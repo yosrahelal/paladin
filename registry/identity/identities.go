@@ -36,7 +36,7 @@ type Identity struct {
 }
 
 func (registry *IdentityRegistry) GetRootIdentity() (identity Identity, err error) {
-	if (registry.contractAddr == ethtypes.Address0xHex{}) {
+	if !registry.IsSmartContractSet() {
 		err = errors.New("Smart contract not set")
 		return
 	}
@@ -58,7 +58,7 @@ func (registry *IdentityRegistry) GetRootIdentity() (identity Identity, err erro
 }
 
 func (registry *IdentityRegistry) RegisterIdentity(signer string, parent ethtypes.HexBytes0xPrefix, owner ethtypes.Address0xHex, name string) (err error) {
-	if (registry.contractAddr == ethtypes.Address0xHex{}) {
+	if !registry.IsSmartContractSet() {
 		err = errors.New("Smart contract not set")
 		return
 	}
@@ -76,7 +76,7 @@ func (registry *IdentityRegistry) RegisterIdentity(signer string, parent ethtype
 }
 
 func (registry *IdentityRegistry) LookupIdentity(hash ethtypes.HexBytes0xPrefix) (identity Identity, err error) {
-	if (registry.contractAddr == ethtypes.Address0xHex{}) {
+	if !registry.IsSmartContractSet() {
 		err = errors.New("Smart contract not set")
 		return
 	}

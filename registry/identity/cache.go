@@ -25,7 +25,7 @@ import (
 )
 
 func (registry *IdentityRegistry) SyncCache() (err error) {
-	if (registry.contractAddr == ethtypes.Address0xHex{}) {
+	if !registry.IsSmartContractSet() {
 		err = errors.New("Smart contract not set")
 		return
 	}
@@ -43,13 +43,13 @@ func (registry *IdentityRegistry) SyncCache() (err error) {
 			return err
 		}
 
-		registry.identityCache[hash.String()] = identity
+		registry.IdentityCache[hash.String()] = &identity
 		properties, err := registry.GetIdentityProperties(hash)
 		if err != nil {
 			return err
 		}
 
-		registry.propertyCache[hash.String()] = properties
+		registry.PropertyCache[hash.String()] = &properties
 		propertyCount += len(properties)
 
 		list = list[1:]
@@ -59,6 +59,6 @@ func (registry *IdentityRegistry) SyncCache() (err error) {
 	}
 
 	registry.LastSync = time.Now().Unix()
-	slog.Info(fmt.Sprintf("Synchronized cache in %v identities=%d properties=%d", time.Since(start), len(registry.identityCache), propertyCount))
+	slog.Info(fmt.Sprintf("Synchronized cache in %v identities=%d properties=%d", time.Since(start), len(registry.IdentityCache), propertyCount))
 	return nil
 }

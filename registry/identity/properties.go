@@ -34,7 +34,7 @@ type propertyResponse struct {
 }
 
 func (registry *IdentityRegistry) SetIdentityProperty(signer string, identityHash ethtypes.HexBytes0xPrefix, name string, value string) (err error) {
-	if (registry.contractAddr == ethtypes.Address0xHex{}) {
+	if !registry.IsSmartContractSet() {
 		err = errors.New("Smart contract not set")
 		return
 	}
@@ -52,13 +52,12 @@ func (registry *IdentityRegistry) SetIdentityProperty(signer string, identityHas
 }
 
 func (registry *IdentityRegistry) GetIdentityProperties(identityHash ethtypes.HexBytes0xPrefix) (properties map[string]string, err error) {
-
-	properties = make(map[string]string)
-	if (registry.contractAddr == ethtypes.Address0xHex{}) {
+	if !registry.IsSmartContractSet() {
 		err = errors.New("Smart contract not set")
 		return
 	}
 
+	properties = make(map[string]string)
 	ctx := context.Background()
 	input := fmt.Sprintf(`{"identityHash":"%s"}`, identityHash)
 	data, err := registry.abiClient.MustFunction("listIdentityPropertyHashes").R(ctx).To(&registry.contractAddr).Input(input).CallJSON()
@@ -84,7 +83,7 @@ func (registry *IdentityRegistry) GetIdentityProperties(identityHash ethtypes.He
 }
 
 func (registry *IdentityRegistry) getIdentityProperty(identityHash ethtypes.HexBytes0xPrefix, propertyHash ethtypes.HexBytes0xPrefix) (name string, value string, err error) {
-	if (registry.contractAddr == ethtypes.Address0xHex{}) {
+	if !registry.IsSmartContractSet() {
 		err = errors.New("Smart contract not set")
 		return
 	}

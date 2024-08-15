@@ -36,8 +36,13 @@ type APIConfig struct {
 	Port int `yaml:"port"`
 }
 
+type Contract struct {
+	Address string `yaml:"address"`
+}
+
 type Config struct {
 	API         APIConfig           `yaml:"api"`
+	Contract    Contract            `yaml:"contract"`
 	Persistence persistence.Config  `yaml:"persistence"`
 	Eth         ethclient.Config    `yaml:"eth"`
 	Indexer     blockindexer.Config `yaml:"indexer"`

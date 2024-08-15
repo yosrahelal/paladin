@@ -83,7 +83,14 @@ func registerIdentityHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := registerIdentity(identityRequest.Signer, identifier, identityRequest.Name, *ethtypes.MustNewAddress(identityRequest.Owner))
+	address, err := ethtypes.NewAddress(identityRequest.Owner)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, "Invalid owner")
+		return
+	}
+
+	result, err := registerIdentity(identityRequest.Signer, identifier, identityRequest.Name, *address)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, "Failed to register identity: %s", err)
@@ -132,11 +139,18 @@ func setSmartContractAddressHandler(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&smartContractAddress)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, "Invalid request")
+		return
+	}
+
+	address, err := ethtypes.NewAddress(smartContractAddress.Address)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprint(w, "Invalid smart contract address")
 		return
 	}
 
-	result, err := setSmartContractAddress(*ethtypes.MustNewAddress(smartContractAddress.Address))
+	result, err := setSmartContractAddress(*address)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, "Failed to set smart contract address %s", err)

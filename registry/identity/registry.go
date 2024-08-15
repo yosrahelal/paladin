@@ -33,15 +33,21 @@ import (
 //go:embed abis/IdentityRegistry.json
 var identityRegistryBuildJSON []byte
 
+type solBuild struct {
+	ABI      abi.ABI                   `json:"abi"`
+	Bytecode ethtypes.HexBytes0xPrefix `json:"bytecode"`
+}
+
 type IdentityRegistry struct {
+	contract     solBuild
 	indexer      blockindexer.BlockIndexer
 	ethClient    ethclient.EthClient
 	abiClient    ethclient.ABIClient
 	keyMgr       ethclient.KeyManager
 	contractAddr ethtypes.Address0xHex
 
-	identityCache map[string]Identity
-	propertyCache map[string]map[string]string
+	IdentityCache map[string]*Identity
+	PropertyCache map[string]*map[string]string
 
 	LastSync              int64
 	LastIncrementalUpdate int64
@@ -52,8 +58,8 @@ var Registry IdentityRegistry
 func (registry *IdentityRegistry) Initialize(conf config.Config) error {
 	ctx := context.Background()
 
-	registry.identityCache = make(map[string]Identity)
-	registry.propertyCache = make(map[string]map[string]string)
+	registry.IdentityCache = make(map[string]*Identity)
+	registry.PropertyCache = make(map[string]*map[string]string)
 
 	persistence, err := persistence.NewPersistence(ctx, &conf.Persistence)
 	if err != nil {
@@ -75,29 +81,44 @@ func (registry *IdentityRegistry) Initialize(conf config.Config) error {
 		return fmt.Errorf("Failed to initialize ethClient: %s", err)
 	}
 
-	registry.indexer.Start()
+	err = registry.indexer.Start()
+	if err != nil {
+		return fmt.Errorf("Failed to initialize indexer: %s", err)
+	}
+
+	if len(conf.Contract.Address) > 0 {
+		address, err := ethtypes.NewAddress(conf.Contract.Address)
+		if err != nil {
+			return fmt.Errorf("Invalid smart contract address: %s", err)
+		}
+		registry.contractAddr = *address
+		err = registry.SyncCache()
+		if err != nil {
+			return err
+		}
+		err = registry.StartListening()
+		if err != nil {
+			return fmt.Errorf("Failed to initialize listener: %s", err)
+		}
+	}
+
 	return nil
 }
 
 func (registry *IdentityRegistry) DeploySmartContract(signer string) (address ethtypes.Address0xHex, err error) {
 	ctx := context.Background()
-	type solBuild struct {
-		ABI      abi.ABI                   `json:"abi"`
-		Bytecode ethtypes.HexBytes0xPrefix `json:"bytecode"`
-	}
 
-	var identityRegistryBuild solBuild
-	err = json.Unmarshal(identityRegistryBuildJSON, &identityRegistryBuild)
+	err = json.Unmarshal(identityRegistryBuildJSON, &registry.contract)
 	if err != nil {
 		return
 	}
 
-	registry.abiClient, err = registry.ethClient.ABI(ctx, identityRegistryBuild.ABI)
+	registry.abiClient, err = registry.ethClient.ABI(ctx, registry.contract.ABI)
 	if err != nil {
 		return
 	}
 
-	txHash, err := registry.abiClient.MustConstructor(identityRegistryBuild.Bytecode).R(ctx).
+	txHash, err := registry.abiClient.MustConstructor(registry.contract.Bytecode).R(ctx).
 		Signer(signer).SignAndSend()
 	if err != nil {
 		return
@@ -108,19 +129,50 @@ func (registry *IdentityRegistry) DeploySmartContract(signer string) (address et
 		return
 	}
 
-	address = *deployTX.ContractAddress.Address0xHex()
+	registry.contractAddr = *deployTX.ContractAddress.Address0xHex()
+
+	err = registry.SyncCache()
+	if err != nil {
+		return
+	}
+
+	err = registry.StartListening()
+	if err != nil {
+		return
+	}
+	address = registry.contractAddr
 	return
 }
 
 func (registry *IdentityRegistry) GetSmartContractAddress() (address ethtypes.Address0xHex, err error) {
-	if len(registry.contractAddr) > 0 {
-		address = registry.contractAddr
-	} else {
-		err = errors.New("contract address not configured")
+	if !registry.IsSmartContractSet() {
+		err = errors.New("Smart contract not set")
 	}
+	address = registry.contractAddr
 	return
 }
 
-func (registry *IdentityRegistry) SetSmartContractAddress(address ethtypes.Address0xHex) {
+func (registry *IdentityRegistry) SetSmartContractAddress(address ethtypes.Address0xHex) (err error) {
+
+	startListener := registry.contractAddr == ethtypes.Address0xHex{}
+
 	registry.contractAddr = address
+
+	err = registry.SyncCache()
+	if err != nil {
+		return err
+	}
+
+	if startListener {
+		err = registry.StartListening()
+		if err != nil {
+			return
+		}
+	}
+
+	return
+}
+
+func (registry *IdentityRegistry) IsSmartContractSet() bool {
+	return registry.contractAddr != ethtypes.Address0xHex{}
 }

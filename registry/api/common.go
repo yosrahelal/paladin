@@ -16,6 +16,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -58,27 +59,32 @@ type SyncStatusResult struct {
 }
 
 func lookupIdentity(identifier string) (response LookupIdentityResult, err error) {
-	hash := identity.GetIdentityHash(identifier)
-	resolvedIdentity, err := identity.Registry.LookupIdentity(hash)
-	if err != nil {
+
+	if !identity.Registry.IsSmartContractSet() {
+		err = errors.New("Smart contract not set")
 		return
 	}
 
-	parent, err := identity.Registry.LookupIdentity(resolvedIdentity.Parent)
-	if err != nil {
+	hash := identity.GetIdentityHash(identifier).String()
+
+	resolvedIdentity, ok := identity.Registry.IdentityCache[hash]
+	if !ok {
+		err = errors.New("identity not found")
 		return
 	}
 
-	properties, propertiesError := identity.Registry.GetIdentityProperties(hash)
-	if propertiesError != nil {
-		err = propertiesError
+	parent, ok := identity.Registry.IdentityCache[resolvedIdentity.Parent.String()]
+	if !ok {
+		err = errors.New("identity parent not found")
 		return
 	}
+
+	properties := identity.Registry.PropertyCache[hash]
 
 	children := []string{}
 	for _, childHash := range resolvedIdentity.Children {
-		resolvedChild, err := identity.Registry.LookupIdentity(childHash)
-		if err == nil {
+		resolvedChild, ok := identity.Registry.IdentityCache[childHash.String()]
+		if ok {
 			children = append(children, resolvedChild.Name)
 		} else {
 			slog.Error(fmt.Sprintf("Failed to resolve child identity %s", err))
@@ -90,7 +96,7 @@ func lookupIdentity(identifier string) (response LookupIdentityResult, err error
 		Owner:      resolvedIdentity.Owner.String(),
 		Parent:     parent.Name,
 		Children:   children,
-		Properties: properties,
+		Properties: *properties,
 	}
 	return
 }
