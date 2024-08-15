@@ -100,7 +100,8 @@ func deploySmartContract(t *testing.T) {
 	address, err := Registry.DeploySmartContract("key0")
 	assert.Nil(t, err)
 
-	Registry.SetSmartContractAddress(address)
+	err = Registry.SetSmartContractAddress(address)
+	assert.Nil(t, err)
 }
 
 func registerChildIdentities(t *testing.T) {

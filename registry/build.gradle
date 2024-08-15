@@ -35,11 +35,11 @@ task copyContracts(type: Copy) {
     includeEmptyDirs = false
 }
 
-
 task clean(type: Delete) {
     delete 'abis'
 }
 
 task build {
        dependsOn tasks.copyContracts
+       dependsOn ':testinfra:startTestInfra'
 }

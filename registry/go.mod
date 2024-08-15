@@ -6,10 +6,11 @@ require github.com/gorilla/mux v1.8.1
 
 require (
 	github.com/gorilla/rpc v1.2.1
-	github.com/hyperledger/firefly-signer v1.1.14-0.20240808215801-ae08ff3979ee
+	github.com/hyperledger/firefly-signer v1.1.14-0.20240812205501-7e256d7bc276
 	github.com/kaleido-io/paladin/kata v0.0.0
 	github.com/stretchr/testify v1.9.0
 	gopkg.in/yaml.v2 v2.4.0
+	gorm.io/gorm v1.25.10
 )
 
 require (
@@ -99,7 +100,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/postgres v1.5.9 // indirect
 	gorm.io/driver/sqlite v1.5.2 // indirect
-	gorm.io/gorm v1.25.10 // indirect
 )
 
 replace github.com/kaleido-io/paladin/kata => ../kata
