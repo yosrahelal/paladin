@@ -40,7 +40,7 @@ import { ContractTransactionResponse, EventLog } from 'ethers';
  *             key=key-node-A-2, value=value-node-A-2
  */
 
-describe.only('Identity Registry', () => {
+describe('Identity Registry', () => {
 
   let identityRegistry: IdentityRegistry;
 
