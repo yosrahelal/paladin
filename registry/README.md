@@ -108,7 +108,7 @@ Sample request body:
 ```json
 {
     "signer": "mykey",
-    "name": "my-property-key,
+    "name": "my-property-key",
     "value": "my-property-value"
 }
 ```
