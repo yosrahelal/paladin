@@ -30,21 +30,21 @@ import (
  * Test design
  * -----------
  *
- * The following node hierarchy is registered:
+ * The following identity hierarchy is registered:
  *
- *    root              (owned by key0)
- *    ├── node-A        (owned by key2)
- *    │   ├── node-A-A  (owned by key3)
- *    │   └── node-A-B  (owned by key4)
- *    └── node-B        (owned by key0)
+ *    root                  (owned by key0)
+ *    ├── identity-a        (owned by key2)
+ *    │   ├── identity-a-a  (owned by key3)
+ *    │   └── identity-a-b  (owned by key4)
+ *    └── identity-b        (owned by key0)
  *
  * The following properties are set:
  *
  *   root      key=key-root-1, value=value-root-1/updated
  *             key=key-root-2, value=value-root-2
  *
- *   node-A    key=key-node-A-1, value=value-node-A-1
- *             key=key-node-A-2, value=value-node-A-2
+ *   identity-a    key=key-identity-a-1, value=value-identity-a-1
+ *                 key=key-identity-a-2, value=value-identity-a-2
  *
  * NOTE: Hardhat node must be running during the execution of the test.
  *       Run the command: "npx run hardhat" in the solidity directory
@@ -83,7 +83,7 @@ func preContractDeploymentTests(t *testing.T) {
 	_, err := Registry.LookupIdentity(rootIdentityHash)
 	assert.Equal(t, "Smart contract not set", err.Error())
 
-	err = Registry.RegisterIdentity("key0", rootIdentityHash, ethtypes.Address0xHex{}, "node-A")
+	err = Registry.RegisterIdentity("key0", rootIdentityHash, ethtypes.Address0xHex{}, "identity-a")
 	assert.Equal(t, "Smart contract not set", err.Error())
 
 	_, err = Registry.GetIdentityProperties(rootIdentityHash)
@@ -107,10 +107,10 @@ func deploySmartContract(t *testing.T) {
 func registerChildIdentities(t *testing.T) {
 	var rootIdentityHash = GetRootIdentityHash()
 
-	err := Registry.RegisterIdentity("key0", rootIdentityHash, getAddress("key1"), "node-A")
+	err := Registry.RegisterIdentity("key0", rootIdentityHash, getAddress("key1"), "identity-a")
 	assert.Nil(t, err)
 
-	err = Registry.RegisterIdentity("key0", rootIdentityHash, getAddress("key2"), "node-B")
+	err = Registry.RegisterIdentity("key0", rootIdentityHash, getAddress("key2"), "identity-b")
 	assert.Nil(t, err)
 }
 
@@ -120,10 +120,10 @@ func registerGrandChildIdentities(t *testing.T) {
 	rootIdentity, err := Registry.LookupIdentity(rootIdentityHash)
 	assert.Nil(t, err)
 
-	err = Registry.RegisterIdentity("key1", rootIdentity.Children[0], getAddress("key3"), "node-A-A")
+	err = Registry.RegisterIdentity("key1", rootIdentity.Children[0], getAddress("key3"), "identity-a-a")
 	assert.Nil(t, err)
 
-	err = Registry.RegisterIdentity("key1", rootIdentity.Children[0], getAddress("key4"), "node-A-B")
+	err = Registry.RegisterIdentity("key1", rootIdentity.Children[0], getAddress("key4"), "identity-a-b")
 	assert.Nil(t, err)
 }
 
@@ -139,10 +139,10 @@ func setProperties(t *testing.T) {
 	err = Registry.SetIdentityProperty("key0", rootIdentityHash, "key-root-2", "value-root-2")
 	assert.Nil(t, err)
 
-	err = Registry.SetIdentityProperty("key1", rootIdentity.Children[0], "key-node-A-1", "value-node-A-1")
+	err = Registry.SetIdentityProperty("key1", rootIdentity.Children[0], "key-identity-a-1", "value-identity-a-1")
 	assert.Nil(t, err)
 
-	err = Registry.SetIdentityProperty("key1", rootIdentity.Children[0], "key-node-A-2", "value-node-A-2")
+	err = Registry.SetIdentityProperty("key1", rootIdentity.Children[0], "key-identity-a-2", "value-identity-a-2")
 	assert.Nil(t, err)
 }
 
@@ -158,7 +158,7 @@ func verifyIdentities(t *testing.T) {
 	identityA, err := Registry.LookupIdentity(rootIdentity.Children[0])
 	assert.Nil(t, err)
 
-	assert.Equal(t, "node-A", identityA.Name)
+	assert.Equal(t, "identity-a", identityA.Name)
 	assert.Equal(t, getAddress("key1"), identityA.Owner)
 	assert.Equal(t, GetRootIdentityHash(), identityA.Parent)
 	assert.Equal(t, 2, len(identityA.Children))
@@ -166,7 +166,7 @@ func verifyIdentities(t *testing.T) {
 	identityAA, err := Registry.LookupIdentity(identityA.Children[0])
 	assert.Nil(t, err)
 
-	assert.Equal(t, "node-A-A", identityAA.Name)
+	assert.Equal(t, "identity-a-a", identityAA.Name)
 	assert.Equal(t, getAddress("key3"), identityAA.Owner)
 	assert.Equal(t, rootIdentity.Children[0], identityAA.Parent)
 	assert.Equal(t, 0, len(identityAA.Children))
@@ -174,7 +174,7 @@ func verifyIdentities(t *testing.T) {
 	identityAB, err := Registry.LookupIdentity(identityA.Children[1])
 	assert.Nil(t, err)
 
-	assert.Equal(t, "node-A-B", identityAB.Name)
+	assert.Equal(t, "identity-a-b", identityAB.Name)
 	assert.Equal(t, getAddress("key4"), identityAB.Owner)
 	assert.Equal(t, rootIdentity.Children[0], identityAB.Parent)
 	assert.Equal(t, 0, len(identityAB.Children))
@@ -182,7 +182,7 @@ func verifyIdentities(t *testing.T) {
 	identityB, err := Registry.LookupIdentity(rootIdentity.Children[1])
 	assert.Nil(t, err)
 
-	assert.Equal(t, "node-B", identityB.Name)
+	assert.Equal(t, "identity-b", identityB.Name)
 	assert.Equal(t, identityB.Owner, getAddress("key2"))
 	assert.Equal(t, GetRootIdentityHash(), identityB.Parent)
 	assert.Equal(t, 0, len(identityB.Children))
@@ -195,31 +195,31 @@ func verifyProperties(t *testing.T) {
 	assert.Equal(t, "value-root-1", properties["key-root-1"])
 	assert.Equal(t, "value-root-2", properties["key-root-2"])
 
-	properties, err = Registry.GetIdentityProperties(GetIdentityHash("node-A"))
+	properties, err = Registry.GetIdentityProperties(GetIdentityHash("identity-a"))
 	assert.Nil(t, err)
 
-	assert.Equal(t, "value-node-A-1", properties["key-node-A-1"])
-	assert.Equal(t, "value-node-A-2", properties["key-node-A-2"])
+	assert.Equal(t, "value-identity-a-1", properties["key-identity-a-1"])
+	assert.Equal(t, "value-identity-a-2", properties["key-identity-a-2"])
 
-	properties, err = Registry.GetIdentityProperties(GetIdentityHash("node-B"))
+	properties, err = Registry.GetIdentityProperties(GetIdentityHash("identity-b"))
 	assert.Nil(t, err)
 
 	assert.Equal(t, 0, len(properties))
 
-	properties, err = Registry.GetIdentityProperties(GetIdentityHash("node-A/node-A-A"))
+	properties, err = Registry.GetIdentityProperties(GetIdentityHash("identity-a/identity-a-a"))
 	assert.Nil(t, err)
 	assert.Equal(t, 0, len(properties))
 
-	properties, err = Registry.GetIdentityProperties(GetIdentityHash("node-A/node-A-B"))
+	properties, err = Registry.GetIdentityProperties(GetIdentityHash("identity-a/identity-a-b"))
 	assert.Nil(t, err)
 	assert.Equal(t, 0, len(properties))
 }
 
 func checkPermissions(t *testing.T) {
-	err := Registry.RegisterIdentity("key0", GetIdentityHash("node-A"), getAddress("key0"), "node-X")
+	err := Registry.RegisterIdentity("key0", GetIdentityHash("identity-a"), getAddress("key0"), "identity-x")
 	assert.Equal(t, "Execution reverted: Forbidden", err.Error())
 
-	err = Registry.SetIdentityProperty("key0", GetIdentityHash("node-A"), "key", "value")
+	err = Registry.SetIdentityProperty("key0", GetIdentityHash("identity-a"), "key", "value")
 	assert.Equal(t, "Execution reverted: Forbidden", err.Error())
 }
 
@@ -230,7 +230,7 @@ func checkIdentityNotFound(t *testing.T) {
 
 func checkDuplicates(t *testing.T) {
 	var rootIdentityHash = GetRootIdentityHash()
-	err := Registry.RegisterIdentity("key0", rootIdentityHash, getAddress("key1"), "node-A")
+	err := Registry.RegisterIdentity("key0", rootIdentityHash, getAddress("key1"), "identity-a")
 	assert.Equal(t, "Execution reverted: Name already taken", err.Error())
 }
 

@@ -23,203 +23,203 @@ import { ContractTransactionResponse, EventLog } from 'ethers';
  * Test design
  * -----------
  * 
- * The following node hierarchy is registered:
+ * The following identity hierarchy is registered:
  * 
- *    root              (owned by accounts[0])
- *    ├── node-A        (owned by accounts[1])
- *    │   ├── node-A-A  (owned by accounts[3])
- *    │   └── node-A-B  (owned by accounts[4])
- *    └── node-B        (owned by accounts[2])
+ *    root                  (owned by accounts[0])
+ *    ├── identity-a        (owned by accounts[1])
+ *    │   ├── identity-a-a  (owned by accounts[3])
+ *    │   └── identity-a-b  (owned by accounts[4])
+ *    └── identity-b        (owned by accounts[2])
  * 
  * The following properties are set:
  * 
  *   root      key=key-root-1, value=value-root-1/updated
  *             key=key-root-2, value=value-root-2        
  *
- *   node-A    key=key-node-A-1, value=value-node-A-1
- *             key=key-node-A-2, value=value-node-A-2
+ *   identity-a    key=key-identity-a-1, value=value-identity-a-1
+ *                 key=key-identity-a-2, value=value-identity-a-2
  */
 
 describe('Identity Registry', () => {
 
   let identityRegistry: IdentityRegistry;
 
-  let rootAccount: SignerWithAddress;
-  let accountA: SignerWithAddress;
-  let accountB: SignerWithAddress;
-  let accountAA: SignerWithAddress;
-  let accountAB: SignerWithAddress;
-  let otherAccount: SignerWithAddress;
+  let root_account: SignerWithAddress;
+  let account_a: SignerWithAddress;
+  let account_b: SignerWithAddress;
+  let account_a_a: SignerWithAddress;
+  let account_a_b: SignerWithAddress;
+  let other_account: SignerWithAddress;
 
-  let node_A_Hash: string;
-  let node_B_Hash: string;
-  let node_A_A_Hash: string;
-  let node_A_B_Hash: string;
+  let identity_a_hash: string;
+  let identity_b_hash: string;
+  let identity_a_a_hash: string;
+  let identity_a_b_hash: string;
 
   before(async () => {
-    [rootAccount, accountA, accountB, accountAA, accountAB, otherAccount] = await hre.ethers.getSigners();
+    [root_account, account_a, account_b, account_a_a, account_a_b, other_account] = await hre.ethers.getSigners();
     const IdentityRegistry = await hre.ethers.getContractFactory('IdentityRegistry');
-    identityRegistry = await IdentityRegistry.connect(rootAccount).deploy();
+    identityRegistry = await IdentityRegistry.connect(root_account).deploy();
     await identityRegistry.waitForDeployment();
   });
 
   it('Root Identity', async () => {
-    // Root identity is established as part of the smart contract deployment, name 'root' owned by rootAccount
+    // Root identity is established as part of the smart contract deployment, name 'root' owned by root_account
     const rootIdentity = await identityRegistry.getRootIdentity();
     expect(rootIdentity.parent).to.equal(hre.ethers.ZeroHash);
     expect(rootIdentity.children.length).to.equal(0);
     expect(rootIdentity.name).to.equal('root');
-    expect(rootIdentity.owner).to.equal(rootAccount);
+    expect(rootIdentity.owner).to.equal(root_account);
   });
 
   it('Register identities', async () => {
-    // Owner of root identity registers child identity "node-A" and sets the ownership to accountA
-    const transaction1 = await identityRegistry.connect(rootAccount).registerIdentity(hre.ethers.ZeroHash, 'node-A', accountA);
+    // Owner of root identity registers child identity "identity-a" and sets the ownership to account_a
+    const transaction1 = await identityRegistry.connect(root_account).registerIdentity(hre.ethers.ZeroHash, 'identity-a', account_a);
     const event1 = await getEvent(transaction1);
     expect(event1?.fragment.name).to.equal('IdentityRegistered');
     expect(event1?.args[0]).to.equal(hre.ethers.ZeroHash);
-    expect(event1?.args[2]).to.equal('node-A');
-    expect(event1?.args[3]).to.equal(accountA);
-    node_A_Hash = event1?.args[1];
+    expect(event1?.args[2]).to.equal('identity-a');
+    expect(event1?.args[3]).to.equal(account_a);
+    identity_a_hash = event1?.args[1];
 
-    // Owner of root identity registers child identity "node-B" and sets the ownership to accountB
-    const transaction2 = await identityRegistry.connect(rootAccount).registerIdentity(hre.ethers.ZeroHash, 'node-B', accountB);
+    // Owner of root identity registers child identity "identity-b" and sets the ownership to account_b
+    const transaction2 = await identityRegistry.connect(root_account).registerIdentity(hre.ethers.ZeroHash, 'identity-b', account_b);
     const event2 = await getEvent(transaction2);
     expect(event2?.fragment.name).to.equal('IdentityRegistered');
     expect(event2?.args[0]).to.equal(hre.ethers.ZeroHash);
-    expect(event2?.args[2]).to.equal('node-B');
-    expect(event2?.args[3]).to.equal(accountB);
-    node_B_Hash = event2?.args[1];
+    expect(event2?.args[2]).to.equal('identity-b');
+    expect(event2?.args[3]).to.equal(account_b);
+    identity_b_hash = event2?.args[1];
   });
 
   it('Register nested identities', async () => {
-    // Owner of identity "node-A" registers child identity "node-A-A"
-    const transaction1 = await identityRegistry.connect(accountA).registerIdentity(node_A_Hash, 'node-A-A', accountAA);
+    // Owner of identity "identity-a" registers child identity "identity-a-a"
+    const transaction1 = await identityRegistry.connect(account_a).registerIdentity(identity_a_hash, 'identity-a-a', account_a_a);
     const event1 = await getEvent(transaction1);
     expect(event1?.fragment.name).to.equal('IdentityRegistered');
-    expect(event1?.args[0]).to.equal(node_A_Hash);
-    expect(event1?.args[2]).to.equal('node-A-A');
-    expect(event1?.args[3]).to.equal(accountAA);
-    node_A_A_Hash = event1?.args[1];
+    expect(event1?.args[0]).to.equal(identity_a_hash);
+    expect(event1?.args[2]).to.equal('identity-a-a');
+    expect(event1?.args[3]).to.equal(account_a_a);
+    identity_a_a_hash = event1?.args[1];
 
-    // Owner of root identity registers child identity "node-A-A" as a child of identity "node-A"
-    const transaction2 = await identityRegistry.connect(accountA).registerIdentity(node_A_Hash, 'node-A-B', accountAB.address);
+    // Owner of root identity registers child identity "identity-a-a" as a child of identity "identity-a"
+    const transaction2 = await identityRegistry.connect(account_a).registerIdentity(identity_a_hash, 'identity-a-b', account_a_b.address);
     const event2 = await getEvent(transaction2);
     expect(event2?.fragment.name).to.equal('IdentityRegistered');
-    expect(event2?.args[0]).to.equal(node_A_Hash);
-    expect(event2?.args[2]).to.equal('node-A-B');
-    expect(event2?.args[3]).to.equal(accountAB);
-    node_A_B_Hash = event2?.args[1];
+    expect(event2?.args[0]).to.equal(identity_a_hash);
+    expect(event2?.args[2]).to.equal('identity-a-b');
+    expect(event2?.args[3]).to.equal(account_a_b);
+    identity_a_b_hash = event2?.args[1];
 
   });
 
   it('Traverse identity hierarchy', async () => {
-    // Root node must have node-A and node-B as children
+    // Root identity must have identity-a and identity-b as children
     const rootIdentity = await identityRegistry.getRootIdentity();
     expect(rootIdentity.children.length).to.equal(2);
-    expect(rootIdentity.children[0]).to.equal(node_A_Hash);
-    expect(rootIdentity.children[1]).to.equal(node_B_Hash);
+    expect(rootIdentity.children[0]).to.equal(identity_a_hash);
+    expect(rootIdentity.children[1]).to.equal(identity_b_hash);
 
-    // Node-A must have node-A-A and node-A-B as children, and the root node as parent
-    const node_A = await identityRegistry.getIdentity(rootIdentity.children[0]);
-    expect(node_A.name).to.equal('node-A');
-    expect(node_A.parent).to.equal(hre.ethers.ZeroHash);
-    expect(node_A.children.length).to.equal(2);
-    expect(node_A.children[0]).to.equal(node_A_A_Hash);
-    expect(node_A.children[1]).to.equal(node_A_B_Hash);
+    // identity-a must have identity-a-a and identity-a-b as children, and the root identity as parent
+    const identity_a = await identityRegistry.getIdentity(rootIdentity.children[0]);
+    expect(identity_a.name).to.equal('identity-a');
+    expect(identity_a.parent).to.equal(hre.ethers.ZeroHash);
+    expect(identity_a.children.length).to.equal(2);
+    expect(identity_a.children[0]).to.equal(identity_a_a_hash);
+    expect(identity_a.children[1]).to.equal(identity_a_b_hash);
 
-    // Node-B must have no children and the root node as parent
-    const node_B = await identityRegistry.getIdentity(rootIdentity.children[1]);
-    expect(node_B.name).to.equal('node-B');
-    expect(node_B.parent).to.equal(hre.ethers.ZeroHash);
-    expect(node_B.children.length).to.equal(0);
+    // identity-b must have no children and the root identity as parent
+    const identity_b = await identityRegistry.getIdentity(rootIdentity.children[1]);
+    expect(identity_b.name).to.equal('identity-b');
+    expect(identity_b.parent).to.equal(hre.ethers.ZeroHash);
+    expect(identity_b.children.length).to.equal(0);
 
-    // Node-A-A must have no children and node-A as parent
-    const node_A_A = await identityRegistry.getIdentity(node_A.children[0]);
-    expect(node_A_A.name).to.equal('node-A-A');
-    expect(node_A_A.parent).to.equal(node_A_Hash);
-    expect(node_A_A.children.length).to.equal(0);
+    // identity-a-a must have no children and identity-a as parent
+    const identity_a_a = await identityRegistry.getIdentity(identity_a.children[0]);
+    expect(identity_a_a.name).to.equal('identity-a-a');
+    expect(identity_a_a.parent).to.equal(identity_a_hash);
+    expect(identity_a_a.children.length).to.equal(0);
 
-    // Node-A-B must have no children and node-A as parent
-    const node_A_B = await identityRegistry.getIdentity(node_A.children[1]);
-    expect(node_A_B.name).to.equal('node-A-B');
-    expect(node_A_B.parent).to.equal(node_A_Hash);
-    expect(node_A_B.children.length).to.equal(0);
+    // identity-a-b must have no children and identity-a as parent
+    const identity_a_b = await identityRegistry.getIdentity(identity_a.children[1]);
+    expect(identity_a_b.name).to.equal('identity-a-b');
+    expect(identity_a_b.parent).to.equal(identity_a_hash);
+    expect(identity_a_b.children.length).to.equal(0);
   });
 
-  it('Permission checking for root node', async () => {
+  it('Permission checking for root identity', async () => {
     // Only the owner of the identity should be allowed to add child identities
-    await expect(identityRegistry.connect(otherAccount).registerIdentity(hre.ethers.ZeroHash, 'node-X', otherAccount)).to.be.revertedWith('Forbidden')
+    await expect(identityRegistry.connect(other_account).registerIdentity(hre.ethers.ZeroHash, 'identity_x', other_account)).to.be.revertedWith('Forbidden')
   });
 
-  it('Permission checking for node-A and node-B', async () => {
-    // Attempt to register an identity on node-A owned by accountA using otherAccount
-    await expect(identityRegistry.connect(otherAccount).registerIdentity(node_A_Hash, 'node-X', otherAccount)).to.be.revertedWith('Forbidden');
+  it('Permission checking for identity-a and identity-b', async () => {
+    // Attempt to register an identity on identity-a owned by account_a using other_account
+    await expect(identityRegistry.connect(other_account).registerIdentity(identity_a_hash, 'identity_x', other_account)).to.be.revertedWith('Forbidden');
 
-    // Attempt to register an identity on node-B owned by accountB using otherAccount
-    await expect(identityRegistry.connect(otherAccount).registerIdentity(node_B_Hash, 'node-X', otherAccount)).to.be.revertedWith('Forbidden');
+    // Attempt to register an identity on identity-b owned by account_b using other_account
+    await expect(identityRegistry.connect(other_account).registerIdentity(identity_b_hash, 'identity_x', other_account)).to.be.revertedWith('Forbidden');
   });
 
-  it('Permission checking for node-A-A and node-A-B', async () => {
-    // Attempt to register an identity on node-A-A owned by accountAA using otherAccount
-    await expect(identityRegistry.connect(otherAccount).registerIdentity(node_A_A_Hash, 'node-X', otherAccount)).to.be.revertedWith('Forbidden');
+  it('Permission checking for identity-a-a and identity-a-b', async () => {
+    // Attempt to register an identity on identity-a-a owned by account_a_a using other_account
+    await expect(identityRegistry.connect(other_account).registerIdentity(identity_a_a_hash, 'identity_x', other_account)).to.be.revertedWith('Forbidden');
 
-    // Attempt to register an identity on node-A-A owned by accountAB using otherAccount
-    await expect(identityRegistry.connect(otherAccount).registerIdentity(node_A_B_Hash, 'node-X', otherAccount)).to.be.revertedWith('Forbidden');
+    // Attempt to register an identity on identity-a-a owned by account_a_b using other_account
+    await expect(identityRegistry.connect(other_account).registerIdentity(identity_a_b_hash, 'identity_x', other_account)).to.be.revertedWith('Forbidden');
   });
 
-  it('Root node owner should only be allowed to add direct children', async () => {
+  it('Root identity owner should only be allowed to add direct children', async () => {
     // Attempt to register grand-child identity
-    await expect(identityRegistry.connect(otherAccount).registerIdentity(node_A_Hash, 'node-X', otherAccount)).to.be.revertedWith('Forbidden');
+    await expect(identityRegistry.connect(other_account).registerIdentity(identity_a_hash, 'identity_x', other_account)).to.be.revertedWith('Forbidden');
   });
 
   it('Should not allow registration of identities with empty string', async () => {
     // Attempt to register an identity with name set to empty string
-    await expect(identityRegistry.connect(rootAccount).registerIdentity(hre.ethers.ZeroHash, '', otherAccount)).to.be.revertedWith('Name cannot be empty')
+    await expect(identityRegistry.connect(root_account).registerIdentity(hre.ethers.ZeroHash, '', other_account)).to.be.revertedWith('Name cannot be empty')
   });
 
-  it('Set properties on root and node-A', async () => {
-    // Set property key="key-root-1" value="value-root-1" on root node using owner rootAccount
-    await expect(identityRegistry.connect(rootAccount).setIdentityProperty(hre.ethers.ZeroHash, 'key-root-1', 'value-root-1'))
+  it('Set properties on root and identity-a', async () => {
+    // Set property key="key-root-1" value="value-root-1" on root identity using owner root_account
+    await expect(identityRegistry.connect(root_account).setIdentityProperty(hre.ethers.ZeroHash, 'key-root-1', 'value-root-1'))
       .to.emit(identityRegistry, 'PropertySet')
       .withArgs(hre.ethers.ZeroHash, 'key-root-1', 'value-root-1');
 
-    // Set property key="key-root-2" value="value-root-2" on root node using owner rootAccount
-    await expect(identityRegistry.connect(rootAccount).setIdentityProperty(hre.ethers.ZeroHash, 'key-root-2', 'value-root-2'))
+    // Set property key="key-root-2" value="value-root-2" on root identity using owner root_account
+    await expect(identityRegistry.connect(root_account).setIdentityProperty(hre.ethers.ZeroHash, 'key-root-2', 'value-root-2'))
       .to.emit(identityRegistry, 'PropertySet')
       .withArgs(hre.ethers.ZeroHash, 'key-root-2', 'value-root-2');
 
-    // Set property key="key-node-A-1" value="value-node-A-1" on node-A using owner accountA
-    await expect(identityRegistry.connect(accountA).setIdentityProperty(node_A_Hash, 'key-node-A-1', 'value-node-A-1'))
+    // Set property key="key-identity-a-1" value="value-identity-a-1" on identity-a using owner account_a
+    await expect(identityRegistry.connect(account_a).setIdentityProperty(identity_a_hash, 'key-identity-a-1', 'value-identity-a-1'))
       .to.emit(identityRegistry, 'PropertySet')
-      .withArgs(node_A_Hash, 'key-node-A-1', 'value-node-A-1');
+      .withArgs(identity_a_hash, 'key-identity-a-1', 'value-identity-a-1');
 
-    // Set property key="key-node-A-2" value="value-node-A-2" on node-A using owner accountA
-    await expect(identityRegistry.connect(accountA).setIdentityProperty(node_A_Hash, 'key-node-A-2', 'value-node-A-2'))
+    // Set property key="key-identity-a-2" value="value-identity-a-2" on identity-a using owner account_a
+    await expect(identityRegistry.connect(account_a).setIdentityProperty(identity_a_hash, 'key-identity-a-2', 'value-identity-a-2'))
       .to.emit(identityRegistry, 'PropertySet')
-      .withArgs(node_A_Hash, 'key-node-A-2', 'value-node-A-2');
+      .withArgs(identity_a_hash, 'key-identity-a-2', 'value-identity-a-2');
   });
 
   it('Lookup property values by key', async () => {
-    // Property key="key-root-1" must have value="value-root-1" on root node
+    // Property key="key-root-1" must have value="value-root-1" on root identity
     const transaction1 = await identityRegistry.getIdentityPropertyValueByName(hre.ethers.ZeroHash, 'key-root-1');
     expect(transaction1).to.equal('value-root-1');
 
-    // Property key="key-root-2" must have value="value-root-2" on root node
+    // Property key="key-root-2" must have value="value-root-2" on root identity
     const transaction2 = await identityRegistry.getIdentityPropertyValueByName(hre.ethers.ZeroHash, 'key-root-2');
     expect(transaction2).to.equal('value-root-2');
 
-    // Property key="key-node-A-1" must have value="value-node-A-1" on node-A
-    const transaction3 = await identityRegistry.getIdentityPropertyValueByName(node_A_Hash, 'key-node-A-1');
-    expect(transaction3).to.equal('value-node-A-1');
+    // Property key="key-identity-a-1" must have value="value-identity-a-1" on identity-a
+    const transaction3 = await identityRegistry.getIdentityPropertyValueByName(identity_a_hash, 'key-identity-a-1');
+    expect(transaction3).to.equal('value-identity-a-1');
 
-    // Property key="key-node-A-2" must have value="value-node-A-2" on node-A
-    const transaction4 = await identityRegistry.getIdentityPropertyValueByName(node_A_Hash, 'key-node-A-2');
-    expect(transaction4).to.equal('value-node-A-2');
+    // Property key="key-identity-a-2" must have value="value-identity-a-2" on identity-a
+    const transaction4 = await identityRegistry.getIdentityPropertyValueByName(identity_a_hash, 'key-identity-a-2');
+    expect(transaction4).to.equal('value-identity-a-2');
   });
 
   it('List properties', async () => {
-    // Get property key hashes for root node
+    // Get property key hashes for root identity
     const transaction1 = await identityRegistry.listIdentityPropertyHashes(hre.ethers.ZeroHash);
     expect(transaction1.length).to.equal(2);
 
@@ -233,34 +233,34 @@ describe('Identity Registry', () => {
     expect(transaction3[0]).to.equal('key-root-2');
     expect(transaction3[1]).to.equal('value-root-2');
 
-    // Get property key hashes for node-A
-    const transaction4 = await identityRegistry.listIdentityPropertyHashes(node_A_Hash);
+    // Get property key hashes for identity-a
+    const transaction4 = await identityRegistry.listIdentityPropertyHashes(identity_a_hash);
     expect(transaction4.length).to.equal(2);
 
-    // Get property key="key-node-A-1" using retreived key hash
-    const transaction5 = await identityRegistry.getIdentityPropertyByHash(node_A_Hash, transaction4[0]);
-    expect(transaction5[0]).to.equal('key-node-A-1');
-    expect(transaction5[1]).to.equal('value-node-A-1');
+    // Get property key="key-identity-a-1" using retreived key hash
+    const transaction5 = await identityRegistry.getIdentityPropertyByHash(identity_a_hash, transaction4[0]);
+    expect(transaction5[0]).to.equal('key-identity-a-1');
+    expect(transaction5[1]).to.equal('value-identity-a-1');
 
-    // Get property key="key-node-A-2" using retreived key hash
-    const transaction6 = await identityRegistry.getIdentityPropertyByHash(node_A_Hash, transaction4[1]);
-    expect(transaction6[0]).to.equal('key-node-A-2');
-    expect(transaction6[1]).to.equal('value-node-A-2');
+    // Get property key="key-identity-a-2" using retreived key hash
+    const transaction6 = await identityRegistry.getIdentityPropertyByHash(identity_a_hash, transaction4[1]);
+    expect(transaction6[0]).to.equal('key-identity-a-2');
+    expect(transaction6[1]).to.equal('value-identity-a-2');
   });
 
   it('Check only identity owner can set properties', async () => {
-    // Attempt to set property on root node owned by rootAccount using otherAccount
-    await expect(identityRegistry.connect(otherAccount).setIdentityProperty(hre.ethers.ZeroHash, 'key-x', 'value-x'))
+    // Attempt to set property on root identity owned by root_account using other_account
+    await expect(identityRegistry.connect(other_account).setIdentityProperty(hre.ethers.ZeroHash, 'key-x', 'value-x'))
       .to.be.revertedWith('Forbidden');
 
-    // Attempt to set property on node B owned by accountB using otherAccount
-    await expect(identityRegistry.connect(otherAccount).setIdentityProperty(node_B_Hash, 'key-x', 'value-x'))
+    // Attempt to set property on identity-b owned by account_b using other_account
+    await expect(identityRegistry.connect(other_account).setIdentityProperty(identity_b_hash, 'key-x', 'value-x'))
       .to.be.revertedWith('Forbidden');
   });
 
   it('Should allow properties to be updated', async () => {
-    // Update property key="key-root-1" setting value="updated" on root node using rootAccount
-    await expect(identityRegistry.connect(rootAccount).setIdentityProperty(hre.ethers.ZeroHash, 'key-root-1', 'updated'))
+    // Update property key="key-root-1" setting value="updated" on root identity using root_account
+    await expect(identityRegistry.connect(root_account).setIdentityProperty(hre.ethers.ZeroHash, 'key-root-1', 'updated'))
       .to.emit(identityRegistry, 'PropertySet')
       .withArgs(hre.ethers.ZeroHash, 'key-root-1', 'updated');
 
@@ -270,30 +270,30 @@ describe('Identity Registry', () => {
   });
 
   it('Properties should be available to all identities', async () => {
-    // Access property in root node from otherAccount
-    const transaction1 = await identityRegistry.connect(otherAccount).getIdentityPropertyValueByName(hre.ethers.ZeroHash, 'key-root-1');
+    // Access property in root identity from other_account
+    const transaction1 = await identityRegistry.connect(other_account).getIdentityPropertyValueByName(hre.ethers.ZeroHash, 'key-root-1');
     expect(transaction1).to.equal('updated');
 
-    // Access property in node-A node from otherAccount
-    const transaction2 = await identityRegistry.connect(otherAccount).getIdentityPropertyValueByName(node_A_Hash, 'key-node-A-1');
-    expect(transaction2).to.equal('value-node-A-1');
+    // Access property in identity-a identity from other_account
+    const transaction2 = await identityRegistry.connect(other_account).getIdentityPropertyValueByName(identity_a_hash, 'key-identity-a-1');
+    expect(transaction2).to.equal('value-identity-a-1');
   });
 
   it('Should not allow empty string name properties', async () => {
-    // Attempt to set a property on root node with name="" using rootAccount
-    await expect(identityRegistry.connect(rootAccount).setIdentityProperty(hre.ethers.ZeroHash, '', 'value'))
+    // Attempt to set a property on root identity with name="" using root_account
+    await expect(identityRegistry.connect(root_account).setIdentityProperty(hre.ethers.ZeroHash, '', 'value'))
       .to.be.revertedWith('Name cannot be empty');
   });
 
   it('Ensure there siblings have unique names', async () => {
-    // Attempt to register a new child node with repeated name
-    await expect(identityRegistry.connect(rootAccount).registerIdentity(hre.ethers.ZeroHash, 'node-A', otherAccount))
+    // Attempt to register a new child identity with repeated name
+    await expect(identityRegistry.connect(root_account).registerIdentity(hre.ethers.ZeroHash, 'identity-a', other_account))
       .to.be.revertedWith('Name already taken');
   });
 
   it('Handle property not found errors', async () => {
     // Attempt to get property with the same hash as the identity
-    await expect(identityRegistry.getIdentityPropertyByHash(node_A_Hash, node_A_Hash))
+    await expect(identityRegistry.getIdentityPropertyByHash(identity_a_hash, identity_a_hash))
       .to.be.revertedWith('Property not found');
   });
 
