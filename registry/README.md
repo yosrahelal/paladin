@@ -49,7 +49,7 @@ A set of APIs (REST, JSON-RPC and soon to be developed gRPC) are provided in ord
 #### Resolving identities
 An identity is resolved using paths where each segment (separated by a forward slash) consists of the name of an identity. Since the root identity name is constant ("root"), for convenience it is ommited from the path. Following the sample diagram above, in order to resolve identity `identity-a-b` the following path is used:
 ```
-node-a/identity-a-b
+identity-a/identity-a-b
 ```
 Resolving an identity provides access to its associated properties, owner address and list of child identities.
 
