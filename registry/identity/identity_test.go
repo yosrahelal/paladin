@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/kaleido-io/paladin/kata/pkg/signer"
+	"github.com/kaleido-io/paladin/kata/pkg/signer/api"
 	"github.com/kaleido-io/paladin/registry/config"
 	"github.com/stretchr/testify/assert"
 )
@@ -244,7 +244,8 @@ func checkEmptyNames(t *testing.T) {
 
 func getAddress(key string) (address ethtypes.Address0xHex) {
 	ctx := context.Background()
-	_, verifier, err := Registry.keyMgr.ResolveKey(ctx, key, signer.Algorithm_ECDSA_SECP256K1_PLAINBYTES)
+	_, verifier, err := Registry.keyMgr.ResolveKey(ctx, key, api.Algorithm_ECDSA_SECP256K1_PLAINBYTES)
+
 	if err != nil {
 		panic("Failed to get address from key")
 	}

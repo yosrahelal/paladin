@@ -22,7 +22,7 @@ import (
 	"github.com/kaleido-io/paladin/kata/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/kata/pkg/ethclient"
 	"github.com/kaleido-io/paladin/kata/pkg/persistence"
-	"github.com/kaleido-io/paladin/kata/pkg/signer"
+	"github.com/kaleido-io/paladin/kata/pkg/signer/api"
 	"gopkg.in/yaml.v2"
 )
 
@@ -46,7 +46,7 @@ type Config struct {
 	Persistence persistence.Config  `yaml:"persistence"`
 	Eth         ethclient.Config    `yaml:"eth"`
 	Indexer     blockindexer.Config `yaml:"indexer"`
-	Keys        signer.Config       `yaml:"keys"`
+	Keys        api.Config          `yaml:"keys"`
 }
 
 func (config *Config) Load() error {
