@@ -33,7 +33,8 @@ import (
 	"github.com/kaleido-io/paladin/kata/internal/msgs"
 	"github.com/kaleido-io/paladin/kata/internal/rpcclient"
 	"github.com/kaleido-io/paladin/kata/pkg/proto"
-	"github.com/kaleido-io/paladin/kata/pkg/signer"
+	"github.com/kaleido-io/paladin/kata/pkg/signer/api"
+	"github.com/kaleido-io/paladin/kata/pkg/types"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -44,6 +45,7 @@ type EthClient interface {
 	ABI(ctx context.Context, a abi.ABI) (ABIClient, error)
 	ABIJSON(ctx context.Context, abiJson []byte) (ABIClient, error)
 	MustABIJSON(abiJson []byte) ABIClient
+	ChainID() int64
 
 	// Below are raw functions that the ABI() above provides wrappers for
 	CallContract(ctx context.Context, from *string, tx *ethsigner.Transaction, block string) (data ethtypes.HexBytes0xPrefix, err error)
@@ -109,6 +111,10 @@ func (ec *ethClient) Close() {
 	}
 }
 
+func (ec *ethClient) ChainID() int64 {
+	return ec.chainID
+}
+
 func (ec *ethClient) setupChainID(ctx context.Context) error {
 	var chainID ethtypes.HexUint64
 	if rpcErr := ec.rpc.CallRPC(ctx, &chainID, "eth_chainId"); rpcErr != nil {
@@ -122,11 +128,11 @@ func (ec *ethClient) setupChainID(ctx context.Context) error {
 func (ec *ethClient) CallContract(ctx context.Context, from *string, tx *ethsigner.Transaction, block string) (data ethtypes.HexBytes0xPrefix, err error) {
 
 	if from != nil {
-		_, fromAddr, err := ec.keymgr.ResolveKey(ctx, *from, signer.Algorithm_ECDSA_SECP256K1_PLAINBYTES)
+		_, fromAddr, err := ec.keymgr.ResolveKey(ctx, *from, api.Algorithm_ECDSA_SECP256K1_PLAINBYTES)
 		if err != nil {
 			return nil, err
 		}
-		tx.From = json.RawMessage(fmt.Sprintf(`"%s"`, fromAddr))
+		tx.From = json.RawMessage(types.JSONString(fromAddr))
 	}
 
 	if rpcErr := ec.rpc.CallRPC(ctx, &data, "eth_call", tx, block); rpcErr != nil {
@@ -140,11 +146,11 @@ func (ec *ethClient) CallContract(ctx context.Context, from *string, tx *ethsign
 
 func (ec *ethClient) BuildRawTransaction(ctx context.Context, txVersion EthTXVersion, from string, tx *ethsigner.Transaction) (ethtypes.HexBytes0xPrefix, error) {
 	// Resolve the key (directly with the signer - we have no key manager here in the teseced)
-	keyHandle, fromAddr, err := ec.keymgr.ResolveKey(ctx, from, signer.Algorithm_ECDSA_SECP256K1_PLAINBYTES)
+	keyHandle, fromAddr, err := ec.keymgr.ResolveKey(ctx, from, api.Algorithm_ECDSA_SECP256K1_PLAINBYTES)
 	if err != nil {
 		return nil, err
 	}
-	tx.From = json.RawMessage(fmt.Sprintf(`"%s"`, fromAddr))
+	tx.From = json.RawMessage(types.JSONString(fromAddr))
 
 	// Trivial nonce management in the client - just get the current nonce for this key, from the local node mempool, for each TX
 	if tx.Nonce == nil {
@@ -183,13 +189,13 @@ func (ec *ethClient) BuildRawTransaction(ctx context.Context, txVersion EthTXVer
 	hash := sha3.NewLegacyKeccak256()
 	_, _ = hash.Write(sigPayload.Bytes())
 	signature, err := ec.keymgr.Sign(ctx, &proto.SignRequest{
-		Algorithm: signer.Algorithm_ECDSA_SECP256K1_PLAINBYTES,
+		Algorithm: api.Algorithm_ECDSA_SECP256K1_PLAINBYTES,
 		KeyHandle: keyHandle,
 		Payload:   ethtypes.HexBytes0xPrefix(hash.Sum(nil)),
 	})
 	var sig *secp256k1.SignatureData
 	if err == nil {
-		sig, err = signer.DecodeCompactRSV(ctx, signature.Payload)
+		sig, err = secp256k1.DecodeCompactRSV(ctx, signature.Payload)
 	}
 	var rawTX []byte
 	if err == nil {

@@ -27,7 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/kata/internal/rpcclient"
 	"github.com/kaleido-io/paladin/kata/internal/rpcserver"
 	"github.com/kaleido-io/paladin/kata/pkg/proto"
-	"github.com/kaleido-io/paladin/kata/pkg/signer"
+	"github.com/kaleido-io/paladin/kata/pkg/signer/api"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -116,6 +116,7 @@ func newTestClientAndServer(t *testing.T, isWS bool, mEth *mockEth) (ctx context
 		assert.NoError(t, err)
 		ec = iec.(*ethClient)
 	}
+	assert.Equal(t, int64(12345), ec.ChainID())
 
 	return ctx, ec, func() {
 		serverDone()
@@ -125,8 +126,8 @@ func newTestClientAndServer(t *testing.T, isWS bool, mEth *mockEth) (ctx context
 }
 
 func TestNewEthClientBadConfig(t *testing.T) {
-	kmgr, err := NewSimpleTestKeyManager(context.Background(), &signer.Config{
-		KeyStore: signer.StoreConfig{Type: signer.KeyStoreTypeStatic},
+	kmgr, err := NewSimpleTestKeyManager(context.Background(), &api.Config{
+		KeyStore: api.StoreConfig{Type: api.KeyStoreTypeStatic},
 	})
 	assert.NoError(t, err)
 	_, err = NewEthClient(context.Background(), kmgr, &Config{})

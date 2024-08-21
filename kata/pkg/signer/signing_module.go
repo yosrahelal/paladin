@@ -18,14 +18,18 @@ package signer
 import (
 	"context"
 	"crypto/rand"
-	"math/big"
 	"strings"
 
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
+	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/key"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/kata/internal/msgs"
 	"github.com/kaleido-io/paladin/kata/pkg/proto"
+	"github.com/kaleido-io/paladin/kata/pkg/signer/api"
+	sepc256k1Signer "github.com/kaleido-io/paladin/kata/pkg/signer/in-memory/secp256k1"
+	zkpSigner "github.com/kaleido-io/paladin/kata/pkg/signer/in-memory/snark"
+	"github.com/kaleido-io/paladin/kata/pkg/signer/keystore"
 )
 
 // SigningModule provides functions for the protobuf request/reply functions from the proto interface defined
@@ -38,11 +42,6 @@ type SigningModule interface {
 	List(ctx context.Context, req *proto.ListKeysRequest) (res *proto.ListKeysResponse, err error)
 }
 
-type Extension interface {
-	// Return nil if keystore type is not known, or error if initialization fails
-	KeyStore(keystoreType string) (store KeyStore, err error)
-}
-
 type hdDerivation struct {
 	sm                    *signingModule
 	bip44DirectResolution bool
@@ -52,10 +51,11 @@ type hdDerivation struct {
 }
 
 type signingModule struct {
-	keyStore          KeyStore
+	keyStore          api.KeyStore
 	disableKeyListing bool
 	disableKeyLoading bool
 	hd                *hdDerivation
+	inMemorySigners   map[string]api.InMemorySigner
 }
 
 // We allow this same code to be used (un-modified) with set of initialization functions passed
@@ -80,22 +80,22 @@ type signingModule struct {
 // The design is such that all built-in behaviors should be both:
 // 1. Easy to re-use if they are valuable with your extension
 // 2. Easy to disable in the Config object passed in, if you do not want to have them enabled
-func NewSigningModule(ctx context.Context, config *Config, extensions ...Extension) (_ SigningModule, err error) {
+func NewSigningModule(ctx context.Context, config *api.Config, extensions ...api.Extension) (_ SigningModule, err error) {
 	sm := &signingModule{}
 
 	keyStoreType := strings.ToLower(config.KeyStore.Type)
 	switch keyStoreType {
-	case "", KeyStoreTypeFilesystem:
-		if sm.keyStore, err = newFilesystemStore(ctx, &config.KeyStore.FileSystem); err != nil {
+	case "", api.KeyStoreTypeFilesystem:
+		if sm.keyStore, err = keystore.NewFilesystemStore(ctx, config.KeyStore.FileSystem); err != nil {
 			return nil, err
 		}
-	case KeyStoreTypeStatic:
-		if sm.keyStore, err = newStaticKeyStore(ctx, &config.KeyStore.Static); err != nil {
+	case api.KeyStoreTypeStatic:
+		if sm.keyStore, err = keystore.NewStaticKeyStore(ctx, config.KeyStore.Static); err != nil {
 			return nil, err
 		}
 	default:
 		for _, ext := range extensions {
-			store, err := ext.KeyStore(keyStoreType)
+			store, err := ext.KeyStore(ctx, &config.KeyStore)
 			if err != nil {
 				return nil, err
 			}
@@ -110,8 +110,8 @@ func NewSigningModule(ctx context.Context, config *Config, extensions ...Extensi
 	}
 
 	switch config.KeyDerivation.Type {
-	case "", KeyDerivationTypeDirect:
-	case KeyDerivationTypeBIP32:
+	case "", api.KeyDerivationTypeDirect:
+	case api.KeyDerivationTypeBIP32:
 		// This is fundamentally incompatible with a request to disable loading key materials into memory
 		if config.KeyStore.DisableKeyLoading {
 			return nil, i18n.NewError(ctx, msgs.MsgSigningHierarchicalRequiresLoading)
@@ -126,7 +126,13 @@ func NewSigningModule(ctx context.Context, config *Config, extensions ...Extensi
 	// Settings that disable behaviors, whether technically supported by the key store or not
 	sm.disableKeyListing = config.KeyStore.DisableKeyListing
 	sm.disableKeyLoading = config.KeyStore.DisableKeyLoading
-	return sm, nil
+
+	// Register any in-memory signers
+	sm.inMemorySigners = make(map[string]api.InMemorySigner)
+	sepc256k1Signer.Register(sm.inMemorySigners)
+	err = zkpSigner.Register(ctx, config.KeyStore.SnarkProver, sm.inMemorySigners)
+
+	return sm, err
 }
 
 func (sm *signingModule) newKeyForAlgorithms(ctx context.Context, algorithms []string) ([]byte, error) {
@@ -148,29 +154,9 @@ func (sm *signingModule) resolveKeystoreSECP256K1(ctx context.Context, req *prot
 	return &proto.ResolveKeyResponse{
 		KeyHandle: keyHandle,
 		Identifiers: []*proto.PublicKeyIdentifier{
-			{Algorithm: Algorithm_ECDSA_SECP256K1_PLAINBYTES, Identifier: addr.String()},
+			{Algorithm: api.Algorithm_ECDSA_SECP256K1_PLAINBYTES, Identifier: addr.String()},
 		},
 	}, nil
-}
-
-// We use the ethereum convention of R,S,V for compact packing (mentioned because Golang tends to prefer V,R,S)
-func CompactRSV(sig *secp256k1.SignatureData) []byte {
-	signatureBytes := make([]byte, 65)
-	sig.R.FillBytes(signatureBytes[0:32])
-	sig.S.FillBytes(signatureBytes[32:64])
-	signatureBytes[64] = byte(sig.V.Int64())
-	return signatureBytes
-}
-
-func DecodeCompactRSV(ctx context.Context, compactRSV []byte) (*secp256k1.SignatureData, error) {
-	if len(compactRSV) != 65 {
-		return nil, i18n.NewError(ctx, msgs.MsgSigningInvalidCompactRSV, len(compactRSV))
-	}
-	var sig secp256k1.SignatureData
-	sig.R = new(big.Int).SetBytes(compactRSV[0:32])
-	sig.S = new(big.Int).SetBytes(compactRSV[32:64])
-	sig.V = new(big.Int).SetBytes(compactRSV[64:65])
-	return &sig, nil
 }
 
 func (sm *signingModule) signKeystoreSECP256K1(ctx context.Context, req *proto.SignRequest, keyStoreSigner KeyStoreSigner_secp256k1) (res *proto.SignResponse, err error) {
@@ -179,7 +165,7 @@ func (sm *signingModule) signKeystoreSECP256K1(ctx context.Context, req *proto.S
 		return nil, err
 	}
 	return &proto.SignResponse{
-		Payload: CompactRSV(sig),
+		Payload: sig.CompactRSV(),
 	}, nil
 }
 
@@ -187,7 +173,7 @@ func (sm *signingModule) getKeyLenForInMemorySigning(ctx context.Context, algori
 	keyLen := 0
 	for _, algo := range algorithms {
 		switch strings.ToLower(algo) {
-		case Algorithm_ECDSA_SECP256K1_PLAINBYTES:
+		case api.Algorithm_ECDSA_SECP256K1_PLAINBYTES, api.Algorithm_ZKP_BABYJUBJUB_PLAINBYTES:
 			keyLen = 32
 		default:
 			return -1, i18n.NewError(ctx, msgs.MsgSigningUnsupportedAlgoForInMemorySigning, algo)
@@ -200,28 +186,31 @@ func (sm *signingModule) getKeyLenForInMemorySigning(ctx context.Context, algori
 }
 
 func (sm *signingModule) signInMemory(ctx context.Context, privateKey []byte, req *proto.SignRequest) (res *proto.SignResponse, err error) {
-	switch strings.ToLower(req.Algorithm) {
-	case Algorithm_ECDSA_SECP256K1_PLAINBYTES:
-		kp := secp256k1.KeyPairFromBytes(privateKey)
-		sig, err := kp.SignDirect(req.Payload)
-		if err == nil {
-			return &proto.SignResponse{Payload: CompactRSV(sig)}, nil
-		}
-	default:
-		err = i18n.NewError(ctx, msgs.MsgSigningUnsupportedAlgoForInMemorySigning, req.Algorithm)
+	algo := strings.ToLower(req.Algorithm)
+	signer, ok := sm.inMemorySigners[algo]
+	if !ok {
+		return nil, i18n.NewError(ctx, msgs.MsgSigningUnsupportedAlgoForInMemorySigning, req.Algorithm)
 	}
-	return nil, err
+	return signer.Sign(ctx, privateKey, req)
 }
 
 func (sm *signingModule) publicKeyIdentifiersForAlgorithms(ctx context.Context, keyHandle string, privateKey []byte, algorithms []string) (*proto.ResolveKeyResponse, error) {
 	var identifiers []*proto.PublicKeyIdentifier
 	for _, algo := range algorithms {
 		switch strings.ToLower(algo) {
-		case Algorithm_ECDSA_SECP256K1_PLAINBYTES:
+		case api.Algorithm_ECDSA_SECP256K1_PLAINBYTES:
 			addr := secp256k1.KeyPairFromBytes(privateKey)
 			identifiers = append(identifiers, &proto.PublicKeyIdentifier{
-				Algorithm:  Algorithm_ECDSA_SECP256K1_PLAINBYTES,
+				Algorithm:  api.Algorithm_ECDSA_SECP256K1_PLAINBYTES,
 				Identifier: addr.Address.String(),
+			})
+		case api.Algorithm_ZKP_BABYJUBJUB_PLAINBYTES:
+			var privKeyBytes [32]byte
+			copy(privKeyBytes[:], privateKey)
+			keyEntry := key.NewKeyEntryFromPrivateKeyBytes(privKeyBytes)
+			identifiers = append(identifiers, &proto.PublicKeyIdentifier{
+				Algorithm:  api.Algorithm_ZKP_BABYJUBJUB_PLAINBYTES,
+				Identifier: keyEntry.PublicKey.String(),
 			})
 		default:
 			return nil, i18n.NewError(ctx, msgs.MsgSigningUnsupportedAlgoForInMemorySigning, algo)
@@ -234,16 +223,23 @@ func (sm *signingModule) publicKeyIdentifiersForAlgorithms(ctx context.Context, 
 }
 
 func (sm *signingModule) Resolve(ctx context.Context, req *proto.ResolveKeyRequest) (res *proto.ResolveKeyResponse, err error) {
+	if len(req.Name) == 0 {
+		return nil, i18n.NewError(ctx, msgs.MsgSigningKeyCannotBeEmpty)
+	}
 	if sm.hd != nil {
 		return sm.hd.resolveHDWalletKey(ctx, req)
 	}
-	if len(req.Algorithms) == 1 && req.Algorithms[0] == Algorithm_ECDSA_SECP256K1_PLAINBYTES {
+	if len(req.Algorithms) == 1 && req.Algorithms[0] == api.Algorithm_ECDSA_SECP256K1_PLAINBYTES {
+		// found a key store signer configured which does not expose private key materials
+		// but encapsulates the signing logic. delegate further handling to the signer
 		keyStoreSigner, ok := sm.keyStore.(KeyStoreSigner_secp256k1)
 		if ok {
 			return sm.resolveKeystoreSECP256K1(ctx, req, keyStoreSigner)
 		}
 	}
-	// We are going to use the key store to load/decrypt a key into our volatile memory
+
+	// No key store signer for the requested algorithm - we need to
+	// load/decrypt a key into our volatile memory
 	if sm.disableKeyLoading {
 		return nil, i18n.NewError(ctx, msgs.MsgSigningStoreRequiresKeyLoadingForAlgo, strings.Join(req.Algorithms, ","))
 	}
@@ -260,13 +256,15 @@ func (sm *signingModule) Sign(ctx context.Context, req *proto.SignRequest) (res 
 	if sm.hd != nil {
 		return sm.hd.signHDWalletKey(ctx, req)
 	}
-	if req.Algorithm == Algorithm_ECDSA_SECP256K1_PLAINBYTES {
+	if req.Algorithm == api.Algorithm_ECDSA_SECP256K1_PLAINBYTES {
 		keyStoreSigner, ok := sm.keyStore.(KeyStoreSigner_secp256k1)
 		if ok {
 			return sm.signKeystoreSECP256K1(ctx, req, keyStoreSigner)
 		}
 	}
-	// We are going to use the key store to load/decrypt a key into our volatile memory
+
+	// No key store signer for the requested algorithm - we need to sign in memory
+	// by asking the key store to load/decrypt a key into our volatile memory
 	if sm.disableKeyLoading {
 		return nil, i18n.NewError(ctx, msgs.MsgSigningStoreRequiresKeyLoadingForAlgo, req.Algorithm)
 	}
@@ -278,7 +276,7 @@ func (sm *signingModule) Sign(ctx context.Context, req *proto.SignRequest) (res 
 }
 
 func (sm *signingModule) List(ctx context.Context, req *proto.ListKeysRequest) (res *proto.ListKeysResponse, err error) {
-	listableStore, isListable := sm.keyStore.(KeyStoreListable)
+	listableStore, isListable := sm.keyStore.(api.KeyStoreListable)
 	if !isListable || sm.disableKeyListing {
 		return nil, i18n.NewError(ctx, msgs.MsgSigningKeyListingNotSupported)
 	}

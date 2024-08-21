@@ -23,7 +23,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/kaleido-io/paladin/kata/pkg/signer"
+	"github.com/kaleido-io/paladin/kata/pkg/signer/api"
 	"github.com/kaleido-io/paladin/kata/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/sha3"
@@ -161,7 +161,7 @@ func testInvokeNewWidgetOk(t *testing.T, isWS bool, txVersion EthTXVersion, gasL
 	})
 	defer done()
 
-	_, key1, err := ec.keymgr.ResolveKey(ctx, "key1", signer.Algorithm_ECDSA_SECP256K1_PLAINBYTES)
+	_, key1, err := ec.keymgr.ResolveKey(ctx, "key1", api.Algorithm_ECDSA_SECP256K1_PLAINBYTES)
 	assert.NoError(t, err)
 
 	fakeContractAddr := ethtypes.MustNewAddress("0xCC3b61E636B395a4821Df122d652820361FF26f1")
@@ -211,7 +211,7 @@ func testCallGetWidgetsOk(t *testing.T, withFrom, withBlock, withBlockRef bool) 
 				assert.Equal(t, "latest", s)
 			}
 			if withFrom {
-				assert.Equal(t, fmt.Sprintf(`"%s"`, key1), string(tx.From))
+				assert.Equal(t, types.JSONString(key1), types.RawJSON(tx.From))
 			} else {
 				assert.Nil(t, tx.From)
 			}
@@ -240,7 +240,7 @@ func testCallGetWidgetsOk(t *testing.T, withFrom, withBlock, withBlockRef bool) 
 	defer done()
 
 	if withFrom {
-		_, key1, err = ec.keymgr.ResolveKey(ctx, "key1", signer.Algorithm_ECDSA_SECP256K1_PLAINBYTES)
+		_, key1, err = ec.keymgr.ResolveKey(ctx, "key1", api.Algorithm_ECDSA_SECP256K1_PLAINBYTES)
 		assert.NoError(t, err)
 	}
 
@@ -340,9 +340,19 @@ func TestFunctionFail(t *testing.T) {
 func TestConstructorFail(t *testing.T) {
 	ctx, ec, done := newTestClientAndServer(t, false, &mockEth{})
 	defer done()
+
 	tABI := ec.MustABIJSON(([]byte)(`[]`))
+	defaultConstructor := tABI.MustConstructor([]byte{})
+	assert.Equal(t, "()", defaultConstructor.(*abiFunctionClient).inputs.String())
+
+	tABI.(*abiClient).abi = abi.ABI{
+		{
+			Type:   abi.Constructor,
+			Inputs: abi.ParameterArray{{Type: "!wrong"}},
+		},
+	}
 	_, err := tABI.Constructor(ctx, []byte{})
-	assert.Regexp(t, "PD011507", err)
+	assert.Regexp(t, "FF22025", err)
 
 	assert.Panics(t, func() {
 		_ = tABI.MustConstructor([]byte{})
@@ -498,7 +508,7 @@ func TestInvokeConstructor(t *testing.T) {
 	})
 	defer done()
 
-	_, key1, err := ec.keymgr.ResolveKey(ctx, "key1", signer.Algorithm_ECDSA_SECP256K1_PLAINBYTES)
+	_, key1, err := ec.keymgr.ResolveKey(ctx, "key1", api.Algorithm_ECDSA_SECP256K1_PLAINBYTES)
 	assert.NoError(t, err)
 
 	testABI = ec.MustABIJSON(testABIJSON)
