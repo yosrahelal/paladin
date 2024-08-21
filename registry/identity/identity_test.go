@@ -33,10 +33,10 @@ import (
  * The following identity hierarchy is registered:
  *
  *    root                  (owned by key0)
- *    ├── identity-a        (owned by key2)
+ *    ├── identity-a        (owned by key1)
  *    │   ├── identity-a-a  (owned by key3)
  *    │   └── identity-a-b  (owned by key4)
- *    └── identity-b        (owned by key0)
+ *    └── identity-b        (owned by key2)
  *
  * The following properties are set:
  *
