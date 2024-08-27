@@ -47,7 +47,7 @@ func (registry *IdentityRegistry) SetIdentityProperty(signer string, identityHas
 		return
 	}
 
-	_, err = registry.indexer.WaitForTransaction(ctx, txHash.String())
+	_, err = registry.indexer.WaitForTransaction(ctx, *txHash)
 	return
 }
 

@@ -7,7 +7,9 @@ persistence:
     autoMigrate:   true
     migrationsDir: ../kata/db/migrations/sqlite
     debugQueries:  true
-eth:  
+eth:
+    http:
+      url: http://localhost:8545
     ws:
         url: ws://localhost:8546
         initialConnectAttempts: 25

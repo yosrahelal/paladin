@@ -44,7 +44,7 @@ type propertySetEvent struct {
 
 func (registry *IdentityRegistry) StartListening() (err error) {
 	identityStream := blockindexer.InternalEventStream{
-		Handler: func(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) error {
+		Handler: func(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
 			for _, e := range batch.Events {
 				if !bytes.Equal(e.Address[:], registry.contractAddr[:]) {
 					continue
@@ -68,7 +68,7 @@ func (registry *IdentityRegistry) StartListening() (err error) {
 				}
 				registry.LastIncrementalUpdate = time.Now().Unix()
 			}
-			return nil
+			return nil, nil
 		},
 		Definition: &blockindexer.EventStream{
 			Name: "IdentityRegistered",
@@ -77,7 +77,7 @@ func (registry *IdentityRegistry) StartListening() (err error) {
 	}
 
 	propertyStream := blockindexer.InternalEventStream{
-		Handler: func(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) error {
+		Handler: func(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
 			for _, e := range batch.Events {
 				if !bytes.Equal(e.Address[:], registry.contractAddr[:]) {
 					continue
@@ -94,7 +94,7 @@ func (registry *IdentityRegistry) StartListening() (err error) {
 				}
 				registry.LastIncrementalUpdate = time.Now().Unix()
 			}
-			return nil
+			return nil, nil
 		},
 		Definition: &blockindexer.EventStream{
 			Name: "PropertySet",

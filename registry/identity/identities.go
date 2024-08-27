@@ -71,7 +71,7 @@ func (registry *IdentityRegistry) RegisterIdentity(signer string, parent ethtype
 		return
 	}
 
-	_, err = registry.indexer.WaitForTransaction(ctx, txHash.String())
+	_, err = registry.indexer.WaitForTransaction(ctx, *txHash)
 	return
 }
 

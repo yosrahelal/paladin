@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/kata/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/kata/pkg/ethclient"
 	"github.com/kaleido-io/paladin/kata/pkg/persistence"
+	"github.com/kaleido-io/paladin/kata/pkg/types"
 	"github.com/kaleido-io/paladin/registry/config"
 )
 
@@ -76,10 +77,17 @@ func (registry *IdentityRegistry) Initialize(conf config.Config) error {
 		return fmt.Errorf("Failed to initialize key manager: %s", err)
 	}
 
-	registry.ethClient, err = ethclient.NewEthClient(ctx, registry.keyMgr, &conf.Eth)
+	ecf, err := ethclient.NewEthClientFactory(ctx, registry.keyMgr, &conf.Eth)
 	if err != nil {
-		return fmt.Errorf("Failed to initialize ethClient: %s", err)
+		return fmt.Errorf("Failed to initialize ethClient factory: %s", err)
 	}
+
+	err = ecf.Start()
+	if err != nil {
+		return fmt.Errorf("Failed to start ethClient factory: %s", err)
+	}
+
+	registry.ethClient = ecf.HTTPClient()
 
 	err = registry.indexer.Start()
 	if err != nil {
@@ -118,13 +126,13 @@ func (registry *IdentityRegistry) DeploySmartContract(signer string) (address et
 		return
 	}
 
-	txHash, err := registry.abiClient.MustConstructor(registry.contract.Bytecode).R(ctx).
+	txHash, err := registry.abiClient.MustConstructor(types.HexBytes(registry.contract.Bytecode)).R(ctx).
 		Signer(signer).SignAndSend()
 	if err != nil {
 		return
 	}
 
-	deployTX, err := registry.indexer.WaitForTransaction(ctx, txHash.String())
+	deployTX, err := registry.indexer.WaitForTransaction(ctx, *txHash)
 	if err != nil {
 		return
 	}
