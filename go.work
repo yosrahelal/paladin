@@ -5,4 +5,5 @@ use (
 	./talaria
 	./testinfra
 	./registry
+	./toolkit_go
 )
