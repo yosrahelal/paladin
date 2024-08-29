@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      SEGMENT_DOWNLOAD_TIMEOUT_MINS: '5'
     # uncomment database setup as needed
     # services:
     #   postgres:
@@ -38,12 +40,28 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: 21
+          cache: 'gradle'
+          cache-dependency-path: |
+            .gradle
+            buildSrc/.gradle
+            solidity/node_modules/amazon-cognito-identity-js/android/.gradle
+            gradle/wrapper/gradle-wrapper.properties
+            pente/gradle/wrapper/gradle-wrapper.properties
+            portara/gradle/wrapper/gradle-wrapper.properties
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: '1.22'
           check-latest: true
+          cache-dependency-path: |
+            zeto/go-sdk/go.sum
+            domains/zeto/go.sum
+            domains/noto/go.sum
+            talaria/go.sum
+            testinfra/go.sum
+            toolkit_go/go.sum
+            kata/go.sum
 
       - name: Setup Gradle
         with:
