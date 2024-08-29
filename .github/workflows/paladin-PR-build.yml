@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -47,6 +46,8 @@ jobs:
           check-latest: true
 
       - name: Setup Gradle
+        with:
+          gradle-version: 8.4
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build with Gradle
