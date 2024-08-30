@@ -27,6 +27,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-iden3-crypto/poseidon"
+	"github.com/kaleido-io/paladin/toolkit/pkg/filters"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
@@ -76,29 +77,15 @@ func (z *Zeto) prepareInputs(ctx context.Context, owner string, amount *ethtypes
 	stateRefs := []*pb.StateRef{}
 	coins := []*ZetoCoin{}
 	for {
-		// Simple oldest coin first algorithm
-		// TODO: make this configurable
-		// TODO: why is filters.QueryJSON not a public interface?
-		query := map[string]interface{}{
-			"limit": 10,
-			"sort":  []string{".created"},
-			"eq": []map[string]string{{
-				"field": "owner",
-				"value": owner,
-			}},
-		}
-		if lastStateTimestamp > 0 {
-			query["gt"] = []map[string]string{{
-				"field": ".created",
-				"value": strconv.FormatInt(lastStateTimestamp, 10),
-			}}
-		}
-		queryJSON, err := json.Marshal(query)
-		if err != nil {
-			return nil, nil, nil, err
-		}
+		queryBuilder := filters.NewQueryBuilder().
+			Limit(10).
+			Sort(".created").
+			Eq("owner", owner)
 
-		states, err := z.findAvailableStates(ctx, string(queryJSON))
+		if lastStateTimestamp > 0 {
+			queryBuilder.Gt(".created", strconv.FormatInt(lastStateTimestamp, 10))
+		}
+		states, err := z.findAvailableStates(ctx, queryBuilder.Query().String())
 		if err != nil {
 			return nil, nil, nil, err
 		}
