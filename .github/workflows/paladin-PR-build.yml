@@ -55,7 +55,6 @@ jobs:
           go-version: '1.22'
           check-latest: true
           cache-dependency-path: |
-            zeto/go-sdk/go.sum
             domains/zeto/go.sum
             domains/noto/go.sum
             talaria/go.sum
@@ -69,7 +68,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build with Gradle
-        run: ./gradlew -PcomposeLogs=true build
+        run: ./gradlew -PcomposeLogs=true --console=verbose build
 
         # env:
         #   CREATE_TEST_DB: 0 # github action setup a PSQL db service, so no need to create a test db again
