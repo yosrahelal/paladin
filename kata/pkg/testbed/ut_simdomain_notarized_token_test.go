@@ -32,11 +32,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
-	"github.com/kaleido-io/paladin/kata/internal/componentmgr"
-	"github.com/kaleido-io/paladin/kata/internal/components"
-	"github.com/kaleido-io/paladin/kata/internal/domainmgr"
 	"github.com/kaleido-io/paladin/kata/internal/filters"
-	"github.com/kaleido-io/paladin/kata/internal/plugins"
 	"github.com/kaleido-io/paladin/kata/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/kata/pkg/ethclient"
 	"github.com/kaleido-io/paladin/kata/pkg/types"
@@ -45,7 +41,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v3"
 )
 
 //go:embed abis/SIMDomain.json
@@ -311,7 +306,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 
 			ConfigureDomain: func(ctx context.Context, req *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
 				assert.Equal(t, "domain1", req.Name)
-				assert.JSONEq(t, `{"some":"config"}`, req.ConfigYaml)
+				assert.JSONEq(t, `{"some":"config"}`, req.ConfigJson)
 				assert.Equal(t, int64(1337), req.ChainId) // from tools/besu_bootstrap
 				chainID = req.ChainId
 
@@ -596,33 +591,21 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 		}}
 	})
 
-	var pl plugins.UnitTestPluginLoader
-	url, _, done := newUnitTestbed(t,
-		func(conf *componentmgr.Config) {
-			conf.DomainManagerConfig.Domains = map[string]*domainmgr.DomainConfig{
-				"domain1": {
-					Plugin: plugins.PluginConfig{
-						Type:    plugins.LibraryTypeCShared.Enum(),
-						Library: "loaded/via/unit/test/loader",
-					},
-					Config: yamlNode(`{"some":"config"}`),
-				},
-			}
+	tb := NewTestBed()
+	confFile := writeTestConfig(t)
+	url, done, err := tb.StartForTest(confFile, map[string]*TestbedDomain{
+		"domain1": {
+			Plugin: fakeCoinDomain,
+			Config: map[string]any{"some": "config"},
 		},
-		func(c components.AllComponents) (err error) {
-			ec = c.EthClientFactory().HTTPClient()
-			bi := c.BlockIndexer()
-			blockIndexer.Store(&bi)
-			pc := c.PluginController()
-			pl, err = plugins.NewUnitTestPluginLoader(pc.GRPCTargetURL(), pc.LoaderID().String(), map[string]plugintk.Plugin{
-				"domain1": fakeCoinDomain,
-			})
-			assert.NoError(t, err)
-			go pl.Run()
-			return nil
-		})
+	}, &UTInitFunction{PreManagerStart: func(c AllComponents) error {
+		ec = c.EthClientFactory().HTTPClient()
+		bi := c.BlockIndexer()
+		blockIndexer.Store(&bi)
+		return nil
+	}})
+	assert.NoError(t, err)
 	defer done()
-	defer pl.Stop()
 
 	tbRPC := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
 
@@ -658,9 +641,4 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 	})
 	assert.Nil(t, rpcErr)
 
-}
-
-func yamlNode(s string) (yn yaml.Node) {
-	_ = yaml.Unmarshal([]byte(s), &yn)
-	return yn
 }

@@ -17,16 +17,17 @@ package testbed
 
 import (
 	"context"
-	"fmt"
+	"os"
+	"path"
 	"testing"
 
 	"github.com/kaleido-io/paladin/kata/internal/componentmgr"
-	"github.com/kaleido-io/paladin/kata/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/stretchr/testify/assert"
+	"gopkg.in/yaml.v2"
 )
 
-func newUnitTestbed(t *testing.T, setConf func(conf *componentmgr.Config), pluginInit ...func(c components.AllComponents) error) (url string, tb *testbed, done func()) {
+func writeTestConfig(t *testing.T) (configFile string) {
 	ctx := context.Background()
 	log.SetLevel("debug")
 
@@ -36,14 +37,56 @@ func newUnitTestbed(t *testing.T, setConf func(conf *componentmgr.Config), plugi
 	// For running in this unit test the dirs are different to the sample config
 	conf.DB.SQLite.MigrationsDir = "../../db/migrations/sqlite"
 	conf.DB.Postgres.MigrationsDir = "../../db/migrations/postgres"
-	setConf(conf)
-
-	tb = NewTestBed()
-	cm, err := componentmgr.UnitTestStart(ctx, conf, tb, pluginInit...)
+	configFile = path.Join(t.TempDir(), "test.config.yaml")
+	f, err := os.Create(configFile)
+	assert.NoError(t, err)
+	defer f.Close()
+	err = yaml.NewEncoder(f).Encode(conf)
 	assert.NoError(t, err)
 
-	return fmt.Sprintf("http://%s", tb.c.RPCServer().HTTPAddr()), tb, func() {
-		cm.Stop()
-	}
+	return configFile
+}
 
+func TestYAMLConfigWorks(t *testing.T) {
+	yamlConf := `
+db:
+  type: sqlite
+  sqlite:
+    uri:           ":memory:"
+    autoMigrate:   true
+    migrationsDir: any
+    debugQueries:  true
+signer:
+  keyStore:
+    type: static
+    static:
+      keys:
+        seed:
+          encoding: none
+          inline: '17250abf7976eae3c964e9704063f1457a8e1b4c0c0bd8b21ec8db5b88743c10'
+rpcServer:
+  http:
+    port: 1234
+  ws:
+    disabled: true
+blockchain:
+   http:
+     url: http://localhost:8545
+   ws:
+     url: ws://localhost:8546
+domains:
+  pente:
+    plugin:
+      type: jar
+      class: any
+    config:
+      address: any
+log:
+  level: debug	
+`
+	var conf componentmgr.Config
+	err := yaml.Unmarshal([]byte(yamlConf), &conf)
+	assert.NoError(t, err)
+
+	assert.NotNil(t, conf.DomainManagerConfig.Domains["pente"].Config)
 }
