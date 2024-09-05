@@ -6,9 +6,9 @@ require (
 	github.com/go-resty/resty/v2 v2.14.0
 	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240812164533-f19c3b9c5915
 	github.com/hyperledger/firefly-common v1.4.8
-	github.com/hyperledger/firefly-signer v1.1.14-0.20240827185235-2fe278d0353f
+	github.com/hyperledger/firefly-signer v1.1.14
 	github.com/iden3/go-iden3-crypto v0.0.16
-	github.com/kaleido-io/paladin/kata v0.0.0-00010101000000-000000000000
+	github.com/kaleido-io/paladin/core v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.9.0
 	google.golang.org/protobuf v1.34.2
@@ -63,6 +63,7 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/onsi/gomega v1.33.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -107,8 +108,8 @@ require (
 	gorm.io/gorm v1.25.11 // indirect
 )
 
-replace github.com/kaleido-io/paladin/kata => ../../kata
-
-replace github.com/kaleido-io/paladin/toolkit => ../../toolkit_go
+replace github.com/kaleido-io/paladin/core => ../../core/go
 
 replace github.com/hyperledger-labs/zeto/go-sdk => ../../zeto/go-sdk
+
+replace github.com/kaleido-io/paladin/toolkit => ../../toolkit/go

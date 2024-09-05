@@ -27,6 +27,7 @@ task startTestInfra(type: DockerCompose, dependsOn: tasks.besuBootstrapTool) {
     args 'up', '-d', '--wait', '--wait-timeout', 60
 }
 
+
 task stopTestInfra(type: DockerCompose) {
     composeFile 'docker-compose-test.yml'
     projectName 'paladin-testinfra'
