@@ -297,49 +297,104 @@ func TestSet(t *testing.T) {
 		expected map[string]interface{}
 	}{
 		{
-			name:     "Set new key-value pair",
+			name:     "Set value type string",
 			initial:  map[string]interface{}{},
-			key:      "newKey",
-			value:    "newValue",
-			expected: map[string]interface{}{"newKey": "newValue"},
+			key:      "key",
+			value:    "value",
+			expected: map[string]interface{}{"key": "value"},
 		},
 		{
-			name:     "Update existing key with new value",
-			initial:  map[string]interface{}{"existingKey": "oldValue"},
-			key:      "existingKey",
-			value:    "newValue",
-			expected: map[string]interface{}{"existingKey": "newValue"},
+			name:     "Set value type uint64",
+			initial:  map[string]interface{}{},
+			key:      "key",
+			value:    uint64(98),
+			expected: map[string]interface{}{"key": uint64(98)},
 		},
 		{
-			name: "Merge maps when value is a map",
-			initial: map[string]interface{}{
-				"mapKey": map[string]interface{}{"field1": "value1"},
+			name:     "Set value type int",
+			initial:  map[string]interface{}{},
+			key:      "key",
+			value:    98,
+			expected: map[string]interface{}{"key": 98},
+		},
+		{
+			name:     "Set value type bool",
+			initial:  map[string]interface{}{},
+			key:      "key",
+			value:    true,
+			expected: map[string]interface{}{"key": true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q := &queryImpl{query: tt.initial}
+			q.set(tt.key, tt.value)
+			assert.Equal(t, tt.expected, q.query)
+		})
+	}
+}
+
+func TestQueryImpl_setSliceMap(t *testing.T) {
+	tests := []struct {
+		name     string
+		initial  map[string]interface{}
+		key      string
+		value    []map[string]string
+		expected map[string]interface{}
+	}{
+		{
+			name:    "Set single map",
+			initial: map[string]interface{}{},
+			key:     "key",
+			value:   []map[string]string{{"field": "name", "value": "John"}},
+			expected: map[string]interface{}{
+				"key": []map[string]string{{"field": "name", "value": "John"}},
 			},
-			key: "mapKey",
-			value: map[string]interface{}{
-				"field2": "value2",
+		},
+		{
+			name:    "Set multiple maps",
+			initial: map[string]interface{}{},
+			key:     "key",
+			value: []map[string]string{
+				{"field": "name", "value": "John"},
+				{"field": "age", "value": "30"},
 			},
 			expected: map[string]interface{}{
-				"mapKey": map[string]interface{}{
-					"field1": "value1",
-					"field2": "value2",
+				"key": []map[string]string{
+					{"field": "name", "value": "John"},
+					{"field": "age", "value": "30"},
 				},
 			},
 		},
 		{
-			name: "Set nested map value",
+			name: "Append to existing maps",
 			initial: map[string]interface{}{
-				"nestedKey": map[string]interface{}{
-					"innerKey": "innerValue",
-				},
+				"key": []map[string]string{{"field": "name", "value": "John"}},
 			},
-			key: "nestedKey",
-			value: map[string]interface{}{
-				"innerKey": "newInnerValue",
+			key: "key",
+			value: []map[string]string{
+				{"field": "age", "value": "30"},
 			},
 			expected: map[string]interface{}{
-				"nestedKey": map[string]interface{}{
-					"innerKey": "newInnerValue",
+				"key": []map[string]string{
+					{"field": "name", "value": "John"},
+					{"field": "age", "value": "30"},
+				},
+			},
+		},
+		{
+			name: "Overwrite non-slice map value",
+			initial: map[string]interface{}{
+				"key": "non-slice-map-value",
+			},
+			key: "key",
+			value: []map[string]string{
+				{"field": "name", "value": "John"},
+			},
+			expected: map[string]interface{}{
+				"key": []map[string]string{
+					{"field": "name", "value": "John"},
 				},
 			},
 		},
@@ -347,15 +402,145 @@ func TestSet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			q := &QueryImpl{query: tt.initial}
-			q.set(tt.key, tt.value)
+			q := &queryImpl{query: tt.initial}
+			q.setSliceMapString(tt.key, tt.value)
 			assert.Equal(t, tt.expected, q.query)
 		})
 	}
 }
+func TestQueryImpl_setSlice(t *testing.T) {
+	tests := []struct {
+		name     string
+		initial  map[string]interface{}
+		key      string
+		value    []string
+		expected map[string]interface{}
+	}{
+		{
+			name:    "Set single slice",
+			initial: map[string]interface{}{},
+			key:     "key",
+			value:   []string{"value1"},
+			expected: map[string]interface{}{
+				"key": []string{"value1"},
+			},
+		},
+		{
+			name:    "Set multiple slices",
+			initial: map[string]interface{}{},
+			key:     "key",
+			value:   []string{"value1", "value2"},
+			expected: map[string]interface{}{
+				"key": []string{"value1", "value2"},
+			},
+		},
+		{
+			name: "Append to existing slice",
+			initial: map[string]interface{}{
+				"key": []string{"value1"},
+			},
+			key:   "key",
+			value: []string{"value2"},
+			expected: map[string]interface{}{
+				"key": []string{"value1", "value2"},
+			},
+		},
+		{
+			name: "Overwrite non-slice value",
+			initial: map[string]interface{}{
+				"key": "non-slice-value",
+			},
+			key:   "key",
+			value: []string{"value1"},
+			expected: map[string]interface{}{
+				"key": []string{"value1"},
+			},
+		},
+	}
 
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q := &queryImpl{query: tt.initial}
+			q.setSliceString(tt.key, tt.value)
+			assert.Equal(t, tt.expected, q.query)
+		})
+	}
+}
+func TestQueryImpl_setMap(t *testing.T) {
+	tests := []struct {
+		name     string
+		initial  map[string]interface{}
+		key      string
+		value    map[string]interface{}
+		expected map[string]interface{}
+	}{
+		{
+			name:    "Set single map",
+			initial: map[string]interface{}{},
+			key:     "key",
+			value:   map[string]interface{}{"field1": "value1"},
+			expected: map[string]interface{}{
+				"key": map[string]interface{}{"field1": "value1"},
+			},
+		},
+		{
+			name:    "Set multiple maps",
+			initial: map[string]interface{}{},
+			key:     "key",
+			value: map[string]interface{}{
+				"field1": "value1",
+				"field2": "value2",
+			},
+			expected: map[string]interface{}{
+				"key": map[string]interface{}{
+					"field1": "value1",
+					"field2": "value2",
+				},
+			},
+		},
+		{
+			name: "Append to existing map",
+			initial: map[string]interface{}{
+				"key": map[string]interface{}{"field1": "value1"},
+			},
+			key: "key",
+			value: map[string]interface{}{
+				"field2": "value2",
+			},
+			expected: map[string]interface{}{
+				"key": map[string]interface{}{
+					"field1": "value1",
+					"field2": "value2",
+				},
+			},
+		},
+		{
+			name: "Overwrite non-map value",
+			initial: map[string]interface{}{
+				"key": "non-map-value",
+			},
+			key: "key",
+			value: map[string]interface{}{
+				"field1": "value1",
+			},
+			expected: map[string]interface{}{
+				"key": map[string]interface{}{
+					"field1": "value1",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q := &queryImpl{query: tt.initial}
+			q.setMap(tt.key, tt.value)
+			assert.Equal(t, tt.expected, q.query)
+		})
+	}
+}
 func TestQueryImpl_JSON(t *testing.T) {
-	q := &QueryImpl{
+	q := &queryImpl{
 		query: map[string]interface{}{
 			"key1": "value1",
 			"key2": "value2",
@@ -368,7 +553,7 @@ func TestQueryImpl_JSON(t *testing.T) {
 }
 
 func TestQueryImpl_String(t *testing.T) {
-	q := &QueryImpl{
+	q := &queryImpl{
 		query: map[string]interface{}{
 			"key1": "value1",
 			"key2": "value2",

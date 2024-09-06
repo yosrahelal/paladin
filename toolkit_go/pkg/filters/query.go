@@ -63,104 +63,114 @@ type QueryBuilder interface {
 	Query() Query
 }
 
-type QueryBuilderImpl struct {
-	query *QueryImpl
+type queryBuilderImpl struct {
+	query *queryImpl
 }
 
-func NewQueryBuilder() *QueryBuilderImpl {
-	return &QueryBuilderImpl{
+func NewQueryBuilder() *queryBuilderImpl {
+	return &queryBuilderImpl{
 		query: newQuery(),
 	}
 }
 
 // Limit sets the limit of the query
-func (qb *QueryBuilderImpl) Limit(limit uint64) QueryBuilder {
+func (qb *queryBuilderImpl) Limit(limit uint64) QueryBuilder {
 	qb.query.set(limitKey, limit)
 	return qb
 }
 
 // Sort adds a sort filter to the query
-func (qb *QueryBuilderImpl) Sort(fields ...string) QueryBuilder {
-	qb.query.set(sortKey, fields)
+func (qb *queryBuilderImpl) Sort(fields ...string) QueryBuilder {
+	qb.query.setSliceString(sortKey, fields)
 	return qb
 }
 
 // Eq adds an equal filter to the query
-func (qb *QueryBuilderImpl) Eq(field, value string) QueryBuilder {
+func (qb *queryBuilderImpl) Eq(field, value string) QueryBuilder {
 	return qb.setField(eqKey, field, value)
 }
 
 // Nq adds a not equal filter to the query
-func (qb *QueryBuilderImpl) Nq(field, value string) QueryBuilder {
+func (qb *queryBuilderImpl) Nq(field, value string) QueryBuilder {
 	return qb.setField(nqKey, field, value)
 }
 
 // Gt adds a greater than filter to the query
-func (qb *QueryBuilderImpl) Gt(field, value string) QueryBuilder {
+func (qb *queryBuilderImpl) Gt(field, value string) QueryBuilder {
 	return qb.setField(gtKey, field, value)
 }
 
 // Lt adds a less than filter to the query
-func (qb *QueryBuilderImpl) Lt(field, value string) QueryBuilder {
+func (qb *queryBuilderImpl) Lt(field, value string) QueryBuilder {
 	return qb.setField(ltKey, field, value)
 }
 
-func (qb *QueryBuilderImpl) Query() Query {
+func (qb *queryBuilderImpl) Query() Query {
 	return qb.query
 }
 
-func (qb *QueryBuilderImpl) setField(key, field, value string) QueryBuilder {
-	qb.query.set(key, []map[string]string{{"field": field, "value": value}})
+func (qb *queryBuilderImpl) setField(key, field, value string) QueryBuilder {
+	qb.query.setSliceMapString(key, []map[string]string{{"field": field, "value": value}})
 	return qb
 }
 
-type QueryImpl struct {
+type queryImpl struct {
 	query map[string]interface{}
 }
 
-func newQuery() *QueryImpl {
+func newQuery() *queryImpl {
 
-	return &QueryImpl{
+	return &queryImpl{
 		query: make(map[string]interface{}),
 	}
 }
 
 // JSON returns the JSON representation of the query
-func (q *QueryImpl) JSON() ([]byte, error) {
+func (q *queryImpl) JSON() ([]byte, error) {
 	return json.Marshal(q.query)
 }
 
 // String returns the string representation of the query
-func (q *QueryImpl) String() string {
+func (q *queryImpl) String() string {
 	j, _ := q.JSON()
 	return string(j)
 }
 
-func (q *QueryImpl) set(key string, value interface{}) {
+// set generic setter for query
+func (q *queryImpl) set(key string, value interface{}) {
+	q.query[key] = value
+}
+
+// setMap sets a map in the query
+func (q *queryImpl) setMap(key string, value map[string]interface{}) {
 	if existingValue, exists := q.query[key]; exists {
 		if existingMap, ok := existingValue.(map[string]interface{}); ok {
-			if newMap, ok := value.(map[string]interface{}); ok {
-				for k, v := range newMap {
-					existingMap[k] = v
-				}
-				return
+			for k, v := range value {
+				existingMap[k] = v
 			}
+			return
 		}
-		if existingSlice, ok := existingValue.([]string); ok {
-			if newSlice, ok := value.([]string); ok {
-				existingSlice = append(existingSlice, newSlice...)
-				q.query[key] = existingSlice
-				return
-			}
-		}
-		if existingSliceMap, ok := existingValue.([]map[string]string); ok {
-			if newSliceMap, ok := value.([]map[string]string); ok {
-				existingSliceMap = append(existingSliceMap, newSliceMap...)
-				q.query[key] = existingSliceMap
-				return
-			}
-		}
+	}
+	q.query[key] = value
+}
 
+// setSlice sets a slice in the query
+func (q *queryImpl) setSliceString(key string, value []string) {
+	if existingValue, exists := q.query[key]; exists {
+		if existingSlice, ok := existingValue.([]string); ok {
+			q.query[key] = append(existingSlice, value...)
+			return
+		}
+	}
+	q.query[key] = value
+}
+
+func (q *queryImpl) setSliceMapString(key string, value []map[string]string) {
+	if existingValue, exists := q.query[key]; exists {
+		if existingSliceMap, ok := existingValue.([]map[string]string); ok {
+			q.query[key] = append(existingSliceMap, value...)
+			return
+		}
 	}
 	q.query[key] = value
 }
