@@ -9,8 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      SEGMENT_DOWNLOAD_TIMEOUT_MINS: '5'
     # uncomment database setup as needed
     # services:
     #   postgres:
@@ -40,14 +38,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: 21
-          cache: 'gradle'
-          cache-dependency-path: |
-            .gradle
-            buildSrc/.gradle
-            solidity/node_modules/amazon-cognito-identity-js/android/.gradle
-            gradle/wrapper/gradle-wrapper.properties
-            pente/gradle/wrapper/gradle-wrapper.properties
-            portara/gradle/wrapper/gradle-wrapper.properties
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -55,20 +45,13 @@ jobs:
           go-version: '1.22'
           check-latest: true
           cache-dependency-path: |
-            domains/zeto/go.sum
-            domains/noto/go.sum
-            talaria/go.sum
-            testinfra/go.sum
-            toolkit_go/go.sum
-            kata/go.sum
+            **/*.sum
 
       - name: Setup Gradle
-        with:
-          gradle-version: 8.4
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build with Gradle
-        run: ./gradlew -PcomposeLogs=true --console=verbose build
+        run: ./gradlew -PcomposeLogs=true --no-daemon build
 
         # env:
         #   CREATE_TEST_DB: 0 # github action setup a PSQL db service, so no need to create a test db again
