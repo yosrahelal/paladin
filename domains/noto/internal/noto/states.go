@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"strconv"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
@@ -107,10 +106,10 @@ func (n *Noto) prepareInputs(ctx context.Context, owner string, amount *ethtypes
 		queryBuilder := filters.NewQueryBuilder().
 			Limit(10).
 			Sort(".created").
-			Eq("owner", owner)
+			IsEqual("owner", owner)
 
 		if lastStateTimestamp > 0 {
-			queryBuilder.Gt(".created", strconv.FormatInt(lastStateTimestamp, 10))
+			queryBuilder.IsGreaterThan(".created", lastStateTimestamp)
 		}
 
 		states, err := n.findAvailableStates(ctx, queryBuilder.Query().String())
