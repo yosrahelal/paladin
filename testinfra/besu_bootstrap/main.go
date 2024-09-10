@@ -67,9 +67,10 @@ func main() {
 			CancunTime:  0,
 			ZeroBaseFee: true,
 			QBFT: QBFTConfig{
-				BlockPeriodSeconds:    1,
-				EpochLength:           30000,
-				RequestTimeoutSeconds: 4,
+				BlockPeriodSeconds:      1, // overwritten by env BESU_X_DEV_BFT_PERIOD_MS
+				EpochLength:             30000,
+				RequestTimeoutSeconds:   10,
+				EmptyBlockPeriodSeconds: 10,
 			},
 		},
 		Nonce:      0,
