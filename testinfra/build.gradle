@@ -40,7 +40,13 @@ task removeBesuBootstrapTool(type: Exec, dependsOn: stopTestInfra) {
     ignoreExitValue true
 }
 
-task clean(type: Delete, dependsOn: [tasks.removeBesuBootstrapTool, tasks.stopTestInfra]) {
-    
+task removeBesuBootstrapVolume(type: Exec, dependsOn: stopTestInfra) {
+    executable "docker"
+    args "volume", "rm", "-f", "paladin-testinfra_besu_data"
+    errorOutput OutputStream.nullOutputStream()
+    ignoreExitValue true
 }
 
+task clean(type: Delete, dependsOn: [tasks.removeBesuBootstrapVolume, tasks.removeBesuBootstrapTool, tasks.stopTestInfra]) {
+    
+}
