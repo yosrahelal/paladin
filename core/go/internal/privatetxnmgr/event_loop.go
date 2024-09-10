@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package orchestrator
+package privatetxmgr
 
 import (
 	"context"
