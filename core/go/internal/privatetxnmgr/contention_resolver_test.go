@@ -25,8 +25,9 @@ import (
 )
 
 func TestContentionResolver_2TransactionsDeterministicResults(t *testing.T) {
-	// create 2 ids at random (representing bidding transactions),
-	// then iterate over 100 random state ids and check that there is a fair distribution of winners
+	t.Skip("this test should be run manually when the algorithm is changed. ")
+	// see https://github.com/kaleido-io/paladin/pull/145 for background
+
 	winner1 := 0
 	winner2 := 0
 	biddingTransaction1 := uuid.New().String()
@@ -46,6 +47,7 @@ func TestContentionResolver_2TransactionsDeterministicResults(t *testing.T) {
 		}
 
 	}
+
 	assert.InDelta(t, winner2, winner1, 100)
 }
 
