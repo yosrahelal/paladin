@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package stages
+package privatetxnmgr
 
 import (
 	"context"
@@ -21,8 +21,8 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 	engineProto "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	"github.com/kaleido-io/paladin/core/pkg/proto/sequence"
@@ -35,12 +35,16 @@ import (
 )
 
 type GatherEndorsementsStage struct {
-	sequencer enginespi.Sequencer
+	sequencer           Sequencer
+	endorsementGatherer EndorsementGatherer
+	identityResolver    IdentityResolver
 }
 
-func NewGatherEndorsementsStage(sequencer enginespi.Sequencer) *GatherEndorsementsStage {
+func NewGatherEndorsementsStage(sequencer Sequencer, endorsementGatherer EndorsementGatherer, identityResolver IdentityResolver) *GatherEndorsementsStage {
 	return &GatherEndorsementsStage{
-		sequencer: sequencer,
+		sequencer:           sequencer,
+		endorsementGatherer: endorsementGatherer,
+		identityResolver:    identityResolver,
 	}
 }
 
@@ -48,7 +52,7 @@ func (as *GatherEndorsementsStage) Name() string {
 	return "gather_endorsements"
 }
 
-func (as *GatherEndorsementsStage) GetIncompletePreReqTxIDs(ctx context.Context, tsg transactionstore.TxStateGetters, sfs enginespi.StageFoundationService) *enginespi.TxProcessPreReq {
+func (as *GatherEndorsementsStage) GetIncompletePreReqTxIDs(ctx context.Context, tsg transactionstore.TxStateGetters, sfs ptmgrtypes.StageFoundationService) *ptmgrtypes.TxProcessPreReq {
 
 	return nil
 }
@@ -83,11 +87,11 @@ out:
 	return outstandingEndorsementRequests
 }
 
-func (as *GatherEndorsementsStage) ProcessEvents(ctx context.Context, tsg transactionstore.TxStateGetters, sfs enginespi.StageFoundationService, stageEvents []*enginespi.StageEvent) (unprocessedStageEvents []*enginespi.StageEvent, txUpdates *transactionstore.TransactionUpdate, nextStep enginespi.StageProcessNextStep) {
+func (as *GatherEndorsementsStage) ProcessEvents(ctx context.Context, tsg transactionstore.TxStateGetters, sfs ptmgrtypes.StageFoundationService, stageEvents []*ptmgrtypes.StageEvent) (unprocessedStageEvents []*ptmgrtypes.StageEvent, txUpdates *transactionstore.TransactionUpdate, nextStep ptmgrtypes.StageProcessNextStep) {
 	tx := tsg.HACKGetPrivateTx()
 
-	unprocessedStageEvents = []*enginespi.StageEvent{}
-	nextStep = enginespi.NextStepWait
+	unprocessedStageEvents = []*ptmgrtypes.StageEvent{}
+	nextStep = ptmgrtypes.NextStepWait
 	for _, se := range stageEvents {
 		if string(se.Stage) == as.Name() { // the current stage does not care about events from other stages yet (may need to be for interrupts)
 			if se.Data != nil {
@@ -99,10 +103,10 @@ func (as *GatherEndorsementsStage) ProcessEvents(ctx context.Context, tsg transa
 						as.processEndorsementResponse(ctx, tx, er)
 					}
 
-				case *enginespi.TransactionDispatched:
+				case *TransactionDispatched:
 					if isEndorsed(tx) {
 						tx.Signer = "TODO"
-						nextStep = enginespi.NextStepNewStage
+						nextStep = ptmgrtypes.NextStepNewStage
 					} else {
 						//TODO this is an error, we should never have gotten here without endorsements
 						log.L(ctx).Errorf("Transaction dispatched without endorsements")
@@ -185,7 +189,7 @@ func isEndorsed(tx *components.PrivateTransaction) bool {
 		len(tx.PostAssembly.Endorsements) >= len(tx.PostAssembly.AttestationPlan)
 }
 
-func (as *GatherEndorsementsStage) MatchStage(ctx context.Context, tsg transactionstore.TxStateGetters, sfs enginespi.StageFoundationService) bool {
+func (as *GatherEndorsementsStage) matchStage(ctx context.Context, tsg transactionstore.TxStateGetters, sfs ptmgrtypes.StageFoundationService) bool {
 	tx := tsg.HACKGetPrivateTx()
 	// any asembled transactions are in this stage until they are dispatched
 	return isAssembled(tx) && !isDispatched(tx) && !hasOutstandingSignatureRequests(tx) && hasOutstandingEndorsementRequests(tx)
@@ -203,7 +207,7 @@ func toEndorsableList(states []*components.FullState) []*prototk.EndorsableState
 	return endorsableList
 }
 
-func (as *GatherEndorsementsStage) PerformAction(ctx context.Context, tsg transactionstore.TxStateGetters, sfs enginespi.StageFoundationService) (actionOutput interface{}, actionTriggerErr error) {
+func (as *GatherEndorsementsStage) PerformAction(ctx context.Context, tsg transactionstore.TxStateGetters, sfs ptmgrtypes.StageFoundationService) (actionOutput interface{}, actionTriggerErr error) {
 	tx := tsg.HACKGetPrivateTx()
 	log.L(ctx).Debugf("GatherEndorsementsStage.PerformAction tx: %s", tx.ID.String())
 
@@ -245,9 +249,9 @@ func (as *GatherEndorsementsStage) PerformAction(ctx context.Context, tsg transa
 						return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
 					}
 
-					if sfs.IdentityResolver().IsCurrentNode(partyNode) || partyNode == "" {
+					if as.identityResolver.IsCurrentNode(partyNode) || partyNode == "" {
 						// This is a local party, so we can endorse it directly
-						endorsement, revertReason, err := sfs.EndorsementGatherer().GatherEndorsement(ctx,
+						endorsement, revertReason, err := as.endorsementGatherer.GatherEndorsement(ctx,
 							tx.PreAssembly.TransactionSpecification,
 							tx.PreAssembly.Verifiers,
 							tx.PostAssembly.Signatures,

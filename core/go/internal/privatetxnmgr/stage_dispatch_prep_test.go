@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package stages
+package privatetxnmgr
 
 import (
 	"context"
@@ -22,10 +22,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/mocks/enginemocks"
+	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -73,8 +73,8 @@ func TestDispatchPrepStage(t *testing.T) {
 	assert.Equal(t, "dispatch_prep", dps.Name())
 
 	testTx := newDispatchPrepStageTx(ctx)
-	mSFS := enginemocks.NewStageFoundationService(t)
-	assert.True(t, dps.MatchStage(ctx, testTx, mSFS))
+	mSFS := privatetxnmgrmocks.NewStageFoundationService(t)
+	assert.True(t, dps.matchStage(ctx, testTx, mSFS))
 
 	// pre-req check is a no op
 	assert.Nil(t, dps.GetIncompletePreReqTxIDs(ctx, testTx, mSFS))
@@ -85,7 +85,7 @@ func TestDispatchPrepStageReturnsError(t *testing.T) {
 
 	dps := &DispatchPrepStage{}
 	testTx := newDispatchPrepStageTx(ctx)
-	mSFS := enginemocks.NewStageFoundationService(t)
+	mSFS := privatetxnmgrmocks.NewStageFoundationService(t)
 
 	/// perform action calls the Domain API and hit error
 	mDomainAPI := componentmocks.NewDomainSmartContract(t)
@@ -102,7 +102,7 @@ func TestDispatchPrepStageReturnsPreparedTx(t *testing.T) {
 
 	dps := &DispatchPrepStage{}
 	testTx := newDispatchPrepStageTx(ctx)
-	mSFS := enginemocks.NewStageFoundationService(t)
+	mSFS := privatetxnmgrmocks.NewStageFoundationService(t)
 
 	/// perform action calls the Domain API and hit error
 	mDomainAPI := componentmocks.NewDomainSmartContract(t)
@@ -121,7 +121,7 @@ func TestDispatchPrepStageProcessEvents(t *testing.T) {
 	testEthTx := &components.EthTransaction{}
 
 	dps := &DispatchPrepStage{}
-	testUnprocessedEvents := []*enginespi.StageEvent{
+	testUnprocessedEvents := []*ptmgrtypes.StageEvent{
 		{
 			Stage: "unknown",
 			Data:  "unknown",
@@ -132,10 +132,10 @@ func TestDispatchPrepStageProcessEvents(t *testing.T) {
 		},
 	}
 	testTx := newDispatchPrepStageTx(ctx)
-	mSFS := enginemocks.NewStageFoundationService(t)
+	mSFS := privatetxnmgrmocks.NewStageFoundationService(t)
 	unprocessedStageEvents, txUpdate, nextStep := dps.ProcessEvents(ctx, testTx, mSFS, testUnprocessedEvents)
 	assert.NotNil(t, txUpdate)
-	assert.Equal(t, enginespi.NextStepNewStage, nextStep)
+	assert.Equal(t, ptmgrtypes.NextStepNewStage, nextStep)
 	assert.Len(t, unprocessedStageEvents, 1)
 	assert.Equal(t, "unknown", unprocessedStageEvents[0].Stage)
 }

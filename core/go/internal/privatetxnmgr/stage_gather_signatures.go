@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package stages
+package privatetxnmgr
 
 import (
 	"context"
@@ -21,8 +21,8 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -33,10 +33,10 @@ type GatherSignaturesResult struct {
 }
 
 type GatherSignaturesStage struct {
-	sequencer enginespi.Sequencer
+	sequencer Sequencer
 }
 
-func NewGatherSignaturesStage(sequencer enginespi.Sequencer) *GatherSignaturesStage {
+func NewGatherSignaturesStage(sequencer Sequencer) *GatherSignaturesStage {
 	return &GatherSignaturesStage{
 		sequencer: sequencer,
 	}
@@ -46,7 +46,7 @@ func (as *GatherSignaturesStage) Name() string {
 	return "gather_signatures"
 }
 
-func (as *GatherSignaturesStage) GetIncompletePreReqTxIDs(ctx context.Context, tsg transactionstore.TxStateGetters, sfs enginespi.StageFoundationService) *enginespi.TxProcessPreReq {
+func (as *GatherSignaturesStage) GetIncompletePreReqTxIDs(ctx context.Context, tsg transactionstore.TxStateGetters, sfs ptmgrtypes.StageFoundationService) *ptmgrtypes.TxProcessPreReq {
 
 	return nil
 }
@@ -55,11 +55,11 @@ type signaturesActionResult struct {
 	Signatures []*prototk.AttestationResult
 }
 
-func (as *GatherSignaturesStage) ProcessEvents(ctx context.Context, tsg transactionstore.TxStateGetters, sfs enginespi.StageFoundationService, stageEvents []*enginespi.StageEvent) (unprocessedStageEvents []*enginespi.StageEvent, txUpdates *transactionstore.TransactionUpdate, nextStep enginespi.StageProcessNextStep) {
+func (as *GatherSignaturesStage) ProcessEvents(ctx context.Context, tsg transactionstore.TxStateGetters, sfs ptmgrtypes.StageFoundationService, stageEvents []*ptmgrtypes.StageEvent) (unprocessedStageEvents []*ptmgrtypes.StageEvent, txUpdates *transactionstore.TransactionUpdate, nextStep ptmgrtypes.StageProcessNextStep) {
 	tx := tsg.HACKGetPrivateTx()
 
-	unprocessedStageEvents = []*enginespi.StageEvent{}
-	nextStep = enginespi.NextStepWait
+	unprocessedStageEvents = []*ptmgrtypes.StageEvent{}
+	nextStep = ptmgrtypes.NextStepWait
 	for _, se := range stageEvents {
 		if string(se.Stage) == as.Name() { // the current stage does not care about events from other stages yet (may need to be for interrupts)
 			if se.Data != nil {
@@ -69,7 +69,7 @@ func (as *GatherSignaturesStage) ProcessEvents(ctx context.Context, tsg transact
 					log.L(ctx).Debugf("Adding %d signatures to transaction %s", len(v.Signatures), tx.ID.String())
 					tx.PostAssembly.Signatures = append(tx.PostAssembly.Signatures, v.Signatures...)
 					if !hasOutstandingSignatureRequests(tx) {
-						nextStep = enginespi.NextStepNewStage
+						nextStep = ptmgrtypes.NextStepNewStage
 					}
 				}
 			}
@@ -104,12 +104,12 @@ out:
 	return outstandingSignatureRequests
 }
 
-func (as *GatherSignaturesStage) MatchStage(ctx context.Context, tsg transactionstore.TxStateGetters, sfs enginespi.StageFoundationService) bool {
+func (as *GatherSignaturesStage) matchStage(ctx context.Context, tsg transactionstore.TxStateGetters, sfs ptmgrtypes.StageFoundationService) bool {
 	tx := tsg.HACKGetPrivateTx()
 	return isAssembled(tx) && !isDispatched(tx) && hasOutstandingSignatureRequests(tx)
 }
 
-func (as *GatherSignaturesStage) PerformAction(ctx context.Context, tsg transactionstore.TxStateGetters, sfs enginespi.StageFoundationService) (actionOutput interface{}, actionTriggerErr error) {
+func (as *GatherSignaturesStage) PerformAction(ctx context.Context, tsg transactionstore.TxStateGetters, sfs ptmgrtypes.StageFoundationService) (actionOutput interface{}, actionTriggerErr error) {
 	tx := tsg.HACKGetPrivateTx()
 	log.L(ctx).Debugf("GatherSignaturesStage.PerformAction tx: %s", tx.ID.String())
 

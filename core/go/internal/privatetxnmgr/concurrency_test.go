@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sequencer
+package privatetxnmgr
 
 import (
 	"context"
@@ -23,8 +23,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
-	"github.com/kaleido-io/paladin/core/mocks/enginemocks"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
+	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -32,25 +32,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type Engine interface {
+type FakeEngine interface {
 	Invoke(ctx context.Context) error
 	HandleTransactionAssembledEvent(ctx context.Context, event *pb.TransactionAssembledEvent) error
 	HandleTransactionEndorsedEvent(ctx context.Context, event *pb.TransactionEndorsedEvent) error
 	HandleTransactionConfirmedEvent(ctx context.Context, event *pb.TransactionConfirmedEvent) error
 	HandleTransactionRevertedEvent(ctx context.Context, event *pb.TransactionRevertedEvent) error
-	ApproveEndorsement(ctx context.Context, endorsementRequest enginespi.EndorsementRequest) (bool, error)
+	ApproveEndorsement(ctx context.Context, endorsementRequest ptmgrtypes.EndorsementRequest) (bool, error)
 	DelegateTransaction(ctx context.Context, message *pb.DelegateTransaction) error
 }
 
 type fakeEngine struct {
 	nodeID         string
-	sequencer      enginespi.Sequencer
+	sequencer      Sequencer
 	currentState   string
 	transportLayer *fakeTransportLayer
 	t              *testing.T
 }
 
-func newFakeEngine(t *testing.T, nodeID string, sequencer enginespi.Sequencer, seedState string, transportLayer *fakeTransportLayer) *fakeEngine {
+func newFakeEngine(t *testing.T, nodeID string, sequencer Sequencer, seedState string, transportLayer *fakeTransportLayer) *fakeEngine {
 	return &fakeEngine{
 		nodeID:         nodeID,
 		sequencer:      sequencer,
@@ -116,7 +116,7 @@ func (f *fakeEngine) HandleTransactionRevertedEvent(ctx context.Context, event *
 	return f.sequencer.HandleTransactionRevertedEvent(ctx, event)
 }
 
-func (f *fakeEngine) ApproveEndorsement(ctx context.Context, endorsementRequest enginespi.EndorsementRequest) (bool, error) {
+func (f *fakeEngine) ApproveEndorsement(ctx context.Context, endorsementRequest ptmgrtypes.EndorsementRequest) (bool, error) {
 	ctx = log.WithLogField(ctx, "node", f.nodeID)
 
 	// Implement the logic for approving an endorsement request.
@@ -133,11 +133,11 @@ func (f *fakeEngine) DelegateTransaction(ctx context.Context, message *pb.Delega
 // as in a distributed system.
 type fakeTransportLayer struct {
 	//map of sequencer to nodeID
-	engines map[string]Engine
+	engines map[string]FakeEngine
 	t       *testing.T
 }
 
-func (f *fakeTransportLayer) addEngine(nodeID uuid.UUID, engine Engine) {
+func (f *fakeTransportLayer) addEngine(nodeID uuid.UUID, engine FakeEngine) {
 	f.engines[nodeID.String()] = engine
 }
 
@@ -163,25 +163,25 @@ func (f *fakeTransportLayer) PublishEvent(ctx context.Context, event interface{}
 	return nil
 }
 
-func (f *fakeTransportLayer) PublishStageEvent(ctx context.Context, stageEvent *enginespi.StageEvent) error {
+func (f *fakeTransportLayer) PublishStageEvent(ctx context.Context, stageEvent *ptmgrtypes.StageEvent) error {
 	panic("unimplemented")
 }
 
 func NewFakeTransportLayer(t *testing.T) *fakeTransportLayer {
 	return &fakeTransportLayer{
-		engines: make(map[string]Engine),
+		engines: make(map[string]FakeEngine),
 		t:       t,
 	}
 }
 
 type fakeDelegator struct {
 	//map of sequencer to nodeID
-	engines map[string]Engine
+	engines map[string]FakeEngine
 	t       *testing.T
 	nodeID  string
 }
 
-func (f *fakeDelegator) addEngine(nodeID uuid.UUID, engine Engine) {
+func (f *fakeDelegator) addEngine(nodeID uuid.UUID, engine FakeEngine) {
 	f.engines[nodeID.String()] = engine
 }
 
@@ -201,7 +201,7 @@ func (f *fakeDelegator) Delegate(ctx context.Context, txnID, delegate string) er
 
 func NewFakeDelegator(t *testing.T, nodeID string) *fakeDelegator {
 	return &fakeDelegator{
-		engines: make(map[string]Engine),
+		engines: make(map[string]FakeEngine),
 		t:       t,
 		nodeID:  nodeID,
 	}
@@ -221,9 +221,9 @@ func TestConcurrentSequencing(t *testing.T) {
 	log.L(ctx).Infof("node2ID %s", node2ID)
 	log.L(ctx).Infof("node3ID %s", node3ID)
 
-	dispatcher1Mock := enginemocks.NewDispatcher(t)
-	dispatcher2Mock := enginemocks.NewDispatcher(t)
-	dispatcher3Mock := enginemocks.NewDispatcher(t)
+	dispatcher1Mock := privatetxnmgrmocks.NewDispatcher(t)
+	dispatcher2Mock := privatetxnmgrmocks.NewDispatcher(t)
+	dispatcher3Mock := privatetxnmgrmocks.NewDispatcher(t)
 
 	internodeTransportLayer := NewFakeTransportLayer(t)
 
@@ -348,7 +348,7 @@ func TestConcurrentSequencing(t *testing.T) {
 type testTransactionInvoker struct {
 	name    string
 	nodeID  uuid.UUID
-	engine  Engine
+	engine  FakeEngine
 	next    chan bool
 	stopMsg chan bool
 }
@@ -373,7 +373,7 @@ func (a *testTransactionInvoker) run(t *testing.T, postInvoke func()) {
 
 }
 
-func newtestTransactionInvoker(nodeId uuid.UUID, name string, engine Engine) *testTransactionInvoker {
+func newtestTransactionInvoker(nodeId uuid.UUID, name string, engine FakeEngine) *testTransactionInvoker {
 	return &testTransactionInvoker{
 		name:    name,
 		nodeID:  nodeId,

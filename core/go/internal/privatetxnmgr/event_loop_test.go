@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package orchestrator
+package privatetxnmgr
 
 import (
 	"context"
@@ -22,10 +22,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/mocks/enginemocks"
+	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -40,9 +40,9 @@ type orchestratorDepencyMocks struct {
 	transportManager     *componentmocks.TransportManager
 	stateStore           *componentmocks.StateStore
 	keyManager           *componentmocks.KeyManager
-	publisher            *enginemocks.Publisher
-	sequencer            *enginemocks.Sequencer
-	endorsementGatherer  *enginemocks.EndorsementGatherer
+	publisher            *privatetxnmgrmocks.Publisher
+	sequencer            *privatetxnmgrmocks.Sequencer
+	endorsementGatherer  *privatetxnmgrmocks.EndorsementGatherer
 }
 
 func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress *tktypes.EthAddress) (*Orchestrator, *orchestratorDepencyMocks) {
@@ -58,9 +58,9 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 		transportManager:     componentmocks.NewTransportManager(t),
 		stateStore:           componentmocks.NewStateStore(t),
 		keyManager:           componentmocks.NewKeyManager(t),
-		publisher:            enginemocks.NewPublisher(t),
-		sequencer:            enginemocks.NewSequencer(t),
-		endorsementGatherer:  enginemocks.NewEndorsementGatherer(t),
+		publisher:            privatetxnmgrmocks.NewPublisher(t),
+		sequencer:            privatetxnmgrmocks.NewSequencer(t),
+		endorsementGatherer:  privatetxnmgrmocks.NewEndorsementGatherer(t),
 	}
 	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
@@ -91,7 +91,7 @@ func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
 	waitForAction := make(chan bool, 1)
 
 	// fake stage controller for testing
-	mSC := enginemocks.StageController{}
+	mSC := privatetxnmgrmocks.StageController{}
 	testOc.StageController = &mSC
 	mSC.On("CalculateStage", ctx, testTx).Once().Return("test")
 	mSC.On("PerformActionForStage", ctx, mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
@@ -138,7 +138,7 @@ func TestOrchestratorHandleEvents(t *testing.T) {
 	waitForAction := make(chan bool, 1)
 
 	// fake stage controller for testing
-	mSC := enginemocks.StageController{}
+	mSC := privatetxnmgrmocks.StageController{}
 	testOc.StageController = &mSC
 	mSC.On("CalculateStage", ctx, testTx).Once().Return("test")
 	mSC.On("PerformActionForStage", ctx, mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
@@ -161,8 +161,8 @@ func TestOrchestratorHandleEvents(t *testing.T) {
 	// feed in an event for process
 	mSC.On("ProcessEventsForStage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
 		waitForProcessEvent <- true
-	}).Return(nil, nil, enginespi.NextStepWait /*just wait, don't trigger new stage etc*/)
-	testOc.HandleEvent(ctx, &enginespi.StageEvent{
+	}).Return(nil, nil, ptmgrtypes.NextStepWait /*just wait, don't trigger new stage etc*/)
+	testOc.HandleEvent(ctx, &ptmgrtypes.StageEvent{
 		ID:    uuid.NewString(),
 		Stage: "test",
 		TxID:  testTx.GetTxID(ctx),
@@ -179,8 +179,8 @@ func TestOrchestratorHandleEvents(t *testing.T) {
 	mSC.On("CalculateStage", ctx, testTx).Once().Return("test")
 	mSC.On("ProcessEventsForStage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
 		waitForProcessEvent <- true
-	}).Return(nil, nil, enginespi.NextStepWait /*just wait, don't trigger new stage etc*/)
-	testOc.HandleEvent(ctx, &enginespi.StageEvent{
+	}).Return(nil, nil, ptmgrtypes.NextStepWait /*just wait, don't trigger new stage etc*/)
+	testOc.HandleEvent(ctx, &ptmgrtypes.StageEvent{
 		ID:    uuid.NewString(),
 		Stage: "test",
 		TxID:  testTx.GetTxID(ctx),
@@ -230,7 +230,7 @@ func TestOrchestratorPollingLoopRemoveCompletedTx(t *testing.T) {
 	}
 	testOc, _ := newOrchestratorForTesting(t, ctx, nil)
 
-	mSC := enginemocks.StageController{}
+	mSC := privatetxnmgrmocks.StageController{}
 	testOc.StageController = &mSC
 
 	ocDone, err := testOc.Start(ctx)

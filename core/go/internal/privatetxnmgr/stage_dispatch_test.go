@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package stages
+package privatetxnmgr
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/transactionstore"
-	"github.com/kaleido-io/paladin/core/mocks/enginemocks"
+	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -38,10 +38,10 @@ func TestDispatchStageMatchTrue(t *testing.T) {
 	ds := &DispatchStage{}
 	assert.Equal(t, "dispatch", ds.Name())
 
-	mSFS := &enginemocks.StageFoundationService{}
+	mSFS := &privatetxnmgrmocks.StageFoundationService{}
 
 	// expect transaction to not match dispatch stage, when tx payload is not prepared.
-	assert.True(t, ds.MatchStage(ctx, tsg, mSFS))
+	assert.True(t, ds.matchStage(ctx, tsg, mSFS))
 
 }
 
@@ -58,10 +58,10 @@ func TestDispatchStageMatchFalse(t *testing.T) {
 	ds := &DispatchStage{}
 	assert.Equal(t, "dispatch", ds.Name())
 
-	mSFS := &enginemocks.StageFoundationService{}
+	mSFS := &privatetxnmgrmocks.StageFoundationService{}
 
 	// expect transaction to not match dispatch stage, when tx payload is not prepared.
-	assert.False(t, ds.MatchStage(ctx, tsg, mSFS))
+	assert.False(t, ds.matchStage(ctx, tsg, mSFS))
 
 }
 
@@ -78,7 +78,7 @@ func TestDispatchStagePreReqCheck(t *testing.T) {
 	ds := &DispatchStage{}
 	assert.Equal(t, "dispatch", ds.Name())
 
-	mSFS := &enginemocks.StageFoundationService{}
+	mSFS := &privatetxnmgrmocks.StageFoundationService{}
 
 	// expect transaction to not match dispatch stage, when tx payload is not prepared.
 	prereqs := ds.GetIncompletePreReqTxIDs(ctx, tsg, mSFS)

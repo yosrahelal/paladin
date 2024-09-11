@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package privatetxmgr
+package privatetxnmgr
 
 import (
 	"context"
@@ -24,9 +24,8 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
-	"github.com/kaleido-io/paladin/core/internal/engine/orchestrator"
-	"github.com/kaleido-io/paladin/core/internal/engine/sequencer"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
+
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
@@ -42,22 +41,22 @@ import (
 
 type Engine interface {
 	components.Engine
-	HandleNewEvent(ctx context.Context, stageEvent *enginespi.StageEvent)
+	HandleNewEvent(ctx context.Context, stageEvent *ptmgrtypes.StageEvent)
 	HandleNewTx(ctx context.Context, tx *components.PrivateTransaction) (txID string, err error)
 	HandleDeployTx(ctx context.Context, tx *components.PrivateContractDeploy) (txID string, contractAddress string, err error)
 
-	GetTxStatus(ctx context.Context, domainAddress string, txID string) (status enginespi.TxStatus, err error)
-	Subscribe(ctx context.Context, subscriber enginespi.EventSubscriber)
+	GetTxStatus(ctx context.Context, domainAddress string, txID string) (status ptmgrtypes.TxStatus, err error)
+	Subscribe(ctx context.Context, subscriber ptmgrtypes.EventSubscriber)
 }
 
 type engine struct {
 	ctx                  context.Context
 	ctxCancel            func()
-	orchestrators        map[string]*orchestrator.Orchestrator
-	endorsementGatherers map[string]enginespi.EndorsementGatherer
+	orchestrators        map[string]*Orchestrator
+	endorsementGatherers map[string]EndorsementGatherer
 	components           components.PreInitComponentsAndManagers
 	nodeID               uuid.UUID
-	subscribers          []enginespi.EventSubscriber
+	subscribers          []ptmgrtypes.EventSubscriber
 	subscribersLock      sync.Mutex
 }
 
@@ -85,20 +84,20 @@ func (e *engine) Stop() {
 
 func NewEngine(nodeID uuid.UUID) Engine {
 	return &engine{
-		orchestrators:        make(map[string]*orchestrator.Orchestrator),
-		endorsementGatherers: make(map[string]enginespi.EndorsementGatherer),
+		orchestrators:        make(map[string]*Orchestrator),
+		endorsementGatherers: make(map[string]EndorsementGatherer),
 		nodeID:               nodeID,
-		subscribers:          make([]enginespi.EventSubscriber, 0),
+		subscribers:          make([]ptmgrtypes.EventSubscriber, 0),
 	}
 }
 
-func (e *engine) getOrchestratorForContract(ctx context.Context, contractAddr tktypes.EthAddress, domainAPI components.DomainSmartContract) (oc *orchestrator.Orchestrator, err error) {
+func (e *engine) getOrchestratorForContract(ctx context.Context, contractAddr tktypes.EthAddress, domainAPI components.DomainSmartContract) (oc *Orchestrator, err error) {
 
 	if e.orchestrators[contractAddr.String()] == nil {
 		publisher := NewPublisher(e)
 		delegator := NewDelegator()
 		dispatcher := NewDispatcher(contractAddr.String(), publisher)
-		seq := sequencer.NewSequencer(
+		seq := NewSequencer(
 			e.nodeID,
 			publisher,
 			delegator,
@@ -111,10 +110,10 @@ func (e *engine) getOrchestratorForContract(ctx context.Context, contractAddr tk
 		}
 
 		e.orchestrators[contractAddr.String()] =
-			orchestrator.NewOrchestrator(
+			NewOrchestrator(
 				ctx, e.nodeID,
 				contractAddr.String(), /** TODO: fill in the real plug-ins*/
-				&orchestrator.OrchestratorConfig{},
+				&OrchestratorConfig{},
 				e.components,
 				domainAPI,
 				publisher,
@@ -135,7 +134,7 @@ func (e *engine) getOrchestratorForContract(ctx context.Context, contractAddr tk
 	return e.orchestrators[contractAddr.String()], nil
 }
 
-func (e *engine) getEndorsementGathererForContract(ctx context.Context, contractAddr tktypes.EthAddress) (enginespi.EndorsementGatherer, error) {
+func (e *engine) getEndorsementGathererForContract(ctx context.Context, contractAddr tktypes.EthAddress) (EndorsementGatherer, error) {
 
 	domainAPI, err := e.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
 	if err != nil {
@@ -312,20 +311,20 @@ func (e *engine) execBaseLedgerTransaction(ctx context.Context, signer string, t
 	return nil
 }
 
-func (e *engine) GetTxStatus(ctx context.Context, domainAddress string, txID string) (status enginespi.TxStatus, err error) {
+func (e *engine) GetTxStatus(ctx context.Context, domainAddress string, txID string) (status ptmgrtypes.TxStatus, err error) {
 	//TODO This is primarily here to help with testing for now
 	// this needs to be revisited ASAP as part of a holisitic review of the persistence model
 	targetOrchestrator := e.orchestrators[domainAddress]
 	if targetOrchestrator == nil {
 		//TODO should be valid to query the status of a transaction that belongs to a domain instance that is not currently active
-		return enginespi.TxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError)
+		return ptmgrtypes.TxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError)
 	} else {
 		return targetOrchestrator.GetTxStatus(ctx, txID)
 	}
 
 }
 
-func (e *engine) HandleNewEvent(ctx context.Context, stageEvent *enginespi.StageEvent) {
+func (e *engine) HandleNewEvent(ctx context.Context, stageEvent *ptmgrtypes.StageEvent) {
 	targetOrchestrator := e.orchestrators[stageEvent.ContractAddress]
 	if targetOrchestrator == nil { // this is an event that belongs to a contract that's not in flight, throw it away and rely on the engine to trigger the action again when the orchestrator is wake up. (an enhanced version is to add weight on queueing an orchestrator)
 		log.L(ctx).Warnf("Ignored event for domain contract %s and transaction %s on stage %s. If this happens a lot, check the orchestrator idle timeout is set to a reasonable number", stageEvent.ContractAddress, stageEvent.TxID, stageEvent.Stage)
@@ -465,7 +464,7 @@ func (e *engine) handleEndorsementResponse(ctx context.Context, messagePayload [
 	}
 	contractAddressString := endorsementResponse.ContractAddress
 
-	e.HandleNewEvent(ctx, &enginespi.StageEvent{
+	e.HandleNewEvent(ctx, &ptmgrtypes.StageEvent{
 		ContractAddress: contractAddressString,
 		TxID:            endorsementResponse.TransactionId,
 		Stage:           "gather_endorsements",
@@ -506,7 +505,7 @@ func (e *engine) ReceiveTransportMessage(ctx context.Context, message *component
 			return
 		}
 
-		e.HandleNewEvent(ctx, &enginespi.StageEvent{
+		e.HandleNewEvent(ctx, &ptmgrtypes.StageEvent{
 			ContractAddress: stageMessage.ContractAddress,
 			TxID:            stageMessage.TransactionId,
 			Stage:           stageMessage.Stage,
@@ -519,14 +518,14 @@ func (e *engine) ReceiveTransportMessage(ctx context.Context, message *component
 // in the future if we want to have an eventing interface but at such time we would need to put more effort
 // into the reliabilty of the event delivery or maybe there is only a consumer of the event and it is responsible
 // for managing multiple subscribers and durability etc...
-func (e *engine) Subscribe(ctx context.Context, subscriber enginespi.EventSubscriber) {
+func (e *engine) Subscribe(ctx context.Context, subscriber ptmgrtypes.EventSubscriber) {
 	e.subscribersLock.Lock()
 	defer e.subscribersLock.Unlock()
 	//TODO implement this
 	e.subscribers = append(e.subscribers, subscriber)
 }
 
-func (e *engine) publishToSubscribers(ctx context.Context, event enginespi.EngineEvent) {
+func (e *engine) publishToSubscribers(ctx context.Context, event ptmgrtypes.EngineEvent) {
 	log.L(ctx).Debugf("Publishing event to subscribers")
 	e.subscribersLock.Lock()
 	defer e.subscribersLock.Unlock()

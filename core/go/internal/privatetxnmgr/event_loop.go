@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package privatetxmgr
+package privatetxnmgr
 
 import (
 	"context"
@@ -24,10 +24,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/engine/controller"
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
-	"github.com/kaleido-io/paladin/core/internal/engine/stages"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 
@@ -105,8 +103,8 @@ type Orchestrator struct {
 	stageRetryTimeout       time.Duration
 	persistenceRetryTimeout time.Duration
 
-	StageController controller.StageController
-	sequencer       enginespi.Sequencer
+	StageController StageController
+	sequencer       Sequencer
 
 	// each orchestrator has its own go routine
 	initiated       time.Time     // when orchestrator is created
@@ -115,7 +113,7 @@ type Orchestrator struct {
 
 	maxConcurrentProcess        int
 	incompleteTxProcessMapMutex sync.Mutex
-	incompleteTxSProcessMap     map[string]controller.TxProcessor // a map of all known transactions that are not completed
+	incompleteTxSProcessMap     map[string]TxProcessor // a map of all known transactions that are not completed
 
 	processedTxIDs       map[string]bool // an internal record of completed transactions to handle persistence delays that causes reprocessing
 	orchestratorLoopDone chan struct{}
@@ -144,7 +142,7 @@ var orchestratorConfigDefault = OrchestratorConfig{
 	StaleTimeout:            confutil.P("10m"),
 }
 
-func NewOrchestrator(ctx context.Context, nodeID uuid.UUID, contractAddress string, oc *OrchestratorConfig, allComponents components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, publisher enginespi.Publisher, sequencer enginespi.Sequencer, endorsementGatherer enginespi.EndorsementGatherer) *Orchestrator {
+func NewOrchestrator(ctx context.Context, nodeID uuid.UUID, contractAddress string, oc *OrchestratorConfig, allComponents components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, publisher Publisher, sequencer Sequencer, endorsementGatherer EndorsementGatherer) *Orchestrator {
 
 	newOrchestrator := &Orchestrator{
 		ctx:                  log.WithLogField(ctx, "role", fmt.Sprintf("orchestrator-%s", contractAddress)),
@@ -155,7 +153,7 @@ func NewOrchestrator(ctx context.Context, nodeID uuid.UUID, contractAddress stri
 		state:                OrchestratorStateNew,
 		stateEntryTime:       time.Now(),
 
-		incompleteTxSProcessMap: make(map[string]controller.TxProcessor),
+		incompleteTxSProcessMap: make(map[string]TxProcessor),
 		stageRetryTimeout:       confutil.DurationMin(oc.StageRetry, 1*time.Millisecond, *orchestratorConfigDefault.StageRetry),
 		persistenceRetryTimeout: confutil.DurationMin(oc.PersistenceRetryTimeout, 1*time.Millisecond, *orchestratorConfigDefault.PersistenceRetryTimeout),
 
@@ -169,13 +167,13 @@ func NewOrchestrator(ctx context.Context, nodeID uuid.UUID, contractAddress stri
 
 	newOrchestrator.sequencer = sequencer
 
-	newOrchestrator.StageController = controller.NewPaladinStageController(ctx, enginespi.NewPaladinStageFoundationService(newOrchestrator, allComponents.StateStore(), &enginespi.MockIdentityResolver{}, allComponents.TransportManager(), domainAPI, publisher, allComponents.KeyManager(), endorsementGatherer), []controller.TxStageProcessor{
+	newOrchestrator.StageController = NewPaladinStageController(ctx, NewPaladinStageFoundationService(allComponents.StateStore(), allComponents.TransportManager(), domainAPI, allComponents.KeyManager()), []txStageProcessor{
 		// for now, assume all orchestrators have same stages and register all the stages here
 		//we add them in reverse order to make sure the last stage is the first to be checked for a match
-		&stages.DispatchStage{},
-		stages.NewGatherEndorsementsStage(sequencer),
-		stages.NewGatherSignaturesStage(sequencer),
-		stages.NewAssembleStage(sequencer, nodeID.String()),
+		&DispatchStage{},
+		NewGatherEndorsementsStage(sequencer, endorsementGatherer, &ptmgrtypes.MockIdentityResolver{}),
+		NewGatherSignaturesStage(sequencer),
+		NewAssembleStage(sequencer, nodeID.String()),
 	})
 
 	log.L(ctx).Debugf("NewOrchestrator for contract address %s created: %+v", newOrchestrator.contractAddress, newOrchestrator)
@@ -217,7 +215,7 @@ func (oc *Orchestrator) evaluateTransactions(ctx context.Context) (added int, ne
 	// hasActivity := false
 
 	oldIncompleteMap := oc.incompleteTxSProcessMap
-	oc.incompleteTxSProcessMap = make(map[string]controller.TxProcessor, len(oldIncompleteMap))
+	oc.incompleteTxSProcessMap = make(map[string]TxProcessor, len(oldIncompleteMap))
 
 	stageCounts := make(map[string]int)
 	for _, stageName := range oc.StageController.GetAllStages() {
@@ -309,14 +307,14 @@ func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tsm transacti
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			oc.incompleteTxSProcessMap[tsm.GetTxID(ctx)] = controller.NewPaladinTransactionProcessor(ctx, tsm, oc.StageController)
+			oc.incompleteTxSProcessMap[tsm.GetTxID(ctx)] = NewPaladinTransactionProcessor(ctx, tsm, oc.StageController)
 		}
 		oc.incompleteTxSProcessMap[tsm.GetTxID(ctx)].Init(ctx)
 	}
 	return false
 }
 
-func (oc *Orchestrator) HandleEvent(ctx context.Context, stageEvent *enginespi.StageEvent) {
+func (oc *Orchestrator) HandleEvent(ctx context.Context, stageEvent *ptmgrtypes.StageEvent) {
 	oc.incompleteTxProcessMapMutex.Lock()
 	defer oc.incompleteTxProcessMapMutex.Unlock()
 	txProc := oc.incompleteTxSProcessMap[stageEvent.TxID]
@@ -325,7 +323,7 @@ func (oc *Orchestrator) HandleEvent(ctx context.Context, stageEvent *enginespi.S
 		// or throw the event away and waste another cycle to redo the actions
 		// (doesn't feel right, maybe for some events only persistence is needed)
 		tsm := transactionstore.NewTransactionStageManagerByTxID(ctx, stageEvent.TxID)
-		oc.incompleteTxSProcessMap[tsm.GetTxID(ctx)] = controller.NewPaladinTransactionProcessor(ctx, tsm, oc.StageController)
+		oc.incompleteTxSProcessMap[tsm.GetTxID(ctx)] = NewPaladinTransactionProcessor(ctx, tsm, oc.StageController)
 		txProc = oc.incompleteTxSProcessMap[stageEvent.TxID]
 	}
 	go func() {
@@ -334,7 +332,7 @@ func (oc *Orchestrator) HandleEvent(ctx context.Context, stageEvent *enginespi.S
 }
 
 // this function should only have one running instance at any given time
-func (oc *Orchestrator) ProcessIncompleteTransactions(ctx context.Context, txStages map[string]controller.TxProcessor) (blockedByPreReq bool) {
+func (oc *Orchestrator) ProcessIncompleteTransactions(ctx context.Context, txStages map[string]TxProcessor) (blockedByPreReq bool) {
 	processStart := time.Now()
 	blockedByPreReq = false
 	log.L(ctx).Debugf("%s ProcessIncompleteTransactions entry for contract address %s", processStart.String(), oc.contractAddress)
@@ -375,7 +373,7 @@ func (oc *Orchestrator) TriggerOrchestratorEvaluation() {
 	}
 }
 
-func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status enginespi.TxStatus, err error) {
+func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status ptmgrtypes.TxStatus, err error) {
 	//TODO This is primarily here to help with testing for now
 	// this needs to be revisited ASAP as part of a holisitic review of the persistence model
 	oc.incompleteTxProcessMapMutex.Lock()
@@ -384,5 +382,17 @@ func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status en
 		return txProc.GetTxStatus(ctx)
 	}
 	//TODO should be possible to query the status of a transaction that is not inflight
-	return enginespi.TxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError)
+	return ptmgrtypes.TxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError)
+}
+
+func (oc *Orchestrator) PreReqsMatchCondition(ctx context.Context, preReqTxIDs []string, conditionFunc func(tsg transactionstore.TxStateGetters) (preReqComplete bool)) (filteredPreReqTxIDs []string) {
+	// TODO
+	return preReqTxIDs
+}
+func (oc *Orchestrator) GetPreReqDispatchAddresses(ctx context.Context, preReqTxIDs []string) (dispatchAddresses []string) {
+	// TODO
+	return nil
+}
+func (oc *Orchestrator) RegisterPreReqTrigger(ctx context.Context, txID string, txPreReq *ptmgrtypes.TxProcessPreReq) {
+	// TODO
 }

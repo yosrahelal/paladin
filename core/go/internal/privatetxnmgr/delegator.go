@@ -13,15 +13,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package engine
+package privatetxnmgr
 
 import (
 	"context"
-
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 )
 
-func NewDelegator() enginespi.Delegator {
+func NewDelegator() Delegator {
 	return &delegator{}
 }
 

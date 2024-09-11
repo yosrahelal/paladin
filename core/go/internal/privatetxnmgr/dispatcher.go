@@ -13,18 +13,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package engine
+package privatetxnmgr
 
 import (
 	"context"
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
-func NewDispatcher(contractAddress string, publisher enginespi.Publisher) enginespi.Dispatcher {
+func NewDispatcher(contractAddress string, publisher Publisher) Dispatcher {
 	return &dispatcher{
 		publisher:       publisher,
 		contractAddress: contractAddress,
@@ -34,7 +34,7 @@ func NewDispatcher(contractAddress string, publisher enginespi.Publisher) engine
 
 type dispatcher struct {
 	sequencedTransactions []uuid.UUID
-	publisher             enginespi.Publisher
+	publisher             Publisher
 	contractAddress       string
 	nextNonce             uint64
 	nextNonceLock         sync.Mutex
@@ -53,18 +53,18 @@ func (p *dispatcher) Dispatch(ctx context.Context, transactionIDs []uuid.UUID) e
 	//Placeholder for actual interface to hand over to dispatcher
 	p.sequencedTransactions = append(p.sequencedTransactions, transactionIDs...)
 	for _, transactionID := range transactionIDs {
-		err := p.publisher.PublishStageEvent(ctx, &enginespi.StageEvent{
+		err := p.publisher.PublishStageEvent(ctx, &ptmgrtypes.StageEvent{
 			Stage:           "gather_endorsements",
 			ContractAddress: p.contractAddress,
 			TxID:            transactionID.String(),
-			Data:            &enginespi.TransactionDispatched{},
+			Data:            &TransactionDispatched{},
 		})
 		if err != nil {
 			//TODO think about how best to handle this error
 			log.L(ctx).Errorf("Error publishing stage event: %s", err)
 			return err
 		}
-		err = p.publisher.PublishEvent(ctx, &enginespi.TransactionDispatchedEvent{
+		err = p.publisher.PublishEvent(ctx, &ptmgrtypes.TransactionDispatchedEvent{
 			TransactionID:  transactionID.String(),
 			Nonce:          p.NextNonce(),
 			SigningAddress: "0x1234567890abcdef",

@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package stages
+package privatetxnmgr
 
 import (
 	"context"
@@ -21,8 +21,8 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 	"github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -30,12 +30,12 @@ import (
 )
 
 type AssembleStage struct {
-	sequencer enginespi.Sequencer
+	sequencer Sequencer
 	nodeID    string
 	lock      sync.Mutex
 }
 
-func NewAssembleStage(sequencer enginespi.Sequencer, nodeID string) *AssembleStage {
+func NewAssembleStage(sequencer Sequencer, nodeID string) *AssembleStage {
 	return &AssembleStage{
 		sequencer: sequencer,
 		nodeID:    nodeID,
@@ -45,7 +45,7 @@ func (as *AssembleStage) Name() string {
 	return "assemble"
 }
 
-func (as *AssembleStage) GetIncompletePreReqTxIDs(ctx context.Context, tsg transactionstore.TxStateGetters, sfs enginespi.StageFoundationService) *enginespi.TxProcessPreReq {
+func (as *AssembleStage) GetIncompletePreReqTxIDs(ctx context.Context, tsg transactionstore.TxStateGetters, sfs ptmgrtypes.StageFoundationService) *ptmgrtypes.TxProcessPreReq {
 	//TODO for now we don't have any pre-reqs for assemble stage
 
 	return nil
@@ -62,10 +62,10 @@ func stateIDs(states []*components.FullState) []string {
 	return stateIDs
 }
 
-func (as *AssembleStage) ProcessEvents(ctx context.Context, tsg transactionstore.TxStateGetters, sfs enginespi.StageFoundationService, stageEvents []*enginespi.StageEvent) (unprocessedStageEvents []*enginespi.StageEvent, txUpdates *transactionstore.TransactionUpdate, nextStep enginespi.StageProcessNextStep) {
+func (as *AssembleStage) ProcessEvents(ctx context.Context, tsg transactionstore.TxStateGetters, sfs ptmgrtypes.StageFoundationService, stageEvents []*ptmgrtypes.StageEvent) (unprocessedStageEvents []*ptmgrtypes.StageEvent, txUpdates *transactionstore.TransactionUpdate, nextStep ptmgrtypes.StageProcessNextStep) {
 	tx := tsg.HACKGetPrivateTx()
 
-	unprocessedStageEvents = []*enginespi.StageEvent{}
+	unprocessedStageEvents = []*ptmgrtypes.StageEvent{}
 	if len(stageEvents) > 0 {
 		for _, event := range stageEvents {
 
@@ -82,17 +82,17 @@ func (as *AssembleStage) ProcessEvents(ctx context.Context, tsg transactionstore
 					log.L(ctx).Errorf("HandleTransactionAssembledEvent failed: %s", err)
 					panic("todo")
 				}
-				return nil, nil, enginespi.NextStepNewStage
+				return nil, nil, ptmgrtypes.NextStepNewStage
 			default:
 				unprocessedStageEvents = append(unprocessedStageEvents, event)
 			}
 		}
-		return stageEvents, nil, enginespi.NextStepNewStage
+		return stageEvents, nil, ptmgrtypes.NextStepNewStage
 	}
-	return nil, nil, enginespi.NextStepWait
+	return nil, nil, ptmgrtypes.NextStepWait
 }
 
-func (as *AssembleStage) MatchStage(ctx context.Context, tsg transactionstore.TxStateGetters, sfs enginespi.StageFoundationService) bool {
+func (as *AssembleStage) matchStage(ctx context.Context, tsg transactionstore.TxStateGetters, sfs ptmgrtypes.StageFoundationService) bool {
 	tx := tsg.HACKGetPrivateTx()
 
 	// if we have a private transaction but do not have a post assemble payload, we are in the assemble stage
@@ -100,7 +100,7 @@ func (as *AssembleStage) MatchStage(ctx context.Context, tsg transactionstore.Tx
 
 }
 
-func (as *AssembleStage) PerformAction(ctx context.Context, tsg transactionstore.TxStateGetters, sfs enginespi.StageFoundationService) (actionOutput interface{}, actionTriggerErr error) {
+func (as *AssembleStage) PerformAction(ctx context.Context, tsg transactionstore.TxStateGetters, sfs ptmgrtypes.StageFoundationService) (actionOutput interface{}, actionTriggerErr error) {
 	// temporary hack.  components.PrivateTx should be passed in as a parameter
 	tx := tsg.HACKGetPrivateTx()
 	log.L(ctx).Debugf("AssembleStage.PerformAction tx: %s", tx.ID.String())

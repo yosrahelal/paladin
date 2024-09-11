@@ -13,28 +13,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package enginespi
+package privatetxnmgr
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestForTypesAndMocks(t *testing.T) {
 
-	pfs := NewPaladinStageFoundationService(nil, nil, nil, nil, nil, nil, nil, nil)
-	assert.Nil(t, pfs.DependencyChecker())
-	assert.Nil(t, pfs.IdentityResolver())
+	pfs := NewPaladinStageFoundationService(nil, nil, nil, nil)
+
 	assert.Nil(t, pfs.StateStore())
 
-	// mock object tests for coverage:
-	mIR := &MockIdentityResolver{}
-
-	require.NoError(t, mIR.ConnectToBaseLeger())
-	assert.True(t, mIR.IsCurrentNode("current-node"))
-	assert.False(t, mIR.IsCurrentNode("not-current-node"))
-	assert.Empty(t, mIR.GetDispatchAddress(nil))
-	assert.Equal(t, "test", mIR.GetDispatchAddress([]string{"test"}))
 }

@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package privatetxmgr
+package privatetxnmgr
 
 import (
 	"context"
@@ -24,7 +24,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	engineTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	coreProto "github.com/kaleido-io/paladin/core/pkg/proto"
@@ -591,12 +591,12 @@ func TestEngineMiniLoad(t *testing.T) {
 	numDispatched := 0
 	allDispatched := make(chan bool, 1)
 	nonceWriterLock := sync.Mutex{}
-	engine.Subscribe(ctx, func(event engineTypes.EngineEvent) {
+	engine.Subscribe(ctx, func(event ptmgrtypes.EngineEvent) {
 		nonceWriterLock.Lock()
 		defer nonceWriterLock.Unlock()
 		numDispatched++
 		switch event := event.(type) {
-		case *engineTypes.TransactionDispatchedEvent:
+		case *ptmgrtypes.TransactionDispatchedEvent:
 			assert.Equal(t, expectedNonce, event.Nonce)
 			expectedNonce++
 			nonceByTransactionID[event.TransactionID] = event.Nonce

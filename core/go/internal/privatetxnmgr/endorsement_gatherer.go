@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package engine
+package privatetxnmgr
 
 import (
 	"context"
@@ -21,7 +21,6 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
@@ -30,7 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
-func NewEndorsementGatherer(psc components.DomainSmartContract, keyMgr ethclient.KeyManager) enginespi.EndorsementGatherer {
+func NewEndorsementGatherer(psc components.DomainSmartContract, keyMgr ethclient.KeyManager) EndorsementGatherer {
 	return &endorsementGatherer{
 		psc:    psc,
 		keyMgr: keyMgr,

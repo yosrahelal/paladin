@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sequencer
+package privatetxnmgr
 
 import (
 	"context"
@@ -22,8 +22,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
-	"github.com/kaleido-io/paladin/core/mocks/enginemocks"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
+	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -470,7 +470,7 @@ func TestSequencerApproveEndorsement(t *testing.T) {
 	node1Sequencer, _ := newSequencerForTesting(t, nodeID, false)
 
 	//with no other information, a sequencer should have no reason not to approve endorsement
-	approved, err := node1Sequencer.ApproveEndorsement(ctx, enginespi.EndorsementRequest{
+	approved, err := node1Sequencer.ApproveEndorsement(ctx, ptmgrtypes.EndorsementRequest{
 		TransactionID: txn1ID.String(),
 		InputStates:   []string{stateID.String()},
 	})
@@ -496,7 +496,7 @@ func TestSequencerApproveEndorsementForRemoteTransaction(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	approved, err := node1Sequencer.ApproveEndorsement(ctx, enginespi.EndorsementRequest{
+	approved, err := node1Sequencer.ApproveEndorsement(ctx, ptmgrtypes.EndorsementRequest{
 		TransactionID: txn1ID.String(),
 		InputStates:   []string{stateID.String()},
 	})
@@ -514,14 +514,14 @@ func TestSequencerApproveEndorsementDoubleSpendAvoidance(t *testing.T) {
 	txn2ID := uuid.New()
 	node1Sequencer, _ := newSequencerForTesting(t, nodeID, false)
 
-	approved, err := node1Sequencer.ApproveEndorsement(ctx, enginespi.EndorsementRequest{
+	approved, err := node1Sequencer.ApproveEndorsement(ctx, ptmgrtypes.EndorsementRequest{
 		TransactionID: txn1ID.String(),
 		InputStates:   []string{stateID.String()},
 	})
 	require.NoError(t, err)
 	assert.True(t, approved)
 
-	approved, err = node1Sequencer.ApproveEndorsement(ctx, enginespi.EndorsementRequest{
+	approved, err = node1Sequencer.ApproveEndorsement(ctx, ptmgrtypes.EndorsementRequest{
 		TransactionID: txn2ID.String(),
 		InputStates:   []string{stateID.String()},
 	})
@@ -547,7 +547,7 @@ func TestSequencerApproveEndorsementReleaseStateOnRevert(t *testing.T) {
 	require.NoError(t, err)
 
 	//with no other information, a sequencer should have no reason not to approve endorsement
-	approved, err := node1Sequencer.ApproveEndorsement(ctx, enginespi.EndorsementRequest{
+	approved, err := node1Sequencer.ApproveEndorsement(ctx, ptmgrtypes.EndorsementRequest{
 		TransactionID: txn1ID.String(),
 		InputStates:   []string{stateID.String()},
 	})
@@ -559,7 +559,7 @@ func TestSequencerApproveEndorsementReleaseStateOnRevert(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	approved, err = node1Sequencer.ApproveEndorsement(ctx, enginespi.EndorsementRequest{
+	approved, err = node1Sequencer.ApproveEndorsement(ctx, ptmgrtypes.EndorsementRequest{
 		TransactionID: txn2ID.String(),
 		InputStates:   []string{stateID.String()},
 	})
@@ -568,19 +568,19 @@ func TestSequencerApproveEndorsementReleaseStateOnRevert(t *testing.T) {
 }
 
 type sequencerMockDependencies struct {
-	publisherMock  *enginemocks.Publisher
-	resolverMock   *enginemocks.ContentionResolver
-	delegatorMock  *enginemocks.Delegator
-	dispatcherMock *enginemocks.Dispatcher
+	publisherMock  *privatetxnmgrmocks.Publisher
+	resolverMock   *privatetxnmgrmocks.ContentionResolver
+	delegatorMock  *privatetxnmgrmocks.Delegator
+	dispatcherMock *privatetxnmgrmocks.Dispatcher
 }
 
-func newSequencerForTesting(t *testing.T, nodeID uuid.UUID, mockResolver bool) (enginespi.Sequencer, sequencerMockDependencies) {
+func newSequencerForTesting(t *testing.T, nodeID uuid.UUID, mockResolver bool) (Sequencer, sequencerMockDependencies) {
 
-	publisherMock := enginemocks.NewPublisher(t)
-	dispatcherMock := enginemocks.NewDispatcher(t)
-	delegatorMock := enginemocks.NewDelegator(t)
+	publisherMock := privatetxnmgrmocks.NewPublisher(t)
+	dispatcherMock := privatetxnmgrmocks.NewDispatcher(t)
+	delegatorMock := privatetxnmgrmocks.NewDelegator(t)
 	if mockResolver {
-		resolverMock := enginemocks.NewContentionResolver(t)
+		resolverMock := privatetxnmgrmocks.NewContentionResolver(t)
 		return &sequencer{
 				nodeID:                      nodeID,
 				publisher:                   publisherMock,

@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sequencer
+package privatetxnmgr
 
 import (
 	"context"
@@ -22,8 +22,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -35,15 +35,15 @@ type Sequence []*transactionstore.Transaction
 func NewSequencer(
 	nodeID uuid.UUID,
 
-	publisher enginespi.Publisher,
-	delegator enginespi.Delegator,
+	publisher Publisher,
+	delegator Delegator,
 
 	/*
 		dispatcher is the reciever of the sequenced transactions and will be responsible for submitting them to the base ledger in the correct order
 	*/
-	dispatcher enginespi.Dispatcher,
+	dispatcher Dispatcher,
 
-) enginespi.Sequencer {
+) Sequencer {
 	return &sequencer{
 		publisher:                   publisher,
 		dispatcher:                  dispatcher,
@@ -90,10 +90,10 @@ type transaction struct {
 
 type sequencer struct {
 	nodeID                      uuid.UUID
-	publisher                   enginespi.Publisher
-	delegator                   enginespi.Delegator
+	publisher                   Publisher
+	delegator                   Delegator
 	resolver                    ContentionResolver
-	dispatcher                  enginespi.Dispatcher
+	dispatcher                  Dispatcher
 	graph                       Graph
 	blockedTransactions         []*blockedTransaction // naive implementation of a list of blocked transaction TODO may need to make this a graph so that we can analyise knock on effects of unblocking a transaction but this simple list will do for now to prove out functional behaviour
 	unconfirmedStatesByID       map[string]*unconfirmedState
@@ -436,7 +436,7 @@ func (s *sequencer) AssignTransaction(ctx context.Context, txnID string) error {
 	return s.acceptTransaction(ctx, txn)
 }
 
-func (s *sequencer) ApproveEndorsement(ctx context.Context, endorsementRequst enginespi.EndorsementRequest) (bool, error) {
+func (s *sequencer) ApproveEndorsement(ctx context.Context, endorsementRequst ptmgrtypes.EndorsementRequest) (bool, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	contentionFound := false

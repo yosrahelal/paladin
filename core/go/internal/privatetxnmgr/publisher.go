@@ -13,16 +13,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package engine
+package privatetxnmgr
 
 import (
 	"context"
 
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
-func NewPublisher(e *engine) enginespi.Publisher {
+func NewPublisher(e *engine) Publisher {
 	return &publisher{
 		engine: e,
 	}
@@ -33,7 +33,7 @@ type publisher struct {
 }
 
 // PublishStageEvent implements enginespi.Publisher.
-func (p *publisher) PublishStageEvent(ctx context.Context, stageEvent *enginespi.StageEvent) error {
+func (p *publisher) PublishStageEvent(ctx context.Context, stageEvent *ptmgrtypes.StageEvent) error {
 
 	p.engine.HandleNewEvent(ctx, stageEvent)
 	return nil

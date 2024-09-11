@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package controller
+package privatetxnmgr
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 	"github.com/stretchr/testify/assert"
 )
@@ -63,7 +63,7 @@ func TestTransactionProcessorPersistTxUpdates(t *testing.T) {
 	tp.Init(ctx)
 	assert.NotEmpty(t, tp.stageContext)
 
-	tp.AddStageEvent(ctx, &enginespi.StageEvent{
+	tp.AddStageEvent(ctx, &ptmgrtypes.StageEvent{
 		Stage: testStage,
 		Data: &testActionOutput{
 			Message: "continue",
@@ -73,7 +73,7 @@ func TestTransactionProcessorPersistTxUpdates(t *testing.T) {
 	assert.NotEmpty(t, testTx.SequenceID)
 
 	testTx.Contract = "complete"
-	tp.AddStageEvent(ctx, &enginespi.StageEvent{
+	tp.AddStageEvent(ctx, &ptmgrtypes.StageEvent{
 		Stage: testStage,
 		Data: &testActionOutput{
 			Message: "continue",
@@ -101,7 +101,7 @@ func TestTransactionProcessorInitiateOnEvent(t *testing.T) {
 
 	assert.Empty(t, tp.stageContext)
 
-	tp.AddStageEvent(ctx, &enginespi.StageEvent{
+	tp.AddStageEvent(ctx, &ptmgrtypes.StageEvent{
 		Stage: testStage,
 		Data: &testActionOutput{
 			Message: "continue",
