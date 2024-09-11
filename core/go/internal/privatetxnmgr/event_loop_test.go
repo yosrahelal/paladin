@@ -43,6 +43,7 @@ type orchestratorDepencyMocks struct {
 	publisher            *privatetxnmgrmocks.Publisher
 	sequencer            *privatetxnmgrmocks.Sequencer
 	endorsementGatherer  *privatetxnmgrmocks.EndorsementGatherer
+	emitEvent            EmitEvent
 }
 
 func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress *tktypes.EthAddress) (*Orchestrator, *orchestratorDepencyMocks) {
@@ -61,6 +62,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 		publisher:            privatetxnmgrmocks.NewPublisher(t),
 		sequencer:            privatetxnmgrmocks.NewSequencer(t),
 		endorsementGatherer:  privatetxnmgrmocks.NewEndorsementGatherer(t),
+		emitEvent:            func(ctx context.Context, event PrivateTransactionEvent) {},
 	}
 	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
@@ -68,7 +70,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
 
-	o := NewOrchestrator(ctx, uuid.Must(uuid.NewUUID()), domainAddress.String(), &OrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.publisher, mocks.sequencer, mocks.endorsementGatherer)
+	o := NewOrchestrator(ctx, tktypes.RandHex(16), domainAddress.String(), &OrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.publisher, mocks.sequencer, mocks.endorsementGatherer, mocks.emitEvent)
 
 	return o, mocks
 
@@ -89,14 +91,6 @@ func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
 	}
 
 	waitForAction := make(chan bool, 1)
-
-	// fake stage controller for testing
-	mSC := privatetxnmgrmocks.StageController{}
-	testOc.StageController = &mSC
-	mSC.On("CalculateStage", ctx, testTx).Once().Return("test")
-	mSC.On("PerformActionForStage", ctx, mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
-		waitForAction <- true
-	}).Return(nil /*no synchronous output*/, nil)
 
 	assert.Empty(t, testOc.incompleteTxSProcessMap)
 
@@ -137,14 +131,6 @@ func TestOrchestratorHandleEvents(t *testing.T) {
 
 	waitForAction := make(chan bool, 1)
 
-	// fake stage controller for testing
-	mSC := privatetxnmgrmocks.StageController{}
-	testOc.StageController = &mSC
-	mSC.On("CalculateStage", ctx, testTx).Once().Return("test")
-	mSC.On("PerformActionForStage", ctx, mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
-		waitForAction <- true
-	}).Return(nil /*no synchronous output*/, nil)
-
 	assert.Empty(t, testOc.incompleteTxSProcessMap)
 
 	// gets added when the queue is not full
@@ -159,9 +145,6 @@ func TestOrchestratorHandleEvents(t *testing.T) {
 
 	waitForProcessEvent := make(chan bool, 1)
 	// feed in an event for process
-	mSC.On("ProcessEventsForStage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
-		waitForProcessEvent <- true
-	}).Return(nil, nil, ptmgrtypes.NextStepWait /*just wait, don't trigger new stage etc*/)
 	testOc.HandleEvent(ctx, &ptmgrtypes.StageEvent{
 		ID:    uuid.NewString(),
 		Stage: "test",
@@ -176,10 +159,6 @@ func TestOrchestratorHandleEvents(t *testing.T) {
 	assert.Empty(t, testOc.incompleteTxSProcessMap)
 
 	// trigger again which should initiate the tx processor
-	mSC.On("CalculateStage", ctx, testTx).Once().Return("test")
-	mSC.On("ProcessEventsForStage", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
-		waitForProcessEvent <- true
-	}).Return(nil, nil, ptmgrtypes.NextStepWait /*just wait, don't trigger new stage etc*/)
 	testOc.HandleEvent(ctx, &ptmgrtypes.StageEvent{
 		ID:    uuid.NewString(),
 		Stage: "test",
@@ -230,17 +209,9 @@ func TestOrchestratorPollingLoopRemoveCompletedTx(t *testing.T) {
 	}
 	testOc, _ := newOrchestratorForTesting(t, ctx, nil)
 
-	mSC := privatetxnmgrmocks.StageController{}
-	testOc.StageController = &mSC
-
 	ocDone, err := testOc.Start(ctx)
 	require.NoError(t, err)
 	waitForAction := make(chan bool, 1)
-	mSC.On("GetAllStages").Maybe().Return([]string{"test"})
-	mSC.On("CalculateStage", ctx, testTx).Once().Return("remove")
-	mSC.On("PerformActionForStage", ctx, mock.Anything, mock.Anything).Once().Run(func(args mock.Arguments) {
-		waitForAction <- true
-	}).Return(nil /*no synchronous output*/, nil)
 	// gets add when the queue is not full
 	testOc.maxConcurrentProcess = 10
 	assert.Empty(t, testOc.incompleteTxSProcessMap)

@@ -713,7 +713,7 @@ func newEngineForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (Engin
 		assert.NoError(t, err)
 	}).Maybe().Return(nil)
 
-	e := NewEngine(uuid.Must(uuid.NewUUID()))
+	e := NewEngine(tktypes.RandHex(16))
 	r, err := e.Init(mocks.allComponents)
 	assert.NotNil(t, r)
 	assert.NoError(t, err)

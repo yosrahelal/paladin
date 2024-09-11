@@ -21,92 +21,57 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
-	"github.com/kaleido-io/paladin/core/internal/transactionstore"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
+
+type transactionProcessorDepencyMocks struct {
+	allComponents        *componentmocks.AllComponents
+	domainStateInterface *componentmocks.DomainStateInterface
+	domainSmartContract  *componentmocks.DomainSmartContract
+	domainMgr            *componentmocks.DomainManager
+	transportManager     *componentmocks.TransportManager
+	stateStore           *componentmocks.StateStore
+	keyManager           *componentmocks.KeyManager
+	sequencer            *privatetxnmgrmocks.Sequencer
+	endorsementGatherer  *privatetxnmgrmocks.EndorsementGatherer
+	emitEvent            EmitEvent
+}
+
+func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context, transaction *components.PrivateTransaction) (*PaladinTxProcessor, *transactionProcessorDepencyMocks) {
+
+	mocks := &transactionProcessorDepencyMocks{
+		allComponents:        componentmocks.NewAllComponents(t),
+		domainStateInterface: componentmocks.NewDomainStateInterface(t),
+		domainSmartContract:  componentmocks.NewDomainSmartContract(t),
+		domainMgr:            componentmocks.NewDomainManager(t),
+		transportManager:     componentmocks.NewTransportManager(t),
+		stateStore:           componentmocks.NewStateStore(t),
+		keyManager:           componentmocks.NewKeyManager(t),
+		sequencer:            privatetxnmgrmocks.NewSequencer(t),
+		endorsementGatherer:  privatetxnmgrmocks.NewEndorsementGatherer(t),
+		emitEvent:            func(ctx context.Context, event PrivateTransactionEvent) {},
+	}
+	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
+	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
+	mocks.allComponents.On("TransportManager").Return(mocks.transportManager).Maybe()
+	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
+
+	tp := NewPaladinTransactionProcessor(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.emitEvent, mocks.endorsementGatherer)
+
+	return tp.(*PaladinTxProcessor), mocks
+}
 
 func TestTransactionProcessor(t *testing.T) {
 	ctx := context.Background()
 	newTxID := uuid.New()
-	testTx := &transactionstore.TransactionWrapper{
-		Transaction: transactionstore.Transaction{
-			ID: newTxID,
-		},
-		PrivateTransaction: &components.PrivateTransaction{
-			ID: newTxID,
-		},
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
 	}
-	tp := NewPaladinTransactionProcessor(ctx, testTx, newTestStageController(ctx)).(*PaladinTxProcessor)
+	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
 	tp.stageController = newTestStageController(ctx)
 	assert.Nil(t, tp.GetStageContext(ctx))
 	assert.Nil(t, tp.GetStageTriggerError(ctx))
-}
-
-func TestTransactionProcessorPersistTxUpdates(t *testing.T) {
-	ctx := context.Background()
-	newTxID := uuid.New()
-	testTx := &transactionstore.TransactionWrapper{
-		Transaction: transactionstore.Transaction{
-			ID: newTxID,
-		},
-		PrivateTransaction: &components.PrivateTransaction{
-			ID: newTxID,
-		},
-	}
-	tp := NewPaladinTransactionProcessor(ctx, testTx, newTestStageController(ctx)).(*PaladinTxProcessor)
-	tp.stageController = newTestStageController(ctx)
-	assert.Nil(t, tp.GetStageContext(ctx))
-	assert.Nil(t, tp.GetStageTriggerError(ctx))
-	assert.Empty(t, testTx.SequenceID)
-
-	tp.Init(ctx)
-	assert.NotEmpty(t, tp.stageContext)
-
-	tp.AddStageEvent(ctx, &ptmgrtypes.StageEvent{
-		Stage: testStage,
-		Data: &testActionOutput{
-			Message: "continue",
-		},
-	})
-	firstSeqID := testTx.SequenceID
-	assert.NotEmpty(t, testTx.SequenceID)
-
-	testTx.Contract = "complete"
-	tp.AddStageEvent(ctx, &ptmgrtypes.StageEvent{
-		Stage: testStage,
-		Data: &testActionOutput{
-			Message: "continue",
-		},
-	})
-	assert.NotEqual(t, firstSeqID, testTx.SequenceID)
-}
-
-func TestTransactionProcessorInitiateOnEvent(t *testing.T) {
-	ctx := context.Background()
-	newTxID := uuid.New()
-	testTx := &transactionstore.TransactionWrapper{
-		Transaction: transactionstore.Transaction{
-			ID: newTxID,
-		},
-		PrivateTransaction: &components.PrivateTransaction{
-			ID: newTxID,
-		},
-	}
-	tp := NewPaladinTransactionProcessor(ctx, testTx, newTestStageController(ctx)).(*PaladinTxProcessor)
-	tp.stageController = newTestStageController(ctx)
-	assert.Nil(t, tp.GetStageContext(ctx))
-	assert.Nil(t, tp.GetStageTriggerError(ctx))
-	assert.Empty(t, testTx.SequenceID)
-
-	assert.Empty(t, tp.stageContext)
-
-	tp.AddStageEvent(ctx, &ptmgrtypes.StageEvent{
-		Stage: testStage,
-		Data: &testActionOutput{
-			Message: "continue",
-		},
-	})
-
-	assert.NotEmpty(t, testTx.SequenceID)
 }

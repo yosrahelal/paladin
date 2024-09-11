@@ -44,13 +44,13 @@ type FakeEngine interface {
 
 type fakeEngine struct {
 	nodeID         string
-	sequencer      Sequencer
+	sequencer      ptmgrtypes.Sequencer
 	currentState   string
 	transportLayer *fakeTransportLayer
 	t              *testing.T
 }
 
-func newFakeEngine(t *testing.T, nodeID string, sequencer Sequencer, seedState string, transportLayer *fakeTransportLayer) *fakeEngine {
+func newFakeEngine(t *testing.T, nodeID string, sequencer ptmgrtypes.Sequencer, seedState string, transportLayer *fakeTransportLayer) *fakeEngine {
 	return &fakeEngine{
 		nodeID:         nodeID,
 		sequencer:      sequencer,
@@ -137,11 +137,11 @@ type fakeTransportLayer struct {
 	t       *testing.T
 }
 
-func (f *fakeTransportLayer) addEngine(nodeID uuid.UUID, engine FakeEngine) {
-	f.engines[nodeID.String()] = engine
+func (f *fakeTransportLayer) addEngine(nodeID string, engine FakeEngine) {
+	f.engines[nodeID] = engine
 }
 
-// PublishEvent implements Publisher.
+// PublishEvent implements ptmgrtypes.Publisher.
 func (f *fakeTransportLayer) PublishEvent(ctx context.Context, event interface{}) error {
 	log.L(ctx).Info("PublishEvent")
 
@@ -181,11 +181,11 @@ type fakeDelegator struct {
 	nodeID  string
 }
 
-func (f *fakeDelegator) addEngine(nodeID uuid.UUID, engine FakeEngine) {
-	f.engines[nodeID.String()] = engine
+func (f *fakeDelegator) addEngine(nodeID string, engine FakeEngine) {
+	f.engines[nodeID] = engine
 }
 
-// Delegate implements Delegator.
+// Delegate implements ptmgrtypes.Delegator.
 func (f *fakeDelegator) Delegate(ctx context.Context, txnID, delegate string) error {
 
 	log.L(ctx).Info("DelegateTransaction")
@@ -214,9 +214,9 @@ func TestConcurrentSequencing(t *testing.T) {
 	ctx := context.Background()
 	log.SetLevel("debug")
 
-	node1ID := uuid.New()
-	node2ID := uuid.New()
-	node3ID := uuid.New()
+	node1ID := uuid.New().String()
+	node2ID := uuid.New().String()
+	node3ID := uuid.New().String()
 	log.L(ctx).Infof("node1ID %s", node1ID)
 	log.L(ctx).Infof("node2ID %s", node2ID)
 	log.L(ctx).Infof("node3ID %s", node3ID)
@@ -229,30 +229,30 @@ func TestConcurrentSequencing(t *testing.T) {
 
 	seedState := tktypes.NewBytes32FromSlice(tktypes.RandBytes(32))
 
-	delegatorMock1 := NewFakeDelegator(t, node1ID.String())
+	delegatorMock1 := NewFakeDelegator(t, node1ID)
 
 	node1Sequencer := NewSequencer(node1ID,
 		internodeTransportLayer,
 		delegatorMock1,
 		dispatcher1Mock,
 	)
-	node1Engine := newFakeEngine(t, node1ID.String(), node1Sequencer, seedState.String(), internodeTransportLayer)
+	node1Engine := newFakeEngine(t, node1ID, node1Sequencer, seedState.String(), internodeTransportLayer)
 
-	delegatorMock2 := NewFakeDelegator(t, node2ID.String())
+	delegatorMock2 := NewFakeDelegator(t, node2ID)
 	node2Sequencer := NewSequencer(node2ID,
 		internodeTransportLayer,
 		delegatorMock2,
 		dispatcher2Mock,
 	)
-	node2Engine := newFakeEngine(t, node2ID.String(), node2Sequencer, seedState.String(), internodeTransportLayer)
+	node2Engine := newFakeEngine(t, node2ID, node2Sequencer, seedState.String(), internodeTransportLayer)
 
-	delegatorMock3 := NewFakeDelegator(t, node3ID.String())
+	delegatorMock3 := NewFakeDelegator(t, node3ID)
 	node3Sequencer := NewSequencer(node3ID,
 		internodeTransportLayer,
 		delegatorMock3,
 		dispatcher3Mock,
 	)
-	node3Engine := newFakeEngine(t, node3ID.String(), node3Sequencer, seedState.String(), internodeTransportLayer)
+	node3Engine := newFakeEngine(t, node3ID, node3Sequencer, seedState.String(), internodeTransportLayer)
 
 	internodeTransportLayer.addEngine(node1ID, node1Engine)
 	internodeTransportLayer.addEngine(node2ID, node2Engine)
@@ -347,7 +347,7 @@ func TestConcurrentSequencing(t *testing.T) {
 
 type testTransactionInvoker struct {
 	name    string
-	nodeID  uuid.UUID
+	nodeID  string
 	engine  FakeEngine
 	next    chan bool
 	stopMsg chan bool
@@ -373,7 +373,7 @@ func (a *testTransactionInvoker) run(t *testing.T, postInvoke func()) {
 
 }
 
-func newtestTransactionInvoker(nodeId uuid.UUID, name string, engine FakeEngine) *testTransactionInvoker {
+func newtestTransactionInvoker(nodeId string, name string, engine FakeEngine) *testTransactionInvoker {
 	return &testTransactionInvoker{
 		name:    name,
 		nodeID:  nodeId,

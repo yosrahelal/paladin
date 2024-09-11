@@ -19,15 +19,12 @@ package privatetxnmgr
 import (
 	"strconv"
 
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/serialx/hashring"
 )
 
-func NewContentionResolver() ContentionResolver {
+func NewContentionResolver() ptmgrtypes.ContentionResolver {
 	return &contentionResolver{}
-}
-
-type ContentionResolver interface {
-	Resolve(stateID, biddingContentionResolver1, biddingContentionResolver2 string) (string, error)
 }
 
 type contentionResolver struct {
@@ -36,7 +33,7 @@ type contentionResolver struct {
 func (c *contentionResolver) Resolve(stateID, bidder1, bidder2 string) (string, error) {
 
 	bidders := make([]string, 0, 1000)
-	// create 500 virtual nodes for each bidding ContentionResolver
+	// create 500 virtual nodes for each bidding ptmgrtypes.ContentionResolver
 	for i := 0; i < 500; i++ {
 		bidders = append(bidders, bidder1+strconv.Itoa(i))
 		bidders = append(bidders, bidder2+strconv.Itoa(i))

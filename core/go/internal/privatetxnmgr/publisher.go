@@ -22,7 +22,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
-func NewPublisher(e *engine) Publisher {
+func NewPublisher(e *engine) ptmgrtypes.Publisher {
 	return &publisher{
 		engine: e,
 	}
@@ -35,7 +35,7 @@ type publisher struct {
 // PublishStageEvent implements enginespi.Publisher.
 func (p *publisher) PublishStageEvent(ctx context.Context, stageEvent *ptmgrtypes.StageEvent) error {
 
-	p.engine.HandleNewEvent(ctx, stageEvent)
+	//p.engine.HandleNewEvent(ctx, stageEvent)
 	return nil
 
 }

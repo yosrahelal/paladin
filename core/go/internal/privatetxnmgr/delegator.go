@@ -17,16 +17,18 @@ package privatetxnmgr
 
 import (
 	"context"
+
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 )
 
-func NewDelegator() Delegator {
+func NewDelegator() ptmgrtypes.Delegator {
 	return &delegator{}
 }
 
 type delegator struct {
 }
 
-// Delegate implements Delegator.
+// Delegate implements ptmgrtypes.Delegator.
 func (p *delegator) Delegate(ctx context.Context, transactionId string, delegateNodeId string) error {
 	panic("unimplemented")
 }

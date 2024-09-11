@@ -30,12 +30,12 @@ import (
 )
 
 type AssembleStage struct {
-	sequencer Sequencer
+	sequencer ptmgrtypes.Sequencer
 	nodeID    string
 	lock      sync.Mutex
 }
 
-func NewAssembleStage(sequencer Sequencer, nodeID string) *AssembleStage {
+func NewAssembleStage(sequencer ptmgrtypes.Sequencer, nodeID string) *AssembleStage {
 	return &AssembleStage{
 		sequencer: sequencer,
 		nodeID:    nodeID,

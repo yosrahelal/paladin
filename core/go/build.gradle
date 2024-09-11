@@ -176,7 +176,7 @@ task makeMocks(type: Mockery, dependsOn: [tasks.installTools, tasks.protoc, task
         outputDir 'mocks/enginemocks'
     }
     mock {
-        inputDir 'internal/privatetxnmgr'
+        inputDir 'internal/privatetxnmgr/ptmgrtypes'
         includeAll true
         outputPackage 'privatetxnmgrmocks'
         outputDir 'mocks/privatetxnmgrmocks'

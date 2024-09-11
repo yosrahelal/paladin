@@ -33,10 +33,10 @@ type GatherSignaturesResult struct {
 }
 
 type GatherSignaturesStage struct {
-	sequencer Sequencer
+	sequencer ptmgrtypes.Sequencer
 }
 
-func NewGatherSignaturesStage(sequencer Sequencer) *GatherSignaturesStage {
+func NewGatherSignaturesStage(sequencer ptmgrtypes.Sequencer) *GatherSignaturesStage {
 	return &GatherSignaturesStage{
 		sequencer: sequencer,
 	}

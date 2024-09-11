@@ -24,7 +24,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
-func NewDispatcher(contractAddress string, publisher Publisher) Dispatcher {
+func NewDispatcher(contractAddress string, publisher ptmgrtypes.Publisher) ptmgrtypes.Dispatcher {
 	return &dispatcher{
 		publisher:       publisher,
 		contractAddress: contractAddress,
@@ -34,7 +34,7 @@ func NewDispatcher(contractAddress string, publisher Publisher) Dispatcher {
 
 type dispatcher struct {
 	sequencedTransactions []uuid.UUID
-	publisher             Publisher
+	publisher             ptmgrtypes.Publisher
 	contractAddress       string
 	nextNonce             uint64
 	nextNonceLock         sync.Mutex
@@ -48,7 +48,7 @@ func (p *dispatcher) NextNonce() uint64 {
 	return nextNonce
 }
 
-// Dispatch implements Dispatcher.
+// Dispatch implements ptmgrtypes.Dispatcher.
 func (p *dispatcher) Dispatch(ctx context.Context, transactionIDs []uuid.UUID) error {
 	//Placeholder for actual interface to hand over to dispatcher
 	p.sequencedTransactions = append(p.sequencedTransactions, transactionIDs...)

@@ -17,15 +17,25 @@ package privatetxnmgr
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/transactionstore"
+	coreProto "github.com/kaleido-io/paladin/core/pkg/proto"
+	engineProto "github.com/kaleido-io/paladin/core/pkg/proto/engine"
+
+	"github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type stageContextAction int
@@ -44,14 +54,27 @@ type TxProcessor interface {
 	AddStageEvent(ctx context.Context, stageEvent *ptmgrtypes.StageEvent)
 	Init(ctx context.Context)
 	GetTxStatus(ctx context.Context) (ptmgrtypes.TxStatus, error)
+
+	handleTransactionSubmittedEvent(ctx context.Context, event *TransactionSubmittedEvent)
+	handleTransactionAssembledEvent(ctx context.Context, event *TransactionAssembledEvent)
+	handleTransactionSignedEvent(ctx context.Context, event *TransactionSignedEvent)
+	handleTransactionEndorsedEvent(ctx context.Context, event *TransactionEndorsedEvent)
+	handleTransactionDispatchedEvent(ctx context.Context, event *TransactionDispatchedEvent)
+	handleTransactionConfirmedEvent(ctx context.Context, event *TransactionConfirmedEvent)
+	handleTransactionRevertedEvent(ctx context.Context, event *TransactionRevertedEvent)
+	handleTransactionDelegatedEvent(ctx context.Context, event *TransactionDelegatedEvent)
 }
 
-func NewPaladinTransactionProcessor(ctx context.Context, tsm transactionstore.TxStateManager, sc StageController) TxProcessor {
+func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, emitEvent EmitEvent, endorsementGatherer ptmgrtypes.EndorsementGatherer) TxProcessor {
 	return &PaladinTxProcessor{
-		tsm:                 tsm,
-		stageController:     sc,
 		stageErrorRetry:     10 * time.Second,
-		bufferedStageEvents: make([]*ptmgrtypes.StageEvent, 0),
+		sequencer:           sequencer,
+		domainAPI:           domainAPI,
+		nodeID:              nodeID,
+		components:          components,
+		emitEvent:           emitEvent,
+		endorsementGatherer: endorsementGatherer,
+		transaction:         transaction,
 	}
 }
 
@@ -66,6 +89,16 @@ type PaladinTxProcessor struct {
 
 	bufferedStageEventsMapMutex sync.Mutex
 	bufferedStageEvents         []*ptmgrtypes.StageEvent
+	contractAddress             string // the contract address managed by the current orchestrator
+
+	components components.AllComponents
+
+	nodeID              string
+	domainAPI           components.DomainSmartContract
+	sequencer           ptmgrtypes.Sequencer
+	transaction         *components.PrivateTransaction
+	emitEvent           EmitEvent
+	endorsementGatherer ptmgrtypes.EndorsementGatherer
 }
 
 func (ts *PaladinTxProcessor) Init(ctx context.Context) {
@@ -107,7 +140,6 @@ func (ts *PaladinTxProcessor) createStageContext(ctx context.Context, action sta
 	} else {
 		log.L(ctx).Tracef("Transaction with ID %s, resuming for %s stage", ts.tsm.GetTxID(ctx), stage)
 	}
-
 }
 
 func (ts *PaladinTxProcessor) PerformActionForStageAsync(ctx context.Context) {
@@ -207,4 +239,309 @@ func (ts *PaladinTxProcessor) GetTxStatus(ctx context.Context) (ptmgrtypes.TxSta
 	}
 	//TODO what error condition can cause this?
 	return ptmgrtypes.TxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError)
+}
+
+func (ts *PaladinTxProcessor) handleTransactionSubmittedEvent(ctx context.Context, event *TransactionSubmittedEvent) {
+	//syncronously assemble the transaction then inform the local sequencer and remote nodes for any parties in the
+	// privacy group that need to know about the transaction
+	// this could be other parties that have potential to attempt to spend the same state(s) as this transaction is assembled to spend
+	// or parties that could potentially spend the output states of this transaction
+	// or parties that will be needed to endorse or notarize this transaction
+	err := ts.domainAPI.AssembleTransaction(ctx, event.transaction)
+	if err != nil {
+		log.L(ctx).Errorf("AssembleTransaction failed: %s", err)
+		// TODO assembly failed, need to revert the transaction
+	}
+	// inform the sequencer that the transaction has been assembled
+	err = ts.sequencer.HandleTransactionAssembledEvent(ctx, &sequence.TransactionAssembledEvent{
+		TransactionId: event.transaction.ID.String(),
+		NodeId:        ts.nodeID,
+		InputStateId:  stateIDs(event.transaction.PostAssembly.InputStates),
+		OutputStateId: stateIDs(event.transaction.PostAssembly.OutputStates),
+	})
+	if err != nil {
+		log.L(ctx).Errorf("HandleTransactionAssembledEvent failed: %s", err)
+		panic("todo")
+	}
+
+	if ts.transaction.PostAssembly == nil {
+		log.L(ctx).Errorf("PostAssembly is nil. Should never have reached this stage without a PostAssembly")
+		//return nil, i18n.NewError(ctx, msgs.MsgEngineInternalError, "")
+	}
+
+	if ts.transaction.PostAssembly.OutputStatesPotential != nil && ts.transaction.PostAssembly.OutputStates == nil {
+		//TODO - a bit of a chicken and egg situation here.
+		// We need to write the potential states to the domain before we can sign or endorse the transaction
+		// however, this is something that we would prefer to defer until we are confident that this transaction will be
+		// added to a sequence.
+		// Currently, the sequencer waits for endorsement before giving us that confidence so we are forced to write the potential states here.
+
+		err := ts.domainAPI.WritePotentialStates(ctx, ts.transaction)
+		if err != nil {
+			//TODO better error message
+			errorMessage := fmt.Sprintf("Failed to write potential states: %s", err)
+			log.L(ctx).Error(errorMessage)
+			//return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError, errorMessage)
+		}
+	}
+
+	//start an async process to gather signatures
+	// this will emit a TransactionSignedEvent for each signature collected
+	go ts.requestSignatures(ctx)
+
+}
+
+func (ts *PaladinTxProcessor) handleTransactionAssembledEvent(ctx context.Context, event *TransactionAssembledEvent) {
+	//TODO inform the sequencer about a transaction assembled by another node
+}
+
+func (ts *PaladinTxProcessor) handleTransactionSignedEvent(ctx context.Context, event *TransactionSignedEvent) {
+	log.L(ctx).Debugf("Adding signature to transaction %s", ts.transaction.ID.String())
+	ts.transaction.PostAssembly.Signatures = append(ts.transaction.PostAssembly.Signatures, event.attestationResult)
+	if !ts.hasOutstandingSignatureRequests(ctx) {
+		ts.requestEndorsements(ctx)
+	}
+}
+
+func (ts *PaladinTxProcessor) handleTransactionEndorsedEvent(ctx context.Context, event *TransactionEndorsedEvent) {
+}
+func (ts *PaladinTxProcessor) handleTransactionDispatchedEvent(ctx context.Context, event *TransactionDispatchedEvent) {
+}
+func (ts *PaladinTxProcessor) handleTransactionConfirmedEvent(ctx context.Context, event *TransactionConfirmedEvent) {
+}
+func (ts *PaladinTxProcessor) handleTransactionRevertedEvent(ctx context.Context, event *TransactionRevertedEvent) {
+}
+func (ts *PaladinTxProcessor) handleTransactionDelegatedEvent(ctx context.Context, event *TransactionDelegatedEvent) {
+}
+
+func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *prototk.AttestationRequest, partyName string) {
+	keyHandle, verifier, err := ts.components.KeyManager().ResolveKey(ctx, partyName, attRequest.Algorithm)
+	if err != nil {
+		log.L(ctx).Errorf("Failed to resolve local signer for %s (algorithm=%s): %s", partyName, attRequest.Algorithm, err)
+
+		//TODO return nil, err
+	}
+	// TODO this could be calling out to a remote signer, should we be doing these in parallel?
+	signaturePayload, err := ts.components.KeyManager().Sign(ctx, &coreProto.SignRequest{
+		KeyHandle: keyHandle,
+		Algorithm: attRequest.Algorithm,
+		Payload:   attRequest.Payload,
+	})
+	if err != nil {
+		log.L(ctx).Errorf("failed to sign for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, attRequest.Algorithm, err)
+		//TODO return nil, err
+	}
+
+	ts.emitEvent(ctx, &TransactionSignedEvent{
+		attestationResult: &prototk.AttestationResult{
+			Name:            attRequest.Name,
+			AttestationType: attRequest.AttestationType,
+			Verifier: &prototk.ResolvedVerifier{
+				Lookup:    partyName,
+				Algorithm: attRequest.Algorithm,
+				Verifier:  verifier,
+			},
+			Payload: signaturePayload.Payload,
+		},
+	})
+}
+
+func (ts *PaladinTxProcessor) requestSignatures(ctx context.Context) {
+
+	err := ts.sequencer.AssignTransaction(ctx, ts.transaction.ID.String())
+	if err != nil {
+		log.L(ctx).Errorf("Failed to assign transaction to sequencer: %s", err)
+		//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
+	}
+
+	attPlan := ts.transaction.PostAssembly.AttestationPlan
+	attResults := ts.transaction.PostAssembly.Endorsements
+
+	for _, attRequest := range attPlan {
+		switch attRequest.AttestationType {
+		case prototk.AttestationType_SIGN:
+			toBeComplete := true
+			for _, ar := range attResults {
+				if ar.GetAttestationType().Type() == attRequest.GetAttestationType().Type() {
+					toBeComplete = false
+					break
+				}
+			}
+			if toBeComplete {
+
+				for _, partyName := range attRequest.Parties {
+					go ts.requestSignature(ctx, attRequest, partyName)
+				}
+			}
+		}
+	}
+}
+func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party string, attRequest *prototk.AttestationRequest) {
+
+	partyLocator := tktypes.PrivateIdentityLocator(party)
+	partyNode, err := partyLocator.Node(ctx, true)
+	if err != nil {
+		log.L(ctx).Errorf("Failed to get node name from locator %s: %s", party, err)
+		//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
+	}
+
+	if partyNode == ts.nodeID || partyNode == "" {
+		// This is a local party, so we can endorse it directly
+		endorsement, revertReason, err := ts.endorsementGatherer.GatherEndorsement(ctx,
+			ts.transaction.PreAssembly.TransactionSpecification,
+			ts.transaction.PreAssembly.Verifiers,
+			ts.transaction.PostAssembly.Signatures,
+			toEndorsableList(ts.transaction.PostAssembly.InputStates),
+			toEndorsableList(ts.transaction.PostAssembly.OutputStates), party, attRequest)
+		if err != nil {
+			log.L(ctx).Errorf("Failed to gather endorsement for party %s: %s", party, err)
+			//TODO specific error message
+			//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
+		}
+		ts.emitEvent(ctx, &TransactionEndorsedEvent{
+			endorsement:  endorsement,
+			revertReason: revertReason,
+		})
+
+	} else {
+		// This is a remote party, so we need to send an endorsement request to the remote node
+
+		attRequstAny, err := anypb.New(attRequest)
+		if err != nil {
+			log.L(ctx).Error("Error marshalling attestation request", err)
+			//TODO return nil, err
+		}
+
+		transactionSpecificationAny, err := anypb.New(ts.transaction.PreAssembly.TransactionSpecification)
+		if err != nil {
+			log.L(ctx).Error("Error marshalling transaction specification", err)
+			//TODO return nil, err
+		}
+		verifiers := make([]*anypb.Any, len(ts.transaction.PreAssembly.Verifiers))
+		for i, verifier := range ts.transaction.PreAssembly.Verifiers {
+			verifierAny, err := anypb.New(verifier)
+			if err != nil {
+				log.L(ctx).Error("Error marshalling verifier", err)
+				//TODO return nil, err
+			}
+			verifiers[i] = verifierAny
+		}
+		signatures := make([]*anypb.Any, len(ts.transaction.PostAssembly.Signatures))
+		for i, signature := range ts.transaction.PostAssembly.Signatures {
+			signatureAny, err := anypb.New(signature)
+			if err != nil {
+				log.L(ctx).Error("Error marshalling signature", err)
+				//TODO return nil, err
+			}
+			signatures[i] = signatureAny
+		}
+
+		inputStates := make([]*anypb.Any, len(ts.transaction.PostAssembly.InputStates))
+		endorseableInputStates := toEndorsableList(ts.transaction.PostAssembly.InputStates)
+		for i, inputState := range endorseableInputStates {
+			inputStateAny, err := anypb.New(inputState)
+			if err != nil {
+				log.L(ctx).Error("Error marshalling input state", err)
+				//TODO return nil, err
+			}
+			inputStates[i] = inputStateAny
+		}
+
+		outputStates := make([]*anypb.Any, len(ts.transaction.PostAssembly.OutputStates))
+		endorseableOutputStates := toEndorsableList(ts.transaction.PostAssembly.OutputStates)
+		for i, outputState := range endorseableOutputStates {
+			outputStateAny, err := anypb.New(outputState)
+			if err != nil {
+				log.L(ctx).Error("Error marshalling output state", err)
+				//TODO return nil, err
+			}
+			outputStates[i] = outputStateAny
+		}
+
+		endorsementRequest := &engineProto.EndorsementRequest{
+			ContractAddress:          ts.transaction.Inputs.To.String(),
+			TransactionId:            ts.transaction.ID.String(),
+			AttestationRequest:       attRequstAny,
+			Party:                    party,
+			TransactionSpecification: transactionSpecificationAny,
+			Verifiers:                verifiers,
+			Signatures:               signatures,
+			InputStates:              inputStates,
+			OutputStates:             outputStates,
+		}
+
+		endorsementRequestBytes, err := proto.Marshal(endorsementRequest)
+		if err != nil {
+			log.L(ctx).Error("Error marshalling endorsement request", err)
+			//TODO return nil, err
+		}
+		err = ts.components.TransportManager().Send(ctx, &components.TransportMessage{
+			MessageType: "EndorsementRequest",
+			Destination: tktypes.PrivateIdentityLocator(party),
+			Payload:     endorsementRequestBytes,
+		})
+		if err != nil {
+			//TODO need better error handling here.  Should we retry? Should we fail the transaction? Should we try sending the other requests?
+			log.L(ctx).Errorf("Failed to send endorsement request to party %s: %s", party, err)
+			//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
+		}
+	}
+}
+
+func (ts *PaladinTxProcessor) requestEndorsements(ctx context.Context) {
+	attPlan := ts.transaction.PostAssembly.AttestationPlan
+	attResults := ts.transaction.PostAssembly.Endorsements
+	for _, attRequest := range attPlan {
+		switch attRequest.AttestationType {
+		case prototk.AttestationType_SIGN:
+			// no op. Signatures are gathered in the GatherSignaturesStage
+		case prototk.AttestationType_ENDORSE:
+			//TODO not sure this is the best way to check toBeComplete - take a closer look and think about this
+			toBeComplete := true
+			for _, ar := range attResults {
+				if ar.GetAttestationType().Type() == attRequest.GetAttestationType().Type() {
+					toBeComplete = false
+					break
+				}
+			}
+			if toBeComplete {
+
+				for _, party := range attRequest.GetParties() {
+					go ts.requestEndorsement(ctx, party, attRequest)
+				}
+
+			}
+		case prototk.AttestationType_GENERATE_PROOF:
+			errorMessage := "AttestationType_GENERATE_PROOF is not implemented yet"
+			log.L(ctx).Error(errorMessage)
+			//TODO return nil, i18n.NewError(ctx, msgs.MsgEngineInternalError, errorMessage)
+		default:
+			errorMessage := fmt.Sprintf("Unsupported attestation type: %s", attRequest.AttestationType)
+			log.L(ctx).Error(errorMessage)
+			//TODO return nil, i18n.NewError(ctx, msgs.MsgEngineInternalError, errorMessage)
+		}
+
+	}
+}
+
+func (ts *PaladinTxProcessor) hasOutstandingSignatureRequests(ctx context.Context) bool {
+	outstandingSignatureRequests := false
+out:
+	for _, attRequest := range ts.transaction.PostAssembly.AttestationPlan {
+		if attRequest.AttestationType == prototk.AttestationType_SIGN {
+			found := false
+			for _, signatures := range ts.transaction.PostAssembly.Signatures {
+				if signatures.Name == attRequest.Name {
+					found = true
+					break
+				}
+			}
+			if !found {
+				outstandingSignatureRequests = true
+				// no point checking any further, we have at least one outstanding signature request
+				break out
+			}
+		}
+	}
+	return outstandingSignatureRequests
 }

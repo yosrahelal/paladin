@@ -21,7 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
@@ -55,6 +54,7 @@ const (
 
 type OrchestratorConfig struct {
 	MaxConcurrentProcess    *int    `yaml:"maxConcurrentProcess,omitempty"`
+	MaxPendingEvents        *int    `yaml:"maxPendingEvents,omitempty"`
 	StageRetry              *string `yaml:"stageRetry,omitempty"`
 	EvaluationInterval      *string `yaml:"evalInterval,omitempty"`
 	PersistenceRetryTimeout *string `yaml:"persistenceRetryTimeout,omitempty"`
@@ -103,13 +103,9 @@ type Orchestrator struct {
 	stageRetryTimeout       time.Duration
 	persistenceRetryTimeout time.Duration
 
-	StageController StageController
-	sequencer       Sequencer
-
 	// each orchestrator has its own go routine
-	initiated       time.Time     // when orchestrator is created
-	evalInterval    time.Duration // between how long the orchestrator will do an evaluation to check & remove transactions that missed events
-	contractAddress string        // the contract address managed by the current orchestrator
+	initiated    time.Time     // when orchestrator is created
+	evalInterval time.Duration // between how long the orchestrator will do an evaluation to check & remove transactions that missed events
 
 	maxConcurrentProcess        int
 	incompleteTxProcessMapMutex sync.Mutex
@@ -130,8 +126,15 @@ type Orchestrator struct {
 	staleTimeout time.Duration
 	// lastActivityTime time.Time
 
+	pendingEvents chan PrivateTransactionEvent
+
+	contractAddress     string // the contract address managed by the current orchestrator
+	nodeID              string
 	domainAPI           components.DomainSmartContract
-	assemblyRequestChan chan *components.PrivateTransaction
+	sequencer           ptmgrtypes.Sequencer
+	components          components.PreInitComponentsAndManagers
+	emitEvent           EmitEvent
+	endorsementGatherer ptmgrtypes.EndorsementGatherer
 }
 
 var orchestratorConfigDefault = OrchestratorConfig{
@@ -140,9 +143,10 @@ var orchestratorConfigDefault = OrchestratorConfig{
 	EvaluationInterval:      confutil.P("5m"),
 	PersistenceRetryTimeout: confutil.P("5s"),
 	StaleTimeout:            confutil.P("10m"),
+	MaxPendingEvents:        confutil.P(500),
 }
 
-func NewOrchestrator(ctx context.Context, nodeID uuid.UUID, contractAddress string, oc *OrchestratorConfig, allComponents components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, publisher Publisher, sequencer Sequencer, endorsementGatherer EndorsementGatherer) *Orchestrator {
+func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string, oc *OrchestratorConfig, allComponents components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, publisher ptmgrtypes.Publisher, sequencer ptmgrtypes.Sequencer, endorsementGatherer ptmgrtypes.EndorsementGatherer, emitEvent EmitEvent) *Orchestrator {
 
 	newOrchestrator := &Orchestrator{
 		ctx:                  log.WithLogField(ctx, "role", fmt.Sprintf("orchestrator-%s", contractAddress)),
@@ -161,28 +165,57 @@ func NewOrchestrator(ctx context.Context, nodeID uuid.UUID, contractAddress stri
 		processedTxIDs:               make(map[string]bool),
 		orchestrationEvalRequestChan: make(chan bool, 1),
 		stopProcess:                  make(chan bool, 1),
+		pendingEvents:                make(chan PrivateTransactionEvent, *orchestratorConfigDefault.MaxPendingEvents),
+		nodeID:                       nodeID,
 		domainAPI:                    domainAPI,
-		assemblyRequestChan:          make(chan *components.PrivateTransaction, 100), //TODO: buffer size should be configurable
+		sequencer:                    sequencer,
+		components:                   allComponents,
+		emitEvent:                    emitEvent,
+		endorsementGatherer:          endorsementGatherer,
 	}
 
 	newOrchestrator.sequencer = sequencer
-
-	newOrchestrator.StageController = NewPaladinStageController(ctx, NewPaladinStageFoundationService(allComponents.StateStore(), allComponents.TransportManager(), domainAPI, allComponents.KeyManager()), []txStageProcessor{
-		// for now, assume all orchestrators have same stages and register all the stages here
-		//we add them in reverse order to make sure the last stage is the first to be checked for a match
-		&DispatchStage{},
-		NewGatherEndorsementsStage(sequencer, endorsementGatherer, &ptmgrtypes.MockIdentityResolver{}),
-		NewGatherSignaturesStage(sequencer),
-		NewAssembleStage(sequencer, nodeID.String()),
-	})
-
 	log.L(ctx).Debugf("NewOrchestrator for contract address %s created: %+v", newOrchestrator.contractAddress, newOrchestrator)
 
 	return newOrchestrator
 }
 
+func (oc *Orchestrator) handleEvent(ctx context.Context, event PrivateTransactionEvent) {
+	//For any event that is specific to a single transaction,
+	// find (or create) the transaction processor for that transaction
+	// and pass the event to it
+	transactionID := event.TransactionID()
+	transactionProccessor := oc.incompleteTxSProcessMap[transactionID]
+	switch event := event.(type) {
+	case *TransactionSubmittedEvent:
+		transactionProccessor.handleTransactionSubmittedEvent(ctx, event)
+	case *TransactionAssembledEvent:
+		transactionProccessor.handleTransactionAssembledEvent(ctx, event)
+	case *TransactionSignedEvent:
+		transactionProccessor.handleTransactionSignedEvent(ctx, event)
+	case *TransactionEndorsedEvent:
+		transactionProccessor.handleTransactionEndorsedEvent(ctx, event)
+	case *TransactionDispatchedEvent:
+		transactionProccessor.handleTransactionDispatchedEvent(ctx, event)
+	case *TransactionConfirmedEvent:
+		transactionProccessor.handleTransactionConfirmedEvent(ctx, event)
+	case *TransactionRevertedEvent:
+		transactionProccessor.handleTransactionRevertedEvent(ctx, event)
+	case *TransactionDelegatedEvent:
+		transactionProccessor.handleTransactionDelegatedEvent(ctx, event)
+	default:
+		log.L(ctx).Warnf("Unknown event type: %T", event)
+	}
+}
+
 func (oc *Orchestrator) evaluationLoop() {
-	ctx := log.WithLogField(oc.ctx, "role", fmt.Sprintf("oc-loop-%s", oc.contractAddress))
+	// Select from the event channel and process each event on a single thread
+	// individual event handlers are responsible for kicking off another go routine if they have
+	// long running tasks that are not dependant on the order of events
+	// if the channel ever fills up, then we need to be aware that we have potentially missed some events
+	// and we need to poll the database for any events that we missed
+
+	ctx := log.WithLogField(oc.ctx, "role", fmt.Sprintf("pctm-loop-%s", oc.contractAddress))
 	log.L(ctx).Infof("Orchestrator for contract address %s started evaluation loop based on interval %s", oc.contractAddress, oc.evalInterval)
 
 	defer close(oc.orchestratorLoopDone)
@@ -191,6 +224,8 @@ func (oc *Orchestrator) evaluationLoop() {
 	for {
 		// an InFlight
 		select {
+		case pendingEvent := <-oc.pendingEvents:
+			oc.handleEvent(ctx, pendingEvent)
 		case <-oc.orchestrationEvalRequestChan:
 		case <-ticker.C:
 		case <-ctx.Done():
@@ -217,17 +252,6 @@ func (oc *Orchestrator) evaluateTransactions(ctx context.Context) (added int, ne
 	oldIncompleteMap := oc.incompleteTxSProcessMap
 	oc.incompleteTxSProcessMap = make(map[string]TxProcessor, len(oldIncompleteMap))
 
-	stageCounts := make(map[string]int)
-	for _, stageName := range oc.StageController.GetAllStages() {
-		// map for saving number of known incomplete transactions per stage
-		stageCounts[stageName] = 0
-	}
-
-	// TODO: how to distinguish the engine states below
-	stageCounts["remove"] = 0
-	stageCounts["suspend"] = 0
-	stageCounts["queued"] = 0
-
 	for txID, txp := range oldIncompleteMap {
 		oc.processedTxIDs[txID] = true
 		sc := txp.GetStageContext(ctx)
@@ -241,17 +265,12 @@ func (oc *Orchestrator) evaluateTransactions(ctx context.Context) (added int, ne
 			} else if sc.Stage == "suspend" {
 				log.L(ctx).Debugf("Orchestrator evaluate and process, removed suspended tx %s", txID)
 				break
-			} else {
-				stageCounts[sc.Stage] = stageCounts[sc.Stage] + 1
 			}
-		} else {
-			stageCounts["queued"] = stageCounts["queued"] + 1
-
 		}
 		oc.incompleteTxSProcessMap[txID] = txp
 	}
 
-	log.L(ctx).Debugf("Orchestrator evaluate and process, stage counts: %+v", stageCounts)
+	log.L(ctx).Debugf("Orchestrator evaluate and process")
 
 	oldTotal := len(oc.incompleteTxSProcessMap)
 	newTotal = oldTotal
@@ -307,7 +326,7 @@ func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tsm transacti
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			oc.incompleteTxSProcessMap[tsm.GetTxID(ctx)] = NewPaladinTransactionProcessor(ctx, tsm, oc.StageController)
+			//oc.incompleteTxSProcessMap[tsm.GetTxID(ctx)] = NewPaladinTransactionProcessor(ctx, oc.components, oc.sequencer, oc.domainAPI, oc.nodeID, oc.emitEvent, oc.endorsementGatherer)
 		}
 		oc.incompleteTxSProcessMap[tsm.GetTxID(ctx)].Init(ctx)
 	}
@@ -322,8 +341,8 @@ func (oc *Orchestrator) HandleEvent(ctx context.Context, stageEvent *ptmgrtypes.
 		// TODO: is bypassing max concurrent process correct?
 		// or throw the event away and waste another cycle to redo the actions
 		// (doesn't feel right, maybe for some events only persistence is needed)
-		tsm := transactionstore.NewTransactionStageManagerByTxID(ctx, stageEvent.TxID)
-		oc.incompleteTxSProcessMap[tsm.GetTxID(ctx)] = NewPaladinTransactionProcessor(ctx, tsm, oc.StageController)
+		//tsm := transactionstore.NewTransactionStageManagerByTxID(ctx, stageEvent.TxID)
+		//oc.incompleteTxSProcessMap[tsm.GetTxID(ctx)] = NewPaladinTransactionProcessor(ctx, tsm, oc.StageController)
 		txProc = oc.incompleteTxSProcessMap[stageEvent.TxID]
 	}
 	go func() {
@@ -332,20 +351,22 @@ func (oc *Orchestrator) HandleEvent(ctx context.Context, stageEvent *ptmgrtypes.
 }
 
 // this function should only have one running instance at any given time
-func (oc *Orchestrator) ProcessIncompleteTransactions(ctx context.Context, txStages map[string]TxProcessor) (blockedByPreReq bool) {
-	processStart := time.Now()
-	blockedByPreReq = false
-	log.L(ctx).Debugf("%s ProcessIncompleteTransactions entry for contract address %s", processStart.String(), oc.contractAddress)
+/*
 
-	for txID, stage := range txStages {
-		log.L(ctx).Tracef("%s ProcessIncompleteTransactions for contract address %s processing transaction with ID: %s, current stage: %s", processStart.String(), oc.contractAddress, txID, stage)
-		// TODO: stage plugin here
+	func (oc *Orchestrator) ProcessIncompleteTransactions(ctx context.Context, txStages map[string]TxProcessor) (blockedByPreReq bool) {
+		processStart := time.Now()
+		blockedByPreReq = false
+		log.L(ctx).Debugf("%s ProcessIncompleteTransactions entry for contract address %s", processStart.String(), oc.contractAddress)
+
+		for txID, stage := range txStages {
+			log.L(ctx).Tracef("%s ProcessIncompleteTransactions for contract address %s processing transaction with ID: %s, current stage: %s", processStart.String(), oc.contractAddress, txID, stage)
+			// TODO: stage plugin here
+		}
+
+		log.L(ctx).Debugf("%s ProcessIncompleteTransactions exit for contract address: %s, process %d over %s", processStart.String(), oc.contractAddress, len(txStages), time.Since(processStart))
+		return blockedByPreReq
 	}
-
-	log.L(ctx).Debugf("%s ProcessIncompleteTransactions exit for contract address: %s, process %d over %s", processStart.String(), oc.contractAddress, len(txStages), time.Since(processStart))
-	return blockedByPreReq
-}
-
+*/
 func (oc *Orchestrator) Start(c context.Context) (done <-chan struct{}, err error) {
 	oc.orchestratorLoopDone = make(chan struct{})
 	go oc.evaluationLoop()

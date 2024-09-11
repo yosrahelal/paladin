@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -53,9 +52,9 @@ type engine struct {
 	ctx                  context.Context
 	ctxCancel            func()
 	orchestrators        map[string]*Orchestrator
-	endorsementGatherers map[string]EndorsementGatherer
+	endorsementGatherers map[string]ptmgrtypes.EndorsementGatherer
 	components           components.PreInitComponentsAndManagers
-	nodeID               uuid.UUID
+	nodeID               string
 	subscribers          []ptmgrtypes.EventSubscriber
 	subscribersLock      sync.Mutex
 }
@@ -82,10 +81,10 @@ func (e *engine) Stop() {
 	panic("unimplemented")
 }
 
-func NewEngine(nodeID uuid.UUID) Engine {
+func NewEngine(nodeID string) Engine {
 	return &engine{
 		orchestrators:        make(map[string]*Orchestrator),
-		endorsementGatherers: make(map[string]EndorsementGatherer),
+		endorsementGatherers: make(map[string]ptmgrtypes.EndorsementGatherer),
 		nodeID:               nodeID,
 		subscribers:          make([]ptmgrtypes.EventSubscriber, 0),
 	}
@@ -119,6 +118,9 @@ func (e *engine) getOrchestratorForContract(ctx context.Context, contractAddr tk
 				publisher,
 				seq,
 				endorsementGatherer,
+				func(ctx context.Context, event PrivateTransactionEvent) {
+					//TODO
+				},
 			)
 		orchestratorDone, err := e.orchestrators[contractAddr.String()].Start(ctx)
 		if err != nil {
@@ -134,7 +136,7 @@ func (e *engine) getOrchestratorForContract(ctx context.Context, contractAddr tk
 	return e.orchestrators[contractAddr.String()], nil
 }
 
-func (e *engine) getEndorsementGathererForContract(ctx context.Context, contractAddr tktypes.EthAddress) (EndorsementGatherer, error) {
+func (e *engine) getEndorsementGathererForContract(ctx context.Context, contractAddr tktypes.EthAddress) (ptmgrtypes.EndorsementGatherer, error) {
 
 	domainAPI, err := e.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
 	if err != nil {

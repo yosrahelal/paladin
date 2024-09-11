@@ -35,11 +35,11 @@ func TestSequencerGraphOfOne(t *testing.T) {
 	// Transactions that are added to a sequencer's graph and have no dependencies on other transactions
 	// are immediately moved to the dispatch stage on the current node as soon as they are endorsed
 	ctx := context.Background()
-	node1ID := uuid.New()
+	node1ID := uuid.New().String()
 	txn1ID := uuid.New()
 	node1Sequencer, node1SequencerMockDependencies := newSequencerForTesting(t, node1ID, false)
 	err := node1Sequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
-		NodeId:        node1ID.String(),
+		NodeId:        node1ID,
 		TransactionId: txn1ID.String(),
 	})
 
@@ -61,13 +61,13 @@ func TestSequencerTwoGraphsOfOne(t *testing.T) {
 	// are immediately moved to the dispatch stage on the current node as soon as they are endorsed
 	// further transactions that are dependant on dispatched transactions are also dispatched
 	ctx := context.Background()
-	node1ID := uuid.New()
+	node1ID := uuid.New().String()
 	txn1ID := uuid.New()
 	txn2ID := uuid.New()
 	stateID := tktypes.NewBytes32FromSlice(tktypes.RandBytes(32))
 	node1Sequencer, node1SequencerMockDependencies := newSequencerForTesting(t, node1ID, false)
 	err := node1Sequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
-		NodeId:        node1ID.String(),
+		NodeId:        node1ID,
 		TransactionId: txn1ID.String(),
 		OutputStateId: []string{stateID.String()},
 	})
@@ -85,7 +85,7 @@ func TestSequencerTwoGraphsOfOne(t *testing.T) {
 
 	//now add a second transaction that is dependant on the first (before the first is confirmed)
 	err = node1Sequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
-		NodeId:        node1ID.String(),
+		NodeId:        node1ID,
 		TransactionId: txn2ID.String(),
 		InputStateId:  []string{stateID.String()},
 	})
@@ -106,14 +106,14 @@ func TestSequencerLocalUnendorsedDependency(t *testing.T) {
 	// managed by the same sequencer, will be moved to the dispatch stage as soon as they are endorsed and
 	// all of their dependencies are also endorsed and dispatched
 	ctx := context.Background()
-	node1ID := uuid.New()
+	node1ID := uuid.New().String()
 	txn1ID := uuid.New()
 	txn2ID := uuid.New()
 	stateID := tktypes.NewBytes32FromSlice(tktypes.RandBytes(32))
 	node1Sequencer, node1SequencerMockDependencies := newSequencerForTesting(t, node1ID, false)
 
 	err := node1Sequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
-		NodeId:        node1ID.String(),
+		NodeId:        node1ID,
 		TransactionId: txn1ID.String(),
 		OutputStateId: []string{stateID.String()},
 	})
@@ -123,7 +123,7 @@ func TestSequencerLocalUnendorsedDependency(t *testing.T) {
 	require.NoError(t, err)
 
 	err = node1Sequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
-		NodeId:        node1ID.String(),
+		NodeId:        node1ID,
 		TransactionId: txn2ID.String(),
 		InputStateId:  []string{stateID.String()},
 	})
@@ -153,8 +153,8 @@ func TestSequencerRemoteDependency(t *testing.T) {
 	// Transactions that are added to a sequencer's graph and have dependencies on another transaction that is
 	// managed by another sequencer, will be moved to that other sequencer as soon as they are assembled
 	ctx := context.Background()
-	localNodeId := uuid.New()
-	remoteNodeId := uuid.New()
+	localNodeId := uuid.New().String()
+	remoteNodeId := uuid.New().String()
 
 	txn1ID := uuid.New()
 	txn2ID := uuid.New()
@@ -167,16 +167,16 @@ func TestSequencerRemoteDependency(t *testing.T) {
 	// First transaction (the minter of a given state) is assembled on the remote node
 	err := node1Sequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
 		TransactionId: txn1ID.String(),
-		NodeId:        remoteNodeId.String(),
+		NodeId:        remoteNodeId,
 		OutputStateId: []string{stateID.String()},
 	})
 	require.NoError(t, err)
 
-	node1SequencerMockDependencies.delegatorMock.On("Delegate", ctx, txn2ID.String(), remoteNodeId.String()).Return(nil)
+	node1SequencerMockDependencies.delegatorMock.On("Delegate", ctx, txn2ID.String(), remoteNodeId).Return(nil)
 
 	err = node1Sequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
 		TransactionId: txn2ID.String(),
-		NodeId:        localNodeId.String(),
+		NodeId:        localNodeId,
 		InputStateId:  []string{stateID.String()},
 	})
 	require.NoError(t, err)
@@ -204,9 +204,9 @@ func TestSequencerTransitiveRemoteDependency(t *testing.T) {
 	// even when the dependency is itself dependent on another transaction and has already been delegated too
 	// i.e. make sure that we don't assume that the assemblyNodeID is the same as the delegatingNodeID
 	ctx := context.Background()
-	localNodeId := uuid.New()
-	remoteNode1Id := uuid.New()
-	remoteNode2Id := uuid.New()
+	localNodeId := uuid.New().String()
+	remotenode1ID := uuid.New().String()
+	remoteNode2Id := uuid.New().String()
 
 	txn1ID := uuid.New()
 	txn2ID := uuid.New()
@@ -222,7 +222,7 @@ func TestSequencerTransitiveRemoteDependency(t *testing.T) {
 	// First transaction (the minter of a given state) is assembled on the remote node
 	err := node1Sequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
 		TransactionId: txn1ID.String(),
-		NodeId:        remoteNode1Id.String(),
+		NodeId:        remotenode1ID,
 		OutputStateId: []string{stateIDA.String()},
 	})
 	require.NoError(t, err)
@@ -230,7 +230,7 @@ func TestSequencerTransitiveRemoteDependency(t *testing.T) {
 	// Second transaction (the spender of that state and minter of a new state) is assembled on another remote node
 	err = node1Sequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
 		TransactionId: txn2ID.String(),
-		NodeId:        remoteNode2Id.String(),
+		NodeId:        remoteNode2Id,
 		InputStateId:  []string{stateIDA.String()},
 		OutputStateId: []string{stateIDB.String()},
 	})
@@ -238,22 +238,22 @@ func TestSequencerTransitiveRemoteDependency(t *testing.T) {
 
 	err = node1Sequencer.HandleTransactionDelegatedEvent(ctx, &pb.TransactionDelegatedEvent{
 		TransactionId:    txn2ID.String(),
-		DelegatingNodeId: remoteNode2Id.String(),
-		DelegateNodeId:   remoteNode1Id.String(),
+		DelegatingNodeId: remoteNode2Id,
+		DelegateNodeId:   remotenode1ID,
 	})
 	require.NoError(t, err)
 
 	//Third transaction (the spender of the output of the second transaction) is assembled on the local node
 	err = node1Sequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
 		TransactionId: txn3ID.String(),
-		NodeId:        localNodeId.String(),
+		NodeId:        localNodeId,
 		InputStateId:  []string{stateIDB.String()},
 	})
 	require.NoError(t, err)
 
 	// Should see an event relinquishing ownership of this this transaction to the first remote node
 	// even though the transaction's direct dependency is on the second remote node
-	node1SequencerMockDependencies.delegatorMock.On("Delegate", ctx, txn3ID.String(), remoteNode1Id.String()).Return(nil)
+	node1SequencerMockDependencies.delegatorMock.On("Delegate", ctx, txn3ID.String(), remotenode1ID).Return(nil)
 
 	err = node1Sequencer.AssignTransaction(ctx, txn3ID.String())
 	require.NoError(t, err)
@@ -278,9 +278,9 @@ func TestSequencerTransitiveRemoteDependencyTiming(t *testing.T) {
 	// It is valid for node3 to delegate to node2 and it is node 2's responsibiilty to onward delegate to node1
 
 	ctx := context.Background()
-	localNodeId := uuid.New()
-	remoteNode1Id := uuid.New()
-	remoteNode2Id := uuid.New()
+	localNodeId := uuid.New().String()
+	remotenode1ID := uuid.New().String()
+	remoteNode2Id := uuid.New().String()
 
 	txn1ID := uuid.New()
 	txn2ID := uuid.New()
@@ -296,7 +296,7 @@ func TestSequencerTransitiveRemoteDependencyTiming(t *testing.T) {
 	// First transaction (the minter of a given state) is assembled on the remote node
 	err := node1Sequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
 		TransactionId: txn1ID.String(),
-		NodeId:        remoteNode1Id.String(),
+		NodeId:        remotenode1ID,
 		OutputStateId: []string{stateIDA.String()},
 	})
 	require.NoError(t, err)
@@ -304,7 +304,7 @@ func TestSequencerTransitiveRemoteDependencyTiming(t *testing.T) {
 	// Second transaction (the spender of that state and minter of a new state) is assembled on another remote node
 	err = node1Sequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
 		TransactionId: txn2ID.String(),
-		NodeId:        remoteNode2Id.String(),
+		NodeId:        remoteNode2Id,
 		InputStateId:  []string{stateIDA.String()},
 		OutputStateId: []string{stateIDB.String()},
 	})
@@ -314,13 +314,13 @@ func TestSequencerTransitiveRemoteDependencyTiming(t *testing.T) {
 	//but the local node has not been notified that txn2 has been delegated to remoteNode1 yet
 	err = node1Sequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
 		TransactionId: txn3ID.String(),
-		NodeId:        localNodeId.String(),
+		NodeId:        localNodeId,
 		InputStateId:  []string{stateIDB.String()},
 	})
 	require.NoError(t, err)
 
 	// Should see an event relinquishing ownership of this this transaction to the second remote node
-	node1SequencerMockDependencies.delegatorMock.On("Delegate", ctx, txn3ID.String(), remoteNode2Id.String()).Return(nil)
+	node1SequencerMockDependencies.delegatorMock.On("Delegate", ctx, txn3ID.String(), remoteNode2Id).Return(nil)
 
 	err = node1Sequencer.AssignTransaction(ctx, txn3ID.String())
 	require.NoError(t, err)
@@ -356,7 +356,7 @@ func TestSequencerTransitiveRemoteDependencyTiming(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	node1SequencerMockDependencies.delegatorMock.On("Delegate", ctx, txn4ID.String(), remoteNode2Id.String()).Return(nil)
+	node1SequencerMockDependencies.delegatorMock.On("Delegate", ctx, txn4ID.String(), remoteNode2Id).Return(nil)
 
 	err = node1Sequencer.AssignTransaction(ctx, txn4ID.String())
 	require.NoError(t, err)
@@ -368,9 +368,9 @@ func TestSequencerMultipleRemoteDependencies(t *testing.T) {
 	// managed by multiple other sequencers, will be moved to the blocked stage until all bar one of their dependencies are
 	// committed
 	ctx := context.Background()
-	localNodeId := uuid.New()
-	remoteNode1Id := uuid.New()
-	remoteNode2Id := uuid.New()
+	localNodeId := uuid.New().String()
+	remotenode1ID := uuid.New().String()
+	remoteNode2Id := uuid.New().String()
 
 	newTransactionID := uuid.New()
 	dependency1TransactionID := uuid.New()
@@ -387,7 +387,7 @@ func TestSequencerMultipleRemoteDependencies(t *testing.T) {
 	// First transaction (the minter of a given state) is assembled on the remote node
 	err := localNodeSequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
 		TransactionId: dependency1TransactionID.String(),
-		NodeId:        remoteNode1Id.String(),
+		NodeId:        remotenode1ID,
 		OutputStateId: []string{stateID1.String()},
 	})
 	require.NoError(t, err)
@@ -395,7 +395,7 @@ func TestSequencerMultipleRemoteDependencies(t *testing.T) {
 	// Second transaction (the minter of the other state) is assembled on a different remote node
 	err = localNodeSequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
 		TransactionId: dependency2TransactionID.String(),
-		NodeId:        remoteNode2Id.String(),
+		NodeId:        remoteNode2Id,
 		OutputStateId: []string{stateID2.String()},
 	})
 	require.NoError(t, err)
@@ -410,7 +410,7 @@ func TestSequencerMultipleRemoteDependencies(t *testing.T) {
 
 	err = localNodeSequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
 		TransactionId: newTransactionID.String(),
-		NodeId:        localNodeId.String(),
+		NodeId:        localNodeId,
 		InputStateId:  []string{stateID1.String(), stateID2.String()},
 	})
 	require.NoError(t, err)
@@ -438,7 +438,7 @@ func TestSequencerMultipleRemoteDependencies(t *testing.T) {
 
 	// once all bar one transaction is confirmed, should see the dependant transaction being delegated
 	// Should see an event relinquishing ownership of this this transaction
-	localNodeSequencerMockDependencies.delegatorMock.On("Delegate", ctx, newTransactionID.String(), remoteNode1Id.String()).Return(nil)
+	localNodeSequencerMockDependencies.delegatorMock.On("Delegate", ctx, newTransactionID.String(), remotenode1ID).Return(nil)
 
 	err = localNodeSequencer.HandleTransactionConfirmedEvent(ctx, &pb.TransactionConfirmedEvent{
 		TransactionId: dependency2TransactionID.String(),
@@ -464,7 +464,7 @@ func TestSequencerMultipleRemoteDependencies(t *testing.T) {
 func TestSequencerApproveEndorsement(t *testing.T) {
 
 	ctx := context.Background()
-	nodeID := uuid.New()
+	nodeID := uuid.New().String()
 	txn1ID := uuid.New()
 	stateID := tktypes.NewBytes32FromSlice(tktypes.RandBytes(32))
 	node1Sequencer, _ := newSequencerForTesting(t, nodeID, false)
@@ -482,7 +482,7 @@ func TestSequencerApproveEndorsementForRemoteTransaction(t *testing.T) {
 
 	//in this test, we do the check after we have seen the assembled event
 	ctx := context.Background()
-	nodeID := uuid.New()
+	nodeID := uuid.New().String()
 	remoteNodeID := uuid.New()
 
 	txn1ID := uuid.New()
@@ -507,7 +507,7 @@ func TestSequencerApproveEndorsementForRemoteTransaction(t *testing.T) {
 func TestSequencerApproveEndorsementDoubleSpendAvoidance(t *testing.T) {
 
 	ctx := context.Background()
-	nodeID := uuid.New()
+	nodeID := uuid.New().String()
 	stateID := tktypes.NewBytes32FromSlice(tktypes.RandBytes(32))
 
 	txn1ID := uuid.New()
@@ -532,7 +532,7 @@ func TestSequencerApproveEndorsementDoubleSpendAvoidance(t *testing.T) {
 func TestSequencerApproveEndorsementReleaseStateOnRevert(t *testing.T) {
 
 	ctx := context.Background()
-	nodeID := uuid.New()
+	nodeID := uuid.New().String()
 	remoteNodeID := uuid.New()
 	stateID := tktypes.NewBytes32FromSlice(tktypes.RandBytes(32))
 
@@ -574,7 +574,7 @@ type sequencerMockDependencies struct {
 	dispatcherMock *privatetxnmgrmocks.Dispatcher
 }
 
-func newSequencerForTesting(t *testing.T, nodeID uuid.UUID, mockResolver bool) (Sequencer, sequencerMockDependencies) {
+func newSequencerForTesting(t *testing.T, nodeID string, mockResolver bool) (ptmgrtypes.Sequencer, sequencerMockDependencies) {
 
 	publisherMock := privatetxnmgrmocks.NewPublisher(t)
 	dispatcherMock := privatetxnmgrmocks.NewDispatcher(t)

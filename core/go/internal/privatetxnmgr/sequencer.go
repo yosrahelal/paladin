@@ -33,17 +33,17 @@ import (
 type Sequence []*transactionstore.Transaction
 
 func NewSequencer(
-	nodeID uuid.UUID,
+	nodeID string,
 
-	publisher Publisher,
-	delegator Delegator,
+	publisher ptmgrtypes.Publisher,
+	delegator ptmgrtypes.Delegator,
 
 	/*
 		dispatcher is the reciever of the sequenced transactions and will be responsible for submitting them to the base ledger in the correct order
 	*/
-	dispatcher Dispatcher,
+	dispatcher ptmgrtypes.Dispatcher,
 
-) Sequencer {
+) ptmgrtypes.Sequencer {
 	return &sequencer{
 		publisher:                   publisher,
 		dispatcher:                  dispatcher,
@@ -89,11 +89,11 @@ type transaction struct {
 }
 
 type sequencer struct {
-	nodeID                      uuid.UUID
-	publisher                   Publisher
-	delegator                   Delegator
-	resolver                    ContentionResolver
-	dispatcher                  Dispatcher
+	nodeID                      string
+	publisher                   ptmgrtypes.Publisher
+	delegator                   ptmgrtypes.Delegator
+	resolver                    ptmgrtypes.ContentionResolver
+	dispatcher                  ptmgrtypes.Dispatcher
 	graph                       Graph
 	blockedTransactions         []*blockedTransaction // naive implementation of a list of blocked transaction TODO may need to make this a graph so that we can analyise knock on effects of unblocking a transaction but this simple list will do for now to prove out functional behaviour
 	unconfirmedStatesByID       map[string]*unconfirmedState
@@ -230,7 +230,7 @@ func (s *sequencer) delegateIfAppropriate(ctx context.Context, transaction *tran
 		}
 		return true, nil
 	}
-	if len(keys) == 1 && keys[0] != s.nodeID.String() {
+	if len(keys) == 1 && keys[0] != s.nodeID {
 		// we are dependent on one other node so we can delegate
 		log.L(ctx).Debugf("Transaction %s is dependant on transaction(s). Delagating to node %s", transaction.id, keys[0])
 		err := s.delegate(ctx, transaction.id, keys[0])
@@ -278,7 +278,7 @@ func (s *sequencer) findDelegatableTransactions() []delegatableTransaction {
 			// we can't delegate this transaction to multiple nodes, so we need to wait for the dependencies to be resolved
 			continue
 		}
-		if len(keys) == 1 && keys[0] != s.nodeID.String() {
+		if len(keys) == 1 && keys[0] != s.nodeID {
 			// we are dependent on one other node so we can delegate
 			delegatableTransactions = append(delegatableTransactions, delegatableTransaction{
 				transactionID:  blockedTransaction.transactionID,
@@ -293,7 +293,7 @@ func (s *sequencer) findDelegatableTransactions() []delegatableTransaction {
 	return delegatableTransactions
 }
 func (s *sequencer) acceptTransaction(ctx context.Context, transaction *transaction) error {
-	transaction.sequencingNodeID = s.nodeID.String()
+	transaction.sequencingNodeID = s.nodeID
 
 	delegated, err := s.delegateIfAppropriate(ctx, transaction)
 	if err != nil {

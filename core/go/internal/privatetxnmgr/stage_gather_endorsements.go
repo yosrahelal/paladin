@@ -35,12 +35,12 @@ import (
 )
 
 type GatherEndorsementsStage struct {
-	sequencer           Sequencer
-	endorsementGatherer EndorsementGatherer
+	sequencer           ptmgrtypes.Sequencer
+	endorsementGatherer ptmgrtypes.EndorsementGatherer
 	identityResolver    IdentityResolver
 }
 
-func NewGatherEndorsementsStage(sequencer Sequencer, endorsementGatherer EndorsementGatherer, identityResolver IdentityResolver) *GatherEndorsementsStage {
+func NewGatherEndorsementsStage(sequencer ptmgrtypes.Sequencer, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver IdentityResolver) *GatherEndorsementsStage {
 	return &GatherEndorsementsStage{
 		sequencer:           sequencer,
 		endorsementGatherer: endorsementGatherer,
