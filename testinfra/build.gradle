@@ -41,6 +41,5 @@ task removeBesuBootstrapTool(type: Exec, dependsOn: stopTestInfra) {
 }
 
 task clean(type: Delete, dependsOn: [tasks.removeBesuBootstrapTool, tasks.stopTestInfra]) {
-
 }
 
