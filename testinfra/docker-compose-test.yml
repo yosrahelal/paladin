@@ -32,8 +32,6 @@ services:
       retries: 10
     environment:
       BESU_X_DEV_BFT_PERIOD_MS: 300
-      BESU_RPC_HTTP_HOST: 0.0.0.0
-      BESU_RPC_WS_HOST: 0.0.0.0
     command:
       - --logging=INFO
       - --rpc-http-enabled
@@ -49,6 +47,8 @@ services:
       - --node-private-key-file=/var/besu/key
       - --revert-reason-enabled
       - --host-allowlist=localhost,besu,127.0.0.1
+      - --rpc-http-host=0.0.0.0
+      - --rpc-ws-host=0.0.0.0
 volumes:
   besu_data:
     driver: local
