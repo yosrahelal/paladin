@@ -14,7 +14,6 @@ services:
     command:
       - /var/besu
   besu:
-    container_name: besu
     image: 604386504253.dkr.ecr.us-east-2.amazonaws.com/kaleido-node-besu:24.8.0-kaleido-20240910-237
     user: 0:0
     entrypoint: besu
@@ -33,6 +32,8 @@ services:
       retries: 10
     environment:
       BESU_X_DEV_BFT_PERIOD_MS: 300
+      BESU_RPC_HTTP_HOST: 0.0.0.0
+      BESU_RPC_WS_HOST: 0.0.0.0
     command:
       - --logging=INFO
       - --rpc-http-enabled
@@ -47,7 +48,7 @@ services:
       - --data-path=/var/besu/data
       - --node-private-key-file=/var/besu/key
       - --revert-reason-enabled
-      - --host-allowlist=localhost,besu
+      - --host-allowlist=localhost,besu,127.0.0.1
 volumes:
   besu_data:
     driver: local
