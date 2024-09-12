@@ -52,12 +52,6 @@ type StageChangeEvent struct {
 	Data            interface{} `json:"data"` // schema decided by each stage
 }
 
-type TransactionDispatchedEvent struct {
-	TransactionID  string `json:"transactionId"`
-	Nonce          uint64 `json:"nonce"`
-	SigningAddress string `json:"signingAddress"`
-}
-
 type TxProcessPreReq struct {
 	TxIDs []string `json:"transactionIds,omitempty"`
 }
@@ -188,8 +182,26 @@ type TransportWriter interface {
 	SendDelegateTransactionMessage(ctx context.Context, transactionId string, delegateNodeId string) error
 }
 
-type PrivateTransactionEvent interface {
-	TransactionID() string
-	ContractAddress() string
-	SetContractAddress(string)
+type TxProcessorStatus int
+
+const (
+	TxProcessorActive = iota
+	TxProcessorSuspend
+	TxProcessorResume
+	TxProcessorRemove
+)
+
+type TxProcessor interface {
+	Init(ctx context.Context)
+	GetTxStatus(ctx context.Context) (TxStatus, error)
+	GetStatus(ctx context.Context) TxProcessorStatus
+
+	HandleTransactionSubmittedEvent(ctx context.Context, event *TransactionSubmittedEvent)
+	HandleTransactionAssembledEvent(ctx context.Context, event *TransactionAssembledEvent)
+	HandleTransactionSignedEvent(ctx context.Context, event *TransactionSignedEvent)
+	HandleTransactionEndorsedEvent(ctx context.Context, event *TransactionEndorsedEvent)
+	HandleTransactionDispatchedEvent(ctx context.Context, event *TransactionDispatchedEvent)
+	HandleTransactionConfirmedEvent(ctx context.Context, event *TransactionConfirmedEvent)
+	HandleTransactionRevertedEvent(ctx context.Context, event *TransactionRevertedEvent)
+	HandleTransactionDelegatedEvent(ctx context.Context, event *TransactionDelegatedEvent)
 }

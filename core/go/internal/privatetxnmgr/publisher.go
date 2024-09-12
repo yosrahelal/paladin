@@ -18,6 +18,7 @@ package privatetxnmgr
 import (
 	"context"
 
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/events"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
@@ -36,10 +37,10 @@ type publisher struct {
 
 func (p *publisher) PublishTransactionBlockedEvent(ctx context.Context, transactionId string) error {
 
-	p.engine.HandleNewEvent(ctx, &TransactionBlockedEvent{
-		privateTransactionEvent: privateTransactionEvent{
-			contractAddress: p.contractAddress,
-			transactionID:   transactionId,
+	p.engine.HandleNewEvent(ctx, &ptmgrtypes.TransactionBlockedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
 		},
 	})
 	return nil
@@ -48,15 +49,15 @@ func (p *publisher) PublishTransactionBlockedEvent(ctx context.Context, transact
 
 func (p *publisher) PublishTransactionDispatchedEvent(ctx context.Context, transactionId string, nonce uint64, signingAddress string) error {
 
-	p.engine.HandleNewEvent(ctx, &TransactionDispatchedEvent{
-		privateTransactionEvent: privateTransactionEvent{
-			contractAddress: p.contractAddress,
-			transactionID:   transactionId,
+	p.engine.HandleNewEvent(ctx, &ptmgrtypes.TransactionDispatchedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
 		},
-		nonce:          nonce,
-		signingAddress: signingAddress,
+		Nonce:          nonce,
+		SigningAddress: signingAddress,
 	})
-	p.engine.publishToSubscribers(ctx, &ptmgrtypes.TransactionDispatchedEvent{
+	p.engine.publishToSubscribers(ctx, &events.TransactionDispatchedEvent{
 		TransactionID:  transactionId,
 		Nonce:          nonce,
 		SigningAddress: signingAddress,
@@ -66,25 +67,25 @@ func (p *publisher) PublishTransactionDispatchedEvent(ctx context.Context, trans
 }
 
 func (p *publisher) PublishTransactionSignedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult) error {
-	event := &TransactionSignedEvent{
-		privateTransactionEvent: privateTransactionEvent{
-			contractAddress: p.contractAddress,
-			transactionID:   transactionId,
+	event := &ptmgrtypes.TransactionSignedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
 		},
-		attestationResult: attestationResult,
+		AttestationResult: attestationResult,
 	}
 	p.engine.HandleNewEvent(ctx, event)
 	return nil
 }
 
 func (p *publisher) PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, endorsement *prototk.AttestationResult, revertReason *string) error {
-	event := &TransactionEndorsedEvent{
-		privateTransactionEvent: privateTransactionEvent{
-			contractAddress: p.contractAddress,
-			transactionID:   transactionId,
+	event := &ptmgrtypes.TransactionEndorsedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
 		},
-		endorsement:  endorsement,
-		revertReason: revertReason,
+		Endorsement:  endorsement,
+		RevertReason: revertReason,
 	}
 	p.engine.HandleNewEvent(ctx, event)
 	return nil

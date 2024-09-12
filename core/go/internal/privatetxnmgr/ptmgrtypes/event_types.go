@@ -13,65 +13,66 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package privatetxnmgr
+package ptmgrtypes
 
 import (
-	"context"
-
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
-type EmitEvent func(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent)
-
-type privateTransactionEvent struct {
-	transactionID   string
-	contractAddress string
+type PrivateTransactionEvent interface {
+	GetTransactionID() string
+	GetContractAddress() string
+	SetContractAddress(string)
 }
 
-func (e *privateTransactionEvent) TransactionID() string {
-	return e.transactionID
+type PrivateTransactionEventBase struct {
+	TransactionID   string
+	ContractAddress string
 }
 
-func (e *privateTransactionEvent) ContractAddress() string {
-	return e.contractAddress
+func (e *PrivateTransactionEventBase) GetTransactionID() string {
+	return e.TransactionID
 }
 
-func (e *privateTransactionEvent) SetContractAddress(contractAddress string) {
-	e.contractAddress = contractAddress
+func (e *PrivateTransactionEventBase) GetContractAddress() string {
+	return e.ContractAddress
+}
+
+func (e *PrivateTransactionEventBase) SetContractAddress(contractAddress string) {
+	e.ContractAddress = contractAddress
 }
 
 type TransactionSubmittedEvent struct {
-	privateTransactionEvent
+	PrivateTransactionEventBase
 }
 type TransactionAssembledEvent struct {
-	privateTransactionEvent
+	PrivateTransactionEventBase
 	sequence.TransactionAssembledEvent
 }
 type TransactionSignedEvent struct {
-	privateTransactionEvent
-	attestationResult *prototk.AttestationResult
+	PrivateTransactionEventBase
+	AttestationResult *prototk.AttestationResult
 }
 type TransactionEndorsedEvent struct {
-	privateTransactionEvent
-	revertReason *string
-	endorsement  *prototk.AttestationResult
+	PrivateTransactionEventBase
+	RevertReason *string
+	Endorsement  *prototk.AttestationResult
 }
 type TransactionDispatchedEvent struct {
-	privateTransactionEvent
-	nonce          uint64
-	signingAddress string
+	PrivateTransactionEventBase
+	Nonce          uint64
+	SigningAddress string
 }
 type TransactionConfirmedEvent struct {
-	privateTransactionEvent
+	PrivateTransactionEventBase
 }
 type TransactionRevertedEvent struct {
-	privateTransactionEvent
+	PrivateTransactionEventBase
 }
 type TransactionDelegatedEvent struct {
-	privateTransactionEvent
+	PrivateTransactionEventBase
 }
 type TransactionBlockedEvent struct {
-	privateTransactionEvent
+	PrivateTransactionEventBase
 }

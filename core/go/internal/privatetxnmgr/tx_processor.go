@@ -44,26 +44,7 @@ const (
 	switchStage
 )
 
-type TxProcessor interface {
-	GetStageContext(ctx context.Context) *ptmgrtypes.StageContext
-	GetStageTriggerError(ctx context.Context) error
-
-	// stage outputs management
-	AddStageEvent(ctx context.Context, stageEvent *ptmgrtypes.StageEvent)
-	Init(ctx context.Context)
-	GetTxStatus(ctx context.Context) (ptmgrtypes.TxStatus, error)
-
-	handleTransactionSubmittedEvent(ctx context.Context, event *TransactionSubmittedEvent)
-	handleTransactionAssembledEvent(ctx context.Context, event *TransactionAssembledEvent)
-	handleTransactionSignedEvent(ctx context.Context, event *TransactionSignedEvent)
-	handleTransactionEndorsedEvent(ctx context.Context, event *TransactionEndorsedEvent)
-	handleTransactionDispatchedEvent(ctx context.Context, event *TransactionDispatchedEvent)
-	handleTransactionConfirmedEvent(ctx context.Context, event *TransactionConfirmedEvent)
-	handleTransactionRevertedEvent(ctx context.Context, event *TransactionRevertedEvent)
-	handleTransactionDelegatedEvent(ctx context.Context, event *TransactionDelegatedEvent)
-}
-
-func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer) TxProcessor {
+func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer) ptmgrtypes.TxProcessor {
 	return &PaladinTxProcessor{
 		stageErrorRetry:     10 * time.Second,
 		sequencer:           sequencer,
@@ -196,8 +177,8 @@ func (ts *PaladinTxProcessor) executeAsync(funcToExecute func(), ctx context.Con
 	}()
 }
 
-func (ts *PaladinTxProcessor) GetStageContext(ctx context.Context) *ptmgrtypes.StageContext {
-	return ts.stageContext
+func (ts *PaladinTxProcessor) GetStatus(ctx context.Context) ptmgrtypes.TxProcessorStatus {
+	return ptmgrtypes.TxProcessorActive
 }
 
 func (ts *PaladinTxProcessor) GetStageTriggerError(ctx context.Context) error {
@@ -235,7 +216,7 @@ func (ts *PaladinTxProcessor) GetTxStatus(ctx context.Context) (ptmgrtypes.TxSta
 	}, nil
 }
 
-func (ts *PaladinTxProcessor) handleTransactionSubmittedEvent(ctx context.Context, event *TransactionSubmittedEvent) {
+func (ts *PaladinTxProcessor) HandleTransactionSubmittedEvent(ctx context.Context, event *ptmgrtypes.TransactionSubmittedEvent) {
 	//syncronously assemble the transaction then inform the local sequencer and remote nodes for any parties in the
 	// privacy group that need to know about the transaction
 	// this could be other parties that have potential to attempt to spend the same state(s) as this transaction is assembled to spend
@@ -244,6 +225,7 @@ func (ts *PaladinTxProcessor) handleTransactionSubmittedEvent(ctx context.Contex
 	err := ts.domainAPI.AssembleTransaction(ctx, ts.transaction)
 	if err != nil {
 		log.L(ctx).Errorf("AssembleTransaction failed: %s", err)
+		return
 		// TODO assembly failed, need to revert the transaction
 	}
 	ts.status = "assembled"
@@ -295,28 +277,28 @@ func (ts *PaladinTxProcessor) handleTransactionSubmittedEvent(ctx context.Contex
 	}
 }
 
-func (ts *PaladinTxProcessor) handleTransactionAssembledEvent(ctx context.Context, event *TransactionAssembledEvent) {
+func (ts *PaladinTxProcessor) HandleTransactionAssembledEvent(ctx context.Context, event *ptmgrtypes.TransactionAssembledEvent) {
 	//TODO inform the sequencer about a transaction assembled by another node
 }
 
-func (ts *PaladinTxProcessor) handleTransactionSignedEvent(ctx context.Context, event *TransactionSignedEvent) {
+func (ts *PaladinTxProcessor) HandleTransactionSignedEvent(ctx context.Context, event *ptmgrtypes.TransactionSignedEvent) {
 	log.L(ctx).Debugf("Adding signature to transaction %s", ts.transaction.ID.String())
-	ts.transaction.PostAssembly.Signatures = append(ts.transaction.PostAssembly.Signatures, event.attestationResult)
+	ts.transaction.PostAssembly.Signatures = append(ts.transaction.PostAssembly.Signatures, event.AttestationResult)
 	if !ts.hasOutstandingSignatureRequests(ctx) {
 		ts.status = "signed"
 		ts.requestEndorsements(ctx)
 	}
 }
 
-func (ts *PaladinTxProcessor) handleTransactionEndorsedEvent(ctx context.Context, event *TransactionEndorsedEvent) {
-	if event.revertReason != nil {
-		log.L(ctx).Infof("Endorsement for transaction %s was rejected: %s", ts.transaction.ID.String(), *event.revertReason)
+func (ts *PaladinTxProcessor) HandleTransactionEndorsedEvent(ctx context.Context, event *ptmgrtypes.TransactionEndorsedEvent) {
+	if event.RevertReason != nil {
+		log.L(ctx).Infof("Endorsement for transaction %s was rejected: %s", ts.transaction.ID.String(), *event.RevertReason)
 		//TODO
 	} else {
 		log.L(ctx).Infof("Adding endorsement to transaction %s", ts.transaction.ID.String())
-		ts.transaction.PostAssembly.Endorsements = append(ts.transaction.PostAssembly.Endorsements, event.endorsement)
-		if event.endorsement.Constraints != nil {
-			for _, constraint := range event.endorsement.Constraints {
+		ts.transaction.PostAssembly.Endorsements = append(ts.transaction.PostAssembly.Endorsements, event.Endorsement)
+		if event.Endorsement.Constraints != nil {
+			for _, constraint := range event.Endorsement.Constraints {
 				switch constraint {
 				case prototk.AttestationResult_ENDORSER_MUST_SUBMIT:
 					//TODO endorser must submit?
@@ -345,15 +327,15 @@ func (ts *PaladinTxProcessor) handleTransactionEndorsedEvent(ctx context.Context
 	}
 }
 
-func (ts *PaladinTxProcessor) handleTransactionDispatchedEvent(ctx context.Context, event *TransactionDispatchedEvent) {
+func (ts *PaladinTxProcessor) HandleTransactionDispatchedEvent(ctx context.Context, event *ptmgrtypes.TransactionDispatchedEvent) {
 	ts.status = "dispatched"
 }
 
-func (ts *PaladinTxProcessor) handleTransactionConfirmedEvent(ctx context.Context, event *TransactionConfirmedEvent) {
+func (ts *PaladinTxProcessor) HandleTransactionConfirmedEvent(ctx context.Context, event *ptmgrtypes.TransactionConfirmedEvent) {
 }
-func (ts *PaladinTxProcessor) handleTransactionRevertedEvent(ctx context.Context, event *TransactionRevertedEvent) {
+func (ts *PaladinTxProcessor) HandleTransactionRevertedEvent(ctx context.Context, event *ptmgrtypes.TransactionRevertedEvent) {
 }
-func (ts *PaladinTxProcessor) handleTransactionDelegatedEvent(ctx context.Context, event *TransactionDelegatedEvent) {
+func (ts *PaladinTxProcessor) HandleTransactionDelegatedEvent(ctx context.Context, event *ptmgrtypes.TransactionDelegatedEvent) {
 }
 
 func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *prototk.AttestationRequest, partyName string) {

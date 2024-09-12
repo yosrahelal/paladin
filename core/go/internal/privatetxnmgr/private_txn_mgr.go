@@ -321,15 +321,15 @@ func (e *engine) GetTxStatus(ctx context.Context, domainAddress string, txID str
 }
 
 func (e *engine) HandleNewEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
-	targetOrchestrator := e.orchestrators[event.ContractAddress()]
+	targetOrchestrator := e.orchestrators[event.GetContractAddress()]
 	if targetOrchestrator == nil { // this is an event that belongs to a contract that's not in flight, throw it away and rely on the engine to trigger the action again when the orchestrator is wake up. (an enhanced version is to add weight on queueing an orchestrator)
-		log.L(ctx).Warnf("Ignored %T event for domain contract %s and transaction %s . If this happens a lot, check the orchestrator idle timeout is set to a reasonable number", event, event.ContractAddress(), event.TransactionID())
+		log.L(ctx).Warnf("Ignored %T event for domain contract %s and transaction %s . If this happens a lot, check the orchestrator idle timeout is set to a reasonable number", event, event.GetContractAddress(), event.GetTransactionID())
 	} else {
 		targetOrchestrator.HandleEvent(ctx, event)
 	}
 }
 
-func (e *engine) handleEndorsementRequest(ctx context.Context, messagePayload []byte) {
+func (e *engine) HandleEndorsementRequest(ctx context.Context, messagePayload []byte) {
 	endorsementRequest := &pbEngine.EndorsementRequest{}
 	err := proto.Unmarshal(messagePayload, endorsementRequest)
 	if err != nil {
@@ -451,7 +451,7 @@ func (e *engine) handleEndorsementRequest(ctx context.Context, messagePayload []
 	}
 }
 
-func (e *engine) handleEndorsementResponse(ctx context.Context, messagePayload []byte) {
+func (e *engine) HandleEndorsementResponse(ctx context.Context, messagePayload []byte) {
 
 	endorsementResponse := &pbEngine.EndorsementResponse{}
 	err := proto.Unmarshal(messagePayload, endorsementResponse)
@@ -473,13 +473,13 @@ func (e *engine) handleEndorsementResponse(ctx context.Context, messagePayload [
 		return
 	}
 
-	e.HandleNewEvent(ctx, &TransactionEndorsedEvent{
-		privateTransactionEvent: privateTransactionEvent{
-			transactionID:   endorsementResponse.TransactionId,
-			contractAddress: contractAddressString,
+	e.HandleNewEvent(ctx, &ptmgrtypes.TransactionEndorsedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			TransactionID:   endorsementResponse.TransactionId,
+			ContractAddress: contractAddressString,
 		},
-		revertReason: revertReason,
-		endorsement:  endorsement,
+		RevertReason: revertReason,
+		Endorsement:  endorsement,
 	})
 
 }
@@ -492,9 +492,9 @@ func (e *engine) ReceiveTransportMessage(ctx context.Context, message *component
 
 	switch message.MessageType {
 	case "EndorsementRequest":
-		go e.handleEndorsementRequest(ctx, messagePayload)
+		go e.HandleEndorsementRequest(ctx, messagePayload)
 	case "EndorsementResponse":
-		go e.handleEndorsementResponse(ctx, messagePayload)
+		go e.HandleEndorsementResponse(ctx, messagePayload)
 	default:
 		log.L(ctx).Errorf("Unknown message type: %s", message.MessageType)
 	}

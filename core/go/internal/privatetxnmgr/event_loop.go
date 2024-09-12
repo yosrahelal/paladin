@@ -109,7 +109,7 @@ type Orchestrator struct {
 
 	maxConcurrentProcess        int
 	incompleteTxProcessMapMutex sync.Mutex
-	incompleteTxSProcessMap     map[string]TxProcessor // a map of all known transactions that are not completed
+	incompleteTxSProcessMap     map[string]ptmgrtypes.TxProcessor // a map of all known transactions that are not completed
 
 	processedTxIDs       map[string]bool // an internal record of completed transactions to handle persistence delays that causes reprocessing
 	orchestratorLoopDone chan struct{}
@@ -157,7 +157,7 @@ func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string,
 		state:                OrchestratorStateNew,
 		stateEntryTime:       time.Now(),
 
-		incompleteTxSProcessMap: make(map[string]TxProcessor),
+		incompleteTxSProcessMap: make(map[string]ptmgrtypes.TxProcessor),
 		stageRetryTimeout:       confutil.DurationMin(oc.StageRetry, 1*time.Millisecond, *orchestratorConfigDefault.StageRetry),
 		persistenceRetryTimeout: confutil.DurationMin(oc.PersistenceRetryTimeout, 1*time.Millisecond, *orchestratorConfigDefault.PersistenceRetryTimeout),
 
@@ -180,7 +180,7 @@ func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string,
 	return newOrchestrator
 }
 
-func (oc *Orchestrator) getTransactionProcessor(txID string) TxProcessor {
+func (oc *Orchestrator) getTransactionProcessor(txID string) ptmgrtypes.TxProcessor {
 	oc.incompleteTxProcessMapMutex.Lock()
 	defer oc.incompleteTxProcessMapMutex.Unlock()
 	return oc.incompleteTxSProcessMap[txID]
@@ -190,25 +190,25 @@ func (oc *Orchestrator) handleEvent(ctx context.Context, event ptmgrtypes.Privat
 	//For any event that is specific to a single transaction,
 	// find (or create) the transaction processor for that transaction
 	// and pass the event to it
-	transactionID := event.TransactionID()
+	transactionID := event.GetTransactionID()
 	transactionProccessor := oc.getTransactionProcessor(transactionID)
 	switch event := event.(type) {
-	case *TransactionSubmittedEvent:
-		transactionProccessor.handleTransactionSubmittedEvent(ctx, event)
-	case *TransactionAssembledEvent:
-		transactionProccessor.handleTransactionAssembledEvent(ctx, event)
-	case *TransactionSignedEvent:
-		transactionProccessor.handleTransactionSignedEvent(ctx, event)
-	case *TransactionEndorsedEvent:
-		transactionProccessor.handleTransactionEndorsedEvent(ctx, event)
-	case *TransactionDispatchedEvent:
-		transactionProccessor.handleTransactionDispatchedEvent(ctx, event)
-	case *TransactionConfirmedEvent:
-		transactionProccessor.handleTransactionConfirmedEvent(ctx, event)
-	case *TransactionRevertedEvent:
-		transactionProccessor.handleTransactionRevertedEvent(ctx, event)
-	case *TransactionDelegatedEvent:
-		transactionProccessor.handleTransactionDelegatedEvent(ctx, event)
+	case *ptmgrtypes.TransactionSubmittedEvent:
+		transactionProccessor.HandleTransactionSubmittedEvent(ctx, event)
+	case *ptmgrtypes.TransactionAssembledEvent:
+		transactionProccessor.HandleTransactionAssembledEvent(ctx, event)
+	case *ptmgrtypes.TransactionSignedEvent:
+		transactionProccessor.HandleTransactionSignedEvent(ctx, event)
+	case *ptmgrtypes.TransactionEndorsedEvent:
+		transactionProccessor.HandleTransactionEndorsedEvent(ctx, event)
+	case *ptmgrtypes.TransactionDispatchedEvent:
+		transactionProccessor.HandleTransactionDispatchedEvent(ctx, event)
+	case *ptmgrtypes.TransactionConfirmedEvent:
+		transactionProccessor.HandleTransactionConfirmedEvent(ctx, event)
+	case *ptmgrtypes.TransactionRevertedEvent:
+		transactionProccessor.HandleTransactionRevertedEvent(ctx, event)
+	case *ptmgrtypes.TransactionDelegatedEvent:
+		transactionProccessor.HandleTransactionDelegatedEvent(ctx, event)
 	default:
 		log.L(ctx).Warnf("Unknown event type: %T", event)
 	}
@@ -256,22 +256,20 @@ func (oc *Orchestrator) evaluateTransactions(ctx context.Context) (added int, ne
 	// hasActivity := false
 
 	oldIncompleteMap := oc.incompleteTxSProcessMap
-	oc.incompleteTxSProcessMap = make(map[string]TxProcessor, len(oldIncompleteMap))
+	oc.incompleteTxSProcessMap = make(map[string]ptmgrtypes.TxProcessor, len(oldIncompleteMap))
 
 	for txID, txp := range oldIncompleteMap {
 		oc.processedTxIDs[txID] = true
-		sc := txp.GetStageContext(ctx)
-		if sc != nil {
-			if sc.Stage == "remove" {
-				// no longer in an incomplete stage
-				oc.totalCompleted = oc.totalCompleted + 1
-				// hasActivity = true
-				log.L(ctx).Debugf("Orchestrator evaluate and process, marking %s as complete.", txID)
-				break
-			} else if sc.Stage == "suspend" {
-				log.L(ctx).Debugf("Orchestrator evaluate and process, removed suspended tx %s", txID)
-				break
-			}
+		sc := txp.GetStatus(ctx)
+		if sc == ptmgrtypes.TxProcessorRemove {
+			// no longer in an incomplete stage
+			oc.totalCompleted = oc.totalCompleted + 1
+			// hasActivity = true
+			log.L(ctx).Debugf("Orchestrator evaluate and process, marking %s as complete.", txID)
+			break
+		} else if sc == ptmgrtypes.TxProcessorSuspend {
+			log.L(ctx).Debugf("Orchestrator evaluate and process, removed suspended tx %s", txID)
+			break
 		}
 		oc.incompleteTxSProcessMap[txID] = txp
 	}
@@ -335,8 +333,8 @@ func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *component
 			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.publisher, oc.endorsementGatherer)
 		}
 		oc.incompleteTxSProcessMap[tx.ID.String()].Init(ctx)
-		oc.pendingEvents <- &TransactionSubmittedEvent{
-			privateTransactionEvent: privateTransactionEvent{transactionID: tx.ID.String()},
+		oc.pendingEvents <- &ptmgrtypes.TransactionSubmittedEvent{
+			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
 		}
 	}
 	return false
@@ -346,7 +344,7 @@ func (oc *Orchestrator) HandleEvent(ctx context.Context, event ptmgrtypes.Privat
 	//TODO Better
 	oc.incompleteTxProcessMapMutex.Lock()
 	defer oc.incompleteTxProcessMapMutex.Unlock()
-	txProc := oc.incompleteTxSProcessMap[event.TransactionID()]
+	txProc := oc.incompleteTxSProcessMap[event.GetTransactionID()]
 	if txProc == nil {
 		// TODO: is bypassing max concurrent process correct?
 		// or throw the event away and waste another cycle to redo the actions
