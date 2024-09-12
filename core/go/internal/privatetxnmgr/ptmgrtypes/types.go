@@ -158,10 +158,11 @@ type Sequencer interface {
 	*/
 	ApproveEndorsement(ctx context.Context, endorsementRequest EndorsementRequest) (bool, error)
 }
+
 type Publisher interface {
-	//Service for sending messages and events within the local node and as a client to the transport manager to send to other nodes
-	PublishEvent(ctx context.Context, eventPayload interface{}) error
-	PublishStageEvent(ctx context.Context, stageEvent *StageEvent) error
+	//Service for sending messages and events within the local node
+	PublishTransactionBlockedEvent(ctx context.Context, transactionId string) error
+	PublishTransactionDispatchedEvent(ctx context.Context, transactionId string, nonce uint64, signingAddress string) error
 }
 
 type Dispatcher interface {
@@ -180,7 +181,13 @@ type ContentionResolver interface {
 	Resolve(stateID, biddingContentionResolver1, biddingContentionResolver2 string) (string, error)
 }
 
-type Delegator interface {
-	// Delegator is the component that takes responsibility for delegating transactions to other nodes
-	Delegate(ctx context.Context, transactionId string, delegateNodeId string) error
+type TransportWriter interface {
+	// Provided to the sequencer to allow it to send messages to other nodes in the network
+	SendDelegateTransactionMessage(ctx context.Context, transactionId string, delegateNodeId string) error
+}
+
+type PrivateTransactionEvent interface {
+	TransactionID() string
+	ContractAddress() string
+	SetContractAddress(string)
 }

@@ -19,42 +19,47 @@ import (
 	"context"
 
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
-func NewPublisher(e *engine) ptmgrtypes.Publisher {
+func NewPublisher(e *engine, contractAddress string) *publisher {
 	return &publisher{
-		engine: e,
+		engine:          e,
+		contractAddress: contractAddress,
 	}
 }
 
 type publisher struct {
-	engine *engine
+	engine          *engine
+	contractAddress string
 }
 
-// PublishStageEvent implements enginespi.Publisher.
-func (p *publisher) PublishStageEvent(ctx context.Context, stageEvent *ptmgrtypes.StageEvent) error {
+func (p *publisher) PublishTransactionBlockedEvent(ctx context.Context, transactionId string) error {
 
-	//p.engine.HandleNewEvent(ctx, stageEvent)
+	p.engine.HandleNewEvent(ctx, &TransactionBlockedEvent{
+		privateTransactionEvent: privateTransactionEvent{
+			contractAddress: p.contractAddress,
+			transactionID:   transactionId,
+		},
+	})
 	return nil
 
 }
 
-// PublishEvent implements enginespi.Publisher.
-func (p *publisher) PublishEvent(ctx context.Context, eventPayload interface{}) error {
-	//TODO really need to decide when to use protobufs and when to use json
-	// current assumption is that we would use golang structs for internal messages within a single engine,
-	//protobuf for internal messages between nodes because it is faster and more efficient on the network bandwidth
-	// and json for external messages because it is more consumable by external applications
-	// but there are cases where all three of those are being emitted from the same point in the code
-	// and we need to decide how to handle that
-	log.L(ctx).Infof("Publishing event: %v", eventPayload)
+func (p *publisher) PublishTransactionDispatchedEvent(ctx context.Context, transactionId string, nonce uint64, signingAddress string) error {
 
-	//TODO need to decide if we should leverage (or throwaway) the exising commsbus package.
-	// for now, other than stage events, we only publish to subscribers of the engine and there is exactly one of those
-	// at time of writing - which is the unit test
-	// there may be a future where we want to publish to multiple internal subscribers, in which case we would need to use commsbus
-	// and/or multiple external subscribers
-	p.engine.publishToSubscribers(ctx, eventPayload)
+	p.engine.HandleNewEvent(ctx, &TransactionDispatchedEvent{
+		privateTransactionEvent: privateTransactionEvent{
+			contractAddress: p.contractAddress,
+			transactionID:   transactionId,
+		},
+		nonce:          nonce,
+		signingAddress: signingAddress,
+	})
+	p.engine.publishToSubscribers(ctx, &ptmgrtypes.TransactionDispatchedEvent{
+		TransactionID:  transactionId,
+		Nonce:          nonce,
+		SigningAddress: signingAddress,
+	})
 	return nil
+
 }

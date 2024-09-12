@@ -53,27 +53,14 @@ func (p *dispatcher) Dispatch(ctx context.Context, transactionIDs []uuid.UUID) e
 	//Placeholder for actual interface to hand over to dispatcher
 	p.sequencedTransactions = append(p.sequencedTransactions, transactionIDs...)
 	for _, transactionID := range transactionIDs {
-		err := p.publisher.PublishStageEvent(ctx, &ptmgrtypes.StageEvent{
-			Stage:           "gather_endorsements",
-			ContractAddress: p.contractAddress,
-			TxID:            transactionID.String(),
-			Data:            &TransactionDispatched{},
-		})
+		err := p.publisher.PublishTransactionDispatchedEvent(ctx, transactionID.String(), p.NextNonce(), "0x1234567890abcdef")
+
 		if err != nil {
 			//TODO think about how best to handle this error
 			log.L(ctx).Errorf("Error publishing stage event: %s", err)
 			return err
 		}
-		err = p.publisher.PublishEvent(ctx, &ptmgrtypes.TransactionDispatchedEvent{
-			TransactionID:  transactionID.String(),
-			Nonce:          p.NextNonce(),
-			SigningAddress: "0x1234567890abcdef",
-		})
-		if err != nil {
-			//TODO think about how best to handle this error
-			log.L(ctx).Errorf("Error publishing event: %s", err)
-			return err
-		}
+		//TODO actually dispatch the transaction
 	}
 
 	return nil
