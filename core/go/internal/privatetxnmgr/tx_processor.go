@@ -22,9 +22,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 	coreProto "github.com/kaleido-io/paladin/core/pkg/proto"
@@ -65,7 +63,7 @@ type TxProcessor interface {
 	handleTransactionDelegatedEvent(ctx context.Context, event *TransactionDelegatedEvent)
 }
 
-func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, emitEvent EmitEvent, endorsementGatherer ptmgrtypes.EndorsementGatherer) TxProcessor {
+func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, emitEvent EmitEvent, endorsementGatherer ptmgrtypes.EndorsementGatherer) TxProcessor {
 	return &PaladinTxProcessor{
 		stageErrorRetry:     10 * time.Second,
 		sequencer:           sequencer,
@@ -75,6 +73,7 @@ func NewPaladinTransactionProcessor(ctx context.Context, transaction *components
 		emitEvent:           emitEvent,
 		endorsementGatherer: endorsementGatherer,
 		transaction:         transaction,
+		status:              "new",
 	}
 }
 
@@ -91,7 +90,7 @@ type PaladinTxProcessor struct {
 	bufferedStageEvents         []*ptmgrtypes.StageEvent
 	contractAddress             string // the contract address managed by the current orchestrator
 
-	components components.AllComponents
+	components components.PreInitComponentsAndManagers
 
 	nodeID              string
 	domainAPI           components.DomainSmartContract
@@ -99,10 +98,10 @@ type PaladinTxProcessor struct {
 	transaction         *components.PrivateTransaction
 	emitEvent           EmitEvent
 	endorsementGatherer ptmgrtypes.EndorsementGatherer
+	status              string
 }
 
 func (ts *PaladinTxProcessor) Init(ctx context.Context) {
-	ts.createStageContext(ctx, initStage)
 }
 
 func (ts *PaladinTxProcessor) createStageContext(ctx context.Context, action stageContextAction) {
@@ -230,15 +229,10 @@ func (ts *PaladinTxProcessor) AddStageEvent(ctx context.Context, stageEvent *ptm
 }
 
 func (ts *PaladinTxProcessor) GetTxStatus(ctx context.Context) (ptmgrtypes.TxStatus, error) {
-	stageContext := ts.GetStageContext(ctx)
-	if stageContext != nil {
-		return ptmgrtypes.TxStatus{
-			TxID:   ts.tsm.GetTxID(ctx),
-			Status: stageContext.Stage,
-		}, nil
-	}
-	//TODO what error condition can cause this?
-	return ptmgrtypes.TxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError)
+	return ptmgrtypes.TxStatus{
+		TxID:   ts.transaction.ID.String(),
+		Status: ts.status,
+	}, nil
 }
 
 func (ts *PaladinTxProcessor) handleTransactionSubmittedEvent(ctx context.Context, event *TransactionSubmittedEvent) {
@@ -247,17 +241,18 @@ func (ts *PaladinTxProcessor) handleTransactionSubmittedEvent(ctx context.Contex
 	// this could be other parties that have potential to attempt to spend the same state(s) as this transaction is assembled to spend
 	// or parties that could potentially spend the output states of this transaction
 	// or parties that will be needed to endorse or notarize this transaction
-	err := ts.domainAPI.AssembleTransaction(ctx, event.transaction)
+	err := ts.domainAPI.AssembleTransaction(ctx, ts.transaction)
 	if err != nil {
 		log.L(ctx).Errorf("AssembleTransaction failed: %s", err)
 		// TODO assembly failed, need to revert the transaction
 	}
+	ts.status = "assembled"
 	// inform the sequencer that the transaction has been assembled
 	err = ts.sequencer.HandleTransactionAssembledEvent(ctx, &sequence.TransactionAssembledEvent{
-		TransactionId: event.transaction.ID.String(),
+		TransactionId: ts.transaction.ID.String(),
 		NodeId:        ts.nodeID,
-		InputStateId:  stateIDs(event.transaction.PostAssembly.InputStates),
-		OutputStateId: stateIDs(event.transaction.PostAssembly.OutputStates),
+		InputStateId:  stateIDs(ts.transaction.PostAssembly.InputStates),
+		OutputStateId: stateIDs(ts.transaction.PostAssembly.OutputStates),
 	})
 	if err != nil {
 		log.L(ctx).Errorf("HandleTransactionAssembledEvent failed: %s", err)
@@ -285,10 +280,19 @@ func (ts *PaladinTxProcessor) handleTransactionSubmittedEvent(ctx context.Contex
 		}
 	}
 
+	err = ts.sequencer.AssignTransaction(ctx, ts.transaction.ID.String())
+	if err != nil {
+		log.L(ctx).Errorf("Failed to assign transaction to sequencer: %s", err)
+		//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
+	}
+
 	//start an async process to gather signatures
 	// this will emit a TransactionSignedEvent for each signature collected
-	go ts.requestSignatures(ctx)
-
+	if ts.hasOutstandingSignatureRequests(ctx) {
+		ts.requestSignatures(ctx)
+	} else {
+		ts.requestEndorsements(ctx)
+	}
 }
 
 func (ts *PaladinTxProcessor) handleTransactionAssembledEvent(ctx context.Context, event *TransactionAssembledEvent) {
@@ -299,14 +303,52 @@ func (ts *PaladinTxProcessor) handleTransactionSignedEvent(ctx context.Context, 
 	log.L(ctx).Debugf("Adding signature to transaction %s", ts.transaction.ID.String())
 	ts.transaction.PostAssembly.Signatures = append(ts.transaction.PostAssembly.Signatures, event.attestationResult)
 	if !ts.hasOutstandingSignatureRequests(ctx) {
+		ts.status = "signed"
 		ts.requestEndorsements(ctx)
 	}
 }
 
 func (ts *PaladinTxProcessor) handleTransactionEndorsedEvent(ctx context.Context, event *TransactionEndorsedEvent) {
+	if event.revertReason != nil {
+		log.L(ctx).Infof("Endorsement for transaction %s was rejected: %s", ts.transaction.ID.String(), *event.revertReason)
+		//TODO
+	} else {
+		log.L(ctx).Infof("Adding endorsement to transaction %s", ts.transaction.ID.String())
+		ts.transaction.PostAssembly.Endorsements = append(ts.transaction.PostAssembly.Endorsements, event.endorsement)
+		if event.endorsement.Constraints != nil {
+			for _, constraint := range event.endorsement.Constraints {
+				switch constraint {
+				case prototk.AttestationResult_ENDORSER_MUST_SUBMIT:
+					//TODO endorser must submit?
+					//TODO other constraints
+
+				default:
+					log.L(ctx).Errorf("Unsupported constraint: %s", constraint)
+				}
+			}
+		}
+		if !ts.hasOutstandingEndorsementRequests(ctx) {
+			ts.status = "endorsed"
+
+			//TODO should really call out to the engine to publish this event because it needs
+			// to go to other nodes too?
+
+			//Tell the sequencer that this transaction has been endorsed and wait until it publishes a TransactionDispatched event before moving to the next stage
+			err := ts.sequencer.HandleTransactionEndorsedEvent(ctx, &sequence.TransactionEndorsedEvent{
+				TransactionId: ts.transaction.ID.String(),
+			})
+			if err != nil {
+				//TODO need better error handling here.  Should we retry? Should we fail the transaction? Should we try sending the other requests?
+				log.L(ctx).Errorf("Failed to publish transaction endorsed event: %s", err)
+			}
+		}
+	}
 }
+
 func (ts *PaladinTxProcessor) handleTransactionDispatchedEvent(ctx context.Context, event *TransactionDispatchedEvent) {
+	ts.status = "dispatched"
 }
+
 func (ts *PaladinTxProcessor) handleTransactionConfirmedEvent(ctx context.Context, event *TransactionConfirmedEvent) {
 }
 func (ts *PaladinTxProcessor) handleTransactionRevertedEvent(ctx context.Context, event *TransactionRevertedEvent) {
@@ -347,12 +389,6 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 }
 
 func (ts *PaladinTxProcessor) requestSignatures(ctx context.Context) {
-
-	err := ts.sequencer.AssignTransaction(ctx, ts.transaction.ID.String())
-	if err != nil {
-		log.L(ctx).Errorf("Failed to assign transaction to sequencer: %s", err)
-		//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
-	}
 
 	attPlan := ts.transaction.PostAssembly.AttestationPlan
 	attResults := ts.transaction.PostAssembly.Endorsements
@@ -399,6 +435,9 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 			//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
 		}
 		ts.emitEvent(ctx, &TransactionEndorsedEvent{
+			privateTransactionEvent: privateTransactionEvent{
+				transactionID: ts.transaction.ID.String(),
+			},
 			endorsement:  endorsement,
 			revertReason: revertReason,
 		})
@@ -544,4 +583,26 @@ out:
 		}
 	}
 	return outstandingSignatureRequests
+}
+
+func (ts *PaladinTxProcessor) hasOutstandingEndorsementRequests(ctx context.Context) bool {
+	outstandingEndorsementRequests := false
+out:
+	for _, attRequest := range ts.transaction.PostAssembly.AttestationPlan {
+		if attRequest.AttestationType == prototk.AttestationType_ENDORSE {
+			found := false
+			for _, endorsement := range ts.transaction.PostAssembly.Endorsements {
+				if endorsement.Name == attRequest.Name {
+					found = true
+					break
+				}
+			}
+			if !found {
+				outstandingEndorsementRequests = true
+				// no point checking any further, we have at least one outstanding endorsement request
+				break out
+			}
+		}
+	}
+	return outstandingEndorsementRequests
 }
