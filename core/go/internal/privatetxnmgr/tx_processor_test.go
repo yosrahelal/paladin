@@ -21,9 +21,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/mock"
 )
 
 type transactionProcessorDepencyMocks struct {
@@ -63,14 +67,43 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 	return tp.(*PaladinTxProcessor), mocks
 }
 
-func TestTransactionProcessor(t *testing.T) {
+func TestTransactionProcessorHandleTransactionSubmittedEvent(t *testing.T) {
 	ctx := context.Background()
 	newTxID := uuid.New()
 	testTx := &components.PrivateTransaction{
 		ID: newTxID,
 	}
-	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	tp.stageController = newTestStageController(ctx)
-	//assert.Nil(t, tp.GetStageContext(ctx))
-	//assert.Nil(t, tp.GetStageTriggerError(ctx))
+	tp, dependencyMocks := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
+	dependencyMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(1).(*components.PrivateTransaction)
+
+		tx.PostAssembly = &components.TransactionPostAssembly{
+			AssemblyResult: prototk.AssembleTransactionResponse_OK,
+			InputStates: []*components.FullState{
+				{
+					ID:     tktypes.Bytes32(tktypes.RandBytes(32)),
+					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
+					Data:   tktypes.JSONString("foo"),
+				},
+			},
+			AttestationPlan: []*prototk.AttestationRequest{
+				{
+					Name:            "notary",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+					Parties: []string{
+						"domain1.contract1.notary",
+					},
+				},
+			},
+		}
+	}).Return(nil).Once()
+	dependencyMocks.sequencer.On("HandleTransactionAssembledEvent", mock.Anything, mock.Anything).Return(nil).Once()
+	dependencyMocks.sequencer.On("AssignTransaction", mock.Anything, newTxID.String()).Return(nil).Once()
+
+	tp.HandleTransactionSubmittedEvent(ctx, &ptmgrtypes.TransactionSubmittedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			TransactionID: newTxID.String(),
+		},
+	})
 }
