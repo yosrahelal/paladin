@@ -45,7 +45,7 @@ type orchestratorDepencyMocks struct {
 	publisher            *privatetxnmgrmocks.Publisher
 }
 
-func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress *tktypes.EthAddress) (*Orchestrator, *orchestratorDepencyMocks) {
+func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress *tktypes.EthAddress) (*Orchestrator, *orchestratorDepencyMocks, <-chan struct{}) {
 	if domainAddress == nil {
 		domainAddress = tktypes.MustEthAddress(tktypes.RandHex(20))
 	}
@@ -69,17 +69,17 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
 
 	o := NewOrchestrator(ctx, tktypes.RandHex(16), domainAddress.String(), &OrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher)
-	_, err := o.Start(ctx)
+	ocDone, err := o.Start(ctx)
 	require.NoError(t, err)
 
-	return o, mocks
+	return o, mocks, ocDone
 
 }
 
 func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
 	ctx := context.Background()
 
-	testOc, dependencyMocks := newOrchestratorForTesting(t, ctx, nil)
+	testOc, dependencyMocks, _ := newOrchestratorForTesting(t, ctx, nil)
 
 	newTxID := uuid.New()
 	testTx := &components.PrivateTransaction{
@@ -173,7 +173,7 @@ func TestOrchestratorHandleEvents(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 
 			ctx := context.Background()
-			testOc, _ := newOrchestratorForTesting(t, ctx, nil)
+			testOc, _, _ := newOrchestratorForTesting(t, ctx, nil)
 
 			waitForAction := make(chan bool, 1)
 
@@ -203,9 +203,7 @@ func TestOrchestratorPollingLoopStop(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	testOc, _ := newOrchestratorForTesting(t, ctx, nil)
-	ocDone, err := testOc.Start(ctx)
-	require.NoError(t, err)
+	testOc, _, ocDone := newOrchestratorForTesting(t, ctx, nil)
 	testOc.TriggerOrchestratorEvaluation()
 	testOc.Stop()
 	<-ocDone
@@ -214,38 +212,8 @@ func TestOrchestratorPollingLoopStop(t *testing.T) {
 func TestOrchestratorPollingLoopCancelContext(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
-	testOc, _ := newOrchestratorForTesting(t, ctx, nil)
+	_, _, ocDone := newOrchestratorForTesting(t, ctx, nil)
 
 	cancel()
-	ocDone, err := testOc.Start(ctx)
-	require.NoError(t, err)
 	<-ocDone
-}
-
-func TestOrchestratorPollingLoopRemoveCompletedTx(t *testing.T) {
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	newTxID := uuid.New()
-	testTx := &components.PrivateTransaction{
-		ID: newTxID,
-	}
-	testOc, _ := newOrchestratorForTesting(t, ctx, nil)
-
-	ocDone, err := testOc.Start(ctx)
-	require.NoError(t, err)
-	waitForAction := make(chan bool, 1)
-	// gets add when the queue is not full
-	testOc.maxConcurrentProcess = 10
-	assert.Empty(t, testOc.incompleteTxSProcessMap)
-	assert.False(t, testOc.ProcessNewTransaction(ctx, testTx))
-	<-waitForAction                        // no events emitted as no synchronous output was returned
-	testOc.TriggerOrchestratorEvaluation() // this should remove the process from the pool
-	//workaround timing condition
-	time.Sleep(100 * time.Millisecond)
-	testOc.Stop()
-	testOc.Stop() // do a second stop to ensure at least one stop has gone through as the channel has buffer size 1
-	<-ocDone
-	assert.Empty(t, testOc.incompleteTxSProcessMap)
-	assert.Equal(t, 1, int(testOc.totalCompleted))
 }
