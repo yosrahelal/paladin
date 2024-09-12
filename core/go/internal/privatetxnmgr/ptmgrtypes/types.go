@@ -151,6 +151,8 @@ type Sequencer interface {
 		"given the information available to the local node at this point in time, does it appear that this transaction has no contention on input states".
 	*/
 	ApproveEndorsement(ctx context.Context, endorsementRequest EndorsementRequest) (bool, error)
+
+	SetDispatcher(dispatcher Dispatcher)
 }
 
 type Publisher interface {
@@ -163,8 +165,7 @@ type Publisher interface {
 
 type Dispatcher interface {
 	// Dispatcher is the component that takes responsibility for submitting the transactions in the sequence to the base ledger in the correct order
-	// most likely will be replaced with (or become an integration to) either the comms bus or some utility of the StageController framework
-	Dispatch(context.Context, []uuid.UUID) error
+	DispatchTransactions(context.Context, []uuid.UUID) error
 }
 
 type EndorsementGatherer interface {
@@ -204,4 +205,6 @@ type TxProcessor interface {
 	HandleTransactionConfirmedEvent(ctx context.Context, event *TransactionConfirmedEvent)
 	HandleTransactionRevertedEvent(ctx context.Context, event *TransactionRevertedEvent)
 	HandleTransactionDelegatedEvent(ctx context.Context, event *TransactionDelegatedEvent)
+
+	PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error)
 }

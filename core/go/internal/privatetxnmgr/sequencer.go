@@ -35,17 +35,11 @@ type Sequence []*transactionstore.Transaction
 func NewSequencer(
 	nodeID string,
 	publisher ptmgrtypes.Publisher,
-
-	/*
-		dispatcher is the reciever of the sequenced transactions and will be responsible for submitting them to the base ledger in the correct order
-	*/
-	dispatcher ptmgrtypes.Dispatcher,
 	transportWriter ptmgrtypes.TransportWriter,
 
 ) ptmgrtypes.Sequencer {
 	return &sequencer{
 		publisher:                   publisher,
-		dispatcher:                  dispatcher,
 		nodeID:                      nodeID,
 		resolver:                    NewContentionResolver(),
 		graph:                       NewGraph(),
@@ -101,6 +95,11 @@ type sequencer struct {
 	transportWriter             ptmgrtypes.TransportWriter
 }
 
+func (s *sequencer) SetDispatcher(dispatcher ptmgrtypes.Dispatcher) {
+	s.dispatcher = dispatcher
+	return
+}
+
 func (s *sequencer) evaluateGraph(ctx context.Context) error {
 
 	dispatchableTransactions, err := s.graph.GetDispatchableTransactions(ctx)
@@ -123,7 +122,7 @@ func (s *sequencer) evaluateGraph(ctx context.Context) error {
 	}
 
 	log.L(ctx).Debugf("Dispatching transactions: %v", transactionUUIDs)
-	err = s.dispatcher.Dispatch(ctx, transactionUUIDs)
+	err = s.dispatcher.DispatchTransactions(ctx, transactionUUIDs)
 	if err != nil {
 		log.L(ctx).Errorf("Error dispatching transaction: %s", err)
 		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, err)

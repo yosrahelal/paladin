@@ -48,7 +48,7 @@ func TestSequencerGraphOfOne(t *testing.T) {
 	err = node1Sequencer.AssignTransaction(ctx, txn1ID.String())
 	require.NoError(t, err)
 
-	node1SequencerMockDependencies.dispatcherMock.On("Dispatch", ctx, []uuid.UUID{txn1ID}).Return(nil).Once()
+	node1SequencerMockDependencies.dispatcherMock.On("DispatchTransactions", ctx, []uuid.UUID{txn1ID}).Return(nil).Once()
 	err = node1Sequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
 		TransactionId: txn1ID.String(),
 	})
@@ -598,12 +598,13 @@ func newSequencerForTesting(t *testing.T, nodeID string, mockResolver bool) (ptm
 				publisherMock,
 			}
 	} else {
-		return NewSequencer(
-				nodeID,
-				publisherMock,
-				dispatcherMock,
-				transportWriterMock,
-			),
+		newSequencer := NewSequencer(
+			nodeID,
+			publisherMock,
+			transportWriterMock,
+		)
+		newSequencer.SetDispatcher(dispatcherMock)
+		return newSequencer,
 			sequencerMockDependencies{
 				nil,
 				dispatcherMock,

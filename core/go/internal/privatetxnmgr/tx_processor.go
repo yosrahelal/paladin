@@ -21,7 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/transactionstore"
@@ -65,8 +64,6 @@ type PaladinTxProcessor struct {
 	stageErrorRetry   time.Duration
 	tsm               transactionstore.TxStateManager
 
-	stageController StageController
-
 	bufferedStageEventsMapMutex sync.Mutex
 	bufferedStageEvents         []*ptmgrtypes.StageEvent
 	contractAddress             string // the contract address managed by the current orchestrator
@@ -80,97 +77,27 @@ type PaladinTxProcessor struct {
 	publisher           ptmgrtypes.Publisher
 	endorsementGatherer ptmgrtypes.EndorsementGatherer
 	status              string
+	latestEvent         string
 }
 
 func (ts *PaladinTxProcessor) Init(ctx context.Context) {
 }
 
-func (ts *PaladinTxProcessor) createStageContext(ctx context.Context, action stageContextAction) {
-	ts.stageContextMutex.Lock()
-	defer ts.stageContextMutex.Unlock()
-	if action != switchStage && ts.stageContext != nil { // we only override existing stage context when switching stage
-		// stage context already initialized, skip
-		log.L(ctx).Tracef("Transaction with ID %s, on stage %s, no need for new stage context", ts.tsm.GetTxID(ctx), ts.stageContext.Stage)
-		return
-	}
-	nowTime := time.Now() // pin the now time
-	stage := ts.stageController.CalculateStage(ctx, ts.tsm)
-	nextStepContext := &ptmgrtypes.StageContext{
-		Stage:          stage,
-		ID:             uuid.NewString(),
-		StageEntryTime: nowTime,
-		Ctx:            log.WithLogField(ctx, "stage", string(stage)),
-	}
-	if ts.stageContext != nil {
-		if ts.stageContext.Stage == nextStepContext.Stage { // switching to existing stage ---> this is a retry
-			// redoing the current stage
-			log.L(ctx).Warnf("Transaction with ID %s retrying action, already on stage %s for %s", ts.tsm.GetTxID(ctx), stage, time.Since(ts.stageContext.StageEntryTime))
-			nextStepContext.StageEntryTime = ts.stageContext.StageEntryTime
-		} else {
-			log.L(ctx).Tracef("Transaction with ID %s, switching from %s to %s after %s", ts.tsm.GetTxID(ctx), ts.stageContext.Stage, nextStepContext.Stage, time.Since(ts.stageContext.StageEntryTime))
-		}
-	} else {
-		// init succeeded
-		log.L(ctx).Tracef("Transaction with ID %s, initiated on stage %s", ts.tsm.GetTxID(ctx), nextStepContext.Stage)
-	}
-	ts.stageContext = nextStepContext
-	ts.stageTriggerError = nil
-	if action != resumeStage { // if we are resuming a stage when received its action event, don't perf the action again
-		ts.PerformActionForStageAsync(ctx)
-	} else {
-		log.L(ctx).Tracef("Transaction with ID %s, resuming for %s stage", ts.tsm.GetTxID(ctx), stage)
-	}
-}
-
-func (ts *PaladinTxProcessor) PerformActionForStageAsync(ctx context.Context) {
-	stageContext := ts.stageContext
-	if stageContext == nil {
-		panic("stage context not set")
-	}
-	log.L(ctx).Tracef("Transaction with ID %s, triggering action for %s stage", ts.tsm.GetTxID(ctx), stageContext.Stage)
-	ts.executeAsync(func() {
-		synchronousActionOutput, err := ts.stageController.PerformActionForStage(ctx, string(stageContext.Stage), ts.tsm)
-		ts.stageTriggerError = err
-		if synchronousActionOutput != nil {
-			ts.AddStageEvent(ts.stageContext.Ctx, &ptmgrtypes.StageEvent{
-				ID:    stageContext.ID,
-				TxID:  ts.tsm.GetTxID(ctx),
-				Stage: stageContext.Stage,
-				Data:  synchronousActionOutput,
-			})
-		}
-		if err != nil {
-			// if errored, clean stage context
-			ts.stageContextMutex.Lock()
-			ts.stageContext = nil
-			ts.stageContextMutex.Unlock()
-			// retry after the timeout
-			time.Sleep(ts.stageErrorRetry)
-			ts.createStageContext(ctx, initStage)
-		}
-	}, ctx)
-}
-
-func (ts *PaladinTxProcessor) addPanicOutput(ctx context.Context, sc ptmgrtypes.StageContext) {
+func (ts *PaladinTxProcessor) addPanicOutput(ctx context.Context) {
+	//TODO
 	start := time.Now()
 	// unexpected error, set an empty input for the stage
 	// so that the stage handler will handle this as unexpected error
-	ts.AddStageEvent(ctx, &ptmgrtypes.StageEvent{
-		Stage: sc.Stage,
-		ID:    sc.ID,
-		TxID:  ts.tsm.GetTxID(ctx),
-	})
 	log.L(ctx).Debugf("%s addPanicOutput took %s to write the result", ts.tsm.GetTxID(ctx), time.Since(start))
 }
 
 func (ts *PaladinTxProcessor) executeAsync(funcToExecute func(), ctx context.Context) {
-	sc := *ts.stageContext
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
 				// if the function panicked, catch it and write a panic error to the output queue
-				log.L(ctx).Errorf("Panic error detected for transaction %s, when executing: %s, error: %+v", ts.tsm.GetTxID(ctx), sc.Stage, err)
-				ts.addPanicOutput(ctx, sc)
+				log.L(ctx).Errorf("Panic error detected for transaction %s, when executing: %s, error: %+v", ts.tsm.GetTxID(ctx), ts.latestEvent, err)
+				ts.addPanicOutput(ctx)
 			}
 		}()
 		funcToExecute() // in non-panic scenarios, this function will add output to the output queue
@@ -181,34 +108,6 @@ func (ts *PaladinTxProcessor) GetStatus(ctx context.Context) ptmgrtypes.TxProces
 	return ptmgrtypes.TxProcessorActive
 }
 
-func (ts *PaladinTxProcessor) GetStageTriggerError(ctx context.Context) error {
-	return ts.stageTriggerError
-}
-
-func (ts *PaladinTxProcessor) AddStageEvent(ctx context.Context, stageEvent *ptmgrtypes.StageEvent) {
-	ts.bufferedStageEventsMapMutex.Lock()
-	defer ts.bufferedStageEventsMapMutex.Unlock()
-	ts.bufferedStageEvents = append(ts.bufferedStageEvents, stageEvent)
-
-	ts.createStageContext(ctx, resumeStage)
-
-	unProcessedBufferedStageEvents, txUpdates, nextStep := ts.stageController.ProcessEventsForStage(ctx, string(ts.stageContext.Stage), ts.tsm, ts.bufferedStageEvents)
-
-	if unProcessedBufferedStageEvents != nil {
-		ts.bufferedStageEvents = unProcessedBufferedStageEvents
-	}
-	if txUpdates != nil {
-		// persistence is synchronous, so it must NOT run on the main go routine to avoid blocking
-		ts.tsm.ApplyTxUpdates(ctx, txUpdates)
-	}
-	if nextStep == ptmgrtypes.NextStepNewStage {
-		ts.createStageContext(ctx, switchStage)
-	} else if nextStep == ptmgrtypes.NextStepNewAction {
-		ts.PerformActionForStageAsync(ctx)
-	}
-	// other wise, the stage told the processor to wait for async events
-}
-
 func (ts *PaladinTxProcessor) GetTxStatus(ctx context.Context) (ptmgrtypes.TxStatus, error) {
 	return ptmgrtypes.TxStatus{
 		TxID:   ts.transaction.ID.String(),
@@ -217,6 +116,7 @@ func (ts *PaladinTxProcessor) GetTxStatus(ctx context.Context) (ptmgrtypes.TxSta
 }
 
 func (ts *PaladinTxProcessor) HandleTransactionSubmittedEvent(ctx context.Context, event *ptmgrtypes.TransactionSubmittedEvent) {
+	ts.latestEvent = "HandleTransactionSubmittedEvent"
 	//syncronously assemble the transaction then inform the local sequencer and remote nodes for any parties in the
 	// privacy group that need to know about the transaction
 	// this could be other parties that have potential to attempt to spend the same state(s) as this transaction is assembled to spend
@@ -279,9 +179,11 @@ func (ts *PaladinTxProcessor) HandleTransactionSubmittedEvent(ctx context.Contex
 
 func (ts *PaladinTxProcessor) HandleTransactionAssembledEvent(ctx context.Context, event *ptmgrtypes.TransactionAssembledEvent) {
 	//TODO inform the sequencer about a transaction assembled by another node
+	ts.latestEvent = "HandleTransactionAssembledEvent"
 }
 
 func (ts *PaladinTxProcessor) HandleTransactionSignedEvent(ctx context.Context, event *ptmgrtypes.TransactionSignedEvent) {
+	ts.latestEvent = "HandleTransactionSignedEvent"
 	log.L(ctx).Debugf("Adding signature to transaction %s", ts.transaction.ID.String())
 	ts.transaction.PostAssembly.Signatures = append(ts.transaction.PostAssembly.Signatures, event.AttestationResult)
 	if !ts.hasOutstandingSignatureRequests(ctx) {
@@ -291,6 +193,7 @@ func (ts *PaladinTxProcessor) HandleTransactionSignedEvent(ctx context.Context, 
 }
 
 func (ts *PaladinTxProcessor) HandleTransactionEndorsedEvent(ctx context.Context, event *ptmgrtypes.TransactionEndorsedEvent) {
+	ts.latestEvent = "HandleTransactionEndorsedEvent"
 	if event.RevertReason != nil {
 		log.L(ctx).Infof("Endorsement for transaction %s was rejected: %s", ts.transaction.ID.String(), *event.RevertReason)
 		//TODO
@@ -328,17 +231,25 @@ func (ts *PaladinTxProcessor) HandleTransactionEndorsedEvent(ctx context.Context
 }
 
 func (ts *PaladinTxProcessor) HandleTransactionDispatchedEvent(ctx context.Context, event *ptmgrtypes.TransactionDispatchedEvent) {
+	ts.latestEvent = "HandleTransactionDispatchedEvent"
 	ts.status = "dispatched"
 }
 
 func (ts *PaladinTxProcessor) HandleTransactionConfirmedEvent(ctx context.Context, event *ptmgrtypes.TransactionConfirmedEvent) {
+	ts.latestEvent = "HandleTransactionConfirmedEvent"
+	ts.status = "confirmed"
 }
 func (ts *PaladinTxProcessor) HandleTransactionRevertedEvent(ctx context.Context, event *ptmgrtypes.TransactionRevertedEvent) {
+	ts.latestEvent = "HandleTransactionRevertedEvent"
+	ts.status = "reverted"
 }
 func (ts *PaladinTxProcessor) HandleTransactionDelegatedEvent(ctx context.Context, event *ptmgrtypes.TransactionDelegatedEvent) {
+	ts.latestEvent = "HandleTransactionDelegatedEvent"
+	ts.status = "delegated"
 }
 
 func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *prototk.AttestationRequest, partyName string) {
+
 	keyHandle, verifier, err := ts.components.KeyManager().ResolveKey(ctx, partyName, attRequest.Algorithm)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to resolve local signer for %s (algorithm=%s): %s", partyName, attRequest.Algorithm, err)
@@ -599,4 +510,34 @@ out:
 		}
 	}
 	return outstandingEndorsementRequests
+}
+
+func (ts *PaladinTxProcessor) PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error) {
+
+	prepError := ts.domainAPI.PrepareTransaction(ctx, ts.transaction)
+	if prepError != nil {
+		log.L(ctx).Errorf("Error preparing transaction: %s", prepError)
+		return nil, prepError
+	}
+	return ts.transaction, nil
+}
+
+func toEndorsableList(states []*components.FullState) []*prototk.EndorsableState {
+	endorsableList := make([]*prototk.EndorsableState, len(states))
+	for i, input := range states {
+		endorsableList[i] = &prototk.EndorsableState{
+			Id:            input.ID.String(),
+			SchemaId:      input.Schema.String(),
+			StateDataJson: string(input.Data),
+		}
+	}
+	return endorsableList
+}
+
+func stateIDs(states []*components.FullState) []string {
+	stateIDs := make([]string, 0, len(states))
+	for _, state := range states {
+		stateIDs = append(stateIDs, state.ID.String())
+	}
+	return stateIDs
 }

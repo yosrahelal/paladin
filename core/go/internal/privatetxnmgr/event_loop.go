@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
@@ -175,6 +176,7 @@ func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string,
 	}
 
 	newOrchestrator.sequencer = sequencer
+	sequencer.SetDispatcher(newOrchestrator)
 	log.L(ctx).Debugf("NewOrchestrator for contract address %s created: %+v", newOrchestrator.contractAddress, newOrchestrator)
 
 	return newOrchestrator
@@ -425,4 +427,45 @@ func (oc *Orchestrator) GetPreReqDispatchAddresses(ctx context.Context, preReqTx
 }
 func (oc *Orchestrator) RegisterPreReqTrigger(ctx context.Context, txID string, txPreReq *ptmgrtypes.TxProcessPreReq) {
 	// TODO
+}
+
+// syncronously prepare and dispatch all given transactions
+func (oc *Orchestrator) DispatchTransactions(ctx context.Context, transactionIDs []uuid.UUID) error {
+	//prepare all transactions then dispatch them
+	preparedTransactions := make([]*components.PrivateTransaction, len(transactionIDs))
+	for i, transactionID := range transactionIDs {
+
+		txProcessor := oc.getTransactionProcessor(transactionID.String())
+		if txProcessor == nil {
+			//TODO currently assume that all the transactions are in flight and in memory
+			// need to reload from database if not in memory
+			panic("Transaction not found")
+		}
+
+		preparedTransaction, err := txProcessor.PrepareTransaction(ctx)
+
+		if err != nil {
+			log.L(ctx).Errorf("Error preparing transaction: %s", err)
+			//TODO this is a really bad time to be getting an error.  need to think carefully about how to handle this
+			return err
+		}
+		preparedTransactions[i] = preparedTransaction
+
+	}
+
+	for _, transactionID := range transactionIDs {
+		nonce := uint64(0) //TODO get the nonce from BLT
+		signingAddress := "0x1234567890abcdef"
+		err := oc.publisher.PublishTransactionDispatchedEvent(ctx, transactionID.String(), nonce, signingAddress)
+
+		if err != nil {
+			//TODO think about how best to handle this error
+			log.L(ctx).Errorf("Error publishing stage event: %s", err)
+			return err
+		}
+		//TODO actually dispatch the transaction
+	}
+
+	return nil
+
 }

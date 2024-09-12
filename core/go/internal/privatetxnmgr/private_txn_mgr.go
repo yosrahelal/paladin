@@ -94,11 +94,9 @@ func (e *engine) getOrchestratorForContract(ctx context.Context, contractAddr tk
 
 	if e.orchestrators[contractAddr.String()] == nil {
 		publisher := NewPublisher(e, contractAddr.String())
-		dispatcher := NewDispatcher(contractAddr.String(), publisher)
 		seq := NewSequencer(
 			e.nodeID,
 			publisher,
-			dispatcher,
 			NewTransportWriter(e.nodeID, e.components.TransportManager()),
 		)
 		endorsementGatherer, err := e.getEndorsementGathererForContract(ctx, contractAddr)
