@@ -201,7 +201,7 @@ func TestNoto(t *testing.T) {
 		}),
 	})
 	require.NotNil(t, rpcerr)
-	assert.Regexp(t, "insufficient funds", rpcerr.Error())
+	assert.Regexp(t, "Insufficient funds", rpcerr.Error())
 
 	log.L(ctx).Infof("Transfer 50 from notary to recipient1")
 	rpcerr = rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{

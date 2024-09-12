@@ -212,7 +212,7 @@ func (h *transferHandler) validateOwners(tx *types.ParsedTransaction, req *pb.En
 }
 
 func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
-	coins, err := h.noto.gatherCoins(req.Inputs, req.Outputs)
+	coins, err := h.noto.gatherCoins(ctx, req.Inputs, req.Outputs)
 	if err != nil {
 		return nil, err
 	}
