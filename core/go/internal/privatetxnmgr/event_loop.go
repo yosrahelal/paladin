@@ -126,7 +126,7 @@ type Orchestrator struct {
 	staleTimeout time.Duration
 	// lastActivityTime time.Time
 
-	pendingEvents chan PrivateTransactionEvent
+	pendingEvents chan ptmgrtypes.PrivateTransactionEvent
 
 	contractAddress     string // the contract address managed by the current orchestrator
 	nodeID              string
@@ -146,7 +146,7 @@ var orchestratorConfigDefault = OrchestratorConfig{
 	MaxPendingEvents:        confutil.P(500),
 }
 
-func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string, oc *OrchestratorConfig, allComponents components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, publisher ptmgrtypes.Publisher, sequencer ptmgrtypes.Sequencer, endorsementGatherer ptmgrtypes.EndorsementGatherer, emitEvent EmitEvent) *Orchestrator {
+func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string, oc *OrchestratorConfig, allComponents components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, endorsementGatherer ptmgrtypes.EndorsementGatherer, emitEvent EmitEvent) *Orchestrator {
 
 	newOrchestrator := &Orchestrator{
 		ctx:                  log.WithLogField(ctx, "role", fmt.Sprintf("orchestrator-%s", contractAddress)),
@@ -165,7 +165,7 @@ func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string,
 		processedTxIDs:               make(map[string]bool),
 		orchestrationEvalRequestChan: make(chan bool, 1),
 		stopProcess:                  make(chan bool, 1),
-		pendingEvents:                make(chan PrivateTransactionEvent, *orchestratorConfigDefault.MaxPendingEvents),
+		pendingEvents:                make(chan ptmgrtypes.PrivateTransactionEvent, *orchestratorConfigDefault.MaxPendingEvents),
 		nodeID:                       nodeID,
 		domainAPI:                    domainAPI,
 		sequencer:                    sequencer,
@@ -180,12 +180,18 @@ func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string,
 	return newOrchestrator
 }
 
-func (oc *Orchestrator) handleEvent(ctx context.Context, event PrivateTransactionEvent) {
+func (oc *Orchestrator) getTransactionProcessor(txID string) TxProcessor {
+	oc.incompleteTxProcessMapMutex.Lock()
+	defer oc.incompleteTxProcessMapMutex.Unlock()
+	return oc.incompleteTxSProcessMap[txID]
+}
+
+func (oc *Orchestrator) handleEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
 	//For any event that is specific to a single transaction,
 	// find (or create) the transaction processor for that transaction
 	// and pass the event to it
 	transactionID := event.TransactionID()
-	transactionProccessor := oc.incompleteTxSProcessMap[transactionID]
+	transactionProccessor := oc.getTransactionProcessor(transactionID)
 	switch event := event.(type) {
 	case *TransactionSubmittedEvent:
 		transactionProccessor.handleTransactionSubmittedEvent(ctx, event)
@@ -317,37 +323,42 @@ func (oc *Orchestrator) evaluateTransactions(ctx context.Context) (added int, ne
 	return added, newTotal
 }
 
-func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tsm transactionstore.TxStateManager) (queued bool) {
+func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *components.PrivateTransaction) (queued bool) {
 	oc.incompleteTxProcessMapMutex.Lock()
 	defer oc.incompleteTxProcessMapMutex.Unlock()
-	if oc.incompleteTxSProcessMap[tsm.GetTxID(ctx)] == nil {
+	if oc.incompleteTxSProcessMap[tx.ID.String()] == nil {
 		if len(oc.incompleteTxSProcessMap) >= oc.maxConcurrentProcess {
 			// TODO: decide how this map is managed, it shouldn't track the entire lifecycle
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			//oc.incompleteTxSProcessMap[tsm.GetTxID(ctx)] = NewPaladinTransactionProcessor(ctx, oc.components, oc.sequencer, oc.domainAPI, oc.nodeID, oc.emitEvent, oc.endorsementGatherer)
+			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.emitEvent, oc.endorsementGatherer)
 		}
-		oc.incompleteTxSProcessMap[tsm.GetTxID(ctx)].Init(ctx)
+		oc.incompleteTxSProcessMap[tx.ID.String()].Init(ctx)
+		oc.pendingEvents <- &TransactionSubmittedEvent{
+			privateTransactionEvent: privateTransactionEvent{transactionID: tx.ID.String()},
+		}
 	}
 	return false
 }
 
-func (oc *Orchestrator) HandleEvent(ctx context.Context, stageEvent *ptmgrtypes.StageEvent) {
+func (oc *Orchestrator) HandleEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
+	//TODO Better
 	oc.incompleteTxProcessMapMutex.Lock()
 	defer oc.incompleteTxProcessMapMutex.Unlock()
-	txProc := oc.incompleteTxSProcessMap[stageEvent.TxID]
+	txProc := oc.incompleteTxSProcessMap[event.TransactionID()]
 	if txProc == nil {
 		// TODO: is bypassing max concurrent process correct?
 		// or throw the event away and waste another cycle to redo the actions
 		// (doesn't feel right, maybe for some events only persistence is needed)
-		//tsm := transactionstore.NewTransactionStageManagerByTxID(ctx, stageEvent.TxID)
-		//oc.incompleteTxSProcessMap[tsm.GetTxID(ctx)] = NewPaladinTransactionProcessor(ctx, tsm, oc.StageController)
-		txProc = oc.incompleteTxSProcessMap[stageEvent.TxID]
+
+		//TODO we have an event for a transaction that we have swapped out of memory.  Need to reload the transaction from the database before we can proces this event
+		// and we need to do this in a way that doesn't exceed the maxConcurrentProcess and doesn't allow events from a runaway remote node to cause a noisy neighbor problem for events
+		// from the local node
+		panic("Transaction not found")
+
 	}
-	go func() {
-		txProc.AddStageEvent(ctx, stageEvent)
-	}()
+	oc.pendingEvents <- event
 }
 
 // this function should only have one running instance at any given time
@@ -403,7 +414,7 @@ func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status pt
 		return txProc.GetTxStatus(ctx)
 	}
 	//TODO should be possible to query the status of a transaction that is not inflight
-	return ptmgrtypes.TxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError)
+	return ptmgrtypes.TxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError, "Transaction not found")
 }
 
 func (oc *Orchestrator) PreReqsMatchCondition(ctx context.Context, preReqTxIDs []string, conditionFunc func(tsg transactionstore.TxStateGetters) (preReqComplete bool)) (filteredPreReqTxIDs []string) {
