@@ -34,14 +34,13 @@ type Sequence []*transactionstore.Transaction
 
 func NewSequencer(
 	nodeID string,
-
 	publisher ptmgrtypes.Publisher,
-	delegator ptmgrtypes.Delegator,
 
 	/*
 		dispatcher is the reciever of the sequenced transactions and will be responsible for submitting them to the base ledger in the correct order
 	*/
 	dispatcher ptmgrtypes.Dispatcher,
+	transportWriter ptmgrtypes.TransportWriter,
 
 ) ptmgrtypes.Sequencer {
 	return &sequencer{
@@ -53,7 +52,7 @@ func NewSequencer(
 		unconfirmedStatesByID:       make(map[string]*unconfirmedState),
 		unconfirmedTransactionsByID: make(map[string]*transaction),
 		stateSpenders:               make(map[string]string),
-		delegator:                   delegator,
+		transportWriter:             transportWriter,
 	}
 }
 
@@ -91,7 +90,6 @@ type transaction struct {
 type sequencer struct {
 	nodeID                      string
 	publisher                   ptmgrtypes.Publisher
-	delegator                   ptmgrtypes.Delegator
 	resolver                    ptmgrtypes.ContentionResolver
 	dispatcher                  ptmgrtypes.Dispatcher
 	graph                       Graph
@@ -100,7 +98,7 @@ type sequencer struct {
 	unconfirmedTransactionsByID map[string]*transaction
 	stateSpenders               map[string]string /// map of state hash to our recognised spender of that state
 	lock                        sync.Mutex        //put one massive mutex around the whole sequencer for now.  We can optimise this later
-
+	transportWriter             ptmgrtypes.TransportWriter
 }
 
 func (s *sequencer) evaluateGraph(ctx context.Context) error {
@@ -162,11 +160,10 @@ func (s *sequencer) getUnconfirmedDependencies(ctx context.Context, txn transact
 }
 
 func (s *sequencer) delegate(ctx context.Context, transactionId string, delegateNodeID string) error {
-	err := s.delegator.Delegate(ctx, transactionId, delegateNodeID)
-	if err != nil {
-		log.L(ctx).Errorf("Error sending delegate transaction message: %s", err)
-		return err
-	}
+	log.L(ctx).Infof("Delegating transaction %s to node %s", transactionId, delegateNodeID)
+
+	s.transportWriter.SendDelegateTransactionMessage(ctx, transactionId, delegateNodeID)
+
 	//update our local state to reflect that this transaction is now delegated
 	txn, ok := s.unconfirmedTransactionsByID[transactionId]
 	if !ok {
@@ -183,12 +180,9 @@ func (s *sequencer) blockTransaction(ctx context.Context, transactionId string, 
 		transactionID: transactionId,
 		blockedBy:     blockedBy,
 	})
-	err := s.publisher.PublishEvent(ctx, &pb.TransactionBlockedEvent{
-		TransactionId: transactionId,
-	},
-	)
+	err := s.publisher.PublishTransactionBlockedEvent(ctx, transactionId)
 	if err != nil {
-		log.L(ctx).Errorf("Error sending delegate transaction message: %s", err)
+		log.L(ctx).Errorf("Error publishing transaction blocked event: %s", err)
 		return err
 	}
 	return nil
