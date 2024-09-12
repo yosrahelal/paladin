@@ -18,28 +18,32 @@ package privatetxnmgr
 import (
 	"context"
 
-	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
-type EmitEvent func(ctx context.Context, event PrivateTransactionEvent)
-
-type PrivateTransactionEvent interface {
-	TransactionID() string
-}
+type EmitEvent func(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent)
 
 type privateTransactionEvent struct {
-	transactionID string
+	transactionID   string
+	contractAddress string
 }
 
 func (e *privateTransactionEvent) TransactionID() string {
 	return e.transactionID
 }
 
+func (e *privateTransactionEvent) ContractAddress() string {
+	return e.contractAddress
+}
+
+func (e *privateTransactionEvent) SetContractAddress(contractAddress string) {
+	e.contractAddress = contractAddress
+}
+
 type TransactionSubmittedEvent struct {
 	privateTransactionEvent
-	transaction *components.PrivateTransaction
 }
 type TransactionAssembledEvent struct {
 	privateTransactionEvent
@@ -56,6 +60,8 @@ type TransactionEndorsedEvent struct {
 }
 type TransactionDispatchedEvent struct {
 	privateTransactionEvent
+	nonce          uint64
+	signingAddress string
 }
 type TransactionConfirmedEvent struct {
 	privateTransactionEvent
@@ -64,5 +70,8 @@ type TransactionRevertedEvent struct {
 	privateTransactionEvent
 }
 type TransactionDelegatedEvent struct {
+	privateTransactionEvent
+}
+type TransactionBlockedEvent struct {
 	privateTransactionEvent
 }
