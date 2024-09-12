@@ -185,7 +185,7 @@ type TransportWriter interface {
 type TxProcessorStatus int
 
 const (
-	TxProcessorActive = iota
+	TxProcessorActive TxProcessorStatus = iota
 	TxProcessorSuspend
 	TxProcessorResume
 	TxProcessorRemove

@@ -17,6 +17,7 @@ package privatetxnmgr
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -25,7 +26,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
-	"github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -43,7 +43,6 @@ type orchestratorDepencyMocks struct {
 	sequencer            *privatetxnmgrmocks.Sequencer
 	endorsementGatherer  *privatetxnmgrmocks.EndorsementGatherer
 	publisher            *privatetxnmgrmocks.Publisher
-	emitEvent            EmitEvent
 }
 
 func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress *tktypes.EthAddress) (*Orchestrator, *orchestratorDepencyMocks) {
@@ -62,7 +61,6 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 		sequencer:            privatetxnmgrmocks.NewSequencer(t),
 		endorsementGatherer:  privatetxnmgrmocks.NewEndorsementGatherer(t),
 		publisher:            privatetxnmgrmocks.NewPublisher(t),
-		emitEvent:            func(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {},
 	}
 	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
@@ -71,6 +69,8 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
 
 	o := NewOrchestrator(ctx, tktypes.RandHex(16), domainAddress.String(), &OrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher)
+	_, err := o.Start(ctx)
+	require.NoError(t, err)
 
 	return o, mocks
 
@@ -79,13 +79,17 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
 	ctx := context.Background()
 
-	testOc, _ := newOrchestratorForTesting(t, ctx, nil)
+	testOc, dependencyMocks := newOrchestratorForTesting(t, ctx, nil)
+
 	newTxID := uuid.New()
 	testTx := &components.PrivateTransaction{
 		ID: newTxID,
 	}
 
-	waitForAction := make(chan bool, 1)
+	waitForAssemble := make(chan bool, 1)
+	dependencyMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Return(errors.New("fail assembly. Just happy that we got this far")).Run(func(args mock.Arguments) {
+		waitForAssemble <- true
+	})
 
 	assert.Empty(t, testOc.incompleteTxSProcessMap)
 
@@ -99,71 +103,99 @@ func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
 	assert.False(t, testOc.ProcessNewTransaction(ctx, testTx))
 	assert.Equal(t, 1, len(testOc.incompleteTxSProcessMap))
 
-	stageContext := testOc.incompleteTxSProcessMap[testTx.ID.String()].GetStageContext(ctx)
-	<-waitForAction // no events emitted as no synchronous output was returned
-	assert.NotNil(t, stageContext)
+	<-waitForAssemble
 
 	// add again doesn't cause a repeat process of the current stage context
 	assert.False(t, testOc.ProcessNewTransaction(ctx, testTx))
 	assert.Equal(t, 1, len(testOc.incompleteTxSProcessMap))
 
-	newStageContext := testOc.incompleteTxSProcessMap[testTx.ID.String()].GetStageContext(ctx)
-	assert.Equal(t, stageContext, newStageContext)
 }
 
 func TestOrchestratorHandleEvents(t *testing.T) {
-	ctx := context.Background()
-	testOc, _ := newOrchestratorForTesting(t, ctx, nil)
 	newTxID := uuid.New()
-	testTx := &components.PrivateTransaction{
-		ID: newTxID,
+	tests := []struct {
+		name        string
+		handlerName string
+		event       ptmgrtypes.PrivateTransactionEvent
+	}{
+		{
+			name:        "TransactionSubmittedEvent",
+			handlerName: "HandleTransactionSubmittedEvent",
+			event: &ptmgrtypes.TransactionSubmittedEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
+		{
+			name:        "TransactionSignedEvent",
+			handlerName: "HandleTransactionSignedEvent",
+			event: &ptmgrtypes.TransactionSignedEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
+		{
+			name:        "TransactionEndorsedEvent",
+			handlerName: "HandleTransactionEndorsedEvent",
+			event: &ptmgrtypes.TransactionEndorsedEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
+		{
+			name:        "TransactionDispatchedEvent",
+			handlerName: "HandleTransactionDispatchedEvent",
+			event: &ptmgrtypes.TransactionDispatchedEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
+		{
+			name:        "TransactionConfirmedEvent",
+			handlerName: "HandleTransactionConfirmedEvent",
+			event: &ptmgrtypes.TransactionConfirmedEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
+		{
+			name:        "TransactionRevertedEvent",
+			handlerName: "HandleTransactionRevertedEvent",
+			event: &ptmgrtypes.TransactionRevertedEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
+		{
+			name:        "TransactionDelegatedEvent",
+			handlerName: "HandleTransactionDelegatedEvent",
+			event: &ptmgrtypes.TransactionDelegatedEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
 	}
 
-	waitForAction := make(chan bool, 1)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 
-	assert.Empty(t, testOc.incompleteTxSProcessMap)
+			ctx := context.Background()
+			testOc, _ := newOrchestratorForTesting(t, ctx, nil)
 
-	// gets added when the queue is not full
-	testOc.maxConcurrentProcess = 1
-	assert.Empty(t, testOc.incompleteTxSProcessMap)
-	assert.False(t, testOc.ProcessNewTransaction(ctx, testTx))
-	assert.Equal(t, 1, len(testOc.incompleteTxSProcessMap))
+			waitForAction := make(chan bool, 1)
 
-	stageContext := testOc.incompleteTxSProcessMap[testTx.ID.String()].GetStageContext(ctx)
-	<-waitForAction // no events emitted as no synchronous output was returned
-	assert.NotNil(t, stageContext)
+			//Emulate ProcessNewTransaction with a mockTxProcessor
+			mockTxProcessor := privatetxnmgrmocks.NewTxProcessor(t)
+			mockTxProcessor.On("GetStatus", mock.Anything).Return(ptmgrtypes.TxProcessorActive)
+			mockTxProcessor.On(tt.handlerName, mock.Anything, tt.event).Run(func(args mock.Arguments) {
+				waitForAction <- true
+			}).Return()
 
-	waitForProcessEvent := make(chan bool, 1)
-	// feed in an event for process
-	testOc.HandleEvent(ctx, &TransactionAssembledEvent{
-		privateTransactionEvent: privateTransactionEvent{
-			transactionID:   testTx.ID.String(),
-			contractAddress: "test",
-		},
-		TransactionAssembledEvent: sequence.TransactionAssembledEvent{
-			TransactionId: testTx.ID.String(),
-		},
-	})
-	<-waitForProcessEvent
-	newStageContext := testOc.incompleteTxSProcessMap[testTx.ID.String()].GetStageContext(ctx)
-	assert.Equal(t, stageContext, newStageContext)
+			testOc.incompleteTxSProcessMap[newTxID.String()] = mockTxProcessor
+			testOc.pendingEvents <- tt.event
 
-	delete(testOc.incompleteTxSProcessMap, testTx.ID.String()) // clean up the queue
-	assert.Empty(t, testOc.incompleteTxSProcessMap)
-
-	// trigger again which should initiate the tx processor
-	testOc.HandleEvent(ctx, &TransactionAssembledEvent{
-		privateTransactionEvent: privateTransactionEvent{
-			transactionID:   testTx.ID.String(),
-			contractAddress: "test",
-		},
-		TransactionAssembledEvent: sequence.TransactionAssembledEvent{
-			TransactionId: testTx.ID.String(),
-		},
-	})
-	<-waitForProcessEvent
-	newStageContext = testOc.incompleteTxSProcessMap[testTx.ID.String()].GetStageContext(ctx)
-	assert.NotEqual(t, stageContext, newStageContext)
+			select {
+			case <-waitForAction:
+				// Handle the action
+			case <-time.After(1 * time.Second):
+				t.Fatal("Timeout waiting for action")
+			}
+			mockTxProcessor.AssertExpectations(t)
+		})
+	}
 
 }
 
