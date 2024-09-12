@@ -52,6 +52,24 @@ func TestEngineInit(t *testing.T) {
 	assert.NotNil(t, initResult)
 }
 
+func TestEngineInvalidTransaction(t *testing.T) {
+	ctx := context.Background()
+
+	engine, mocks := newEngineForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
+	assert.Equal(t, "Kata Engine", engine.EngineName())
+	initResult, err := engine.Init(mocks.allComponents)
+	require.NoError(t, err)
+	assert.NotNil(t, initResult)
+
+	err = engine.Start()
+	require.NoError(t, err)
+
+	txID, err := engine.HandleNewTx(ctx, &components.PrivateTransaction{})
+	// no input domain should err
+	assert.Regexp(t, "PD011800", err)
+	assert.Empty(t, txID)
+}
+
 func TestEngineSimpleTransaction(t *testing.T) {
 	//Submit a transaction that gets assembled with an attestation plan for a local endorser to sign the transaction
 	ctx := context.Background()
@@ -63,7 +81,7 @@ func TestEngineSimpleTransaction(t *testing.T) {
 	domainAddressString := domainAddress.String()
 
 	initialised := make(chan struct{}, 1)
-	mocks.domainSmartContract.On("InitTransaction", ctx, mock.Anything).Run(func(args mock.Arguments) {
+	mocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
@@ -80,7 +98,7 @@ func TestEngineSimpleTransaction(t *testing.T) {
 	// TODO check that the transaction is signed with this key
 
 	assembled := make(chan struct{}, 1)
-	mocks.domainSmartContract.On("AssembleTransaction", ctx, mock.Anything).Run(func(args mock.Arguments) {
+	mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
@@ -130,11 +148,7 @@ func TestEngineSimpleTransaction(t *testing.T) {
 	err := engine.Start()
 	require.NoError(t, err)
 
-	txID, err := engine.HandleNewTx(ctx, &components.PrivateTransaction{})
-	// no input domain should err
-	assert.Regexp(t, "PD011800", err)
-	assert.Empty(t, txID)
-	txID, err = engine.HandleNewTx(ctx, &components.PrivateTransaction{
+	txID, err := engine.HandleNewTx(ctx, &components.PrivateTransaction{
 		ID: uuid.New(),
 		Inputs: &components.TransactionInputs{
 			Domain: "domain1",
@@ -144,8 +158,8 @@ func TestEngineSimpleTransaction(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, txID)
 
-	status := pollForStatus(ctx, t, "dispatch", engine, domainAddressString, txID, 2*time.Second)
-	assert.Equal(t, "dispatch", status)
+	status := pollForStatus(ctx, t, "dispatched", engine, domainAddressString, txID, 2*time.Second)
+	assert.Equal(t, "dispatched", status)
 }
 
 func TestEngineLocalEndorserSubmits(t *testing.T) {
@@ -164,7 +178,7 @@ func TestEngineRemoteEndorser(t *testing.T) {
 	remoteEngine, remoteEngineMocks := newEngineForTesting(t, domainAddress)
 
 	initialised := make(chan struct{}, 1)
-	mocks.domainSmartContract.On("InitTransaction", ctx, mock.Anything).Run(func(args mock.Arguments) {
+	mocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
@@ -180,7 +194,7 @@ func TestEngineRemoteEndorser(t *testing.T) {
 	mocks.keyManager.On("ResolveKey", mock.Anything, "alice", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("aliceKeyHandle", "aliceVerifier", nil)
 
 	assembled := make(chan struct{}, 1)
-	mocks.domainSmartContract.On("AssembleTransaction", ctx, mock.Anything).Run(func(args mock.Arguments) {
+	mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
@@ -256,8 +270,8 @@ func TestEngineRemoteEndorser(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, txID)
 
-	status := pollForStatus(ctx, t, "dispatch", engine, domainAddressString, txID, 2*time.Second)
-	assert.Equal(t, "dispatch", status)
+	status := pollForStatus(ctx, t, "dispatched", engine, domainAddressString, txID, 2*time.Second)
+	assert.Equal(t, "dispatched", status)
 
 }
 
@@ -274,7 +288,7 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	domainAddressString := domainAddress.String()
 	mocks.keyManager.On("ResolveKey", mock.Anything, "alice", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("aliceKeyHandle", "aliceVerifier", nil)
 
-	mocks.domainSmartContract.On("InitTransaction", ctx, mock.Anything).Run(func(args mock.Arguments) {
+	mocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
@@ -314,7 +328,7 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		},
 	}
 
-	mocks.domainSmartContract.On("AssembleTransaction", ctx, mock.Anything).Run(func(args mock.Arguments) {
+	mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		switch tx.ID.String() {
 		case tx1.ID.String():
@@ -432,230 +446,239 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		Payload:     endorsementResponse1Bytes,
 	})
 
-	status := pollForStatus(ctx, t, "dispatch", engine, domainAddressString, tx1ID, 2*time.Second)
-	assert.Equal(t, "dispatch", status)
+	status := pollForStatus(ctx, t, "dispatched", engine, domainAddressString, tx1ID, 2*time.Second)
+	assert.Equal(t, "dispatched", status)
 
-	status = pollForStatus(ctx, t, "dispatch", engine, domainAddressString, tx2ID, 2*time.Second)
-	assert.Equal(t, "dispatch", status)
+	status = pollForStatus(ctx, t, "dispatched", engine, domainAddressString, tx2ID, 2*time.Second)
+	assert.Equal(t, "dispatched", status)
 
 	//TODO assert that transaction 1 got dispatched before 2
 
 }
 
 func TestEngineMiniLoad(t *testing.T) {
-	t.Skip("This test does not run reliably in the full gradle build for an unknown reason but it is still useful for local testing")
-
-	ctx := context.Background()
-
-	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-	engine, mocks := newEngineForTesting(t, domainAddress)
-	assert.Equal(t, "Kata Engine", engine.EngineName())
-
-	remoteEngine, remoteEngineMocks := newEngineForTesting(t, domainAddress)
-
+	//t.Skip("This test does not run reliably in the full gradle build for an unknown reason but it is still useful for local testing")
+	r := rand.New(rand.NewSource(42))
+	loadTests := []struct {
+		name            string
+		latency         func() time.Duration
+		numTransactions int
+	}{
+		{"no-latency", func() time.Duration { return 0 }, 500},
+		{"low-latency", func() time.Duration { return 10 * time.Millisecond }, 500},
+		{"medium-latency", func() time.Duration { return 50 * time.Millisecond }, 500},
+		{"high-latency", func() time.Duration { return 100 * time.Millisecond }, 500},
+		{"random-none-to-low-latency", func() time.Duration { return time.Duration(r.Intn(10)) * time.Millisecond }, 500},
+		{"random-none-to-high-latency", func() time.Duration { return time.Duration(r.Intn(100)) * time.Millisecond }, 500},
+	}
 	//500 is the maximum we can do in this test for now until either
 	//a) implement config to allow us to define MaxConcurrentTransactions
 	//b) implement ( or mock) transaction dispatch processing all the way to confirmation
-	numTransactions := 500
 
-	dependenciesByTransactionID := make(map[string][]string) // populated during assembly stage
-	nonceByTransactionID := make(map[string]uint64)          // populated when dispatch event recieved and used later to check that the nonce order matchs the dependency order
+	for _, test := range loadTests {
+		t.Run(test.name, func(t *testing.T) {
 
-	unclaimedPendingStatesToMintingTransaction := make(map[tktypes.Bytes32]string)
+			ctx := context.Background()
 
-	mocks.domainSmartContract.On("InitTransaction", ctx, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
-		tx.PreAssembly = &components.TransactionPreAssembly{
-			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
-				{
-					Lookup:    "alice",
+			domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
+			engine, mocks := newEngineForTesting(t, domainAddress)
+			assert.Equal(t, "Kata Engine", engine.EngineName())
+
+			remoteEngine, remoteEngineMocks := newEngineForTesting(t, domainAddress)
+
+			dependenciesByTransactionID := make(map[string][]string) // populated during assembly stage
+			nonceByTransactionID := make(map[string]uint64)          // populated when dispatch event recieved and used later to check that the nonce order matchs the dependency order
+
+			unclaimedPendingStatesToMintingTransaction := make(map[tktypes.Bytes32]string)
+
+			mocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+				tx := args.Get(1).(*components.PrivateTransaction)
+				tx.PreAssembly = &components.TransactionPreAssembly{
+					RequiredVerifiers: []*prototk.ResolveVerifierRequest{
+						{
+							Lookup:    "alice",
+							Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+						},
+					},
+				}
+			}).Return(nil)
+			mocks.keyManager.On("ResolveKey", mock.Anything, "alice", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("aliceKeyHandle", "aliceVerifier", nil)
+
+			failEarly := make(chan string, 1)
+
+			assembleConcurrency := 0
+			mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+				//assert that we are not assembling more than 1 transaction at a time
+				if assembleConcurrency > 0 {
+					failEarly <- "Assembling more than one transaction at a time"
+				}
+				require.Equal(t, assembleConcurrency, 0, "Assembling more than one transaction at a time")
+
+				assembleConcurrency++
+				defer func() { assembleConcurrency-- }()
+
+				// chose a number of dependencies at random 0, 1, 2, 3
+				// for each dependency, chose a different unclaimed pending state to spend
+				tx := args.Get(1).(*components.PrivateTransaction)
+
+				var inputStates []*components.FullState
+				numDependencies := min(r.Intn(4), len(unclaimedPendingStatesToMintingTransaction))
+				dependencies := make([]string, numDependencies)
+				for i := 0; i < numDependencies; i++ {
+					// chose a random unclaimed pending state to spend
+					stateIndex := r.Intn(len(unclaimedPendingStatesToMintingTransaction))
+
+					keys := make([]tktypes.Bytes32, len(unclaimedPendingStatesToMintingTransaction))
+					keyIndex := 0
+					for keyName := range unclaimedPendingStatesToMintingTransaction {
+
+						keys[keyIndex] = keyName
+						keyIndex++
+					}
+					stateID := keys[stateIndex]
+					inputStates = append(inputStates, &components.FullState{
+						ID: stateID,
+					})
+
+					log.L(ctx).Infof("input state %s, numDependencies %d i %d", stateID, numDependencies, i)
+					dependencies[i] = unclaimedPendingStatesToMintingTransaction[stateID]
+					delete(unclaimedPendingStatesToMintingTransaction, stateID)
+				}
+				dependenciesByTransactionID[tx.ID.String()] = dependencies
+
+				numOutputStates := r.Intn(4)
+				outputStates := make([]*components.FullState, numOutputStates)
+				for i := 0; i < numOutputStates; i++ {
+					stateID := tktypes.Bytes32(tktypes.RandBytes(32))
+					outputStates[i] = &components.FullState{
+						ID: stateID,
+					}
+					unclaimedPendingStatesToMintingTransaction[stateID] = tx.ID.String()
+				}
+
+				tx.PostAssembly = &components.TransactionPostAssembly{
+
+					AssemblyResult: prototk.AssembleTransactionResponse_OK,
+					OutputStates:   outputStates,
+					InputStates:    inputStates,
+					AttestationPlan: []*prototk.AttestationRequest{
+						{
+							Name:            "notary",
+							AttestationType: prototk.AttestationType_ENDORSE,
+							Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+							Parties: []string{
+								"domain1.contract1.notary@othernode",
+							},
+						},
+					},
+				}
+			}).Return(nil)
+
+			mocks.transportManager.On("Send", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+				go func() {
+					//inject random latency on the network
+					time.Sleep(test.latency())
+					transportMessage := args.Get(1).(*components.TransportMessage)
+					remoteEngine.ReceiveTransportMessage(ctx, transportMessage)
+				}()
+			}).Return(nil).Maybe()
+
+			remoteEngineMocks.transportManager.On("Send", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+				go func() {
+					//inject random latency on the network
+					time.Sleep(test.latency())
+					transportMessage := args.Get(1).(*components.TransportMessage)
+					engine.ReceiveTransportMessage(ctx, transportMessage)
+				}()
+			}).Return(nil).Maybe()
+			remoteEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(remoteEngineMocks.domainSmartContract, nil)
+
+			remoteEngineMocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("notaryKeyHandle", "notaryVerifier", nil)
+
+			//TODO match endorsement request and verifier args
+			remoteEngineMocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&components.EndorsementResult{
+				Result:  prototk.EndorseTransactionResponse_SIGN,
+				Payload: []byte("some-endorsement-bytes"),
+				Endorser: &prototk.ResolvedVerifier{
+					Lookup:    "notaryKeyHandle",
+					Verifier:  "notaryVerifier",
 					Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
 				},
-			},
-		}
-	}).Return(nil)
-	mocks.keyManager.On("ResolveKey", mock.Anything, "alice", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("aliceKeyHandle", "aliceVerifier", nil)
+			}, nil)
+			remoteEngineMocks.keyManager.On("Sign", mock.Anything, &coreProto.SignRequest{
+				KeyHandle: "notaryKeyHandle",
+				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+				Payload:   []byte("some-endorsement-bytes"),
+			}).Return(&coreProto.SignResponse{
+				Payload: []byte("some-signature-bytes"),
+			}, nil)
 
-	r := rand.New(rand.NewSource(42))
-	failEarly := make(chan string, 1)
+			expectedNonce := uint64(0)
 
-	assembleConcurrency := 0
-	mocks.domainSmartContract.On("AssembleTransaction", ctx, mock.Anything).Run(func(args mock.Arguments) {
-		//assert that we are not assembling more than 1 transaction at a time
-		if assembleConcurrency > 0 {
-			failEarly <- "Assembling more than one transaction at a time"
-		}
-		require.Equal(t, assembleConcurrency, 0, "Assembling more than one transaction at a time")
-
-		assembleConcurrency++
-		defer func() { assembleConcurrency-- }()
-
-		// chose a number of dependencies at random 0, 1, 2, 3
-		// for each dependency, chose a different unclaimed pending state to spend
-		tx := args.Get(1).(*components.PrivateTransaction)
-
-		var inputStates []*components.FullState
-		numDependencies := min(r.Intn(4), len(unclaimedPendingStatesToMintingTransaction))
-		dependencies := make([]string, numDependencies)
-		for i := 0; i < numDependencies; i++ {
-			// chose a random unclaimed pending state to spend
-			stateIndex := r.Intn(len(unclaimedPendingStatesToMintingTransaction))
-
-			keys := make([]tktypes.Bytes32, len(unclaimedPendingStatesToMintingTransaction))
-			keyIndex := 0
-			for keyName := range unclaimedPendingStatesToMintingTransaction {
-
-				keys[keyIndex] = keyName
-				keyIndex++
-			}
-			stateID := keys[stateIndex]
-			inputStates = append(inputStates, &components.FullState{
-				ID: stateID,
+			numDispatched := 0
+			allDispatched := make(chan bool, 1)
+			nonceWriterLock := sync.Mutex{}
+			engine.Subscribe(ctx, func(event ptmgrtypes.EngineEvent) {
+				nonceWriterLock.Lock()
+				defer nonceWriterLock.Unlock()
+				numDispatched++
+				switch event := event.(type) {
+				case *ptmgrtypes.TransactionDispatchedEvent:
+					assert.Equal(t, expectedNonce, event.Nonce)
+					expectedNonce++
+					nonceByTransactionID[event.TransactionID] = event.Nonce
+				}
+				if numDispatched == test.numTransactions {
+					allDispatched <- true
+				}
 			})
 
-			log.L(ctx).Infof("input state %s, numDependencies %d i %d", stateID, numDependencies, i)
-			dependencies[i] = unclaimedPendingStatesToMintingTransaction[stateID]
-			delete(unclaimedPendingStatesToMintingTransaction, stateID)
-		}
-		dependenciesByTransactionID[tx.ID.String()] = dependencies
+			err := engine.Start()
+			require.NoError(t, err)
 
-		numOutputStates := r.Intn(4)
-		outputStates := make([]*components.FullState, numOutputStates)
-		for i := 0; i < numOutputStates; i++ {
-			stateID := tktypes.Bytes32(tktypes.RandBytes(32))
-			outputStates[i] = &components.FullState{
-				ID: stateID,
-			}
-			unclaimedPendingStatesToMintingTransaction[stateID] = tx.ID.String()
-		}
-
-		tx.PostAssembly = &components.TransactionPostAssembly{
-
-			AssemblyResult: prototk.AssembleTransactionResponse_OK,
-			OutputStates:   outputStates,
-			InputStates:    inputStates,
-			AttestationPlan: []*prototk.AttestationRequest{
-				{
-					Name:            "notary",
-					AttestationType: prototk.AttestationType_ENDORSE,
-					Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
-					Parties: []string{
-						"domain1.contract1.notary@othernode",
+			for i := 0; i < test.numTransactions; i++ {
+				tx := &components.PrivateTransaction{
+					ID: uuid.New(),
+					Inputs: &components.TransactionInputs{
+						Domain: "domain1",
+						To:     *domainAddress,
+						From:   "Alice",
 					},
-				},
-			},
-		}
-	}).Return(nil)
-
-	mocks.transportManager.On("Send", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		go func() {
-			//inject random latency on the network
-			time.Sleep(time.Duration(r.Intn(100)) * time.Millisecond)
-			transportMessage := args.Get(1).(*components.TransportMessage)
-			remoteEngine.ReceiveTransportMessage(ctx, transportMessage)
-		}()
-	}).Return(nil).Maybe()
-
-	remoteEngineMocks.transportManager.On("Send", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		go func() {
-			//inject random latency on the network
-			time.Sleep(time.Duration(r.Intn(100)) * time.Millisecond)
-			transportMessage := args.Get(1).(*components.TransportMessage)
-			engine.ReceiveTransportMessage(ctx, transportMessage)
-		}()
-	}).Return(nil).Maybe()
-	remoteEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(remoteEngineMocks.domainSmartContract, nil)
-
-	remoteEngineMocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("notaryKeyHandle", "notaryVerifier", nil)
-
-	//TODO match endorsement request and verifier args
-	remoteEngineMocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&components.EndorsementResult{
-		Result:  prototk.EndorseTransactionResponse_SIGN,
-		Payload: []byte("some-endorsement-bytes"),
-		Endorser: &prototk.ResolvedVerifier{
-			Lookup:    "notaryKeyHandle",
-			Verifier:  "notaryVerifier",
-			Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-		},
-	}, nil)
-	remoteEngineMocks.keyManager.On("Sign", mock.Anything, &coreProto.SignRequest{
-		KeyHandle: "notaryKeyHandle",
-		Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-		Payload:   []byte("some-endorsement-bytes"),
-	}).Return(&coreProto.SignResponse{
-		Payload: []byte("some-signature-bytes"),
-	}, nil)
-
-	expectedNonce := uint64(0)
-
-	numDispatched := 0
-	allDispatched := make(chan bool, 1)
-	nonceWriterLock := sync.Mutex{}
-	engine.Subscribe(ctx, func(event ptmgrtypes.EngineEvent) {
-		nonceWriterLock.Lock()
-		defer nonceWriterLock.Unlock()
-		numDispatched++
-		switch event := event.(type) {
-		case *ptmgrtypes.TransactionDispatchedEvent:
-			assert.Equal(t, expectedNonce, event.Nonce)
-			expectedNonce++
-			nonceByTransactionID[event.TransactionID] = event.Nonce
-		}
-		if numDispatched == numTransactions {
-			allDispatched <- true
-		}
-	})
-
-	err := engine.Start()
-	require.NoError(t, err)
-
-	for i := 0; i < numTransactions; i++ {
-		tx := &components.PrivateTransaction{
-			ID: uuid.New(),
-			Inputs: &components.TransactionInputs{
-				Domain: "domain1",
-				To:     *domainAddress,
-				From:   "Alice",
-			},
-		}
-		txID, err := engine.HandleNewTx(ctx, tx)
-		require.NoError(t, err)
-		require.NotNil(t, txID)
-	}
-
-	deadline, ok := t.Deadline()
-	if !ok {
-		//there was no -timeout flag, default to 10 seconds
-		deadline = time.Now().Add(10 * time.Second)
-	}
-	haveAllDispatched := false
-out:
-	for {
-		select {
-		case <-time.After(time.Until(deadline)):
-			log.L(ctx).Errorf("Timed out waiting for all transactions to be dispatched")
-			assert.Fail(t, "Timed out waiting for all transactions to be dispatched")
-			break out
-		case <-allDispatched:
-			haveAllDispatched = true
-			break out
-		case reason := <-failEarly:
-			require.Fail(t, reason)
-		}
-	}
-
-	if haveAllDispatched {
-		//check that they were dispatched a valid order ( i.e. no transaction was dispatched before its dependencies)
-		for txId, nonce := range nonceByTransactionID {
-			dependencies := dependenciesByTransactionID[txId]
-			for _, depTxID := range dependencies {
-				depNonce, ok := nonceByTransactionID[depTxID]
-				assert.True(t, ok)
-				assert.True(t, depNonce < nonce, "Transaction %s (nonce %d) was dispatched before its dependency %s (nonce %d)", txId, nonce, depTxID, depNonce)
+				}
+				txID, err := engine.HandleNewTx(ctx, tx)
+				require.NoError(t, err)
+				require.NotNil(t, txID)
 			}
-		}
-	}
 
+			haveAllDispatched := false
+		out:
+			for {
+				select {
+				case <-time.After(timeTillDeadline(t)):
+					log.L(ctx).Errorf("Timed out waiting for all transactions to be dispatched")
+					assert.Fail(t, "Timed out waiting for all transactions to be dispatched")
+					break out
+				case <-allDispatched:
+					haveAllDispatched = true
+					break out
+				case reason := <-failEarly:
+					require.Fail(t, reason)
+				}
+			}
+
+			if haveAllDispatched {
+				//check that they were dispatched a valid order ( i.e. no transaction was dispatched before its dependencies)
+				for txId, nonce := range nonceByTransactionID {
+					dependencies := dependenciesByTransactionID[txId]
+					for _, depTxID := range dependencies {
+						depNonce, ok := nonceByTransactionID[depTxID]
+						assert.True(t, ok)
+						assert.True(t, depNonce < nonce, "Transaction %s (nonce %d) was dispatched before its dependency %s (nonce %d)", txId, nonce, depTxID, depNonce)
+					}
+				}
+			}
+		})
+	}
 }
 
 func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, engine Engine, domainAddressString, txID string, duration time.Duration) string {
@@ -719,4 +742,13 @@ func newEngineForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (Engin
 	assert.NoError(t, err)
 	return e, mocks
 
+}
+
+func timeTillDeadline(t *testing.T) time.Duration {
+	deadline, ok := t.Deadline()
+	if !ok {
+		//there was no -timeout flag, default to 10 seconds
+		deadline = time.Now().Add(10 * time.Second)
+	}
+	return time.Until(deadline)
 }

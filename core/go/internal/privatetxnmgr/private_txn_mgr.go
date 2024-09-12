@@ -26,10 +26,10 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -40,7 +40,7 @@ import (
 
 type Engine interface {
 	components.Engine
-	HandleNewEvent(ctx context.Context, stageEvent *ptmgrtypes.StageEvent)
+	HandleNewEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent)
 	HandleNewTx(ctx context.Context, tx *components.PrivateTransaction) (txID string, err error)
 	HandleDeployTx(ctx context.Context, tx *components.PrivateContractDeploy) (txID string, contractAddress string, err error)
 
@@ -92,15 +92,19 @@ func NewEngine(nodeID string) Engine {
 
 func (e *engine) getOrchestratorForContract(ctx context.Context, contractAddr tktypes.EthAddress, domainAPI components.DomainSmartContract) (oc *Orchestrator, err error) {
 
+	emitEvent := func(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
+		//TODO better
+		event.SetContractAddress(contractAddr.String())
+		e.HandleNewEvent(ctx, event)
+	}
 	if e.orchestrators[contractAddr.String()] == nil {
-		publisher := NewPublisher(e)
-		delegator := NewDelegator()
+		publisher := NewPublisher(e, contractAddr.String())
 		dispatcher := NewDispatcher(contractAddr.String(), publisher)
 		seq := NewSequencer(
 			e.nodeID,
 			publisher,
-			delegator,
 			dispatcher,
+			NewTransportWriter(e.nodeID, e.components.TransportManager()),
 		)
 		endorsementGatherer, err := e.getEndorsementGathererForContract(ctx, contractAddr)
 		if err != nil {
@@ -115,12 +119,9 @@ func (e *engine) getOrchestratorForContract(ctx context.Context, contractAddr tk
 				&OrchestratorConfig{},
 				e.components,
 				domainAPI,
-				publisher,
 				seq,
 				endorsementGatherer,
-				func(ctx context.Context, event PrivateTransactionEvent) {
-					//TODO
-				},
+				emitEvent,
 			)
 		orchestratorDone, err := e.orchestrators[contractAddr.String()].Start(ctx)
 		if err != nil {
@@ -189,18 +190,15 @@ func (e *engine) HandleNewTx(ctx context.Context, tx *components.PrivateTransact
 		}
 	}
 
-	txInstance := transactionstore.NewTransactionStageManager(ctx, tx)
-	// TODO how to measure fairness/ per From address / contract address / something else
-
 	oc, err := e.getOrchestratorForContract(ctx, contractAddr, domainAPI)
 	if err != nil {
 		return "", err
 	}
-	queued := oc.ProcessNewTransaction(ctx, txInstance)
+	queued := oc.ProcessNewTransaction(ctx, tx)
 	if queued {
-		log.L(ctx).Debugf("Transaction with ID %s queued in database", txInstance.GetTxID(ctx))
+		log.L(ctx).Debugf("Transaction with ID %s queued in database", tx.ID)
 	}
-	return txInstance.GetTxID(ctx), nil
+	return tx.ID.String(), nil
 }
 
 // Synchronous function to deploy a domain smart contract
@@ -319,19 +317,20 @@ func (e *engine) GetTxStatus(ctx context.Context, domainAddress string, txID str
 	targetOrchestrator := e.orchestrators[domainAddress]
 	if targetOrchestrator == nil {
 		//TODO should be valid to query the status of a transaction that belongs to a domain instance that is not currently active
-		return ptmgrtypes.TxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError)
+		errorMessage := fmt.Sprintf("Orchestrator not found for domain address %s", domainAddress)
+		return ptmgrtypes.TxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError, errorMessage)
 	} else {
 		return targetOrchestrator.GetTxStatus(ctx, txID)
 	}
 
 }
 
-func (e *engine) HandleNewEvent(ctx context.Context, stageEvent *ptmgrtypes.StageEvent) {
-	targetOrchestrator := e.orchestrators[stageEvent.ContractAddress]
+func (e *engine) HandleNewEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
+	targetOrchestrator := e.orchestrators[event.ContractAddress()]
 	if targetOrchestrator == nil { // this is an event that belongs to a contract that's not in flight, throw it away and rely on the engine to trigger the action again when the orchestrator is wake up. (an enhanced version is to add weight on queueing an orchestrator)
-		log.L(ctx).Warnf("Ignored event for domain contract %s and transaction %s on stage %s. If this happens a lot, check the orchestrator idle timeout is set to a reasonable number", stageEvent.ContractAddress, stageEvent.TxID, stageEvent.Stage)
+		log.L(ctx).Warnf("Ignored %T event for domain contract %s and transaction %s . If this happens a lot, check the orchestrator idle timeout is set to a reasonable number", event, event.ContractAddress(), event.TransactionID())
 	} else {
-		targetOrchestrator.HandleEvent(ctx, stageEvent)
+		targetOrchestrator.HandleEvent(ctx, event)
 	}
 }
 
@@ -458,6 +457,7 @@ func (e *engine) handleEndorsementRequest(ctx context.Context, messagePayload []
 }
 
 func (e *engine) handleEndorsementResponse(ctx context.Context, messagePayload []byte) {
+
 	endorsementResponse := &pbEngine.EndorsementResponse{}
 	err := proto.Unmarshal(messagePayload, endorsementResponse)
 	if err != nil {
@@ -466,11 +466,25 @@ func (e *engine) handleEndorsementResponse(ctx context.Context, messagePayload [
 	}
 	contractAddressString := endorsementResponse.ContractAddress
 
-	e.HandleNewEvent(ctx, &ptmgrtypes.StageEvent{
-		ContractAddress: contractAddressString,
-		TxID:            endorsementResponse.TransactionId,
-		Stage:           "gather_endorsements",
-		Data:            endorsementResponse,
+	var revertReason *string
+	if endorsementResponse.GetRevertReason() != "" {
+		revertReason = confutil.P(endorsementResponse.GetRevertReason())
+	}
+	endorsement := &prototk.AttestationResult{}
+	err = endorsementResponse.GetEndorsement().UnmarshalTo(endorsement)
+	if err != nil {
+		// TODO this is only temproary until we stop using anypb in EndorsementResponse
+		log.L(ctx).Errorf("Wrong type received in EndorsementResponse")
+		return
+	}
+
+	e.HandleNewEvent(ctx, &TransactionEndorsedEvent{
+		privateTransactionEvent: privateTransactionEvent{
+			transactionID:   endorsementResponse.TransactionId,
+			contractAddress: contractAddressString,
+		},
+		revertReason: revertReason,
+		endorsement:  endorsement,
 	})
 
 }
@@ -486,33 +500,8 @@ func (e *engine) ReceiveTransportMessage(ctx context.Context, message *component
 		go e.handleEndorsementRequest(ctx, messagePayload)
 	case "EndorsementResponse":
 		go e.handleEndorsementResponse(ctx, messagePayload)
-	case "StageMessage":
-
-		//TODO - this may be dead code.
-		stageMessage := &pbEngine.StageMessage{}
-
-		err := proto.Unmarshal(messagePayload, stageMessage)
-		if err != nil {
-			log.L(ctx).Errorf("Failed to unmarshal message payload: %s", err)
-			return
-		}
-		if stageMessage.ContractAddress == "" {
-			log.L(ctx).Errorf("Invalid message: contract address is empty")
-			return
-		}
-
-		dataProto, err := stageMessage.Data.UnmarshalNew()
-		if err != nil {
-			log.L(ctx).Errorf("Failed to unmarshal from any: %s", err)
-			return
-		}
-
-		e.HandleNewEvent(ctx, &ptmgrtypes.StageEvent{
-			ContractAddress: stageMessage.ContractAddress,
-			TxID:            stageMessage.TransactionId,
-			Stage:           stageMessage.Stage,
-			Data:            dataProto,
-		})
+	default:
+		log.L(ctx).Errorf("Unknown message type: %s", message.MessageType)
 	}
 }
 

@@ -172,7 +172,8 @@ func TestSequencerRemoteDependency(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	node1SequencerMockDependencies.delegatorMock.On("Delegate", ctx, txn2ID.String(), remoteNodeId).Return(nil)
+	//TODO assert that it is the correct node that is delegated to
+	node1SequencerMockDependencies.transportWriterMock.On("SendDelegateTransactionMessage", mock.Anything, txn2ID.String(), remoteNodeId).Return(nil)
 
 	err = node1Sequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
 		TransactionId: txn2ID.String(),
@@ -253,7 +254,8 @@ func TestSequencerTransitiveRemoteDependency(t *testing.T) {
 
 	// Should see an event relinquishing ownership of this this transaction to the first remote node
 	// even though the transaction's direct dependency is on the second remote node
-	node1SequencerMockDependencies.delegatorMock.On("Delegate", ctx, txn3ID.String(), remotenode1ID).Return(nil)
+	//TODO assert that it is the correct node that is delegated to
+	node1SequencerMockDependencies.transportWriterMock.On("SendDelegateTransactionMessage", mock.Anything, txn3ID.String(), remotenode1ID).Return(nil)
 
 	err = node1Sequencer.AssignTransaction(ctx, txn3ID.String())
 	require.NoError(t, err)
@@ -320,7 +322,8 @@ func TestSequencerTransitiveRemoteDependencyTiming(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should see an event relinquishing ownership of this this transaction to the second remote node
-	node1SequencerMockDependencies.delegatorMock.On("Delegate", ctx, txn3ID.String(), remoteNode2Id).Return(nil)
+	//TODO assert that it is the correct node that is delegated to
+	node1SequencerMockDependencies.transportWriterMock.On("SendDelegateTransactionMessage", mock.Anything, txn3ID.String(), remoteNode2Id).Return(nil)
 
 	err = node1Sequencer.AssignTransaction(ctx, txn3ID.String())
 	require.NoError(t, err)
@@ -356,7 +359,7 @@ func TestSequencerTransitiveRemoteDependencyTiming(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	node1SequencerMockDependencies.delegatorMock.On("Delegate", ctx, txn4ID.String(), remoteNode2Id).Return(nil)
+	node1SequencerMockDependencies.transportWriterMock.On("SendDelegateTransactionMessage", ctx, txn4ID.String(), remoteNode2Id).Return(nil)
 
 	err = node1Sequencer.AssignTransaction(ctx, txn4ID.String())
 	require.NoError(t, err)
@@ -382,7 +385,7 @@ func TestSequencerMultipleRemoteDependencies(t *testing.T) {
 
 	//create a sequencer for the local node
 	localNodeSequencer, localNodeSequencerMockDependencies := newSequencerForTesting(t, localNodeId, false)
-	transportMock1 := localNodeSequencerMockDependencies.publisherMock
+	publisherMock1 := localNodeSequencerMockDependencies.publisherMock
 
 	// First transaction (the minter of a given state) is assembled on the remote node
 	err := localNodeSequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
@@ -401,10 +404,7 @@ func TestSequencerMultipleRemoteDependencies(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should see an event moving this transaction to the blocked stage
-	transportMock1.On("PublishEvent", ctx, mock.Anything).Run(func(args mock.Arguments) {
-		transactionBlockedEvent := args.Get(1).(*pb.TransactionBlockedEvent)
-		assert.Equal(t, newTransactionID.String(), transactionBlockedEvent.TransactionId)
-	}).Return(nil)
+	publisherMock1.On("PublishTransactionBlockedEvent", ctx, newTransactionID.String()).Return(nil)
 
 	// new transaction (the spender of that states) is assembled on the local node
 
@@ -418,7 +418,7 @@ func TestSequencerMultipleRemoteDependencies(t *testing.T) {
 	err = localNodeSequencer.AssignTransaction(ctx, newTransactionID.String())
 	require.NoError(t, err)
 
-	transportMock1.AssertExpectations(t)
+	publisherMock1.AssertExpectations(t)
 
 	//We shouldn't see any dispatch, from the local sequencer, even when both transactions are endorsed
 	err = localNodeSequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
@@ -438,7 +438,7 @@ func TestSequencerMultipleRemoteDependencies(t *testing.T) {
 
 	// once all bar one transaction is confirmed, should see the dependant transaction being delegated
 	// Should see an event relinquishing ownership of this this transaction
-	localNodeSequencerMockDependencies.delegatorMock.On("Delegate", ctx, newTransactionID.String(), remotenode1ID).Return(nil)
+	localNodeSequencerMockDependencies.transportWriterMock.On("SendDelegateTransactionMessage", mock.Anything, newTransactionID.String(), remotenode1ID).Return(nil)
 
 	err = localNodeSequencer.HandleTransactionConfirmedEvent(ctx, &pb.TransactionConfirmedEvent{
 		TransactionId: dependency2TransactionID.String(),
@@ -568,47 +568,47 @@ func TestSequencerApproveEndorsementReleaseStateOnRevert(t *testing.T) {
 }
 
 type sequencerMockDependencies struct {
-	publisherMock  *privatetxnmgrmocks.Publisher
-	resolverMock   *privatetxnmgrmocks.ContentionResolver
-	delegatorMock  *privatetxnmgrmocks.Delegator
-	dispatcherMock *privatetxnmgrmocks.Dispatcher
+	resolverMock        *privatetxnmgrmocks.ContentionResolver
+	dispatcherMock      *privatetxnmgrmocks.Dispatcher
+	transportWriterMock *privatetxnmgrmocks.TransportWriter
+	publisherMock       *privatetxnmgrmocks.Publisher
 }
 
 func newSequencerForTesting(t *testing.T, nodeID string, mockResolver bool) (ptmgrtypes.Sequencer, sequencerMockDependencies) {
 
 	publisherMock := privatetxnmgrmocks.NewPublisher(t)
 	dispatcherMock := privatetxnmgrmocks.NewDispatcher(t)
-	delegatorMock := privatetxnmgrmocks.NewDelegator(t)
+	transportWriterMock := privatetxnmgrmocks.NewTransportWriter(t)
 	if mockResolver {
 		resolverMock := privatetxnmgrmocks.NewContentionResolver(t)
 		return &sequencer{
 				nodeID:                      nodeID,
-				publisher:                   publisherMock,
 				resolver:                    resolverMock,
 				dispatcher:                  dispatcherMock,
 				graph:                       NewGraph(),
 				unconfirmedStatesByID:       make(map[string]*unconfirmedState),
 				unconfirmedTransactionsByID: make(map[string]*transaction),
 				stateSpenders:               make(map[string]string),
+				transportWriter:             transportWriterMock,
 			},
 			sequencerMockDependencies{
-				publisherMock,
 				resolverMock,
-				delegatorMock,
 				dispatcherMock,
+				transportWriterMock,
+				publisherMock,
 			}
 	} else {
 		return NewSequencer(
 				nodeID,
 				publisherMock,
-				delegatorMock,
 				dispatcherMock,
+				transportWriterMock,
 			),
 			sequencerMockDependencies{
-				publisherMock,
 				nil,
-				delegatorMock,
 				dispatcherMock,
+				transportWriterMock,
+				publisherMock,
 			}
 	}
 

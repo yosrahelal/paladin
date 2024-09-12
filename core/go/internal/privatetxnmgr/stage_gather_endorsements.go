@@ -213,13 +213,13 @@ func (as *GatherEndorsementsStage) PerformAction(ctx context.Context, tsg transa
 
 	if tx.PostAssembly == nil {
 		log.L(ctx).Errorf("PostAssembly is nil. Should never have reached this stage without a PostAssembly")
-		return nil, i18n.NewError(ctx, msgs.MsgEngineInternalError, "")
+		return nil, i18n.NewError(ctx, msgs.MsgEngineInternalError, "PostAssembly is nil. Should never have reached this stage without a PostAssembly")
 	}
 
 	err := as.sequencer.AssignTransaction(ctx, tx.ID.String())
 	if err != nil {
 		log.L(ctx).Errorf("Failed to assign transaction to sequencer: %s", err)
-		return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
+		return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError, "Failed to assign transaction to sequencer")
 	}
 	endorsementActionResult := &endorsementActionResult{}
 
