@@ -404,6 +404,18 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 		//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
 	}
 
+	if ts.transaction == nil {
+		log.L(ctx).Error("Transaction  is nil")
+		return
+	}
+	if ts.transaction.PreAssembly == nil {
+		log.L(ctx).Error("PreAssembly is nil")
+		return
+	}
+	if ts.transaction.PostAssembly == nil {
+		log.L(ctx).Error("PostAssembly is nil")
+		return
+	}
 	if partyNode == ts.nodeID || partyNode == "" {
 		// This is a local party, so we can endorse it directly
 		endorsement, revertReason, err := ts.endorsementGatherer.GatherEndorsement(ctx,
@@ -414,6 +426,7 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 			toEndorsableList(ts.transaction.PostAssembly.OutputStates), party, attRequest)
 		if err != nil {
 			log.L(ctx).Errorf("Failed to gather endorsement for party %s: %s", party, err)
+			return
 			//TODO specific error message
 			//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
 		}

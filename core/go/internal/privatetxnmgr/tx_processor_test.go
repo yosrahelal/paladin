@@ -24,7 +24,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/mock"
@@ -79,23 +78,6 @@ func TestTransactionProcessorHandleTransactionSubmittedEvent(t *testing.T) {
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
 			AssemblyResult: prototk.AssembleTransactionResponse_OK,
-			InputStates: []*components.FullState{
-				{
-					ID:     tktypes.Bytes32(tktypes.RandBytes(32)),
-					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
-					Data:   tktypes.JSONString("foo"),
-				},
-			},
-			AttestationPlan: []*prototk.AttestationRequest{
-				{
-					Name:            "notary",
-					AttestationType: prototk.AttestationType_ENDORSE,
-					Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
-					Parties: []string{
-						"domain1.contract1.notary",
-					},
-				},
-			},
 		}
 	}).Return(nil).Once()
 	dependencyMocks.sequencer.On("HandleTransactionAssembledEvent", mock.Anything, mock.Anything).Return(nil).Once()

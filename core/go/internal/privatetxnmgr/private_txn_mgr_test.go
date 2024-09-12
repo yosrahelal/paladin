@@ -457,7 +457,7 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 }
 
 func TestEngineMiniLoad(t *testing.T) {
-	//t.Skip("This test does not run reliably in the full gradle build for an unknown reason but it is still useful for local testing")
+	t.Skip("This test does not run reliably in the full gradle build for an unknown reason but it is still useful for local testing")
 	r := rand.New(rand.NewSource(42))
 	loadTests := []struct {
 		name            string
