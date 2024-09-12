@@ -23,9 +23,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
-	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
+	"github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -40,9 +40,9 @@ type orchestratorDepencyMocks struct {
 	transportManager     *componentmocks.TransportManager
 	stateStore           *componentmocks.StateStore
 	keyManager           *componentmocks.KeyManager
-	publisher            *privatetxnmgrmocks.Publisher
 	sequencer            *privatetxnmgrmocks.Sequencer
 	endorsementGatherer  *privatetxnmgrmocks.EndorsementGatherer
+	publisher            *privatetxnmgrmocks.Publisher
 	emitEvent            EmitEvent
 }
 
@@ -59,10 +59,10 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 		transportManager:     componentmocks.NewTransportManager(t),
 		stateStore:           componentmocks.NewStateStore(t),
 		keyManager:           componentmocks.NewKeyManager(t),
-		publisher:            privatetxnmgrmocks.NewPublisher(t),
 		sequencer:            privatetxnmgrmocks.NewSequencer(t),
 		endorsementGatherer:  privatetxnmgrmocks.NewEndorsementGatherer(t),
-		emitEvent:            func(ctx context.Context, event PrivateTransactionEvent) {},
+		publisher:            privatetxnmgrmocks.NewPublisher(t),
+		emitEvent:            func(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {},
 	}
 	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
@@ -70,7 +70,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
 
-	o := NewOrchestrator(ctx, tktypes.RandHex(16), domainAddress.String(), &OrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.publisher, mocks.sequencer, mocks.endorsementGatherer, mocks.emitEvent)
+	o := NewOrchestrator(ctx, tktypes.RandHex(16), domainAddress.String(), &OrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher)
 
 	return o, mocks
 
@@ -81,13 +81,8 @@ func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
 
 	testOc, _ := newOrchestratorForTesting(t, ctx, nil)
 	newTxID := uuid.New()
-	testTx := &transactionstore.TransactionWrapper{
-		Transaction: transactionstore.Transaction{
-			ID: newTxID,
-		},
-		PrivateTransaction: &components.PrivateTransaction{
-			ID: newTxID,
-		},
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
 	}
 
 	waitForAction := make(chan bool, 1)
@@ -104,7 +99,7 @@ func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
 	assert.False(t, testOc.ProcessNewTransaction(ctx, testTx))
 	assert.Equal(t, 1, len(testOc.incompleteTxSProcessMap))
 
-	stageContext := testOc.incompleteTxSProcessMap[testTx.GetTxID(ctx)].GetStageContext(ctx)
+	stageContext := testOc.incompleteTxSProcessMap[testTx.ID.String()].GetStageContext(ctx)
 	<-waitForAction // no events emitted as no synchronous output was returned
 	assert.NotNil(t, stageContext)
 
@@ -112,7 +107,7 @@ func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
 	assert.False(t, testOc.ProcessNewTransaction(ctx, testTx))
 	assert.Equal(t, 1, len(testOc.incompleteTxSProcessMap))
 
-	newStageContext := testOc.incompleteTxSProcessMap[testTx.GetTxID(ctx)].GetStageContext(ctx)
+	newStageContext := testOc.incompleteTxSProcessMap[testTx.ID.String()].GetStageContext(ctx)
 	assert.Equal(t, stageContext, newStageContext)
 }
 
@@ -120,13 +115,8 @@ func TestOrchestratorHandleEvents(t *testing.T) {
 	ctx := context.Background()
 	testOc, _ := newOrchestratorForTesting(t, ctx, nil)
 	newTxID := uuid.New()
-	testTx := &transactionstore.TransactionWrapper{
-		Transaction: transactionstore.Transaction{
-			ID: newTxID,
-		},
-		PrivateTransaction: &components.PrivateTransaction{
-			ID: newTxID,
-		},
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
 	}
 
 	waitForAction := make(chan bool, 1)
@@ -139,34 +129,40 @@ func TestOrchestratorHandleEvents(t *testing.T) {
 	assert.False(t, testOc.ProcessNewTransaction(ctx, testTx))
 	assert.Equal(t, 1, len(testOc.incompleteTxSProcessMap))
 
-	stageContext := testOc.incompleteTxSProcessMap[testTx.GetTxID(ctx)].GetStageContext(ctx)
+	stageContext := testOc.incompleteTxSProcessMap[testTx.ID.String()].GetStageContext(ctx)
 	<-waitForAction // no events emitted as no synchronous output was returned
 	assert.NotNil(t, stageContext)
 
 	waitForProcessEvent := make(chan bool, 1)
 	// feed in an event for process
-	testOc.HandleEvent(ctx, &ptmgrtypes.StageEvent{
-		ID:    uuid.NewString(),
-		Stage: "test",
-		TxID:  testTx.GetTxID(ctx),
-		Data:  "test",
+	testOc.HandleEvent(ctx, &TransactionAssembledEvent{
+		privateTransactionEvent: privateTransactionEvent{
+			transactionID:   testTx.ID.String(),
+			contractAddress: "test",
+		},
+		TransactionAssembledEvent: sequence.TransactionAssembledEvent{
+			TransactionId: testTx.ID.String(),
+		},
 	})
 	<-waitForProcessEvent
-	newStageContext := testOc.incompleteTxSProcessMap[testTx.GetTxID(ctx)].GetStageContext(ctx)
+	newStageContext := testOc.incompleteTxSProcessMap[testTx.ID.String()].GetStageContext(ctx)
 	assert.Equal(t, stageContext, newStageContext)
 
-	delete(testOc.incompleteTxSProcessMap, testTx.GetTxID(ctx)) // clean up the queue
+	delete(testOc.incompleteTxSProcessMap, testTx.ID.String()) // clean up the queue
 	assert.Empty(t, testOc.incompleteTxSProcessMap)
 
 	// trigger again which should initiate the tx processor
-	testOc.HandleEvent(ctx, &ptmgrtypes.StageEvent{
-		ID:    uuid.NewString(),
-		Stage: "test",
-		TxID:  testTx.GetTxID(ctx),
-		Data:  "test",
+	testOc.HandleEvent(ctx, &TransactionAssembledEvent{
+		privateTransactionEvent: privateTransactionEvent{
+			transactionID:   testTx.ID.String(),
+			contractAddress: "test",
+		},
+		TransactionAssembledEvent: sequence.TransactionAssembledEvent{
+			TransactionId: testTx.ID.String(),
+		},
 	})
 	<-waitForProcessEvent
-	newStageContext = testOc.incompleteTxSProcessMap[testTx.GetTxID(ctx)].GetStageContext(ctx)
+	newStageContext = testOc.incompleteTxSProcessMap[testTx.ID.String()].GetStageContext(ctx)
 	assert.NotEqual(t, stageContext, newStageContext)
 
 }
@@ -199,13 +195,8 @@ func TestOrchestratorPollingLoopRemoveCompletedTx(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	newTxID := uuid.New()
-	testTx := &transactionstore.TransactionWrapper{
-		Transaction: transactionstore.Transaction{
-			ID: newTxID,
-		},
-		PrivateTransaction: &components.PrivateTransaction{
-			ID: newTxID,
-		},
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
 	}
 	testOc, _ := newOrchestratorForTesting(t, ctx, nil)
 

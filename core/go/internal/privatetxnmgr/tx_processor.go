@@ -63,14 +63,14 @@ type TxProcessor interface {
 	handleTransactionDelegatedEvent(ctx context.Context, event *TransactionDelegatedEvent)
 }
 
-func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, emitEvent EmitEvent, endorsementGatherer ptmgrtypes.EndorsementGatherer) TxProcessor {
+func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer) TxProcessor {
 	return &PaladinTxProcessor{
 		stageErrorRetry:     10 * time.Second,
 		sequencer:           sequencer,
 		domainAPI:           domainAPI,
 		nodeID:              nodeID,
 		components:          components,
-		emitEvent:           emitEvent,
+		publisher:           publisher,
 		endorsementGatherer: endorsementGatherer,
 		transaction:         transaction,
 		status:              "new",
@@ -96,7 +96,7 @@ type PaladinTxProcessor struct {
 	domainAPI           components.DomainSmartContract
 	sequencer           ptmgrtypes.Sequencer
 	transaction         *components.PrivateTransaction
-	emitEvent           EmitEvent
+	publisher           ptmgrtypes.Publisher
 	endorsementGatherer ptmgrtypes.EndorsementGatherer
 	status              string
 }
@@ -374,8 +374,9 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 		//TODO return nil, err
 	}
 
-	ts.emitEvent(ctx, &TransactionSignedEvent{
-		attestationResult: &prototk.AttestationResult{
+	ts.publisher.PublishTransactionSignedEvent(ctx,
+		ts.transaction.ID.String(),
+		&prototk.AttestationResult{
 			Name:            attRequest.Name,
 			AttestationType: attRequest.AttestationType,
 			Verifier: &prototk.ResolvedVerifier{
@@ -385,7 +386,7 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 			},
 			Payload: signaturePayload.Payload,
 		},
-	})
+	)
 }
 
 func (ts *PaladinTxProcessor) requestSignatures(ctx context.Context) {
@@ -434,13 +435,11 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 			//TODO specific error message
 			//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
 		}
-		ts.emitEvent(ctx, &TransactionEndorsedEvent{
-			privateTransactionEvent: privateTransactionEvent{
-				transactionID: ts.transaction.ID.String(),
-			},
-			endorsement:  endorsement,
-			revertReason: revertReason,
-		})
+		ts.publisher.PublishTransactionEndorsedEvent(ctx,
+			ts.transaction.ID.String(),
+			endorsement,
+			revertReason,
+		)
 
 	} else {
 		// This is a remote party, so we need to send an endorsement request to the remote node

@@ -163,6 +163,8 @@ type Publisher interface {
 	//Service for sending messages and events within the local node
 	PublishTransactionBlockedEvent(ctx context.Context, transactionId string) error
 	PublishTransactionDispatchedEvent(ctx context.Context, transactionId string, nonce uint64, signingAddress string) error
+	PublishTransactionSignedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult) error
+	PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult, revertReason *string) error
 }
 
 type Dispatcher interface {

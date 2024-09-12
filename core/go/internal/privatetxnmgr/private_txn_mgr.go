@@ -92,11 +92,6 @@ func NewEngine(nodeID string) Engine {
 
 func (e *engine) getOrchestratorForContract(ctx context.Context, contractAddr tktypes.EthAddress, domainAPI components.DomainSmartContract) (oc *Orchestrator, err error) {
 
-	emitEvent := func(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
-		//TODO better
-		event.SetContractAddress(contractAddr.String())
-		e.HandleNewEvent(ctx, event)
-	}
 	if e.orchestrators[contractAddr.String()] == nil {
 		publisher := NewPublisher(e, contractAddr.String())
 		dispatcher := NewDispatcher(contractAddr.String(), publisher)
@@ -121,7 +116,7 @@ func (e *engine) getOrchestratorForContract(ctx context.Context, contractAddr tk
 				domainAPI,
 				seq,
 				endorsementGatherer,
-				emitEvent,
+				publisher,
 			)
 		orchestratorDone, err := e.orchestrators[contractAddr.String()].Start(ctx)
 		if err != nil {

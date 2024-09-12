@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
 func NewPublisher(e *engine, contractAddress string) *publisher {
@@ -62,4 +63,29 @@ func (p *publisher) PublishTransactionDispatchedEvent(ctx context.Context, trans
 	})
 	return nil
 
+}
+
+func (p *publisher) PublishTransactionSignedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult) error {
+	event := &TransactionSignedEvent{
+		privateTransactionEvent: privateTransactionEvent{
+			contractAddress: p.contractAddress,
+			transactionID:   transactionId,
+		},
+		attestationResult: attestationResult,
+	}
+	p.engine.HandleNewEvent(ctx, event)
+	return nil
+}
+
+func (p *publisher) PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, endorsement *prototk.AttestationResult, revertReason *string) error {
+	event := &TransactionEndorsedEvent{
+		privateTransactionEvent: privateTransactionEvent{
+			contractAddress: p.contractAddress,
+			transactionID:   transactionId,
+		},
+		endorsement:  endorsement,
+		revertReason: revertReason,
+	}
+	p.engine.HandleNewEvent(ctx, event)
+	return nil
 }

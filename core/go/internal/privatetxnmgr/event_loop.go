@@ -133,8 +133,8 @@ type Orchestrator struct {
 	domainAPI           components.DomainSmartContract
 	sequencer           ptmgrtypes.Sequencer
 	components          components.PreInitComponentsAndManagers
-	emitEvent           EmitEvent
 	endorsementGatherer ptmgrtypes.EndorsementGatherer
+	publisher           ptmgrtypes.Publisher
 }
 
 var orchestratorConfigDefault = OrchestratorConfig{
@@ -146,7 +146,7 @@ var orchestratorConfigDefault = OrchestratorConfig{
 	MaxPendingEvents:        confutil.P(500),
 }
 
-func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string, oc *OrchestratorConfig, allComponents components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, endorsementGatherer ptmgrtypes.EndorsementGatherer, emitEvent EmitEvent) *Orchestrator {
+func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string, oc *OrchestratorConfig, allComponents components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, endorsementGatherer ptmgrtypes.EndorsementGatherer, publisher ptmgrtypes.Publisher) *Orchestrator {
 
 	newOrchestrator := &Orchestrator{
 		ctx:                  log.WithLogField(ctx, "role", fmt.Sprintf("orchestrator-%s", contractAddress)),
@@ -170,8 +170,8 @@ func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string,
 		domainAPI:                    domainAPI,
 		sequencer:                    sequencer,
 		components:                   allComponents,
-		emitEvent:                    emitEvent,
 		endorsementGatherer:          endorsementGatherer,
+		publisher:                    publisher,
 	}
 
 	newOrchestrator.sequencer = sequencer
@@ -332,7 +332,7 @@ func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *component
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.emitEvent, oc.endorsementGatherer)
+			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.publisher, oc.endorsementGatherer)
 		}
 		oc.incompleteTxSProcessMap[tx.ID.String()].Init(ctx)
 		oc.pendingEvents <- &TransactionSubmittedEvent{
