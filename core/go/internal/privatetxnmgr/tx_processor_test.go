@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -52,7 +53,7 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 		keyManager:           componentmocks.NewKeyManager(t),
 		sequencer:            privatetxnmgrmocks.NewSequencer(t),
 		endorsementGatherer:  privatetxnmgrmocks.NewEndorsementGatherer(t),
-		emitEvent:            func(ctx context.Context, event PrivateTransactionEvent) {},
+		emitEvent:            func(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {},
 	}
 	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
