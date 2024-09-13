@@ -1,11 +1,7 @@
 import { expect } from "chai";
 import { ContractTransactionReceipt, ZeroAddress } from "ethers";
 import { ethers } from "hardhat";
-<<<<<<< HEAD
-import { Atom } from "../../../typechain-types";
-=======
-import { Atom, Noto } from "../typechain-types";
->>>>>>> main
+import { Atom, Noto } from "../../../typechain-types";
 import {
   deployNotoInstance,
   fakeTXO,
@@ -26,13 +22,8 @@ describe("Atom", function () {
     const ERC20Simple = await ethers.getContractFactory("ERC20Simple");
 
     // Deploy two contracts
-<<<<<<< HEAD
-    const noto = await Noto.connect(notary1).deploy(
-      notary1.address,
-=======
     const noto: Noto = Noto.attach(
       await deployNotoInstance(notoFactory, Noto.interface, notary1.address)
->>>>>>> main
     );
     const erc20 = await ERC20Simple.connect(notary2).deploy("Token", "TOK");
 

@@ -2,13 +2,8 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
 import { AbiCoder, ContractTransactionReceipt, Signer } from "ethers";
 import hre, { ethers } from "hardhat";
-<<<<<<< HEAD
 import { NotoSelfSubmit } from "../../../typechain-types";
-import { fakeTXO, randomBytes32 } from "./Noto";
-=======
-import { NotoSelfSubmit } from "../../typechain-types";
 import { fakeTXO, NotoConfigID_V0, randomBytes32 } from "./Noto";
->>>>>>> main
 
 export async function prepareSignature(
   noto: NotoSelfSubmit,
@@ -55,7 +50,7 @@ describe("NotoSelfSubmit", function () {
       (l) => NotoFactory.interface.parseLog(l)?.name === "PaladinRegisterSmartContract_V0"
     );
     expect(deployEvent).to.exist;
-    const noto = Noto.attach(deployEvent?.address ?? "");
+    const noto = Noto.attach(deployEvent?.args.instance ?? "");
 
     return { noto, notary, other };
   }
