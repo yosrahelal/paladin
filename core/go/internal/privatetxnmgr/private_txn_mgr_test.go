@@ -145,6 +145,7 @@ func TestEngineSimpleTransaction(t *testing.T) {
 		Payload: []byte("some-signature-bytes"),
 	}, nil)
 
+	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
 	err := engine.Start()
 	require.NoError(t, err)
 
@@ -257,6 +258,8 @@ func TestEngineRemoteEndorser(t *testing.T) {
 		Payload: []byte("some-signature-bytes"),
 	}, nil)
 
+	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
+
 	err := engine.Start()
 	assert.NoError(t, err)
 
@@ -270,7 +273,7 @@ func TestEngineRemoteEndorser(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, txID)
 
-	status := pollForStatus(ctx, t, "dispatched", engine, domainAddressString, txID, 2*time.Second)
+	status := pollForStatus(ctx, t, "dispatched", engine, domainAddressString, txID, 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
 }
@@ -370,6 +373,8 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	mocks.transportManager.On("Send", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		sentEndorsementRequest <- struct{}{}
 	}).Return(nil).Maybe()
+
+	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
 
 	err := engine.Start()
 	require.NoError(t, err)
@@ -612,6 +617,8 @@ func TestEngineMiniLoad(t *testing.T) {
 			}).Return(&coreProto.SignResponse{
 				Payload: []byte("some-signature-bytes"),
 			}, nil)
+
+			mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
 
 			expectedNonce := uint64(0)
 

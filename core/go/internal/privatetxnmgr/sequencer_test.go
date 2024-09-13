@@ -77,7 +77,7 @@ func TestSequencerTwoGraphsOfOne(t *testing.T) {
 	err = node1Sequencer.AssignTransaction(ctx, txn1ID.String())
 	require.NoError(t, err)
 
-	node1SequencerMockDependencies.dispatcherMock.On("Dispatch", ctx, []uuid.UUID{txn1ID}).Return(nil).Once()
+	node1SequencerMockDependencies.dispatcherMock.On("DispatchTransactions", ctx, []uuid.UUID{txn1ID}).Return(nil).Once()
 	err = node1Sequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
 		TransactionId: txn1ID.String(),
 	})
@@ -94,7 +94,7 @@ func TestSequencerTwoGraphsOfOne(t *testing.T) {
 	err = node1Sequencer.AssignTransaction(ctx, txn2ID.String())
 	require.NoError(t, err)
 
-	node1SequencerMockDependencies.dispatcherMock.On("Dispatch", ctx, []uuid.UUID{txn2ID}).Return(nil).Once()
+	node1SequencerMockDependencies.dispatcherMock.On("DispatchTransactions", ctx, []uuid.UUID{txn2ID}).Return(nil).Once()
 	err = node1Sequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
 		TransactionId: txn2ID.String(),
 	})
@@ -138,7 +138,7 @@ func TestSequencerLocalUnendorsedDependency(t *testing.T) {
 	require.NoError(t, err)
 
 	// add the mock for dispatch now because we need to assert that it is called but not before txn1 is endorsed
-	node1SequencerMockDependencies.dispatcherMock.On("Dispatch", ctx, []uuid.UUID{txn1ID, txn2ID}).Return(nil).Once()
+	node1SequencerMockDependencies.dispatcherMock.On("DispatchTransactions", ctx, []uuid.UUID{txn1ID, txn2ID}).Return(nil).Once()
 
 	//now endorse txn1 and expect that both txn1 and txn2 are dispatched
 	err = node1Sequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
