@@ -1,8 +1,13 @@
 import { expect } from "chai";
 import { ContractTransactionReceipt, ZeroAddress } from "ethers";
 import { ethers } from "hardhat";
+<<<<<<< HEAD
 import { Atom } from "../../../typechain-types";
+=======
+import { Atom, Noto } from "../typechain-types";
+>>>>>>> main
 import {
+  deployNotoInstance,
   fakeTXO,
   newTransferHash,
   randomBytes32,
@@ -12,14 +17,22 @@ describe("Atom", function () {
   it("atomic operation with 2 encoded calls", async function () {
     const [notary1, notary2, anybody1, anybody2] = await ethers.getSigners();
 
+    const NotoFactory = await ethers.getContractFactory("NotoFactory");
+    const notoFactory = await NotoFactory.deploy();
+
     const Noto = await ethers.getContractFactory("Noto");
     const AtomFactory = await ethers.getContractFactory("AtomFactory");
     const Atom = await ethers.getContractFactory("Atom");
     const ERC20Simple = await ethers.getContractFactory("ERC20Simple");
 
     // Deploy two contracts
+<<<<<<< HEAD
     const noto = await Noto.connect(notary1).deploy(
       notary1.address,
+=======
+    const noto: Noto = Noto.attach(
+      await deployNotoInstance(notoFactory, Noto.interface, notary1.address)
+>>>>>>> main
     );
     const erc20 = await ERC20Simple.connect(notary2).deploy("Token", "TOK");
 
@@ -99,13 +112,16 @@ describe("Atom", function () {
   it("revert propagation", async function () {
     const [notary1, anybody1, anybody2] = await ethers.getSigners();
 
+    const NotoFactory = await ethers.getContractFactory("NotoFactory");
+    const notoFactory = await NotoFactory.deploy();
+
     const Noto = await ethers.getContractFactory("Noto");
     const AtomFactory = await ethers.getContractFactory("AtomFactory");
     const Atom = await ethers.getContractFactory("Atom");
 
     // Deploy noto contract
-    const noto = await Noto.connect(notary1).deploy(
-      notary1.address,
+    const noto: Noto = Noto.attach(
+      await deployNotoInstance(notoFactory, Noto.interface, notary1.address)
     );
 
     // Fake up a delegation
