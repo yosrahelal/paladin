@@ -41,7 +41,7 @@ const (
 	inKey = "in"
 	// NinKey is the key for the not in field in the query
 	ninKey = "nin"
-	// IsNullKey is the key for the is null field in the query
+	// isNullKey is the key for the is null field in the query
 	isNullKey = "null"
 	// LikeKey is the key for the like field in the query
 	likeKey = "like"
@@ -71,41 +71,41 @@ type QueryBuilder interface {
 	// Sort adds a sort filter to the query
 	Sort(fields string) QueryBuilder
 
-	// IsEqual adds an equal filter to the query
-	IsEqual(field, value string, adds ...addOns) QueryBuilder
+	// Equal adds an equal filter to the query
+	Equal(field, value string, adds ...addOns) QueryBuilder
 
-	// IsNotEqual adds a not equal filter to the query
-	IsNotEqual(field, value string, adds ...addOns) QueryBuilder
+	// NotEqual adds a not equal filter to the query
+	NotEqual(field, value string, adds ...addOns) QueryBuilder
 
-	// IsGreaterThan adds a greater than filter to the query
-	IsGreaterThan(field string, value int64) QueryBuilder
+	// GreaterThan adds a greater than filter to the query
+	GreaterThan(field string, value int64) QueryBuilder
 
-	// IsGreaterThanOrEqual adds a greater than or equal filter to the query
-	IsGreaterThanOrEqual(field string, value int64) QueryBuilder
+	// GreaterThanOrEqual adds a greater than or equal filter to the query
+	GreaterThanOrEqual(field string, value int64) QueryBuilder
 
-	// IsLessThan adds a less than filter to the query
-	IsLessThan(field string, value int64) QueryBuilder
+	// LessThan adds a less than filter to the query
+	LessThan(field string, value int64) QueryBuilder
 
-	// IsLessThanOrEqual adds a less than or equal filter to the query
-	IsLessThanOrEqual(field string, value int64) QueryBuilder
+	// LessThanOrEqual adds a less than or equal filter to the query
+	LessThanOrEqual(field string, value int64) QueryBuilder
 
-	// IsIn adds an in filter to the query
-	IsIn(field string, values []string, adds ...addOns) QueryBuilder
+	// In adds an in filter to the query
+	In(field string, values []string, adds ...addOns) QueryBuilder
 
-	// IsNotIn adds a not in filter to the query
-	IsNotIn(field string, values []string, adds ...addOns) QueryBuilder
+	// NotIn adds a not in filter to the query
+	NotIn(field string, values []string, adds ...addOns) QueryBuilder
 
-	// IsNull adds an is null filter to the query
-	IsNull(field string) QueryBuilder
+	// Null adds an is null filter to the query
+	Null(field string) QueryBuilder
 
-	// IsNotNull adds an is not null filter to the query
-	IsNotNull(field string) QueryBuilder
+	// NotNull adds an is not null filter to the query
+	NotNull(field string) QueryBuilder
 
-	// IsLike adds a like filter to the query
-	IsLike(field, value string) QueryBuilder
+	// Like adds a like filter to the query
+	Like(field, value string) QueryBuilder
 
-	// IsNotLike adds a not like filter to the query
-	IsNotLike(field, value string) QueryBuilder
+	// NotLike adds a not like filter to the query
+	NotLike(field, value string) QueryBuilder
 
 	// Or creates an OR condition between multiple queries
 	Or(...QueryBuilder) QueryBuilder
@@ -139,63 +139,63 @@ func (qb *queryBuilderImpl) Sort(fields string) QueryBuilder {
 	return qb
 }
 
-// IsEqual adds an equal filter to the query
-func (qb *queryBuilderImpl) IsEqual(field, value string, adds ...addOns) QueryBuilder {
+// Equal adds an equal filter to the query
+func (qb *queryBuilderImpl) Equal(field, value string, adds ...addOns) QueryBuilder {
 	return qb.setField(eqKey, field, value, adds...)
 }
 
-// IsNotEqual adds a not equal filter to the query
-func (qb *queryBuilderImpl) IsNotEqual(field, value string, adds ...addOns) QueryBuilder {
+// NotEqual adds a not equal filter to the query
+func (qb *queryBuilderImpl) NotEqual(field, value string, adds ...addOns) QueryBuilder {
 	return qb.setField(nqKey, field, value, adds...)
 }
 
-// IsGreaterThan adds a greater than filter to the query
-func (qb *queryBuilderImpl) IsGreaterThan(field string, value int64) QueryBuilder {
+// GreaterThan adds a greater than filter to the query
+func (qb *queryBuilderImpl) GreaterThan(field string, value int64) QueryBuilder {
 	return qb.setField(gtKey, field, value)
 }
 
-// IsGreaterThanOrEqual adds a greater than or equal filter to the query
-func (qb *queryBuilderImpl) IsGreaterThanOrEqual(field string, value int64) QueryBuilder {
+// GreaterThanOrEqual adds a greater than or equal filter to the query
+func (qb *queryBuilderImpl) GreaterThanOrEqual(field string, value int64) QueryBuilder {
 	return qb.setField(geKey, field, value)
 }
 
-// IsLessThan adds a less than filter to the query
-func (qb *queryBuilderImpl) IsLessThan(field string, value int64) QueryBuilder {
+// LessThan adds a less than filter to the query
+func (qb *queryBuilderImpl) LessThan(field string, value int64) QueryBuilder {
 	return qb.setField(ltKey, field, value)
 }
 
-// IsLessThanOrEqual adds a less than or equal filter to the query
-func (qb *queryBuilderImpl) IsLessThanOrEqual(field string, value int64) QueryBuilder {
+// LessThanOrEqual adds a less than or equal filter to the query
+func (qb *queryBuilderImpl) LessThanOrEqual(field string, value int64) QueryBuilder {
 	return qb.setField(leKey, field, value)
 }
 
-// IsIn adds an in filter to the query
-func (qb *queryBuilderImpl) IsIn(field string, values []string, adds ...addOns) QueryBuilder {
+// In adds an in filter to the query
+func (qb *queryBuilderImpl) In(field string, values []string, adds ...addOns) QueryBuilder {
 	return qb.setFields(inKey, field, values, adds...)
 }
 
-// IsNotIn adds a not in filter to the query
-func (qb *queryBuilderImpl) IsNotIn(field string, values []string, adds ...addOns) QueryBuilder {
+// NotIn adds a not in filter to the query
+func (qb *queryBuilderImpl) NotIn(field string, values []string, adds ...addOns) QueryBuilder {
 	return qb.setFields(ninKey, field, values, adds...)
 }
 
-// IsNull adds an is null filter to the query
-func (qb *queryBuilderImpl) IsNull(field string) QueryBuilder {
+// Null adds an is null filter to the query
+func (qb *queryBuilderImpl) Null(field string) QueryBuilder {
 	return qb.setField(isNullKey, field, nil)
 }
 
-// IsNotNull adds an is not null filter to the query
-func (qb *queryBuilderImpl) IsNotNull(field string) QueryBuilder {
+// NotNull adds an is not null filter to the query
+func (qb *queryBuilderImpl) NotNull(field string) QueryBuilder {
 	return qb.setField(isNullKey, field, nil, Not)
 }
 
-// IsLike adds a like filter to the query
-func (qb *queryBuilderImpl) IsLike(field, value string) QueryBuilder {
+// Like adds a like filter to the query
+func (qb *queryBuilderImpl) Like(field, value string) QueryBuilder {
 	return qb.setField(likeKey, field, value)
 }
 
-// IsNotLike adds a not like filter to the query
-func (qb *queryBuilderImpl) IsNotLike(field, value string) QueryBuilder {
+// NotLike adds a not like filter to the query
+func (qb *queryBuilderImpl) NotLike(field, value string) QueryBuilder {
 	return qb.setField(likeKey, field, value, Not)
 }
 

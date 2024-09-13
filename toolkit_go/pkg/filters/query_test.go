@@ -62,18 +62,18 @@ func TestQuery(t *testing.T) {
 	query := NewQueryBuilder().
 		Limit(10).
 		Sort("field1").Sort("field2").
-		IsEqual("field1", "value1").
-		IsNotEqual("field2", "value2").
-		IsLike("field3", "some value").
-		IsLessThan("field4", 12345).
-		IsLessThanOrEqual("field5", 23456).
-		IsGreaterThan("field6", 34567).
-		IsGreaterThanOrEqual("field7", 45678).
-		IsIn("field8", []string{"a", "b", "c"}).
-		IsNotIn("field9", []string{"x", "y", "z"}).
-		IsNotNull("field10").
-		IsNull("field11").
-		IsEqual("field12", "value12", Not, CaseInsensitive).
+		Equal("field1", "value1").
+		NotEqual("field2", "value2").
+		Like("field3", "some value").
+		LessThan("field4", 12345).
+		LessThanOrEqual("field5", 23456).
+		GreaterThan("field6", 34567).
+		GreaterThanOrEqual("field7", 45678).
+		In("field8", []string{"a", "b", "c"}).
+		NotIn("field9", []string{"x", "y", "z"}).
+		NotNull("field10").
+		Null("field11").
+		Equal("field12", "value12", Not, CaseInsensitive).
 		Query()
 
 	jsonQuery, err := query.JSON()
@@ -108,12 +108,12 @@ func TestQuery_StringOr(t *testing.T) {
 
 	query := NewQueryBuilder().
 		Or(
-			NewQueryBuilder().IsEqual("field1", "value1"),
-			NewQueryBuilder().IsNotEqual("field2", "value2"),
+			NewQueryBuilder().Equal("field1", "value1"),
+			NewQueryBuilder().NotEqual("field2", "value2"),
 		).
 		Or(
-			NewQueryBuilder().IsEqual("field3", "value3"),
-			NewQueryBuilder().IsNotEqual("field4", "value4"),
+			NewQueryBuilder().Equal("field3", "value3"),
+			NewQueryBuilder().NotEqual("field4", "value4"),
 		).
 		Query().String()
 
@@ -183,7 +183,7 @@ func TestQueryBuilderImpl_Sort(t *testing.T) {
 	}
 }
 
-func TestQueryBuilderImpl_IsIn(t *testing.T) {
+func TestQueryBuilderImpl_In(t *testing.T) {
 	tests := []struct {
 		name     string
 		field    string
@@ -239,12 +239,12 @@ func TestQueryBuilderImpl_IsIn(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := NewQueryBuilder()
-			qb.IsIn(tt.field, tt.values, tt.adds...)
+			qb.In(tt.field, tt.values, tt.adds...)
 			assert.Equal(t, tt.expected, qb.query.query)
 		})
 	}
 }
-func TestQueryBuilderImpl_IsNotIn(t *testing.T) {
+func TestQueryBuilderImpl_NotIn(t *testing.T) {
 	tests := []struct {
 		name     string
 		field    string
@@ -300,13 +300,13 @@ func TestQueryBuilderImpl_IsNotIn(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := NewQueryBuilder()
-			qb.IsNotIn(tt.field, tt.values, tt.adds...)
+			qb.NotIn(tt.field, tt.values, tt.adds...)
 
 			assert.Equal(t, tt.expected, qb.query.query)
 		})
 	}
 }
-func TestQueryBuilderImpl_IsNull(t *testing.T) {
+func TestQueryBuilderImpl_Null(t *testing.T) {
 	tests := []struct {
 		name     string
 		field    string
@@ -326,12 +326,12 @@ func TestQueryBuilderImpl_IsNull(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := NewQueryBuilder()
-			qb.IsNull(tt.field)
+			qb.Null(tt.field)
 			assert.Equal(t, tt.expected, qb.query.query)
 		})
 	}
 }
-func TestQueryBuilderImpl_IsLike(t *testing.T) {
+func TestQueryBuilderImpl_Like(t *testing.T) {
 	tests := []struct {
 		name     string
 		field    string
@@ -353,12 +353,12 @@ func TestQueryBuilderImpl_IsLike(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := NewQueryBuilder()
-			qb.IsLike(tt.field, tt.value)
+			qb.Like(tt.field, tt.value)
 			assert.Equal(t, tt.expected, qb.query.query)
 		})
 	}
 }
-func TestQueryBuilderImpl_IsNotLike(t *testing.T) {
+func TestQueryBuilderImpl_NotLike(t *testing.T) {
 	tests := []struct {
 		name     string
 		field    string
@@ -380,7 +380,7 @@ func TestQueryBuilderImpl_IsNotLike(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := NewQueryBuilder()
-			qb.IsNotLike(tt.field, tt.value)
+			qb.NotLike(tt.field, tt.value)
 			assert.Equal(t, tt.expected, qb.query.query)
 		})
 	}
