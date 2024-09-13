@@ -187,7 +187,7 @@ func TestNoto(t *testing.T) {
 		}),
 	})
 	require.NotNil(t, rpcerr)
-	assert.ErrorContains(t, rpcerr.Error(), "mint can only be initiated by notary")
+	assert.ErrorContains(t, rpcerr.Error(), "Mint can only be initiated by notary")
 	assert.True(t, boolResult)
 
 	log.L(ctx).Infof("Transfer 150 from notary (should fail)")
