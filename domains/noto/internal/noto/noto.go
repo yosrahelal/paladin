@@ -100,8 +100,7 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *pb.ConfigureDomainReque
 
 	return &pb.ConfigureDomainResponse{
 		DomainConfig: &pb.DomainConfig{
-			FactoryContractAddress: config.FactoryAddress,
-			AbiStateSchemasJson:    []string{string(schemaJSON)},
+			AbiStateSchemasJson: []string{string(schemaJSON)},
 			BaseLedgerSubmitConfig: &pb.BaseLedgerSubmitConfig{
 				SubmitMode: pb.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
 			},

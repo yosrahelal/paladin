@@ -84,9 +84,9 @@ func newTestDomain(t *testing.T, domainName string, config *types.Config) (conte
 	})
 	url, done, err := tb.StartForTest("../../testbed.config.yaml", map[string]*testbed.TestbedDomain{
 		domainName: {
-			Config:         mapConfig(t, config),
-			Plugin:         plugin,
-			FactoryAddress: tktypes.MustEthAddress(config.FactoryAddress),
+			Config:          mapConfig(t, config),
+			Plugin:          plugin,
+			RegistryAddress: tktypes.MustEthAddress(config.FactoryAddress),
 		},
 	})
 	require.NoError(t, err)

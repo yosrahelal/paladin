@@ -125,9 +125,9 @@ func newTestDomain(t *testing.T, domainName string, domainContracts *zetoDomainC
 	})
 	url, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{
 		domainName: {
-			Config:         mapConfig(t, config),
-			Plugin:         plugin,
-			FactoryAddress: domainContracts.factoryAddress,
+			Config:          mapConfig(t, config),
+			Plugin:          plugin,
+			RegistryAddress: domainContracts.factoryAddress,
 		},
 	})
 	require.NoError(t, err)
