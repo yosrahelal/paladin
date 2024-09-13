@@ -124,8 +124,12 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *pb.PrepareDeployRequest) 
 	if err != nil {
 		return nil, err
 	}
+	notary := domain.FindVerifier(params.Notary, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
+	if notary == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "notary")
+	}
 	config := &types.NotoConfigInput_V0{
-		NotaryLookup: req.ResolvedVerifiers[0].Lookup,
+		NotaryLookup: notary.Lookup,
 	}
 	configABI, err := n.encodeConfig(config)
 	if err != nil {
@@ -135,7 +139,7 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *pb.PrepareDeployRequest) 
 	deployParams := &NotoDeployParams{
 		Name:          params.Implementation,
 		TransactionID: req.Transaction.TransactionId,
-		Notary:        req.ResolvedVerifiers[0].Verifier,
+		Notary:        notary.Verifier,
 		Config:        configABI,
 	}
 	paramsJSON, err := json.Marshal(deployParams)
