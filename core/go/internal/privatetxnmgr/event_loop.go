@@ -26,7 +26,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
-	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -34,19 +33,11 @@ import (
 
 // Orchestrator orchestrates transaction processing within a specific private preserving contract
 // Key responsibilities:
-// 1. Fairness control for transaction processing within a contract
-// 1. Apply stage-aware ordering constraints between transactions
-// 1. Detect and initiating stage processing of each transactions through 2 ways:
+// - Fairness control for transaction processing within a contract
+// - Apply ordering constraints between transactions
+// - Detect and initiating stage processing of each transactions through 2 ways:
 //    a. events through a buffered channel for back-pressure to drive the pace
 //    b. fetching from DB as a fallback mechanism when events are missed
-// 1. Provide transaction data access for stage processing with a consistent cache for efficiency
-// 1. Provide an efficient lookup for pre req tx check
-
-// TBD: decide whether this generic logic should be reused by the following levels of orchestrations:
-// 1. Transactions in a chain
-// 1. a private preserving contract instance and its transaction chains
-// 1. a private preserving contract domain and its instance
-// 1. runtime and private preserving contract domains
 
 // configurations
 const (
@@ -185,6 +176,7 @@ func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string,
 func (oc *Orchestrator) getTransactionProcessor(txID string) ptmgrtypes.TxProcessor {
 	oc.incompleteTxProcessMapMutex.Lock()
 	defer oc.incompleteTxProcessMapMutex.Unlock()
+	//TODO if the transaction is not in memory, we need to load it from the database
 	return oc.incompleteTxSProcessMap[txID]
 }
 
@@ -352,7 +344,7 @@ func (oc *Orchestrator) HandleEvent(ctx context.Context, event ptmgrtypes.Privat
 		// or throw the event away and waste another cycle to redo the actions
 		// (doesn't feel right, maybe for some events only persistence is needed)
 
-		//TODO we have an event for a transaction that we have swapped out of memory.  Need to reload the transaction from the database before we can proces this event
+		// TODO we have an event for a transaction that we have swapped out of memory.  Need to reload the transaction from the database before we can proces this event
 		// and we need to do this in a way that doesn't exceed the maxConcurrentProcess and doesn't allow events from a runaway remote node to cause a noisy neighbor problem for events
 		// from the local node
 		panic("Transaction not found")
@@ -361,23 +353,6 @@ func (oc *Orchestrator) HandleEvent(ctx context.Context, event ptmgrtypes.Privat
 	oc.pendingEvents <- event
 }
 
-// this function should only have one running instance at any given time
-/*
-
-	func (oc *Orchestrator) ProcessIncompleteTransactions(ctx context.Context, txStages map[string]TxProcessor) (blockedByPreReq bool) {
-		processStart := time.Now()
-		blockedByPreReq = false
-		log.L(ctx).Debugf("%s ProcessIncompleteTransactions entry for contract address %s", processStart.String(), oc.contractAddress)
-
-		for txID, stage := range txStages {
-			log.L(ctx).Tracef("%s ProcessIncompleteTransactions for contract address %s processing transaction with ID: %s, current stage: %s", processStart.String(), oc.contractAddress, txID, stage)
-			// TODO: stage plugin here
-		}
-
-		log.L(ctx).Debugf("%s ProcessIncompleteTransactions exit for contract address: %s, process %d over %s", processStart.String(), oc.contractAddress, len(txStages), time.Since(processStart))
-		return blockedByPreReq
-	}
-*/
 func (oc *Orchestrator) Start(c context.Context) (done <-chan struct{}, err error) {
 	oc.orchestratorLoopDone = make(chan struct{})
 	go oc.evaluationLoop()
@@ -415,18 +390,6 @@ func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status pt
 	}
 	//TODO should be possible to query the status of a transaction that is not inflight
 	return ptmgrtypes.TxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError, "Transaction not found")
-}
-
-func (oc *Orchestrator) PreReqsMatchCondition(ctx context.Context, preReqTxIDs []string, conditionFunc func(tsg transactionstore.TxStateGetters) (preReqComplete bool)) (filteredPreReqTxIDs []string) {
-	// TODO
-	return preReqTxIDs
-}
-func (oc *Orchestrator) GetPreReqDispatchAddresses(ctx context.Context, preReqTxIDs []string) (dispatchAddresses []string) {
-	// TODO
-	return nil
-}
-func (oc *Orchestrator) RegisterPreReqTrigger(ctx context.Context, txID string, txPreReq *ptmgrtypes.TxProcessPreReq) {
-	// TODO
 }
 
 // syncronously prepare and dispatch all given transactions
