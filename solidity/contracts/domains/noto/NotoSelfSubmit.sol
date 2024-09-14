@@ -14,11 +14,9 @@ contract NotoSelfSubmit is Noto {
         0x0000000000000000000000000000000000000000000000000000000000000001;
 
     function initialize(
-        bytes32 transactionId,
-        address domain,
         address notary,
         bytes calldata config
-    ) public override initializer {
+    ) public override initializer returns (bytes memory) {
         __EIP712_init("noto", "0.0.1");
 
         NotoConfig_V0 memory configOut = _decodeConfig(config);
@@ -26,11 +24,7 @@ contract NotoSelfSubmit is Noto {
         configOut.variant = NotoVariantSelfSubmit;
 
         _notary = notary;
-        emit PaladinNewSmartContract_V0(
-            transactionId,
-            domain,
-            _encodeConfig(configOut)
-        );
+        return _encodeConfig(configOut);
     }
 
     function transfer(

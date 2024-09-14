@@ -12,11 +12,9 @@ interface INoto {
     event UTXOApproved(address delegate, bytes32 txhash, bytes signature);
 
     function initialize(
-        bytes32 transactionId,
-        address domain,
         address notary,
         bytes memory config
-    ) external;
+    ) external returns (bytes memory);
 
     function transfer(
         bytes32[] memory inputs,

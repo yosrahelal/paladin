@@ -59,10 +59,10 @@ export async function deployNotoInstance(
   );
   const deployReceipt = await deployTx.wait();
   const deployEvent = deployReceipt?.logs.find(
-    (l) => notoInterface.parseLog(l)?.name === "PaladinNewSmartContract_V0"
+    (l) => notoFactory.interface.parseLog(l)?.name === "PaladinRegisterSmartContract_V0"
   );
   expect(deployEvent).to.exist;
-  return deployEvent?.address ?? "";
+  return deployEvent?.args.instance ?? "";
 }
 
 describe("Noto", function () {

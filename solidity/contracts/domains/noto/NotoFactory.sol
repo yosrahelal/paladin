@@ -6,8 +6,9 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {INoto} from "../interfaces/INoto.sol";
 import {Noto} from "./Noto.sol";
+import {IPaladinContractRegistry_V0} from "../interfaces/IPaladinContractRegistry.sol";
 
-contract NotoFactory is Ownable {
+contract NotoFactory is Ownable, IPaladinContractRegistry_V0 {
     mapping(string => address) internal implementations;
 
     constructor() Ownable(_msgSender()) {
@@ -54,11 +55,11 @@ contract NotoFactory is Ownable {
         bytes calldata config
     ) internal {
         address instance = Clones.clone(implementation);
-        INoto(instance).initialize(
+        bytes memory data = INoto(instance).initialize(notary, config);
+        emit PaladinRegisterSmartContract_V0(
             transactionId,
-            address(this),
-            notary,
-            config
+            address(instance),
+            data
         );
     }
 }
