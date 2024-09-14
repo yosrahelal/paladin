@@ -18,25 +18,16 @@ package integrationtest
 import (
 	"context"
 	_ "embed"
-	"encoding/json"
 	"testing"
 
-	"github.com/go-resty/resty/v2"
-
 	"github.com/hyperledger/firefly-common/pkg/log"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
-	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
-	"github.com/kaleido-io/paladin/domains/noto/pkg/noto"
+	"github.com/kaleido-io/paladin/domains/integration-test/helpers"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
-	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,186 +49,6 @@ var (
 	bob    = "bob"
 )
 
-type AtomOperation struct {
-	ContractAddress ethtypes.Address0xHex     `json:"contractAddress"`
-	CallData        ethtypes.HexBytes0xPrefix `json:"callData"`
-}
-
-type TradeRequestInput struct {
-	Holder1       string                    `json:"holder1"`
-	Holder2       string                    `json:"holder2"`
-	TokenAddress1 ethtypes.Address0xHex     `json:"tokenAddress1"`
-	TokenAddress2 ethtypes.Address0xHex     `json:"tokenAddress2"`
-	TokenValue1   *ethtypes.HexInteger      `json:"tokenValue1"`
-	TokenValue2   *ethtypes.HexInteger      `json:"tokenValue2"`
-	TradeData1    ethtypes.HexBytes0xPrefix `json:"tradeData1"`
-	TradeData2    ethtypes.HexBytes0xPrefix `json:"tradeData2"`
-}
-
-type StateData struct {
-	Inputs  []*tktypes.FullState `json:"inputs"`
-	Outputs []*tktypes.FullState `json:"outputs"`
-}
-
-type AtomDeployed struct {
-	Address ethtypes.Address0xHex `json:"addr"`
-}
-
-func toJSON(t *testing.T, v any) []byte {
-	result, err := json.Marshal(v)
-	assert.NoError(t, err)
-	return result
-}
-
-func mapConfig(t *testing.T, config *types.DomainConfig) (m map[string]any) {
-	configJSON, err := json.Marshal(&config)
-	assert.NoError(t, err)
-	err = json.Unmarshal(configJSON, &m)
-	assert.NoError(t, err)
-	return m
-}
-
-func deployContracts(ctx context.Context, t *testing.T, contracts map[string][]byte) map[string]string {
-	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{})
-	assert.NoError(t, err)
-	defer done()
-	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
-
-	deployed := make(map[string]string, len(contracts))
-	for name, contract := range contracts {
-		build := domain.LoadBuild(contract)
-		var addr string
-		rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deployBytecode",
-			notary, build.ABI, build.Bytecode.String(), `{}`)
-		if rpcerr != nil {
-			assert.NoError(t, rpcerr.Error())
-		}
-		deployed[name] = addr
-	}
-	return deployed
-}
-
-func newNotoDomain(t *testing.T, config *types.DomainConfig) (*noto.Noto, *testbed.TestbedDomain) {
-	var domain noto.Noto
-	return &domain, &testbed.TestbedDomain{
-		Config: mapConfig(t, config),
-		Plugin: plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
-			domain = noto.New(callbacks)
-			return domain
-		}),
-		RegistryAddress: tktypes.MustEthAddress(config.FactoryAddress),
-	}
-}
-
-func notoDeploy(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domainName, notary string) ethtypes.Address0xHex {
-	var addr ethtypes.Address0xHex
-	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deploy",
-		domainName, &types.ConstructorParams{Notary: notary})
-	if rpcerr != nil {
-		assert.NoError(t, rpcerr.Error())
-	}
-	return addr
-}
-
-func notoMint(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, notoAddress ethtypes.Address0xHex, from, to string, amount int64) {
-	var result bool
-	rpcerr := rpc.CallRPC(ctx, &result, "testbed_invoke", &tktypes.PrivateContractInvoke{
-		From:     from,
-		To:       tktypes.EthAddress(notoAddress),
-		Function: *types.NotoABI.Functions()["mint"],
-		Inputs: toJSON(t, &types.MintParams{
-			To:     to,
-			Amount: ethtypes.NewHexInteger64(amount),
-		}),
-	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
-	assert.True(t, result)
-}
-
-func notoPrepareTransfer(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, notoAddress ethtypes.Address0xHex, from, to string, amount int64) *tktypes.PrivateContractPreparedTransaction {
-	var prepared tktypes.PrivateContractPreparedTransaction
-	rpcerr := rpc.CallRPC(ctx, &prepared, "testbed_prepare", &tktypes.PrivateContractInvoke{
-		From:     from,
-		To:       tktypes.EthAddress(notoAddress),
-		Function: *types.NotoABI.Functions()["approvedTransfer"],
-		Inputs: toJSON(t, &types.TransferParams{
-			To:     to,
-			Amount: ethtypes.NewHexInteger64(amount),
-		}),
-	})
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
-	return &prepared
-}
-
-func notoApprove(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, notoAddress ethtypes.Address0xHex, from string, delegate ethtypes.Address0xHex, call []byte) {
-	var result bool
-	rpcerr := rpc.CallRPC(ctx, &result, "testbed_invoke", &tktypes.PrivateContractInvoke{
-		From:     from,
-		To:       tktypes.EthAddress(notoAddress),
-		Function: *types.NotoABI.Functions()["approve"],
-		Inputs: toJSON(t, &types.ApproveParams{
-			Delegate: delegate,
-			Call:     call,
-		}),
-	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
-	assert.True(t, result)
-}
-
-func deployBuilder(ctx context.Context, t *testing.T, eth ethclient.EthClient, abi abi.ABI, bytecode []byte) ethclient.ABIFunctionRequestBuilder {
-	abiClient, err := eth.ABI(ctx, abi)
-	assert.NoError(t, err)
-	construct, err := abiClient.Constructor(ctx, bytecode)
-	assert.NoError(t, err)
-	return construct.R(ctx)
-}
-
-func functionBuilder(ctx context.Context, t *testing.T, eth ethclient.EthClient, abi abi.ABI, functionName string) ethclient.ABIFunctionRequestBuilder {
-	abiClient, err := eth.ABI(ctx, abi)
-	assert.NoError(t, err)
-	fn, err := abiClient.Function(ctx, functionName)
-	assert.NoError(t, err)
-	return fn.R(ctx)
-}
-
-func waitFor(ctx context.Context, t *testing.T, tb testbed.Testbed, txHash *tktypes.Bytes32, err error) *blockindexer.IndexedTransaction {
-	require.NoError(t, err)
-	tx, err := tb.Components().BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
-	assert.NoError(t, err)
-	return tx
-}
-
-func findEvent(ctx context.Context, t *testing.T, tb testbed.Testbed, txHash tktypes.Bytes32, abi abi.ABI, eventName string, eventParams interface{}) *blockindexer.EventWithData {
-	targetEvent := abi.Events()[eventName]
-	assert.NotNil(t, targetEvent)
-	assert.NotEmpty(t, targetEvent.SolString())
-	events, err := tb.Components().BlockIndexer().DecodeTransactionEvents(ctx, txHash, abi)
-	assert.NoError(t, err)
-	for _, event := range events {
-		if event.SoliditySignature == targetEvent.SolString() {
-			err = json.Unmarshal(event.Data, eventParams)
-			assert.NoError(t, err)
-			return event
-		}
-	}
-	return nil
-}
-
-func newTestbed(t *testing.T, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
-	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("./testbed.config.yaml", domains)
-	assert.NoError(t, err)
-	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
-	return done, tb, rpc
-}
-
 func TestPvP(t *testing.T) {
 	ctx := context.Background()
 	log.L(ctx).Infof("TestPvP")
@@ -249,7 +60,7 @@ func TestPvP(t *testing.T) {
 		"noto": notoFactoryJSON,
 		"atom": atomFactoryJSON,
 	}
-	contracts := deployContracts(ctx, t, contractSource)
+	contracts := deployContracts(ctx, t, notary, contractSource)
 	for name, address := range contracts {
 		log.L(ctx).Infof("%s deployed to %s", name, address)
 	}
@@ -262,125 +73,77 @@ func TestPvP(t *testing.T) {
 	})
 	defer done()
 
-	atomAddress, err := ethtypes.NewAddress(contracts["atom"])
-	assert.NoError(t, err)
-
 	_, aliceKey, err := tb.Components().KeyManager().ResolveKey(ctx, alice, algorithms.ECDSA_SECP256K1_PLAINBYTES)
 	require.NoError(t, err)
 	_, bobKey, err := tb.Components().KeyManager().ResolveKey(ctx, bob, algorithms.ECDSA_SECP256K1_PLAINBYTES)
 	require.NoError(t, err)
 
-	eth := tb.Components().EthClientFactory().HTTPClient()
-	atomFactory := domain.LoadBuild(atomFactoryJSON)
-	atom := domain.LoadBuild(atomJSON)
-	swap := domain.LoadBuild(swapJSON)
+	atomFactory := helpers.InitAtom(t, tb, rpc, contracts["atom"], domain.LoadBuild(atomFactoryJSON).ABI, domain.LoadBuild(atomJSON).ABI)
 
 	log.L(ctx).Infof("Deploying 2 instances of Noto")
-	notoGoldAddress := notoDeploy(ctx, t, rpc, domainName, notary)
-	notoSilverAddress := notoDeploy(ctx, t, rpc, domainName, notary)
-	log.L(ctx).Infof("Noto gold deployed to %s", notoGoldAddress)
-	log.L(ctx).Infof("Noto silver deployed to %s", notoSilverAddress)
+	notoGold := helpers.DeployNoto(ctx, t, rpc, domainName, notary)
+	notoSilver := helpers.DeployNoto(ctx, t, rpc, domainName, notary)
+	log.L(ctx).Infof("Noto gold deployed to %s", notoGold.Address)
+	log.L(ctx).Infof("Noto silver deployed to %s", notoSilver.Address)
 
 	log.L(ctx).Infof("Mint 10 gold to Alice")
-	notoMint(ctx, t, rpc, notoGoldAddress, notary, alice, 10)
+	notoGold.Mint(ctx, notary, alice, 10)
 	log.L(ctx).Infof("Mint 100 silver to Bob")
-	notoMint(ctx, t, rpc, notoSilverAddress, notary, bob, 100)
+	notoSilver.Mint(ctx, notary, bob, 100)
 
 	// TODO: this should be a Pente private contract, instead of a base ledger contract
 	log.L(ctx).Infof("Propose a trade of 1 gold for 10 silver")
-	txHash, err := deployBuilder(ctx, t, eth, swap.ABI, swap.Bytecode).
-		Signer(alice).
-		Input(toJSON(t, map[string]any{
-			"inputData": TradeRequestInput{
-				Holder1:       aliceKey,
-				TokenAddress1: notoGoldAddress,
-				TokenValue1:   ethtypes.NewHexInteger64(1),
+	swap := helpers.DeploySwap(ctx, t, tb, domain.LoadBuild(swapJSON), alice, &helpers.TradeRequestInput{
+		Holder1:       aliceKey,
+		TokenAddress1: notoGold.Address,
+		TokenValue1:   ethtypes.NewHexInteger64(1),
 
-				Holder2:       bobKey,
-				TokenAddress2: notoSilverAddress,
-				TokenValue2:   ethtypes.NewHexInteger64(10),
-			},
-		})).
-		SignAndSend()
-	swapDeploy := waitFor(ctx, t, tb, txHash, err)
-	swapAddress := ethtypes.Address0xHex(*swapDeploy.ContractAddress)
+		Holder2:       bobKey,
+		TokenAddress2: notoSilver.Address,
+		TokenValue2:   ethtypes.NewHexInteger64(10),
+	})
 
 	log.L(ctx).Infof("Prepare the transfers")
-	transferGold := notoPrepareTransfer(ctx, t, rpc, notoGoldAddress, alice, bob, 1)
-	transferSilver := notoPrepareTransfer(ctx, t, rpc, notoSilverAddress, bob, alice, 10)
+	transferGold := notoGold.PrepareTransfer(ctx, alice, bob, 1)
+	transferSilver := notoSilver.PrepareTransfer(ctx, bob, alice, 10)
 
 	// TODO: this should actually be a Pente state transition
 	log.L(ctx).Infof("Prepare the trade execute")
-	executeBuilder := functionBuilder(ctx, t, eth, swap.ABI, "execute").
-		Signer(alice).
-		To(&swapAddress)
-	err = executeBuilder.BuildCallData()
-	require.NoError(t, err)
+	encodedExecute := swap.PrepareExecute(ctx, alice)
 
 	log.L(ctx).Infof("Record the prepared transfers")
-	txHash1, err1 := functionBuilder(ctx, t, eth, swap.ABI, "prepare").
-		Signer(alice).
-		To(&swapAddress).
-		Input(toJSON(t, map[string]any{
-			"holder": alice,
-			"states": StateData{
-				Inputs:  transferGold.InputStates,
-				Outputs: transferGold.OutputStates,
-			},
-		})).
-		SignAndSend()
-	txHash2, err2 := functionBuilder(ctx, t, eth, swap.ABI, "prepare").
-		Signer(bob).
-		To(&swapAddress).
-		Input(toJSON(t, map[string]any{
-			"holder": bob,
-			"states": &StateData{
-				Inputs:  transferSilver.InputStates,
-				Outputs: transferSilver.OutputStates,
-			},
-		})).
-		SignAndSend()
-	waitFor(ctx, t, tb, txHash1, err1)
-	waitFor(ctx, t, tb, txHash2, err2)
+	swap.Prepare(ctx, alice, &helpers.StateData{
+		Inputs:  transferGold.InputStates,
+		Outputs: transferGold.OutputStates,
+	})
+	swap.Prepare(ctx, bob, &helpers.StateData{
+		Inputs:  transferSilver.InputStates,
+		Outputs: transferSilver.OutputStates,
+	})
 
 	log.L(ctx).Infof("Create Atom instance")
-	txHash, err = functionBuilder(ctx, t, eth, atomFactory.ABI, "create").
-		Signer(alice).
-		To(atomAddress).
-		Input(toJSON(t, map[string]any{
-			"operations": []*AtomOperation{
-				{
-					ContractAddress: notoGoldAddress,
-					CallData:        transferGold.EncodedCall,
-				},
-				{
-					ContractAddress: notoSilverAddress,
-					CallData:        transferSilver.EncodedCall,
-				},
-				{
-					ContractAddress: swapAddress,
-					CallData:        executeBuilder.TX().Data,
-				},
-			},
-		})).
-		SignAndSend()
-	waitFor(ctx, t, tb, txHash, err)
-
-	var atomDeployed AtomDeployed
-	findEvent(ctx, t, tb, *txHash, atomFactory.ABI, "AtomDeployed", &atomDeployed)
-	assert.NotEmpty(t, atomDeployed.Address)
+	transferAtom := atomFactory.Create(ctx, alice, []*helpers.AtomOperation{
+		{
+			ContractAddress: notoGold.Address,
+			CallData:        transferGold.EncodedCall,
+		},
+		{
+			ContractAddress: notoSilver.Address,
+			CallData:        transferSilver.EncodedCall,
+		},
+		{
+			ContractAddress: swap.Address,
+			CallData:        encodedExecute,
+		},
+	})
 
 	// TODO: all parties should verify the Atom against the original proposed trade
 	// If any party found a discrepancy at this point, they could cancel the swap (last chance to back out)
 
 	log.L(ctx).Infof("Approve both Noto transactions")
-	notoApprove(ctx, t, rpc, notoGoldAddress, alice, atomDeployed.Address, transferGold.EncodedCall)
-	notoApprove(ctx, t, rpc, notoSilverAddress, bob, atomDeployed.Address, transferSilver.EncodedCall)
+	notoGold.Approve(ctx, alice, transferAtom.Address, transferGold.EncodedCall)
+	notoSilver.Approve(ctx, bob, transferAtom.Address, transferSilver.EncodedCall)
 
 	log.L(ctx).Infof("Execute the atomic operation")
-	txHash, err = functionBuilder(ctx, t, eth, atom.ABI, "execute").
-		Signer(alice).
-		To(&atomDeployed.Address).
-		SignAndSend()
-	waitFor(ctx, t, tb, txHash, err)
+	transferAtom.Execute(ctx, alice)
 }
