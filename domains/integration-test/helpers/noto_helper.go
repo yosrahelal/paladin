@@ -24,7 +24,6 @@ import (
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type NotoHelper struct {
@@ -48,70 +47,34 @@ func DeployNoto(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domai
 	}
 }
 
-func (n *NotoHelper) Mint(ctx context.Context, signer, to string, amount uint64) {
-	var result bool
-	rpcerr := n.rpc.CallRPC(ctx, &result, "testbed_invoke", &tktypes.PrivateContractInvoke{
-		From:     signer,
-		To:       tktypes.EthAddress(n.Address),
-		Function: *types.NotoABI.Functions()["mint"],
-		Inputs: toJSON(n.t, &types.MintParams{
-			To:     to,
-			Amount: ethtypes.NewHexIntegerU64(amount),
-		}),
-	}, true)
-	if rpcerr != nil {
-		require.NoError(n.t, rpcerr.Error())
-	}
-	assert.True(n.t, result)
+func (n *NotoHelper) Mint(to string, amount uint64) *DomainTransactionHelper {
+	fn := types.NotoABI.Functions()["mint"]
+	return NewDomainTransactionHelper(n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.MintParams{
+		To:     to,
+		Amount: ethtypes.NewHexIntegerU64(amount),
+	}))
 }
 
-func (n *NotoHelper) Transfer(ctx context.Context, signer, to string, amount int64) {
-	var result bool
-	rpcerr := n.rpc.CallRPC(ctx, &result, "testbed_invoke", &tktypes.PrivateContractInvoke{
-		From:     signer,
-		To:       tktypes.EthAddress(n.Address),
-		Function: *types.NotoABI.Functions()["transfer"],
-		Inputs: toJSON(n.t, &types.TransferParams{
-			To:     to,
-			Amount: ethtypes.NewHexInteger64(amount),
-		}),
-	}, true)
-	if rpcerr != nil {
-		require.NoError(n.t, rpcerr.Error())
-	}
-	assert.True(n.t, result)
+func (n *NotoHelper) Transfer(to string, amount uint64) *DomainTransactionHelper {
+	fn := types.NotoABI.Functions()["transfer"]
+	return NewDomainTransactionHelper(n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.TransferParams{
+		To:     to,
+		Amount: ethtypes.NewHexIntegerU64(amount),
+	}))
 }
 
-func (n *NotoHelper) PrepareTransfer(ctx context.Context, signer, to string, amount uint64) *tktypes.PrivateContractPreparedTransaction {
-	var prepared tktypes.PrivateContractPreparedTransaction
-	rpcerr := n.rpc.CallRPC(ctx, &prepared, "testbed_prepare", &tktypes.PrivateContractInvoke{
-		From:     signer,
-		To:       tktypes.EthAddress(n.Address),
-		Function: *types.NotoABI.Functions()["approvedTransfer"],
-		Inputs: toJSON(n.t, &types.TransferParams{
-			To:     to,
-			Amount: ethtypes.NewHexIntegerU64(amount),
-		}),
-	})
-	if rpcerr != nil {
-		require.NoError(n.t, rpcerr.Error())
-	}
-	return &prepared
+func (n *NotoHelper) ApprovedTransfer(to string, amount uint64) *DomainTransactionHelper {
+	fn := types.NotoABI.Functions()["approvedTransfer"]
+	return NewDomainTransactionHelper(n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.TransferParams{
+		To:     to,
+		Amount: ethtypes.NewHexIntegerU64(amount),
+	}))
 }
 
-func (n *NotoHelper) Approve(ctx context.Context, signer string, delegate ethtypes.Address0xHex, call []byte) {
-	var result bool
-	rpcerr := n.rpc.CallRPC(ctx, &result, "testbed_invoke", &tktypes.PrivateContractInvoke{
-		From:     signer,
-		To:       tktypes.EthAddress(n.Address),
-		Function: *types.NotoABI.Functions()["approve"],
-		Inputs: toJSON(n.t, &types.ApproveParams{
-			Delegate: delegate,
-			Call:     call,
-		}),
-	}, true)
-	if rpcerr != nil {
-		require.NoError(n.t, rpcerr.Error())
-	}
-	assert.True(n.t, result)
+func (n *NotoHelper) Approve(delegate ethtypes.Address0xHex, call []byte) *DomainTransactionHelper {
+	fn := types.NotoABI.Functions()["approve"]
+	return NewDomainTransactionHelper(n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.ApproveParams{
+		Delegate: delegate,
+		Call:     call,
+	}))
 }

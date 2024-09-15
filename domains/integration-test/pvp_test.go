@@ -87,9 +87,9 @@ func TestPvP(t *testing.T) {
 	log.L(ctx).Infof("Noto silver deployed to %s", notoSilver.Address)
 
 	log.L(ctx).Infof("Mint 10 gold to Alice")
-	notoGold.Mint(ctx, notary, alice, 10)
+	notoGold.Mint(alice, 10).SendAndWait(ctx, notary)
 	log.L(ctx).Infof("Mint 100 silver to Bob")
-	notoSilver.Mint(ctx, notary, bob, 100)
+	notoSilver.Mint(bob, 100).SendAndWait(ctx, notary)
 
 	// TODO: this should be a Pente private contract, instead of a base ledger contract
 	log.L(ctx).Infof("Propose a trade of 1 gold for 10 silver")
@@ -104,8 +104,8 @@ func TestPvP(t *testing.T) {
 	})
 
 	log.L(ctx).Infof("Prepare the transfers")
-	transferGold := notoGold.PrepareTransfer(ctx, alice, bob, 1)
-	transferSilver := notoSilver.PrepareTransfer(ctx, bob, alice, 10)
+	transferGold := notoGold.ApprovedTransfer(bob, 1).Prepare(ctx, alice)
+	transferSilver := notoSilver.ApprovedTransfer(alice, 10).Prepare(ctx, bob)
 
 	// TODO: this should actually be a Pente state transition
 	log.L(ctx).Infof("Prepare the trade execute")
@@ -141,9 +141,9 @@ func TestPvP(t *testing.T) {
 	// If any party found a discrepancy at this point, they could cancel the swap (last chance to back out)
 
 	log.L(ctx).Infof("Approve both Noto transactions")
-	notoGold.Approve(ctx, alice, transferAtom.Address, transferGold.EncodedCall)
-	notoSilver.Approve(ctx, bob, transferAtom.Address, transferSilver.EncodedCall)
+	notoGold.Approve(transferAtom.Address, transferGold.EncodedCall).SendAndWait(ctx, alice)
+	notoSilver.Approve(transferAtom.Address, transferSilver.EncodedCall).SendAndWait(ctx, bob)
 
 	log.L(ctx).Infof("Execute the atomic operation")
-	transferAtom.Execute(ctx, alice)
+	transferAtom.Execute(ctx).SignAndSend(alice).Wait(ctx)
 }
