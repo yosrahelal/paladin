@@ -16,6 +16,7 @@
 ext {
     goFiles = fileTree(".") {
         include "internal/**/*.go"
+        include "pkg/**/*.go"
     }
 }
 
@@ -25,29 +26,34 @@ configurations {
         canBeConsumed = false
         canBeResolved = true
     }
-    toolkitProtoCompiled {
+    toolkitGo {
         canBeConsumed = false
         canBeResolved = true
     }
-    kataProtoCompiled {
+    coreGo {
         canBeConsumed = false
         canBeResolved = true
+    }
+
+    // Consumable configurations
+    goSource {
+        canBeConsumed = true
+        canBeResolved = false
     }
 }
 
 dependencies {
     contractCompile project(path: ":solidity", configuration: "compiledContracts")
-    toolkitProtoCompiled project(path: ":toolkit_go", configuration: "protoCompiled")
-    kataProtoCompiled project(path: ":kata", configuration: "protoCompiled")
+    toolkitGo project(path: ":toolkit:go", configuration: "goSource")
+    coreGo project(path: ":core:go", configuration: "goSource")
 }
 
 task copySolidity(type: Copy) {
     inputs.files(configurations.contractCompile)
     from fileTree(configurations.contractCompile.asPath) {
-        include 'contracts/noto/NotoFactory.sol/NotoFactory.json'
-        include 'contracts/noto/Noto.sol/Noto.json'
-        include 'contracts/noto/NotoSelfSubmitFactory.sol/NotoSelfSubmitFactory.json'
-        include 'contracts/noto/NotoSelfSubmit.sol/NotoSelfSubmit.json'
+        include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
+        include 'contracts/domains/noto/Noto.sol/Noto.json'
+        include 'contracts/domains/noto/NotoSelfSubmit.sol/NotoSelfSubmit.json'
     }
     into 'internal/noto/abis'
 
@@ -57,8 +63,8 @@ task copySolidity(type: Copy) {
 }
 
 task test(type: Exec) {
-    inputs.files(configurations.toolkitProtoCompiled)
-    inputs.files(configurations.kataProtoCompiled)
+    inputs.files(configurations.toolkitGo)
+    inputs.files(configurations.coreGo)
     inputs.files(goFiles)
     outputs.dir('coverage')
 
@@ -66,6 +72,7 @@ task test(type: Exec) {
     executable 'go'
     args 'test'
     args './internal/...'
+    args './pkg/...'
     args '-cover'
     args '-covermode=atomic'
     args '-timeout=30s'
@@ -73,6 +80,7 @@ task test(type: Exec) {
 
     dependsOn copySolidity
     dependsOn ':testinfra:startTestInfra'
+    helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
 task build {
@@ -82,4 +90,8 @@ task build {
 task clean(type: Delete) {
     delete 'coverage'
     delete 'internal/noto/abis'
+}
+
+dependencies {
+    goSource files(goFiles, copySolidity)
 }

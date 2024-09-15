@@ -8,7 +8,7 @@
     "test": "hardhat test --network hardhat"
   },
   "author": "",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "devDependencies": {
     "@iden3/contracts": "^2.3.0",
     "@nomicfoundation/hardhat-network-helpers": "^1.0.10",
@@ -24,6 +24,6 @@
     "ethers": "^6.13.1",
     "hardhat": "^2.19.4",
     "ts-node": "^10.9.2",
-    "zeto": "file:../zeto/solidity"
+    "zeto": "https://gitpkg.vercel.app/hyperledger-labs/zeto/solidity?v0.0.3"
   }
 }
