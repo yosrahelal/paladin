@@ -23,11 +23,11 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -418,11 +418,11 @@ func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateR
 	statesByID := make(map[tktypes.Bytes32]*statestore.State)
 	err := dc.dm.stateStore.RunInDomainContext(dc.d.name, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
 		for schemaID, stateIDs := range rawIDsBySchema {
-			statesForSchema, err := dsi.FindAvailableStates(schemaID, &filters.QueryJSON{
-				Statements: filters.Statements{
-					Ops: filters.Ops{
-						In: []*filters.OpMultiVal{
-							{Op: filters.Op{Field: ".id"}, Values: stateIDs},
+			statesForSchema, err := dsi.FindAvailableStates(schemaID, &query.QueryJSON{
+				Statements: query.Statements{
+					Ops: query.Ops{
+						In: []*query.OpMultiVal{
+							{Op: query.Op{Field: ".id"}, Values: stateIDs},
 						},
 					},
 				},
