@@ -33,31 +33,44 @@ import (
 )
 
 type TransactionHelper struct {
+	ctx     context.Context
 	t       *testing.T
 	tb      testbed.Testbed
 	builder ethclient.ABIFunctionRequestBuilder
 }
 
 type DomainTransactionHelper struct {
+	ctx context.Context
 	t   *testing.T
 	rpc rpcbackend.Backend
 	tx  *tktypes.PrivateContractInvoke
 }
 
 type SentTransaction struct {
-	t  *testing.T
-	tb testbed.Testbed
-	tx *tktypes.Bytes32
+	ctx context.Context
+	t   *testing.T
+	tb  testbed.Testbed
+	tx  *tktypes.Bytes32
 }
 
-func NewTransactionHelper(t *testing.T, tb testbed.Testbed, builder ethclient.ABIFunctionRequestBuilder) *TransactionHelper {
-	return &TransactionHelper{t: t, tb: tb, builder: builder}
+type SentDomainTransaction struct {
+	t      *testing.T
+	result chan any
+}
+
+func NewTransactionHelper(ctx context.Context, t *testing.T, tb testbed.Testbed, builder ethclient.ABIFunctionRequestBuilder) *TransactionHelper {
+	return &TransactionHelper{ctx: ctx, t: t, tb: tb, builder: builder}
 }
 
 func (th *TransactionHelper) SignAndSend(signer string) *SentTransaction {
 	tx, err := th.builder.Signer(signer).SignAndSend()
 	require.NoError(th.t, err)
-	return &SentTransaction{t: th.t, tb: th.tb, tx: tx}
+	return &SentTransaction{
+		ctx: th.ctx,
+		t:   th.t,
+		tb:  th.tb,
+		tx:  tx,
+	}
 }
 
 func (th *TransactionHelper) Prepare() ethtypes.HexBytes0xPrefix {
@@ -65,12 +78,13 @@ func (th *TransactionHelper) Prepare() ethtypes.HexBytes0xPrefix {
 	return th.builder.TX().Data
 }
 
-func (st *SentTransaction) Wait(ctx context.Context) {
-	waitFor(ctx, st.t, st.tb, st.tx, nil)
+func (st *SentTransaction) Wait() {
+	waitFor(st.ctx, st.t, st.tb, st.tx, nil)
 }
 
-func NewDomainTransactionHelper(t *testing.T, rpc rpcbackend.Backend, to tktypes.EthAddress, fn *abi.Entry, inputs tktypes.RawJSON) *DomainTransactionHelper {
+func NewDomainTransactionHelper(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, to tktypes.EthAddress, fn *abi.Entry, inputs tktypes.RawJSON) *DomainTransactionHelper {
 	return &DomainTransactionHelper{
+		ctx: ctx,
 		t:   t,
 		rpc: rpc,
 		tx: &tktypes.PrivateContractInvoke{
@@ -81,24 +95,40 @@ func NewDomainTransactionHelper(t *testing.T, rpc rpcbackend.Backend, to tktypes
 	}
 }
 
-func (dth *DomainTransactionHelper) SendAndWait(ctx context.Context, signer string) any {
-	var result any
-	dth.tx.From = signer
-	rpcerr := dth.rpc.CallRPC(ctx, &result, "testbed_invoke", dth.tx, true)
-	if rpcerr != nil {
-		require.NoError(dth.t, rpcerr.Error())
+func (dth *DomainTransactionHelper) SignAndSend(signer string) *SentDomainTransaction {
+	tx := &SentDomainTransaction{
+		t:      dth.t,
+		result: make(chan any),
 	}
-	return result
+	dth.tx.From = signer
+	go func() {
+		var result any
+		rpcerr := dth.rpc.CallRPC(dth.ctx, &result, "testbed_invoke", dth.tx, true)
+		if rpcerr != nil && rpcerr.Error() != nil {
+			tx.result <- rpcerr.Error()
+		}
+		tx.result <- result
+	}()
+	return tx
 }
 
-func (dth *DomainTransactionHelper) Prepare(ctx context.Context, signer string) *tktypes.PrivateContractPreparedTransaction {
+func (dth *DomainTransactionHelper) Prepare(signer string) *tktypes.PrivateContractPreparedTransaction {
 	var result tktypes.PrivateContractPreparedTransaction
 	dth.tx.From = signer
-	rpcerr := dth.rpc.CallRPC(ctx, &result, "testbed_prepare", dth.tx)
+	rpcerr := dth.rpc.CallRPC(dth.ctx, &result, "testbed_prepare", dth.tx)
 	if rpcerr != nil {
 		require.NoError(dth.t, rpcerr.Error())
 	}
 	return &result
+}
+
+func (st *SentDomainTransaction) Wait() {
+	result := <-st.result
+	switch r := result.(type) {
+	case error:
+		require.NoError(st.t, r)
+	default:
+	}
 }
 
 func toJSON(t *testing.T, v any) []byte {

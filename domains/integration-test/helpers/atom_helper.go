@@ -95,5 +95,5 @@ func (a *AtomFactoryHelper) Create(ctx context.Context, signer string, operation
 
 func (a *AtomHelper) Execute(ctx context.Context) *TransactionHelper {
 	builder := functionBuilder(ctx, a.t, a.eth, a.InstanceABI, "execute").To(&a.Address)
-	return NewTransactionHelper(a.t, a.tb, builder)
+	return NewTransactionHelper(ctx, a.t, a.tb, builder)
 }

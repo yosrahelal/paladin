@@ -26,7 +26,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type SwapHelper struct {
@@ -80,22 +79,16 @@ func DeploySwap(
 	}
 }
 
-func (s *SwapHelper) Prepare(ctx context.Context, signer string, states *StateData) {
-	txHash, err := functionBuilder(ctx, s.t, s.eth, s.ABI, "prepare").
-		Signer(signer).
+func (s *SwapHelper) Prepare(ctx context.Context, states *StateData) *TransactionHelper {
+	builder := functionBuilder(ctx, s.t, s.eth, s.ABI, "prepare").
 		To(&s.Address).
 		Input(toJSON(s.t, map[string]any{
 			"states": states,
-		})).
-		SignAndSend()
-	waitFor(ctx, s.t, s.tb, txHash, err)
+		}))
+	return NewTransactionHelper(ctx, s.t, s.tb, builder)
 }
 
-func (s *SwapHelper) PrepareExecute(ctx context.Context, signer string) ethtypes.HexBytes0xPrefix {
-	executeBuilder := functionBuilder(ctx, s.t, s.eth, s.ABI, "execute").
-		Signer(signer).
-		To(&s.Address)
-	err := executeBuilder.BuildCallData()
-	require.NoError(s.t, err)
-	return executeBuilder.TX().Data
+func (s *SwapHelper) Execute(ctx context.Context) *TransactionHelper {
+	builder := functionBuilder(ctx, s.t, s.eth, s.ABI, "execute").To(&s.Address)
+	return NewTransactionHelper(ctx, s.t, s.tb, builder)
 }

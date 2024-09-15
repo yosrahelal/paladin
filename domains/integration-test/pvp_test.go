@@ -87,9 +87,9 @@ func TestPvP(t *testing.T) {
 	log.L(ctx).Infof("Noto silver deployed to %s", notoSilver.Address)
 
 	log.L(ctx).Infof("Mint 10 gold to Alice")
-	notoGold.Mint(alice, 10).SendAndWait(ctx, notary)
+	notoGold.Mint(ctx, alice, 10).SignAndSend(notary).Wait()
 	log.L(ctx).Infof("Mint 100 silver to Bob")
-	notoSilver.Mint(bob, 100).SendAndWait(ctx, notary)
+	notoSilver.Mint(ctx, bob, 100).SignAndSend(notary).Wait()
 
 	// TODO: this should be a Pente private contract, instead of a base ledger contract
 	log.L(ctx).Infof("Propose a trade of 1 gold for 10 silver")
@@ -104,22 +104,22 @@ func TestPvP(t *testing.T) {
 	})
 
 	log.L(ctx).Infof("Prepare the transfers")
-	transferGold := notoGold.ApprovedTransfer(bob, 1).Prepare(ctx, alice)
-	transferSilver := notoSilver.ApprovedTransfer(alice, 10).Prepare(ctx, bob)
+	transferGold := notoGold.ApprovedTransfer(ctx, bob, 1).Prepare(alice)
+	transferSilver := notoSilver.ApprovedTransfer(ctx, alice, 10).Prepare(bob)
 
 	// TODO: this should actually be a Pente state transition
 	log.L(ctx).Infof("Prepare the trade execute")
-	encodedExecute := swap.PrepareExecute(ctx, alice)
+	encodedExecute := swap.Execute(ctx).Prepare()
 
 	log.L(ctx).Infof("Record the prepared transfers")
-	swap.Prepare(ctx, alice, &helpers.StateData{
+	swap.Prepare(ctx, &helpers.StateData{
 		Inputs:  transferGold.InputStates,
 		Outputs: transferGold.OutputStates,
-	})
-	swap.Prepare(ctx, bob, &helpers.StateData{
+	}).SignAndSend(alice).Wait()
+	swap.Prepare(ctx, &helpers.StateData{
 		Inputs:  transferSilver.InputStates,
 		Outputs: transferSilver.OutputStates,
-	})
+	}).SignAndSend(bob).Wait()
 
 	log.L(ctx).Infof("Create Atom instance")
 	transferAtom := atomFactory.Create(ctx, alice, []*helpers.AtomOperation{
@@ -141,9 +141,9 @@ func TestPvP(t *testing.T) {
 	// If any party found a discrepancy at this point, they could cancel the swap (last chance to back out)
 
 	log.L(ctx).Infof("Approve both Noto transactions")
-	notoGold.Approve(transferAtom.Address, transferGold.EncodedCall).SendAndWait(ctx, alice)
-	notoSilver.Approve(transferAtom.Address, transferSilver.EncodedCall).SendAndWait(ctx, bob)
+	notoGold.Approve(ctx, transferAtom.Address, transferGold.EncodedCall).SignAndSend(alice).Wait()
+	notoSilver.Approve(ctx, transferAtom.Address, transferSilver.EncodedCall).SignAndSend(bob).Wait()
 
 	log.L(ctx).Infof("Execute the atomic operation")
-	transferAtom.Execute(ctx).SignAndSend(alice).Wait(ctx)
+	transferAtom.Execute(ctx).SignAndSend(alice).Wait()
 }

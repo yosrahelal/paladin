@@ -47,33 +47,33 @@ func DeployNoto(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domai
 	}
 }
 
-func (n *NotoHelper) Mint(to string, amount uint64) *DomainTransactionHelper {
+func (n *NotoHelper) Mint(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
 	fn := types.NotoABI.Functions()["mint"]
-	return NewDomainTransactionHelper(n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.MintParams{
+	return NewDomainTransactionHelper(ctx, n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.MintParams{
 		To:     to,
 		Amount: ethtypes.NewHexIntegerU64(amount),
 	}))
 }
 
-func (n *NotoHelper) Transfer(to string, amount uint64) *DomainTransactionHelper {
+func (n *NotoHelper) Transfer(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
 	fn := types.NotoABI.Functions()["transfer"]
-	return NewDomainTransactionHelper(n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.TransferParams{
+	return NewDomainTransactionHelper(ctx, n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.TransferParams{
 		To:     to,
 		Amount: ethtypes.NewHexIntegerU64(amount),
 	}))
 }
 
-func (n *NotoHelper) ApprovedTransfer(to string, amount uint64) *DomainTransactionHelper {
+func (n *NotoHelper) ApprovedTransfer(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
 	fn := types.NotoABI.Functions()["approvedTransfer"]
-	return NewDomainTransactionHelper(n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.TransferParams{
+	return NewDomainTransactionHelper(ctx, n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.TransferParams{
 		To:     to,
 		Amount: ethtypes.NewHexIntegerU64(amount),
 	}))
 }
 
-func (n *NotoHelper) Approve(delegate ethtypes.Address0xHex, call []byte) *DomainTransactionHelper {
+func (n *NotoHelper) Approve(ctx context.Context, delegate ethtypes.Address0xHex, call []byte) *DomainTransactionHelper {
 	fn := types.NotoABI.Functions()["approve"]
-	return NewDomainTransactionHelper(n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.ApproveParams{
+	return NewDomainTransactionHelper(ctx, n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.ApproveParams{
 		Delegate: delegate,
 		Call:     call,
 	}))
