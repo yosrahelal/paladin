@@ -13,12 +13,42 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package filters
+package query
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+)
+
+const (
+	// LimitKey is the key for the limit field in the query
+	limitKey = "limit"
+	// SortKey is the key for the sort field in the query
+	sortKey = "sort"
+	// EqKey is the key for the eq field in the query
+	eqKey = "eq"
+	// NqKey is the key for the nq field in the query
+	// nqKey = "neq"
+	// GtKey is the key for the gt field in the query
+	// gtKey = "gt"
+	// LtKey is the key for the lt field in the query
+	// ltKey = "lt"
+	// LeKey is the key for the less than or equal field in the query
+	// leKey = "lte"
+	// GeKey is the key for the greater than or equal field in the query
+	// geKey = "gte"
+	// InKey is the key for the in field in the query
+	inKey = "in"
+	// NinKey is the key for the not in field in the query
+	ninKey = "nin"
+	// isNullKey is the key for the is null field in the query
+	isNullKey = "null"
+	// LikeKey is the key for the like field in the query
+	likeKey = "like"
+	// CaseInsensitiveKey is the key for the case insensitive flag in the query
+	// caseInsensitiveKey = "caseInsensitive"
 )
 
 func TestQuery(t *testing.T) {
@@ -62,15 +92,15 @@ func TestQuery(t *testing.T) {
 	query := NewQueryBuilder().
 		Limit(10).
 		Sort("field1").Sort("field2").
-		Equal("field1", "value1").
+		Equal("field1", "value1", CaseSensitive).
 		NotEqual("field2", "value2").
 		Like("field3", "some value").
 		LessThan("field4", 12345).
 		LessThanOrEqual("field5", 23456).
 		GreaterThan("field6", 34567).
 		GreaterThanOrEqual("field7", 45678).
-		In("field8", []string{"a", "b", "c"}).
-		NotIn("field9", []string{"x", "y", "z"}).
+		In("field8", []any{"a", "b", "c"}).
+		NotIn("field9", []any{"x", "y", "z"}).
 		NotNull("field10").
 		Null("field11").
 		Equal("field12", "value12", Not, CaseInsensitive).
@@ -108,36 +138,46 @@ func TestQuery_StringOr(t *testing.T) {
 
 	query := NewQueryBuilder().
 		Or(
-			NewQueryBuilder().Equal("field1", "value1"),
-			NewQueryBuilder().NotEqual("field2", "value2"),
+			NewQueryBuilder().
+				Equal("field1", "value1").
+				NotEqual("field2", "value2"),
 		).
 		Or(
-			NewQueryBuilder().Equal("field3", "value3"),
-			NewQueryBuilder().NotEqual("field4", "value4"),
+			NewQueryBuilder().
+				Equal("field3", "value3").
+				NotEqual("field4", "value4"),
 		).
 		Query().String()
 
 	assert.JSONEq(t, expectedQuery, query)
 }
 
+func assertQueryEqual(t *testing.T, jsonMap map[string]interface{}, jq *QueryJSON) {
+	jmb, err := json.Marshal(jsonMap)
+	assert.NoError(t, err)
+	jqb, err := json.Marshal(jq)
+	assert.NoError(t, err)
+	assert.JSONEq(t, string(jmb), string(jqb))
+}
+
 func TestQueryBuilderImpl_Limit(t *testing.T) {
 	tests := []struct {
 		name     string
-		limit    uint64
+		limit    int
 		expected map[string]interface{}
 	}{
 		{
 			name:  "Set positive limit",
 			limit: 10,
 			expected: map[string]interface{}{
-				limitKey: uint64(10),
+				limitKey: int(10),
 			},
 		},
 		{
 			name:  "Set zero limit",
 			limit: 0,
 			expected: map[string]interface{}{
-				limitKey: uint64(0),
+				limitKey: int(0),
 			},
 		},
 	}
@@ -146,7 +186,7 @@ func TestQueryBuilderImpl_Limit(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := NewQueryBuilder()
 			qb.Limit(tt.limit)
-			assert.Equal(t, tt.expected, qb.query.query)
+			assertQueryEqual(t, tt.expected, qb.Query())
 		})
 	}
 }
@@ -178,7 +218,7 @@ func TestQueryBuilderImpl_Sort(t *testing.T) {
 			for _, field := range tt.fields {
 				qb.Sort(field)
 			}
-			assert.Equal(t, tt.expected, qb.query.query)
+			assertQueryEqual(t, tt.expected, qb.Query())
 		})
 	}
 }
@@ -187,14 +227,14 @@ func TestQueryBuilderImpl_In(t *testing.T) {
 	tests := []struct {
 		name     string
 		field    string
-		values   []string
+		values   []any
 		adds     []addOns
 		expected map[string]interface{}
 	}{
 		{
 			name:   "Set single in field",
 			field:  "name",
-			values: []string{"John", "Doe"},
+			values: []any{"John", "Doe"},
 			expected: map[string]interface{}{
 				inKey: []map[string]interface{}{
 					{"field": "name", "values": []string{"John", "Doe"}},
@@ -204,7 +244,7 @@ func TestQueryBuilderImpl_In(t *testing.T) {
 		{
 			name:   "Set in field with Not add-on",
 			field:  "name",
-			values: []string{"John", "Doe"},
+			values: []any{"John", "Doe"},
 			adds:   []addOns{Not},
 			expected: map[string]interface{}{
 				inKey: []map[string]interface{}{
@@ -215,7 +255,7 @@ func TestQueryBuilderImpl_In(t *testing.T) {
 		{
 			name:   "Set in field with CaseInsensitive add-on",
 			field:  "name",
-			values: []string{"John", "Doe"},
+			values: []any{"John", "Doe"},
 			adds:   []addOns{CaseInsensitive},
 			expected: map[string]interface{}{
 				inKey: []map[string]interface{}{
@@ -226,7 +266,7 @@ func TestQueryBuilderImpl_In(t *testing.T) {
 		{
 			name:   "Set in field with multiple add-ons",
 			field:  "name",
-			values: []string{"John", "Doe"},
+			values: []any{"John", "Doe"},
 			adds:   []addOns{Not, CaseInsensitive},
 			expected: map[string]interface{}{
 				inKey: []map[string]interface{}{
@@ -240,7 +280,7 @@ func TestQueryBuilderImpl_In(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := NewQueryBuilder()
 			qb.In(tt.field, tt.values, tt.adds...)
-			assert.Equal(t, tt.expected, qb.query.query)
+			assertQueryEqual(t, tt.expected, qb.Query())
 		})
 	}
 }
@@ -248,14 +288,14 @@ func TestQueryBuilderImpl_NotIn(t *testing.T) {
 	tests := []struct {
 		name     string
 		field    string
-		values   []string
+		values   []any
 		adds     []addOns
 		expected map[string]interface{}
 	}{
 		{
 			name:   "Set single not in field",
 			field:  "name",
-			values: []string{"John", "Doe"},
+			values: []any{"John", "Doe"},
 			expected: map[string]interface{}{
 				ninKey: []map[string]interface{}{
 					{"field": "name", "values": []string{"John", "Doe"}},
@@ -265,7 +305,7 @@ func TestQueryBuilderImpl_NotIn(t *testing.T) {
 		{
 			name:   "Set not in field with Not add-on",
 			field:  "name",
-			values: []string{"John", "Doe"},
+			values: []any{"John", "Doe"},
 			adds:   []addOns{Not},
 			expected: map[string]interface{}{
 				ninKey: []map[string]interface{}{
@@ -276,7 +316,7 @@ func TestQueryBuilderImpl_NotIn(t *testing.T) {
 		{
 			name:   "Set not in field with CaseInsensitive add-on",
 			field:  "name",
-			values: []string{"John", "Doe"},
+			values: []any{"John", "Doe"},
 			adds:   []addOns{CaseInsensitive},
 			expected: map[string]interface{}{
 				ninKey: []map[string]interface{}{
@@ -287,7 +327,7 @@ func TestQueryBuilderImpl_NotIn(t *testing.T) {
 		{
 			name:   "Set not in field with multiple add-ons",
 			field:  "name",
-			values: []string{"John", "Doe"},
+			values: []any{"John", "Doe"},
 			adds:   []addOns{Not, CaseInsensitive},
 			expected: map[string]interface{}{
 				ninKey: []map[string]interface{}{
@@ -302,7 +342,7 @@ func TestQueryBuilderImpl_NotIn(t *testing.T) {
 			qb := NewQueryBuilder()
 			qb.NotIn(tt.field, tt.values, tt.adds...)
 
-			assert.Equal(t, tt.expected, qb.query.query)
+			assertQueryEqual(t, tt.expected, qb.Query())
 		})
 	}
 }
@@ -327,7 +367,7 @@ func TestQueryBuilderImpl_Null(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := NewQueryBuilder()
 			qb.Null(tt.field)
-			assert.Equal(t, tt.expected, qb.query.query)
+			assertQueryEqual(t, tt.expected, qb.Query())
 		})
 	}
 }
@@ -354,7 +394,7 @@ func TestQueryBuilderImpl_Like(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := NewQueryBuilder()
 			qb.Like(tt.field, tt.value)
-			assert.Equal(t, tt.expected, qb.query.query)
+			assertQueryEqual(t, tt.expected, qb.Query())
 		})
 	}
 }
@@ -381,7 +421,7 @@ func TestQueryBuilderImpl_NotLike(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := NewQueryBuilder()
 			qb.NotLike(tt.field, tt.value)
-			assert.Equal(t, tt.expected, qb.query.query)
+			assertQueryEqual(t, tt.expected, qb.Query())
 		})
 	}
 }
@@ -389,7 +429,6 @@ func TestQueryBuilderImpl_NotLike(t *testing.T) {
 func TestQueryBuilderImpl_setField(t *testing.T) {
 	tests := []struct {
 		name     string
-		key      string
 		field    string
 		value    interface{}
 		adds     []addOns
@@ -397,7 +436,6 @@ func TestQueryBuilderImpl_setField(t *testing.T) {
 	}{
 		{
 			name:  "Set single field",
-			key:   eqKey,
 			field: "name",
 			value: "John",
 			expected: map[string]interface{}{
@@ -408,7 +446,6 @@ func TestQueryBuilderImpl_setField(t *testing.T) {
 		},
 		{
 			name:  "Set field with Not add-on",
-			key:   eqKey,
 			field: "name",
 			value: "John",
 			adds:  []addOns{Not},
@@ -420,7 +457,6 @@ func TestQueryBuilderImpl_setField(t *testing.T) {
 		},
 		{
 			name:  "Set field with CaseInsensitive add-on",
-			key:   eqKey,
 			field: "name",
 			value: "John",
 			adds:  []addOns{CaseInsensitive},
@@ -432,7 +468,6 @@ func TestQueryBuilderImpl_setField(t *testing.T) {
 		},
 		{
 			name:  "Set field with multiple add-ons",
-			key:   eqKey,
 			field: "name",
 			value: "John",
 			adds:  []addOns{Not, CaseInsensitive},
@@ -444,7 +479,6 @@ func TestQueryBuilderImpl_setField(t *testing.T) {
 		},
 		{
 			name:  "Set multiple fields",
-			key:   eqKey,
 			field: "name",
 			value: "John",
 			expected: map[string]interface{}{
@@ -459,28 +493,26 @@ func TestQueryBuilderImpl_setField(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := NewQueryBuilder()
-			qb.setField(tt.key, tt.field, tt.value, tt.adds...)
+			qb = qb.Equal(tt.field, tt.value, tt.adds...)
 			if tt.name == "Set multiple fields" {
-				qb.setField(tt.key, "age", "30")
+				qb = qb.Equal("age", "30", tt.adds...)
 			}
-			assert.Equal(t, tt.expected, qb.query.query)
+			assertQueryEqual(t, tt.expected, qb.Query())
 		})
 	}
 }
 func TestQueryBuilderImpl_setFields(t *testing.T) {
 	tests := []struct {
 		name     string
-		key      string
 		field    string
-		values   []string
+		values   []any
 		adds     []addOns
 		expected map[string]interface{}
 	}{
 		{
 			name:   "Set single field with values",
-			key:    inKey,
 			field:  "name",
-			values: []string{"John", "Doe"},
+			values: []any{"John", "Doe"},
 			expected: map[string]interface{}{
 				inKey: []map[string]interface{}{
 					{"field": "name", "values": []string{"John", "Doe"}},
@@ -489,9 +521,8 @@ func TestQueryBuilderImpl_setFields(t *testing.T) {
 		},
 		{
 			name:   "Set field with Not add-on",
-			key:    inKey,
 			field:  "name",
-			values: []string{"John", "Doe"},
+			values: []any{"John", "Doe"},
 			adds:   []addOns{Not},
 			expected: map[string]interface{}{
 				inKey: []map[string]interface{}{
@@ -501,9 +532,8 @@ func TestQueryBuilderImpl_setFields(t *testing.T) {
 		},
 		{
 			name:   "Set field with CaseInsensitive add-on",
-			key:    inKey,
 			field:  "name",
-			values: []string{"John", "Doe"},
+			values: []any{"John", "Doe"},
 			adds:   []addOns{CaseInsensitive},
 			expected: map[string]interface{}{
 				inKey: []map[string]interface{}{
@@ -513,9 +543,8 @@ func TestQueryBuilderImpl_setFields(t *testing.T) {
 		},
 		{
 			name:   "Set field with multiple add-ons",
-			key:    inKey,
 			field:  "name",
-			values: []string{"John", "Doe"},
+			values: []any{"John", "Doe"},
 			adds:   []addOns{Not, CaseInsensitive},
 			expected: map[string]interface{}{
 				inKey: []map[string]interface{}{
@@ -525,9 +554,8 @@ func TestQueryBuilderImpl_setFields(t *testing.T) {
 		},
 		{
 			name:   "Set multiple fields",
-			key:    inKey,
 			field:  "name",
-			values: []string{"John", "Doe"},
+			values: []any{"John", "Doe"},
 			expected: map[string]interface{}{
 				inKey: []map[string]interface{}{
 					{"field": "name", "values": []string{"John", "Doe"}},
@@ -540,287 +568,25 @@ func TestQueryBuilderImpl_setFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			qb := NewQueryBuilder()
-			qb.setFields(tt.key, tt.field, tt.values, tt.adds...)
+			qb = qb.In(tt.field, tt.values, tt.adds...)
 			if tt.name == "Set multiple fields" {
-				qb.setFields(tt.key, "age", []string{"30", "40"})
+				qb = qb.In("age", []any{"30", "40"})
 			}
-			assert.Equal(t, tt.expected, qb.query.query)
-		})
-	}
-}
-func TestSet(t *testing.T) {
-	tests := []struct {
-		name     string
-		initial  map[string]interface{}
-		key      string
-		value    interface{}
-		expected map[string]interface{}
-	}{
-		{
-			name:     "Set value type string",
-			initial:  map[string]interface{}{},
-			key:      "key",
-			value:    "value",
-			expected: map[string]interface{}{"key": "value"},
-		},
-		{
-			name:     "Set value type uint64",
-			initial:  map[string]interface{}{},
-			key:      "key",
-			value:    uint64(98),
-			expected: map[string]interface{}{"key": uint64(98)},
-		},
-		{
-			name:     "Set value type int",
-			initial:  map[string]interface{}{},
-			key:      "key",
-			value:    98,
-			expected: map[string]interface{}{"key": 98},
-		},
-		{
-			name:     "Set value type bool",
-			initial:  map[string]interface{}{},
-			key:      "key",
-			value:    true,
-			expected: map[string]interface{}{"key": true},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			q := &queryImpl{query: tt.initial}
-			q.set(tt.key, tt.value)
-			assert.Equal(t, tt.expected, q.query)
-		})
-	}
-}
-
-func TestQueryImpl_setSliceMap(t *testing.T) {
-	tests := []struct {
-		name     string
-		initial  map[string]interface{}
-		key      string
-		value    []map[string]string
-		expected map[string]interface{}
-	}{
-		{
-			name:    "Set single map",
-			initial: map[string]interface{}{},
-			key:     "key",
-			value:   []map[string]string{{"field": "name", "value": "John"}},
-			expected: map[string]interface{}{
-				"key": []map[string]string{{"field": "name", "value": "John"}},
-			},
-		},
-		{
-			name:    "Set multiple maps",
-			initial: map[string]interface{}{},
-			key:     "key",
-			value: []map[string]string{
-				{"field": "name", "value": "John"},
-				{"field": "age", "value": "30"},
-			},
-			expected: map[string]interface{}{
-				"key": []map[string]string{
-					{"field": "name", "value": "John"},
-					{"field": "age", "value": "30"},
-				},
-			},
-		},
-		{
-			name: "Append to existing maps",
-			initial: map[string]interface{}{
-				"key": []map[string]string{{"field": "name", "value": "John"}},
-			},
-			key: "key",
-			value: []map[string]string{
-				{"field": "age", "value": "30"},
-			},
-			expected: map[string]interface{}{
-				"key": []map[string]string{
-					{"field": "name", "value": "John"},
-					{"field": "age", "value": "30"},
-				},
-			},
-		},
-		{
-			name: "Overwrite non-slice map value",
-			initial: map[string]interface{}{
-				"key": "non-slice-map-value",
-			},
-			key: "key",
-			value: []map[string]string{
-				{"field": "name", "value": "John"},
-			},
-			expected: map[string]interface{}{
-				"key": []map[string]string{
-					{"field": "name", "value": "John"},
-				},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			q := &queryImpl{query: tt.initial}
-			q.setSliceMapString(tt.key, tt.value)
-			assert.Equal(t, tt.expected, q.query)
-		})
-	}
-}
-func TestQueryImpl_setSlice(t *testing.T) {
-	tests := []struct {
-		name     string
-		initial  map[string]interface{}
-		key      string
-		value    []string
-		expected map[string]interface{}
-	}{
-		{
-			name:    "Set single slice",
-			initial: map[string]interface{}{},
-			key:     "key",
-			value:   []string{"value1"},
-			expected: map[string]interface{}{
-				"key": []string{"value1"},
-			},
-		},
-		{
-			name:    "Set multiple slices",
-			initial: map[string]interface{}{},
-			key:     "key",
-			value:   []string{"value1", "value2"},
-			expected: map[string]interface{}{
-				"key": []string{"value1", "value2"},
-			},
-		},
-		{
-			name: "Append to existing slice",
-			initial: map[string]interface{}{
-				"key": []string{"value1"},
-			},
-			key:   "key",
-			value: []string{"value2"},
-			expected: map[string]interface{}{
-				"key": []string{"value1", "value2"},
-			},
-		},
-		{
-			name: "Overwrite non-slice value",
-			initial: map[string]interface{}{
-				"key": "non-slice-value",
-			},
-			key:   "key",
-			value: []string{"value1"},
-			expected: map[string]interface{}{
-				"key": []string{"value1"},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			q := &queryImpl{query: tt.initial}
-			q.setSliceString(tt.key, tt.value)
-			assert.Equal(t, tt.expected, q.query)
-		})
-	}
-}
-
-func TestQueryImpl_setMap(t *testing.T) {
-	tests := []struct {
-		name     string
-		initial  map[string]interface{}
-		key      string
-		value    map[string]interface{}
-		expected map[string]interface{}
-	}{
-		{
-			name:    "Set single map",
-			initial: map[string]interface{}{},
-			key:     "key",
-			value:   map[string]interface{}{"field1": "value1"},
-			expected: map[string]interface{}{
-				"key": map[string]interface{}{"field1": "value1"},
-			},
-		},
-		{
-			name:    "Set multiple maps",
-			initial: map[string]interface{}{},
-			key:     "key",
-			value: map[string]interface{}{
-				"field1": "value1",
-				"field2": "value2",
-			},
-			expected: map[string]interface{}{
-				"key": map[string]interface{}{
-					"field1": "value1",
-					"field2": "value2",
-				},
-			},
-		},
-		{
-			name: "Append to existing map",
-			initial: map[string]interface{}{
-				"key": map[string]interface{}{"field1": "value1"},
-			},
-			key: "key",
-			value: map[string]interface{}{
-				"field2": "value2",
-			},
-			expected: map[string]interface{}{
-				"key": map[string]interface{}{
-					"field1": "value1",
-					"field2": "value2",
-				},
-			},
-		},
-		{
-			name: "Overwrite non-map value",
-			initial: map[string]interface{}{
-				"key": "non-map-value",
-			},
-			key: "key",
-			value: map[string]interface{}{
-				"field1": "value1",
-			},
-			expected: map[string]interface{}{
-				"key": map[string]interface{}{
-					"field1": "value1",
-				},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			q := &queryImpl{query: tt.initial}
-			q.setMap(tt.key, tt.value)
-			assert.Equal(t, tt.expected, q.query)
+			assertQueryEqual(t, tt.expected, qb.Query())
 		})
 	}
 }
 
 func TestQueryImpl_JSON(t *testing.T) {
-	q := &queryImpl{
-		query: map[string]interface{}{
-			"key1": "value1",
-			"key2": "value2",
-		},
-	}
-	expectedJSON := `{"key1":"value1","key2":"value2"}`
+	q := NewQueryBuilder().Equal("key1", "value1").Query()
+	expectedJSON := `{"eq":[{"field":"key1", "value":"value1"}]}`
 	jsonBytes, err := q.JSON()
 	assert.NoError(t, err)
 	assert.JSONEq(t, expectedJSON, string(jsonBytes))
 }
 
 func TestQueryImpl_String(t *testing.T) {
-	q := &queryImpl{
-		query: map[string]interface{}{
-			"key1": "value1",
-			"key2": "value2",
-		},
-	}
-	expectedString := `{"key1":"value1","key2":"value2"}`
+	q := NewQueryBuilder().Equal("key1", "value1").Query()
+	expectedString := `{"eq":[{"field":"key1", "value":"value1"}]}`
 	assert.JSONEq(t, expectedString, q.String())
 }

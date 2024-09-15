@@ -24,6 +24,7 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -50,7 +51,7 @@ func (vs PassthroughValueSet) GetValue(ctx context.Context, fieldName string, re
 	return vs[fieldName], nil
 }
 
-func (qj *QueryJSON) Eval(ctx context.Context, fieldSet FieldSet, valueSet ValueSet) (bool, error) {
+func EvalQuery(ctx context.Context, qj *query.QueryJSON, fieldSet FieldSet, valueSet ValueSet) (bool, error) {
 	eval := &inlineEval{
 		inlineEvalRoot: &inlineEvalRoot{
 			ctx:      ctx,
@@ -134,7 +135,7 @@ func (t *inlineEval) BuildOr(ot ...*inlineEval) Traverser[*inlineEval] {
 	return t
 }
 
-func (t *inlineEval) doCompare(e *Op, fieldName string, field FieldResolver, testValue driver.Value,
+func (t *inlineEval) doCompare(e *query.Op, fieldName string, field FieldResolver, testValue driver.Value,
 	compareStrings func(caseInsensitive bool, s1, s2 string) bool,
 	compareInt64 func(s1, s2 int64) bool,
 ) *inlineEval {
@@ -177,11 +178,11 @@ func (t *inlineEval) doCompare(e *Op, fieldName string, field FieldResolver, tes
 	return t
 }
 
-func (t *inlineEval) IsEqual(e *OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*inlineEval] {
+func (t *inlineEval) IsEqual(e *query.OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*inlineEval] {
 	return t.isEqual(&e.Op, fieldName, field, testValue)
 }
 
-func (t *inlineEval) isEqual(e *Op, fieldName string, field FieldResolver, testValue driver.Value) *inlineEval {
+func (t *inlineEval) isEqual(e *query.Op, fieldName string, field FieldResolver, testValue driver.Value) *inlineEval {
 	return t.doCompare(e, fieldName, field, testValue,
 		func(caseInsensitive bool, s1, s2 string) bool {
 			if caseInsensitive {
@@ -195,7 +196,7 @@ func (t *inlineEval) isEqual(e *Op, fieldName string, field FieldResolver, testV
 	)
 }
 
-func (t *inlineEval) IsLike(e *OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*inlineEval] {
+func (t *inlineEval) IsLike(e *query.OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*inlineEval] {
 	return t.doCompare(&e.Op, fieldName, field, testValue,
 		func(caseInsensitive bool, s1, s2 string) bool {
 			re, err := t.convertLike(s2, caseInsensitive)
@@ -215,7 +216,7 @@ func (t *inlineEval) int64LikeNotSupported(s1, s2 int64) bool {
 	return false
 }
 
-func (t *inlineEval) IsNull(e *Op, fieldName string, field FieldResolver) Traverser[*inlineEval] {
+func (t *inlineEval) IsNull(e *query.Op, fieldName string, field FieldResolver) Traverser[*inlineEval] {
 	var valMatches bool
 	actualValue, err := t.valueSet.GetValue(t.ctx, fieldName, field)
 	if err != nil {
@@ -230,7 +231,7 @@ func (t *inlineEval) IsNull(e *Op, fieldName string, field FieldResolver) Traver
 	return t
 }
 
-func (t *inlineEval) IsLessThan(e *OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*inlineEval] {
+func (t *inlineEval) IsLessThan(e *query.OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*inlineEval] {
 	return t.doCompare(&e.Op, fieldName, field, testValue,
 		func(caseInsensitive bool, s1, s2 string) bool {
 			return strings.Compare(s1, s2) < 0
@@ -241,7 +242,7 @@ func (t *inlineEval) IsLessThan(e *OpSingleVal, fieldName string, field FieldRes
 	)
 }
 
-func (t *inlineEval) IsLessThanOrEqual(e *OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*inlineEval] {
+func (t *inlineEval) IsLessThanOrEqual(e *query.OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*inlineEval] {
 	return t.doCompare(&e.Op, fieldName, field, testValue,
 		func(caseInsensitive bool, s1, s2 string) bool {
 			return strings.Compare(s1, s2) <= 0
@@ -252,7 +253,7 @@ func (t *inlineEval) IsLessThanOrEqual(e *OpSingleVal, fieldName string, field F
 	)
 }
 
-func (t *inlineEval) IsGreaterThan(e *OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*inlineEval] {
+func (t *inlineEval) IsGreaterThan(e *query.OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*inlineEval] {
 	return t.doCompare(&e.Op, fieldName, field, testValue,
 		func(caseInsensitive bool, s1, s2 string) bool {
 			return strings.Compare(s1, s2) > 0
@@ -263,7 +264,7 @@ func (t *inlineEval) IsGreaterThan(e *OpSingleVal, fieldName string, field Field
 	)
 }
 
-func (t *inlineEval) IsGreaterThanOrEqual(e *OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*inlineEval] {
+func (t *inlineEval) IsGreaterThanOrEqual(e *query.OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*inlineEval] {
 	return t.doCompare(&e.Op, fieldName, field, testValue,
 		func(caseInsensitive bool, s1, s2 string) bool {
 			return strings.Compare(s1, s2) >= 0
@@ -274,7 +275,7 @@ func (t *inlineEval) IsGreaterThanOrEqual(e *OpSingleVal, fieldName string, fiel
 	)
 }
 
-func (t *inlineEval) IsIn(e *OpMultiVal, fieldName string, field FieldResolver, testValues []driver.Value) Traverser[*inlineEval] {
+func (t *inlineEval) IsIn(e *query.OpMultiVal, fieldName string, field FieldResolver, testValues []driver.Value) Traverser[*inlineEval] {
 	// Do not negate the check in the individual compares
 	withoutNegate := e.Op
 	withoutNegate.Not = false

@@ -23,7 +23,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
-	"github.com/kaleido-io/paladin/core/internal/filters"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -186,7 +186,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	assert.Equal(t, state1.State, state1a)
 
 	// Do a query on just one state, based on all the label fields
-	var query *filters.QueryJSON
+	var query *query.QueryJSON
 	err = json.Unmarshal(([]byte)(`{
 		"eq": [
 		  {"field":"field1","value":"0x0123456789012345678901234567890123456789"},

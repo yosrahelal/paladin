@@ -26,8 +26,8 @@ import (
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
-	"github.com/kaleido-io/paladin/toolkit/pkg/filters"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 )
 
 var INPUT_COUNT = 2
@@ -56,7 +56,7 @@ func (z *Zeto) prepareInputs(ctx context.Context, owner string, amount *ethtypes
 	stateRefs := []*pb.StateRef{}
 	coins := []*types.ZetoCoin{}
 	for {
-		queryBuilder := filters.NewQueryBuilder().
+		queryBuilder := query.NewQueryBuilder().
 			Limit(10).
 			Sort(".created").
 			Equal("owner", owner)
