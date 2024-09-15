@@ -44,7 +44,7 @@ describe("Atom", function () {
       [f1txo3, f1txo4],
       f1TxData
     );
-    const encoded1 = noto.interface.encodeFunctionData("approvedTransfer", [
+    const encoded1 = noto.interface.encodeFunctionData("transferWithApproval", [
       [f1txo1, f1txo2],
       [f1txo3, f1txo4],
       randomBytes32(),
@@ -77,7 +77,7 @@ describe("Atom", function () {
     // Do the delegation/approval transactions
     const f1tx = await noto
       .connect(notary1)
-      .approve(mcAddr, multiTXF1Part.hash, "0x", "0x");
+      .approveTransfer(mcAddr, multiTXF1Part.hash, "0x", "0x");
     const delegateResult1: ContractTransactionReceipt | null =
       await f1tx.wait();
     const delegateEvent1 = noto.interface.parseLog(
@@ -126,7 +126,7 @@ describe("Atom", function () {
       f1TxData
     );
 
-    const encoded1 = noto.interface.encodeFunctionData("approvedTransfer", [
+    const encoded1 = noto.interface.encodeFunctionData("transferWithApproval", [
       [f1txo1, f1txo2],
       [f1txo3, f1txo4],
       randomBytes32(),

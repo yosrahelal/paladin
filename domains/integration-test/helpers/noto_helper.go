@@ -63,16 +63,16 @@ func (n *NotoHelper) Transfer(ctx context.Context, to string, amount uint64) *Do
 	}))
 }
 
-func (n *NotoHelper) ApprovedTransfer(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
-	fn := types.NotoABI.Functions()["approvedTransfer"]
+func (n *NotoHelper) TransferWithApproval(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
+	fn := types.NotoABI.Functions()["transferWithApproval"]
 	return NewDomainTransactionHelper(ctx, n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.TransferParams{
 		To:     to,
 		Amount: ethtypes.NewHexIntegerU64(amount),
 	}))
 }
 
-func (n *NotoHelper) Approve(ctx context.Context, delegate ethtypes.Address0xHex, call []byte) *DomainTransactionHelper {
-	fn := types.NotoABI.Functions()["approve"]
+func (n *NotoHelper) ApproveTransfer(ctx context.Context, delegate ethtypes.Address0xHex, call []byte) *DomainTransactionHelper {
+	fn := types.NotoABI.Functions()["approveTransfer"]
 	return NewDomainTransactionHelper(ctx, n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.ApproveParams{
 		Delegate: delegate,
 		Call:     call,

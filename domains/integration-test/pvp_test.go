@@ -104,8 +104,8 @@ func TestPvP(t *testing.T) {
 	})
 
 	log.L(ctx).Infof("Prepare the transfers")
-	transferGold := notoGold.ApprovedTransfer(ctx, bob, 1).Prepare(alice)
-	transferSilver := notoSilver.ApprovedTransfer(ctx, alice, 10).Prepare(bob)
+	transferGold := notoGold.TransferWithApproval(ctx, bob, 1).Prepare(alice)
+	transferSilver := notoSilver.TransferWithApproval(ctx, alice, 10).Prepare(bob)
 
 	// TODO: this should actually be a Pente state transition
 	log.L(ctx).Infof("Prepare the trade execute")
@@ -141,8 +141,8 @@ func TestPvP(t *testing.T) {
 	// If any party found a discrepancy at this point, they could cancel the swap (last chance to back out)
 
 	log.L(ctx).Infof("Approve both Noto transactions")
-	notoGold.Approve(ctx, transferAtom.Address, transferGold.EncodedCall).SignAndSend(alice).Wait()
-	notoSilver.Approve(ctx, transferAtom.Address, transferSilver.EncodedCall).SignAndSend(bob).Wait()
+	notoGold.ApproveTransfer(ctx, transferAtom.Address, transferGold.EncodedCall).SignAndSend(alice).Wait()
+	notoSilver.ApproveTransfer(ctx, transferAtom.Address, transferSilver.EncodedCall).SignAndSend(bob).Wait()
 
 	log.L(ctx).Infof("Execute the atomic operation")
 	transferAtom.Execute(ctx).SignAndSend(alice).Wait()

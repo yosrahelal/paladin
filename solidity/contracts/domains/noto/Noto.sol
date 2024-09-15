@@ -118,10 +118,56 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     /// @dev query whether an approval exists for the given transaction
     /// @param txhash the transaction hash
     /// @return delegate the non-zero owner address, or zero if the TXO ID is not in the approval map
-    function getApproval(
+    function getTransferApproval(
         bytes32 txhash
     ) public view returns (address delegate) {
         return _approvals[txhash].delegate;
+    }
+
+    /**
+     * @dev the main function of the contract, which finalizes execution of a pre-verified
+     *      transaction. The inputs and outputs are all opaque to this on-chain function.
+     *      Provides ordering and double-spend protection.
+     *
+     * @param inputs Array of zero or more outputs of a previous function call against this
+     *      contract that have not yet been spent, and the signer is authorized to spend.
+     * @param outputs Array of zero or more new outputs to generate, for future transactions to spend.
+     * @param data Any additional transaction data (opaque to the blockchain)
+     *
+     * Emits a {UTXOTransfer} event.
+     */
+    function transfer(
+        bytes32[] calldata inputs,
+        bytes32[] calldata outputs,
+        bytes calldata signature,
+        bytes calldata data
+    ) external virtual onlyNotary {
+        _transfer(inputs, outputs, signature, data);
+    }
+
+    function _transfer(
+        bytes32[] memory inputs,
+        bytes32[] memory outputs,
+        bytes memory signature,
+        bytes memory data
+    ) internal {
+        // Check the inputs are all existing unspent ids
+        for (uint256 i = 0; i < inputs.length; ++i) {
+            if (_unspent[inputs[i]] == false) {
+                revert NotoInvalidInput(inputs[i]);
+            }
+            delete (_unspent[inputs[i]]);
+        }
+
+        // Check the outputs are all new unspent ids
+        for (uint256 i = 0; i < outputs.length; ++i) {
+            if (_unspent[outputs[i]] == true) {
+                revert NotoInvalidOutput(outputs[i]);
+            }
+            _unspent[outputs[i]] = true;
+        }
+
+        emit NotoTransfer(inputs, outputs, signature, data);
     }
 
     /**
@@ -139,7 +185,16 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
      *
      * Emits a {NotoApproved} event.
      */
-    function _approve(
+    function approveTransfer(
+        address delegate,
+        bytes32 txhash,
+        bytes calldata signature,
+        bytes calldata data
+    ) external virtual onlyNotary {
+        _approveTransfer(delegate, txhash, signature, data);
+    }
+
+    function _approveTransfer(
         address delegate,
         bytes32 txhash,
         bytes calldata signature,
@@ -158,7 +213,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
      *
      * Emits a {NotoTransfer} event.
      */
-    function approvedTransfer(
+    function transferWithApproval(
         bytes32[] calldata inputs,
         bytes32[] calldata outputs,
         bytes calldata signature,
@@ -194,43 +249,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
         return _hashTypedDataV4(structHash);
     }
 
-    /**
-     * @dev the main function of the contract, which finalizes execution of a pre-verified
-     *      transaction. The inputs and outputs are all opaque to this on-chain function.
-     *      Provides ordering and double-spend protection.
-     *
-     * @param inputs Array of zero or more outputs of a previous function call against this
-     *      contract that have not yet been spent, and the signer is authorized to spend.
-     * @param outputs Array of zero or more new outputs to generate, for future transactions to spend.
-     * @param data Any additional transaction data (opaque to the blockchain)
-     *
-     * Emits a {NotoTransfer} event.
-     */
-    function _transfer(
-        bytes32[] memory inputs,
-        bytes32[] memory outputs,
-        bytes memory signature,
-        bytes memory data
-    ) internal {
-        // Check the inputs are all existing unspent ids
-        for (uint256 i = 0; i < inputs.length; ++i) {
-            if (_unspent[inputs[i]] == false) {
-                revert NotoInvalidInput(inputs[i]);
-            }
-            delete (_unspent[inputs[i]]);
-        }
-
-        // Check the outputs are all new unspent ids
-        for (uint256 i = 0; i < outputs.length; ++i) {
-            if (_unspent[outputs[i]] == true) {
-                revert NotoInvalidOutput(outputs[i]);
-            }
-            _unspent[outputs[i]] = true;
-        }
-
-        emit NotoTransfer(inputs, outputs, signature, data);
-    }
-
     function mint(
         bytes32[] calldata outputs,
         bytes calldata signature,
@@ -238,23 +256,5 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     ) external virtual onlyNotary {
         bytes32[] memory inputs;
         _transfer(inputs, outputs, signature, data);
-    }
-
-    function transfer(
-        bytes32[] calldata inputs,
-        bytes32[] calldata outputs,
-        bytes calldata signature,
-        bytes calldata data
-    ) external virtual onlyNotary {
-        _transfer(inputs, outputs, signature, data);
-    }
-
-    function approve(
-        address delegate,
-        bytes32 txhash,
-        bytes calldata signature,
-        bytes calldata data
-    ) external virtual onlyNotary {
-        _approve(delegate, txhash, signature, data);
     }
 }
