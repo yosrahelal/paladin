@@ -33,7 +33,7 @@ func TestIntentToAssignNonce(t *testing.T) {
 	nonceCache := newNonceCacheForTesting(t)
 	defer nonceCache.stop()
 	callbackHasBeenCalled := false
-	intent, err := nonceCache.intentToAssignNonce(ctx, "0xabcd", func(ctx context.Context, signer string) (uint64, error) {
+	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd", func(ctx context.Context, signer string) (uint64, error) {
 		callbackHasBeenCalled = true
 		return uint64(42), nil
 	})
@@ -51,7 +51,7 @@ func TestAssignNonce(t *testing.T) {
 		callbackHasBeenCalled = true
 		return uint64(42), nil
 	}
-	intent, err := nonceCache.intentToAssignNonce(ctx, "0xabcd", callback)
+	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
 	require.NoError(t, err)
 	assert.True(t, callbackHasBeenCalled)
 
@@ -62,7 +62,7 @@ func TestAssignNonce(t *testing.T) {
 
 	callbackHasBeenCalled = false
 
-	intent, err = nonceCache.intentToAssignNonce(ctx, "0xabcd", callback)
+	intent, err = nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
 	require.NoError(t, err)
 	assert.False(t, callbackHasBeenCalled)
 
@@ -81,7 +81,7 @@ func TestAssignNonceRollback(t *testing.T) {
 		callbackHasBeenCalled = true
 		return uint64(42), nil
 	}
-	intent, err := nonceCache.intentToAssignNonce(ctx, "0xabcd", callback)
+	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
 	require.NoError(t, err)
 	assert.True(t, callbackHasBeenCalled)
 
@@ -92,7 +92,7 @@ func TestAssignNonceRollback(t *testing.T) {
 
 	callbackHasBeenCalled = false
 
-	intent, err = nonceCache.intentToAssignNonce(ctx, "0xabcd", callback)
+	intent, err = nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
 	require.NoError(t, err)
 	assert.False(t, callbackHasBeenCalled)
 
@@ -124,7 +124,7 @@ func TestAssignNonceMultiThreaded(t *testing.T) {
 	doIt := func(threadNumber int) {
 		for itteration := 0; itteration < itterations; itteration++ {
 
-			intent, err := nonceCache.intentToAssignNonce(ctx, "0xabcd", callback)
+			intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
 			require.NoError(t, err)
 			nextNonce := intent.AssignNextNonce(ctx)
 			if rand.Intn(10) == 9 {
@@ -250,7 +250,7 @@ func TestAssignNonceMultiThreadedMultiSigningAddresses(t *testing.T) {
 			// inner function to run through a number of itterations on a single thread
 			runItterationsForThread := func(threadNumber int, signingAddressIndex int, signingAddress string) {
 				for itteration := 0; itteration < numItterationsPerThread; itteration++ {
-					intent, err := nonceCache.intentToAssignNonce(ctx, signingAddress, callback)
+					intent, err := nonceCache.IntentToAssignNonce(ctx, signingAddress, callback)
 					defer intent.Rollback(ctx)
 					require.NoError(t, err)
 					nextNonce := intent.AssignNextNonce(ctx)

@@ -20,14 +20,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
-
-type nextNonceCallback func(ctx context.Context, signer string) (uint64, error)
-
-type nonceCache interface {
-	intentToAssignNonce(ctx context.Context, signer string, nextNonceCB nextNonceCallback) (NonceAssignmentIntent, error)
-}
 
 type nonceCacheStruct struct {
 	nextNonceBySigner map[string]*cachedNonce
@@ -41,7 +36,7 @@ type nonceCacheStruct struct {
 func (nc *nonceCacheStruct) stop() {
 	close(nc.stopChannel)
 }
-func newNonceCache(nonceStateTimeout time.Duration) nonceCache {
+func newNonceCache(nonceStateTimeout time.Duration) enginespi.NonceCache {
 	n := &nonceCacheStruct{
 		nextNonceBySigner: make(map[string]*cachedNonce),
 		nonceStateTimeout: nonceStateTimeout,
@@ -96,11 +91,11 @@ func (nc *nonceCacheStruct) setNextNonceBySigner(signer string, record *cachedNo
 // the caller can be sure that the nonce assignment step will not suffer the latency of reading the database or calling
 // out to the block chain node
 // It is the callers responsibility to call `Complete` on the returned object
-// The nonce cache for the given signing address is guranteed not to be reaped after intentToAssignNonce returns and before `complete`
+// The nonce cache for the given signing address is guranteed not to be reaped after IntentToAssignNonce returns and before `complete`
 // NOTE:  multiple readers can hold intents to assign concurrently so the nonce is not actually assigned at this point
 //
 //	nonce assignment itself is protected by a mutex so only one reader can assign at a time but thanks to the pre intent declaration, the assignment is quick
-func (nc *nonceCacheStruct) intentToAssignNonce(ctx context.Context, signer string, nextNonceCB nextNonceCallback) (NonceAssignmentIntent, error) {
+func (nc *nonceCacheStruct) IntentToAssignNonce(ctx context.Context, signer string, nextNonceCB enginespi.NextNonceCallback) (enginespi.NonceAssignmentIntent, error) {
 
 	// take a read lock to block the reaper thread
 	nc.reaperLock.RLock()
@@ -139,11 +134,6 @@ func (nc *nonceCacheStruct) intentToAssignNonce(ctx context.Context, signer stri
 	}, nil
 }
 
-type NonceAssignmentIntent interface {
-	Complete(ctx context.Context)
-	AssignNextNonce(ctx context.Context) uint64
-	Rollback(ctx context.Context)
-}
 type nonceAssignmentIntent struct {
 	completed   bool
 	cachedNonce *cachedNonce
