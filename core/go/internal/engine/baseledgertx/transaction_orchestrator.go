@@ -513,7 +513,6 @@ func (oc *orchestrator) HandleIndexTransactions(ctx context.Context, confirmedTr
 	recordStart := time.Now()
 	oc.InFlightTxsMux.Lock()
 	defer oc.InFlightTxsMux.Unlock()
-	var pending *InFlightTransactionStageController
 	addOutputResponse := make(chan struct{}, len(oc.InFlightTxs))
 	for _, it := range oc.InFlightTxs { // no new transaction orchestrator is started, rely on the main loop to apply strict order
 		if it != nil {
@@ -524,11 +523,11 @@ func (oc *orchestrator) HandleIndexTransactions(ctx context.Context, confirmedTr
 					nonceStr := currentTx.stateManager.GetNonce().String()
 					indexTx := confirmedTransactions[nonceStr]
 					if indexTx != nil {
-						pending.MarkHistoricalTime("confirmation_event_wait_to_be_recorded", recordStart)
-						pending.MarkTime("confirmation_event_wait_to_be_processed")
+						currentTx.MarkHistoricalTime("confirmation_event_wait_to_be_recorded", recordStart)
+						currentTx.MarkTime("confirmation_event_wait_to_be_processed")
 						// Will be picked up on the next orchestrator loop - guaranteed to occur before Confirmed
-						pending.stateManager.AddConfirmationsOutput(ctx, indexTx)
-						pending.MarkInFlightTxStale()
+						currentTx.stateManager.AddConfirmationsOutput(ctx, indexTx)
+						currentTx.MarkInFlightTxStale()
 					}
 					addOutputResponse <- struct{}{}
 				}()

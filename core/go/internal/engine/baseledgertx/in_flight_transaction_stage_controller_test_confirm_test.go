@@ -18,6 +18,7 @@ package baseledgertx
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"testing"
 	"time"
 
@@ -233,6 +234,34 @@ func TestProduceLatestInFlightStageContextConfirmingTxSucceeded(t *testing.T) {
 	// switched running stage context
 	assert.NotEqual(t, rsc, inFlightStageMananger.GetRunningStageContext(ctx))
 
+}
+
+func TestProduceLatestInFlightStageContextConfirmingTxThatMissedConfirmationEvent(t *testing.T) {
+	ctx := context.Background()
+	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
+	it := testInFlightTransactionStateManagerWithMocks.it
+
+	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
+
+	mTS := testInFlightTransactionStateManagerWithMocks.mTS
+	defer mTS.AssertExpectations(t)
+	// trigger confirmation due to missed event
+	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
+
+	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+		AvailableToSpend:         nil,
+		PreviousNonceCostUnknown: false,
+		CurrentConfirmedNonce:    new(big.Int).SetUint64(it.stateManager.GetNonce().Uint64() + 1),
+	})
+	assert.NotEmpty(t, *tOut)
+	assert.Equal(t, "20000", tOut.Cost.String())
+	assert.True(t, tOut.TransactionSubmitted)
+	for len(inFlightStageMananger.bufferedStageOutputs) == 0 {
+		// wait for the confirmation output to be added
+	}
+	assert.NotNil(t, inFlightStageMananger.bufferedStageOutputs[0].ConfirmationOutput)
+	assert.Nil(t, inFlightStageMananger.bufferedStageOutputs[0].ConfirmationOutput.ConfirmedTransaction)
+	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
 }
 func TestProduceLatestInFlightStageContextConfirmingPanic(t *testing.T) {
 	ctx := context.Background()

@@ -79,6 +79,7 @@ func TestNewOrchestratorPolling(t *testing.T) {
 	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 	oc.InFlightTxs = []*InFlightTransactionStageController{mockIT}
 	oc.transactionIDsInStatusUpdate = []string{"randomID"}
+	oc.updateConfirmedTxNonce(testMainSigningAddress, big.NewInt(2))
 	mTS.On("AddSubStatusAction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		time.Sleep(1 * time.Hour) // make sure the async action never got returned as the test will mock the events
 	}).Maybe()
@@ -90,7 +91,6 @@ func TestNewOrchestratorPolling(t *testing.T) {
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{}, nil, nil).Maybe()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT}
-
 	addressBalanceChecked := make(chan bool)
 	mEC.On("GetBalance", mock.Anything, testMainSigningAddress, "latest").Return(ethtypes.NewHexInteger64(100), nil).Run(func(args mock.Arguments) {
 		close(addressBalanceChecked)
@@ -458,7 +458,16 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 }
 
 func TestOrchestratorHandleIndexTransactions(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	mockManagedTx0 := &baseTypes.ManagedTX{
+		ID:     uuid.New().String(),
+		Status: baseTypes.BaseTxStatusPending,
+		Transaction: &ethsigner.Transaction{
+			From:  json.RawMessage(testMainSigningAddress),
+			Nonce: ethtypes.NewHexInteger64(0),
+		},
+		Created: fftypes.Now(),
+	}
 	mockManagedTx1 := &baseTypes.ManagedTX{
 		ID:     uuid.New().String(),
 		Status: baseTypes.BaseTxStatusPending,
@@ -474,6 +483,15 @@ func TestOrchestratorHandleIndexTransactions(t *testing.T) {
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
+		},
+		Created: fftypes.Now(),
+	}
+	mockManagedTx3 := &baseTypes.ManagedTX{
+		ID:     uuid.New().String(),
+		Status: baseTypes.BaseTxStatusPending,
+		Transaction: &ethsigner.Transaction{
+			From:  json.RawMessage(testMainSigningAddress),
+			Nonce: ethtypes.NewHexInteger64(3),
 		},
 		Created: fftypes.Now(),
 	}
@@ -493,16 +511,30 @@ func TestOrchestratorHandleIndexTransactions(t *testing.T) {
 	oc := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
 
 	oc.balanceManager = mockBM
-	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
+	mockIT1 := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
+	mockIT3 := NewInFlightTransactionStageController(ble, oc, mockManagedTx3)
 
 	oc.InFlightTxs = []*InFlightTransactionStageController{
-		mockIT,
+		mockIT1,
+		nil,
+		mockIT3, // nonce is bigger than the max nonce, so shouldn't be processed
 	}
 
+	assert.Nil(t, oc.confirmedTxNoncePerAddress[testMainSigningAddress])
 	oc.orchestratorPollingInterval = 1 * time.Hour
 	err := oc.HandleIndexTransactions(ctx, map[string]*blockindexer.IndexedTransaction{
-		mockManagedTx1.ID: {},
-		mockManagedTx2.ID: {}, // not inflight, so shouldn't be processed
-	}, big.NewInt(1))
+		mockManagedTx0.Nonce.BigInt().String(): {}, // already confirmed
+		mockManagedTx1.Nonce.BigInt().String(): {}, // in flight, add the confirmation event
+		mockManagedTx2.Nonce.BigInt().String(): {}, // not inflight, so shouldn't be processed
+	}, big.NewInt(2))
 	assert.NoError(t, err)
+	assert.Equal(t, big.NewInt(2), oc.confirmedTxNoncePerAddress[testMainSigningAddress]) //record the max nonce
+
+	// cancel context should return with error
+	cancelCtx()
+	assert.Regexp(t, "PD010301", oc.HandleIndexTransactions(ctx, map[string]*blockindexer.IndexedTransaction{
+		mockManagedTx0.Nonce.BigInt().String(): {}, // already confirmed
+		mockManagedTx1.Nonce.BigInt().String(): {}, // in flight, add the confirmation event
+		mockManagedTx2.Nonce.BigInt().String(): {}, // not inflight, so shouldn't be processed
+	}, big.NewInt(2)))
 }
