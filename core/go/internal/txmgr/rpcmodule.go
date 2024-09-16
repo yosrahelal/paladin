@@ -18,25 +18,21 @@ package txmgr
 import (
 	"context"
 
-	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 )
 
-func (tm *txManager) initRPC() {
-	tm.rpcModule = rpcserver.NewRPCModule("pstate").
+func (tm *txManager) buildRPCModule() *rpcserver.RPCModule {
+	return rpcserver.NewRPCModule("pstate").
 		Add("ptx_queryTransactions", tm.rpcQueryTransactions())
 }
 
 func (tm *txManager) rpcQueryTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
-		query filters.QueryJSON,
-		abiParam abi.Parameter,
-	) (Schema, error) {
-		s, err := newABISchema(ctx, domain, &abiParam)
-		if err == nil {
-			err = ss.PersistSchema(ctx, s)
-		}
-		return s, err
+		query query.QueryJSON,
+		full bool,
+	) ([]*ptxapi.Transaction, error) {
+		return tm.queryTransactions(ctx, &query, full)
 	})
 }

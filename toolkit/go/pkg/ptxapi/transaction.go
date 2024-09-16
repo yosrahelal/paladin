@@ -29,7 +29,7 @@ const (
 )
 
 func (tt TransactionType) Enum() tktypes.Enum[TransactionType] {
-	return tktypes.Enum[TransactionType](lt)
+	return tktypes.Enum[TransactionType](tt)
 }
 
 func (tt TransactionType) Options() []string {
@@ -56,7 +56,6 @@ func (ts TransactionStatus) Options() []string {
 }
 
 type TransactionInput struct {
-	ID             string                        `json:"id"`
 	IdempotencyKey string                        `json:"idempotencyKey,omitempty"`
 	Type           tktypes.Enum[TransactionType] `json:"type"`
 	Domain         string                        `json:"domain,omitempty"`
@@ -67,7 +66,8 @@ type TransactionInput struct {
 }
 
 type Transaction struct {
+	ID string `json:"id"`
 	TransactionInput
-	CreatedAt tktypes.Timestamp               `json:"createdAt"`
-	Status    tktypes.Enum[TransactionStatus] `json:"status"`
+	Created tktypes.Timestamp               `json:"created"`
+	Status  tktypes.Enum[TransactionStatus] `json:"status"`
 }
