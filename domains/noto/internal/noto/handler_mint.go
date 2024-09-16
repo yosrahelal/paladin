@@ -85,7 +85,11 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 		return nil, err
 	}
 
-	_, outputStates, err := h.noto.prepareOutputs(*toAddress, params.Amount)
+	outputCoins, outputStates, err := h.noto.prepareOutputs(*toAddress, params.Amount)
+	if err != nil {
+		return nil, err
+	}
+	encodedTransfer, err := h.noto.encodeTransferUnmasked(ctx, tx.ContractAddress, nil, outputCoins)
 	if err != nil {
 		return nil, err
 	}
@@ -96,8 +100,16 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 			OutputStates: outputStates,
 		},
 		AttestationPlan: []*prototk.AttestationRequest{
+			// Sender confirms the initial request with a signature
+			// Note: although sender is guaranteed to be the notary, this is included for alignment with transfers
+			{
+				Name:            "sender",
+				AttestationType: prototk.AttestationType_SIGN,
+				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+				Payload:         encodedTransfer,
+				Parties:         []string{req.Transaction.From},
+			},
 			// Notary will endorse the assembled transaction (by submitting to the ledger)
-			// Note no  additional attestation using req.Transaction.From, because it is guaranteed to be the notary
 			{
 				Name:            "notary",
 				AttestationType: prototk.AttestationType_ENDORSE,
@@ -138,13 +150,21 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		outputs[i] = state.Id
 	}
 
+	// Include the signature from the sender/notary
+	// This is not verified on the base ledger, but can be verified by anyone with the unmasked state data
+	signature := domain.FindAttestation("sender", req.AttestationResult)
+	if signature == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
+	}
+
 	data, err := h.noto.encodeTransactionData(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
 	}
+
 	params := map[string]interface{}{
 		"outputs":   outputs,
-		"signature": "0x", // no signature, because requester AND submitter are always the notary
+		"signature": ethtypes.HexBytes0xPrefix(signature.Payload),
 		"data":      data,
 	}
 	paramsJSON, err := json.Marshal(params)

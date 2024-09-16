@@ -141,6 +141,19 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
         _transfer(inputs, outputs, signature, data);
     }
 
+    /**
+     * @dev mint performs a transfer with no input states. Base implementation is identical
+     *      to transfer(), but both methods can be overriden to provide different constraints.
+     */
+    function mint(
+        bytes32[] calldata outputs,
+        bytes calldata signature,
+        bytes calldata data
+    ) external virtual onlyNotary {
+        bytes32[] memory inputs;
+        _transfer(inputs, outputs, signature, data);
+    }
+
     function _transfer(
         bytes32[] memory inputs,
         bytes32[] memory outputs,
@@ -174,7 +187,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
      *      the inputs/outputs/data that are later supplied in useDelegation.
      *      This approach is gas-efficient as it means:
      *      - The inputs/outputs/data are not stored on-chain at any point
-     *      - The EIP-712 hash is only calculated on-chain once, in approvedTranfer()
+     *      - The EIP-712 hash is only calculated on-chain once, in transferWithApproval()
      *
      * @param delegate the address that is authorized to submit the transaction
      * @param txhash the pre-calculated hash of the transaction that is delegated
@@ -239,14 +252,5 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
             )
         );
         return _hashTypedDataV4(structHash);
-    }
-
-    function mint(
-        bytes32[] calldata outputs,
-        bytes calldata signature,
-        bytes calldata data
-    ) external virtual onlyNotary {
-        bytes32[] memory inputs;
-        _transfer(inputs, outputs, signature, data);
     }
 }
