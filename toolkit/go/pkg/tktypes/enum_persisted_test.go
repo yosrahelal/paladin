@@ -32,7 +32,7 @@ const (
 	TestEnumOption3 TestEnum = "option3"
 )
 
-func (te TestEnum) Options() []string {
+func (oc TestEnum) Options() []string {
 	return []string{
 		string(TestEnumOption1),
 		string(TestEnumOption2),
@@ -40,7 +40,7 @@ func (te TestEnum) Options() []string {
 	}
 }
 
-func (te TestEnum) Default() string {
+func (oc TestEnum) Default() string {
 	return string(TestEnumOption2)
 }
 

@@ -17,7 +17,6 @@ package baseledgertx
 
 import (
 	"context"
-	"encoding/json"
 	"math/big"
 	"time"
 
@@ -25,7 +24,7 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 )
 
 type inMemoryTxState struct {
@@ -34,28 +33,19 @@ type inMemoryTxState struct {
 
 	// the value of the following properties are populated during transaction processing but not during initialization
 	//  the process logic will determine whether receipt / confirmations requires to be fetched
-	Receipt       *ethclient.TransactionReceiptResponse
-	Confirmations []*baseTypes.Confirmation
-
-	// History       []*baseTypes.TxHistoryStateTransitionEntry , There shouldn't be a scenario to read history entries using the in memory state
-	//                                                           If there is logic requires historical data, consider extending the policyInfo to store them instead
-
-	// Following attributes are metadata derived from the on disk state for coding convenience
-	policyInfo *baseTypes.EnterprisePolicyInfo // The enterprise policy policyInfo parsed from the managed transaction PolicyInfo JSON object
+	IndexedTransaction *blockindexer.IndexedTransaction
 }
 
 func NewInMemoryTxStateMananger(ctx context.Context, mtx *baseTypes.ManagedTX) baseTypes.InMemoryTxStateManager {
-	var info baseTypes.EnterprisePolicyInfo
-	_ = json.Unmarshal(mtx.PolicyInfo.Bytes(), &info)
 	return &inMemoryTxState{
-		mtx:        mtx,
-		policyInfo: &info,
+		mtx: mtx,
 	}
 }
 
-func (imtxs *inMemoryTxState) SetReceipt(ctx context.Context, receipt *ethclient.TransactionReceiptResponse) {
-	imtxs.Receipt = receipt
+func (imtxs *inMemoryTxState) SetIndexedTransaction(ctx context.Context, iTX *blockindexer.IndexedTransaction) {
+	imtxs.IndexedTransaction = iTX
 }
+
 func (imtxs *inMemoryTxState) ApplyTxUpdates(ctx context.Context, txUpdates *baseTypes.BaseTXUpdates) {
 	mtx := imtxs.mtx
 
@@ -99,15 +89,12 @@ func (imtxs *inMemoryTxState) ApplyTxUpdates(ctx context.Context, txUpdates *bas
 		}
 	}
 
-	if txUpdates.LastSubmit != nil {
-		mtx.LastSubmit = txUpdates.LastSubmit
+	if txUpdates.SubmittedHashes != nil {
+		mtx.SubmittedHashes = txUpdates.SubmittedHashes
 	}
 
-	if txUpdates.PolicyInfo != nil {
-		var info baseTypes.EnterprisePolicyInfo
-		_ = json.Unmarshal(txUpdates.PolicyInfo.Bytes(), &info)
-		mtx.PolicyInfo = txUpdates.PolicyInfo
-		imtxs.policyInfo = &info
+	if txUpdates.LastSubmit != nil {
+		mtx.LastSubmit = txUpdates.LastSubmit
 	}
 
 	if txUpdates.Status != nil {
@@ -170,15 +157,19 @@ func (imtxs *inMemoryTxState) GetGasPriceObject() *baseTypes.GasPriceObject {
 	}
 	return gpo
 }
-func (imtxs *inMemoryTxState) GetPolicyInfo() *baseTypes.EnterprisePolicyInfo {
-	return imtxs.policyInfo
+func (imtxs *inMemoryTxState) GetLastSubmitTime() *fftypes.FFTime {
+	return imtxs.mtx.LastSubmit
+}
+
+func (imtxs *inMemoryTxState) GetSubmittedHashes() []string {
+	return imtxs.mtx.SubmittedHashes
 }
 func (imtxs *inMemoryTxState) GetGasLimit() *big.Int {
 	return imtxs.mtx.GasLimit.BigInt()
 }
 
-func (imtxs *inMemoryTxState) GetReceipt() *ethclient.TransactionReceiptResponse {
-	return imtxs.Receipt
+func (imtxs *inMemoryTxState) GetIndexedTransaction() *blockindexer.IndexedTransaction {
+	return imtxs.IndexedTransaction
 }
 
 func (imtxs *inMemoryTxState) IsComplete() bool {

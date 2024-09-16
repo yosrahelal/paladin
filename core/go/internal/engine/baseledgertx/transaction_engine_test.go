@@ -17,6 +17,7 @@ package baseledgertx
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"testing"
@@ -88,18 +89,18 @@ func TestInit(t *testing.T) {
 
 	mockTransactionFilter := qFields.NewFilter(ctx)
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
-
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
 	listed := make(chan struct{})
+	mBI.On("RegisterIndexedTransactionHandler", ctx, mock.Anything).Return(nil).Once()
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{}, nil, nil).Run(func(args mock.Arguments) {
 		listed <- struct{}{}
 	}).Once()
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.enginePollingInterval = 1 * time.Hour
 	ble.maxInFlightOrchestrators = 1
 	// starts ok
@@ -109,9 +110,30 @@ func TestInit(t *testing.T) {
 	afConfig := ble.balanceManagerConfig.SubSection(BalanceManagerAutoFuelingSection)
 	afConfig.Set(BalanceManagerAutoFuelingSourceAddressMinimumBalanceBigIntString, "not a big int")
 	assert.Panics(t, func() {
-		ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+		ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	})
 	afConfig.Set(BalanceManagerAutoFuelingSourceAddressMinimumBalanceBigIntString, "0")
+}
+
+func TestInitFailedRegisterIndexedTransactionHandler(t *testing.T) {
+	ctx := context.Background()
+	ble, _ := NewTestTransactionEngine(t)
+
+	mTS := enginemocks.NewTransactionStore(t)
+	mBI := componentmocks.NewBlockIndexer(t)
+	mEN := enginemocks.NewManagedTxEventNotifier(t)
+	mEC := componentmocks.NewEthClient(t)
+	mKM := componentmocks.NewKeyManager(t)
+	mBI.On("RegisterIndexedTransactionHandler", ctx, mock.Anything).Return(errors.New("pop")).Once()
+
+	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
+	ble.enginePollingInterval = 1 * time.Hour
+	ble.maxInFlightOrchestrators = 1
+	// start error
+	_, initErr := ble.Start(ctx)
+	assert.Regexp(t, "pop", initErr)
+
 }
 
 func TestHandleNewTransactionForTransferOnly(t *testing.T) {
@@ -120,11 +142,11 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	testEthTxInput := &ethsigner.Transaction{
 		From:  []byte(testAutoFuelingSourceAddress),
 		To:    ethtypes.MustNewAddress(testDestAddress),
@@ -228,14 +250,14 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 	ctx := context.Background()
 	ble, _ := NewTestTransactionEngine(t)
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
 	mKM.On("ResolveKey", ctx, testAutoFuelingSourceAddress, algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", testAutoFuelingSourceAddress, nil)
 	// fall back to connector when get call failed
 	ble.gasPriceClient = NewTestNodeGasPriceClient(t, mEC)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	testEthTxInput := &ethsigner.Transaction{
 		From:     []byte(testAutoFuelingSourceAddress),
 		To:       ethtypes.MustNewAddress(testDestAddress),
@@ -278,12 +300,12 @@ func TestHandleNewTransactionTransferAndInvalidType(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestZeroGasPriceChainClient(t)
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
 	mKM.On("ResolveKey", ctx, testAutoFuelingSourceAddress, algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", testAutoFuelingSourceAddress, nil)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	testEthTxInput := &ethsigner.Transaction{
 		From:     []byte(testAutoFuelingSourceAddress),
 		To:       ethtypes.MustNewAddress(testDestAddress),
@@ -335,12 +357,12 @@ func TestHandleNewTransaction(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
 	mKM.On("ResolveKey", ctx, testDestAddress, algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", testDestAddress, nil)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	testEthTxInput := &ethsigner.Transaction{
 		From:  []byte(testMainSigningAddress),
 		To:    ethtypes.MustNewAddress(testDestAddress),
@@ -478,12 +500,12 @@ func TestHandleNewDeployment(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
 	mKM.On("ResolveKey", ctx, testDestAddress, algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", testDestAddress, nil)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	testEthTxInput := &ethsigner.Transaction{
 		From: []byte(testMainSigningAddress),
 		Data: ethtypes.MustNewHexBytes0xPrefix(""),
@@ -603,12 +625,12 @@ func TestEngineSuspend(t *testing.T) {
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 
 	imtxs := NewTestInMemoryTxState(t)
 	mtx := imtxs.GetTx()
@@ -650,7 +672,7 @@ func TestEngineSuspend(t *testing.T) {
 		txStore:                      mTS,
 		ethClient:                    mEC,
 		managedTXEventNotifier:       mEN,
-		txConfirmationListener:       mCL,
+		bIndexer:                     mBI,
 	}
 	// orchestrator update error
 	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
@@ -706,12 +728,12 @@ func TestEngineResume(t *testing.T) {
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 
 	imtxs := NewTestInMemoryTxState(t)
 	mtx := imtxs.GetTx()
@@ -753,7 +775,7 @@ func TestEngineResume(t *testing.T) {
 		txStore:                      mTS,
 		ethClient:                    mEC,
 		managedTXEventNotifier:       mEN,
-		txConfirmationListener:       mCL,
+		bIndexer:                     mBI,
 	}
 	// orchestrator update error
 	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
@@ -809,12 +831,12 @@ func TestEngineCanceledContext(t *testing.T) {
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 
 	imtxs := NewTestInMemoryTxState(t)
 	mtx := imtxs.GetTx()

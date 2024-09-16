@@ -23,21 +23,22 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/hyperledger/firefly-common/pkg/retry"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/enginemocks"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
 type testInFlightTransactionStateManagerWithMocks struct {
-	stateManager baseTypes.InFlightTransactionStateManager
-	mEC          *componentmocks.EthClient
-	mTS          *enginemocks.TransactionStore
-	mCL          *enginemocks.TransactionConfirmationListener
-
+	stateManager    baseTypes.InFlightTransactionStateManager
+	mEC             *componentmocks.EthClient
+	mTS             *enginemocks.TransactionStore
+	mBI             *componentmocks.BlockIndexer
 	mBM             baseTypes.BalanceManager
 	mAT             *enginemocks.InFlightStageActionTriggers
 	inMemoryTxState baseTypes.InMemoryTxStateManager
@@ -48,13 +49,17 @@ func newTestInFlightTransactionStateManager(t *testing.T) *testInFlightTransacti
 	mockInMemoryState := NewTestInMemoryTxState(t)
 	mockActionTriggers := enginemocks.NewInFlightStageActionTriggers(t)
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
-	iftxs := NewInFlightTransactionStateManager(&baseLedgerTxEngineMetrics{}, mBM, mTS, mCL, mockActionTriggers, mockInMemoryState, false, false)
+	mBI := componentmocks.NewBlockIndexer(t)
+	iftxs := NewInFlightTransactionStateManager(&baseLedgerTxEngineMetrics{}, mBM, mTS, mBI, mockActionTriggers, mockInMemoryState, &retry.Retry{
+		InitialDelay: 1 * time.Millisecond,
+		MaximumDelay: 100 * time.Millisecond,
+		Factor:       2.0,
+	}, false, false)
 	return &testInFlightTransactionStateManagerWithMocks{
 		iftxs,
 		mEC,
 		mTS,
-		mCL,
+		mBI,
 		mBM,
 		mockActionTriggers,
 		mockInMemoryState,
@@ -141,12 +146,8 @@ func TestStateManagerStageManagementTransactionFromRetrieveGasPriceToTracking(t 
 	mockActionTriggers.On("TriggerSubmitTx", mock.Anything, testSignedData).Return(nil).Once()
 	stateManager.StartNewStageContext(ctx, baseTypes.InFlightTxStageSubmitting, baseTypes.BaseTxSubStatusReceived)
 	assert.Nil(t, stateManager.GetStageTriggerError(ctx))
-	// start tracking
-	mockActionTriggers.On("TriggerTracking", mock.Anything).Return(nil).Once()
-	stateManager.StartNewStageContext(ctx, baseTypes.InFlightTxStageReceipting, baseTypes.BaseTxSubStatusTracking)
-	assert.Nil(t, stateManager.GetStageTriggerError(ctx))
 
-	// no actions need to be triggered
+	// start tracking  no actions need to be triggered
 	stateManager.StartNewStageContext(ctx, baseTypes.InFlightTxStageConfirming, baseTypes.BaseTxSubStatusTracking)
 	assert.Nil(t, stateManager.GetStageTriggerError(ctx))
 
@@ -172,17 +173,15 @@ func TestStateManagerStageOutputManagement(t *testing.T) {
 	expectedNumberOfSignErrorOutput := 452
 	expectedNumberOfGasPriceSuccessOutput := 123
 	expectedNumberOfGasPriceErrorOutput := 34
-	expectedNumberOfReceiptSuccessOutput := 77
-	expectedNumberOfReceiptErrorOutput := 865
 	expectedNumberOfConfirmationsOutput := 47
 	expectedNumberOfPanicOutput := 19
-	totalOutputAdd := expectedNumberOfPersistenceSuccessOutput + expectedNumberOfPersistenceErrorOutput + expectedNumberOfSubmitSuccessOutput + expectedNumberOfSubmitErrorOutput + expectedNumberOfSignSuccessOutput + expectedNumberOfSignErrorOutput + expectedNumberOfGasPriceSuccessOutput + expectedNumberOfGasPriceErrorOutput + expectedNumberOfReceiptSuccessOutput + expectedNumberOfReceiptErrorOutput + expectedNumberOfConfirmationsOutput + expectedNumberOfPanicOutput
+	totalOutputAdd := expectedNumberOfPersistenceSuccessOutput + expectedNumberOfPersistenceErrorOutput + expectedNumberOfSubmitSuccessOutput + expectedNumberOfSubmitErrorOutput + expectedNumberOfSignSuccessOutput + expectedNumberOfSignErrorOutput + expectedNumberOfGasPriceSuccessOutput + expectedNumberOfGasPriceErrorOutput + expectedNumberOfConfirmationsOutput + expectedNumberOfPanicOutput
 	countChanel := make(chan bool, totalOutputAdd)
 
 	go func() {
 		for i := 0; i < expectedNumberOfPersistenceSuccessOutput; i++ {
 			go func() {
-				stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageReceipting, time.Now(), nil)
+				stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageConfirming, time.Now(), nil)
 				countChanel <- true
 			}()
 		}
@@ -190,7 +189,7 @@ func TestStateManagerStageOutputManagement(t *testing.T) {
 	go func() {
 		for i := 0; i < expectedNumberOfPersistenceErrorOutput; i++ {
 			go func() {
-				stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageReceipting, time.Now(), fmt.Errorf("error"))
+				stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageConfirming, time.Now(), fmt.Errorf("error"))
 				countChanel <- true
 			}()
 		}
@@ -249,25 +248,9 @@ func TestStateManagerStageOutputManagement(t *testing.T) {
 		}
 	}()
 	go func() {
-		for i := 0; i < expectedNumberOfReceiptSuccessOutput; i++ {
-			go func() {
-				stateManager.AddReceiptOutput(ctx, &ethclient.TransactionReceiptResponse{}, nil)
-				countChanel <- true
-			}()
-		}
-	}()
-	go func() {
-		for i := 0; i < expectedNumberOfReceiptErrorOutput; i++ {
-			go func() {
-				stateManager.AddReceiptOutput(ctx, nil, fmt.Errorf("error"))
-				countChanel <- true
-			}()
-		}
-	}()
-	go func() {
 		for i := 0; i < expectedNumberOfConfirmationsOutput; i++ {
 			go func() {
-				stateManager.AddConfirmationsOutput(ctx, &baseTypes.ConfirmationsNotification{})
+				stateManager.AddConfirmationsOutput(ctx, nil)
 				countChanel <- true
 			}()
 		}
@@ -303,8 +286,6 @@ func TestStateManagerStageOutputManagement(t *testing.T) {
 		actualNumberOfSignErrorOutput,
 		actualNumberOfGasPriceSuccessOutput,
 		actualNumberOfGasPriceErrorOutput,
-		actualNumberOfReceiptSuccessOutput,
-		actualNumberOfReceiptErrorOutput,
 		actualNumberOfConfirmationsOutput,
 		actualNumberOfPanicOutput int
 
@@ -331,12 +312,6 @@ func TestStateManagerStageOutputManagement(t *testing.T) {
 				} else {
 					actualNumberOfSignErrorOutput++
 				}
-			} else if stageOutput.ReceiptOutput != nil {
-				if stageOutput.ReceiptOutput.Err == nil {
-					actualNumberOfReceiptSuccessOutput++
-				} else {
-					actualNumberOfReceiptErrorOutput++
-				}
 			} else if stageOutput.PersistenceOutput != nil {
 				if stageOutput.PersistenceOutput.PersistenceError == nil {
 					actualNumberOfPersistenceSuccessOutput++
@@ -357,8 +332,6 @@ func TestStateManagerStageOutputManagement(t *testing.T) {
 		assert.Equal(t, expectedNumberOfSignErrorOutput, actualNumberOfSignErrorOutput)
 		assert.Equal(t, expectedNumberOfSubmitSuccessOutput, actualNumberOfSubmitSuccessOutput)
 		assert.Equal(t, expectedNumberOfSubmitErrorOutput, actualNumberOfSubmitErrorOutput)
-		assert.Equal(t, expectedNumberOfReceiptSuccessOutput, actualNumberOfReceiptSuccessOutput)
-		assert.Equal(t, expectedNumberOfReceiptErrorOutput, actualNumberOfReceiptErrorOutput)
 		assert.Equal(t, expectedNumberOfPersistenceSuccessOutput, actualNumberOfPersistenceSuccessOutput)
 		assert.Equal(t, expectedNumberOfPersistenceErrorOutput, actualNumberOfPersistenceErrorOutput)
 		return
@@ -404,32 +377,25 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmed(t *testing.T) {
 	assert.False(t, inMemoryTxState.IsComplete())
 
 	newTime := fftypes.Now()
-	newTxHash := "0x000031"
+	newTxHash := tktypes.Bytes32Keccak([]byte("0x00003")).String()
+	newSubmittedHashes := []string{
+		tktypes.Bytes32Keccak([]byte("0x00000")).String(),
+		tktypes.Bytes32Keccak([]byte("0x00001")).String(),
+		tktypes.Bytes32Keccak([]byte("0x00002")).String(),
+		tktypes.Bytes32Keccak([]byte("0x00003")).String(),
+	}
 	newStatus := baseTypes.BaseTxStatusSucceeded
 	newGas := ethtypes.NewHexInteger64(111)
 	newGasPrice := ethtypes.NewHexInteger64(111)
-	newTestPolicyInfo := &baseTypes.EnterprisePolicyInfo{
-		LastWarnTime:      newTime,
-		SubmittedTxHashes: []string{"0x00000", "0x00001", "0x00002", "0x00003"},
-	}
-	testReceipt := ethclient.TransactionReceiptResponse{
-		BlockNumber:      fftypes.NewFFBigInt(1233),
-		TransactionIndex: fftypes.NewFFBigInt(23),
-		BlockHash:        "0x000000000",
-		Success:          true,
-		ProtocolID:       "000000000/0023",
-	}
-	testConfirmation := &baseTypes.ConfirmationsNotification{
-		Confirmed: true,
-		NewFork:   true,
-		Confirmations: []*baseTypes.Confirmation{
-			{BlockNumber: fftypes.FFuint64(12)},
-		},
+
+	testIndexedTx := &blockindexer.IndexedTransaction{
+		BlockNumber:      int64(1233),
+		TransactionIndex: int64(23),
+		Hash:             tktypes.MustParseBytes32(newTxHash),
+		Result:           blockindexer.TXResult_SUCCESS.Enum(),
 	}
 
-	rsc.StageOutputsToBePersisted.PolicyInfo = newTestPolicyInfo
-	rsc.StageOutputsToBePersisted.Confirmations = testConfirmation
-	rsc.StageOutputsToBePersisted.Receipt = &testReceipt
+	rsc.StageOutputsToBePersisted.IndexedTransaction = testIndexedTx
 	rsc.StageOutputsToBePersisted.TxUpdates = &baseTypes.BaseTXUpdates{
 		Status:          &newStatus,
 		DeleteRequested: newTime,
@@ -440,24 +406,22 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmed(t *testing.T) {
 		GasLimit:        newGas,
 	}
 	mTS := testStateManagerWithMocks.mTS
-	mCL := testStateManagerWithMocks.mCL
 	txID := stateManager.GetTxID()
-	mTS.On("AddTransactionConfirmations", mock.Anything, txID, testConfirmation.NewFork, testConfirmation.Confirmations[0]).Return(nil).Once()
-	mTS.On("SetTransactionReceipt", mock.Anything, txID, &testReceipt).Return(nil).Once()
+	mTS.On("SetIndexedTransaction", mock.Anything, txID, testIndexedTx).Return(nil).Once()
 	mTS.On("AddSubStatusAction", mock.Anything, txID, baseTypes.BaseTxSubStatusTracking, baseTypes.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
 	mTS.On("UpdateTransaction", mock.Anything, txID, rsc.StageOutputsToBePersisted.TxUpdates).Return(nil).Once()
-	mCL.On("Remove", mock.Anything, mock.Anything).Return(nil).Once()
 	_, _, err = stateManager.PersistTxState(ctx)
 	assert.Nil(t, err)
 	assert.Equal(t, stateManager.GetTxID(), inMemoryTxState.GetTxID())
 
 	assert.Equal(t, newTime, inMemoryTxState.GetDeleteRequestedTime())
-	assert.Equal(t, testReceipt, *inMemoryTxState.GetReceipt())
+	assert.Equal(t, testIndexedTx, inMemoryTxState.GetIndexedTransaction())
 	assert.Equal(t, newTxHash, inMemoryTxState.GetTransactionHash())
 	assert.Equal(t, newStatus, inMemoryTxState.GetStatus())
 	assert.Equal(t, newGasPrice.BigInt(), inMemoryTxState.GetGasPriceObject().GasPrice)
 	assert.Equal(t, newTime, inMemoryTxState.GetFirstSubmit())
-	assert.Equal(t, newTestPolicyInfo, inMemoryTxState.GetPolicyInfo())
+	assert.Equal(t, newTime, inMemoryTxState.GetLastSubmitTime())
+	assert.Equal(t, newSubmittedHashes, inMemoryTxState.GetSubmittedHashes())
 	assert.Equal(t, newGas.BigInt(), inMemoryTxState.GetGasLimit())
 	assert.True(t, inMemoryTxState.IsComplete())
 
@@ -495,37 +459,28 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmedRetrieveReceiptA
 	assert.Nil(t, err)
 
 	inMemoryTxState := testStateManagerWithMocks.inMemoryTxState
-	oldHash := stateManager.GetTransactionHash()
 
 	assert.Equal(t, stateManager.GetTxID(), inMemoryTxState.GetTxID())
 	assert.False(t, inMemoryTxState.IsComplete())
 
 	newTime := fftypes.Now()
-	newTxHash := "0x000031"
 	newStatus := baseTypes.BaseTxStatusFailed
 	newGas := ethtypes.NewHexInteger64(111)
 	newGasPrice := ethtypes.NewHexInteger64(111)
-	newTestPolicyInfo := &baseTypes.EnterprisePolicyInfo{
-		LastWarnTime:      newTime,
-		SubmittedTxHashes: []string{"0x00000", "0x00001", "0x00002", "0x00003"},
+	newTxHash := tktypes.Bytes32Keccak([]byte("0x00003")).String()
+	newSubmittedHashes := []string{
+		tktypes.Bytes32Keccak([]byte("0x00000")).String(),
+		tktypes.Bytes32Keccak([]byte("0x00001")).String(),
+		tktypes.Bytes32Keccak([]byte("0x00002")).String(),
 	}
-	testReceipt := ethclient.TransactionReceiptResponse{
-		BlockNumber:      fftypes.NewFFBigInt(1233),
-		TransactionIndex: fftypes.NewFFBigInt(23),
-		BlockHash:        "0x000000000",
-		Success:          false,
-		ProtocolID:       "000000000/0023",
-	}
-	testConfirmation := &baseTypes.ConfirmationsNotification{
-		Confirmed: true,
-		NewFork:   true,
-		Confirmations: []*baseTypes.Confirmation{
-			{BlockNumber: fftypes.FFuint64(12)},
-		},
+	testIndexedTx := &blockindexer.IndexedTransaction{
+		BlockNumber:      int64(1233),
+		TransactionIndex: int64(23),
+		Hash:             tktypes.MustParseBytes32(newTxHash),
+		Result:           blockindexer.TXResult_FAILURE.Enum(),
 	}
 
-	rsc.StageOutputsToBePersisted.PolicyInfo = newTestPolicyInfo
-	rsc.StageOutputsToBePersisted.Confirmations = testConfirmation
+	rsc.StageOutputsToBePersisted.IndexedTransaction = testIndexedTx
 	rsc.StageOutputsToBePersisted.TxUpdates = &baseTypes.BaseTXUpdates{
 		Status:          &newStatus,
 		DeleteRequested: newTime,
@@ -533,28 +488,27 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmedRetrieveReceiptA
 		TransactionHash: &newTxHash,
 		FirstSubmit:     newTime,
 		LastSubmit:      newTime,
+		SubmittedHashes: newSubmittedHashes,
 		GasLimit:        newGas,
 	}
 
 	mTS := testStateManagerWithMocks.mTS
-	mCL := testStateManagerWithMocks.mCL
 	txID := stateManager.GetTxID()
-	mTS.On("AddTransactionConfirmations", mock.Anything, txID, testConfirmation.NewFork, testConfirmation.Confirmations[0]).Return(nil).Once()
-	mTS.On("GetTransactionReceipt", mock.Anything, txID).Return(&testReceipt, nil).Once()
+	mTS.On("SetIndexedTransaction", mock.Anything, txID, testIndexedTx).Return(nil).Once()
 	mTS.On("AddSubStatusAction", mock.Anything, txID, baseTypes.BaseTxSubStatusTracking, baseTypes.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
 	mTS.On("UpdateTransaction", mock.Anything, txID, rsc.StageOutputsToBePersisted.TxUpdates).Return(nil).Once()
-	mCL.On("Remove", mock.Anything, oldHash).Return(nil).Once()
 	_, _, err = stateManager.PersistTxState(ctx)
 	assert.Nil(t, err)
 	assert.Equal(t, stateManager.GetTxID(), inMemoryTxState.GetTxID())
 
 	assert.Equal(t, newTime, inMemoryTxState.GetDeleteRequestedTime())
-	assert.Equal(t, testReceipt, *inMemoryTxState.GetReceipt())
+	assert.Equal(t, testIndexedTx, inMemoryTxState.GetIndexedTransaction())
 	assert.Equal(t, newTxHash, inMemoryTxState.GetTransactionHash())
 	assert.Equal(t, newStatus, inMemoryTxState.GetStatus())
 	assert.Equal(t, newGasPrice.BigInt(), inMemoryTxState.GetGasPriceObject().GasPrice)
 	assert.Equal(t, newTime, inMemoryTxState.GetFirstSubmit())
-	assert.Equal(t, newTestPolicyInfo, inMemoryTxState.GetPolicyInfo())
+	assert.Equal(t, newTime, inMemoryTxState.GetLastSubmitTime())
+	assert.Equal(t, append(newSubmittedHashes[:], newTxHash), inMemoryTxState.GetSubmittedHashes())
 	assert.Equal(t, newGas.BigInt(), inMemoryTxState.GetGasLimit())
 	assert.True(t, inMemoryTxState.IsComplete())
 }
@@ -589,79 +543,56 @@ func TestStateManagerTxPersistenceManagementUpdateErrors(t *testing.T) {
 	assert.Equal(t, stateManager.GetTxID(), inMemoryTxState.GetTxID())
 	assert.False(t, inMemoryTxState.IsComplete())
 
+	newTxHash := tktypes.Bytes32Keccak([]byte("0x00003")).String()
 	// receipt update error
-	testReceipt := ethclient.TransactionReceiptResponse{
-		BlockNumber:      fftypes.NewFFBigInt(1233),
-		TransactionIndex: fftypes.NewFFBigInt(23),
-		BlockHash:        "0x000000000",
-		Success:          true,
-		ProtocolID:       "000000000/0023",
+	newSubmittedHashes := []string{
+		tktypes.Bytes32Keccak([]byte("0x00000")).String(),
+		tktypes.Bytes32Keccak([]byte("0x00001")).String(),
+		tktypes.Bytes32Keccak([]byte("0x00002")).String(),
 	}
-	newTestPolicyInfo := &baseTypes.EnterprisePolicyInfo{
-		LastWarnTime:      fftypes.Now(),
-		SubmittedTxHashes: []string{"0x00000", "0x00001", "0x00002", "0x00003"},
+	testIndexedTx := &blockindexer.IndexedTransaction{
+		BlockNumber:      int64(1233),
+		TransactionIndex: int64(23),
+		Hash:             tktypes.MustParseBytes32(newTxHash),
+		Result:           blockindexer.TXResult_SUCCESS.Enum(),
 	}
-	testConfirmation := &baseTypes.ConfirmationsNotification{
-		Confirmed: true,
-		NewFork:   true,
-		Confirmations: []*baseTypes.Confirmation{
-			{BlockNumber: fftypes.FFuint64(12)},
-		},
+
+	rsc.StageOutputsToBePersisted.IndexedTransaction = testIndexedTx
+	rsc.StageOutputsToBePersisted.TxUpdates = &baseTypes.BaseTXUpdates{
+		SubmittedHashes: newSubmittedHashes,
 	}
-	rsc.StageOutputsToBePersisted.PolicyInfo = newTestPolicyInfo
-	rsc.StageOutputsToBePersisted.Receipt = &testReceipt
-	rsc.StageOutputsToBePersisted.Confirmations = testConfirmation
 
 	mTS := testStateManagerWithMocks.mTS
-	mCL := testStateManagerWithMocks.mCL
 	txID := stateManager.GetTxID()
 	// set receipt fail
-	mTS.On("SetTransactionReceipt", mock.Anything, txID, &testReceipt).Return(fmt.Errorf("SetTransactionReceipt error")).Once()
+	mTS.On("SetIndexedTransaction", mock.Anything, txID, testIndexedTx).Return(fmt.Errorf("SetIndexedTransaction error")).Once()
 	_, _, err = stateManager.PersistTxState(ctx)
 	assert.NotNil(t, err)
-	assert.Regexp(t, "SetTransactionReceipt error", err)
+	assert.Regexp(t, "SetIndexedTransaction error", err)
 
-	// add transaction confirmations fail
-	rsc.StageOutputsToBePersisted.PolicyInfo = nil
-	rsc.StageOutputsToBePersisted.TxUpdates = nil
-	rsc.StageOutputsToBePersisted.Receipt = nil
-	mTS.On("AddTransactionConfirmations", mock.Anything, txID, testConfirmation.NewFork, testConfirmation.Confirmations[0]).Return(fmt.Errorf("AddTransactionConfirmations error")).Once()
-	_, _, err = stateManager.PersistTxState(ctx)
-	assert.NotNil(t, err)
-	assert.Regexp(t, "AddTransactionConfirmations error", err)
+	mBI := testStateManagerWithMocks.mBI
 
 	// get receipt fail
-	mTS.On("AddTransactionConfirmations", mock.Anything, txID, testConfirmation.NewFork, testConfirmation.Confirmations[0]).Return(nil).Once()
-	mTS.On("GetTransactionReceipt", mock.Anything, txID).Return(nil, fmt.Errorf("GetTransactionReceipt error")).Once()
+	rsc.StageOutputsToBePersisted.IndexedTransaction = nil
+	rsc.StageOutputsToBePersisted.MissedIndexedTransaction = true
+	mBI.On("GetIndexedTransactionByNonce", mock.Anything, *tktypes.MustEthAddress(stateManager.GetFrom()), stateManager.GetNonce().Uint64()).Return(nil, fmt.Errorf("GetIndexedTransaction error")).Once() // recovered by retry
+	mBI.On("GetIndexedTransactionByNonce", mock.Anything, *tktypes.MustEthAddress(stateManager.GetFrom()), stateManager.GetNonce().Uint64()).Return(nil, nil).Once()                                       // triggers the not found error
 	_, _, err = stateManager.PersistTxState(ctx)
 	assert.NotNil(t, err)
-	assert.Regexp(t, "GetTransactionReceipt error", err)
+	assert.Regexp(t, "PD011930", err)
 
 	// history update fail
-	mTS.On("AddTransactionConfirmations", mock.Anything, txID, testConfirmation.NewFork, testConfirmation.Confirmations[0]).Return(nil).Once()
-	mTS.On("GetTransactionReceipt", mock.Anything, txID).Return(&testReceipt, nil).Once()
+	mBI.On("GetIndexedTransactionByNonce", mock.Anything, *tktypes.MustEthAddress(stateManager.GetFrom()), stateManager.GetNonce().Uint64()).Return(testIndexedTx, nil)
+	mTS.On("SetIndexedTransaction", mock.Anything, txID, testIndexedTx).Return(nil)
 	mTS.On("AddSubStatusAction", mock.Anything, txID, baseTypes.BaseTxSubStatusTracking, baseTypes.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(fmt.Errorf("AddSubStatusAction error")).Once()
 	_, _, err = stateManager.PersistTxState(ctx)
 	assert.NotNil(t, err)
 	assert.Regexp(t, "AddSubStatusAction error", err)
 
 	// update transaction fail
-	mTS.On("AddTransactionConfirmations", mock.Anything, txID, testConfirmation.NewFork, testConfirmation.Confirmations[0]).Return(nil).Once()
 	mTS.On("AddSubStatusAction", mock.Anything, txID, baseTypes.BaseTxSubStatusTracking, baseTypes.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
 	mTS.On("UpdateTransaction", mock.Anything, txID, rsc.StageOutputsToBePersisted.TxUpdates).Return(fmt.Errorf("UpdateTransaction error")).Once()
 	_, _, err = stateManager.PersistTxState(ctx)
 	assert.NotNil(t, err)
 	assert.Regexp(t, "UpdateTransaction error", err)
-
-	// handle event fail
-	newTxHash := "0x000031"
-	rsc.StageOutputsToBePersisted.TxUpdates = &baseTypes.BaseTXUpdates{
-		TransactionHash: &newTxHash,
-	}
-	mTS.On("AddTransactionConfirmations", mock.Anything, txID, testConfirmation.NewFork, testConfirmation.Confirmations[0]).Return(nil).Once()
-	mTS.On("AddSubStatusAction", mock.Anything, txID, baseTypes.BaseTxSubStatusTracking, baseTypes.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
-	mTS.On("UpdateTransaction", mock.Anything, txID, rsc.StageOutputsToBePersisted.TxUpdates).Return(nil).Once()
-	mCL.On("Remove", mock.Anything, mock.Anything).Return(fmt.Errorf("HandleEvent error")).Once()
-	_, _, err = stateManager.PersistTxState(ctx)
-	assert.Nil(t, err) // failure to delete existing hash tracking is ignored
 }

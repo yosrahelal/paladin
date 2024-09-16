@@ -29,7 +29,7 @@ import (
 func TestRunningStageContext(t *testing.T) {
 	imtx := NewTestInMemoryTxState(t)
 	newSubStatus := baseTypes.BaseTxSubStatusConfirmed
-	testRunningStageContext := NewRunningStageContext(context.Background(), baseTypes.InFlightTxStageReceipting, "", imtx)
+	testRunningStageContext := NewRunningStageContext(context.Background(), baseTypes.InFlightTxStageConfirming, "", imtx)
 	assert.Empty(t, testRunningStageContext.SubStatus)
 	assert.Nil(t, testRunningStageContext.StageOutputsToBePersisted)
 	testRunningStageContext.SetSubStatus(newSubStatus)

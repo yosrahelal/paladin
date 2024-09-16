@@ -83,13 +83,13 @@ func (baseLedgerEngine *baseLedgerTxEngine) dispatchAction(ctx context.Context, 
 	}
 }
 
-func (te *orchestrator) dispatchAction(ctx context.Context, mtx *baseTypes.ManagedTX, action APIRequestType, response chan<- APIResponse) {
+func (oc *orchestrator) dispatchAction(ctx context.Context, mtx *baseTypes.ManagedTX, action APIRequestType, response chan<- APIResponse) {
 	switch action {
 	case ActionSuspend, ActionResume:
-		te.InFlightTxsMux.Lock()
-		defer te.InFlightTxsMux.Unlock()
+		oc.InFlightTxsMux.Lock()
+		defer oc.InFlightTxsMux.Unlock()
 		var pending *InFlightTransactionStageController
-		for _, inflight := range te.InFlightTxs {
+		for _, inflight := range oc.InFlightTxs {
 			if inflight.stateManager.GetTxID() == mtx.ID {
 				pending = inflight
 				break
@@ -101,21 +101,21 @@ func (te *orchestrator) dispatchAction(ctx context.Context, mtx *baseTypes.Manag
 		}
 		if pending == nil {
 			// transaction not in flight yet, update the DB directly and tell the engine to not pick up the transaction until we completed
-			te.transactionIDsInStatusUpdate = append(te.transactionIDsInStatusUpdate, mtx.ID)
+			oc.transactionIDsInStatusUpdate = append(oc.transactionIDsInStatusUpdate, mtx.ID)
 			go func() {
 				defer func() {
-					te.InFlightTxsMux.Lock()
-					defer te.InFlightTxsMux.Unlock()
-					newTransactionIDsInStatusUpdate := make([]string, 0, len(te.transactionIDsInStatusUpdate)-1)
-					for _, txID := range te.transactionIDsInStatusUpdate {
+					oc.InFlightTxsMux.Lock()
+					defer oc.InFlightTxsMux.Unlock()
+					newTransactionIDsInStatusUpdate := make([]string, 0, len(oc.transactionIDsInStatusUpdate)-1)
+					for _, txID := range oc.transactionIDsInStatusUpdate {
 						if txID != mtx.ID {
 							newTransactionIDsInStatusUpdate = append(newTransactionIDsInStatusUpdate, txID)
 						}
 					}
-					te.transactionIDsInStatusUpdate = newTransactionIDsInStatusUpdate
+					oc.transactionIDsInStatusUpdate = newTransactionIDsInStatusUpdate
 				}()
 				log.L(ctx).Debugf("Setting status to '%s' for transaction %s", newStatus, mtx.ID)
-				err := te.txStore.UpdateTransaction(ctx, mtx.ID, &baseTypes.BaseTXUpdates{
+				err := oc.txStore.UpdateTransaction(ctx, mtx.ID, &baseTypes.BaseTXUpdates{
 					Status: &newStatus,
 				})
 				if err != nil {

@@ -17,31 +17,33 @@ package baseledgertx
 
 import (
 	"context"
-	"encoding/json"
 	"math/big"
 	"sync"
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-common/pkg/retry"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type inFlightTransactionState struct {
 	testMode bool // Note: this flag can never be set in normal code path, exposed for testing only
+	retry    *retry.Retry
 
 	BaseLedgerTxEngineMetricsManager
 	baseTypes.BalanceManager
 
-	txStore                baseTypes.TransactionStore
-	txConfirmationListener baseTypes.TransactionConfirmationListener
+	txStore  baseTypes.TransactionStore
+	bIndexer blockindexer.BlockIndexer
 	// input that should be set once the stage is running
 	*baseTypes.TransientPreviousStageOutputs
 	orchestratorContext *baseTypes.OrchestratorContext
-
 	baseTypes.InFlightStageActionTriggers
 	baseTypes.InMemoryTxStateManager
 
@@ -111,9 +113,9 @@ func (iftxs *inFlightTransactionState) StartNewStageContext(ctx context.Context,
 			signedMessage = iftxs.TransientPreviousStageOutputs.SignedMessage
 		}
 		iftxs.stageTriggerError = iftxs.TriggerSubmitTx(ctx, signedMessage)
-	case baseTypes.InFlightTxStageReceipting:
-		log.L(ctx).Tracef("Transaction with ID %s, triggering receipting", rsc.InMemoryTx.GetTxID())
-		iftxs.stageTriggerError = iftxs.TriggerTracking(ctx)
+	case baseTypes.InFlightTxStageConfirming:
+		log.L(ctx).Tracef("Transaction with ID %s, entered confirmation tracking, waiting for block indexer to index the transaction", rsc.InMemoryTx.GetTxID())
+		// no action required, relies on block indexer to trigger events
 	case baseTypes.InFlightTxStageStatusUpdate:
 		log.L(ctx).Tracef("Transaction with ID %s, triggering status update", rsc.InMemoryTx.GetTxID())
 		iftxs.stageTriggerError = iftxs.TriggerStatusUpdate(ctx)
@@ -183,18 +185,20 @@ func (iftxs *inFlightTransactionState) AddStageOutputs(ctx context.Context, stag
 func NewInFlightTransactionStateManager(thm BaseLedgerTxEngineMetricsManager,
 	bm baseTypes.BalanceManager,
 	txStore baseTypes.TransactionStore,
-	txConfirmationListener baseTypes.TransactionConfirmationListener,
+	bIndexer blockindexer.BlockIndexer,
 	ifsat baseTypes.InFlightStageActionTriggers,
 	imtxs baseTypes.InMemoryTxStateManager,
+	retry *retry.Retry,
 	turnOffHistory bool,
 	noEventMode bool,
 ) baseTypes.InFlightTransactionStateManager {
 	return &inFlightTransactionState{
 		testMode:                         noEventMode,
+		retry:                            retry,
 		BaseLedgerTxEngineMetricsManager: thm,
 		BalanceManager:                   bm,
 		txStore:                          txStore,
-		txConfirmationListener:           txConfirmationListener,
+		bIndexer:                         bIndexer,
 		InFlightStageActionTriggers:      ifsat,
 		bufferedStageOutputs:             make([]*baseTypes.StageOutput, 0),
 		txLevelStageStartTime:            time.Now(),
@@ -260,26 +264,12 @@ func (iftxs *inFlightTransactionState) AddGasPriceOutput(ctx context.Context, ga
 	log.L(ctx).Debugf("%s AddGasPriceOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetTxID(), time.Since(start))
 }
 
-func (iftxs *inFlightTransactionState) AddReceiptOutput(ctx context.Context, rpt *ethclient.TransactionReceiptResponse, err error) {
-	start := time.Now()
-	iftxs.AddStageOutputs(ctx, &baseTypes.StageOutput{
-		Stage: baseTypes.InFlightTxStageReceipting,
-		ReceiptOutput: &baseTypes.ReceiptOutputs{
-			Receipt:       rpt,
-			ReceiptNotify: fftypes.Now(),
-			Err:           err,
-		},
-	})
-	log.L(ctx).Debugf("%s AddReceiptOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetTxID(), time.Since(start))
-}
-
-func (iftxs *inFlightTransactionState) AddConfirmationsOutput(ctx context.Context, cmfs *baseTypes.ConfirmationsNotification) {
+func (iftxs *inFlightTransactionState) AddConfirmationsOutput(ctx context.Context, indexedTx *blockindexer.IndexedTransaction) {
 	start := time.Now()
 	iftxs.AddStageOutputs(ctx, &baseTypes.StageOutput{
 		Stage: baseTypes.InFlightTxStageConfirming,
 		ConfirmationOutput: &baseTypes.ConfirmationOutputs{
-			Confirmations: cmfs,
-			ConfirmNotify: fftypes.Now(),
+			IndexedTransaction: indexedTx,
 		},
 	})
 	log.L(ctx).Debugf("%s AddConfirmationsOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetTxID(), time.Since(start))
@@ -304,50 +294,54 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 	}
 	switch rsc.StageOutputsToBePersisted.UpdateType {
 	case baseTypes.PersistenceUpdateUpdate:
-		if rsc.StageOutputsToBePersisted.PolicyInfo != nil {
-			if rsc.StageOutputsToBePersisted.TxUpdates == nil {
-				rsc.StageOutputsToBePersisted.TxUpdates = &baseTypes.BaseTXUpdates{}
+		it := rsc.StageOutputsToBePersisted.IndexedTransaction
+		trackedHashes := iftxs.GetSubmittedHashes()
+		hashAlreadyTracked := false
+		matchFound := false
+		if rsc.StageOutputsToBePersisted.TxUpdates != nil && rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash != nil && *rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash != "" {
+			newTxHash := *rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash
+			for _, h := range trackedHashes {
+				if h == newTxHash {
+					hashAlreadyTracked = true
+				}
+				if it != nil && h == it.Hash.String() {
+					matchFound = true
+				}
 			}
-			infoBytes, _ := json.Marshal(rsc.StageOutputsToBePersisted.PolicyInfo)
-			rsc.StageOutputsToBePersisted.TxUpdates.PolicyInfo = fftypes.JSONAnyPtrBytes(infoBytes)
+			if !hashAlreadyTracked {
+				matchFound = matchFound || newTxHash == it.Hash.String()
+				rsc.StageOutputsToBePersisted.TxUpdates.SubmittedHashes = append(trackedHashes[:], newTxHash)
+			}
 		}
-
-		if rsc.StageOutputsToBePersisted.Receipt != nil {
+		if it != nil || rsc.StageOutputsToBePersisted.MissedIndexedTransaction {
+			if it == nil {
+				err = iftxs.retry.Do(ctx, "get indexed transaction for "+mtx.ID, func(attempt int) (retry bool, err error) {
+					retrievedTx, retryErr := iftxs.bIndexer.GetIndexedTransactionByNonce(ctx, *tktypes.MustEthAddress(string(mtx.From)), mtx.Nonce.Uint64())
+					if retryErr == nil && retrievedTx == nil {
+						// panic("block indexer missed a nonce")
+						// the logic is in a confirmation loop until block indexer indexed the missing transaction
+						return false, i18n.NewError(ctx, msgs.MsgMissingIndexedTransaction, mtx.ID)
+					}
+					it = retrievedTx
+					return true, retryErr
+				})
+				if err != nil {
+					return rsc.Stage, time.Now(), err
+				}
+			}
 			iftxs.NotifyAddressBalanceChanged(ctx, string(mtx.From))
 			if mtx.Value != nil && mtx.To != nil {
 				iftxs.NotifyAddressBalanceChanged(ctx, mtx.To.String())
 			}
-			if err = iftxs.txStore.SetTransactionReceipt(ctx, mtx.ID, rsc.StageOutputsToBePersisted.Receipt); err != nil {
-				log.L(ctx).Errorf("Failed to persist receipt for transaction %s due to error: %+v, receipt: %+v", mtx.ID, err, rsc.StageOutputsToBePersisted.Receipt)
+			if err = iftxs.txStore.SetIndexedTransaction(ctx, mtx.ID, it); err != nil {
+				log.L(ctx).Errorf("Failed to persist receipt for transaction %s due to error: %+v, receipt: %+v", mtx.ID, err, it)
 				return rsc.Stage, time.Now(), err
 			}
 			// update the in memory state
-			iftxs.SetReceipt(ctx, rsc.StageOutputsToBePersisted.Receipt)
-		}
+			iftxs.SetIndexedTransaction(ctx, it)
 
-		if rsc.StageOutputsToBePersisted.Confirmations != nil {
-			if err := iftxs.txStore.AddTransactionConfirmations(ctx, mtx.ID, rsc.StageOutputsToBePersisted.Confirmations.NewFork, rsc.StageOutputsToBePersisted.Confirmations.Confirmations...); err != nil {
-				log.L(ctx).Errorf("Failed to persist confirmations for transaction %s due to error: %+v, confirmations: %+v", mtx.ID, err, rsc.StageOutputsToBePersisted.Confirmations)
-				return rsc.Stage, time.Now(), err
-			}
-			if rsc.StageOutputsToBePersisted.Confirmations.Confirmed {
-				if rsc.StageOutputsToBePersisted.TxUpdates == nil {
-					rsc.StageOutputsToBePersisted.TxUpdates = &baseTypes.BaseTXUpdates{}
-				}
-				if rsc.SubStatus != baseTypes.BaseTxSubStatusConfirmed {
-					rsc.StageOutputsToBePersisted.AddSubStatusAction(baseTypes.BaseTxActionConfirmTransaction, nil, nil)
-					rsc.SetSubStatus(baseTypes.BaseTxSubStatusConfirmed)
-				}
-				if iftxs.GetReceipt() == nil {
-					receipt, err := iftxs.txStore.GetTransactionReceipt(ctx, mtx.ID)
-					if err != nil {
-						log.L(ctx).Errorf("Failed to retrieve receipt for confirmation check for transaction %s due to error: %+v", mtx.ID, err)
-						return rsc.Stage, time.Now(), err
-					}
-					iftxs.SetReceipt(ctx, receipt)
-				}
-				recpt := iftxs.GetReceipt()
-				if recpt != nil && recpt.Success {
+			if matchFound {
+				if it.Result == blockindexer.TXResult_SUCCESS.Enum() {
 					mtx.Status = baseTypes.BaseTxStatusSucceeded
 					rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
 					iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusSuccess))
@@ -356,6 +350,14 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 					rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
 					iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusFail))
 				}
+			} else {
+				mtx.Status = baseTypes.BaseTxStatusConflict
+				rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
+				iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusConflict))
+			}
+			if rsc.SubStatus != baseTypes.BaseTxSubStatusConfirmed {
+				rsc.StageOutputsToBePersisted.AddSubStatusAction(baseTypes.BaseTxActionConfirmTransaction, nil, nil)
+				rsc.SetSubStatus(baseTypes.BaseTxSubStatusConfirmed)
 			}
 		}
 		if !iftxs.turnOffHistory {
@@ -366,7 +368,6 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 				}
 			}
 		}
-		oldTxHash := mtx.TransactionHash
 		if rsc.StageOutputsToBePersisted.TxUpdates != nil {
 			err := iftxs.txStore.UpdateTransaction(ctx, mtx.ID, rsc.StageOutputsToBePersisted.TxUpdates)
 			if err != nil {
@@ -375,14 +376,6 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 			}
 			// update the in memory state
 			iftxs.ApplyTxUpdates(ctx, rsc.StageOutputsToBePersisted.TxUpdates)
-		}
-		if oldTxHash != "" && oldTxHash != mtx.TransactionHash {
-			// if had a previous transaction hash, emit an event to for transaction hash removal
-			log.L(ctx).Debugf("Cancelling confirmation manager tracking of stale hash for TX %s oldHash=%s newHash=%s", mtx.ID, oldTxHash, mtx.TransactionHash)
-			if err := iftxs.txConfirmationListener.Remove(ctx, oldTxHash); err != nil {
-				// Unexpected error, ignore as fail to remove the listener is not a stop deal
-				log.L(ctx).Errorf("Error detected notifying confirmation manager to remove old transaction hash: %s", err.Error())
-			}
 		}
 	}
 	return rsc.Stage, time.Now(), nil

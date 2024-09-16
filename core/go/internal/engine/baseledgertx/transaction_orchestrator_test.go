@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"testing"
 	"time"
 
@@ -30,7 +31,7 @@ import (
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/enginemocks"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -64,20 +65,20 @@ func TestNewOrchestratorPolling(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mTS := enginemocks.NewTransactionStore(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
 	ble.ctx = ctx
 	ble.enginePollingInterval = 1 * time.Hour
 
-	te := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
-	te.balanceManager = mockBM
-	mockIT := NewInFlightTransactionStageController(ble, te, mockManagedTx1)
-	te.InFlightTxs = []*InFlightTransactionStageController{mockIT}
-	te.transactionIDsInStatusUpdate = []string{"randomID"}
+	oc := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
+	oc.balanceManager = mockBM
+	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
+	oc.InFlightTxs = []*InFlightTransactionStageController{mockIT}
+	oc.transactionIDsInStatusUpdate = []string{"randomID"}
 	mTS.On("AddSubStatusAction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		time.Sleep(1 * time.Hour) // make sure the async action never got returned as the test will mock the events
 	}).Maybe()
@@ -87,15 +88,15 @@ func TestNewOrchestratorPolling(t *testing.T) {
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{}, nil, nil).Maybe()
-	te.InFlightTxs = []*InFlightTransactionStageController{
+	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT}
 
 	addressBalanceChecked := make(chan bool)
 	mEC.On("GetBalance", mock.Anything, testMainSigningAddress, "latest").Return(ethtypes.NewHexInteger64(100), nil).Run(func(args mock.Arguments) {
 		close(addressBalanceChecked)
 	}).Once()
-	te.orchestratorPollingInterval = 1 * time.Hour
-	_, _ = te.Start(ctx)
+	oc.orchestratorPollingInterval = 1 * time.Hour
+	_, _ = oc.Start(ctx)
 	<-addressBalanceChecked
 }
 
@@ -115,24 +116,24 @@ func TestNewOrchestratorPollingContextCancelled(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mTS := enginemocks.NewTransactionStore(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
 	ble.ctx = ctx
 	ble.enginePollingInterval = 1 * time.Hour
 
-	te := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
+	oc := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
 
-	te.balanceManager = mockBM
+	oc.balanceManager = mockBM
 
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return(nil, nil, fmt.Errorf("list transactions error")).Run(func(args mock.Arguments) {
 		cancelCtx()
 	}).Once()
-	polled, _ := te.pollAndProcess(ctx)
+	polled, _ := oc.pollAndProcess(ctx)
 	assert.Equal(t, -1, polled)
 }
 
@@ -163,31 +164,31 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mTS := enginemocks.NewTransactionStore(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
 	ble.ctx = ctx
 	ble.enginePollingInterval = 1 * time.Hour
 
-	te := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
+	oc := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
 
-	te.balanceManager = mockBM
-	mockIT := NewInFlightTransactionStageController(ble, te, mockManagedTx1)
+	oc.balanceManager = mockBM
+	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
-	te.InFlightTxs = []*InFlightTransactionStageController{
+	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT,
 	}
 	addressBalanceChecked := make(chan bool)
 	mEC.On("GetBalance", mock.Anything, testMainSigningAddress, "latest").Return(nil, fmt.Errorf("failed getting balance")).Run(func(args mock.Arguments) {
 		close(addressBalanceChecked)
 	}).Once()
-	te.orchestratorPollingInterval = 1 * time.Hour
-	_, _ = te.Start(ctx)
+	oc.orchestratorPollingInterval = 1 * time.Hour
+	_, _ = oc.Start(ctx)
 	<-addressBalanceChecked
 }
 
@@ -219,24 +220,24 @@ func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mTS := enginemocks.NewTransactionStore(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 
 	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
 	ble.ctx = ctx
 	ble.enginePollingInterval = 1 * time.Hour
 
-	te := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
+	oc := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
 
-	te.balanceManager = mockBM
-	mockIT := NewInFlightTransactionStageController(ble, te, mockManagedTx1)
+	oc.balanceManager = mockBM
+	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
-	te.InFlightTxs = []*InFlightTransactionStageController{
+	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT,
 	}
 
@@ -244,8 +245,8 @@ func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 	mEC.On("GetBalance", mock.Anything, testMainSigningAddress, "latest").Return(nil, fmt.Errorf("failed getting balance")).Run(func(args mock.Arguments) {
 		close(addressBalanceChecked)
 	}).Once()
-	te.orchestratorPollingInterval = 1 * time.Hour
-	_, _ = te.Start(ctx)
+	oc.orchestratorPollingInterval = 1 * time.Hour
+	_, _ = oc.Start(ctx)
 	<-addressBalanceChecked
 }
 
@@ -268,34 +269,34 @@ func TestNewOrchestratorPollingMarkStale(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mTS := enginemocks.NewTransactionStore(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
 	ble.ctx = ctx
 	ble.enginePollingInterval = 1 * time.Hour
 
-	te := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
+	oc := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
 
-	te.balanceManager = mockBM
-	te.lastQueueUpdate = time.Now().Add(-1 * time.Hour)
-	mockIT := NewInFlightTransactionStageController(ble, te, mockManagedTx1)
+	oc.balanceManager = mockBM
+	oc.lastQueueUpdate = time.Now().Add(-1 * time.Hour)
+	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{mockManagedTx1}, nil, nil).Once()
-	te.InFlightTxs = []*InFlightTransactionStageController{
+	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT,
 	}
 	addressBalanceChecked := make(chan bool)
 	mEC.On("GetBalance", mock.Anything, testMainSigningAddress, "latest").Return(nil, fmt.Errorf("failed getting balance")).Run(func(args mock.Arguments) {
 		close(addressBalanceChecked)
 	}).Once()
-	te.orchestratorPollingInterval = 1 * time.Hour
-	te.pollAndProcess(ctx)
+	oc.orchestratorPollingInterval = 1 * time.Hour
+	oc.pollAndProcess(ctx)
 	<-addressBalanceChecked
-	assert.Equal(t, OrchestratorStateStale, te.state)
+	assert.Equal(t, OrchestratorStateStale, oc.state)
 }
 
 func TestOrchestratorStop(t *testing.T) {
@@ -330,25 +331,25 @@ func TestOrchestratorStop(t *testing.T) {
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Maybe()
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
 	ble.ctx = ctx
 	ble.enginePollingInterval = 1 * time.Hour
 
-	te := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
-	te.orchestratorPollingInterval = 1 * time.Hour
-	te.ctx = ctx
-	te.orchestratorLoopDone = make(chan struct{})
-	go te.orchestratorLoop()
+	oc := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
+	oc.orchestratorPollingInterval = 1 * time.Hour
+	oc.ctx = ctx
+	oc.orchestratorLoopDone = make(chan struct{})
+	go oc.orchestratorLoop()
 
 	//stops OK
 	cancelCtx()
-	<-te.orchestratorLoopDone
+	<-oc.orchestratorLoopDone
 }
 
 func TestOrchestratorStopWhenBalanceUnavailable(t *testing.T) {
@@ -366,45 +367,45 @@ func TestOrchestratorStopWhenBalanceUnavailable(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mTS := enginemocks.NewTransactionStore(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 
 	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
 	ble.ctx = ctx
 	ble.enginePollingInterval = 1 * time.Hour
 
-	te := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
-	te.state = OrchestratorStateRunning
-	te.balanceManager = mockBM
-	mockIT := NewInFlightTransactionStageController(ble, te, mockManagedTx1)
+	oc := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
+	oc.state = OrchestratorStateRunning
+	oc.balanceManager = mockBM
+	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
 	// continue process
 	mEC.On("GetBalance", mock.Anything, testMainSigningAddress, "latest").Return(nil, fmt.Errorf("failed getting balance")).Once()
-	te.unavailableBalanceHandlingStrategy = OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyContinue
-	waitingForBalance, err := te.ProcessInFlightTransaction(ctx, []*InFlightTransactionStageController{mockIT})
+	oc.unavailableBalanceHandlingStrategy = OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyContinue
+	waitingForBalance, err := oc.ProcessInFlightTransaction(ctx, []*InFlightTransactionStageController{mockIT})
 	require.NoError(t, err)
 	assert.False(t, waitingForBalance)
-	assert.Equal(t, OrchestratorStateRunning, te.state)
+	assert.Equal(t, OrchestratorStateRunning, oc.state)
 
 	// wait for the next round
 	mEC.On("GetBalance", mock.Anything, testMainSigningAddress, "latest").Return(nil, fmt.Errorf("failed getting balance")).Once()
-	te.unavailableBalanceHandlingStrategy = OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyWait
-	waitingForBalance, err = te.ProcessInFlightTransaction(ctx, []*InFlightTransactionStageController{mockIT})
+	oc.unavailableBalanceHandlingStrategy = OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyWait
+	waitingForBalance, err = oc.ProcessInFlightTransaction(ctx, []*InFlightTransactionStageController{mockIT})
 	require.NoError(t, err)
 	assert.True(t, waitingForBalance)
-	assert.Equal(t, OrchestratorStateRunning, te.state)
+	assert.Equal(t, OrchestratorStateRunning, oc.state)
 
 	// stop the orchestrator
 	mEC.On("GetBalance", mock.Anything, testMainSigningAddress, "latest").Return(nil, fmt.Errorf("failed getting balance")).Once()
-	te.unavailableBalanceHandlingStrategy = OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyStop
-	te.stopProcess = make(chan bool, 1)
-	waitingForBalance, err = te.ProcessInFlightTransaction(ctx, []*InFlightTransactionStageController{mockIT})
+	oc.unavailableBalanceHandlingStrategy = OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyStop
+	oc.stopProcess = make(chan bool, 1)
+	waitingForBalance, err = oc.ProcessInFlightTransaction(ctx, []*InFlightTransactionStageController{mockIT})
 	require.NoError(t, err)
 	assert.True(t, waitingForBalance)
-	<-te.stopProcess
+	<-oc.stopProcess
 }
 
 func TestOrchestratorTriggerTopUp(t *testing.T) {
@@ -424,43 +425,43 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, mockAFTxEngine := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mTS := enginemocks.NewTransactionStore(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
 	ble.ctx = ctx
 	ble.enginePollingInterval = 1 * time.Hour
 
-	te := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
-	te.state = OrchestratorStateRunning
-	te.balanceManager = mockBM
-	mockIT := NewInFlightTransactionStageController(ble, te, mockManagedTx1)
+	oc := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
+	oc.state = OrchestratorStateRunning
+	oc.balanceManager = mockBM
+	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
 	// trigger top up if cost is known
 	mockAFTxEngine.On("GetPendingFuelingTransaction", mock.Anything, "0x4e598f6e918321dd47c86e7a077b4ab0e7414846", testMainSigningAddress).Return(nil, fmt.Errorf("cannot get tx")).Once()
 	mEC.On("GetBalance", mock.Anything, testMainSigningAddress, "latest").Return(ethtypes.NewHexInteger64(100), nil).Once()
-	te.unavailableBalanceHandlingStrategy = OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyContinue
-	waitingForBalance, err := te.ProcessInFlightTransaction(ctx, []*InFlightTransactionStageController{mockIT})
+	oc.unavailableBalanceHandlingStrategy = OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyContinue
+	waitingForBalance, err := oc.ProcessInFlightTransaction(ctx, []*InFlightTransactionStageController{mockIT})
 	require.NoError(t, err)
 	assert.True(t, waitingForBalance)
-	assert.Equal(t, OrchestratorStateRunning, te.state)
+	assert.Equal(t, OrchestratorStateRunning, oc.state)
 
 	// skip top up when cost is unknown
 	mockManagedTx1.GasPrice = nil
-	te.unavailableBalanceHandlingStrategy = OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyContinue
-	waitingForBalance, err = te.ProcessInFlightTransaction(ctx, []*InFlightTransactionStageController{mockIT})
+	oc.unavailableBalanceHandlingStrategy = OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyContinue
+	waitingForBalance, err = oc.ProcessInFlightTransaction(ctx, []*InFlightTransactionStageController{mockIT})
 	require.NoError(t, err)
 	assert.False(t, waitingForBalance)
-	assert.Equal(t, OrchestratorStateRunning, te.state)
+	assert.Equal(t, OrchestratorStateRunning, oc.state)
 }
 
-func TestOrchestratorReceiptHandler(t *testing.T) {
+func TestOrchestratorHandleIndexTransactions(t *testing.T) {
 	ctx := context.Background()
 	mockManagedTx1 := &baseTypes.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusSucceeded,
+		Status: baseTypes.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
@@ -469,99 +470,39 @@ func TestOrchestratorReceiptHandler(t *testing.T) {
 	}
 	mockManagedTx2 := &baseTypes.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusSucceeded,
+		Status: baseTypes.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
 		Created: fftypes.Now(),
 	}
-
 	ble, _ := NewTestTransactionEngine(t)
-	_, mEC, _ := NewTestBalanceManager(ctx, t)
+	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mTS := enginemocks.NewTransactionStore(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 
 	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
 	ble.ctx = ctx
 	ble.enginePollingInterval = 1 * time.Hour
 
-	te := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
-	mockIT1 := NewInFlightTransactionStageController(ble, te, mockManagedTx1)
-	mockIT1.timeLineLoggingEnabled = true
-	mockIT2 := NewInFlightTransactionStageController(ble, te, mockManagedTx2)
-	mockIT2.timeLineLoggingEnabled = true
-	te.InFlightTxs = []*InFlightTransactionStageController{mockIT1, mockIT2}
-	receiptHandler := te.CreateTransactionReceiptReceivedHandler(mockManagedTx1.ID)
-	testReceipt := &ethclient.TransactionReceiptResponse{BlockNumber: fftypes.NewFFBigInt(1)}
+	oc := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
 
-	// added receipt
-	err := receiptHandler(ctx, mockIT1.stateManager.GetTxID(), testReceipt)
-	require.NoError(t, err)
-	time.Sleep(200 * time.Millisecond)
-	iftxs := mockIT1.stateManager.(*inFlightTransactionState)
-	assert.Equal(t, testReceipt, iftxs.bufferedStageOutputs[0].ReceiptOutput.Receipt)
+	oc.balanceManager = mockBM
+	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
-	// transaction no longer in queue
-	te.InFlightTxs = []*InFlightTransactionStageController{mockIT2}
-	err = receiptHandler(ctx, mockIT1.stateManager.GetTxID(), testReceipt)
-	assert.Regexp(t, "PD011924", err)
-}
-
-func TestOrchestratorConfirmationHandler(t *testing.T) {
-	ctx := context.Background()
-	mockManagedTx1 := &baseTypes.ManagedTX{
-		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusSucceeded,
-		Transaction: &ethsigner.Transaction{
-			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(1),
-		},
-		Created: fftypes.Now(),
-	}
-	mockManagedTx2 := &baseTypes.ManagedTX{
-		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusSucceeded,
-		Transaction: &ethsigner.Transaction{
-			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(2),
-		},
-		Created: fftypes.Now(),
+	oc.InFlightTxs = []*InFlightTransactionStageController{
+		mockIT,
 	}
 
-	ble, _ := NewTestTransactionEngine(t)
-	_, mEC, _ := NewTestBalanceManager(ctx, t)
-	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
-	mTS := enginemocks.NewTransactionStore(t)
-	mEN := enginemocks.NewManagedTxEventNotifier(t)
-	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
-
-	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
-	ble.ctx = ctx
-	ble.enginePollingInterval = 1 * time.Hour
-
-	te := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
-	mockIT1 := NewInFlightTransactionStageController(ble, te, mockManagedTx1)
-	mockIT2 := NewInFlightTransactionStageController(ble, te, mockManagedTx2)
-	te.InFlightTxs = []*InFlightTransactionStageController{mockIT1, mockIT2}
-	confirmationHandler := te.CreateTransactionConfirmationsHandler(mockManagedTx1.ID)
-	testConfirmation := &baseTypes.ConfirmationsNotification{Confirmed: true}
-
-	// added confirmation
-	err := confirmationHandler(ctx, mockIT1.stateManager.GetTxID(), testConfirmation)
-	require.NoError(t, err)
-	time.Sleep(200 * time.Millisecond)
-	iftxs := mockIT1.stateManager.(*inFlightTransactionState)
-	assert.Equal(t, testConfirmation, iftxs.bufferedStageOutputs[0].ConfirmationOutput.Confirmations)
-
-	// transaction no longer in queue
-	te.InFlightTxs = []*InFlightTransactionStageController{mockIT2}
-	err = confirmationHandler(ctx, mockIT1.stateManager.GetTxID(), testConfirmation)
-	assert.Regexp(t, "PD011924", err)
+	oc.orchestratorPollingInterval = 1 * time.Hour
+	err := oc.HandleIndexTransactions(ctx, map[string]*blockindexer.IndexedTransaction{
+		mockManagedTx1.ID: {},
+		mockManagedTx2.ID: {}, // not inflight, so shouldn't be processed
+	}, big.NewInt(1))
+	assert.NoError(t, err)
 }

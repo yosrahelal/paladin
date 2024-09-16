@@ -130,18 +130,18 @@ func (ble *baseLedgerTxEngine) poll(ctx context.Context) (polled int, total int)
 	}
 
 	// Run through copying across from the old InFlight list to the new one, those that aren't ready to be deleted
-	for signingAddress, te := range oldInFlight {
-		log.L(ctx).Debugf("Engine checking orchestrator for %s: state: %s, state duration: %s, number of transactions: %d", te.signingAddress, te.state, time.Since(te.stateEntryTime), len(te.InFlightTxs))
-		if (te.state == OrchestratorStateStale && time.Since(te.stateEntryTime) > ble.maxOrchestratorStale) ||
-			(te.state == OrchestratorStateIdle && time.Since(te.stateEntryTime) > ble.maxOrchestratorIdle) {
+	for signingAddress, oc := range oldInFlight {
+		log.L(ctx).Debugf("Engine checking orchestrator for %s: state: %s, state duration: %s, number of transactions: %d", oc.signingAddress, oc.state, time.Since(oc.stateEntryTime), len(oc.InFlightTxs))
+		if (oc.state == OrchestratorStateStale && time.Since(oc.stateEntryTime) > ble.maxOrchestratorStale) ||
+			(oc.state == OrchestratorStateIdle && time.Since(oc.stateEntryTime) > ble.maxOrchestratorIdle) {
 			// tell transaction orchestrator to stop, there is a chance we later found new transaction for this address, but we got to make a call at some point
 			// so it's here. The transaction orchestrator won't be removed immediately as the state update is async
-			te.Stop()
+			oc.Stop()
 		}
-		if te.state != OrchestratorStateStopped {
-			ble.InFlightOrchestrators[signingAddress] = te
-			te.MarkInFlightTxStale()
-			stateCounts[string(te.state)] = stateCounts[string(te.state)] + 1
+		if oc.state != OrchestratorStateStopped {
+			ble.InFlightOrchestrators[signingAddress] = oc
+			oc.MarkInFlightTxStale()
+			stateCounts[string(oc.state)] = stateCounts[string(oc.state)] + 1
 			InFlightSigningAddresses = append(InFlightSigningAddresses, signingAddress)
 		} else {
 			log.L(ctx).Infof("Engine removed orchestrator for signing address %s", signingAddress)
@@ -187,10 +187,10 @@ func (ble *baseLedgerTxEngine) poll(ctx context.Context) (polled int, total int)
 
 		for _, mtx := range additionalTxFromNonInFlightSigners {
 			if _, exist := ble.InFlightOrchestrators[string(mtx.From)]; !exist {
-				te := NewOrchestrator(ble, string(mtx.From), ble.orchestratorConfig)
-				ble.InFlightOrchestrators[string(mtx.From)] = te
-				stateCounts[string(te.state)] = stateCounts[string(te.state)] + 1
-				_, _ = te.Start(ble.ctx)
+				oc := NewOrchestrator(ble, string(mtx.From), ble.orchestratorConfig)
+				ble.InFlightOrchestrators[string(mtx.From)] = oc
+				stateCounts[string(oc.state)] = stateCounts[string(oc.state)] + 1
+				_, _ = oc.Start(ble.ctx)
 				log.L(ctx).Infof("Engine added orchestrator for signing address %s", mtx.From)
 			} else {
 				log.L(ctx).Warnf("Engine fetched extra transactions from signing address %s", mtx.From)
@@ -206,10 +206,10 @@ func (ble *baseLedgerTxEngine) poll(ctx context.Context) (polled int, total int)
 		// TODO: don't stop more than required number of slots
 
 		// Run through the existing running orchestrators and stop the ones that exceeded the max process timeout
-		for signingAddress, te := range ble.InFlightOrchestrators {
-			if time.Since(te.orchestratorBirthTime) > ble.maxOverloadProcessTime {
+		for signingAddress, oc := range ble.InFlightOrchestrators {
+			if time.Since(oc.orchestratorBirthTime) > ble.maxOverloadProcessTime {
 				log.L(ctx).Infof("Engine pause, attempt to stop orchestrator for signing address %s", signingAddress)
-				te.Stop()
+				oc.Stop()
 				ble.SigningAddressesPausedUntil[signingAddress] = time.Now().Add(ble.maxOverloadProcessTime)
 			}
 		}

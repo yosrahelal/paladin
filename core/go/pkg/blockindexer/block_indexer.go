@@ -46,9 +46,10 @@ import (
 type BlockIndexer interface {
 	Start(internalStreams ...*InternalEventStream) error
 	Stop()
-	RegisterIndexedTransactionHandler(ctx context.Context, hookFunction func(indexedTransactions []*IndexedTransaction) error) error
+	RegisterIndexedTransactionHandler(ctx context.Context, hookFunction func(ctx context.Context, indexedTransactions []*IndexedTransaction) error) error
 	GetIndexedBlockByNumber(ctx context.Context, number uint64) (*IndexedBlock, error)
 	GetIndexedTransactionByHash(ctx context.Context, hash tktypes.Bytes32) (*IndexedTransaction, error)
+	GetIndexedTransactionByNonce(ctx context.Context, from tktypes.EthAddress, nonce uint64) (*IndexedTransaction, error)
 	GetBlockTransactionsByNumber(ctx context.Context, blockNumber int64) ([]*IndexedTransaction, error)
 	GetTransactionEventsByHash(ctx context.Context, hash tktypes.Bytes32) ([]*IndexedEvent, error)
 	ListTransactionEvents(ctx context.Context, lastBlock int64, lastIndex, limit int, withTransaction, withBlock bool) ([]*IndexedEvent, error)
@@ -70,7 +71,7 @@ type BlockIndexer interface {
 type blockIndexer struct {
 	parentCtxForReset                context.Context
 	hookRegisterMutex                sync.Mutex
-	indexedTransactionPrePersistHook func(indexedTransactions []*IndexedTransaction) error
+	indexedTransactionPrePersistHook func(ctx context.Context, indexedTransactions []*IndexedTransaction) error
 	cancelFunc                       func()
 	persistence                      persistence.Persistence
 	blockListener                    *blockListener
@@ -148,7 +149,7 @@ func (bi *blockIndexer) Start(internalStreams ...*InternalEventStream) error {
 	return nil
 }
 
-func (bi *blockIndexer) RegisterIndexedTransactionHandler(ctx context.Context, hookFunction func(indexedTransactions []*IndexedTransaction) error) (err error) {
+func (bi *blockIndexer) RegisterIndexedTransactionHandler(ctx context.Context, hookFunction func(ctx context.Context, indexedTransactions []*IndexedTransaction) error) (err error) {
 	bi.hookRegisterMutex.Lock()
 	defer bi.hookRegisterMutex.Unlock()
 	if bi.indexedTransactionPrePersistHook != nil {
@@ -544,7 +545,7 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 	}
 
 	if bi.indexedTransactionPrePersistHook != nil {
-		if prePersistHookError = bi.indexedTransactionPrePersistHook(transactions); prePersistHookError != nil {
+		if prePersistHookError = bi.indexedTransactionPrePersistHook(ctx, transactions); prePersistHookError != nil {
 			// if pre persist hook failed, don't write to db
 			return prePersistHookError
 		}
@@ -745,6 +746,22 @@ func (bi *blockIndexer) GetIndexedBlockByNumber(ctx context.Context, number uint
 		return nil, err
 	}
 	return blocks[0], nil
+}
+
+func (bi *blockIndexer) GetIndexedTransactionByNonce(ctx context.Context, from tktypes.EthAddress, nonce uint64) (*IndexedTransaction, error) {
+	var txns []*IndexedTransaction
+	db := bi.persistence.DB()
+	err := db.
+		WithContext(ctx).
+		Table("indexed_transactions").
+		Where("from = ?", from).
+		Where("nonce = ?", nonce).
+		Find(&txns).
+		Error
+	if err != nil || len(txns) < 1 {
+		return nil, err
+	}
+	return txns[0], nil
 }
 
 func (bi *blockIndexer) GetIndexedTransactionByHash(ctx context.Context, hash tktypes.Bytes32) (*IndexedTransaction, error) {

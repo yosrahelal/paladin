@@ -39,12 +39,13 @@ func TestNewEngineNoNewOrchestrator(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
+	mBI.On("RegisterIndexedTransactionHandler", ctx, mock.Anything).Return(nil).Once()
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.maxInFlightOrchestrators = 1
 	ble.enginePollingInterval = 1 * time.Hour
 
@@ -65,12 +66,12 @@ func TestNewEnginePollingCancelledContext(t *testing.T) {
 
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.maxInFlightOrchestrators = 1
 	ble.enginePollingInterval = 1 * time.Hour
 	// already has a running orchestrator for the address so no new orchestrator should be started
@@ -107,12 +108,12 @@ func TestNewEnginePollingReAddStoppedOrchestrator(t *testing.T) {
 
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.maxInFlightOrchestrators = 1
 	ble.enginePollingInterval = 1 * time.Hour
 
@@ -161,12 +162,12 @@ func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.maxInFlightOrchestrators = 2
 	ble.ctx = ctx
 	ble.enginePollingInterval = 1 * time.Hour
@@ -186,7 +187,7 @@ func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 		txStore:                     mTS,
 		ethClient:                   mEC,
 		managedTXEventNotifier:      mEN,
-		txConfirmationListener:      mCL,
+		bIndexer:                    mBI,
 		maxInFlightTxs:              0,
 	}
 	ble.InFlightOrchestrators = map[string]*orchestrator{
@@ -227,12 +228,12 @@ func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) 
 
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.maxInFlightOrchestrators = 1
 	ble.ctx = ctx
 	ble.enginePollingInterval = 1 * time.Hour
@@ -249,7 +250,7 @@ func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) 
 		txStore:                     mTS,
 		ethClient:                   mEC,
 		managedTXEventNotifier:      mEN,
-		txConfirmationListener:      mCL,
+		bIndexer:                    mBI,
 	}
 	// already has a running orchestrator for the address so no new orchestrator should be started
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
@@ -276,12 +277,13 @@ func TestNewEnginePollingExcludePausedOrchestrator(t *testing.T) {
 
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
+	mBI.On("RegisterIndexedTransactionHandler", ctx, mock.Anything).Return(nil).Once()
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.maxInFlightOrchestrators = 1
 	ble.enginePollingInterval = 1 * time.Hour
 
@@ -314,12 +316,12 @@ func TestNewEngineGetPendingFuelingTxs(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.ctx = ctx
 	ble.enginePollingInterval = 1 * time.Hour
 
@@ -353,12 +355,12 @@ func TestNewEngineCheckTxCompleteness(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := enginemocks.NewTransactionStore(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.ctx = ctx
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
 	ble.enginePollingInterval = 1 * time.Hour

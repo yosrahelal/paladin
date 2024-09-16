@@ -718,7 +718,7 @@ func TestBlockIndexerResetsWhenPrePersistHookFails(t *testing.T) {
 		return blocks, receipts
 	})
 
-	err := bi.RegisterIndexedTransactionHandler(ctx, func(indexedTransactions []*IndexedTransaction) error {
+	err := bi.RegisterIndexedTransactionHandler(ctx, func(ctx context.Context, indexedTransactions []*IndexedTransaction) error {
 		if !prePersistHookFailed && indexedTransactions[0].Hash == tktypes.NewBytes32FromSlice(blocks[2].Transactions[0].Hash) {
 			prePersistHookFailed = true
 			return fmt.Errorf("pop")
@@ -727,7 +727,7 @@ func TestBlockIndexerResetsWhenPrePersistHookFails(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	err = bi.RegisterIndexedTransactionHandler(ctx, func(indexedTransactions []*IndexedTransaction) error {
+	err = bi.RegisterIndexedTransactionHandler(ctx, func(ctx context.Context, indexedTransactions []*IndexedTransaction) error {
 		panic("should not override the first hook")
 	})
 	assert.Regexp(t, "PD011309", err)

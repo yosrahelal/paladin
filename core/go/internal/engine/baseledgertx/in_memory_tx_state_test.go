@@ -25,7 +25,8 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -33,7 +34,7 @@ import (
 func NewTestInMemoryTxState(t *testing.T) baseTypes.InMemoryTxStateManager {
 	oldTime := fftypes.Now()
 	oldFrom := "0x4e598f6e918321dd47c86e7a077b4ab0e7414846"
-	oldTxHash := "0x00000"
+	oldTxHash := tktypes.Bytes32Keccak([]byte("0x00000")).String()
 	oldStatus := baseTypes.BaseTxStatusPending
 	oldTo := "0x6cee73cf4d5b0ac66ce2d1c0617bec4bedd09f39"
 	oldNonce := ethtypes.NewHexInteger64(1)
@@ -41,12 +42,7 @@ func NewTestInMemoryTxState(t *testing.T) baseTypes.InMemoryTxStateManager {
 	oldValue := ethtypes.NewHexInteger64(200)
 	oldGasPrice := ethtypes.NewHexInteger64(10)
 	oldErrorMessage := "old message"
-	oldTestPolicyInfo := &baseTypes.EnterprisePolicyInfo{
-		LastWarnTime:      oldTime,
-		SubmittedTxHashes: []string{"0x00000", "0x00001", "0x00002"},
-	}
 	oldTransactionData := ethtypes.MustNewHexBytes0xPrefix(testTransactionData)
-	oldTestPolicyInfoBytes, _ := json.Marshal(oldTestPolicyInfo)
 	testManagedTx := &baseTypes.ManagedTX{
 		ID:              uuid.New().String(),
 		Created:         oldTime,
@@ -62,7 +58,11 @@ func NewTestInMemoryTxState(t *testing.T) baseTypes.InMemoryTxStateManager {
 			GasPrice: oldGasPrice,
 			Data:     oldTransactionData,
 		},
-		PolicyInfo:   fftypes.JSONAnyPtrBytes(oldTestPolicyInfoBytes),
+		SubmittedHashes: []string{
+			tktypes.Bytes32Keccak([]byte("0x00000")).String(),
+			tktypes.Bytes32Keccak([]byte("0x00001")).String(),
+			tktypes.Bytes32Keccak([]byte("0x00002")).String(),
+		},
 		FirstSubmit:  oldTime,
 		LastSubmit:   oldTime,
 		ErrorMessage: oldErrorMessage,
@@ -75,20 +75,15 @@ func NewTestInMemoryTxState(t *testing.T) baseTypes.InMemoryTxStateManager {
 func TestSettersAndGetters(t *testing.T) {
 	oldTime := fftypes.Now()
 	oldFrom := "0xb3d9cf8e163bbc840195a97e81f8a34e295b8f39"
-	oldTxHash := "0x00000"
+	oldTxHash := tktypes.Bytes32Keccak([]byte("0x00000")).String()
 	oldTo := "0x1f9090aae28b8a3dceadf281b0f12828e676c326"
 	oldNonce := ethtypes.NewHexInteger64(1)
 	oldGasLimit := ethtypes.NewHexInteger64(2000)
 	oldValue := ethtypes.NewHexInteger64(200)
 	oldGasPrice := ethtypes.NewHexInteger64(10)
 	oldErrorMessage := "old message"
-	oldTestPolicyInfo := &baseTypes.EnterprisePolicyInfo{
-		LastWarnTime:      oldTime,
-		SubmittedTxHashes: []string{"0x00000", "0x00001", "0x00002"},
-	}
 	oldTransactionData := ethtypes.MustNewHexBytes0xPrefix(testTransactionData)
 
-	oldTestPolicyInfoBytes, _ := json.Marshal(oldTestPolicyInfo)
 	testManagedTx := &baseTypes.ManagedTX{
 		ID:              uuid.New().String(),
 		Created:         oldTime,
@@ -104,7 +99,11 @@ func TestSettersAndGetters(t *testing.T) {
 			GasPrice: oldGasPrice,
 			Data:     oldTransactionData,
 		},
-		PolicyInfo:   fftypes.JSONAnyPtrBytes(oldTestPolicyInfoBytes),
+		SubmittedHashes: []string{
+			tktypes.Bytes32Keccak([]byte("0x00000")).String(),
+			tktypes.Bytes32Keccak([]byte("0x00001")).String(),
+			tktypes.Bytes32Keccak([]byte("0x00002")).String(),
+		},
 		FirstSubmit:  oldTime,
 		LastSubmit:   oldTime,
 		ErrorMessage: oldErrorMessage,
@@ -118,29 +117,32 @@ func TestSettersAndGetters(t *testing.T) {
 
 	assert.Equal(t, oldTime, inMemoryTxState.GetCreatedTime())
 	assert.Equal(t, oldTime, inMemoryTxState.GetDeleteRequestedTime())
-	assert.Nil(t, inMemoryTxState.GetReceipt())
+	assert.Nil(t, inMemoryTxState.GetIndexedTransaction())
 	assert.Equal(t, oldTxHash, inMemoryTxState.GetTransactionHash())
 	assert.Equal(t, oldNonce.BigInt(), inMemoryTxState.GetNonce())
 	assert.Equal(t, oldFrom, inMemoryTxState.GetFrom())
 	assert.Equal(t, testManagedTx.Status, inMemoryTxState.GetStatus())
 	assert.Equal(t, oldGasPrice.BigInt(), inMemoryTxState.GetGasPriceObject().GasPrice)
 	assert.Equal(t, oldTime, inMemoryTxState.GetFirstSubmit())
-	assert.Equal(t, oldTestPolicyInfo, inMemoryTxState.GetPolicyInfo())
+	assert.Equal(t, []string{
+		tktypes.Bytes32Keccak([]byte("0x00000")).String(),
+		tktypes.Bytes32Keccak([]byte("0x00001")).String(),
+		tktypes.Bytes32Keccak([]byte("0x00002")).String(),
+	}, inMemoryTxState.GetSubmittedHashes())
 	assert.Equal(t, testManagedTx, inMemoryTxState.GetTx())
 	assert.Equal(t, oldGasLimit.BigInt(), inMemoryTxState.GetGasLimit())
 	assert.False(t, inMemoryTxState.IsComplete())
 
-	// add receipt to the pending transaction and mark it as complete with a policy info update
-	testReceipt := ethclient.TransactionReceiptResponse{
-		BlockNumber:      fftypes.NewFFBigInt(1233),
-		TransactionIndex: fftypes.NewFFBigInt(23),
-		BlockHash:        "0x000000000",
-		Success:          true,
-		ProtocolID:       "000000000/0023",
+	// add indexed to the pending transaction and mark it as complete
+	testIndexedTx := &blockindexer.IndexedTransaction{
+		BlockNumber:      int64(1233),
+		TransactionIndex: int64(23),
+		Hash:             tktypes.Bytes32Keccak([]byte("test")),
+		Result:           blockindexer.TXResult_SUCCESS.Enum(),
 	}
 
-	inMemoryTxState.SetReceipt(context.Background(), &testReceipt)
-	assert.Equal(t, testReceipt, *inMemoryTxState.GetReceipt())
+	inMemoryTxState.SetIndexedTransaction(context.Background(), testIndexedTx)
+	assert.Equal(t, testIndexedTx, inMemoryTxState.GetIndexedTransaction())
 	successStatus := baseTypes.BaseTxStatusSucceeded
 	newTime := fftypes.Now()
 	newFrom := "0xf1031"
@@ -151,21 +153,22 @@ func TestSettersAndGetters(t *testing.T) {
 	newValue := ethtypes.NewHexInteger64(222)
 	newGasPrice := ethtypes.NewHexInteger64(111)
 	newErrorMessage := "new message"
-	newTestPolicyInfo := &baseTypes.EnterprisePolicyInfo{
-		LastWarnTime:      newTime,
-		SubmittedTxHashes: []string{"0x00000", "0x00001", "0x00002", "0x00003"},
-	}
-	newTestPolicyInfoBytes, _ := json.Marshal(newTestPolicyInfo)
+
 	inMemoryTxState.ApplyTxUpdates(context.Background(), &baseTypes.BaseTXUpdates{
 		Status:          &successStatus,
 		DeleteRequested: newTime,
 		GasPrice:        newGasPrice,
 		TransactionHash: &newTxHash,
-		PolicyInfo:      fftypes.JSONAnyPtrBytes(newTestPolicyInfoBytes),
-		FirstSubmit:     newTime,
-		LastSubmit:      newTime,
-		ErrorMessage:    &newErrorMessage,
-		GasLimit:        newGasLimit,
+		SubmittedHashes: []string{
+			tktypes.Bytes32Keccak([]byte("0x00000")).String(),
+			tktypes.Bytes32Keccak([]byte("0x00001")).String(),
+			tktypes.Bytes32Keccak([]byte("0x00002")).String(),
+			tktypes.Bytes32Keccak([]byte("0x00003")).String(),
+		},
+		FirstSubmit:  newTime,
+		LastSubmit:   newTime,
+		ErrorMessage: &newErrorMessage,
+		GasLimit:     newGasLimit,
 		// field that cannot be updated
 		From:  &newFrom,
 		To:    &newTo,
@@ -177,14 +180,20 @@ func TestSettersAndGetters(t *testing.T) {
 
 	assert.Equal(t, oldTime, inMemoryTxState.GetCreatedTime())
 	assert.Equal(t, newTime, inMemoryTxState.GetDeleteRequestedTime())
-	assert.Equal(t, testReceipt, *inMemoryTxState.GetReceipt())
+	assert.Equal(t, newTime, inMemoryTxState.GetLastSubmitTime())
+	assert.Equal(t, testIndexedTx, inMemoryTxState.GetIndexedTransaction())
 	assert.Equal(t, newTxHash, inMemoryTxState.GetTransactionHash())
 	assert.Equal(t, successStatus, inMemoryTxState.GetStatus())
 	assert.Equal(t, newGasPrice.BigInt(), inMemoryTxState.GetGasPriceObject().GasPrice)
 	assert.Nil(t, inMemoryTxState.GetGasPriceObject().MaxFeePerGas)
 	assert.Nil(t, inMemoryTxState.GetGasPriceObject().MaxPriorityFeePerGas)
 	assert.Equal(t, newTime, inMemoryTxState.GetFirstSubmit())
-	assert.Equal(t, newTestPolicyInfo, inMemoryTxState.GetPolicyInfo())
+	assert.Equal(t, []string{
+		tktypes.Bytes32Keccak([]byte("0x00000")).String(),
+		tktypes.Bytes32Keccak([]byte("0x00001")).String(),
+		tktypes.Bytes32Keccak([]byte("0x00002")).String(),
+		tktypes.Bytes32Keccak([]byte("0x00003")).String(),
+	}, inMemoryTxState.GetSubmittedHashes())
 	assert.Equal(t, testManagedTx, inMemoryTxState.GetTx())
 	assert.Equal(t, newGasLimit.BigInt(), inMemoryTxState.GetGasLimit())
 	assert.True(t, inMemoryTxState.IsComplete())

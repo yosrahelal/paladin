@@ -31,7 +31,7 @@ import (
 
 type testInFlightTransactionWithMocksAndConf struct {
 	it   *InFlightTransactionStageController
-	mCL  *enginemocks.TransactionConfirmationListener
+	mBI  *componentmocks.BlockIndexer
 	mEC  *componentmocks.EthClient
 	mEN  *enginemocks.ManagedTxEventNotifier
 	mTS  *enginemocks.TransactionStore
@@ -46,21 +46,21 @@ func NewTestInFlightTransactionWithMocks(t *testing.T) *testInFlightTransactionW
 	ble, conf := NewTestTransactionEngine(t)
 	mockBalanceManager, mEC, _ := NewTestBalanceManager(context.Background(), t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mCL := enginemocks.NewTransactionConfirmationListener(t)
+	mBI := componentmocks.NewBlockIndexer(t)
 	mTS := enginemocks.NewTransactionStore(t)
 	mEN := enginemocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mCL)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.ctx = ctx
 	ble.balanceManager = mockBalanceManager
 	orchestratorConf := conf.SubSection(OrchestratorSection)
-	te := NewOrchestrator(ble, imtxs.GetFrom(), orchestratorConf)
-	it := NewInFlightTransactionStageController(ble, te, imtxs.GetTx())
+	oc := NewOrchestrator(ble, imtxs.GetFrom(), orchestratorConf)
+	it := NewInFlightTransactionStageController(ble, oc, imtxs.GetTx())
 	it.timeLineLoggingEnabled = true
 	it.testOnlyNoActionMode = true
 	return &testInFlightTransactionWithMocksAndConf{
 		it:   it,
-		mCL:  mCL,
+		mBI:  mBI,
 		mEC:  mEC,
 		mEN:  mEN,
 		mTS:  mTS,

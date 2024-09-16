@@ -26,6 +26,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 
@@ -42,6 +43,8 @@ const (
 	BaseTxStatusSucceeded BaseTxStatus = "Succeeded"
 	// BaseTxStatusFailed happens when an error is reported by the infrastructure runtime
 	BaseTxStatusFailed BaseTxStatus = "Failed"
+	// BaseTxStatusFailed happens when the indexed transaction hash doesn't match any of the submitted hashes
+	BaseTxStatusConflict BaseTxStatus = "Conflict"
 	// BaseTxStatusSuspended indicates we are not actively doing any work with this transaction right now, until it's resumed to pending again
 	BaseTxStatusSuspended BaseTxStatus = "Suspended"
 )
@@ -76,8 +79,6 @@ const (
 	BaseTxActionRetrieveGasPrice BaseTxAction = "RetrieveGasPrice"
 	// BaseTxActionSubmitTransaction indicates that the transaction has been submitted
 	BaseTxActionSubmitTransaction BaseTxAction = "SubmitTransaction"
-	// BaseTxActionReceiveReceipt indicates that we have received a receipt for the transaction
-	BaseTxActionReceiveReceipt BaseTxAction = "ReceiveReceipt"
 	// BaseTxActionConfirmTransaction indicates that the transaction has been confirmed
 	BaseTxActionConfirmTransaction BaseTxAction = "Confirm"
 )
@@ -106,10 +107,10 @@ type BaseTXUpdates struct {
 	MaxFeePerGas         *ethtypes.HexInteger `json:"maxFeePerGas,omitempty"`
 	GasLimit             *ethtypes.HexInteger `json:"gas,omitempty"` // note this is required for some methods (eth_estimateGas)
 	TransactionHash      *string              `json:"transactionHash,omitempty"`
-	PolicyInfo           *fftypes.JSONAny     `json:"policyInfo"`
 	FirstSubmit          *fftypes.FFTime      `json:"firstSubmit,omitempty"`
 	LastSubmit           *fftypes.FFTime      `json:"lastSubmit,omitempty"`
 	ErrorMessage         *string              `json:"errorMessage,omitempty"`
+	SubmittedHashes      []string             `json:"submittedHashes,omitempty"`
 }
 
 type TransactionHeaders struct {
@@ -128,11 +129,12 @@ type ManagedTX struct {
 	DeleteRequested *fftypes.FFTime `json:"deleteRequested,omitempty"`
 	SequenceID      string          `json:"sequenceId,omitempty"`
 	*ethsigner.Transaction
-	TransactionHash string           `json:"transactionHash,omitempty"`
-	PolicyInfo      *fftypes.JSONAny `json:"policyInfo"`
-	FirstSubmit     *fftypes.FFTime  `json:"firstSubmit,omitempty"`
-	LastSubmit      *fftypes.FFTime  `json:"lastSubmit,omitempty"`
-	ErrorMessage    string           `json:"errorMessage,omitempty"`
+	TransactionHash string          `json:"transactionHash,omitempty"`
+	FirstSubmit     *fftypes.FFTime `json:"firstSubmit,omitempty"`
+	LastSubmit      *fftypes.FFTime `json:"lastSubmit,omitempty"`
+	ErrorMessage    string          `json:"errorMessage,omitempty"`
+	// submitted transaction hashes are in a separate DB table, we load and manage it in memory in the same object for code convenience
+	SubmittedHashes []string `json:"submittedHashes,omitempty"`
 }
 
 type BalanceManager interface {
@@ -198,10 +200,9 @@ type TransactionStore interface {
 	UpdateTransaction(ctx context.Context, txID string, updates *BaseTXUpdates) error
 	DeleteTransaction(ctx context.Context, txID string) error
 
-	GetTransactionReceipt(ctx context.Context, txID string) (receipt *ethclient.TransactionReceiptResponse, err error)
-	SetTransactionReceipt(ctx context.Context, txID string, receipt *ethclient.TransactionReceiptResponse) error
+	GetIndexedTransaction(ctx context.Context, txID string) (iTX *blockindexer.IndexedTransaction, err error)
+	SetIndexedTransaction(ctx context.Context, txID string, iTX *blockindexer.IndexedTransaction) error
 
-	AddTransactionConfirmations(ctx context.Context, txID string, clearExisting bool, confirmations ...*Confirmation) error
 	AddSubStatusAction(ctx context.Context, txID string, subStatus BaseTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *fftypes.FFTime) error
 
 	ListTransactions(ctx context.Context, filter ffapi.AndFilter) ([]*ManagedTX, *ffapi.FilterResult, error)
@@ -224,7 +225,7 @@ type BaseLedgerTxEngine interface {
 	// Init - setting a set of initialized toolkit plugins in the constructed transaction handler object. Safe checks & initialization
 	//        can take place inside this function as well. It also enables toolkit plugins to be able to embed a reference to its parent
 	//        transaction handler instance.
-	Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore TransactionStore, managedTXEventNotifier ManagedTxEventNotifier, txConfirmationListener TransactionConfirmationListener)
+	Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore TransactionStore, managedTXEventNotifier ManagedTxEventNotifier, blockIndexer blockindexer.BlockIndexer)
 
 	// Start - starting the transaction handler to handle inbound events.
 	// It takes in a context, of which upon cancellation will stop the transaction handler.
@@ -250,11 +251,6 @@ type BaseLedgerTxEngine interface {
 // manager accordingly.
 type ManagedTxEventNotifier interface {
 	Notify(ctx context.Context, e ManagedTransactionEvent) error
-}
-
-type TransactionConfirmationListener interface {
-	Add(ctx context.Context, txID, txHash string, rH ReceiptHandler, cH ConfirmationHandler) error
-	Remove(ctx context.Context, txHash string) error
 }
 
 type RequestOptions struct {
@@ -284,16 +280,9 @@ const (
 )
 
 type ManagedTransactionEvent struct {
-	Type    ManagedTransactionEventType
-	Tx      *ManagedTX
-	Receipt *ethclient.TransactionReceiptResponse
+	Type ManagedTransactionEventType
+	Tx   *ManagedTX
 }
-
-// ReceiptHandler can be passed on the event as a closure with extra variables
-type ReceiptHandler func(ctx context.Context, txID string, receipt *ethclient.TransactionReceiptResponse) error
-
-// ConfirmationHandler can be passed on the event as a closure with extra variables
-type ConfirmationHandler func(ctx context.Context, txID string, notification *ConfirmationsNotification) error
 
 type GasPriceObject struct {
 	MaxPriorityFeePerGas *big.Int `json:"maxPriorityFeePerGas,omitempty"`
@@ -344,16 +333,6 @@ const (
 	//   completion criteria -> receipt / prepare
 	//     the last sub-status is a completed (success/expired) "submit" substatus
 	InFlightTxStageSubmitting InFlightTxStage = "submit"
-	//   entry criteria (OR):
-	//     received "receipt" (!!!first high priority, before entry criteria checks of any other stages, other stage are aborted as soon as this criteria is met)
-	//     the last sub-status is a success "submit" substatus
-	//     the last sub-status is an unexpired incomplete "receipt" substatus
-	//   emitted async actions:
-	//     - old transaction dis-tracking (only emitted for expired )
-	//     - new transaction tracking
-	//   completion criteria -> confirm / prepare
-	//     the last sub-status is a completed (success/expired) "receipt" substatus
-	InFlightTxStageReceipting InFlightTxStage = "receipt"
 	//   entry criteria:
 	//     there is a completed "receipt" substatus (!!!second high priority)
 	//   completion criteria -> complete
@@ -375,7 +354,6 @@ var AllInFlightStages = []string{
 	string(InFlightTxStageRetrieveGasPrice),
 	string(InFlightTxStageSigning),
 	string(InFlightTxStageSubmitting),
-	string(InFlightTxStageReceipting),
 	string(InFlightTxStageConfirming),
 	string(InFlightTxStageComplete),
 	string(InFlightTxStageQueued),
@@ -393,24 +371,20 @@ const (
 	SubmissionOutcomeFailedRequiresRetry SubmissionOutcome = "errRequiresRetry"
 )
 
-type EnterprisePolicyInfo struct {
-	LastWarnTime      *fftypes.FFTime `json:"lastWarnTime"`
-	SubmittedTxHashes []string        `json:"submittedTxHashes,omitempty"`
-}
-
 type InMemoryTxStateReadOnly interface {
 	GetTxID() string
 	GetCreatedTime() *fftypes.FFTime
 	GetDeleteRequestedTime() *fftypes.FFTime
 	// get the transaction receipt from the in-memory state (note: the returned value should not be modified)
-	GetReceipt() *ethclient.TransactionReceiptResponse
+	GetIndexedTransaction() *blockindexer.IndexedTransaction
 	GetTransactionHash() string
 	GetNonce() *big.Int
 	GetFrom() string
 	GetStatus() BaseTxStatus
 	GetGasPriceObject() *GasPriceObject
 	GetFirstSubmit() *fftypes.FFTime
-	GetPolicyInfo() *EnterprisePolicyInfo
+	GetLastSubmitTime() *fftypes.FFTime
+	GetSubmittedHashes() []string
 
 	GetTx() *ManagedTX //TODO: remove the need of this function
 
@@ -424,7 +398,7 @@ type InMemoryTxStateManager interface {
 }
 
 type InMemoryTxStateSetters interface {
-	SetReceipt(ctx context.Context, receipt *ethclient.TransactionReceiptResponse)
+	SetIndexedTransaction(ctx context.Context, iTX *blockindexer.IndexedTransaction)
 	ApplyTxUpdates(ctx context.Context, txUpdates *BaseTXUpdates)
 }
 
@@ -438,8 +412,6 @@ type StageOutput struct {
 	SignOutput *SignOutputs
 
 	GasPriceOutput *GasPriceOutput
-
-	ReceiptOutput *ReceiptOutputs
 
 	ConfirmationOutput *ConfirmationOutputs
 }
@@ -462,15 +434,9 @@ type GasPriceOutput struct {
 	Err            error
 }
 
-type ReceiptOutputs struct {
-	Receipt       *ethclient.TransactionReceiptResponse
-	ReceiptNotify *fftypes.FFTime
-	Err           error
-}
-
 type ConfirmationOutputs struct {
-	Confirmations *ConfirmationsNotification
-	ConfirmNotify *fftypes.FFTime
+	IndexedTransaction *blockindexer.IndexedTransaction
+	Err                error
 }
 
 type PersistenceOutput struct {
@@ -480,7 +446,6 @@ type PersistenceOutput struct {
 
 type InFlightStageActionTriggers interface {
 	TriggerRetrieveGasPrice(ctx context.Context) error
-	TriggerTracking(ctx context.Context) error
 	TriggerSignTx(ctx context.Context) error
 	TriggerSubmitTx(ctx context.Context, signedMessage []byte) error
 	TriggerStatusUpdate(ctx context.Context) error
@@ -519,16 +484,14 @@ func (ctx *RunningStageContext) SetNewPersistenceUpdateOutput() {
 }
 
 type RunningStageContextPersistenceOutput struct {
-	UpdateType PersistenceUpdateType
-	InMemoryTx InMemoryTxStateReadOnly
-	SubStatus  BaseTxSubStatus
-	Ctx        context.Context
-
-	PolicyInfo     *EnterprisePolicyInfo
-	TxUpdates      *BaseTXUpdates
-	Receipt        *ethclient.TransactionReceiptResponse
-	HistoryUpdates []func(p TransactionStore) error
-	Confirmations  *ConfirmationsNotification
+	UpdateType               PersistenceUpdateType
+	InMemoryTx               InMemoryTxStateReadOnly
+	SubStatus                BaseTxSubStatus
+	Ctx                      context.Context
+	TxUpdates                *BaseTXUpdates
+	HistoryUpdates           []func(p TransactionStore) error
+	IndexedTransaction       *blockindexer.IndexedTransaction
+	MissedIndexedTransaction bool
 }
 
 func (sOut *RunningStageContextPersistenceOutput) AddSubStatusAction(action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny) {
@@ -550,6 +513,7 @@ type OrchestratorContext struct {
 	// input from transaction engine
 	AvailableToSpend         *big.Int
 	PreviousNonceCostUnknown bool
+	CurrentConfirmedNonce    *big.Int
 }
 
 // output of some stages doesn't get written into the database
@@ -583,8 +547,7 @@ type InFlightTransactionStateManager interface {
 	AddSubmitOutput(ctx context.Context, txHash string, submissionTime *fftypes.FFTime, submissionOutcome SubmissionOutcome, errorReason ethclient.ErrorReason, err error)
 	AddSignOutput(ctx context.Context, signedMessage []byte, txHash string, err error)
 	AddGasPriceOutput(ctx context.Context, gasPriceObject *GasPriceObject, err error)
-	AddReceiptOutput(ctx context.Context, rpt *ethclient.TransactionReceiptResponse, err error)
-	AddConfirmationsOutput(ctx context.Context, cmfs *ConfirmationsNotification)
+	AddConfirmationsOutput(ctx context.Context, indexedTx *blockindexer.IndexedTransaction)
 	AddPanicOutput(ctx context.Context, stage InFlightTxStage)
 
 	PersistTxState(ctx context.Context) (stage InFlightTxStage, persistenceTime time.Time, err error)

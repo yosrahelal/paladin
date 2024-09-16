@@ -29,6 +29,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 
@@ -62,7 +63,7 @@ type baseLedgerTxEngine struct {
 	ctx                    context.Context
 	thMetrics              *baseLedgerTxEngineMetrics
 	txStore                baseTypes.TransactionStore
-	txConfirmationListener baseTypes.TransactionConfirmationListener
+	bIndexer               blockindexer.BlockIndexer
 	ethClient              ethclient.EthClient
 	managedTXEventNotifier baseTypes.ManagedTxEventNotifier
 	keymgr                 ethclient.KeyManager
@@ -78,6 +79,10 @@ type baseLedgerTxEngine struct {
 	// a map of signing addresses and the highest nonce of their completed transactions
 	completedTxNoncePerAddress      map[string]big.Int
 	completedTxNoncePerAddressMutex sync.Mutex
+
+	// a map of signing addresses and the highest nonce of their confirmed transactions seen from the block indexer
+	confirmedTxNoncePerAddress        map[string]*big.Int
+	confirmedTxNoncePerAddressRWMutex sync.RWMutex
 
 	// inbound concurrency control TBD
 
@@ -145,6 +150,7 @@ func NewTransactionEngine(ctx context.Context, conf config.Section) (baseTypes.B
 		cacheManager:               cm,
 		balanceManagerConfig:       balanceManagerConfig,
 		completedTxNoncePerAddress: make(map[string]big.Int),
+		confirmedTxNoncePerAddress: make(map[string]*big.Int),
 		orchestratorConfig:         orchestratorConfig,
 		gasPriceIncreaseMax:        gasPriceIncreaseMax,
 		gasPriceIncreasePercent:    big.NewInt(orchestratorConfig.GetInt64(OrchestratorGasPriceIncreasePercentageInt)),
@@ -154,14 +160,14 @@ func NewTransactionEngine(ctx context.Context, conf config.Section) (baseTypes.B
 	return ble, nil
 }
 
-func (ble *baseLedgerTxEngine) Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore baseTypes.TransactionStore, managedTXEventNotifier baseTypes.ManagedTxEventNotifier, txConfirmationListener baseTypes.TransactionConfirmationListener) {
+func (ble *baseLedgerTxEngine) Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore baseTypes.TransactionStore, managedTXEventNotifier baseTypes.ManagedTxEventNotifier, blockIndexer blockindexer.BlockIndexer) {
 	log.L(ctx).Debugf("Initializing enterprise transaction handler")
 	ble.ethClient = ethClient
 	ble.keymgr = keymgr
 	ble.txStore = txStore
 	ble.gasPriceClient.Init(ctx, ethClient)
 	ble.managedTXEventNotifier = managedTXEventNotifier
-	ble.txConfirmationListener = txConfirmationListener
+	ble.bIndexer = blockIndexer
 
 	balanceManager, err := NewBalanceManagerWithInMemoryTracking(ctx, ble.balanceManagerConfig, ethClient, ble)
 	if err != nil {
@@ -178,6 +184,9 @@ func (ble *baseLedgerTxEngine) Start(ctx context.Context) (done <-chan struct{},
 		ble.ctx = ctx // set the context for policy loop
 		ble.engineLoopDone = make(chan struct{})
 		log.L(ctx).Debugf("Kicking off  enterprise handler engine loop")
+		if err = ble.bIndexer.RegisterIndexedTransactionHandler(ctx, ble.HandleIndexTransactions); err != nil {
+			return
+		}
 		go ble.engineLoop()
 	}
 	ble.MarkInFlightOrchestratorsStale()
@@ -306,6 +315,86 @@ func (ble *baseLedgerTxEngine) createManagedTx(ctx context.Context, txID string,
 	return mtx, nil
 }
 
+// HandleIndexTransactions
+// handover events to the inflight orchestrators for the related signing addresses and record the highest confirmed nonce
+// new orchestrators will be created if there are space, orchestrators will use the recorded highest nonce to drive completion logic of transactions
+func (ble *baseLedgerTxEngine) HandleIndexTransactions(ctx context.Context, indexedTransactions []*blockindexer.IndexedTransaction) error {
+	// firstly, we group the indexed transactions by from address
+	// note: filter out transactions that are before the recorded nonce in confirmedTXNonce map requires multiple reads to a single address (as the loop keep switching between addresses)
+	// so we delegate the logic to the orchestrator as it will have a list of records for a single address
+	itMap := make(map[string]map[string]*blockindexer.IndexedTransaction)
+	itMaxNonce := make(map[string]*big.Int)
+	for _, it := range indexedTransactions {
+		itNonce := new(big.Int).SetUint64(it.Nonce)
+		if itMap[it.From.String()] == nil {
+			itMap[it.From.String()] = map[string]*blockindexer.IndexedTransaction{itNonce.String(): it}
+		} else {
+			itMap[it.From.String()][itNonce.String()] = it
+		}
+		if itMaxNonce[it.From.String()] == nil || itMaxNonce[it.From.String()].Cmp(itNonce) == -1 {
+			itMaxNonce[it.From.String()] = itNonce
+		}
+	}
+
+	// secondly, we obtain the lock for the orchestrator map:
+	ble.InFlightOrchestratorMux.Lock()
+	defer ble.InFlightOrchestratorMux.Unlock() // note, using lock might cause the event sequence to get lost when this function is invoked concurrently by several go routines, this code assumes the upstream logic does not do that
+
+	//     for address that has or could have a running orchestrator, triggers event handlers of each orchestrator in parallel to handle the event
+	//         (logic implemented in orchestrator handler)for the orchestrator handler, it obtains the stage process buffer lock and add the event into the stage process buffer and then exit
+
+	localRWLock := sync.RWMutex{} // could consider switch InFlightOrchestrators to use sync.Map for this logic here as the go routines will only modify disjoint set of keys
+	eventHandlingErrors := make(chan error, len(itMap))
+	for from, its := range itMap {
+		go func() {
+			localRWLock.RLock()
+			inFlightOrchestrator := ble.InFlightOrchestrators[from]
+			localRWLock.Unlock()
+			if inFlightOrchestrator == nil {
+				localRWLock.Lock()
+				itTotal := len(ble.InFlightOrchestrators)
+				if itTotal < ble.maxInFlightOrchestrators {
+					inFlightOrchestrator = NewOrchestrator(ble, from, ble.orchestratorConfig)
+					ble.InFlightOrchestrators[from] = inFlightOrchestrator
+					_, _ = inFlightOrchestrator.Start(ble.ctx)
+					log.L(ctx).Infof("(Event handler) Engine added orchestrator for signing address %s", from)
+					localRWLock.Unlock()
+				} else {
+					// no action can be taken
+					log.L(ctx).Debugf("(Event handler) Cannot add orchestrator for signing address %s due to in-flight queue is full", from)
+					localRWLock.Unlock()
+					eventHandlingErrors <- nil
+					return
+				}
+			}
+			err := inFlightOrchestrator.HandleIndexTransactions(ctx, its, itMaxNonce[from])
+			// finally, we update the confirmed nonce for each address to the highest number that is observed ever. This then can be used by the orchestrator to retrospectively fetch missed indexed transaction data.
+			ble.updateConfirmedTxNonce(from, itMaxNonce[from])
+			eventHandlingErrors <- err
+		}()
+	}
+
+	resultCount := 0
+	var accumulatedError error
+
+	// wait for all add output to complete
+	for {
+		select {
+		case err := <-eventHandlingErrors:
+			if err != nil {
+				accumulatedError = err
+			}
+			resultCount++
+		case <-ctx.Done():
+			return i18n.NewError(ctx, msgs.MsgContextCanceled)
+		}
+		if resultCount == len(itMap) {
+			break
+		}
+	}
+	return accumulatedError
+}
+
 func (ble *baseLedgerTxEngine) HandleSuspendTransaction(ctx context.Context, txID string) (mtx *baseTypes.ManagedTX, err error) {
 	mtx, err = ble.txStore.GetTransactionByID(ctx, txID)
 	if err != nil {
@@ -328,4 +417,19 @@ func (ble *baseLedgerTxEngine) HandleResumeTransaction(ctx context.Context, txID
 		return nil, res.err
 	}
 	return res.tx, nil
+}
+
+func (ble *baseLedgerTxEngine) getConfirmedTxNonce(addr string) (nonce *big.Int) {
+	ble.confirmedTxNoncePerAddressRWMutex.RLock()
+	nonce = ble.confirmedTxNoncePerAddress[addr]
+	defer ble.confirmedTxNoncePerAddressRWMutex.RUnlock()
+	return
+}
+
+func (ble *baseLedgerTxEngine) updateConfirmedTxNonce(addr string, nonce *big.Int) {
+	ble.confirmedTxNoncePerAddressRWMutex.Lock()
+	defer ble.confirmedTxNoncePerAddressRWMutex.Unlock()
+	if ble.confirmedTxNoncePerAddress[addr] == nil || ble.confirmedTxNoncePerAddress[addr].Cmp(nonce) != 1 {
+		ble.confirmedTxNoncePerAddress[addr] = nonce
+	}
 }
