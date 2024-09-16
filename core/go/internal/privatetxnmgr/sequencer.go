@@ -161,7 +161,11 @@ func (s *sequencer) getUnconfirmedDependencies(ctx context.Context, txn transact
 func (s *sequencer) delegate(ctx context.Context, transactionId string, delegateNodeID string) error {
 	log.L(ctx).Infof("Delegating transaction %s to node %s", transactionId, delegateNodeID)
 
-	s.transportWriter.SendDelegateTransactionMessage(ctx, transactionId, delegateNodeID)
+	err := s.transportWriter.SendDelegateTransactionMessage(ctx, transactionId, delegateNodeID)
+	if err != nil {
+		log.L(ctx).Errorf("Error sending delegate transaction message: %s", err)
+		return err
+	}
 
 	//update our local state to reflect that this transaction is now delegated
 	txn, ok := s.unconfirmedTransactionsByID[transactionId]
