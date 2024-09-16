@@ -19,7 +19,6 @@ package statestore
 import (
 	"context"
 
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -31,23 +30,9 @@ func (ss *stateStore) RPCModule() *rpcserver.RPCModule {
 
 func (ss *stateStore) initRPC() {
 	ss.rpcModule = rpcserver.NewRPCModule("pstate").
-		Add("pstate_storeABISchema", ss.rpcStoreABISchema()).
 		Add("pstate_listSchemas", ss.rpcListSchema()).
 		Add("pstate_storeState", ss.rpcStoreState()).
 		Add("pstate_queryStates", ss.rpcQuery())
-}
-
-func (ss *stateStore) rpcStoreABISchema() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod2(func(ctx context.Context,
-		domain string,
-		abiParam abi.Parameter,
-	) (Schema, error) {
-		s, err := newABISchema(ctx, domain, &abiParam)
-		if err == nil {
-			err = ss.PersistSchema(ctx, s)
-		}
-		return s, err
-	})
 }
 
 func (ss *stateStore) rpcListSchema() rpcserver.RPCHandler {

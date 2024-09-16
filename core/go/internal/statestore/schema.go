@@ -23,6 +23,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"gorm.io/gorm/clause"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -83,11 +84,18 @@ func schemaCacheKey(domainID string, id tktypes.Bytes32) string {
 	return domainID + "/" + id.String()
 }
 
-func (ss *stateStore) PersistSchema(ctx context.Context, s Schema) error {
-	op := ss.writer.newWriteOp(s.Persisted().DomainID)
-	op.schemas = []*SchemaPersisted{s.Persisted()}
-	ss.writer.queue(ctx, op)
-	return op.flush(ctx)
+func (ss *stateStore) persistSchemas(schemas []*SchemaPersisted) error {
+	return ss.p.DB().
+		Table("schemas").
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "domain_id"},
+				{Name: "id"},
+			},
+			DoNothing: true, // immutable
+		}).
+		Create(schemas).
+		Error
 }
 
 func (ss *stateStore) GetSchema(ctx context.Context, domainID, schemaID string, failNotFound bool) (Schema, error) {
@@ -156,6 +164,9 @@ func (ss *stateStore) ListSchemas(ctx context.Context, domainID string) (results
 }
 
 func (ss *stateStore) EnsureABISchemas(ctx context.Context, domainID string, defs []*abi.Parameter) ([]Schema, error) {
+	if len(defs) == 0 {
+		return nil, nil
+	}
 
 	// Validate all the schemas
 	prepared := make([]Schema, len(defs))
@@ -169,10 +180,5 @@ func (ss *stateStore) EnsureABISchemas(ctx context.Context, domainID string, def
 		toFlush[i] = s.SchemaPersisted
 	}
 
-	op := ss.writer.newWriteOp(domainID)
-	op.schemas = toFlush
-	ss.writer.queue(ctx, op)
-	err := op.flush(ctx)
-
-	return prepared, err
+	return prepared, ss.persistSchemas(toFlush)
 }

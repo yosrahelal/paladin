@@ -84,7 +84,7 @@ func TestStateLockingQuery(t *testing.T) {
 
 	schema, err := newABISchema(ctx, "domain1", testABIParam(t, widgetABI))
 	require.NoError(t, err)
-	err = ss.PersistSchema(ctx, schema)
+	err = ss.persistSchemas([]*SchemaPersisted{schema.SchemaPersisted})
 	require.NoError(t, err)
 	schemaID := schema.IDString()
 

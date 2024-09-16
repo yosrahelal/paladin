@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/internal/httpserver"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
@@ -32,7 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestRPCServer(t *testing.T) (context.Context, rpcbackend.Backend, func()) {
+func newTestRPCServer(t *testing.T) (context.Context, *stateStore, rpcbackend.Backend, func()) {
 	ctx, ss, ssDone := newDBTestStateStore(t)
 
 	s, err := rpcserver.NewRPCServer(ctx, &rpcserver.Config{
@@ -49,7 +50,7 @@ func newTestRPCServer(t *testing.T) (context.Context, rpcbackend.Backend, func()
 
 	c := rpcbackend.NewRPCClient(resty.New().SetBaseURL(fmt.Sprintf("http://%s", s.HTTPAddr())))
 
-	return ctx, c, func() { s.Stop(); ssDone() }
+	return ctx, ss, c, func() { s.Stop(); ssDone() }
 
 }
 
@@ -61,16 +62,19 @@ func jsonTestLog(t *testing.T, desc string, f interface{}) {
 
 func TestRPC(t *testing.T) {
 
-	ctx, c, done := newTestRPCServer(t)
+	ctx, ss, c, done := newTestRPCServer(t)
 	defer done()
 
-	var schema tktypes.RawJSON
-	rpcErr := c.CallRPC(ctx, &schema, "pstate_storeABISchema", "domain1", tktypes.RawJSON(widgetABI))
-	jsonTestLog(t, "pstate_storeABISchema", schema)
-	assert.Nil(t, rpcErr)
+	var abiParam abi.Parameter
+	err := json.Unmarshal([]byte(widgetABI), &abiParam)
+	assert.NoError(t, err)
+	schema, err := newABISchema(ctx, "domain1", &abiParam)
+	assert.NoError(t, err)
+	err = ss.persistSchemas([]*SchemaPersisted{schema.SchemaPersisted})
+	assert.NoError(t, err)
 
 	var schemas []*SchemaPersisted
-	rpcErr = c.CallRPC(ctx, &schemas, "pstate_listSchemas", "domain1")
+	rpcErr := c.CallRPC(ctx, &schemas, "pstate_listSchemas", "domain1")
 	jsonTestLog(t, "pstate_listSchemas", schemas)
 	assert.Nil(t, rpcErr)
 	assert.Len(t, schemas, 1)
