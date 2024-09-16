@@ -261,6 +261,7 @@ func TestAssignNonceMultipleNoncesRollback(t *testing.T) {
 	nextNonce, err = intent.AssignNextNonce(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(42), nextNonce)
+	intent.Complete(ctx)
 
 	//Check that the reapear lock is in a state where the reaper can grab it
 	gotLock := nonceCache.reaperLock.TryLock()
