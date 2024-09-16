@@ -146,13 +146,13 @@ func newMockBlockIndexer(t *testing.T, config *Config) (context.Context, *blockI
 
 }
 
-func testBlockArray(t *testing.T, l int, knownAddress ...*ethtypes.Address0xHex) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC) {
+func testBlockArray(t *testing.T, l int, knownAddress ...ethtypes.Address0xHex) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC) {
 	blocks := make([]*BlockInfoJSONRPC, l)
 	receipts := make(map[string][]*TXReceiptJSONRPC, l)
 	for i := 0; i < l; i++ {
 		var contractAddress, to, emitAddr1 *ethtypes.Address0xHex
 		if knownAddress != nil {
-			emitAddr1 = knownAddress[0]
+			emitAddr1 = &knownAddress[0]
 		} else {
 			emitAddr1 = ethtypes.MustNewAddress(tktypes.RandHex(20))
 		}
