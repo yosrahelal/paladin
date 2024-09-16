@@ -1,12 +1,12 @@
 **/coverage*.txt
 **/debug.test
 **/__debug_*
-.vscode/*.log
 **/.DS_Store
 **/*.so
 **/*.dylib
 **/*.dll
 **/*.wasm
+!core/go/pkg/signer/in-memory/snark/test-resources/test.wasm
 **/*.zip
 
 .gradle
@@ -51,7 +51,11 @@ bin/
 /.nb-gradle/
 
 ### VS Code ###
-.vscode/
+**/.vscode/**
+!.vscode/settings.json
 
 ### Mac OS ###
 .DS_Store
+
+### Proto ###
+*.pb.go

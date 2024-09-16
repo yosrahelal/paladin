@@ -20,16 +20,19 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
 type mintHandler struct {
-	domainHandler
+	noto *Noto
 }
 
-func (h *mintHandler) ValidateParams(params string) (interface{}, error) {
-	var mintParams NotoMintParams
+func (h *mintHandler) ValidateParams(ctx context.Context, params string) (interface{}, error) {
+	var mintParams types.MintParams
 	if err := json.Unmarshal([]byte(params), &mintParams); err != nil {
 		return nil, err
 	}
@@ -39,34 +42,46 @@ func (h *mintHandler) ValidateParams(params string) (interface{}, error) {
 	if mintParams.Amount.BigInt().Sign() != 1 {
 		return nil, fmt.Errorf("parameter 'amount' must be greater than 0")
 	}
-	return mintParams, nil
+	return &mintParams, nil
 }
 
-func (h *mintHandler) Init(ctx context.Context, tx *parsedTransaction, req *pb.InitTransactionRequest) (*pb.InitTransactionResponse, error) {
-	if req.Transaction.From != tx.domainConfig.NotaryLookup {
+func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *pb.InitTransactionRequest) (*pb.InitTransactionResponse, error) {
+	params := tx.Params.(*types.MintParams)
+
+	if req.Transaction.From != tx.DomainConfig.NotaryLookup {
 		return nil, fmt.Errorf("mint can only be initiated by notary")
 	}
 	return &pb.InitTransactionResponse{
 		RequiredVerifiers: []*pb.ResolveVerifierRequest{
 			{
-				Lookup:    tx.domainConfig.NotaryLookup,
+				Lookup:    tx.DomainConfig.NotaryLookup,
 				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
 			},
-			// TODO: should we also resolve "To" party?
+			{
+				Lookup:    params.To,
+				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+			},
 		},
 	}, nil
 }
 
-func (h *mintHandler) Assemble(ctx context.Context, tx *parsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
-	params := tx.params.(NotoMintParams)
+func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
+	params := tx.Params.(*types.MintParams)
 
-	notary := findVerifier(tx.domainConfig.NotaryLookup, req.ResolvedVerifiers)
-	if notary == nil || notary.Verifier != tx.domainConfig.NotaryAddress {
-		// TODO: do we need to verify every time?
+	notary := domain.FindVerifier(tx.DomainConfig.NotaryLookup, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
+	if notary == nil || notary.Verifier != tx.DomainConfig.NotaryAddress {
 		return nil, fmt.Errorf("notary resolved to unexpected address")
 	}
+	to := domain.FindVerifier(params.To, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
+	if to == nil {
+		return nil, fmt.Errorf("error verifying recipient address")
+	}
+	toAddress, err := ethtypes.NewAddress(to.Verifier)
+	if err != nil {
+		return nil, err
+	}
 
-	_, outputStates, err := h.noto.prepareOutputs(params.To, params.Amount)
+	_, outputStates, err := h.noto.prepareOutputs(*toAddress, params.Amount)
 	if err != nil {
 		return nil, err
 	}
@@ -77,17 +92,19 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *parsedTransaction, req *
 			OutputStates: outputStates,
 		},
 		AttestationPlan: []*pb.AttestationRequest{
+			// Notary will endorse the assembled transaction (by submitting to the ledger)
+			// Note no  additional attestation using req.Transaction.From, because it is guaranteed to be the notary
 			{
 				Name:            "notary",
 				AttestationType: pb.AttestationType_ENDORSE,
 				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
-				Parties:         []string{tx.domainConfig.NotaryLookup},
+				Parties:         []string{tx.DomainConfig.NotaryLookup},
 			},
 		},
 	}, nil
 }
 
-func (h *mintHandler) validateAmounts(params *NotoMintParams, coins *gatheredCoins) error {
+func (h *mintHandler) validateAmounts(params *types.MintParams, coins *gatheredCoins) error {
 	if len(coins.inCoins) > 0 {
 		return fmt.Errorf("invalid inputs to 'mint': %v", coins.inCoins)
 	}
@@ -97,13 +114,13 @@ func (h *mintHandler) validateAmounts(params *NotoMintParams, coins *gatheredCoi
 	return nil
 }
 
-func (h *mintHandler) Endorse(ctx context.Context, tx *parsedTransaction, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
-	params := tx.params.(NotoMintParams)
-	coins, err := h.gatherCoins(req.Inputs, req.Outputs)
+func (h *mintHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
+	params := tx.Params.(*types.MintParams)
+	coins, err := h.noto.gatherCoins(req.Inputs, req.Outputs)
 	if err != nil {
 		return nil, err
 	}
-	if err := h.validateAmounts(&params, coins); err != nil {
+	if err := h.validateAmounts(params, coins); err != nil {
 		return nil, err
 	}
 	return &pb.EndorseTransactionResponse{
@@ -111,7 +128,7 @@ func (h *mintHandler) Endorse(ctx context.Context, tx *parsedTransaction, req *p
 	}, nil
 }
 
-func (h *mintHandler) Prepare(ctx context.Context, tx *parsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
+func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
 	outputs := make([]string, len(req.OutputStates))
 	for i, state := range req.OutputStates {
 		outputs[i] = state.Id
@@ -119,18 +136,22 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *parsedTransaction, req *p
 
 	params := map[string]interface{}{
 		"outputs":   outputs,
-		"signature": "0x",
+		"signature": "0x", // no signature, because requester AND submitter are always the notary
 		"data":      req.Transaction.TransactionId,
 	}
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
 		return nil, err
 	}
+	functionJSON, err := json.Marshal(h.noto.contractABI.Functions()["mint"])
+	if err != nil {
+		return nil, err
+	}
 
 	return &pb.PrepareTransactionResponse{
 		Transaction: &pb.BaseLedgerTransaction{
-			FunctionName: "mint",
-			ParamsJson:   string(paramsJSON),
+			FunctionAbiJson: string(functionJSON),
+			ParamsJson:      string(paramsJSON),
 		},
 	}, nil
 }
