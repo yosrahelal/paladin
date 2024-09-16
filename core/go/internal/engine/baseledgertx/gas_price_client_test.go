@@ -79,6 +79,11 @@ func TestSetFixedGasPriceIfConfigured(t *testing.T) {
 	assert.Equal(t, big.NewInt(0), testTx.GasPrice.BigInt())
 	assert.Nil(t, testTx.MaxFeePerGas)
 	assert.Nil(t, testTx.MaxPriorityFeePerGas)
+	zeroGpo, err := zeroHgc.GetGasPriceObject(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, big.NewInt(0), zeroGpo.GasPrice)
+	assert.Nil(t, zeroGpo.MaxFeePerGas)
+	assert.Nil(t, zeroGpo.MaxPriorityFeePerGas)
 
 	testTx = &ethsigner.Transaction{}
 	tenHgc := NewTestFixedPriceGasPriceClient(t)
@@ -86,6 +91,11 @@ func TestSetFixedGasPriceIfConfigured(t *testing.T) {
 	assert.Equal(t, big.NewInt(10), testTx.GasPrice.BigInt())
 	assert.Nil(t, testTx.MaxFeePerGas)
 	assert.Nil(t, testTx.MaxPriorityFeePerGas)
+	tenGpo, err := tenHgc.GetGasPriceObject(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, big.NewInt(10), tenGpo.GasPrice)
+	assert.Nil(t, tenGpo.MaxFeePerGas)
+	assert.Nil(t, tenGpo.MaxPriorityFeePerGas)
 
 	testTx = &ethsigner.Transaction{}
 	eip1559Hgc := NewTestFixedPriceGasPriceClientEIP1559(t)
@@ -93,6 +103,11 @@ func TestSetFixedGasPriceIfConfigured(t *testing.T) {
 	assert.Equal(t, big.NewInt(10), testTx.MaxFeePerGas.BigInt())
 	assert.Equal(t, big.NewInt(1), testTx.MaxPriorityFeePerGas.BigInt())
 	assert.Nil(t, testTx.GasPrice)
+	gpo, err := eip1559Hgc.GetGasPriceObject(ctx)
+	assert.NoError(t, err)
+	assert.Nil(t, gpo.GasPrice)
+	assert.Equal(t, big.NewInt(10), gpo.MaxFeePerGas)
+	assert.Equal(t, big.NewInt(1), gpo.MaxPriorityFeePerGas)
 }
 
 func TestGasPriceClientInit(t *testing.T) {

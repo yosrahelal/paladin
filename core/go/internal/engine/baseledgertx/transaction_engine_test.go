@@ -17,6 +17,7 @@ package baseledgertx
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -33,6 +34,7 @@ import (
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/enginemocks"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -855,4 +857,149 @@ func TestEngineCanceledContext(t *testing.T) {
 	}).Once()
 	_, err = ble.HandleResumeTransaction(ctx, mtx.ID)
 	assert.Regexp(t, "PD011926", err)
+}
+
+func TestEngineHandleConfirmedTransactionEvents(t *testing.T) {
+	ctx, cancelCtx := context.WithCancel(context.Background())
+
+	ble, _ := NewTestTransactionEngine(t)
+	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
+
+	mTS := enginemocks.NewTransactionStore(t)
+	mBI := componentmocks.NewBlockIndexer(t)
+	mEN := enginemocks.NewManagedTxEventNotifier(t)
+
+	mEC := componentmocks.NewEthClient(t)
+	mKM := componentmocks.NewKeyManager(t)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
+
+	imtxs := NewTestInMemoryTxState(t)
+	mtx := imtxs.GetTx()
+
+	mockManagedTx0 := &baseTypes.ManagedTX{
+		Transaction: &ethsigner.Transaction{
+			From:  json.RawMessage(string(mtx.From)),
+			Nonce: ethtypes.NewHexInteger64(4),
+		},
+	}
+	mockManagedTx1 := &baseTypes.ManagedTX{
+		Transaction: &ethsigner.Transaction{
+			From:  json.RawMessage(string(mtx.From)),
+			Nonce: ethtypes.NewHexInteger64(5),
+		},
+	}
+	mockManagedTx2 := &baseTypes.ManagedTX{
+		Transaction: &ethsigner.Transaction{
+			From:  json.RawMessage("0x12345f6e918321dd47c86e7a077b4ab0e7411234"),
+			Nonce: ethtypes.NewHexInteger64(6),
+		},
+	}
+	mockManagedTx3 := &baseTypes.ManagedTX{
+		Transaction: &ethsigner.Transaction{
+			From:  json.RawMessage("0x43215f6e918321dd47c86e7a077b4ab0e7414321"),
+			Nonce: ethtypes.NewHexInteger64(7),
+		},
+	}
+
+	ble.InFlightOrchestrators = make(map[string]*orchestrator)
+	ble.InFlightOrchestrators[string(mtx.From)] = &orchestrator{
+		baseLedgerTxEngine:           ble,
+		orchestratorPollingInterval:  ble.enginePollingInterval,
+		state:                        OrchestratorStateIdle,
+		stateEntryTime:               time.Now().Add(-ble.maxOrchestratorIdle).Add(-1 * time.Minute),
+		InFlightTxsStale:             make(chan bool, 1),
+		stopProcess:                  make(chan bool, 1),
+		transactionIDsInStatusUpdate: []string{"randomID"},
+		txStore:                      mTS,
+		ethClient:                    mEC,
+		managedTXEventNotifier:       mEN,
+		bIndexer:                     mBI,
+	}
+	// in flight tx test
+	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
+	it := testInFlightTransactionStateManagerWithMocks.it
+	mtx = it.stateManager.GetTx()
+	ble.InFlightOrchestrators[string(mtx.From)].InFlightTxs = []*InFlightTransactionStageController{
+		it,
+	}
+	ble.maxInFlightOrchestrators = 2
+	ble.ctx = ctx
+
+	assert.Equal(t, 1, len(ble.InFlightOrchestrators))
+	err := ble.HandleConfirmedTransactions(ctx, []*blockindexer.IndexedTransaction{
+		{
+			BlockNumber:      int64(1233),
+			TransactionIndex: int64(23),
+			Hash:             tktypes.Bytes32Keccak([]byte("0x00001")),
+			Result:           blockindexer.TXResult_SUCCESS.Enum(),
+			Nonce:            mtx.Nonce.Uint64(),
+			From:             tktypes.MustEthAddress(string(mtx.From)),
+		},
+		{
+			BlockNumber:      int64(1233),
+			TransactionIndex: int64(23),
+			Hash:             tktypes.Bytes32Keccak([]byte("0x00002")),
+			Result:           blockindexer.TXResult_SUCCESS.Enum(),
+			Nonce:            mockManagedTx0.Nonce.Uint64(),
+			From:             tktypes.MustEthAddress(string(mockManagedTx0.From)),
+		},
+		{
+			BlockNumber:      int64(1233),
+			TransactionIndex: int64(23),
+			Hash:             tktypes.Bytes32Keccak([]byte("0x00002")),
+			Result:           blockindexer.TXResult_SUCCESS.Enum(),
+			Nonce:            mockManagedTx1.Nonce.Uint64(),
+			From:             tktypes.MustEthAddress(string(mockManagedTx1.From)),
+		},
+		{
+			BlockNumber:      int64(1233),
+			TransactionIndex: int64(23),
+			Hash:             tktypes.Bytes32Keccak([]byte("0x00002")),
+			Result:           blockindexer.TXResult_SUCCESS.Enum(),
+			Nonce:            mockManagedTx2.Nonce.Uint64(),
+			From:             tktypes.MustEthAddress(string(mockManagedTx2.From)),
+		},
+		{
+			BlockNumber:      int64(1233),
+			TransactionIndex: int64(23),
+			Hash:             tktypes.Bytes32Keccak([]byte("0x00002")),
+			Result:           blockindexer.TXResult_SUCCESS.Enum(),
+			Nonce:            mockManagedTx3.Nonce.Uint64(),
+			From:             tktypes.MustEthAddress(string(mockManagedTx3.From)),
+		},
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(ble.InFlightOrchestrators))
+
+	// cancel context should return with error
+	cancelCtx()
+	assert.Regexp(t, "PD010301", ble.HandleConfirmedTransactions(ctx, []*blockindexer.IndexedTransaction{
+		{
+			BlockNumber:      int64(1233),
+			TransactionIndex: int64(23),
+			Hash:             tktypes.Bytes32Keccak([]byte("0x00001")),
+			Result:           blockindexer.TXResult_SUCCESS.Enum(),
+			Nonce:            mtx.Nonce.Uint64(),
+			From:             tktypes.MustEthAddress(string(mtx.From)),
+		},
+	}))
+}
+
+func TestEngineHandleConfirmedTransactionEventsNoInFlightNotHang(t *testing.T) {
+	ctx := context.Background()
+
+	ble, _ := NewTestTransactionEngine(t)
+	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
+
+	mTS := enginemocks.NewTransactionStore(t)
+	mBI := componentmocks.NewBlockIndexer(t)
+	mEN := enginemocks.NewManagedTxEventNotifier(t)
+
+	mEC := componentmocks.NewEthClient(t)
+	mKM := componentmocks.NewKeyManager(t)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
+
+	ble.InFlightOrchestrators = map[string]*orchestrator{}
+	// test not hang
+	assert.NoError(t, ble.HandleConfirmedTransactions(ctx, []*blockindexer.IndexedTransaction{}))
 }

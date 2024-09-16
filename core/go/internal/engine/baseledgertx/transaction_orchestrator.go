@@ -504,56 +504,59 @@ func (oc *orchestrator) Start(c context.Context) (done <-chan struct{}, err erro
 	return oc.orchestratorLoopDone, nil
 }
 
-// HandleIndexTransactions
+// HandleConfirmedTransactions
 // adds confirmed transactions to the event buffer concurrently for all in-flight transactions
 // currently, the submission queue and tracking queue are the same queue, which means the logic should not miss
 // confirmations for a pending transaction.
 // If the two queues needs to split in the future to allow optimistic submission & delayed confirmation, this logic will need to be updated.
-func (oc *orchestrator) HandleIndexTransactions(ctx context.Context, confirmedTransactions map[string]*blockindexer.IndexedTransaction, maxNonce *big.Int) error {
+func (oc *orchestrator) HandleConfirmedTransactions(ctx context.Context, confirmedTransactions map[string]*blockindexer.IndexedTransaction, maxNonce *big.Int) error {
 	recordStart := time.Now()
 	oc.InFlightTxsMux.Lock()
 	defer oc.InFlightTxsMux.Unlock()
-	addOutputResponse := make(chan struct{}, len(oc.InFlightTxs))
-	for _, it := range oc.InFlightTxs { // no new transaction orchestrator is started, rely on the main loop to apply strict order
-		if it != nil {
-			currentTx := it
-			if maxNonce.Cmp(currentTx.stateManager.GetNonce()) != -1 {
-				// there is a confirmed transaction available for this transaction
-				go func() {
-					nonceStr := currentTx.stateManager.GetNonce().String()
-					indexTx := confirmedTransactions[nonceStr]
-					if indexTx != nil {
-						currentTx.MarkHistoricalTime("confirmation_event_wait_to_be_recorded", recordStart)
-						currentTx.MarkTime("confirmation_event_wait_to_be_processed")
-						// Will be picked up on the next orchestrator loop - guaranteed to occur before Confirmed
-						currentTx.stateManager.AddConfirmationsOutput(ctx, indexTx)
-						currentTx.MarkInFlightTxStale()
-					}
+	if len(oc.InFlightTxs) > 0 {
+		addOutputResponse := make(chan struct{}, len(oc.InFlightTxs))
+		for _, it := range oc.InFlightTxs { // no new transaction orchestrator is started, rely on the main loop to apply strict order
+			if it != nil {
+				currentTx := it
+				if maxNonce.Cmp(currentTx.stateManager.GetNonce()) != -1 {
+					// there is a confirmed transaction available for this transaction
+					go func() {
+						nonceStr := currentTx.stateManager.GetNonce().String()
+						indexTx := confirmedTransactions[nonceStr]
+						if indexTx != nil {
+							currentTx.MarkHistoricalTime("confirmation_event_wait_to_be_recorded", recordStart)
+							currentTx.MarkTime("confirmation_event_wait_to_be_processed")
+							// Will be picked up on the next orchestrator loop - guaranteed to occur before Confirmed
+							currentTx.stateManager.AddConfirmationsOutput(ctx, indexTx)
+							currentTx.MarkInFlightTxStale()
+						}
+						addOutputResponse <- struct{}{}
+					}()
+				} else {
 					addOutputResponse <- struct{}{}
-				}()
+				}
+
 			} else {
 				addOutputResponse <- struct{}{}
 			}
+		}
 
-		} else {
-			addOutputResponse <- struct{}{}
+		resultCount := 0
+
+		// wait for all add output to complete
+		for {
+			select {
+			case <-addOutputResponse:
+				resultCount++
+			case <-ctx.Done():
+				return i18n.NewError(ctx, msgs.MsgContextCanceled)
+			}
+			if resultCount == len(oc.InFlightTxs) {
+				break
+			}
 		}
 	}
 
-	resultCount := 0
-
-	// wait for all add output to complete
-	for {
-		select {
-		case <-addOutputResponse:
-			resultCount++
-		case <-ctx.Done():
-			return i18n.NewError(ctx, msgs.MsgContextCanceled)
-		}
-		if resultCount == len(oc.InFlightTxs) {
-			break
-		}
-	}
 	// we've processed all confirmed nonce in this batch, update the confirmed nonce so any gaps will be filled in
 	oc.updateConfirmedTxNonce(oc.signingAddress, maxNonce)
 	return nil

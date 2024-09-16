@@ -457,7 +457,7 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 	assert.Equal(t, OrchestratorStateRunning, oc.state)
 }
 
-func TestOrchestratorHandleIndexTransactions(t *testing.T) {
+func TestOrchestratorHandleConfirmedTransactions(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	mockManagedTx0 := &baseTypes.ManagedTX{
 		ID:     uuid.New().String(),
@@ -522,7 +522,7 @@ func TestOrchestratorHandleIndexTransactions(t *testing.T) {
 
 	assert.Nil(t, oc.confirmedTxNoncePerAddress[testMainSigningAddress])
 	oc.orchestratorPollingInterval = 1 * time.Hour
-	err := oc.HandleIndexTransactions(ctx, map[string]*blockindexer.IndexedTransaction{
+	err := oc.HandleConfirmedTransactions(ctx, map[string]*blockindexer.IndexedTransaction{
 		mockManagedTx0.Nonce.BigInt().String(): {}, // already confirmed
 		mockManagedTx1.Nonce.BigInt().String(): {}, // in flight, add the confirmation event
 		mockManagedTx2.Nonce.BigInt().String(): {}, // not inflight, so shouldn't be processed
@@ -532,9 +532,50 @@ func TestOrchestratorHandleIndexTransactions(t *testing.T) {
 
 	// cancel context should return with error
 	cancelCtx()
-	assert.Regexp(t, "PD010301", oc.HandleIndexTransactions(ctx, map[string]*blockindexer.IndexedTransaction{
+	assert.Regexp(t, "PD010301", oc.HandleConfirmedTransactions(ctx, map[string]*blockindexer.IndexedTransaction{
 		mockManagedTx0.Nonce.BigInt().String(): {}, // already confirmed
 		mockManagedTx1.Nonce.BigInt().String(): {}, // in flight, add the confirmation event
 		mockManagedTx2.Nonce.BigInt().String(): {}, // not inflight, so shouldn't be processed
 	}, big.NewInt(2)))
+}
+
+func TestOrchestratorHandleConfirmedTransactionsNoInflightNotHang(t *testing.T) {
+	ctx := context.Background()
+
+	mockManagedTx1 := &baseTypes.ManagedTX{
+		ID:     uuid.New().String(),
+		Status: baseTypes.BaseTxStatusPending,
+		Transaction: &ethsigner.Transaction{
+			From:  json.RawMessage(testMainSigningAddress),
+			Nonce: ethtypes.NewHexInteger64(1),
+		},
+		Created: fftypes.Now(),
+	}
+	ble, _ := NewTestTransactionEngine(t)
+	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
+	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
+	mBI := componentmocks.NewBlockIndexer(t)
+	mTS := enginemocks.NewTransactionStore(t)
+	mEN := enginemocks.NewManagedTxEventNotifier(t)
+	mKM := componentmocks.NewKeyManager(t)
+	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
+
+	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
+	ble.ctx = ctx
+	ble.enginePollingInterval = 1 * time.Hour
+
+	oc := NewOrchestrator(ble, string(mockManagedTx1.From), ble.orchestratorConfig)
+
+	oc.balanceManager = mockBM
+
+	oc.InFlightTxs = []*InFlightTransactionStageController{}
+
+	assert.Nil(t, oc.confirmedTxNoncePerAddress[testMainSigningAddress])
+	oc.orchestratorPollingInterval = 1 * time.Hour
+	err := oc.HandleConfirmedTransactions(ctx, map[string]*blockindexer.IndexedTransaction{
+		mockManagedTx1.Nonce.BigInt().String(): {},
+	}, big.NewInt(1))
+	assert.NoError(t, err)
+	assert.Equal(t, big.NewInt(1), oc.confirmedTxNoncePerAddress[testMainSigningAddress]) //record the max nonce
+
 }

@@ -184,7 +184,7 @@ func (ble *baseLedgerTxEngine) Start(ctx context.Context) (done <-chan struct{},
 		ble.ctx = ctx // set the context for policy loop
 		ble.engineLoopDone = make(chan struct{})
 		log.L(ctx).Debugf("Kicking off  enterprise handler engine loop")
-		if err = ble.bIndexer.RegisterIndexedTransactionHandler(ctx, ble.HandleIndexTransactions); err != nil {
+		if err = ble.bIndexer.RegisterIndexedTransactionHandler(ctx, ble.HandleConfirmedTransactions); err != nil {
 			return
 		}
 		go ble.engineLoop()
@@ -315,10 +315,10 @@ func (ble *baseLedgerTxEngine) createManagedTx(ctx context.Context, txID string,
 	return mtx, nil
 }
 
-// HandleIndexTransactions
+// HandleConfirmedTransactions
 // handover events to the inflight orchestrators for the related signing addresses and record the highest confirmed nonce
 // new orchestrators will be created if there are space, orchestrators will use the recorded highest nonce to drive completion logic of transactions
-func (ble *baseLedgerTxEngine) HandleIndexTransactions(ctx context.Context, confirmedTransactions []*blockindexer.IndexedTransaction) error {
+func (ble *baseLedgerTxEngine) HandleConfirmedTransactions(ctx context.Context, confirmedTransactions []*blockindexer.IndexedTransaction) error {
 	// firstly, we group the confirmed transactions by from address
 	// note: filter out transactions that are before the recorded nonce in confirmedTXNonce map requires multiple reads to a single address (as the loop keep switching between addresses)
 	// so we delegate the logic to the orchestrator as it will have a list of records for a single address
@@ -335,64 +335,67 @@ func (ble *baseLedgerTxEngine) HandleIndexTransactions(ctx context.Context, conf
 			itMaxNonce[it.From.String()] = itNonce
 		}
 	}
+	if len(itMap) > 0 {
+		// secondly, we obtain the lock for the orchestrator map:
+		ble.InFlightOrchestratorMux.Lock()
+		defer ble.InFlightOrchestratorMux.Unlock() // note, using lock might cause the event sequence to get lost when this function is invoked concurrently by several go routines, this code assumes the upstream logic does not do that
 
-	// secondly, we obtain the lock for the orchestrator map:
-	ble.InFlightOrchestratorMux.Lock()
-	defer ble.InFlightOrchestratorMux.Unlock() // note, using lock might cause the event sequence to get lost when this function is invoked concurrently by several go routines, this code assumes the upstream logic does not do that
+		//     for address that has or could have a running orchestrator, triggers event handlers of each orchestrator in parallel to handle the event
+		//         (logic implemented in orchestrator handler)for the orchestrator handler, it obtains the stage process buffer lock and add the event into the stage process buffer and then exit
 
-	//     for address that has or could have a running orchestrator, triggers event handlers of each orchestrator in parallel to handle the event
-	//         (logic implemented in orchestrator handler)for the orchestrator handler, it obtains the stage process buffer lock and add the event into the stage process buffer and then exit
-
-	localRWLock := sync.RWMutex{} // could consider switch InFlightOrchestrators to use sync.Map for this logic here as the go routines will only modify disjoint set of keys
-	eventHandlingErrors := make(chan error, len(itMap))
-	for from, its := range itMap {
-		go func() {
-			localRWLock.RLock()
-			inFlightOrchestrator := ble.InFlightOrchestrators[from]
-			localRWLock.Unlock()
-			if inFlightOrchestrator == nil {
-				localRWLock.Lock()
-				itTotal := len(ble.InFlightOrchestrators)
-				if itTotal < ble.maxInFlightOrchestrators {
-					inFlightOrchestrator = NewOrchestrator(ble, from, ble.orchestratorConfig)
-					ble.InFlightOrchestrators[from] = inFlightOrchestrator
-					_, _ = inFlightOrchestrator.Start(ble.ctx)
-					log.L(ctx).Infof("(Event handler) Engine added orchestrator for signing address %s", from)
-					localRWLock.Unlock()
-				} else {
-					// no action can be taken
-					log.L(ctx).Debugf("(Event handler) Cannot add orchestrator for signing address %s due to in-flight queue is full", from)
-					localRWLock.Unlock()
-					eventHandlingErrors <- nil
-					return
+		localRWLock := sync.RWMutex{} // could consider switch InFlightOrchestrators to use sync.Map for this logic here as the go routines will only modify disjoint set of keys
+		eventHandlingErrors := make(chan error, len(itMap))
+		for from, its := range itMap {
+			fromAddress := from
+			go func() {
+				localRWLock.RLock()
+				inFlightOrchestrator := ble.InFlightOrchestrators[fromAddress]
+				localRWLock.RUnlock()
+				if inFlightOrchestrator == nil {
+					localRWLock.Lock()
+					itTotal := len(ble.InFlightOrchestrators)
+					if itTotal < ble.maxInFlightOrchestrators {
+						inFlightOrchestrator = NewOrchestrator(ble, fromAddress, ble.orchestratorConfig)
+						ble.InFlightOrchestrators[fromAddress] = inFlightOrchestrator
+						_, _ = inFlightOrchestrator.Start(ble.ctx)
+						log.L(ctx).Infof("(Event handler) Engine added orchestrator for signing address %s", fromAddress)
+						localRWLock.Unlock()
+					} else {
+						// no action can be taken
+						log.L(ctx).Debugf("(Event handler) Cannot add orchestrator for signing address %s due to in-flight queue is full", fromAddress)
+						localRWLock.Unlock()
+						eventHandlingErrors <- nil
+						return
+					}
 				}
-			}
-			err := inFlightOrchestrator.HandleIndexTransactions(ctx, its, itMaxNonce[from])
-			// finally, we update the confirmed nonce for each address to the highest number that is observed ever. This then can be used by the orchestrator to retrospectively fetch missed confirmed transaction data.
-			ble.updateConfirmedTxNonce(from, itMaxNonce[from])
-			eventHandlingErrors <- err
-		}()
-	}
-
-	resultCount := 0
-	var accumulatedError error
-
-	// wait for all add output to complete
-	for {
-		select {
-		case err := <-eventHandlingErrors:
-			if err != nil {
-				accumulatedError = err
-			}
-			resultCount++
-		case <-ctx.Done():
-			return i18n.NewError(ctx, msgs.MsgContextCanceled)
+				err := inFlightOrchestrator.HandleConfirmedTransactions(ctx, its, itMaxNonce[fromAddress])
+				// finally, we update the confirmed nonce for each address to the highest number that is observed ever. This then can be used by the orchestrator to retrospectively fetch missed confirmed transaction data.
+				ble.updateConfirmedTxNonce(fromAddress, itMaxNonce[fromAddress])
+				eventHandlingErrors <- err
+			}()
 		}
-		if resultCount == len(itMap) {
-			break
+
+		resultCount := 0
+		var accumulatedError error
+
+		// wait for all add output to complete
+		for {
+			select {
+			case err := <-eventHandlingErrors:
+				if err != nil {
+					accumulatedError = err
+				}
+				resultCount++
+			case <-ctx.Done():
+				return i18n.NewError(ctx, msgs.MsgContextCanceled)
+			}
+			if resultCount == len(itMap) {
+				break
+			}
 		}
+		return accumulatedError
 	}
-	return accumulatedError
+	return nil
 }
 
 func (ble *baseLedgerTxEngine) HandleSuspendTransaction(ctx context.Context, txID string) (mtx *baseTypes.ManagedTX, err error) {
