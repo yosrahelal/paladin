@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/filters"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -87,11 +88,10 @@ func (n *Noto) prepareInputs(ctx context.Context, owner ethtypes.Address0xHex, a
 	stateRefs := []*pb.StateRef{}
 	coins := []*types.NotoCoin{}
 	for {
-		queryBuilder := filters.NewQueryBuilder().
+		queryBuilder := query.NewQueryBuilder().
 			Limit(10).
 			Sort(".created").
-		  Equal("owner", owner.String())
-
+			Equal("owner", owner.String())
 
 		if lastStateTimestamp > 0 {
 			queryBuilder.GreaterThan(".created", lastStateTimestamp)
