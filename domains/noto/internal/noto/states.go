@@ -87,9 +87,6 @@ func (n *Noto) prepareInputs(ctx context.Context, owner ethtypes.Address0xHex, a
 	stateRefs := []*pb.StateRef{}
 	coins := []*types.NotoCoin{}
 	for {
-		// Simple oldest coin first algorithm
-		// TODO: make this configurable
-		// TODO: why is filters.QueryJSON not a public interface?
 		queryBuilder := query.NewQueryBuilder().
 			Limit(10).
 			Sort(".created").

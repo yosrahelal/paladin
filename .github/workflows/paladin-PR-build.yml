@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -41,16 +40,18 @@ jobs:
           java-version: 21
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: '1.22'
           check-latest: true
+          cache-dependency-path: |
+            **/*.sum
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build with Gradle
-        run: ./gradlew -PcomposeLogs=true --parallel build
+        run: ./gradlew -PcomposeLogs=true --no-daemon --parallel build
 
         # env:
         #   CREATE_TEST_DB: 0 # github action setup a PSQL db service, so no need to create a test db again
