@@ -100,10 +100,7 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 	// Ensure all the schemas are recorded to the DB
 	// This is a special case where we need a synchronous flush to ensure they're all established
 	var schemas []statestore.Schema
-	err := d.dm.stateStore.RunInDomainContextFlush(d.name, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
-		schemas, err = dsi.EnsureABISchemas(abiSchemas)
-		return err
-	})
+	schemas, err := d.dm.stateStore.EnsureABISchemas(d.ctx, d.name, abiSchemas)
 	if err != nil {
 		return nil, err
 	}

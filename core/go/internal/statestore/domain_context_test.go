@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -66,49 +65,6 @@ func parseFakeCoin(t *testing.T, s *State) *FakeCoin {
 	return &c
 }
 
-func TestStateFlushAsync(t *testing.T) {
-
-	_, ss, done := newDBTestStateStore(t)
-	defer done()
-
-	schemaIDReceiver := make(chan string)
-
-	// Run one handler that ends in a flush, of a schema that won't be available unless we flush
-	err := ss.RunInDomainContext("domain1", func(ctx context.Context, dsi DomainStateInterface) error {
-		schemas, err := dsi.EnsureABISchemas([]*abi.Parameter{testABIParam(t, fakeCoinABI)})
-		require.NoError(t, err)
-		assert.Len(t, schemas, 1)
-		schemaID := schemas[0].IDString()
-		return dsi.Flush(func(ctx context.Context, dsi DomainStateInterface) error {
-			schemaIDReceiver <- schemaID
-			return nil
-		})
-	})
-	require.NoError(t, err)
-
-	var schemaID string
-	select {
-	case schemaID = <-schemaIDReceiver:
-	case <-time.After(5 * time.Second):
-		assert.Fail(t, "timed out")
-	}
-
-	// Run a 2nd handler that depends on that schema being available
-	err = ss.RunInDomainContext("domain1", func(ctx context.Context, dsi DomainStateInterface) error {
-		states, err := dsi.UpsertStates(nil, []*StateUpsert{
-			{
-				SchemaID: schemaID,
-				Data:     tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0x1eDfD974fE6828dE81a1a762df680111870B7cDD", "salt": "%s"}`, tktypes.RandHex(32))),
-			},
-		})
-		require.NoError(t, err)
-		assert.Len(t, states, 1)
-		return nil
-	})
-	require.NoError(t, err)
-
-}
-
 func TestStateContextMintSpendMint(t *testing.T) {
 
 	_, ss, done := newDBTestStateStore(t)
@@ -117,17 +73,11 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	transactionID := uuid.New()
 	var schemaID string
 
-	err := ss.RunInDomainContextFlush("domain1", func(ctx context.Context, dsi DomainStateInterface) error {
-		// Pop in our widget ABI
-		schemas, err := dsi.EnsureABISchemas([]*abi.Parameter{testABIParam(t, fakeCoinABI)})
-		require.NoError(t, err)
-		assert.Len(t, schemas, 1)
-		schemaID = schemas[0].IDString()
-
-		// Need to flush for the schemas to be available
-		return nil
-	})
+	// Pop in our widget ABI
+	schemas, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
 	require.NoError(t, err)
+	assert.Len(t, schemas, 1)
+	schemaID = schemas[0].IDString()
 
 	err = ss.RunInDomainContextFlush("domain1", func(ctx context.Context, dsi DomainStateInterface) error {
 
@@ -302,10 +252,7 @@ func TestDSIBadSchema(t *testing.T) {
 	_, ss, _, done := newDBMockStateStore(t)
 	defer done()
 
-	err := ss.RunInDomainContext("domain1", func(ctx context.Context, dsi DomainStateInterface) error {
-		_, err := dsi.EnsureABISchemas([]*abi.Parameter{{}})
-		return err
-	})
+	_, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{{}})
 	assert.Regexp(t, "PD010114", err)
 
 }
@@ -321,21 +268,12 @@ func TestDSIFlushErrorCapture(t *testing.T) {
 		dc.flushResult <- fmt.Errorf("pop")
 	}
 
-	var schemas []Schema
-	err := ss.RunInDomainContextFlush("domain1", func(ctx context.Context, dsi DomainStateInterface) (err error) {
-		schemas, err = dsi.EnsureABISchemas([]*abi.Parameter{testABIParam(t, fakeCoinABI)})
-		require.NoError(t, err)
-		return nil
-	})
+	schemas, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
 	require.NoError(t, err)
 
 	err = ss.RunInDomainContextFlush("domain1", func(ctx context.Context, dsi DomainStateInterface) error {
 
 		dc := dsi.(*domainContext)
-
-		fakeFlushError(dc)
-		_, err = dsi.EnsureABISchemas(nil)
-		assert.Regexp(t, "pop", err)
 
 		fakeFlushError(dc)
 		_, err = dsi.FindAvailableStates("", nil)
@@ -537,17 +475,10 @@ func TestDSIFindBadQueryAndInsert(t *testing.T) {
 	_, ss, done := newDBTestStateStore(t)
 	defer done()
 
-	var schemas []Schema
-	var schemaID string
-	err := ss.RunInDomainContextFlush("domain1", func(ctx context.Context, dsi DomainStateInterface) (err error) {
-
-		schemas, err = dsi.EnsureABISchemas([]*abi.Parameter{testABIParam(t, fakeCoinABI)})
-		require.NoError(t, err)
-		schemaID = schemas[0].IDString()
-		assert.Equal(t, "type=FakeCoin(bytes32 salt,address owner,uint256 amount),labels=[owner,amount]", schemas[0].Signature())
-		return nil
-	})
+	schemas, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
 	require.NoError(t, err)
+	schemaID := schemas[0].IDString()
+	assert.Equal(t, "type=FakeCoin(bytes32 salt,address owner,uint256 amount),labels=[owner,amount]", schemas[0].Signature())
 
 	err = ss.RunInDomainContextFlush("domain1", func(ctx context.Context, dsi DomainStateInterface) error {
 		_, err = dsi.FindAvailableStates(schemaID, toQuery(t,

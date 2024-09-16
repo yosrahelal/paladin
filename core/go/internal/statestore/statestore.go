@@ -20,6 +20,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
@@ -47,6 +48,7 @@ type StateStore interface {
 	RPCModule() *rpcserver.RPCModule
 	RunInDomainContext(domainID string, fn DomainContextFunction) error
 	RunInDomainContextFlush(domainID string, fn DomainContextFunction) error
+	EnsureABISchemas(ctx context.Context, domainID string, defs []*abi.Parameter) ([]Schema, error)
 	Close()
 }
 
