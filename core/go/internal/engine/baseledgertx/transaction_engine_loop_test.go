@@ -124,7 +124,9 @@ func TestNewEnginePollingReAddStoppedOrchestrator(t *testing.T) {
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{}, nil, nil).Run(func(args mock.Arguments) {
 		close(zeroTransactionListedForIdle)
-	})
+	}).Once()
+
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{}, nil, nil).Maybe()
 	ble.InFlightOrchestrators = map[string]*orchestrator{
 		testMainSigningAddress: {state: OrchestratorStateStopped, stateEntryTime: time.Now()}, // already has an orchestrator for 0x1
 	}

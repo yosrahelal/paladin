@@ -200,8 +200,8 @@ type TransactionStore interface {
 	UpdateTransaction(ctx context.Context, txID string, updates *BaseTXUpdates) error
 	DeleteTransaction(ctx context.Context, txID string) error
 
-	GetIndexedTransaction(ctx context.Context, txID string) (iTX *blockindexer.IndexedTransaction, err error)
-	SetIndexedTransaction(ctx context.Context, txID string, iTX *blockindexer.IndexedTransaction) error
+	GetConfirmedTransaction(ctx context.Context, txID string) (iTX *blockindexer.IndexedTransaction, err error)
+	SetConfirmedTransaction(ctx context.Context, txID string, iTX *blockindexer.IndexedTransaction) error
 
 	AddSubStatusAction(ctx context.Context, txID string, subStatus BaseTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *fftypes.FFTime) error
 
@@ -376,7 +376,7 @@ type InMemoryTxStateReadOnly interface {
 	GetCreatedTime() *fftypes.FFTime
 	GetDeleteRequestedTime() *fftypes.FFTime
 	// get the transaction receipt from the in-memory state (note: the returned value should not be modified)
-	GetIndexedTransaction() *blockindexer.IndexedTransaction
+	GetConfirmedTransaction() *blockindexer.IndexedTransaction
 	GetTransactionHash() string
 	GetNonce() *big.Int
 	GetFrom() string
@@ -398,7 +398,7 @@ type InMemoryTxStateManager interface {
 }
 
 type InMemoryTxStateSetters interface {
-	SetIndexedTransaction(ctx context.Context, iTX *blockindexer.IndexedTransaction)
+	SetConfirmedTransaction(ctx context.Context, iTX *blockindexer.IndexedTransaction)
 	ApplyTxUpdates(ctx context.Context, txUpdates *BaseTXUpdates)
 }
 
@@ -435,8 +435,8 @@ type GasPriceOutput struct {
 }
 
 type ConfirmationOutputs struct {
-	IndexedTransaction *blockindexer.IndexedTransaction
-	Err                error
+	ConfirmedTransaction *blockindexer.IndexedTransaction
+	Err                  error
 }
 
 type PersistenceOutput struct {
@@ -484,14 +484,14 @@ func (ctx *RunningStageContext) SetNewPersistenceUpdateOutput() {
 }
 
 type RunningStageContextPersistenceOutput struct {
-	UpdateType               PersistenceUpdateType
-	InMemoryTx               InMemoryTxStateReadOnly
-	SubStatus                BaseTxSubStatus
-	Ctx                      context.Context
-	TxUpdates                *BaseTXUpdates
-	HistoryUpdates           []func(p TransactionStore) error
-	IndexedTransaction       *blockindexer.IndexedTransaction
-	MissedIndexedTransaction bool
+	UpdateType              PersistenceUpdateType
+	InMemoryTx              InMemoryTxStateReadOnly
+	SubStatus               BaseTxSubStatus
+	Ctx                     context.Context
+	TxUpdates               *BaseTXUpdates
+	HistoryUpdates          []func(p TransactionStore) error
+	ConfirmedTransaction    *blockindexer.IndexedTransaction
+	MissedConfirmationEvent bool
 }
 
 func (sOut *RunningStageContextPersistenceOutput) AddSubStatusAction(action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny) {

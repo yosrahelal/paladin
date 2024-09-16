@@ -110,7 +110,7 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 			case ethclient.ErrorReasonNonceTooLow:
 				// NonceTooLow means a transaction with same nonce is already mined, this could mean:
 				//   1. we have a nonce conflict
-				//   2. our transaction is completed and we are waiting for the receipt
+				//   2. our transaction is completed and we are waiting for the confirmation
 				// TODO: handle nonce conflict
 				log.L(ctx).Debugf("Nonce too low for transaction ID: %s. new transaction hash: %s, recorded transaction hash: %s", mtx.ID, txHash, mtx.TransactionHash)
 				// otherwise, we revert back to track the old hash

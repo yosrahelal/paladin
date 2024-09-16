@@ -283,7 +283,7 @@ var (
 	MsgTransactionEngineRequestTimeout = ffe("PD011926", "The transaction handler did not acknowledge the request after %.2fs")
 	MsgErrorMissingSignerID            = ffe("PD011928", "Signer Identifier must be provided")
 	MsgInvalidTransactionType          = ffe("PD011929", "Transaction type invalid")
-	MsgMissingIndexedTransaction       = ffe("PD011930", "Transaction %s with nonce smaller than the recorded confirmed nonce cannot find an indexed transaction.")
+	MsgMissingConfirmedTransaction     = ffe("PD011930", "Transaction %s with nonce smaller than the recorded confirmed nonce does not have an indexed transaction.")
 
 	// TransportManager module PD0120XX
 	MsgTransportInvalidMessage                = ffe("PD012000", "Invalid message")

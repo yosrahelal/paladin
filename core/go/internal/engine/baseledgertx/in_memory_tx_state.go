@@ -32,8 +32,8 @@ type inMemoryTxState struct {
 	mtx *baseTypes.ManagedTX
 
 	// the value of the following properties are populated during transaction processing but not during initialization
-	//  the process logic will determine whether receipt / confirmations requires to be fetched
-	IndexedTransaction *blockindexer.IndexedTransaction
+	//  the process logic will determine whether confirmed transaction requires to be fetched
+	ConfirmedTransaction *blockindexer.IndexedTransaction
 }
 
 func NewInMemoryTxStateMananger(ctx context.Context, mtx *baseTypes.ManagedTX) baseTypes.InMemoryTxStateManager {
@@ -42,8 +42,8 @@ func NewInMemoryTxStateMananger(ctx context.Context, mtx *baseTypes.ManagedTX) b
 	}
 }
 
-func (imtxs *inMemoryTxState) SetIndexedTransaction(ctx context.Context, iTX *blockindexer.IndexedTransaction) {
-	imtxs.IndexedTransaction = iTX
+func (imtxs *inMemoryTxState) SetConfirmedTransaction(ctx context.Context, iTX *blockindexer.IndexedTransaction) {
+	imtxs.ConfirmedTransaction = iTX
 }
 
 func (imtxs *inMemoryTxState) ApplyTxUpdates(ctx context.Context, txUpdates *baseTypes.BaseTXUpdates) {
@@ -168,8 +168,8 @@ func (imtxs *inMemoryTxState) GetGasLimit() *big.Int {
 	return imtxs.mtx.GasLimit.BigInt()
 }
 
-func (imtxs *inMemoryTxState) GetIndexedTransaction() *blockindexer.IndexedTransaction {
-	return imtxs.IndexedTransaction
+func (imtxs *inMemoryTxState) GetConfirmedTransaction() *blockindexer.IndexedTransaction {
+	return imtxs.ConfirmedTransaction
 }
 
 func (imtxs *inMemoryTxState) IsComplete() bool {

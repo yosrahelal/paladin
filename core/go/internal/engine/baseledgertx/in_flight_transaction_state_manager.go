@@ -264,12 +264,12 @@ func (iftxs *inFlightTransactionState) AddGasPriceOutput(ctx context.Context, ga
 	log.L(ctx).Debugf("%s AddGasPriceOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetTxID(), time.Since(start))
 }
 
-func (iftxs *inFlightTransactionState) AddConfirmationsOutput(ctx context.Context, indexedTx *blockindexer.IndexedTransaction) {
+func (iftxs *inFlightTransactionState) AddConfirmationsOutput(ctx context.Context, confirmedTx *blockindexer.IndexedTransaction) {
 	start := time.Now()
 	iftxs.AddStageOutputs(ctx, &baseTypes.StageOutput{
 		Stage: baseTypes.InFlightTxStageConfirming,
 		ConfirmationOutput: &baseTypes.ConfirmationOutputs{
-			IndexedTransaction: indexedTx,
+			ConfirmedTransaction: confirmedTx,
 		},
 	})
 	log.L(ctx).Debugf("%s AddConfirmationsOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetTxID(), time.Since(start))
@@ -294,7 +294,7 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 	}
 	switch rsc.StageOutputsToBePersisted.UpdateType {
 	case baseTypes.PersistenceUpdateUpdate:
-		it := rsc.StageOutputsToBePersisted.IndexedTransaction
+		it := rsc.StageOutputsToBePersisted.ConfirmedTransaction
 		trackedHashes := iftxs.GetSubmittedHashes()
 		hashAlreadyTracked := false
 		matchFound := false
@@ -313,14 +313,14 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 				rsc.StageOutputsToBePersisted.TxUpdates.SubmittedHashes = append(trackedHashes[:], newTxHash)
 			}
 		}
-		if it != nil || rsc.StageOutputsToBePersisted.MissedIndexedTransaction {
+		if it != nil || rsc.StageOutputsToBePersisted.MissedConfirmationEvent {
 			if it == nil {
-				err = iftxs.retry.Do(ctx, "get indexed transaction for "+mtx.ID, func(attempt int) (retry bool, err error) {
+				err = iftxs.retry.Do(ctx, "get confirmed transaction for "+mtx.ID, func(attempt int) (retry bool, err error) {
 					retrievedTx, retryErr := iftxs.bIndexer.GetIndexedTransactionByNonce(ctx, *tktypes.MustEthAddress(string(mtx.From)), mtx.Nonce.Uint64())
 					if retryErr == nil && retrievedTx == nil {
 						// panic("block indexer missed a nonce")
 						// the logic is in a confirmation loop until block indexer indexed the missing transaction
-						return false, i18n.NewError(ctx, msgs.MsgMissingIndexedTransaction, mtx.ID)
+						return false, i18n.NewError(ctx, msgs.MsgMissingConfirmedTransaction, mtx.ID)
 					}
 					it = retrievedTx
 					return true, retryErr
@@ -333,12 +333,12 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 			if mtx.Value != nil && mtx.To != nil {
 				iftxs.NotifyAddressBalanceChanged(ctx, mtx.To.String())
 			}
-			if err = iftxs.txStore.SetIndexedTransaction(ctx, mtx.ID, it); err != nil {
-				log.L(ctx).Errorf("Failed to persist receipt for transaction %s due to error: %+v, receipt: %+v", mtx.ID, err, it)
+			if err = iftxs.txStore.SetConfirmedTransaction(ctx, mtx.ID, it); err != nil {
+				log.L(ctx).Errorf("Failed to persist confirmed transaction for transaction %s due to error: %+v, confirmed tx: %+v", mtx.ID, err, it)
 				return rsc.Stage, time.Now(), err
 			}
 			// update the in memory state
-			iftxs.SetIndexedTransaction(ctx, it)
+			iftxs.SetConfirmedTransaction(ctx, it)
 
 			if matchFound {
 				if it.Result == blockindexer.TXResult_SUCCESS.Enum() {

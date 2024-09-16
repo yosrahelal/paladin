@@ -59,7 +59,7 @@ func TestProduceLatestInFlightStageContextConfirming(t *testing.T) {
 
 	mTS := testInFlightTransactionStateManagerWithMocks.mTS
 	defer mTS.AssertExpectations(t)
-	testIndexedTx := &blockindexer.IndexedTransaction{
+	testConfirmedTx := &blockindexer.IndexedTransaction{
 		BlockNumber:      int64(1233),
 		TransactionIndex: int64(23),
 		Hash:             tktypes.Bytes32Keccak([]byte("test")),
@@ -70,7 +70,7 @@ func TestProduceLatestInFlightStageContextConfirming(t *testing.T) {
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
 	rsc := it.stateManager.GetRunningStageContext(ctx)
 	rsc.SetNewPersistenceUpdateOutput()
-	it.stateManager.AddConfirmationsOutput(ctx, testIndexedTx)
+	it.stateManager.AddConfirmationsOutput(ctx, testConfirmedTx)
 	assert.GreaterOrEqual(t, len(inFlightStageMananger.bufferedStageOutputs), 1)
 	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
 		AvailableToSpend:         nil,
@@ -80,7 +80,7 @@ func TestProduceLatestInFlightStageContextConfirming(t *testing.T) {
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.True(t, tOut.TransactionSubmitted)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
-	assert.Equal(t, testIndexedTx, rsc.StageOutputsToBePersisted.IndexedTransaction)
+	assert.Equal(t, testConfirmedTx, rsc.StageOutputsToBePersisted.ConfirmedTransaction)
 
 	// persisting error waiting for persistence retry timeout
 	rsc.StageErrored = false
@@ -291,14 +291,14 @@ func TestProduceLatestInFlightStageContextSanityChecksForCompletedTransactions(t
 
 	mtx := it.stateManager.GetTx()
 	mtx.Status = baseTypes.BaseTxStatusSucceeded
-	testIndexedTx := &blockindexer.IndexedTransaction{
+	testConfirmedTx := &blockindexer.IndexedTransaction{
 		BlockNumber:      int64(1233),
 		TransactionIndex: int64(23),
 		Hash:             tktypes.Bytes32Keccak([]byte("test")),
 		Result:           blockindexer.TXResult_SUCCESS.Enum(),
 	}
 
-	imtxs.IndexedTransaction = testIndexedTx
+	imtxs.ConfirmedTransaction = testConfirmedTx
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
@@ -308,7 +308,7 @@ func TestProduceLatestInFlightStageContextSanityChecksForCompletedTransactions(t
 
 }
 
-func TestProduceLatestInFlightStageContextReceiptingErroredAndExceededStageTimeout(t *testing.T) {
+func TestProduceLatestInFlightStageContextConfirmErroredAndExceededStageTimeout(t *testing.T) {
 	ctx := context.Background()
 	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
 	it := testInFlightTransactionStateManagerWithMocks.it
@@ -325,7 +325,7 @@ func TestProduceLatestInFlightStageContextReceiptingErroredAndExceededStageTimeo
 	assert.True(t, tOut.TransactionSubmitted)
 
 	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
-	// receipt errored and reached stage retry timeout
+	// stage errored and reached stage retry timeout
 	it.stageRetryTimeout = 0
 	rsc := it.stateManager.GetRunningStageContext(ctx)
 	rsc.StageErrored = true

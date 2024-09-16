@@ -318,13 +318,13 @@ func (ble *baseLedgerTxEngine) createManagedTx(ctx context.Context, txID string,
 // HandleIndexTransactions
 // handover events to the inflight orchestrators for the related signing addresses and record the highest confirmed nonce
 // new orchestrators will be created if there are space, orchestrators will use the recorded highest nonce to drive completion logic of transactions
-func (ble *baseLedgerTxEngine) HandleIndexTransactions(ctx context.Context, indexedTransactions []*blockindexer.IndexedTransaction) error {
-	// firstly, we group the indexed transactions by from address
+func (ble *baseLedgerTxEngine) HandleIndexTransactions(ctx context.Context, confirmedTransactions []*blockindexer.IndexedTransaction) error {
+	// firstly, we group the confirmed transactions by from address
 	// note: filter out transactions that are before the recorded nonce in confirmedTXNonce map requires multiple reads to a single address (as the loop keep switching between addresses)
 	// so we delegate the logic to the orchestrator as it will have a list of records for a single address
 	itMap := make(map[string]map[string]*blockindexer.IndexedTransaction)
 	itMaxNonce := make(map[string]*big.Int)
-	for _, it := range indexedTransactions {
+	for _, it := range confirmedTransactions {
 		itNonce := new(big.Int).SetUint64(it.Nonce)
 		if itMap[it.From.String()] == nil {
 			itMap[it.From.String()] = map[string]*blockindexer.IndexedTransaction{itNonce.String(): it}
@@ -368,7 +368,7 @@ func (ble *baseLedgerTxEngine) HandleIndexTransactions(ctx context.Context, inde
 				}
 			}
 			err := inFlightOrchestrator.HandleIndexTransactions(ctx, its, itMaxNonce[from])
-			// finally, we update the confirmed nonce for each address to the highest number that is observed ever. This then can be used by the orchestrator to retrospectively fetch missed indexed transaction data.
+			// finally, we update the confirmed nonce for each address to the highest number that is observed ever. This then can be used by the orchestrator to retrospectively fetch missed confirmed transaction data.
 			ble.updateConfirmedTxNonce(from, itMaxNonce[from])
 			eventHandlingErrors <- err
 		}()

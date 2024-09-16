@@ -431,13 +431,8 @@ func (it *InFlightTransactionStageController) ProduceLatestInFlightStageContext(
 									// new transaction confirmed received
 									log.L(ctx).Debugf("Confirmed transaction %s at nonce %s / %d - hash: %s", rsc.InMemoryTx.GetTxID(), rsc.InMemoryTx.GetFrom(), rsc.InMemoryTx.GetNonce().Int64(), rsc.InMemoryTx.GetTransactionHash())
 									rsc.SetNewPersistenceUpdateOutput()
-									rsc.StageOutputsToBePersisted.IndexedTransaction = rsIn.ConfirmationOutput.IndexedTransaction
-									rsc.StageOutputsToBePersisted.MissedIndexedTransaction = rsIn.ConfirmationOutput.IndexedTransaction == nil // this is an edge case when block indexer has missed a transaction
-									if rsc.StageOutputsToBePersisted.IndexedTransaction != nil {
-										rsc.StageOutputsToBePersisted.AddSubStatusAction(baseTypes.BaseTxActionConfirmTransaction, fftypes.JSONAnyPtr(`{"confirmedHash":"`+rsIn.ConfirmationOutput.IndexedTransaction.Hash.String()+`"}`), nil)
-									} else {
-										rsc.StageOutputsToBePersisted.AddSubStatusAction(baseTypes.BaseTxActionConfirmTransaction, fftypes.JSONAnyPtr(`{"confirmedHash": null }`), nil)
-									}
+									rsc.StageOutputsToBePersisted.ConfirmedTransaction = rsIn.ConfirmationOutput.ConfirmedTransaction
+									rsc.StageOutputsToBePersisted.MissedConfirmationEvent = rsIn.ConfirmationOutput.ConfirmedTransaction == nil // this is an edge case when block indexer has missed a transaction
 									_ = it.TriggerPersistTxState(ctx)
 								}
 								it.confirmed = true
@@ -498,8 +493,8 @@ func (it *InFlightTransactionStageController) ProduceLatestInFlightStageContext(
 	}
 
 	if it.stateManager.GetGasPriceObject() != nil {
-		if it.stateManager.GetIndexedTransaction() != nil {
-			// already has receipt so the cost to submit this transaction is zero
+		if it.stateManager.GetConfirmedTransaction() != nil {
+			// already has confirmed transaction so the cost to submit this transaction is zero
 			tOut.Cost = big.NewInt(0)
 		} else {
 			gpo := it.stateManager.GetGasPriceObject()

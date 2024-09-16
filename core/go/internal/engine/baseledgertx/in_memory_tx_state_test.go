@@ -117,7 +117,7 @@ func TestSettersAndGetters(t *testing.T) {
 
 	assert.Equal(t, oldTime, inMemoryTxState.GetCreatedTime())
 	assert.Equal(t, oldTime, inMemoryTxState.GetDeleteRequestedTime())
-	assert.Nil(t, inMemoryTxState.GetIndexedTransaction())
+	assert.Nil(t, inMemoryTxState.GetConfirmedTransaction())
 	assert.Equal(t, oldTxHash, inMemoryTxState.GetTransactionHash())
 	assert.Equal(t, oldNonce.BigInt(), inMemoryTxState.GetNonce())
 	assert.Equal(t, oldFrom, inMemoryTxState.GetFrom())
@@ -134,15 +134,15 @@ func TestSettersAndGetters(t *testing.T) {
 	assert.False(t, inMemoryTxState.IsComplete())
 
 	// add indexed to the pending transaction and mark it as complete
-	testIndexedTx := &blockindexer.IndexedTransaction{
+	testConfirmedTx := &blockindexer.IndexedTransaction{
 		BlockNumber:      int64(1233),
 		TransactionIndex: int64(23),
 		Hash:             tktypes.Bytes32Keccak([]byte("test")),
 		Result:           blockindexer.TXResult_SUCCESS.Enum(),
 	}
 
-	inMemoryTxState.SetIndexedTransaction(context.Background(), testIndexedTx)
-	assert.Equal(t, testIndexedTx, inMemoryTxState.GetIndexedTransaction())
+	inMemoryTxState.SetConfirmedTransaction(context.Background(), testConfirmedTx)
+	assert.Equal(t, testConfirmedTx, inMemoryTxState.GetConfirmedTransaction())
 	successStatus := baseTypes.BaseTxStatusSucceeded
 	newTime := fftypes.Now()
 	newFrom := "0xf1031"
@@ -181,7 +181,7 @@ func TestSettersAndGetters(t *testing.T) {
 	assert.Equal(t, oldTime, inMemoryTxState.GetCreatedTime())
 	assert.Equal(t, newTime, inMemoryTxState.GetDeleteRequestedTime())
 	assert.Equal(t, newTime, inMemoryTxState.GetLastSubmitTime())
-	assert.Equal(t, testIndexedTx, inMemoryTxState.GetIndexedTransaction())
+	assert.Equal(t, testConfirmedTx, inMemoryTxState.GetConfirmedTransaction())
 	assert.Equal(t, newTxHash, inMemoryTxState.GetTransactionHash())
 	assert.Equal(t, successStatus, inMemoryTxState.GetStatus())
 	assert.Equal(t, newGasPrice.BigInt(), inMemoryTxState.GetGasPriceObject().GasPrice)

@@ -383,7 +383,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			} else if mtx.Status == baseTypes.BaseTxStatusPending {
 				queueUpdated = true
 				it := NewInFlightTransactionStageController(oc.baseLedgerTxEngine, oc, mtx)
-				if it.getConfirmedTxNonce(oc.signingAddress) != nil && it.getConfirmedTxNonce(oc.signingAddress).Cmp(mtx.Nonce.BigInt()) != -1 /* an indexed tx is missed*/ {
+				if it.getConfirmedTxNonce(oc.signingAddress) != nil && it.getConfirmedTxNonce(oc.signingAddress).Cmp(mtx.Nonce.BigInt()) != -1 /* an confirmed tx is missed*/ {
 					it.stateManager.AddConfirmationsOutput(ctx, nil) // trigger confirmation stage
 				}
 				oc.InFlightTxs = append(oc.InFlightTxs, it)
@@ -505,11 +505,11 @@ func (oc *orchestrator) Start(c context.Context) (done <-chan struct{}, err erro
 }
 
 // HandleIndexTransactions
-// adds confirmed/indexed transactions to the event buffer concurrently for all in-flight transactions
+// adds confirmed transactions to the event buffer concurrently for all in-flight transactions
 // currently, the submission queue and tracking queue are the same queue, which means the logic should not miss
 // confirmations for a pending transaction.
 // If the two queues needs to split in the future to allow optimistic submission & delayed confirmation, this logic will need to be updated.
-func (oc *orchestrator) HandleIndexTransactions(ctx context.Context, indexedTransactions map[string]*blockindexer.IndexedTransaction, maxNonce *big.Int) error {
+func (oc *orchestrator) HandleIndexTransactions(ctx context.Context, confirmedTransactions map[string]*blockindexer.IndexedTransaction, maxNonce *big.Int) error {
 	recordStart := time.Now()
 	oc.InFlightTxsMux.Lock()
 	defer oc.InFlightTxsMux.Unlock()
@@ -519,13 +519,13 @@ func (oc *orchestrator) HandleIndexTransactions(ctx context.Context, indexedTran
 		if it != nil {
 			currentTx := it
 			if maxNonce.Cmp(currentTx.stateManager.GetNonce()) != -1 {
-				// there is a indexed transaction available for this transaction
+				// there is a confirmed transaction available for this transaction
 				go func() {
 					nonceStr := currentTx.stateManager.GetNonce().String()
-					indexTx := indexedTransactions[nonceStr]
+					indexTx := confirmedTransactions[nonceStr]
 					if indexTx != nil {
-						pending.MarkHistoricalTime("receipt_event_wait_to_be_recorded", recordStart)
-						pending.MarkTime("receipt_event_wait_to_be_processed")
+						pending.MarkHistoricalTime("confirmation_event_wait_to_be_recorded", recordStart)
+						pending.MarkTime("confirmation_event_wait_to_be_processed")
 						// Will be picked up on the next orchestrator loop - guaranteed to occur before Confirmed
 						pending.stateManager.AddConfirmationsOutput(ctx, indexTx)
 						pending.MarkInFlightTxStale()
@@ -555,7 +555,7 @@ func (oc *orchestrator) HandleIndexTransactions(ctx context.Context, indexedTran
 			break
 		}
 	}
-	// we've processed all indexed nonce in this batch, update the confirmed nonce so any gaps will be filled in
+	// we've processed all confirmed nonce in this batch, update the confirmed nonce so any gaps will be filled in
 	oc.updateConfirmedTxNonce(oc.signingAddress, maxNonce)
 	return nil
 }
