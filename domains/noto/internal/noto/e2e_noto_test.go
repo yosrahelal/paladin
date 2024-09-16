@@ -187,7 +187,7 @@ func TestNoto(t *testing.T) {
 		}),
 	})
 	require.NotNil(t, rpcerr)
-	assert.ErrorContains(t, rpcerr.Error(), "Mint can only be initiated by notary")
+	assert.ErrorContains(t, rpcerr.Error(), "PD200009")
 	assert.True(t, boolResult)
 
 	log.L(ctx).Infof("Transfer 150 from notary (should fail)")
@@ -201,7 +201,7 @@ func TestNoto(t *testing.T) {
 		}),
 	})
 	require.NotNil(t, rpcerr)
-	assert.Regexp(t, "Insufficient funds", rpcerr.Error())
+	assert.ErrorContains(t, rpcerr.Error(), "PD200005")
 
 	log.L(ctx).Infof("Transfer 50 from notary to recipient1")
 	rpcerr = rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{

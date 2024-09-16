@@ -72,7 +72,8 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 	notary := domain.FindVerifier(tx.DomainConfig.NotaryLookup, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
 	if notary == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "notary")
-	} else if notary.Verifier != tx.DomainConfig.NotaryAddress {
+	}
+	if notary.Verifier != tx.DomainConfig.NotaryAddress {
 		return nil, i18n.NewError(ctx, msgs.MsgNotaryUnexpectedAddress, tx.DomainConfig.NotaryAddress, notary.Verifier)
 	}
 	to := domain.FindVerifier(params.To, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
