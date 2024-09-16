@@ -218,10 +218,6 @@ type ConfirmationsNotification struct {
 	Confirmations []*Confirmation
 }
 
-type PreparedSubmission interface {
-	ID() string
-}
-
 type BaseLedgerTxEngine interface {
 	// Lifecycle functions
 
@@ -238,12 +234,6 @@ type BaseLedgerTxEngine interface {
 
 	// Event handling functions
 	// Instructional events:
-	PrepareSubmission(ctx context.Context, reqOptions *RequestOptions, txPayload interface{}) (preparedSubmission PreparedSubmission, submissionRejected bool, err error)
-	Submit(ctx context.Context, preparedSubmission PreparedSubmission) (mtx *ManagedTX, err error)
-	HandleEvent(ctx context.Context, signingAddress string, txPayload interface{}) (err error)
-	SubmitBatch(ctx context.Context, preparedSubmissions []PreparedSubmission) ([]*ManagedTX, error)
-	PrepareSubmissionBatch(ctx context.Context, reqOptions *RequestOptions, txPayloads []interface{}) (preparedSubmission []PreparedSubmission, submissionRejected bool, err error)
-
 	// HandleNewTransaction - handles event of adding new transactions onto blockchain
 	HandleNewTransaction(ctx context.Context, reqOptions *RequestOptions, txPayload interface{}) (mtx *ManagedTX, submissionRejected bool, err error)
 	// HandleSuspendTransaction - handles event of suspending a managed transaction
