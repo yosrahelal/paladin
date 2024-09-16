@@ -23,6 +23,7 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/filters"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -87,9 +88,6 @@ func (n *Noto) prepareInputs(ctx context.Context, owner ethtypes.Address0xHex, a
 	stateRefs := []*pb.StateRef{}
 	coins := []*types.NotoCoin{}
 	for {
-		// Simple oldest coin first algorithm
-		// TODO: make this configurable
-		// TODO: why is filters.QueryJSON not a public interface?
 		queryBuilder := query.NewQueryBuilder().
 			Limit(10).
 			Sort(".created").
