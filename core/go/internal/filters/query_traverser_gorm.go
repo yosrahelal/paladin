@@ -21,10 +21,11 @@ import (
 	"database/sql/driver"
 	"fmt"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"gorm.io/gorm"
 )
 
-func (qj *QueryJSON) BuildGORM(ctx context.Context, db *gorm.DB, fieldSet FieldSet) *gorm.DB {
+func BuildGORM(ctx context.Context, qj *query.QueryJSON, db *gorm.DB, fieldSet FieldSet) *gorm.DB {
 	gt := &gormTraverser{
 		// We can't assume anything about the db passed in - if it's a clone (internal concept
 		// in GORM I can't work out how to detect), then it will aggregate WHERE clauses
@@ -86,7 +87,7 @@ func (t *gormTraverser) BuildOr(ot ...*gormTraverser) Traverser[*gormTraverser] 
 	return or
 }
 
-func (t *gormTraverser) IsEqual(e *OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*gormTraverser] {
+func (t *gormTraverser) IsEqual(e *query.OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*gormTraverser] {
 	if e.CaseInsensitive {
 		if e.Not {
 			t.db = t.db.Where(fmt.Sprintf("LOWER(%s) != LOWER(?)", field.SQLColumn()), testValue)
@@ -103,7 +104,7 @@ func (t *gormTraverser) IsEqual(e *OpSingleVal, fieldName string, field FieldRes
 	return t
 }
 
-func (t *gormTraverser) IsLike(e *OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*gormTraverser] {
+func (t *gormTraverser) IsLike(e *query.OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*gormTraverser] {
 	if e.CaseInsensitive {
 		if e.Not {
 			t.db = t.db.Where(fmt.Sprintf("%s NOT ILIKE ?", field.SQLColumn()), testValue)
@@ -120,7 +121,7 @@ func (t *gormTraverser) IsLike(e *OpSingleVal, fieldName string, field FieldReso
 	return t
 }
 
-func (t *gormTraverser) IsNull(e *Op, fieldName string, field FieldResolver) Traverser[*gormTraverser] {
+func (t *gormTraverser) IsNull(e *query.Op, fieldName string, field FieldResolver) Traverser[*gormTraverser] {
 	if e.Not {
 		t.db = t.db.Where(fmt.Sprintf("%s IS NOT NULL", field.SQLColumn()))
 	} else {
@@ -129,27 +130,27 @@ func (t *gormTraverser) IsNull(e *Op, fieldName string, field FieldResolver) Tra
 	return t
 }
 
-func (t *gormTraverser) IsLessThan(e *OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*gormTraverser] {
+func (t *gormTraverser) IsLessThan(e *query.OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*gormTraverser] {
 	t.db = t.db.Where(fmt.Sprintf("%s < ?", field.SQLColumn()), testValue)
 	return t
 }
 
-func (t *gormTraverser) IsLessThanOrEqual(e *OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*gormTraverser] {
+func (t *gormTraverser) IsLessThanOrEqual(e *query.OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*gormTraverser] {
 	t.db = t.db.Where(fmt.Sprintf("%s <= ?", field.SQLColumn()), testValue)
 	return t
 }
 
-func (t *gormTraverser) IsGreaterThan(e *OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*gormTraverser] {
+func (t *gormTraverser) IsGreaterThan(e *query.OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*gormTraverser] {
 	t.db = t.db.Where(fmt.Sprintf("%s > ?", field.SQLColumn()), testValue)
 	return t
 }
 
-func (t *gormTraverser) IsGreaterThanOrEqual(e *OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*gormTraverser] {
+func (t *gormTraverser) IsGreaterThanOrEqual(e *query.OpSingleVal, fieldName string, field FieldResolver, testValue driver.Value) Traverser[*gormTraverser] {
 	t.db = t.db.Where(fmt.Sprintf("%s >= ?", field.SQLColumn()), testValue)
 	return t
 }
 
-func (t *gormTraverser) IsIn(e *OpMultiVal, fieldName string, field FieldResolver, testValues []driver.Value) Traverser[*gormTraverser] {
+func (t *gormTraverser) IsIn(e *query.OpMultiVal, fieldName string, field FieldResolver, testValues []driver.Value) Traverser[*gormTraverser] {
 	if e.Not {
 		t.db = t.db.Where(fmt.Sprintf("%s NOT IN (?)", field.SQLColumn()), testValues)
 	} else {
