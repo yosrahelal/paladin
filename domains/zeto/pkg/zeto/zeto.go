@@ -30,5 +30,5 @@ type Zeto interface {
 }
 
 func New(callbacks plugintk.DomainCallbacks) Zeto {
-	return &internal.Zeto{Callbacks: callbacks}
+	return internal.New(callbacks)
 }

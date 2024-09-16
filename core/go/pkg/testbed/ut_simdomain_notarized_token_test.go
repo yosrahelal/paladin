@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
-	"sync/atomic"
 	"testing"
 
 	_ "embed"
@@ -34,7 +33,6 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
@@ -62,27 +60,6 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 	ctx := context.Background()
 	simDomainABI := mustParseBuildABI(simDomainBuild)
 	simTokenABI := mustParseBuildABI(simTokenBuild)
-
-	var blockIndexer atomic.Pointer[blockindexer.BlockIndexer]
-	var ec ethclient.EthClient
-	fakeCoinConstructorABI := `{
-		"type": "constructor",
-		"inputs": [
-		  {
-		    "name": "notary",
-			"type": "string"
-		  },
-		  {
-		    "name": "name",
-			"type": "string"
-		  },
-		  {
-		    "name": "symbol",
-			"type": "string"
-		  }
-		],
-		"outputs": null
-	}`
 
 	fakeCoinStateSchema := `{
 		"type": "tuple",
@@ -130,7 +107,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 	}`
 
 	fakeDeployPayload := `{
-		"notary": "domain1/contract1/notary",
+		"notary": "domain1.contract1.notary",
 		"name": "FakeToken1",
 		"symbol": "FT1"
 	}`
@@ -311,34 +288,12 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 				assert.Equal(t, int64(1337), req.ChainId) // from tools/besu_bootstrap
 				chainID = req.ChainId
 
-				// In this test we deploy the factory in-line
-				ec, err := ec.ABI(ctx, simDomainABI)
-				require.NoError(t, err)
-
-				cc, err := ec.Constructor(ctx, mustParseBuildBytecode(simDomainBuild))
-				require.NoError(t, err)
-
-				deployTXHash, err := cc.R(ctx).
-					Signer("domain1_admin").
-					Input(`{}`).
-					SignAndSend()
-				require.NoError(t, err)
-
-				bi := *blockIndexer.Load()
-				deployTx, err := bi.WaitForTransaction(ctx, *deployTXHash)
-				require.NoError(t, err)
-				if deployTx.Result.V() != blockindexer.TXResult_SUCCESS {
-					return nil, fmt.Errorf("Transaction %s reverted", deployTx.Hash)
-				}
-
 				return &prototk.ConfigureDomainResponse{
 					DomainConfig: &prototk.DomainConfig{
 						BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
 							SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
 						},
-						ConstructorAbiJson:     fakeCoinConstructorABI,
-						FactoryContractAddress: deployTx.ContractAddress.String(),
-						AbiStateSchemasJson:    []string{fakeCoinStateSchema},
+						AbiStateSchemasJson: []string{fakeCoinStateSchema},
 					},
 				}, nil
 			},
@@ -351,12 +306,11 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 			},
 
 			InitDeploy: func(ctx context.Context, req *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error) {
-				assert.JSONEq(t, fakeCoinConstructorABI, req.Transaction.ConstructorAbi)
 				assert.JSONEq(t, fakeDeployPayload, req.Transaction.ConstructorParamsJson)
 				return &prototk.InitDeployResponse{
 					RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 						{
-							Lookup:    "domain1/contract1/notary",
+							Lookup:    "domain1.contract1.notary",
 							Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
 						},
 					},
@@ -364,15 +318,14 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 			},
 
 			PrepareDeploy: func(ctx context.Context, req *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
-				assert.JSONEq(t, fakeCoinConstructorABI, req.Transaction.ConstructorAbi)
 				assert.JSONEq(t, `{
-					"notary": "domain1/contract1/notary",
+					"notary": "domain1.contract1.notary",
 					"name": "FakeToken1",
 					"symbol": "FT1"
 				}`, req.Transaction.ConstructorParamsJson)
 				assert.Len(t, req.ResolvedVerifiers, 1)
 				assert.Equal(t, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers[0].Algorithm)
-				assert.Equal(t, "domain1/contract1/notary", req.ResolvedVerifiers[0].Lookup)
+				assert.Equal(t, "domain1.contract1.notary", req.ResolvedVerifiers[0].Lookup)
 				assert.NotEmpty(t, req.ResolvedVerifiers[0].Verifier)
 				return &prototk.PrepareDeployResponse{
 					Signer: confutil.P(fmt.Sprintf("domain1/transactions/%s", req.Transaction.TransactionId)),
@@ -381,7 +334,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 						ParamsJson: fmt.Sprintf(`{
 							"txId": "%s",
 							"notary": "%s",
-							"notaryLocator": "domain1/contract1/notary"
+							"notaryLocator": "domain1.contract1.notary"
 						}`, req.Transaction.TransactionId, req.ResolvedVerifiers[0].Verifier),
 					},
 				}, nil
@@ -590,19 +543,16 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 		}}
 	})
 
-	tb := NewTestBed()
 	confFile := writeTestConfig(t)
+	factoryContractAddress := deploySmartContract(t, confFile)
+	tb := NewTestBed()
 	url, done, err := tb.StartForTest(confFile, map[string]*TestbedDomain{
 		"domain1": {
-			Plugin: fakeCoinDomain,
-			Config: map[string]any{"some": "config"},
+			Plugin:          fakeCoinDomain,
+			Config:          map[string]any{"some": "config"},
+			RegistryAddress: factoryContractAddress,
 		},
-	}, &UTInitFunction{PreManagerStart: func(c AllComponents) error {
-		ec = c.EthClientFactory().HTTPClient()
-		bi := c.BlockIndexer()
-		blockIndexer.Store(&bi)
-		return nil
-	}})
+	})
 	require.NoError(t, err)
 	defer done()
 
@@ -610,34 +560,74 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 
 	var contractAddr ethtypes.Address0xHex
 	rpcErr := tbRPC.CallRPC(ctx, &contractAddr, "testbed_deploy", "domain1", tktypes.RawJSON(`{
-		"notary": "domain1/contract1/notary",
+		"notary": "domain1.contract1.notary",
 		"name": "FakeToken1",
 		"symbol": "FT1"
 	}`))
 	assert.Nil(t, rpcErr)
 
 	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &tktypes.PrivateContractInvoke{
-		From:     "wallets/org1/aaaaaa",
+		From:     "wallets.org1.aaaaaa",
 		To:       tktypes.EthAddress(contractAddr),
 		Function: *mustParseABIEntry(fakeCoinTransferABI),
 		Inputs: tktypes.RawJSON(`{
 			"from": "",
-			"to": "wallets/org1/aaaaaa",
+			"to": "wallets.org1.aaaaaa",
 			"amount": "123000000000000000000"
 		}`),
 	})
 	assert.Nil(t, rpcErr)
 
 	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &tktypes.PrivateContractInvoke{
-		From:     "wallets/org1/aaaaaa",
+		From:     "wallets.org1.aaaaaa",
 		To:       tktypes.EthAddress(contractAddr),
 		Function: *mustParseABIEntry(fakeCoinTransferABI),
 		Inputs: tktypes.RawJSON(`{
-			"from": "wallets/org1/aaaaaa",
-			"to": "wallets/org2/bbbbbb",
+			"from": "wallets.org1.aaaaaa",
+			"to": "wallets.org2.bbbbbb",
 			"amount": "23000000000000000000"
 		}`),
 	})
 	assert.Nil(t, rpcErr)
 
+	// Check we can also use the utility function externally to resolve verifiers
+	var address tktypes.EthAddress
+	rpcErr = tbRPC.CallRPC(ctx, &address, "testbed_resolveVerifier", "wallets.org2.bbbbbb", algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	assert.Nil(t, rpcErr)
+	assert.False(t, address.IsZero())
+
+}
+
+// We have create a testbed with no domains from our config, to be able to deploy the factory.
+// Then we return the factory
+func deploySmartContract(t *testing.T, confFile string) *tktypes.EthAddress {
+	ctx := context.Background()
+
+	simDomainABI := mustParseBuildABI(simDomainBuild)
+
+	tb := NewTestBed()
+
+	_, done, err := tb.StartForTest(confFile, nil)
+	require.NoError(t, err)
+	defer done()
+
+	bi := tb.Components().BlockIndexer()
+
+	// In this test we deploy the factory in-line
+	ec, err := tb.Components().EthClientFactory().HTTPClient().ABI(ctx, simDomainABI)
+	require.NoError(t, err)
+
+	cc, err := ec.Constructor(ctx, mustParseBuildBytecode(simDomainBuild))
+	require.NoError(t, err)
+
+	deployTXHash, err := cc.R(ctx).
+		Signer("domain1_admin").
+		Input(`{}`).
+		SignAndSend()
+	require.NoError(t, err)
+
+	deployTx, err := bi.WaitForTransaction(ctx, *deployTXHash)
+	require.NoError(t, err)
+	require.Equal(t, deployTx.Result.V(), blockindexer.TXResult_SUCCESS)
+	return deployTx.ContractAddress
 }
