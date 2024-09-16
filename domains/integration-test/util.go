@@ -17,7 +17,6 @@ package integrationtest
 
 import (
 	"context"
-	_ "embed"
 	"encoding/json"
 	"testing"
 

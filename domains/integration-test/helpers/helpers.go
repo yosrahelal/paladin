@@ -17,7 +17,6 @@ package helpers
 
 import (
 	"context"
-	_ "embed"
 	"encoding/json"
 	"testing"
 

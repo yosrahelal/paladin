@@ -20,8 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	_ "embed"
-
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
