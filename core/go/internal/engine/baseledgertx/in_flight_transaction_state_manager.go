@@ -113,9 +113,6 @@ func (iftxs *inFlightTransactionState) StartNewStageContext(ctx context.Context,
 			signedMessage = iftxs.TransientPreviousStageOutputs.SignedMessage
 		}
 		iftxs.stageTriggerError = iftxs.TriggerSubmitTx(ctx, signedMessage)
-	case baseTypes.InFlightTxStageConfirming:
-		log.L(ctx).Tracef("Transaction with ID %s, entered confirmation tracking, waiting for block indexer to index the transaction", rsc.InMemoryTx.GetTxID())
-		// no action required, relies on block indexer to trigger events
 	case baseTypes.InFlightTxStageStatusUpdate:
 		log.L(ctx).Tracef("Transaction with ID %s, triggering status update", rsc.InMemoryTx.GetTxID())
 		iftxs.stageTriggerError = iftxs.TriggerStatusUpdate(ctx)

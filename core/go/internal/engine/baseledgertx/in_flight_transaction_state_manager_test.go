@@ -433,6 +433,94 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmed(t *testing.T) {
 	assert.True(t, stateManager.CanBeRemoved(ctx))
 }
 
+func TestStateManagerTxPersistenceManagementTransactionConfirmedOnPreviousHash(t *testing.T) {
+	ctx := context.Background()
+	testStateManagerWithMocks := newTestInFlightTransactionStateManager(t)
+
+	stateManager := testStateManagerWithMocks.stateManager
+
+	// cannot persist when there is no running context
+	_, _, err := stateManager.PersistTxState(ctx)
+	assert.NotNil(t, err)
+	assert.Regexp(t, "PD011918", err)
+
+	// set a running context
+	mockActionTriggers := testStateManagerWithMocks.mAT
+	defer mockActionTriggers.AssertExpectations(t)
+	stateManager.StartNewStageContext(ctx, baseTypes.InFlightTxStageConfirming, baseTypes.BaseTxSubStatusTracking)
+
+	// cannot persist when running context hasn't set persistence output
+	_, _, err = stateManager.PersistTxState(ctx)
+	assert.NotNil(t, err)
+	assert.Regexp(t, "PD011918", err)
+
+	rsc := stateManager.GetRunningStageContext(ctx)
+	rsc.SetNewPersistenceUpdateOutput()
+	// now test different combinations of persistence
+	_, _, err = stateManager.PersistTxState(ctx)
+	assert.Nil(t, err)
+
+	inMemoryTxState := testStateManagerWithMocks.inMemoryTxState
+
+	assert.Equal(t, stateManager.GetTxID(), inMemoryTxState.GetTxID())
+	assert.False(t, inMemoryTxState.IsComplete())
+
+	newTime := fftypes.Now()
+	newTxHash := tktypes.Bytes32Keccak([]byte("0x00002")).String()
+	newSubmittedHashes := []string{
+		tktypes.Bytes32Keccak([]byte("0x00000")).String(),
+		tktypes.Bytes32Keccak([]byte("0x00001")).String(),
+		tktypes.Bytes32Keccak([]byte("0x00002")).String(),
+	}
+	newStatus := baseTypes.BaseTxStatusSucceeded
+	newGas := ethtypes.NewHexInteger64(111)
+	newGasPrice := ethtypes.NewHexInteger64(111)
+
+	testConfirmedTx := &blockindexer.IndexedTransaction{
+		BlockNumber:      int64(1233),
+		TransactionIndex: int64(23),
+		Hash:             tktypes.Bytes32Keccak([]byte("0x00001")),
+		Result:           blockindexer.TXResult_SUCCESS.Enum(),
+	}
+
+	rsc.StageOutputsToBePersisted.ConfirmedTransaction = testConfirmedTx
+	rsc.StageOutputsToBePersisted.TxUpdates = &baseTypes.BaseTXUpdates{
+		Status:          &newStatus,
+		DeleteRequested: newTime,
+		GasPrice:        newGasPrice,
+		TransactionHash: &newTxHash,
+		FirstSubmit:     newTime,
+		LastSubmit:      newTime,
+		GasLimit:        newGas,
+	}
+	mTS := testStateManagerWithMocks.mTS
+	txID := stateManager.GetTxID()
+	mTS.On("SetConfirmedTransaction", mock.Anything, txID, testConfirmedTx).Return(nil).Once()
+	mTS.On("AddSubStatusAction", mock.Anything, txID, baseTypes.BaseTxSubStatusTracking, baseTypes.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
+	mTS.On("UpdateTransaction", mock.Anything, txID, rsc.StageOutputsToBePersisted.TxUpdates).Return(nil).Once()
+	_, _, err = stateManager.PersistTxState(ctx)
+	assert.Nil(t, err)
+	assert.Equal(t, stateManager.GetTxID(), inMemoryTxState.GetTxID())
+
+	assert.Equal(t, newTime, inMemoryTxState.GetDeleteRequestedTime())
+	assert.Equal(t, testConfirmedTx, inMemoryTxState.GetConfirmedTransaction())
+	assert.Equal(t, newTxHash, inMemoryTxState.GetTransactionHash())
+	assert.Equal(t, newStatus, inMemoryTxState.GetStatus())
+	assert.Equal(t, newGasPrice.BigInt(), inMemoryTxState.GetGasPriceObject().GasPrice)
+	assert.Equal(t, newTime, inMemoryTxState.GetFirstSubmit())
+	assert.Equal(t, newTime, inMemoryTxState.GetLastSubmitTime())
+	assert.Equal(t, newSubmittedHashes, inMemoryTxState.GetSubmittedHashes())
+	assert.Equal(t, newGas.BigInt(), inMemoryTxState.GetGasLimit())
+	assert.True(t, inMemoryTxState.IsComplete())
+
+	// only mark the transaction as can be removed when there is no longer a running stage
+	assert.NotNil(t, stateManager.GetRunningStageContext(ctx))
+	assert.False(t, stateManager.CanBeRemoved(ctx))
+
+	stateManager.ClearRunningStageContext(ctx)
+	assert.True(t, stateManager.CanBeRemoved(ctx))
+}
+
 func TestStateManagerTxPersistenceManagementTransactionConfirmedRetrieveConfirmedTXAndTxFailed(t *testing.T) {
 	ctx := context.Background()
 	testStateManagerWithMocks := newTestInFlightTransactionStateManager(t)
