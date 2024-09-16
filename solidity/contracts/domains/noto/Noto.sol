@@ -23,9 +23,9 @@ import {INoto} from "../interfaces/INoto.sol";
 ///         be using any model programmable via EVM (not just C-UTXO)
 ///
 contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
-    mapping(bytes32 => bool) private _unspent;
-    mapping(bytes32 => ApprovalRecord) private _approvals;
     address _notary;
+    mapping(bytes32 => bool) private _unspent;
+    mapping(bytes32 => address) private _approvals;
 
     error NotoInvalidNotary(address signer, address notary);
     error NotoInvalidInput(bytes32 id);
@@ -48,10 +48,6 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
 
     bytes32 private constant TRANSFER_TYPEHASH =
         keccak256("Transfer(bytes32[] inputs,bytes32[] outputs,bytes data)");
-
-    struct ApprovalRecord {
-        address delegate;
-    }
 
     function requireNotary(address addr) internal view {
         if (addr != _notary) {
@@ -121,7 +117,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     function getTransferApproval(
         bytes32 txhash
     ) public view returns (address delegate) {
-        return _approvals[txhash].delegate;
+        return _approvals[txhash];
     }
 
     /**
@@ -200,7 +196,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
         bytes calldata signature,
         bytes calldata data
     ) internal {
-        _approvals[txhash].delegate = delegate;
+        _approvals[txhash] = delegate;
         emit NotoApproved(delegate, txhash, signature, data);
     }
 
@@ -220,12 +216,8 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
         bytes calldata data
     ) public {
         bytes32 txhash = _buildTXHash(inputs, outputs, data);
-        if (_approvals[txhash].delegate != msg.sender) {
-            revert NotoInvalidDelegate(
-                txhash,
-                _approvals[txhash].delegate,
-                msg.sender
-            );
+        if (_approvals[txhash] != msg.sender) {
+            revert NotoInvalidDelegate(txhash, _approvals[txhash], msg.sender);
         }
 
         _transfer(inputs, outputs, signature, data);
