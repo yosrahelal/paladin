@@ -19,6 +19,7 @@ package msgs
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"golang.org/x/text/language"
@@ -26,12 +27,11 @@ import (
 
 const notoPrefix = "PD20"
 
-var registered = false
+var registered sync.Once
 var ffe = func(key, translation string, statusHint ...int) i18n.ErrorMessageKey {
-	if !registered {
+	registered.Do(func() {
 		i18n.RegisterPrefix(notoPrefix, "Noto Domain")
-		registered = true
-	}
+	})
 	if !strings.HasPrefix(key, notoPrefix) {
 		panic(fmt.Errorf("must have prefix '%s': %s", notoPrefix, key))
 	}
