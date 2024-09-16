@@ -36,8 +36,8 @@ type testExtension struct {
 	keyStore func(ctx context.Context, config *api.StoreConfig) (store api.KeyStore, err error)
 }
 
-func (oc *testExtension) KeyStore(ctx context.Context, config *api.StoreConfig) (store api.KeyStore, err error) {
-	return oc.keyStore(ctx, config)
+func (te *testExtension) KeyStore(ctx context.Context, config *api.StoreConfig) (store api.KeyStore, err error) {
+	return te.keyStore(ctx, config)
 }
 
 type testKeyStoreAll struct {
@@ -74,7 +74,7 @@ func (tk *testKeyStoreAll) Close() {
 
 func TestExtensionInitFail(t *testing.T) {
 
-	oc := &testExtension{
+	te := &testExtension{
 		keyStore: func(ctx context.Context, config *api.StoreConfig) (store api.KeyStore, err error) {
 			assert.Equal(t, "ext-store", config.Type)
 			return nil, fmt.Errorf("pop")
@@ -85,21 +85,21 @@ func TestExtensionInitFail(t *testing.T) {
 		KeyStore: api.StoreConfig{
 			Type: "ext-store",
 		},
-	}, oc)
+	}, te)
 	assert.Regexp(t, "pop", err)
 
 }
 
 func TestKeystoreTypeUnknown(t *testing.T) {
 
-	oc := &testExtension{
+	te := &testExtension{
 		keyStore: func(ctx context.Context, config *api.StoreConfig) (store api.KeyStore, err error) { return nil, nil },
 	}
 	_, err := NewSigningModule(context.Background(), &api.Config{
 		KeyStore: api.StoreConfig{
 			Type: "unknown",
 		},
-	}, oc)
+	}, te)
 	assert.Regexp(t, "PD011407", err)
 
 }
@@ -140,7 +140,7 @@ func TestExtensionKeyStoreListOK(t *testing.T) {
 			return testRes, nil
 		},
 	}
-	oc := &testExtension{
+	te := &testExtension{
 		keyStore: func(ctx context.Context, config *api.StoreConfig) (store api.KeyStore, err error) {
 			assert.Equal(t, "ext-store", config.Type)
 			return tk, nil
@@ -151,7 +151,7 @@ func TestExtensionKeyStoreListOK(t *testing.T) {
 		KeyStore: api.StoreConfig{
 			Type: "ext-store",
 		},
-	}, oc)
+	}, te)
 	require.NoError(t, err)
 
 	res, err := sm.List(context.Background(), &proto.ListKeysRequest{
@@ -178,7 +178,7 @@ func TestExtensionKeyStoreListFail(t *testing.T) {
 			return nil, fmt.Errorf("pop")
 		},
 	}
-	oc := &testExtension{
+	te := &testExtension{
 		keyStore: func(ctx context.Context, config *api.StoreConfig) (store api.KeyStore, err error) {
 			assert.Equal(t, "ext-store", config.Type)
 			return tk, nil
@@ -189,7 +189,7 @@ func TestExtensionKeyStoreListFail(t *testing.T) {
 		KeyStore: api.StoreConfig{
 			Type: "ext-store",
 		},
-	}, oc)
+	}, te)
 	require.NoError(t, err)
 
 	_, err = sm.List(context.Background(), &proto.ListKeysRequest{
@@ -213,7 +213,7 @@ func TestExtensionKeyStoreResolveSignSECP256K1OK(t *testing.T) {
 			return &secp256k1.SignatureData{V: big.NewInt(1), R: big.NewInt(2), S: big.NewInt(3)}, nil
 		},
 	}
-	oc := &testExtension{
+	te := &testExtension{
 		keyStore: func(ctx context.Context, config *api.StoreConfig) (store api.KeyStore, err error) {
 			assert.Equal(t, "ext-store", config.Type)
 			return tk, nil
@@ -224,7 +224,7 @@ func TestExtensionKeyStoreResolveSignSECP256K1OK(t *testing.T) {
 		KeyStore: api.StoreConfig{
 			Type: "ext-store",
 		},
-	}, oc)
+	}, te)
 	require.NoError(t, err)
 
 	resResolve, err := sm.Resolve(context.Background(), &proto.ResolveKeyRequest{
@@ -251,7 +251,7 @@ func TestExtensionKeyStoreResolveSECP256K1Fail(t *testing.T) {
 			return nil, "", fmt.Errorf("pop")
 		},
 	}
-	oc := &testExtension{
+	te := &testExtension{
 		keyStore: func(ctx context.Context, config *api.StoreConfig) (store api.KeyStore, err error) {
 			assert.Equal(t, "ext-store", config.Type)
 			return tk, nil
@@ -262,7 +262,7 @@ func TestExtensionKeyStoreResolveSECP256K1Fail(t *testing.T) {
 		KeyStore: api.StoreConfig{
 			Type: "ext-store",
 		},
-	}, oc)
+	}, te)
 	require.NoError(t, err)
 
 	_, err = sm.Resolve(context.Background(), &proto.ResolveKeyRequest{
@@ -283,7 +283,7 @@ func TestExtensionKeyStoreSignSECP256K1Fail(t *testing.T) {
 			return nil, fmt.Errorf("pop")
 		},
 	}
-	oc := &testExtension{
+	te := &testExtension{
 		keyStore: func(ctx context.Context, config *api.StoreConfig) (store api.KeyStore, err error) {
 			assert.Equal(t, "ext-store", config.Type)
 			return tk, nil
@@ -294,7 +294,7 @@ func TestExtensionKeyStoreSignSECP256K1Fail(t *testing.T) {
 		KeyStore: api.StoreConfig{
 			Type: "ext-store",
 		},
-	}, oc)
+	}, te)
 	require.NoError(t, err)
 
 	_, err = sm.Sign(context.Background(), &proto.SignRequest{
