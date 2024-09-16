@@ -23,7 +23,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/kaleido-io/paladin/core/internal/filters"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
@@ -100,7 +100,7 @@ func TestFindStatesMissingSchema(t *testing.T) {
 
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
-	_, err := ss.FindStates(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("schema1")).String(), &filters.QueryJSON{}, "all")
+	_, err := ss.FindStates(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("schema1")).String(), &query.QueryJSON{}, "all")
 	assert.Regexp(t, "PD010106", err)
 }
 
@@ -114,11 +114,11 @@ func TestFindStatesBadQuery(t *testing.T) {
 		definition: &abi.Parameter{},
 	})
 
-	_, err := ss.FindStates(ctx, "domain1", schemaID.String(), &filters.QueryJSON{
-		Statements: filters.Statements{
-			Ops: filters.Ops{
-				Equal: []*filters.OpSingleVal{
-					{Op: filters.Op{Field: "wrong"}},
+	_, err := ss.FindStates(ctx, "domain1", schemaID.String(), &query.QueryJSON{
+		Statements: query.Statements{
+			Ops: query.Ops{
+				Equal: []*query.OpSingleVal{
+					{Op: query.Op{Field: "wrong"}},
 				},
 			},
 		},
@@ -140,11 +140,11 @@ func TestFindStatesFail(t *testing.T) {
 
 	db.ExpectQuery("SELECT.*created_at").WillReturnError(fmt.Errorf("pop"))
 
-	_, err := ss.FindStates(ctx, "domain1", schemaID.String(), &filters.QueryJSON{
-		Statements: filters.Statements{
-			Ops: filters.Ops{
-				GreaterThan: []*filters.OpSingleVal{
-					{Op: filters.Op{
+	_, err := ss.FindStates(ctx, "domain1", schemaID.String(), &query.QueryJSON{
+		Statements: query.Statements{
+			Ops: query.Ops{
+				GreaterThan: []*query.OpSingleVal{
+					{Op: query.Op{
 						Field: ".created",
 					}, Value: tktypes.RawJSON(fmt.Sprintf("%d", time.Now().UnixNano()))},
 				},

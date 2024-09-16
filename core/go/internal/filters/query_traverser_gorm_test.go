@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -29,7 +30,7 @@ import (
 
 func TestBuildQueryJSONNestedAndOr(t *testing.T) {
 
-	var qf QueryJSON
+	var qf query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"skip": 5,
 		"limit": 10,
@@ -107,7 +108,7 @@ func TestBuildQueryJSONNestedAndOr(t *testing.T) {
 	require.NoError(t, err)
 	generatedSQL := p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
 		var count int64
-		db := qf.BuildGORM(context.Background(), tx.Table("test"), FieldMap{
+		db := BuildGORM(context.Background(), &qf, tx.Table("test"), FieldMap{
 			"tag":      StringField("tag"),
 			"sequence": Int64Field("sequence"),
 			"masked":   Int64BoolField("masked"),
@@ -122,7 +123,7 @@ func TestBuildQueryJSONNestedAndOr(t *testing.T) {
 
 func TestBuildQuerySingleNestedOr(t *testing.T) {
 
-	var qf QueryJSON
+	var qf query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"or": [
 			{
@@ -141,7 +142,7 @@ func TestBuildQuerySingleNestedOr(t *testing.T) {
 	require.NoError(t, err)
 	generatedSQL := p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
 		var count int64
-		db := qf.BuildGORM(context.Background(), tx.Table("test"), FieldMap{
+		db := BuildGORM(context.Background(), &qf, tx.Table("test"), FieldMap{
 			"tag": StringField("tag"),
 		}).Count(&count)
 		require.NoError(t, db.Error)
@@ -152,7 +153,7 @@ func TestBuildQuerySingleNestedOr(t *testing.T) {
 
 func TestBuildQuerySingleNestedWithResolverErrorTag(t *testing.T) {
 
-	var qf QueryJSON
+	var qf query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"or": [
 			{
@@ -171,7 +172,7 @@ func TestBuildQuerySingleNestedWithResolverErrorTag(t *testing.T) {
 	require.NoError(t, err)
 	_ = p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
 		var count int64
-		db := qf.BuildGORM(context.Background(), tx.Table("test"), FieldMap{}).Count(&count)
+		db := BuildGORM(context.Background(), &qf, tx.Table("test"), FieldMap{}).Count(&count)
 		assert.Regexp(t, "PD010700.*tag", db.Error)
 		return db
 	})
@@ -179,7 +180,7 @@ func TestBuildQuerySingleNestedWithResolverErrorTag(t *testing.T) {
 
 func TestBuildQuerySingleNestedWithResolverErrorValue(t *testing.T) {
 
-	var qf QueryJSON
+	var qf query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"or": [
 			{
@@ -198,7 +199,7 @@ func TestBuildQuerySingleNestedWithResolverErrorValue(t *testing.T) {
 	require.NoError(t, err)
 	_ = p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
 		var count int64
-		db := qf.BuildGORM(context.Background(), tx.Table("test"), FieldMap{
+		db := BuildGORM(context.Background(), &qf, tx.Table("test"), FieldMap{
 			"tag": StringField("tag"),
 		}).Count(&count)
 		assert.Regexp(t, "PD010710.*tag.*PD010705", db.Error)
@@ -208,7 +209,7 @@ func TestBuildQuerySingleNestedWithResolverErrorValue(t *testing.T) {
 
 func TestBuildQueryResolverErrorMissing(t *testing.T) {
 
-	var qf QueryJSON
+	var qf query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"eq": [
 			{
@@ -222,7 +223,7 @@ func TestBuildQueryResolverErrorMissing(t *testing.T) {
 	require.NoError(t, err)
 	_ = p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
 		var count int64
-		db := qf.BuildGORM(context.Background(), tx.Table("test"), FieldMap{
+		db := BuildGORM(context.Background(), &qf, tx.Table("test"), FieldMap{
 			"tag": StringField("tag"),
 		}).Count(&count)
 		assert.Regexp(t, "PD010708.*tag", db.Error)
@@ -232,7 +233,7 @@ func TestBuildQueryResolverErrorMissing(t *testing.T) {
 
 func TestBuildQueryJSONEqual(t *testing.T) {
 
-	var qf QueryJSON
+	var qf query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"skip": 5,
 		"limit": 10,
@@ -276,7 +277,7 @@ func TestBuildQueryJSONEqual(t *testing.T) {
 	require.NoError(t, err)
 	generatedSQL := p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
 		var count int64
-		db := qf.BuildGORM(context.Background(), tx.Table("test"), FieldMap{
+		db := BuildGORM(context.Background(), &qf, tx.Table("test"), FieldMap{
 			"tag":      StringField("tag"),
 			"sequence": Int64Field("sequence"),
 			"masked":   Int64BoolField("masked"),
@@ -291,7 +292,7 @@ func TestBuildQueryJSONEqual(t *testing.T) {
 
 func TestBuildQueryJSONLike(t *testing.T) {
 
-	var qf QueryJSON
+	var qf query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"skip": 5,
 		"limit": 10,
@@ -324,7 +325,7 @@ func TestBuildQueryJSONLike(t *testing.T) {
 	require.NoError(t, err)
 	generatedSQL := p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
 		var count int64
-		db := qf.BuildGORM(context.Background(), tx.Table("test"), FieldMap{
+		db := BuildGORM(context.Background(), &qf, tx.Table("test"), FieldMap{
 			"tag":      StringField("tag"),
 			"sequence": Int64Field("sequence"),
 			"masked":   Int64BoolField("masked"),
@@ -340,7 +341,7 @@ func TestBuildQueryJSONLike(t *testing.T) {
 
 func TestBuildQueryJSONGreaterThan(t *testing.T) {
 
-	var qf QueryJSON
+	var qf query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"skip": 5,
 		"limit": 10,
@@ -357,7 +358,7 @@ func TestBuildQueryJSONGreaterThan(t *testing.T) {
 	require.NoError(t, err)
 	generatedSQL := p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
 		var count int64
-		db := qf.BuildGORM(context.Background(), tx.Table("test"), FieldMap{
+		db := BuildGORM(context.Background(), &qf, tx.Table("test"), FieldMap{
 			"sequence": Int64Field("sequence"),
 		}).Count(&count)
 		require.NoError(t, db.Error)
@@ -368,7 +369,7 @@ func TestBuildQueryJSONGreaterThan(t *testing.T) {
 
 func TestBuildQueryJSONLessThan(t *testing.T) {
 
-	var qf QueryJSON
+	var qf query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"skip": 5,
 		"limit": 10,
@@ -389,7 +390,7 @@ func TestBuildQueryJSONLessThan(t *testing.T) {
 	require.NoError(t, err)
 	generatedSQL := p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
 		var count int64
-		db := qf.BuildGORM(context.Background(), tx.Table("test"), FieldMap{
+		db := BuildGORM(context.Background(), &qf, tx.Table("test"), FieldMap{
 			"amount": Uint256Field("amount"),
 			"delta":  Int256Field("delta"),
 		}).Count(&count)
@@ -401,7 +402,7 @@ func TestBuildQueryJSONLessThan(t *testing.T) {
 
 func TestBuildQueryJSONGreaterThanOrEqual(t *testing.T) {
 
-	var qf QueryJSON
+	var qf query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"skip": 5,
 		"limit": 10,
@@ -422,7 +423,7 @@ func TestBuildQueryJSONGreaterThanOrEqual(t *testing.T) {
 	require.NoError(t, err)
 	generatedSQL := p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
 		var count int64
-		db := qf.BuildGORM(context.Background(), tx.Table("test"), FieldMap{
+		db := BuildGORM(context.Background(), &qf, tx.Table("test"), FieldMap{
 			"sequence": Int64Field("sequence"),
 			"delta":    Int256Field("delta"),
 		}).Count(&count)
@@ -434,7 +435,7 @@ func TestBuildQueryJSONGreaterThanOrEqual(t *testing.T) {
 
 func TestBuildQueryJSONLessThanOrEqual(t *testing.T) {
 
-	var qf QueryJSON
+	var qf query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"skip": 5,
 		"limit": 10,
@@ -451,7 +452,7 @@ func TestBuildQueryJSONLessThanOrEqual(t *testing.T) {
 	require.NoError(t, err)
 	generatedSQL := p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
 		var count int64
-		db := qf.BuildGORM(context.Background(), tx.Table("test"), FieldMap{
+		db := BuildGORM(context.Background(), &qf, tx.Table("test"), FieldMap{
 			"sequence": Int64Field("sequence"),
 		}).Count(&count)
 		require.NoError(t, db.Error)
@@ -462,7 +463,7 @@ func TestBuildQueryJSONLessThanOrEqual(t *testing.T) {
 
 func TestBuildQueryJSONIn(t *testing.T) {
 
-	var qf QueryJSON
+	var qf query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"skip": 5,
 		"limit": 10,
@@ -484,7 +485,7 @@ func TestBuildQueryJSONIn(t *testing.T) {
 	require.NoError(t, err)
 	generatedSQL := p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
 		var count int64
-		db := qf.BuildGORM(context.Background(), tx.Table("test"), FieldMap{
+		db := BuildGORM(context.Background(), &qf, tx.Table("test"), FieldMap{
 			"tag": StringField("tag"),
 		}).Count(&count)
 		require.NoError(t, db.Error)
@@ -499,11 +500,11 @@ func TestBuildQueryJSONBadModifiers(t *testing.T) {
 	require.NoError(t, err)
 
 	testJSON := func(j string) error {
-		var qf QueryJSON
+		var qf query.QueryJSON
 		err := json.Unmarshal([]byte(j), &qf)
 		require.NoError(t, err)
 		var count int64
-		db := qf.BuildGORM(context.Background(), p.P.DB().Table("test"), FieldMap{
+		db := BuildGORM(context.Background(), &qf, p.P.DB().Table("test"), FieldMap{
 			"tag": StringField("tag"),
 		}).Count(&count)
 		return db.Error
@@ -535,11 +536,11 @@ func TestBuildQueryJSONBadFields(t *testing.T) {
 	require.NoError(t, err)
 
 	testJSON := func(j string) error {
-		var qf QueryJSON
+		var qf query.QueryJSON
 		err := json.Unmarshal([]byte(j), &qf)
 		require.NoError(t, err)
 		var count int64
-		db := qf.BuildGORM(context.Background(), p.P.DB().Table("test"), FieldMap{
+		db := BuildGORM(context.Background(), &qf, p.P.DB().Table("test"), FieldMap{
 			"tag": StringField("tag"),
 		}).Count(&count)
 		return db.Error
@@ -575,7 +576,7 @@ func TestBuildQueryJSONBadFields(t *testing.T) {
 
 func TestBuildQueryJSONContainsShortNames(t *testing.T) {
 
-	var qf1 QueryJSON
+	var qf1 query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"eq": [
 			{
@@ -590,7 +591,7 @@ func TestBuildQueryJSONContainsShortNames(t *testing.T) {
 	require.NoError(t, err)
 	generatedSQL := p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
 		var count int64
-		db := qf1.BuildGORM(context.Background(), tx.Table("test"), FieldMap{
+		db := BuildGORM(context.Background(), &qf1, tx.Table("test"), FieldMap{
 			"sequence": Int64Field("sequence"),
 		}).Count(&count)
 		require.NoError(t, db.Error)
@@ -598,7 +599,7 @@ func TestBuildQueryJSONContainsShortNames(t *testing.T) {
 	})
 	assert.Equal(t, "SELECT count(*) FROM `test` WHERE sequence = 12345", generatedSQL)
 
-	var qf2 QueryJSON
+	var qf2 query.QueryJSON
 	err = json.Unmarshal([]byte(`{
 		"gt": [
 			{
@@ -617,7 +618,7 @@ func TestBuildQueryJSONContainsShortNames(t *testing.T) {
 
 	generatedSQL = p.P.DB().ToSQL(func(tx *gorm.DB) *gorm.DB {
 		var count int64
-		db := qf2.BuildGORM(context.Background(), tx.Table("test"), FieldMap{
+		db := BuildGORM(context.Background(), &qf2, tx.Table("test"), FieldMap{
 			"sequence": Int64Field("sequence"),
 		}).Count(&count)
 		require.NoError(t, db.Error)
