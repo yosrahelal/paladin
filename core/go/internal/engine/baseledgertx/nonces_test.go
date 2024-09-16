@@ -40,6 +40,13 @@ func TestIntentToAssignNonce(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, callbackHasBeenCalled)
 	intent.Complete(ctx)
+
+	//Check that the reapear lock is in a state where the reaper can grab it
+	gotLock := nonceCache.reaperLock.TryLock()
+	assert.True(t, gotLock)
+	if gotLock {
+		nonceCache.reaperLock.Unlock()
+	}
 }
 
 func TestAssignNonce(t *testing.T) {
@@ -55,7 +62,8 @@ func TestAssignNonce(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, callbackHasBeenCalled)
 
-	nextNonce := intent.AssignNextNonce(ctx)
+	nextNonce, err := intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
 
 	assert.Equal(t, uint64(42), nextNonce)
 	intent.Complete(ctx)
@@ -66,9 +74,122 @@ func TestAssignNonce(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, callbackHasBeenCalled)
 
-	nextNonce = intent.AssignNextNonce(ctx)
+	nextNonce, err = intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
 	assert.Equal(t, uint64(43), nextNonce)
 	intent.Complete(ctx)
+
+	//Check that the reapear lock is in a state where the reaper can grab it
+	gotLock := nonceCache.reaperLock.TryLock()
+	assert.True(t, gotLock)
+	if gotLock {
+		nonceCache.reaperLock.Unlock()
+	}
+
+}
+
+func TestIntentToAssignNonceRollbackNoAssign(t *testing.T) {
+	ctx := context.Background()
+	nonceCache := newNonceCacheForTesting(t)
+	defer nonceCache.stop()
+	callbackHasBeenCalled := false
+	callback := func(ctx context.Context, signer string) (uint64, error) {
+		callbackHasBeenCalled = true
+		return uint64(42), nil
+	}
+	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
+	require.NoError(t, err)
+	assert.True(t, callbackHasBeenCalled)
+	intent.Rollback(ctx)
+
+	//check that the nonce is still in memory and if assigned, we get the correct nonce
+	callbackHasBeenCalled = false
+	intent, err = nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
+	require.NoError(t, err)
+	assert.False(t, callbackHasBeenCalled)
+
+	nextNonce, err := intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(42), nextNonce)
+	intent.Complete(ctx)
+
+	//Check that the reapear lock is in a state where the reaper can grab it
+	gotLock := nonceCache.reaperLock.TryLock()
+	assert.True(t, gotLock)
+	if gotLock {
+		nonceCache.reaperLock.Unlock()
+	}
+}
+
+func TestIntentToAssignNonceCompleteNoAssign(t *testing.T) {
+	ctx := context.Background()
+	nonceCache := newNonceCacheForTesting(t)
+	defer nonceCache.stop()
+	callbackHasBeenCalled := false
+	callback := func(ctx context.Context, signer string) (uint64, error) {
+		callbackHasBeenCalled = true
+		return uint64(42), nil
+	}
+	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
+	require.NoError(t, err)
+	assert.True(t, callbackHasBeenCalled)
+	intent.Complete(ctx)
+
+	callbackHasBeenCalled = false
+	intent, err = nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
+	require.NoError(t, err)
+	assert.False(t, callbackHasBeenCalled)
+
+	nextNonce, err := intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(42), nextNonce)
+	intent.Complete(ctx)
+
+	//Check that the reapear lock is in a state where the reaper can grab it
+	gotLock := nonceCache.reaperLock.TryLock()
+	assert.True(t, gotLock)
+	if gotLock {
+		nonceCache.reaperLock.Unlock()
+	}
+}
+
+func TestAssignNonceMultipleNonces(t *testing.T) {
+	ctx := context.Background()
+	nonceCache := newNonceCacheForTesting(t)
+	defer nonceCache.stop()
+	callback := func(ctx context.Context, signer string) (uint64, error) {
+		return uint64(42), nil
+	}
+	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
+	require.NoError(t, err)
+
+	nextNonce, err := intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, uint64(42), nextNonce)
+	nextNonce, err = intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(43), nextNonce)
+	nextNonce, err = intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(44), nextNonce)
+
+	intent.Complete(ctx)
+
+	intent, err = nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
+	require.NoError(t, err)
+
+	nextNonce, err = intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(45), nextNonce)
+	intent.Complete(ctx)
+
+	//Check that the reapear lock is in a state where the reaper can grab it
+	gotLock := nonceCache.reaperLock.TryLock()
+	assert.True(t, gotLock)
+	if gotLock {
+		nonceCache.reaperLock.Unlock()
+	}
 
 }
 
@@ -85,7 +206,8 @@ func TestAssignNonceRollback(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, callbackHasBeenCalled)
 
-	nextNonce := intent.AssignNextNonce(ctx)
+	nextNonce, err := intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
 
 	assert.Equal(t, uint64(42), nextNonce)
 	intent.Rollback(ctx)
@@ -96,11 +218,110 @@ func TestAssignNonceRollback(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, callbackHasBeenCalled)
 
-	nextNonce = intent.AssignNextNonce(ctx)
+	nextNonce, err = intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
 	//should get 42 as before given that the previous assignment got rolled back
 	assert.Equal(t, uint64(42), nextNonce)
 	intent.Complete(ctx)
 
+	//Check that the reapear lock is in a state where the reaper can grab it
+	gotLock := nonceCache.reaperLock.TryLock()
+	assert.True(t, gotLock)
+	if gotLock {
+		nonceCache.reaperLock.Unlock()
+	}
+}
+
+func TestAssignNonceMultipleNoncesRollback(t *testing.T) {
+	ctx := context.Background()
+	nonceCache := newNonceCacheForTesting(t)
+	defer nonceCache.stop()
+	callback := func(ctx context.Context, signer string) (uint64, error) {
+		return uint64(42), nil
+	}
+	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
+	require.NoError(t, err)
+
+	nextNonce, err := intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, uint64(42), nextNonce)
+	nextNonce, err = intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(43), nextNonce)
+	nextNonce, err = intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(44), nextNonce)
+
+	intent.Rollback(ctx)
+
+	intent, err = nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
+	require.NoError(t, err)
+
+	nextNonce, err = intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(42), nextNonce)
+
+	//Check that the reapear lock is in a state where the reaper can grab it
+	gotLock := nonceCache.reaperLock.TryLock()
+	assert.True(t, gotLock)
+	if gotLock {
+		nonceCache.reaperLock.Unlock()
+	}
+}
+
+func TestAssignNonceAfterCompleteFail(t *testing.T) {
+	ctx := context.Background()
+	nonceCache := newNonceCacheForTesting(t)
+	defer nonceCache.stop()
+	callback := func(ctx context.Context, signer string) (uint64, error) {
+		return uint64(42), nil
+	}
+	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
+	require.NoError(t, err)
+
+	nextNonce, err := intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, uint64(42), nextNonce)
+	intent.Complete(ctx)
+
+	_, err = intent.AssignNextNonce(ctx)
+	assert.Error(t, err)
+
+	//Check that the reapear lock is in a state where the reaper can grab it
+	gotLock := nonceCache.reaperLock.TryLock()
+	assert.True(t, gotLock)
+	if gotLock {
+		nonceCache.reaperLock.Unlock()
+	}
+}
+
+func TestAssignNonceAfterRollbackFail(t *testing.T) {
+	ctx := context.Background()
+	nonceCache := newNonceCacheForTesting(t)
+	defer nonceCache.stop()
+	callback := func(ctx context.Context, signer string) (uint64, error) {
+		return uint64(42), nil
+	}
+	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
+	require.NoError(t, err)
+
+	nextNonce, err := intent.AssignNextNonce(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, uint64(42), nextNonce)
+	intent.Rollback(ctx)
+
+	_, err = intent.AssignNextNonce(ctx)
+	assert.Error(t, err)
+
+	//Check that the reapear lock is in a state where the reaper can grab it
+	gotLock := nonceCache.reaperLock.TryLock()
+	assert.True(t, gotLock)
+	if gotLock {
+		nonceCache.reaperLock.Unlock()
+	}
 }
 
 func TestAssignNonceMultiThreaded(t *testing.T) {
@@ -126,7 +347,8 @@ func TestAssignNonceMultiThreaded(t *testing.T) {
 
 			intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd", callback)
 			require.NoError(t, err)
-			nextNonce := intent.AssignNextNonce(ctx)
+			nextNonce, err := intent.AssignNextNonce(ctx)
+			require.NoError(t, err)
 			if rand.Intn(10) == 9 {
 				//rollback on average 10% of the time
 				results[threadNumber][itteration] = 1 // 1 is a special value meaning rolledback
@@ -180,6 +402,12 @@ func TestAssignNonceMultiThreaded(t *testing.T) {
 	assert.True(t, haveSeenHighestNonce)
 	assert.Equal(t, 1, callbackCalled)
 
+	//Check that the reapear lock is in a state where the reaper can grab it
+	gotLock := nonceCache.reaperLock.TryLock()
+	assert.True(t, gotLock)
+	if gotLock {
+		nonceCache.reaperLock.Unlock()
+	}
 }
 
 func TestAssignNonceMultiThreadedMultiSigningAddresses(t *testing.T) {
@@ -253,7 +481,8 @@ func TestAssignNonceMultiThreadedMultiSigningAddresses(t *testing.T) {
 					intent, err := nonceCache.IntentToAssignNonce(ctx, signingAddress, callback)
 					defer intent.Rollback(ctx)
 					require.NoError(t, err)
-					nextNonce := intent.AssignNextNonce(ctx)
+					nextNonce, err := intent.AssignNextNonce(ctx)
+					require.NoError(t, err)
 					if rand.Intn(10) == 9 {
 						//rollback on average 10% of the time
 						results[signingAddressIndex][threadNumber][itteration] = 1 // 1 is a special value meaning rolledback
@@ -320,11 +549,21 @@ func TestAssignNonceMultiThreadedMultiSigningAddresses(t *testing.T) {
 				assert.True(t, haveSeenHighestNonce, "did not see highest %d nonce for signing address %d", highestNonce, signingAddressNumber)
 				assert.True(t, callbackCalled[signingAddresses[signingAddressNumber]], "callback was not called for signing address %d", signingAddressNumber)
 			}
+			//Check that the reapear lock is in a state where the reaper can grab it
+			gotLock := nonceCache.reaperLock.TryLock()
+			assert.True(t, gotLock)
+			if gotLock {
+				nonceCache.reaperLock.Unlock()
+			}
 		})
 	}
 }
 
 func newNonceCacheForTesting(t *testing.T) *nonceCacheStruct {
-	nonceCache := newNonceCache(10000 * time.Millisecond)
+	nonceCache := newNonceCache(100000 * time.Millisecond)
 	return nonceCache.(*nonceCacheStruct)
+}
+
+func assertCacheCanBeReaped(t *testing.T, ctx context.Context, nonceCache *nonceCacheStruct) {
+
 }

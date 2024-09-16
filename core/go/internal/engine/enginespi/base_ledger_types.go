@@ -602,7 +602,7 @@ type InFlightTransactionStateManager interface {
 
 type NonceAssignmentIntent interface {
 	Complete(ctx context.Context)
-	AssignNextNonce(ctx context.Context) uint64
+	AssignNextNonce(ctx context.Context) (uint64, error)
 	Rollback(ctx context.Context)
 }
 

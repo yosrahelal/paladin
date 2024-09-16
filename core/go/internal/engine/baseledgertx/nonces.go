@@ -17,6 +17,7 @@ package baseledgertx
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -36,6 +37,7 @@ type nonceCacheStruct struct {
 func (nc *nonceCacheStruct) stop() {
 	close(nc.stopChannel)
 }
+
 func newNonceCache(nonceStateTimeout time.Duration) enginespi.NonceCache {
 	n := &nonceCacheStruct{
 		nextNonceBySigner: make(map[string]*cachedNonce),
@@ -54,6 +56,7 @@ type cachedNonce struct {
 }
 
 func (nc *nonceCacheStruct) reap() {
+	ctx := log.WithLogField(context.Background(), "role", "reaper")
 	ticker := time.NewTicker(nc.nonceStateTimeout)
 	for {
 		select {
@@ -69,6 +72,7 @@ func (nc *nonceCacheStruct) reap() {
 					delete(nc.nextNonceBySigner, signingAddress)
 				}
 			}
+			log.L(ctx).Debug("nonce cache reaper completed on ticker")
 		}
 	}
 }
@@ -91,7 +95,7 @@ func (nc *nonceCacheStruct) setNextNonceBySigner(signer string, record *cachedNo
 // the caller can be sure that the nonce assignment step will not suffer the latency of reading the database or calling
 // out to the block chain node
 // It is the callers responsibility to call `Complete` on the returned object
-// The nonce cache for the given signing address is guranteed not to be reaped after IntentToAssignNonce returns and before `complete`
+// The nonce cache for the given signing address is guaranteed not to be reaped after IntentToAssignNonce returns and before `complete`
 // NOTE:  multiple readers can hold intents to assign concurrently so the nonce is not actually assigned at this point
 //
 //	nonce assignment itself is protected by a mutex so only one reader can assign at a time but thanks to the pre intent declaration, the assignment is quick
@@ -128,6 +132,7 @@ func (nc *nonceCacheStruct) IntentToAssignNonce(ctx context.Context, signer stri
 
 	}
 	return &nonceAssignmentIntent{
+		locked:      false,
 		completed:   false,
 		cachedNonce: cachedNonceRecord,
 		nonceCache:  nc,
@@ -135,33 +140,63 @@ func (nc *nonceCacheStruct) IntentToAssignNonce(ctx context.Context, signer stri
 }
 
 type nonceAssignmentIntent struct {
-	completed   bool
-	cachedNonce *cachedNonce
-	nonceCache  *nonceCacheStruct
+	locked       bool
+	completed    bool
+	cachedNonce  *cachedNonce
+	nonceCache   *nonceCacheStruct
+	initialValue uint64
 }
 
-func (i *nonceAssignmentIntent) AssignNextNonce(ctx context.Context) uint64 {
-	i.cachedNonce.nonceMux.Lock()
-	return i.cachedNonce.value
+// AssignNextNonce returns the next nonce to be used by the caller and obtains a lock on the nonce
+// the caller is responsible for calling Complete or Rollback when they are confident that they will or will not use that nonce
+// (i.e. typically just after a database transaction has been committed or rolled back)
+// This means that any other callers will be blocked until the current caller calls Complete or Rollback
+// if there is a need to obtain multiple nonces on the same signing address as part of the same database transaction,
+// then a single NonceAssigmentIntent shoudld be shared and AssignNextNonce should be called
+// multiple times on that single intent
+// It is invalid to call AssignNextNonce after calling Complete or Rollback
+func (i *nonceAssignmentIntent) AssignNextNonce(ctx context.Context) (uint64, error) {
+	if i.completed {
+		return 0, errors.New("nonceAssignmentIntent already completed") //TODO
+	}
+	if !i.locked {
+		i.cachedNonce.nonceMux.Lock()
+		//once we have the lock, take a copy of the first value we see so that we can roll back to it if needed
+		i.initialValue = i.cachedNonce.value
+		i.locked = true
+	}
+	value := i.cachedNonce.value
+	i.cachedNonce.value = i.cachedNonce.value + 1
+	return value, nil
 }
 
 func (i *nonceAssignmentIntent) Complete(ctx context.Context) {
-	//increment it for the next reader
-	//we still have the nonceMux lock so incrementing is safe
-	i.cachedNonce.value = i.cachedNonce.value + 1
-	i.cachedNonce.updatedTime = time.Now()
+	//If we never took the lock or if we have already completed, then this is a no-op
+	if !i.completed && i.locked {
+		i.cachedNonce.updatedTime = time.Now()
+		i.cachedNonce.nonceMux.Unlock()
+	}
+	if !i.completed {
+		i.nonceCache.reaperLock.RUnlock()
+	}
 	i.completed = true
-	i.cachedNonce.nonceMux.Unlock()
-	i.nonceCache.reaperLock.RUnlock()
+
 }
 
 // If Rollback is called after a Complete or another Rollback, it will be a no-op
 // thus it is safe to defer Rollback as soon as you have the intent
 func (i *nonceAssignmentIntent) Rollback(ctx context.Context) {
-	//unlock without incrementing or updating the timestamp
-	if !i.completed {
-		i.completed = true
+
+	//unlock rollback to previous value
+
+	//If we never took the lock or if we have already completed, then this is a no-op
+	if !i.completed && i.locked {
+		i.cachedNonce.value = i.initialValue
 		i.cachedNonce.nonceMux.Unlock()
+	}
+	if !i.completed {
 		i.nonceCache.reaperLock.RUnlock()
 	}
+	i.completed = true
+
 }
