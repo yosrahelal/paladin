@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func setupDomainTests(t *testing.T) (context.Context, *pluginExerciser[prototk.DomainMessage], *DomainAPIFunctions, DomainCallbacks, map[string]func(*prototk.DomainMessage), func()) {
@@ -71,7 +72,33 @@ func TestDomainCallback_FindAvailableStates(t *testing.T) {
 		}
 	}
 	_, err := callbacks.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
+}
+
+func TestDomainCallback_EncodeData(t *testing.T) {
+	ctx, _, _, callbacks, inOutMap, done := setupDomainTests(t)
+	defer done()
+
+	inOutMap[fmt.Sprintf("%T", &prototk.DomainMessage_EncodeData{})] = func(dm *prototk.DomainMessage) {
+		dm.ResponseToDomain = &prototk.DomainMessage_EncodeDataRes{
+			EncodeDataRes: &prototk.EncodeDataResponse{},
+		}
+	}
+	_, err := callbacks.EncodeData(ctx, &prototk.EncodeDataRequest{})
+	require.NoError(t, err)
+}
+
+func TestDomainCallback_RecoverSigner(t *testing.T) {
+	ctx, _, _, callbacks, inOutMap, done := setupDomainTests(t)
+	defer done()
+
+	inOutMap[fmt.Sprintf("%T", &prototk.DomainMessage_RecoverSigner{})] = func(dm *prototk.DomainMessage) {
+		dm.ResponseToDomain = &prototk.DomainMessage_RecoverSignerRes{
+			RecoverSignerRes: &prototk.RecoverSignerResponse{},
+		}
+	}
+	_, err := callbacks.RecoverSigner(ctx, &prototk.RecoverSignerRequest{})
+	require.NoError(t, err)
 }
 
 func TestDomainFunction_ConfigureDomain(t *testing.T) {

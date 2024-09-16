@@ -13,16 +13,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zkp
+package snark
 
 import (
+	_ "embed"
 	"os"
 	"path"
 	"testing"
 
 	"github.com/kaleido-io/paladin/core/pkg/signer/api"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+//go:embed test-resources/test.wasm
+var testWasm []byte
 
 func mockWASMModule() []byte {
 	return []byte(`(module
@@ -35,11 +40,11 @@ func mockWASMModule() []byte {
 func TestLoadCircuit(t *testing.T) {
 	tmpDir := t.TempDir()
 	err := os.Mkdir(path.Join(tmpDir, "test_js"), 0755)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = os.WriteFile(path.Join(tmpDir, "test_js", "test.wasm"), mockWASMModule(), 0644)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = os.WriteFile(path.Join(tmpDir, "test.zkey"), []byte("test"), 0644)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	config := api.SnarkProverConfig{}
 	config.CircuitsDir = tmpDir
@@ -49,22 +54,29 @@ func TestLoadCircuit(t *testing.T) {
 	assert.EqualError(t, err, "Export `getFieldNumLen32` does not exist")
 	assert.Nil(t, circuit)
 	assert.Equal(t, []byte{}, provingKey)
+
+	err = os.WriteFile(path.Join(tmpDir, "test_js", "test.wasm"), testWasm, 0644)
+	assert.NoError(t, err)
+	circuit, provingKey, err = loadCircuit("test", config)
+	assert.NoError(t, err)
+	assert.NotNil(t, circuit)
+	assert.Equal(t, []byte("test"), provingKey)
 }
 
 func TestLoadCircuitFail(t *testing.T) {
 	tmpDir := t.TempDir()
 	err := os.Mkdir(path.Join(tmpDir, "test_js"), 0755)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = os.WriteFile(path.Join(tmpDir, "test_js", "test.wasm"), mockWASMModule(), 0644)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	config := api.SnarkProverConfig{}
 	_, _, err = loadCircuit("test", config)
-	assert.EqualError(t, err, "CIRCUITS_ROOT not set")
+	assert.EqualError(t, err, "circuits root must be set via the configuration file")
 
 	config.CircuitsDir = tmpDir
 	_, _, err = loadCircuit("test", config)
-	assert.EqualError(t, err, "PROVING_KEYS_ROOT not set")
+	assert.EqualError(t, err, "proving keys root must be set via the configuration file")
 }
 
 func TestLoadCircuitFailRead(t *testing.T) {
@@ -81,9 +93,9 @@ func TestLoadCircuitFailRead(t *testing.T) {
 func TestLoadCircuitFailReadZKey(t *testing.T) {
 	tmpDir := t.TempDir()
 	err := os.Mkdir(path.Join(tmpDir, "test_js"), 0755)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = os.WriteFile(path.Join(tmpDir, "test_js", "test.wasm"), mockWASMModule(), 0644)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	config := api.SnarkProverConfig{}
 	config.CircuitsDir = tmpDir

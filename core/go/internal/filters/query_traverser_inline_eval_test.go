@@ -24,8 +24,10 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/kaleido-io/paladin/core/pkg/types"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var allTypesFieldMap = FieldMap{
@@ -42,14 +44,14 @@ func (r badTypeResolver) SQLColumn() string { return (string)(r) }
 
 func (r badTypeResolver) SupportsLIKE() bool { return false }
 
-func (r badTypeResolver) SQLValue(ctx context.Context, jsonValue types.RawJSON) (driver.Value, error) {
+func (r badTypeResolver) SQLValue(ctx context.Context, jsonValue tktypes.RawJSON) (driver.Value, error) {
 	// Return something the system cannot handle
 	return map[bool]bool{false: true}, nil
 }
 
 func TestEvalQueryEquals(t *testing.T) {
 
-	var qf *QueryJSON
+	var qf *query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"eq": [
 			{"field": "stringField", "value": "test1"},
@@ -61,78 +63,78 @@ func TestEvalQueryEquals(t *testing.T) {
 	    "limit": 100,
 		"sort": ["stringField"]
 	}`), &qf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Exact match, but with slightly different types for each
-	match, err := qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err := EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
 
 	// String different
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test2"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test2"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// Int64 different
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"99999"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"99999"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// Bool different
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"false"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"false"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// int256 different
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"99999"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"99999"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// uint256 different
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"99999"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"99999"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 }
 
 func TestEvalQueryNull(t *testing.T) {
 
-	var qf *QueryJSON
+	var qf *query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"null": [
 			{"field": "stringField"},
@@ -142,136 +144,136 @@ func TestEvalQueryNull(t *testing.T) {
 			{"field": "uint256Field"}
 		]
 	}`), &qf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Test with the JSON null, which is equiv to nil
-	match, err := qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`null`),
-		"int64Field":   types.RawJSON(`null`),
-		"boolField":    types.RawJSON(`null`),
-		"int256Field":  types.RawJSON(`null`),
-		"uint256Field": types.RawJSON(`null`),
+	match, err := EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`null`),
+		"int64Field":   tktypes.RawJSON(`null`),
+		"boolField":    tktypes.RawJSON(`null`),
+		"int256Field":  tktypes.RawJSON(`null`),
+		"uint256Field": tktypes.RawJSON(`null`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
 	// Test with actual nil
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{})
-	assert.NoError(t, err)
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{})
+	require.NoError(t, err)
 	assert.True(t, match)
 
 	// String different
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"something"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"something"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// Int64 different
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"int64Field": types.RawJSON(`"11111"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"int64Field": tktypes.RawJSON(`"11111"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// Bool different
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"boolField": types.RawJSON(`"true"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"boolField": tktypes.RawJSON(`"true"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// int256 different
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"int256Field": types.RawJSON(`"11111"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"int256Field": tktypes.RawJSON(`"11111"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// uint256 different
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"uint256Field": types.RawJSON(`"11111"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"uint256Field": tktypes.RawJSON(`"11111"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 }
 
 func TestEvalQueryNotNull(t *testing.T) {
 
-	var qf *QueryJSON
+	var qf *query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"null": [{"field": "stringField", "not": true}]
 	}`), &qf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	match, err := qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`null`),
+	match, err := EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`null`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"any"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"any"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
 
-	_, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`12345`),
+	_, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`12345`),
 	})
 	assert.Regexp(t, "PD010705", err)
 
 }
 
 func TestEvalQueryMatchStringCaseInsensitive(t *testing.T) {
-	var qf *QueryJSON
+	var qf *query.QueryJSON
 	err := json.Unmarshal([]byte(`{"eq": [{"field": "stringField", "value": "test1", "caseInsensitive": true}]}`), &qf)
-	assert.NoError(t, err)
-	match, err := qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"TesT1"`),
+	require.NoError(t, err)
+	match, err := EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"TesT1"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
 }
 
 func TestEvalQueryMatchStringInvert(t *testing.T) {
-	var qf *QueryJSON
+	var qf *query.QueryJSON
 	err := json.Unmarshal([]byte(`{"eq": [{"field": "stringField", "value": "test1", "not": true}]}`), &qf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	match, err := qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"test1"`),
+	match, err := EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"test1"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"anything else"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"anything else"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
 }
 
 func TestEvalQueryInvalidValueTypes(t *testing.T) {
-	var qf *QueryJSON
+	var qf *query.QueryJSON
 	err := json.Unmarshal([]byte(`{"eq": [
 		{"field": "stringField", "value": "test1"},
 		{"field": "int64Field", "value": 12345}
 	]}`), &qf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	match, err := qf.Eval(context.Background(), allTypesFieldMap, PassthroughValueSet{
+	match, err := EvalQuery(context.Background(), qf, allTypesFieldMap, PassthroughValueSet{
 		"stringField": int64(12345),
 	})
 	assert.Regexp(t, "PD010713", err)
 	assert.False(t, match)
 
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, PassthroughValueSet{
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, PassthroughValueSet{
 		"int64Field": "test1",
 	})
 	assert.Regexp(t, "PD010713", err)
 	assert.False(t, match)
 
-	match, err = qf.Eval(context.Background(), FieldMap{
+	match, err = EvalQuery(context.Background(), qf, FieldMap{
 		"stringField": badTypeResolver("wrong"),
 		"int64Field":  badTypeResolver("wrong"),
 	}, PassthroughValueSet{
@@ -285,45 +287,45 @@ func TestEvalQueryInvalidValueTypes(t *testing.T) {
 func TestEvalQueryMatchNullDoesNotMatch(t *testing.T) {
 
 	// String test
-	var qf *QueryJSON
+	var qf *query.QueryJSON
 	err := json.Unmarshal([]byte(`{"eq": [{"field": "stringField", "value": "test1"}]}`), &qf)
-	assert.NoError(t, err)
-	match, err := qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	match, err := EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{})
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// int64 test
 	err = json.Unmarshal([]byte(`{"eq": [{"field": "int64Field", "value": "12345"}]}`), &qf)
-	assert.NoError(t, err)
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{})
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// bool test
 	err = json.Unmarshal([]byte(`{"eq": [{"field": "boolField", "value": false}]}`), &qf)
-	assert.NoError(t, err)
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{})
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// int256 test
 	err = json.Unmarshal([]byte(`{"eq": [{"field": "int256Field", "value": "11223344"}]}`), &qf)
-	assert.NoError(t, err)
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{})
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// uint256 test
 	err = json.Unmarshal([]byte(`{"eq": [{"field": "uint256Field", "value": "-11223344"}]}`), &qf)
-	assert.NoError(t, err)
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{})
+	require.NoError(t, err)
 	assert.False(t, match)
 }
 
 func TestEvalQueryLessThan(t *testing.T) {
 
-	var qf *QueryJSON
+	var qf *query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"lt": [
 			{"field": "stringField", "value": "test1"},
@@ -333,78 +335,78 @@ func TestEvalQueryLessThan(t *testing.T) {
 			{"field": "uint256Field", "value": 55555}
 		]
 	}`), &qf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Exact match, but with slightly different types for each
-	match, err := qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test0"`),
-		"int64Field":   types.RawJSON(`"11111"`),
-		"boolField":    types.RawJSON(`"false"`),
-		"int256Field":  types.RawJSON(`"33333"`),
-		"uint256Field": types.RawJSON(`"0xD902"`),
+	match, err := EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test0"`),
+		"int64Field":   tktypes.RawJSON(`"11111"`),
+		"boolField":    tktypes.RawJSON(`"false"`),
+		"int256Field":  tktypes.RawJSON(`"33333"`),
+		"uint256Field": tktypes.RawJSON(`"0xD902"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
 
 	// string mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"11111"`),
-		"boolField":    types.RawJSON(`"false"`),
-		"int256Field":  types.RawJSON(`"33333"`),
-		"uint256Field": types.RawJSON(`"0xD902"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"11111"`),
+		"boolField":    tktypes.RawJSON(`"false"`),
+		"int256Field":  tktypes.RawJSON(`"33333"`),
+		"uint256Field": tktypes.RawJSON(`"0xD902"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// int64 mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test0"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"false"`),
-		"int256Field":  types.RawJSON(`"33333"`),
-		"uint256Field": types.RawJSON(`"0xD902"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test0"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"false"`),
+		"int256Field":  tktypes.RawJSON(`"33333"`),
+		"uint256Field": tktypes.RawJSON(`"0xD902"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// bool mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test0"`),
-		"int64Field":   types.RawJSON(`"11111"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"33333"`),
-		"uint256Field": types.RawJSON(`"0xD902"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test0"`),
+		"int64Field":   tktypes.RawJSON(`"11111"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"33333"`),
+		"uint256Field": tktypes.RawJSON(`"0xD902"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// int256 mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test0"`),
-		"int64Field":   types.RawJSON(`"11111"`),
-		"boolField":    types.RawJSON(`"false"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD902"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test0"`),
+		"int64Field":   tktypes.RawJSON(`"11111"`),
+		"boolField":    tktypes.RawJSON(`"false"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD902"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// uint256 mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test0"`),
-		"int64Field":   types.RawJSON(`"11111"`),
-		"boolField":    types.RawJSON(`"false"`),
-		"int256Field":  types.RawJSON(`"33333"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test0"`),
+		"int64Field":   tktypes.RawJSON(`"11111"`),
+		"boolField":    tktypes.RawJSON(`"false"`),
+		"int256Field":  tktypes.RawJSON(`"33333"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 }
 
 func TestEvalQueryLessThanEqual(t *testing.T) {
 
-	var qf *QueryJSON
+	var qf *query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"lte": [
 			{"field": "stringField", "value": "test1"},
@@ -414,78 +416,78 @@ func TestEvalQueryLessThanEqual(t *testing.T) {
 			{"field": "uint256Field", "value": 55555}
 		]
 	}`), &qf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Exact match, but with slightly different types for each
-	match, err := qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"false"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err := EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"false"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
 
 	// string mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test2"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"false"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test2"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"false"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// int64 mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"22223"`),
-		"boolField":    types.RawJSON(`"false"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"22223"`),
+		"boolField":    tktypes.RawJSON(`"false"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// bool mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// int256 mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"false"`),
-		"int256Field":  types.RawJSON(`"44445"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"false"`),
+		"int256Field":  tktypes.RawJSON(`"44445"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// uint256 mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"false"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD904"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"false"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD904"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 }
 
 func TestEvalQueryGreaterThan(t *testing.T) {
 
-	var qf *QueryJSON
+	var qf *query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"gt": [
 			{"field": "stringField", "value": "test1"},
@@ -495,78 +497,78 @@ func TestEvalQueryGreaterThan(t *testing.T) {
 			{"field": "uint256Field", "value": 55555}
 		]
 	}`), &qf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Exact match, but with slightly different types for each
-	match, err := qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test2"`),
-		"int64Field":   types.RawJSON(`"22223"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"44445"`),
-		"uint256Field": types.RawJSON(`"0xD904"`),
+	match, err := EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test2"`),
+		"int64Field":   tktypes.RawJSON(`"22223"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"44445"`),
+		"uint256Field": tktypes.RawJSON(`"0xD904"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
 
 	// string mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"22223"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"44445"`),
-		"uint256Field": types.RawJSON(`"0xD904"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"22223"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"44445"`),
+		"uint256Field": tktypes.RawJSON(`"0xD904"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// int64 mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test2"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"44445"`),
-		"uint256Field": types.RawJSON(`"0xD904"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test2"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"44445"`),
+		"uint256Field": tktypes.RawJSON(`"0xD904"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// bool mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test2"`),
-		"int64Field":   types.RawJSON(`"22223"`),
-		"boolField":    types.RawJSON(`"false"`),
-		"int256Field":  types.RawJSON(`"44445"`),
-		"uint256Field": types.RawJSON(`"0xD904"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test2"`),
+		"int64Field":   tktypes.RawJSON(`"22223"`),
+		"boolField":    tktypes.RawJSON(`"false"`),
+		"int256Field":  tktypes.RawJSON(`"44445"`),
+		"uint256Field": tktypes.RawJSON(`"0xD904"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// int256 mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test2"`),
-		"int64Field":   types.RawJSON(`"22223"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD904"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test2"`),
+		"int64Field":   tktypes.RawJSON(`"22223"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD904"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// uint256 mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test2"`),
-		"int64Field":   types.RawJSON(`"22223"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"44445"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test2"`),
+		"int64Field":   tktypes.RawJSON(`"22223"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"44445"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 }
 
 func TestEvalQueryGreaterThanOrEqual(t *testing.T) {
 
-	var qf *QueryJSON
+	var qf *query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"gte": [
 			{"field": "stringField", "value": "test1"},
@@ -576,108 +578,108 @@ func TestEvalQueryGreaterThanOrEqual(t *testing.T) {
 			{"field": "uint256Field", "value": 55555}
 		]
 	}`), &qf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Exact match, but with slightly different types for each
-	match, err := qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err := EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
 
 	// string mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test0"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test0"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// int64 mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"22221"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"22221"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// bool mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"false"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"false"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// int256 mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"44443"`),
-		"uint256Field": types.RawJSON(`"0xD903"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"44443"`),
+		"uint256Field": tktypes.RawJSON(`"0xD903"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// uint256 mismatch
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField":  types.RawJSON(`"test1"`),
-		"int64Field":   types.RawJSON(`"22222"`),
-		"boolField":    types.RawJSON(`"true"`),
-		"int256Field":  types.RawJSON(`"44444"`),
-		"uint256Field": types.RawJSON(`"0xD902"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField":  tktypes.RawJSON(`"test1"`),
+		"int64Field":   tktypes.RawJSON(`"22222"`),
+		"boolField":    tktypes.RawJSON(`"true"`),
+		"int256Field":  tktypes.RawJSON(`"44444"`),
+		"uint256Field": tktypes.RawJSON(`"0xD902"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 }
 
 func TestEvalQueryMatchLike(t *testing.T) {
 
-	var qf *QueryJSON
+	var qf *query.QueryJSON
 	err := json.Unmarshal([]byte(`{"like": [{"field": "int64Field", "value": "111"}]}`), &qf)
-	assert.NoError(t, err)
-	match, err := qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{})
+	require.NoError(t, err)
+	match, err := EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{})
 	assert.Regexp(t, "PD010716", err)
 	assert.False(t, match)
 
 	err = json.Unmarshal([]byte(`{"like": [{"field": "stringField", "value": "hello%"}]}`), &qf)
-	assert.NoError(t, err)
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"hello world"`),
+	require.NoError(t, err)
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"hello world"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"Hello world"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"Hello world"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	err = json.Unmarshal([]byte(`{"like": [{"field": "stringField", "value": "%world%", "caseInsensitive": true}]}`), &qf)
-	assert.NoError(t, err)
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"Hello World"`),
+	require.NoError(t, err)
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"Hello World"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"Hello"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"Hello"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 }
 
@@ -687,7 +689,7 @@ func TestEvalQueryLikeFail(t *testing.T) {
 		inlineEvalRoot: &inlineEvalRoot{
 			ctx: context.Background(),
 			valueSet: ResolvingValueSet{
-				"stringField": types.RawJSON(`"any"`),
+				"stringField": tktypes.RawJSON(`"any"`),
 			},
 			convertLike: func(s string, caseInsensitive bool) (*regexp.Regexp, error) {
 				return nil, fmt.Errorf("pop")
@@ -695,8 +697,8 @@ func TestEvalQueryLikeFail(t *testing.T) {
 		},
 		matches: true,
 	}
-	res := eval.NewRoot().IsLike(&OpSingleVal{
-		Op: Op{Field: "stringField"},
+	res := eval.NewRoot().IsLike(&query.OpSingleVal{
+		Op: query.Op{Field: "stringField"},
 	}, "stringField", StringField("string_field"), "any")
 	assert.Regexp(t, "PD010715", res.Error())
 
@@ -707,55 +709,55 @@ func TestEvalQueryLikeFail(t *testing.T) {
 
 func TestEvalQueryMatchIn(t *testing.T) {
 
-	var qf *QueryJSON
+	var qf *query.QueryJSON
 	err := json.Unmarshal([]byte(`{"in": [{"field": "int64Field", "values": ["111","222"]}]}`), &qf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	match, err := qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"int64Field": types.RawJSON(`111`),
+	match, err := EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"int64Field": tktypes.RawJSON(`111`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
 
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"int64Field": types.RawJSON(`"0xDE"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"int64Field": tktypes.RawJSON(`"0xDE"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
 
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"int64Field": types.RawJSON(`"333"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"int64Field": tktypes.RawJSON(`"333"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	err = json.Unmarshal([]byte(`{"in": [{"field": "stringField", "values": ["aaa","bbb"], "not": true}]}`), &qf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"ccc"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"ccc"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
 
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"aaa"`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"aaa"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	err = json.Unmarshal([]byte(`{"in": [{"field": "stringField", "values": ["aaa","bbb"], "not": true}]}`), &qf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	_, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`false`),
+	_, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`false`),
 	})
 	assert.Regexp(t, "PD010705", err)
 
 }
 
 func TestEvalQueryAndOr(t *testing.T) {
-	var qf *QueryJSON
+	var qf *query.QueryJSON
 	err := json.Unmarshal([]byte(`{
 		"eq": [{"field": "stringField", "value": "test1", "caseInsensitive": true}],
 		"or": [
@@ -769,51 +771,51 @@ func TestEvalQueryAndOr(t *testing.T) {
 		  }
 		]
 	}`), &qf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	match, err := qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"TesT1"`),
+	match, err := EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"TesT1"`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// Match the base AND match, and the int64 child
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"TesT1"`),
-		"int64Field":  types.RawJSON(`100`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"TesT1"`),
+		"int64Field":  tktypes.RawJSON(`100`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
 
 	// Match the base AND match, and the int256 child
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"TesT1"`),
-		"int256Field": types.RawJSON(`5001`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"TesT1"`),
+		"int256Field": tktypes.RawJSON(`5001`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, match)
 
 	// Don't match the base requirement
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"test2"`),
-		"int256Field": types.RawJSON(`5001`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"test2"`),
+		"int256Field": tktypes.RawJSON(`5001`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// Don't match the either or criteria
-	match, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"test1"`),
-		"int64Field":  types.RawJSON(`50`),
-		"int256Field": types.RawJSON(`5000`),
+	match, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"test1"`),
+		"int64Field":  tktypes.RawJSON(`50`),
+		"int256Field": tktypes.RawJSON(`5000`),
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, match)
 
 	// Roll up errors
-	_, err = qf.Eval(context.Background(), allTypesFieldMap, ResolvingValueSet{
-		"stringField": types.RawJSON(`"test1"`),
-		"int64Field":  types.RawJSON(`"wrong"`),
+	_, err = EvalQuery(context.Background(), qf, allTypesFieldMap, ResolvingValueSet{
+		"stringField": tktypes.RawJSON(`"test1"`),
+		"int64Field":  tktypes.RawJSON(`"wrong"`),
 	})
 	assert.Regexp(t, "PD010703", err)
 }

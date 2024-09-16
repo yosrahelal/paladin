@@ -4,14 +4,14 @@ go 1.22.5
 
 require (
 	github.com/go-resty/resty/v2 v2.14.0
-	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240812164533-f19c3b9c5915
-	github.com/hyperledger/firefly-common v1.4.8
+	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240905213624-43a614759076
 	github.com/hyperledger/firefly-signer v1.1.14
 	github.com/iden3/go-iden3-crypto v0.0.16
 	github.com/kaleido-io/paladin/core v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.9.0
 	google.golang.org/protobuf v1.34.2
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -39,10 +39,11 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
+	github.com/hyperledger/firefly-common v1.4.8 // indirect
 	github.com/iden3/go-rapidsnark/prover v0.0.10 // indirect
 	github.com/iden3/go-rapidsnark/types v0.0.2 // indirect
 	github.com/iden3/go-rapidsnark/witness/v2 v2.0.0 // indirect
-	github.com/iden3/go-rapidsnark/witness/wasmer v0.0.0-20230524142950-0986cf057d4e // indirect
+	github.com/iden3/go-rapidsnark/witness/wasmer v0.0.0-20240621085734-9323fbec34a3 // indirect
 	github.com/iden3/wasmer-go v0.0.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/yaml v0.2.0 // indirect
@@ -89,20 +90,19 @@ require (
 	gitlab.com/hfuss/mux-prometheus v0.0.5 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.26.0 // indirect
+	golang.org/x/crypto v0.27.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.24.0 // indirect
-	golang.org/x/term v0.23.0 // indirect
-	golang.org/x/text v0.17.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
+	golang.org/x/term v0.24.0 // indirect
+	golang.org/x/text v0.18.0 // indirect
 	golang.org/x/time v0.6.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240812133136-8ffd90a71988 // indirect
 	google.golang.org/grpc v1.65.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/postgres v1.5.9 // indirect
 	gorm.io/driver/sqlite v1.5.6 // indirect
 	gorm.io/gorm v1.25.11 // indirect
@@ -110,6 +110,6 @@ require (
 
 replace github.com/kaleido-io/paladin/core => ../../core/go
 
-replace github.com/hyperledger-labs/zeto/go-sdk => ../../zeto/go-sdk
-
 replace github.com/kaleido-io/paladin/toolkit => ../../toolkit/go
+
+replace github.com/iden3/go-iden3-crypto => github.com/kaleido-io/go-iden3-crypto v0.0.0-20240905154504-333f60687c26

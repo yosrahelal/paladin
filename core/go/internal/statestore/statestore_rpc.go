@@ -20,9 +20,9 @@ import (
 	"context"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
-	"github.com/kaleido-io/paladin/core/pkg/types"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 func (ss *stateStore) RPCModule() *rpcserver.RPCModule {
@@ -62,7 +62,7 @@ func (ss *stateStore) rpcStoreState() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod3(func(ctx context.Context,
 		domain string,
 		schema string,
-		value types.RawJSON,
+		value tktypes.RawJSON,
 	) (*State, error) {
 		var state *State
 		newState, err := ss.PersistState(ctx, domain, schema, value)
@@ -77,7 +77,7 @@ func (ss *stateStore) rpcQuery() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod4(func(ctx context.Context,
 		domain string,
 		schema string,
-		query filters.QueryJSON,
+		query query.QueryJSON,
 		status StateStatusQualifier,
 	) ([]*State, error) {
 		return ss.FindStates(ctx, domain, schema, &query, status)

@@ -1,9 +1,12 @@
 go 1.22.5
 
 use (
-	./domains/noto
-	./domains/zeto
 	./core/go
+	./domains/noto
+	./domains/test
+	./domains/zeto
+	./registries/static
 	./testinfra
 	./toolkit/go
+	./transports/grpc
 )

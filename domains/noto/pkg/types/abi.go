@@ -22,12 +22,6 @@ import (
 
 var NotoABI = abi.ABI{
 	{
-		Type: abi.Constructor,
-		Inputs: abi.ParameterArray{
-			{Name: "notary", Type: "string"},
-		},
-	},
-	{
 		Name: "mint",
 		Type: abi.Function,
 		Inputs: abi.ParameterArray{
@@ -43,10 +37,27 @@ var NotoABI = abi.ABI{
 			{Name: "amount", Type: "uint256"},
 		},
 	},
+	{
+		Name: "approvedTransfer",
+		Type: abi.Function,
+		Inputs: abi.ParameterArray{
+			{Name: "to", Type: "string"},
+			{Name: "amount", Type: "uint256"},
+		},
+	},
+	{
+		Name: "approve",
+		Type: abi.Function,
+		Inputs: abi.ParameterArray{
+			{Name: "delegate", Type: "address"},
+			{Name: "call", Type: "bytes"}, // assumed to be an encoded "approvedTransfer"
+		},
+	},
 }
 
 type ConstructorParams struct {
-	Notary string `json:"notary"`
+	Notary         string `json:"notary"`
+	Implementation string `json:"implementation"`
 }
 
 type MintParams struct {
@@ -57,4 +68,9 @@ type MintParams struct {
 type TransferParams struct {
 	To     string               `json:"to"`
 	Amount *ethtypes.HexInteger `json:"amount"`
+}
+
+type ApproveParams struct {
+	Delegate ethtypes.Address0xHex     `json:"delegate"`
+	Call     ethtypes.HexBytes0xPrefix `json:"call"`
 }

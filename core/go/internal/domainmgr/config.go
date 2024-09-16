@@ -33,9 +33,10 @@ type DomainManagerManagerConfig struct {
 }
 
 type DomainConfig struct {
-	Init   DomainInitConfig        `yaml:"init"`
-	Plugin components.PluginConfig `yaml:"plugin"`
-	Config map[string]any          `yaml:"config"`
+	Init            DomainInitConfig        `yaml:"init"`
+	Plugin          components.PluginConfig `yaml:"plugin"`
+	Config          map[string]any          `yaml:"config"`
+	RegistryAddress string                  `yaml:"registryAddress"`
 }
 
 var ContractCacheDefaults = &cache.Config{

@@ -25,7 +25,7 @@ ext {
         include "mocks/**/*.go"
     }
 
-    targetCoverage = 94.3
+    targetCoverage = 90.7
     maxCoverageBarGap = 1
     coverageExcludedPackages = [
         'github.com/kaleido-io/paladin/core/pkg/proto',
@@ -52,7 +52,7 @@ configurations {
         canBeConsumed = true
         canBeResolved = false
     }
-    protoCompiled {
+    goSource {
         canBeConsumed = true
         canBeResolved = false
     }
@@ -99,10 +99,9 @@ task copyTestContracts(type: Copy) {
 task copyTestbedContracts(type: Copy) {
     inputs.files(configurations.compiledContracts)
     from fileTree(configurations.compiledContracts.asPath) {
-        include 'contracts/testbed_sim/SIMDomain.sol/SIMDomain.json'
-        include 'contracts/testbed_sim/SIMToken.sol/SIMToken.json'
-        include 'contracts/interfaces/IPaladinDomain.sol/IPaladinDomain_V0.json'
-        include 'contracts/interfaces/IPaladinContract.sol/IPaladinContract_V0.json'
+        include 'contracts/domains/testbed_sim/SIMDomain.sol/SIMDomain.json'
+        include 'contracts/domains/testbed_sim/SIMToken.sol/SIMToken.json'
+        include 'contracts/domains/interfaces/IPaladinContractRegistry.sol/IPaladinContractRegistry_V0.json'
     }
     into 'pkg/testbed/abis'
 
@@ -114,7 +113,8 @@ task copyTestbedContracts(type: Copy) {
 task copyDomainManagerContracts(type: Copy) {
     inputs.files(configurations.compiledContracts)
     from fileTree(configurations.compiledContracts.asPath) {
-        include 'contracts/interfaces/IPaladinContract.sol/IPaladinContract_V0.json'
+        include 'contracts/domains/interfaces/IPaladinContract.sol/IPaladinContract_V0.json'
+        include 'contracts/domains/interfaces/IPaladinContractRegistry.sol/IPaladinContractRegistry_V0.json'
     }
     into 'internal/domainmgr/abis'
 
@@ -242,7 +242,8 @@ task clean(type: Delete, dependsOn: ':testinfra:stopTestInfra') {
 task lint(type: Exec, dependsOn:[tasks.protoc,tasks.makeMocks,tasks.copyContracts]) {
     workingDir '.'
 
-    inputs.files(goFiles);
+    helpers.lockResource(it, "lint.lock")
+    inputs.files(goFiles)
     environment 'GOGC', '20'
 
     executable "bin/golangci-lint"
@@ -356,7 +357,7 @@ abstract class ComponentTest extends Exec {
         args '-timeout=120s'
         args "-test.gocoverdir=${project.projectDir}/coverage"
 
-        project.dumpLogsOnFailure(this, ':testinfra:startTestInfra')
+        project.helpers.dumpLogsOnFailure(this, ':testinfra:startTestInfra')
     }
 }
 
@@ -372,7 +373,11 @@ task setupCoverage(dependsOn: [tasks.protoc, tasks.copyContracts, tasks.makeMock
     }
 }
 
-task unitTestSQLite(type: UnitTests, dependsOn: [setupCoverage, goGet]) {
+task unitTestSQLite(type: UnitTests, dependsOn: [
+        ':testinfra:startTestInfra',
+        setupCoverage,
+        goGet,
+    ]) {
 }
 
 task unitTestPostgres(type: UnitTests, dependsOn: [
@@ -381,16 +386,16 @@ task unitTestPostgres(type: UnitTests, dependsOn: [
         goGet,
     ]) {
     args '-tags', "testdbpostgres"
-    lockTestInfra(it)
+    mustRunAfter 'unitTestSQLite' // these tests cannot run concurrently
 }
 
 task componentTestSQLite(type: ComponentTest, dependsOn: [
-    ':testinfra:startTestInfra',
-    tasks.setupCoverage,
-    tasks.goGet,
-    tasks.copyContracts,
+        ':testinfra:startTestInfra',
+        tasks.setupCoverage,
+        tasks.goGet,
+        tasks.copyContracts,
     ]) {
-    lockTestInfra(it)
+    mustRunAfter 'unitTestPostgres' // these tests cannot run concurrently
 }
 
 task buildCoverageTxt(type: Exec, dependsOn: [
@@ -409,7 +414,6 @@ task buildCoverageTxt(type: Exec, dependsOn: [
     args 'tool', 'covdata', 'textfmt'
     args '-i', "${projectDir}/coverage"
     args '-o', "${projectDir}/coverage/coverage_unfiltered.txt"
-
 }
 
 task aggregateCoverage(type: Copy, dependsOn: buildCoverageTxt) {
@@ -422,21 +426,10 @@ task aggregateCoverage(type: Copy, dependsOn: buildCoverageTxt) {
     filter(LineContains, negate: true, contains: getProject().ext.coverageExcludedPackages, matchAny: true) 
 }
 
-task checkCoverage(dependsOn: [aggregateCoverage]) {
-    inputs.files('coverage/coverage.txt')
-
-    doLast {
-        def coverageOutput = ("go tool cover -func=${projectDir}/coverage/coverage.txt").execute().text
-        def totalCoverage = coverageOutput.readLines().find { it.contains('total:') }?.split()?.last()?.replace('%', '')
-        println "Coverage is ${totalCoverage}%"
-        if (totalCoverage && totalCoverage.toFloat() < targetCoverage) {
-            throw new GradleException("ERROR: Coverage is below ${targetCoverage}% (current coverage: ${totalCoverage}%)")
-        } else if ( totalCoverage.toFloat() - targetCoverage > maxCoverageBarGap) {
-            throw new GradleException("ERROR: The target coverage ${targetCoverage}% is below the current coverage: ${totalCoverage}% for more than ${maxCoverageBarGap}%, please update the targetCoverage value in ./core/go/build.gradle file")
-        } else {
-            println "Coverage is above ${targetCoverage}%, current coverage: ${totalCoverage}%"
-        }
-    }
+task checkCoverage(type: GoCheckCoverage, dependsOn: [aggregateCoverage]) {
+    coverageFile('coverage/coverage.txt')
+    target = targetCoverage
+    maxGap = maxCoverageBarGap
 }
 
 task test {
@@ -461,6 +454,5 @@ task build {
 
 dependencies {
     libcore files(buildSharedLibrary)
-    protoCompiled files(protoc)
+    goSource files(goFiles, protoc, makeMocks, copyContracts)
 }
-

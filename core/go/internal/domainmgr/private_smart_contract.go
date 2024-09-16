@@ -21,19 +21,21 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
-	"github.com/kaleido-io/paladin/core/pkg/types"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type PrivateSmartContract struct {
-	DeployTX      uuid.UUID        `json:"deployTransaction"   gorm:"column:deploy_tx"`
-	DomainAddress types.EthAddress `json:"domainAddress"       gorm:"column:domain_address"`
-	Address       types.EthAddress `json:"address"             gorm:"column:address"`
-	ConfigBytes   types.HexBytes   `json:"configBytes"         gorm:"column:config_bytes"`
+	DeployTX        uuid.UUID          `json:"deployTransaction"   gorm:"column:deploy_tx"`
+	RegistryAddress tktypes.EthAddress `json:"domainAddress"       gorm:"column:domain_address"`
+	Address         tktypes.EthAddress `json:"address"             gorm:"column:address"`
+	ConfigBytes     tktypes.HexBytes   `json:"configBytes"         gorm:"column:config_bytes"`
 }
 
 type domainContract struct {
@@ -75,14 +77,14 @@ func (dc *domainContract) InitTransaction(ctx context.Context, tx *components.Pr
 	}
 	if err == nil {
 		// Serialize to standardized JSON before passing to domain
-		paramsJSON, err = types.StandardABISerializer().SerializeJSONCtx(ctx, inputValues)
+		paramsJSON, err = tktypes.StandardABISerializer().SerializeJSONCtx(ctx, inputValues)
 	}
 	if err != nil {
 		return i18n.WrapError(ctx, err, msgs.MsgDomainInvalidFunctionParams, txi.Function.SolString())
 	}
 
 	txSpec := &prototk.TransactionSpecification{
-		TransactionId:      types.Bytes32UUIDFirst16(tx.ID).String(),
+		TransactionId:      tktypes.Bytes32UUIDFirst16(tx.ID).String(),
 		ContractAddress:    dc.info.Address.String(),
 		ContractConfig:     dc.info.ConfigBytes,
 		From:               txi.From,
@@ -154,8 +156,7 @@ func (dc *domainContract) AssembleTransaction(ctx context.Context, tx *component
 
 // Happens only on the sequencing node
 func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *components.PrivateTransaction) error {
-	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil ||
-		tx.PostAssembly == nil || tx.PostAssembly.OutputStatesPotential == nil {
+	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil || tx.PostAssembly == nil {
 		return i18n.NewError(ctx, msgs.MsgDomainTXIncompleteWritePotentialStates)
 	}
 
@@ -180,20 +181,23 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 		}
 		newStatesToWrite[i] = &statestore.StateUpsert{
 			SchemaID: schema.IDString(),
-			Data:     types.RawJSON(s.StateDataJson),
+			Data:     tktypes.RawJSON(s.StateDataJson),
 			// These are marked as locked and creating in the transaction
 			Creating: true,
 		}
 	}
 
 	var states []*statestore.State
-	err := dc.dm.stateStore.RunInDomainContext(domain.name, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
-		states, err = dsi.UpsertStates(&tx.ID, newStatesToWrite)
-		return err
-	})
-	if err != nil {
-		return err
+	if len(newStatesToWrite) > 0 {
+		err := dc.dm.stateStore.RunInDomainContext(domain.name, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
+			states, err = dsi.UpsertStates(&tx.ID, newStatesToWrite)
+			return err
+		})
+		if err != nil {
+			return err
+		}
 	}
+
 	// Store the results on the TX
 	postAssembly.OutputStates = make([]*components.FullState, len(states))
 	for i, s := range states {
@@ -262,10 +266,18 @@ func (dc *domainContract) LockStates(ctx context.Context, tx *components.Private
 }
 
 // Endorse is a little special, because it returns a payload rather than updating the transaction.
-func (dc *domainContract) EndorseTransaction(ctx context.Context, tx *components.PrivateTransaction, endorsement *prototk.AttestationRequest, endorser *prototk.ResolvedVerifier) (*components.EndorsementResult, error) {
-	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil ||
-		tx.PostAssembly == nil || tx.PostAssembly.InputStates == nil || tx.PostAssembly.OutputStates == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgDomainTXIncompleteEndorseTransaction)
+func (dc *domainContract) EndorseTransaction(ctx context.Context, req *components.PrivateTransactionEndorseRequest) (*components.EndorsementResult, error) {
+
+	if req == nil ||
+		req.TransactionSpecification == nil ||
+		req.Verifiers == nil ||
+		req.Signatures == nil ||
+		req.InputStates == nil ||
+		req.ReadStates == nil ||
+		req.OutputStates == nil ||
+		req.Endorsement == nil ||
+		req.Endorser == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgDomainReqIncompleteEndorseTransaction)
 	}
 
 	// This function does NOT FLUSH before or after doing endorse. The assumption is that this
@@ -276,18 +288,16 @@ func (dc *domainContract) EndorseTransaction(ctx context.Context, tx *components
 	// but for efficiency we can and should start the runtime exercise of endorsement + signing before
 	// waiting for the DB TX to commit.
 
-	preAssembly := tx.PreAssembly
-	postAssembly := tx.PostAssembly
-
 	// Run the endorsement
 	res, err := dc.api.EndorseTransaction(ctx, &prototk.EndorseTransactionRequest{
-		Transaction:         preAssembly.TransactionSpecification,
-		ResolvedVerifiers:   preAssembly.Verifiers,
-		Inputs:              dc.toEndorsableList(postAssembly.InputStates),
-		Outputs:             dc.toEndorsableList(postAssembly.OutputStates),
-		Signatures:          postAssembly.Signatures,
-		EndorsementRequest:  endorsement,
-		EndorsementVerifier: endorser,
+		Transaction:         req.TransactionSpecification,
+		ResolvedVerifiers:   req.Verifiers,
+		Inputs:              req.InputStates,
+		Reads:               req.ReadStates,
+		Outputs:             req.OutputStates,
+		Signatures:          req.Signatures,
+		EndorsementRequest:  req.Endorsement,
+		EndorsementVerifier: req.Endorser,
 	})
 	// We don't do any processing - as the result is not directly processable by us.
 	// It is an instruction to the engine - such as an authority to sign an endorsement,
@@ -296,7 +306,7 @@ func (dc *domainContract) EndorseTransaction(ctx context.Context, tx *components
 		return nil, err
 	}
 	return &components.EndorsementResult{
-		Endorser:     endorser,
+		Endorser:     req.Endorser,
 		Result:       res.EndorsementResult,
 		Payload:      res.Payload,
 		RevertReason: res.RevertReason,
@@ -351,6 +361,7 @@ func (dc *domainContract) PrepareTransaction(ctx context.Context, tx *components
 	res, err := dc.api.PrepareTransaction(ctx, &prototk.PrepareTransactionRequest{
 		Transaction:       preAssembly.TransactionSpecification,
 		InputStates:       dc.toEndorsableList(postAssembly.InputStates),
+		ReadStates:        dc.toEndorsableList(postAssembly.ReadStates),
 		OutputStates:      dc.toEndorsableList(postAssembly.OutputStates),
 		AttestationResult: dc.allAttestations(tx),
 	})
@@ -358,16 +369,17 @@ func (dc *domainContract) PrepareTransaction(ctx context.Context, tx *components
 		return err
 	}
 
-	functionABI := dc.d.privateContractABI.Functions()[res.Transaction.FunctionName]
-	if functionABI == nil {
-		return i18n.NewError(ctx, msgs.MsgDomainFunctionNotFound, res.Transaction.FunctionName)
+	var functionABI abi.Entry
+	if err := json.Unmarshal(([]byte)(res.Transaction.FunctionAbiJson), &functionABI); err != nil {
+		return i18n.WrapError(ctx, err, msgs.MsgDomainPrivateAbiJsonInvalid)
 	}
+
 	inputs, err := functionABI.Inputs.ParseJSONCtx(ctx, emptyJSONIfBlank(res.Transaction.ParamsJson))
 	if err != nil {
 		return err
 	}
 	tx.PreparedTransaction = &components.EthTransaction{
-		FunctionABI: functionABI,
+		FunctionABI: &functionABI,
 		To:          dc.Address(),
 		Inputs:      inputs,
 	}
@@ -378,11 +390,11 @@ func (dc *domainContract) Domain() components.Domain {
 	return dc.d
 }
 
-func (dc *domainContract) Address() types.EthAddress {
+func (dc *domainContract) Address() tktypes.EthAddress {
 	return dc.info.Address
 }
 
-func (dc *domainContract) ConfigBytes() types.HexBytes {
+func (dc *domainContract) ConfigBytes() tktypes.HexBytes {
 	return dc.info.ConfigBytes
 }
 
@@ -393,24 +405,24 @@ func (dc *domainContract) allAttestations(tx *components.PrivateTransaction) []*
 }
 
 func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateRef) ([]*components.FullState, error) {
-	rawIDsBySchema := make(map[string][]types.RawJSON)
-	stateIDs := make([]types.Bytes32, len(refs))
+	rawIDsBySchema := make(map[string][]tktypes.RawJSON)
+	stateIDs := make([]tktypes.Bytes32, len(refs))
 	for i, s := range refs {
-		stateID, err := types.ParseBytes32Ctx(ctx, s.Id)
+		stateID, err := tktypes.ParseBytes32Ctx(ctx, s.Id)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateIDFromDomain, s.Id, i)
 		}
-		rawIDsBySchema[s.SchemaId] = append(rawIDsBySchema[s.SchemaId], types.JSONString(stateID.String()))
+		rawIDsBySchema[s.SchemaId] = append(rawIDsBySchema[s.SchemaId], tktypes.JSONString(stateID.String()))
 		stateIDs[i] = stateID
 	}
-	statesByID := make(map[types.Bytes32]*statestore.State)
+	statesByID := make(map[tktypes.Bytes32]*statestore.State)
 	err := dc.dm.stateStore.RunInDomainContext(dc.d.name, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
 		for schemaID, stateIDs := range rawIDsBySchema {
-			statesForSchema, err := dsi.FindAvailableStates(schemaID, &filters.QueryJSON{
-				Statements: filters.Statements{
-					Ops: filters.Ops{
-						In: []*filters.OpMultiVal{
-							{Op: filters.Op{Field: ".id"}, Values: stateIDs},
+			statesForSchema, err := dsi.FindAvailableStates(schemaID, &query.QueryJSON{
+				Statements: query.Statements{
+					Ops: query.Ops{
+						In: []*query.OpMultiVal{
+							{Op: query.Op{Field: ".id"}, Values: stateIDs},
 						},
 					},
 				},

@@ -29,10 +29,11 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/mocks/rpcbackendmocks"
-	"github.com/kaleido-io/paladin/core/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
@@ -99,7 +100,7 @@ func TestInternalEventStreamDeliveryAtHead(t *testing.T) {
 			},
 		},
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Expect to get 15 * 2 events (1 TX x 3 Events per block, but we only listen to two)
 	for i := 0; i < len(blocks)*2; i++ {
@@ -119,6 +120,73 @@ func TestInternalEventStreamDeliveryAtHead(t *testing.T) {
 			}`, 1000+blockNumber, 2000+blockNumber, 3000+blockNumber, 4000+blockNumber, 5000+blockNumber,
 				blockNumber), string(e.Data))
 		}
+	}
+	assert.True(t, calledPostCommit)
+
+}
+
+func TestInternalEventStreamDeliveryAtHeadWithSourceAddress(t *testing.T) {
+
+	// This test uses a real DB, includes the full block indexer, but simulates the blockchain.
+	_, bi, mRPC, blDone := newTestBlockIndexer(t)
+	defer blDone()
+	bi.utBatchNotify = nil // we only care about the blocks
+
+	sourceContractAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
+
+	// Mock up the block calls to the blockchain for 15 blocks
+	blocks, receipts := testBlockArray(t, 15, sourceContractAddress.Address0xHex())
+	mockBlocksRPCCalls(mRPC, blocks, receipts)
+	mockBlockListenerNil(mRPC)
+
+	eventCollector := make(chan *EventWithData)
+
+	// Do a full start now with an internal event listener
+	var esID string
+	calledPostCommit := false
+	err := bi.Start(&InternalEventStream{
+		Handler: func(ctx context.Context, tx *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error) {
+			if esID == "" {
+				esID = batch.StreamID.String()
+			} else {
+				assert.Equal(t, esID, batch.StreamID.String())
+			}
+			assert.Equal(t, "unit_test", batch.StreamName)
+			assert.Greater(t, len(batch.Events), 0)
+			assert.LessOrEqual(t, len(batch.Events), 3)
+			for _, e := range batch.Events {
+				select {
+				case eventCollector <- e:
+				case <-ctx.Done():
+				}
+			}
+			return func() { calledPostCommit = true }, nil
+		},
+		Definition: &EventStream{
+			Name: "unit_test",
+			Config: EventStreamConfig{
+				BatchSize:    confutil.P(3),
+				BatchTimeout: confutil.P("5ms"),
+			},
+			// Listen to two out of three event types
+			ABI: abi.ABI{
+				testABI[1],
+				testABI[2],
+			},
+			Source: sourceContractAddress,
+		},
+	})
+	require.NoError(t, err)
+
+	// Expect to get 15 events. 1 TX x 3 Events per block, but we only have
+	// one event matching the expected source address
+	for i := 0; i < len(blocks); i++ {
+		e := <-eventCollector
+		blockNumber := i
+		assert.JSONEq(t, fmt.Sprintf(`{
+			"intParam1": "%d",
+			"strParam2": "event_b_in_block_%d"
+		}`, 1000000+blockNumber, blockNumber), string(e.Data))
 	}
 	assert.True(t, calledPostCommit)
 
@@ -158,7 +226,7 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 
 	// Do a full start now without a block listener, and wait for the ut notification of all the blocks
 	err := bi.Start()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	for i := 0; i < len(blocks); i++ {
 		b := <-bi.utBatchNotify
 		assert.Len(t, b.blocks, 1)
@@ -182,7 +250,7 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 		Definition: internalESConfig,
 		Handler:    handler,
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// And start it
 	es.start()
@@ -212,19 +280,19 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 
 	bi, err = newBlockIndexer(ctx, &Config{
 		CommitBatchSize: confutil.P(1),
-		FromBlock:       types.RawJSON(`0`),
+		FromBlock:       tktypes.RawJSON(`0`),
 	}, bi.persistence, bi.blockListener)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = bi.Start(&InternalEventStream{
 		Definition: internalESConfig,
 		Handler:    handler,
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check it's back to the checkpoint we expect
 	es = bi.eventStreams[uuid.MustParse(esID)]
 	cp, err := es.processCheckpoint()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, int64(14), cp)
 
 	// And check we don't get any events
@@ -242,7 +310,7 @@ func TestStartBadInternalEventStream(t *testing.T) {
 	defer blDone()
 
 	err := bi.Start(&InternalEventStream{})
-	assert.Regexp(t, "PD011106", err)
+	assert.Regexp(t, "PD020005", err)
 
 }
 
@@ -259,8 +327,8 @@ func TestTestNotifyEventStreamDoesNotBlock(t *testing.T) {
 		blocks: make(chan *eventStreamBlock),
 	}
 
-	blockHash := ethtypes.MustNewHexBytes0xPrefix(types.RandHex(32))
-	txHash := ethtypes.MustNewHexBytes0xPrefix(types.RandHex(32))
+	blockHash := ethtypes.MustNewHexBytes0xPrefix(tktypes.RandHex(32))
+	txHash := ethtypes.MustNewHexBytes0xPrefix(tktypes.RandHex(32))
 	bi.notifyEventStreams(ctx, &blockWriterBatch{
 		blocks: []*BlockInfoJSONRPC{
 			{
@@ -314,9 +382,9 @@ func TestUpsertInternalEventStreamMismatchExisting(t *testing.T) {
 			Name: "testing",
 		},
 	})
-	assert.Regexp(t, "PD011103", err)
+	assert.Regexp(t, "PD020004", err)
 
-	assert.NoError(t, p.Mock.ExpectationsWereMet())
+	require.NoError(t, p.Mock.ExpectationsWereMet())
 }
 
 func TestUpsertInternalEventStreamUpdateFail(t *testing.T) {
@@ -341,7 +409,7 @@ func TestUpsertInternalEventStreamUpdateFail(t *testing.T) {
 	})
 	assert.Regexp(t, "pop", err)
 
-	assert.NoError(t, p.Mock.ExpectationsWereMet())
+	require.NoError(t, p.Mock.ExpectationsWereMet())
 }
 
 func TestUpsertInternalEventStreamCreateFail(t *testing.T) {
@@ -363,7 +431,7 @@ func TestUpsertInternalEventStreamCreateFail(t *testing.T) {
 	})
 	assert.Regexp(t, "pop", err)
 
-	assert.NoError(t, p.Mock.ExpectationsWereMet())
+	require.NoError(t, p.Mock.ExpectationsWereMet())
 }
 
 func TestProcessCheckpointFail(t *testing.T) {
@@ -381,7 +449,7 @@ func TestProcessCheckpointFail(t *testing.T) {
 	}
 	es.detector()
 
-	assert.NoError(t, p.Mock.ExpectationsWereMet())
+	require.NoError(t, p.Mock.ExpectationsWereMet())
 }
 
 func TestGetHighestIndexedBlockFail(t *testing.T) {
@@ -400,7 +468,7 @@ func TestGetHighestIndexedBlockFail(t *testing.T) {
 	}
 	es.detector()
 
-	assert.NoError(t, p.Mock.ExpectationsWereMet())
+	require.NoError(t, p.Mock.ExpectationsWereMet())
 }
 
 func TestReturnToCatchupAfterStartHead(t *testing.T) {
@@ -452,8 +520,8 @@ func testReturnToCatchupAfterStart(t *testing.T, headBlock int64) {
 		blockNumber: 10,
 		events: []*LogJSONRPC{
 			{
-				BlockHash:        ethtypes.MustNewHexBytes0xPrefix(types.RandHex(32)),
-				TransactionHash:  ethtypes.MustNewHexBytes0xPrefix(types.RandHex(32)),
+				BlockHash:        ethtypes.MustNewHexBytes0xPrefix(tktypes.RandHex(32)),
+				TransactionHash:  ethtypes.MustNewHexBytes0xPrefix(tktypes.RandHex(32)),
 				BlockNumber:      10,
 				TransactionIndex: 0,
 				LogIndex:         0,
@@ -467,7 +535,7 @@ func testReturnToCatchupAfterStart(t *testing.T, headBlock int64) {
 	cancelCtx()
 	<-es.detectorDone
 
-	assert.NoError(t, p.Mock.ExpectationsWereMet())
+	require.NoError(t, p.Mock.ExpectationsWereMet())
 }
 
 func TestExitInCatchupPhase(t *testing.T) {
@@ -496,7 +564,7 @@ func TestExitInCatchupPhase(t *testing.T) {
 	}()
 	<-es.detectorDone
 
-	assert.NoError(t, p.Mock.ExpectationsWereMet())
+	require.NoError(t, p.Mock.ExpectationsWereMet())
 }
 
 func TestSendToDispatcherClosedNoBlock(t *testing.T) {
@@ -571,7 +639,7 @@ func TestDispatcherRunLateHandler(t *testing.T) {
 		ctx: ctx,
 		definition: &EventStream{
 			ID:   uuid.New(),
-			Type: types.Enum[EventStreamType]("wrong"),
+			Type: tktypes.Enum[EventStreamType]("wrong"),
 			ABI:  testABI,
 		},
 		eventABIs:      testABI,
@@ -616,7 +684,7 @@ func TestDispatcherRunMissingHandler(t *testing.T) {
 		ctx: ctx,
 		definition: &EventStream{
 			ID:   uuid.New(),
-			Type: types.Enum[EventStreamType]("wrong"),
+			Type: tktypes.Enum[EventStreamType]("wrong"),
 			ABI:  testABI,
 		},
 		eventABIs:      testABI,
@@ -661,7 +729,7 @@ func TestProcessCatchupEventPageFailRPC(t *testing.T) {
 	ctx, bi, mRPC, p, done := newMockBlockIndexer(t, &Config{})
 	defer done()
 
-	txHash := types.MustParseBytes32(types.RandHex(32))
+	txHash := tktypes.MustParseBytes32(tktypes.RandHex(32))
 
 	bi.retry.UTSetMaxAttempts(2)
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", ethtypes.MustNewHexBytes0xPrefix(txHash.String())).

@@ -48,13 +48,13 @@ func (p *dispatcher) NextNonce() uint64 {
 	return nextNonce
 }
 
-// Dispatch implements types.Dispatcher.
+// Dispatch implements Dispatcher.
 func (p *dispatcher) Dispatch(ctx context.Context, transactionIDs []uuid.UUID) error {
 	//Placeholder for actual interface to hand over to dispatcher
 	p.sequencedTransactions = append(p.sequencedTransactions, transactionIDs...)
 	for _, transactionID := range transactionIDs {
 		err := p.publisher.PublishStageEvent(ctx, &enginespi.StageEvent{
-			Stage:           "attestation",
+			Stage:           "gather_endorsements",
 			ContractAddress: p.contractAddress,
 			TxID:            transactionID.String(),
 			Data:            &enginespi.TransactionDispatched{},

@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"testing"
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/componentmgr"
@@ -28,15 +27,19 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/plugins"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type Testbed interface {
-	StartForTest(t *testing.T, configFile string, domains map[string]*TestbedDomain) (url string, done func())
+	components.Engine
+	StartForTest(configFile string, domains map[string]*TestbedDomain, initFunctions ...*UTInitFunction) (url string, done func(), err error)
+	Components() AllComponents
 }
 
 type TestbedDomain struct {
-	Config map[string]any
-	Plugin plugintk.Plugin
+	Config          map[string]any
+	Plugin          plugintk.Plugin
+	RegistryAddress *tktypes.EthAddress
 }
 
 type testbed struct {
@@ -46,8 +49,8 @@ type testbed struct {
 	c         components.PreInitComponentsAndManagers
 }
 
-func NewTestBed() (tb *testbed) {
-	tb = &testbed{}
+func NewTestBed() Testbed {
+	tb := &testbed{}
 	tb.ctx, tb.cancelCtx = context.WithCancel(context.Background())
 	tb.initRPC()
 	return tb
@@ -69,6 +72,10 @@ func (tb *testbed) Init(c components.PreInitComponentsAndManagers) (*components.
 	return &components.ManagerInitResult{
 		RPCModules: []*rpcserver.RPCModule{tb.rpcModule},
 	}, nil
+}
+
+func (tb *testbed) Components() AllComponents {
+	return tb.c
 }
 
 // redeclare the AllComponents interface to allow unit test
@@ -142,7 +149,8 @@ func (tb *testbed) StartForTest(configFile string, domains map[string]*TestbedDo
 				Type:    components.LibraryTypeCShared.Enum(),
 				Library: "loaded/via/unit/test/loader",
 			},
-			Config: domain.Config,
+			Config:          domain.Config,
+			RegistryAddress: domain.RegistryAddress.String(),
 		}
 	}
 

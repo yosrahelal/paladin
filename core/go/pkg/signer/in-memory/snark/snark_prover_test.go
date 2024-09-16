@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zkp
+package snark
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/hyperledger-labs/zeto/go-sdk/pkg/utxo"
+	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/iden3/go-rapidsnark/types"
@@ -118,9 +118,9 @@ func TestSnarkProve(t *testing.T) {
 	inputValues := []*big.Int{big.NewInt(30), big.NewInt(40)}
 	outputValues := []*big.Int{big.NewInt(32), big.NewInt(38)}
 
-	salt1 := utxo.NewSalt()
+	salt1 := crypto.NewSalt()
 	input1, _ := poseidon.Hash([]*big.Int{inputValues[0], salt1, alice.PublicKey.X, alice.PublicKey.Y})
-	salt2 := utxo.NewSalt()
+	salt2 := crypto.NewSalt()
 	input2, _ := poseidon.Hash([]*big.Int{inputValues[1], salt2, alice.PublicKey.X, alice.PublicKey.Y})
 	inputCommitments := []string{input1.Text(16), input2.Text(16)}
 
@@ -139,7 +139,7 @@ func TestSnarkProve(t *testing.T) {
 			InputSalts:       inputSalts,
 			InputOwner:       "alice/key0",
 			OutputValues:     outputValueInts,
-			OutputSalts:      []string{utxo.NewSalt().Text(16), utxo.NewSalt().Text(16)},
+			OutputSalts:      []string{crypto.NewSalt().Text(16), crypto.NewSalt().Text(16)},
 			OutputOwners:     []string{bobPubKey, alicePubKey},
 		},
 	}
@@ -152,7 +152,7 @@ func TestSnarkProve(t *testing.T) {
 		Payload:   payload,
 	})
 	assert.NoError(t, err)
-	assert.Equal(t, 34, len(res.Payload))
+	assert.Equal(t, 36, len(res.Payload))
 }
 
 func TestSnarkProveError(t *testing.T) {
@@ -346,9 +346,9 @@ func TestSnarkProveErrorLoadcircuits(t *testing.T) {
 	inputValues := []*big.Int{big.NewInt(30), big.NewInt(40)}
 	outputValues := []*big.Int{big.NewInt(32), big.NewInt(38)}
 
-	salt1 := utxo.NewSalt()
+	salt1 := crypto.NewSalt()
 	input1, _ := poseidon.Hash([]*big.Int{inputValues[0], salt1, alice.PublicKey.X, alice.PublicKey.Y})
-	salt2 := utxo.NewSalt()
+	salt2 := crypto.NewSalt()
 	input2, _ := poseidon.Hash([]*big.Int{inputValues[1], salt2, alice.PublicKey.X, alice.PublicKey.Y})
 	inputCommitments := []string{input1.Text(16), input2.Text(16)}
 
@@ -399,9 +399,9 @@ func TestSnarkProveErrorGenerateProof(t *testing.T) {
 	inputValues := []*big.Int{big.NewInt(30), big.NewInt(40)}
 	outputValues := []*big.Int{big.NewInt(32), big.NewInt(38)}
 
-	salt1 := utxo.NewSalt()
+	salt1 := crypto.NewSalt()
 	input1, _ := poseidon.Hash([]*big.Int{inputValues[0], salt1, alice.PublicKey.X, alice.PublicKey.Y})
-	salt2 := utxo.NewSalt()
+	salt2 := crypto.NewSalt()
 	input2, _ := poseidon.Hash([]*big.Int{inputValues[1], salt2, alice.PublicKey.X, alice.PublicKey.Y})
 	inputCommitments := []string{input1.Text(16), input2.Text(16)}
 
@@ -450,9 +450,9 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 	inputValues := []*big.Int{big.NewInt(30), big.NewInt(40)}
 	outputValues := []*big.Int{big.NewInt(32), big.NewInt(38)}
 
-	salt1 := utxo.NewSalt()
+	salt1 := crypto.NewSalt()
 	input1, _ := poseidon.Hash([]*big.Int{inputValues[0], salt1, alice.PublicKey.X, alice.PublicKey.Y})
-	salt2 := utxo.NewSalt()
+	salt2 := crypto.NewSalt()
 	input2, _ := poseidon.Hash([]*big.Int{inputValues[1], salt2, alice.PublicKey.X, alice.PublicKey.Y})
 	inputCommitments := []string{input1.Text(16), input2.Text(16)}
 
@@ -471,7 +471,7 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 			InputSalts:       inputSalts,
 			InputOwner:       "alice/key0",
 			OutputValues:     outputValueInts,
-			OutputSalts:      []string{utxo.NewSalt().Text(16), utxo.NewSalt().Text(16)},
+			OutputSalts:      []string{crypto.NewSalt().Text(16), crypto.NewSalt().Text(16)},
 			OutputOwners:     []string{bobPubKey, alicePubKey},
 		},
 	}
@@ -492,7 +492,7 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 			InputSalts:       []string{"salt1", "salt2"},
 			InputOwner:       "alice/key0",
 			OutputValues:     outputValueInts,
-			OutputSalts:      []string{utxo.NewSalt().Text(16), utxo.NewSalt().Text(16)},
+			OutputSalts:      []string{crypto.NewSalt().Text(16), crypto.NewSalt().Text(16)},
 			OutputOwners:     []string{bobPubKey, alicePubKey},
 		},
 	}
@@ -504,4 +504,52 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 		Payload:   payload,
 	})
 	assert.ErrorContains(t, err, "failed to parse input salt")
+}
+
+func TestValidateInputs(t *testing.T) {
+	inputs1 := &pb.ProvingRequestCommon{
+		InputCommitments: []string{"input1", "input2"},
+		InputValues:      []uint64{30},
+		InputSalts:       []string{"salt1", "salt2"},
+	}
+	err := validateInputs(inputs1)
+	assert.ErrorContains(t, err, "input commitments, values, and salts must have the same length")
+
+	inputs2 := &pb.ProvingRequestCommon{
+		InputCommitments: []string{"input1", "input2"},
+		InputValues:      []uint64{30, 40},
+		InputSalts:       []string{"salt1"},
+	}
+	err = validateInputs(inputs2)
+	assert.ErrorContains(t, err, "input commitments, values, and salts must have the same length")
+
+	inputs3 := &pb.ProvingRequestCommon{
+		InputCommitments: []string{"input1", "input2"},
+		InputValues:      []uint64{30, 40},
+		InputSalts:       []string{"salt1", "salt2"},
+		OutputValues:     []uint64{32, 38},
+		OutputOwners:     []string{"bob"},
+	}
+	err = validateInputs(inputs3)
+	assert.ErrorContains(t, err, "output values and owner keys must have the same length")
+}
+
+func TestSerializeProofResponse(t *testing.T) {
+	snark := types.ZKProof{
+		Proof: &types.ProofData{
+			A: []string{"a"},
+			B: [][]string{
+				{"b1.1", "b1.2"},
+				{"b2.1", "b2.2"},
+			},
+			C: []string{"c"},
+		},
+		PubSignals: []string{"1", "2", "3", "4"},
+	}
+	publicInputs := map[string]string{
+		"encryptedValues": "1,2,3,4",
+	}
+	bytes, err := serializeProofResponse("anon_enc", &snark, publicInputs)
+	assert.NoError(t, err)
+	assert.Equal(t, 64, len(bytes))
 }

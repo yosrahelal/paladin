@@ -19,11 +19,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestForTypesAndMocks(t *testing.T) {
 
-	pfs := NewPaladinStageFoundationService(nil, nil, nil, nil, nil, nil)
+	pfs := NewPaladinStageFoundationService(nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.Nil(t, pfs.DependencyChecker())
 	assert.Nil(t, pfs.IdentityResolver())
 	assert.Nil(t, pfs.StateStore())
@@ -31,7 +32,7 @@ func TestForTypesAndMocks(t *testing.T) {
 	// mock object tests for coverage:
 	mIR := &MockIdentityResolver{}
 
-	assert.NoError(t, mIR.ConnectToBaseLeger())
+	require.NoError(t, mIR.ConnectToBaseLeger())
 	assert.True(t, mIR.IsCurrentNode("current-node"))
 	assert.False(t, mIR.IsCurrentNode("not-current-node"))
 	assert.Empty(t, mIR.GetDispatchAddress(nil))

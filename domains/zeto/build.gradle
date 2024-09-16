@@ -20,7 +20,10 @@ ext {
         include "internal/**/*.go"
         include "pkg/**/*.go"
     }
-    jsCircuits = "${rootDir}/zeto/zkp/circuits"
+    goFilesE2E = fileTree(".") {
+        include "integration-test/**/*.go"
+    }
+    zetoVersion = "v0.0.3"
     zkpOut = "${projectDir}/zkp"
     toolsOut = "${projectDir}/tools"
 }
@@ -31,11 +34,11 @@ configurations {
         canBeConsumed = false
         canBeResolved = true
     }
-    toolkitProtoCompiled {
+    toolkitGo {
         canBeConsumed = false
         canBeResolved = true
     }
-    coreProtoCompiled {
+    coreGo {
         canBeConsumed = false
         canBeResolved = true
     }
@@ -43,19 +46,54 @@ configurations {
 
 dependencies {
     contractCompile project(path: ":solidity", configuration: "compiledContracts")
-    toolkitProtoCompiled project(path: ":toolkit:go", configuration: "protoCompiled")
-    coreProtoCompiled project(path: ":core:go", configuration: "protoCompiled")
+    toolkitGo project(path: ":toolkit:go", configuration: "goSource")
+    coreGo project(path: ":core:go", configuration: "goSource")
 }
 
-task copySolidity(type: Copy) {
-    inputs.files(configurations.contractCompile)
-    from fileTree(configurations.contractCompile.asPath) {
-        include 'contracts/zeto/ZetoSample.sol/ZetoSample.json'
-        include 'contracts/zeto/ZetoSampleFactory.sol/ZetoSampleFactory.json'
-        include 'zeto/contracts/lib/common.sol/Commonlib.json'
-        include 'zeto/contracts/lib/verifier_anon.sol/Groth16Verifier_Anon.json'
-        include 'zeto/contracts/lib/verifier_check_hashes_value.sol/Groth16Verifier_CheckHashesValue.json'
-        include 'zeto/contracts/lib/verifier_check_inputs_outputs_value.sol/Groth16Verifier_CheckInputsOutputsValue.json'
+task downloadZetoProver {
+    def outname = "zeto-wasm-${zetoVersion}.tar.gz"
+    def url = "https://github.com/hyperledger-labs/zeto/releases/download/${zetoVersion}/${outname}"
+    def f = new File(toolsOut, outname)
+    doFirst {
+        mkdir(f.parent)
+        new URL(url).withInputStream{ i -> f.withOutputStream{ it << i }}
+    }
+    outputs.file(f)
+}
+
+task downloadZetoTestProvingKeys {
+    def outname = "zeto-test-proving-keys-${zetoVersion}.tar.gz"
+    def url = "https://github.com/hyperledger-labs/zeto/releases/download/${zetoVersion}/${outname}"
+    def f = new File(toolsOut, outname)
+    doFirst {
+        mkdir(f.parent)
+        new URL(url).withInputStream{ i -> f.withOutputStream{ it << i }}
+    }
+    outputs.file(f)
+}
+
+task downloadZetoCompiledContracts {
+    def outname = "zeto-contracts-${zetoVersion}.tar.gz"
+    def url = "https://github.com/hyperledger-labs/zeto/releases/download/${zetoVersion}/${outname}"
+    def f = new File(toolsOut, outname)
+    doFirst {
+        mkdir(f.parent)
+        new URL(url).withInputStream{ i -> f.withOutputStream{ it << i }}
+    }
+    outputs.file(f)
+}
+
+task extractZetoArtifacts(type: Copy, dependsOn: [downloadZetoProver, downloadZetoTestProvingKeys, downloadZetoCompiledContracts]) {
+    from tarTree("${toolsOut}/zeto-wasm-${zetoVersion}.tar.gz")
+    from tarTree("${toolsOut}/zeto-test-proving-keys-${zetoVersion}.tar.gz")
+    from tarTree("${toolsOut}/zeto-contracts-${zetoVersion}.tar.gz")
+    into zkpOut
+}
+
+task copySolidity(type: Copy, dependsOn: [":solidity:compile"]) {
+    inputs.files(fileTree("${rootDir}/solidity/artifacts"))
+    from fileTree("${rootDir}/solidity/artifacts") {
+        include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
     }
     into 'internal/zeto/abis'
 
@@ -64,68 +102,57 @@ task copySolidity(type: Copy) {
     includeEmptyDirs = false
 }
 
-// TODO: should circuits logic move to a separate project?
-task circuitsInstall(type: Exec) {
-    executable 'npm'
-    args 'install'
-    workingDir "${rootDir}/zeto/zkp/circuits"
+task copySolidityForTest(type: Copy, dependsOn: [extractZetoArtifacts, ":solidity:compile"]) {
+    inputs.files(fileTree("${zkpOut}/artifacts/contracts"))
+    from fileTree("${rootDir}/solidity/artifacts") {
+        include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
+    }
+    from fileTree("${zkpOut}/artifacts/contracts") {
+        include '**/*.json'
+        exclude '**/*.dbg.json'
+    }
+    into 'integration-test/abis'
 
-    inputs.files("package.json", "package-lock.json")
-    outputs.files("package-lock.json")
-    outputs.dir("node_modules")
+    // Flatten all paths into the destination folder
+    eachFile { path = name }
+    includeEmptyDirs = false
 }
 
-task installCircom {
-    def filename
-    def outname
-    if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-        filename = "circom-windows-amd64.exe"
-        outname = "circom.exe"
-    } else if (Os.isFamily(Os.FAMILY_MAC)) {
-        filename = "circom-macos-amd64"
-        outname = "circom"
-    } else {
-        filename = "circom-linux-amd64"
-        outname = "circom"
-    }
+task testE2E(type: Exec) {
+    inputs.files(configurations.toolkitGo)
+    inputs.files(configurations.coreGo)
+    inputs.files(goFiles)
+    inputs.files(goFilesE2E)
+    inputs.file('./integration-test/config-for-deploy.yaml')
+    outputs.dir('coverage')
 
-    def url = "https://github.com/iden3/circom/releases/download/v2.1.9/${filename}"
-    def f = new File(toolsOut, outname)
-    doFirst {
-        mkdir(f.parent)
-        new URL(url).withInputStream{ i -> f.withOutputStream{ it << i }}
-        f.setExecutable(true)
-    }
-    outputs.file(f)
-}
+    workingDir '.'
+    executable 'go'
+    args 'test'
+    args '-v'
+    args './integration-test'
+    args '-cover'
+    args '-covermode=atomic'
+    args '-timeout=300s'
+    args "-test.gocoverdir=${projectDir}/coverage"
 
-task circuitsGen(type: Exec, dependsOn: [circuitsInstall, installCircom]) {
-    executable 'npm'
-    args 'run', 'gen'
-    args '--', '-c', 'anon'
-    workingDir "${rootDir}/zeto/zkp/circuits"
-
-    environment 'PATH', "${toolsOut}${File.pathSeparator}${environment.PATH}"
-    environment "CIRCUITS_ROOT", zkpOut
-    environment "PROVING_KEYS_ROOT", zkpOut
-    environment "PTAU_DOWNLOAD_PATH", zkpOut
-    doFirst {
-        mkdir(zkpOut)
-    }
-
-    inputs.dir(workingDir)
-    outputs.dir(zkpOut)
+    dependsOn copySolidity
+    dependsOn copySolidityForTest
+    dependsOn ':testinfra:startTestInfra'
+    helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
 task test(type: Exec) {
-    inputs.files(configurations.toolkitProtoCompiled)
-    inputs.files(configurations.coreProtoCompiled)
+
+    inputs.files(configurations.toolkitGo)
+    inputs.files(configurations.coreGo)
     inputs.files(goFiles)
     outputs.dir('coverage')
 
     workingDir '.'
     executable 'go'
     args 'test'
+    args '-v'
     args './internal/...'
     args './pkg/...'
     args '-cover'
@@ -134,14 +161,13 @@ task test(type: Exec) {
     args "-test.gocoverdir=${projectDir}/coverage"
 
     dependsOn copySolidity
-    dependsOn circuitsGen
     dependsOn ':testinfra:startTestInfra'
-    lockTestInfra(it)
-    dumpLogsOnFailure(it, ':testinfra:startTestInfra')
+    helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
 task build {
     dependsOn test
+    dependsOn testE2E
 }
 
 task clean(type: Delete) {

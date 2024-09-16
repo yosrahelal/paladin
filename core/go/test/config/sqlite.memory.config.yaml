@@ -12,11 +12,15 @@ db:
     autoMigrate: true
     migrationsDir: './db/migrations/postgres'
     debugQueries: true
+grpc:
+  shutdownTimeout: 0
 rpcServer:
   http:
     port: 0
+    shutdownTimeout: 0
   ws:
     disabled: true
+    shutdownTimeout: 0
 blockchain:
   http:
     url: http://localhost:8545
@@ -33,5 +37,5 @@ signer:
         seed:
           encoding: none
           # DO NOT USE THIS MNEMONIC FOR ANYTHING APART FROM TESTBED TESTING
-          inline: lift steak taste love canvas crush oil fortune pave joy empty hedgehog radio outdoor twice
+          inline: worth race crush harbor atom race scrub quit glimpse solution style adapt catalog cheese nothing
     

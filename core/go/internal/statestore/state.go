@@ -24,15 +24,17 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/types"
+
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type State struct {
-	ID          types.Bytes32      `json:"id"                  gorm:"primaryKey"`
-	CreatedAt   types.Timestamp    `json:"created"             gorm:"autoCreateTime:nano"`
+	ID          tktypes.Bytes32    `json:"id"                  gorm:"primaryKey"`
+	CreatedAt   tktypes.Timestamp  `json:"created"             gorm:"autoCreateTime:nano"`
 	DomainID    string             `json:"domain"`
-	Schema      types.Bytes32      `json:"schema"`
-	Data        types.RawJSON      `json:"data"`
+	Schema      tktypes.Bytes32    `json:"schema"`
+	Data        tktypes.RawJSON    `json:"data"`
 	Labels      []*StateLabel      `json:"-"                   gorm:"foreignKey:state;references:id;"`
 	Int64Labels []*StateInt64Label `json:"-"                   gorm:"foreignKey:state;references:id;"`
 	Confirmed   *StateConfirm      `json:"confirmed,omitempty" gorm:"foreignKey:state;references:id;"`
@@ -42,7 +44,7 @@ type State struct {
 
 type StateUpsert struct {
 	SchemaID string
-	Data     types.RawJSON
+	Data     tktypes.RawJSON
 	Creating bool
 	Spending bool
 }
@@ -54,13 +56,13 @@ type StateWithLabels struct {
 }
 
 type StateLabel struct {
-	State types.Bytes32 `gorm:"primaryKey"`
+	State tktypes.Bytes32 `gorm:"primaryKey"`
 	Label string
 	Value string
 }
 
 type StateInt64Label struct {
-	State types.Bytes32 `gorm:"primaryKey"`
+	State tktypes.Bytes32 `gorm:"primaryKey"`
 	Label string
 	Value int64
 }
@@ -74,7 +76,7 @@ func (s *StateWithLabels) ValueSet() filters.ValueSet {
 	return s.LabelValues
 }
 
-func (ss *stateStore) PersistState(ctx context.Context, domainID string, schemaID string, data types.RawJSON) (*StateWithLabels, error) {
+func (ss *stateStore) PersistState(ctx context.Context, domainID string, schemaID string, data tktypes.RawJSON) (*StateWithLabels, error) {
 
 	schema, err := ss.GetSchema(ctx, domainID, schemaID, true)
 	if err != nil {
@@ -93,7 +95,7 @@ func (ss *stateStore) PersistState(ctx context.Context, domainID string, schemaI
 }
 
 func (ss *stateStore) GetState(ctx context.Context, domainID, stateID string, failNotFound, withLabels bool) (*State, error) {
-	id, err := types.ParseBytes32Ctx(ctx, stateID)
+	id, err := tktypes.ParseBytes32Ctx(ctx, stateID)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +124,7 @@ var baseStateFields = map[string]filters.FieldResolver{
 	".created": filters.TimestampField("created_at"),
 }
 
-func addStateBaseLabels(labelValues filters.PassthroughValueSet, id types.Bytes32, createdAt types.Timestamp) filters.PassthroughValueSet {
+func addStateBaseLabels(labelValues filters.PassthroughValueSet, id tktypes.Bytes32, createdAt tktypes.Timestamp) filters.PassthroughValueSet {
 	labelValues[".id"] = id.HexString()
 	labelValues[".created"] = int64(createdAt)
 	return labelValues
@@ -154,14 +156,14 @@ func (ss *stateStore) labelSetFor(schema Schema) *trackingLabelSet {
 	return &tls
 }
 
-func (ss *stateStore) FindStates(ctx context.Context, domainID, schemaID string, query *filters.QueryJSON, status StateStatusQualifier) (s []*State, err error) {
+func (ss *stateStore) FindStates(ctx context.Context, domainID, schemaID string, query *query.QueryJSON, status StateStatusQualifier) (s []*State, err error) {
 	_, s, err = ss.findStates(ctx, domainID, schemaID, query, status)
 	return s, err
 }
 
-func (ss *stateStore) findStates(ctx context.Context, domainID, schemaID string, query *filters.QueryJSON, status StateStatusQualifier, excluded ...*idOnly) (schema Schema, s []*State, err error) {
-	if len(query.Sort) == 0 {
-		query.Sort = []string{".created"}
+func (ss *stateStore) findStates(ctx context.Context, domainID, schemaID string, jq *query.QueryJSON, status StateStatusQualifier, excluded ...*idOnly) (schema Schema, s []*State, err error) {
+	if len(jq.Sort) == 0 {
+		jq.Sort = []string{".created"}
 	}
 
 	schema, err = ss.GetSchema(ctx, domainID, schemaID, true)
@@ -173,7 +175,7 @@ func (ss *stateStore) findStates(ctx context.Context, domainID, schemaID string,
 
 	// Build the query
 	db := ss.p.DB()
-	q := query.BuildGORM(ctx, db.Table("states"), tracker)
+	q := filters.BuildGORM(ctx, jq, db.Table("states"), tracker)
 	if q.Error != nil {
 		return nil, nil, q.Error
 	}
@@ -209,7 +211,7 @@ func (ss *stateStore) findStates(ctx context.Context, domainID, schemaID string,
 }
 
 func (ss *stateStore) MarkConfirmed(ctx context.Context, domainID, stateID string, transactionID uuid.UUID) error {
-	id, err := types.ParseBytes32Ctx(ctx, stateID)
+	id, err := tktypes.ParseBytes32Ctx(ctx, stateID)
 	if err != nil {
 		return err
 	}
@@ -224,7 +226,7 @@ func (ss *stateStore) MarkConfirmed(ctx context.Context, domainID, stateID strin
 }
 
 func (ss *stateStore) MarkSpent(ctx context.Context, domainID, stateID string, transactionID uuid.UUID) error {
-	id, err := types.ParseBytes32Ctx(ctx, stateID)
+	id, err := tktypes.ParseBytes32Ctx(ctx, stateID)
 	if err != nil {
 		return err
 	}
@@ -239,7 +241,7 @@ func (ss *stateStore) MarkSpent(ctx context.Context, domainID, stateID string, t
 }
 
 func (ss *stateStore) MarkLocked(ctx context.Context, domainID, stateID string, transactionID uuid.UUID, creating, spending bool) error {
-	id, err := types.ParseBytes32Ctx(ctx, stateID)
+	id, err := tktypes.ParseBytes32Ctx(ctx, stateID)
 	if err != nil {
 		return err
 	}

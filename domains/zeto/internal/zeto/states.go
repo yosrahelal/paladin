@@ -20,14 +20,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"strconv"
 
-	"github.com/hyperledger-labs/zeto/go-sdk/pkg/utxo"
+	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 )
 
 var INPUT_COUNT = 2
@@ -56,29 +56,15 @@ func (z *Zeto) prepareInputs(ctx context.Context, owner string, amount *ethtypes
 	stateRefs := []*pb.StateRef{}
 	coins := []*types.ZetoCoin{}
 	for {
-		// Simple oldest coin first algorithm
-		// TODO: make this configurable
-		// TODO: why is filters.QueryJSON not a public interface?
-		query := map[string]interface{}{
-			"limit": 10,
-			"sort":  []string{".created"},
-			"eq": []map[string]string{{
-				"field": "owner",
-				"value": owner,
-			}},
-		}
-		if lastStateTimestamp > 0 {
-			query["gt"] = []map[string]string{{
-				"field": ".created",
-				"value": strconv.FormatInt(lastStateTimestamp, 10),
-			}}
-		}
-		queryJSON, err := json.Marshal(query)
-		if err != nil {
-			return nil, nil, nil, err
-		}
+		queryBuilder := query.NewQueryBuilder().
+			Limit(10).
+			Sort(".created").
+			Equal("owner", owner)
 
-		states, err := z.findAvailableStates(ctx, string(queryJSON))
+		if lastStateTimestamp > 0 {
+			queryBuilder.GreaterThan(".created", lastStateTimestamp)
+		}
+		states, err := z.findAvailableStates(ctx, queryBuilder.Query().String())
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -124,7 +110,7 @@ func (z *Zeto) addHash(newCoin *types.ZetoCoin, ownerKey *babyjub.PublicKey) err
 func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount *ethtypes.HexInteger) ([]*types.ZetoCoin, []*pb.NewState, error) {
 	// Always produce a single coin for the entire output amount
 	// TODO: make this configurable
-	salt := utxo.NewSalt()
+	salt := crypto.NewSalt()
 	keyCompressed := ownerKey.Compress()
 	newCoin := &types.ZetoCoin{
 		Salt:     (*ethtypes.HexInteger)(salt),

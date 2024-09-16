@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/enginemocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewEngineNoNewOrchestrator(t *testing.T) {
@@ -115,15 +116,25 @@ func TestNewEnginePollingReAddStoppedOrchestrator(t *testing.T) {
 	ble.maxInFlightOrchestrators = 1
 	ble.enginePollingInterval = 1 * time.Hour
 
+	zeroTransactionListedForIdle := make(chan struct{})
+
 	// already has a running orchestrator for the address so no new orchestrator should be started
-	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
+	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter)
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{}, nil, nil).Run(func(args mock.Arguments) {
+		close(zeroTransactionListedForIdle)
+	})
 	ble.InFlightOrchestrators = map[string]*orchestrator{
 		testMainSigningAddress: {state: OrchestratorStateStopped, stateEntryTime: time.Now()}, // already has an orchestrator for 0x1
 	}
 	ble.ctx = ctx
 	ble.poll(ctx)
-	assert.Equal(t, OrchestratorStateNew, ble.InFlightOrchestrators[testMainSigningAddress].state)
+	to := ble.InFlightOrchestrators[testMainSigningAddress]
+	assert.NotNil(t, to)
+	to.maxInFlightTxs = 1
+	to.poll(ctx)
+	<-zeroTransactionListedForIdle
+	assert.Equal(t, OrchestratorStateIdle, to.state)
 }
 
 func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
@@ -317,7 +328,7 @@ func TestNewEngineGetPendingFuelingTxs(t *testing.T) {
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{mockManagedTx1}, nil, nil).Once()
 	tx, err := ble.GetPendingFuelingTransaction(ctx, "0x0", testMainSigningAddress)
 	assert.Equal(t, mockManagedTx1, tx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return(nil, nil, fmt.Errorf("List transaction errored")).Once()
 	tx, err = ble.GetPendingFuelingTransaction(ctx, "0x0", testMainSigningAddress)
 	assert.Nil(t, tx)

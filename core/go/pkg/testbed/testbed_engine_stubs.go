@@ -27,15 +27,15 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 func (tb *testbed) execBaseLedgerDeployTransaction(ctx context.Context, signer string, txInstruction *components.EthDeployTransaction) error {
 
 	var abiFunc ethclient.ABIFunctionClient
 	ec := tb.c.EthClientFactory().HTTPClient()
-	abiFunc, err := ec.ABIConstructor(ctx, txInstruction.ConstructorABI, types.HexBytes(txInstruction.Bytecode))
+	abiFunc, err := ec.ABIConstructor(ctx, txInstruction.ConstructorABI, tktypes.HexBytes(txInstruction.Bytecode))
 	if err != nil {
 		return err
 	}
@@ -112,6 +112,18 @@ func (tb *testbed) gatherSignatures(ctx context.Context, tx *components.PrivateT
 	return nil
 }
 
+func toEndorsableList(states []*components.FullState) []*prototk.EndorsableState {
+	endorsableList := make([]*prototk.EndorsableState, len(states))
+	for i, input := range states {
+		endorsableList[i] = &prototk.EndorsableState{
+			Id:            input.ID.String(),
+			SchemaId:      input.Schema.String(),
+			StateDataJson: string(input.Data),
+		}
+	}
+	return endorsableList
+}
+
 func (tb *testbed) gatherEndorsements(ctx context.Context, psc components.DomainSmartContract, tx *components.PrivateTransaction) error {
 
 	keyMgr := tb.c.KeyManager()
@@ -125,10 +137,19 @@ func (tb *testbed) gatherEndorsements(ctx context.Context, psc components.Domain
 					return fmt.Errorf("failed to resolve (local in testbed case) endorser for %s (algorithm=%s): %s", partyName, ar.Algorithm, err)
 				}
 				// Invoke the domain
-				endorseRes, err := psc.EndorseTransaction(ctx, tx, ar, &prototk.ResolvedVerifier{
-					Lookup:    partyName,
-					Algorithm: ar.Algorithm,
-					Verifier:  verifier,
+				endorseRes, err := psc.EndorseTransaction(ctx, &components.PrivateTransactionEndorseRequest{
+					TransactionSpecification: tx.PreAssembly.TransactionSpecification,
+					Verifiers:                tx.PreAssembly.Verifiers,
+					Signatures:               tx.PostAssembly.Signatures,
+					InputStates:              toEndorsableList(tx.PostAssembly.InputStates),
+					ReadStates:               toEndorsableList(tx.PostAssembly.ReadStates),
+					OutputStates:             toEndorsableList(tx.PostAssembly.OutputStates),
+					Endorsement:              ar,
+					Endorser: &prototk.ResolvedVerifier{
+						Lookup:    partyName,
+						Algorithm: ar.Algorithm,
+						Verifier:  verifier,
+					},
 				})
 				if err != nil {
 					return err
@@ -168,7 +189,7 @@ func (tb *testbed) gatherEndorsements(ctx context.Context, psc components.Domain
 }
 
 func mustParseBuildABI(buildJSON []byte) abi.ABI {
-	var buildParsed map[string]types.RawJSON
+	var buildParsed map[string]tktypes.RawJSON
 	var buildABI abi.ABI
 	err := json.Unmarshal(buildJSON, &buildParsed)
 	if err == nil {
@@ -180,9 +201,9 @@ func mustParseBuildABI(buildJSON []byte) abi.ABI {
 	return buildABI
 }
 
-func mustParseBuildBytecode(buildJSON []byte) types.HexBytes {
-	var buildParsed map[string]types.RawJSON
-	var byteCode types.HexBytes
+func mustParseBuildBytecode(buildJSON []byte) tktypes.HexBytes {
+	var buildParsed map[string]tktypes.RawJSON
+	var byteCode tktypes.HexBytes
 	err := json.Unmarshal(buildJSON, &buildParsed)
 	if err == nil {
 		err = json.Unmarshal(buildParsed["bytecode"], &byteCode)
