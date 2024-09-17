@@ -233,7 +233,6 @@ func TestAssignNonceRollback(t *testing.T) {
 }
 
 func TestAssignNonceMultipleNoncesRollback(t *testing.T) {
-	t.Skip("skipping TestAssignNonceMultipleNoncesRollback")
 	ctx := context.Background()
 	nonceCache := newNonceCacheForTesting(t)
 	defer nonceCache.stop()
