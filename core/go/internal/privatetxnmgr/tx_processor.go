@@ -344,12 +344,16 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 	}
 	if partyNode == ts.nodeID || partyNode == "" {
 		// This is a local party, so we can endorse it directly
-		endorsement, revertReason, err := ts.endorsementGatherer.GatherEndorsement(ctx,
+		endorsement, revertReason, err := ts.endorsementGatherer.GatherEndorsement(
+			ctx,
 			ts.transaction.PreAssembly.TransactionSpecification,
 			ts.transaction.PreAssembly.Verifiers,
 			ts.transaction.PostAssembly.Signatures,
 			toEndorsableList(ts.transaction.PostAssembly.InputStates),
-			toEndorsableList(ts.transaction.PostAssembly.OutputStates), party, attRequest)
+			toEndorsableList(ts.transaction.PostAssembly.ReadStates),
+			toEndorsableList(ts.transaction.PostAssembly.OutputStates),
+			party,
+			attRequest)
 		if err != nil {
 			log.L(ctx).Errorf("Failed to gather endorsement for party %s: %s", party, err)
 			return
