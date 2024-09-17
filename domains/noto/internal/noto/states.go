@@ -89,6 +89,7 @@ func (n *Noto) prepareInputs(ctx context.Context, owner ethtypes.Address0xHex, a
 	stateRefs := []*pb.StateRef{}
 	coins := []*types.NotoCoin{}
 	for {
+		// TODO: make this configurable
 		queryBuilder := query.NewQueryBuilder().
 			Limit(10).
 			Sort(".created").

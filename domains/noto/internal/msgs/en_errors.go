@@ -59,4 +59,5 @@ var (
 	MsgSignatureDoesNotMatch       = ffe("PD200017", "Signature for '%s' did not match: expected=%s actual=%s")
 	MsgStateWrongOwner             = ffe("PD200018", "State '%s' is not owned by '%s'")
 	MsgUnrecognizedEndorsement     = ffe("PD200019", "Unrecognized endorsement request: %s")
+	MsgDuplicateStateInList        = ffe("PD200020", "Duplicate state in list %s[%d] (%s)")
 )
