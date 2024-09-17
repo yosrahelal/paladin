@@ -26,7 +26,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/kaleido-io/paladin/core/internal/filters"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -401,7 +401,7 @@ func TestDSIMergedUnFlushedWhileFlushing(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, spending, 1)
 
-	states, err := dc.mergedUnFlushed(schema, []*State{}, &filters.QueryJSON{
+	states, err := dc.mergedUnFlushed(schema, []*State{}, &query.QueryJSON{
 		Sort: []string{".created"},
 	})
 	require.NoError(t, err)
