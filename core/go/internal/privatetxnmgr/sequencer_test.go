@@ -48,7 +48,15 @@ func TestSequencerGraphOfOne(t *testing.T) {
 	err = node1Sequencer.AssignTransaction(ctx, txn1ID.String())
 	require.NoError(t, err)
 
-	node1SequencerMockDependencies.dispatcherMock.On("DispatchTransactions", ctx, []uuid.UUID{txn1ID}).Return(nil).Once()
+	testSigner := tktypes.RandHex(32)
+
+	node1SequencerMockDependencies.dispatcherMock.On("DispatchTransactions", ctx, ptmgrtypes.DispatchableTransactions{testSigner: []string{txn1ID.String()}}).Return(nil).Once()
+
+	err = node1Sequencer.HandleTransactionDispatchResolvedEvent(ctx, &pb.TransactionDispatchResolvedEvent{
+		TransactionId: txn1ID.String(),
+		Signer:        testSigner,
+	})
+	require.NoError(t, err)
 	err = node1Sequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
 		TransactionId: txn1ID.String(),
 	})
@@ -77,7 +85,14 @@ func TestSequencerTwoGraphsOfOne(t *testing.T) {
 	err = node1Sequencer.AssignTransaction(ctx, txn1ID.String())
 	require.NoError(t, err)
 
-	node1SequencerMockDependencies.dispatcherMock.On("DispatchTransactions", ctx, []uuid.UUID{txn1ID}).Return(nil).Once()
+	testSigner := tktypes.RandHex(32)
+
+	node1SequencerMockDependencies.dispatcherMock.On("DispatchTransactions", ctx, ptmgrtypes.DispatchableTransactions{testSigner: []string{txn1ID.String()}}).Return(nil).Once()
+	err = node1Sequencer.HandleTransactionDispatchResolvedEvent(ctx, &pb.TransactionDispatchResolvedEvent{
+		TransactionId: txn1ID.String(),
+		Signer:        testSigner,
+	})
+	require.NoError(t, err)
 	err = node1Sequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
 		TransactionId: txn1ID.String(),
 	})
@@ -94,7 +109,13 @@ func TestSequencerTwoGraphsOfOne(t *testing.T) {
 	err = node1Sequencer.AssignTransaction(ctx, txn2ID.String())
 	require.NoError(t, err)
 
-	node1SequencerMockDependencies.dispatcherMock.On("DispatchTransactions", ctx, []uuid.UUID{txn2ID}).Return(nil).Once()
+	node1SequencerMockDependencies.dispatcherMock.On("DispatchTransactions", ctx, ptmgrtypes.DispatchableTransactions{testSigner: []string{txn2ID.String()}}).Return(nil).Once()
+
+	err = node1Sequencer.HandleTransactionDispatchResolvedEvent(ctx, &pb.TransactionDispatchResolvedEvent{
+		TransactionId: txn2ID.String(),
+		Signer:        testSigner,
+	})
+	require.NoError(t, err)
 	err = node1Sequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
 		TransactionId: txn2ID.String(),
 	})
@@ -132,13 +153,24 @@ func TestSequencerLocalUnendorsedDependency(t *testing.T) {
 	err = node1Sequencer.AssignTransaction(ctx, txn2ID.String())
 	require.NoError(t, err)
 
+	testSigner := tktypes.RandHex(32)
+	err = node1Sequencer.HandleTransactionDispatchResolvedEvent(ctx, &pb.TransactionDispatchResolvedEvent{
+		TransactionId: txn2ID.String(),
+		Signer:        testSigner,
+	})
+	require.NoError(t, err)
 	err = node1Sequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
 		TransactionId: txn2ID.String(),
 	})
 	require.NoError(t, err)
-
 	// add the mock for dispatch now because we need to assert that it is called but not before txn1 is endorsed
-	node1SequencerMockDependencies.dispatcherMock.On("DispatchTransactions", ctx, []uuid.UUID{txn1ID, txn2ID}).Return(nil).Once()
+	node1SequencerMockDependencies.dispatcherMock.On("DispatchTransactions", ctx, ptmgrtypes.DispatchableTransactions{testSigner: []string{txn1ID.String(), txn2ID.String()}}).Return(nil).Once()
+
+	err = node1Sequencer.HandleTransactionDispatchResolvedEvent(ctx, &pb.TransactionDispatchResolvedEvent{
+		TransactionId: txn1ID.String(),
+		Signer:        testSigner,
+	})
+	require.NoError(t, err)
 
 	//now endorse txn1 and expect that both txn1 and txn2 are dispatched
 	err = node1Sequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
