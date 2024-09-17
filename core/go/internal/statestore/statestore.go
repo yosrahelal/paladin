@@ -46,9 +46,9 @@ var StateWriterConfigDefaults = StateWriterConfig{
 
 type StateStore interface {
 	RPCModule() *rpcserver.RPCModule
-	RunInDomainContext(domainID string, fn DomainContextFunction) error
-	RunInDomainContextFlush(domainID string, fn DomainContextFunction) error
-	EnsureABISchemas(ctx context.Context, domainID string, defs []*abi.Parameter) ([]Schema, error)
+	RunInDomainContext(domainName, domainAddress string, fn DomainContextFunction) error
+	RunInDomainContextFlush(domainName, domainAddress string, fn DomainContextFunction) error
+	EnsureABISchemas(ctx context.Context, domainName string, defs []*abi.Parameter) ([]Schema, error)
 	Close()
 }
 

@@ -323,7 +323,7 @@ func TestDomainFindAvailableStatesBadQuery(t *testing.T) {
 func TestDomainFindAvailableStatesFail(t *testing.T) {
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), func(mc *mockComponents) {
 		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return([]statestore.Schema{}, nil)
-		mc.domainStateInterface.On("FindAvailableStates", "0x1234", "12345", mock.Anything).Return(nil, fmt.Errorf("pop"))
+		mc.domainStateInterface.On("FindAvailableStates", "12345", mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
 	assert.Nil(t, tp.d.initError.Load())
@@ -344,8 +344,8 @@ func storeState(t *testing.T, dm *domainManager, tp *testPlugin, domainAddress s
 	stateJSON, err := json.Marshal(state)
 	require.NoError(t, err)
 
-	err = dm.stateStore.RunInDomainContextFlush("test1", func(ctx context.Context, dsi statestore.DomainStateInterface) error {
-		newStates, err := dsi.UpsertStates(domainAddress, &txID, []*statestore.StateUpsert{
+	err = dm.stateStore.RunInDomainContextFlush("test1", domainAddress, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
+		newStates, err := dsi.UpsertStates(&txID, []*statestore.StateUpsert{
 			{
 				SchemaID: tp.stateSchemas[0].Id,
 				Data:     stateJSON,

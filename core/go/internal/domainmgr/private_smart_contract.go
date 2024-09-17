@@ -189,8 +189,8 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 
 	var states []*statestore.State
 	if len(newStatesToWrite) > 0 {
-		err := dc.dm.stateStore.RunInDomainContext(domain.name, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
-			states, err = dsi.UpsertStates(dc.info.Address.String(), &tx.ID, newStatesToWrite)
+		err := dc.dm.stateStore.RunInDomainContext(domain.name, dc.info.Address.String(), func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
+			states, err = dsi.UpsertStates(&tx.ID, newStatesToWrite)
 			return err
 		})
 		if err != nil {
@@ -254,11 +254,11 @@ func (dc *domainContract) LockStates(ctx context.Context, tx *components.Private
 		})
 	}
 
-	return dc.dm.stateStore.RunInDomainContext(dc.d.name, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
+	return dc.dm.stateStore.RunInDomainContext(dc.d.name, dc.info.Address.String(), func(ctx context.Context, dsi statestore.DomainStateInterface) error {
 		// Heavy lifting is all done for us by the state store
-		_, err := dsi.UpsertStates(dc.info.Address.String(), &tx.ID, txLockedStateUpserts)
+		_, err := dsi.UpsertStates(&tx.ID, txLockedStateUpserts)
 		if err == nil && len(readStateUpserts) > 0 {
-			_, err = dsi.UpsertStates(dc.info.Address.String(), nil, readStateUpserts)
+			_, err = dsi.UpsertStates(nil, readStateUpserts)
 		}
 		return err
 	})
@@ -416,9 +416,9 @@ func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateR
 		stateIDs[i] = stateID
 	}
 	statesByID := make(map[tktypes.Bytes32]*statestore.State)
-	err := dc.dm.stateStore.RunInDomainContext(dc.d.name, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
+	err := dc.dm.stateStore.RunInDomainContext(dc.d.name, dc.info.Address.String(), func(ctx context.Context, dsi statestore.DomainStateInterface) error {
 		for schemaID, stateIDs := range rawIDsBySchema {
-			statesForSchema, err := dsi.FindAvailableStates(dc.info.Address.String(), schemaID, &query.QueryJSON{
+			statesForSchema, err := dsi.FindAvailableStates(schemaID, &query.QueryJSON{
 				Statements: query.Statements{
 					Ops: query.Ops{
 						In: []*query.OpMultiVal{

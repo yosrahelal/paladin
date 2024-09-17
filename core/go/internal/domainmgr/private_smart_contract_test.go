@@ -585,7 +585,7 @@ func TestDomainWritePotentialStatesFail(t *testing.T) {
 	schema.On("IDString").Return("schema1")
 	schema.On("Signature").Return("schema1_signature")
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(schema), mockBlockHeight, func(mc *mockComponents) {
-		mc.domainStateInterface.On("UpsertStates", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+		mc.domainStateInterface.On("UpsertStates", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
 
@@ -733,7 +733,7 @@ func TestPrepareTransactionBadData(t *testing.T) {
 
 func TestLoadStatesError(t *testing.T) {
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight, func(mc *mockComponents) {
-		mc.domainStateInterface.On("FindAvailableStates", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+		mc.domainStateInterface.On("FindAvailableStates", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
 
@@ -748,7 +748,7 @@ func TestLoadStatesError(t *testing.T) {
 
 func TestLoadStatesNotFound(t *testing.T) {
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight, func(mc *mockComponents) {
-		mc.domainStateInterface.On("FindAvailableStates", mock.Anything, mock.Anything, mock.Anything).Return([]*statestore.State{}, nil)
+		mc.domainStateInterface.On("FindAvailableStates", mock.Anything, mock.Anything).Return([]*statestore.State{}, nil)
 	})
 	defer done()
 

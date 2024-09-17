@@ -52,7 +52,7 @@ type DomainStateInterface interface {
 	// 2) We deliberately return states that are locked to a transaction (but not spent yet) - which means the
 	//    result of the any assemble that uses those states, will be a transaction that must
 	//    be on the same transaction where those states are locked.
-	FindAvailableStates(domainAddress, schemaID string, query *query.QueryJSON) (s []*State, err error)
+	FindAvailableStates(schemaID string, query *query.QueryJSON) (s []*State, err error)
 
 	// MarkStatesSpending writes a lock record so the state is now locked for spending, and
 	// thus subsequent calls to FindAvailableStates will not return these states.
@@ -70,7 +70,7 @@ type DomainStateInterface interface {
 	// If a non-nil transaction ID is supplied, then the states are mark locked to the specified
 	// transaction. They can then be locked-for-creation, locked-for-spending, for simply
 	// locked for existence to avoid other transactions spending them.
-	UpsertStates(domainAddress string, transactionID *uuid.UUID, states []*StateUpsert) (s []*State, err error)
+	UpsertStates(transactionID *uuid.UUID, states []*StateUpsert) (s []*State, err error)
 
 	// ResetTransaction queues up removal of all lock records for a given transaction
 	// Note that the private data of the states themselves are not removed
@@ -97,22 +97,23 @@ type DomainStateInterface interface {
 }
 
 type domainContext struct {
-	ss          *stateStore
-	domainID    string
-	ctx         context.Context
-	stateLock   sync.Mutex
-	latch       chan struct{}
-	unFlushed   *writeOperation
-	flushing    *writeOperation
-	flushResult chan error
+	ss            *stateStore
+	domainName    string
+	domainAddress string
+	ctx           context.Context
+	stateLock     sync.Mutex
+	latch         chan struct{}
+	unFlushed     *writeOperation
+	flushing      *writeOperation
+	flushResult   chan error
 }
 
-func (ss *stateStore) RunInDomainContext(domainID string, fn DomainContextFunction) error {
-	return ss.getDomainContext(domainID).run(fn)
+func (ss *stateStore) RunInDomainContext(domainName, domainAddress string, fn DomainContextFunction) error {
+	return ss.getDomainContext(domainName, domainAddress).run(fn)
 }
 
-func (ss *stateStore) RunInDomainContextFlush(domainID string, fn DomainContextFunction) error {
-	dc := ss.getDomainContext(domainID)
+func (ss *stateStore) RunInDomainContextFlush(domainName, domainAddress string, fn DomainContextFunction) error {
+	dc := ss.getDomainContext(domainName, domainAddress)
 	err := dc.run(fn)
 	if err == nil {
 		err = dc.Flush()
@@ -123,20 +124,22 @@ func (ss *stateStore) RunInDomainContextFlush(domainID string, fn DomainContextF
 	return err
 }
 
-func (ss *stateStore) getDomainContext(domainID string) *domainContext {
+func (ss *stateStore) getDomainContext(domainName, domainAddress string) *domainContext {
 	ss.domainLock.Lock()
 	defer ss.domainLock.Unlock()
 
-	dc := ss.domainContexts[domainID]
+	domainKey := domainName + ":" + contractAddress
+	dc := ss.domainContexts[domainKey]
 	if dc == nil {
 		dc = &domainContext{
-			ss:        ss,
-			domainID:  domainID,
-			ctx:       log.WithLogField(ss.bgCtx, "domain_context", domainID),
-			latch:     make(chan struct{}, 1),
-			unFlushed: ss.writer.newWriteOp(domainID),
+			ss:            ss,
+			domainName:    domainName,
+			domainAddress: domainAddress,
+			ctx:           log.WithLogField(ss.bgCtx, "domain_context", domainName),
+			latch:         make(chan struct{}, 1),
+			unFlushed:     ss.writer.newWriteOp(domainName),
 		}
-		ss.domainContexts[domainID] = dc
+		ss.domainContexts[domainKey] = dc
 	}
 	return dc
 }
@@ -291,7 +294,7 @@ func (dc *domainContext) mergeInMemoryMatches(schema Schema, states []*State, ex
 
 }
 
-func (dc *domainContext) FindAvailableStates(domainAddress, schemaID string, query *query.QueryJSON) (s []*State, err error) {
+func (dc *domainContext) FindAvailableStates(schemaID string, query *query.QueryJSON) (s []*State, err error) {
 
 	// Build a list of excluded states
 	excluded, err := dc.getUnFlushedSpending()
@@ -300,7 +303,7 @@ func (dc *domainContext) FindAvailableStates(domainAddress, schemaID string, que
 	}
 
 	// Run the query against the DB
-	schema, states, err := dc.ss.findStates(dc.ctx, dc.domainID, domainAddress, schemaID, query, StateStatusAvailable, excluded...)
+	schema, states, err := dc.ss.findStates(dc.ctx, dc.domainName, dc.domainAddress, schemaID, query, StateStatusAvailable, excluded...)
 	if err != nil {
 		return nil, err
 	}
@@ -309,12 +312,12 @@ func (dc *domainContext) FindAvailableStates(domainAddress, schemaID string, que
 	return dc.mergedUnFlushed(schema, states, query)
 }
 
-func (dc *domainContext) UpsertStates(domainAddress string, transactionID *uuid.UUID, stateUpserts []*StateUpsert) (states []*State, err error) {
+func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*StateUpsert) (states []*State, err error) {
 
 	states = make([]*State, len(stateUpserts))
 	withValues := make([]*StateWithLabels, len(stateUpserts))
 	for i, ns := range stateUpserts {
-		schema, err := dc.ss.GetSchema(dc.ctx, dc.domainID, ns.SchemaID, true)
+		schema, err := dc.ss.GetSchema(dc.ctx, dc.domainName, ns.SchemaID, true)
 		if err != nil {
 			return nil, err
 		}
@@ -324,7 +327,7 @@ func (dc *domainContext) UpsertStates(domainAddress string, transactionID *uuid.
 			return nil, err
 		}
 		states[i] = withValues[i].State
-		states[i].DomainAddress = domainAddress
+		states[i].DomainAddress = dc.domainAddress
 		if transactionID != nil {
 			states[i].Locked = &StateLock{
 				Transaction: *transactionID,
@@ -466,7 +469,7 @@ func (dc *domainContext) Flush(successCallbacks ...DomainContextFunction) error 
 	// Cycle it out
 	dc.flushing = dc.unFlushed
 	dc.flushResult = make(chan error, 1)
-	dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainID)
+	dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainName)
 
 	// We pass the vars directly to the routine, so the routine does not need the lock
 	go dc.flushOp(dc.flushing, dc.flushResult, successCallbacks...)
@@ -507,8 +510,8 @@ func (dc *domainContext) checkFlushCompletion(block bool) error {
 	dc.flushResult = nil
 	// If there was an error, we need to clean out the whole un-flushed state before we return it
 	if flushErr != nil {
-		dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainID)
-		return i18n.WrapError(dc.ctx, flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainID)
+		dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainName)
+		return i18n.WrapError(dc.ctx, flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainName)
 	}
 	return nil
 }

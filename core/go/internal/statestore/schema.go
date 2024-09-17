@@ -163,7 +163,7 @@ func (ss *stateStore) ListSchemas(ctx context.Context, domainID string) (results
 	return results, nil
 }
 
-func (ss *stateStore) EnsureABISchemas(ctx context.Context, domainID string, defs []*abi.Parameter) ([]Schema, error) {
+func (ss *stateStore) EnsureABISchemas(ctx context.Context, domainName string, defs []*abi.Parameter) ([]Schema, error) {
 	if len(defs) == 0 {
 		return nil, nil
 	}
@@ -172,7 +172,7 @@ func (ss *stateStore) EnsureABISchemas(ctx context.Context, domainID string, def
 	prepared := make([]Schema, len(defs))
 	toFlush := make([]*SchemaPersisted, len(defs))
 	for i, def := range defs {
-		s, err := newABISchema(ctx, domainID, def)
+		s, err := newABISchema(ctx, domainName, def)
 		if err != nil {
 			return nil, err
 		}
