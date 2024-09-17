@@ -239,8 +239,8 @@ func (z *Zeto) validateTransaction(ctx context.Context, tx *pb.TransactionSpecif
 	}, handler, nil
 }
 
-func (z *Zeto) FindCoins(ctx context.Context, contractAddress, query string) ([]*types.ZetoCoin, error) {
-	states, err := z.findAvailableStates(ctx, contractAddress, query)
+func (z *Zeto) FindCoins(ctx context.Context, contractAddress ethtypes.Address0xHex, query string) ([]*types.ZetoCoin, error) {
+	states, err := z.findAvailableStates(ctx, contractAddress.String(), query)
 	if err != nil {
 		return nil, err
 	}

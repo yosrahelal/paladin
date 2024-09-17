@@ -325,8 +325,8 @@ func (n *Noto) gatherCoins(ctx context.Context, inputs, outputs []*pb.Endorsable
 	}, nil
 }
 
-func (n *Noto) FindCoins(ctx context.Context, contractAddress, query string) ([]*types.NotoCoin, error) {
-	states, err := n.findAvailableStates(ctx, contractAddress, query)
+func (n *Noto) FindCoins(ctx context.Context, contractAddress ethtypes.Address0xHex, query string) ([]*types.NotoCoin, error) {
+	states, err := n.findAvailableStates(ctx, contractAddress.String(), query)
 	if err != nil {
 		return nil, err
 	}
