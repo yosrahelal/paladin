@@ -109,7 +109,8 @@ func functionBuilder(ctx context.Context, t *testing.T, eth ethclient.EthClient,
 
 func waitFor(ctx context.Context, t *testing.T, tb testbed.Testbed, txHash *tktypes.Bytes32, err error) *blockindexer.IndexedTransaction {
 	require.NoError(t, err)
-	tx, err := tb.Components().BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, types.NotoABI)
+	notoBuild := domain.LoadBuild(notoJSON)
+	tx, err := tb.Components().BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, notoBuild.ABI)
 	assert.NoError(t, err)
 	return tx
 }
@@ -363,4 +364,10 @@ func TestNotoSelfSubmit(t *testing.T) {
 	coins, err = noto.FindCoins(ctx, "{}")
 	require.NoError(t, err)
 	assert.Len(t, coins, 4) // TODO: verify coins
+}
+
+func TestDecodeError(t *testing.T) {
+	notoBuild := domain.LoadBuild(notoJSON)
+	errStr, _ := notoBuild.ABI.ErrorString(tktypes.MustParseHexBytes("0x8b8ff76e7252bf506ebf125cd289ce782a4b4745304a08ff120a23627b8dbd51aa7c8c08"))
+	assert.Equal(t, `NotoInvalidInput("7252bf506ebf125cd289ce782a4b4745304a08ff120a23627b8dbd51aa7c8c08")`, errStr)
 }
