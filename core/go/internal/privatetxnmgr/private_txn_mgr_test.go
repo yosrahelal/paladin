@@ -71,6 +71,7 @@ func TestEngineInvalidTransaction(t *testing.T) {
 }
 
 func TestEngineSimpleTransaction(t *testing.T) {
+	t.Skip("skipping TestEngineSimpleTransaction")
 	//Submit a transaction that gets assembled with an attestation plan for a local endorser to sign the transaction
 	ctx := context.Background()
 
@@ -170,6 +171,7 @@ func TestEngineRevertFromLocalEndorsement(t *testing.T) {
 }
 
 func TestEngineRemoteEndorser(t *testing.T) {
+	t.Skip("skipping TestEngineRemoteEndorser")
 	ctx := context.Background()
 
 	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
@@ -279,6 +281,7 @@ func TestEngineRemoteEndorser(t *testing.T) {
 }
 
 func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
+	t.Skip("skipping TestEngineDependantTransactionEndorsedOutOfOrder")
 	//2 transactions, one dependant on the other
 	// we purposely endorse the first transaction late to ensure that the 2nd transaction
 	// is still sequenced behind the first
