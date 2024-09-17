@@ -263,9 +263,8 @@ func (dc *domainContext) mergedUnFlushed(schema Schema, dbStates []*State, query
 					break
 				}
 			}
-			log.L(dc.ctx).Debugf("Matched in-memory dbLen=%d dbDuplicate=%t stateId=%s createdTS=%d query=%s", len(dbStates), dup, s.ID, &s.CreatedAt, query)
+			log.L(dc.ctx).Debugf("Matched in-memory dbLen=%d dbDuplicate=%t stateId=%s createdTS=%d query=%s", len(dbStates), dup, &s.ID, s.CreatedAt.UnixNano(), query)
 			if !dup {
-				log.L(dc.ctx).Debugf("Matched state %s from un-flushed writes", &s.ID)
 				matches = append(matches, s)
 			}
 		}

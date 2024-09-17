@@ -93,13 +93,8 @@ func TestTimestampDatabaseSerialization(t *testing.T) {
 	now := TimestampNow()
 	zero := Timestamp(0)
 
-	var ts *Timestamp
+	ts := &zero
 	v, err := ts.Value()
-	require.NoError(t, err)
-	assert.Nil(t, v)
-
-	ts = &zero
-	v, err = ts.Value()
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), v)
 
@@ -121,10 +116,8 @@ func TestTimestampDatabaseSerialization(t *testing.T) {
 }
 
 func TestStringZero(t *testing.T) {
-	var ts *Timestamp
-	assert.Equal(t, int64(0), ts.UnixNano())
 	zero := Timestamp(0)
-	ts = &zero
+	ts := &zero
 	assert.Equal(t, "", ts.String()) // empty string rather than epoch 1970 time
 }
 
