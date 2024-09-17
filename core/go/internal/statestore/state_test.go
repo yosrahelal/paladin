@@ -74,7 +74,7 @@ func TestMarkConfirmedBadID(t *testing.T) {
 	ctx, ss, _, done := newDBMockStateStore(t)
 	defer done()
 
-	err := ss.MarkConfirmed(ctx, "domain1", "bad id", uuid.New())
+	err := ss.MarkConfirmed(ctx, "domain1", "0x1234", "bad id", uuid.New())
 	assert.Regexp(t, "PD020007", err)
 }
 
@@ -82,7 +82,7 @@ func TestMarkSpentBadID(t *testing.T) {
 	ctx, ss, _, done := newDBMockStateStore(t)
 	defer done()
 
-	err := ss.MarkSpent(ctx, "domain1", "bad id", uuid.New())
+	err := ss.MarkSpent(ctx, "domain1", "0x1234", "bad id", uuid.New())
 	assert.Regexp(t, "PD020007", err)
 }
 
@@ -90,7 +90,7 @@ func TestMarkLockedBadID(t *testing.T) {
 	ctx, ss, _, done := newDBMockStateStore(t)
 	defer done()
 
-	err := ss.MarkLocked(ctx, "domain1", "bad id", uuid.New(), false, false)
+	err := ss.MarkLocked(ctx, "domain1", "0x1234", "bad id", uuid.New(), false, false)
 	assert.Regexp(t, "PD020007", err)
 }
 

@@ -90,7 +90,7 @@ func (ss *stateStore) PersistState(ctx context.Context, domainID, domainAddress,
 	}
 	s.DomainAddress = domainAddress
 
-	op := ss.writer.newWriteOp(s.State.DomainID)
+	op := ss.writer.newWriteOp(s.State.DomainID, domainAddress)
 	op.states = []*StateWithLabels{s}
 	ss.writer.queue(ctx, op)
 	return s, op.flush(ctx)
@@ -213,13 +213,13 @@ func (ss *stateStore) findStates(ctx context.Context, domainID, domainAddress, s
 	return schema, states, nil
 }
 
-func (ss *stateStore) MarkConfirmed(ctx context.Context, domainID, stateID string, transactionID uuid.UUID) error {
+func (ss *stateStore) MarkConfirmed(ctx context.Context, domainID, domainAddress, stateID string, transactionID uuid.UUID) error {
 	id, err := tktypes.ParseBytes32Ctx(ctx, stateID)
 	if err != nil {
 		return err
 	}
 
-	op := ss.writer.newWriteOp(domainID)
+	op := ss.writer.newWriteOp(domainID, domainAddress)
 	op.stateConfirms = []*StateConfirm{
 		{State: id, Transaction: transactionID},
 	}
@@ -228,13 +228,13 @@ func (ss *stateStore) MarkConfirmed(ctx context.Context, domainID, stateID strin
 	return op.flush(ctx)
 }
 
-func (ss *stateStore) MarkSpent(ctx context.Context, domainID, stateID string, transactionID uuid.UUID) error {
+func (ss *stateStore) MarkSpent(ctx context.Context, domainID, domainAddress, stateID string, transactionID uuid.UUID) error {
 	id, err := tktypes.ParseBytes32Ctx(ctx, stateID)
 	if err != nil {
 		return err
 	}
 
-	op := ss.writer.newWriteOp(domainID)
+	op := ss.writer.newWriteOp(domainID, domainAddress)
 	op.stateSpends = []*StateSpend{
 		{State: id, Transaction: transactionID},
 	}
@@ -243,13 +243,13 @@ func (ss *stateStore) MarkSpent(ctx context.Context, domainID, stateID string, t
 	return op.flush(ctx)
 }
 
-func (ss *stateStore) MarkLocked(ctx context.Context, domainID, stateID string, transactionID uuid.UUID, creating, spending bool) error {
+func (ss *stateStore) MarkLocked(ctx context.Context, domainID, domainAddress, stateID string, transactionID uuid.UUID, creating, spending bool) error {
 	id, err := tktypes.ParseBytes32Ctx(ctx, stateID)
 	if err != nil {
 		return err
 	}
 
-	op := ss.writer.newWriteOp(domainID)
+	op := ss.writer.newWriteOp(domainID, domainAddress)
 	op.stateLocks = []*StateLock{
 		{State: id, Transaction: transactionID, Creating: creating, Spending: spending},
 	}
@@ -258,8 +258,8 @@ func (ss *stateStore) MarkLocked(ctx context.Context, domainID, stateID string, 
 	return op.flush(ctx)
 }
 
-func (ss *stateStore) ResetTransaction(ctx context.Context, domainID string, transactionID uuid.UUID) error {
-	op := ss.writer.newWriteOp(domainID)
+func (ss *stateStore) ResetTransaction(ctx context.Context, domainAddress, domainID string, transactionID uuid.UUID) error {
+	op := ss.writer.newWriteOp(domainID, domainAddress)
 	op.transactionLockDeletes = []uuid.UUID{transactionID}
 
 	ss.writer.queue(ctx, op)

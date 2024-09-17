@@ -127,7 +127,7 @@ func TestStateLockingQuery(t *testing.T) {
 	// Mark them all confirmed apart from one
 	for i, w := range widgets {
 		if i != 3 {
-			err = ss.MarkConfirmed(ctx, "domain1", w.ID.String(), uuid.New())
+			err = ss.MarkConfirmed(ctx, "domain1", "0x1234", w.ID.String(), uuid.New())
 			require.NoError(t, err)
 		}
 	}
@@ -141,7 +141,7 @@ func TestStateLockingQuery(t *testing.T) {
 	checkQuery(`{}`, seqQual)                          // unchanged
 
 	// Mark one spent
-	err = ss.MarkSpent(ctx, "domain1", widgets[0].ID.String(), uuid.New())
+	err = ss.MarkSpent(ctx, "domain1", "0x1234", widgets[0].ID.String(), uuid.New())
 	require.NoError(t, err)
 
 	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4) // unchanged
@@ -153,7 +153,7 @@ func TestStateLockingQuery(t *testing.T) {
 	checkQuery(`{}`, seqQual)                       // unchanged
 
 	// lock a confirmed one for spending
-	err = ss.MarkLocked(ctx, "domain1", widgets[1].ID.String(), seqID, false, true)
+	err = ss.MarkLocked(ctx, "domain1", "0x1234", widgets[1].ID.String(), seqID, false, true)
 	require.NoError(t, err)
 
 	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4) // unchanged
@@ -165,7 +165,7 @@ func TestStateLockingQuery(t *testing.T) {
 	checkQuery(`{}`, seqQual, 1)                    // added 1
 
 	// lock the unconfirmed one for spending
-	err = ss.MarkLocked(ctx, "domain1", widgets[3].ID.String(), seqID, false, true)
+	err = ss.MarkLocked(ctx, "domain1", "0x1234", widgets[3].ID.String(), seqID, false, true)
 	require.NoError(t, err)
 
 	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4) // unchanged
@@ -181,7 +181,7 @@ func TestStateLockingQuery(t *testing.T) {
 	checkQuery(`{"eq":[{"field":"color","value":"pink"}]}`, StateStatusAvailable)
 
 	// clear the transaction locks
-	err = ss.ResetTransaction(ctx, "domain1", seqID)
+	err = ss.ResetTransaction(ctx, "domain1", "0x1234", seqID)
 	require.NoError(t, err)
 
 	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4) // unchanged

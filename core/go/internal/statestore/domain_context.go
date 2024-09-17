@@ -137,7 +137,7 @@ func (ss *stateStore) getDomainContext(domainName, domainAddress string) *domain
 			domainAddress: domainAddress,
 			ctx:           log.WithLogField(ss.bgCtx, "domain_context", domainName),
 			latch:         make(chan struct{}, 1),
-			unFlushed:     ss.writer.newWriteOp(domainName),
+			unFlushed:     ss.writer.newWriteOp(domainName, domainAddress),
 		}
 		ss.domainContexts[domainKey] = dc
 	}
@@ -469,7 +469,7 @@ func (dc *domainContext) Flush(successCallbacks ...DomainContextFunction) error 
 	// Cycle it out
 	dc.flushing = dc.unFlushed
 	dc.flushResult = make(chan error, 1)
-	dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainName)
+	dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainName, dc.domainAddress)
 
 	// We pass the vars directly to the routine, so the routine does not need the lock
 	go dc.flushOp(dc.flushing, dc.flushResult, successCallbacks...)
@@ -510,7 +510,7 @@ func (dc *domainContext) checkFlushCompletion(block bool) error {
 	dc.flushResult = nil
 	// If there was an error, we need to clean out the whole un-flushed state before we return it
 	if flushErr != nil {
-		dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainName)
+		dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainName, dc.domainAddress)
 		return i18n.WrapError(dc.ctx, flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainName)
 	}
 	return nil

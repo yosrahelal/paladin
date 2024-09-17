@@ -36,7 +36,7 @@ import (
 
 type writeOperation struct {
 	id                     string
-	domain                 string
+	domainKey              string
 	done                   chan error
 	isShutdown             bool
 	states                 []*StateWithLabels
@@ -86,11 +86,11 @@ func newStateWriter(bgCtx context.Context, ss *stateStore, conf *StateWriterConf
 	return sw
 }
 
-func (sw *stateWriter) newWriteOp(domain string) *writeOperation {
+func (sw *stateWriter) newWriteOp(domainName, domainAddress string) *writeOperation {
 	return &writeOperation{
-		id:     tktypes.ShortID(),
-		domain: domain,
-		done:   make(chan error, 1), // 1 slot to ensure we don't block the writer
+		id:        tktypes.ShortID(),
+		domainKey: domainName + ":" + domainAddress,
+		done:      make(chan error, 1), // 1 slot to ensure we don't block the writer
 	}
 }
 
@@ -108,12 +108,12 @@ func (sw *stateWriter) queue(ctx context.Context, op *writeOperation) {
 	// All insert/nonce-allocation requests for the same domain go to the same worker
 	// currently. This allows assertions to be made between threads writing schemas,
 	// threads writing state updates, and threads writing new states.
-	if op.domain == "" {
+	if op.domainKey == "" {
 		op.done <- i18n.NewError(ctx, msgs.MsgStateOpInvalid)
 		return
 	}
 	h := fnv.New32a() // simple non-cryptographic hash algo
-	_, _ = h.Write([]byte(op.domain))
+	_, _ = h.Write([]byte(op.domainKey))
 	routine := h.Sum32() % sw.workerCount
 	log.L(ctx).Debugf("Queuing write operation %s to worker state_writer_%.4d", op.id, routine)
 	select {

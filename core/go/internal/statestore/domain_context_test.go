@@ -88,6 +88,17 @@ func TestStateFlushAsync(t *testing.T) {
 
 }
 
+func TestUpsertSchemaEmptyList(t *testing.T) {
+
+	_, ss, done := newDBTestStateStore(t)
+	defer done()
+
+	schemas, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{})
+	require.NoError(t, err)
+	require.Len(t, schemas, 0)
+
+}
+
 func TestUpsertSchemaAndStates(t *testing.T) {
 
 	_, ss, done := newDBTestStateStore(t)
@@ -112,6 +123,7 @@ func TestUpsertSchemaAndStates(t *testing.T) {
 	require.NoError(t, err)
 
 }
+
 func TestStateContextMintSpendMint(t *testing.T) {
 
 	_, ss, done := newDBTestStateStore(t)
