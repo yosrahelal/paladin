@@ -18,7 +18,7 @@ syntax = "proto3";
 package github.com.kaleido_io.paladin.toolkit;
 
 message FindAvailableStatesRequest {
-  string domain_address = 1; // The address of the domain instance
+  string contract_address = 1; // The private smart contract address
   string schema_id = 2; // The ID of the schema
   string query_json = 3; // The query specification in JSON
 }

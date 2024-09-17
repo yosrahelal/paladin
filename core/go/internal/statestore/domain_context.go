@@ -97,23 +97,23 @@ type DomainStateInterface interface {
 }
 
 type domainContext struct {
-	ss            *stateStore
-	domainName    string
-	domainAddress string
-	ctx           context.Context
-	stateLock     sync.Mutex
-	latch         chan struct{}
-	unFlushed     *writeOperation
-	flushing      *writeOperation
-	flushResult   chan error
+	ss              *stateStore
+	domainName      string
+	contractAddress string
+	ctx             context.Context
+	stateLock       sync.Mutex
+	latch           chan struct{}
+	unFlushed       *writeOperation
+	flushing        *writeOperation
+	flushResult     chan error
 }
 
-func (ss *stateStore) RunInDomainContext(domainName, domainAddress string, fn DomainContextFunction) error {
-	return ss.getDomainContext(domainName, domainAddress).run(fn)
+func (ss *stateStore) RunInDomainContext(domainName, contractAddress string, fn DomainContextFunction) error {
+	return ss.getDomainContext(domainName, contractAddress).run(fn)
 }
 
-func (ss *stateStore) RunInDomainContextFlush(domainName, domainAddress string, fn DomainContextFunction) error {
-	dc := ss.getDomainContext(domainName, domainAddress)
+func (ss *stateStore) RunInDomainContextFlush(domainName, contractAddress string, fn DomainContextFunction) error {
+	dc := ss.getDomainContext(domainName, contractAddress)
 	err := dc.run(fn)
 	if err == nil {
 		err = dc.Flush()
@@ -124,7 +124,7 @@ func (ss *stateStore) RunInDomainContextFlush(domainName, domainAddress string, 
 	return err
 }
 
-func (ss *stateStore) getDomainContext(domainName, domainAddress string) *domainContext {
+func (ss *stateStore) getDomainContext(domainName, contractAddress string) *domainContext {
 	ss.domainLock.Lock()
 	defer ss.domainLock.Unlock()
 
@@ -132,12 +132,12 @@ func (ss *stateStore) getDomainContext(domainName, domainAddress string) *domain
 	dc := ss.domainContexts[domainKey]
 	if dc == nil {
 		dc = &domainContext{
-			ss:            ss,
-			domainName:    domainName,
-			domainAddress: domainAddress,
-			ctx:           log.WithLogField(ss.bgCtx, "domain_context", domainName),
-			latch:         make(chan struct{}, 1),
-			unFlushed:     ss.writer.newWriteOp(domainName, domainAddress),
+			ss:              ss,
+			domainName:      domainName,
+			contractAddress: contractAddress,
+			ctx:             log.WithLogField(ss.bgCtx, "domain_context", domainName),
+			latch:           make(chan struct{}, 1),
+			unFlushed:       ss.writer.newWriteOp(domainName, contractAddress),
 		}
 		ss.domainContexts[domainKey] = dc
 	}
@@ -303,7 +303,7 @@ func (dc *domainContext) FindAvailableStates(schemaID string, query *query.Query
 	}
 
 	// Run the query against the DB
-	schema, states, err := dc.ss.findStates(dc.ctx, dc.domainName, dc.domainAddress, schemaID, query, StateStatusAvailable, excluded...)
+	schema, states, err := dc.ss.findStates(dc.ctx, dc.domainName, dc.contractAddress, schemaID, query, StateStatusAvailable, excluded...)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +327,7 @@ func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*
 			return nil, err
 		}
 		states[i] = withValues[i].State
-		states[i].DomainAddress = dc.domainAddress
+		states[i].ContractAddress = dc.contractAddress
 		if transactionID != nil {
 			states[i].Locked = &StateLock{
 				Transaction: *transactionID,
@@ -469,7 +469,7 @@ func (dc *domainContext) Flush(successCallbacks ...DomainContextFunction) error 
 	// Cycle it out
 	dc.flushing = dc.unFlushed
 	dc.flushResult = make(chan error, 1)
-	dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainName, dc.domainAddress)
+	dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainName, dc.contractAddress)
 
 	// We pass the vars directly to the routine, so the routine does not need the lock
 	go dc.flushOp(dc.flushing, dc.flushResult, successCallbacks...)
@@ -510,7 +510,7 @@ func (dc *domainContext) checkFlushCompletion(block bool) error {
 	dc.flushResult = nil
 	// If there was an error, we need to clean out the whole un-flushed state before we return it
 	if flushErr != nil {
-		dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainName, dc.domainAddress)
+		dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainName, dc.contractAddress)
 		return i18n.WrapError(dc.ctx, flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainName)
 	}
 	return nil

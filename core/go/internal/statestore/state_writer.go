@@ -86,10 +86,10 @@ func newStateWriter(bgCtx context.Context, ss *stateStore, conf *StateWriterConf
 	return sw
 }
 
-func (sw *stateWriter) newWriteOp(domainName, domainAddress string) *writeOperation {
+func (sw *stateWriter) newWriteOp(domainName, contractAddress string) *writeOperation {
 	return &writeOperation{
 		id:        tktypes.ShortID(),
-		domainKey: domainName + ":" + domainAddress,
+		domainKey: domainName + ":" + contractAddress,
 		done:      make(chan error, 1), // 1 slot to ensure we don't block the writer
 	}
 }

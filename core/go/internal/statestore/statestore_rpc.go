@@ -46,12 +46,12 @@ func (ss *stateStore) rpcListSchema() rpcserver.RPCHandler {
 func (ss *stateStore) rpcStoreState() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod4(func(ctx context.Context,
 		domain string,
-		domainAddress string,
+		contractAddress string,
 		schema string,
 		value tktypes.RawJSON,
 	) (*State, error) {
 		var state *State
-		newState, err := ss.PersistState(ctx, domain, domainAddress, schema, value)
+		newState, err := ss.PersistState(ctx, domain, contractAddress, schema, value)
 		if err == nil {
 			state = newState.State
 		}
@@ -62,11 +62,11 @@ func (ss *stateStore) rpcStoreState() rpcserver.RPCHandler {
 func (ss *stateStore) rpcQuery() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod5(func(ctx context.Context,
 		domain string,
-		domainAddress string,
+		contractAddress string,
 		schema string,
 		query query.QueryJSON,
 		status StateStatusQualifier,
 	) ([]*State, error) {
-		return ss.FindStates(ctx, domain, domainAddress, schema, &query, status)
+		return ss.FindStates(ctx, domain, contractAddress, schema, &query, status)
 	})
 }

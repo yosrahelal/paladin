@@ -1,12 +1,12 @@
 BEGIN;
 
 CREATE TABLE states (
-    "id"             TEXT    NOT NULL,
-    "created_at"     BIGINT  NOT NULL,
-    "domain_id"      TEXT,
-    "schema"         TEXT,
-    "domain_address" TEXT,
-    "data"           TEXT,
+    "id"               TEXT    NOT NULL,
+    "created_at"       BIGINT  NOT NULL,
+    "domain_id"        TEXT,
+    "schema"           TEXT,
+    "contract_address" TEXT,
+    "data"             TEXT,
     PRIMARY KEY ("id"),
     FOREIGN KEY ("domain_id", "schema") REFERENCES schemas ("domain_id", "id") ON DELETE CASCADE
 );

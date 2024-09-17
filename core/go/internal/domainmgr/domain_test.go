@@ -328,14 +328,14 @@ func TestDomainFindAvailableStatesFail(t *testing.T) {
 	defer done()
 	assert.Nil(t, tp.d.initError.Load())
 	_, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		DomainAddress: "0x1234",
-		SchemaId:      "12345",
-		QueryJson:     `{}`,
+		ContractAddress: "0x1234",
+		SchemaId:        "12345",
+		QueryJson:       `{}`,
 	})
 	assert.Regexp(t, "pop", err)
 }
 
-func storeState(t *testing.T, dm *domainManager, tp *testPlugin, domainAddress string, txID uuid.UUID, amount *ethtypes.HexInteger) *fakeState {
+func storeState(t *testing.T, dm *domainManager, tp *testPlugin, contractAddress string, txID uuid.UUID, amount *ethtypes.HexInteger) *fakeState {
 	state := &fakeState{
 		Salt:   tktypes.Bytes32(tktypes.RandBytes(32)),
 		Owner:  tktypes.EthAddress(tktypes.RandBytes(20)),
@@ -344,7 +344,7 @@ func storeState(t *testing.T, dm *domainManager, tp *testPlugin, domainAddress s
 	stateJSON, err := json.Marshal(state)
 	require.NoError(t, err)
 
-	err = dm.stateStore.RunInDomainContextFlush("test1", domainAddress, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
+	err = dm.stateStore.RunInDomainContextFlush("test1", contractAddress, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
 		newStates, err := dsi.UpsertStates(&txID, []*statestore.StateUpsert{
 			{
 				SchemaID: tp.stateSchemas[0].Id,
@@ -369,8 +369,8 @@ func TestDomainFindAvailableStatesOK(t *testing.T) {
 
 	// Filter match
 	states, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		DomainAddress: "0x1234",
-		SchemaId:      tp.stateSchemas[0].Id,
+		ContractAddress: "0x1234",
+		SchemaId:        tp.stateSchemas[0].Id,
 		QueryJson: `{
 		  "eq": [
 		    { "field": "owner", "value": "` + state1.Owner.String() + `" }
@@ -382,8 +382,8 @@ func TestDomainFindAvailableStatesOK(t *testing.T) {
 
 	// Filter miss
 	states, err = tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		DomainAddress: "0x1234",
-		SchemaId:      tp.stateSchemas[0].Id,
+		ContractAddress: "0x1234",
+		SchemaId:        tp.stateSchemas[0].Id,
 		QueryJson: `{
 		  "eq": [
 		    { "field": "owner", "value": "` + tktypes.EthAddress(tktypes.RandBytes(20)).String() + `" }

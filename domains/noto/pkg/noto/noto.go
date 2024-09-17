@@ -26,7 +26,7 @@ import (
 type Noto interface {
 	plugintk.DomainAPI
 	GetHandler(method string) types.DomainHandler
-	FindCoins(ctx context.Context, domainAddress, query string) ([]*types.NotoCoin, error)
+	FindCoins(ctx context.Context, contractAddress, query string) ([]*types.NotoCoin, error)
 }
 
 func New(callbacks plugintk.DomainCallbacks) Noto {

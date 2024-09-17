@@ -357,10 +357,10 @@ public class PenteDomain extends DomainInstance {
     /** during assembly we load available states from the Paladin state store */
     class AssemblyAccountLoader implements AccountLoader {
         private final HashMap<org.hyperledger.besu.datatypes.Address, FromDomain.StoredState> loadedAccountStates = new HashMap<>();
-        private final String domainAddress;
+        private final String contractAddress;
 
-        AssemblyAccountLoader(String domainAddress) {
-            this.domainAddress = domainAddress;
+        AssemblyAccountLoader(String contractAddress) {
+            this.contractAddress = contractAddress;
         }
 
         public Optional<PersistedAccount> load(org.hyperledger.besu.datatypes.Address address) throws IOException {
@@ -370,7 +370,7 @@ public class PenteDomain extends DomainInstance {
                         isEqual("address", address.toString()).
                         json();
                 var response = findAvailableStates(FromDomain.FindAvailableStatesRequest.newBuilder().
-                        setDomainAddress(this.domainAddress).
+                        setContractAddress(this.contractAddress).
                         setSchemaId(config.schemaId_AccountStateLatest()).
                         setQueryJson(queryJson).
                         build()).get();

@@ -83,7 +83,7 @@ func (n *Noto) makeNewState(coin *types.NotoCoin) (*pb.NewState, error) {
 	}, nil
 }
 
-func (n *Noto) prepareInputs(ctx context.Context, domainAddress string, owner ethtypes.Address0xHex, amount *ethtypes.HexInteger) ([]*types.NotoCoin, []*pb.StateRef, *big.Int, error) {
+func (n *Noto) prepareInputs(ctx context.Context, contractAddress string, owner ethtypes.Address0xHex, amount *ethtypes.HexInteger) ([]*types.NotoCoin, []*pb.StateRef, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
 	stateRefs := []*pb.StateRef{}
@@ -99,7 +99,7 @@ func (n *Noto) prepareInputs(ctx context.Context, domainAddress string, owner et
 		}
 
 		log.L(ctx).Debugf("State query: %s", queryBuilder.Query())
-		states, err := n.findAvailableStates(ctx, domainAddress, queryBuilder.Query().String())
+		states, err := n.findAvailableStates(ctx, contractAddress, queryBuilder.Query().String())
 
 		if err != nil {
 			return nil, nil, nil, err
@@ -139,11 +139,11 @@ func (n *Noto) prepareOutputs(owner ethtypes.Address0xHex, amount *ethtypes.HexI
 	return []*types.NotoCoin{newCoin}, []*pb.NewState{newState}, err
 }
 
-func (n *Noto) findAvailableStates(ctx context.Context, domainAddress, query string) ([]*pb.StoredState, error) {
+func (n *Noto) findAvailableStates(ctx context.Context, contractAddress, query string) ([]*pb.StoredState, error) {
 	req := &pb.FindAvailableStatesRequest{
-		DomainAddress: domainAddress,
-		SchemaId:      n.coinSchema.Id,
-		QueryJson:     query,
+		ContractAddress: contractAddress,
+		SchemaId:        n.coinSchema.Id,
+		QueryJson:       query,
 	}
 	res, err := n.Callbacks.FindAvailableStates(ctx, req)
 	if err != nil {

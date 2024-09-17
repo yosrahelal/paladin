@@ -198,7 +198,7 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 	}
 
 	var states []*statestore.State
-	err = d.dm.stateStore.RunInDomainContext(d.name, req.DomainAddress, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
+	err = d.dm.stateStore.RunInDomainContext(d.name, req.ContractAddress, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
 		states, err = dsi.FindAvailableStates(req.SchemaId, &query)
 		return err
 	})

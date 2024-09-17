@@ -161,9 +161,9 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 					}
 				}
 				res, err := callbacks.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-					DomainAddress: contractAddr,
-					SchemaId:      fakeCoinSchemaID,
-					QueryJson:     tktypes.JSONString(jq).String(),
+					ContractAddress: contractAddr,
+					SchemaId:        fakeCoinSchemaID,
+					QueryJson:       tktypes.JSONString(jq).String(),
 				})
 				if err != nil {
 					return nil, nil, nil, err

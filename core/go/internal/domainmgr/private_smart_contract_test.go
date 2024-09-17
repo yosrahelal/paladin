@@ -324,8 +324,8 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 		assert.Same(t, req.Transaction, tx.PreAssembly.TransactionSpecification)
 
 		stateRes, err := domain.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-			DomainAddress: req.Transaction.ContractAddress,
-			SchemaId:      tp.stateSchemas[0].Id,
+			ContractAddress: req.Transaction.ContractAddress,
+			SchemaId:        tp.stateSchemas[0].Id,
 			QueryJson: `{
 				"or": [
 					{
@@ -383,8 +383,8 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	require.NoError(t, err)
 
 	stateRes, err := domain.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		DomainAddress: psc.Address().String(),
-		SchemaId:      tx.PostAssembly.OutputStatesPotential[0].SchemaId,
+		ContractAddress: psc.Address().String(),
+		SchemaId:        tx.PostAssembly.OutputStatesPotential[0].SchemaId,
 		QueryJson: `{
 			"or": [
 				{
@@ -401,9 +401,9 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	require.NoError(t, err)
 
 	stillAvailable, err := domain.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		DomainAddress: psc.Address().String(),
-		SchemaId:      tx.PostAssembly.OutputStatesPotential[0].SchemaId,
-		QueryJson:     `{}`,
+		ContractAddress: psc.Address().String(),
+		SchemaId:        tx.PostAssembly.OutputStatesPotential[0].SchemaId,
+		QueryJson:       `{}`,
 	})
 	require.NoError(t, err)
 	assert.Len(t, stillAvailable.States, 3)
