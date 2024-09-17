@@ -26,6 +26,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -609,5 +610,34 @@ func TestDSIResetWithMixed(t *testing.T) {
 
 	assert.Len(t, dc.unFlushed.stateLocks, 1)
 	assert.Equal(t, dc.unFlushed.stateLocks[0].State, state2)
+
+}
+
+func TestCheckEvalGTTimestamp(t *testing.T) {
+	ctx, ss, _, done := newDBMockStateStore(t)
+	defer done()
+	dc := ss.getDomainContext("domain1")
+
+	filterJSON :=
+		`{"gt":[{"field":".created","value":1726545933211347000}],"limit":10,"sort":[".created"]}`
+	var jq query.QueryJSON
+	err := json.Unmarshal([]byte(filterJSON), &jq)
+	assert.NoError(t, err)
+
+	schema, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
+	require.NoError(t, err)
+	labelSet := dc.ss.labelSetFor(schema)
+
+	s := &State{
+		ID:        tktypes.MustParseBytes32("2eaf4727b7c7e9b3728b1344ac38ea6d8698603dc3b41d9458d7c011c20ce672"),
+		CreatedAt: tktypes.TimestampFromUnix(1726545933211347000),
+	}
+	ls := filters.PassthroughValueSet{}
+	addStateBaseLabels(ls, s.ID, s.CreatedAt)
+	labelSet.labels[".created"] = nil
+
+	match, err := filters.EvalQuery(dc.ctx, &jq, labelSet, ls)
+	assert.NoError(t, err)
+	assert.False(t, match)
 
 }
