@@ -118,7 +118,7 @@ func (n *Noto) prepareInputs(ctx context.Context, owner ethtypes.Address0xHex, a
 				Id:       state.Id,
 			})
 			coins = append(coins, coin)
-			log.L(ctx).Debugf("Selecting coin %s value=%s total=%s required=%s)", state.Id, coin.Amount, total, amount)
+			log.L(ctx).Debugf("Selecting coin %s value=%s total=%s required=%s)", state.Id, coin.Amount.BigInt().Text(10), total.Text(10), amount.BigInt().Text(10))
 			if total.Cmp(amount.BigInt()) >= 0 {
 				return coins, stateRefs, total, nil
 			}
