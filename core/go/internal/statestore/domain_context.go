@@ -256,8 +256,17 @@ func (dc *domainContext) mergedUnFlushed(schema Schema, states []*State, query *
 			return nil, err
 		}
 		if match {
-			log.L(dc.ctx).Debugf("Matched state %s from un-flushed writes", &s.ID)
-			matches = append(matches, s)
+			dup := false
+			for _, dbState := range states {
+				if s.ID == dbState.ID {
+					dup = true
+					break
+				}
+			}
+			if !dup {
+				log.L(dc.ctx).Debugf("Matched state %s from un-flushed writes", &s.ID)
+				matches = append(matches, s)
+			}
 		}
 	}
 

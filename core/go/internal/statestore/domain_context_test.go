@@ -409,6 +409,48 @@ func TestDSIMergedUnFlushedWhileFlushing(t *testing.T) {
 
 }
 
+func TestDSIMergedUnFlushedWhileFlushingDedup(t *testing.T) {
+
+	ctx, ss, _, done := newDBMockStateStore(t)
+	defer done()
+
+	schema, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
+	require.NoError(t, err)
+
+	dc := ss.getDomainContext("domain1")
+
+	s1, err := schema.ProcessState(ctx, tktypes.RawJSON(fmt.Sprintf(
+		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
+		tktypes.RandHex(32))))
+	require.NoError(t, err)
+	s1.Locked = &StateLock{State: s1.ID, Transaction: uuid.New(), Creating: true}
+
+	dc.flushing = &writeOperation{
+		states: []*StateWithLabels{s1},
+		stateLocks: []*StateLock{
+			s1.Locked,
+			{State: tktypes.Bytes32Keccak(([]byte)("another")), Spending: true},
+		},
+	}
+
+	spending, err := dc.getUnFlushedSpending()
+	require.NoError(t, err)
+	assert.Len(t, spending, 1)
+
+	dc.stateLock.Lock()
+	inTheFlush := dc.flushing.states[0]
+	dc.stateLock.Unlock()
+
+	states, err := dc.mergedUnFlushed(schema, []*State{
+		inTheFlush.State,
+	}, &query.QueryJSON{
+		Sort: []string{".created"},
+	})
+	require.NoError(t, err)
+	assert.Len(t, states, 1)
+
+}
+
 func TestDSIMergedUnFlushedEvalError(t *testing.T) {
 
 	ctx, ss, _, done := newDBMockStateStore(t)
