@@ -29,6 +29,8 @@ import (
 // EthAddress is an SQL serializable version of ethtypes.Address0xHex
 type EthAddress [20]byte
 
+var zeroAddress = EthAddress{}
+
 func ParseEthAddress(s string) (*EthAddress, error) {
 	a, err := ethtypes.NewAddress(s)
 	if err != nil {
@@ -67,7 +69,7 @@ func (a *EthAddress) Equals(b *EthAddress) bool {
 }
 
 func (a *EthAddress) IsZero() bool {
-	return a == nil || a.String() == "0x0000000000000000000000000000000000000000"
+	return a == nil || *a == zeroAddress
 }
 
 func (a EthAddress) String() string {

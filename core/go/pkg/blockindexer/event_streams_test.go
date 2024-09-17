@@ -18,6 +18,7 @@ package blockindexer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -135,7 +136,7 @@ func TestInternalEventStreamDeliveryAtHeadWithSourceAddress(t *testing.T) {
 	sourceContractAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
 
 	// Mock up the block calls to the blockchain for 15 blocks
-	blocks, receipts := testBlockArray(t, 15, sourceContractAddress.Address0xHex())
+	blocks, receipts := testBlockArray(t, 15, *sourceContractAddress.Address0xHex())
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 	mockBlockListenerNil(mRPC)
 
@@ -369,7 +370,7 @@ func TestUpsertInternalEventQueryExistingStreamFail(t *testing.T) {
 	assert.Regexp(t, "pop", err)
 }
 
-func TestUpsertInternalEventStreamMismatchExisting(t *testing.T) {
+func TestUpsertInternalEventStreamMismatchExistingABI(t *testing.T) {
 	_, bi, _, p, done := newMockBlockIndexer(t, &Config{})
 	defer done()
 
@@ -383,6 +384,30 @@ func TestUpsertInternalEventStreamMismatchExisting(t *testing.T) {
 		},
 	})
 	assert.Regexp(t, "PD020004", err)
+
+	require.NoError(t, p.Mock.ExpectationsWereMet())
+}
+
+func TestUpsertInternalEventStreamMismatchExistingSource(t *testing.T) {
+	_, bi, _, p, done := newMockBlockIndexer(t, &Config{})
+	defer done()
+
+	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows(
+		[]string{"id", "abi"},
+	).AddRow(uuid.New().String(), testEventABIJSON))
+
+	var a abi.ABI
+	err := json.Unmarshal(testEventABIJSON, &a)
+	assert.NoError(t, err)
+
+	err = bi.Start(&InternalEventStream{
+		Definition: &EventStream{
+			Name:   "testing",
+			ABI:    a,
+			Source: tktypes.MustEthAddress(tktypes.RandHex(20)),
+		},
+	})
+	assert.Regexp(t, "PD011302", err)
 
 	require.NoError(t, p.Mock.ExpectationsWereMet())
 }
