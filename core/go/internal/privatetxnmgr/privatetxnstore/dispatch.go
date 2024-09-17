@@ -18,8 +18,6 @@ package privatetxnstore
 
 import (
 	"context"
-
-	"github.com/google/uuid"
 )
 
 type DispatchPersisted struct {
@@ -28,21 +26,35 @@ type DispatchPersisted struct {
 	PublicTransactionID  string `json:"publicTransactionID"`
 }
 
-type DispatchBatch struct {
-	PrivateTransactionIDs    []string
-	PublicTransactionsSubmit func() (publicTxID []uuid.UUID, err error)
+// A dispatch sequence is a collection of private transactions that are submitted together for a given signing address in order
+type DispatchSequence struct {
+	PrivateTransactionDispatches []*DispatchPersisted
+	PublicTransactionsSubmit     func() (publicTxID []string, err error)
 }
 
-func (s *store) PersistDispatches(ctx context.Context, dispatches *DispatchBatch) error {
+// a dispatch batch is a collection of dispatch sequences that are submitted together with no ordering requirements between sequences
+// purely for a database performance reason, they are included in the same transaction
+type DispatchBatch struct {
+	DispatchSequences []*DispatchSequence
+}
+
+// PersistDispatches persists the dispatches to the store and coordinates with the public transaction manager
+// to submit public transactions.
+func (s *store) PersistDispatchBatch(ctx context.Context, dispatchBatch *DispatchBatch) error {
 	op := s.writer.newWriteOp()
-	op.dispatches = make([]*DispatchPersisted, len(dispatches.PrivateTransactionIDs))
-	for i, privateTxnID := range dispatches.PrivateTransactionIDs {
-		op.dispatches[i] = &DispatchPersisted{
-			ID:                   uuid.New().String(),
-			PrivateTransactionID: privateTxnID,
+	op.dispatchSequenceOperations = make([]*dispatchSequenceOperation, len(dispatchBatch.DispatchSequences))
+	for i, dispatchSequence := range dispatchBatch.DispatchSequences {
+		//TODO why are we copying to a different struct rather than just expose this struct type on the function signature?
+		dispatchSequenceOp := &dispatchSequenceOperation{
+			dispatches:               dispatchSequence.PrivateTransactionDispatches,
+			publicTransactionsSubmit: dispatchSequence.PublicTransactionsSubmit,
 		}
+		op.dispatchSequenceOperations[i] = dispatchSequenceOp
 	}
-	op.publicTransactionsSubmit = dispatches.PublicTransactionsSubmit
+
+	// Send the write operation with all of the batch sequence operations to the flush worker thread
 	s.writer.queue(ctx, op)
+
+	//wait for the flush to complete
 	return op.flush(ctx)
 }

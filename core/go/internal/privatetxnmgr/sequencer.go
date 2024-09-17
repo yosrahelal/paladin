@@ -20,7 +20,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
@@ -111,33 +110,19 @@ func (s *sequencer) evaluateGraph(ctx context.Context) error {
 	if len(dispatchableTransactions) == 0 {
 		return nil
 	}
-
-	for signingAddress, sequence := range dispatchableTransactions {
-		transactionUUIDs := make([]uuid.UUID, len(sequence))
-		for i, txID := range sequence {
-			transactionUUID, err := uuid.Parse(txID)
-			if err != nil {
-				log.L(ctx).Errorf("failed to parse transaction ID as uuid: %s", txID)
-				return i18n.NewError(ctx, msgs.MsgSequencerInternalError, txID)
-			}
-			transactionUUIDs[i] = transactionUUID
-		}
-
-		log.L(ctx).Debugf("Dispatching transactions: %v", transactionUUIDs)
-		err = s.dispatcher.DispatchTransactions(ctx, transactionUUIDs, signingAddress)
-		if err != nil {
-			log.L(ctx).Errorf("Error dispatching transaction: %s", err)
-			return i18n.NewError(ctx, msgs.MsgSequencerInternalError, err)
-		}
-		err = s.graph.RemoveTransactions(ctx, sequence)
-		if err != nil {
-			//TODO this is bad.  What can we do?
-			// probably need to add more precise error reporting to RemoveTransactions function
-			log.L(ctx).Errorf("Error removing dispatched transaction: %s", err)
-			return i18n.NewError(ctx, msgs.MsgSequencerInternalError, err)
-		}
+	err = s.dispatcher.DispatchTransactions(ctx, dispatchableTransactions)
+	if err != nil {
+		log.L(ctx).Errorf("Error dispatching transaction: %s", err)
+		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, err)
 	}
-
+	//DispatchTransactions is a persistence point so we can remove the transactions from our graph now that they are dispatched
+	err = s.graph.RemoveTransactions(ctx, dispatchableTransactions)
+	if err != nil {
+		//TODO this is bad.  What can we do?
+		// probably need to add more precise error reporting to RemoveTransactions function
+		log.L(ctx).Errorf("Error removing dispatched transaction: %s", err)
+		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, err)
+	}
 	return nil
 }
 

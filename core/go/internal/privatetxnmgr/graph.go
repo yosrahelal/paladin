@@ -22,17 +22,15 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
-// Map of signing address to an ordered list of transaction IDs that are ready to be dispatched by that signing address
-type DispatchableTransactions map[string][]string
-
 type Graph interface {
 	AddTransaction(ctx context.Context, txID string, inputStates []string, outputStates []string) error
-	GetDispatchableTransactions(ctx context.Context) (DispatchableTransactions, error)
-	RemoveTransactions(ctx context.Context, transactionsToRemove []string) error
+	GetDispatchableTransactions(ctx context.Context) (ptmgrtypes.DispatchableTransactions, error)
+	RemoveTransactions(ctx context.Context, transactionsToRemove ptmgrtypes.DispatchableTransactions) error
 	RecordSigner(ctx context.Context, txID string, signer string) error
 	RecordEndorsement(ctx context.Context, txID string) error
 	IncludesTransaction(txID string) bool
@@ -149,7 +147,7 @@ func (g *graph) buildMatrix(ctx context.Context) error {
 // by isolating subgraphs (within each subgraph all transactions are to be dispatched with the same signing key)
 // of transactions that have been endorsed and have no dependencies on transactions that have not been endorsed
 // and then doing a topological sort of each of those subgraphs
-func (g *graph) GetDispatchableTransactions(ctx context.Context) (DispatchableTransactions, error) {
+func (g *graph) GetDispatchableTransactions(ctx context.Context) (ptmgrtypes.DispatchableTransactions, error) {
 
 	//TODO there are many valid topilogical sorts of any given graph,
 	// should we bias in favour of older transactions?
@@ -220,7 +218,7 @@ func (g *graph) GetDispatchableTransactions(ctx context.Context) (DispatchableTr
 	return map[string][]string{}, nil
 }
 
-func (g *graph) RemoveTransactions(ctx context.Context, transactionsToRemove []string) error {
+func (g *graph) RemoveTransactions(ctx context.Context, transactionsToRemove ptmgrtypes.DispatchableTransactions) error {
 	// no validation performed here
 	// it is valid to remove transactions that have dependants.  In fact that is normal.
 	//Transactions are removed when they are dispatched and dependencies are dispatched before their dependants
@@ -228,15 +226,18 @@ func (g *graph) RemoveTransactions(ctx context.Context, transactionsToRemove []s
 	// maybe they got reverted before being endorsed or whatever it is not the concern of the graph to validate this
 	// the graph just gets redrawn based on the dependencies that remain after a transaction is removed
 
-	//Only real validation we do is to throw an error if a transaction to be removed does not exist
-	// TODO - is that really an error?  Should we just ignore it and remove the others?  That would give us some idempotency behaviour that might be useful
-	for _, txID := range transactionsToRemove {
-		if g.allTransactions[txID] == nil {
-			log.L(ctx).Errorf("Transaction %s does not exist", txID)
-			return i18n.NewError(ctx, msgs.MsgSequencerInternalError, fmt.Sprintf("Transaction %s does not exist", txID))
+	for _, sequence := range transactionsToRemove {
+		for _, txID := range sequence {
+			if g.allTransactions[txID] == nil {
+				//Only real validation we do is to throw an error if a transaction to be removed does not exist
+				// TODO - is that really an error?  Should we just ignore it and remove the others?  That would give us some idempotency behaviour that might be useful
+				log.L(ctx).Errorf("Transaction %s does not exist", txID)
+				return i18n.NewError(ctx, msgs.MsgSequencerInternalError, fmt.Sprintf("Transaction %s does not exist", txID))
+			}
+			delete(g.allTransactions, txID)
 		}
-		delete(g.allTransactions, txID)
 	}
+
 	err := g.buildMatrix(ctx)
 	if err != nil {
 		log.L(ctx).Errorf("Error building graph: %s", err)

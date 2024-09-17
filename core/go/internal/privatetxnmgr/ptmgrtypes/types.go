@@ -19,7 +19,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
@@ -168,9 +167,11 @@ type Publisher interface {
 	PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult, revertReason *string) error
 }
 
+// Map of signing address to an ordered list of transaction IDs that are ready to be dispatched by that signing address
+type DispatchableTransactions map[string][]string
 type Dispatcher interface {
 	// Dispatcher is the component that takes responsibility for submitting the transactions in the sequence to the base ledger in the correct order
-	DispatchTransactions(context.Context, []uuid.UUID, string) error
+	DispatchTransactions(context.Context, DispatchableTransactions) error
 }
 
 type EndorsementGatherer interface {

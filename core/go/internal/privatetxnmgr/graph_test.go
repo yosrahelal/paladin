@@ -53,19 +53,29 @@ func TestRemoveTransactions(t *testing.T) {
 	ctx := context.Background()
 
 	testGraph := NewGraph()
+	signer := tktypes.RandHex(32)
+
 	err := testGraph.AddTransaction(ctx, "tx0", []string{}, []string{"S0"})
+	require.NoError(t, err)
+	err = testGraph.RecordSigner(ctx, "tx0", signer)
 	require.NoError(t, err)
 
 	err = testGraph.AddTransaction(ctx, "tx1", []string{}, []string{"S1A", "S1B"})
 	require.NoError(t, err)
+	err = testGraph.RecordSigner(ctx, "tx1", signer)
+	require.NoError(t, err)
 
 	err = testGraph.AddTransaction(ctx, "tx2", []string{}, []string{"S2"})
+	require.NoError(t, err)
+	err = testGraph.RecordSigner(ctx, "tx2", signer)
 	require.NoError(t, err)
 
 	err = testGraph.AddTransaction(ctx, "tx3", []string{"S0", "S1A"}, []string{"S3"})
 	require.NoError(t, err)
+	err = testGraph.RecordSigner(ctx, "tx3", signer)
+	require.NoError(t, err)
 
-	err = testGraph.RemoveTransactions(ctx, []string{"tx1", "tx2"})
+	err = testGraph.RemoveTransactions(ctx, map[string][]string{signer: {"tx1", "tx2"}})
 	require.NoError(t, err)
 	assert.True(t, testGraph.IncludesTransaction("tx0"))
 	assert.False(t, testGraph.IncludesTransaction("tx1"))
@@ -236,7 +246,7 @@ func TestScenario1(t *testing.T) {
 		(dispatchableTransactions[0] == "tx1" && dispatchableTransactions[1] == "tx0")))
 	assert.Equal(t, "tx3", dispatchableTransactions[2])
 
-	err = testGraph.RemoveTransactions(ctx, dispatchableTransactions)
+	err = testGraph.RemoveTransactions(ctx, dispatchable)
 	require.NoError(t, err)
 
 	dispatchable, err = testGraph.GetDispatchableTransactions(ctx)

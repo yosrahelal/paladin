@@ -22,7 +22,6 @@ import (
 	"hash/fnv"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -51,13 +50,17 @@ to atomically allocate and record the nonce under that same transaction.
 // the submit will happen on the user transaction manager's flush writer context so
 // that it can be co-ordinated with the user transaction submission
 // do we have any other checkpoints (e.g. on delegate?)
-type writeOperation struct {
-	id                       string
-	domain                   string
-	done                     chan error
-	isShutdown               bool
+type dispatchSequenceOperation struct {
 	dispatches               []*DispatchPersisted
-	publicTransactionsSubmit func() (publicTxID []uuid.UUID, err error)
+	publicTransactionsSubmit func() (publicTxID []string, err error)
+}
+
+type writeOperation struct {
+	id                         string
+	domain                     string
+	done                       chan error
+	isShutdown                 bool
+	dispatchSequenceOperations []*dispatchSequenceOperation
 }
 
 type writer struct {
@@ -220,41 +223,54 @@ func (w *writer) runBatch(ctx context.Context, b *writeOperationBatch) {
 	// which it can only guaranteed to be gapless and unique if it is done during the database transaction that inserts the dispatch record.
 	// However, this is
 	// Build lists of things to insert (we are insert only)
-	var dispatches []*DispatchPersisted
 
 	err := w.store.p.DB().Transaction(func(tx *gorm.DB) (err error) {
 		if len(b.ops) > 0 {
-			for i, op := range b.ops {
-				publicTxIDs, err := op.publicTransactionsSubmit()
-				for _, d := range op.dispatches {
-					//TODO this results in an `INSERT` for each dispatch (or mini batch of them).
-					//Would it be more efficient to pass an array for the whole flush?
-					// could get complicated on the public transaction manager side because
-					// it needs to allocate a nonce for each dispatch and that is specific to signing key
-
+			for _, op := range b.ops {
+				//for each batchSequence operation, call the public transaction manager to allocate a nonce
+				for _, dispatchSequenceOp := range op.dispatchSequenceOperations {
+					// Call the public transaction manager to allocate nonces for all transactions in the sequence
+					// and persist them to the database under the current transaction
+					publicTxIDs, err := dispatchSequenceOp.publicTransactionsSubmit()
 					if err != nil {
 						log.L(ctx).Errorf("Error submitting public transaction: %s", err)
 						// TODO  this is a really bad situation because it will cause all dispatches in the flush to rollback
 						// Should we skip this dispatch ( or this mini batch of dispatches?)
 						return err
 					}
-					d.PublicTransactionID = publicTxIDs[i].String()
-					dispatches = append(dispatches, d)
-				}
-			}
-			log.L(ctx).Debugf("Writing dispatch batch %d", len(dispatches))
 
-			err = tx.
-				Table("dispatches").
-				Clauses(clause.OnConflict{
-					Columns: []clause.Column{
-						{Name: "private_transaction_id"},
-						{Name: "public_transaction_id"},
-					},
-					DoNothing: true, // immutable
-				}).
-				Create(dispatches).
-				Error
+					//TODO this results in an `INSERT` for each dispatchSequence
+					//Would it be more efficient to pass an array for the whole flush?
+					// could get complicated on the public transaction manager side because
+					// it needs to allocate a nonce for each dispatch and that is specific to signing key
+					for dispatchIndex, dispatch := range dispatchSequenceOp.dispatches {
+
+						//fill in the foreign key before persisting in our dispatch table
+						dispatch.PublicTransactionID = publicTxIDs[dispatchIndex]
+					}
+					log.L(ctx).Debugf("Writing dispatch batch %d", len(dispatchSequenceOp.dispatches))
+
+					err = tx.
+						Table("dispatches").
+						Clauses(clause.OnConflict{
+							Columns: []clause.Column{
+								{Name: "private_transaction_id"},
+								{Name: "public_transaction_id"},
+							},
+							DoNothing: true, // immutable
+						}).
+						Create(dispatchSequenceOp.dispatches).
+						Error
+
+					if err != nil {
+						log.L(ctx).Errorf("Error persisting dispatches: %s", err)
+						return err
+					}
+
+				}
+
+			}
+
 		}
 
 		return err

@@ -42,7 +42,8 @@ var WriterConfigDefaults = WriterConfig{
 }
 
 type Store interface {
-	PersistDispatches(ctx context.Context, dispatches *DispatchBatch) error
+	//We persist multiple sequences in a single call, one for each signing address
+	PersistDispatchBatch(ctx context.Context, dispatchBatch *DispatchBatch) error
 	Close()
 }
 

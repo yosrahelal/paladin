@@ -21,10 +21,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 
@@ -127,6 +128,10 @@ type Orchestrator struct {
 	components          components.PreInitComponentsAndManagers
 	endorsementGatherer ptmgrtypes.EndorsementGatherer
 	publisher           ptmgrtypes.Publisher
+
+	store privatetxnstore.Store
+
+	baseLedgerTransactionManager enginespi.BaseLedgerTxEngine
 }
 
 var orchestratorConfigDefault = OrchestratorConfig{
@@ -392,41 +397,99 @@ func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status pt
 	return ptmgrtypes.TxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError, "Transaction not found")
 }
 
-// syncronously prepare and dispatch all given transactions
-func (oc *Orchestrator) DispatchTransactions(ctx context.Context, transactionIDs []uuid.UUID) error {
+// synchronously prepare and dispatch all given transactions to their associated signing address
+func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTransactions ptmgrtypes.DispatchableTransactions) error {
+
 	//prepare all transactions then dispatch them
-	preparedTransactions := make([]*components.PrivateTransaction, len(transactionIDs))
-	for i, transactionID := range transactionIDs {
 
-		txProcessor := oc.getTransactionProcessor(transactionID.String())
-		if txProcessor == nil {
-			//TODO currently assume that all the transactions are in flight and in memory
-			// need to reload from database if not in memory
-			panic("Transaction not found")
-		}
-
-		preparedTransaction, err := txProcessor.PrepareTransaction(ctx)
-
-		if err != nil {
-			log.L(ctx).Errorf("Error preparing transaction: %s", err)
-			//TODO this is a really bad time to be getting an error.  need to think carefully about how to handle this
-			return err
-		}
-		preparedTransactions[i] = preparedTransaction
-
+	// array of batches with space for one batch per signing address
+	dispatchBatch := &privatetxnstore.DispatchBatch{
+		DispatchSequences: make([]*privatetxnstore.DispatchSequence, 0, len(dispatchableTransactions)),
 	}
 
-	for _, transactionID := range transactionIDs {
-		nonce := uint64(0) //TODO get the nonce from BLT
-		signingAddress := "0x1234567890abcdef"
-		err := oc.publisher.PublishTransactionDispatchedEvent(ctx, transactionID.String(), nonce, signingAddress)
-
-		if err != nil {
-			//TODO think about how best to handle this error
-			log.L(ctx).Errorf("Error publishing stage event: %s", err)
-			return err
+	for signingAddress, transactionIDs := range dispatchableTransactions {
+		preparedTransactions := make([]*components.PrivateTransaction, len(transactionIDs))
+		sequence := &privatetxnstore.DispatchSequence{
+			PrivateTransactionDispatches: make([]*privatetxnstore.DispatchPersisted, len(transactionIDs)),
 		}
-		//TODO actually dispatch the transaction
+		for i, transactionID := range transactionIDs {
+			sequence.PrivateTransactionDispatches[i] = &privatetxnstore.DispatchPersisted{
+				PrivateTransactionID: transactionID,
+			}
+
+			txProcessor := oc.getTransactionProcessor(transactionID)
+			if txProcessor == nil {
+				//TODO currently assume that all the transactions are in flight and in memory
+				// need to reload from database if not in memory
+				panic("Transaction not found")
+			}
+
+			preparedTransaction, err := txProcessor.PrepareTransaction(ctx)
+
+			if err != nil {
+				log.L(ctx).Errorf("Error preparing transaction: %s", err)
+				//TODO this is a really bad time to be getting an error.  need to think carefully about how to handle this
+				return err
+			}
+			preparedTransactions[i] = preparedTransaction
+			preparedTransactionPayloads := make([]*components.EthTransaction, len(preparedTransactions))
+
+			convertToInterfaceSlice := func(slice []*components.EthTransaction) []interface{} {
+				converted := make([]interface{}, len(slice))
+				for i, v := range slice {
+					converted[i] = v
+				}
+				return converted
+			}
+
+			for j, preparedTransaction := range preparedTransactions {
+				preparedTransactionPayloads[j] = preparedTransaction.PreparedTransaction
+			}
+			preparedSubmissions, rejected, err := oc.baseLedgerTransactionManager.PrepareSubmissionBatch(ctx,
+				&enginespi.RequestOptions{
+					SignerID: signingAddress,
+				},
+				convertToInterfaceSlice(preparedTransactionPayloads),
+			)
+			if rejected {
+				log.L(ctx).Errorf("Submission rejected")
+				return i18n.NewError(ctx, msgs.MsgEngineInternalError, "Submission rejected")
+			}
+			if err != nil {
+				log.L(ctx).Errorf("Error preparing submission batch: %s", err)
+				return err
+			}
+
+			sequence.PublicTransactionsSubmit = func() (publicTxIDs []string, err error) {
+				//TODO submit the public transactions
+				manageTransactions, err := oc.baseLedgerTransactionManager.SubmitBatch(ctx, preparedSubmissions)
+				if err != nil {
+					log.L(ctx).Errorf("Error submitting batch: %s", err)
+					return nil, err
+				}
+				publicTxIDs = make([]string, len(manageTransactions))
+				for i, manageTransaction := range manageTransactions {
+					publicTxIDs[i] = manageTransaction.ID
+				}
+
+				return nil, nil
+			}
+
+		}
+		dispatchBatch.DispatchSequences = append(dispatchBatch.DispatchSequences, sequence)
+	}
+
+	oc.store.PersistDispatchBatch(ctx, dispatchBatch)
+
+	for signingAddress, sequence := range dispatchableTransactions {
+		for _, privateTransactionID := range sequence {
+			err := oc.publisher.PublishTransactionDispatchedEvent(ctx, privateTransactionID, uint64(0) /*TODO*/, signingAddress)
+
+			if err != nil {
+				//TODO think about how best to handle this error
+				log.L(ctx).Errorf("Error publishing stage event: %s", err)
+			}
+		}
 	}
 
 	return nil
