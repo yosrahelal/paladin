@@ -79,6 +79,7 @@ type transaction struct {
 	endorsed         bool
 	inputStateIDs    []string
 	outputStateIDs   []string
+	signingAddress   string
 }
 
 type sequencer struct {
@@ -111,29 +112,32 @@ func (s *sequencer) evaluateGraph(ctx context.Context) error {
 		return nil
 	}
 
-	transactionUUIDs := make([]uuid.UUID, len(dispatchableTransactions))
-	for i, txID := range dispatchableTransactions {
-		transactionUUID, err := uuid.Parse(txID)
-		if err != nil {
-			log.L(ctx).Errorf("failed to parse transaction ID as uuid: %s", txID)
-			return i18n.NewError(ctx, msgs.MsgSequencerInternalError, txID)
+	for signingAddress, sequence := range dispatchableTransactions {
+		transactionUUIDs := make([]uuid.UUID, len(sequence))
+		for i, txID := range sequence {
+			transactionUUID, err := uuid.Parse(txID)
+			if err != nil {
+				log.L(ctx).Errorf("failed to parse transaction ID as uuid: %s", txID)
+				return i18n.NewError(ctx, msgs.MsgSequencerInternalError, txID)
+			}
+			transactionUUIDs[i] = transactionUUID
 		}
-		transactionUUIDs[i] = transactionUUID
+
+		log.L(ctx).Debugf("Dispatching transactions: %v", transactionUUIDs)
+		err = s.dispatcher.DispatchTransactions(ctx, transactionUUIDs, signingAddress)
+		if err != nil {
+			log.L(ctx).Errorf("Error dispatching transaction: %s", err)
+			return i18n.NewError(ctx, msgs.MsgSequencerInternalError, err)
+		}
+		err = s.graph.RemoveTransactions(ctx, sequence)
+		if err != nil {
+			//TODO this is bad.  What can we do?
+			// probably need to add more precise error reporting to RemoveTransactions function
+			log.L(ctx).Errorf("Error removing dispatched transaction: %s", err)
+			return i18n.NewError(ctx, msgs.MsgSequencerInternalError, err)
+		}
 	}
 
-	log.L(ctx).Debugf("Dispatching transactions: %v", transactionUUIDs)
-	err = s.dispatcher.DispatchTransactions(ctx, transactionUUIDs)
-	if err != nil {
-		log.L(ctx).Errorf("Error dispatching transaction: %s", err)
-		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, err)
-	}
-	err = s.graph.RemoveTransactions(ctx, dispatchableTransactions)
-	if err != nil {
-		//TODO this is bad.  What can we do?
-		// probably need to add more precise error reporting to RemoveTransactions function
-		log.L(ctx).Errorf("Error removing dispatched transaction: %s", err)
-		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, err)
-	}
 	return nil
 }
 
@@ -336,6 +340,32 @@ func (s *sequencer) HandleTransactionAssembledEvent(ctx context.Context, event *
 	//TODO this could be a dependency on a transaction that we have already added to our graph but
 	// we didn't know about it when we added the dependant transaction
 
+	return nil
+}
+
+func (s *sequencer) HandleTransactionDispatchResolvedEvent(ctx context.Context, event *pb.TransactionDispatchResolvedEvent) error {
+	log.L(ctx).Infof("Received transaction dispatch resolved event: %s", event.String())
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if !s.graph.IncludesTransaction(event.TransactionId) {
+		log.L(ctx).Debugf("Transaction %s does not exist locally", event.TransactionId)
+		return nil
+	}
+
+	err := s.graph.RecordSigner(ctx, event.TransactionId, event.Signer)
+	if err != nil {
+		log.L(ctx).Errorf("Error recording signer: %s", err)
+		return err
+	}
+
+	//TODO we evaluate the graph here because resolving the signer theoretically might unblock some transactions
+	// however, in reality, this is typcially going to happen immediately before we are informed of an endorsement
+	// so maybe more efficient to not evaluate the graph right now because we will do it again very soon
+	err = s.evaluateGraph(ctx)
+	if err != nil {
+		log.L(ctx).Errorf("Error evaluating graph: %s", err)
+		return err
+	}
 	return nil
 }
 

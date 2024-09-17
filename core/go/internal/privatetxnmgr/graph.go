@@ -26,10 +26,14 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
+// Map of signing address to an ordered list of transaction IDs that are ready to be dispatched by that signing address
+type DispatchableTransactions map[string][]string
+
 type Graph interface {
 	AddTransaction(ctx context.Context, txID string, inputStates []string, outputStates []string) error
-	GetDispatchableTransactions(ctx context.Context) ([]string, error)
+	GetDispatchableTransactions(ctx context.Context) (DispatchableTransactions, error)
 	RemoveTransactions(ctx context.Context, transactionsToRemove []string) error
+	RecordSigner(ctx context.Context, txID string, signer string) error
 	RecordEndorsement(ctx context.Context, txID string) error
 	IncludesTransaction(txID string) bool
 }
@@ -87,6 +91,15 @@ func (g *graph) RecordEndorsement(ctx context.Context, txID string) error {
 	return nil
 }
 
+func (g *graph) RecordSigner(ctx context.Context, txID string, signer string) error {
+	if g.allTransactions[txID] == nil {
+		log.L(ctx).Errorf("Transaction %s does not exist", txID)
+		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, fmt.Sprintf("Transaction %s does not exist", txID))
+	}
+	g.allTransactions[txID].signingAddress = signer
+	return nil
+}
+
 func (g *graph) buildMatrix(ctx context.Context) error {
 	g.transactionIndex = make(map[string]int)
 	g.transactions = make([]*transaction, len(g.allTransactions))
@@ -133,9 +146,10 @@ func (g *graph) buildMatrix(ctx context.Context) error {
 }
 
 // Function GetDispatchableTransactions returns a list of transactions that are ready to be dispatched to the base ledger
-// by isolating a subgraph of transactions that have been endorsed and have no dependencies on transactions that have not been endorsed
-// and then doing a topological sort of that subgraph
-func (g *graph) GetDispatchableTransactions(ctx context.Context) ([]string, error) {
+// by isolating subgraphs (within each subgraph all transactions are to be dispatched with the same signing key)
+// of transactions that have been endorsed and have no dependencies on transactions that have not been endorsed
+// and then doing a topological sort of each of those subgraphs
+func (g *graph) GetDispatchableTransactions(ctx context.Context) (DispatchableTransactions, error) {
 
 	//TODO there are many valid topilogical sorts of any given graph,
 	// should we bias in favour of older transactions?
@@ -193,7 +207,17 @@ func (g *graph) GetDispatchableTransactions(ctx context.Context) ([]string, erro
 		}
 	}
 
-	return dispatchable, nil
+	//TODO for now, we assume that all dispatchable transactions are to be dispatched by the same signing key
+	// in reality, we need to maintain subgraphs per signign key because there is no way to guarntee ordering
+	// across signing keys
+
+	if len(dispatchable) > 0 {
+		signingAddress := g.allTransactions[dispatchable[0]].signingAddress
+		return map[string][]string{
+			signingAddress: dispatchable,
+		}, nil
+	}
+	return map[string][]string{}, nil
 }
 
 func (g *graph) RemoveTransactions(ctx context.Context, transactionsToRemove []string) error {

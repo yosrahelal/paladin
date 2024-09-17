@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -76,29 +77,44 @@ func TestRemoveTransactions(t *testing.T) {
 func TestGetDispatchableTransactions(t *testing.T) {
 	ctx := context.Background()
 
+	// TODO / TBC trying to decide if we should keep this test or do we get good enough coverage on the others
+	// this is extremely white box and is more brittle and will potentially have a high maintenance cost on any future
+	// refactoring of the code under test
+
 	// build the matrix by hand
+	signer := tktypes.RandHex(32)
 
 	testTransactions := []*transaction{
 		{
-			id:       uuid.New().String(),
-			endorsed: true,
+			id:             uuid.New().String(),
+			endorsed:       true,
+			signingAddress: signer,
 		},
 		{
-			id:       uuid.New().String(),
-			endorsed: true,
+			id:             uuid.New().String(),
+			endorsed:       true,
+			signingAddress: signer,
 		},
 		{
-			id:       uuid.New().String(),
-			endorsed: false,
+			id:             uuid.New().String(),
+			endorsed:       false,
+			signingAddress: signer,
 		},
 		{
-			id:       uuid.New().String(),
-			endorsed: true,
+			id:             uuid.New().String(),
+			endorsed:       true,
+			signingAddress: signer,
 		},
 		{
-			id:       uuid.New().String(),
-			endorsed: true,
+			id:             uuid.New().String(),
+			endorsed:       true,
+			signingAddress: signer,
 		},
+	}
+
+	allTransactions := make(map[string]*transaction)
+	for _, tx := range testTransactions {
+		allTransactions[tx.id] = tx
 	}
 
 	transactionsMatrix := make([][][]string, 5)
@@ -113,11 +129,14 @@ func TestGetDispatchableTransactions(t *testing.T) {
 	transactionsMatrix[2][4] = []string{"foo"}
 
 	testGraph := graph{
+		allTransactions:    allTransactions,
 		transactions:       testTransactions,
 		transactionsMatrix: transactionsMatrix,
 	}
 
-	dispatchableTransactions, err := testGraph.GetDispatchableTransactions(ctx)
+	dispatchable, err := testGraph.GetDispatchableTransactions(ctx)
+	assert.Len(t, dispatchable, 1)
+	dispatchableTransactions := dispatchable[signer]
 	require.NoError(t, err)
 	require.Len(t, dispatchableTransactions, 3)
 
@@ -145,19 +164,31 @@ func TestScenario1(t *testing.T) {
 	// build the matrix by adding transactions
 	ctx := context.Background()
 	testGraph := NewGraph()
+	signer := tktypes.RandHex(32)
+
 	err := testGraph.AddTransaction(ctx, "tx0", []string{}, []string{"S0"})
+	require.NoError(t, err)
+	err = testGraph.RecordSigner(ctx, "tx0", signer)
 	require.NoError(t, err)
 
 	err = testGraph.AddTransaction(ctx, "tx1", []string{}, []string{"S1A", "S1B"})
 	require.NoError(t, err)
+	err = testGraph.RecordSigner(ctx, "tx1", signer)
+	require.NoError(t, err)
 
 	err = testGraph.AddTransaction(ctx, "tx2", []string{}, []string{"S2"})
+	require.NoError(t, err)
+	err = testGraph.RecordSigner(ctx, "tx2", signer)
 	require.NoError(t, err)
 
 	err = testGraph.AddTransaction(ctx, "tx3", []string{"S0", "S1A"}, []string{"S3"})
 	require.NoError(t, err)
+	err = testGraph.RecordSigner(ctx, "tx3", signer)
+	require.NoError(t, err)
 
 	err = testGraph.AddTransaction(ctx, "tx4", []string{"S1B", "S2"}, []string{"S4"})
+	require.NoError(t, err)
+	err = testGraph.RecordSigner(ctx, "tx4", signer)
 	require.NoError(t, err)
 
 	err = testGraph.RecordEndorsement(ctx, "tx0")
@@ -172,7 +203,12 @@ func TestScenario1(t *testing.T) {
 	err = testGraph.RecordEndorsement(ctx, "tx4")
 	require.NoError(t, err)
 
-	dispatchableTransactions, err := testGraph.GetDispatchableTransactions(ctx)
+	dispatchable, err := testGraph.GetDispatchableTransactions(ctx)
+	require.NoError(t, err)
+
+	assert.Len(t, dispatchable, 1)
+	dispatchableTransactions := dispatchable[signer]
+
 	require.NoError(t, err)
 	require.Len(t, dispatchableTransactions, 3)
 
@@ -186,8 +222,11 @@ func TestScenario1(t *testing.T) {
 	assert.Equal(t, "tx3", dispatchableTransactions[2])
 
 	// GetDispatchableTransactions is a read only operation so we can call it again and get the same result
-	dispatchableTransactions, err = testGraph.GetDispatchableTransactions(ctx)
+	dispatchable, err = testGraph.GetDispatchableTransactions(ctx)
 	require.NoError(t, err)
+	assert.Len(t, dispatchable, 1)
+
+	dispatchableTransactions = dispatchable[signer]
 	require.Len(t, dispatchableTransactions, 3)
 
 	//make sure they come out in the expected order
@@ -200,10 +239,9 @@ func TestScenario1(t *testing.T) {
 	err = testGraph.RemoveTransactions(ctx, dispatchableTransactions)
 	require.NoError(t, err)
 
-	dispatchableTransactions, err = testGraph.GetDispatchableTransactions(ctx)
+	dispatchable, err = testGraph.GetDispatchableTransactions(ctx)
 	require.NoError(t, err)
-	assert.Len(t, dispatchableTransactions, 0)
-
+	assert.Len(t, dispatchable, 0)
 }
 
 func TestScenario2(t *testing.T) {
@@ -219,22 +257,36 @@ func TestScenario2(t *testing.T) {
 	// build the matrix by adding transactions
 	ctx := context.Background()
 	testGraph := NewGraph()
+	signer := tktypes.RandHex(32)
+
 	err := testGraph.AddTransaction(ctx, "tx0", []string{}, []string{"S0"})
+	require.NoError(t, err)
+	err = testGraph.RecordSigner(ctx, "tx0", signer)
 	require.NoError(t, err)
 
 	err = testGraph.AddTransaction(ctx, "tx1", []string{}, []string{"S1"})
 	require.NoError(t, err)
+	err = testGraph.RecordSigner(ctx, "tx1", signer)
+	require.NoError(t, err)
 
 	err = testGraph.AddTransaction(ctx, "tx2", []string{"S0"}, []string{"S2"})
+	require.NoError(t, err)
+	err = testGraph.RecordSigner(ctx, "tx2", signer)
 	require.NoError(t, err)
 
 	err = testGraph.AddTransaction(ctx, "tx3", []string{"S1"}, []string{"S3"})
 	require.NoError(t, err)
+	err = testGraph.RecordSigner(ctx, "tx3", signer)
+	require.NoError(t, err)
 
 	err = testGraph.AddTransaction(ctx, "tx4", []string{"S2"}, []string{"S4"})
 	require.NoError(t, err)
+	err = testGraph.RecordSigner(ctx, "tx4", signer)
+	require.NoError(t, err)
 
 	err = testGraph.AddTransaction(ctx, "tx5", []string{"S3"}, []string{"S5"})
+	require.NoError(t, err)
+	err = testGraph.RecordSigner(ctx, "tx5", signer)
 	require.NoError(t, err)
 
 	err = testGraph.RecordEndorsement(ctx, "tx0")
@@ -255,8 +307,11 @@ func TestScenario2(t *testing.T) {
 	err = testGraph.RecordEndorsement(ctx, "tx5")
 	require.NoError(t, err)
 
-	dispatchableTransactions, err := testGraph.GetDispatchableTransactions(ctx)
+	dispatchable, err := testGraph.GetDispatchableTransactions(ctx)
 	require.NoError(t, err)
+	assert.Len(t, dispatchable, 1)
+
+	dispatchableTransactions := dispatchable[signer]
 	require.Len(t, dispatchableTransactions, 6)
 
 	//make sure they come out in the expected order

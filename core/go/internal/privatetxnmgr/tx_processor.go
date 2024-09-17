@@ -214,12 +214,27 @@ func (ts *PaladinTxProcessor) HandleTransactionEndorsedEvent(ctx context.Context
 		}
 		if !ts.hasOutstandingEndorsementRequests(ctx) {
 			ts.status = "endorsed"
+			//resolve the singing address here before informing the sequencer about endorsement
+			// because endorsement will could trigger a dispatch but
+			// a change of signing address could affect the dispatchabiliy of the transaction and/or any transations that depend on it
+
+			if err := ts.domainAPI.ResolveDispatch(ctx, ts.transaction); err != nil {
+				log.L(ctx).Errorf("Failed to resolve dispatch for transaction %s: %s", ts.transaction.ID.String(), err)
+				//TODO
+			}
+			err := ts.sequencer.HandleTransactionDispatchResolvedEvent(ctx, &sequence.TransactionDispatchResolvedEvent{
+				TransactionId: ts.transaction.ID.String(),
+				Signer:        ts.transaction.Signer,
+			})
+			if err != nil {
+				log.L(ctx).Errorf("Failed to publish transaction dispatch resolved event: %s", err)
+			}
 
 			//TODO should really call out to the engine to publish this event because it needs
 			// to go to other nodes too?
 
 			//Tell the sequencer that this transaction has been endorsed and wait until it publishes a TransactionDispatched event before moving to the next stage
-			err := ts.sequencer.HandleTransactionEndorsedEvent(ctx, &sequence.TransactionEndorsedEvent{
+			err = ts.sequencer.HandleTransactionEndorsedEvent(ctx, &sequence.TransactionEndorsedEvent{
 				TransactionId: ts.transaction.ID.String(),
 			})
 			if err != nil {

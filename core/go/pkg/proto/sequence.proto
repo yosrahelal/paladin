@@ -69,3 +69,8 @@ message TransactionDelegatedEvent {
     string delegatingNode_id = 2;
     string delegateNode_id = 3;
 }
+
+message TransactionDispatchResolvedEvent {
+    string transaction_id = 1;
+    string signer = 2;
+}

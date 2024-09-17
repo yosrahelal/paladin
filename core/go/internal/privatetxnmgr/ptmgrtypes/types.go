@@ -122,6 +122,11 @@ type Sequencer interface {
 	HandleTransactionEndorsedEvent(ctx context.Context, event *pbSequence.TransactionEndorsedEvent) error
 
 	/*
+		HandleTransactionDispatchResovedEvent needs to be called whenever a the signign address for a transaction has been resolved.
+	*/
+	HandleTransactionDispatchResolvedEvent(ctx context.Context, event *pbSequence.TransactionDispatchResolvedEvent) error
+
+	/*
 		HandleTransactionConfirmedEvent needs to be called whenever a transaction has been confirmed on the base ledger
 		i.e. it has been included in a block with enough subsequent blocks to consider this final for that particular chain.
 	*/
@@ -165,7 +170,7 @@ type Publisher interface {
 
 type Dispatcher interface {
 	// Dispatcher is the component that takes responsibility for submitting the transactions in the sequence to the base ledger in the correct order
-	DispatchTransactions(context.Context, []uuid.UUID) error
+	DispatchTransactions(context.Context, []uuid.UUID, string) error
 }
 
 type EndorsementGatherer interface {
