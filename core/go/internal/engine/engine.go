@@ -279,7 +279,7 @@ func (e *engine) execBaseLedgerDeployTransaction(ctx context.Context, signer str
 		Input(txInstruction.Inputs).
 		SignAndSend()
 	if err == nil {
-		_, err = e.components.BlockIndexer().WaitForTransaction(ctx, *txHash)
+		_, err = e.components.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to send base deploy ledger transaction: %s", err)
@@ -304,7 +304,7 @@ func (e *engine) execBaseLedgerTransaction(ctx context.Context, signer string, t
 		Input(txInstruction.Inputs).
 		SignAndSend()
 	if err == nil {
-		_, err = e.components.BlockIndexer().WaitForTransaction(ctx, *txHash)
+		_, err = e.components.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to send base ledger transaction: %s", err)

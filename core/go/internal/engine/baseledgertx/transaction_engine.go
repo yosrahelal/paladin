@@ -246,7 +246,7 @@ func (ble *baseLedgerTxEngine) HandleNewTransaction(ctx context.Context, reqOpti
 	estimatedGasLimit := reqOptions.GasLimit
 
 	if estimatedGasLimit == nil {
-		estimatedGasLimitHexInt, err := ble.ethClient.GasEstimate(ctx, ethTx)
+		estimatedGasLimitHexInt, err := ble.ethClient.GasEstimate(ctx, ethTx, nil /* TODO: Would be great to have the ABI errors available here */)
 		if err != nil {
 			log.L(ctx).Errorf("HandleNewTx <%s> error estimating gas for transfer request: %+v, request: (%+v)", txType, err, txPayload)
 			ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusFail), time.Since(prepareStart).Seconds())

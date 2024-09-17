@@ -46,6 +46,7 @@ type TXReceiptJSONRPC struct {
 	To                *ethtypes.Address0xHex    `json:"to"`
 	TransactionHash   ethtypes.HexBytes0xPrefix `json:"transactionHash"`
 	TransactionIndex  *ethtypes.HexInteger      `json:"transactionIndex"`
+	RevertReason      ethtypes.HexBytes0xPrefix `json:"revertReason"`
 }
 
 type LogJSONRPC struct {
