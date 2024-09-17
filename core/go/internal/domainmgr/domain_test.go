@@ -323,13 +323,14 @@ func TestDomainFindAvailableStatesBadQuery(t *testing.T) {
 func TestDomainFindAvailableStatesFail(t *testing.T) {
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), func(mc *mockComponents) {
 		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return([]statestore.Schema{}, nil)
-		mc.domainStateInterface.On("FindAvailableStates", "12345", mock.Anything).Return(nil, fmt.Errorf("pop"))
+		mc.domainStateInterface.On("FindAvailableStates", "0x1234", "12345", mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
 	assert.Nil(t, tp.d.initError.Load())
 	_, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		SchemaId:  "12345",
-		QueryJson: `{}`,
+		DomainAddress: "0x1234",
+		SchemaId:      "12345",
+		QueryJson:     `{}`,
 	})
 	assert.Regexp(t, "pop", err)
 }
@@ -368,7 +369,8 @@ func TestDomainFindAvailableStatesOK(t *testing.T) {
 
 	// Filter match
 	states, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		SchemaId: tp.stateSchemas[0].Id,
+		DomainAddress: "0x1234",
+		SchemaId:      tp.stateSchemas[0].Id,
 		QueryJson: `{
 		  "eq": [
 		    { "field": "owner", "value": "` + state1.Owner.String() + `" }
@@ -380,7 +382,8 @@ func TestDomainFindAvailableStatesOK(t *testing.T) {
 
 	// Filter miss
 	states, err = tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		SchemaId: tp.stateSchemas[0].Id,
+		DomainAddress: "0x1234",
+		SchemaId:      tp.stateSchemas[0].Id,
 		QueryJson: `{
 		  "eq": [
 		    { "field": "owner", "value": "` + tktypes.EthAddress(tktypes.RandBytes(20)).String() + `" }

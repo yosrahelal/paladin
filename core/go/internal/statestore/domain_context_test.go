@@ -149,7 +149,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 
 		// Query the states, and notice we find the ones that are still in the process of creating
 		// even though they've not yet been written to the DB
-		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{
+		states, err := dsi.FindAvailableStates("0x1234", schemaID, toQuery(t, `{
 			"sort": [ "amount" ]
 		}`))
 		require.NoError(t, err)
@@ -183,7 +183,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 		}
 
 		// Query the states on the first address
-		states, err = dsi.FindAvailableStates(schemaID, toQuery(t, `{
+		states, err = dsi.FindAvailableStates("0x1234", schemaID, toQuery(t, `{
 			"sort": [ "-amount" ],
 			"eq": [{"field": "owner", "value": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180"}]
 		}`))
@@ -193,7 +193,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 		assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
 
 		// Query the states on the other address
-		states, err = dsi.FindAvailableStates(schemaID, toQuery(t, `{
+		states, err = dsi.FindAvailableStates("0x1234", schemaID, toQuery(t, `{
 					"sort": [ "-amount" ],
 					"eq": [{"field": "owner", "value": "0x615dD09124271D8008225054d85Ffe720E7a447A"}]
 				}`))
@@ -208,7 +208,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 
 	err = ss.RunInDomainContextFlush("domain1", func(ctx context.Context, dsi DomainStateInterface) error {
 		// Check the DB persisted state is what we expect
-		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{
+		states, err := dsi.FindAvailableStates("0x1234", schemaID, toQuery(t, `{
 			"sort": [ "owner", "amount" ]
 		}`))
 		require.NoError(t, err)
@@ -236,7 +236,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 		assert.Len(t, tx3states, 2)
 
 		// Now check that we merge the DB and in-memory state
-		states, err = dsi.FindAvailableStates(schemaID, toQuery(t, `{
+		states, err = dsi.FindAvailableStates("0x1234", schemaID, toQuery(t, `{
 					"sort": [ "owner", "amount" ]
 				}`))
 		require.NoError(t, err)
@@ -247,7 +247,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 		assert.Equal(t, int64(100), parseFakeCoin(t, states[3]).Amount.Int64())
 
 		// Check the limit works too across this
-		states, err = dsi.FindAvailableStates(schemaID, toQuery(t, `{
+		states, err = dsi.FindAvailableStates("0x1234", schemaID, toQuery(t, `{
 			"limit": 1,
 			"sort": [ "owner", "amount" ]
 		}`))
@@ -270,7 +270,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	err = ss.RunInDomainContextFlush("domain1", func(ctx context.Context, dsi DomainStateInterface) error {
 
 		// Confirm
-		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{}`))
+		states, err := dsi.FindAvailableStates("0x1234", schemaID, toQuery(t, `{}`))
 		require.NoError(t, err)
 		assert.Empty(t, states)
 
@@ -323,7 +323,7 @@ func TestDSIFlushErrorCapture(t *testing.T) {
 		dc := dsi.(*domainContext)
 
 		fakeFlushError(dc)
-		_, err = dsi.FindAvailableStates("", nil)
+		_, err = dsi.FindAvailableStates("", "", nil)
 		assert.Regexp(t, "pop", err)
 
 		fakeFlushError(dc)
@@ -528,7 +528,7 @@ func TestDSIFindBadQueryAndInsert(t *testing.T) {
 	assert.Equal(t, "type=FakeCoin(bytes32 salt,address owner,uint256 amount),labels=[owner,amount]", schemas[0].Signature())
 
 	err = ss.RunInDomainContextFlush("domain1", func(ctx context.Context, dsi DomainStateInterface) error {
-		_, err = dsi.FindAvailableStates(schemaID, toQuery(t,
+		_, err = dsi.FindAvailableStates("0x1234", schemaID, toQuery(t,
 			`{"sort":["wrong"]}`))
 		assert.Regexp(t, "PD010700", err)
 

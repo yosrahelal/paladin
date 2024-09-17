@@ -100,7 +100,7 @@ func TestFindStatesMissingSchema(t *testing.T) {
 
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
-	_, err := ss.FindStates(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("schema1")).String(), &query.QueryJSON{}, "all")
+	_, err := ss.FindStates(ctx, "domain1", "0x1234", tktypes.Bytes32Keccak(([]byte)("schema1")).String(), &query.QueryJSON{}, "all")
 	assert.Regexp(t, "PD010106", err)
 }
 
@@ -114,7 +114,7 @@ func TestFindStatesBadQuery(t *testing.T) {
 		definition: &abi.Parameter{},
 	})
 
-	_, err := ss.FindStates(ctx, "domain1", schemaID.String(), &query.QueryJSON{
+	_, err := ss.FindStates(ctx, "domain1", "0x1234", schemaID.String(), &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				Equal: []*query.OpSingleVal{
@@ -140,7 +140,7 @@ func TestFindStatesFail(t *testing.T) {
 
 	db.ExpectQuery("SELECT.*created_at").WillReturnError(fmt.Errorf("pop"))
 
-	_, err := ss.FindStates(ctx, "domain1", schemaID.String(), &query.QueryJSON{
+	_, err := ss.FindStates(ctx, "domain1", "0x1234", schemaID.String(), &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				GreaterThan: []*query.OpSingleVal{

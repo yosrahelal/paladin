@@ -97,7 +97,7 @@ func TestStateLockingQuery(t *testing.T) {
 	})
 
 	checkQuery := func(query string, status StateStatusQualifier, expected ...int) {
-		states, err := ss.FindStates(ctx, "domain1", schemaID, toQuery(t, query), status)
+		states, err := ss.FindStates(ctx, "domain1", "0x1234", schemaID, toQuery(t, query), status)
 		require.NoError(t, err)
 		assert.Len(t, states, len(expected))
 		for _, wIndex := range expected {

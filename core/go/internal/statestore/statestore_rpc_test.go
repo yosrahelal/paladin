@@ -95,7 +95,7 @@ func TestRPC(t *testing.T) {
 	assert.Equal(t, "0x30e278bca8d876cdceb24520b0ebe736a64a9cb8019157f40fa5b03f083f824d", state.ID.String())
 
 	var states []*State
-	rpcErr = c.CallRPC(ctx, &states, "pstate_queryStates", "domain1", schemas[0].ID, tktypes.RawJSON(`{
+	rpcErr = c.CallRPC(ctx, &states, "pstate_queryStates", "domain1", "0x1234", schemas[0].ID, tktypes.RawJSON(`{
 		"eq": [{
 		  "field": "color",
 		  "value": "blue"

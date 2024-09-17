@@ -52,7 +52,7 @@ type DomainStateInterface interface {
 	// 2) We deliberately return states that are locked to a transaction (but not spent yet) - which means the
 	//    result of the any assemble that uses those states, will be a transaction that must
 	//    be on the same transaction where those states are locked.
-	FindAvailableStates(schemaID string, query *query.QueryJSON) (s []*State, err error)
+	FindAvailableStates(domainAddress, schemaID string, query *query.QueryJSON) (s []*State, err error)
 
 	// MarkStatesSpending writes a lock record so the state is now locked for spending, and
 	// thus subsequent calls to FindAvailableStates will not return these states.
@@ -291,7 +291,7 @@ func (dc *domainContext) mergeInMemoryMatches(schema Schema, states []*State, ex
 
 }
 
-func (dc *domainContext) FindAvailableStates(schemaID string, query *query.QueryJSON) (s []*State, err error) {
+func (dc *domainContext) FindAvailableStates(domainAddress, schemaID string, query *query.QueryJSON) (s []*State, err error) {
 
 	// Build a list of excluded states
 	excluded, err := dc.getUnFlushedSpending()
@@ -300,7 +300,7 @@ func (dc *domainContext) FindAvailableStates(schemaID string, query *query.Query
 	}
 
 	// Run the query against the DB
-	schema, states, err := dc.ss.findStates(dc.ctx, dc.domainID, schemaID, query, StateStatusAvailable, excluded...)
+	schema, states, err := dc.ss.findStates(dc.ctx, dc.domainID, domainAddress, schemaID, query, StateStatusAvailable, excluded...)
 	if err != nil {
 		return nil, err
 	}

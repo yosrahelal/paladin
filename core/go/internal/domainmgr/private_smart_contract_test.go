@@ -382,7 +382,8 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	require.NoError(t, err)
 
 	stateRes, err := domain.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		SchemaId: tx.PostAssembly.OutputStatesPotential[0].SchemaId,
+		DomainAddress: "0x1234",
+		SchemaId:      tx.PostAssembly.OutputStatesPotential[0].SchemaId,
 		QueryJson: `{
 			"or": [
 				{
@@ -399,8 +400,9 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	require.NoError(t, err)
 
 	stillAvailable, err := domain.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		SchemaId:  tx.PostAssembly.OutputStatesPotential[0].SchemaId,
-		QueryJson: `{}`,
+		DomainAddress: "0x1234",
+		SchemaId:      tx.PostAssembly.OutputStatesPotential[0].SchemaId,
+		QueryJson:     `{}`,
 	})
 	require.NoError(t, err)
 	assert.Len(t, stillAvailable.States, 3)
@@ -730,7 +732,7 @@ func TestPrepareTransactionBadData(t *testing.T) {
 
 func TestLoadStatesError(t *testing.T) {
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight, func(mc *mockComponents) {
-		mc.domainStateInterface.On("FindAvailableStates", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+		mc.domainStateInterface.On("FindAvailableStates", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
 
@@ -745,7 +747,7 @@ func TestLoadStatesError(t *testing.T) {
 
 func TestLoadStatesNotFound(t *testing.T) {
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight, func(mc *mockComponents) {
-		mc.domainStateInterface.On("FindAvailableStates", mock.Anything, mock.Anything).Return([]*statestore.State{}, nil)
+		mc.domainStateInterface.On("FindAvailableStates", mock.Anything, mock.Anything, mock.Anything).Return([]*statestore.State{}, nil)
 	})
 	defer done()
 

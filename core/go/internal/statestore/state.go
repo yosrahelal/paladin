@@ -30,16 +30,17 @@ import (
 )
 
 type State struct {
-	ID          tktypes.Bytes32    `json:"id"                  gorm:"primaryKey"`
-	CreatedAt   tktypes.Timestamp  `json:"created"             gorm:"autoCreateTime:nano"`
-	DomainID    string             `json:"domain"`
-	Schema      tktypes.Bytes32    `json:"schema"`
-	Data        tktypes.RawJSON    `json:"data"`
-	Labels      []*StateLabel      `json:"-"                   gorm:"foreignKey:state;references:id;"`
-	Int64Labels []*StateInt64Label `json:"-"                   gorm:"foreignKey:state;references:id;"`
-	Confirmed   *StateConfirm      `json:"confirmed,omitempty" gorm:"foreignKey:state;references:id;"`
-	Spent       *StateSpend        `json:"spent,omitempty"     gorm:"foreignKey:state;references:id;"`
-	Locked      *StateLock         `json:"locked,omitempty"    gorm:"foreignKey:state;references:id;"`
+	ID            tktypes.Bytes32    `json:"id"                  gorm:"primaryKey"`
+	CreatedAt     tktypes.Timestamp  `json:"created"             gorm:"autoCreateTime:nano"`
+	DomainID      string             `json:"domain"`
+	DomainAddress string             `json:"domainAddress"`
+	Schema        tktypes.Bytes32    `json:"schema"`
+	Data          tktypes.RawJSON    `json:"data"`
+	Labels        []*StateLabel      `json:"-"                   gorm:"foreignKey:state;references:id;"`
+	Int64Labels   []*StateInt64Label `json:"-"                   gorm:"foreignKey:state;references:id;"`
+	Confirmed     *StateConfirm      `json:"confirmed,omitempty" gorm:"foreignKey:state;references:id;"`
+	Spent         *StateSpend        `json:"spent,omitempty"     gorm:"foreignKey:state;references:id;"`
+	Locked        *StateLock         `json:"locked,omitempty"    gorm:"foreignKey:state;references:id;"`
 }
 
 type StateUpsert struct {
@@ -156,12 +157,12 @@ func (ss *stateStore) labelSetFor(schema Schema) *trackingLabelSet {
 	return &tls
 }
 
-func (ss *stateStore) FindStates(ctx context.Context, domainID, schemaID string, query *query.QueryJSON, status StateStatusQualifier) (s []*State, err error) {
-	_, s, err = ss.findStates(ctx, domainID, schemaID, query, status)
+func (ss *stateStore) FindStates(ctx context.Context, domainID, domainAddress, schemaID string, query *query.QueryJSON, status StateStatusQualifier) (s []*State, err error) {
+	_, s, err = ss.findStates(ctx, domainID, domainAddress, schemaID, query, status)
 	return s, err
 }
 
-func (ss *stateStore) findStates(ctx context.Context, domainID, schemaID string, jq *query.QueryJSON, status StateStatusQualifier, excluded ...*idOnly) (schema Schema, s []*State, err error) {
+func (ss *stateStore) findStates(ctx context.Context, domainID, domainAddress, schemaID string, jq *query.QueryJSON, status StateStatusQualifier, excluded ...*idOnly) (schema Schema, s []*State, err error) {
 	if len(jq.Sort) == 0 {
 		jq.Sort = []string{".created"}
 	}
@@ -193,6 +194,7 @@ func (ss *stateStore) findStates(ctx context.Context, domainID, schemaID string,
 		Joins("Spent", db.Select("transaction")).
 		Joins("Locked", db.Select("transaction")).
 		Where("domain_id = ?", domainID).
+		// Where("domain_address = ?", domainAddress).
 		Where("schema = ?", schema.Persisted().ID)
 
 	if len(excluded) > 0 {

@@ -418,7 +418,7 @@ func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateR
 	statesByID := make(map[tktypes.Bytes32]*statestore.State)
 	err := dc.dm.stateStore.RunInDomainContext(dc.d.name, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
 		for schemaID, stateIDs := range rawIDsBySchema {
-			statesForSchema, err := dsi.FindAvailableStates(schemaID, &query.QueryJSON{
+			statesForSchema, err := dsi.FindAvailableStates(dc.info.Address.String(), schemaID, &query.QueryJSON{
 				Statements: query.Statements{
 					Ops: query.Ops{
 						In: []*query.OpMultiVal{

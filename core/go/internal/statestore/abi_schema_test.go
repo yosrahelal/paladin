@@ -200,7 +200,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		]
 	}`), &query)
 	require.NoError(t, err)
-	states, err := ss.FindStates(ctx, as.Persisted().DomainID, schemaID, query, "all")
+	states, err := ss.FindStates(ctx, as.Persisted().DomainID, "0x1234", schemaID, query, "all")
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 
@@ -211,7 +211,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		]
 	}`), &query)
 	require.NoError(t, err)
-	states, err = ss.FindStates(ctx, as.Persisted().DomainID, schemaID, query, "all")
+	states, err = ss.FindStates(ctx, as.Persisted().DomainID, "0x1234", schemaID, query, "all")
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 
@@ -222,7 +222,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		]
 	}`), &query)
 	require.NoError(t, err)
-	states, err = ss.FindStates(ctx, as.Persisted().DomainID, schemaID, query, "all")
+	states, err = ss.FindStates(ctx, as.Persisted().DomainID, "0x1234", schemaID, query, "all")
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 }
