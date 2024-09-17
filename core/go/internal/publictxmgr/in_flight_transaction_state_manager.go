@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/retry"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
@@ -39,7 +40,7 @@ type inFlightTransactionState struct {
 	PublicTxEngineMetricsManager
 	baseTypes.BalanceManager
 
-	txStore  baseTypes.TransactionStore
+	txStore  components.TransactionStore
 	bIndexer blockindexer.BlockIndexer
 	// input that should be set once the stage is running
 	*baseTypes.TransientPreviousStageOutputs
@@ -82,7 +83,7 @@ func (iftxs *inFlightTransactionState) CanSubmit(ctx context.Context, cost *big.
 	return false
 }
 
-func (iftxs *inFlightTransactionState) StartNewStageContext(ctx context.Context, stage baseTypes.InFlightTxStage, substatus baseTypes.BaseTxSubStatus) {
+func (iftxs *inFlightTransactionState) StartNewStageContext(ctx context.Context, stage baseTypes.InFlightTxStage, substatus components.BaseTxSubStatus) {
 	nowTime := time.Now() // pin the now time
 	rsc := NewRunningStageContext(ctx, stage, substatus, iftxs.InMemoryTxStateManager)
 	if rsc.Stage != iftxs.stage {
@@ -181,7 +182,7 @@ func (iftxs *inFlightTransactionState) AddStageOutputs(ctx context.Context, stag
 
 func NewInFlightTransactionStateManager(thm PublicTxEngineMetricsManager,
 	bm baseTypes.BalanceManager,
-	txStore baseTypes.TransactionStore,
+	txStore components.TransactionStore,
 	bIndexer blockindexer.BlockIndexer,
 	ifsat baseTypes.InFlightStageActionTriggers,
 	imtxs baseTypes.InMemoryTxStateManager,
@@ -339,22 +340,22 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 
 			if matchFound {
 				if it.Result == blockindexer.TXResult_SUCCESS.Enum() {
-					mtx.Status = baseTypes.BaseTxStatusSucceeded
+					mtx.Status = components.BaseTxStatusSucceeded
 					rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
 					iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusSuccess))
 				} else {
-					mtx.Status = baseTypes.BaseTxStatusFailed
+					mtx.Status = components.BaseTxStatusFailed
 					rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
 					iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusFail))
 				}
 			} else {
-				mtx.Status = baseTypes.BaseTxStatusConflict
+				mtx.Status = components.BaseTxStatusConflict
 				rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
 				iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusConflict))
 			}
-			if rsc.SubStatus != baseTypes.BaseTxSubStatusConfirmed {
-				rsc.StageOutputsToBePersisted.AddSubStatusAction(baseTypes.BaseTxActionConfirmTransaction, nil, nil)
-				rsc.SetSubStatus(baseTypes.BaseTxSubStatusConfirmed)
+			if rsc.SubStatus != components.BaseTxSubStatusConfirmed {
+				rsc.StageOutputsToBePersisted.AddSubStatusAction(components.BaseTxActionConfirmTransaction, nil, nil)
+				rsc.SetSubStatus(components.BaseTxSubStatusConfirmed)
 			}
 		}
 		if !iftxs.turnOffHistory {

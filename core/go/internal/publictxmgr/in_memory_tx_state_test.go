@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -35,7 +36,7 @@ func NewTestInMemoryTxState(t *testing.T) baseTypes.InMemoryTxStateManager {
 	oldTime := fftypes.Now()
 	oldFrom := "0x4e598f6e918321dd47c86e7a077b4ab0e7414846"
 	oldTxHash := tktypes.Bytes32Keccak([]byte("0x00000")).String()
-	oldStatus := baseTypes.BaseTxStatusPending
+	oldStatus := components.BaseTxStatusPending
 	oldTo := "0x6cee73cf4d5b0ac66ce2d1c0617bec4bedd09f39"
 	oldNonce := ethtypes.NewHexInteger64(1)
 	oldGasLimit := ethtypes.NewHexInteger64(2000)
@@ -43,7 +44,7 @@ func NewTestInMemoryTxState(t *testing.T) baseTypes.InMemoryTxStateManager {
 	oldGasPrice := ethtypes.NewHexInteger64(10)
 	oldErrorMessage := "old message"
 	oldTransactionData := ethtypes.MustNewHexBytes0xPrefix(testTransactionData)
-	testManagedTx := &baseTypes.ManagedTX{
+	testManagedTx := &components.ManagedTX{
 		ID:              uuid.New().String(),
 		Created:         oldTime,
 		DeleteRequested: oldTime,
@@ -84,11 +85,11 @@ func TestSettersAndGetters(t *testing.T) {
 	oldErrorMessage := "old message"
 	oldTransactionData := ethtypes.MustNewHexBytes0xPrefix(testTransactionData)
 
-	testManagedTx := &baseTypes.ManagedTX{
+	testManagedTx := &components.ManagedTX{
 		ID:              uuid.New().String(),
 		Created:         oldTime,
 		DeleteRequested: oldTime,
-		Status:          baseTypes.BaseTxStatusPending,
+		Status:          components.BaseTxStatusPending,
 		TransactionHash: oldTxHash,
 		Transaction: &ethsigner.Transaction{
 			From:     json.RawMessage(oldFrom),
@@ -143,7 +144,7 @@ func TestSettersAndGetters(t *testing.T) {
 
 	inMemoryTxState.SetConfirmedTransaction(context.Background(), testConfirmedTx)
 	assert.Equal(t, testConfirmedTx, inMemoryTxState.GetConfirmedTransaction())
-	successStatus := baseTypes.BaseTxStatusSucceeded
+	successStatus := components.BaseTxStatusSucceeded
 	newTime := fftypes.Now()
 	newFrom := "0xf1031"
 	newTxHash := "0x000031"
@@ -154,7 +155,7 @@ func TestSettersAndGetters(t *testing.T) {
 	newGasPrice := ethtypes.NewHexInteger64(111)
 	newErrorMessage := "new message"
 
-	inMemoryTxState.ApplyTxUpdates(context.Background(), &baseTypes.BaseTXUpdates{
+	inMemoryTxState.ApplyTxUpdates(context.Background(), &components.BaseTXUpdates{
 		Status:          &successStatus,
 		DeleteRequested: newTime,
 		GasPrice:        newGasPrice,
@@ -208,7 +209,7 @@ func TestSettersAndGetters(t *testing.T) {
 	maxFeePerGas := ethtypes.NewHexInteger64(123)
 
 	// test switch gas price format
-	inMemoryTxState.ApplyTxUpdates(context.Background(), &baseTypes.BaseTXUpdates{
+	inMemoryTxState.ApplyTxUpdates(context.Background(), &components.BaseTXUpdates{
 		MaxPriorityFeePerGas: maxPriorityFeePerGas,
 		MaxFeePerGas:         maxFeePerGas,
 	})
@@ -222,7 +223,7 @@ func TestSettersAndGetters(t *testing.T) {
 	maxPF := ethtypes.NewHexInteger64(3)
 	maxF := ethtypes.NewHexInteger64(234)
 	maxP := ethtypes.NewHexInteger64(10000)
-	inMemoryTxState.ApplyTxUpdates(context.Background(), &baseTypes.BaseTXUpdates{
+	inMemoryTxState.ApplyTxUpdates(context.Background(), &components.BaseTXUpdates{
 		MaxPriorityFeePerGas: maxPF,
 		MaxFeePerGas:         maxF,
 		GasPrice:             maxP,

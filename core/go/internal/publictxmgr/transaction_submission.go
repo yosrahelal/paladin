@@ -23,6 +23,7 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
@@ -41,7 +42,7 @@ func calculateTransactionHash(rawTxnData []byte) *tktypes.Bytes32 {
 	return &hashBytes
 }
 
-func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx *baseTypes.ManagedTX, signedMessage []byte) (string, *fftypes.FFTime, ethclient.ErrorReason, baseTypes.SubmissionOutcome, error) {
+func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx *components.ManagedTX, signedMessage []byte) (string, *fftypes.FFTime, ethclient.ErrorReason, baseTypes.SubmissionOutcome, error) {
 	var txHash *tktypes.Bytes32
 	sendStart := time.Now()
 	calculatedTxHash := calculateTransactionHash(signedMessage)

@@ -22,7 +22,7 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
-	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
@@ -162,12 +162,12 @@ func (ble *publicTxEngine) poll(ctx context.Context) (polled int, total int) {
 			}
 		}
 
-		var additionalTxFromNonInFlightSigners []*baseTypes.ManagedTX
+		var additionalTxFromNonInFlightSigners []*components.ManagedTX
 		// We retry the get from persistence indefinitely (until the context cancels)
 		err := ble.retry.Do(ctx, "get pending transactions with non InFlight signing addresses", func(attempt int) (retry bool, err error) {
 			fb := ble.txStore.NewTransactionFilter(ctx)
 			conditions := []ffapi.Filter{
-				fb.Eq("status", baseTypes.BaseTxStatusPending),
+				fb.Eq("status", components.BaseTxStatusPending),
 			}
 			if len(InFlightSigningAddresses) > 0 {
 				conditions = append(conditions, fb.NotIn("from", InFlightSigningAddresses))
@@ -229,11 +229,11 @@ func (ble *publicTxEngine) MarkInFlightOrchestratorsStale() {
 	}
 }
 
-func (ble *publicTxEngine) GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *baseTypes.ManagedTX, err error) {
+func (ble *publicTxEngine) GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *components.ManagedTX, err error) {
 	fb := ble.txStore.NewTransactionFilter(ctx)
 	filter := fb.And(fb.Eq("from", sourceAddress),
 		fb.Eq("to", destinationAddress),
-		fb.Eq("status", baseTypes.BaseTxStatusPending),
+		fb.Eq("status", components.BaseTxStatusPending),
 		fb.Neq("value", nil), // NB: we assume if a transaction has value then it's a fueling transaction
 	)
 	_ = filter.Limit(1).Sort("-nonce")
@@ -248,14 +248,14 @@ func (ble *publicTxEngine) GetPendingFuelingTransaction(ctx context.Context, sou
 	return tx, nil
 }
 
-func (ble *publicTxEngine) CheckTransactionCompleted(ctx context.Context, tx *baseTypes.ManagedTX) (completed bool) {
+func (ble *publicTxEngine) CheckTransactionCompleted(ctx context.Context, tx *components.ManagedTX) (completed bool) {
 	// no need for locking here as outdated information is OK given we do frequent retires
 	log.L(ctx).Debugf("CheckTransactionCompleted checking state for transaction %s.", tx.ID)
 	completedTxNonce, exists := ble.completedTxNoncePerAddress[string(tx.From)]
 	if !exists {
 		// need to query the database to check the status of managed transaction
 		fb := ble.txStore.NewTransactionFilter(ctx)
-		filter := fb.And(fb.Eq("from", tx.From), fb.Or(fb.Eq("status", baseTypes.BaseTxStatusSucceeded), fb.Eq("status", baseTypes.BaseTxStatusFailed)))
+		filter := fb.And(fb.Eq("from", tx.From), fb.Or(fb.Eq("status", components.BaseTxStatusSucceeded), fb.Eq("status", components.BaseTxStatusFailed)))
 		_ = filter.Limit(1).Sort("-nonce")
 
 		txs, _, err := ble.txStore.ListTransactions(ctx, filter)
@@ -280,12 +280,12 @@ func (ble *publicTxEngine) CheckTransactionCompleted(ctx context.Context, tx *ba
 
 }
 
-func (ble *publicTxEngine) updateCompletedTxNonce(tx *baseTypes.ManagedTX) (updated bool) {
+func (ble *publicTxEngine) updateCompletedTxNonce(tx *components.ManagedTX) (updated bool) {
 	updated = false
 	// no need for locking here as outdated information is OK given we do frequent retires
 	ble.completedTxNoncePerAddressMutex.Lock()
 	defer ble.completedTxNoncePerAddressMutex.Unlock()
-	if tx.Status != baseTypes.BaseTxStatusSucceeded && tx.Status != baseTypes.BaseTxStatusFailed {
+	if tx.Status != components.BaseTxStatusSucceeded && tx.Status != components.BaseTxStatusFailed {
 		// not a completed tx, no op
 		return updated
 	}

@@ -28,9 +28,8 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/mocks/enginemocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -39,18 +38,18 @@ import (
 
 func TestNewOrchestratorPolling(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &baseTypes.ManagedTX{
+	mockManagedTx1 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusPending,
+		Status: components.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 		Created: fftypes.Now(),
 	}
-	mockManagedTx2 := &baseTypes.ManagedTX{
+	mockManagedTx2 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusPending,
+		Status: components.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
@@ -66,8 +65,8 @@ func TestNewOrchestratorPolling(t *testing.T) {
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := enginemocks.NewTransactionStore(t)
-	mEN := enginemocks.NewManagedTxEventNotifier(t)
+	mTS := componentmocks.NewTransactionStore(t)
+	mEN := componentmocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
@@ -87,8 +86,8 @@ func TestNewOrchestratorPolling(t *testing.T) {
 		time.Sleep(1 * time.Hour) // make sure the async action never got returned as the test will mock the events
 	}).Maybe()
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{}, nil, nil).Maybe()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{}, nil, nil).Maybe()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT}
 	addressBalanceChecked := make(chan bool)
@@ -102,7 +101,7 @@ func TestNewOrchestratorPolling(t *testing.T) {
 
 func TestNewOrchestratorPollingContextCancelled(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	mockManagedTx1 := &baseTypes.ManagedTX{
+	mockManagedTx1 := &components.ManagedTX{
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
@@ -117,8 +116,8 @@ func TestNewOrchestratorPollingContextCancelled(t *testing.T) {
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := enginemocks.NewTransactionStore(t)
-	mEN := enginemocks.NewManagedTxEventNotifier(t)
+	mTS := componentmocks.NewTransactionStore(t)
+	mEN := componentmocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
@@ -139,18 +138,18 @@ func TestNewOrchestratorPollingContextCancelled(t *testing.T) {
 
 func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &baseTypes.ManagedTX{
+	mockManagedTx1 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusFailed,
+		Status: components.BaseTxStatusFailed,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 		Created: fftypes.Now(),
 	}
-	mockManagedTx2 := &baseTypes.ManagedTX{
+	mockManagedTx2 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusPending,
+		Status: components.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
@@ -165,8 +164,8 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := enginemocks.NewTransactionStore(t)
-	mEN := enginemocks.NewManagedTxEventNotifier(t)
+	mTS := componentmocks.NewTransactionStore(t)
+	mEN := componentmocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
@@ -179,7 +178,7 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT,
 	}
@@ -194,18 +193,18 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 
 func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &baseTypes.ManagedTX{
+	mockManagedTx1 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusSuspended,
+		Status: components.BaseTxStatusSuspended,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 		Created: fftypes.Now(),
 	}
-	mockManagedTx2 := &baseTypes.ManagedTX{
+	mockManagedTx2 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusPending,
+		Status: components.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
@@ -221,8 +220,8 @@ func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := enginemocks.NewTransactionStore(t)
-	mEN := enginemocks.NewManagedTxEventNotifier(t)
+	mTS := componentmocks.NewTransactionStore(t)
+	mEN := componentmocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 
@@ -236,7 +235,7 @@ func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT,
 	}
@@ -252,9 +251,9 @@ func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 
 func TestNewOrchestratorPollingMarkStale(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &baseTypes.ManagedTX{
+	mockManagedTx1 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusPending,
+		Status: components.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
@@ -270,8 +269,8 @@ func TestNewOrchestratorPollingMarkStale(t *testing.T) {
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := enginemocks.NewTransactionStore(t)
-	mEN := enginemocks.NewManagedTxEventNotifier(t)
+	mTS := componentmocks.NewTransactionStore(t)
+	mEN := componentmocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
@@ -285,7 +284,7 @@ func TestNewOrchestratorPollingMarkStale(t *testing.T) {
 	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{mockManagedTx1}, nil, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{mockManagedTx1}, nil, nil).Once()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT,
 	}
@@ -302,18 +301,18 @@ func TestNewOrchestratorPollingMarkStale(t *testing.T) {
 func TestOrchestratorStop(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
-	mockManagedTx1 := &baseTypes.ManagedTX{
+	mockManagedTx1 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusSuspended,
+		Status: components.BaseTxStatusSuspended,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 		Created: fftypes.Now(),
 	}
-	mockManagedTx2 := &baseTypes.ManagedTX{
+	mockManagedTx2 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusPending,
+		Status: components.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
@@ -327,12 +326,12 @@ func TestOrchestratorStop(t *testing.T) {
 
 	ble, _ := NewTestTransactionEngine(t)
 
-	mTS := enginemocks.NewTransactionStore(t)
+	mTS := componentmocks.NewTransactionStore(t)
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Maybe()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Maybe()
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := enginemocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewManagedTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
@@ -354,9 +353,9 @@ func TestOrchestratorStop(t *testing.T) {
 
 func TestOrchestratorStopWhenBalanceUnavailable(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &baseTypes.ManagedTX{
+	mockManagedTx1 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusSucceeded,
+		Status: components.BaseTxStatusSucceeded,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
@@ -368,8 +367,8 @@ func TestOrchestratorStopWhenBalanceUnavailable(t *testing.T) {
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := enginemocks.NewTransactionStore(t)
-	mEN := enginemocks.NewManagedTxEventNotifier(t)
+	mTS := componentmocks.NewTransactionStore(t)
+	mEN := componentmocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 
@@ -410,9 +409,9 @@ func TestOrchestratorStopWhenBalanceUnavailable(t *testing.T) {
 
 func TestOrchestratorTriggerTopUp(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &baseTypes.ManagedTX{
+	mockManagedTx1 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusSucceeded,
+		Status: components.BaseTxStatusSucceeded,
 		Transaction: &ethsigner.Transaction{
 			From:     json.RawMessage(testMainSigningAddress),
 			Nonce:    ethtypes.NewHexInteger64(1),
@@ -426,8 +425,8 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 	mockBM, mEC, mockAFTxEngine := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := enginemocks.NewTransactionStore(t)
-	mEN := enginemocks.NewManagedTxEventNotifier(t)
+	mTS := componentmocks.NewTransactionStore(t)
+	mEN := componentmocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.orchestratorConfig.Set(OrchestratorMaxInFlightTransactionsInt, 10)
@@ -459,36 +458,36 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 
 func TestOrchestratorHandleConfirmedTransactions(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	mockManagedTx0 := &baseTypes.ManagedTX{
+	mockManagedTx0 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusPending,
+		Status: components.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(0),
 		},
 		Created: fftypes.Now(),
 	}
-	mockManagedTx1 := &baseTypes.ManagedTX{
+	mockManagedTx1 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusPending,
+		Status: components.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 		Created: fftypes.Now(),
 	}
-	mockManagedTx2 := &baseTypes.ManagedTX{
+	mockManagedTx2 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusPending,
+		Status: components.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
 		Created: fftypes.Now(),
 	}
-	mockManagedTx3 := &baseTypes.ManagedTX{
+	mockManagedTx3 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusPending,
+		Status: components.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(3),
@@ -499,8 +498,8 @@ func TestOrchestratorHandleConfirmedTransactions(t *testing.T) {
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := enginemocks.NewTransactionStore(t)
-	mEN := enginemocks.NewManagedTxEventNotifier(t)
+	mTS := componentmocks.NewTransactionStore(t)
+	mEN := componentmocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 
@@ -542,9 +541,9 @@ func TestOrchestratorHandleConfirmedTransactions(t *testing.T) {
 func TestOrchestratorHandleConfirmedTransactionsNoInflightNotHang(t *testing.T) {
 	ctx := context.Background()
 
-	mockManagedTx1 := &baseTypes.ManagedTX{
+	mockManagedTx1 := &components.ManagedTX{
 		ID:     uuid.New().String(),
-		Status: baseTypes.BaseTxStatusPending,
+		Status: components.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
@@ -555,8 +554,8 @@ func TestOrchestratorHandleConfirmedTransactionsNoInflightNotHang(t *testing.T) 
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := enginemocks.NewTransactionStore(t)
-	mEN := enginemocks.NewManagedTxEventNotifier(t)
+	mTS := componentmocks.NewTransactionStore(t)
+	mEN := componentmocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 

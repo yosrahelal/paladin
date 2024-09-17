@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -162,13 +163,13 @@ func TestProduceLatestInFlightStageContextConfirmingTxFailed(t *testing.T) {
 	notifyMock := mEN.On("Notify", ctx, mock.Anything)
 
 	notifyMock.Run(func(args mock.Arguments) {
-		transactionEvent := args[1].(baseTypes.ManagedTransactionEvent)
-		assert.Equal(t, baseTypes.ManagedTXProcessFailed, transactionEvent.Type)
+		transactionEvent := args[1].(components.ManagedTransactionEvent)
+		assert.Equal(t, components.ManagedTXProcessFailed, transactionEvent.Type)
 		notifyMock.Return(nil)
 	}).Once()
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
 	it.stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageConfirming, time.Now(), nil)
-	mtx.Status = baseTypes.BaseTxStatusFailed
+	mtx.Status = components.BaseTxStatusFailed
 	it.stateManager.SetValidatedTransactionHashMatchState(ctx, true)
 	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
 		AvailableToSpend:         nil,
@@ -216,13 +217,13 @@ func TestProduceLatestInFlightStageContextConfirmingTxSucceeded(t *testing.T) {
 	notifyMock := mEN.On("Notify", ctx, mock.Anything)
 
 	notifyMock.Run(func(args mock.Arguments) {
-		transactionEvent := args[1].(baseTypes.ManagedTransactionEvent)
-		assert.Equal(t, baseTypes.ManagedTXProcessSucceeded, transactionEvent.Type)
+		transactionEvent := args[1].(components.ManagedTransactionEvent)
+		assert.Equal(t, components.ManagedTXProcessSucceeded, transactionEvent.Type)
 		notifyMock.Return(nil)
 	}).Once()
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
 	it.stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageConfirming, time.Now(), nil)
-	mtx.Status = baseTypes.BaseTxStatusSucceeded
+	mtx.Status = components.BaseTxStatusSucceeded
 	rsc.StageErrored = false
 	it.stateManager.SetValidatedTransactionHashMatchState(ctx, true)
 	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
@@ -355,7 +356,7 @@ func TestProduceLatestInFlightStageContextSanityChecksForCompletedTransactions(t
 	imtxs := inFlightStageMananger.InMemoryTxStateManager.(*inMemoryTxState)
 
 	mtx := it.stateManager.GetTx()
-	mtx.Status = baseTypes.BaseTxStatusSucceeded
+	mtx.Status = components.BaseTxStatusSucceeded
 	testConfirmedTx := &blockindexer.IndexedTransaction{
 		BlockNumber:      int64(1233),
 		TransactionIndex: int64(23),

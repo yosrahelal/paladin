@@ -23,20 +23,21 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 )
 
 type inMemoryTxState struct {
 	// managed transaction in the only input for creating an inflight transaction
-	mtx *baseTypes.ManagedTX
+	mtx *components.ManagedTX
 
 	// the value of the following properties are populated during transaction processing but not during initialization
 	//  the process logic will determine whether confirmed transaction requires to be fetched
 	ConfirmedTransaction *blockindexer.IndexedTransaction
 }
 
-func NewInMemoryTxStateMananger(ctx context.Context, mtx *baseTypes.ManagedTX) baseTypes.InMemoryTxStateManager {
+func NewInMemoryTxStateMananger(ctx context.Context, mtx *components.ManagedTX) baseTypes.InMemoryTxStateManager {
 	return &inMemoryTxState{
 		mtx: mtx,
 	}
@@ -46,7 +47,7 @@ func (imtxs *inMemoryTxState) SetConfirmedTransaction(ctx context.Context, iTX *
 	imtxs.ConfirmedTransaction = iTX
 }
 
-func (imtxs *inMemoryTxState) ApplyTxUpdates(ctx context.Context, txUpdates *baseTypes.BaseTXUpdates) {
+func (imtxs *inMemoryTxState) ApplyTxUpdates(ctx context.Context, txUpdates *components.BaseTXUpdates) {
 	mtx := imtxs.mtx
 
 	if txUpdates.From != nil || txUpdates.To != nil || txUpdates.Nonce != nil || txUpdates.Value != nil {
@@ -106,7 +107,7 @@ func (imtxs *inMemoryTxState) ApplyTxUpdates(ctx context.Context, txUpdates *bas
 	}
 }
 
-func (imtxs *inMemoryTxState) GetTx() *baseTypes.ManagedTX {
+func (imtxs *inMemoryTxState) GetTx() *components.ManagedTX {
 	return imtxs.mtx
 }
 
@@ -125,7 +126,7 @@ func (imtxs *inMemoryTxState) GetDeleteRequestedTime() *fftypes.FFTime {
 func (imtxs *inMemoryTxState) GetTransactionHash() string {
 	return imtxs.mtx.TransactionHash
 }
-func (imtxs *inMemoryTxState) GetStatus() baseTypes.BaseTxStatus {
+func (imtxs *inMemoryTxState) GetStatus() components.BaseTxStatus {
 	return imtxs.mtx.Status
 }
 
@@ -173,14 +174,14 @@ func (imtxs *inMemoryTxState) GetConfirmedTransaction() *blockindexer.IndexedTra
 }
 
 func (imtxs *inMemoryTxState) IsComplete() bool {
-	return imtxs.mtx.Status == baseTypes.BaseTxStatusFailed || imtxs.mtx.Status == baseTypes.BaseTxStatusSucceeded
+	return imtxs.mtx.Status == components.BaseTxStatusFailed || imtxs.mtx.Status == components.BaseTxStatusSucceeded
 }
 
 func (imtxs *inMemoryTxState) IsSuspended() bool {
-	return imtxs.mtx.Status == baseTypes.BaseTxStatusSuspended
+	return imtxs.mtx.Status == components.BaseTxStatusSuspended
 }
 
-func NewRunningStageContext(ctx context.Context, stage baseTypes.InFlightTxStage, substatus baseTypes.BaseTxSubStatus, imtxs baseTypes.InMemoryTxStateManager) *baseTypes.RunningStageContext {
+func NewRunningStageContext(ctx context.Context, stage baseTypes.InFlightTxStage, substatus components.BaseTxSubStatus, imtxs baseTypes.InMemoryTxStateManager) *baseTypes.RunningStageContext {
 	return &baseTypes.RunningStageContext{
 		Stage:          stage,
 		SubStatus:      substatus,

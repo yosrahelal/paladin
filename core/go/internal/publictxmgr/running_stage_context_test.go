@@ -20,15 +20,16 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
-	"github.com/kaleido-io/paladin/core/mocks/enginemocks"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
 func TestRunningStageContext(t *testing.T) {
 	imtx := NewTestInMemoryTxState(t)
-	newSubStatus := baseTypes.BaseTxSubStatusConfirmed
+	newSubStatus := components.BaseTxSubStatusConfirmed
 	testRunningStageContext := NewRunningStageContext(context.Background(), baseTypes.InFlightTxStageConfirming, "", imtx)
 	assert.Empty(t, testRunningStageContext.SubStatus)
 	assert.Nil(t, testRunningStageContext.StageOutputsToBePersisted)
@@ -38,10 +39,10 @@ func TestRunningStageContext(t *testing.T) {
 	assert.NotNil(t, testRunningStageContext.StageOutputsToBePersisted)
 
 	assert.Empty(t, testRunningStageContext.StageOutputsToBePersisted.HistoryUpdates)
-	testRunningStageContext.StageOutputsToBePersisted.AddSubStatusAction(baseTypes.BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr("info"), fftypes.JSONAnyPtr("error"))
+	testRunningStageContext.StageOutputsToBePersisted.AddSubStatusAction(components.BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr("info"), fftypes.JSONAnyPtr("error"))
 	assert.Equal(t, 1, len(testRunningStageContext.StageOutputsToBePersisted.HistoryUpdates))
 
-	mTS := enginemocks.NewTransactionStore(t)
-	mTS.On("AddSubStatusAction", mock.Anything, mock.Anything, newSubStatus, baseTypes.BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr("info"), fftypes.JSONAnyPtr("error"), mock.Anything).Return(nil).Once()
+	mTS := componentmocks.NewTransactionStore(t)
+	mTS.On("AddSubStatusAction", mock.Anything, mock.Anything, newSubStatus, components.BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr("info"), fftypes.JSONAnyPtr("error"), mock.Anything).Return(nil).Once()
 	_ = testRunningStageContext.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
 }

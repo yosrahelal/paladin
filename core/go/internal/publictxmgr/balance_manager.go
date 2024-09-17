@@ -116,7 +116,7 @@ type BalanceManagerWithInMemoryTracking struct {
 	ethClient ethclient.EthClient
 
 	// transaction handler is used to submit and fetch autofueling transaction status
-	txEngine baseTypes.PublicTxEngine
+	txEngine components.PublicTxEngine
 
 	// balance cache is used to store cached balances of any address
 	balanceCache cache.CInterface
@@ -149,7 +149,7 @@ type BalanceManagerWithInMemoryTracking struct {
 	// fueling transactions by search for the latest transfer type transaction to the destination address. (this involves
 	//  read from database and is necessary to recover balance manager from crashes)
 	destinationAddressesFuelingTracked    map[string]*sync.Mutex
-	trackedFuelingTransactions            map[string]*baseTypes.ManagedTX
+	trackedFuelingTransactions            map[string]*components.ManagedTX
 	destinationAddressesFuelingTrackedMux sync.Mutex
 
 	// a map of signing addresses and a boolean to indicate whether balance manager should fetch
@@ -158,7 +158,7 @@ type BalanceManagerWithInMemoryTracking struct {
 	addressBalanceChangedMapMux sync.Mutex
 }
 
-func (af *BalanceManagerWithInMemoryTracking) TopUpAccount(ctx context.Context, addAccount *baseTypes.AddressAccount) (mtx *baseTypes.ManagedTX, err error) {
+func (af *BalanceManagerWithInMemoryTracking) TopUpAccount(ctx context.Context, addAccount *baseTypes.AddressAccount) (mtx *components.ManagedTX, err error) {
 	if af.sourceAddress == "" {
 		log.L(ctx).Debugf("Skip top up transaction as no fueling source configured")
 		// No-op
@@ -277,12 +277,12 @@ func (af *BalanceManagerWithInMemoryTracking) GetAddressBalance(ctx context.Cont
 	}, nil
 }
 
-func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(ctx context.Context, destAddress string, value *big.Int) (mtx *baseTypes.ManagedTX, err error) {
+func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(ctx context.Context, destAddress string, value *big.Int) (mtx *components.ManagedTX, err error) {
 	// check whether there is a pending fueling transaction already
 	// check whether the current balance manager already tracking the existing in-flight fueling transactions
 	log.L(ctx).Tracef("TransferGasFromAutoFuelingSource entry, source address: %s, destination address: %s, amount: %s", af.sourceAddress, destAddress, value.String())
 
-	var fuelingTx *baseTypes.ManagedTX
+	var fuelingTx *components.ManagedTX
 	af.destinationAddressesFuelingTrackedMux.Lock()
 	perAddressMux, ok := af.destinationAddressesFuelingTracked[destAddress] // there is no lock here as the map of tracked transactions is the one that is critical to get right
 	if !ok {
@@ -343,7 +343,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 
 	log.L(ctx).Debugf("TransferGasFromAutoFuelingSource submitting a fueling tx for  destination address: %s ", destAddress)
 	txID := uuid.New()
-	mtx, _, err = af.txEngine.HandleNewTransaction(ctx, &baseTypes.RequestOptions{
+	mtx, _, err = af.txEngine.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
 		SignerID: af.sourceAddress,
 	}, &components.EthTransfer{
@@ -361,7 +361,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 	return mtx, nil
 }
 
-func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf config.Section, ethClient ethclient.EthClient, txEngine baseTypes.PublicTxEngine) (baseTypes.BalanceManager, error) {
+func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf config.Section, ethClient ethclient.EthClient, txEngine components.PublicTxEngine) (baseTypes.BalanceManager, error) {
 	cm, _ := cache.NewCacheManager(ctx, true).GetCache(ctx, "balance-manager", "balance", conf.GetByteSize(BalanceManagerCacheSizeByteString), conf.GetDuration(BalanceManagerCacheTTLDurationString), conf.GetBool(BalanceManagerCacheEnabled), cache.StrictExpiry, cache.TTLFromInitialAdd)
 	log.L(ctx).Debugf("Balance manager cache setting. Enabled: %t , size: %d , ttl: %s", conf.GetBool(BalanceManagerCacheEnabled), conf.GetByteSize(BalanceManagerCacheSizeByteString), conf.GetDuration(BalanceManagerCacheTTLDurationString))
 	afConfig := conf.SubSection(BalanceManagerAutoFuelingSection)
@@ -441,7 +441,7 @@ func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf config.Sect
 		maxDestBalance:                     maxDestBalance,
 		minThreshold:                       minThreshold,
 		destinationAddressesFuelingTracked: make(map[string]*sync.Mutex),
-		trackedFuelingTransactions:         make(map[string]*baseTypes.ManagedTX),
+		trackedFuelingTransactions:         make(map[string]*components.ManagedTX),
 		addressBalanceChangedMap:           make(map[string]bool),
 	}
 	return bm, nil

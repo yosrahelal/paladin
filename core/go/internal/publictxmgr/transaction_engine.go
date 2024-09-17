@@ -62,10 +62,10 @@ const (
 type publicTxEngine struct {
 	ctx                    context.Context
 	thMetrics              *publicTxEngineMetrics
-	txStore                baseTypes.TransactionStore
+	txStore                components.TransactionStore
 	bIndexer               blockindexer.BlockIndexer
 	ethClient              ethclient.EthClient
-	managedTXEventNotifier baseTypes.ManagedTxEventNotifier
+	managedTXEventNotifier components.ManagedTxEventNotifier
 	keymgr                 ethclient.KeyManager
 	// gas price
 	gasPriceClient GasPriceClient
@@ -106,7 +106,7 @@ type publicTxEngine struct {
 	gasPriceIncreasePercent *big.Int
 }
 
-func NewTransactionEngine(ctx context.Context, conf config.Section) (baseTypes.PublicTxEngine, error) {
+func NewTransactionEngine(ctx context.Context, conf config.Section) (components.PublicTxEngine, error) {
 	log.L(ctx).Debugf("Creating new enterprise transaction handler")
 
 	cm := cache.NewCacheManager(ctx, true)
@@ -160,7 +160,7 @@ func NewTransactionEngine(ctx context.Context, conf config.Section) (baseTypes.P
 	return ble, nil
 }
 
-func (ble *publicTxEngine) Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore baseTypes.TransactionStore, managedTXEventNotifier baseTypes.ManagedTxEventNotifier, blockIndexer blockindexer.BlockIndexer) {
+func (ble *publicTxEngine) Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore components.TransactionStore, managedTXEventNotifier components.ManagedTxEventNotifier, blockIndexer blockindexer.BlockIndexer) {
 	log.L(ctx).Debugf("Initializing enterprise transaction handler")
 	ble.ethClient = ethClient
 	ble.keymgr = keymgr
@@ -194,7 +194,7 @@ func (ble *publicTxEngine) Start(ctx context.Context) (done <-chan struct{}, err
 	return ble.engineLoopDone, nil
 }
 
-func (ble *publicTxEngine) HandleNewTransaction(ctx context.Context, reqOptions *baseTypes.RequestOptions, txPayload interface{}) (mtx *baseTypes.ManagedTX, submissionRejected bool, err error) {
+func (ble *publicTxEngine) HandleNewTransaction(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}) (mtx *components.ManagedTX, submissionRejected bool, err error) {
 	log.L(ctx).Tracef("HandleNewTx new request, options: %+v, payload: %+v", reqOptions, txPayload)
 
 	err = reqOptions.Validate(ctx)
@@ -276,15 +276,15 @@ func (ble *publicTxEngine) HandleNewTransaction(ctx context.Context, reqOptions 
 	return mtx, false /* any error at this point should be transient and re-submittable with the same UUID */, err
 }
 
-func (ble *publicTxEngine) createManagedTx(ctx context.Context, txID string, ethTx *ethsigner.Transaction) (*baseTypes.ManagedTX, error) {
+func (ble *publicTxEngine) createManagedTx(ctx context.Context, txID string, ethTx *ethsigner.Transaction) (*components.ManagedTX, error) {
 	log.L(ctx).Tracef("createManagedTx creating a new managed transaction with ID: %s, and payload %+v", txID, ethTx)
 	now := fftypes.Now()
-	mtx := &baseTypes.ManagedTX{
+	mtx := &components.ManagedTX{
 		ID:          txID,
 		Created:     now,
 		Updated:     now,
 		Transaction: ethTx,
-		Status:      baseTypes.BaseTxStatusPending,
+		Status:      components.BaseTxStatusPending,
 	}
 
 	log.L(ctx).Tracef("createManagedTx persisting managed transaction %+v", mtx)
@@ -303,7 +303,7 @@ func (ble *publicTxEngine) createManagedTx(ctx context.Context, txID string, eth
 	})
 	if err == nil {
 		log.L(ctx).Tracef("createManagedTx persisted transaction with ID: %s, using nonce %s", mtx.ID, mtx.Nonce.String())
-		err = ble.txStore.AddSubStatusAction(ctx, txID, baseTypes.BaseTxSubStatusReceived, baseTypes.BaseTxActionAssignNonce, fftypes.JSONAnyPtr(`{"nonce":"`+mtx.Nonce.String()+`"}`), nil, fftypes.Now())
+		err = ble.txStore.AddSubStatusAction(ctx, txID, components.BaseTxSubStatusReceived, components.BaseTxActionAssignNonce, fftypes.JSONAnyPtr(`{"nonce":"`+mtx.Nonce.String()+`"}`), nil, fftypes.Now())
 	}
 	if err != nil {
 		log.L(ctx).Errorf("createManagedTx failed to create managed traction with ID: %s, due to %+v", mtx.ID, err)
@@ -398,7 +398,7 @@ func (ble *publicTxEngine) HandleConfirmedTransactions(ctx context.Context, conf
 	return nil
 }
 
-func (ble *publicTxEngine) HandleSuspendTransaction(ctx context.Context, txID string) (mtx *baseTypes.ManagedTX, err error) {
+func (ble *publicTxEngine) HandleSuspendTransaction(ctx context.Context, txID string) (mtx *components.ManagedTX, err error) {
 	mtx, err = ble.txStore.GetTransactionByID(ctx, txID)
 	if err != nil {
 		return nil, err
@@ -410,7 +410,7 @@ func (ble *publicTxEngine) HandleSuspendTransaction(ctx context.Context, txID st
 	return res.tx, nil
 }
 
-func (ble *publicTxEngine) HandleResumeTransaction(ctx context.Context, txID string) (mtx *baseTypes.ManagedTX, err error) {
+func (ble *publicTxEngine) HandleResumeTransaction(ctx context.Context, txID string) (mtx *components.ManagedTX, err error) {
 	mtx, err = ble.txStore.GetTransactionByID(ctx, txID)
 	if err != nil {
 		return nil, err

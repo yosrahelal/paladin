@@ -22,9 +22,9 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/config"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/mocks/enginemocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,8 +33,8 @@ type testInFlightTransactionWithMocksAndConf struct {
 	it   *InFlightTransactionStageController
 	mBI  *componentmocks.BlockIndexer
 	mEC  *componentmocks.EthClient
-	mEN  *enginemocks.ManagedTxEventNotifier
-	mTS  *enginemocks.TransactionStore
+	mEN  *componentmocks.ManagedTxEventNotifier
+	mTS  *componentmocks.TransactionStore
 	mKM  *componentmocks.KeyManager
 	mBM  baseTypes.BalanceManager
 	conf config.Section
@@ -47,8 +47,8 @@ func NewTestInFlightTransactionWithMocks(t *testing.T) *testInFlightTransactionW
 	mockBalanceManager, mEC, _ := NewTestBalanceManager(context.Background(), t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := enginemocks.NewTransactionStore(t)
-	mEN := enginemocks.NewManagedTxEventNotifier(t)
+	mTS := componentmocks.NewTransactionStore(t)
+	mEN := componentmocks.NewManagedTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.ctx = ctx
@@ -112,10 +112,10 @@ func TestProduceLatestInFlightStageContextStatusChange(t *testing.T) {
 	mtx.GasPrice = nil
 	mtx.TransactionHash = ""
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
-	suspended := baseTypes.BaseTxStatusSuspended
+	suspended := components.BaseTxStatusSuspended
 	it.newStatus = &suspended
 	iftxms := it.stateManager.(*inFlightTransactionState)
-	iftxms.runningStageContext = NewRunningStageContext(ctx, baseTypes.InFlightTxStageStatusUpdate, baseTypes.BaseTxSubStatusReceived, iftxms)
+	iftxms.runningStageContext = NewRunningStageContext(ctx, baseTypes.InFlightTxStageStatusUpdate, components.BaseTxSubStatusReceived, iftxms)
 
 	assert.NotNil(t, it.stateManager.GetRunningStageContext(ctx))
 	rsc := it.stateManager.GetRunningStageContext(ctx)
@@ -188,7 +188,7 @@ func TestProduceLatestInFlightStageContextStatusUpdatePanic(t *testing.T) {
 	mtx.GasPrice = nil
 	mtx.TransactionHash = ""
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
-	suspend := baseTypes.BaseTxStatusSuspended
+	suspend := components.BaseTxStatusSuspended
 	it.newStatus = &suspend
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
 		AvailableToSpend:         nil,

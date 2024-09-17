@@ -27,6 +27,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/retry"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
@@ -173,9 +174,9 @@ type orchestrator struct {
 	resubmitInterval        time.Duration
 	stageRetryTimeout       time.Duration
 	persistenceRetryTimeout time.Duration
-	txStore                 baseTypes.TransactionStore
+	txStore                 components.TransactionStore
 	ethClient               ethclient.EthClient
-	managedTXEventNotifier  baseTypes.ManagedTxEventNotifier
+	managedTXEventNotifier  components.ManagedTxEventNotifier
 	bIndexer                blockindexer.BlockIndexer
 	turnOffHistory          bool
 
@@ -302,7 +303,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 		stageCounts[stageName] = 0
 	}
 
-	var latestCompleted *baseTypes.ManagedTX
+	var latestCompleted *components.ManagedTX
 	startFromNonce, hasCompletedNonce := oc.completedTxNoncePerAddress[oc.signingAddress]
 	// Run through copying across from the old InFlight list to the new one, those that aren't ready to be deleted
 	for _, p := range oldInFlight {
@@ -344,7 +345,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 		fb := oc.txStore.NewTransactionFilter(ctx)
 		conds := []ffapi.Filter{
 			fb.Eq("from", oc.signingAddress),
-			fb.Eq("status", baseTypes.BaseTxStatusPending),
+			fb.Eq("status", components.BaseTxStatusPending),
 		}
 
 		if len(oc.transactionIDsInStatusUpdate) > 0 {
@@ -360,7 +361,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			conds = append(conds, fb.Gt("nonce", startFromNonce.String()))
 		}
 
-		var additional []*baseTypes.ManagedTX
+		var additional []*components.ManagedTX
 		// We retry the get from persistence indefinitely (until the context cancels)
 		err := oc.retry.Do(ctx, "get pending transactions", func(attempt int) (retry bool, err error) {
 			filter := fb.And(conds...)
@@ -380,7 +381,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 				// already processed, still being persisted
 				completedTxIDsStillBeingPersisted[mtx.ID] = true
 				log.L(ctx).Debugf("Orchestrator polled transaction with ID: %s but it's already being processed before, ignoring it", mtx.ID)
-			} else if mtx.Status == baseTypes.BaseTxStatusPending {
+			} else if mtx.Status == components.BaseTxStatusPending {
 				queueUpdated = true
 				it := NewInFlightTransactionStageController(oc.publicTxEngine, oc, mtx)
 				if it.getConfirmedTxNonce(oc.signingAddress) != nil && it.getConfirmedTxNonce(oc.signingAddress).Cmp(mtx.Nonce.BigInt()) != -1 /* an confirmed tx is missed*/ {

@@ -28,7 +28,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/mocks/enginemocks"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -43,7 +42,7 @@ const testSourceAddressBalanceString = "400"
 const testSourceAddressBalanceNew = 500
 const testSourceAddressBalanceNewString = "500"
 
-func NewTestBalanceManager(ctx context.Context, t *testing.T) (*BalanceManagerWithInMemoryTracking, *componentmocks.EthClient, *enginemocks.PublicTxEngine) {
+func NewTestBalanceManager(ctx context.Context, t *testing.T) (*BalanceManagerWithInMemoryTracking, *componentmocks.EthClient, *componentmocks.PublicTxEngine) {
 	conf := config.RootSection("unittest")
 	InitBalanceManagerConfig(conf)
 	ResetBalanceManagerConfig(conf)
@@ -54,7 +53,7 @@ func NewTestBalanceManager(ctx context.Context, t *testing.T) (*BalanceManagerWi
 
 	mEthClient := componentmocks.NewEthClient(t)
 
-	mockAFTxEngine := enginemocks.NewPublicTxEngine(t)
+	mockAFTxEngine := componentmocks.NewPublicTxEngine(t)
 
 	testManagerWithMocks, err := NewBalanceManagerWithInMemoryTracking(ctx, bmConf, mEthClient, mockAFTxEngine)
 	require.NoError(t, err)
@@ -71,7 +70,7 @@ func TestNewBalanceManagerError(t *testing.T) {
 
 	mEthClient := componentmocks.NewEthClient(t)
 
-	mockAFTxEngine := enginemocks.NewPublicTxEngine(t)
+	mockAFTxEngine := componentmocks.NewPublicTxEngine(t)
 
 	afConfig := conf.SubSection(fmt.Sprintf("%s.%s", BalanceManagerSection, BalanceManagerAutoFuelingSection))
 
@@ -127,7 +126,7 @@ func TestIsAutoFuelingEnabled(t *testing.T) {
 
 	mEthClient := componentmocks.NewEthClient(t)
 
-	mockAFTxEngine := enginemocks.NewPublicTxEngine(t)
+	mockAFTxEngine := componentmocks.NewPublicTxEngine(t)
 
 	afConfig := conf.SubSection(fmt.Sprintf("%s.%s", BalanceManagerSection, BalanceManagerAutoFuelingSection))
 	afConfig.Set(BalanceManagerAutoFuelingSourceAddressString, testAutoFuelingSourceAddress)
@@ -303,9 +302,9 @@ func TestTopUpAddressNoOpScenarios(t *testing.T) {
 
 }
 
-func generateExpectedFuelingTransaction(amountToTransfer int64) *baseTypes.ManagedTX {
-	return &baseTypes.ManagedTX{
-		Status: baseTypes.BaseTxStatusPending,
+func generateExpectedFuelingTransaction(amountToTransfer int64) *components.ManagedTX {
+	return &components.ManagedTX{
+		Status: components.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 
 			From:  []byte(testAutoFuelingSourceAddress),
@@ -337,7 +336,7 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 	expectedTopUpAmount := big.NewInt(100)
 
 	expectedFuelingTransaction1 := generateExpectedFuelingTransaction(expectedTopUpAmount.Int64())
-	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *baseTypes.RequestOptions) bool {
+	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *components.RequestOptions) bool {
 		return txOptions.SignerID == testAutoFuelingSourceAddress
 	}), mock.MatchedBy(func(transfer *components.EthTransfer) bool {
 		return transfer.Value.BigInt().Cmp(expectedTopUpAmount) == 0 && transfer.To.String() == testDestAddress
@@ -365,7 +364,7 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 	expectedTopUpAmount2 := big.NewInt(50)
 	expectedFuelingTransaction2 := generateExpectedFuelingTransaction(expectedTopUpAmount2.Int64())
 	mockAFTxEngine.On("CheckTransactionCompleted", mock.Anything, expectedFuelingTransaction1).Return(true).Once()
-	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *baseTypes.RequestOptions) bool {
+	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *components.RequestOptions) bool {
 		return txOptions.SignerID == testAutoFuelingSourceAddress
 	}), mock.MatchedBy(func(transfer *components.EthTransfer) bool {
 		fmt.Printf("%d - %d", transfer.Value.Int64(), expectedTopUpAmount2.Int64())
@@ -390,7 +389,7 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 	bm.NotifyAddressBalanceChanged(ctx, testAutoFuelingSourceAddress)
 	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(ethtypes.NewHexInteger64(50), nil).Once()
 	mockAFTxEngine.On("CheckTransactionCompleted", mock.Anything, expectedFuelingTransaction2).Return(true).Once()
-	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *baseTypes.RequestOptions) bool {
+	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *components.RequestOptions) bool {
 		return txOptions.SignerID == testAutoFuelingSourceAddress
 	}), mock.MatchedBy(func(transfer *components.EthTransfer) bool {
 		return transfer.Value.BigInt().Cmp(expectedTopUpAmount3) == 0 && transfer.To.String() == testDestAddress
@@ -436,7 +435,7 @@ func TestTopUpSuccessTopUpMinAheadUseMin(t *testing.T) {
 	expectedTopUpAmount := big.NewInt(200)
 
 	expectedFuelingTransaction := generateExpectedFuelingTransaction(expectedTopUpAmount.Int64())
-	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *baseTypes.RequestOptions) bool {
+	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *components.RequestOptions) bool {
 		return txOptions.SignerID == testAutoFuelingSourceAddress
 	}), mock.MatchedBy(func(transfer *components.EthTransfer) bool {
 		return transfer.Value.BigInt().Cmp(expectedTopUpAmount) == 0 && transfer.To.String() == testDestAddress
@@ -474,7 +473,7 @@ func TestTopUpSuccessTopUpMinAheadUseMax(t *testing.T) {
 	expectedTopUpAmount := big.NewInt(400)
 
 	expectedFuelingTransaction := generateExpectedFuelingTransaction(expectedTopUpAmount.Int64())
-	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *baseTypes.RequestOptions) bool {
+	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *components.RequestOptions) bool {
 		return txOptions.SignerID == testAutoFuelingSourceAddress
 	}), mock.MatchedBy(func(transfer *components.EthTransfer) bool {
 		return transfer.Value.BigInt().Cmp(expectedTopUpAmount) == 0 && transfer.To.String() == testDestAddress
@@ -512,7 +511,7 @@ func TestTopUpSuccessTopUpMinAheadUseAvg(t *testing.T) {
 	expectedTopUpAmount := big.NewInt(300)
 
 	expectedFuelingTransaction := generateExpectedFuelingTransaction(expectedTopUpAmount.Int64())
-	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *baseTypes.RequestOptions) bool {
+	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *components.RequestOptions) bool {
 		return txOptions.SignerID == testAutoFuelingSourceAddress
 	}), mock.MatchedBy(func(transfer *components.EthTransfer) bool {
 		return transfer.Value.BigInt().Cmp(expectedTopUpAmount) == 0 && transfer.To.String() == testDestAddress
@@ -546,7 +545,7 @@ func TestTopUpSuccessUseMinDestBalance(t *testing.T) {
 	bm.minDestBalance = big.NewInt(250)
 	expectedTopUpAmount := big.NewInt(150)
 	expectedFuelingTransaction := generateExpectedFuelingTransaction(expectedTopUpAmount.Int64())
-	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *baseTypes.RequestOptions) bool {
+	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *components.RequestOptions) bool {
 		return txOptions.SignerID == testAutoFuelingSourceAddress
 	}), mock.MatchedBy(func(transfer *components.EthTransfer) bool {
 		return transfer.Value.BigInt().Cmp(expectedTopUpAmount) == 0 && transfer.To.String() == testDestAddress
@@ -580,7 +579,7 @@ func TestTopUpSuccessUseMaxDestBalance(t *testing.T) {
 	expectedTopUpAmount := big.NewInt(50)
 
 	expectedFuelingTransaction := generateExpectedFuelingTransaction(expectedTopUpAmount.Int64())
-	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *baseTypes.RequestOptions) bool {
+	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *components.RequestOptions) bool {
 		return txOptions.SignerID == testAutoFuelingSourceAddress
 	}), mock.MatchedBy(func(transfer *components.EthTransfer) bool {
 		return transfer.Value.BigInt().Cmp(expectedTopUpAmount) == 0 && transfer.To.String() == testDestAddress
