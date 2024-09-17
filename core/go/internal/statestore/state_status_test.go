@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/core/internal/filters"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,8 +70,8 @@ func makeWidgets(t *testing.T, ctx context.Context, ss *stateStore, domainID, sc
 	return states
 }
 
-func toQuery(t *testing.T, queryString string) *filters.QueryJSON {
-	var q filters.QueryJSON
+func toQuery(t *testing.T, queryString string) *query.QueryJSON {
+	var q query.QueryJSON
 	err := json.Unmarshal([]byte(queryString), &q)
 	require.NoError(t, err)
 	return &q

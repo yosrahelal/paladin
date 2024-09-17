@@ -25,6 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -155,14 +156,14 @@ func (ss *stateStore) labelSetFor(schema Schema) *trackingLabelSet {
 	return &tls
 }
 
-func (ss *stateStore) FindStates(ctx context.Context, domainID, schemaID string, query *filters.QueryJSON, status StateStatusQualifier) (s []*State, err error) {
+func (ss *stateStore) FindStates(ctx context.Context, domainID, schemaID string, query *query.QueryJSON, status StateStatusQualifier) (s []*State, err error) {
 	_, s, err = ss.findStates(ctx, domainID, schemaID, query, status)
 	return s, err
 }
 
-func (ss *stateStore) findStates(ctx context.Context, domainID, schemaID string, query *filters.QueryJSON, status StateStatusQualifier, excluded ...*idOnly) (schema Schema, s []*State, err error) {
-	if len(query.Sort) == 0 {
-		query.Sort = []string{".created"}
+func (ss *stateStore) findStates(ctx context.Context, domainID, schemaID string, jq *query.QueryJSON, status StateStatusQualifier, excluded ...*idOnly) (schema Schema, s []*State, err error) {
+	if len(jq.Sort) == 0 {
+		jq.Sort = []string{".created"}
 	}
 
 	schema, err = ss.GetSchema(ctx, domainID, schemaID, true)
@@ -174,7 +175,7 @@ func (ss *stateStore) findStates(ctx context.Context, domainID, schemaID string,
 
 	// Build the query
 	db := ss.p.DB()
-	q := query.BuildGORM(ctx, db.Table("states"), tracker)
+	q := filters.BuildGORM(ctx, jq, db.Table("states"), tracker)
 	if q.Error != nil {
 		return nil, nil, q.Error
 	}

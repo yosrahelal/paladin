@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -55,7 +56,7 @@ type DomainStateInterface interface {
 	// 2) We deliberately return states that are locked to a transaction (but not spent yet) - which means the
 	//    result of the any assemble that uses those states, will be a transaction that must
 	//    be on the same transaction where those states are locked.
-	FindAvailableStates(schemaID string, query *filters.QueryJSON) (s []*State, err error)
+	FindAvailableStates(schemaID string, query *query.QueryJSON) (s []*State, err error)
 
 	// MarkStatesSpending writes a lock record so the state is now locked for spending, and
 	// thus subsequent calls to FindAvailableStates will not return these states.
@@ -221,7 +222,7 @@ func (dc *domainContext) getUnFlushedSpending() ([]*idOnly, error) {
 	return spendLocks, nil
 }
 
-func (dc *domainContext) mergedUnFlushed(schema Schema, states []*State, query *filters.QueryJSON) (_ []*State, err error) {
+func (dc *domainContext) mergedUnFlushed(schema Schema, dbStates []*State, query *query.QueryJSON) (_ []*State, err error) {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
@@ -250,13 +251,22 @@ func (dc *domainContext) mergedUnFlushed(schema Schema, states []*State, query *
 		}
 		// Now we see if it matches the query
 		labelSet := dc.ss.labelSetFor(schema)
-		match, err := query.Eval(dc.ctx, labelSet, s.LabelValues)
+		match, err := filters.EvalQuery(dc.ctx, query, labelSet, s.LabelValues)
 		if err != nil {
 			return nil, err
 		}
 		if match {
-			log.L(dc.ctx).Debugf("Matched state %s from un-flushed writes", &s.ID)
-			matches = append(matches, s)
+			dup := false
+			for _, dbState := range dbStates {
+				if s.ID == dbState.ID {
+					dup = true
+					break
+				}
+			}
+			if !dup {
+				log.L(dc.ctx).Debugf("Matched state %s from un-flushed writes", &s.ID)
+				matches = append(matches, s)
+			}
 		}
 	}
 
@@ -264,13 +274,13 @@ func (dc *domainContext) mergedUnFlushed(schema Schema, states []*State, query *
 		// Build the merged list - this involves extra cost, as we deliberately don't reconstitute
 		// the labels in JOIN on DB load (affecting every call at the DB side), instead we re-parse
 		// them as we need them
-		return dc.mergeInMemoryMatches(schema, states, matches, query)
+		return dc.mergeInMemoryMatches(schema, dbStates, matches, query)
 	}
 
-	return states, nil
+	return dbStates, nil
 }
 
-func (dc *domainContext) mergeInMemoryMatches(schema Schema, states []*State, extras []*StateWithLabels, query *filters.QueryJSON) (_ []*State, err error) {
+func (dc *domainContext) mergeInMemoryMatches(schema Schema, states []*State, extras []*StateWithLabels, query *query.QueryJSON) (_ []*State, err error) {
 
 	// Reconstitute the labels for all the loaded states into the front of an aggregate list
 	fullList := make([]*StateWithLabels, len(states), len(states)+len(extras))
@@ -311,7 +321,7 @@ func (dc *domainContext) mergeInMemoryMatches(schema Schema, states []*State, ex
 
 }
 
-func (dc *domainContext) FindAvailableStates(schemaID string, query *filters.QueryJSON) (s []*State, err error) {
+func (dc *domainContext) FindAvailableStates(schemaID string, query *query.QueryJSON) (s []*State, err error) {
 
 	// Build a list of excluded states
 	excluded, err := dc.getUnFlushedSpending()

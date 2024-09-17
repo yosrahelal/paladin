@@ -64,7 +64,10 @@ func (tb *testbed) initRPC() {
 		// Prepares a privacy preserving smart contract invocation, but
 		// does not actually invoke.
 		// Returns an ABI encoded function call.
-		Add("testbed_prepare", tb.rpcTestbedPrepare())
+		Add("testbed_prepare", tb.rpcTestbedPrepare()).
+
+		// Performs identity resolution (which in the case of the testbed is just local identities)
+		Add("testbed_resolveVerifier", tb.rpcResolveVerifier())
 }
 
 func (tb *testbed) rpcListDomains() rpcserver.RPCHandler {
@@ -101,7 +104,7 @@ func (tb *testbed) rpcDeployBytecode() rpcserver.RPCHandler {
 			Input(params).
 			SignAndSend()
 		if err == nil {
-			tx, err = tb.c.BlockIndexer().WaitForTransaction(ctx, *txHash)
+			tx, err = tb.c.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, abi)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to send transaction: %s", err)
@@ -313,5 +316,21 @@ func (tb *testbed) rpcTestbedPrepare() rpcserver.RPCHandler {
 			InputStates:  inputStates,
 			OutputStates: outputStates,
 		}, nil
+	})
+}
+
+func (tb *testbed) rpcResolveVerifier() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context,
+		lookup string,
+		algorithm string,
+	) (verifier string, _ error) {
+		identifier, err := tktypes.PrivateIdentityLocator(lookup).Identity(ctx)
+		if err == nil {
+			_, verifier, err = tb.c.KeyManager().ResolveKey(ctx, identifier, algorithm)
+		}
+		if err != nil {
+			return "", err
+		}
+		return verifier, err
 	})
 }
