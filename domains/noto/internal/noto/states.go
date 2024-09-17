@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -96,6 +97,7 @@ func (n *Noto) prepareInputs(ctx context.Context, owner ethtypes.Address0xHex, a
 			queryBuilder.GreaterThan(".created", lastStateTimestamp)
 		}
 
+		log.L(ctx).Debugf("State query: %s", queryBuilder.Query())
 		states, err := n.findAvailableStates(ctx, queryBuilder.Query().String())
 
 		if err != nil {

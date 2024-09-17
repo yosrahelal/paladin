@@ -30,6 +30,7 @@ import (
 )
 
 type ABIFunctionClient interface {
+	ABI() abi.ABI
 	ABIEntry() *abi.Entry
 	R(ctx context.Context) ABIFunctionRequestBuilder
 }
@@ -233,6 +234,10 @@ func (abic *abiClient) MustConstructor(bytecode tktypes.HexBytes) ABIFunctionCli
 
 func (abic *abiClient) ABI() abi.ABI {
 	return abic.abi
+}
+
+func (ac *abiFunctionClient) ABI() abi.ABI {
+	return ac.abi
 }
 
 func (ac *abiFunctionClient) ABIEntry() *abi.Entry {

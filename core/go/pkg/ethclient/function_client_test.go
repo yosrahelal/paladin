@@ -523,6 +523,7 @@ func TestBuildCallData(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, req.TX().Data)
 
+	assert.NotNil(t, newWidget.ABI())
 	cv, err := newWidget.ABIEntry().Inputs.ParseExternalData(inMap)
 	require.NoError(t, err)
 	err = req.Input(cv).BuildCallData()
