@@ -245,7 +245,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 		}),
 	})
 	require.NotNil(t, rpcerr)
-	assert.EqualError(t, rpcerr.Error(), "failed to send base ledger transaction: Execution reverted")
+	assert.Regexp(t, "failed to send base ledger transaction: PD011516: Reverted: 0x118cdaa.*", rpcerr.Error())
 	assert.True(t, boolResult)
 
 	log.L(ctx).Infof("Transfer 25 from controller to recipient1")
