@@ -171,8 +171,7 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 }
 
 func registerTestDomain(t *testing.T, dm *domainManager, tp *testPlugin) {
-	domainID := uuid.New()
-	_, err := dm.DomainRegistered("test1", domainID, tp)
+	_, err := dm.DomainRegistered("test1", tp)
 	require.NoError(t, err)
 
 	da, err := dm.GetDomainByName(context.Background(), "test1")
@@ -238,9 +237,6 @@ func TestDoubleRegisterReplaces(t *testing.T) {
 	byName, err := dm.GetDomainByName(ctx, "test1")
 	require.NoError(t, err)
 	assert.Same(t, tp1.d, byName)
-	byUUID := dm.domainsByID[tp1.d.id]
-	require.NoError(t, err)
-	assert.Same(t, tp1.d, byUUID)
 
 }
 
@@ -288,8 +284,7 @@ func TestDomainConfigureFail(t *testing.T) {
 		},
 	})
 
-	domainID := uuid.New()
-	_, err := dm.DomainRegistered("test1", domainID, tp)
+	_, err := dm.DomainRegistered("test1", tp)
 	require.NoError(t, err)
 
 	da, err := dm.GetDomainByName(ctx, "test1")

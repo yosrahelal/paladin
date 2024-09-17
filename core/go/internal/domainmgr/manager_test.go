@@ -147,7 +147,7 @@ func TestDomainRegisteredNotFound(t *testing.T) {
 	})
 	defer done()
 
-	_, err := dm.DomainRegistered("unknown", uuid.New(), nil)
+	_, err := dm.DomainRegistered("unknown", nil)
 	assert.Regexp(t, "PD011600", err)
 }
 

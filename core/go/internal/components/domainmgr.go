@@ -33,7 +33,7 @@ type DomainManagerToDomain interface {
 type DomainManager interface {
 	ManagerLifecycle
 	ConfiguredDomains() map[string]*PluginConfig
-	DomainRegistered(name string, id uuid.UUID, toDomain DomainManagerToDomain) (fromDomain plugintk.DomainCallbacks, err error)
+	DomainRegistered(name string, toDomain DomainManagerToDomain) (fromDomain plugintk.DomainCallbacks, err error)
 	GetDomainByName(ctx context.Context, name string) (Domain, error)
 	GetSmartContractByAddress(ctx context.Context, addr tktypes.EthAddress) (DomainSmartContract, error)
 	WaitForDeploy(ctx context.Context, txID uuid.UUID) (DomainSmartContract, error)
