@@ -444,7 +444,9 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 			for j, preparedTransaction := range preparedTransactions {
 				preparedTransactionPayloads[j] = preparedTransaction.PreparedTransaction
 			}
-			preparedSubmissions, rejected, err := oc.publicTxManager.PrepareSubmissionBatch(ctx,
+			publicTransactionEngine := oc.publicTxManager.GetEngine()
+
+			preparedSubmissions, rejected, err := publicTransactionEngine.PrepareSubmissionBatch(ctx,
 				&components.RequestOptions{
 					SignerID: signingAddress,
 				},
@@ -461,7 +463,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 
 			sequence.PublicTransactionsSubmit = func() (publicTxIDs []string, err error) {
 				//TODO submit the public transactions
-				manageTransactions, err := oc.publicTxManager.SubmitBatch(ctx, preparedSubmissions)
+				manageTransactions, err := publicTransactionEngine.SubmitBatch(ctx, preparedSubmissions)
 				if err != nil {
 					log.L(ctx).Errorf("Error submitting batch: %s", err)
 					return nil, err

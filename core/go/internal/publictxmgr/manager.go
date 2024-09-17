@@ -73,3 +73,7 @@ func (ptm publicTxMgr) Stop() {
 	ptm.rootCtxCancel()
 	<-ptm.stopChan
 }
+
+func (ptm publicTxMgr) GetEngine() components.PublicTxEngine {
+	return ptm.publicTxEngine
+}
