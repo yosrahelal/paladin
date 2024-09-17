@@ -225,7 +225,7 @@ signer:
 	txHash1, err := simpleStorage.MustConstructor(tktypes.HexBytes(simpleStorageBuild.Bytecode)).R(ctx).
 		Signer("key1").Input(`{"x":11223344}`).SignAndSend()
 	require.NoError(t, err)
-	deployTX, err := indexer.WaitForTransaction(ctx, *txHash1)
+	deployTX, err := indexer.WaitForTransactionSuccess(ctx, *txHash1, simpleStorageBuild.ABI)
 	require.NoError(t, err)
 	contractAddr := deployTX.ContractAddress.Address0xHex()
 
@@ -236,7 +236,7 @@ signer:
 	txHash2, err := simpleStorage.MustFunction("set").R(ctx).
 		Signer("key1").To(contractAddr).Input(`{"_x":99887766}`).SignAndSend()
 	require.NoError(t, err)
-	_, err = indexer.WaitForTransaction(ctx, *txHash2)
+	_, err = indexer.WaitForTransactionSuccess(ctx, *txHash2, simpleStorageBuild.ABI)
 	require.NoError(t, err)
 
 	getX2, err := simpleStorage.MustFunction("get").R(ctx).To(contractAddr).CallJSON()

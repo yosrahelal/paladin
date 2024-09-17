@@ -44,7 +44,7 @@ func TestInFlightTxSign(t *testing.T) {
 	// signing error
 	mtx := it.stateManager.GetTx()
 
-	buildRawTransactionMock := mEC.On("BuildRawTransaction", ctx, ethclient.EIP1559, string(mtx.From), mtx.Transaction)
+	buildRawTransactionMock := mEC.On("BuildRawTransaction", ctx, ethclient.EIP1559, string(mtx.From), mtx.Transaction, mock.Anything)
 	buildRawTransactionMock.Run(func(args mock.Arguments) {
 		from := args[2].(string)
 		txObj := args[3].(*ethsigner.Transaction)

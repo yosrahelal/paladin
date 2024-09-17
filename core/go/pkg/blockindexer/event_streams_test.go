@@ -136,7 +136,7 @@ func TestInternalEventStreamDeliveryAtHeadWithSourceAddress(t *testing.T) {
 	sourceContractAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
 
 	// Mock up the block calls to the blockchain for 15 blocks
-	blocks, receipts := testBlockArray(t, 15, sourceContractAddress.Address0xHex())
+	blocks, receipts := testBlockArray(t, 15, *sourceContractAddress.Address0xHex())
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 	mockBlockListenerNil(mRPC)
 

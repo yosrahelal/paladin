@@ -161,11 +161,12 @@ var (
 	MsgBlockIndexerESSourceError            = ffe("PD011302", "Event stream source must not be changed after creation")
 	MsgBlockIndexerESInitFail               = ffe("PD011303", "Event stream initialization failed")
 	MsgBlockIndexerESAlreadyInit            = ffe("PD011304", "Event stream already initialized")
-	MsgBlockIndexerConfirmedReceiptNotFound = ffe("PD011305", "Expected received for confirmed transaction %s not found")
+	MsgBlockIndexerConfirmedReceiptNotFound = ffe("PD011305", "Receipt for confirmed transaction %s not found")
 	MsgBlockIndexerInvalidEventStreamType   = ffe("PD011306", "Unsupported event stream type: %s")
 	MsgBlockMissingHandler                  = ffe("PD011307", "Handler not registered for stream")
 	MsgBlockIndexerNoBlocksIndexed          = ffe("PD011308", "No confirmed blocks have yet been indexed")
-	MsgBlockIndexerOnlyOnePrePersistHook    = ffe("PD011309", "Indexed transaction pre-persist hook already registered")
+	MsgBlockIndexerTransactionReverted      = ffe("PD011309", "Transaction reverted: %s")
+	MsgBlockIndexerOnlyOnePrePersistHook    = ffe("PD011310", "Indexed transaction pre-persist hook already registered")
 
 	// Signing module PD0114XX
 	MsgSigningModuleBadPathError                = ffe("PD011400", "Path '%s' does not exist, or it is not a directory")
@@ -206,6 +207,7 @@ var (
 	MsgEthClientChainIDMismatch     = ffe("PD011512", "ChainID mismatch between HTTP and WebSocket JSON/RPC connections http=%d ws=%d")
 	MsgEthClientInvalidWebSocketURL = ffe("PD011513", "Invalid WebSocket URL: %s")
 	MsgEthClientInvalidHTTPURL      = ffe("PD011514", "Invalid HTTP URL: %s")
+	MsgEthClientCallReverted        = ffe("PD011516", "Reverted: %s")
 
 	// DomainManager module PD0116XX
 	MsgDomainNotFound                         = ffe("PD011600", "Domain %q not found")
