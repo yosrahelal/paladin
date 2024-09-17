@@ -194,8 +194,31 @@ func (ble *publicTxEngine) Start(ctx context.Context) (done <-chan struct{}, err
 	return ble.engineLoopDone, nil
 }
 
-func (ble *publicTxEngine) HandleNewTransaction(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}) (mtx *components.PublicTX, submissionRejected bool, err error) {
-	log.L(ctx).Tracef("HandleNewTx new request, options: %+v, payload: %+v", reqOptions, txPayload)
+type preparedTransaction struct {
+	ethTx *ethsigner.Transaction
+	id    string
+}
+
+func (txn *preparedTransaction) ID() string {
+	return txn.id
+}
+
+func (ble *publicTxEngine) PrepareSubmissionBatch(ctx context.Context, reqOptions *components.RequestOptions, txPayloads []interface{}) (preparedSubmission []components.PreparedSubmission, submissionRejected bool, err error) {
+	preparedSubmissions := make([]components.PreparedSubmission, len(txPayloads))
+	for i, tx := range txPayloads {
+		preparedSubmission, submissionRejected, err := ble.PrepareSubmission(ctx, reqOptions, tx)
+		if submissionRejected || err != nil {
+			return nil, submissionRejected, err
+		}
+		preparedSubmissions[i] = preparedSubmission
+	}
+	return preparedSubmissions, false, nil
+}
+
+// PrepareSubmission prepares and validates the transaction input data so that a later call to
+// Submit can be made in the middle of a wider database transaction with minimal risk of error
+func (ble *publicTxEngine) PrepareSubmission(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}) (preparedSubmission components.PreparedSubmission, submissionRejected bool, err error) {
+	log.L(ctx).Tracef("PrepareSubmission new request, options: %+v, payload: %+v", reqOptions, txPayload)
 
 	err = reqOptions.Validate(ctx)
 	if err != nil {
@@ -255,7 +278,7 @@ func (ble *publicTxEngine) HandleNewTransaction(ctx context.Context, reqOptions 
 	estimatedGasLimit := reqOptions.GasLimit
 
 	if estimatedGasLimit == nil {
-		estimatedGasLimitHexInt, err := ble.ethClient.GasEstimate(ctx, ethTx, nil)
+		estimatedGasLimitHexInt, err := ble.ethClient.GasEstimate(ctx, ethTx, nil /* TODO: Would be great to have the ABI errors available here */)
 		if err != nil {
 			log.L(ctx).Errorf("HandleNewTx <%s> error estimating gas for transfer request: %+v, request: (%+v)", txType, err, txPayload)
 			ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusFail), time.Since(prepareStart).Seconds())
@@ -272,8 +295,41 @@ func (ble *publicTxEngine) HandleNewTransaction(ctx context.Context, reqOptions 
 
 	ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusSuccess), time.Since(prepareStart).Seconds())
 	log.L(ctx).Debugf("HandleNewTx <%s> creating a new managed transaction with ID %s", txType, reqOptions.ID)
-	mtx, err = ble.createManagedTx(ctx, reqOptions.ID.String(), ethTx)
-	return mtx, false /* any error at this point should be transient and re-submittable with the same UUID */, err
+	return &preparedTransaction{
+		ethTx: ethTx,
+		id:    reqOptions.ID.String(),
+	}, false, nil
+
+}
+
+// Submit writes the prepared submission to the database using the provided context
+// This is expected to be a lightweight operation involving not much more than writing to the database, as the heavy lifting should have been done in PrepareSubmission
+// The database transaction will be coordinated by the caller
+func (ble *publicTxEngine) Submit(ctx context.Context, preparedSubmission components.PreparedSubmission) (mtx *components.PublicTX, err error) {
+	preparedTransaction := preparedSubmission.(*preparedTransaction)
+	mtx, err = ble.createManagedTx(ctx, preparedTransaction.ID(), preparedTransaction.ethTx)
+	return mtx, err
+}
+
+func (ble *publicTxEngine) SubmitBatch(ctx context.Context, preparedSubmissions []components.PreparedSubmission) ([]*components.PublicTX, error) {
+	mtxBatch := make([]*components.PublicTX, len(preparedSubmissions))
+	for i, preparedSubmission := range preparedSubmissions {
+		mtx, err := ble.Submit(ctx, preparedSubmission)
+		if err != nil {
+			return nil, err
+		}
+		mtxBatch[i] = mtx
+	}
+	return mtxBatch, nil
+}
+
+func (ble *publicTxEngine) HandleNewTransaction(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}) (mtx *components.PublicTX, submissionRejected bool, err error) {
+	preparedSubmission, submissionRejected, err := ble.PrepareSubmission(ctx, reqOptions, txPayload)
+	if submissionRejected || err != nil {
+		return nil, submissionRejected, err
+	}
+	mtx, err = ble.Submit(ctx, preparedSubmission)
+	return
 }
 
 func (ble *publicTxEngine) createManagedTx(ctx context.Context, txID string, ethTx *ethsigner.Transaction) (*components.PublicTX, error) {

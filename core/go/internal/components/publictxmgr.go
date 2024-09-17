@@ -178,6 +178,11 @@ type TransactionStore interface {
 	ListTransactions(ctx context.Context, filter ffapi.AndFilter) ([]*PublicTX, *ffapi.FilterResult, error)
 	NewTransactionFilter(ctx context.Context) ffapi.FilterBuilder
 }
+
+type PreparedSubmission interface {
+	ID() string
+}
+
 type PublicTxEngine interface {
 	// Lifecycle functions
 
@@ -191,6 +196,12 @@ type PublicTxEngine interface {
 	// It returns a read-only channel. When this channel gets closed, it indicates transaction handler has been stopped gracefully.
 	// It returns an error when failed to start.
 	Start(ctx context.Context) (done <-chan struct{}, err error)
+
+	//Syncronous functions that are executed on the callers thread
+	PrepareSubmission(ctx context.Context, reqOptions *RequestOptions, txPayload interface{}) (preparedSubmission PreparedSubmission, submissionRejected bool, err error)
+	Submit(ctx context.Context, preparedSubmission PreparedSubmission) (mtx *PublicTX, err error)
+	SubmitBatch(ctx context.Context, preparedSubmissions []PreparedSubmission) ([]*PublicTX, error)
+	PrepareSubmissionBatch(ctx context.Context, reqOptions *RequestOptions, txPayloads []interface{}) (preparedSubmission []PreparedSubmission, submissionRejected bool, err error)
 
 	// Event handling functions
 	// Instructional events:
@@ -208,4 +219,5 @@ type PublicTxEngine interface {
 
 type PublicTxManager interface {
 	ManagerLifecycle
+	GetEngine() PublicTxEngine
 }
