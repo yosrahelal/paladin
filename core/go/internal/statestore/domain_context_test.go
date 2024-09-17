@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -65,6 +66,52 @@ func parseFakeCoin(t *testing.T, s *State) *FakeCoin {
 	return &c
 }
 
+func TestStateFlushAsync(t *testing.T) {
+
+	_, ss, done := newDBTestStateStore(t)
+	defer done()
+
+	flushed := make(chan bool)
+	err := ss.RunInDomainContext("domain1", func(ctx context.Context, dsi DomainStateInterface) error {
+		return dsi.Flush(func(ctx context.Context, dsi DomainStateInterface) error {
+			flushed <- true
+			return nil
+		})
+	})
+	require.NoError(t, err)
+
+	select {
+	case <-flushed:
+	case <-time.After(5 * time.Second):
+		assert.Fail(t, "timed out")
+	}
+
+}
+
+func TestUpsertSchemaAndStates(t *testing.T) {
+
+	_, ss, done := newDBTestStateStore(t)
+	defer done()
+
+	schemas, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
+	require.NoError(t, err)
+	require.Len(t, schemas, 1)
+	schemaID := schemas[0].IDString()
+
+	err = ss.RunInDomainContext("domain1", func(ctx context.Context, dsi DomainStateInterface) error {
+		states, err := dsi.UpsertStates(nil, []*StateUpsert{
+			{
+				SchemaID: schemaID,
+				Data:     tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0x1eDfD974fE6828dE81a1a762df680111870B7cDD", "salt": "%s"}`, tktypes.RandHex(32))),
+			},
+		})
+		require.NoError(t, err)
+		assert.Len(t, states, 1)
+		return nil
+	})
+	require.NoError(t, err)
+
+}
 func TestStateContextMintSpendMint(t *testing.T) {
 
 	_, ss, done := newDBTestStateStore(t)
