@@ -185,8 +185,37 @@ func (ble *baseLedgerTxEngine) Start(ctx context.Context) (done <-chan struct{},
 	return ble.engineLoopDone, nil
 }
 
-func (ble *baseLedgerTxEngine) HandleNewTransaction(ctx context.Context, reqOptions *baseTypes.RequestOptions, txPayload interface{}) (mtx *baseTypes.ManagedTX, submissionRejected bool, err error) {
-	log.L(ctx).Tracef("HandleNewTx new request, options: %+v, payload: %+v", reqOptions, txPayload)
+type preparedTransaction struct {
+	ethTx *ethsigner.Transaction
+	id    string
+}
+
+func (txn *preparedTransaction) ID() string {
+	return txn.id
+}
+
+// HandleEvent
+func (ble *baseLedgerTxEngine) HandleEvent(ctx context.Context, signingAddress string, txPayload interface{}) (err error) {
+	ble.MarkInFlightOrchestratorsStale()
+	return nil
+}
+
+func (ble *baseLedgerTxEngine) PrepareSubmissionBatch(ctx context.Context, reqOptions *baseTypes.RequestOptions, txPayloads []interface{}) (preparedSubmission []baseTypes.PreparedSubmission, submissionRejected bool, err error) {
+	preparedSubmissions := make([]baseTypes.PreparedSubmission, len(txPayloads))
+	for i, tx := range txPayloads {
+		preparedSubmission, submissionRejected, err := ble.PrepareSubmission(ctx, reqOptions, tx)
+		if submissionRejected || err != nil {
+			return nil, submissionRejected, err
+		}
+		preparedSubmissions[i] = preparedSubmission
+	}
+	return preparedSubmissions, false, nil
+}
+
+// PrepareSubmission prepares and validates the transaction input data so that a later call to
+// Submit can be made in the middle of a wider database transaction with minimal risk of error
+func (ble *baseLedgerTxEngine) PrepareSubmission(ctx context.Context, reqOptions *baseTypes.RequestOptions, txPayload interface{}) (preparedSubmission baseTypes.PreparedSubmission, submissionRejected bool, err error) {
+	log.L(ctx).Tracef("PrepareSubmission new request, options: %+v, payload: %+v", reqOptions, txPayload)
 
 	err = reqOptions.Validate(ctx)
 	if err != nil {
@@ -263,8 +292,32 @@ func (ble *baseLedgerTxEngine) HandleNewTransaction(ctx context.Context, reqOpti
 
 	ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusSuccess), time.Since(prepareStart).Seconds())
 	log.L(ctx).Debugf("HandleNewTx <%s> creating a new managed transaction with ID %s", txType, reqOptions.ID)
-	mtx, err = ble.createManagedTx(ctx, reqOptions.ID.String(), ethTx)
-	return mtx, false /* any error at this point should be transient and re-submittable with the same UUID */, err
+	return &preparedTransaction{
+		ethTx: ethTx,
+		id:    reqOptions.ID.String(),
+	}, false, nil
+
+}
+
+// Submit writes the prepared submission to the database using the provided context
+// This is expected to be a lightweight operation involving not much more than writing to the database, as the heavy lifting should have been done in PrepareSubmission
+// The database transaction will be coordinated by the caller
+func (ble *baseLedgerTxEngine) Submit(ctx context.Context, preparedSubmission baseTypes.PreparedSubmission) (mtx *baseTypes.ManagedTX, err error) {
+	preparedTransaction := preparedSubmission.(*preparedTransaction)
+	mtx, err = ble.createManagedTx(ctx, preparedTransaction.ID(), preparedTransaction.ethTx)
+	return mtx, err
+}
+
+func (ble *baseLedgerTxEngine) SubmitBatch(ctx context.Context, preparedSubmissions []baseTypes.PreparedSubmission) ([]*baseTypes.ManagedTX, error) {
+	mtxBatch := make([]*baseTypes.ManagedTX, len(preparedSubmissions))
+	for i, preparedSubmission := range preparedSubmissions {
+		mtx, err := ble.Submit(ctx, preparedSubmission)
+		if err != nil {
+			return nil, err
+		}
+		mtxBatch[i] = mtx
+	}
+	return mtxBatch, nil
 }
 
 func (ble *baseLedgerTxEngine) createManagedTx(ctx context.Context, txID string, ethTx *ethsigner.Transaction) (*baseTypes.ManagedTX, error) {
@@ -301,9 +354,17 @@ func (ble *baseLedgerTxEngine) createManagedTx(ctx context.Context, txID string,
 		return nil, err
 	}
 	log.L(ctx).Debugf("createManagedTx a new managed transaction with ID %s is persisted", mtx.ID)
-	ble.MarkInFlightOrchestratorsStale()
 
 	return mtx, nil
+}
+
+func (ble *baseLedgerTxEngine) HandleNewTransaction(ctx context.Context, reqOptions *baseTypes.RequestOptions, txPayload interface{}) (mtx *baseTypes.ManagedTX, submissionRejected bool, err error) {
+	preparedSubmission, submissionRejected, err := ble.PrepareSubmission(ctx, reqOptions, txPayload)
+	if submissionRejected || err != nil {
+		return nil, submissionRejected, err
+	}
+	mtx, err = ble.Submit(ctx, preparedSubmission)
+	return
 }
 
 func (ble *baseLedgerTxEngine) HandleSuspendTransaction(ctx context.Context, txID string) (mtx *baseTypes.ManagedTX, err error) {
