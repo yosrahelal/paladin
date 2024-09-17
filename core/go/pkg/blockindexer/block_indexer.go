@@ -46,8 +46,10 @@ import (
 type BlockIndexer interface {
 	Start(internalStreams ...*InternalEventStream) error
 	Stop()
+	RegisterIndexedTransactionHandler(ctx context.Context, hookFunction func(ctx context.Context, indexedTransactions []*IndexedTransaction) error) error
 	GetIndexedBlockByNumber(ctx context.Context, number uint64) (*IndexedBlock, error)
 	GetIndexedTransactionByHash(ctx context.Context, hash tktypes.Bytes32) (*IndexedTransaction, error)
+	GetIndexedTransactionByNonce(ctx context.Context, from tktypes.EthAddress, nonce uint64) (*IndexedTransaction, error)
 	GetBlockTransactionsByNumber(ctx context.Context, blockNumber int64) ([]*IndexedTransaction, error)
 	GetTransactionEventsByHash(ctx context.Context, hash tktypes.Bytes32) ([]*IndexedEvent, error)
 	ListTransactionEvents(ctx context.Context, lastBlock int64, lastIndex, limit int, withTransaction, withBlock bool) ([]*IndexedEvent, error)
@@ -68,31 +70,33 @@ type BlockIndexer interface {
 // This implementation is thus deliberately simple assuming that when instability is found
 // in the notifications it can simply wipe out its view and start again.
 type blockIndexer struct {
-	parentCtxForReset          context.Context
-	cancelFunc                 func()
-	persistence                persistence.Persistence
-	blockListener              *blockListener
-	wsConn                     rpcbackend.WebSocketRPCClient
-	stateLock                  sync.Mutex
-	fromBlock                  *ethtypes.HexUint64
-	nextBlock                  *ethtypes.HexUint64 // nil in the special case of "latest" and no block received yet
-	highestConfirmedBlock      atomic.Int64        // set after we persist blocks
-	blocksSinceCheckpoint      []*BlockInfoJSONRPC
-	newHeadToAdd               []*BlockInfoJSONRPC // used by the notification routine when there are new blocks that add directly onto the end of the blocksSinceCheckpoint
-	requiredConfirmations      int
-	retry                      *retry.Retry
-	batchSize                  int
-	batchTimeout               time.Duration
-	txWaiters                  *inflight.InflightManager[tktypes.Bytes32, *IndexedTransaction]
-	eventStreams               map[uuid.UUID]*eventStream
-	eventStreamsHeadSet        map[uuid.UUID]*eventStream
-	eventStreamsLock           sync.Mutex
-	esBlockDispatchQueueLength int
-	esCatchUpQueryPageSize     int
-	dispatcherTap              chan struct{}
-	processorDone              chan struct{}
-	dispatcherDone             chan struct{}
-	utBatchNotify              chan *blockWriterBatch
+	parentCtxForReset                context.Context
+	hookRegisterMutex                sync.Mutex
+	indexedTransactionPrePersistHook func(ctx context.Context, indexedTransactions []*IndexedTransaction) error
+	cancelFunc                       func()
+	persistence                      persistence.Persistence
+	blockListener                    *blockListener
+	wsConn                           rpcbackend.WebSocketRPCClient
+	stateLock                        sync.Mutex
+	fromBlock                        *ethtypes.HexUint64
+	nextBlock                        *ethtypes.HexUint64 // nil in the special case of "latest" and no block received yet
+	highestConfirmedBlock            atomic.Int64        // set after we persist blocks
+	blocksSinceCheckpoint            []*BlockInfoJSONRPC
+	newHeadToAdd                     []*BlockInfoJSONRPC // used by the notification routine when there are new blocks that add directly onto the end of the blocksSinceCheckpoint
+	requiredConfirmations            int
+	retry                            *retry.Retry
+	batchSize                        int
+	batchTimeout                     time.Duration
+	txWaiters                        *inflight.InflightManager[tktypes.Bytes32, *IndexedTransaction]
+	eventStreams                     map[uuid.UUID]*eventStream
+	eventStreamsHeadSet              map[uuid.UUID]*eventStream
+	eventStreamsLock                 sync.Mutex
+	esBlockDispatchQueueLength       int
+	esCatchUpQueryPageSize           int
+	dispatcherTap                    chan struct{}
+	processorDone                    chan struct{}
+	dispatcherDone                   chan struct{}
+	utBatchNotify                    chan *blockWriterBatch
 }
 
 func NewBlockIndexer(ctx context.Context, config *Config, wsConfig *rpcclient.WSConfig, persistence persistence.Persistence) (_ BlockIndexer, err error) {
@@ -144,6 +148,17 @@ func (bi *blockIndexer) Start(internalStreams ...*InternalEventStream) error {
 	bi.startOrReset()
 	bi.startEventStreams()
 	return nil
+}
+
+func (bi *blockIndexer) RegisterIndexedTransactionHandler(ctx context.Context, hookFunction func(ctx context.Context, indexedTransactions []*IndexedTransaction) error) (err error) {
+	bi.hookRegisterMutex.Lock()
+	defer bi.hookRegisterMutex.Unlock()
+	if bi.indexedTransactionPrePersistHook != nil {
+		err = i18n.NewError(ctx, msgs.MsgBlockIndexerOnlyOnePrePersistHook)
+	} else {
+		bi.indexedTransactionPrePersistHook = hookFunction
+	}
+	return
 }
 
 func (bi *blockIndexer) startOrReset() {
@@ -437,7 +452,12 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 					return // We know we need to exit
 				}
 			}
-			bi.writeBatch(ctx, batch)
+			prePersistHookErr := bi.writeBatch(ctx, batch)
+			if prePersistHookErr != nil {
+				log.L(ctx).Errorf("Block indexer requires reset after per-persist hook failure on batch %s, due to: %s", batch.summaries, prePersistHookErr.Error())
+				go bi.startOrReset()
+				return // exit to restart from the checkpoint
+			}
 			// Write the batch
 			batch = nil
 		}
@@ -491,7 +511,7 @@ func (bi *blockIndexer) logToIndexedEvent(l *LogJSONRPC) *IndexedEvent {
 	}
 }
 
-func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch) {
+func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch) (prePersistHookError error) {
 
 	var blocks []*IndexedBlock
 	var transactions []*IndexedTransaction
@@ -522,6 +542,13 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 			for _, l := range r.Logs {
 				events = append(events, bi.logToIndexedEvent(l))
 			}
+		}
+	}
+
+	if bi.indexedTransactionPrePersistHook != nil {
+		if prePersistHookError = bi.indexedTransactionPrePersistHook(ctx, transactions); prePersistHookError != nil {
+			// if pre persist hook failed, don't write to db
+			return prePersistHookError
 		}
 	}
 
@@ -568,6 +595,7 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 			}
 		}
 	}
+	return
 }
 
 func (bi *blockIndexer) notifyEventStreams(ctx context.Context, batch *blockWriterBatch) {
@@ -746,6 +774,22 @@ func (bi *blockIndexer) GetIndexedBlockByNumber(ctx context.Context, number uint
 		return nil, err
 	}
 	return blocks[0], nil
+}
+
+func (bi *blockIndexer) GetIndexedTransactionByNonce(ctx context.Context, from tktypes.EthAddress, nonce uint64) (*IndexedTransaction, error) {
+	var txns []*IndexedTransaction
+	db := bi.persistence.DB()
+	err := db.
+		WithContext(ctx).
+		Table("indexed_transactions").
+		Where("from = ?", from).
+		Where("nonce = ?", nonce).
+		Find(&txns).
+		Error
+	if err != nil || len(txns) < 1 {
+		return nil, err
+	}
+	return txns[0], nil
 }
 
 func (bi *blockIndexer) GetIndexedTransactionByHash(ctx context.Context, hash tktypes.Bytes32) (*IndexedTransaction, error) {

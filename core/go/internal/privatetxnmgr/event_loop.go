@@ -23,7 +23,6 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
@@ -131,7 +130,7 @@ type Orchestrator struct {
 
 	store privatetxnstore.Store
 
-	baseLedgerTransactionManager enginespi.BaseLedgerTxEngine
+	publicTxManager components.PublicTxManager
 }
 
 var orchestratorConfigDefault = OrchestratorConfig{
@@ -445,8 +444,8 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 			for j, preparedTransaction := range preparedTransactions {
 				preparedTransactionPayloads[j] = preparedTransaction.PreparedTransaction
 			}
-			preparedSubmissions, rejected, err := oc.baseLedgerTransactionManager.PrepareSubmissionBatch(ctx,
-				&enginespi.RequestOptions{
+			preparedSubmissions, rejected, err := oc.publicTxManager.PrepareSubmissionBatch(ctx,
+				&components.RequestOptions{
 					SignerID: signingAddress,
 				},
 				convertToInterfaceSlice(preparedTransactionPayloads),
@@ -462,7 +461,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 
 			sequence.PublicTransactionsSubmit = func() (publicTxIDs []string, err error) {
 				//TODO submit the public transactions
-				manageTransactions, err := oc.baseLedgerTransactionManager.SubmitBatch(ctx, preparedSubmissions)
+				manageTransactions, err := oc.publicTxManager.SubmitBatch(ctx, preparedSubmissions)
 				if err != nil {
 					log.L(ctx).Errorf("Error submitting batch: %s", err)
 					return nil, err

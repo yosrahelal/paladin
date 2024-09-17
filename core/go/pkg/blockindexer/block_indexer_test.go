@@ -722,6 +722,42 @@ func TestBlockIndexerResetsAfterHashLookupFail(t *testing.T) {
 	assert.True(t, sentFail)
 }
 
+func TestBlockIndexerResetsWhenPrePersistHookFails(t *testing.T) {
+	ctx, bi, mRPC, blDone := newTestBlockIndexer(t)
+	defer blDone()
+
+	blocks, receipts := testBlockArray(t, 5)
+
+	prePersistHookFailed := false
+	mockBlocksRPCCallsDynamic(mRPC, func(args mock.Arguments) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC) {
+		return blocks, receipts
+	})
+
+	err := bi.RegisterIndexedTransactionHandler(ctx, func(ctx context.Context, indexedTransactions []*IndexedTransaction) error {
+		if !prePersistHookFailed && indexedTransactions[0].Hash == tktypes.NewBytes32FromSlice(blocks[2].Transactions[0].Hash) {
+			prePersistHookFailed = true
+			return fmt.Errorf("pop")
+		}
+		return nil
+	})
+	assert.NoError(t, err)
+
+	err = bi.RegisterIndexedTransactionHandler(ctx, func(ctx context.Context, indexedTransactions []*IndexedTransaction) error {
+		panic("should not override the first hook")
+	})
+	assert.Regexp(t, "PD011310", err)
+
+	bi.startOrReset() // do not start block listener
+
+	for i := 0; i < len(blocks); i++ {
+		b := <-bi.utBatchNotify
+		assert.Len(t, b.blocks, 1) // We should get one block per batch
+		assert.Equal(t, blocks[i], b.blocks[0])
+	}
+
+	assert.True(t, prePersistHookFailed)
+}
+
 func TestBlockIndexerDispatcherFallsBehindHead(t *testing.T) {
 	_, bi, mRPC, blDone := newTestBlockIndexer(t)
 	defer blDone()

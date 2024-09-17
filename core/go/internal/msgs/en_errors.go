@@ -166,6 +166,7 @@ var (
 	MsgBlockMissingHandler                  = ffe("PD011307", "Handler not registered for stream")
 	MsgBlockIndexerNoBlocksIndexed          = ffe("PD011308", "No confirmed blocks have yet been indexed")
 	MsgBlockIndexerTransactionReverted      = ffe("PD011309", "Transaction reverted: %s")
+	MsgBlockIndexerOnlyOnePrePersistHook    = ffe("PD011310", "Indexed transaction pre-persist hook already registered")
 
 	// Signing module PD0114XX
 	MsgSigningModuleBadPathError                = ffe("PD011400", "Path '%s' does not exist, or it is not a directory")
@@ -264,7 +265,7 @@ var (
 	MsgBaseLedgerTransactionFailed = ffe("PD011810", "Failed to submit base ledger transaction")
 	MsgContractAddressNotProvided  = ffe("PD011811", "Contract address (To) not found in the transaction input")
 
-	// Base Ledger engine PD0119XX
+	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s ")
 	MsgBalanceBelowMinimum             = ffe("PD011901", "Balance %s of fueling source address %s is below the configured minimum balance %s ")
 	MsgInvalidBigIntString             = ffe("PD011902", "Value of '%s' is not a valid bigInt string")
@@ -272,26 +273,20 @@ var (
 	MsgMaxBelowMinThreshold            = ffe("PD011904", "Value of '%s' is not a valid max, it is below the min threshold: %s")
 	MsgSubmitFailedWrongHashReturned   = ffe("PD011905", "Submission of transaction with calculatedHash '%s' returned hash '%s'")
 	MsgSubmissionResponseMissingTxHash = ffe("PD011906", "Missing transaction hash from the submission response for transaction with ID: %s")
+	MsgPublicTxMgrAlreadyInit          = ffe("PD011907", "Public transaction manager already initialized")
 	MsgInvalidGasClientConfig          = ffe("PD011908", "Invalid gas client config: %s")
 	MsgInvalidGasPriceIncreaseMax      = ffe("PD011909", "Invalid max gas price increase price string %s")
 	MsgMissingTransactionID            = ffe("PD011910", "Transaction ID must be provided")
-	MsgUnsupportedAction               = ffe("PD011911", "%s action is not supported")
-	MsgReturnValueNotDecoded           = ffe("PD011912", "Error return value for custom error: %s")
-	MsgReturnValueNotAvailable         = ffe("PD011913", "Error return value unavailable")
-	MsgReceiptNotAvailable             = ffe("PD011914", "Receipt not available for transaction '%s'")
 	MsgGasPriceError                   = ffe("PD011917", `The gasPrice '%s' could not be parsed. Must be a numeric string, or an object with 'gasPrice' field, or 'maxFeePerGas'/'maxPriorityFeePerGas' fields (EIP-1559), error: %s`)
 	MsgPersistError                    = ffe("PD011918", "Unexpected internal error, cannot persist stage.")
 	MsgInvalidStageOutput              = ffe("PD011919", "Stage output object is missing %s: %+v")
 	MsgInvalidGasLimit                 = ffe("PD011920", "Invalid gas limit, must be a positive number")
 	MsgStatusUpdateForbidden           = ffe("PD011921", "Cannot update status of a completed transaction")
-	MsgConfirmationHandlerNotFound     = ffe("PD011922", "Unexpected internal error, no handler set for confirmation")
-	MsgReceiptHandlerNotFound          = ffe("PD011923", "Unexpected internal error, no handler set for receipt")
 	MsgTransactionNotFound             = ffe("PD011924", "Transaction '%s' not found")
-	MsgInvalidChainID                  = ffe("PD011925", "Invalid chain ID string %s")
 	MsgTransactionEngineRequestTimeout = ffe("PD011926", "The transaction handler did not acknowledge the request after %.2fs")
-	MsgErrorFromSigningService         = ffe("PD011927", "Error from signing service: %s")
 	MsgErrorMissingSignerID            = ffe("PD011928", "Signer Identifier must be provided")
 	MsgInvalidTransactionType          = ffe("PD011929", "Transaction type invalid")
+	MsgMissingConfirmedTransaction     = ffe("PD011930", "Transaction %s with nonce smaller than the recorded confirmed nonce does not have an indexed transaction.")
 
 	// TransportManager module PD0120XX
 	MsgTransportInvalidMessage                = ffe("PD012000", "Invalid message")
