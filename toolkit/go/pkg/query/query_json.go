@@ -14,9 +14,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package filters
+package query
 
-import "github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+import (
+	"encoding/json"
+
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+)
 
 type QueryJSON struct {
 	Statements
@@ -74,4 +78,13 @@ type Ops struct {
 	In                 []*OpMultiVal  `json:"in,omitempty"`
 	NIn                []*OpMultiVal  `json:"nin,omitempty"` // negated short name
 	Null               []*Op          `json:"null,omitempty"`
+}
+
+func (jq *QueryJSON) String() string {
+	b, _ := jq.JSON()
+	return string(b)
+}
+
+func (jq *QueryJSON) JSON() ([]byte, error) {
+	return json.Marshal(jq)
 }

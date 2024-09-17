@@ -875,7 +875,8 @@ func (bi *blockIndexer) queryTransactionEvents(ctx context.Context, abi abi.ABI,
 }
 
 func (bi *blockIndexer) matchLog(ctx context.Context, abi abi.ABI, in *LogJSONRPC, out *EventWithData, source *tktypes.EthAddress) {
-	if in.Address != nil && !source.IsZero() && !source.Equals((*tktypes.EthAddress)(in.Address)) {
+	if !source.IsZero() && !source.Equals((*tktypes.EthAddress)(in.Address)) {
+		log.L(ctx).Debugf("Event %d/%d/%d does not match source=%s (tx=%s,address=%s)", in.BlockNumber, in.TransactionIndex, in.LogIndex, source, in.TransactionHash, in.Address)
 		return
 	}
 	// This is one that matches our signature, but we need to check it against our ABI list.
