@@ -30,6 +30,7 @@ import (
 )
 
 type ABIFunctionClient interface {
+	ABI() abi.ABI
 	ABIEntry() *abi.Entry
 	R(ctx context.Context) ABIFunctionRequestBuilder
 }
@@ -93,6 +94,7 @@ type abiFunctionClient struct {
 	bytecode    tktypes.HexBytes
 	signature   string
 	selector    []byte
+	abi         abi.ABI
 	abiEntry    *abi.Entry
 	inputCount  int
 	inputs      abi.TypeComponent
@@ -153,7 +155,7 @@ func (ec *ethClient) MustABIJSON(abiJson []byte) ABIClient {
 }
 
 func (abic *abiClient) Function(ctx context.Context, nameOrFullSig string) (_ ABIFunctionClient, err error) {
-	ac := &abiFunctionClient{ec: abic.ec}
+	ac := &abiFunctionClient{ec: abic.ec, abi: abic.abi}
 	functionABI := abic.functions[nameOrFullSig]
 	if functionABI == nil {
 		err = i18n.NewError(ctx, msgs.MsgEthClientFunctionNotFound, nameOrFullSig)
@@ -176,7 +178,7 @@ func (ec *ethClient) ABIFunction(ctx context.Context, functionABI *abi.Entry) (f
 }
 
 func (abic *abiClient) Constructor(ctx context.Context, bytecode tktypes.HexBytes) (ABIFunctionClient, error) {
-	ac := &abiFunctionClient{ec: abic.ec, bytecode: bytecode}
+	ac := &abiFunctionClient{ec: abic.ec, bytecode: bytecode, abi: abic.abi}
 	functionABI := abic.abi.Constructor()
 	if functionABI == nil {
 		// Default constructor
@@ -232,6 +234,10 @@ func (abic *abiClient) MustConstructor(bytecode tktypes.HexBytes) ABIFunctionCli
 
 func (abic *abiClient) ABI() abi.ABI {
 	return abic.abi
+}
+
+func (ac *abiFunctionClient) ABI() abi.ABI {
+	return ac.abi
 }
 
 func (ac *abiFunctionClient) ABIEntry() *abi.Entry {
@@ -367,7 +373,7 @@ func (ac *abiFunctionRequestBuilder) CallJSON() (jsonData []byte, err error) {
 			return nil, err
 		}
 	}
-	resData, err := ac.ec.CallContract(ac.ctx, ac.fromStr, &ac.tx, ac.block)
+	resData, err := ac.ec.CallContract(ac.ctx, ac.fromStr, &ac.tx, ac.block, ac.abi)
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +393,7 @@ func (ac *abiFunctionRequestBuilder) RawTransaction() (rawTX tktypes.HexBytes, e
 	if ac.fromStr == nil {
 		return nil, i18n.NewError(ac.ctx, msgs.MsgEthClientMissingFrom)
 	}
-	return ac.ec.BuildRawTransaction(ac.ctx, ac.txVersion, *ac.fromStr, &ac.tx)
+	return ac.ec.BuildRawTransaction(ac.ctx, ac.txVersion, *ac.fromStr, &ac.tx, ac.abi)
 }
 
 func (ac *abiFunctionRequestBuilder) SignAndSend() (txHash *tktypes.Bytes32, err error) {

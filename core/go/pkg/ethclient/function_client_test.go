@@ -17,12 +17,15 @@ package ethclient
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -94,6 +97,20 @@ var testABIJSON = ([]byte)(`[
 				]
 			}
 		]
+	},
+	{
+	  "type": "error",
+	  "name": "WidgetError",
+	  "inputs": [
+	    {
+	      "name": "sku",
+	      "type": "uint256"
+	    },
+	    {
+	      "name": "issue",
+	      "type": "string"
+	    }
+	  ]
 	}
 ]`)
 
@@ -506,6 +523,7 @@ func TestBuildCallData(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, req.TX().Data)
 
+	assert.NotNil(t, newWidget.ABI())
 	cv, err := newWidget.ABIEntry().Inputs.ParseExternalData(inMap)
 	require.NoError(t, err)
 	err = req.Input(cv).BuildCallData()
@@ -561,5 +579,51 @@ func TestInvokeConstructor(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, txHash)
+
+}
+
+func TestInvokeNewWidgetCustomError(t *testing.T) {
+
+	var testABI abi.ABI
+	err := json.Unmarshal(testABIJSON, &testABI)
+	assert.NoError(t, err)
+	errData, err := testABI.Errors()["WidgetError"].EncodeCallDataJSON([]byte(`{"sku": 1122334455, "issue": "not widgety enough"}`))
+	assert.NoError(t, err)
+
+	ctx, ecf, done := newTestClientAndServer(t, &mockEth{
+		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (ethtypes.HexInteger, error) {
+			return *ethtypes.NewHexInteger64(0), fmt.Errorf("pop")
+		},
+		eth_callErr: func(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse {
+			return &rpcbackend.RPCResponse{
+				JSONRpc: "2.0",
+				ID:      req.ID,
+				Error: &rpcbackend.RPCError{
+					Code:    int64(rpcbackend.RPCCodeInternalError),
+					Message: "reverted",
+					Data:    *fftypes.JSONAnyPtr(fmt.Sprintf(`"%s"`, tktypes.HexBytes(errData))),
+				},
+			}
+		},
+	})
+	defer done()
+
+	fakeContractAddr := ethtypes.MustNewAddress("0xCC3b61E636B395a4821Df122d652820361FF26f1")
+
+	widgetA := &widget{
+		ID:       *ethtypes.MustNewAddress("0xFd33700f0511AbB60FF31A8A533854dB90B0a32A"),
+		SKU:      *ethtypes.NewHexInteger64(1122334455),
+		Features: []string{"shiny", "spinny"},
+	}
+	req := ecf.HTTPClient().MustABIJSON(testABIJSON).MustFunction("newWidget").R(ctx).
+		To(fakeContractAddr).
+		Input(&newWidgetInput{
+			Widget: *widgetA,
+		})
+	_, err = req.CallJSON()
+	assert.EqualError(t, err, `PD011516: Reverted: WidgetError("1122334455","not widgety enough")`)
+
+	_, err = ecf.HTTPClient().CallContract(ctx, nil, &ethsigner.Transaction{}, "latest", nil)
+	assert.EqualError(t, err, `PD011516: Reverted: 0xf852c6da0000000000000000000000000000000000000000000000000000000042e576f7000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000126e6f74207769646765747920656e6f7567680000000000000000000000000000`)
 
 }

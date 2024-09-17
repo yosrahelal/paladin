@@ -104,7 +104,7 @@ func (tb *testbed) rpcDeployBytecode() rpcserver.RPCHandler {
 			Input(params).
 			SignAndSend()
 		if err == nil {
-			tx, err = tb.c.BlockIndexer().WaitForTransaction(ctx, *txHash)
+			tx, err = tb.c.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, abi)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to send transaction: %s", err)
