@@ -48,7 +48,6 @@ type Noto struct {
 
 	config      types.DomainConfig
 	chainID     int64
-	domainID    string
 	coinSchema  *pb.StateSchema
 	factoryABI  abi.ABI
 	contractABI abi.ABI
@@ -99,7 +98,6 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *pb.ConfigureDomainReque
 }
 
 func (n *Noto) InitDomain(ctx context.Context, req *pb.InitDomainRequest) (*pb.InitDomainResponse, error) {
-	n.domainID = req.DomainUuid
 	n.coinSchema = req.AbiStateSchemas[0]
 	return &pb.InitDomainResponse{}, nil
 }

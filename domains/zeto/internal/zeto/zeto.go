@@ -39,7 +39,6 @@ type Zeto struct {
 
 	config     *types.DomainFactoryConfig
 	chainID    int64
-	domainID   string
 	coinSchema *pb.StateSchema
 	factoryABI abi.ABI
 }
@@ -79,7 +78,6 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *pb.ConfigureDomainReque
 }
 
 func (z *Zeto) InitDomain(ctx context.Context, req *pb.InitDomainRequest) (*pb.InitDomainResponse, error) {
-	z.domainID = req.DomainUuid
 	z.coinSchema = req.AbiStateSchemas[0]
 	return &pb.InitDomainResponse{}, nil
 }

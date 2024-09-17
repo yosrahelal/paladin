@@ -99,7 +99,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	assert.NotNil(t, as.definition)
 	assert.Equal(t, "type=MyStruct(uint256 field1,string field2,int64 field3,bool field4,address field5,int256 field6,bytes field7,uint32 field8,string field9),labels=[field1,field2,field3,field4,field5,field6,field7,field8]", as.Persisted().Signature)
 	cacheKey := "domain1/0xcf41493c8bb9652d1483ee6cb5122efbec6fbdf67cc27363ba5b030b59244cad"
-	assert.Equal(t, cacheKey, schemaCacheKey(as.Persisted().DomainID, as.Persisted().ID))
+	assert.Equal(t, cacheKey, schemaCacheKey(as.Persisted().DomainName, as.Persisted().ID))
 
 	err = ss.persistSchemas([]*SchemaPersisted{as.SchemaPersisted})
 	require.NoError(t, err)
@@ -162,7 +162,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	schemaID = as.IDString()
 
 	getValidate := func() {
-		as1, err := ss.GetSchema(ctx, as.Persisted().DomainID, schemaID, true)
+		as1, err := ss.GetSchema(ctx, as.Persisted().DomainName, schemaID, true)
 		require.NoError(t, err)
 		assert.NotNil(t, as1)
 		as1Sig, err := as1.(*abiSchema).FullSignature(ctx)
@@ -181,7 +181,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	getValidate()
 
 	// Get the state back too
-	state1a, err := ss.GetState(ctx, as.Persisted().DomainID, state1.ID.String(), true, true)
+	state1a, err := ss.GetState(ctx, as.Persisted().DomainName, state1.ID.String(), true, true)
 	require.NoError(t, err)
 	assert.Equal(t, state1.State, state1a)
 
@@ -200,7 +200,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		]
 	}`), &query)
 	require.NoError(t, err)
-	states, err := ss.FindStates(ctx, as.Persisted().DomainID, "0x1234", schemaID, query, "all")
+	states, err := ss.FindStates(ctx, as.Persisted().DomainName, "0x1234", schemaID, query, "all")
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 
@@ -211,7 +211,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		]
 	}`), &query)
 	require.NoError(t, err)
-	states, err = ss.FindStates(ctx, as.Persisted().DomainID, "0x1234", schemaID, query, "all")
+	states, err = ss.FindStates(ctx, as.Persisted().DomainName, "0x1234", schemaID, query, "all")
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 
@@ -222,7 +222,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		]
 	}`), &query)
 	require.NoError(t, err)
-	states, err = ss.FindStates(ctx, as.Persisted().DomainID, "0x1234", schemaID, query, "all")
+	states, err = ss.FindStates(ctx, as.Persisted().DomainName, "0x1234", schemaID, query, "all")
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 }

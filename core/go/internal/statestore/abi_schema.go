@@ -42,12 +42,12 @@ type abiSchema struct {
 	abiLabelInfo []*schemaLabelInfo
 }
 
-func newABISchema(ctx context.Context, domainID string, def *abi.Parameter) (*abiSchema, error) {
+func newABISchema(ctx context.Context, domainName string, def *abi.Parameter) (*abiSchema, error) {
 	as := &abiSchema{
 		SchemaPersisted: &SchemaPersisted{
-			DomainID: domainID,
-			Type:     SchemaTypeABI,
-			Labels:   []string{},
+			DomainName: domainName,
+			Type:       SchemaTypeABI,
+			Labels:     []string{},
 		},
 		definition: def,
 	}
@@ -357,7 +357,7 @@ func (as *abiSchema) ProcessState(ctx context.Context, data tktypes.RawJSON) (*S
 		State: &State{
 			ID:          hashID,
 			CreatedAt:   now,
-			DomainID:    as.DomainID,
+			DomainName:  as.DomainName,
 			Schema:      as.ID,
 			Data:        jsonData,
 			Labels:      psd.labels,

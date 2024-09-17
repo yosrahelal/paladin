@@ -74,7 +74,7 @@ type Transaction struct {
 	ID                 uuid.UUID  `gorm:"type:uuid;default:uuid_generate_v4()"`
 	From               string     `gorm:"type:text"`
 	SequenceID         *uuid.UUID `gorm:"type:uuid"`
-	DomainID           string     `gorm:"type:uuid"`
+	DomainName         string     `gorm:"type:text"`
 	SchemaID           string     `gorm:"type:uuid"`
 	AssembledRound     int64      `gorm:"type:int"`
 	AttestationPlan    string     `gorm:"type:text[]; serializer:json"`
@@ -197,8 +197,9 @@ func (t *TransactionWrapper) GetAttestationResults(ctx context.Context) []*proto
 	_ = json.Unmarshal([]byte(t.AttestationResults), &attResults)
 	return attResults
 }
+
 func (t *TransactionWrapper) GetDomainID(ctx context.Context) string {
-	return t.DomainID
+	return t.DomainName
 }
 
 func (t *TransactionWrapper) GetSchemaID(ctx context.Context) string {

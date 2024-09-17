@@ -3,13 +3,14 @@ BEGIN;
 CREATE TABLE states (
     "id"               TEXT    NOT NULL,
     "created_at"       BIGINT  NOT NULL,
-    "domain_id"        TEXT,
+    "domain_name"      TEXT,
     "schema"           TEXT,
     "contract_address" TEXT,
     "data"             TEXT,
     PRIMARY KEY ("id"),
-    FOREIGN KEY ("domain_id", "schema") REFERENCES schemas ("domain_id", "id") ON DELETE CASCADE
+    FOREIGN KEY ("domain_name", "schema") REFERENCES schemas ("domain_name", "id") ON DELETE CASCADE
 );
+CREATE INDEX states_by_domain ON states("domain_name", "schema", "contract_address");
 
 CREATE TABLE state_labels (
     "state"       TEXT    NOT NULL,
