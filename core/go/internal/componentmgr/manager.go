@@ -25,7 +25,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/domainmgr"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
-	"github.com/kaleido-io/paladin/core/internal/publictxmgr"
 	"github.com/kaleido-io/paladin/core/internal/registrymgr"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
@@ -149,11 +148,11 @@ func (cm *componentManager) Init() (err error) {
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
 	}
 
-	if err == nil {
+	/*if err == nil {
 		cm.publicTxManager = publictxmgr.NewPublicTransactionMgr(cm.bgCtx)
 		cm.initResults["public_tx_mgr"], err = cm.publicTxManager.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
-	}
+	}*/
 
 	// init engine
 	if err == nil {
@@ -182,10 +181,10 @@ func (cm *componentManager) Init() (err error) {
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
 	}
 
-	if err == nil {
+	/*if err == nil {
 		err = cm.publicTxManager.PostInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
-	}
+	}*/
 
 	return err
 }
