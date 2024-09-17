@@ -18,11 +18,12 @@ package noto
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/big"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -104,13 +105,13 @@ func (n *Noto) prepareInputs(ctx context.Context, owner ethtypes.Address0xHex, a
 			return nil, nil, nil, err
 		}
 		if len(states) == 0 {
-			return nil, nil, nil, fmt.Errorf("insufficient funds (available=%s)", total.Text(10))
+			return nil, nil, nil, i18n.NewError(ctx, msgs.MsgInsufficientFunds, total.Text(10))
 		}
 		for _, state := range states {
 			lastStateTimestamp = state.StoredAt
 			coin, err := n.unmarshalCoin(state.DataJson)
 			if err != nil {
-				return nil, nil, nil, fmt.Errorf("coin %s is invalid: %s", state.Id, err)
+				return nil, nil, nil, i18n.NewError(ctx, msgs.MsgInvalidStateData, state.Id, err)
 			}
 			total = total.Add(total, coin.Amount.BigInt())
 			stateRefs = append(stateRefs, &pb.StateRef{
