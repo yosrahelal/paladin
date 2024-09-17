@@ -219,7 +219,7 @@ type ConfirmationsNotification struct {
 	Confirmations []*Confirmation
 }
 
-type BaseLedgerTxEngine interface {
+type PublicTxEngine interface {
 	// Lifecycle functions
 
 	// Init - setting a set of initialized toolkit plugins in the constructed transaction handler object. Safe checks & initialization

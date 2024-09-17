@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package baseledgertx
+package publictxmgr
 
 import (
 	"context"
@@ -22,7 +22,7 @@ import (
 
 func TestMetrics(t *testing.T) {
 	// none of the functions are actually implemented, so it's purely for test coverage
-	btem := &baseLedgerTxEngineMetrics{}
+	btem := &publicTxEngineMetrics{}
 	ctx := context.Background()
 	btem.InitMetrics(ctx)
 	btem.RecordCompletedTransactionCountMetrics(ctx, "success")

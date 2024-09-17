@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package baseledgertx
+package publictxmgr
 
 import (
 	"context"
@@ -50,7 +50,7 @@ func newTestInFlightTransactionStateManager(t *testing.T) *testInFlightTransacti
 	mockActionTriggers := enginemocks.NewInFlightStageActionTriggers(t)
 	mTS := enginemocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	iftxs := NewInFlightTransactionStateManager(&baseLedgerTxEngineMetrics{}, mBM, mTS, mBI, mockActionTriggers, mockInMemoryState, &retry.Retry{
+	iftxs := NewInFlightTransactionStateManager(&publicTxEngineMetrics{}, mBM, mTS, mBI, mockActionTriggers, mockInMemoryState, &retry.Retry{
 		InitialDelay: 1 * time.Millisecond,
 		MaximumDelay: 100 * time.Millisecond,
 		Factor:       2.0,

@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package baseledgertx
+package publictxmgr
 
 import (
 	"context"
@@ -136,6 +136,50 @@ func TestProduceLatestInFlightStageContextRetrieveGas(t *testing.T) {
 	assert.False(t, it.stateManager.ValidatedTransactionHashMatchState(ctx))
 	// switched running stage context
 	assert.NotEqual(t, rsc, it.stateManager.GetRunningStageContext(ctx))
+}
+
+func TestProduceLatestInFlightStageContextRetrieveGasWithPersistence(t *testing.T) {
+	ctx := context.Background()
+	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
+	it := testInFlightTransactionStateManagerWithMocks.it
+	// succeed retrieving gas price
+	it.testOnlyNoActionMode = false
+	it.testOnlyNoEventMode = false
+	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
+	// trigger retrieve gas price
+	mtx := it.stateManager.GetTx()
+	mtx.GasPrice = nil
+	mtx.TransactionHash = ""
+	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
+	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+		AvailableToSpend:         nil,
+		PreviousNonceCostUnknown: true,
+	})
+	for len(inFlightStageMananger.bufferedStageOutputs) == 0 {
+		// wait for the confirmation output to be added
+	}
+	assert.Empty(t, *tOut)
+
+	assert.NotNil(t, it.stateManager.GetRunningStageContext(ctx))
+	rsc := it.stateManager.GetRunningStageContext(ctx)
+
+	assert.Equal(t, baseTypes.InFlightTxStageRetrieveGasPrice, rsc.Stage)
+
+	// persisted stage success and move on
+	mTS := testInFlightTransactionStateManagerWithMocks.mTS
+	called := make(chan bool)
+	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, baseTypes.BaseTxSubStatusReceived, baseTypes.BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
+		called <- true
+	}).Return(nil).Maybe()
+	mTS.On("UpdateTransaction", mock.Anything, mtx.ID, mock.Anything).Return(nil).Once()
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+		AvailableToSpend:         nil,
+		PreviousNonceCostUnknown: true,
+	})
+
+	<-called
+	assert.Empty(t, *tOut)
+	assert.False(t, it.stateManager.ValidatedTransactionHashMatchState(ctx))
 }
 
 func TestProduceLatestInFlightStageContextRetrieveGasIncrements(t *testing.T) {

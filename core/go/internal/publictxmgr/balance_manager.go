@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package baseledgertx
+package publictxmgr
 
 import (
 	"context"
@@ -116,7 +116,7 @@ type BalanceManagerWithInMemoryTracking struct {
 	ethClient ethclient.EthClient
 
 	// transaction handler is used to submit and fetch autofueling transaction status
-	txEngine baseTypes.BaseLedgerTxEngine
+	txEngine baseTypes.PublicTxEngine
 
 	// balance cache is used to store cached balances of any address
 	balanceCache cache.CInterface
@@ -361,7 +361,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 	return mtx, nil
 }
 
-func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf config.Section, ethClient ethclient.EthClient, txEngine baseTypes.BaseLedgerTxEngine) (baseTypes.BalanceManager, error) {
+func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf config.Section, ethClient ethclient.EthClient, txEngine baseTypes.PublicTxEngine) (baseTypes.BalanceManager, error) {
 	cm, _ := cache.NewCacheManager(ctx, true).GetCache(ctx, "balance-manager", "balance", conf.GetByteSize(BalanceManagerCacheSizeByteString), conf.GetDuration(BalanceManagerCacheTTLDurationString), conf.GetBool(BalanceManagerCacheEnabled), cache.StrictExpiry, cache.TTLFromInitialAdd)
 	log.L(ctx).Debugf("Balance manager cache setting. Enabled: %t , size: %d , ttl: %s", conf.GetBool(BalanceManagerCacheEnabled), conf.GetByteSize(BalanceManagerCacheSizeByteString), conf.GetDuration(BalanceManagerCacheTTLDurationString))
 	afConfig := conf.SubSection(BalanceManagerAutoFuelingSection)

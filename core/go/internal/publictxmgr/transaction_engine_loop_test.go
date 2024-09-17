@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package baseledgertx
+package publictxmgr
 
 import (
 	"context"
@@ -180,7 +180,7 @@ func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*baseTypes.ManagedTX{}, nil, nil).Maybe()
 	go ble.engineLoop()
 	existingOrchestrator := &orchestrator{
-		baseLedgerTxEngine:          ble,
+		publicTxEngine:              ble,
 		orchestratorPollingInterval: ble.enginePollingInterval,
 		state:                       OrchestratorStateIdle,
 		stateEntryTime:              time.Now().Add(-ble.maxOrchestratorIdle).Add(-1 * time.Minute),
@@ -243,7 +243,7 @@ func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) 
 	ble.maxInFlightOrchestrators = 1
 	existingOrchestrator := &orchestrator{
 		orchestratorBirthTime:       time.Now().Add(-1 * time.Hour),
-		baseLedgerTxEngine:          ble,
+		publicTxEngine:              ble,
 		orchestratorPollingInterval: ble.enginePollingInterval,
 		state:                       OrchestratorStateRunning,
 		stateEntryTime:              time.Now().Add(-ble.maxOrchestratorIdle).Add(-1 * time.Minute),

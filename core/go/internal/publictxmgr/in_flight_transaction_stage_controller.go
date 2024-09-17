@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package baseledgertx
+package publictxmgr
 
 import (
 	"context"
@@ -97,7 +97,7 @@ type BasicActionError struct {
 }
 
 func NewInFlightTransactionStageController(
-	enth *baseLedgerTxEngine,
+	enth *publicTxEngine,
 	oc *orchestrator,
 	mtx *baseTypes.ManagedTX,
 ) *InFlightTransactionStageController {

@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package baseledgertx
+package publictxmgr
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -233,6 +234,41 @@ func TestProduceLatestInFlightStageContextConfirmingTxSucceeded(t *testing.T) {
 	assert.True(t, tOut.TransactionSubmitted)
 	// switched running stage context
 	assert.NotEqual(t, rsc, inFlightStageMananger.GetRunningStageContext(ctx))
+}
+
+func TestProduceLatestInFlightStageContextTriggerResubmissionForStaledConfirmation(t *testing.T) {
+	ctx := context.Background()
+	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
+	it := testInFlightTransactionStateManagerWithMocks.it
+
+	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
+	inFlightStageMananger.testOnlyNoEventMode = true
+	it.testOnlyNoActionMode = true
+	it.testOnlyNoEventMode = true
+	mtx := it.stateManager.GetTx()
+	// set validated to enter tracking
+	it.stateManager.SetValidatedTransactionHashMatchState(ctx, true)
+	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+		AvailableToSpend:         nil,
+		PreviousNonceCostUnknown: false,
+	})
+	assert.NotEmpty(t, *tOut)
+	assert.Equal(t, "20000", tOut.Cost.String())
+	assert.True(t, tOut.TransactionSubmitted)
+	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
+
+	// set last submit to trigger resubmission
+	inThePast := fftypes.ZeroTime()
+	mtx.LastSubmit = &inThePast
+	it.resubmitInterval = 0
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+		AvailableToSpend:         nil,
+		PreviousNonceCostUnknown: false,
+	})
+	assert.NotEmpty(t, *tOut)
+	assert.Equal(t, "20000", tOut.Cost.String())
+	assert.True(t, tOut.TransactionSubmitted)
+	assert.Equal(t, baseTypes.InFlightTxStageRetrieveGasPrice, inFlightStageMananger.stage)
 
 }
 

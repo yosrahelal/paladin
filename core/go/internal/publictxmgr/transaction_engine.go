@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package baseledgertx
+package publictxmgr
 
 import (
 	"context"
@@ -51,7 +51,7 @@ const (
 	UpdateDelete                   // Instructs that the transaction should be removed completely from persistence - generally only returned when TX status is TxStatusDeleteRequested
 )
 
-// baseLedgerTxEngine:
+// Public Tx Engine:
 // - It offers two ways of calculating gas price: use a fixed number, use the built-in API of a ethereum connector
 // - It resubmits the transaction based on a configured interval until it succeed or fail
 // - It also recalculate gas price during resubmissions
@@ -59,9 +59,9 @@ const (
 // - It offers caches of gas price for transactions targeting same method of a smart contract
 // - It provide a outbound request concurrency control
 
-type baseLedgerTxEngine struct {
+type publicTxEngine struct {
 	ctx                    context.Context
-	thMetrics              *baseLedgerTxEngineMetrics
+	thMetrics              *publicTxEngineMetrics
 	txStore                baseTypes.TransactionStore
 	bIndexer               blockindexer.BlockIndexer
 	ethClient              ethclient.EthClient
@@ -106,7 +106,7 @@ type baseLedgerTxEngine struct {
 	gasPriceIncreasePercent *big.Int
 }
 
-func NewTransactionEngine(ctx context.Context, conf config.Section) (baseTypes.BaseLedgerTxEngine, error) {
+func NewTransactionEngine(ctx context.Context, conf config.Section) (baseTypes.PublicTxEngine, error) {
 	log.L(ctx).Debugf("Creating new enterprise transaction handler")
 
 	cm := cache.NewCacheManager(ctx, true)
@@ -133,7 +133,7 @@ func NewTransactionEngine(ctx context.Context, conf config.Section) (baseTypes.B
 		log.L(ctx).Debugf("Gas price increment gasPriceIncreaseMax setting: %s", gasPriceIncreaseMax.String())
 	}
 
-	ble := &baseLedgerTxEngine{
+	ble := &publicTxEngine{
 		gasPriceClient:              gasPriceClient,
 		InFlightOrchestratorStale:   make(chan bool, 1),
 		SigningAddressesPausedUntil: make(map[string]time.Time),
@@ -160,7 +160,7 @@ func NewTransactionEngine(ctx context.Context, conf config.Section) (baseTypes.B
 	return ble, nil
 }
 
-func (ble *baseLedgerTxEngine) Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore baseTypes.TransactionStore, managedTXEventNotifier baseTypes.ManagedTxEventNotifier, blockIndexer blockindexer.BlockIndexer) {
+func (ble *publicTxEngine) Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore baseTypes.TransactionStore, managedTXEventNotifier baseTypes.ManagedTxEventNotifier, blockIndexer blockindexer.BlockIndexer) {
 	log.L(ctx).Debugf("Initializing enterprise transaction handler")
 	ble.ethClient = ethClient
 	ble.keymgr = keymgr
@@ -178,7 +178,7 @@ func (ble *baseLedgerTxEngine) Init(ctx context.Context, ethClient ethclient.Eth
 	ble.balanceManager = balanceManager
 }
 
-func (ble *baseLedgerTxEngine) Start(ctx context.Context) (done <-chan struct{}, err error) {
+func (ble *publicTxEngine) Start(ctx context.Context) (done <-chan struct{}, err error) {
 	log.L(ctx).Debugf("Starting enterprise transaction handler")
 	if ble.ctx == nil { // only start once
 		ble.ctx = ctx // set the context for policy loop
@@ -194,7 +194,7 @@ func (ble *baseLedgerTxEngine) Start(ctx context.Context) (done <-chan struct{},
 	return ble.engineLoopDone, nil
 }
 
-func (ble *baseLedgerTxEngine) HandleNewTransaction(ctx context.Context, reqOptions *baseTypes.RequestOptions, txPayload interface{}) (mtx *baseTypes.ManagedTX, submissionRejected bool, err error) {
+func (ble *publicTxEngine) HandleNewTransaction(ctx context.Context, reqOptions *baseTypes.RequestOptions, txPayload interface{}) (mtx *baseTypes.ManagedTX, submissionRejected bool, err error) {
 	log.L(ctx).Tracef("HandleNewTx new request, options: %+v, payload: %+v", reqOptions, txPayload)
 
 	err = reqOptions.Validate(ctx)
@@ -276,7 +276,7 @@ func (ble *baseLedgerTxEngine) HandleNewTransaction(ctx context.Context, reqOpti
 	return mtx, false /* any error at this point should be transient and re-submittable with the same UUID */, err
 }
 
-func (ble *baseLedgerTxEngine) createManagedTx(ctx context.Context, txID string, ethTx *ethsigner.Transaction) (*baseTypes.ManagedTX, error) {
+func (ble *publicTxEngine) createManagedTx(ctx context.Context, txID string, ethTx *ethsigner.Transaction) (*baseTypes.ManagedTX, error) {
 	log.L(ctx).Tracef("createManagedTx creating a new managed transaction with ID: %s, and payload %+v", txID, ethTx)
 	now := fftypes.Now()
 	mtx := &baseTypes.ManagedTX{
@@ -318,7 +318,7 @@ func (ble *baseLedgerTxEngine) createManagedTx(ctx context.Context, txID string,
 // HandleConfirmedTransactions
 // handover events to the inflight orchestrators for the related signing addresses and record the highest confirmed nonce
 // new orchestrators will be created if there are space, orchestrators will use the recorded highest nonce to drive completion logic of transactions
-func (ble *baseLedgerTxEngine) HandleConfirmedTransactions(ctx context.Context, confirmedTransactions []*blockindexer.IndexedTransaction) error {
+func (ble *publicTxEngine) HandleConfirmedTransactions(ctx context.Context, confirmedTransactions []*blockindexer.IndexedTransaction) error {
 	// firstly, we group the confirmed transactions by from address
 	// note: filter out transactions that are before the recorded nonce in confirmedTXNonce map requires multiple reads to a single address (as the loop keep switching between addresses)
 	// so we delegate the logic to the orchestrator as it will have a list of records for a single address
@@ -398,7 +398,7 @@ func (ble *baseLedgerTxEngine) HandleConfirmedTransactions(ctx context.Context, 
 	return nil
 }
 
-func (ble *baseLedgerTxEngine) HandleSuspendTransaction(ctx context.Context, txID string) (mtx *baseTypes.ManagedTX, err error) {
+func (ble *publicTxEngine) HandleSuspendTransaction(ctx context.Context, txID string) (mtx *baseTypes.ManagedTX, err error) {
 	mtx, err = ble.txStore.GetTransactionByID(ctx, txID)
 	if err != nil {
 		return nil, err
@@ -410,7 +410,7 @@ func (ble *baseLedgerTxEngine) HandleSuspendTransaction(ctx context.Context, txI
 	return res.tx, nil
 }
 
-func (ble *baseLedgerTxEngine) HandleResumeTransaction(ctx context.Context, txID string) (mtx *baseTypes.ManagedTX, err error) {
+func (ble *publicTxEngine) HandleResumeTransaction(ctx context.Context, txID string) (mtx *baseTypes.ManagedTX, err error) {
 	mtx, err = ble.txStore.GetTransactionByID(ctx, txID)
 	if err != nil {
 		return nil, err
@@ -422,14 +422,14 @@ func (ble *baseLedgerTxEngine) HandleResumeTransaction(ctx context.Context, txID
 	return res.tx, nil
 }
 
-func (ble *baseLedgerTxEngine) getConfirmedTxNonce(addr string) (nonce *big.Int) {
+func (ble *publicTxEngine) getConfirmedTxNonce(addr string) (nonce *big.Int) {
 	ble.confirmedTxNoncePerAddressRWMutex.RLock()
 	nonce = ble.confirmedTxNoncePerAddress[addr]
 	defer ble.confirmedTxNoncePerAddressRWMutex.RUnlock()
 	return
 }
 
-func (ble *baseLedgerTxEngine) updateConfirmedTxNonce(addr string, nonce *big.Int) {
+func (ble *publicTxEngine) updateConfirmedTxNonce(addr string, nonce *big.Int) {
 	ble.confirmedTxNoncePerAddressRWMutex.Lock()
 	defer ble.confirmedTxNoncePerAddressRWMutex.Unlock()
 	if ble.confirmedTxNoncePerAddress[addr] == nil || ble.confirmedTxNoncePerAddress[addr].Cmp(nonce) != 1 {

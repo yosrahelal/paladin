@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package baseledgertx
+package publictxmgr
 
 import (
 	"context"
@@ -43,7 +43,7 @@ const testSourceAddressBalanceString = "400"
 const testSourceAddressBalanceNew = 500
 const testSourceAddressBalanceNewString = "500"
 
-func NewTestBalanceManager(ctx context.Context, t *testing.T) (*BalanceManagerWithInMemoryTracking, *componentmocks.EthClient, *enginemocks.BaseLedgerTxEngine) {
+func NewTestBalanceManager(ctx context.Context, t *testing.T) (*BalanceManagerWithInMemoryTracking, *componentmocks.EthClient, *enginemocks.PublicTxEngine) {
 	conf := config.RootSection("unittest")
 	InitBalanceManagerConfig(conf)
 	ResetBalanceManagerConfig(conf)
@@ -54,7 +54,7 @@ func NewTestBalanceManager(ctx context.Context, t *testing.T) (*BalanceManagerWi
 
 	mEthClient := componentmocks.NewEthClient(t)
 
-	mockAFTxEngine := enginemocks.NewBaseLedgerTxEngine(t)
+	mockAFTxEngine := enginemocks.NewPublicTxEngine(t)
 
 	testManagerWithMocks, err := NewBalanceManagerWithInMemoryTracking(ctx, bmConf, mEthClient, mockAFTxEngine)
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestNewBalanceManagerError(t *testing.T) {
 
 	mEthClient := componentmocks.NewEthClient(t)
 
-	mockAFTxEngine := enginemocks.NewBaseLedgerTxEngine(t)
+	mockAFTxEngine := enginemocks.NewPublicTxEngine(t)
 
 	afConfig := conf.SubSection(fmt.Sprintf("%s.%s", BalanceManagerSection, BalanceManagerAutoFuelingSection))
 
@@ -127,7 +127,7 @@ func TestIsAutoFuelingEnabled(t *testing.T) {
 
 	mEthClient := componentmocks.NewEthClient(t)
 
-	mockAFTxEngine := enginemocks.NewBaseLedgerTxEngine(t)
+	mockAFTxEngine := enginemocks.NewPublicTxEngine(t)
 
 	afConfig := conf.SubSection(fmt.Sprintf("%s.%s", BalanceManagerSection, BalanceManagerAutoFuelingSection))
 	afConfig.Set(BalanceManagerAutoFuelingSourceAddressString, testAutoFuelingSourceAddress)

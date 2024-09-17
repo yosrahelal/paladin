@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package baseledgertx
+package publictxmgr
 
 import (
 	"context"
@@ -33,10 +33,10 @@ import (
 )
 
 type inFlightTransactionState struct {
-	testMode bool // Note: this flag can never be set in normal code path, exposed for testing only
-	retry    *retry.Retry
+	testOnlyNoEventMode bool // Note: this flag can never be set in normal code path, exposed for testing only
+	retry               *retry.Retry
 
-	BaseLedgerTxEngineMetricsManager
+	PublicTxEngineMetricsManager
 	baseTypes.BalanceManager
 
 	txStore  baseTypes.TransactionStore
@@ -171,7 +171,7 @@ func (iftxs *inFlightTransactionState) ProcessStageOutputs(ctx context.Context, 
 }
 
 func (iftxs *inFlightTransactionState) AddStageOutputs(ctx context.Context, stageOutput *baseTypes.StageOutput) {
-	if iftxs.testMode {
+	if iftxs.testOnlyNoEventMode {
 		return
 	}
 	iftxs.bufferedStageOutputsMux.Lock()
@@ -179,7 +179,7 @@ func (iftxs *inFlightTransactionState) AddStageOutputs(ctx context.Context, stag
 	iftxs.bufferedStageOutputs = append(iftxs.bufferedStageOutputs, stageOutput)
 }
 
-func NewInFlightTransactionStateManager(thm BaseLedgerTxEngineMetricsManager,
+func NewInFlightTransactionStateManager(thm PublicTxEngineMetricsManager,
 	bm baseTypes.BalanceManager,
 	txStore baseTypes.TransactionStore,
 	bIndexer blockindexer.BlockIndexer,
@@ -190,17 +190,17 @@ func NewInFlightTransactionStateManager(thm BaseLedgerTxEngineMetricsManager,
 	noEventMode bool,
 ) baseTypes.InFlightTransactionStateManager {
 	return &inFlightTransactionState{
-		testMode:                         noEventMode,
-		retry:                            retry,
-		BaseLedgerTxEngineMetricsManager: thm,
-		BalanceManager:                   bm,
-		txStore:                          txStore,
-		bIndexer:                         bIndexer,
-		InFlightStageActionTriggers:      ifsat,
-		bufferedStageOutputs:             make([]*baseTypes.StageOutput, 0),
-		txLevelStageStartTime:            time.Now(),
-		InMemoryTxStateManager:           imtxs,
-		turnOffHistory:                   turnOffHistory,
+		testOnlyNoEventMode:          noEventMode,
+		retry:                        retry,
+		PublicTxEngineMetricsManager: thm,
+		BalanceManager:               bm,
+		txStore:                      txStore,
+		bIndexer:                     bIndexer,
+		InFlightStageActionTriggers:  ifsat,
+		bufferedStageOutputs:         make([]*baseTypes.StageOutput, 0),
+		txLevelStageStartTime:        time.Now(),
+		InMemoryTxStateManager:       imtxs,
+		turnOffHistory:               turnOffHistory,
 	}
 }
 

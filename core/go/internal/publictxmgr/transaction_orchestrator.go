@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package baseledgertx
+package publictxmgr
 
 import (
 	"context"
@@ -167,7 +167,7 @@ var AllOrchestratorStates = []string{
 //    - need more thinking on nonce too low and we lost the information for tracking the submitted transactions
 
 type orchestrator struct {
-	*baseLedgerTxEngine
+	*publicTxEngine
 
 	// in-flight transaction config
 	resubmitInterval        time.Duration
@@ -213,14 +213,14 @@ type orchestrator struct {
 }
 
 func NewOrchestrator(
-	ble *baseLedgerTxEngine,
+	ble *publicTxEngine,
 	signingAddress string,
 	conf config.Section,
 ) *orchestrator {
 	ctx := ble.ctx
 
 	newOrchestrator := &orchestrator{
-		baseLedgerTxEngine:                 ble,
+		publicTxEngine:                     ble,
 		orchestratorBirthTime:              time.Now(),
 		orchestratorPollingInterval:        conf.GetDuration(OrchestratorIntervalDurationString),
 		maxInFlightTxs:                     conf.GetInt(OrchestratorMaxInFlightTransactionsInt),
@@ -382,7 +382,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 				log.L(ctx).Debugf("Orchestrator polled transaction with ID: %s but it's already being processed before, ignoring it", mtx.ID)
 			} else if mtx.Status == baseTypes.BaseTxStatusPending {
 				queueUpdated = true
-				it := NewInFlightTransactionStageController(oc.baseLedgerTxEngine, oc, mtx)
+				it := NewInFlightTransactionStageController(oc.publicTxEngine, oc, mtx)
 				if it.getConfirmedTxNonce(oc.signingAddress) != nil && it.getConfirmedTxNonce(oc.signingAddress).Cmp(mtx.Nonce.BigInt()) != -1 /* an confirmed tx is missed*/ {
 					it.stateManager.AddConfirmationsOutput(ctx, nil) // trigger confirmation stage
 				}

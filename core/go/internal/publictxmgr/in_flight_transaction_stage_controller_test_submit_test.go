@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package baseledgertx
+package publictxmgr
 
 import (
 	"context"
@@ -180,6 +180,43 @@ func TestProduceLatestInFlightStageContextSubmitCompleteAlreadyKnown(t *testing.
 	mtx.SubmittedHashes = []string{}
 	it.stateManager.AddSubmitOutput(ctx, txHash, submissionTime, baseTypes.SubmissionOutcomeAlreadyKnown, ethclient.ErrorReason(""), nil)
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+		AvailableToSpend:         nil,
+		PreviousNonceCostUnknown: false,
+	})
+	assert.NotEmpty(t, *tOut)
+	assert.Equal(t, "20000", tOut.Cost.String())
+	assert.Equal(t, baseTypes.InFlightTxStageSubmitting, rsc.Stage)
+	assert.NotNil(t, rsc.StageOutputsToBePersisted)
+	assert.Empty(t, rsc.StageOutputsToBePersisted.HistoryUpdates)
+	assert.Equal(t, txHash, *rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
+
+	// submission attempt completed - already known for the first time submission
+	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
+	rsc.StageOutputsToBePersisted = nil
+	mtx.FirstSubmit = nil
+	rsc = it.stateManager.GetRunningStageContext(ctx)
+	mtx.SubmittedHashes = []string{}
+	it.stateManager.AddSubmitOutput(ctx, txHash, submissionTime, baseTypes.SubmissionOutcomeAlreadyKnown, ethclient.ErrorReason(""), nil)
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+		AvailableToSpend:         nil,
+		PreviousNonceCostUnknown: false,
+	})
+	assert.NotEmpty(t, *tOut)
+	assert.Equal(t, "20000", tOut.Cost.String())
+	assert.Equal(t, baseTypes.InFlightTxStageSubmitting, rsc.Stage)
+	assert.NotNil(t, rsc.StageOutputsToBePersisted)
+	assert.Empty(t, rsc.StageOutputsToBePersisted.HistoryUpdates)
+	assert.Equal(t, txHash, *rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
+
+	// submission attempt completed - already known for the an existing time submission
+	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
+	rsc.StageOutputsToBePersisted = nil
+	mtx.FirstSubmit = fftypes.Now()
+	mtx.TransactionHash = "already known"
+	rsc = it.stateManager.GetRunningStageContext(ctx)
+	mtx.SubmittedHashes = []string{}
+	it.stateManager.AddSubmitOutput(ctx, txHash, submissionTime, baseTypes.SubmissionOutcomeAlreadyKnown, ethclient.ErrorReason(""), nil)
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
 	})

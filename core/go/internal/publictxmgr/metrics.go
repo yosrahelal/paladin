@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package baseledgertx
+package publictxmgr
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
-type BaseLedgerTxEngineMetricsManager interface {
+type PublicTxEngineMetricsManager interface {
 	InitMetrics(ctx context.Context)
 	RecordOperationMetrics(ctx context.Context, operationName string, operationResult string, durationInSeconds float64)
 	RecordStageChangeMetrics(ctx context.Context, stage string, durationInSeconds float64)
@@ -29,35 +29,35 @@ type BaseLedgerTxEngineMetricsManager interface {
 	RecordCompletedTransactionCountMetrics(ctx context.Context, processStatus string)
 }
 
-type baseLedgerTxEngineMetrics struct {
+type publicTxEngineMetrics struct {
 }
 
-func (thm *baseLedgerTxEngineMetrics) InitMetrics(ctx context.Context) {
+func (thm *publicTxEngineMetrics) InitMetrics(ctx context.Context) {
 	log.L(ctx).Tracef("Init metrics")
 	// TODO
 }
 
-func (thm *baseLedgerTxEngineMetrics) RecordOperationMetrics(ctx context.Context, operationName string, operationResult string, durationInSeconds float64) {
+func (thm *publicTxEngineMetrics) RecordOperationMetrics(ctx context.Context, operationName string, operationResult string, durationInSeconds float64) {
 	log.L(ctx).Tracef("RecordOperationMetrics")
 	// TODO
 }
 
-func (thm *baseLedgerTxEngineMetrics) RecordStageChangeMetrics(ctx context.Context, stage string, durationInSeconds float64) {
+func (thm *publicTxEngineMetrics) RecordStageChangeMetrics(ctx context.Context, stage string, durationInSeconds float64) {
 	log.L(ctx).Tracef("RecordStageChangeMetrics")
 	// TODO
 }
 
-func (thm *baseLedgerTxEngineMetrics) RecordInFlightOrchestratorPoolMetrics(ctx context.Context, usedCountPerState map[string]int, freeCount int) {
+func (thm *publicTxEngineMetrics) RecordInFlightOrchestratorPoolMetrics(ctx context.Context, usedCountPerState map[string]int, freeCount int) {
 	log.L(ctx).Tracef("RecordInFlightEnginePoolMetrics")
 	// TODO
 }
 
-func (thm *baseLedgerTxEngineMetrics) RecordInFlightTxQueueMetrics(ctx context.Context, usedCountPerStage map[string]int, freeCount int) {
+func (thm *publicTxEngineMetrics) RecordInFlightTxQueueMetrics(ctx context.Context, usedCountPerStage map[string]int, freeCount int) {
 	log.L(ctx).Tracef("RecordInFlightTxQueueMetrics")
 	// TODO
 }
 
-func (thm *baseLedgerTxEngineMetrics) RecordCompletedTransactionCountMetrics(ctx context.Context, processStatus string) {
+func (thm *publicTxEngineMetrics) RecordCompletedTransactionCountMetrics(ctx context.Context, processStatus string) {
 	log.L(ctx).Tracef("RecordCompletedTransactionCountMetrics")
 	// TODO
 }

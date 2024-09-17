@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package baseledgertx
+package publictxmgr
 
 import (
 	"context"
@@ -39,14 +39,14 @@ type APIResponse struct {
 	status int // http status code (200 Ok vs. 202 Accepted) - only set for success cases
 }
 
-func (baseLedgerEngine *baseLedgerTxEngine) dispatchAction(ctx context.Context, mtx *baseTypes.ManagedTX, action APIRequestType) APIResponse {
+func (pte *publicTxEngine) dispatchAction(ctx context.Context, mtx *baseTypes.ManagedTX, action APIRequestType) APIResponse {
 	response := make(chan APIResponse, 1)
 	startTime := time.Now()
 	var err error
 
 	go func() {
-		baseLedgerEngine.InFlightOrchestratorMux.Lock()
-		defer baseLedgerEngine.InFlightOrchestratorMux.Unlock()
+		pte.InFlightOrchestratorMux.Lock()
+		defer pte.InFlightOrchestratorMux.Unlock()
 		switch action {
 		case ActionSuspend, ActionResume:
 			// Just update the DB directly, as we're not inflight right now.
@@ -54,11 +54,11 @@ func (baseLedgerEngine *baseLedgerTxEngine) dispatchAction(ctx context.Context, 
 			if action == ActionSuspend {
 				newStatus = baseTypes.BaseTxStatusSuspended
 			}
-			inFlightOrchestrator, orchestratorInFlight := baseLedgerEngine.InFlightOrchestrators[string(mtx.From)]
+			inFlightOrchestrator, orchestratorInFlight := pte.InFlightOrchestrators[string(mtx.From)]
 			if !orchestratorInFlight {
 				// no in-flight orchestrator for the signing address, it's OK to update the DB directly
 				log.L(ctx).Infof("Setting status to '%s' for transaction %s", newStatus, mtx.ID)
-				err = baseLedgerEngine.txStore.UpdateTransaction(ctx, mtx.ID, &baseTypes.BaseTXUpdates{
+				err = pte.txStore.UpdateTransaction(ctx, mtx.ID, &baseTypes.BaseTXUpdates{
 					Status: &newStatus,
 				})
 				if err != nil {

@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package baseledgertx
+package publictxmgr
 
 import (
 	"context"
@@ -91,7 +91,7 @@ func InitTransactionEngineConfig(conf config.Section) {
 // 4. provides shared functionalities for optimization
 //    - handles gas price information which is not signer specific
 
-func (ble *baseLedgerTxEngine) engineLoop() {
+func (ble *publicTxEngine) engineLoop() {
 	defer close(ble.engineLoopDone)
 	ctx := log.WithLogField(ble.ctx, "role", "engine-loop")
 	log.L(ctx).Infof("Engine started polling on interval %s", ble.enginePollingInterval)
@@ -113,7 +113,7 @@ func (ble *baseLedgerTxEngine) engineLoop() {
 	}
 }
 
-func (ble *baseLedgerTxEngine) poll(ctx context.Context) (polled int, total int) {
+func (ble *publicTxEngine) poll(ctx context.Context) (polled int, total int) {
 	pollStart := time.Now()
 	ble.InFlightOrchestratorMux.Lock()
 	defer ble.InFlightOrchestratorMux.Unlock()
@@ -219,7 +219,7 @@ func (ble *baseLedgerTxEngine) poll(ctx context.Context) (polled int, total int)
 	return polled, total
 }
 
-func (ble *baseLedgerTxEngine) MarkInFlightOrchestratorsStale() {
+func (ble *publicTxEngine) MarkInFlightOrchestratorsStale() {
 	// try to send an item in `InFlightStale` channel, which has a buffer of 1
 	// to trigger a polling event to update the in flight transaction orchestrators
 	// if it already has an item in the channel, this function does nothing
@@ -229,7 +229,7 @@ func (ble *baseLedgerTxEngine) MarkInFlightOrchestratorsStale() {
 	}
 }
 
-func (ble *baseLedgerTxEngine) GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *baseTypes.ManagedTX, err error) {
+func (ble *publicTxEngine) GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *baseTypes.ManagedTX, err error) {
 	fb := ble.txStore.NewTransactionFilter(ctx)
 	filter := fb.And(fb.Eq("from", sourceAddress),
 		fb.Eq("to", destinationAddress),
@@ -248,7 +248,7 @@ func (ble *baseLedgerTxEngine) GetPendingFuelingTransaction(ctx context.Context,
 	return tx, nil
 }
 
-func (ble *baseLedgerTxEngine) CheckTransactionCompleted(ctx context.Context, tx *baseTypes.ManagedTX) (completed bool) {
+func (ble *publicTxEngine) CheckTransactionCompleted(ctx context.Context, tx *baseTypes.ManagedTX) (completed bool) {
 	// no need for locking here as outdated information is OK given we do frequent retires
 	log.L(ctx).Debugf("CheckTransactionCompleted checking state for transaction %s.", tx.ID)
 	completedTxNonce, exists := ble.completedTxNoncePerAddress[string(tx.From)]
@@ -280,7 +280,7 @@ func (ble *baseLedgerTxEngine) CheckTransactionCompleted(ctx context.Context, tx
 
 }
 
-func (ble *baseLedgerTxEngine) updateCompletedTxNonce(tx *baseTypes.ManagedTX) (updated bool) {
+func (ble *publicTxEngine) updateCompletedTxNonce(tx *baseTypes.ManagedTX) (updated bool) {
 	updated = false
 	// no need for locking here as outdated information is OK given we do frequent retires
 	ble.completedTxNoncePerAddressMutex.Lock()
