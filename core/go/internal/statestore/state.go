@@ -34,7 +34,7 @@ type State struct {
 	CreatedAt       tktypes.Timestamp  `json:"created"             gorm:"autoCreateTime:nano"`
 	DomainName      string             `json:"domain"`
 	Schema          tktypes.Bytes32    `json:"schema"`
-	ContractAddress string             `json:"contractAddress"`
+	ContractAddress tktypes.EthAddress `json:"contractAddress"`
 	Data            tktypes.RawJSON    `json:"data"`
 	Labels          []*StateLabel      `json:"-"                   gorm:"foreignKey:state;references:id;"`
 	Int64Labels     []*StateInt64Label `json:"-"                   gorm:"foreignKey:state;references:id;"`
@@ -77,18 +77,17 @@ func (s *StateWithLabels) ValueSet() filters.ValueSet {
 	return s.LabelValues
 }
 
-func (ss *stateStore) PersistState(ctx context.Context, domainName, contractAddress, schemaID string, data tktypes.RawJSON) (*StateWithLabels, error) {
+func (ss *stateStore) PersistState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, data tktypes.RawJSON) (*StateWithLabels, error) {
 
 	schema, err := ss.GetSchema(ctx, domainName, schemaID, true)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := schema.ProcessState(ctx, data)
+	s, err := schema.ProcessState(ctx, contractAddress, data)
 	if err != nil {
 		return nil, err
 	}
-	s.ContractAddress = contractAddress
 
 	op := ss.writer.newWriteOp(s.State.DomainName, contractAddress)
 	op.states = []*StateWithLabels{s}
@@ -96,7 +95,7 @@ func (ss *stateStore) PersistState(ctx context.Context, domainName, contractAddr
 	return s, op.flush(ctx)
 }
 
-func (ss *stateStore) GetState(ctx context.Context, domainName, stateID string, failNotFound, withLabels bool) (*State, error) {
+func (ss *stateStore) GetState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID string, failNotFound, withLabels bool) (*State, error) {
 	id, err := tktypes.ParseBytes32Ctx(ctx, stateID)
 	if err != nil {
 		return nil, err
@@ -109,6 +108,7 @@ func (ss *stateStore) GetState(ctx context.Context, domainName, stateID string, 
 	var states []*State
 	err = q.
 		Where("domain_name = ?", domainName).
+		Where("contract_address = ?", contractAddress).
 		Where("id = ?", id).
 		Limit(1).
 		Find(&states).
@@ -158,12 +158,12 @@ func (ss *stateStore) labelSetFor(schema Schema) *trackingLabelSet {
 	return &tls
 }
 
-func (ss *stateStore) FindStates(ctx context.Context, domainName, contractAddress, schemaID string, query *query.QueryJSON, status StateStatusQualifier) (s []*State, err error) {
+func (ss *stateStore) FindStates(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, query *query.QueryJSON, status StateStatusQualifier) (s []*State, err error) {
 	_, s, err = ss.findStates(ctx, domainName, contractAddress, schemaID, query, status)
 	return s, err
 }
 
-func (ss *stateStore) findStates(ctx context.Context, domainName, contractAddress, schemaID string, jq *query.QueryJSON, status StateStatusQualifier, excluded ...*idOnly) (schema Schema, s []*State, err error) {
+func (ss *stateStore) findStates(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, jq *query.QueryJSON, status StateStatusQualifier, excluded ...*idOnly) (schema Schema, s []*State, err error) {
 	if len(jq.Sort) == 0 {
 		jq.Sort = []string{".created"}
 	}
@@ -213,7 +213,7 @@ func (ss *stateStore) findStates(ctx context.Context, domainName, contractAddres
 	return schema, states, nil
 }
 
-func (ss *stateStore) MarkConfirmed(ctx context.Context, domainName, contractAddress, stateID string, transactionID uuid.UUID) error {
+func (ss *stateStore) MarkConfirmed(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID string, transactionID uuid.UUID) error {
 	id, err := tktypes.ParseBytes32Ctx(ctx, stateID)
 	if err != nil {
 		return err
@@ -228,7 +228,7 @@ func (ss *stateStore) MarkConfirmed(ctx context.Context, domainName, contractAdd
 	return op.flush(ctx)
 }
 
-func (ss *stateStore) MarkSpent(ctx context.Context, domainName, contractAddress, stateID string, transactionID uuid.UUID) error {
+func (ss *stateStore) MarkSpent(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID string, transactionID uuid.UUID) error {
 	id, err := tktypes.ParseBytes32Ctx(ctx, stateID)
 	if err != nil {
 		return err
@@ -243,7 +243,7 @@ func (ss *stateStore) MarkSpent(ctx context.Context, domainName, contractAddress
 	return op.flush(ctx)
 }
 
-func (ss *stateStore) MarkLocked(ctx context.Context, domainName, contractAddress, stateID string, transactionID uuid.UUID, creating, spending bool) error {
+func (ss *stateStore) MarkLocked(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID string, transactionID uuid.UUID, creating, spending bool) error {
 	id, err := tktypes.ParseBytes32Ctx(ctx, stateID)
 	if err != nil {
 		return err
@@ -258,7 +258,7 @@ func (ss *stateStore) MarkLocked(ctx context.Context, domainName, contractAddres
 	return op.flush(ctx)
 }
 
-func (ss *stateStore) ResetTransaction(ctx context.Context, domainName, contractAddress string, transactionID uuid.UUID) error {
+func (ss *stateStore) ResetTransaction(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, transactionID uuid.UUID) error {
 	op := ss.writer.newWriteOp(domainName, contractAddress)
 	op.transactionLockDeletes = []uuid.UUID{transactionID}
 

@@ -99,7 +99,7 @@ type DomainStateInterface interface {
 type domainContext struct {
 	ss              *stateStore
 	domainName      string
-	contractAddress string
+	contractAddress tktypes.EthAddress
 	ctx             context.Context
 	stateLock       sync.Mutex
 	latch           chan struct{}
@@ -108,11 +108,11 @@ type domainContext struct {
 	flushResult     chan error
 }
 
-func (ss *stateStore) RunInDomainContext(domainName, contractAddress string, fn DomainContextFunction) error {
+func (ss *stateStore) RunInDomainContext(domainName string, contractAddress tktypes.EthAddress, fn DomainContextFunction) error {
 	return ss.getDomainContext(domainName, contractAddress).run(fn)
 }
 
-func (ss *stateStore) RunInDomainContextFlush(domainName, contractAddress string, fn DomainContextFunction) error {
+func (ss *stateStore) RunInDomainContextFlush(domainName string, contractAddress tktypes.EthAddress, fn DomainContextFunction) error {
 	dc := ss.getDomainContext(domainName, contractAddress)
 	err := dc.run(fn)
 	if err == nil {
@@ -124,11 +124,11 @@ func (ss *stateStore) RunInDomainContextFlush(domainName, contractAddress string
 	return err
 }
 
-func (ss *stateStore) getDomainContext(domainName, contractAddress string) *domainContext {
+func (ss *stateStore) getDomainContext(domainName string, contractAddress tktypes.EthAddress) *domainContext {
 	ss.domainLock.Lock()
 	defer ss.domainLock.Unlock()
 
-	domainKey := domainName + ":" + contractAddress
+	domainKey := domainName + ":" + contractAddress.String()
 	dc := ss.domainContexts[domainKey]
 	if dc == nil {
 		dc = &domainContext{
@@ -322,12 +322,11 @@ func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*
 			return nil, err
 		}
 
-		withValues[i], err = schema.ProcessState(dc.ctx, ns.Data)
+		withValues[i], err = schema.ProcessState(dc.ctx, dc.contractAddress, ns.Data)
 		if err != nil {
 			return nil, err
 		}
 		states[i] = withValues[i].State
-		states[i].ContractAddress = dc.contractAddress
 		if transactionID != nil {
 			states[i].Locked = &StateLock{
 				Transaction: *transactionID,

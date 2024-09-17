@@ -54,7 +54,7 @@ const widgetABI = `{
 	]
 }`
 
-func makeWidgets(t *testing.T, ctx context.Context, ss *stateStore, domainName, schemaID string, withoutSalt []string) []*StateWithLabels {
+func makeWidgets(t *testing.T, ctx context.Context, ss *stateStore, domainName string, contractAddress tktypes.EthAddress, schemaID string, withoutSalt []string) []*StateWithLabels {
 	states := make([]*StateWithLabels, len(withoutSalt))
 	for i, w := range withoutSalt {
 		var ij map[string]interface{}
@@ -63,7 +63,7 @@ func makeWidgets(t *testing.T, ctx context.Context, ss *stateStore, domainName, 
 		ij["salt"] = tktypes.RandHex(32)
 		withSalt, err := json.Marshal(ij)
 		require.NoError(t, err)
-		states[i], err = ss.PersistState(ctx, domainName, "0x1234", schemaID, withSalt)
+		states[i], err = ss.PersistState(ctx, domainName, contractAddress, schemaID, withSalt)
 		require.NoError(t, err)
 		fmt.Printf("widget[%d]: %s\n", i, states[i].Data)
 	}
@@ -88,7 +88,8 @@ func TestStateLockingQuery(t *testing.T) {
 	require.NoError(t, err)
 	schemaID := schema.IDString()
 
-	widgets := makeWidgets(t, ctx, ss, "domain1", schemaID, []string{
+	contractAddress := tktypes.RandAddress()
+	widgets := makeWidgets(t, ctx, ss, "domain1", *contractAddress, schemaID, []string{
 		`{"size": 11111, "color": "red",  "price": 100}`,
 		`{"size": 22222, "color": "red",  "price": 150}`,
 		`{"size": 33333, "color": "blue", "price": 199}`,
@@ -97,7 +98,7 @@ func TestStateLockingQuery(t *testing.T) {
 	})
 
 	checkQuery := func(query string, status StateStatusQualifier, expected ...int) {
-		states, err := ss.FindStates(ctx, "domain1", "0x1234", schemaID, toQuery(t, query), status)
+		states, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID, toQuery(t, query), status)
 		require.NoError(t, err)
 		assert.Len(t, states, len(expected))
 		for _, wIndex := range expected {
@@ -127,7 +128,7 @@ func TestStateLockingQuery(t *testing.T) {
 	// Mark them all confirmed apart from one
 	for i, w := range widgets {
 		if i != 3 {
-			err = ss.MarkConfirmed(ctx, "domain1", "0x1234", w.ID.String(), uuid.New())
+			err = ss.MarkConfirmed(ctx, "domain1", *contractAddress, w.ID.String(), uuid.New())
 			require.NoError(t, err)
 		}
 	}
@@ -141,7 +142,7 @@ func TestStateLockingQuery(t *testing.T) {
 	checkQuery(`{}`, seqQual)                          // unchanged
 
 	// Mark one spent
-	err = ss.MarkSpent(ctx, "domain1", "0x1234", widgets[0].ID.String(), uuid.New())
+	err = ss.MarkSpent(ctx, "domain1", *contractAddress, widgets[0].ID.String(), uuid.New())
 	require.NoError(t, err)
 
 	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4) // unchanged
@@ -153,7 +154,7 @@ func TestStateLockingQuery(t *testing.T) {
 	checkQuery(`{}`, seqQual)                       // unchanged
 
 	// lock a confirmed one for spending
-	err = ss.MarkLocked(ctx, "domain1", "0x1234", widgets[1].ID.String(), seqID, false, true)
+	err = ss.MarkLocked(ctx, "domain1", *contractAddress, widgets[1].ID.String(), seqID, false, true)
 	require.NoError(t, err)
 
 	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4) // unchanged
@@ -165,7 +166,7 @@ func TestStateLockingQuery(t *testing.T) {
 	checkQuery(`{}`, seqQual, 1)                    // added 1
 
 	// lock the unconfirmed one for spending
-	err = ss.MarkLocked(ctx, "domain1", "0x1234", widgets[3].ID.String(), seqID, false, true)
+	err = ss.MarkLocked(ctx, "domain1", *contractAddress, widgets[3].ID.String(), seqID, false, true)
 	require.NoError(t, err)
 
 	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4) // unchanged
@@ -181,7 +182,7 @@ func TestStateLockingQuery(t *testing.T) {
 	checkQuery(`{"eq":[{"field":"color","value":"pink"}]}`, StateStatusAvailable)
 
 	// clear the transaction locks
-	err = ss.ResetTransaction(ctx, "domain1", "0x1234", seqID)
+	err = ss.ResetTransaction(ctx, "domain1", *contractAddress, seqID)
 	require.NoError(t, err)
 
 	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4) // unchanged

@@ -310,10 +310,10 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	psc, tx := doDomainInitTransactionOK(t, ctx, tp)
 	domain := tp.d
 
-	state1 := storeState(t, dm, tp, psc.Address().String(), tx.ID, ethtypes.NewHexInteger64(1111111))
-	state2 := storeState(t, dm, tp, psc.Address().String(), tx.ID, ethtypes.NewHexInteger64(2222222))
-	state3 := storeState(t, dm, tp, psc.Address().String(), tx.ID, ethtypes.NewHexInteger64(3333333))
-	state4 := storeState(t, dm, tp, psc.Address().String(), tx.ID, ethtypes.NewHexInteger64(4444444))
+	state1 := storeState(t, dm, tp, psc.Address(), tx.ID, ethtypes.NewHexInteger64(1111111))
+	state2 := storeState(t, dm, tp, psc.Address(), tx.ID, ethtypes.NewHexInteger64(2222222))
+	state3 := storeState(t, dm, tp, psc.Address(), tx.ID, ethtypes.NewHexInteger64(3333333))
+	state4 := storeState(t, dm, tp, psc.Address(), tx.ID, ethtypes.NewHexInteger64(4444444))
 
 	state5 := &fakeState{
 		Salt:   tktypes.Bytes32(tktypes.RandBytes(32)),

@@ -315,6 +315,18 @@ func TestDomainFindAvailableStatesBadQuery(t *testing.T) {
 	assert.Regexp(t, "PD011608", err)
 }
 
+func TestDomainFindAvailableStatesBadAddress(t *testing.T) {
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, tp.d.initError.Load())
+	_, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
+		SchemaId:        "12345",
+		ContractAddress: "0x",
+		QueryJson:       `{}`,
+	})
+	assert.Regexp(t, "PD011641", err)
+}
+
 func TestDomainFindAvailableStatesFail(t *testing.T) {
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), func(mc *mockComponents) {
 		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return([]statestore.Schema{}, nil)
@@ -323,14 +335,14 @@ func TestDomainFindAvailableStatesFail(t *testing.T) {
 	defer done()
 	assert.Nil(t, tp.d.initError.Load())
 	_, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		ContractAddress: "0x1234",
+		ContractAddress: tktypes.RandAddress().String(),
 		SchemaId:        "12345",
 		QueryJson:       `{}`,
 	})
 	assert.Regexp(t, "pop", err)
 }
 
-func storeState(t *testing.T, dm *domainManager, tp *testPlugin, contractAddress string, txID uuid.UUID, amount *ethtypes.HexInteger) *fakeState {
+func storeState(t *testing.T, dm *domainManager, tp *testPlugin, contractAddress tktypes.EthAddress, txID uuid.UUID, amount *ethtypes.HexInteger) *fakeState {
 	state := &fakeState{
 		Salt:   tktypes.Bytes32(tktypes.RandBytes(32)),
 		Owner:  tktypes.EthAddress(tktypes.RandBytes(20)),
@@ -360,11 +372,12 @@ func TestDomainFindAvailableStatesOK(t *testing.T) {
 	assert.Nil(t, tp.d.initError.Load())
 
 	txID := uuid.New()
-	state1 := storeState(t, dm, tp, "0x1234", txID, ethtypes.NewHexIntegerU64(100000000))
+	contractAddress := tktypes.RandAddress()
+	state1 := storeState(t, dm, tp, *contractAddress, txID, ethtypes.NewHexIntegerU64(100000000))
 
 	// Filter match
 	states, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		ContractAddress: "0x1234",
+		ContractAddress: contractAddress.String(),
 		SchemaId:        tp.stateSchemas[0].Id,
 		QueryJson: `{
 		  "eq": [
@@ -377,7 +390,7 @@ func TestDomainFindAvailableStatesOK(t *testing.T) {
 
 	// Filter miss
 	states, err = tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		ContractAddress: "0x1234",
+		ContractAddress: contractAddress.String(),
 		SchemaId:        tp.stateSchemas[0].Id,
 		QueryJson: `{
 		  "eq": [

@@ -81,8 +81,9 @@ func TestRPC(t *testing.T) {
 	assert.Equal(t, SchemaTypeABI, schemas[0].Type)
 	assert.Equal(t, "0x3612029bf239cbed1e27548e9211ecfe72496dfec4183fd3ea79a3a54eb126be", schemas[0].ID.String())
 
+	contractAddress := tktypes.RandAddress()
 	var state *State
-	rpcErr = c.CallRPC(ctx, &state, "pstate_storeState", "domain1", "0x1234", schemas[0].ID, tktypes.RawJSON(`{
+	rpcErr = c.CallRPC(ctx, &state, "pstate_storeState", "domain1", contractAddress.String(), schemas[0].ID, tktypes.RawJSON(`{
 	    "salt": "fd2724ce91a859e24c228e50ae17b9443454514edce9a64437c208b0184d8910",
 		"size": 10,
 		"color": "blue",
@@ -95,7 +96,7 @@ func TestRPC(t *testing.T) {
 	assert.Equal(t, "0x30e278bca8d876cdceb24520b0ebe736a64a9cb8019157f40fa5b03f083f824d", state.ID.String())
 
 	var states []*State
-	rpcErr = c.CallRPC(ctx, &states, "pstate_queryStates", "domain1", "0x1234", schemas[0].ID, tktypes.RawJSON(`{
+	rpcErr = c.CallRPC(ctx, &states, "pstate_queryStates", "domain1", contractAddress.String(), schemas[0].ID, tktypes.RawJSON(`{
 		"eq": [{
 		  "field": "color",
 		  "value": "blue"

@@ -192,9 +192,13 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidQueryJSON)
 	}
+	addr, err := tktypes.ParseEthAddress(req.ContractAddress)
+	if err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainErrorParsingAddress)
+	}
 
 	var states []*statestore.State
-	err = d.dm.stateStore.RunInDomainContext(d.name, req.ContractAddress, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
+	err = d.dm.stateStore.RunInDomainContext(d.name, *addr, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
 		states, err = dsi.FindAvailableStates(req.SchemaId, &query)
 		return err
 	})

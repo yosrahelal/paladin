@@ -92,6 +92,9 @@ func TestEthAddress(t *testing.T) {
 	a8 := &EthAddress{}
 	err = a8.Scan("!!aca6d8ba6bff0fa5c8a06a58368cb6097285d5")
 	assert.Regexp(t, "bad address", err)
+
+	a9 := RandAddress()
+	assert.False(t, a9.IsZero())
 }
 
 func TestEthAddressJSON(t *testing.T) {

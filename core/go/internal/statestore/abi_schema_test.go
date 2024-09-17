@@ -104,9 +104,10 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	err = ss.persistSchemas([]*SchemaPersisted{as.SchemaPersisted})
 	require.NoError(t, err)
 	schemaID := as.Persisted().ID.String()
+	contractAddress := tktypes.RandAddress()
 
 	// Check it handles data
-	state1, err := ss.PersistState(ctx, "domain1", "0x1234", schemaID, tktypes.RawJSON(`{
+	state1, err := ss.PersistState(ctx, "domain1", *contractAddress, schemaID, tktypes.RawJSON(`{
 		"field1": "0x0123456789012345678901234567890123456789",
 		"field2": "hello world",
 		"field3": 42,
@@ -118,7 +119,6 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		"field9": "things and stuff",
 		"cruft": "to remove"
 	}`))
-	require.NoError(t, err)
 	require.NoError(t, err)
 	assert.Equal(t, []*StateLabel{
 		// uint256 written as zero padded string
@@ -181,7 +181,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	getValidate()
 
 	// Get the state back too
-	state1a, err := ss.GetState(ctx, as.Persisted().DomainName, state1.ID.String(), true, true)
+	state1a, err := ss.GetState(ctx, as.Persisted().DomainName, *contractAddress, state1.ID.String(), true, true)
 	require.NoError(t, err)
 	assert.Equal(t, state1.State, state1a)
 
@@ -200,7 +200,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		]
 	}`), &query)
 	require.NoError(t, err)
-	states, err := ss.FindStates(ctx, as.Persisted().DomainName, "0x1234", schemaID, query, "all")
+	states, err := ss.FindStates(ctx, as.Persisted().DomainName, *contractAddress, schemaID, query, "all")
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 
@@ -211,7 +211,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		]
 	}`), &query)
 	require.NoError(t, err)
-	states, err = ss.FindStates(ctx, as.Persisted().DomainName, "0x1234", schemaID, query, "all")
+	states, err = ss.FindStates(ctx, as.Persisted().DomainName, *contractAddress, schemaID, query, "all")
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 
@@ -222,7 +222,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		]
 	}`), &query)
 	require.NoError(t, err)
-	states, err = ss.FindStates(ctx, as.Persisted().DomainName, "0x1234", schemaID, query, "all")
+	states, err = ss.FindStates(ctx, as.Persisted().DomainName, *contractAddress, schemaID, query, "all")
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 }
@@ -430,7 +430,7 @@ func TestABISchemaProcessStateInvalidType(t *testing.T) {
 	var err error
 	as.tc, err = as.definition.TypeComponentTreeCtx(ctx)
 	require.NoError(t, err)
-	_, err = as.ProcessState(ctx, tktypes.RawJSON(`{"field1": 12345}`))
+	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{"field1": 12345}`))
 	assert.Regexp(t, "PD010103", err)
 }
 
@@ -462,7 +462,7 @@ func TestABISchemaProcessStateLabelMissing(t *testing.T) {
 	var err error
 	as.tc, err = as.definition.TypeComponentTreeCtx(ctx)
 	require.NoError(t, err)
-	_, err = as.ProcessState(ctx, tktypes.RawJSON(`{"field1": 12345}`))
+	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{"field1": 12345}`))
 	assert.Regexp(t, "PD010110", err)
 }
 
@@ -498,7 +498,7 @@ func TestABISchemaProcessStateBadValue(t *testing.T) {
 	var err error
 	as.tc, err = as.definition.TypeComponentTreeCtx(ctx)
 	require.NoError(t, err)
-	_, err = as.ProcessState(ctx, tktypes.RawJSON(`{!!! wrong`))
+	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{!!! wrong`))
 	assert.Regexp(t, "PD010116", err)
 }
 
@@ -523,7 +523,7 @@ func TestABISchemaProcessStateMismatchValue(t *testing.T) {
 	var err error
 	as.tc, err = as.definition.TypeComponentTreeCtx(ctx)
 	require.NoError(t, err)
-	_, err = as.ProcessState(ctx, tktypes.RawJSON(`{"field1":{}}`))
+	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{"field1":{}}`))
 	assert.Regexp(t, "FF22030", err)
 }
 
@@ -548,7 +548,7 @@ func TestABISchemaProcessStateEIP712Failure(t *testing.T) {
 	var err error
 	as.tc, err = as.definition.TypeComponentTreeCtx(ctx)
 	require.NoError(t, err)
-	_, err = as.ProcessState(ctx, tktypes.RawJSON(`{"field1":"0x753A7decf94E48a05Fa1B342D8984acA9bFaf6B2"}`))
+	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{"field1":"0x753A7decf94E48a05Fa1B342D8984acA9bFaf6B2"}`))
 	assert.Regexp(t, "FF22073", err)
 }
 
@@ -573,7 +573,7 @@ func TestABISchemaProcessStateDataFailure(t *testing.T) {
 	var err error
 	as.tc, err = as.definition.TypeComponentTreeCtx(ctx)
 	require.NoError(t, err)
-	_, err = as.ProcessState(ctx, tktypes.RawJSON(`{"field1":"0x753A7decf94E48a05Fa1B342D8984acA9bFaf6B2"}`))
+	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{"field1":"0x753A7decf94E48a05Fa1B342D8984acA9bFaf6B2"}`))
 	assert.Regexp(t, "FF22073", err)
 }
 
