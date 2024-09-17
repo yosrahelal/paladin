@@ -205,7 +205,7 @@ func registerImpl(ctx context.Context, name string, domainContracts *zetoDomainC
 	if err != nil {
 		return err
 	}
-	_, err = bi.WaitForTransaction(ctx, *txHash)
+	_, err = bi.WaitForTransactionSuccess(ctx, *txHash, abiFunc.ABI())
 	if err != nil {
 		return err
 	}

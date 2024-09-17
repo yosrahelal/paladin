@@ -222,7 +222,7 @@ func (dc *domainContext) getUnFlushedSpending() ([]*idOnly, error) {
 	return spendLocks, nil
 }
 
-func (dc *domainContext) mergedUnFlushed(schema Schema, states []*State, query *query.QueryJSON) (_ []*State, err error) {
+func (dc *domainContext) mergedUnFlushed(schema Schema, dbStates []*State, query *query.QueryJSON) (_ []*State, err error) {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
@@ -256,8 +256,17 @@ func (dc *domainContext) mergedUnFlushed(schema Schema, states []*State, query *
 			return nil, err
 		}
 		if match {
-			log.L(dc.ctx).Debugf("Matched state %s from un-flushed writes", &s.ID)
-			matches = append(matches, s)
+			dup := false
+			for _, dbState := range dbStates {
+				if s.ID == dbState.ID {
+					dup = true
+					break
+				}
+			}
+			if !dup {
+				log.L(dc.ctx).Debugf("Matched state %s from un-flushed writes", &s.ID)
+				matches = append(matches, s)
+			}
 		}
 	}
 
@@ -265,10 +274,10 @@ func (dc *domainContext) mergedUnFlushed(schema Schema, states []*State, query *
 		// Build the merged list - this involves extra cost, as we deliberately don't reconstitute
 		// the labels in JOIN on DB load (affecting every call at the DB side), instead we re-parse
 		// them as we need them
-		return dc.mergeInMemoryMatches(schema, states, matches, query)
+		return dc.mergeInMemoryMatches(schema, dbStates, matches, query)
 	}
 
-	return states, nil
+	return dbStates, nil
 }
 
 func (dc *domainContext) mergeInMemoryMatches(schema Schema, states []*State, extras []*StateWithLabels, query *query.QueryJSON) (_ []*State, err error) {

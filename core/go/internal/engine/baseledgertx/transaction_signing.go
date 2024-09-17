@@ -28,7 +28,7 @@ func (it *InFlightTransactionStageController) signTx(ctx context.Context, mtx *b
 
 	log.L(ctx).Debugf("signTx entry")
 	signStart := time.Now()
-	signedMessage, err := it.ethClient.BuildRawTransaction(ctx, ethclient.EIP1559, string(mtx.From), mtx.Transaction) // TODO: move the logic inside to here as BuildRawTransaction seems to not be a function that should be used.
+	signedMessage, err := it.ethClient.BuildRawTransaction(ctx, ethclient.EIP1559, string(mtx.From), mtx.Transaction, nil) // TODO: move the logic inside to here as BuildRawTransaction seems to not be a function that should be used.
 
 	if err != nil {
 		it.thMetrics.RecordOperationMetrics(ctx, string(InFlightTxOperationSign), string(GenericStatusFail), time.Since(signStart).Seconds())

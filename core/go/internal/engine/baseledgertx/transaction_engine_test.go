@@ -147,7 +147,7 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 
 	mKM.On("ResolveKey", ctx, testAutoFuelingSourceAddress, algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", testAutoFuelingSourceAddress, nil)
 	// estimation failure - for non-revert
-	mEC.On("GasEstimate", mock.Anything, testEthTxInput).Return(nil, fmt.Errorf("GasEstimate error")).Once()
+	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(nil, fmt.Errorf("GasEstimate error")).Once()
 	_, submissionRejected, err = ble.HandleNewTransaction(ctx, &baseTypes.RequestOptions{
 		ID:       &txID,
 		SignerID: string(testEthTxInput.From),
@@ -161,7 +161,7 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 
 	// estimation failure - for revert
 	txID = uuid.New()
-	mEC.On("GasEstimate", mock.Anything, testEthTxInput).Return(nil, fmt.Errorf("execution reverted")).Once()
+	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(nil, fmt.Errorf("execution reverted")).Once()
 	_, submissionRejected, err = ble.HandleNewTransaction(ctx, &baseTypes.RequestOptions{
 		ID:       &txID,
 		SignerID: string(testEthTxInput.From),
@@ -174,7 +174,7 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 	assert.Regexp(t, "execution reverted", err)
 
 	// insert transaction next nonce error
-	mEC.On("GasEstimate", mock.Anything, testEthTxInput).Return(ethtypes.NewHexInteger(big.NewInt(10)), nil)
+	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(ethtypes.NewHexInteger(big.NewInt(10)), nil)
 	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything)
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(nil, fmt.Errorf("pop")).Once()
@@ -398,7 +398,7 @@ func TestHandleNewTransaction(t *testing.T) {
 	assert.Regexp(t, "Build data error", err)
 
 	// Gas estimate failure - non-revert
-	mEC.On("GasEstimate", mock.Anything, testEthTxInput).Return(nil, fmt.Errorf("something else")).Once()
+	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(nil, fmt.Errorf("something else")).Once()
 	mABIBuilder.On("BuildCallData").Return(nil).Once()
 	mABIF.On("R", ctx).Return(mABIBuilder).Once()
 	mABIBuilder.On("To", ethtypes.MustNewAddress(testEthTxInput.To.String())).Return(mABIBuilder).Once()
@@ -419,7 +419,7 @@ func TestHandleNewTransaction(t *testing.T) {
 	assert.Regexp(t, "something else", err)
 
 	// Gas estimate failure - revert
-	mEC.On("GasEstimate", mock.Anything, testEthTxInput).Return(nil, fmt.Errorf("execution reverted")).Once()
+	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(nil, fmt.Errorf("execution reverted")).Once()
 	mABIBuilder.On("BuildCallData").Return(nil).Once()
 	mABIF.On("R", ctx).Return(mABIBuilder).Once()
 	mABIBuilder.On("To", ethtypes.MustNewAddress(testEthTxInput.To.String())).Return(mABIBuilder).Once()
@@ -440,7 +440,7 @@ func TestHandleNewTransaction(t *testing.T) {
 	assert.Regexp(t, "execution reverted", err)
 
 	// create transaction succeeded
-	mEC.On("GasEstimate", mock.Anything, testEthTxInput).Return(ethtypes.NewHexInteger64(200), nil).Once()
+	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(ethtypes.NewHexInteger64(200), nil).Once()
 	mABIBuilder.On("BuildCallData").Return(nil).Once()
 	mABIF.On("R", ctx).Return(mABIBuilder).Once()
 	mABIBuilder.On("To", ethtypes.MustNewAddress(testEthTxInput.To.String())).Return(mABIBuilder).Once()
@@ -525,7 +525,7 @@ func TestHandleNewDeployment(t *testing.T) {
 	assert.Regexp(t, "Build data error", err)
 
 	// Gas estimate failure - non-revert
-	mEC.On("GasEstimate", mock.Anything, testEthTxInput).Return(nil, fmt.Errorf("something else")).Once()
+	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(nil, fmt.Errorf("something else")).Once()
 	mABIBuilder.On("BuildCallData").Return(nil).Once()
 	mABIF.On("R", ctx).Return(mABIBuilder).Once()
 	mABIBuilder.On("Input", mock.Anything).Return(mABIBuilder).Once()
@@ -545,7 +545,7 @@ func TestHandleNewDeployment(t *testing.T) {
 	assert.Regexp(t, "something else", err)
 
 	// Gas estimate failure - revert
-	mEC.On("GasEstimate", mock.Anything, testEthTxInput).Return(nil, fmt.Errorf("execution reverted")).Once()
+	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(nil, fmt.Errorf("execution reverted")).Once()
 	mABIBuilder.On("BuildCallData").Return(nil).Once()
 	mABIF.On("R", ctx).Return(mABIBuilder).Once()
 	mABIBuilder.On("Input", mock.Anything).Return(mABIBuilder).Once()
@@ -565,7 +565,7 @@ func TestHandleNewDeployment(t *testing.T) {
 	assert.Regexp(t, "execution reverted", err)
 
 	// create transaction succeeded
-	mEC.On("GasEstimate", mock.Anything, testEthTxInput).Return(ethtypes.NewHexInteger64(200), nil).Once()
+	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(ethtypes.NewHexInteger64(200), nil).Once()
 	mABIBuilder.On("BuildCallData").Return(nil).Once()
 	mABIF.On("R", ctx).Return(mABIBuilder).Once()
 	mABIBuilder.On("Input", mock.Anything).Return(mABIBuilder).Once()

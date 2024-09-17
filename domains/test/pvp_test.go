@@ -209,7 +209,7 @@ func functionBuilder(ctx context.Context, t *testing.T, eth ethclient.EthClient,
 
 func waitFor(ctx context.Context, t *testing.T, tb testbed.Testbed, txHash *tktypes.Bytes32, err error) *blockindexer.IndexedTransaction {
 	require.NoError(t, err)
-	tx, err := tb.Components().BlockIndexer().WaitForTransaction(ctx, *txHash)
+	tx, err := tb.Components().BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
 	assert.NoError(t, err)
 	return tx
 }
