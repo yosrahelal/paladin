@@ -190,7 +190,7 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 	var states []*statestore.State
 	if len(newStatesToWrite) > 0 {
 		err := dc.dm.stateStore.RunInDomainContext(domain.name, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
-			states, err = dsi.UpsertStates(&tx.ID, newStatesToWrite)
+			states, err = dsi.UpsertStates(dc.info.Address.String(), &tx.ID, newStatesToWrite)
 			return err
 		})
 		if err != nil {
@@ -256,9 +256,9 @@ func (dc *domainContract) LockStates(ctx context.Context, tx *components.Private
 
 	return dc.dm.stateStore.RunInDomainContext(dc.d.name, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
 		// Heavy lifting is all done for us by the state store
-		_, err := dsi.UpsertStates(&tx.ID, txLockedStateUpserts)
+		_, err := dsi.UpsertStates(dc.info.Address.String(), &tx.ID, txLockedStateUpserts)
 		if err == nil && len(readStateUpserts) > 0 {
-			_, err = dsi.UpsertStates(nil, readStateUpserts)
+			_, err = dsi.UpsertStates(dc.info.Address.String(), nil, readStateUpserts)
 		}
 		return err
 	})

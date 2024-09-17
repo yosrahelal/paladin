@@ -310,10 +310,10 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	psc, tx := doDomainInitTransactionOK(t, ctx, tp)
 	domain := tp.d
 
-	state1 := storeState(t, dm, tp, tx.ID, ethtypes.NewHexInteger64(1111111))
-	state2 := storeState(t, dm, tp, tx.ID, ethtypes.NewHexInteger64(2222222))
-	state3 := storeState(t, dm, tp, tx.ID, ethtypes.NewHexInteger64(3333333))
-	state4 := storeState(t, dm, tp, tx.ID, ethtypes.NewHexInteger64(4444444))
+	state1 := storeState(t, dm, tp, psc.Address().String(), tx.ID, ethtypes.NewHexInteger64(1111111))
+	state2 := storeState(t, dm, tp, psc.Address().String(), tx.ID, ethtypes.NewHexInteger64(2222222))
+	state3 := storeState(t, dm, tp, psc.Address().String(), tx.ID, ethtypes.NewHexInteger64(3333333))
+	state4 := storeState(t, dm, tp, psc.Address().String(), tx.ID, ethtypes.NewHexInteger64(4444444))
 
 	state5 := &fakeState{
 		Salt:   tktypes.Bytes32(tktypes.RandBytes(32)),
@@ -324,7 +324,8 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 		assert.Same(t, req.Transaction, tx.PreAssembly.TransactionSpecification)
 
 		stateRes, err := domain.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-			SchemaId: tp.stateSchemas[0].Id,
+			DomainAddress: req.Transaction.ContractAddress,
+			SchemaId:      tp.stateSchemas[0].Id,
 			QueryJson: `{
 				"or": [
 					{
@@ -382,7 +383,7 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	require.NoError(t, err)
 
 	stateRes, err := domain.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		DomainAddress: "0x1234",
+		DomainAddress: psc.Address().String(),
 		SchemaId:      tx.PostAssembly.OutputStatesPotential[0].SchemaId,
 		QueryJson: `{
 			"or": [
@@ -400,7 +401,7 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	require.NoError(t, err)
 
 	stillAvailable, err := domain.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		DomainAddress: "0x1234",
+		DomainAddress: psc.Address().String(),
 		SchemaId:      tx.PostAssembly.OutputStatesPotential[0].SchemaId,
 		QueryJson:     `{}`,
 	})
@@ -584,7 +585,7 @@ func TestDomainWritePotentialStatesFail(t *testing.T) {
 	schema.On("IDString").Return("schema1")
 	schema.On("Signature").Return("schema1_signature")
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(schema), mockBlockHeight, func(mc *mockComponents) {
-		mc.domainStateInterface.On("UpsertStates", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+		mc.domainStateInterface.On("UpsertStates", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
 

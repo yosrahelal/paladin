@@ -106,7 +106,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	schemaID := as.Persisted().ID.String()
 
 	// Check it handles data
-	state1, err := ss.PersistState(ctx, "domain1", schemaID, tktypes.RawJSON(`{
+	state1, err := ss.PersistState(ctx, "domain1", "0x1234", schemaID, tktypes.RawJSON(`{
 		"field1": "0x0123456789012345678901234567890123456789",
 		"field2": "hello world",
 		"field3": 42,

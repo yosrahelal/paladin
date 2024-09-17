@@ -335,7 +335,7 @@ func TestDomainFindAvailableStatesFail(t *testing.T) {
 	assert.Regexp(t, "pop", err)
 }
 
-func storeState(t *testing.T, dm *domainManager, tp *testPlugin, txID uuid.UUID, amount *ethtypes.HexInteger) *fakeState {
+func storeState(t *testing.T, dm *domainManager, tp *testPlugin, domainAddress string, txID uuid.UUID, amount *ethtypes.HexInteger) *fakeState {
 	state := &fakeState{
 		Salt:   tktypes.Bytes32(tktypes.RandBytes(32)),
 		Owner:  tktypes.EthAddress(tktypes.RandBytes(20)),
@@ -345,7 +345,7 @@ func storeState(t *testing.T, dm *domainManager, tp *testPlugin, txID uuid.UUID,
 	require.NoError(t, err)
 
 	err = dm.stateStore.RunInDomainContextFlush("test1", func(ctx context.Context, dsi statestore.DomainStateInterface) error {
-		newStates, err := dsi.UpsertStates(&txID, []*statestore.StateUpsert{
+		newStates, err := dsi.UpsertStates(domainAddress, &txID, []*statestore.StateUpsert{
 			{
 				SchemaID: tp.stateSchemas[0].Id,
 				Data:     stateJSON,
@@ -365,7 +365,7 @@ func TestDomainFindAvailableStatesOK(t *testing.T) {
 	assert.Nil(t, tp.d.initError.Load())
 
 	txID := uuid.New()
-	state1 := storeState(t, dm, tp, txID, ethtypes.NewHexIntegerU64(100000000))
+	state1 := storeState(t, dm, tp, "0x1234", txID, ethtypes.NewHexIntegerU64(100000000))
 
 	// Filter match
 	states, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{

@@ -77,7 +77,7 @@ func (s *StateWithLabels) ValueSet() filters.ValueSet {
 	return s.LabelValues
 }
 
-func (ss *stateStore) PersistState(ctx context.Context, domainID string, schemaID string, data tktypes.RawJSON) (*StateWithLabels, error) {
+func (ss *stateStore) PersistState(ctx context.Context, domainID, domainAddress, schemaID string, data tktypes.RawJSON) (*StateWithLabels, error) {
 
 	schema, err := ss.GetSchema(ctx, domainID, schemaID, true)
 	if err != nil {
@@ -88,6 +88,7 @@ func (ss *stateStore) PersistState(ctx context.Context, domainID string, schemaI
 	if err != nil {
 		return nil, err
 	}
+	s.DomainAddress = domainAddress
 
 	op := ss.writer.newWriteOp(s.State.DomainID)
 	op.states = []*StateWithLabels{s}
@@ -194,7 +195,7 @@ func (ss *stateStore) findStates(ctx context.Context, domainID, domainAddress, s
 		Joins("Spent", db.Select("transaction")).
 		Joins("Locked", db.Select("transaction")).
 		Where("domain_id = ?", domainID).
-		// Where("domain_address = ?", domainAddress).
+		Where("domain_address = ?", domainAddress).
 		Where("schema = ?", schema.Persisted().ID)
 
 	if len(excluded) > 0 {

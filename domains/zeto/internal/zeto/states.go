@@ -50,7 +50,7 @@ func (z *Zeto) makeNewState(coin *types.ZetoCoin) (*pb.NewState, error) {
 	}, nil
 }
 
-func (z *Zeto) prepareInputs(ctx context.Context, owner string, amount *ethtypes.HexInteger) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, error) {
+func (z *Zeto) prepareInputs(ctx context.Context, domainAddress, owner string, amount *ethtypes.HexInteger) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
 	stateRefs := []*pb.StateRef{}
@@ -64,7 +64,7 @@ func (z *Zeto) prepareInputs(ctx context.Context, owner string, amount *ethtypes
 		if lastStateTimestamp > 0 {
 			queryBuilder.GreaterThan(".created", lastStateTimestamp)
 		}
-		states, err := z.findAvailableStates(ctx, queryBuilder.Query().String())
+		states, err := z.findAvailableStates(ctx, domainAddress, queryBuilder.Query().String())
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -126,10 +126,11 @@ func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount 
 	return []*types.ZetoCoin{newCoin}, []*pb.NewState{newState}, err
 }
 
-func (z *Zeto) findAvailableStates(ctx context.Context, query string) ([]*pb.StoredState, error) {
+func (z *Zeto) findAvailableStates(ctx context.Context, domainAddress, query string) ([]*pb.StoredState, error) {
 	req := &pb.FindAvailableStatesRequest{
-		SchemaId:  z.coinSchema.Id,
-		QueryJson: query,
+		DomainAddress: domainAddress,
+		SchemaId:      z.coinSchema.Id,
+		QueryJson:     query,
 	}
 	res, err := z.Callbacks.FindAvailableStates(ctx, req)
 	if err != nil {

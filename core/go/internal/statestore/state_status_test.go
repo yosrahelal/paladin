@@ -63,7 +63,7 @@ func makeWidgets(t *testing.T, ctx context.Context, ss *stateStore, domainID, sc
 		ij["salt"] = tktypes.RandHex(32)
 		withSalt, err := json.Marshal(ij)
 		require.NoError(t, err)
-		states[i], err = ss.PersistState(ctx, domainID, schemaID, withSalt)
+		states[i], err = ss.PersistState(ctx, domainID, "0x1234", schemaID, withSalt)
 		require.NoError(t, err)
 		fmt.Printf("widget[%d]: %s\n", i, states[i].Data)
 	}

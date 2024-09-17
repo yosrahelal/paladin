@@ -70,7 +70,7 @@ type DomainStateInterface interface {
 	// If a non-nil transaction ID is supplied, then the states are mark locked to the specified
 	// transaction. They can then be locked-for-creation, locked-for-spending, for simply
 	// locked for existence to avoid other transactions spending them.
-	UpsertStates(transactionID *uuid.UUID, states []*StateUpsert) (s []*State, err error)
+	UpsertStates(domainAddress string, transactionID *uuid.UUID, states []*StateUpsert) (s []*State, err error)
 
 	// ResetTransaction queues up removal of all lock records for a given transaction
 	// Note that the private data of the states themselves are not removed
@@ -309,7 +309,7 @@ func (dc *domainContext) FindAvailableStates(domainAddress, schemaID string, que
 	return dc.mergedUnFlushed(schema, states, query)
 }
 
-func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*StateUpsert) (states []*State, err error) {
+func (dc *domainContext) UpsertStates(domainAddress string, transactionID *uuid.UUID, stateUpserts []*StateUpsert) (states []*State, err error) {
 
 	states = make([]*State, len(stateUpserts))
 	withValues := make([]*StateWithLabels, len(stateUpserts))
@@ -324,6 +324,7 @@ func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*
 			return nil, err
 		}
 		states[i] = withValues[i].State
+		states[i].DomainAddress = domainAddress
 		if transactionID != nil {
 			states[i].Locked = &StateLock{
 				Transaction: *transactionID,
