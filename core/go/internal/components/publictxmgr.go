@@ -29,13 +29,13 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 )
 
-// ManagedTransactionEventType is a enum type that contains all types of transaction process events
+// PublicTransactionEventType is a enum type that contains all types of transaction process events
 // that a transaction handler emits.
-type ManagedTransactionEventType int
+type PublicTransactionEventType int
 
 const (
-	ManagedTXProcessSucceeded ManagedTransactionEventType = iota
-	ManagedTXProcessFailed
+	PublicTXProcessSucceeded PublicTransactionEventType = iota
+	PublicTXProcessFailed
 )
 
 // BaseTxStatus is the current status of a transaction
@@ -65,7 +65,7 @@ const (
 	BaseTxStatusSuspended BaseTxStatus = "Suspended"
 )
 
-type ManagedTX struct {
+type PublicTX struct {
 	ID              string          `json:"id"`
 	Created         *fftypes.FFTime `json:"created"`
 	Updated         *fftypes.FFTime `json:"updated"`
@@ -81,15 +81,15 @@ type ManagedTX struct {
 	SubmittedHashes []string `json:"submittedHashes,omitempty"`
 }
 
-type ManagedTransactionEvent struct {
-	Type ManagedTransactionEventType
-	Tx   *ManagedTX
+type PublicTransactionEvent struct {
+	Type PublicTransactionEventType
+	Tx   *PublicTX
 }
 
 // Handler checks received transaction process events and dispatch them to an event
 // manager accordingly.
-type ManagedTxEventNotifier interface {
-	Notify(ctx context.Context, e ManagedTransactionEvent) error
+type PublicTxEventNotifier interface {
+	Notify(ctx context.Context, e PublicTransactionEvent) error
 }
 
 type RequestOptions struct {
@@ -165,8 +165,8 @@ type BaseTXUpdates struct {
 type NextNonceCallback func(ctx context.Context, signer string) (uint64, error)
 
 type TransactionStore interface {
-	GetTransactionByID(ctx context.Context, txID string) (*ManagedTX, error)
-	InsertTransactionWithNextNonce(ctx context.Context, tx *ManagedTX, lookupNextNonce NextNonceCallback) error
+	GetTransactionByID(ctx context.Context, txID string) (*PublicTX, error)
+	InsertTransactionWithNextNonce(ctx context.Context, tx *PublicTX, lookupNextNonce NextNonceCallback) error
 	UpdateTransaction(ctx context.Context, txID string, updates *BaseTXUpdates) error
 	DeleteTransaction(ctx context.Context, txID string) error
 
@@ -175,7 +175,7 @@ type TransactionStore interface {
 
 	AddSubStatusAction(ctx context.Context, txID string, subStatus BaseTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *fftypes.FFTime) error
 
-	ListTransactions(ctx context.Context, filter ffapi.AndFilter) ([]*ManagedTX, *ffapi.FilterResult, error)
+	ListTransactions(ctx context.Context, filter ffapi.AndFilter) ([]*PublicTX, *ffapi.FilterResult, error)
 	NewTransactionFilter(ctx context.Context) ffapi.FilterBuilder
 }
 type PublicTxEngine interface {
@@ -184,7 +184,7 @@ type PublicTxEngine interface {
 	// Init - setting a set of initialized toolkit plugins in the constructed transaction handler object. Safe checks & initialization
 	//        can take place inside this function as well. It also enables toolkit plugins to be able to embed a reference to its parent
 	//        transaction handler instance.
-	Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore TransactionStore, managedTXEventNotifier ManagedTxEventNotifier, blockIndexer blockindexer.BlockIndexer)
+	Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore TransactionStore, publicTXEventNotifier PublicTxEventNotifier, blockIndexer blockindexer.BlockIndexer)
 
 	// Start - starting the transaction handler to handle inbound events.
 	// It takes in a context, of which upon cancellation will stop the transaction handler.
@@ -195,15 +195,15 @@ type PublicTxEngine interface {
 	// Event handling functions
 	// Instructional events:
 	// HandleNewTransaction - handles event of adding new transactions onto blockchain
-	HandleNewTransaction(ctx context.Context, reqOptions *RequestOptions, txPayload interface{}) (mtx *ManagedTX, submissionRejected bool, err error)
+	HandleNewTransaction(ctx context.Context, reqOptions *RequestOptions, txPayload interface{}) (mtx *PublicTX, submissionRejected bool, err error)
 	// HandleSuspendTransaction - handles event of suspending a managed transaction
-	HandleSuspendTransaction(ctx context.Context, txID string) (mtx *ManagedTX, err error)
+	HandleSuspendTransaction(ctx context.Context, txID string) (mtx *PublicTX, err error)
 	// HandleResumeTransaction - handles event of resuming a suspended managed transaction
-	HandleResumeTransaction(ctx context.Context, txID string) (mtx *ManagedTX, err error)
+	HandleResumeTransaction(ctx context.Context, txID string) (mtx *PublicTX, err error)
 
 	// Functions for auto-fueling
-	GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *ManagedTX, err error)
-	CheckTransactionCompleted(ctx context.Context, tx *ManagedTX) (completed bool)
+	GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *PublicTX, err error)
+	CheckTransactionCompleted(ctx context.Context, tx *PublicTX) (completed bool)
 }
 
 type PublicTxManager interface {

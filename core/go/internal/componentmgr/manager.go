@@ -25,6 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/domainmgr"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
+	"github.com/kaleido-io/paladin/core/internal/publictxmgr"
 	"github.com/kaleido-io/paladin/core/internal/registrymgr"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
@@ -63,6 +64,7 @@ type componentManager struct {
 	transportManager components.TransportManager
 	registryManager  components.RegistryManager
 	pluginManager    components.PluginManager
+	publicTxManager  components.PublicTxManager
 	// engine
 	engine components.Engine
 	// init to start tracking
@@ -147,6 +149,12 @@ func (cm *componentManager) Init() (err error) {
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
 	}
 
+	if err == nil {
+		cm.publicTxManager = publictxmgr.NewPublicTransactionMgr(cm.bgCtx)
+		cm.initResults["public_tx_mgr"], err = cm.publicTxManager.PreInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
+	}
+
 	// init engine
 	if err == nil {
 		cm.initResults[cm.engine.EngineName()], err = cm.engine.Init(cm)
@@ -171,6 +179,11 @@ func (cm *componentManager) Init() (err error) {
 
 	if err == nil {
 		err = cm.pluginManager.PostInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
+	}
+
+	if err == nil {
+		err = cm.publicTxManager.PostInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
 	}
 
@@ -371,6 +384,10 @@ func (cm *componentManager) RegistryManager() components.RegistryManager {
 
 func (cm *componentManager) PluginManager() components.PluginManager {
 	return cm.pluginManager
+}
+
+func (cm *componentManager) PublicTxManager() components.PublicTxManager {
+	return cm.publicTxManager
 }
 
 func (cm *componentManager) Engine() components.Engine {

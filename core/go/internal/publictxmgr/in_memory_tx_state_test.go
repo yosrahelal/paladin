@@ -44,7 +44,7 @@ func NewTestInMemoryTxState(t *testing.T) baseTypes.InMemoryTxStateManager {
 	oldGasPrice := ethtypes.NewHexInteger64(10)
 	oldErrorMessage := "old message"
 	oldTransactionData := ethtypes.MustNewHexBytes0xPrefix(testTransactionData)
-	testManagedTx := &components.ManagedTX{
+	testManagedTx := &components.PublicTX{
 		ID:              uuid.New().String(),
 		Created:         oldTime,
 		DeleteRequested: oldTime,
@@ -85,7 +85,7 @@ func TestSettersAndGetters(t *testing.T) {
 	oldErrorMessage := "old message"
 	oldTransactionData := ethtypes.MustNewHexBytes0xPrefix(testTransactionData)
 
-	testManagedTx := &components.ManagedTX{
+	testManagedTx := &components.PublicTX{
 		ID:              uuid.New().String(),
 		Created:         oldTime,
 		DeleteRequested: oldTime,

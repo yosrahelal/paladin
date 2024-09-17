@@ -30,14 +30,14 @@ import (
 
 type inMemoryTxState struct {
 	// managed transaction in the only input for creating an inflight transaction
-	mtx *components.ManagedTX
+	mtx *components.PublicTX
 
 	// the value of the following properties are populated during transaction processing but not during initialization
 	//  the process logic will determine whether confirmed transaction requires to be fetched
 	ConfirmedTransaction *blockindexer.IndexedTransaction
 }
 
-func NewInMemoryTxStateMananger(ctx context.Context, mtx *components.ManagedTX) baseTypes.InMemoryTxStateManager {
+func NewInMemoryTxStateMananger(ctx context.Context, mtx *components.PublicTX) baseTypes.InMemoryTxStateManager {
 	return &inMemoryTxState{
 		mtx: mtx,
 	}
@@ -107,7 +107,7 @@ func (imtxs *inMemoryTxState) ApplyTxUpdates(ctx context.Context, txUpdates *com
 	}
 }
 
-func (imtxs *inMemoryTxState) GetTx() *components.ManagedTX {
+func (imtxs *inMemoryTxState) GetTx() *components.PublicTX {
 	return imtxs.mtx
 }
 

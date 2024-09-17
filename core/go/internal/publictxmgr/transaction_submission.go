@@ -42,7 +42,7 @@ func calculateTransactionHash(rawTxnData []byte) *tktypes.Bytes32 {
 	return &hashBytes
 }
 
-func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx *components.ManagedTX, signedMessage []byte) (string, *fftypes.FFTime, ethclient.ErrorReason, baseTypes.SubmissionOutcome, error) {
+func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx *components.PublicTX, signedMessage []byte) (string, *fftypes.FFTime, ethclient.ErrorReason, baseTypes.SubmissionOutcome, error) {
 	var txHash *tktypes.Bytes32
 	sendStart := time.Now()
 	calculatedTxHash := calculateTransactionHash(signedMessage)

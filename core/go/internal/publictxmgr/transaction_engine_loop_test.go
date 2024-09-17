@@ -40,7 +40,7 @@ func TestNewEngineNoNewOrchestrator(t *testing.T) {
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mBI.On("RegisterIndexedTransactionHandler", ctx, mock.Anything).Return(nil).Once()
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
@@ -66,7 +66,7 @@ func TestNewEnginePollingCancelledContext(t *testing.T) {
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
@@ -75,7 +75,7 @@ func TestNewEnginePollingCancelledContext(t *testing.T) {
 	ble.enginePollingInterval = 1 * time.Hour
 	// already has a running orchestrator for the address so no new orchestrator should be started
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{}, nil, fmt.Errorf("error")).Run(func(args mock.Arguments) {
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil, fmt.Errorf("error")).Run(func(args mock.Arguments) {
 		cancelCtx()
 	}).Once()
 	ble.ctx = ctx
@@ -85,14 +85,14 @@ func TestNewEnginePollingCancelledContext(t *testing.T) {
 
 func TestNewEnginePollingReAddStoppedOrchestrator(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &components.ManagedTX{
+	mockManagedTx1 := &components.PublicTX{
 		ID: uuid.New().String(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 	}
-	mockManagedTx2 := &components.ManagedTX{
+	mockManagedTx2 := &components.PublicTX{
 		ID: uuid.New().String(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
@@ -108,7 +108,7 @@ func TestNewEnginePollingReAddStoppedOrchestrator(t *testing.T) {
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
@@ -120,12 +120,12 @@ func TestNewEnginePollingReAddStoppedOrchestrator(t *testing.T) {
 
 	// already has a running orchestrator for the address so no new orchestrator should be started
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter)
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{}, nil, nil).Run(func(args mock.Arguments) {
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil, nil).Run(func(args mock.Arguments) {
 		close(zeroTransactionListedForIdle)
 	}).Once()
 
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{}, nil, nil).Maybe()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil, nil).Maybe()
 	ble.InFlightOrchestrators = map[string]*orchestrator{
 		testMainSigningAddress: {state: OrchestratorStateStopped, stateEntryTime: time.Now()}, // already has an orchestrator for 0x1
 	}
@@ -141,14 +141,14 @@ func TestNewEnginePollingReAddStoppedOrchestrator(t *testing.T) {
 
 func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	mockManagedTx1 := &components.ManagedTX{
+	mockManagedTx1 := &components.PublicTX{
 		ID: uuid.New().String(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 	}
-	mockManagedTx2 := &components.ManagedTX{
+	mockManagedTx2 := &components.PublicTX{
 		ID: uuid.New().String(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
@@ -164,7 +164,7 @@ func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
@@ -175,8 +175,8 @@ func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 	ble.engineLoopDone = make(chan struct{})
 	// already has a running orchestrator for the address so no new orchestrator should be started
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{}, nil, nil).Maybe()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil, nil).Maybe()
 	go ble.engineLoop()
 	existingOrchestrator := &orchestrator{
 		publicTxEngine:              ble,
@@ -187,7 +187,7 @@ func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 		stopProcess:                 make(chan bool, 1),
 		txStore:                     mTS,
 		ethClient:                   mEC,
-		managedTXEventNotifier:      mEN,
+		publicTXEventNotifier:       mEN,
 		bIndexer:                    mBI,
 		maxInFlightTxs:              0,
 	}
@@ -207,14 +207,14 @@ func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 
 func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &components.ManagedTX{
+	mockManagedTx1 := &components.PublicTX{
 		ID: uuid.New().String(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 	}
-	mockManagedTx2 := &components.ManagedTX{
+	mockManagedTx2 := &components.PublicTX{
 		ID: uuid.New().String(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
@@ -230,7 +230,7 @@ func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) 
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
@@ -250,13 +250,13 @@ func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) 
 		stopProcess:                 make(chan bool, 1),
 		txStore:                     mTS,
 		ethClient:                   mEC,
-		managedTXEventNotifier:      mEN,
+		publicTXEventNotifier:       mEN,
 		bIndexer:                    mBI,
 	}
 	// already has a running orchestrator for the address so no new orchestrator should be started
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{mockManagedTx1, mockManagedTx2}, nil, nil).Maybe()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{}, nil, nil).Maybe()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil, nil).Maybe()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil, nil).Maybe()
 	ble.InFlightOrchestrators = map[string]*orchestrator{
 		testMainSigningAddress: existingOrchestrator, // already has an orchestrator for 0x1
 	}
@@ -280,7 +280,7 @@ func TestNewEnginePollingExcludePausedOrchestrator(t *testing.T) {
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mBI.On("RegisterIndexedTransactionHandler", ctx, mock.Anything).Return(nil).Once()
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
@@ -291,7 +291,7 @@ func TestNewEnginePollingExcludePausedOrchestrator(t *testing.T) {
 	// already has a running orchestrator for the address so no new orchestrator should be started
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
 	listed := make(chan struct{})
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{}, nil, nil).Run(func(args mock.Arguments) {
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil, nil).Run(func(args mock.Arguments) {
 		close(listed)
 	}).Once()
 	ble.InFlightOrchestrators = map[string]*orchestrator{}
@@ -303,7 +303,7 @@ func TestNewEnginePollingExcludePausedOrchestrator(t *testing.T) {
 
 func TestNewEngineGetPendingFuelingTxs(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &components.ManagedTX{
+	mockManagedTx1 := &components.PublicTX{
 		ID: uuid.New().String(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
@@ -318,7 +318,7 @@ func TestNewEngineGetPendingFuelingTxs(t *testing.T) {
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
@@ -328,7 +328,7 @@ func TestNewEngineGetPendingFuelingTxs(t *testing.T) {
 
 	// already has a running orchestrator for the address so no new orchestrator should be started
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{mockManagedTx1}, nil, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1}, nil, nil).Once()
 	tx, err := ble.GetPendingFuelingTransaction(ctx, "0x0", testMainSigningAddress)
 	assert.Equal(t, mockManagedTx1, tx)
 	require.NoError(t, err)
@@ -341,7 +341,7 @@ func TestNewEngineGetPendingFuelingTxs(t *testing.T) {
 
 func TestNewEngineCheckTxCompleteness(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &components.ManagedTX{
+	mockManagedTx1 := &components.PublicTX{
 		ID:     uuid.New().String(),
 		Status: components.BaseTxStatusSucceeded,
 		Transaction: &ethsigner.Transaction{
@@ -357,7 +357,7 @@ func TestNewEngineCheckTxCompleteness(t *testing.T) {
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
@@ -369,18 +369,18 @@ func TestNewEngineCheckTxCompleteness(t *testing.T) {
 	// when no nonce cached
 
 	// return false for a transaction with nonce "0" that is still pending
-	testTxWithZeroNonce := &components.ManagedTX{
+	testTxWithZeroNonce := &components.PublicTX{
 		Status: components.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(0),
 		},
 	}
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{}, nil, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil, nil).Once()
 	assert.False(t, ble.CheckTransactionCompleted(ctx, testTxWithZeroNonce))
 
 	// for transactions with a non-zero nonce
-	testTxToCheck := &components.ManagedTX{
+	testTxToCheck := &components.PublicTX{
 		Status: components.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
@@ -391,10 +391,10 @@ func TestNewEngineCheckTxCompleteness(t *testing.T) {
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return(nil, nil, fmt.Errorf("List transaction errored")).Once()
 	assert.False(t, ble.CheckTransactionCompleted(ctx, testTxToCheck))
 	// return false when no transactions retrieved
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{}, nil, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil, nil).Once()
 	assert.False(t, ble.CheckTransactionCompleted(ctx, testTxToCheck))
 	// return false when the retrieved transaction has a lower nonce
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{mockManagedTx1}, nil, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1}, nil, nil).Once()
 	assert.False(t, ble.CheckTransactionCompleted(ctx, testTxToCheck))
 
 	// try to update nonce when transaction incomplete shouldn't take affect

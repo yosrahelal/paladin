@@ -265,7 +265,7 @@ var (
 	MsgBaseLedgerTransactionFailed = ffe("PD011810", "Failed to submit base ledger transaction")
 	MsgContractAddressNotProvided  = ffe("PD011811", "Contract address (To) not found in the transaction input")
 
-	// Base Ledger engine PD0119XX
+	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s ")
 	MsgBalanceBelowMinimum             = ffe("PD011901", "Balance %s of fueling source address %s is below the configured minimum balance %s ")
 	MsgInvalidBigIntString             = ffe("PD011902", "Value of '%s' is not a valid bigInt string")
@@ -273,6 +273,7 @@ var (
 	MsgMaxBelowMinThreshold            = ffe("PD011904", "Value of '%s' is not a valid max, it is below the min threshold: %s")
 	MsgSubmitFailedWrongHashReturned   = ffe("PD011905", "Submission of transaction with calculatedHash '%s' returned hash '%s'")
 	MsgSubmissionResponseMissingTxHash = ffe("PD011906", "Missing transaction hash from the submission response for transaction with ID: %s")
+	MsgPublicTxMgrAlreadyInit          = ffe("PD011907", "Public transaction manager already initialized")
 	MsgInvalidGasClientConfig          = ffe("PD011908", "Invalid gas client config: %s")
 	MsgInvalidGasPriceIncreaseMax      = ffe("PD011909", "Invalid max gas price increase price string %s")
 	MsgMissingTransactionID            = ffe("PD011910", "Transaction ID must be provided")

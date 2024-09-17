@@ -52,6 +52,7 @@ type Managers interface {
 	TransportManager() TransportManager
 	RegistryManager() RegistryManager
 	PluginManager() PluginManager
+	PublicTxManager() PublicTxManager
 }
 
 // All managers conform to a standard lifecycle
@@ -74,8 +75,9 @@ type ManagerEventStream struct {
 
 // Managers can instruct the init of some of the PostInitComponents in a generic way
 type ManagerInitResult struct {
-	EventStreams []*ManagerEventStream
-	RPCModules   []*rpcserver.RPCModule
+	EventStreams          []*ManagerEventStream
+	RPCModules            []*rpcserver.RPCModule
+	PublicTxEventNotifier PublicTxEventNotifier
 }
 
 type PreInitComponentsAndManagers interface {

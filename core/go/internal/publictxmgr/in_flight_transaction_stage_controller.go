@@ -100,7 +100,7 @@ type BasicActionError struct {
 func NewInFlightTransactionStageController(
 	enth *publicTxEngine,
 	oc *orchestrator,
-	mtx *components.ManagedTX,
+	mtx *components.PublicTX,
 ) *InFlightTransactionStageController {
 
 	ift := &InFlightTransactionStageController{
@@ -403,13 +403,13 @@ func (it *InFlightTransactionStageController) ProduceLatestInFlightStageContext(
 										// we've persisted successfully, perform completion actions when the transaction received all confirmations
 										// dispatch an event to event handler and discard any handling errors
 										if rsc.InMemoryTx.GetStatus() == components.BaseTxStatusSucceeded {
-											_ = it.managedTXEventNotifier.Notify(ctx, components.ManagedTransactionEvent{
-												Type: components.ManagedTXProcessSucceeded,
+											_ = it.publicTXEventNotifier.Notify(ctx, components.PublicTransactionEvent{
+												Type: components.PublicTXProcessSucceeded,
 												Tx:   rsc.InMemoryTx.GetTx(),
 											})
 										} else if rsc.InMemoryTx.GetStatus() == components.BaseTxStatusFailed {
-											_ = it.managedTXEventNotifier.Notify(ctx, components.ManagedTransactionEvent{
-												Type: components.ManagedTXProcessFailed,
+											_ = it.publicTXEventNotifier.Notify(ctx, components.PublicTransactionEvent{
+												Type: components.PublicTXProcessFailed,
 												Tx:   rsc.InMemoryTx.GetTx(),
 											})
 										}

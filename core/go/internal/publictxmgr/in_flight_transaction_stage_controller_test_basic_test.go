@@ -33,7 +33,7 @@ type testInFlightTransactionWithMocksAndConf struct {
 	it   *InFlightTransactionStageController
 	mBI  *componentmocks.BlockIndexer
 	mEC  *componentmocks.EthClient
-	mEN  *componentmocks.ManagedTxEventNotifier
+	mEN  *componentmocks.PublicTxEventNotifier
 	mTS  *componentmocks.TransactionStore
 	mKM  *componentmocks.KeyManager
 	mBM  baseTypes.BalanceManager
@@ -48,7 +48,7 @@ func NewTestInFlightTransactionWithMocks(t *testing.T) *testInFlightTransactionW
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mTS := componentmocks.NewTransactionStore(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.ctx = ctx

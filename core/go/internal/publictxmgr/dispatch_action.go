@@ -34,12 +34,12 @@ const (
 )
 
 type APIResponse struct {
-	tx     *components.ManagedTX
+	tx     *components.PublicTX
 	err    error
 	status int // http status code (200 Ok vs. 202 Accepted) - only set for success cases
 }
 
-func (pte *publicTxEngine) dispatchAction(ctx context.Context, mtx *components.ManagedTX, action APIRequestType) APIResponse {
+func (pte *publicTxEngine) dispatchAction(ctx context.Context, mtx *components.PublicTX, action APIRequestType) APIResponse {
 	response := make(chan APIResponse, 1)
 	startTime := time.Now()
 	var err error
@@ -83,7 +83,7 @@ func (pte *publicTxEngine) dispatchAction(ctx context.Context, mtx *components.M
 	}
 }
 
-func (oc *orchestrator) dispatchAction(ctx context.Context, mtx *components.ManagedTX, action APIRequestType, response chan<- APIResponse) {
+func (oc *orchestrator) dispatchAction(ctx context.Context, mtx *components.PublicTX, action APIRequestType, response chan<- APIResponse) {
 	switch action {
 	case ActionSuspend, ActionResume:
 		oc.InFlightTxsMux.Lock()

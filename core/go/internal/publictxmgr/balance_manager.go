@@ -149,7 +149,7 @@ type BalanceManagerWithInMemoryTracking struct {
 	// fueling transactions by search for the latest transfer type transaction to the destination address. (this involves
 	//  read from database and is necessary to recover balance manager from crashes)
 	destinationAddressesFuelingTracked    map[string]*sync.Mutex
-	trackedFuelingTransactions            map[string]*components.ManagedTX
+	trackedFuelingTransactions            map[string]*components.PublicTX
 	destinationAddressesFuelingTrackedMux sync.Mutex
 
 	// a map of signing addresses and a boolean to indicate whether balance manager should fetch
@@ -158,7 +158,7 @@ type BalanceManagerWithInMemoryTracking struct {
 	addressBalanceChangedMapMux sync.Mutex
 }
 
-func (af *BalanceManagerWithInMemoryTracking) TopUpAccount(ctx context.Context, addAccount *baseTypes.AddressAccount) (mtx *components.ManagedTX, err error) {
+func (af *BalanceManagerWithInMemoryTracking) TopUpAccount(ctx context.Context, addAccount *baseTypes.AddressAccount) (mtx *components.PublicTX, err error) {
 	if af.sourceAddress == "" {
 		log.L(ctx).Debugf("Skip top up transaction as no fueling source configured")
 		// No-op
@@ -277,12 +277,12 @@ func (af *BalanceManagerWithInMemoryTracking) GetAddressBalance(ctx context.Cont
 	}, nil
 }
 
-func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(ctx context.Context, destAddress string, value *big.Int) (mtx *components.ManagedTX, err error) {
+func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(ctx context.Context, destAddress string, value *big.Int) (mtx *components.PublicTX, err error) {
 	// check whether there is a pending fueling transaction already
 	// check whether the current balance manager already tracking the existing in-flight fueling transactions
 	log.L(ctx).Tracef("TransferGasFromAutoFuelingSource entry, source address: %s, destination address: %s, amount: %s", af.sourceAddress, destAddress, value.String())
 
-	var fuelingTx *components.ManagedTX
+	var fuelingTx *components.PublicTX
 	af.destinationAddressesFuelingTrackedMux.Lock()
 	perAddressMux, ok := af.destinationAddressesFuelingTracked[destAddress] // there is no lock here as the map of tracked transactions is the one that is critical to get right
 	if !ok {
@@ -441,7 +441,7 @@ func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf config.Sect
 		maxDestBalance:                     maxDestBalance,
 		minThreshold:                       minThreshold,
 		destinationAddressesFuelingTracked: make(map[string]*sync.Mutex),
-		trackedFuelingTransactions:         make(map[string]*components.ManagedTX),
+		trackedFuelingTransactions:         make(map[string]*components.PublicTX),
 		addressBalanceChangedMap:           make(map[string]bool),
 	}
 	return bm, nil

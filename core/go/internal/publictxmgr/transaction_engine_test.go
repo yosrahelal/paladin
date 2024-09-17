@@ -90,13 +90,13 @@ func TestInit(t *testing.T) {
 	mockTransactionFilter := qFields.NewFilter(ctx)
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
 	listed := make(chan struct{})
 	mBI.On("RegisterIndexedTransactionHandler", ctx, mock.Anything).Return(nil).Once()
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.ManagedTX{}, nil, nil).Run(func(args mock.Arguments) {
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil, nil).Run(func(args mock.Arguments) {
 		listed <- struct{}{}
 	}).Once()
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
@@ -121,7 +121,7 @@ func TestInitFailedRegisterIndexedTransactionHandler(t *testing.T) {
 
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
 	mBI.On("RegisterIndexedTransactionHandler", ctx, mock.Anything).Return(errors.New("pop")).Once()
@@ -143,7 +143,7 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
@@ -202,7 +202,7 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 		Return(nil, fmt.Errorf("pop")).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		ctx := args[0].(context.Context)
-		mtx := args[1].(*components.ManagedTX)
+		mtx := args[1].(*components.PublicTX)
 		nextNonceCB := args[2].(components.NextNonceCallback)
 		_, err := nextNonceCB(ctx, string(mtx.From))
 		insertMock.Return(err)
@@ -226,7 +226,7 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		ctx := args[0].(context.Context)
-		mtx := args[1].(*components.ManagedTX)
+		mtx := args[1].(*components.PublicTX)
 		nextNonceCB := args[2].(components.NextNonceCallback)
 		nonce, err := nextNonceCB(ctx, string(mtx.From))
 		assert.Nil(t, err)
@@ -251,7 +251,7 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
 	mKM.On("ResolveKey", ctx, testAutoFuelingSourceAddress, algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", testAutoFuelingSourceAddress, nil)
@@ -271,7 +271,7 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		ctx := args[0].(context.Context)
-		mtx := args[1].(*components.ManagedTX)
+		mtx := args[1].(*components.PublicTX)
 		nextNonceCB := args[2].(components.NextNonceCallback)
 		nonce, err := nextNonceCB(ctx, string(mtx.From))
 		assert.Equal(t, "1223451", mtx.GasLimit.BigInt().String())
@@ -301,7 +301,7 @@ func TestHandleNewTransactionTransferAndInvalidType(t *testing.T) {
 	ble.gasPriceClient = NewTestZeroGasPriceChainClient(t)
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
 	mKM.On("ResolveKey", ctx, testAutoFuelingSourceAddress, algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", testAutoFuelingSourceAddress, nil)
@@ -319,7 +319,7 @@ func TestHandleNewTransactionTransferAndInvalidType(t *testing.T) {
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		ctx := args[0].(context.Context)
-		mtx := args[1].(*components.ManagedTX)
+		mtx := args[1].(*components.PublicTX)
 		nextNonceCB := args[2].(components.NextNonceCallback)
 		nonce, err := nextNonceCB(ctx, string(mtx.From))
 		assert.Equal(t, "1223451", mtx.GasLimit.BigInt().String())
@@ -358,7 +358,7 @@ func TestHandleNewTransaction(t *testing.T) {
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
 	mKM.On("ResolveKey", ctx, testDestAddress, algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", testDestAddress, nil)
@@ -474,7 +474,7 @@ func TestHandleNewTransaction(t *testing.T) {
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		ctx := args[0].(context.Context)
-		mtx := args[1].(*components.ManagedTX)
+		mtx := args[1].(*components.PublicTX)
 		assert.Equal(t, big.NewInt(200), mtx.GasLimit.BigInt())
 		nextNonceCB := args[2].(components.NextNonceCallback)
 		nonce, err := nextNonceCB(ctx, string(mtx.From))
@@ -501,7 +501,7 @@ func TestHandleNewDeployment(t *testing.T) {
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
 	mKM.On("ResolveKey", ctx, testDestAddress, algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", testDestAddress, nil)
@@ -598,7 +598,7 @@ func TestHandleNewDeployment(t *testing.T) {
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		ctx := args[0].(context.Context)
-		mtx := args[1].(*components.ManagedTX)
+		mtx := args[1].(*components.PublicTX)
 		assert.Equal(t, big.NewInt(200), mtx.GasLimit.BigInt())
 		nextNonceCB := args[2].(components.NextNonceCallback)
 		nonce, err := nextNonceCB(ctx, string(mtx.From))
@@ -626,7 +626,7 @@ func TestEngineSuspend(t *testing.T) {
 
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
@@ -671,7 +671,7 @@ func TestEngineSuspend(t *testing.T) {
 		transactionIDsInStatusUpdate: []string{"randomID"},
 		txStore:                      mTS,
 		ethClient:                    mEC,
-		managedTXEventNotifier:       mEN,
+		publicTXEventNotifier:        mEN,
 		bIndexer:                     mBI,
 	}
 	// orchestrator update error
@@ -729,7 +729,7 @@ func TestEngineResume(t *testing.T) {
 
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
@@ -774,7 +774,7 @@ func TestEngineResume(t *testing.T) {
 		transactionIDsInStatusUpdate: []string{"randomID"},
 		txStore:                      mTS,
 		ethClient:                    mEC,
-		managedTXEventNotifier:       mEN,
+		publicTXEventNotifier:        mEN,
 		bIndexer:                     mBI,
 	}
 	// orchestrator update error
@@ -832,7 +832,7 @@ func TestEngineCanceledContext(t *testing.T) {
 
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
@@ -865,7 +865,7 @@ func TestEngineHandleConfirmedTransactionEvents(t *testing.T) {
 
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)
@@ -874,25 +874,25 @@ func TestEngineHandleConfirmedTransactionEvents(t *testing.T) {
 	imtxs := NewTestInMemoryTxState(t)
 	mtx := imtxs.GetTx()
 
-	mockManagedTx0 := &components.ManagedTX{
+	mockManagedTx0 := &components.PublicTX{
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(string(mtx.From)),
 			Nonce: ethtypes.NewHexInteger64(4),
 		},
 	}
-	mockManagedTx1 := &components.ManagedTX{
+	mockManagedTx1 := &components.PublicTX{
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(string(mtx.From)),
 			Nonce: ethtypes.NewHexInteger64(5),
 		},
 	}
-	mockManagedTx2 := &components.ManagedTX{
+	mockManagedTx2 := &components.PublicTX{
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage("0x12345f6e918321dd47c86e7a077b4ab0e7411234"),
 			Nonce: ethtypes.NewHexInteger64(6),
 		},
 	}
-	mockManagedTx3 := &components.ManagedTX{
+	mockManagedTx3 := &components.PublicTX{
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage("0x43215f6e918321dd47c86e7a077b4ab0e7414321"),
 			Nonce: ethtypes.NewHexInteger64(7),
@@ -910,7 +910,7 @@ func TestEngineHandleConfirmedTransactionEvents(t *testing.T) {
 		transactionIDsInStatusUpdate: []string{"randomID"},
 		txStore:                      mTS,
 		ethClient:                    mEC,
-		managedTXEventNotifier:       mEN,
+		publicTXEventNotifier:        mEN,
 		bIndexer:                     mBI,
 	}
 	// in flight tx test
@@ -991,7 +991,7 @@ func TestEngineHandleConfirmedTransactionEventsNoInFlightNotHang(t *testing.T) {
 
 	mTS := componentmocks.NewTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mEN := componentmocks.NewManagedTxEventNotifier(t)
+	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
 	mKM := componentmocks.NewKeyManager(t)

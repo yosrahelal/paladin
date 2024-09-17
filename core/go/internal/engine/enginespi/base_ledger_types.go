@@ -37,7 +37,7 @@ type TransactionHeaders struct {
 }
 
 type BalanceManager interface {
-	TopUpAccount(ctx context.Context, addAccount *AddressAccount) (mtx *components.ManagedTX, err error)
+	TopUpAccount(ctx context.Context, addAccount *AddressAccount) (mtx *components.PublicTX, err error)
 	IsAutoFuelingEnabled(ctx context.Context) bool
 	GetAddressBalance(ctx context.Context, address string) (*AddressAccount, error)
 	NotifyAddressBalanceChanged(ctx context.Context, address string)
@@ -203,7 +203,7 @@ type InMemoryTxStateReadOnly interface {
 	GetLastSubmitTime() *fftypes.FFTime
 	GetSubmittedHashes() []string
 
-	GetTx() *components.ManagedTX //TODO: remove the need of this function
+	GetTx() *components.PublicTX //TODO: remove the need of this function
 
 	GetGasLimit() *big.Int
 	IsComplete() bool

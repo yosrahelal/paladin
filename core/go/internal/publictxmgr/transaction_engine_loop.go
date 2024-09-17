@@ -162,7 +162,7 @@ func (ble *publicTxEngine) poll(ctx context.Context) (polled int, total int) {
 			}
 		}
 
-		var additionalTxFromNonInFlightSigners []*components.ManagedTX
+		var additionalTxFromNonInFlightSigners []*components.PublicTX
 		// We retry the get from persistence indefinitely (until the context cancels)
 		err := ble.retry.Do(ctx, "get pending transactions with non InFlight signing addresses", func(attempt int) (retry bool, err error) {
 			fb := ble.txStore.NewTransactionFilter(ctx)
@@ -229,7 +229,7 @@ func (ble *publicTxEngine) MarkInFlightOrchestratorsStale() {
 	}
 }
 
-func (ble *publicTxEngine) GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *components.ManagedTX, err error) {
+func (ble *publicTxEngine) GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *components.PublicTX, err error) {
 	fb := ble.txStore.NewTransactionFilter(ctx)
 	filter := fb.And(fb.Eq("from", sourceAddress),
 		fb.Eq("to", destinationAddress),
@@ -248,7 +248,7 @@ func (ble *publicTxEngine) GetPendingFuelingTransaction(ctx context.Context, sou
 	return tx, nil
 }
 
-func (ble *publicTxEngine) CheckTransactionCompleted(ctx context.Context, tx *components.ManagedTX) (completed bool) {
+func (ble *publicTxEngine) CheckTransactionCompleted(ctx context.Context, tx *components.PublicTX) (completed bool) {
 	// no need for locking here as outdated information is OK given we do frequent retires
 	log.L(ctx).Debugf("CheckTransactionCompleted checking state for transaction %s.", tx.ID)
 	completedTxNonce, exists := ble.completedTxNoncePerAddress[string(tx.From)]
@@ -280,7 +280,7 @@ func (ble *publicTxEngine) CheckTransactionCompleted(ctx context.Context, tx *co
 
 }
 
-func (ble *publicTxEngine) updateCompletedTxNonce(tx *components.ManagedTX) (updated bool) {
+func (ble *publicTxEngine) updateCompletedTxNonce(tx *components.PublicTX) (updated bool) {
 	updated = false
 	// no need for locking here as outdated information is OK given we do frequent retires
 	ble.completedTxNoncePerAddressMutex.Lock()

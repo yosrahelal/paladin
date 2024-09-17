@@ -302,8 +302,8 @@ func TestTopUpAddressNoOpScenarios(t *testing.T) {
 
 }
 
-func generateExpectedFuelingTransaction(amountToTransfer int64) *components.ManagedTX {
-	return &components.ManagedTX{
+func generateExpectedFuelingTransaction(amountToTransfer int64) *components.PublicTX {
+	return &components.PublicTX{
 		Status: components.BaseTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 

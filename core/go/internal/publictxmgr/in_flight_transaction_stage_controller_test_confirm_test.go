@@ -163,8 +163,8 @@ func TestProduceLatestInFlightStageContextConfirmingTxFailed(t *testing.T) {
 	notifyMock := mEN.On("Notify", ctx, mock.Anything)
 
 	notifyMock.Run(func(args mock.Arguments) {
-		transactionEvent := args[1].(components.ManagedTransactionEvent)
-		assert.Equal(t, components.ManagedTXProcessFailed, transactionEvent.Type)
+		transactionEvent := args[1].(components.PublicTransactionEvent)
+		assert.Equal(t, components.PublicTXProcessFailed, transactionEvent.Type)
 		notifyMock.Return(nil)
 	}).Once()
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
@@ -217,8 +217,8 @@ func TestProduceLatestInFlightStageContextConfirmingTxSucceeded(t *testing.T) {
 	notifyMock := mEN.On("Notify", ctx, mock.Anything)
 
 	notifyMock.Run(func(args mock.Arguments) {
-		transactionEvent := args[1].(components.ManagedTransactionEvent)
-		assert.Equal(t, components.ManagedTXProcessSucceeded, transactionEvent.Type)
+		transactionEvent := args[1].(components.PublicTransactionEvent)
+		assert.Equal(t, components.PublicTXProcessSucceeded, transactionEvent.Type)
 		notifyMock.Return(nil)
 	}).Once()
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)

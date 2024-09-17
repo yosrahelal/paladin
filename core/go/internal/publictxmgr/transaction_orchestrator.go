@@ -176,7 +176,7 @@ type orchestrator struct {
 	persistenceRetryTimeout time.Duration
 	txStore                 components.TransactionStore
 	ethClient               ethclient.EthClient
-	managedTXEventNotifier  components.ManagedTxEventNotifier
+	publicTXEventNotifier   components.PublicTxEventNotifier
 	bIndexer                blockindexer.BlockIndexer
 	turnOffHistory          bool
 
@@ -251,7 +251,7 @@ func NewOrchestrator(
 		stopProcess:                     make(chan bool, 1),
 		txStore:                         ble.txStore,
 		ethClient:                       ble.ethClient,
-		managedTXEventNotifier:          ble.managedTXEventNotifier,
+		publicTXEventNotifier:           ble.publicTXEventNotifier,
 		bIndexer:                        ble.bIndexer,
 	}
 
@@ -303,7 +303,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 		stageCounts[stageName] = 0
 	}
 
-	var latestCompleted *components.ManagedTX
+	var latestCompleted *components.PublicTX
 	startFromNonce, hasCompletedNonce := oc.completedTxNoncePerAddress[oc.signingAddress]
 	// Run through copying across from the old InFlight list to the new one, those that aren't ready to be deleted
 	for _, p := range oldInFlight {
@@ -361,7 +361,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			conds = append(conds, fb.Gt("nonce", startFromNonce.String()))
 		}
 
-		var additional []*components.ManagedTX
+		var additional []*components.PublicTX
 		// We retry the get from persistence indefinitely (until the context cancels)
 		err := oc.retry.Do(ctx, "get pending transactions", func(attempt int) (retry bool, err error) {
 			filter := fb.And(conds...)
