@@ -233,6 +233,12 @@ func (bi *blockIndexer) startEventStreams() {
 	}
 }
 
+func (bi *blockIndexer) startEventStream(es *eventStream) {
+	bi.eventStreamsLock.Lock()
+	defer bi.eventStreamsLock.Unlock()
+	es.start()
+}
+
 func (es *eventStream) start() {
 	if es.handler != nil && es.detectorDone == nil && es.dispatcherDone == nil {
 		es.ctx, es.cancelCtx = context.WithCancel(log.WithLogField(es.bi.parentCtxForReset, "eventstream", es.definition.ID.String()))
