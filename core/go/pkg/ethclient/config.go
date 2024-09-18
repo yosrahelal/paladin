@@ -16,8 +16,8 @@
 package ethclient
 
 import (
-	"github.com/kaleido-io/paladin/core/internal/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 )
 
 type Config struct {

@@ -22,18 +22,18 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 )
 
-func (s *rpcServer) processRPC(ctx context.Context, rpcReq *rpcbackend.RPCRequest) (*rpcbackend.RPCResponse, bool) {
+func (s *rpcServer) processRPC(ctx context.Context, rpcReq *rpcclient.RPCRequest) (*rpcclient.RPCResponse, bool) {
 	if rpcReq.ID == nil {
 		// While the JSON/RPC standard does not strictly require an ID (it strongly discourages use of a null ID),
 		// we choose to make an ID mandatory. We do not enforce the type - it can be a number, string, or even boolean.
 		// However, it cannot be null.
 		err := i18n.NewError(ctx, msgs.MsgJSONRPCMissingRequestID)
-		return rpcbackend.RPCErrorResponse(err, rpcReq.ID, rpcbackend.RPCCodeInvalidRequest), false
+		return rpcclient.NewRPCErrorResponse(err, rpcReq.ID, rpcclient.RPCCodeInvalidRequest), false
 	}
 
 	var handler RPCHandler
@@ -44,7 +44,7 @@ func (s *rpcServer) processRPC(ctx context.Context, rpcReq *rpcbackend.RPCReques
 	}
 	if handler == nil {
 		err := i18n.NewError(ctx, msgs.MsgJSONRPCUnsupportedMethod)
-		return rpcbackend.RPCErrorResponse(err, rpcReq.ID, rpcbackend.RPCCodeInvalidRequest), false
+		return rpcclient.NewRPCErrorResponse(err, rpcReq.ID, rpcclient.RPCCodeInvalidRequest), false
 	}
 
 	startTime := time.Now()

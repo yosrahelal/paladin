@@ -20,22 +20,23 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/kaleido-io/paladin/core/internal/statestore"
+	"github.com/alecthomas/assert/v2"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/stretchr/testify/require"
 )
 
 type mockComponents struct {
 	db            sqlmock.Sqlmock
-	ethClient     *componentmocks.EthClient
 	domainManager *componentmocks.DomainManager
 	blockIndexer  *componentmocks.BlockIndexer
 }
 
 func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *Config, mc *mockComponents)) (context.Context, *txManager, func()) {
 
+	log.SetLevel("debug")
 	ctx := context.Background()
 
 	conf := &Config{}
@@ -54,8 +55,6 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *Con
 	if realDB {
 		p, pDone, err = persistence.NewUnitTestPersistence(ctx)
 		require.NoError(t, err)
-		realStateStore := statestore.NewStateStore(ctx, &statestore.Config{}, p)
-		componentMocks.On("StateStore").Return(realStateStore)
 	} else {
 		mp, err := mockpersistence.NewSQLMockProvider()
 		require.NoError(t, err)
@@ -71,8 +70,19 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *Con
 		fn(conf, mc)
 	}
 
-	txm := NewTXManager(ctx, conf)
-	return ctx, txm.(*txManager), func() {
+	txm := NewTXManager(ctx, conf).(*txManager)
+
+	ic, err := txm.PreInit(componentMocks)
+	require.NoError(t, err)
+	assert.Equal(t, txm.rpcModule, ic.RPCModules[0])
+
+	err = txm.PostInit(componentMocks)
+	require.NoError(t, err)
+
+	err = txm.Start()
+	require.NoError(t, err)
+
+	return ctx, txm, func() {
 		pDone()
 		txm.Stop()
 	}

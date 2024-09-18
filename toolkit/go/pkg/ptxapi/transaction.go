@@ -59,8 +59,8 @@ type Transaction struct {
 // Additional optional fields on input not returned on output
 type TransactionInput struct {
 	Transaction
-	ABI      abi.ABI          `json:"abi,omitempty"`  // required if abiReference not supplied
-	Bytecode tktypes.HexBytes `json:"data,omitempty"` // for deploy this is prepended to the encoded data inputs
+	ABI      abi.ABI          `json:"abi,omitempty"`      // required if abiReference not supplied
+	Bytecode tktypes.HexBytes `json:"bytecode,omitempty"` // for deploy this is prepended to the encoded data inputs
 }
 
 // Additional fields returned on output when "full" specified

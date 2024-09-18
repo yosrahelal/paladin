@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -37,8 +36,6 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
-	transactionsPB "github.com/kaleido-io/paladin/core/pkg/proto/transaction"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -53,90 +50,6 @@ import (
 
 //go:embed abis/SimpleStorage.json
 var simpleStorageBuildJSON []byte // From "gradle copyTestSolidityBuild"
-
-func TestRunTransactionSubmission(t *testing.T) {
-	ctx := context.Background()
-
-	socketAddress, done := runServiceForTesting(ctx, t)
-	defer done()
-
-	client, done := newClientForTesting(ctx, t, socketAddress)
-	defer done()
-
-	testDestination := "test-destination"
-	listenerContext, stopListener := context.WithCancel(ctx)
-	streams, err := client.Listen(listenerContext, &pb.ListenRequest{
-		Destination: testDestination,
-	})
-	require.NoError(t, err, "failed to call Listen")
-
-	// TODO: Currently the comms bus only functions correctly if you know your
-	// destination actually exists on the server side - but the `Listen()` is
-	// an async stream so you have no idea when it's been created.
-	//
-	// This workaround is the only way currently to find out your destination exists.
-	// By trying to subscribe to it, you get the same error below that the
-	// sender of your replies would, until the destination is set up:
-	// Error sending response: PD010600: Destination not found: test-destination
-	//
-	// If we continue to have a model for destinations like this in the future, we
-	// need a robust way to "create" destinations so you know they exist before you
-	// perform a request/reply exchange with them.
-	for {
-		_, err = client.SubscribeToTopic(ctx, &pb.SubscribeToTopicRequest{
-			Topic:       "anything-it-does-not-matter",
-			Destination: "test-destination",
-		})
-		if err != nil && strings.Contains(err.Error(), "PD010600") {
-			log.L(ctx).Infof("Destination still creating: %s", err)
-			time.Sleep(10 * time.Millisecond)
-			continue
-		}
-		require.NoError(t, err)
-		break
-	}
-	// We just unsubscribe straight away
-	_, err = client.UnsubscribeFromTopic(ctx, &pb.UnsubscribeFromTopicRequest{
-		Topic:       "anything-it-does-not-matter",
-		Destination: "test-destination",
-	})
-	require.NoError(t, err)
-
-	submitTransaction := transactionsPB.SubmitTransactionRequest{
-		From:            "fromID",
-		ContractAddress: "contract",
-		Payload: &transactionsPB.SubmitTransactionRequest_PayloadJSON{
-			PayloadJSON: "{\"foo\":\"bar\"}",
-		},
-	}
-
-	requestId := "requestID"
-	body, err := anypb.New(&submitTransaction)
-	require.NoError(t, err)
-	submitTransactionRequest := &pb.Message{
-		Destination: "kata-txn-engine",
-		Id:          requestId,
-		Body:        body,
-		ReplyTo:     &testDestination,
-	}
-
-	sendMessageResponse, err := client.SendMessage(ctx, submitTransactionRequest)
-	require.NoError(t, err)
-	require.NotNil(t, sendMessageResponse)
-	assert.Equal(t, pb.SEND_MESSAGE_RESULT_SEND_MESSAGE_OK, sendMessageResponse.GetResult())
-
-	// attempt to receive the response message
-	resp, err := streams.Recv()
-
-	require.NotEqual(t, err, io.EOF)
-	require.NoError(t, err)
-	assert.Equal(t, requestId, resp.GetCorrelationId())
-	assert.NotNil(t, resp.GetBody())
-
-	stopListener()
-	// Stop the server
-	bootstrap.CommsBusStop(ctx, socketAddress)
-}
 
 func TestRunSimpleStorageEthTransaction(t *testing.T) {
 	ctx := context.Background()

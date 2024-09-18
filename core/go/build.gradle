@@ -164,10 +164,10 @@ task makeMocks(type: Mockery, dependsOn: [tasks.installTools, tasks.protoc, task
     mockery 'bin/mockery'
     args '--case', 'underscore'
     mock {
-        inputDir "go list -f {{.Dir}} github.com/hyperledger/firefly-signer/pkg/rpcbackend".execute().text.trim()
+        inputDir "go list -f {{.Dir}} github.com/kaleido-io/paladin/toolkit/pkg/rpcclient".execute().text.trim()
         includeAll true
-        outputPackage 'rpcbackendmocks'
-        outputDir 'mocks/rpcbackendmocks'
+        outputPackage 'rpcclientmocks'
+        outputDir 'mocks/rpcclientmocks'
     }
     mock {
         inputDir 'internal/engine'

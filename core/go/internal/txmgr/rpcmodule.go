@@ -26,8 +26,8 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func (tm *txManager) buildRPCModule() *rpcserver.RPCModule {
-	return rpcserver.NewRPCModule("pstate").
+func (tm *txManager) buildRPCModule() {
+	tm.rpcModule = rpcserver.NewRPCModule("ptx").
 		Add("ptx_sendTransaction", tm.rpcSendTransaction()).
 		Add("ptx_queryTransactions", tm.rpcQueryTransactions()).
 		Add("ptx_storeABI", tm.rpcStoreABI()).

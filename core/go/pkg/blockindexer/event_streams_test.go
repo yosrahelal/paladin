@@ -27,10 +27,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/mocks/rpcbackendmocks"
+	"github.com/kaleido-io/paladin/core/mocks/rpcclientmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -38,7 +37,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func mockBlockListenerNil(mRPC *rpcbackendmocks.WebSocketRPCClient) {
+func mockBlockListenerNil(mRPC *rpcclientmocks.WSClient) {
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_blockNumber").Return(nil).Run(func(args mock.Arguments) {
 		hbh := args[1].(*ethtypes.HexUint64)
 		*hbh = ethtypes.HexUint64(0)
@@ -758,7 +757,7 @@ func TestProcessCatchupEventPageFailRPC(t *testing.T) {
 
 	bi.retry.UTSetMaxAttempts(2)
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", ethtypes.MustNewHexBytes0xPrefix(txHash.String())).
-		Return(rpcbackend.NewRPCError(ctx, rpcbackend.RPCCodeInternalError, msgs.MsgContextCanceled)).Once()
+		Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop"))).Once()
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", ethtypes.MustNewHexBytes0xPrefix(txHash.String())).
 		Return(nil) // but still not found
 

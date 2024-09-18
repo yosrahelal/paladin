@@ -118,7 +118,7 @@ func (tm *txManager) upsertABI(ctx context.Context, a abi.ABI) (*tktypes.Bytes32
 		}
 		if err == nil && len(errorDefs) > 0 {
 			err = tx.
-				Table("abis").
+				Table("abi_errors").
 				Clauses(clause.OnConflict{
 					Columns: []clause.Column{
 						{Name: "abi_hash"},

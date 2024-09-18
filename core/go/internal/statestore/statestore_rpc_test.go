@@ -23,16 +23,16 @@ import (
 	"testing"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/internal/httpserver"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func newTestRPCServer(t *testing.T) (context.Context, rpcbackend.Backend, func()) {
+func newTestRPCServer(t *testing.T) (context.Context, rpcclient.Client, func()) {
 	ctx, ss, ssDone := newDBTestStateStore(t)
 
 	s, err := rpcserver.NewRPCServer(ctx, &rpcserver.Config{
@@ -47,7 +47,7 @@ func newTestRPCServer(t *testing.T) (context.Context, rpcbackend.Backend, func()
 
 	s.Register(ss.RPCModule())
 
-	c := rpcbackend.NewRPCClient(resty.New().SetBaseURL(fmt.Sprintf("http://%s", s.HTTPAddr())))
+	c := rpcclient.WrapRestyClient(resty.New().SetBaseURL(fmt.Sprintf("http://%s", s.HTTPAddr())))
 
 	return ctx, c, func() { s.Stop(); ssDone() }
 

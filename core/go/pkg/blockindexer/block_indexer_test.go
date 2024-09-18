@@ -25,15 +25,13 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
-	"github.com/kaleido-io/paladin/core/internal/rpcclient"
-	"github.com/kaleido-io/paladin/core/mocks/rpcbackendmocks"
+	"github.com/kaleido-io/paladin/core/mocks/rpcclientmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tlsconf"
 	"github.com/sirupsen/logrus"
@@ -102,14 +100,14 @@ func testParseABI(abiJSON []byte) abi.ABI {
 	return a
 }
 
-func newTestBlockIndexer(t *testing.T) (context.Context, *blockIndexer, *rpcbackendmocks.WebSocketRPCClient, func()) {
+func newTestBlockIndexer(t *testing.T) (context.Context, *blockIndexer, *rpcclientmocks.WSClient, func()) {
 	return newTestBlockIndexerConf(t, &Config{
 		CommitBatchSize: confutil.P(1), // makes testing simpler
 		FromBlock:       tktypes.RawJSON(`0`),
 	})
 }
 
-func newTestBlockIndexerConf(t *testing.T, config *Config) (context.Context, *blockIndexer, *rpcbackendmocks.WebSocketRPCClient, func()) {
+func newTestBlockIndexerConf(t *testing.T, config *Config) (context.Context, *blockIndexer, *rpcclientmocks.WSClient, func()) {
 	logrus.SetLevel(logrus.DebugLevel)
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
@@ -132,7 +130,7 @@ func newTestBlockIndexerConf(t *testing.T, config *Config) (context.Context, *bl
 	}
 }
 
-func newMockBlockIndexer(t *testing.T, config *Config) (context.Context, *blockIndexer, *rpcbackendmocks.WebSocketRPCClient, *mockpersistence.SQLMockProvider, func()) {
+func newMockBlockIndexer(t *testing.T, config *Config) (context.Context, *blockIndexer, *rpcclientmocks.WSClient, *mockpersistence.SQLMockProvider, func()) {
 	ctx, bl, mRPC, done := newTestBlockListener(t)
 
 	p, err := mockpersistence.NewSQLMockProvider()
@@ -211,20 +209,20 @@ func testBlockArray(t *testing.T, l int, knownAddress ...ethtypes.Address0xHex) 
 	return blocks, receipts
 }
 
-func mockBlocksRPCCalls(mRPC *rpcbackendmocks.WebSocketRPCClient, blocks []*BlockInfoJSONRPC, receipts map[string][]*TXReceiptJSONRPC) {
+func mockBlocksRPCCalls(mRPC *rpcclientmocks.WSClient, blocks []*BlockInfoJSONRPC, receipts map[string][]*TXReceiptJSONRPC) {
 	mockBlocksRPCCallsDynamic(mRPC, func(args mock.Arguments) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC) {
 		return blocks, receipts
 	})
 }
 
-func mockBlocksRPCCallsDynamic(mRPC *rpcbackendmocks.WebSocketRPCClient, dynamic func(args mock.Arguments) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC)) {
+func mockBlocksRPCCallsDynamic(mRPC *rpcclientmocks.WSClient, dynamic func(args mock.Arguments) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC)) {
 	byBlock := mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getBlockByNumber", mock.Anything, true).Maybe()
 	byBlock.Run(func(args mock.Arguments) {
 		blocks, _ := dynamic(args)
 		blockReturn := args[1].(**BlockInfoJSONRPC)
 		blockNumber := int(args[3].(ethtypes.HexUint64))
 		if blockNumber >= len(blocks) {
-			byBlock.Return(&rpcbackend.RPCError{Message: "not found"})
+			byBlock.Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
 		} else {
 			*blockReturn = blocks[blockNumber]
 			byBlock.Return(nil)
@@ -238,7 +236,7 @@ func mockBlocksRPCCallsDynamic(mRPC *rpcbackendmocks.WebSocketRPCClient, dynamic
 		blockHash := args[3].(ethtypes.HexBytes0xPrefix)
 		*blockReturn = receipts[blockHash.String()]
 		if *blockReturn == nil {
-			blockReceipts.Return(&rpcbackend.RPCError{Message: "not found"})
+			blockReceipts.Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
 		} else {
 			blockReceipts.Return(nil)
 		}
@@ -258,7 +256,7 @@ func mockBlocksRPCCallsDynamic(mRPC *rpcbackendmocks.WebSocketRPCClient, dynamic
 			}
 		}
 		if *blockReturn == nil {
-			txReceipt.Return(&rpcbackend.RPCError{Message: "not found"})
+			txReceipt.Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
 		} else {
 			txReceipt.Return(nil)
 		}
@@ -962,11 +960,11 @@ func TestWaitForTransactionSuccessGetReceiptFail(t *testing.T) {
 	defer done()
 
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", mock.Anything).Return(
-		rpcbackend.NewRPCError(ctx, rpcbackend.RPCCodeInternalError, i18n.Msg404NotFound),
+		rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop")),
 	)
 
 	err := bi.getReceiptRevertError(ctx, tktypes.Bytes32(tktypes.RandBytes(32)), nil)
-	assert.Regexp(t, "FF00167", err)
+	assert.Regexp(t, "pop", err)
 
 }
 

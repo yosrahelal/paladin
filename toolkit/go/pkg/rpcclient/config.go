@@ -61,7 +61,7 @@ var DefaultWSConfig = &WSConfig{
 	ConnectRetry:           retry.Defaults.Config,
 }
 
-func parseWSConfig(ctx context.Context, config *WSConfig) (*wsclient.WSConfig, error) {
+func ParseWSConfig(ctx context.Context, config *WSConfig) (*wsclient.WSConfig, error) {
 	u, err := url.Parse(config.URL)
 	if err != nil || (u.Scheme != "ws" && u.Scheme != "wss") {
 		return nil, i18n.WrapError(ctx, err, tkmsgs.MsgRPCClientInvalidWebSocketURL, u)
@@ -89,7 +89,7 @@ func parseWSConfig(ctx context.Context, config *WSConfig) (*wsclient.WSConfig, e
 	}, nil
 }
 
-func parseHTTPConfig(ctx context.Context, config *HTTPConfig) (*resty.Client, error) {
+func ParseHTTPConfig(ctx context.Context, config *HTTPConfig) (*resty.Client, error) {
 	u, err := url.Parse(config.URL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 		return nil, i18n.WrapError(ctx, err, tkmsgs.MsgRPCClientInvalidHTTPURL, u)

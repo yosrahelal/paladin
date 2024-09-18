@@ -22,30 +22,30 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 )
 
 // RPCHandler should not be implemented directly - use RPCMethod0 ... RPCMethod5 to implement your function
 // These use generics to avoid you needing to do any messy type mapping in your functions.
 type RPCHandler interface {
-	Handle(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse
+	Handle(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse
 }
 
-func HandlerFunc(fn func(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse) RPCHandler {
+func HandlerFunc(fn func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse) RPCHandler {
 	return &rpcHandlerFunc{fn: fn}
 }
 
 type rpcHandlerFunc struct {
-	fn func(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse
+	fn func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse
 }
 
-func (hf *rpcHandlerFunc) Handle(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse {
+func (hf *rpcHandlerFunc) Handle(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse {
 	return hf.fn(ctx, req)
 }
 
 func RPCMethod0[R any](impl func(ctx context.Context) (R, error)) RPCHandler {
-	return HandlerFunc(func(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse {
+	return HandlerFunc(func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse {
 		var result R
 		code, err := parseParams(ctx, req)
 		if err == nil {
@@ -56,7 +56,7 @@ func RPCMethod0[R any](impl func(ctx context.Context) (R, error)) RPCHandler {
 }
 
 func RPCMethod1[R any, P0 any](impl func(ctx context.Context, param0 P0) (R, error)) RPCHandler {
-	return HandlerFunc(func(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse {
+	return HandlerFunc(func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse {
 		var result R
 		param0 := new(P0)
 		code, err := parseParams(ctx, req, param0)
@@ -68,7 +68,7 @@ func RPCMethod1[R any, P0 any](impl func(ctx context.Context, param0 P0) (R, err
 }
 
 func RPCMethod2[R any, P0 any, P1 any](impl func(ctx context.Context, param0 P0, param1 P1) (R, error)) RPCHandler {
-	return HandlerFunc(func(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse {
+	return HandlerFunc(func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse {
 		var result R
 		param0 := new(P0)
 		param1 := new(P1)
@@ -81,7 +81,7 @@ func RPCMethod2[R any, P0 any, P1 any](impl func(ctx context.Context, param0 P0,
 }
 
 func RPCMethod3[R any, P0 any, P1 any, P2 any](impl func(ctx context.Context, param0 P0, param1 P1, param2 P2) (R, error)) RPCHandler {
-	return HandlerFunc(func(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse {
+	return HandlerFunc(func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse {
 		var result R
 		param0 := new(P0)
 		param1 := new(P1)
@@ -95,7 +95,7 @@ func RPCMethod3[R any, P0 any, P1 any, P2 any](impl func(ctx context.Context, pa
 }
 
 func RPCMethod4[R any, P0 any, P1 any, P2 any, P3 any](impl func(ctx context.Context, param0 P0, param1 P1, param2 P2, param3 P3) (R, error)) RPCHandler {
-	return HandlerFunc(func(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse {
+	return HandlerFunc(func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse {
 		var result R
 		param0 := new(P0)
 		param1 := new(P1)
@@ -110,7 +110,7 @@ func RPCMethod4[R any, P0 any, P1 any, P2 any, P3 any](impl func(ctx context.Con
 }
 
 func RPCMethod5[R any, P0 any, P1 any, P2 any, P3 any, P4 any](impl func(ctx context.Context, param0 P0, param1 P1, param2 P2, param3 P3, param4 P4) (R, error)) RPCHandler {
-	return HandlerFunc(func(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse {
+	return HandlerFunc(func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse {
 		var result R
 		param0 := new(P0)
 		param1 := new(P1)
@@ -125,9 +125,9 @@ func RPCMethod5[R any, P0 any, P1 any, P2 any, P3 any, P4 any](impl func(ctx con
 	})
 }
 
-func parseParams(ctx context.Context, req *rpcbackend.RPCRequest, params ...interface{}) (rpcbackend.RPCCode, error) {
+func parseParams(ctx context.Context, req *rpcclient.RPCRequest, params ...interface{}) (rpcclient.RPCCode, error) {
 	if len(req.Params) != len(params) {
-		return rpcbackend.RPCCodeInvalidRequest, i18n.NewError(ctx, msgs.MsgJSONRPCIncorrectParamCount, req.Method, len(params), len(req.Params))
+		return rpcclient.RPCCodeInvalidRequest, i18n.NewError(ctx, msgs.MsgJSONRPCIncorrectParamCount, req.Method, len(params), len(req.Params))
 	}
 	for i := range params {
 		b := req.Params[i].Bytes()
@@ -135,19 +135,19 @@ func parseParams(ctx context.Context, req *rpcbackend.RPCRequest, params ...inte
 			b = ([]byte)(`null`)
 		}
 		if err := json.Unmarshal(b, &params[i]); err != nil {
-			return rpcbackend.RPCCodeInvalidRequest, i18n.NewError(ctx, msgs.MsgJSONRPCInvalidParam, req.Method, i, err)
+			return rpcclient.RPCCodeInvalidRequest, i18n.NewError(ctx, msgs.MsgJSONRPCInvalidParam, req.Method, i, err)
 		}
 	}
 	return 0, nil
 }
 
-func mapResponse(ctx context.Context, req *rpcbackend.RPCRequest, result interface{}, code rpcbackend.RPCCode, err error) *rpcbackend.RPCResponse {
+func mapResponse(ctx context.Context, req *rpcclient.RPCRequest, result interface{}, code rpcclient.RPCCode, err error) *rpcclient.RPCResponse {
 	if err == nil {
 		b, marshalErr := json.Marshal(result)
 		if marshalErr != nil {
 			err = i18n.NewError(ctx, msgs.MsgJSONRPCResultSerialization, req.Method, marshalErr)
 		} else {
-			return &rpcbackend.RPCResponse{
+			return &rpcclient.RPCResponse{
 				JSONRpc: "2.0",
 				ID:      req.ID,
 				Result:  fftypes.JSONAnyPtrBytes(b),
@@ -155,7 +155,7 @@ func mapResponse(ctx context.Context, req *rpcbackend.RPCRequest, result interfa
 		}
 	}
 	if code == 0 {
-		code = rpcbackend.RPCCodeInternalError
+		code = rpcclient.RPCCodeInternalError
 	}
-	return rpcbackend.RPCErrorResponse(err, req.ID, code)
+	return rpcclient.NewRPCErrorResponse(err, req.ID, code)
 }

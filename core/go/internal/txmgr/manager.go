@@ -41,6 +41,7 @@ type txManager struct {
 	txCache              cache.Cache[uuid.UUID, *txStatusRecord]
 	abiCache             cache.Cache[tktypes.Bytes32, abi.ABI]
 	activityRecordsPerTX int
+	rpcModule            *rpcserver.RPCModule
 }
 
 func (tm *txManager) PostInit(c components.AllComponents) error {
@@ -49,8 +50,9 @@ func (tm *txManager) PostInit(c components.AllComponents) error {
 }
 
 func (tm *txManager) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
+	tm.buildRPCModule()
 	return &components.ManagerInitResult{
-		RPCModules: []*rpcserver.RPCModule{tm.buildRPCModule()},
+		RPCModules: []*rpcserver.RPCModule{tm.rpcModule},
 	}, nil
 }
 

@@ -28,10 +28,9 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
-	"github.com/kaleido-io/paladin/core/internal/rpcclient"
-	"github.com/kaleido-io/paladin/core/mocks/rpcbackendmocks"
+	"github.com/kaleido-io/paladin/core/mocks/rpcclientmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +41,7 @@ import (
 const testBlockFilterID1 = "block_filter_1"
 const testBlockFilterID2 = "block_filter_2"
 
-func newTestBlockListener(t *testing.T) (context.Context, *blockListener, *rpcbackendmocks.WebSocketRPCClient, func()) {
+func newTestBlockListener(t *testing.T) (context.Context, *blockListener, *rpcclientmocks.WSClient, func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	bl, mRPC := newTestBlockListenerConf(t, ctx, &Config{})
 	return ctx, bl, mRPC, func() {
@@ -51,14 +50,14 @@ func newTestBlockListener(t *testing.T) (context.Context, *blockListener, *rpcba
 	}
 }
 
-func newTestBlockListenerConf(t *testing.T, ctx context.Context, config *Config) (*blockListener, *rpcbackendmocks.WebSocketRPCClient) {
+func newTestBlockListenerConf(t *testing.T, ctx context.Context, config *Config) (*blockListener, *rpcclientmocks.WSClient) {
 
 	logrus.SetLevel(logrus.DebugLevel)
 
-	mRPC := rpcbackendmocks.NewWebSocketRPCClient(t)
+	mRPC := rpcclientmocks.NewWSClient(t)
 
-	subsChan := make(chan *rpcbackend.RPCSubscriptionNotification)
-	mSub := rpcbackendmocks.NewSubscription(t)
+	subsChan := make(chan *rpcclient.RPCSubscriptionNotification)
+	mSub := rpcclientmocks.NewSubscription(t)
 	mSub.On("Notifications").Return(subsChan).Maybe()
 
 	mRPC.On("Connect", mock.Anything).Return(nil).Maybe()
@@ -80,7 +79,7 @@ func TestBlockListenerStartGettingHighestBlockRetry(t *testing.T) {
 	ctx, bl, mRPC, done := newTestBlockListener(t)
 
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_blockNumber").
-		Return(&rpcbackend.RPCError{Message: "pop"}).Once()
+		Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop"))).Once()
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_blockNumber").Return(nil).Run(func(args mock.Arguments) {
 		hbh := args[1].(*ethtypes.HexUint64)
 		*hbh = ethtypes.HexUint64(12345)
@@ -226,10 +225,10 @@ func TestBlockListenerWSShoulderTap(t *testing.T) {
 		for {
 			select {
 			case rpcStr := <-toServer:
-				var rpcReq rpcbackend.RPCRequest
+				var rpcReq rpcclient.RPCRequest
 				err := json.Unmarshal([]byte(rpcStr), &rpcReq)
 				require.NoError(t, err)
-				rpcRes := &rpcbackend.RPCResponse{
+				rpcRes := &rpcclient.RPCResponse{
 					JSONRpc: rpcReq.JSONRpc,
 					ID:      rpcReq.ID,
 				}
@@ -240,8 +239,8 @@ func TestBlockListenerWSShoulderTap(t *testing.T) {
 					assert.Equal(t, "newHeads", rpcReq.Params[0].AsString())
 					if !failedSubOnce {
 						failedSubOnce = true
-						rpcRes.Error = &rpcbackend.RPCError{
-							Code:    int64(rpcbackend.RPCCodeInternalError),
+						rpcRes.Error = &rpcclient.RPCError{
+							Code:    int64(rpcclient.RPCCodeInternalError),
 							Message: "pop",
 						}
 					} else {
@@ -252,9 +251,9 @@ func TestBlockListenerWSShoulderTap(t *testing.T) {
 							for !complete {
 								time.Sleep(100 * time.Microsecond)
 								if bl.newHeadsSub != nil {
-									bl.newHeadsSub.Notifications() <- &rpcbackend.RPCSubscriptionNotification{
+									bl.newHeadsSub.Notifications() <- &rpcclient.RPCSubscriptionNotification{
 										CurrentSubID: bl.newHeadsSub.LocalID().String(),
-										Result:       fftypes.JSONAnyPtr(`"anything"`),
+										Result:       tktypes.JSONString("anything"),
 									}
 								}
 							}
@@ -401,7 +400,7 @@ func TestBlockListenerBlockNotAvailableAfterNotify(t *testing.T) {
 
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getBlockByHash", mock.MatchedBy(func(bh string) bool {
 		return bh == block1000Hash.String()
-	}), true).Return(&rpcbackend.RPCError{Message: "not found"})
+	}), true).Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
 
 	bl.start()
 
@@ -1066,7 +1065,7 @@ func TestBlockListenerRebuildToHead(t *testing.T) {
 	})
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getBlockByNumber", mock.MatchedBy(func(bn ethtypes.HexUint64) bool {
 		return bn == 1003
-	}), true).Return(&rpcbackend.RPCError{Message: "not found"})
+	}), true).Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
 
 	bl.start()
 
@@ -1329,7 +1328,7 @@ func TestBlockListenerBlockHashFailed(t *testing.T) {
 
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getBlockByHash", mock.MatchedBy(func(bh string) bool {
 		return bh == block1003Hash.String()
-	}), true).Return(&rpcbackend.RPCError{Message: "pop"})
+	}), true).Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop")))
 
 	bl.start()
 
@@ -1354,7 +1353,7 @@ func TestBlockListenerReestablishBlockFilter(t *testing.T) {
 		hbh := args[1].(*string)
 		*hbh = testBlockFilterID2
 	}).Once()
-	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getFilterChanges", testBlockFilterID1).Return(&rpcbackend.RPCError{Message: "filter not found"}).Once()
+	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getFilterChanges", testBlockFilterID1).Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("filter not found"))).Once()
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 		go done() // Close after we've processed the log
 	})
@@ -1373,7 +1372,7 @@ func TestBlockListenerReestablishBlockFilterFail(t *testing.T) {
 		hbh := args[1].(*ethtypes.HexUint64)
 		*hbh = ethtypes.HexUint64(1000)
 	}).Once()
-	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_newBlockFilter").Return(&rpcbackend.RPCError{Message: "pop"}).Run(func(args mock.Arguments) {
+	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_newBlockFilter").Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop"))).Run(func(args mock.Arguments) {
 		go done()
 	})
 
@@ -1411,7 +1410,7 @@ func TestBlockListenerRebuildCanonicalFailTerminate(t *testing.T) {
 	})
 
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getBlockByNumber", mock.Anything, true).
-		Return(&rpcbackend.RPCError{Message: "pop"}).
+		Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop"))).
 		Run(func(args mock.Arguments) {
 			done()
 		})
@@ -1427,7 +1426,7 @@ func TestBlockListenerClosedBeforeEstablishingBlockHeight(t *testing.T) {
 	done()
 
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_blockNumber").
-		Return(&rpcbackend.RPCError{Message: "pop"}).Once()
+		Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop"))).Once()
 
 	bl.listenLoopDone = make(chan struct{})
 	bl.listenLoop()

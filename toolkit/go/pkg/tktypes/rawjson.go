@@ -46,6 +46,10 @@ func (m RawJSON) String() string {
 	return (string)(b)
 }
 
+func (m RawJSON) Bytes() []byte {
+	return m
+}
+
 func (m RawJSON) StringValue() string {
 	if m == nil {
 		return ""

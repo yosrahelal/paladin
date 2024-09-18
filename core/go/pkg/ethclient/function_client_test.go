@@ -25,8 +25,8 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -594,12 +594,12 @@ func TestInvokeNewWidgetCustomError(t *testing.T) {
 		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (ethtypes.HexInteger, error) {
 			return *ethtypes.NewHexInteger64(0), fmt.Errorf("pop")
 		},
-		eth_callErr: func(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse {
-			return &rpcbackend.RPCResponse{
+		eth_callErr: func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse {
+			return &rpcclient.RPCResponse{
 				JSONRpc: "2.0",
 				ID:      req.ID,
-				Error: &rpcbackend.RPCError{
-					Code:    int64(rpcbackend.RPCCodeInternalError),
+				Error: &rpcclient.RPCError{
+					Code:    int64(rpcclient.RPCCodeInternalError),
 					Message: "reverted",
 					Data:    *fftypes.JSONAnyPtr(fmt.Sprintf(`"%s"`, tktypes.HexBytes(errData))),
 				},

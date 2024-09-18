@@ -18,12 +18,13 @@ package rpcclient
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
-	"github.com/kaleido-io/paladin/core/mocks/rpcbackendmocks"
+	"github.com/kaleido-io/paladin/toolkit/mocks/rpcbackendmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -80,14 +81,14 @@ func TestHTTPClientWrappingErr(t *testing.T) {
 	ctx, c, mc := newWrappedHTTP(t)
 
 	mc.On("CallRPC", ctx, mock.Anything, "any_method", "param1").Return(
-		rpcbackend.NewRPCError(ctx, rpcbackend.RPCCodeInternalError, i18n.Msg404NoResult),
+		NewRPCError(ctx, RPCCodeInternalError, i18n.Msg404NoResult),
 	)
 
 	var s string
 	err := c.CallRPC(ctx, &s, "any_method", "param1")
 	assert.Regexp(t, "FF00164.*", err)
 	assert.NotNil(t, err.RPCError())
-	assert.Equal(t, RPCCodeInternalError, err.RPCError().Code)
+	assert.Equal(t, int64(RPCCodeInternalError), err.RPCError().Code)
 }
 
 func TestWSClientWrappingOK(t *testing.T) {
@@ -110,14 +111,14 @@ func TestWSClientWrappingErr(t *testing.T) {
 	ctx, c, mc := newWrappedWS(t)
 
 	mc.On("CallRPC", ctx, mock.Anything, "any_method", "param1").Return(
-		rpcbackend.NewRPCError(ctx, rpcbackend.RPCCodeInternalError, i18n.Msg404NoResult),
+		NewRPCError(ctx, RPCCodeInternalError, i18n.Msg404NoResult),
 	)
 
 	var s string
 	err := c.CallRPC(ctx, &s, "any_method", "param1")
 	assert.Regexp(t, "FF00164.*", err)
 	assert.NotNil(t, err.RPCError())
-	assert.Equal(t, RPCCodeInternalError, err.RPCError().Code)
+	assert.Equal(t, int64(RPCCodeInternalError), err.RPCError().Code)
 }
 
 func TestWSClientSubscribeWrappingOK(t *testing.T) {
@@ -128,7 +129,7 @@ func TestWSClientSubscribeWrappingOK(t *testing.T) {
 	mc.On("Connect", ctx).Return(nil)
 	mc.On("Subscriptions").Return([]rpcbackend.Subscription{ms})
 	mc.On("Subscribe", ctx, "param1").Return(nil,
-		rpcbackend.NewRPCError(ctx, rpcbackend.RPCCodeInternalError, i18n.Msg404NoResult),
+		NewRPCError(ctx, RPCCodeInternalError, i18n.Msg404NoResult),
 	).Once()
 	mc.On("Subscribe", ctx, "param1").Return(ms, nil)
 	mc.On("UnsubscribeAll", ctx).Return(nil)
@@ -169,4 +170,24 @@ func TestWSClientSubscribeWrappingOK(t *testing.T) {
 	assert.NoError(t, err)
 
 	c.Close()
+}
+
+func TestRPCErrorResponse(t *testing.T) {
+	rpcRes := NewRPCErrorResponse(fmt.Errorf("pop"), tktypes.RawJSON(`"1"`), RPCCodeInternalError)
+	assert.Equal(t, &RPCResponse{
+		JSONRpc: "2.0",
+		ID:      fftypes.JSONAnyPtr(`"1"`),
+		Error: &RPCError{
+			Code:    -32603,
+			Message: "pop",
+		},
+	}, rpcRes)
+}
+
+func TestWrapErrorRPC(t *testing.T) {
+	err := WrapErrorRPC(RPCCodeInternalError, fmt.Errorf("pop"))
+	assert.Equal(t, &RPCError{
+		Code:    -32603,
+		Message: "pop",
+	}, err.RPCError())
 }

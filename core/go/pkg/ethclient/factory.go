@@ -21,9 +21,8 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/rpcclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 )
 
 // Allows separate components to maintain separate connections/connection-pools to the
@@ -43,7 +42,7 @@ type ethClientFactory struct {
 	conf   *Config
 	keymgr KeyManager
 
-	httpRPC    rpcbackend.RPC
+	httpRPC    rpcclient.Client
 	httpClient EthClient
 
 	sharedWSClient EthClient
@@ -69,11 +68,7 @@ func NewEthClientFactory(bgCtx context.Context, keymgr KeyManager, conf *Config)
 	if conf.HTTP.URL == "" {
 		return nil, i18n.NewError(bgCtx, msgs.MsgEthClientHTTPURLMissing)
 	}
-	httpConf, err := rpcclient.ParseHTTPConfig(bgCtx, &conf.HTTP)
-	if err == nil {
-		ecf.httpRPC = rpcbackend.NewRPCClient(httpConf)
-	}
-	if err != nil {
+	if ecf.httpRPC, err = rpcclient.NewHTTPClient(bgCtx, &conf.HTTP); err != nil {
 		return nil, err
 	}
 
@@ -110,7 +105,7 @@ func (ecf *ethClientFactory) Start() (err error) {
 }
 
 func (ecf *ethClientFactory) NewWS() (ec EthClient, err error) {
-	wsRPC := rpcbackend.NewWSRPCClient(ecf.wsConf)
+	wsRPC := rpcclient.WrapWSConfig(ecf.wsConf)
 	err = wsRPC.Connect(ecf.bgCtx)
 	if err == nil {
 		ec, err = WrapRPCClient(ecf.bgCtx, ecf.keymgr, wsRPC, ecf.conf)

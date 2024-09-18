@@ -29,13 +29,13 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"golang.org/x/crypto/sha3"
 )
@@ -71,13 +71,13 @@ type KeyManager interface {
 type ethClient struct {
 	chainID           int64
 	gasEstimateFactor float64
-	rpc               rpcbackend.RPC
+	rpc               rpcclient.Client
 	keymgr            KeyManager
 }
 
 // A direct creation of a dedicated RPC client for things like unit tests outside of Paladin.
 // Within Paladin, use the EthClientFactory instead as passed to your component/manager/engine via the initialization
-func WrapRPCClient(ctx context.Context, keymgr KeyManager, rpc rpcbackend.RPC, conf *Config) (EthClient, error) {
+func WrapRPCClient(ctx context.Context, keymgr KeyManager, rpc rpcclient.Client, conf *Config) (EthClient, error) {
 	ec := &ethClient{
 		keymgr:            keymgr,
 		rpc:               rpc,
@@ -90,7 +90,7 @@ func WrapRPCClient(ctx context.Context, keymgr KeyManager, rpc rpcbackend.RPC, c
 }
 
 func (ec *ethClient) Close() {
-	wsRPC, isWS := ec.rpc.(rpcbackend.WebSocketRPCClient)
+	wsRPC, isWS := ec.rpc.(rpcclient.WSClient)
 	if isWS {
 		wsRPC.Close()
 	}
@@ -104,7 +104,7 @@ func (ec *ethClient) setupChainID(ctx context.Context) error {
 	var chainID ethtypes.HexUint64
 	if rpcErr := ec.rpc.CallRPC(ctx, &chainID, "eth_chainId"); rpcErr != nil {
 		log.L(ctx).Errorf("eth_chainId failed: %+v", rpcErr)
-		return i18n.WrapError(ctx, rpcErr.Error(), msgs.MsgEthClientChainIDFailed)
+		return i18n.WrapError(ctx, rpcErr, msgs.MsgEthClientChainIDFailed)
 	}
 	ec.chainID = int64(chainID.Uint64())
 	return nil
@@ -125,7 +125,8 @@ func (ec *ethClient) CallContract(ctx context.Context, from *string, tx *ethsign
 
 func (ec *ethClient) callContract(ctx context.Context, tx *ethsigner.Transaction, block string, a abi.ABI) (data tktypes.HexBytes, err error) {
 
-	if rpcErr := ec.rpc.CallRPC(ctx, &data, "eth_call", tx, block); rpcErr != nil {
+	if err := ec.rpc.CallRPC(ctx, &data, "eth_call", tx, block); err != nil {
+		rpcErr := err.RPCError()
 		log.L(ctx).Errorf("eth_call failed: %+v", rpcErr)
 		if rpcErr.Data != "" {
 			log.L(ctx).Debugf("Received error data in revert: %s", rpcErr.Data)
@@ -155,7 +156,7 @@ func (ec *ethClient) GetBalance(ctx context.Context, address string, block strin
 
 	if rpcErr := ec.rpc.CallRPC(ctx, &addressBalance, "eth_getBalance", address, block); rpcErr != nil {
 		log.L(ctx).Errorf("eth_getBalance failed: %+v", rpcErr)
-		return nil, rpcErr.Error()
+		return nil, rpcErr
 	}
 	return &addressBalance, nil
 }
@@ -167,7 +168,7 @@ func (ec *ethClient) GasPrice(ctx context.Context) (*ethtypes.HexInteger, error)
 
 	if rpcErr := ec.rpc.CallRPC(ctx, &gasPrice, "eth_gasPrice"); rpcErr != nil {
 		log.L(ctx).Errorf("eth_gasPrice failed: %+v", rpcErr)
-		return nil, rpcErr.Error()
+		return nil, rpcErr
 	}
 	return &gasPrice, nil
 }
@@ -178,7 +179,7 @@ func (ec *ethClient) GetTransactionReceipt(ctx context.Context, txHash string) (
 	var ethReceipt *txReceiptJSONRPC
 	rpcErr := ec.rpc.CallRPC(ctx, &ethReceipt, "eth_getTransactionReceipt", txHash)
 	if rpcErr != nil {
-		return nil, rpcErr.Error()
+		return nil, rpcErr
 	}
 	if ethReceipt == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgReceiptNotAvailable, txHash)
@@ -225,12 +226,11 @@ func (ec *ethClient) GetTransactionReceipt(ctx context.Context, txHash string) (
 	return receiptResponse, nil
 }
 
-func (ec *ethClient) GasEstimate(ctx context.Context, tx *ethsigner.Transaction, a abi.ABI) (*ethtypes.HexInteger, error) {
+func (ec *ethClient) GasEstimate(ctx context.Context, tx *ethsigner.Transaction, a abi.ABI) (_ *ethtypes.HexInteger, err error) {
 	var gasEstimate ethtypes.HexInteger
-	if rpcErr := ec.rpc.CallRPC(ctx, &gasEstimate, "eth_estimateGas", tx); rpcErr != nil {
-		log.L(ctx).Errorf("eth_estimateGas failed: %+v", rpcErr)
+	if err = ec.rpc.CallRPC(ctx, &gasEstimate, "eth_estimateGas", tx); err != nil {
+		log.L(ctx).Errorf("eth_estimateGas failed: %+v", err)
 		// Fall back to a call, to see if we can get an error
-		err := rpcErr.Error()
 		if _, callErr := ec.callContract(ctx, tx, "latest", a); callErr != nil {
 			err = callErr
 		}
@@ -243,7 +243,7 @@ func (ec *ethClient) GetTransactionCount(ctx context.Context, fromAddr string) (
 	var transactionCount ethtypes.HexUint64
 	if rpcErr := ec.rpc.CallRPC(ctx, &transactionCount, "eth_getTransactionCount", fromAddr, "latest"); rpcErr != nil {
 		log.L(ctx).Errorf("eth_getTransactionCount(%s) failed: %+v", fromAddr, rpcErr)
-		return nil, rpcErr.Error()
+		return nil, rpcErr
 	}
 	return &transactionCount, nil
 }

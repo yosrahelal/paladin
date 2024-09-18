@@ -20,6 +20,7 @@ CREATE TABLE transactions (
   "id"                        UUID            NOT NULL,
   "idempotency_key"           TEXT,   
   "created"                   BIGINT          NOT NULL,
+  "type"                      TEXT            NOT NULL,
   "abi_ref"                   TEXT            NOT NULL,
   "function"                  TEXT,   
   "domain"                    TEXT,   
@@ -39,13 +40,13 @@ CREATE TABLE transaction_deps (
   PRIMARY KEY ("transaction","depends_on"),
   FOREIGN KEY ("transaction") REFERENCES transactions ("id") ON DELETE CASCADE
 );
-CREATE INDEX transaction_deps_depends_on ON transactions("depends_on");
+CREATE INDEX transaction_deps_depends_on ON transaction_deps("depends_on");
 
 CREATE TABLE transaction_receipts (
   "transaction"               UUID            NOT NULL,
   "status"                    TEXT            NOT NULL,
   "tx_hash"                   TEXT,
   PRIMARY KEY ("transaction"),
-  FOREIGN KEY ("transaction") REFERENCES transactions ("id") ON DELETE CASCADE
+  FOREIGN KEY ("transaction") REFERENCES transaction_receipts ("id") ON DELETE CASCADE
 );
 CREATE INDEX transaction_receipts_tx_hash ON transactions("tx_hash");

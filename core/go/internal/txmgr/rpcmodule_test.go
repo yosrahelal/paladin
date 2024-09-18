@@ -20,10 +20,15 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
+	"github.com/alecthomas/assert/v2"
+	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/httpserver"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,6 +46,11 @@ func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*Config, *mockC
 	})
 	require.NoError(t, err)
 
+	rpcServer.Register(txm.rpcModule)
+
+	err = rpcServer.Start()
+	require.NoError(t, err)
+
 	return ctx, fmt.Sprintf("http://%s", rpcServer.HTTPAddr()), txm, func() {
 		txmDone()
 		rpcServer.Stop()
@@ -50,9 +60,26 @@ func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*Config, *mockC
 
 func TestTransactionLifecycle(t *testing.T) {
 
-	ctx, url, txm, done := newTestTransactionManagerWithRPC(t)
+	ctx, url, _, done := newTestTransactionManagerWithRPC(t)
 	defer done()
 
-	rpcClient := rpcbackend.NewRPCClient()
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{URL: url})
+	assert.NoError(t, err)
+
+	var txID uuid.UUID
+	err = rpcClient.CallRPC(ctx, &txID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+		ABI: abi.ABI{
+			{Type: abi.Constructor, Inputs: abi.ParameterArray{
+				{Type: "uint256"},
+			}},
+		},
+		Bytecode: tktypes.MustParseHexBytes("0x11223344"),
+		Transaction: ptxapi.Transaction{
+			IdempotencyKey: "tx1",
+			Type:           ptxapi.TransactionTypePublic.Enum(),
+			Data:           tktypes.RawJSON(`[12345]`),
+		},
+	})
+	assert.NoError(t, err)
 
 }

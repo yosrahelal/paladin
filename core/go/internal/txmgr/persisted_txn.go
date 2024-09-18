@@ -107,9 +107,12 @@ func (tm *txManager) resolveFunction(ctx context.Context, a abi.ABI, abiReferenc
 		if a != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgTxMgrABIAndDefinition)
 		}
-		if abiReference, a, err = tm.getABIByHash(ctx, *abiReference); a == nil || err != nil {
-			return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrABIReferenceLookupFailed, abiReference)
-		}
+		_, a, err = tm.getABIByHash(ctx, *abiReference)
+	} else {
+		abiReference, err = tm.upsertABI(ctx, a)
+	}
+	if err != nil || a == nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrABIReferenceLookupFailed, abiReference)
 	}
 
 	// If a function is specified, we cannot be invoking the constructor

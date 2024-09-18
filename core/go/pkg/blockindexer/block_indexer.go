@@ -30,10 +30,9 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/rpcclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/inflight"
@@ -72,7 +71,7 @@ type blockIndexer struct {
 	cancelFunc                 func()
 	persistence                persistence.Persistence
 	blockListener              *blockListener
-	wsConn                     rpcbackend.WebSocketRPCClient
+	wsConn                     rpcclient.WSClient
 	stateLock                  sync.Mutex
 	fromBlock                  *ethtypes.HexUint64
 	nextBlock                  *ethtypes.HexUint64 // nil in the special case of "latest" and no block received yet
@@ -471,7 +470,7 @@ func (bi *blockIndexer) hydrateBlock(ctx context.Context, batch *blockWriterBatc
 			// but there's no point in continuing to retry as a confirmed block should be available
 			// on our connection.
 			// This nil entry in batch.receipts[blockIndex] triggers a reset.
-			return !isNotFound(rpcErr), rpcErr.Error()
+			return !isNotFound(rpcErr), rpcErr
 		}
 		return false, nil
 	})
@@ -833,7 +832,7 @@ func (bi *blockIndexer) getConfirmedTransactionReceipt(ctx context.Context, tx e
 	var receipt *TXReceiptJSONRPC
 	rpcErr := bi.wsConn.CallRPC(ctx, &receipt, "eth_getTransactionReceipt", tx)
 	if rpcErr != nil {
-		return nil, rpcErr.Error()
+		return nil, rpcErr
 	}
 	if receipt == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgBlockIndexerConfirmedReceiptNotFound, tx)

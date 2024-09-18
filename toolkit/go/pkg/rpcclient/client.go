@@ -22,14 +22,19 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-common/pkg/wsclient"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
+type RPCCode int64
+
 const (
-	RPCCodeParseError     int64 = int64(rpcbackend.RPCCodeParseError)
-	RPCCodeInvalidRequest int64 = int64(rpcbackend.RPCCodeInvalidRequest)
-	RPCCodeInternalError  int64 = int64(rpcbackend.RPCCodeInternalError)
+	RPCCodeParseError     RPCCode = -32700
+	RPCCodeInvalidRequest RPCCode = -32600
+	RPCCodeInternalError  RPCCode = -32603
 )
 
 type RPCRequest = rpcbackend.RPCRequest
@@ -49,7 +54,7 @@ type Client interface {
 
 type WSClient interface {
 	Client
-	Subscribe(ctx context.Context, params ...interface{}) (Subscription, error)
+	Subscribe(ctx context.Context, params ...interface{}) (Subscription, ErrorRPC)
 	Subscriptions() []Subscription
 	UnsubscribeAll(ctx context.Context) ErrorRPC
 	Connect(ctx context.Context) error
@@ -62,6 +67,10 @@ type Subscription interface {
 	Unsubscribe(ctx context.Context) ErrorRPC
 }
 
+type Byteable interface {
+	Bytes() []byte
+}
+
 type RPCSubscriptionNotification struct {
 	CurrentSubID string // will change on each reconnect
 	Result       tktypes.RawJSON
@@ -71,7 +80,7 @@ type RPCSubscriptionNotification struct {
 // helpful code/utility, but a couple of weirdnesses in the interface that this package addresses.
 // The biggest being the fact that the errors, are not errors (the Error() function returns the error, not a string).
 func NewHTTPClient(ctx context.Context, conf *HTTPConfig) (Client, error) {
-	rc, err := parseHTTPConfig(ctx, conf)
+	rc, err := ParseHTTPConfig(ctx, conf)
 	if err != nil {
 		return nil, err
 	}
@@ -83,11 +92,38 @@ func WrapRestyClient(rc *resty.Client) Client {
 }
 
 func NewWSClient(ctx context.Context, conf *WSConfig) (WSClient, error) {
-	wsc, err := parseWSConfig(ctx, conf)
+	wsc, err := ParseWSConfig(ctx, conf)
 	if err != nil {
 		return nil, err
 	}
-	return &wsWrap{c: rpcbackend.NewWSRPCClient(wsc)}, nil
+	return WrapWSConfig(wsc), nil
+}
+
+func WrapWSConfig(wsc *wsclient.WSConfig) WSClient {
+	return &wsWrap{c: rpcbackend.NewWSRPCClient(wsc)}
+}
+
+func NewRPCErrorResponse(err error, id Byteable, code RPCCode) *RPCResponse {
+	var byteID []byte
+	if id != nil {
+		byteID = id.Bytes()
+	}
+	return &rpcbackend.RPCResponse{
+		JSONRpc: "2.0",
+		ID:      fftypes.JSONAnyPtrBytes(byteID),
+		Error: &rpcbackend.RPCError{
+			Code:    int64(code),
+			Message: err.Error(),
+		},
+	}
+}
+
+func NewRPCError(ctx context.Context, code RPCCode, msg i18n.ErrorMessageKey, inserts ...interface{}) *RPCError {
+	return &RPCError{Code: int64(code), Message: i18n.NewError(ctx, msg, inserts...).Error()}
+}
+
+func WrapErrorRPC(code RPCCode, err error) ErrorRPC {
+	return &errWrap{&RPCError{Code: int64(code), Message: err.Error()}}
 }
 
 type httpWrap struct {
@@ -127,7 +163,7 @@ func (w *wsWrap) CallRPC(ctx context.Context, result interface{}, method string,
 	return wrapIfErr(rpcErr)
 }
 
-func (w *wsWrap) Subscribe(ctx context.Context, params ...interface{}) (Subscription, error) {
+func (w *wsWrap) Subscribe(ctx context.Context, params ...interface{}) (Subscription, ErrorRPC) {
 	s, rpcErr := w.c.Subscribe(ctx, params...)
 	if rpcErr != nil {
 		return nil, &errWrap{rpcErr}
