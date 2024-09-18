@@ -41,39 +41,34 @@ func NewPublicTransactionMgr(ctx context.Context) components.PublicTxManager {
 }
 
 // Init only depends on the configuration and components - no other managers
-func (ptm publicTxMgr) PreInit(pic components.PreInitComponents) (*components.ManagerInitResult, error) {
+func (ptm *publicTxMgr) PreInit(pic components.PreInitComponents) (result *components.ManagerInitResult, err error) {
 	if ptm.publicTxEngine == nil {
-
-		te, err := NewTransactionEngine(ptm.rootCtx, config.RootSection("empty"))
+		tmpConfigSection := config.RootSection("tmp")
+		ptm.publicTxEngine, err = NewTransactionEngine(ptm.rootCtx, tmpConfigSection)
 		if err != nil {
-			ptm.publicTxEngine = te
+			return nil, err
 		}
-		te.Init(ptm.rootCtx, pic.EthClientFactory().HTTPClient(), pic.KeyManager(), nil /*TODO: transaction storage**/, nil, pic.BlockIndexer())
-		return nil, err
+		ptm.publicTxEngine.Init(ptm.rootCtx, pic.EthClientFactory().HTTPClient(), pic.KeyManager(), nil /*TODO: transaction storage**/, nil, pic.BlockIndexer())
+		return nil, nil
 	} else {
 		return nil, i18n.NewError(ptm.rootCtx, msgs.MsgPublicTxMgrAlreadyInit)
 	}
 }
 
 // Post-init allows the manager to cross-bind to other components, or the Engine
-func (ptm publicTxMgr) PostInit(components.AllComponents) error {
+func (ptm *publicTxMgr) PostInit(components.AllComponents) error {
 	return nil
 }
 
-func (ptm publicTxMgr) Start() error {
-	stopChan, err := ptm.publicTxEngine.Start(ptm.rootCtx)
-	if err != nil {
-		return err
-	}
-	ptm.stopChan = stopChan
-	return nil
+func (ptm *publicTxMgr) Start() (err error) {
+	ptm.stopChan, err = ptm.publicTxEngine.Start(ptm.rootCtx)
+	return
 }
-
-func (ptm publicTxMgr) Stop() {
+func (ptm *publicTxMgr) Stop() {
 	ptm.rootCtxCancel()
 	<-ptm.stopChan
 }
 
-func (ptm publicTxMgr) GetEngine() components.PublicTxEngine {
+func (ptm *publicTxMgr) GetEngine() components.PublicTxEngine {
 	return ptm.publicTxEngine
 }

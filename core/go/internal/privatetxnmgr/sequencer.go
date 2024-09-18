@@ -97,7 +97,6 @@ type sequencer struct {
 
 func (s *sequencer) SetDispatcher(dispatcher ptmgrtypes.Dispatcher) {
 	s.dispatcher = dispatcher
-	return
 }
 
 func (s *sequencer) evaluateGraph(ctx context.Context) error {

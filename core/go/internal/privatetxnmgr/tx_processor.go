@@ -18,12 +18,10 @@ package privatetxnmgr
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
-	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 	coreProto "github.com/kaleido-io/paladin/core/pkg/proto"
 	engineProto "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 
@@ -35,13 +33,13 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-type stageContextAction int
+// type stageContextAction int
 
-const (
-	resumeStage = iota
-	initStage
-	switchStage
-)
+// const (
+// 	resumeStage = iota
+// 	initStage
+// 	switchStage
+// )
 
 func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer) ptmgrtypes.TxProcessor {
 	return &PaladinTxProcessor{
@@ -58,15 +56,15 @@ func NewPaladinTransactionProcessor(ctx context.Context, transaction *components
 }
 
 type PaladinTxProcessor struct {
-	stageContextMutex sync.Mutex
-	stageContext      *ptmgrtypes.StageContext
-	stageTriggerError error
-	stageErrorRetry   time.Duration
-	tsm               transactionstore.TxStateManager
+	// stageContextMutex sync.Mutex
+	// stageContext      *ptmgrtypes.StageContext
+	// stageTriggerError error
+	stageErrorRetry time.Duration
+	// tsm               transactionstore.TxStateManager
 
-	bufferedStageEventsMapMutex sync.Mutex
-	bufferedStageEvents         []*ptmgrtypes.StageEvent
-	contractAddress             string // the contract address managed by the current orchestrator
+	// bufferedStageEventsMapMutex sync.Mutex
+	// bufferedStageEvents         []*ptmgrtypes.StageEvent
+	// contractAddress             string // the contract address managed by the current orchestrator
 
 	components components.PreInitComponentsAndManagers
 
@@ -83,26 +81,26 @@ type PaladinTxProcessor struct {
 func (ts *PaladinTxProcessor) Init(ctx context.Context) {
 }
 
-func (ts *PaladinTxProcessor) addPanicOutput(ctx context.Context) {
-	//TODO
-	start := time.Now()
-	// unexpected error, set an empty input for the stage
-	// so that the stage handler will handle this as unexpected error
-	log.L(ctx).Debugf("%s addPanicOutput took %s to write the result", ts.tsm.GetTxID(ctx), time.Since(start))
-}
+// func (ts *PaladinTxProcessor) addPanicOutput(ctx context.Context) {
+// 	//TODO
+// 	start := time.Now()
+// 	// unexpected error, set an empty input for the stage
+// 	// so that the stage handler will handle this as unexpected error
+// 	log.L(ctx).Debugf("%s addPanicOutput took %s to write the result", ts.tsm.GetTxID(ctx), time.Since(start))
+// }
 
-func (ts *PaladinTxProcessor) executeAsync(funcToExecute func(), ctx context.Context) {
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				// if the function panicked, catch it and write a panic error to the output queue
-				log.L(ctx).Errorf("Panic error detected for transaction %s, when executing: %s, error: %+v", ts.tsm.GetTxID(ctx), ts.latestEvent, err)
-				ts.addPanicOutput(ctx)
-			}
-		}()
-		funcToExecute() // in non-panic scenarios, this function will add output to the output queue
-	}()
-}
+// func (ts *PaladinTxProcessor) executeAsync(funcToExecute func(), ctx context.Context) {
+// 	go func() {
+// 		defer func() {
+// 			if err := recover(); err != nil {
+// 				// if the function panicked, catch it and write a panic error to the output queue
+// 				log.L(ctx).Errorf("Panic error detected for transaction %s, when executing: %s, error: %+v", ts.tsm.GetTxID(ctx), ts.latestEvent, err)
+// 				ts.addPanicOutput(ctx)
+// 			}
+// 		}()
+// 		funcToExecute() // in non-panic scenarios, this function will add output to the output queue
+// 	}()
+// }
 
 func (ts *PaladinTxProcessor) GetStatus(ctx context.Context) ptmgrtypes.TxProcessorStatus {
 	return ptmgrtypes.TxProcessorActive
@@ -282,7 +280,7 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 		//TODO return nil, err
 	}
 
-	ts.publisher.PublishTransactionSignedEvent(ctx,
+	if err = ts.publisher.PublishTransactionSignedEvent(ctx,
 		ts.transaction.ID.String(),
 		&prototk.AttestationResult{
 			Name:            attRequest.Name,
@@ -294,7 +292,10 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 			},
 			Payload: signaturePayload.Payload,
 		},
-	)
+	); err != nil {
+		log.L(ctx).Errorf("failed to public event for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, attRequest.Algorithm, err)
+		//TODO return error
+	}
 }
 
 func (ts *PaladinTxProcessor) requestSignatures(ctx context.Context) {
@@ -360,11 +361,15 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 			//TODO specific error message
 			//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
 		}
-		ts.publisher.PublishTransactionEndorsedEvent(ctx,
+		if err = ts.publisher.PublishTransactionEndorsedEvent(ctx,
 			ts.transaction.ID.String(),
 			endorsement,
 			revertReason,
-		)
+		); err != nil {
+			log.L(ctx).Errorf("Failed to publish endorsement event for party %s: %s", party, err)
+			return
+			//TODO specific error message
+		}
 
 	} else {
 		// This is a remote party, so we need to send an endorsement request to the remote node

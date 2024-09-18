@@ -48,9 +48,11 @@ func (tw *transportWriter) SendDelegateTransactionMessage(ctx context.Context, t
 		return err
 	}
 
-	tw.transportManager.Send(ctx, &components.TransportMessage{
+	if err = tw.transportManager.Send(ctx, &components.TransportMessage{
 		MessageType: "DelegateTransaction",
 		Payload:     delegationMessageBytes,
-	})
+	}); err != nil {
+		return err
+	}
 	return nil
 }

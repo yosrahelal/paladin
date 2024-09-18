@@ -565,6 +565,6 @@ func newNonceCacheForTesting(t *testing.T) *nonceCacheStruct {
 	return nonceCache.(*nonceCacheStruct)
 }
 
-func assertCacheCanBeReaped(t *testing.T, ctx context.Context, nonceCache *nonceCacheStruct) {
+// func assertCacheCanBeReaped(t *testing.T, ctx context.Context, nonceCache *nonceCacheStruct) {
 
-}
+// }

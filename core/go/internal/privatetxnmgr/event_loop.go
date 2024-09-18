@@ -480,8 +480,11 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		dispatchBatch.DispatchSequences = append(dispatchBatch.DispatchSequences, sequence)
 	}
 
-	oc.store.PersistDispatchBatch(ctx, dispatchBatch)
-
+	err := oc.store.PersistDispatchBatch(ctx, dispatchBatch)
+	if err != nil {
+		log.L(ctx).Errorf("Error persisting batch: %s", err)
+		return err
+	}
 	for signingAddress, sequence := range dispatchableTransactions {
 		for _, privateTransactionID := range sequence {
 			err := oc.publisher.PublishTransactionDispatchedEvent(ctx, privateTransactionID, uint64(0) /*TODO*/, signingAddress)
