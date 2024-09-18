@@ -72,7 +72,6 @@ func TestEngineInvalidTransaction(t *testing.T) {
 }
 
 func TestEngineSimpleTransaction(t *testing.T) {
-	//t.Skip("skipping TestEngineSimpleTransaction")
 	//Submit a transaction that gets assembled with an attestation plan for a local endorser to sign the transaction
 	ctx := context.Background()
 
@@ -156,8 +155,6 @@ func TestEngineSimpleTransaction(t *testing.T) {
 	}, nil)
 
 	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
-	err := engine.Start()
-	require.NoError(t, err)
 
 	mockPreparedSubmission := componentmocks.NewPreparedSubmission(t)
 	mockPreparedSubmissions := []components.PreparedSubmission{mockPreparedSubmission}
@@ -170,6 +167,9 @@ func TestEngineSimpleTransaction(t *testing.T) {
 		},
 	}
 	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
+
+	err := engine.Start()
+	require.NoError(t, err)
 	txID, err := engine.HandleNewTx(ctx, &components.PrivateTransaction{
 		ID: uuid.New(),
 		Inputs: &components.TransactionInputs{
@@ -191,7 +191,6 @@ func TestEngineRevertFromLocalEndorsement(t *testing.T) {
 }
 
 func TestEngineRemoteEndorser(t *testing.T) {
-	t.Skip("skipping TestEngineRemoteEndorser")
 	ctx := context.Background()
 
 	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
@@ -262,6 +261,13 @@ func TestEngineRemoteEndorser(t *testing.T) {
 
 	remoteEngineMocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("notaryKeyHandle", "notaryVerifier", nil)
 
+	signingAddress := tktypes.RandHex(32)
+
+	mocks.domainSmartContract.On("ResolveDispatch", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(1).(*components.PrivateTransaction)
+		tx.Signer = signingAddress
+	}).Return(nil)
+
 	//TODO match endorsement request and verifier args
 	remoteEngineMocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&components.EndorsementResult{
 		Result:  prototk.EndorseTransactionResponse_SIGN,
@@ -281,6 +287,18 @@ func TestEngineRemoteEndorser(t *testing.T) {
 	}, nil)
 
 	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
+
+	mockPreparedSubmission := componentmocks.NewPreparedSubmission(t)
+	mockPreparedSubmissions := []components.PreparedSubmission{mockPreparedSubmission}
+
+	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPreparedSubmissions, false, nil)
+
+	publicTransactions := []*components.PublicTX{
+		{
+			ID: uuid.New().String(),
+		},
+	}
+	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
 
 	err := engine.Start()
 	assert.NoError(t, err)
