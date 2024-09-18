@@ -37,8 +37,8 @@ github.com/hashicorp/errwrap v1.1.0 h1:OxrOeh75EUXMY8TBjag2fzXGZ40LB6IKw45YeGUDY
 github.com/hashicorp/go-multierror v1.1.1 h1:H5DkEtf6CXdFp0N0Em5UCwQpXMWke8IA0+lD48awMYo=
 github.com/hashicorp/hcl v1.0.0 h1:0Anlzjpi4vEasTeNFn2mLJgTSwt0+6sfsiTG8qcWGx4=
 github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240905213624-43a614759076 h1:sy2RvS84JiF8hGJ2cjY6hZUm6rzpwmWxHp2WiEi7xpI=
-github.com/hyperledger/firefly-common v1.4.8 h1:0o1Qp1c5YzQo8nbnX+gAo9SVd2tR4Z9U2t8Y4zEzyaA=
-github.com/hyperledger/firefly-signer v1.1.14 h1:gSGwdBHTLPchGlmLOKk2Y2nawfMhlH2CDm2owt0lIUE=
+github.com/hyperledger/firefly-common v1.4.11 h1:WKv2hQuNpS7yP51THxzpzrqU3jkln23C9vq5iminzBk=
+github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1 h1:5t25yxdZoscLY/6MPFXXHUZmN0YfiqMT7uROLXNqBQo=
 github.com/iden3/go-rapidsnark/prover v0.0.10 h1:NvOfRPpex/k646UsqOcUy7a7uVl17t4ok9kWvpQg4+k=
 github.com/iden3/go-rapidsnark/types v0.0.2 h1:CjJSrlbWchHzuMRdxSYrEh7n/akP+Z2PLNbwT5yBmQY=
 github.com/iden3/go-rapidsnark/witness/v2 v2.0.0 h1:mkY6VDfwKVJc83QGKmwVXY2LYepidPrFAxskrjr8UCs=

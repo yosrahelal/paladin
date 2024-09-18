@@ -20,15 +20,16 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/alecthomas/assert/v2"
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/httpserver"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,21 +59,30 @@ func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*Config, *mockC
 
 }
 
-func TestTransactionLifecycle(t *testing.T) {
+func TestPublicTransactionLifecycle(t *testing.T) {
 
 	ctx, url, _, done := newTestTransactionManagerWithRPC(t)
 	defer done()
 
 	rpcClient, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{URL: url})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	var txID uuid.UUID
-	err = rpcClient.CallRPC(ctx, &txID, "ptx_sendTransaction", &ptxapi.TransactionInput{
-		ABI: abi.ABI{
-			{Type: abi.Constructor, Inputs: abi.ParameterArray{
-				{Type: "uint256"},
-			}},
-		},
+	sampleABI := abi.ABI{
+		{Type: abi.Constructor, Inputs: abi.ParameterArray{
+			{Type: "uint256"}, // unname param works with array input
+		}},
+		{Type: abi.Function, Name: "set", Inputs: abi.ParameterArray{
+			{Type: "uint256"}, // named where we are using an object input
+		}},
+		{Type: abi.Error, Name: "BadValue", Inputs: abi.ParameterArray{
+			{Type: "uint256"},
+		}},
+	}
+
+	// Submit in a public deploy with array encoded params and bytecode
+	var tx1ID uuid.UUID
+	err = rpcClient.CallRPC(ctx, &tx1ID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+		ABI:      sampleABI,
 		Bytecode: tktypes.MustParseHexBytes("0x11223344"),
 		Transaction: ptxapi.Transaction{
 			IdempotencyKey: "tx1",
@@ -80,6 +90,66 @@ func TestTransactionLifecycle(t *testing.T) {
 			Data:           tktypes.RawJSON(`[12345]`),
 		},
 	})
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.UUID{}, tx1ID)
+
+	// Query it back
+	var txns []*ptxapi.Transaction
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
+	require.NoError(t, err)
+	assert.Len(t, txns, 1)
+	assert.Equal(t, tx1ID, txns[0].ID)
+	assert.Equal(t, `{"0":"12345"}`, txns[0].Data.String())
+	assert.Equal(t, "(uint256)", txns[0].Function)
+
+	// Get the stored ABIs to check we found it
+	var abis []*ptxapi.StoredABI
+	err = rpcClient.CallRPC(ctx, &abis, "ptx_queryABIs", query.NewQueryBuilder().Limit(1).Query())
+	require.NoError(t, err)
+	assert.Len(t, abis, 1)
+
+	// Upsert the same ABI and check we get the same hash
+	var abiHash tktypes.Bytes32
+	err = rpcClient.CallRPC(ctx, &abiHash, "ptx_storeABI", sampleABI)
+	require.NoError(t, err)
+	assert.Equal(t, abiHash, abis[0].Hash)
+	assert.Equal(t, abiHash, *txns[0].ABIReference)
+
+	// Get it directly by ID
+	var abiGet *ptxapi.StoredABI
+	err = rpcClient.CallRPC(ctx, &abiGet, "ptx_getABI", abiHash)
+	require.NoError(t, err)
+	assert.Equal(t, abiHash, abiGet.Hash)
+
+	// Null on not found is the consistent ethereum pattern
+	var abiNotFound *ptxapi.StoredABI
+	err = rpcClient.CallRPC(ctx, &abiNotFound, "ptx_getABI", tktypes.Bytes32(tktypes.RandBytes(32)))
+	require.NoError(t, err)
+	assert.Nil(t, abiNotFound)
+
+	// Submit in a public invoke using that same ABI referring to the function
+	var tx2ID uuid.UUID
+	err = rpcClient.CallRPC(ctx, &tx2ID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			ABIReference:   &abiHash,
+			IdempotencyKey: "tx2",
+			Type:           ptxapi.TransactionTypePublic.Enum(),
+			Data:           tktypes.RawJSON(`{"0": 123456789012345678901234567890}`), // nice big JSON number to deal with
+			Function:       "set(uint256)",
+			To:             tktypes.MustEthAddress(tktypes.RandHex(20)),
+		},
+	})
 	assert.NoError(t, err)
+	var tx2 *ptxapi.Transaction
+	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransaction", tx2ID, false)
+	require.NoError(t, err)
+	assert.Equal(t, tx2ID, tx2.ID)
+	assert.Equal(t, "set(uint256)", tx2.Function)
+
+	// Null on not found is the consistent ethereum pattern
+	var txNotFound *ptxapi.Transaction
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_getTransaction", uuid.New(), false)
+	require.NoError(t, err)
+	assert.Nil(t, txNotFound)
 
 }

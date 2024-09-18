@@ -36,7 +36,7 @@ import (
 // This contains the fields that go into the database.
 // We keep this separate from the ptxapi.TransactionXYZ interfaces that clients and applications use to interact
 // with this, so we have a separation of concerns on the GORM annotations and data serialization format
-type PersistedTransaction struct {
+type persistedTransaction struct {
 	ID                 uuid.UUID                            `gorm:"column:id;primaryKey"`
 	IdempotencyKey     *string                              `gorm:"column:idempotency_key"`
 	Type               tktypes.Enum[ptxapi.TransactionType] `gorm:"column:type"`
@@ -47,16 +47,16 @@ type PersistedTransaction struct {
 	From               string                               `gorm:"column:from"`
 	To                 *tktypes.EthAddress                  `gorm:"column:to"`
 	Data               tktypes.RawJSON                      `gorm:"column:data"` // we always store in JSON object format
-	TransactionDeps    []*PersistedTransactionRef           `gorm:"foreignKey:transaction;references:id"`
-	TransactionReceipt *PersistedTransactionReceipt         `gorm:"foreignKey:transaction;references:id"`
+	TransactionDeps    []*transactionDep                    `gorm:"foreignKey:transaction;references:id"`
+	TransactionReceipt *transactionReceipt                  `gorm:"foreignKey:transaction;references:id"`
 }
 
-type PersistedTransactionRef struct {
+type transactionDep struct {
 	Transaction uuid.UUID `gorm:"column:transaction;primaryKey"`
 	DependsOn   uuid.UUID `gorm:"column:depends_on"`
 }
 
-type PersistedTransactionReceipt struct {
+type transactionReceipt struct {
 	Transaction uuid.UUID        `gorm:"column:transaction;primaryKey"`
 	Success     bool             `gorm:"column:success"`
 	TXHash      *tktypes.Bytes32 `gorm:"column:tx_hash"`
@@ -72,7 +72,7 @@ var transactionFilters = filters.FieldMap{
 	"to":           filters.HexBytesField("to"),
 }
 
-func mapPersistedTXBase(pt *PersistedTransaction) *ptxapi.Transaction {
+func mapPersistedTXBase(pt *persistedTransaction) *ptxapi.Transaction {
 	res := &ptxapi.Transaction{
 		ID:             pt.ID,
 		Created:        pt.Created,
@@ -91,6 +91,21 @@ func mapPersistedTXBase(pt *PersistedTransaction) *ptxapi.Transaction {
 	return res
 }
 
+func (tm *txManager) mapPersistedTXFull(pt *persistedTransaction) *ptxapi.TransactionFull {
+	res := &ptxapi.TransactionFull{
+		Transaction: mapPersistedTXBase(pt),
+	}
+	receipt := pt.TransactionReceipt
+	if receipt != nil {
+		res.Receipt = &ptxapi.TransactionReceiptData{
+			Success:         receipt.Success,
+			TransactionHash: receipt.TXHash,
+		}
+	}
+	res.Activity = tm.getActivityRecords(res.ID)
+	return res
+}
+
 type resolvedFunction struct {
 	abi          abi.ABI
 	abiReference *tktypes.Bytes32
@@ -98,21 +113,22 @@ type resolvedFunction struct {
 	signature    string
 }
 
-func (tm *txManager) resolveFunction(ctx context.Context, a abi.ABI, abiReference *tktypes.Bytes32, requiredFunction string, to *tktypes.EthAddress) (_ *resolvedFunction, err error) {
+func (tm *txManager) resolveFunction(ctx context.Context, inputABI abi.ABI, inputABIRef *tktypes.Bytes32, requiredFunction string, to *tktypes.EthAddress) (_ *resolvedFunction, err error) {
 
 	// Lookup the ABI we're working with.
 	// Only needs to contain the function definition we're calling, but can be the whole ABI of the contract.
 	// Beneficial if it includes the error definitions for this
-	if abiReference != nil {
-		if a != nil {
+	var pa *ptxapi.StoredABI
+	if inputABIRef != nil {
+		if inputABI != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgTxMgrABIAndDefinition)
 		}
-		_, a, err = tm.getABIByHash(ctx, *abiReference)
+		pa, err = tm.getABIByHash(ctx, *inputABIRef)
 	} else {
-		abiReference, err = tm.upsertABI(ctx, a)
+		pa, err = tm.upsertABI(ctx, inputABI)
 	}
-	if err != nil || a == nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrABIReferenceLookupFailed, abiReference)
+	if err != nil || pa == nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrABIReferenceLookupFailed, inputABIRef)
 	}
 
 	// If a function is specified, we cannot be invoking the constructor
@@ -123,7 +139,7 @@ func (tm *txManager) resolveFunction(ctx context.Context, a abi.ABI, abiReferenc
 	// Find the function in the ABI that we're invoking
 	var selectedFunction *abi.Entry
 	var functionSignature string
-	for _, e := range a {
+	for _, e := range pa.ABI {
 		var isMatch bool
 		if e.Type == abi.Constructor && to == nil {
 			isMatch = true
@@ -155,8 +171,8 @@ func (tm *txManager) resolveFunction(ctx context.Context, a abi.ABI, abiReferenc
 	}
 	log.L(ctx).Debugf("Function selected: %s", selectedFunction.SolString())
 	return &resolvedFunction{
-		abi:          a,
-		abiReference: abiReference,
+		abi:          pa.ABI,
+		abiReference: &pa.Hash,
 		definition:   selectedFunction,
 		signature:    functionSignature,
 	}, nil
@@ -232,7 +248,7 @@ func (tm *txManager) sendTransaction(ctx context.Context, tx *ptxapi.Transaction
 	}
 
 	// TODO: Flush writer for singleton transactions vs batch
-	ptx := &PersistedTransaction{
+	ptx := &persistedTransaction{
 		ID:             uuid.New(),
 		IdempotencyKey: notEmptyOrNull(tx.IdempotencyKey),
 		Type:           tx.Type,
@@ -254,7 +270,7 @@ func (tm *txManager) sendTransaction(ctx context.Context, tx *ptxapi.Transaction
 }
 
 func (tm *txManager) queryTransactions(ctx context.Context, jq *query.QueryJSON) ([]*ptxapi.Transaction, error) {
-	qw := &queryWrapper[PersistedTransaction, ptxapi.Transaction]{
+	qw := &queryWrapper[persistedTransaction, ptxapi.Transaction]{
 		p:       tm.p,
 		table:   "transactions",
 		filters: transactionFilters,
@@ -263,7 +279,7 @@ func (tm *txManager) queryTransactions(ctx context.Context, jq *query.QueryJSON)
 			// TODO: Join public and private transaction strings
 			return q.Joins("TransactionDeps")
 		},
-		mapResult: func(pt *PersistedTransaction) (*ptxapi.Transaction, error) {
+		mapResult: func(pt *persistedTransaction) (*ptxapi.Transaction, error) {
 			return mapPersistedTXBase(pt), nil
 		},
 	}
@@ -271,7 +287,7 @@ func (tm *txManager) queryTransactions(ctx context.Context, jq *query.QueryJSON)
 }
 
 func (tm *txManager) queryTransactionsFull(ctx context.Context, jq *query.QueryJSON) ([]*ptxapi.TransactionFull, error) {
-	qw := &queryWrapper[PersistedTransaction, ptxapi.TransactionFull]{
+	qw := &queryWrapper[persistedTransaction, ptxapi.TransactionFull]{
 		p:       tm.p,
 		table:   "transactions",
 		filters: transactionFilters,
@@ -280,20 +296,39 @@ func (tm *txManager) queryTransactionsFull(ctx context.Context, jq *query.QueryJ
 			// TODO: Join public and private transaction info
 			return q.Joins("TransactionDeps").Joins("TransactionReceipt")
 		},
-		mapResult: func(pt *PersistedTransaction) (*ptxapi.TransactionFull, error) {
-			res := &ptxapi.TransactionFull{
-				Transaction: mapPersistedTXBase(pt),
-			}
-			receipt := pt.TransactionReceipt
-			if receipt != nil {
-				res.Receipt = &ptxapi.TransactionReceiptData{
-					Success:         receipt.Success,
-					TransactionHash: receipt.TXHash,
-				}
-			}
-			res.Activity = tm.getActivityRecords(res.ID)
-			return res, nil
+		mapResult: func(pt *persistedTransaction) (*ptxapi.TransactionFull, error) {
+			return tm.mapPersistedTXFull(pt), nil
 		},
 	}
 	return qw.run(ctx)
+}
+
+func (tm *txManager) getPersistedTransactionByID(ctx context.Context, id uuid.UUID) (*persistedTransaction, error) {
+	var pTxns []*persistedTransaction
+	err := tm.p.DB().
+		WithContext(ctx).
+		Table("transactions").
+		Where("id = ?", id).
+		Find(&pTxns).
+		Error
+	if err != nil || len(pTxns) == 0 {
+		return nil, err
+	}
+	return pTxns[0], nil
+}
+
+func (tm *txManager) getTransactionByIDFull(ctx context.Context, id uuid.UUID) (*ptxapi.TransactionFull, error) {
+	ptx, err := tm.getPersistedTransactionByID(ctx, id)
+	if ptx == nil || err != nil {
+		return nil, err
+	}
+	return tm.mapPersistedTXFull(ptx), nil
+}
+
+func (tm *txManager) getTransactionByID(ctx context.Context, id uuid.UUID) (*ptxapi.Transaction, error) {
+	ptx, err := tm.getPersistedTransactionByID(ctx, id)
+	if ptx == nil || err != nil {
+		return nil, err
+	}
+	return mapPersistedTXBase(ptx), nil
 }

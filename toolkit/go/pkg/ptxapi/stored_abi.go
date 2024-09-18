@@ -21,8 +21,15 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
+// This is a very compact wrapping structure that is automatically stored for any ABI
+// used in a transaction. A deterministic hashing is performed of the ABI that preserves
+// all the details including parameter names, indexed flags, errors, event etc.
+// (see tktypes.ABISolDefinitionHash()).
+//
+// In the future a _separate_ metadata object might be added to allow CRUD style storage
+// and query of associated ABI details, like devDocs, contract name, times etc.
+// However, this record is intended to stay unchanged and deliberately thin
 type StoredABI struct {
-	Hash    tktypes.Bytes32   `json:"hash,omitempty"`
-	Created tktypes.Timestamp `json:"created,omitempty"`
-	ABI     abi.ABI           `json:"abi,omitempty"`
+	Hash tktypes.Bytes32 `json:"hash,omitempty"`
+	ABI  abi.ABI         `json:"abi,omitempty"`
 }

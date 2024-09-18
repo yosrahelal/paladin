@@ -29,8 +29,10 @@ import (
 func (tm *txManager) buildRPCModule() {
 	tm.rpcModule = rpcserver.NewRPCModule("ptx").
 		Add("ptx_sendTransaction", tm.rpcSendTransaction()).
+		Add("ptx_getTransaction", tm.rpcGetTransaction()).
 		Add("ptx_queryTransactions", tm.rpcQueryTransactions()).
 		Add("ptx_storeABI", tm.rpcStoreABI()).
+		Add("ptx_getABI", tm.rpcGetABI()).
 		Add("ptx_queryABIs", tm.rpcQueryABIs())
 }
 
@@ -39,6 +41,18 @@ func (tm *txManager) rpcSendTransaction() rpcserver.RPCHandler {
 		tx ptxapi.TransactionInput,
 	) (*uuid.UUID, error) {
 		return tm.sendTransaction(ctx, &tx)
+	})
+}
+
+func (tm *txManager) rpcGetTransaction() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context,
+		id uuid.UUID,
+		full bool,
+	) (any, error) {
+		if full {
+			return tm.getTransactionByIDFull(ctx, id)
+		}
+		return tm.getTransactionByID(ctx, id)
 	})
 }
 
@@ -58,7 +72,19 @@ func (tm *txManager) rpcStoreABI() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		a abi.ABI,
 	) (*tktypes.Bytes32, error) {
-		return tm.upsertABI(ctx, a)
+		pa, err := tm.upsertABI(ctx, a)
+		if err != nil {
+			return nil, err
+		}
+		return &pa.Hash, nil
+	})
+}
+
+func (tm *txManager) rpcGetABI() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		hash tktypes.Bytes32,
+	) (*ptxapi.StoredABI, error) {
+		return tm.getABIByHash(ctx, hash)
 	})
 }
 

@@ -32,9 +32,8 @@ import (
 )
 
 type PersistedABI struct {
-	Hash    tktypes.Bytes32   `gorm:"column:hash"`
-	Created tktypes.Timestamp `gorm:"column:created;autoCreateTime:nano"`
-	ABI     tktypes.RawJSON   `gorm:"column:abi"`
+	Hash tktypes.Bytes32 `gorm:"column:hash"`
+	ABI  tktypes.RawJSON `gorm:"column:abi"`
 }
 
 type PersistedABIError struct {
@@ -48,10 +47,10 @@ var abiFilters = filters.FieldMap{
 	"created": filters.TimestampField("created"),
 }
 
-func (tm *txManager) getABIByHash(ctx context.Context, hash tktypes.Bytes32) (*tktypes.Bytes32, abi.ABI, error) {
-	a, _ := tm.abiCache.Get(hash)
-	if a != nil {
-		return nil, a, nil
+func (tm *txManager) getABIByHash(ctx context.Context, hash tktypes.Bytes32) (*ptxapi.StoredABI, error) {
+	pa, found := tm.abiCache.Get(hash)
+	if found {
+		return pa, nil
 	}
 	var pABIs []*PersistedABI
 	err := tm.p.DB().
@@ -60,27 +59,28 @@ func (tm *txManager) getABIByHash(ctx context.Context, hash tktypes.Bytes32) (*t
 		Where("hash = ?", hash).
 		Find(&pABIs).
 		Error
-	if err == nil {
-		err = json.Unmarshal(pABIs[0].ABI, &a)
-	}
 	if err != nil || len(pABIs) == 0 {
-		return nil, nil, err
+		return nil, err
 	}
-	tm.abiCache.Set(hash, a)
-	return &hash, a, nil
+	pa = &ptxapi.StoredABI{Hash: hash}
+	if err = json.Unmarshal(pABIs[0].ABI, &pa.ABI); err != nil {
+		return nil, err
+	}
+	tm.abiCache.Set(hash, pa)
+	return pa, nil
 }
 
-func (tm *txManager) upsertABI(ctx context.Context, a abi.ABI) (*tktypes.Bytes32, error) {
+func (tm *txManager) upsertABI(ctx context.Context, a abi.ABI) (*ptxapi.StoredABI, error) {
 	hash, err := tktypes.ABISolDefinitionHash(ctx, a)
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidABI)
 	}
 
 	// If cached, nothing to do (note must not cache until written for this to be true)
-	_, existing := tm.abiCache.Get(*hash)
+	pa, existing := tm.abiCache.Get(*hash)
 	if existing {
 		log.L(ctx).Debugf("ABI %s already cached", hash)
-		return hash, nil
+		return pa, nil
 	}
 
 	// Grab all the error definitions for reverse lookup
@@ -110,9 +110,8 @@ func (tm *txManager) upsertABI(ctx context.Context, a abi.ABI) (*tktypes.Bytes32
 					DoNothing: true, // immutable
 				}).
 				Create(&PersistedABI{
-					Hash:    *hash,
-					Created: tktypes.TimestampNow(),
-					ABI:     abiBytes,
+					Hash: *hash,
+					ABI:  abiBytes,
 				}).
 				Error
 		}
@@ -135,8 +134,9 @@ func (tm *txManager) upsertABI(ctx context.Context, a abi.ABI) (*tktypes.Bytes32
 		return nil, err
 	}
 	// Now we can cache it
-	tm.abiCache.Set(*hash, a)
-	return hash, err
+	pa = &ptxapi.StoredABI{Hash: *hash, ABI: a}
+	tm.abiCache.Set(*hash, pa)
+	return pa, err
 }
 
 func (tm *txManager) queryABIs(ctx context.Context, jq *query.QueryJSON) ([]*ptxapi.StoredABI, error) {
@@ -149,9 +149,8 @@ func (tm *txManager) queryABIs(ctx context.Context, jq *query.QueryJSON) ([]*ptx
 			var a abi.ABI
 			err := json.Unmarshal(pa.ABI, &a)
 			return &ptxapi.StoredABI{
-				Hash:    pa.Hash,
-				Created: pa.Created,
-				ABI:     a,
+				Hash: pa.Hash,
+				ABI:  a,
 			}, err
 		},
 	}
