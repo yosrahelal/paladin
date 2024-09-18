@@ -237,6 +237,23 @@ func TestDomainFunction_PrepareTransaction(t *testing.T) {
 	})
 }
 
+func TestDomainFunction_HandleEventBatch(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// HandleEventBatch - paladin to domain
+	funcs.HandleEventBatch = func(ctx context.Context, cdr *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return &prototk.HandleEventBatchResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_HandleEventBatch{
+			HandleEventBatch: &prototk.HandleEventBatchRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_HandleEventBatchRes{}, res.ResponseFromDomain)
+	})
+}
+
 func TestDomainRequestError(t *testing.T) {
 	_, exerciser, _, _, _, done := setupDomainTests(t)
 	defer done()

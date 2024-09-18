@@ -25,32 +25,31 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
-	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 //go:embed abis/NotoFactory.json
-var notoFactoryJSON []byte // From "gradle copySolidity"
+var notoFactoryJSON []byte
 
-//go:embed abis/Noto.json
-var notoJSON []byte // From "gradle copySolidity"
-
-//go:embed abis/NotoSelfSubmit.json
-var notoSelfSubmitJSON []byte // From "gradle copySolidity"
+//go:embed abis/INoto.json
+var notoInterfaceJSON []byte
 
 type Noto struct {
 	Callbacks plugintk.DomainCallbacks
 
-	config      types.DomainConfig
-	chainID     int64
-	coinSchema  *pb.StateSchema
-	factoryABI  abi.ABI
-	contractABI abi.ABI
+	config            types.DomainConfig
+	chainID           int64
+	coinSchema        *prototk.StateSchema
+	factoryABI        abi.ABI
+	contractABI       abi.ABI
+	transferSignature string
 }
 
 type NotoDeployParams struct {
@@ -60,55 +59,80 @@ type NotoDeployParams struct {
 	Config        ethtypes.HexBytes0xPrefix `json:"config"`
 }
 
+type NotoTransfer_Event struct {
+	Inputs    []tktypes.Bytes32 `json:"inputs"`
+	Outputs   []tktypes.Bytes32 `json:"outputs"`
+	Signature tktypes.HexBytes  `json:"signature"`
+	Data      tktypes.HexBytes  `json:"data"`
+}
+
 type gatheredCoins struct {
 	inCoins   []*types.NotoCoin
-	inStates  []*pb.StateRef
+	inStates  []*prototk.StateRef
 	inTotal   *big.Int
 	outCoins  []*types.NotoCoin
-	outStates []*pb.StateRef
+	outStates []*prototk.StateRef
 	outTotal  *big.Int
 }
 
-func (n *Noto) ConfigureDomain(ctx context.Context, req *pb.ConfigureDomainRequest) (*pb.ConfigureDomainResponse, error) {
+func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
 	err := json.Unmarshal([]byte(req.ConfigJson), &n.config)
 	if err != nil {
 		return nil, err
 	}
 
 	factory := domain.LoadBuild(notoFactoryJSON)
-	contract := domain.LoadBuild(notoJSON)
+	contract := domain.LoadBuild(notoInterfaceJSON)
 
 	n.chainID = req.ChainId
 	n.factoryABI = factory.ABI
 	n.contractABI = contract.ABI
+
+	transferEvent := contract.ABI.Events()["NotoTransfer"]
+	if transferEvent == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgUnknownEvent, "NotoTransfer")
+	}
+	n.transferSignature = transferEvent.SolString()
 
 	schemaJSON, err := json.Marshal(types.NotoCoinABI)
 	if err != nil {
 		return nil, err
 	}
 
-	return &pb.ConfigureDomainResponse{
-		DomainConfig: &pb.DomainConfig{
+	var events abi.ABI
+	for _, entry := range contract.ABI {
+		if entry.Type == abi.Event {
+			events = append(events, entry)
+		}
+	}
+	eventsJSON, err := json.Marshal(events)
+	if err != nil {
+		return nil, err
+	}
+
+	return &prototk.ConfigureDomainResponse{
+		DomainConfig: &prototk.DomainConfig{
 			AbiStateSchemasJson: []string{string(schemaJSON)},
-			BaseLedgerSubmitConfig: &pb.BaseLedgerSubmitConfig{
-				SubmitMode: pb.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
+			BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
+				SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
 			},
+			AbiEventsJson: string(eventsJSON),
 		},
 	}, nil
 }
 
-func (n *Noto) InitDomain(ctx context.Context, req *pb.InitDomainRequest) (*pb.InitDomainResponse, error) {
+func (n *Noto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (*prototk.InitDomainResponse, error) {
 	n.coinSchema = req.AbiStateSchemas[0]
-	return &pb.InitDomainResponse{}, nil
+	return &prototk.InitDomainResponse{}, nil
 }
 
-func (n *Noto) InitDeploy(ctx context.Context, req *pb.InitDeployRequest) (*pb.InitDeployResponse, error) {
+func (n *Noto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error) {
 	params, err := n.validateDeploy(req.Transaction)
 	if err != nil {
 		return nil, err
 	}
-	return &pb.InitDeployResponse{
-		RequiredVerifiers: []*pb.ResolveVerifierRequest{
+	return &prototk.InitDeployResponse{
+		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
 				Lookup:    params.Notary,
 				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
@@ -117,7 +141,7 @@ func (n *Noto) InitDeploy(ctx context.Context, req *pb.InitDeployRequest) (*pb.I
 	}, nil
 }
 
-func (n *Noto) PrepareDeploy(ctx context.Context, req *pb.PrepareDeployRequest) (*pb.PrepareDeployResponse, error) {
+func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 	params, err := n.validateDeploy(req.Transaction)
 	if err != nil {
 		return nil, err
@@ -153,8 +177,8 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *pb.PrepareDeployRequest) 
 		return nil, err
 	}
 
-	return &pb.PrepareDeployResponse{
-		Transaction: &pb.BaseLedgerTransaction{
+	return &prototk.PrepareDeployResponse{
+		Transaction: &prototk.BaseLedgerTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
 		},
@@ -162,7 +186,7 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *pb.PrepareDeployRequest) 
 	}, nil
 }
 
-func (n *Noto) InitTransaction(ctx context.Context, req *pb.InitTransactionRequest) (*pb.InitTransactionResponse, error) {
+func (n *Noto) InitTransaction(ctx context.Context, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	tx, handler, err := n.validateTransaction(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
@@ -170,7 +194,7 @@ func (n *Noto) InitTransaction(ctx context.Context, req *pb.InitTransactionReque
 	return handler.Init(ctx, tx, req)
 }
 
-func (n *Noto) AssembleTransaction(ctx context.Context, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
+func (n *Noto) AssembleTransaction(ctx context.Context, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	tx, handler, err := n.validateTransaction(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
@@ -178,7 +202,7 @@ func (n *Noto) AssembleTransaction(ctx context.Context, req *pb.AssembleTransact
 	return handler.Assemble(ctx, tx, req)
 }
 
-func (n *Noto) EndorseTransaction(ctx context.Context, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
+func (n *Noto) EndorseTransaction(ctx context.Context, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
 	tx, handler, err := n.validateTransaction(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
@@ -186,7 +210,7 @@ func (n *Noto) EndorseTransaction(ctx context.Context, req *pb.EndorseTransactio
 	return handler.Endorse(ctx, tx, req)
 }
 
-func (n *Noto) PrepareTransaction(ctx context.Context, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
+func (n *Noto) PrepareTransaction(ctx context.Context, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
 	tx, handler, err := n.validateTransaction(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
@@ -227,13 +251,13 @@ func (n *Noto) decodeConfig(ctx context.Context, domainConfig []byte) (*types.No
 	return &config, err
 }
 
-func (n *Noto) validateDeploy(tx *pb.DeployTransactionSpecification) (*types.ConstructorParams, error) {
+func (n *Noto) validateDeploy(tx *prototk.DeployTransactionSpecification) (*types.ConstructorParams, error) {
 	var params types.ConstructorParams
 	err := json.Unmarshal([]byte(tx.ConstructorParamsJson), &params)
 	return &params, err
 }
 
-func (n *Noto) validateTransaction(ctx context.Context, tx *pb.TransactionSpecification) (*types.ParsedTransaction, types.DomainHandler, error) {
+func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionSpecification) (*types.ParsedTransaction, types.DomainHandler, error) {
 	var functionABI abi.Entry
 	err := json.Unmarshal([]byte(tx.FunctionAbiJson), &functionABI)
 	if err != nil {
@@ -285,11 +309,11 @@ func (n *Noto) recoverSignature(ctx context.Context, payload ethtypes.HexBytes0x
 	return sig.RecoverDirect(payload, n.chainID)
 }
 
-func (n *Noto) parseCoinList(ctx context.Context, label string, states []*pb.EndorsableState) ([]*types.NotoCoin, []*pb.StateRef, *big.Int, error) {
+func (n *Noto) parseCoinList(ctx context.Context, label string, states []*prototk.EndorsableState) ([]*types.NotoCoin, []*prototk.StateRef, *big.Int, error) {
 	var err error
 	statesUsed := make(map[string]bool)
 	coins := make([]*types.NotoCoin, len(states))
-	refs := make([]*pb.StateRef, len(states))
+	refs := make([]*prototk.StateRef, len(states))
 	total := big.NewInt(0)
 	for i, state := range states {
 		if state.SchemaId != n.coinSchema.Id {
@@ -302,7 +326,7 @@ func (n *Noto) parseCoinList(ctx context.Context, label string, states []*pb.End
 		if coins[i], err = n.unmarshalCoin(state.StateDataJson); err != nil {
 			return nil, nil, nil, i18n.NewError(ctx, msgs.MsgInvalidListInput, label, i, state.Id, err)
 		}
-		refs[i] = &pb.StateRef{
+		refs[i] = &prototk.StateRef{
 			SchemaId: state.SchemaId,
 			Id:       state.Id,
 		}
@@ -311,7 +335,7 @@ func (n *Noto) parseCoinList(ctx context.Context, label string, states []*pb.End
 	return coins, refs, total, nil
 }
 
-func (n *Noto) gatherCoins(ctx context.Context, inputs, outputs []*pb.EndorsableState) (*gatheredCoins, error) {
+func (n *Noto) gatherCoins(ctx context.Context, inputs, outputs []*prototk.EndorsableState) (*gatheredCoins, error) {
 	inCoins, inStates, inTotal, err := n.parseCoinList(ctx, "input", inputs)
 	if err != nil {
 		return nil, err
@@ -345,8 +369,8 @@ func (n *Noto) FindCoins(ctx context.Context, contractAddress ethtypes.Address0x
 	return coins, err
 }
 
-func (n *Noto) transferData(transaction *pb.TransactionSpecification) (ethtypes.HexBytes0xPrefix, error) {
-	txID, err := ethtypes.NewHexBytes0xPrefix(transaction.TransactionId)
+func (n *Noto) encodeTransferData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {
+	txID, err := tktypes.ParseHexBytes(ctx, transaction.TransactionId)
 	if err != nil {
 		return nil, err
 	}
@@ -355,4 +379,48 @@ func (n *Noto) transferData(transaction *pb.TransactionSpecification) (ethtypes.
 	data = append(data, types.NotoTransactionData_V0...)
 	data = append(data, txID...)
 	return data, nil
+}
+
+func (n *Noto) decodeTransferData(data tktypes.HexBytes) (txID tktypes.HexBytes) {
+	if len(data) < 4 {
+		return nil
+	}
+	dataPrefix := data[0:4]
+	if dataPrefix.String() != types.NotoTransactionData_V0.String() {
+		return nil
+	}
+	return data[4:]
+}
+
+func (n *Noto) parseStatesFromEvent(txID tktypes.HexBytes, states []tktypes.Bytes32) []*prototk.StateUpdate {
+	refs := make([]*prototk.StateUpdate, len(states))
+	for i, state := range states {
+		refs[i] = &prototk.StateUpdate{
+			SchemaId:      n.coinSchema.Id,
+			Id:            state.String(),
+			TransactionId: txID.String(),
+		}
+	}
+	return refs
+}
+
+func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+	var events []*blockindexer.EventWithData
+	if err := json.Unmarshal([]byte(req.JsonEvents), &events); err != nil {
+		return nil, err
+	}
+
+	var res prototk.HandleEventBatchResponse
+	for _, ev := range events {
+		switch ev.SoliditySignature {
+		case n.transferSignature:
+			var transfer NotoTransfer_Event
+			if err := json.Unmarshal(ev.Data, &transfer); err == nil {
+				txID := n.decodeTransferData(transfer.Data)
+				res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(txID, transfer.Inputs)...)
+				res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(txID, transfer.Outputs)...)
+			}
+		}
+	}
+	return &res, nil
 }

@@ -16,6 +16,12 @@ interface INoto {
         bytes memory config
     ) external returns (bytes memory);
 
+    function mint(
+        bytes32[] calldata outputs,
+        bytes calldata signature,
+        bytes calldata data
+    ) external;
+
     function transfer(
         bytes32[] memory inputs,
         bytes32[] memory outputs,

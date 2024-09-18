@@ -22,6 +22,8 @@ import (
 
 	"github.com/go-resty/resty/v2"
 
+	_ "embed"
+
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
@@ -37,6 +39,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+//go:embed abis/Noto.json
+var notoJSON []byte
+
+//go:embed abis/NotoSelfSubmit.json
+var notoSelfSubmitJSON []byte
 
 var (
 	notaryName     = "notary"

@@ -18,6 +18,7 @@ package domainmgr
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -30,6 +31,8 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -95,14 +98,13 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 	}
 
 	// Ensure all the schemas are recorded to the DB
-	// This is a special case where we need a synchronous flush to ensure they're all established
 	var schemas []statestore.Schema
 	schemas, err := d.dm.stateStore.EnsureABISchemas(d.ctx, d.name, abiSchemas)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build the request to the init
+	// Build the schema IDs to send back in the init
 	schemasProto := make([]*prototk.StateSchema, len(schemas))
 	for i, s := range schemas {
 		schemaID := s.IDString()
@@ -113,6 +115,36 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 			Signature: s.Signature(),
 		}
 	}
+
+	if d.config.AbiEventsJson != "" {
+		// Parse the events ABI
+		var eventsABI abi.ABI
+		if err := json.Unmarshal([]byte(d.config.AbiEventsJson), &eventsABI); err != nil {
+			return nil, err
+		}
+
+		// We build a stream name in a way assured to result in a new stream if the ABI changes,
+		// TODO... and in the future with a logical way to clean up defunct streams
+		streamHash, err := tktypes.ABISolDefinitionHash(d.ctx, eventsABI)
+		if err != nil {
+			return nil, err
+		}
+		streamName := fmt.Sprintf("domain_%s_%s", d.name, streamHash)
+
+		// Create the event stream
+		_, err = d.dm.blockIndexer.AddEventStream(d.ctx, &blockindexer.InternalEventStream{
+			Definition: &blockindexer.EventStream{
+				Name: streamName,
+				Type: blockindexer.EventStreamTypeInternal.Enum(),
+				ABI:  eventsABI,
+			},
+			Handler: d.handleEventBatch,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &prototk.InitDomainRequest{
 		AbiStateSchemas: schemasProto,
 	}, nil
@@ -407,4 +439,17 @@ func emptyJSONIfBlank(js string) []byte {
 func (d *domain) close() {
 	d.cancelCtx()
 	<-d.initDone
+}
+
+func (d *domain) handleEventBatch(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
+	eventsJSON, err := json.Marshal(batch.Events)
+	if err != nil {
+		return nil, err
+	}
+	_, err = d.api.HandleEventBatch(ctx, &prototk.HandleEventBatchRequest{
+		BatchId:    batch.BatchID.String(),
+		JsonEvents: string(eventsJSON),
+	})
+	// TODO: process response
+	return nil, err
 }
