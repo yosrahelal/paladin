@@ -24,9 +24,9 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/ffresty"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tlsconf"
 )
 
@@ -61,10 +61,10 @@ var DefaultWSConfig = &WSConfig{
 	ConnectRetry:           retry.Defaults.Config,
 }
 
-func ParseWSConfig(ctx context.Context, config *WSConfig) (*wsclient.WSConfig, error) {
+func parseWSConfig(ctx context.Context, config *WSConfig) (*wsclient.WSConfig, error) {
 	u, err := url.Parse(config.URL)
 	if err != nil || (u.Scheme != "ws" && u.Scheme != "wss") {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgEthClientInvalidWebSocketURL, u)
+		return nil, i18n.WrapError(ctx, err, tkmsgs.MsgRPCClientInvalidWebSocketURL, u)
 	}
 	if u.Scheme == "wss" {
 		config.TLS.Enabled = true
@@ -89,10 +89,10 @@ func ParseWSConfig(ctx context.Context, config *WSConfig) (*wsclient.WSConfig, e
 	}, nil
 }
 
-func ParseHTTPConfig(ctx context.Context, config *HTTPConfig) (*resty.Client, error) {
+func parseHTTPConfig(ctx context.Context, config *HTTPConfig) (*resty.Client, error) {
 	u, err := url.Parse(config.URL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgEthClientInvalidHTTPURL, u)
+		return nil, i18n.WrapError(ctx, err, tkmsgs.MsgRPCClientInvalidHTTPURL, u)
 	}
 	if u.Scheme == "https" {
 		config.TLS.Enabled = true

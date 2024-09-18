@@ -65,4 +65,8 @@ var (
 	MsgTLSInvalidTLSDnMatcherRegexp = ffe("PD020404", "Invalid regexp '%s' for requiredDNAttributes[%s]: %s")
 	MsgTLSInvalidTLSDnChain         = ffe("PD020405", "Cannot match subject distinguished name as cert chain is not verified")
 	MsgTLSInvalidTLSDnMismatch      = ffe("PD020406", "Certificate subject does not meet requirements")
+
+	// RPCClient PD0205XX
+	MsgRPCClientInvalidWebSocketURL = ffe("PD020500", "Invalid WebSocket URL: %s")
+	MsgRPCClientInvalidHTTPURL      = ffe("PD020501", "Invalid HTTP URL: %s")
 )

@@ -27,14 +27,14 @@ import (
 
 func TestWSConfigOK(t *testing.T) {
 	ctx := context.Background()
-	wsc, err := ParseWSConfig(ctx, &WSConfig{HTTPConfig: HTTPConfig{URL: "ws://localhost:8545"}})
+	wsc, err := parseWSConfig(ctx, &WSConfig{HTTPConfig: HTTPConfig{URL: "ws://localhost:8545"}})
 	require.NoError(t, err)
 	assert.Equal(t, "ws://localhost:8545", wsc.WebSocketURL)
 }
 
 func TestWSConfigTLSOK(t *testing.T) {
 	ctx := context.Background()
-	wsc, err := ParseWSConfig(ctx, &WSConfig{HTTPConfig: HTTPConfig{URL: "wss://localhost:8545"}})
+	wsc, err := parseWSConfig(ctx, &WSConfig{HTTPConfig: HTTPConfig{URL: "wss://localhost:8545"}})
 	require.NoError(t, err)
 	assert.Equal(t, "wss://localhost:8545", wsc.WebSocketURL)
 	assert.NotNil(t, wsc.TLSClientConfig)
@@ -42,38 +42,38 @@ func TestWSConfigTLSOK(t *testing.T) {
 
 func TestWSConfigBadURL(t *testing.T) {
 	ctx := context.Background()
-	_, err := ParseWSConfig(ctx, &WSConfig{HTTPConfig: HTTPConfig{URL: "http://localhost:8545"}})
-	assert.Regexp(t, "PD011513", err)
+	_, err := NewWSClient(ctx, &WSConfig{HTTPConfig: HTTPConfig{URL: "http://localhost:8545"}})
+	assert.Regexp(t, "PD020500", err)
 }
 
 func TestWSConfigBadTLS(t *testing.T) {
 	ctx := context.Background()
-	_, err := ParseWSConfig(ctx, &WSConfig{HTTPConfig: HTTPConfig{URL: "wss://localhost:8545", TLS: tlsconf.Config{CAFile: t.TempDir()}}})
+	_, err := NewWSClient(ctx, &WSConfig{HTTPConfig: HTTPConfig{URL: "wss://localhost:8545", TLS: tlsconf.Config{CAFile: t.TempDir()}}})
 	assert.Regexp(t, "PD020401", err)
 }
 
 func TestHTTPonfigOK(t *testing.T) {
 	ctx := context.Background()
-	r, err := ParseHTTPConfig(ctx, &HTTPConfig{URL: "http://localhost:8545"})
+	r, err := parseHTTPConfig(ctx, &HTTPConfig{URL: "http://localhost:8545"})
 	require.NoError(t, err)
 	assert.Equal(t, "http://localhost:8545", r.BaseURL)
 }
 
 func TestHTTPConfigTLSOK(t *testing.T) {
 	ctx := context.Background()
-	r, err := ParseHTTPConfig(ctx, &HTTPConfig{URL: "https://localhost:8545"})
+	r, err := parseHTTPConfig(ctx, &HTTPConfig{URL: "https://localhost:8545"})
 	require.NoError(t, err)
 	assert.Equal(t, "https://localhost:8545", r.BaseURL)
 }
 
 func TestHTTPConfigBadURL(t *testing.T) {
 	ctx := context.Background()
-	_, err := ParseHTTPConfig(ctx, &HTTPConfig{URL: "wss://localhost:8545"})
-	assert.Regexp(t, "PD011514", err)
+	_, err := NewHTTPClient(ctx, &HTTPConfig{URL: "wss://localhost:8545"})
+	assert.Regexp(t, "PD020501", err)
 }
 
 func TestHTTPConfigBadTLS(t *testing.T) {
 	ctx := context.Background()
-	_, err := ParseHTTPConfig(ctx, &HTTPConfig{URL: "https://localhost:8545", TLS: tlsconf.Config{CAFile: t.TempDir()}})
+	_, err := NewHTTPClient(ctx, &HTTPConfig{URL: "https://localhost:8545", TLS: tlsconf.Config{CAFile: t.TempDir()}})
 	assert.Regexp(t, "PD020401", err)
 }

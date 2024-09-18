@@ -14,3 +14,67 @@
  */
 
 package txmgr
+
+import (
+	"context"
+	"testing"
+
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/kaleido-io/paladin/core/internal/statestore"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
+	"github.com/stretchr/testify/require"
+)
+
+type mockComponents struct {
+	db            sqlmock.Sqlmock
+	ethClient     *componentmocks.EthClient
+	domainManager *componentmocks.DomainManager
+	blockIndexer  *componentmocks.BlockIndexer
+}
+
+func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *Config, mc *mockComponents)) (context.Context, *txManager, func()) {
+
+	ctx := context.Background()
+
+	conf := &Config{}
+	mc := &mockComponents{
+		blockIndexer:  componentmocks.NewBlockIndexer(t),
+		domainManager: componentmocks.NewDomainManager(t),
+	}
+
+	componentMocks := componentmocks.NewAllComponents(t)
+	componentMocks.On("BlockIndexer").Return(mc.blockIndexer).Maybe()
+	componentMocks.On("DomainManager").Return(mc.domainManager).Maybe()
+
+	var p persistence.Persistence
+	var err error
+	var pDone func()
+	if realDB {
+		p, pDone, err = persistence.NewUnitTestPersistence(ctx)
+		require.NoError(t, err)
+		realStateStore := statestore.NewStateStore(ctx, &statestore.Config{}, p)
+		componentMocks.On("StateStore").Return(realStateStore)
+	} else {
+		mp, err := mockpersistence.NewSQLMockProvider()
+		require.NoError(t, err)
+		p = mp.P
+		mc.db = mp.Mock
+		pDone = func() {
+			require.NoError(t, mp.Mock.ExpectationsWereMet())
+		}
+	}
+	componentMocks.On("Persistence").Return(p)
+
+	for _, fn := range init {
+		fn(conf, mc)
+	}
+
+	txm := NewTXManager(ctx, conf)
+	return ctx, txm.(*txManager), func() {
+		pDone()
+		txm.Stop()
+	}
+
+}
