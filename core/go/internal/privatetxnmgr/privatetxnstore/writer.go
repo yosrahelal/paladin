@@ -57,7 +57,7 @@ type dispatchSequenceOperation struct {
 
 type writeOperation struct {
 	id                         string
-	domain                     string
+	contractAddress            string
 	done                       chan error
 	isShutdown                 bool
 	dispatchSequenceOperations []*dispatchSequenceOperation
@@ -103,10 +103,11 @@ func newWriter(bgCtx context.Context, s *store, conf *WriterConfig) *writer {
 	return w
 }
 
-func (w *writer) newWriteOp() *writeOperation {
+func (w *writer) newWriteOp(contractAddress string) *writeOperation {
 	return &writeOperation{
-		id:   tktypes.ShortID(),
-		done: make(chan error, 1), // 1 slot to ensure we don't block the writer
+		id:              tktypes.ShortID(),
+		contractAddress: contractAddress,
+		done:            make(chan error, 1), // 1 slot to ensure we don't block the writer
 	}
 }
 
@@ -121,17 +122,17 @@ func (op *writeOperation) flush(ctx context.Context) error {
 }
 
 func (w *writer) queue(ctx context.Context, op *writeOperation) {
-	// TODO should we have one queue for all write operations (currently known, we need at least 2
-	//  - when we receive the handover from the usertransaction manager (or maybe not - this will likely be done
-	// .  under the context of the user transaction manager's flush writer context)
-	//  - when we handover to the baseledger transaction manager)
-	// or does it make sense to have queueDispatch and queueSubmit
-	if op.domain == "" {
+	// there can be several flush worker threads but significantly fewer than the number of
+	// private contracts (domain instances) we would expect to be running concurrently
+	// however we do need to maintain some affinity between any one domain instance and a worker thread
+	// changing the number of worker threads will require a config change and a restart so no
+	// need for dynamic balancing. A simple modulo of a hash will suffice.
+	if op.contractAddress == "" {
 		op.done <- i18n.NewError(ctx, msgs.MsgStateOpInvalid)
 		return
 	}
 	h := fnv.New32a() // simple non-cryptographic hash algo
-	_, _ = h.Write([]byte(op.domain))
+	_, _ = h.Write([]byte(op.contractAddress))
 	routine := h.Sum32() % w.workerCount
 	log.L(ctx).Debugf("Queuing write operation %s to worker state_writer_%.4d", op.id, routine)
 	select {

@@ -129,8 +129,6 @@ type Orchestrator struct {
 	publisher           ptmgrtypes.Publisher
 
 	store privatetxnstore.Store
-
-	publicTxManager components.PublicTxManager
 }
 
 var orchestratorConfigDefault = OrchestratorConfig{
@@ -172,6 +170,8 @@ func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string,
 
 	newOrchestrator.sequencer = sequencer
 	sequencer.SetDispatcher(newOrchestrator)
+
+	newOrchestrator.store = privatetxnstore.NewStore(ctx, &privatetxnstore.Config{}, allComponents.Persistence())
 	log.L(ctx).Debugf("NewOrchestrator for contract address %s created: %+v", newOrchestrator.contractAddress, newOrchestrator)
 
 	return newOrchestrator
@@ -444,7 +444,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 			for j, preparedTransaction := range preparedTransactions {
 				preparedTransactionPayloads[j] = preparedTransaction.PreparedTransaction
 			}
-			publicTransactionEngine := oc.publicTxManager.GetEngine()
+			publicTransactionEngine := oc.components.PublicTxManager().GetEngine()
 
 			preparedSubmissions, rejected, err := publicTransactionEngine.PrepareSubmissionBatch(ctx,
 				&components.RequestOptions{
@@ -462,25 +462,25 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 			}
 
 			sequence.PublicTransactionsSubmit = func() (publicTxIDs []string, err error) {
-				//TODO submit the public transactions
-				manageTransactions, err := publicTransactionEngine.SubmitBatch(ctx, preparedSubmissions)
+				// submit the public transactions
+				publicTransactions, err := publicTransactionEngine.SubmitBatch(ctx, preparedSubmissions)
 				if err != nil {
 					log.L(ctx).Errorf("Error submitting batch: %s", err)
 					return nil, err
 				}
-				publicTxIDs = make([]string, len(manageTransactions))
-				for i, manageTransaction := range manageTransactions {
-					publicTxIDs[i] = manageTransaction.ID
+				publicTxIDs = make([]string, len(publicTransactions))
+				for i, publicTransaction := range publicTransactions {
+					publicTxIDs[i] = publicTransaction.ID
 				}
 
-				return nil, nil
+				return publicTxIDs, nil
 			}
 
 		}
 		dispatchBatch.DispatchSequences = append(dispatchBatch.DispatchSequences, sequence)
 	}
 
-	err := oc.store.PersistDispatchBatch(ctx, dispatchBatch)
+	err := oc.store.PersistDispatchBatch(ctx, oc.contractAddress, dispatchBatch)
 	if err != nil {
 		log.L(ctx).Errorf("Error persisting batch: %s", err)
 		return err

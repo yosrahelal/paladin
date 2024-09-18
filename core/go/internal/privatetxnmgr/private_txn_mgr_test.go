@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	coreProto "github.com/kaleido-io/paladin/core/pkg/proto"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -71,7 +72,7 @@ func TestEngineInvalidTransaction(t *testing.T) {
 }
 
 func TestEngineSimpleTransaction(t *testing.T) {
-	t.Skip("skipping TestEngineSimpleTransaction")
+	//t.Skip("skipping TestEngineSimpleTransaction")
 	//Submit a transaction that gets assembled with an attestation plan for a local endorser to sign the transaction
 	ctx := context.Background()
 
@@ -127,6 +128,14 @@ func TestEngineSimpleTransaction(t *testing.T) {
 	}).Return(nil)
 
 	mocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("notaryKeyHandle", "notaryVerifier", nil)
+
+	signingAddress := tktypes.RandHex(32)
+
+	mocks.domainSmartContract.On("ResolveDispatch", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(1).(*components.PrivateTransaction)
+		tx.Signer = signingAddress
+	}).Return(nil)
+
 	//TODO match endorsement request and verifier args
 	mocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&components.EndorsementResult{
 		Result:  prototk.EndorseTransactionResponse_SIGN,
@@ -150,6 +159,17 @@ func TestEngineSimpleTransaction(t *testing.T) {
 	err := engine.Start()
 	require.NoError(t, err)
 
+	mockPreparedSubmission := componentmocks.NewPreparedSubmission(t)
+	mockPreparedSubmissions := []components.PreparedSubmission{mockPreparedSubmission}
+
+	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPreparedSubmissions, false, nil)
+
+	publicTransactions := []*components.PublicTX{
+		{
+			ID: uuid.New().String(),
+		},
+	}
+	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
 	txID, err := engine.HandleNewTx(ctx, &components.PrivateTransaction{
 		ID: uuid.New(),
 		Inputs: &components.TransactionInputs{
@@ -721,10 +741,13 @@ type dependencyMocks struct {
 	transportManager     *componentmocks.TransportManager
 	stateStore           *componentmocks.StateStore
 	keyManager           *componentmocks.KeyManager
+	publicTxManager      *componentmocks.PublicTxManager
+	publicTxEngine       *componentmocks.PublicTxEngine
 }
 
 func newEngineForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (Engine, *dependencyMocks) {
 
+	ctx := context.Background()
 	mocks := &dependencyMocks{
 		allComponents:        componentmocks.NewAllComponents(t),
 		domainStateInterface: componentmocks.NewDomainStateInterface(t),
@@ -733,12 +756,17 @@ func newEngineForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (Engin
 		transportManager:     componentmocks.NewTransportManager(t),
 		stateStore:           componentmocks.NewStateStore(t),
 		keyManager:           componentmocks.NewKeyManager(t),
+		publicTxManager:      componentmocks.NewPublicTxManager(t),
+		publicTxEngine:       componentmocks.NewPublicTxEngine(t),
 	}
 	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
 	mocks.allComponents.On("TransportManager").Return(mocks.transportManager).Maybe()
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
+	mocks.allComponents.On("PublicTxManager").Return(mocks.publicTxManager).Maybe()
+	mocks.publicTxManager.On("GetEngine").Return(mocks.publicTxEngine).Maybe()
 	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
+	mocks.allComponents.On("Persistence").Return(persistence.NewUnitTestPersistence(ctx)).Maybe()
 
 	mocks.stateStore.On("RunInDomainContext", mock.Anything, mock.AnythingOfType("statestore.DomainContextFunction")).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(statestore.DomainContextFunction)

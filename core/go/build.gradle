@@ -25,7 +25,7 @@ ext {
         include "mocks/**/*.go"
     }
 
-    targetCoverage = 89.8
+    targetCoverage = 92.0
     maxCoverageBarGap = 1
     coverageExcludedPackages = [
         'github.com/kaleido-io/paladin/core/pkg/proto',
@@ -214,6 +214,24 @@ task makeMocks(type: Mockery, dependsOn: [tasks.installTools, tasks.protoc, task
     mock {
         inputDir 'pkg/blockindexer'
         name 'BlockIndexer'
+        outputPackage 'componentmocks'
+        outputDir 'mocks/componentmocks'
+    }
+    mock {
+        inputDir 'internal/components'
+        name 'PublicTxManager'
+        outputPackage 'componentmocks'
+        outputDir 'mocks/componentmocks'
+    }
+    mock {
+        inputDir 'internal/components'
+        name 'PublicTxEngine'
+        outputPackage 'componentmocks'
+        outputDir 'mocks/componentmocks'
+    }
+    mock {
+        inputDir 'internal/components'
+        name 'PreparedSubmission'
         outputPackage 'componentmocks'
         outputDir 'mocks/componentmocks'
     }

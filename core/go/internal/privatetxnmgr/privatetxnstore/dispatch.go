@@ -40,8 +40,8 @@ type DispatchBatch struct {
 
 // PersistDispatches persists the dispatches to the store and coordinates with the public transaction manager
 // to submit public transactions.
-func (s *store) PersistDispatchBatch(ctx context.Context, dispatchBatch *DispatchBatch) error {
-	op := s.writer.newWriteOp()
+func (s *store) PersistDispatchBatch(ctx context.Context, contractAddress string, dispatchBatch *DispatchBatch) error {
+	op := s.writer.newWriteOp(contractAddress)
 	op.dispatchSequenceOperations = make([]*dispatchSequenceOperation, len(dispatchBatch.DispatchSequences))
 	for i, dispatchSequence := range dispatchBatch.DispatchSequences {
 		//TODO why are we copying to a different struct rather than just expose this struct type on the function signature?

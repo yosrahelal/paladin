@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -68,6 +69,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
 	mocks.sequencer.On("SetDispatcher", mock.Anything).Maybe().Return()
+	mocks.allComponents.On("Persistence").Return(persistence.NewUnitTestPersistence(ctx)).Maybe()
 
 	o := NewOrchestrator(ctx, tktypes.RandHex(16), domainAddress.String(), &OrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher)
 	ocDone, err := o.Start(ctx)
