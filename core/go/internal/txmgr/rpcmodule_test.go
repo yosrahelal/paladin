@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -61,7 +62,7 @@ func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*Config, *mockC
 
 func TestPublicTransactionLifecycle(t *testing.T) {
 
-	ctx, url, _, done := newTestTransactionManagerWithRPC(t)
+	ctx, url, tmr, done := newTestTransactionManagerWithRPC(t)
 	defer done()
 
 	rpcClient, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{URL: url})
@@ -93,18 +94,27 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, uuid.UUID{}, tx1ID)
 
+	// Set some activity
+	tmr.AddActivityRecord(tx1ID, "did a thing")
+	time.Sleep(1 * time.Microsecond)
+	tmr.AddActivityRecord(tx1ID, "did another thing")
+
 	// Query it back
-	var txns []*ptxapi.Transaction
+	var txns []*ptxapi.TransactionFull
 	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
 	require.NoError(t, err)
 	assert.Len(t, txns, 1)
 	assert.Equal(t, tx1ID, txns[0].ID)
 	assert.Equal(t, `{"0":"12345"}`, txns[0].Data.String())
 	assert.Equal(t, "(uint256)", txns[0].Function)
+	assert.Len(t, txns[0].Activity, 2)
+	assert.Equal(t, "did another thing", txns[0].Activity[0].Message)
+	assert.Equal(t, "did a thing", txns[0].Activity[1].Message)
+	assert.Greater(t, txns[0].Activity[0].Time, txns[0].Activity[1].Time)
 
 	// Get the stored ABIs to check we found it
 	var abis []*ptxapi.StoredABI
-	err = rpcClient.CallRPC(ctx, &abis, "ptx_queryABIs", query.NewQueryBuilder().Limit(1).Query())
+	err = rpcClient.CallRPC(ctx, &abis, "ptx_queryStoredABIs", query.NewQueryBuilder().Limit(1).Query())
 	require.NoError(t, err)
 	assert.Len(t, abis, 1)
 
@@ -117,13 +127,13 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 
 	// Get it directly by ID
 	var abiGet *ptxapi.StoredABI
-	err = rpcClient.CallRPC(ctx, &abiGet, "ptx_getABI", abiHash)
+	err = rpcClient.CallRPC(ctx, &abiGet, "ptx_getStoredABI", abiHash)
 	require.NoError(t, err)
 	assert.Equal(t, abiHash, abiGet.Hash)
 
 	// Null on not found is the consistent ethereum pattern
 	var abiNotFound *ptxapi.StoredABI
-	err = rpcClient.CallRPC(ctx, &abiNotFound, "ptx_getABI", tktypes.Bytes32(tktypes.RandBytes(32)))
+	err = rpcClient.CallRPC(ctx, &abiNotFound, "ptx_getStoredABI", tktypes.Bytes32(tktypes.RandBytes(32)))
 	require.NoError(t, err)
 	assert.Nil(t, abiNotFound)
 

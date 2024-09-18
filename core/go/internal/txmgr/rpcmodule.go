@@ -32,8 +32,8 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_getTransaction", tm.rpcGetTransaction()).
 		Add("ptx_queryTransactions", tm.rpcQueryTransactions()).
 		Add("ptx_storeABI", tm.rpcStoreABI()).
-		Add("ptx_getABI", tm.rpcGetABI()).
-		Add("ptx_queryABIs", tm.rpcQueryABIs())
+		Add("ptx_getStoredABI", tm.rpcGetStoredABI()).
+		Add("ptx_queryStoredABIs", tm.rpcQueryStoredABIs())
 }
 
 func (tm *txManager) rpcSendTransaction() rpcserver.RPCHandler {
@@ -80,7 +80,7 @@ func (tm *txManager) rpcStoreABI() rpcserver.RPCHandler {
 	})
 }
 
-func (tm *txManager) rpcGetABI() rpcserver.RPCHandler {
+func (tm *txManager) rpcGetStoredABI() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		hash tktypes.Bytes32,
 	) (*ptxapi.StoredABI, error) {
@@ -88,7 +88,7 @@ func (tm *txManager) rpcGetABI() rpcserver.RPCHandler {
 	})
 }
 
-func (tm *txManager) rpcQueryABIs() rpcserver.RPCHandler {
+func (tm *txManager) rpcQueryStoredABIs() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
 	) ([]*ptxapi.StoredABI, error) {
