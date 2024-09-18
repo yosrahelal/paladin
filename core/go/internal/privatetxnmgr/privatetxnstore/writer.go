@@ -22,6 +22,7 @@ import (
 	"hash/fnv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -248,6 +249,8 @@ func (w *writer) runBatch(ctx context.Context, b *writeOperationBatch) {
 
 						//fill in the foreign key before persisting in our dispatch table
 						dispatch.PublicTransactionID = publicTxIDs[dispatchIndex]
+
+						dispatch.ID = uuid.New().String()
 					}
 					log.L(ctx).Debugf("Writing dispatch batch %d", len(dispatchSequenceOp.dispatches))
 

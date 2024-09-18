@@ -401,17 +401,23 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 
 	//prepare all transactions then dispatch them
 
-	// array of batches with space for one batch per signing address
+	// array of sequences with space for one per signing address
+	// dispatchableTransactions is a map of signing address to transaction IDs so we can group by signing address
 	dispatchBatch := &privatetxnstore.DispatchBatch{
 		DispatchSequences: make([]*privatetxnstore.DispatchSequence, 0, len(dispatchableTransactions)),
 	}
 
 	for signingAddress, transactionIDs := range dispatchableTransactions {
+
 		preparedTransactions := make([]*components.PrivateTransaction, len(transactionIDs))
+
 		sequence := &privatetxnstore.DispatchSequence{
 			PrivateTransactionDispatches: make([]*privatetxnstore.DispatchPersisted, len(transactionIDs)),
 		}
+
 		for i, transactionID := range transactionIDs {
+			// prepare all trasnsactions for the given transaction IDs
+
 			sequence.PrivateTransactionDispatches[i] = &privatetxnstore.DispatchPersisted{
 				PrivateTransactionID: transactionID,
 			}
@@ -431,52 +437,56 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 				return err
 			}
 			preparedTransactions[i] = preparedTransaction
-			preparedTransactionPayloads := make([]*components.EthTransaction, len(preparedTransactions))
-
-			convertToInterfaceSlice := func(slice []*components.EthTransaction) []interface{} {
-				converted := make([]interface{}, len(slice))
-				for i, v := range slice {
-					converted[i] = v
-				}
-				return converted
-			}
-
-			for j, preparedTransaction := range preparedTransactions {
-				preparedTransactionPayloads[j] = preparedTransaction.PreparedTransaction
-			}
-			publicTransactionEngine := oc.components.PublicTxManager().GetEngine()
-
-			preparedSubmissions, rejected, err := publicTransactionEngine.PrepareSubmissionBatch(ctx,
-				&components.RequestOptions{
-					SignerID: signingAddress,
-				},
-				convertToInterfaceSlice(preparedTransactionPayloads),
-			)
-			if rejected {
-				log.L(ctx).Errorf("Submission rejected")
-				return i18n.NewError(ctx, msgs.MsgEngineInternalError, "Submission rejected")
-			}
-			if err != nil {
-				log.L(ctx).Errorf("Error preparing submission batch: %s", err)
-				return err
-			}
-
-			sequence.PublicTransactionsSubmit = func() (publicTxIDs []string, err error) {
-				// submit the public transactions
-				publicTransactions, err := publicTransactionEngine.SubmitBatch(ctx, preparedSubmissions)
-				if err != nil {
-					log.L(ctx).Errorf("Error submitting batch: %s", err)
-					return nil, err
-				}
-				publicTxIDs = make([]string, len(publicTransactions))
-				for i, publicTransaction := range publicTransactions {
-					publicTxIDs[i] = publicTransaction.ID
-				}
-
-				return publicTxIDs, nil
-			}
-
 		}
+
+		preparedTransactionPayloads := make([]*components.EthTransaction, len(preparedTransactions))
+
+		for j, preparedTransaction := range preparedTransactions {
+			preparedTransactionPayloads[j] = preparedTransaction.PreparedTransaction
+		}
+
+		//Now we have the payloads, we can prepare the submission
+		publicTransactionEngine := oc.components.PublicTxManager().GetEngine()
+
+		convertToInterfaceSlice := func(slice []*components.EthTransaction) []interface{} {
+			converted := make([]interface{}, len(slice))
+			for i, v := range slice {
+				converted[i] = v
+			}
+			return converted
+		}
+		preparedSubmissions, rejected, err := publicTransactionEngine.PrepareSubmissionBatch(ctx,
+			&components.RequestOptions{
+				SignerID: signingAddress,
+			},
+			convertToInterfaceSlice(preparedTransactionPayloads),
+		)
+		if rejected {
+			log.L(ctx).Errorf("Submission rejected")
+			return i18n.NewError(ctx, msgs.MsgEngineInternalError, "Submission rejected")
+		}
+		if err != nil {
+			log.L(ctx).Errorf("Error preparing submission batch: %s", err)
+			return err
+		}
+
+		// create a function to perform the actual submit
+		// this function will be called ini the context of the DB transaction
+		sequence.PublicTransactionsSubmit = func() (publicTxIDs []string, err error) {
+			// submit the public transactions
+			publicTransactions, err := publicTransactionEngine.SubmitBatch(ctx, preparedSubmissions)
+			if err != nil {
+				log.L(ctx).Errorf("Error submitting batch: %s", err)
+				return nil, err
+			}
+			publicTxIDs = make([]string, len(publicTransactions))
+			for i, publicTransaction := range publicTransactions {
+				publicTxIDs[i] = publicTransaction.ID
+			}
+
+			return publicTxIDs, nil
+		}
+
 		dispatchBatch.DispatchSequences = append(dispatchBatch.DispatchSequences, sequence)
 	}
 

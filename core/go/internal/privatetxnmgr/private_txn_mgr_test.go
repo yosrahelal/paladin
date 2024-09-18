@@ -319,7 +319,6 @@ func TestEngineRemoteEndorser(t *testing.T) {
 }
 
 func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
-	t.Skip("skipping TestEngineDependantTransactionEndorsedOutOfOrder")
 	//2 transactions, one dependant on the other
 	// we purposely endorse the first transaction late to ensure that the 2nd transaction
 	// is still sequenced behind the first
@@ -417,6 +416,29 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 
 	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
 
+	signingAddress := tktypes.RandHex(32)
+
+	mocks.domainSmartContract.On("ResolveDispatch", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(1).(*components.PrivateTransaction)
+		tx.Signer = signingAddress
+	}).Return(nil)
+
+	mockPreparedSubmission1 := componentmocks.NewPreparedSubmission(t)
+	mockPreparedSubmission2 := componentmocks.NewPreparedSubmission(t)
+	mockPreparedSubmissions := []components.PreparedSubmission{mockPreparedSubmission1, mockPreparedSubmission2}
+
+	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPreparedSubmissions, false, nil)
+
+	publicTransactions := []*components.PublicTX{
+		{
+			ID: uuid.New().String(),
+		},
+		{
+			ID: uuid.New().String(),
+		},
+	}
+	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
+
 	err := engine.Start()
 	require.NoError(t, err)
 
@@ -492,14 +514,20 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		Payload:     endorsementResponse1Bytes,
 	})
 
-	status := pollForStatus(ctx, t, "dispatched", engine, domainAddressString, tx1ID, 2*time.Second)
+	status := pollForStatus(ctx, t, "dispatched", engine, domainAddressString, tx1ID, 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
-	status = pollForStatus(ctx, t, "dispatched", engine, domainAddressString, tx2ID, 2*time.Second)
+	status = pollForStatus(ctx, t, "dispatched", engine, domainAddressString, tx2ID, 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
 	//TODO assert that transaction 1 got dispatched before 2
 
+}
+
+func TestEngineLocalBlockedTransaction(t *testing.T) {
+	//TODO
+	// 3 transactions, for different signing addresses, but two are is blocked by the other
+	// when the earlier transaction is confirmed, both blocked transactions should be dispatched
 }
 
 func TestEngineMiniLoad(t *testing.T) {

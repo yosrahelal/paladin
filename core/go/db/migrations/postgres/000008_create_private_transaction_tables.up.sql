@@ -1,7 +1,7 @@
 BEGIN;
 
 CREATE TABLE dispatches (
-    "public_transaction_id"       UUID    NOT NULL,
+    "public_transaction_id"       TEXT    NOT NULL,
     "private_transaction_id"      TEXT    NOT NULL,
     "id"                          TEXT    NOT NULL,
     PRIMARY KEY ("id")
