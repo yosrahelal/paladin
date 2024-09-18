@@ -22,7 +22,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
@@ -46,9 +45,6 @@ type DomainContextFunction func(ctx context.Context, dsi DomainStateInterface) e
 // We can then continue to build the next set of flushable operations, while the first set is
 // still flushing (a simple pipeline approach).
 type DomainStateInterface interface {
-
-	// EnsureABISchema is expected to be called on startup with all schemas required for operation of the domain
-	EnsureABISchemas(defs []*abi.Parameter) ([]Schema, error)
 
 	// FindAvailableStates is the main query function, only returning states that are available.
 	// Note this does not lock these states in any way, you must call that afterwards as:
@@ -172,32 +168,6 @@ func (dc *domainContext) run(fn func(ctx context.Context, dsi DomainStateInterfa
 	return fn(dc.ctx, dc)
 }
 
-func (dc *domainContext) EnsureABISchemas(defs []*abi.Parameter) ([]Schema, error) {
-
-	// Validate all the schemas
-	prepared := make([]Schema, len(defs))
-	toFlush := make([]*SchemaPersisted, len(defs))
-	for i, def := range defs {
-		s, err := newABISchema(dc.ctx, dc.domainID, def)
-		if err != nil {
-			return nil, err
-		}
-		prepared[i] = s
-		toFlush[i] = s.SchemaPersisted
-	}
-
-	// Take lock and check flush state
-	dc.stateLock.Lock()
-	defer dc.stateLock.Unlock()
-	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
-		return nil, flushErr
-	}
-
-	// Add them to the unflushed state
-	dc.unFlushed.schemas = append(dc.unFlushed.schemas, toFlush...)
-	return prepared, nil
-}
-
 func (dc *domainContext) getUnFlushedSpending() ([]*idOnly, error) {
 	// Take lock and check flush state
 	dc.stateLock.Lock()
@@ -222,7 +192,7 @@ func (dc *domainContext) getUnFlushedSpending() ([]*idOnly, error) {
 	return spendLocks, nil
 }
 
-func (dc *domainContext) mergedUnFlushed(schema Schema, states []*State, query *query.QueryJSON) (_ []*State, err error) {
+func (dc *domainContext) mergedUnFlushed(schema Schema, dbStates []*State, query *query.QueryJSON) (_ []*State, err error) {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
@@ -256,8 +226,17 @@ func (dc *domainContext) mergedUnFlushed(schema Schema, states []*State, query *
 			return nil, err
 		}
 		if match {
-			log.L(dc.ctx).Debugf("Matched state %s from un-flushed writes", &s.ID)
-			matches = append(matches, s)
+			dup := false
+			for _, dbState := range dbStates {
+				if s.ID == dbState.ID {
+					dup = true
+					break
+				}
+			}
+			if !dup {
+				log.L(dc.ctx).Debugf("Matched state %s from un-flushed writes", &s.ID)
+				matches = append(matches, s)
+			}
 		}
 	}
 
@@ -265,10 +244,10 @@ func (dc *domainContext) mergedUnFlushed(schema Schema, states []*State, query *
 		// Build the merged list - this involves extra cost, as we deliberately don't reconstitute
 		// the labels in JOIN on DB load (affecting every call at the DB side), instead we re-parse
 		// them as we need them
-		return dc.mergeInMemoryMatches(schema, states, matches, query)
+		return dc.mergeInMemoryMatches(schema, dbStates, matches, query)
 	}
 
-	return states, nil
+	return dbStates, nil
 }
 
 func (dc *domainContext) mergeInMemoryMatches(schema Schema, states []*State, extras []*StateWithLabels, query *query.QueryJSON) (_ []*State, err error) {

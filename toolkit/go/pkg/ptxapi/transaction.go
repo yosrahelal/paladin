@@ -17,6 +17,7 @@
 package ptxapi
 
 import (
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -39,35 +40,51 @@ func (tt TransactionType) Options() []string {
 	}
 }
 
-type TransactionStatus string
-
-const (
-	TransactionStatusPending TransactionStatus = "pending"
-)
-
-func (ts TransactionStatus) Enum() tktypes.Enum[TransactionStatus] {
-	return tktypes.Enum[TransactionStatus](ts)
-}
-
-func (ts TransactionStatus) Options() []string {
-	return []string{
-		string(TransactionStatusPending),
-	}
-}
-
-type TransactionInput struct {
-	IdempotencyKey string                        `json:"idempotencyKey,omitempty"`
-	Type           tktypes.Enum[TransactionType] `json:"type"`
-	Domain         string                        `json:"domain,omitempty"`
-	From           string                        `json:"from"`
-	To             *tktypes.EthAddress           `json:"to,omitempty"`
-	Function       abi.Entry                     `json:"function,omitempty"`
-	Inputs         tktypes.RawJSON               `json:"inputs,omitempty"`
-}
-
 type Transaction struct {
-	ID string `json:"id"`
-	TransactionInput
-	Created tktypes.Timestamp               `json:"created"`
-	Status  tktypes.Enum[TransactionStatus] `json:"status"`
+	ID             uuid.UUID                     `json:"id,omitempty"`             // server generated UUID for this transaction (query only)
+	Created        tktypes.Timestamp             `json:"created,omitempty"`        // server generated creation timestamp for this transaction (query only)
+	IdempotencyKey string                        `json:"idempotencyKey,omitempty"` // externally supplied unique identifier for this transaction. 409 Conflict will be returned on attempt to re-submit
+	Type           tktypes.Enum[TransactionType] `json:"type,omitempty"`           // public transactions go straight to a base ledger EVM smart contract. Private transactions use a Paladin domain to mask the on-chain data
+	Domain         string                        `json:"domain,omitempty"`         // name of a domain - only required on input for private deploy transactions (n/a for public, and inferred from "to" for invoke)
+	Function       string                        `json:"function,omitempty"`       // inferred from definition if not supplied. Resolved to full signature and stored. Required with abiReference on input if not constructor
+	ABIReference   *tktypes.Bytes32              `json:"abiReference,omitempty"`   // calculated if not supplied (ABI will be stored for you)
+	From           string                        `json:"from,omitempty"`           // locator for a local signing identity to use for submission of this transaction
+	To             *tktypes.EthAddress           `json:"to,omitempty"`             // the target transaction, or null for a deploy
+	Data           tktypes.RawJSON               `json:"data,omitempty"`           // pre-encoded array with/without function selector, array, or object input
+	DependsOn      []uuid.UUID                   `json:"dependsOn,omitempty"`      // these transactions must be mined on the blockchain successfully (or deleted) before this transaction submits. Failure of pre-reqs results in failure of this TX
+	// TODO: PrivateTransactions string list
+	// TODO: PublicTransactions string list
+}
+
+// Additional optional fields on input not returned on output
+type TransactionInput struct {
+	Transaction
+	ABI      abi.ABI          `json:"abi,omitempty"`  // required if abiReference not supplied
+	Bytecode tktypes.HexBytes `json:"data,omitempty"` // for deploy this is prepended to the encoded data inputs
+}
+
+// Additional fields returned on output when "full" specified
+type TransactionFull struct {
+	*Transaction
+	Receipt  *TransactionReceiptData     `json:"receipt"`  // available if the transaction has reached a final state
+	Activity []TransactionActivityRecord `json:"activity"` // if active processing is being performed on this transaction this provides a rolling buffer of updates
+	// TODO: PrivateTransactions object list
+	// TODO: PublicTransactions object list
+}
+
+type TransactionReceipt struct {
+	ID uuid.UUID `json:"id,omitempty"` // transaction ID
+	TransactionReceiptData
+}
+
+type TransactionReceiptData struct {
+	Success         bool             `json:"success,omitempty"` // true for success (note "status" is reserved for future use)
+	TransactionHash *tktypes.Bytes32 `json:"transactionHash"`   // if the result was finalized by the blockchain, this is the on-chain blockchain transaction hash
+	RevertMessage   *string          `json:"revertMessage"`     // always set to a non-empty string if the transaction reverted, with as much detail as could be extracted
+	RevertData      tktypes.HexBytes `json:"revertData"`        // encoded revert data if available
+}
+
+type TransactionActivityRecord struct {
+	Time    tktypes.Timestamp `json:"time"`    // time the record occurred
+	Message string            `json:"message"` //
 }

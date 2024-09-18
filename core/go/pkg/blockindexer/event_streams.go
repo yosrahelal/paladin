@@ -24,7 +24,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -566,7 +565,7 @@ func (es *eventStream) processCatchupEventPage(checkpointBlock int64, catchUpToB
 	enrichments := make(chan error)
 	for txStr, _events := range byTxID {
 		events := _events // not safe to pass loop pointer
-		go es.queryTransactionEvents(ethtypes.MustNewHexBytes0xPrefix(txStr), events, enrichments)
+		go es.queryTransactionEvents(tktypes.MustParseBytes32(txStr), events, enrichments)
 	}
 	// Collect all the results
 	for range byTxID {
@@ -598,8 +597,8 @@ func (es *eventStream) processCatchupEventPage(checkpointBlock int64, catchUpToB
 
 }
 
-func (es *eventStream) queryTransactionEvents(tx ethtypes.HexBytes0xPrefix, events []*EventWithData, done chan error) {
-	done <- es.bi.queryTransactionEvents(es.ctx, es.eventABIs, tx, events)
+func (es *eventStream) queryTransactionEvents(tx tktypes.Bytes32, events []*EventWithData, done chan error) {
+	done <- es.bi.enrichTransactionEvents(es.ctx, es.eventABIs, tx, events, true /* retry indefinitely */)
 }
 
 func (es *eventStream) matchLog(in *LogJSONRPC, out *EventWithData) {

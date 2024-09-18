@@ -626,7 +626,7 @@ func deploySmartContract(t *testing.T, confFile string) *tktypes.EthAddress {
 		SignAndSend()
 	require.NoError(t, err)
 
-	deployTx, err := bi.WaitForTransaction(ctx, *deployTXHash)
+	deployTx, err := bi.WaitForTransactionSuccess(ctx, *deployTXHash, simDomainABI)
 	require.NoError(t, err)
 	require.Equal(t, deployTx.Result.V(), blockindexer.TXResult_SUCCESS)
 	return deployTx.ContractAddress

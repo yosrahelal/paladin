@@ -13,8 +13,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240905213624-43a614759076
-	github.com/hyperledger/firefly-common v1.4.8
-	github.com/hyperledger/firefly-signer v1.1.14
+	github.com/hyperledger/firefly-common v1.4.11
+	github.com/hyperledger/firefly-signer v1.1.18-0.20240916233856-eb284ced6841
 	github.com/iden3/go-iden3-crypto v0.0.16
 	github.com/iden3/go-rapidsnark/witness/v2 v2.0.0
 	github.com/iden3/go-rapidsnark/witness/wasmer v0.0.0-20240621085734-9323fbec34a3

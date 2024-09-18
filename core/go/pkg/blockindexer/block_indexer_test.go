@@ -25,6 +25,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
@@ -146,13 +147,13 @@ func newMockBlockIndexer(t *testing.T, config *Config) (context.Context, *blockI
 
 }
 
-func testBlockArray(t *testing.T, l int, knownAddress ...*ethtypes.Address0xHex) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC) {
+func testBlockArray(t *testing.T, l int, knownAddress ...ethtypes.Address0xHex) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC) {
 	blocks := make([]*BlockInfoJSONRPC, l)
 	receipts := make(map[string][]*TXReceiptJSONRPC, l)
 	for i := 0; i < l; i++ {
 		var contractAddress, to, emitAddr1 *ethtypes.Address0xHex
 		if knownAddress != nil {
-			emitAddr1 = knownAddress[0]
+			emitAddr1 = &knownAddress[0]
 		} else {
 			emitAddr1 = ethtypes.MustNewAddress(tktypes.RandHex(20))
 		}
@@ -845,7 +846,7 @@ func TestGetIndexedTransactionByHashErrors(t *testing.T) {
 
 }
 
-func TestBlockIndexerWaitForTransaction(t *testing.T) {
+func TestBlockIndexerWaitForTransactionSuccess(t *testing.T) {
 	ctx, bi, mRPC, blDone := newTestBlockIndexer(t)
 	defer blDone()
 
@@ -856,7 +857,7 @@ func TestBlockIndexerWaitForTransaction(t *testing.T) {
 	gotTX := make(chan struct{})
 	go func() {
 		defer close(gotTX)
-		tx, err := bi.WaitForTransaction(ctx, txHash)
+		tx, err := bi.WaitForTransactionSuccess(ctx, txHash, nil)
 		require.NoError(t, err)
 		assert.Equal(t, ethtypes.HexUint64(tx.BlockNumber), blocks[2].Number)
 		assert.Equal(t, txHash, tx.Hash)
@@ -877,7 +878,7 @@ func TestBlockIndexerWaitForTransaction(t *testing.T) {
 
 	<-gotTX
 
-	tx, err := bi.WaitForTransaction(ctx, txHash)
+	tx, err := bi.WaitForTransactionAnyResult(ctx, txHash)
 	require.NoError(t, err)
 	assert.Equal(t, TXResult_SUCCESS, tx.Result.V())
 	assert.Equal(t, ethtypes.HexUint64(tx.BlockNumber), blocks[2].Number)
@@ -893,11 +894,17 @@ func TestBlockIndexerWaitForTransactionRevert(t *testing.T) {
 
 	receipt := receipts[blocks[2].Hash.String()][0]
 	receipt.Status = ethtypes.NewHexInteger64(0) // reverted
+	receipt.RevertReason = ethtypes.MustNewHexBytes0xPrefix(`0x08c379a0` +
+		`0000000000000000000000000000000000000000000000000000000000000020` +
+		`000000000000000000000000000000000000000000000000000000000000001a` +
+		`4e6f7420656e6f7567682045746865722070726f76696465642e000000000000`)
 	txHash := tktypes.Bytes32(receipt.TransactionHash)
 	gotTX := make(chan struct{})
 	go func() {
 		defer close(gotTX)
-		tx, err := bi.WaitForTransaction(ctx, txHash)
+		_, err := bi.WaitForTransactionSuccess(ctx, txHash, nil)
+		require.Error(t, err, `PD011309: Transaction reverted: Error("Not enough Ether provided.")`)
+		tx, err := bi.WaitForTransactionAnyResult(ctx, txHash)
 		require.NoError(t, err)
 		assert.Equal(t, ethtypes.HexUint64(tx.BlockNumber), blocks[2].Number)
 		assert.Equal(t, txHash, tx.Hash)
@@ -918,7 +925,7 @@ func TestBlockIndexerWaitForTransactionRevert(t *testing.T) {
 
 	<-gotTX
 
-	tx, err := bi.WaitForTransaction(ctx, txHash)
+	tx, err := bi.WaitForTransactionAnyResult(ctx, txHash)
 	require.NoError(t, err)
 	assert.Equal(t, TXResult_FAILURE, tx.Result.V())
 	assert.Equal(t, ethtypes.HexUint64(tx.BlockNumber), blocks[2].Number)
@@ -932,7 +939,7 @@ func TestWaitForTransactionErrorCases(t *testing.T) {
 
 	p.Mock.ExpectQuery("SELECT.*indexed_transactions").WillReturnError(fmt.Errorf("pop"))
 
-	_, err := bi.WaitForTransaction(ctx, tktypes.Bytes32(tktypes.RandBytes(32)))
+	_, err := bi.WaitForTransactionSuccess(ctx, tktypes.Bytes32(tktypes.RandBytes(32)), nil)
 	assert.Regexp(t, "pop", err)
 
 }
@@ -946,5 +953,35 @@ func TestDecodeTransactionEventsFail(t *testing.T) {
 
 	_, err := bi.DecodeTransactionEvents(ctx, tktypes.Bytes32(tktypes.RandBytes(32)), testABI)
 	assert.Regexp(t, "pop", err)
+
+}
+
+func TestWaitForTransactionSuccessGetReceiptFail(t *testing.T) {
+
+	ctx, bi, mRPC, _, done := newMockBlockIndexer(t, &Config{})
+	defer done()
+
+	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", mock.Anything).Return(
+		rpcbackend.NewRPCError(ctx, rpcbackend.RPCCodeInternalError, i18n.Msg404NotFound),
+	)
+
+	err := bi.getReceiptRevertError(ctx, tktypes.Bytes32(tktypes.RandBytes(32)), nil)
+	assert.Regexp(t, "FF00167", err)
+
+}
+
+func TestWaitForTransactionSuccessGetReceiptFallback(t *testing.T) {
+
+	ctx, bi, mRPC, _, done := newMockBlockIndexer(t, &Config{})
+	defer done()
+
+	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", mock.Anything).Run(
+		func(args mock.Arguments) {
+			*(args[1].(**TXReceiptJSONRPC)) = &TXReceiptJSONRPC{}
+		},
+	).Return(nil)
+
+	err := bi.getReceiptRevertError(ctx, tktypes.Bytes32(tktypes.RandBytes(32)), nil)
+	assert.Regexp(t, "PD011309", err)
 
 }

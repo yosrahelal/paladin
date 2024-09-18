@@ -18,12 +18,14 @@ package noto
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/big"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -96,19 +98,20 @@ func (n *Noto) prepareInputs(ctx context.Context, owner ethtypes.Address0xHex, a
 			queryBuilder.GreaterThan(".created", lastStateTimestamp)
 		}
 
+		log.L(ctx).Debugf("State query: %s", queryBuilder.Query())
 		states, err := n.findAvailableStates(ctx, queryBuilder.Query().String())
 
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		if len(states) == 0 {
-			return nil, nil, nil, fmt.Errorf("insufficient funds (available=%s)", total.Text(10))
+			return nil, nil, nil, i18n.NewError(ctx, msgs.MsgInsufficientFunds, total.Text(10))
 		}
 		for _, state := range states {
 			lastStateTimestamp = state.StoredAt
 			coin, err := n.unmarshalCoin(state.DataJson)
 			if err != nil {
-				return nil, nil, nil, fmt.Errorf("coin %s is invalid: %s", state.Id, err)
+				return nil, nil, nil, i18n.NewError(ctx, msgs.MsgInvalidStateData, state.Id, err)
 			}
 			total = total.Add(total, coin.Amount.BigInt())
 			stateRefs = append(stateRefs, &pb.StateRef{
@@ -116,6 +119,7 @@ func (n *Noto) prepareInputs(ctx context.Context, owner ethtypes.Address0xHex, a
 				Id:       state.Id,
 			})
 			coins = append(coins, coin)
+			log.L(ctx).Debugf("Selecting coin %s value=%s total=%s required=%s)", state.Id, coin.Amount.BigInt().Text(10), total.Text(10), amount.BigInt().Text(10))
 			if total.Cmp(amount.BigInt()) >= 0 {
 				return coins, stateRefs, total, nil
 			}

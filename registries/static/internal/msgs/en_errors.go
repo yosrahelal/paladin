@@ -17,16 +17,17 @@
 package msgs
 
 import (
+	"sync"
+
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"golang.org/x/text/language"
 )
 
-var registered = false
+var registered sync.Once
 var ffe = func(key, translation string, statusHint ...int) i18n.ErrorMessageKey {
-	if !registered {
+	registered.Do(func() {
 		i18n.RegisterPrefix("PD04", "Paladin Static Registry")
-		registered = true
-	}
+	})
 	return i18n.FFE(language.AmericanEnglish, key, translation, statusHint...)
 }
 

@@ -17,6 +17,7 @@
 package tktypes
 
 import (
+	"bytes"
 	"context"
 	"database/sql/driver"
 	"encoding/json"
@@ -79,11 +80,22 @@ func (ts Timestamp) UnixNano() int64 {
 
 func (ts *Timestamp) UnmarshalJSON(b []byte) error {
 	var iVal interface{}
-	err := json.Unmarshal(b, &iVal)
+	decoder := json.NewDecoder(bytes.NewReader(b))
+	decoder.UseNumber() // It's not safe to use a JSON number decoder as it uses float64, so can (and does) lose precision
+	err := decoder.Decode(&iVal)
 	if err == nil {
 		err = ts.Scan(iVal)
 	}
 	return err
+}
+
+func (ts *Timestamp) scanString(src string) error {
+	t, err := ParseTimeString(src)
+	if err != nil {
+		return err
+	}
+	*ts = t
+	return nil
 }
 
 // Scan implements sql.Scanner
@@ -92,23 +104,13 @@ func (ts *Timestamp) Scan(src interface{}) error {
 	case nil:
 		*ts = 0
 		return nil
-
+	case json.Number: // Note we avoid float64 using Decoder.UseNumber() in unmarshal
+		return ts.scanString(src.String())
 	case string:
-		t, err := ParseTimeString(src)
-		if err != nil {
-			return err
-		}
-		*ts = t
-		return nil
-
+		return ts.scanString(src)
 	case int64:
 		*ts = TimestampFromUnix(src)
 		return nil
-
-	case float64:
-		*ts = TimestampFromUnix(int64(src))
-		return nil
-
 	default:
 		return i18n.NewError(context.Background(), i18n.MsgTypeRestoreFailed, src, ts)
 	}

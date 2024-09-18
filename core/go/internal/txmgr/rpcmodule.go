@@ -18,21 +18,54 @@ package txmgr
 import (
 	"context"
 
+	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 func (tm *txManager) buildRPCModule() *rpcserver.RPCModule {
 	return rpcserver.NewRPCModule("pstate").
-		Add("ptx_queryTransactions", tm.rpcQueryTransactions())
+		Add("ptx_sendTransaction", tm.rpcSendTransaction()).
+		Add("ptx_queryTransactions", tm.rpcQueryTransactions()).
+		Add("ptx_storeABI", tm.rpcStoreABI()).
+		Add("ptx_queryABIs", tm.rpcQueryABIs())
+}
+
+func (tm *txManager) rpcSendTransaction() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		tx ptxapi.TransactionInput,
+	) (*uuid.UUID, error) {
+		return tm.sendTransaction(ctx, &tx)
+	})
 }
 
 func (tm *txManager) rpcQueryTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		query query.QueryJSON,
 		full bool,
-	) ([]*ptxapi.Transaction, error) {
-		return tm.queryTransactions(ctx, &query, full)
+	) (any, error) {
+		if full {
+			return tm.queryTransactionsFull(ctx, &query)
+		}
+		return tm.queryTransactions(ctx, &query)
+	})
+}
+
+func (tm *txManager) rpcStoreABI() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		a abi.ABI,
+	) (*tktypes.Bytes32, error) {
+		return tm.upsertABI(ctx, a)
+	})
+}
+
+func (tm *txManager) rpcQueryABIs() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		query query.QueryJSON,
+	) ([]*ptxapi.StoredABI, error) {
+		return tm.queryABIs(ctx, &query)
 	})
 }

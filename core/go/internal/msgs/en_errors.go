@@ -19,6 +19,7 @@ package msgs
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"golang.org/x/text/language"
@@ -26,12 +27,11 @@ import (
 
 const paladinCoreGoPrefix = "PD01"
 
-var registered = false
+var registered sync.Once
 var ffe = func(key, translation string, statusHint ...int) i18n.ErrorMessageKey {
-	if !registered {
+	registered.Do(func() {
 		i18n.RegisterPrefix(paladinCoreGoPrefix, "Paladin Transaction Manager")
-		registered = true
-	}
+	})
 	if !strings.HasPrefix(key, paladinCoreGoPrefix) {
 		panic(fmt.Errorf("must have prefix '%s': %s", paladinCoreGoPrefix, key))
 	}
@@ -132,6 +132,7 @@ var (
 	MsgFiltersTypeErrorDuringCompare      = ffe("PD010717", "Mismatched types during compare t1=%T t2=%T")
 	MsgFiltersMissingSortField            = ffe("PD010718", "Must specify at least one sort field")
 	MsgFiltersValueInvalidHexBytes32      = ffe("PD010719", "Failed to parse value as 32 byte hex string (parsedBytes=%d)")
+	MsgFiltersValueInvalidUUID            = ffe("PD010720", "Failed to parse value as UUID: %v")
 
 	// HTTPServer PD0108XX
 	MsgHTTPServerStartFailed        = ffe("PD010800", "Failed to start server on '%s'")
@@ -161,10 +162,11 @@ var (
 	MsgBlockIndexerESSourceError            = ffe("PD011302", "Event stream source must not be changed after creation")
 	MsgBlockIndexerESInitFail               = ffe("PD011303", "Event stream initialization failed")
 	MsgBlockIndexerESAlreadyInit            = ffe("PD011304", "Event stream already initialized")
-	MsgBlockIndexerConfirmedReceiptNotFound = ffe("PD011305", "Expected received for confirmed transaction %s not found")
+	MsgBlockIndexerConfirmedReceiptNotFound = ffe("PD011305", "Receipt for confirmed transaction %s not found")
 	MsgBlockIndexerInvalidEventStreamType   = ffe("PD011306", "Unsupported event stream type: %s")
 	MsgBlockMissingHandler                  = ffe("PD011307", "Handler not registered for stream")
 	MsgBlockIndexerNoBlocksIndexed          = ffe("PD011308", "No confirmed blocks have yet been indexed")
+	MsgBlockIndexerTransactionReverted      = ffe("PD011309", "Transaction reverted: %s")
 
 	// Signing module PD0114XX
 	MsgSigningModuleBadPathError                = ffe("PD011400", "Path '%s' does not exist, or it is not a directory")
@@ -205,6 +207,7 @@ var (
 	MsgEthClientChainIDMismatch     = ffe("PD011512", "ChainID mismatch between HTTP and WebSocket JSON/RPC connections http=%d ws=%d")
 	MsgEthClientInvalidWebSocketURL = ffe("PD011513", "Invalid WebSocket URL: %s")
 	MsgEthClientInvalidHTTPURL      = ffe("PD011514", "Invalid HTTP URL: %s")
+	MsgEthClientCallReverted        = ffe("PD011516", "Reverted: %s")
 
 	// DomainManager module PD0116XX
 	MsgDomainNotFound                         = ffe("PD011600", "Domain %q not found")
@@ -307,4 +310,19 @@ var (
 	MsgRegistryNodeEntiresNotFound = ffe("PD012100", "No entries found for node '%s'")
 	MsgRegistryInvalidEntry        = ffe("PD012101", "Invalid entry")
 	MsgRegistryNotFound            = ffe("PD012102", "Registry %q not found")
+
+	// TxMgr module PD0122XX
+	MsgTxMgrQueryLimitRequired       = ffe("PD012200", "limit is required on all queries")
+	MsgTxMgrInvalidABI               = ffe("PD012201", "ABI is invalid")
+	MsgTxMgrABIAndDefinition         = ffe("PD012202", "Must supply one of an abi or an abiReference")
+	MsgTxMgrABIReferenceLookupFailed = ffe("PD012203", "Failed to resolve abiReference %s")
+	MsgTxMgrFunctionWithoutTo        = ffe("PD012204", "A to contract address must be specified with a function name (leave blank to select constructor)")
+	MsgTxMgrFunctionMultiMatch       = ffe("PD012205", "Supplied function selector matched more than one function in the ABI: '%s' and '%s'")
+	MsgTxMgrFunctionNoMatch          = ffe("PD012206", "Supplied function selector did not match any function in the ABI")
+	MsgTxMgrBytecodeNonConstructor   = ffe("PD012207", "Bytecode can only be supplied with a constructor. Selected function %s")
+	MsgTxMgrInvalidInputData         = ffe("PD012208", "Invalid input data for function %s")
+	MsgTxMgrInvalidInputDataBytes    = ffe("PD012209", "A string was supplied for data that could not be parsed as encoded call data for function %s")
+	MsgTxMgrBytecodeAndHexData       = ffe("PD012210", "When deploying a smart contract the bytecode must be supplied separately to the input data")
+	MsgTxMgrInvalidTXType            = ffe("PD012211", "Invalid transaction type")
+	MsgTxMgrInvalidInputDataType     = ffe("PD012212", "Invalid input data type: %T")
 )

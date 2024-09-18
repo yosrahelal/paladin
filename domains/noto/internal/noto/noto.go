@@ -19,12 +19,13 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"fmt"
 	"math/big"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
+	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
@@ -123,8 +124,12 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *pb.PrepareDeployRequest) 
 	if err != nil {
 		return nil, err
 	}
+	notary := domain.FindVerifier(params.Notary, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
+	if notary == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "notary")
+	}
 	config := &types.NotoConfigInput_V0{
-		NotaryLookup: req.ResolvedVerifiers[0].Lookup,
+		NotaryLookup: notary.Lookup,
 	}
 	configABI, err := n.encodeConfig(config)
 	if err != nil {
@@ -134,7 +139,7 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *pb.PrepareDeployRequest) 
 	deployParams := &NotoDeployParams{
 		Name:          params.Implementation,
 		TransactionID: req.Transaction.TransactionId,
-		Notary:        req.ResolvedVerifiers[0].Verifier,
+		Notary:        notary.Verifier,
 		Config:        configABI,
 	}
 	paramsJSON, err := json.Marshal(deployParams)
@@ -209,7 +214,7 @@ func (n *Noto) encodeConfig(config *types.NotoConfigInput_V0) ([]byte, error) {
 func (n *Noto) decodeConfig(ctx context.Context, domainConfig []byte) (*types.NotoConfigOutput_V0, error) {
 	configSelector := ethtypes.HexBytes0xPrefix(domainConfig[0:4])
 	if configSelector.String() != types.NotoConfigID_V0.String() {
-		return nil, fmt.Errorf("unexpected config type: %s", configSelector)
+		return nil, i18n.NewError(ctx, msgs.MsgUnexpectedConfigType, configSelector)
 	}
 	configValues, err := types.NotoConfigOutputABI_V0.DecodeABIDataCtx(ctx, domainConfig[4:], 0)
 	if err != nil {
@@ -240,7 +245,7 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *pb.TransactionSpecif
 	abi := types.NotoABI.Functions()[functionABI.Name]
 	handler := n.GetHandler(functionABI.Name)
 	if abi == nil || handler == nil {
-		return nil, nil, fmt.Errorf("unknown function: %s", functionABI.Name)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, functionABI.Name)
 	}
 	params, err := handler.ValidateParams(ctx, tx.FunctionParamsJson)
 	if err != nil {
@@ -252,7 +257,7 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *pb.TransactionSpecif
 		return nil, nil, err
 	}
 	if tx.FunctionSignature != signature {
-		return nil, nil, fmt.Errorf("unexpected signature for function '%s': expected=%s actual=%s", functionABI.Name, signature, tx.FunctionSignature)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgUnexpectedFunctionSignature, functionABI.Name, signature, tx.FunctionSignature)
 	}
 
 	domainConfig, err := n.decodeConfig(ctx, tx.ContractConfig)
@@ -282,17 +287,17 @@ func (n *Noto) recoverSignature(ctx context.Context, payload ethtypes.HexBytes0x
 	return sig.RecoverDirect(payload, n.chainID)
 }
 
-func (n *Noto) parseCoinList(label string, states []*pb.EndorsableState) ([]*types.NotoCoin, []*pb.StateRef, *big.Int, error) {
+func (n *Noto) parseCoinList(ctx context.Context, label string, states []*pb.EndorsableState) ([]*types.NotoCoin, []*pb.StateRef, *big.Int, error) {
 	var err error
 	coins := make([]*types.NotoCoin, len(states))
 	refs := make([]*pb.StateRef, len(states))
 	total := big.NewInt(0)
 	for i, input := range states {
 		if input.SchemaId != n.coinSchema.Id {
-			return nil, nil, nil, fmt.Errorf("unknown schema ID: %s", input.SchemaId)
+			return nil, nil, nil, i18n.NewError(ctx, msgs.MsgUnknownSchema, input.SchemaId)
 		}
 		if coins[i], err = n.unmarshalCoin(input.StateDataJson); err != nil {
-			return nil, nil, nil, fmt.Errorf("invalid %s[%d] (%s): %s", label, i, input.Id, err)
+			return nil, nil, nil, i18n.NewError(ctx, msgs.MsgInvalidListInput, label, i, input.Id, err)
 		}
 		refs[i] = &pb.StateRef{
 			SchemaId: input.SchemaId,
@@ -303,12 +308,12 @@ func (n *Noto) parseCoinList(label string, states []*pb.EndorsableState) ([]*typ
 	return coins, refs, total, nil
 }
 
-func (n *Noto) gatherCoins(inputs, outputs []*pb.EndorsableState) (*gatheredCoins, error) {
-	inCoins, inStates, inTotal, err := n.parseCoinList("input", inputs)
+func (n *Noto) gatherCoins(ctx context.Context, inputs, outputs []*pb.EndorsableState) (*gatheredCoins, error) {
+	inCoins, inStates, inTotal, err := n.parseCoinList(ctx, "input", inputs)
 	if err != nil {
 		return nil, err
 	}
-	outCoins, outStates, outTotal, err := n.parseCoinList("output", outputs)
+	outCoins, outStates, outTotal, err := n.parseCoinList(ctx, "output", outputs)
 	if err != nil {
 		return nil, err
 	}

@@ -18,10 +18,11 @@ package noto
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/big"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
@@ -38,10 +39,10 @@ func (h *transferHandler) ValidateParams(ctx context.Context, params string) (in
 		return nil, err
 	}
 	if transferParams.To == "" {
-		return nil, fmt.Errorf("parameter 'to' is required")
+		return nil, i18n.NewError(ctx, msgs.MsgParameterRequired, "to")
 	}
 	if transferParams.Amount.BigInt().Sign() != 1 {
-		return nil, fmt.Errorf("parameter 'amount' must be greater than 0")
+		return nil, i18n.NewError(ctx, msgs.MsgParameterGreaterThanZero, "amount")
 	}
 	return &transferParams, nil
 }
@@ -72,11 +73,11 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 
 	notary := domain.FindVerifier(tx.DomainConfig.NotaryLookup, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
 	if notary == nil || notary.Verifier != tx.DomainConfig.NotaryAddress {
-		return nil, fmt.Errorf("notary resolved to unexpected address")
+		return nil, i18n.NewError(ctx, msgs.MsgNotaryUnexpectedAddress, tx.DomainConfig.NotaryAddress, notary.Verifier)
 	}
 	from := domain.FindVerifier(tx.Transaction.From, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
 	if from == nil {
-		return nil, fmt.Errorf("error verifying recipient address")
+		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "from")
 	}
 	fromAddress, err := ethtypes.NewAddress(from.Verifier)
 	if err != nil {
@@ -84,7 +85,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	}
 	to := domain.FindVerifier(params.To, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
 	if to == nil {
-		return nil, fmt.Errorf("error verifying recipient address")
+		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "to")
 	}
 	toAddress, err := ethtypes.NewAddress(to.Verifier)
 	if err != nil {
@@ -151,7 +152,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 			},
 		}
 	default:
-		return nil, fmt.Errorf("unknown variant: %s", tx.DomainConfig.Variant)
+		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
 	}
 
 	return &pb.AssembleTransactionResponse{
@@ -164,9 +165,9 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	}, nil
 }
 
-func (h *transferHandler) validateAmounts(coins *gatheredCoins) error {
+func (h *transferHandler) validateAmounts(ctx context.Context, coins *gatheredCoins) error {
 	if coins.inTotal.Cmp(coins.outTotal) != 0 {
-		return fmt.Errorf("invalid amount for 'transfer'")
+		return i18n.NewError(ctx, msgs.MsgInvalidAmount, "transfer", coins.inTotal, coins.outTotal)
 	}
 	return nil
 }
@@ -174,29 +175,29 @@ func (h *transferHandler) validateAmounts(coins *gatheredCoins) error {
 func (h *transferHandler) validateSenderSignature(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest, coins *gatheredCoins) error {
 	signature := domain.FindAttestation("sender", req.Signatures)
 	if signature == nil {
-		return fmt.Errorf("did not find 'sender' attestation")
+		return i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
 	}
 	if signature.Verifier.Lookup != tx.Transaction.From {
-		return fmt.Errorf("sender attestation does not match transaction sender")
+		return i18n.NewError(ctx, msgs.MsgAttestationUnexpected, "sender", tx.Transaction.From, signature.Verifier.Lookup)
 	}
 	encodedTransfer, err := h.noto.encodeTransferUnmasked(ctx, tx.ContractAddress, coins.inCoins, coins.outCoins)
 	if err != nil {
 		return err
 	}
-	signingAddress, err := h.noto.recoverSignature(ctx, encodedTransfer, signature.Payload)
+	recoveredSignature, err := h.noto.recoverSignature(ctx, encodedTransfer, signature.Payload)
 	if err != nil {
 		return err
 	}
-	if signingAddress.String() != signature.Verifier.Verifier {
-		return fmt.Errorf("sender signature does not match")
+	if recoveredSignature.String() != signature.Verifier.Verifier {
+		return i18n.NewError(ctx, msgs.MsgSignatureDoesNotMatch, "sender", signature.Verifier.Verifier, recoveredSignature.String())
 	}
 	return nil
 }
 
-func (h *transferHandler) validateOwners(tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest, coins *gatheredCoins) error {
+func (h *transferHandler) validateOwners(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest, coins *gatheredCoins) error {
 	from := domain.FindVerifier(tx.Transaction.From, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
 	if from == nil {
-		return fmt.Errorf("error verifying recipient address")
+		return i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "from")
 	}
 	fromAddress, err := ethtypes.NewAddress(from.Verifier)
 	if err != nil {
@@ -205,21 +206,21 @@ func (h *transferHandler) validateOwners(tx *types.ParsedTransaction, req *pb.En
 
 	for i, coin := range coins.inCoins {
 		if coin.Owner != *fromAddress {
-			return fmt.Errorf("state %s is not owned by %s", coins.inStates[i].Id, tx.Transaction.From)
+			return i18n.NewError(ctx, msgs.MsgStateWrongOwner, coins.inStates[i].Id, tx.Transaction.From)
 		}
 	}
 	return nil
 }
 
 func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
-	coins, err := h.noto.gatherCoins(req.Inputs, req.Outputs)
+	coins, err := h.noto.gatherCoins(ctx, req.Inputs, req.Outputs)
 	if err != nil {
 		return nil, err
 	}
-	if err := h.validateAmounts(coins); err != nil {
+	if err := h.validateAmounts(ctx, coins); err != nil {
 		return nil, err
 	}
-	if err := h.validateOwners(tx, req, coins); err != nil {
+	if err := h.validateOwners(ctx, tx, req, coins); err != nil {
 		return nil, err
 	}
 
@@ -263,10 +264,10 @@ func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransacti
 			}
 		}
 	default:
-		return nil, fmt.Errorf("unknown variant: %s", tx.DomainConfig.Variant)
+		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
 	}
 
-	return nil, fmt.Errorf("unrecognized endorsement request: %s", req.EndorsementRequest.Name)
+	return nil, i18n.NewError(ctx, msgs.MsgUnrecognizedEndorsement, req.EndorsementRequest.Name)
 }
 
 func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
@@ -286,16 +287,16 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		// This is not verified on the base ledger, but can be verified by anyone with the unmasked state data
 		signature = domain.FindAttestation("sender", req.AttestationResult)
 		if signature == nil {
-			return nil, fmt.Errorf("did not find 'sender' attestation")
+			return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
 		}
 	case types.NotoVariantSelfSubmit:
 		// Include the signature from the notary (will be verified on base ledger)
 		signature = domain.FindAttestation("notary", req.AttestationResult)
 		if signature == nil {
-			return nil, fmt.Errorf("did not find 'notary' attestation")
+			return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "notary")
 		}
 	default:
-		return nil, fmt.Errorf("unknown variant: %s", tx.DomainConfig.Variant)
+		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
 	}
 
 	params := map[string]interface{}{

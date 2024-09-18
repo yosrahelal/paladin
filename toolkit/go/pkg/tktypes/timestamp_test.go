@@ -141,6 +141,11 @@ func TestTimestampParseValue(t *testing.T) {
 	assert.Equal(t, "2021-05-15T19:49:04.123Z", ts.String())
 	assert.Equal(t, "2021-05-15T19:49:04.123Z", ts.Time().UTC().Format(time.RFC3339Nano))
 
+	// Unix Millis beyond precision float64 handles well, proving we use strings for parsing numbers
+	err = ts.Scan("1726545933211347000")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1726545933211347000), ts.UnixNano())
+
 	// Unix Secs
 	err = ts.Scan("1621108144")
 	require.NoError(t, err)

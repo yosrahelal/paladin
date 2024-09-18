@@ -109,7 +109,8 @@ func functionBuilder(ctx context.Context, t *testing.T, eth ethclient.EthClient,
 
 func waitFor(ctx context.Context, t *testing.T, tb testbed.Testbed, txHash *tktypes.Bytes32, err error) *blockindexer.IndexedTransaction {
 	require.NoError(t, err)
-	tx, err := tb.Components().BlockIndexer().WaitForTransaction(ctx, *txHash)
+	notoBuild := domain.LoadBuild(notoJSON)
+	tx, err := tb.Components().BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, notoBuild.ABI)
 	assert.NoError(t, err)
 	return tx
 }
@@ -186,7 +187,7 @@ func TestNoto(t *testing.T) {
 		}),
 	})
 	require.NotNil(t, rpcerr)
-	assert.ErrorContains(t, rpcerr.Error(), "mint can only be initiated by notary")
+	assert.ErrorContains(t, rpcerr.Error(), "PD200009")
 	assert.True(t, boolResult)
 
 	log.L(ctx).Infof("Transfer 150 from notary (should fail)")
@@ -200,7 +201,7 @@ func TestNoto(t *testing.T) {
 		}),
 	})
 	require.NotNil(t, rpcerr)
-	assert.Regexp(t, "insufficient funds", rpcerr.Error())
+	assert.ErrorContains(t, rpcerr.Error(), "PD200005")
 
 	log.L(ctx).Infof("Transfer 50 from notary to recipient1")
 	rpcerr = rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
@@ -248,6 +249,88 @@ func TestNoto(t *testing.T) {
 	coins, err = noto.FindCoins(ctx, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 4) // TODO: verify coins
+}
+
+func TestNotoApprove(t *testing.T) {
+	ctx := context.Background()
+	log.L(ctx).Infof("TestNotoApprove")
+	domainName := "noto_" + tktypes.RandHex(8)
+	log.L(ctx).Infof("Domain name = %s", domainName)
+
+	log.L(ctx).Infof("Deploying Noto factory")
+	contractSource := map[string][]byte{
+		"factory": notoFactoryJSON,
+	}
+	contracts := deployContracts(ctx, t, contractSource)
+	for name, address := range contracts {
+		log.L(ctx).Infof("%s deployed to %s", name, address)
+	}
+
+	_, notoTestbed := newNotoDomain(t, &types.DomainConfig{
+		FactoryAddress: contracts["factory"],
+	})
+	done, tb, rpc := newTestbed(t, map[string]*testbed.TestbedDomain{
+		domainName: notoTestbed,
+	})
+	defer done()
+
+	_, recipient1Key, err := tb.Components().KeyManager().ResolveKey(ctx, recipient1Name, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	require.NoError(t, err)
+
+	log.L(ctx).Infof("Deploying an instance of Noto")
+	var notoAddress ethtypes.Address0xHex
+	rpcerr := rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
+		domainName, &types.ConstructorParams{
+			Notary: notaryName,
+		})
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
+	log.L(ctx).Infof("Noto instance deployed to %s", notoAddress)
+
+	log.L(ctx).Infof("Mint 100 from notary to notary")
+	var boolResult bool
+	rpcerr = rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
+		From:     notaryName,
+		To:       tktypes.EthAddress(notoAddress),
+		Function: *types.NotoABI.Functions()["mint"],
+		Inputs: toJSON(t, &types.MintParams{
+			To:     notaryName,
+			Amount: ethtypes.NewHexInteger64(100),
+		}),
+	})
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
+	assert.True(t, boolResult)
+
+	log.L(ctx).Infof("Approve recipient1 to claim 50")
+	var prepared tktypes.PrivateContractPreparedTransaction
+	rpcerr = rpc.CallRPC(ctx, &prepared, "testbed_prepare", &tktypes.PrivateContractInvoke{
+		From:     notaryName,
+		To:       tktypes.EthAddress(notoAddress),
+		Function: *types.NotoABI.Functions()["approvedTransfer"],
+		Inputs: toJSON(t, &types.TransferParams{
+			To:     recipient1Name,
+			Amount: ethtypes.NewHexInteger64(50),
+		}),
+	})
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
+	rpcerr = rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
+		From:     notaryName,
+		To:       tktypes.EthAddress(notoAddress),
+		Function: *types.NotoABI.Functions()["approve"],
+		Inputs: toJSON(t, &types.ApproveParams{
+			Delegate: *ethtypes.MustNewAddress(recipient1Key),
+			Call:     prepared.EncodedCall,
+		}),
+	})
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
+	assert.True(t, boolResult)
 }
 
 func TestNotoSelfSubmit(t *testing.T) {
