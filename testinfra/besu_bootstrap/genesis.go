@@ -46,6 +46,7 @@ type QBFTConfig struct {
 	EmptyBlockPeriodSeconds int `json:"emptyblockperiodseconds"`
 	EpochLength             int `json:"epochlength"`
 	RequestTimeoutSeconds   int `json:"requesttimeoutseconds"`
+	BlockPeriodMilliseconds int `json:"xblockperiodmilliseconds"`
 }
 
 type AllocEntry struct {

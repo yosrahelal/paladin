@@ -14,7 +14,7 @@ services:
     command:
       - /var/besu
   besu:
-    image: 604386504253.dkr.ecr.us-east-2.amazonaws.com/kaleido-node-besu:24.8.0-kaleido-20240910-237
+    image: 604386504253.dkr.ecr.us-east-2.amazonaws.com/kaleido-node-besu:24.1.0-kaleido-dev-20240918-293
     user: 0:0
     entrypoint: besu
     volumes:
@@ -30,10 +30,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    environment:
-      BESU_X_DEV_BFT_PERIOD_MS: 300
     command:
-      - --logging=INFO
+      - --logging=DEBUG
       - --rpc-http-enabled
       - --rpc-http-api=ETH,QBFT,WEB3,DEBUG
       - --rpc-ws-enabled
