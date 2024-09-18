@@ -287,19 +287,24 @@ func (n *Noto) recoverSignature(ctx context.Context, payload ethtypes.HexBytes0x
 
 func (n *Noto) parseCoinList(ctx context.Context, label string, states []*pb.EndorsableState) ([]*types.NotoCoin, []*pb.StateRef, *big.Int, error) {
 	var err error
+	statesUsed := make(map[string]bool)
 	coins := make([]*types.NotoCoin, len(states))
 	refs := make([]*pb.StateRef, len(states))
 	total := big.NewInt(0)
-	for i, input := range states {
-		if input.SchemaId != n.coinSchema.Id {
-			return nil, nil, nil, i18n.NewError(ctx, msgs.MsgUnknownSchema, input.SchemaId)
+	for i, state := range states {
+		if state.SchemaId != n.coinSchema.Id {
+			return nil, nil, nil, i18n.NewError(ctx, msgs.MsgUnknownSchema, state.SchemaId)
 		}
-		if coins[i], err = n.unmarshalCoin(input.StateDataJson); err != nil {
-			return nil, nil, nil, i18n.NewError(ctx, msgs.MsgInvalidListInput, label, i, input.Id, err)
+		if statesUsed[state.Id] {
+			return nil, nil, nil, i18n.NewError(ctx, msgs.MsgDuplicateStateInList, label, i, state.Id)
+		}
+		statesUsed[state.Id] = true
+		if coins[i], err = n.unmarshalCoin(state.StateDataJson); err != nil {
+			return nil, nil, nil, i18n.NewError(ctx, msgs.MsgInvalidListInput, label, i, state.Id, err)
 		}
 		refs[i] = &pb.StateRef{
-			SchemaId: input.SchemaId,
-			Id:       input.Id,
+			SchemaId: state.SchemaId,
+			Id:       state.Id,
 		}
 		total = total.Add(total, coins[i].Amount.BigInt())
 	}

@@ -190,6 +190,10 @@ func TestNoto(t *testing.T) {
 	assert.ErrorContains(t, rpcerr.Error(), "PD200009")
 	assert.True(t, boolResult)
 
+	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
+	require.NoError(t, err)
+	require.Len(t, coins, 1)
+
 	log.L(ctx).Infof("Transfer 150 from notary (should fail)")
 	rpcerr = rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     notaryName,
@@ -202,6 +206,10 @@ func TestNoto(t *testing.T) {
 	})
 	require.NotNil(t, rpcerr)
 	assert.ErrorContains(t, rpcerr.Error(), "PD200005")
+
+	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
+	require.NoError(t, err)
+	require.Len(t, coins, 1)
 
 	log.L(ctx).Infof("Transfer 50 from notary to recipient1")
 	rpcerr = rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
