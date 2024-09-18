@@ -22,7 +22,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
@@ -46,9 +45,6 @@ type DomainContextFunction func(ctx context.Context, dsi DomainStateInterface) e
 // We can then continue to build the next set of flushable operations, while the first set is
 // still flushing (a simple pipeline approach).
 type DomainStateInterface interface {
-
-	// EnsureABISchema is expected to be called on startup with all schemas required for operation of the domain
-	EnsureABISchemas(defs []*abi.Parameter) ([]Schema, error)
 
 	// FindAvailableStates is the main query function, only returning states that are available.
 	// Note this does not lock these states in any way, you must call that afterwards as:
@@ -170,32 +166,6 @@ func (dc *domainContext) run(fn func(ctx context.Context, dsi DomainStateInterfa
 	}
 	defer dc.returnLatch()
 	return fn(dc.ctx, dc)
-}
-
-func (dc *domainContext) EnsureABISchemas(defs []*abi.Parameter) ([]Schema, error) {
-
-	// Validate all the schemas
-	prepared := make([]Schema, len(defs))
-	toFlush := make([]*SchemaPersisted, len(defs))
-	for i, def := range defs {
-		s, err := newABISchema(dc.ctx, dc.domainID, def)
-		if err != nil {
-			return nil, err
-		}
-		prepared[i] = s
-		toFlush[i] = s.SchemaPersisted
-	}
-
-	// Take lock and check flush state
-	dc.stateLock.Lock()
-	defer dc.stateLock.Unlock()
-	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
-		return nil, flushErr
-	}
-
-	// Add them to the unflushed state
-	dc.unFlushed.schemas = append(dc.unFlushed.schemas, toFlush...)
-	return prepared, nil
 }
 
 func (dc *domainContext) getUnFlushedSpending() ([]*idOnly, error) {

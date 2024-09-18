@@ -41,7 +41,7 @@ import (
 func TestPrivateSmartContractQueryFail(t *testing.T) {
 
 	ctx, dm, _, done := newTestDomain(t, false, goodDomainConf(), func(mc *mockComponents) {
-		mc.domainStateInterface.On("EnsureABISchemas", mock.Anything).Return(nil, nil)
+		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return(nil, nil)
 		mc.db.ExpectQuery("SELECT.*private_smart_contracts").WillReturnError(fmt.Errorf("pop"))
 	})
 	defer done()
@@ -54,7 +54,7 @@ func TestPrivateSmartContractQueryFail(t *testing.T) {
 func TestPrivateSmartContractQueryNoResult(t *testing.T) {
 
 	ctx, dm, _, done := newTestDomain(t, false, goodDomainConf(), func(mc *mockComponents) {
-		mc.domainStateInterface.On("EnsureABISchemas", mock.Anything).Return(nil, nil)
+		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return(nil, nil)
 		mc.db.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows([]string{}))
 	})
 	defer done()

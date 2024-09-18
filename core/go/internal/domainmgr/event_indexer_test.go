@@ -111,7 +111,7 @@ func TestEventIndexingWithDB(t *testing.T) {
 func TestEventIndexingBadEvent(t *testing.T) {
 
 	ctx, dm, _, done := newTestDomain(t, false, goodDomainConf(), func(mc *mockComponents) {
-		mc.domainStateInterface.On("EnsureABISchemas", mock.Anything).Return(nil, nil)
+		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return(nil, nil)
 		mc.db.ExpectBegin()
 		mc.db.ExpectCommit()
 	})
@@ -140,7 +140,7 @@ func TestEventIndexingBadEvent(t *testing.T) {
 func TestEventIndexingInsertError(t *testing.T) {
 
 	ctx, dm, tp, done := newTestDomain(t, false, goodDomainConf(), func(mc *mockComponents) {
-		mc.domainStateInterface.On("EnsureABISchemas", mock.Anything).Return(nil, nil)
+		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return(nil, nil)
 		mc.db.ExpectBegin()
 		mc.db.ExpectExec("INSERT").WillReturnError(fmt.Errorf("pop"))
 		mc.db.ExpectRollback()

@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
@@ -152,4 +153,26 @@ func (ss *stateStore) ListSchemas(ctx context.Context, domainID string) (results
 		}
 	}
 	return results, nil
+}
+
+func (ss *stateStore) EnsureABISchemas(ctx context.Context, domainID string, defs []*abi.Parameter) ([]Schema, error) {
+
+	// Validate all the schemas
+	prepared := make([]Schema, len(defs))
+	toFlush := make([]*SchemaPersisted, len(defs))
+	for i, def := range defs {
+		s, err := newABISchema(ctx, domainID, def)
+		if err != nil {
+			return nil, err
+		}
+		prepared[i] = s
+		toFlush[i] = s.SchemaPersisted
+	}
+
+	op := ss.writer.newWriteOp(domainID)
+	op.schemas = toFlush
+	ss.writer.queue(ctx, op)
+	err := op.flush(ctx)
+
+	return prepared, err
 }

@@ -18,10 +18,11 @@ package noto
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
@@ -65,7 +66,7 @@ func (h *approveHandler) Init(ctx context.Context, tx *types.ParsedTransaction, 
 func (h *approveHandler) decodeTransferCall(ctx context.Context, encodedCall []byte) (*ApprovedTransferParams, error) {
 	approvedTransfer := h.noto.contractABI.Functions()["approvedTransfer"]
 	if approvedTransfer == nil {
-		return nil, fmt.Errorf("could not find approvedTransfer method")
+		return nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, "approvedTransfer")
 	}
 	paramsJSON, err := decodeParams(ctx, approvedTransfer, encodedCall)
 	if err != nil {
@@ -129,14 +130,14 @@ func (h *approveHandler) validateSenderSignature(ctx context.Context, tx *types.
 	}
 	signature := domain.FindAttestation("sender", req.Signatures)
 	if signature == nil {
-		return fmt.Errorf("did not find 'sender' attestation")
+		return i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
 	}
-	signingAddress, err := h.noto.recoverSignature(ctx, encodedTransfer, signature.Payload)
+	recoveredSignature, err := h.noto.recoverSignature(ctx, encodedTransfer, signature.Payload)
 	if err != nil {
 		return err
 	}
-	if signingAddress.String() != signature.Verifier.Verifier {
-		return fmt.Errorf("sender signature does not match")
+	if recoveredSignature.String() != signature.Verifier.Verifier {
+		return i18n.NewError(ctx, msgs.MsgSignatureDoesNotMatch, "sender", signature.Verifier.Verifier, recoveredSignature.String())
 	}
 	return nil
 }
@@ -166,7 +167,7 @@ func (h *approveHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 	}
 	signature := domain.FindAttestation("sender", req.AttestationResult)
 	if signature == nil {
-		return nil, fmt.Errorf("did not find 'sender' attestation")
+		return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
 	}
 
 	approveParams := map[string]interface{}{
