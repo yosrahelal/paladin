@@ -138,10 +138,14 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		outputs[i] = state.Id
 	}
 
+	data, err := h.noto.transferData(req.Transaction)
+	if err != nil {
+		return nil, err
+	}
 	params := map[string]interface{}{
 		"outputs":   outputs,
 		"signature": "0x", // no signature, because requester AND submitter are always the notary
-		"data":      req.Transaction.TransactionId,
+		"data":      data,
 	}
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {

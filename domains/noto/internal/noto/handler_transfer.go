@@ -246,7 +246,10 @@ func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransacti
 			for i, state := range req.Outputs {
 				outputIDs[i] = state.Id
 			}
-			data := ethtypes.HexBytes0xPrefix("")
+			data, err := h.noto.transferData(req.Transaction)
+			if err != nil {
+				return nil, err
+			}
 			encodedTransfer, err := h.noto.encodeTransferMasked(ctx, tx.ContractAddress, inputIDs, outputIDs, data)
 			if err != nil {
 				return nil, err
@@ -299,11 +302,15 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
 	}
 
+	data, err := h.noto.transferData(req.Transaction)
+	if err != nil {
+		return nil, err
+	}
 	params := map[string]interface{}{
 		"inputs":    inputs,
 		"outputs":   outputs,
 		"signature": ethtypes.HexBytes0xPrefix(signature.Payload),
-		"data":      ethtypes.HexBytes0xPrefix(""),
+		"data":      data,
 	}
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {

@@ -344,3 +344,15 @@ func (n *Noto) FindCoins(ctx context.Context, contractAddress ethtypes.Address0x
 	}
 	return coins, err
 }
+
+func (n *Noto) transferData(transaction *pb.TransactionSpecification) (ethtypes.HexBytes0xPrefix, error) {
+	txID, err := ethtypes.NewHexBytes0xPrefix(transaction.TransactionId)
+	if err != nil {
+		return nil, err
+	}
+
+	var data []byte
+	data = append(data, types.NotoTransactionData_V0...)
+	data = append(data, txID...)
+	return data, nil
+}
