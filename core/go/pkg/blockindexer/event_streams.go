@@ -556,7 +556,10 @@ func (es *eventStream) processCatchupEventPage(checkpointBlock int64, catchUpToB
 	enrichments := make(chan error)
 	for txStr, _events := range byTxID {
 		events := _events // not safe to pass loop pointer
-		go es.queryTransactionEvents(tktypes.MustParseBytes32(txStr), events, enrichments)
+		tx := tktypes.MustParseBytes32(txStr)
+		go func() {
+			enrichments <- es.bi.enrichTransactionEvents(es.ctx, es.eventABIs, tx, events, true /* retry indefinitely */)
+		}()
 	}
 	// Collect all the results
 	for range byTxID {
@@ -586,8 +589,4 @@ func (es *eventStream) processCatchupEventPage(checkpointBlock int64, catchUpToB
 	}
 	return caughtUp, nil
 
-}
-
-func (es *eventStream) queryTransactionEvents(tx tktypes.Bytes32, events []*EventWithData, done chan error) {
-	done <- es.bi.enrichTransactionEvents(es.ctx, es.eventABIs, tx, events, true /* retry indefinitely */)
 }
