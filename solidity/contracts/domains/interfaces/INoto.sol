@@ -2,14 +2,14 @@
 pragma solidity ^0.8.20;
 
 interface INoto {
-    event UTXOTransfer(
+    event NotoTransfer(
         bytes32[] inputs,
         bytes32[] outputs,
         bytes signature,
         bytes data
     );
 
-    event UTXOApproved(address delegate, bytes32 txhash, bytes signature);
+    event NotoApproved(address delegate, bytes32 txhash, bytes signature);
 
     function initialize(
         address notary,
