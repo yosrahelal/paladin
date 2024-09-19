@@ -55,11 +55,6 @@ type TxProcessPreReq struct {
 	TxIDs []string `json:"transactionIds,omitempty"`
 }
 
-type TxStatus struct {
-	TxID   string `json:"transactionId"`
-	Status string `json:"status"`
-}
-
 type MockIdentityResolver struct {
 }
 
@@ -95,11 +90,6 @@ type StageContext struct {
 	ID             string
 	Stage          string
 	StageEntryTime time.Time
-}
-
-type EventSubscriber func(event EngineEvent)
-
-type EngineEvent interface {
 }
 
 type StageFoundationService interface {
@@ -209,7 +199,7 @@ const (
 
 type TxProcessor interface {
 	Init(ctx context.Context)
-	GetTxStatus(ctx context.Context) (TxStatus, error)
+	GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error)
 	GetStatus(ctx context.Context) TxProcessorStatus
 
 	HandleTransactionSubmittedEvent(ctx context.Context, event *TransactionSubmittedEvent)

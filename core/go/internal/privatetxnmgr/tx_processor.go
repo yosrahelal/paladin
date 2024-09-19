@@ -106,8 +106,8 @@ func (ts *PaladinTxProcessor) GetStatus(ctx context.Context) ptmgrtypes.TxProces
 	return ptmgrtypes.TxProcessorActive
 }
 
-func (ts *PaladinTxProcessor) GetTxStatus(ctx context.Context) (ptmgrtypes.TxStatus, error) {
-	return ptmgrtypes.TxStatus{
+func (ts *PaladinTxProcessor) GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error) {
+	return components.PrivateTxStatus{
 		TxID:   ts.transaction.ID.String(),
 		Status: ts.status,
 	}, nil

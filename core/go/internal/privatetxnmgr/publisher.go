@@ -18,7 +18,7 @@ package privatetxnmgr
 import (
 	"context"
 
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/events"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
@@ -57,7 +57,7 @@ func (p *publisher) PublishTransactionDispatchedEvent(ctx context.Context, trans
 		Nonce:          nonce,
 		SigningAddress: signingAddress,
 	})
-	p.engine.publishToSubscribers(ctx, &events.TransactionDispatchedEvent{
+	p.engine.publishToSubscribers(ctx, &components.TransactionDispatchedEvent{
 		TransactionID:  transactionId,
 		Nonce:          nonce,
 		SigningAddress: signingAddress,

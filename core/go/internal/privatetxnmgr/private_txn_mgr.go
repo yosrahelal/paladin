@@ -38,16 +38,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
-type Engine interface {
-	components.Engine
-	HandleNewEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent)
-	HandleNewTx(ctx context.Context, tx *components.PrivateTransaction) (txID string, err error)
-	HandleDeployTx(ctx context.Context, tx *components.PrivateContractDeploy) (txID string, contractAddress string, err error)
-
-	GetTxStatus(ctx context.Context, domainAddress string, txID string) (status ptmgrtypes.TxStatus, err error)
-	Subscribe(ctx context.Context, subscriber ptmgrtypes.EventSubscriber)
-}
-
 type engine struct {
 	ctx                  context.Context
 	ctxCancel            func()
@@ -55,7 +45,7 @@ type engine struct {
 	endorsementGatherers map[string]ptmgrtypes.EndorsementGatherer
 	components           components.PreInitComponentsAndManagers
 	nodeID               string
-	subscribers          []ptmgrtypes.EventSubscriber
+	subscribers          []components.PrivateTxEventSubscriber
 	subscribersLock      sync.Mutex
 }
 
@@ -81,12 +71,12 @@ func (e *engine) Stop() {
 	panic("unimplemented")
 }
 
-func NewEngine(nodeID string) Engine {
+func NewEngine(nodeID string) components.PrivateTxMgr {
 	return &engine{
 		orchestrators:        make(map[string]*Orchestrator),
 		endorsementGatherers: make(map[string]ptmgrtypes.EndorsementGatherer),
 		nodeID:               nodeID,
-		subscribers:          make([]ptmgrtypes.EventSubscriber, 0),
+		subscribers:          make([]components.PrivateTxEventSubscriber, 0),
 	}
 }
 
@@ -304,14 +294,14 @@ func (e *engine) execBaseLedgerTransaction(ctx context.Context, signer string, t
 	return nil
 }
 
-func (e *engine) GetTxStatus(ctx context.Context, domainAddress string, txID string) (status ptmgrtypes.TxStatus, err error) {
+func (e *engine) GetTxStatus(ctx context.Context, domainAddress string, txID string) (status components.PrivateTxStatus, err error) {
 	//TODO This is primarily here to help with testing for now
 	// this needs to be revisited ASAP as part of a holisitic review of the persistence model
 	targetOrchestrator := e.orchestrators[domainAddress]
 	if targetOrchestrator == nil {
 		//TODO should be valid to query the status of a transaction that belongs to a domain instance that is not currently active
 		errorMessage := fmt.Sprintf("Orchestrator not found for domain address %s", domainAddress)
-		return ptmgrtypes.TxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError, errorMessage)
+		return components.PrivateTxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError, errorMessage)
 	} else {
 		return targetOrchestrator.GetTxStatus(ctx, txID)
 	}
@@ -513,14 +503,14 @@ func (e *engine) ReceiveTransportMessage(ctx context.Context, message *component
 // in the future if we want to have an eventing interface but at such time we would need to put more effort
 // into the reliabilty of the event delivery or maybe there is only a consumer of the event and it is responsible
 // for managing multiple subscribers and durability etc...
-func (e *engine) Subscribe(ctx context.Context, subscriber ptmgrtypes.EventSubscriber) {
+func (e *engine) Subscribe(ctx context.Context, subscriber components.PrivateTxEventSubscriber) {
 	e.subscribersLock.Lock()
 	defer e.subscribersLock.Unlock()
 	//TODO implement this
 	e.subscribers = append(e.subscribers, subscriber)
 }
 
-func (e *engine) publishToSubscribers(ctx context.Context, event ptmgrtypes.EngineEvent) {
+func (e *engine) publishToSubscribers(ctx context.Context, event components.PrivateTxEvent) {
 	log.L(ctx).Debugf("Publishing event to subscribers")
 	e.subscribersLock.Lock()
 	defer e.subscribersLock.Unlock()

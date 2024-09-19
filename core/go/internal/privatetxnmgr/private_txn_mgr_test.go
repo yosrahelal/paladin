@@ -24,7 +24,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
@@ -49,7 +48,6 @@ import (
 func TestEngineInit(t *testing.T) {
 
 	engine, mocks := newEngineForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
-	assert.Equal(t, "Kata Engine", engine.EngineName())
 	initResult, err := engine.Init(mocks.allComponents)
 	require.NoError(t, err)
 	assert.NotNil(t, initResult)
@@ -59,7 +57,6 @@ func TestEngineInvalidTransaction(t *testing.T) {
 	ctx := context.Background()
 
 	engine, mocks := newEngineForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
-	assert.Equal(t, "Kata Engine", engine.EngineName())
 	initResult, err := engine.Init(mocks.allComponents)
 	require.NoError(t, err)
 	assert.NotNil(t, initResult)
@@ -79,7 +76,6 @@ func TestEngineSimpleTransaction(t *testing.T) {
 
 	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
 	engine, mocks := newEngineForTesting(t, domainAddress)
-	assert.Equal(t, "Kata Engine", engine.EngineName())
 
 	domainAddressString := domainAddress.String()
 
@@ -560,7 +556,6 @@ func TestEngineMiniLoad(t *testing.T) {
 
 			domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
 			engine, mocks := newEngineForTestingWithFakePublicTxEngine(t, domainAddress, newFakePublicTxEngine(t))
-			assert.Equal(t, "Kata Engine", engine.EngineName())
 
 			remoteEngine, remoteEngineMocks := newEngineForTestingWithFakePublicTxEngine(t, domainAddress, newFakePublicTxEngine(t))
 
@@ -705,12 +700,12 @@ func TestEngineMiniLoad(t *testing.T) {
 			numDispatched := 0
 			allDispatched := make(chan bool, 1)
 			nonceWriterLock := sync.Mutex{}
-			engine.Subscribe(ctx, func(event ptmgrtypes.EngineEvent) {
+			engine.Subscribe(ctx, func(event components.PrivateTxEvent) {
 				nonceWriterLock.Lock()
 				defer nonceWriterLock.Unlock()
 				numDispatched++
 				switch event := event.(type) {
-				case *ptmgrtypes.TransactionDispatchedEvent:
+				case *components.TransactionDispatchedEvent:
 					assert.Equal(t, expectedNonce, event.Nonce)
 					expectedNonce++
 					nonceByTransactionID[event.TransactionID] = event.Nonce
@@ -768,7 +763,7 @@ func TestEngineMiniLoad(t *testing.T) {
 	}
 }
 
-func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, engine Engine, domainAddressString, txID string, duration time.Duration) string {
+func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, engine components.PrivateTxMgr, domainAddressString, txID string, duration time.Duration) string {
 	timeout := time.After(duration)
 	tick := time.Tick(100 * time.Millisecond)
 
@@ -802,7 +797,7 @@ type dependencyMocks struct {
 	publicTxEngine       *componentmocks.PublicTxEngine
 }
 
-func newEngineForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (Engine, *dependencyMocks) {
+func newEngineForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (components.PrivateTxMgr, *dependencyMocks) {
 	// by default create a mock publicTxEngine if no fake was provided
 	fakePublicTxEngine := componentmocks.NewPublicTxEngine(t)
 	engine, mocks := newEngineForTestingWithFakePublicTxEngine(t, domainAddress, fakePublicTxEngine)
@@ -888,7 +883,7 @@ func newFakePublicTxEngine(t *testing.T) components.PublicTxEngine {
 	}
 }
 
-func newEngineForTestingWithFakePublicTxEngine(t *testing.T, domainAddress *tktypes.EthAddress, fakePublicTxEngine components.PublicTxEngine) (Engine, *dependencyMocks) {
+func newEngineForTestingWithFakePublicTxEngine(t *testing.T, domainAddress *tktypes.EthAddress, fakePublicTxEngine components.PublicTxEngine) (components.PrivateTxMgr, *dependencyMocks) {
 
 	ctx := context.Background()
 	mocks := &dependencyMocks{

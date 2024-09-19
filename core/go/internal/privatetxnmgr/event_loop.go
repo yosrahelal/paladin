@@ -384,7 +384,7 @@ func (oc *Orchestrator) TriggerOrchestratorEvaluation() {
 	}
 }
 
-func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status ptmgrtypes.TxStatus, err error) {
+func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status components.PrivateTxStatus, err error) {
 	//TODO This is primarily here to help with testing for now
 	// this needs to be revisited ASAP as part of a holisitic review of the persistence model
 	oc.incompleteTxProcessMapMutex.Lock()
@@ -393,7 +393,7 @@ func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status pt
 		return txProc.GetTxStatus(ctx)
 	}
 	//TODO should be possible to query the status of a transaction that is not inflight
-	return ptmgrtypes.TxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError, "Transaction not found")
+	return components.PrivateTxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError, "Transaction not found")
 }
 
 // synchronously prepare and dispatch all given transactions to their associated signing address
@@ -501,7 +501,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 
 			if err != nil {
 				//TODO think about how best to handle this error
-				log.L(ctx).Errorf("Error publishing stage event: %s", err)
+				log.L(ctx).Errorf("Error publishing event: %s", err)
 			}
 		}
 	}
