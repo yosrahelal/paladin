@@ -197,13 +197,13 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 
 	// insert transaction next nonce error
 	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(ethtypes.NewHexInteger(big.NewInt(10)), nil)
-	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything)
+	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything, mock.Anything)
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(nil, fmt.Errorf("pop")).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		ctx := args[0].(context.Context)
-		mtx := args[1].(*components.PublicTX)
-		nextNonceCB := args[2].(components.NextNonceCallback)
+		mtx := args[2].(*components.PublicTX)
+		nextNonceCB := args[3].(components.NextNonceCallback)
 		_, err := nextNonceCB(ctx, string(mtx.From))
 		insertMock.Return(err)
 	}).Once()
@@ -221,13 +221,13 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 
 	// create transaction succeeded
 	// gas estimate should be cached
-	insertMock = mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything)
+	insertMock = mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything, mock.Anything)
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		ctx := args[0].(context.Context)
-		mtx := args[1].(*components.PublicTX)
-		nextNonceCB := args[2].(components.NextNonceCallback)
+		mtx := args[2].(*components.PublicTX)
+		nextNonceCB := args[3].(components.NextNonceCallback)
 		nonce, err := nextNonceCB(ctx, string(mtx.From))
 		assert.Nil(t, err)
 		assert.NotNil(t, nonce)
@@ -266,13 +266,13 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 	}
 	// create transaction succeeded
 	// gas estimate should be cached
-	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything)
+	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything, mock.Anything)
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		ctx := args[0].(context.Context)
-		mtx := args[1].(*components.PublicTX)
-		nextNonceCB := args[2].(components.NextNonceCallback)
+		mtx := args[2].(*components.PublicTX)
+		nextNonceCB := args[3].(components.NextNonceCallback)
 		nonce, err := nextNonceCB(ctx, string(mtx.From))
 		assert.Equal(t, "1223451", mtx.GasLimit.BigInt().String())
 		assert.Nil(t, mtx.GasPrice)
@@ -314,13 +314,13 @@ func TestHandleNewTransactionTransferAndInvalidType(t *testing.T) {
 	}
 	// create transaction succeeded
 	// gas estimate should be cached
-	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything)
+	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything, mock.Anything)
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		ctx := args[0].(context.Context)
-		mtx := args[1].(*components.PublicTX)
-		nextNonceCB := args[2].(components.NextNonceCallback)
+		mtx := args[2].(*components.PublicTX)
+		nextNonceCB := args[3].(components.NextNonceCallback)
 		nonce, err := nextNonceCB(ctx, string(mtx.From))
 		assert.Equal(t, "1223451", mtx.GasLimit.BigInt().String())
 		assert.Equal(t, "0", mtx.GasPrice.BigInt().String())
@@ -469,14 +469,14 @@ func TestHandleNewTransaction(t *testing.T) {
 	mABIBuilder.On("Input", mock.Anything).Return(mABIBuilder).Once()
 	mABIBuilder.On("TX", mock.Anything).Return(testEthTxInput).Once()
 	mEC.On("ABIFunction", ctx, mock.Anything).Return(mABIF, nil).Once()
-	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything)
+	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything, mock.Anything)
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		ctx := args[0].(context.Context)
-		mtx := args[1].(*components.PublicTX)
+		mtx := args[2].(*components.PublicTX)
 		assert.Equal(t, big.NewInt(200), mtx.GasLimit.BigInt())
-		nextNonceCB := args[2].(components.NextNonceCallback)
+		nextNonceCB := args[3].(components.NextNonceCallback)
 		nonce, err := nextNonceCB(ctx, string(mtx.From))
 		assert.Nil(t, err)
 		assert.NotNil(t, nonce)
@@ -593,14 +593,14 @@ func TestHandleNewDeployment(t *testing.T) {
 	mABIBuilder.On("Input", mock.Anything).Return(mABIBuilder).Once()
 	mABIBuilder.On("TX", mock.Anything).Return(testEthTxInput).Once()
 	mEC.On("ABIConstructor", ctx, mock.Anything, mock.Anything).Return(mABIF, nil).Once()
-	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything)
+	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything, mock.Anything)
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		ctx := args[0].(context.Context)
-		mtx := args[1].(*components.PublicTX)
+		mtx := args[2].(*components.PublicTX)
 		assert.Equal(t, big.NewInt(200), mtx.GasLimit.BigInt())
-		nextNonceCB := args[2].(components.NextNonceCallback)
+		nextNonceCB := args[3].(components.NextNonceCallback)
 		nonce, err := nextNonceCB(ctx, string(mtx.From))
 		assert.Nil(t, err)
 		assert.NotNil(t, nonce)

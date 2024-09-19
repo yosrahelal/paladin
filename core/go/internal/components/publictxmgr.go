@@ -167,7 +167,7 @@ type NextNonceCallback func(ctx context.Context, signer string) (uint64, error)
 
 type TransactionStore interface {
 	GetTransactionByID(ctx context.Context, txID string) (*PublicTX, error)
-	InsertTransactionWithNextNonce(ctx context.Context, tx *PublicTX, lookupNextNonce NextNonceCallback) error
+	InsertTransactionWithNextNonce(ctx context.Context, dbtx *gorm.DB, tx *PublicTX, lookupNextNonce NextNonceCallback) error
 	UpdateTransaction(ctx context.Context, txID string, updates *BaseTXUpdates) error
 	DeleteTransaction(ctx context.Context, txID string) error
 
