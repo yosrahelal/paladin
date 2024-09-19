@@ -265,20 +265,21 @@ func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.Pr
 func (tb *testbed) rpcTestbedInvoke() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		invocation tktypes.PrivateContractInvoke,
-	) (bool, error) {
+	) (*tktypes.Bytes32, error) {
 
 		tx, err := tb.prepareTransaction(ctx, invocation)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 
 		err = tb.execBaseLedgerTransaction(ctx, tx.Signer, tx.PreparedTransaction)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 
-		// TODO: state confirmation by TXID
-		return true, nil
+		// Return transaction ID packed as a bytes32 (to match how it appears in proto messages)
+		txID := tktypes.Bytes32UUIDFirst16(tx.ID)
+		return &txID, nil
 	})
 }
 
