@@ -88,7 +88,7 @@ func TestInit(t *testing.T) {
 	qFields := &ffapi.QueryFields{}
 
 	mockTransactionFilter := qFields.NewFilter(ctx)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
@@ -96,7 +96,7 @@ func TestInit(t *testing.T) {
 	listed := make(chan struct{})
 	mBI.On("RegisterIndexedTransactionHandler", ctx, mock.Anything).Return(nil).Once()
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil, nil).Run(func(args mock.Arguments) {
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Run(func(args mock.Arguments) {
 		listed <- struct{}{}
 	}).Once()
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
@@ -119,7 +119,7 @@ func TestInitFailedRegisterIndexedTransactionHandler(t *testing.T) {
 	ctx := context.Background()
 	ble, _ := NewTestTransactionEngine(t)
 
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
@@ -141,7 +141,7 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
@@ -197,7 +197,7 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 
 	// insert transaction next nonce error
 	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(ethtypes.NewHexInteger(big.NewInt(10)), nil)
-	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything)
+	insertMock := mTS.On("InsertTransaction", ctx, mock.Anything)
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(nil, fmt.Errorf("pop")).Once()
 	insertMock.Run(func(args mock.Arguments) {
@@ -221,7 +221,7 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 
 	// create transaction succeeded
 	// gas estimate should be cached
-	insertMock = mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything)
+	insertMock = mTS.On("InsertTransaction", ctx, mock.Anything)
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
@@ -233,7 +233,7 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 		assert.NotNil(t, nonce)
 		insertMock.Return(nil)
 	}).Once()
-	mTS.On("AddSubStatusAction", ctx, txID.String(), components.BaseTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mTS.On("AddSubStatusAction", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	_, _, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
@@ -249,7 +249,7 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 	ctx := context.Background()
 	ble, _ := NewTestTransactionEngine(t)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
@@ -266,7 +266,7 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 	}
 	// create transaction succeeded
 	// gas estimate should be cached
-	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything)
+	insertMock := mTS.On("InsertTransaction", ctx, mock.Anything)
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
@@ -281,7 +281,7 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 		insertMock.Return(nil)
 	}).Once()
 	txID := uuid.New()
-	mTS.On("AddSubStatusAction", ctx, txID.String(), components.BaseTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mTS.On("AddSubStatusAction", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	_, _, err := ble.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
@@ -299,7 +299,7 @@ func TestHandleNewTransactionTransferAndInvalidType(t *testing.T) {
 	ctx := context.Background()
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestZeroGasPriceChainClient(t)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
@@ -314,7 +314,7 @@ func TestHandleNewTransactionTransferAndInvalidType(t *testing.T) {
 	}
 	// create transaction succeeded
 	// gas estimate should be cached
-	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything)
+	insertMock := mTS.On("InsertTransaction", ctx, mock.Anything)
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
@@ -329,7 +329,7 @@ func TestHandleNewTransactionTransferAndInvalidType(t *testing.T) {
 		insertMock.Return(nil)
 	}).Once()
 	txID := uuid.New()
-	mTS.On("AddSubStatusAction", ctx, txID.String(), components.BaseTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mTS.On("AddSubStatusAction", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	_, _, err := ble.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
@@ -356,7 +356,7 @@ func TestHandleNewTransaction(t *testing.T) {
 	ctx := context.Background()
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
@@ -469,7 +469,7 @@ func TestHandleNewTransaction(t *testing.T) {
 	mABIBuilder.On("Input", mock.Anything).Return(mABIBuilder).Once()
 	mABIBuilder.On("TX", mock.Anything).Return(testEthTxInput).Once()
 	mEC.On("ABIFunction", ctx, mock.Anything).Return(mABIF, nil).Once()
-	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything)
+	insertMock := mTS.On("InsertTransaction", ctx, mock.Anything)
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
@@ -482,7 +482,7 @@ func TestHandleNewTransaction(t *testing.T) {
 		assert.NotNil(t, nonce)
 		insertMock.Return(nil)
 	}).Once()
-	mTS.On("AddSubStatusAction", ctx, txID.String(), components.BaseTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mTS.On("AddSubStatusAction", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	_, _, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
 		SignerID: string(testEthTxInput.From),
@@ -499,7 +499,7 @@ func TestHandleNewDeployment(t *testing.T) {
 	ctx := context.Background()
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mEC := componentmocks.NewEthClient(t)
@@ -593,7 +593,7 @@ func TestHandleNewDeployment(t *testing.T) {
 	mABIBuilder.On("Input", mock.Anything).Return(mABIBuilder).Once()
 	mABIBuilder.On("TX", mock.Anything).Return(testEthTxInput).Once()
 	mEC.On("ABIConstructor", ctx, mock.Anything, mock.Anything).Return(mABIF, nil).Once()
-	insertMock := mTS.On("InsertTransactionWithNextNonce", ctx, mock.Anything, mock.Anything)
+	insertMock := mTS.On("InsertTransaction", ctx, mock.Anything)
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
@@ -606,7 +606,7 @@ func TestHandleNewDeployment(t *testing.T) {
 		assert.NotNil(t, nonce)
 		insertMock.Return(nil)
 	}).Once()
-	mTS.On("AddSubStatusAction", ctx, txID.String(), components.BaseTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mTS.On("AddSubStatusAction", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	_, _, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
 		SignerID: string(testEthTxInput.From),
@@ -624,7 +624,7 @@ func TestEngineSuspend(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
@@ -636,26 +636,26 @@ func TestEngineSuspend(t *testing.T) {
 	mtx := imtxs.GetTx()
 
 	// errored
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(nil, fmt.Errorf("get error")).Once()
-	_, err := ble.HandleSuspendTransaction(ctx, mtx.ID)
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(nil, fmt.Errorf("get error")).Once()
+	_, err := ble.HandleSuspendTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "get error", err)
 
 	// engine update error
-	suspendedStatus := components.BaseTxStatusSuspended
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID, &components.BaseTXUpdates{
+	suspendedStatus := components.PubTxStatusSuspended
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
 		Status: &suspendedStatus,
 	}).Return(fmt.Errorf("update error")).Once()
-	_, err = ble.HandleSuspendTransaction(ctx, mtx.ID)
+	_, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "update error", err)
 
 	// engine update success
-	mtx.Status = components.BaseTxStatusPending
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID, &components.BaseTXUpdates{
+	mtx.Status = components.PubTxStatusPending
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
 		Status: &suspendedStatus,
 	}).Return(nil).Once()
-	tx, err := ble.HandleSuspendTransaction(ctx, mtx.ID)
+	tx, err := ble.HandleSuspendTransaction(ctx, mtx.ID.String())
 	require.NoError(t, err)
 	assert.Equal(t, suspendedStatus, tx.Status)
 
@@ -675,20 +675,20 @@ func TestEngineSuspend(t *testing.T) {
 		bIndexer:                     mBI,
 	}
 	// orchestrator update error
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID, &components.BaseTXUpdates{
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
 		Status: &suspendedStatus,
 	}).Return(fmt.Errorf("update error")).Once()
-	_, err = ble.HandleSuspendTransaction(ctx, mtx.ID)
+	_, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "update error", err)
 
 	// orchestrator update success
-	mtx.Status = components.BaseTxStatusPending
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID, &components.BaseTXUpdates{
+	mtx.Status = components.PubTxStatusPending
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
 		Status: &suspendedStatus,
 	}).Return(nil).Once()
-	tx, err = ble.HandleSuspendTransaction(ctx, mtx.ID)
+	tx, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
 	require.NoError(t, err)
 	assert.Equal(t, suspendedStatus, tx.Status)
 
@@ -701,23 +701,23 @@ func TestEngineSuspend(t *testing.T) {
 	}
 
 	// async status update queued
-	mtx.Status = components.BaseTxStatusPending
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
-	tx, err = ble.HandleSuspendTransaction(ctx, mtx.ID)
+	mtx.Status = components.PubTxStatusPending
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
+	tx, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
 	require.NoError(t, err)
-	assert.Equal(t, components.BaseTxStatusPending, tx.Status)
+	assert.Equal(t, components.PubTxStatusPending, tx.Status)
 
 	// already on the target status
-	mtx.Status = components.BaseTxStatusSuspended
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
-	tx, err = ble.HandleSuspendTransaction(ctx, mtx.ID)
+	mtx.Status = components.PubTxStatusSuspended
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
+	tx, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
 	require.NoError(t, err)
-	assert.Equal(t, components.BaseTxStatusSuspended, tx.Status)
+	assert.Equal(t, components.PubTxStatusSuspended, tx.Status)
 
 	// error when try to update the status of a completed tx
-	mtx.Status = components.BaseTxStatusFailed
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
-	_, err = ble.HandleSuspendTransaction(ctx, mtx.ID)
+	mtx.Status = components.PubTxStatusFailed
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
+	_, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "PD011921", err)
 }
 
@@ -727,7 +727,7 @@ func TestEngineResume(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
@@ -739,26 +739,26 @@ func TestEngineResume(t *testing.T) {
 	mtx := imtxs.GetTx()
 
 	// errored
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(nil, fmt.Errorf("get error")).Once()
-	_, err := ble.HandleResumeTransaction(ctx, mtx.ID)
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(nil, fmt.Errorf("get error")).Once()
+	_, err := ble.HandleResumeTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "get error", err)
 
 	// engine update error
-	pendingStatus := components.BaseTxStatusPending
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID, &components.BaseTXUpdates{
+	pendingStatus := components.PubTxStatusPending
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
 		Status: &pendingStatus,
 	}).Return(fmt.Errorf("update error")).Once()
-	_, err = ble.HandleResumeTransaction(ctx, mtx.ID)
+	_, err = ble.HandleResumeTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "update error", err)
 
 	// engine update success
-	mtx.Status = components.BaseTxStatusSuspended
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID, &components.BaseTXUpdates{
+	mtx.Status = components.PubTxStatusSuspended
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
 		Status: &pendingStatus,
 	}).Return(nil).Once()
-	tx, err := ble.HandleResumeTransaction(ctx, mtx.ID)
+	tx, err := ble.HandleResumeTransaction(ctx, mtx.ID.String())
 	require.NoError(t, err)
 	assert.Equal(t, pendingStatus, tx.Status)
 
@@ -778,20 +778,20 @@ func TestEngineResume(t *testing.T) {
 		bIndexer:                     mBI,
 	}
 	// orchestrator update error
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID, &components.BaseTXUpdates{
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
 		Status: &pendingStatus,
 	}).Return(fmt.Errorf("update error")).Once()
-	_, err = ble.HandleResumeTransaction(ctx, mtx.ID)
+	_, err = ble.HandleResumeTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "update error", err)
 
 	// orchestrator update success
-	mtx.Status = components.BaseTxStatusSuspended
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID, &components.BaseTXUpdates{
+	mtx.Status = components.PubTxStatusSuspended
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
 		Status: &pendingStatus,
 	}).Return(nil).Once()
-	tx, err = ble.HandleResumeTransaction(ctx, mtx.ID)
+	tx, err = ble.HandleResumeTransaction(ctx, mtx.ID.String())
 	require.NoError(t, err)
 	assert.Equal(t, pendingStatus, tx.Status)
 
@@ -804,23 +804,23 @@ func TestEngineResume(t *testing.T) {
 	}
 
 	// async status update queued
-	mtx.Status = components.BaseTxStatusSuspended
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
-	tx, err = ble.HandleResumeTransaction(ctx, mtx.ID)
+	mtx.Status = components.PubTxStatusSuspended
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
+	tx, err = ble.HandleResumeTransaction(ctx, mtx.ID.String())
 	require.NoError(t, err)
-	assert.Equal(t, components.BaseTxStatusSuspended, tx.Status)
+	assert.Equal(t, components.PubTxStatusSuspended, tx.Status)
 
 	// already on the target status
-	mtx.Status = components.BaseTxStatusPending
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
-	tx, err = ble.HandleResumeTransaction(ctx, mtx.ID)
+	mtx.Status = components.PubTxStatusPending
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
+	tx, err = ble.HandleResumeTransaction(ctx, mtx.ID.String())
 	require.NoError(t, err)
-	assert.Equal(t, components.BaseTxStatusPending, tx.Status)
+	assert.Equal(t, components.PubTxStatusPending, tx.Status)
 
 	// error when try to update the status of a completed tx
-	mtx.Status = components.BaseTxStatusFailed
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Once()
-	_, err = ble.HandleResumeTransaction(ctx, mtx.ID)
+	mtx.Status = components.PubTxStatusFailed
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
+	_, err = ble.HandleResumeTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "PD011921", err)
 }
 
@@ -830,7 +830,7 @@ func TestEngineCanceledContext(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
@@ -840,20 +840,20 @@ func TestEngineCanceledContext(t *testing.T) {
 
 	imtxs := NewTestInMemoryTxState(t)
 	mtx := imtxs.GetTx()
-	mTS.On("UpdateTransaction", ctx, mtx.ID, mock.Anything).Return(nil).Maybe()
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), mock.Anything).Return(nil).Maybe()
 
 	// Suspend
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Run(func(args mock.Arguments) {
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Run(func(args mock.Arguments) {
 		cancelCtx()
 	}).Once()
-	_, err := ble.HandleSuspendTransaction(ctx, mtx.ID)
+	_, err := ble.HandleSuspendTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "PD011926", err)
 
 	// Resume
-	mTS.On("GetTransactionByID", ctx, mtx.ID).Return(mtx, nil).Run(func(args mock.Arguments) {
+	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Run(func(args mock.Arguments) {
 		cancelCtx()
 	}).Once()
-	_, err = ble.HandleResumeTransaction(ctx, mtx.ID)
+	_, err = ble.HandleResumeTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "PD011926", err)
 }
 
@@ -863,7 +863,7 @@ func TestEngineHandleConfirmedTransactionEvents(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
@@ -989,7 +989,7 @@ func TestEngineHandleConfirmedTransactionEventsNoInFlightNotHang(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 

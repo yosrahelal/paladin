@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
@@ -169,7 +168,7 @@ func TestProduceLatestInFlightStageContextConfirmingTxFailed(t *testing.T) {
 	}).Once()
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
 	it.stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageConfirming, time.Now(), nil)
-	mtx.Status = components.BaseTxStatusFailed
+	mtx.Status = components.PubTxStatusFailed
 	it.stateManager.SetValidatedTransactionHashMatchState(ctx, true)
 	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
 		AvailableToSpend:         nil,
@@ -223,7 +222,7 @@ func TestProduceLatestInFlightStageContextConfirmingTxSucceeded(t *testing.T) {
 	}).Once()
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
 	it.stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageConfirming, time.Now(), nil)
-	mtx.Status = components.BaseTxStatusSucceeded
+	mtx.Status = components.PubTxStatusSucceeded
 	rsc.StageErrored = false
 	it.stateManager.SetValidatedTransactionHashMatchState(ctx, true)
 	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
@@ -259,7 +258,7 @@ func TestProduceLatestInFlightStageContextTriggerResubmissionForStaledConfirmati
 	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
 
 	// set last submit to trigger resubmission
-	inThePast := fftypes.ZeroTime()
+	inThePast := tktypes.Timestamp(0)
 	mtx.LastSubmit = &inThePast
 	it.resubmitInterval = 0
 	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
@@ -356,7 +355,7 @@ func TestProduceLatestInFlightStageContextSanityChecksForCompletedTransactions(t
 	imtxs := inFlightStageMananger.InMemoryTxStateManager.(*inMemoryTxState)
 
 	mtx := it.stateManager.GetTx()
-	mtx.Status = components.BaseTxStatusSucceeded
+	mtx.Status = components.PubTxStatusSucceeded
 	testConfirmedTx := &blockindexer.IndexedTransaction{
 		BlockNumber:      int64(1233),
 		TransactionIndex: int64(23),

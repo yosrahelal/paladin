@@ -17,9 +17,9 @@ package components
 
 import (
 	"context"
+	"math/big"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 // PublicTransactionEventType is a enum type that contains all types of transaction process events
@@ -38,8 +39,8 @@ const (
 	PublicTXProcessFailed
 )
 
-// BaseTxStatus is the current status of a transaction
-type BaseTxStatus string
+// PubTxStatus is the current status of a transaction
+type PubTxStatus string
 
 func (ro *RequestOptions) Validate(ctx context.Context) error {
 	if ro.ID == nil {
@@ -53,30 +54,59 @@ func (ro *RequestOptions) Validate(ctx context.Context) error {
 }
 
 const (
-	// BaseTxStatusPending indicates the operation has been submitted, but is not yet confirmed as successful or failed
-	BaseTxStatusPending BaseTxStatus = "Pending"
-	// BaseTxStatusSucceeded the infrastructure runtime has returned success for the operation
-	BaseTxStatusSucceeded BaseTxStatus = "Succeeded"
-	// BaseTxStatusFailed happens when an error is reported by the infrastructure runtime
-	BaseTxStatusFailed BaseTxStatus = "Failed"
+	// PubTxStatusPending indicates the operation has been submitted, but is not yet confirmed as successful or failed
+	PubTxStatusPending PubTxStatus = "Pending"
+	// PubTxStatusSucceeded the infrastructure runtime has returned success for the operation
+	PubTxStatusSucceeded PubTxStatus = "Succeeded"
+	// PubTxStatusFailed happens when an error is reported by the infrastructure runtime
+	PubTxStatusFailed PubTxStatus = "Failed"
 	// BaseTxStatusFailed happens when the indexed transaction hash doesn't match any of the submitted hashes
-	BaseTxStatusConflict BaseTxStatus = "Conflict"
-	// BaseTxStatusSuspended indicates we are not actively doing any work with this transaction right now, until it's resumed to pending again
-	BaseTxStatusSuspended BaseTxStatus = "Suspended"
+	PubTxStatusConflict PubTxStatus = "Conflict"
+	// PubTxStatusSuspended indicates we are not actively doing any work with this transaction right now, until it's resumed to pending again
+	PubTxStatusSuspended PubTxStatus = "Suspended"
 )
 
+// TXUpdates specifies a set of updates that are possible on the base structure.
+//
+// Any non-nil fields will be set.
+// Sub-objects are set as a whole, apart from TransactionHeaders where each field
+// is considered and stored individually.
+// JSONAny fields can be set explicitly to null using fftypes.NullString
+//
+// This is the update interface for the policy engine to update base status on the
+// transaction object.
+//
+// There are separate setter functions for fields that depending on the persistence
+// mechanism might be in separate tables - including History, Receipt, and Confirmations
+type BaseTXUpdates struct {
+	Status               *PubTxStatus         `json:"status"`
+	From                 *string              `json:"from,omitempty"`
+	To                   *string              `json:"to,omitempty"`
+	Nonce                *ethtypes.HexInteger `json:"nonce,omitempty"`
+	Value                *ethtypes.HexInteger `json:"value,omitempty"`
+	GasPrice             *ethtypes.HexInteger `json:"gasPrice,omitempty"`
+	MaxPriorityFeePerGas *ethtypes.HexInteger `json:"maxPriorityFeePerGas,omitempty"`
+	MaxFeePerGas         *ethtypes.HexInteger `json:"maxFeePerGas,omitempty"`
+	GasLimit             *ethtypes.HexInteger `json:"gas,omitempty"` // note this is required for some methods (eth_estimateGas)
+	TransactionHash      *tktypes.Bytes32     `json:"transactionHash,omitempty"`
+	FirstSubmit          *tktypes.Timestamp   `json:"firstSubmit,omitempty"`
+	LastSubmit           *tktypes.Timestamp   `json:"lastSubmit,omitempty"`
+	ErrorMessage         *string              `json:"errorMessage,omitempty"`
+	SubmittedHashes      []string             `json:"submittedHashes,omitempty"`
+}
+
 type PublicTX struct {
-	ID              string          `json:"id"`
-	Created         *fftypes.FFTime `json:"created"`
-	Updated         *fftypes.FFTime `json:"updated"`
-	Status          BaseTxStatus    `json:"status"`
-	DeleteRequested *fftypes.FFTime `json:"deleteRequested,omitempty"`
-	SequenceID      string          `json:"sequenceId,omitempty"`
+	ID         uuid.UUID          `json:"id"`
+	Created    *tktypes.Timestamp `json:"created"`
+	Updated    *tktypes.Timestamp `json:"updated"`
+	Status     PubTxStatus        `json:"status"`
+	SubStatus  PubTxSubStatus     `json:"subStatus"`
+	SequenceID string             `json:"sequenceId,omitempty"`
 	*ethsigner.Transaction
-	TransactionHash string          `json:"transactionHash,omitempty"`
-	FirstSubmit     *fftypes.FFTime `json:"firstSubmit,omitempty"`
-	LastSubmit      *fftypes.FFTime `json:"lastSubmit,omitempty"`
-	ErrorMessage    string          `json:"errorMessage,omitempty"`
+	TransactionHash *tktypes.Bytes32   `json:"transactionHash,omitempty"`
+	FirstSubmit     *tktypes.Timestamp `json:"firstSubmit,omitempty"`
+	LastSubmit      *tktypes.Timestamp `json:"lastSubmit,omitempty"`
+	ErrorMessage    string             `json:"errorMessage,omitempty"`
 	// submitted transaction hashes are in a separate DB table, we load and manage it in memory in the same object for code convenience
 	SubmittedHashes []string `json:"submittedHashes,omitempty"`
 }
@@ -98,18 +128,18 @@ type RequestOptions struct {
 	GasLimit *ethtypes.HexInteger
 }
 
-// BaseTxSubStatus is an intermediate status a transaction may go through
-type BaseTxSubStatus string
+// PubTxSubStatus is an intermediate status a transaction may go through
+type PubTxSubStatus string
 
 const (
-	// BaseTxSubStatusReceived indicates the transaction has been received by the connector
-	BaseTxSubStatusReceived BaseTxSubStatus = "Received"
-	// BaseTxSubStatusStale indicates the transaction is now in stale
-	BaseTxSubStatusStale BaseTxSubStatus = "Stale"
-	// BaseTxSubStatusTracking indicates we are tracking progress of the transaction
-	BaseTxSubStatusTracking BaseTxSubStatus = "Tracking"
-	// BaseTxSubStatusConfirmed indicates we have confirmed that the transaction has been fully processed
-	BaseTxSubStatusConfirmed BaseTxSubStatus = "Confirmed"
+	// PubTxSubStatusReceived indicates the transaction has been received by the connector
+	PubTxSubStatusReceived PubTxSubStatus = "Received"
+	// PubTxSubStatusStale indicates the transaction is now in stale
+	PubTxSubStatusStale PubTxSubStatus = "Stale"
+	// PubTxSubStatusTracking indicates we are tracking progress of the transaction
+	PubTxSubStatusTracking PubTxSubStatus = "Tracking"
+	// PubTxSubStatusConfirmed indicates we have confirmed that the transaction has been fully processed
+	PubTxSubStatusConfirmed PubTxSubStatus = "Confirmed"
 )
 
 type BaseTxAction string
@@ -132,51 +162,29 @@ const (
 	BaseTxActionConfirmTransaction BaseTxAction = "Confirm"
 )
 
-// TXUpdates specifies a set of updates that are possible on the base structure.
-//
-// Any non-nil fields will be set.
-// Sub-objects are set as a whole, apart from TransactionHeaders where each field
-// is considered and stored individually.
-// JSONAny fields can be set explicitly to null using fftypes.NullString
-//
-// This is the update interface for the policy engine to update base status on the
-// transaction object.
-//
-// There are separate setter functions for fields that depending on the persistence
-// mechanism might be in separate tables - including History, Receipt, and Confirmations
-type BaseTXUpdates struct {
-	Status               *BaseTxStatus        `json:"status"`
-	DeleteRequested      *fftypes.FFTime      `json:"deleteRequested,omitempty"`
-	From                 *string              `json:"from,omitempty"`
-	To                   *string              `json:"to,omitempty"`
-	Nonce                *ethtypes.HexInteger `json:"nonce,omitempty"`
-	Value                *ethtypes.HexInteger `json:"value,omitempty"`
-	GasPrice             *ethtypes.HexInteger `json:"gasPrice,omitempty"`
-	MaxPriorityFeePerGas *ethtypes.HexInteger `json:"maxPriorityFeePerGas,omitempty"`
-	MaxFeePerGas         *ethtypes.HexInteger `json:"maxFeePerGas,omitempty"`
-	GasLimit             *ethtypes.HexInteger `json:"gas,omitempty"` // note this is required for some methods (eth_estimateGas)
-	TransactionHash      *string              `json:"transactionHash,omitempty"`
-	FirstSubmit          *fftypes.FFTime      `json:"firstSubmit,omitempty"`
-	LastSubmit           *fftypes.FFTime      `json:"lastSubmit,omitempty"`
-	ErrorMessage         *string              `json:"errorMessage,omitempty"`
-	SubmittedHashes      []string             `json:"submittedHashes,omitempty"`
-}
-
 type NextNonceCallback func(ctx context.Context, signer string) (uint64, error)
 
-type TransactionStore interface {
+type PubTransactionQueries struct {
+	NotIDAND   []string
+	StatusOR   []string
+	NotFromAND []string
+	From       *string
+	To         *string
+	Sort       *string
+	Limit      *int
+	AfterNonce *big.Int
+	HasValue   bool
+}
+type PublicTransactionStore interface {
 	GetTransactionByID(ctx context.Context, txID string) (*PublicTX, error)
-	InsertTransactionWithNextNonce(ctx context.Context, tx *PublicTX, lookupNextNonce NextNonceCallback) error
+	InsertTransaction(ctx context.Context, tx *PublicTX) error
 	UpdateTransaction(ctx context.Context, txID string, updates *BaseTXUpdates) error
-	DeleteTransaction(ctx context.Context, txID string) error
 
 	GetConfirmedTransaction(ctx context.Context, txID string) (iTX *blockindexer.IndexedTransaction, err error)
-	SetConfirmedTransaction(ctx context.Context, txID string, iTX *blockindexer.IndexedTransaction) error
 
-	AddSubStatusAction(ctx context.Context, txID string, subStatus BaseTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *fftypes.FFTime) error
+	AddSubStatusAction(ctx context.Context, txID string, subStatus PubTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *fftypes.FFTime) error
 
-	ListTransactions(ctx context.Context, filter ffapi.AndFilter) ([]*PublicTX, *ffapi.FilterResult, error)
-	NewTransactionFilter(ctx context.Context) ffapi.FilterBuilder
+	ListTransactions(ctx context.Context, filter *PubTransactionQueries) ([]*PublicTX, error)
 }
 
 type PreparedSubmission interface {
@@ -189,7 +197,7 @@ type PublicTxEngine interface {
 	// Init - setting a set of initialized toolkit plugins in the constructed transaction handler object. Safe checks & initialization
 	//        can take place inside this function as well. It also enables toolkit plugins to be able to embed a reference to its parent
 	//        transaction handler instance.
-	Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore TransactionStore, publicTXEventNotifier PublicTxEventNotifier, blockIndexer blockindexer.BlockIndexer)
+	Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore PublicTransactionStore, publicTXEventNotifier PublicTxEventNotifier, blockIndexer blockindexer.BlockIndexer)
 
 	// Start - starting the transaction handler to handle inbound events.
 	// It takes in a context, of which upon cancellation will stop the transaction handler.
@@ -198,8 +206,6 @@ type PublicTxEngine interface {
 	Start(ctx context.Context) (done <-chan struct{}, err error)
 
 	//Syncronous functions that are executed on the callers thread
-	PrepareSubmission(ctx context.Context, reqOptions *RequestOptions, txPayload interface{}) (preparedSubmission PreparedSubmission, submissionRejected bool, err error)
-	Submit(ctx context.Context, preparedSubmission PreparedSubmission) (mtx *PublicTX, err error)
 	SubmitBatch(ctx context.Context, preparedSubmissions []PreparedSubmission) ([]*PublicTX, error)
 	PrepareSubmissionBatch(ctx context.Context, reqOptions *RequestOptions, txPayloads []interface{}) (preparedSubmission []PreparedSubmission, submissionRejected bool, err error)
 

@@ -27,6 +27,8 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -40,7 +42,7 @@ func TestProduceLatestInFlightStageContextSubmitPanic(t *testing.T) {
 	// switch to submit
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
 	signedMsg := []byte("signedMessage")
-	it.TriggerNewStageRun(ctx, baseTypes.InFlightTxStageSubmitting, components.BaseTxSubStatusReceived, signedMsg)
+	it.TriggerNewStageRun(ctx, baseTypes.InFlightTxStageSubmitting, components.PubTxSubStatusReceived, signedMsg)
 	rsc := it.stateManager.GetRunningStageContext(ctx)
 
 	// unexpected error
@@ -66,18 +68,18 @@ func TestProduceLatestInFlightStageContextSubmitComplete(t *testing.T) {
 	// switch to submit
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
 	signedMsg := []byte("signedMessage")
-	txHash := "tx_hashnew"
-	it.TriggerNewStageRun(ctx, baseTypes.InFlightTxStageSubmitting, components.BaseTxSubStatusReceived, signedMsg)
+	txHash := confutil.P(tktypes.Bytes32Keccak([]byte("0x000031")))
+	it.TriggerNewStageRun(ctx, baseTypes.InFlightTxStageSubmitting, components.PubTxSubStatusReceived, signedMsg)
 	rsc := it.stateManager.GetRunningStageContext(ctx)
 	// submission attempt completed - new transaction submitted
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
 	mtx := it.stateManager.GetTx()
-	mtx.TransactionHash = ""
+	mtx.TransactionHash = nil
 	mTS := testInFlightTransactionStateManagerWithMocks.mTS
 	mtx.FirstSubmit = nil
 	mtx.SubmittedHashes = []string{}
 
-	submissionTime := fftypes.Now()
+	submissionTime := confutil.P(tktypes.TimestampNow())
 	it.stateManager.AddSubmitOutput(ctx, txHash, submissionTime, baseTypes.SubmissionOutcomeSubmittedNew, ethclient.ErrorReason(""), nil)
 	rsc.StageOutputsToBePersisted = nil
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
@@ -89,7 +91,7 @@ func TestProduceLatestInFlightStageContextSubmitComplete(t *testing.T) {
 	assert.Equal(t, baseTypes.InFlightTxStageSubmitting, rsc.Stage)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
-	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, components.BaseTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"txHash":"`+txHash+`"}`), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
+	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"txHash":"`+txHash.String()+`"}`), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
 	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
 	assert.Equal(t, txHash, *rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
 	assert.Equal(t, submissionTime, rsc.StageOutputsToBePersisted.TxUpdates.FirstSubmit)
@@ -109,7 +111,7 @@ func TestProduceLatestInFlightStageContextSubmitComplete(t *testing.T) {
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.Equal(t, baseTypes.InFlightTxStageSubmitting, rsc.Stage)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
-	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, components.BaseTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"txHash":"`+txHash+`"}`), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
+	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"txHash":"`+txHash.String()+`"}`), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
 	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
 	assert.Equal(t, submissionTime, rsc.StageOutputsToBePersisted.TxUpdates.LastSubmit)
 	assert.Equal(t, txHash, *rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
@@ -128,7 +130,7 @@ func TestProduceLatestInFlightStageContextCannotSubmit(t *testing.T) {
 	mtx.MaxFeePerGas = ethtypes.NewHexInteger64(32247127816)
 	mtx.MaxPriorityFeePerGas = ethtypes.NewHexInteger64(32146027800)
 
-	mtx.TransactionHash = ""
+	mtx.TransactionHash = nil
 	mtx.FirstSubmit = nil
 	mtx.SubmittedHashes = []string{}
 
@@ -142,7 +144,7 @@ func TestProduceLatestInFlightStageContextCannotSubmit(t *testing.T) {
 
 	// Previous cost unknown when state is validated
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
-	mtx.TransactionHash = "test"
+	mtx.TransactionHash = confutil.P(tktypes.Bytes32Keccak([]byte("test")))
 	mtx.SubmittedHashes = []string{}
 	mtx.GasLimit = ethtypes.NewHexInteger64(-1) // invalid limit
 	it.stateManager.SetValidatedTransactionHashMatchState(ctx, false)
@@ -162,21 +164,21 @@ func TestProduceLatestInFlightStageContextSubmitCompleteAlreadyKnown(t *testing.
 	// switch to submit
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
 	signedMsg := []byte("signedMessage")
-	txHash := "tx_hashnew"
-	it.TriggerNewStageRun(ctx, baseTypes.InFlightTxStageSubmitting, components.BaseTxSubStatusReceived, signedMsg)
+	txHash := confutil.P(tktypes.Bytes32Keccak([]byte("0x000031")))
+	it.TriggerNewStageRun(ctx, baseTypes.InFlightTxStageSubmitting, components.PubTxSubStatusReceived, signedMsg)
 	rsc := it.stateManager.GetRunningStageContext(ctx)
 	// submission attempt completed - new transaction submitted
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
 	mtx := it.stateManager.GetTx()
-	mtx.TransactionHash = ""
+	mtx.TransactionHash = nil
 	mtx.FirstSubmit = nil
 	mtx.SubmittedHashes = []string{}
 
-	submissionTime := fftypes.Now()
+	submissionTime := confutil.P(tktypes.TimestampNow())
 	// // submission attempt completed - already known
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
 	rsc.StageOutputsToBePersisted = nil
-	mtx.FirstSubmit = fftypes.Now()
+	mtx.FirstSubmit = confutil.P(tktypes.TimestampNow())
 	rsc = it.stateManager.GetRunningStageContext(ctx)
 	mtx.SubmittedHashes = []string{}
 	it.stateManager.AddSubmitOutput(ctx, txHash, submissionTime, baseTypes.SubmissionOutcomeAlreadyKnown, ethclient.ErrorReason(""), nil)
@@ -212,8 +214,8 @@ func TestProduceLatestInFlightStageContextSubmitCompleteAlreadyKnown(t *testing.
 	// submission attempt completed - already known for the an existing time submission
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
 	rsc.StageOutputsToBePersisted = nil
-	mtx.FirstSubmit = fftypes.Now()
-	mtx.TransactionHash = "already known"
+	mtx.FirstSubmit = confutil.P(tktypes.TimestampNow())
+	mtx.TransactionHash = confutil.P(tktypes.Bytes32Keccak([]byte("already known")))
 	rsc = it.stateManager.GetRunningStageContext(ctx)
 	mtx.SubmittedHashes = []string{}
 	it.stateManager.AddSubmitOutput(ctx, txHash, submissionTime, baseTypes.SubmissionOutcomeAlreadyKnown, ethclient.ErrorReason(""), nil)
@@ -235,17 +237,17 @@ func TestProduceLatestInFlightStageContextSubmitErrors(t *testing.T) {
 	// switch to submit
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
 	signedMsg := []byte("signedMessage")
-	txHash := "tx_hashold"
+	txHash := confutil.P(tktypes.Bytes32Keccak([]byte("0x000001")))
 	mTS := testInFlightTransactionStateManagerWithMocks.mTS
 
-	it.TriggerNewStageRun(ctx, baseTypes.InFlightTxStageSubmitting, components.BaseTxSubStatusReceived, signedMsg)
+	it.TriggerNewStageRun(ctx, baseTypes.InFlightTxStageSubmitting, components.PubTxSubStatusReceived, signedMsg)
 	rsc := it.stateManager.GetRunningStageContext(ctx)
 
 	mtx := it.stateManager.GetTx()
-	mtx.TransactionHash = ""
+	mtx.TransactionHash = nil
 	mtx.FirstSubmit = nil
 	mtx.SubmittedHashes = []string{}
-	submissionTime := fftypes.Now()
+	submissionTime := confutil.P(tktypes.TimestampNow())
 	submissionErr := fmt.Errorf("submission error")
 
 	// submission attempt errored - required re-preparation
@@ -265,7 +267,7 @@ func TestProduceLatestInFlightStageContextSubmitErrors(t *testing.T) {
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
 	called := make(chan bool, 3)
-	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, components.BaseTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"reason":"`+string(ethclient.ErrorReasonTransactionReverted)+`"}`), fftypes.JSONAnyPtr(`{"error":"`+submissionErr.Error()+`"}`), mock.Anything).Run(func(args mock.Arguments) {
+	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"reason":"`+string(ethclient.ErrorReasonTransactionReverted)+`"}`), fftypes.JSONAnyPtr(`{"error":"`+submissionErr.Error()+`"}`), mock.Anything).Run(func(args mock.Arguments) {
 		called <- true
 	}).Return(nil).Maybe()
 	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
@@ -278,9 +280,9 @@ func TestProduceLatestInFlightStageContextSubmitErrors(t *testing.T) {
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
 	rsc.StageOutputsToBePersisted = nil
 	rsc = it.stateManager.GetRunningStageContext(ctx)
-	newWarnTime := fftypes.Now()
+	newWarnTime := confutil.P(tktypes.TimestampNow())
 	mtx.TransactionHash = txHash
-	it.stateManager.AddSubmitOutput(ctx, "", newWarnTime, baseTypes.SubmissionOutcomeFailedRequiresRetry, ethclient.ErrorReasonTransactionReverted, submissionErr)
+	it.stateManager.AddSubmitOutput(ctx, nil, newWarnTime, baseTypes.SubmissionOutcomeFailedRequiresRetry, ethclient.ErrorReasonTransactionReverted, submissionErr)
 	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
@@ -293,7 +295,7 @@ func TestProduceLatestInFlightStageContextSubmitErrors(t *testing.T) {
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
 	called = make(chan bool, 3)
-	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, components.BaseTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"reason":"`+string(ethclient.ErrorReasonTransactionReverted)+`"}`), fftypes.JSONAnyPtr(`{"error":"`+submissionErr.Error()+`"}`), mock.Anything).Run(func(args mock.Arguments) {
+	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"reason":"`+string(ethclient.ErrorReasonTransactionReverted)+`"}`), fftypes.JSONAnyPtr(`{"error":"`+submissionErr.Error()+`"}`), mock.Anything).Run(func(args mock.Arguments) {
 		called <- true
 	}).Return(nil).Maybe()
 	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
@@ -352,10 +354,10 @@ func TestProduceLatestInFlightStageContextSubmitRePrepare(t *testing.T) {
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
 	signedMsg := []byte("signedMessage")
 
-	it.TriggerNewStageRun(ctx, baseTypes.InFlightTxStageSubmitting, components.BaseTxSubStatusReceived, signedMsg)
+	it.TriggerNewStageRun(ctx, baseTypes.InFlightTxStageSubmitting, components.PubTxSubStatusReceived, signedMsg)
 
 	mtx := it.stateManager.GetTx()
-	mtx.TransactionHash = ""
+	mtx.TransactionHash = nil
 	mtx.FirstSubmit = nil
 	mtx.SubmittedHashes = []string{}
 	// persisted stage error - require re-preparation
@@ -386,7 +388,7 @@ func TestProduceLatestInFlightStageContextSubmitSuccess(t *testing.T) {
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
 	signedMsg := []byte("signedMessage")
 
-	it.TriggerNewStageRun(ctx, baseTypes.InFlightTxStageSubmitting, components.BaseTxSubStatusReceived, signedMsg)
+	it.TriggerNewStageRun(ctx, baseTypes.InFlightTxStageSubmitting, components.PubTxSubStatusReceived, signedMsg)
 
 	mtx := it.stateManager.GetTx()
 	mtx.SubmittedHashes = []string{}
@@ -420,7 +422,7 @@ func TestProduceLatestInFlightStageContextTriggerSubmit(t *testing.T) {
 	it.testOnlyNoEventMode = false
 	// trigger signing
 	mtx := it.stateManager.GetTx()
-	mtx.TransactionHash = ""
+	mtx.TransactionHash = nil
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	mEC := testInFlightTransactionStateManagerWithMocks.mEC
 	called := make(chan struct{})

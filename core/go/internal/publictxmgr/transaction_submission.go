@@ -21,12 +21,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"golang.org/x/crypto/sha3"
@@ -42,13 +42,13 @@ func calculateTransactionHash(rawTxnData []byte) *tktypes.Bytes32 {
 	return &hashBytes
 }
 
-func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx *components.PublicTX, signedMessage []byte) (string, *fftypes.FFTime, ethclient.ErrorReason, baseTypes.SubmissionOutcome, error) {
+func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx *components.PublicTX, signedMessage []byte) (*tktypes.Bytes32, *tktypes.Timestamp, ethclient.ErrorReason, baseTypes.SubmissionOutcome, error) {
 	var txHash *tktypes.Bytes32
 	sendStart := time.Now()
 	calculatedTxHash := calculateTransactionHash(signedMessage)
 	log.L(ctx).Debugf("Sending raw transaction %s at nonce %s / %d (lastSubmit=%s), Hash= %s, Data=%s", mtx.ID, mtx.From, mtx.Nonce.Int64(), mtx.LastSubmit, txHash, mtx.Data)
 
-	submissionTime := fftypes.Now()
+	submissionTime := confutil.P(tktypes.TimestampNow())
 	var submissionErrorReason ethclient.ErrorReason // TODO: fix reason parsing
 	var submissionOutcome baseTypes.SubmissionOutcome
 	var submissionError error
@@ -129,13 +129,8 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 	})
 
 	if retryError != nil {
-		return "", nil, ethclient.ErrorReason(retryError.Error()), baseTypes.SubmissionOutcomeFailedRequiresRetry, retryError
+		return nil, nil, ethclient.ErrorReason(retryError.Error()), baseTypes.SubmissionOutcomeFailedRequiresRetry, retryError
 	}
 
-	txHashString := ""
-	if txHash != nil {
-		txHashString = txHash.String()
-	}
-
-	return txHashString, submissionTime, submissionErrorReason, submissionOutcome, submissionError
+	return txHash, submissionTime, submissionErrorReason, submissionOutcome, submissionError
 }

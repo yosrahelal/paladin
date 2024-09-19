@@ -34,7 +34,7 @@ type testInFlightTransactionWithMocksAndConf struct {
 	mBI  *componentmocks.BlockIndexer
 	mEC  *componentmocks.EthClient
 	mEN  *componentmocks.PublicTxEventNotifier
-	mTS  *componentmocks.TransactionStore
+	mTS  *componentmocks.PublicTransactionStore
 	mKM  *componentmocks.KeyManager
 	mBM  baseTypes.BalanceManager
 	conf config.Section
@@ -47,7 +47,7 @@ func NewTestInFlightTransactionWithMocks(t *testing.T) *testInFlightTransactionW
 	mockBalanceManager, mEC, _ := NewTestBalanceManager(context.Background(), t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
@@ -77,7 +77,7 @@ func TestProduceLatestInFlightStageContextTriggerStageError(t *testing.T) {
 	// trigger retrieve gas price
 	mtx := it.stateManager.GetTx()
 	mtx.GasPrice = nil
-	mtx.TransactionHash = ""
+	mtx.TransactionHash = nil
 
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
@@ -110,12 +110,12 @@ func TestProduceLatestInFlightStageContextStatusChange(t *testing.T) {
 	// trigger status change
 	mtx := it.stateManager.GetTx()
 	mtx.GasPrice = nil
-	mtx.TransactionHash = ""
+	mtx.TransactionHash = nil
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
-	suspended := components.BaseTxStatusSuspended
+	suspended := components.PubTxStatusSuspended
 	it.newStatus = &suspended
 	iftxms := it.stateManager.(*inFlightTransactionState)
-	iftxms.runningStageContext = NewRunningStageContext(ctx, baseTypes.InFlightTxStageStatusUpdate, components.BaseTxSubStatusReceived, iftxms)
+	iftxms.runningStageContext = NewRunningStageContext(ctx, baseTypes.InFlightTxStageStatusUpdate, components.PubTxSubStatusReceived, iftxms)
 
 	assert.NotNil(t, it.stateManager.GetRunningStageContext(ctx))
 	rsc := it.stateManager.GetRunningStageContext(ctx)
@@ -166,7 +166,7 @@ func TestProduceLatestInFlightStageContextTriggerStatusUpdate(t *testing.T) {
 	it.testOnlyNoEventMode = false
 	// trigger signing
 	mtx := it.stateManager.GetTx()
-	mtx.TransactionHash = ""
+	mtx.TransactionHash = nil
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	err := it.TriggerStatusUpdate(ctx)
 	require.NoError(t, err)
@@ -186,9 +186,9 @@ func TestProduceLatestInFlightStageContextStatusUpdatePanic(t *testing.T) {
 	// trigger status change
 	mtx := it.stateManager.GetTx()
 	mtx.GasPrice = nil
-	mtx.TransactionHash = ""
+	mtx.TransactionHash = nil
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
-	suspend := components.BaseTxStatusSuspended
+	suspend := components.PubTxStatusSuspended
 	it.newStatus = &suspend
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
 		AvailableToSpend:         nil,

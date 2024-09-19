@@ -17,12 +17,11 @@ package publictxmgr
 
 import (
 	"context"
-	"database/sql/driver"
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/config"
-	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
@@ -121,7 +120,7 @@ func (ble *publicTxEngine) poll(ctx context.Context) (polled int, total int) {
 	oldInFlight := ble.InFlightOrchestrators
 	ble.InFlightOrchestrators = make(map[string]*orchestrator)
 
-	InFlightSigningAddresses := make([]driver.Value, 0, len(oldInFlight))
+	InFlightSigningAddresses := make([]string, 0, len(oldInFlight))
 
 	stateCounts := make(map[string]int)
 	for _, sName := range AllOrchestratorStates {
@@ -165,17 +164,15 @@ func (ble *publicTxEngine) poll(ctx context.Context) (polled int, total int) {
 		var additionalTxFromNonInFlightSigners []*components.PublicTX
 		// We retry the get from persistence indefinitely (until the context cancels)
 		err := ble.retry.Do(ctx, "get pending transactions with non InFlight signing addresses", func(attempt int) (retry bool, err error) {
-			fb := ble.txStore.NewTransactionFilter(ctx)
-			conditions := []ffapi.Filter{
-				fb.Eq("status", components.BaseTxStatusPending),
+			tf := &components.PubTransactionQueries{
+				StatusOR: []string{string(components.PubTxStatusPending)},
+				Sort:     confutil.P("sequence"),
+				Limit:    &spaces,
 			}
 			if len(InFlightSigningAddresses) > 0 {
-				conditions = append(conditions, fb.NotIn("from", InFlightSigningAddresses))
+				tf.NotFromAND = InFlightSigningAddresses
 			}
-			filter := fb.And(conditions...)
-			_ = filter.Limit(uint64(spaces)).Sort("sequence") // TODO: use group by to be more efficient
-
-			additionalTxFromNonInFlightSigners, _, err = ble.txStore.ListTransactions(ctx, filter)
+			additionalTxFromNonInFlightSigners, err = ble.txStore.ListTransactions(ctx, tf)
 			return true, err
 		})
 		if err != nil {
@@ -230,15 +227,16 @@ func (ble *publicTxEngine) MarkInFlightOrchestratorsStale() {
 }
 
 func (ble *publicTxEngine) GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *components.PublicTX, err error) {
-	fb := ble.txStore.NewTransactionFilter(ctx)
-	filter := fb.And(fb.Eq("from", sourceAddress),
-		fb.Eq("to", destinationAddress),
-		fb.Eq("status", components.BaseTxStatusPending),
-		fb.Neq("value", nil), // NB: we assume if a transaction has value then it's a fueling transaction
-	)
-	_ = filter.Limit(1).Sort("-nonce")
+	tf := &components.PubTransactionQueries{
+		StatusOR: []string{string(components.PubTxStatusPending)},
+		To:       confutil.P(destinationAddress),
+		From:     confutil.P(sourceAddress),
+		Sort:     confutil.P("-nonce"),
+		Limit:    confutil.P(1),
+		HasValue: true, // NB: we assume if a transaction has value then it's a fueling transaction
+	}
 
-	txs, _, err := ble.txStore.ListTransactions(ctx, filter)
+	txs, err := ble.txStore.ListTransactions(ctx, tf)
 	if err != nil {
 		return nil, err
 	}
@@ -254,11 +252,14 @@ func (ble *publicTxEngine) CheckTransactionCompleted(ctx context.Context, tx *co
 	completedTxNonce, exists := ble.completedTxNoncePerAddress[string(tx.From)]
 	if !exists {
 		// need to query the database to check the status of managed transaction
-		fb := ble.txStore.NewTransactionFilter(ctx)
-		filter := fb.And(fb.Eq("from", tx.From), fb.Or(fb.Eq("status", components.BaseTxStatusSucceeded), fb.Eq("status", components.BaseTxStatusFailed)))
-		_ = filter.Limit(1).Sort("-nonce")
+		tf := &components.PubTransactionQueries{
+			StatusOR: []string{string(components.PubTxStatusSucceeded), string(components.PubTxStatusFailed)},
+			From:     confutil.P(string(tx.From)),
+			Sort:     confutil.P("-nonce"),
+			Limit:    confutil.P(1),
+		}
 
-		txs, _, err := ble.txStore.ListTransactions(ctx, filter)
+		txs, err := ble.txStore.ListTransactions(ctx, tf)
 		if err != nil {
 			// can not read from the database, treat transaction as incomplete
 			return false
@@ -285,7 +286,7 @@ func (ble *publicTxEngine) updateCompletedTxNonce(tx *components.PublicTX) (upda
 	// no need for locking here as outdated information is OK given we do frequent retires
 	ble.completedTxNoncePerAddressMutex.Lock()
 	defer ble.completedTxNoncePerAddressMutex.Unlock()
-	if tx.Status != components.BaseTxStatusSucceeded && tx.Status != components.BaseTxStatusFailed {
+	if tx.Status != components.PubTxStatusSucceeded && tx.Status != components.PubTxStatusFailed {
 		// not a completed tx, no op
 		return updated
 	}

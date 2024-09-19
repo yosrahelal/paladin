@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -32,6 +33,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
 	"github.com/hyperledger/firefly-common/pkg/cache"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
@@ -62,7 +64,7 @@ const (
 type publicTxEngine struct {
 	ctx                   context.Context
 	thMetrics             *publicTxEngineMetrics
-	txStore               components.TransactionStore
+	txStore               components.PublicTransactionStore
 	bIndexer              blockindexer.BlockIndexer
 	ethClient             ethclient.EthClient
 	publicTXEventNotifier components.PublicTxEventNotifier
@@ -160,7 +162,7 @@ func NewTransactionEngine(ctx context.Context, conf config.Section) (components.
 	return ble, nil
 }
 
-func (ble *publicTxEngine) Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore components.TransactionStore, publicTXEventNotifier components.PublicTxEventNotifier, blockIndexer blockindexer.BlockIndexer) {
+func (ble *publicTxEngine) Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore components.PublicTransactionStore, publicTXEventNotifier components.PublicTxEventNotifier, blockIndexer blockindexer.BlockIndexer) {
 	log.L(ctx).Debugf("Initializing enterprise transaction handler")
 	ble.ethClient = ethClient
 	ble.keymgr = keymgr
@@ -334,32 +336,33 @@ func (ble *publicTxEngine) HandleNewTransaction(ctx context.Context, reqOptions 
 
 func (ble *publicTxEngine) createManagedTx(ctx context.Context, txID string, ethTx *ethsigner.Transaction) (*components.PublicTX, error) {
 	log.L(ctx).Tracef("createManagedTx creating a new managed transaction with ID: %s, and payload %+v", txID, ethTx)
-	now := fftypes.Now()
+	now := tktypes.TimestampNow()
 	mtx := &components.PublicTX{
-		ID:          txID,
-		Created:     now,
-		Updated:     now,
+		ID:          uuid.MustParse(txID),
+		Created:     &now,
+		Updated:     &now,
 		Transaction: ethTx,
-		Status:      components.BaseTxStatusPending,
+		Status:      components.PubTxStatusPending,
 	}
 
 	log.L(ctx).Tracef("createManagedTx persisting managed transaction %+v", mtx)
 	// Sequencing ID will be added as part of persistence logic - so we have a deterministic order of transactions
 	// Note: We must ensure persistence happens this within the nonce lock, to ensure that the nonce sequence and the
 	//       global transaction sequence line up.
-	err := ble.txStore.InsertTransactionWithNextNonce(ctx, mtx, func(ctx context.Context, signer string) (uint64, error) {
-		log.L(ctx).Tracef("createManagedTx getting next nonce for transaction ID %s", mtx.ID)
-		nextNonce, err := ble.ethClient.GetTransactionCount(ctx, string(ethTx.From))
-		if err != nil {
-			log.L(ctx).Errorf("createManagedTx getting next nonce for transaction ID %s failed: %+v", mtx.ID, err)
-			return 0, err
-		}
-		log.L(ctx).Tracef("createManagedTx getting next nonce for transaction ID %s succeeded: %s, converting to uint: %d", mtx.ID, nextNonce.String(), nextNonce.Uint64())
-		return nextNonce.Uint64(), nil
-	})
+	err := ble.txStore.InsertTransaction(ctx, mtx)
+	// 	, func(ctx context.Context, signer string) (uint64, error) {
+	// 	log.L(ctx).Tracef("createManagedTx getting next nonce for transaction ID %s", mtx.ID)
+	// 	nextNonce, err := ble.ethClient.GetTransactionCount(ctx, string(ethTx.From))
+	// 	if err != nil {
+	// 		log.L(ctx).Errorf("createManagedTx getting next nonce for transaction ID %s failed: %+v", mtx.ID, err)
+	// 		return 0, err
+	// 	}
+	// 	log.L(ctx).Tracef("createManagedTx getting next nonce for transaction ID %s succeeded: %s, converting to uint: %d", mtx.ID, nextNonce.String(), nextNonce.Uint64())
+	// 	return nextNonce.Uint64(), nil
+	// })
 	if err == nil {
 		log.L(ctx).Tracef("createManagedTx persisted transaction with ID: %s, using nonce %s", mtx.ID, mtx.Nonce.String())
-		err = ble.txStore.AddSubStatusAction(ctx, txID, components.BaseTxSubStatusReceived, components.BaseTxActionAssignNonce, fftypes.JSONAnyPtr(`{"nonce":"`+mtx.Nonce.String()+`"}`), nil, fftypes.Now())
+		err = ble.txStore.AddSubStatusAction(ctx, txID, components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, fftypes.JSONAnyPtr(`{"nonce":"`+mtx.Nonce.String()+`"}`), nil, fftypes.Now())
 	}
 	if err != nil {
 		log.L(ctx).Errorf("createManagedTx failed to create managed traction with ID: %s, due to %+v", mtx.ID, err)

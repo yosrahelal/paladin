@@ -17,14 +17,11 @@ package publictxmgr
 
 import (
 	"context"
-	"database/sql/driver"
 	"math/big"
 	"sync"
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/config"
-	"github.com/hyperledger/firefly-common/pkg/dbsql"
-	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/retry"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -32,6 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
@@ -174,7 +172,7 @@ type orchestrator struct {
 	resubmitInterval        time.Duration
 	stageRetryTimeout       time.Duration
 	persistenceRetryTimeout time.Duration
-	txStore                 components.TransactionStore
+	txStore                 components.PublicTransactionStore
 	ethClient               ethclient.EthClient
 	publicTXEventNotifier   components.PublicTxEventNotifier
 	bIndexer                blockindexer.BlockIndexer
@@ -311,16 +309,16 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			startFromNonce = *p.stateManager.GetNonce()
 			hasCompletedNonce = true
 		}
-		oc.processedTxIDs[p.stateManager.GetTxID()] = true
+		oc.processedTxIDs[p.stateManager.GetTxID().String()] = true
 		if p.stateManager.CanBeRemoved(ctx) {
 			oc.totalCompleted = oc.totalCompleted + 1
 			latestCompleted = p.stateManager.GetTx()
 			queueUpdated = true
-			log.L(ctx).Debugf("Orchestrator poll and process, marking %s as complete after: %s", p.stateManager.GetTxID(), time.Since(*p.stateManager.GetCreatedTime().Time()))
+			log.L(ctx).Debugf("Orchestrator poll and process, marking %s as complete after: %s", p.stateManager.GetTxID(), time.Since(p.stateManager.GetCreatedTime().Time()))
 		} else if p.stateManager.IsSuspended() {
-			log.L(ctx).Debugf("Orchestrator poll and process, removed suspended tx %s after: %s", p.stateManager.GetTxID(), time.Since(*p.stateManager.GetCreatedTime().Time()))
+			log.L(ctx).Debugf("Orchestrator poll and process, removed suspended tx %s after: %s", p.stateManager.GetTxID(), time.Since(p.stateManager.GetCreatedTime().Time()))
 		} else {
-			log.L(ctx).Debugf("Orchestrator poll and process, continuing tx %s after: %s", p.stateManager.GetTxID(), time.Since(*p.stateManager.GetCreatedTime().Time()))
+			log.L(ctx).Debugf("Orchestrator poll and process, continuing tx %s after: %s", p.stateManager.GetTxID(), time.Since(p.stateManager.GetCreatedTime().Time()))
 			oc.InFlightTxs = append(oc.InFlightTxs, p)
 			txStage := p.stateManager.GetStage(ctx)
 			if string(txStage) == "" {
@@ -342,32 +340,31 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 	spaces := oc.maxInFlightTxs - oldLen
 	if spaces > 0 {
 		completedTxIDsStillBeingPersisted := make(map[string]bool)
-		fb := oc.txStore.NewTransactionFilter(ctx)
-		conds := []ffapi.Filter{
-			fb.Eq("from", oc.signingAddress),
-			fb.Eq("status", components.BaseTxStatusPending),
+		tf := &components.PubTransactionQueries{
+			StatusOR: []string{string(components.PubTxStatusPending)},
+			From:     confutil.P(oc.signingAddress),
+			Sort:     confutil.P("nonce"),
+			Limit:    confutil.P(spaces),
+			HasValue: true, // NB: we assume if a transaction has value then it's a fueling transaction
 		}
 
 		if len(oc.transactionIDsInStatusUpdate) > 0 {
-			transactionIDInStatusUpdate := make([]driver.Value, 0, len(oc.transactionIDsInStatusUpdate))
+			transactionIDInStatusUpdate := make([]string, 0, len(oc.transactionIDsInStatusUpdate))
 			for _, txID := range oc.transactionIDsInStatusUpdate {
 				transactionIDInStatusUpdate = append(transactionIDInStatusUpdate, txID)
-
 			}
-			conds = append(conds, fb.NotIn(dbsql.ColumnID, transactionIDInStatusUpdate))
+			tf.NotIDAND = transactionIDInStatusUpdate
 		}
 		var after string
 		if len(oc.InFlightTxs) > 0 {
-			conds = append(conds, fb.Gt("nonce", startFromNonce.String()))
+			tf.AfterNonce = &startFromNonce
 		}
 
 		var additional []*components.PublicTX
 		// We retry the get from persistence indefinitely (until the context cancels)
 		err := oc.retry.Do(ctx, "get pending transactions", func(attempt int) (retry bool, err error) {
-			filter := fb.And(conds...)
-			_ = filter.Limit(uint64(spaces)).Sort("nonce")
 
-			additional, _, err = oc.txStore.ListTransactions(ctx, filter)
+			additional, err = oc.txStore.ListTransactions(ctx, tf)
 			return true, err
 		})
 		if err != nil {
@@ -377,11 +374,11 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 
 		log.L(ctx).Debugf("Orchestrator poll and process: polled %d items, space: %d", len(additional), spaces)
 		for _, mtx := range additional {
-			if oc.processedTxIDs[mtx.ID] {
+			if oc.processedTxIDs[mtx.ID.String()] {
 				// already processed, still being persisted
-				completedTxIDsStillBeingPersisted[mtx.ID] = true
+				completedTxIDsStillBeingPersisted[mtx.ID.String()] = true
 				log.L(ctx).Debugf("Orchestrator polled transaction with ID: %s but it's already being processed before, ignoring it", mtx.ID)
-			} else if mtx.Status == components.BaseTxStatusPending {
+			} else if mtx.Status == components.PubTxStatusPending {
 				queueUpdated = true
 				it := NewInFlightTransactionStageController(oc.publicTxEngine, oc, mtx)
 				if it.getConfirmedTxNonce(oc.signingAddress) != nil && it.getConfirmedTxNonce(oc.signingAddress).Cmp(mtx.Nonce.BigInt()) != -1 /* an confirmed tx is missed*/ {

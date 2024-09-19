@@ -29,7 +29,7 @@ import (
 
 func TestRunningStageContext(t *testing.T) {
 	imtx := NewTestInMemoryTxState(t)
-	newSubStatus := components.BaseTxSubStatusConfirmed
+	newSubStatus := components.PubTxSubStatusConfirmed
 	testRunningStageContext := NewRunningStageContext(context.Background(), baseTypes.InFlightTxStageConfirming, "", imtx)
 	assert.Empty(t, testRunningStageContext.SubStatus)
 	assert.Nil(t, testRunningStageContext.StageOutputsToBePersisted)
@@ -42,7 +42,7 @@ func TestRunningStageContext(t *testing.T) {
 	testRunningStageContext.StageOutputsToBePersisted.AddSubStatusAction(components.BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr("info"), fftypes.JSONAnyPtr("error"))
 	assert.Equal(t, 1, len(testRunningStageContext.StageOutputsToBePersisted.HistoryUpdates))
 
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mTS.On("AddSubStatusAction", mock.Anything, mock.Anything, newSubStatus, components.BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr("info"), fftypes.JSONAnyPtr("error"), mock.Anything).Return(nil).Once()
 	_ = testRunningStageContext.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
 }

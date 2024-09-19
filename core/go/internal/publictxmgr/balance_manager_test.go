@@ -304,7 +304,7 @@ func TestTopUpAddressNoOpScenarios(t *testing.T) {
 
 func generateExpectedFuelingTransaction(amountToTransfer int64) *components.PublicTX {
 	return &components.PublicTX{
-		Status: components.BaseTxStatusPending,
+		Status: components.PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 
 			From:  []byte(testAutoFuelingSourceAddress),

@@ -277,6 +277,7 @@ var (
 	MsgInvalidGasClientConfig          = ffe("PD011908", "Invalid gas client config: %s")
 	MsgInvalidGasPriceIncreaseMax      = ffe("PD011909", "Invalid max gas price increase price string %s")
 	MsgMissingTransactionID            = ffe("PD011910", "Transaction ID must be provided")
+	MsgPublicTransactionNotFound       = ffe("PD011911", "Public transaction not found with id %s")
 	MsgGasPriceError                   = ffe("PD011917", `The gasPrice '%s' could not be parsed. Must be a numeric string, or an object with 'gasPrice' field, or 'maxFeePerGas'/'maxPriorityFeePerGas' fields (EIP-1559), error: %s`)
 	MsgPersistError                    = ffe("PD011918", "Unexpected internal error, cannot persist stage.")
 	MsgInvalidStageOutput              = ffe("PD011919", "Stage output object is missing %s: %+v")
@@ -287,7 +288,6 @@ var (
 	MsgErrorMissingSignerID            = ffe("PD011928", "Signer Identifier must be provided")
 	MsgInvalidTransactionType          = ffe("PD011929", "Transaction type invalid")
 	MsgMissingConfirmedTransaction     = ffe("PD011930", "Transaction %s with nonce smaller than the recorded confirmed nonce does not have an indexed transaction.")
-
 	// TransportManager module PD0120XX
 	MsgTransportInvalidMessage                = ffe("PD012000", "Invalid message")
 	MsgTransportNotFound                      = ffe("PD012001", "Transport %q not found")

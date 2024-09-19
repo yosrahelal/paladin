@@ -20,9 +20,10 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
@@ -52,10 +53,6 @@ func (imtxs *inMemoryTxState) ApplyTxUpdates(ctx context.Context, txUpdates *com
 
 	if txUpdates.From != nil || txUpdates.To != nil || txUpdates.Nonce != nil || txUpdates.Value != nil {
 		log.L(ctx).Warnf("ApplyTxUpdates received fields that are not expected to be updated: %+v", txUpdates)
-	}
-
-	if txUpdates.DeleteRequested != nil {
-		mtx.DeleteRequested = txUpdates.DeleteRequested
 	}
 
 	if txUpdates.ErrorMessage != nil {
@@ -103,7 +100,7 @@ func (imtxs *inMemoryTxState) ApplyTxUpdates(ctx context.Context, txUpdates *com
 	}
 
 	if txUpdates.TransactionHash != nil {
-		mtx.TransactionHash = *txUpdates.TransactionHash
+		mtx.TransactionHash = txUpdates.TransactionHash
 	}
 }
 
@@ -111,22 +108,18 @@ func (imtxs *inMemoryTxState) GetTx() *components.PublicTX {
 	return imtxs.mtx
 }
 
-func (imtxs *inMemoryTxState) GetTxID() string {
+func (imtxs *inMemoryTxState) GetTxID() uuid.UUID {
 	return imtxs.mtx.ID
 }
 
-func (imtxs *inMemoryTxState) GetCreatedTime() *fftypes.FFTime {
+func (imtxs *inMemoryTxState) GetCreatedTime() *tktypes.Timestamp {
 	return imtxs.mtx.Created
 }
 
-func (imtxs *inMemoryTxState) GetDeleteRequestedTime() *fftypes.FFTime {
-	return imtxs.mtx.DeleteRequested
-}
-
-func (imtxs *inMemoryTxState) GetTransactionHash() string {
+func (imtxs *inMemoryTxState) GetTransactionHash() *tktypes.Bytes32 {
 	return imtxs.mtx.TransactionHash
 }
-func (imtxs *inMemoryTxState) GetStatus() components.BaseTxStatus {
+func (imtxs *inMemoryTxState) GetStatus() components.PubTxStatus {
 	return imtxs.mtx.Status
 }
 
@@ -137,7 +130,7 @@ func (imtxs *inMemoryTxState) GetFrom() string {
 	return string(imtxs.mtx.From)
 }
 
-func (imtxs *inMemoryTxState) GetFirstSubmit() *fftypes.FFTime {
+func (imtxs *inMemoryTxState) GetFirstSubmit() *tktypes.Timestamp {
 	return imtxs.mtx.FirstSubmit
 }
 
@@ -158,7 +151,7 @@ func (imtxs *inMemoryTxState) GetGasPriceObject() *baseTypes.GasPriceObject {
 	}
 	return gpo
 }
-func (imtxs *inMemoryTxState) GetLastSubmitTime() *fftypes.FFTime {
+func (imtxs *inMemoryTxState) GetLastSubmitTime() *tktypes.Timestamp {
 	return imtxs.mtx.LastSubmit
 }
 
@@ -174,14 +167,14 @@ func (imtxs *inMemoryTxState) GetConfirmedTransaction() *blockindexer.IndexedTra
 }
 
 func (imtxs *inMemoryTxState) IsComplete() bool {
-	return imtxs.mtx.Status == components.BaseTxStatusFailed || imtxs.mtx.Status == components.BaseTxStatusSucceeded
+	return imtxs.mtx.Status == components.PubTxStatusFailed || imtxs.mtx.Status == components.PubTxStatusSucceeded
 }
 
 func (imtxs *inMemoryTxState) IsSuspended() bool {
-	return imtxs.mtx.Status == components.BaseTxStatusSuspended
+	return imtxs.mtx.Status == components.PubTxStatusSuspended
 }
 
-func NewRunningStageContext(ctx context.Context, stage baseTypes.InFlightTxStage, substatus components.BaseTxSubStatus, imtxs baseTypes.InMemoryTxStateManager) *baseTypes.RunningStageContext {
+func NewRunningStageContext(ctx context.Context, stage baseTypes.InFlightTxStage, substatus components.PubTxSubStatus, imtxs baseTypes.InMemoryTxStateManager) *baseTypes.RunningStageContext {
 	return &baseTypes.RunningStageContext{
 		Stage:          stage,
 		SubStatus:      substatus,

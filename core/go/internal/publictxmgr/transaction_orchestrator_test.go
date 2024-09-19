@@ -25,12 +25,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -39,22 +40,22 @@ import (
 func TestNewOrchestratorPolling(t *testing.T) {
 	ctx := context.Background()
 	mockManagedTx1 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusPending,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 	mockManagedTx2 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusPending,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 
 	qFields := &ffapi.QueryFields{}
@@ -65,7 +66,7 @@ func TestNewOrchestratorPolling(t *testing.T) {
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
@@ -86,8 +87,8 @@ func TestNewOrchestratorPolling(t *testing.T) {
 		time.Sleep(1 * time.Hour) // make sure the async action never got returned as the test will mock the events
 	}).Maybe()
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil, nil).Maybe()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Maybe()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT}
 	addressBalanceChecked := make(chan bool)
@@ -116,7 +117,7 @@ func TestNewOrchestratorPollingContextCancelled(t *testing.T) {
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
@@ -129,7 +130,7 @@ func TestNewOrchestratorPollingContextCancelled(t *testing.T) {
 	oc.balanceManager = mockBM
 
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return(nil, nil, fmt.Errorf("list transactions error")).Run(func(args mock.Arguments) {
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("list transactions error")).Run(func(args mock.Arguments) {
 		cancelCtx()
 	}).Once()
 	polled, _ := oc.pollAndProcess(ctx)
@@ -139,22 +140,22 @@ func TestNewOrchestratorPollingContextCancelled(t *testing.T) {
 func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 	ctx := context.Background()
 	mockManagedTx1 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusFailed,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusFailed,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 	mockManagedTx2 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusPending,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 	qFields := &ffapi.QueryFields{}
 
@@ -164,7 +165,7 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
@@ -178,7 +179,7 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Once()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT,
 	}
@@ -194,22 +195,22 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 	ctx := context.Background()
 	mockManagedTx1 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusSuspended,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusSuspended,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 	mockManagedTx2 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusPending,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 
 	qFields := &ffapi.QueryFields{}
@@ -220,7 +221,7 @@ func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
@@ -235,7 +236,7 @@ func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Once()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT,
 	}
@@ -252,13 +253,13 @@ func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 func TestNewOrchestratorPollingMarkStale(t *testing.T) {
 	ctx := context.Background()
 	mockManagedTx1 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusPending,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 
 	qFields := &ffapi.QueryFields{}
@@ -269,7 +270,7 @@ func TestNewOrchestratorPollingMarkStale(t *testing.T) {
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
@@ -284,7 +285,7 @@ func TestNewOrchestratorPollingMarkStale(t *testing.T) {
 	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1}, nil, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1}, nil).Once()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT,
 	}
@@ -302,22 +303,22 @@ func TestOrchestratorStop(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	mockManagedTx1 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusSuspended,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusSuspended,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 	mockManagedTx2 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusPending,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 
 	qFields := &ffapi.QueryFields{}
@@ -326,9 +327,9 @@ func TestOrchestratorStop(t *testing.T) {
 
 	ble, _ := NewTestTransactionEngine(t)
 
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil, nil).Maybe()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Maybe()
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
@@ -354,20 +355,20 @@ func TestOrchestratorStop(t *testing.T) {
 func TestOrchestratorStopWhenBalanceUnavailable(t *testing.T) {
 	ctx := context.Background()
 	mockManagedTx1 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusSucceeded,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusSucceeded,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
@@ -410,22 +411,22 @@ func TestOrchestratorStopWhenBalanceUnavailable(t *testing.T) {
 func TestOrchestratorTriggerTopUp(t *testing.T) {
 	ctx := context.Background()
 	mockManagedTx1 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusSucceeded,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusSucceeded,
 		Transaction: &ethsigner.Transaction{
 			From:     json.RawMessage(testMainSigningAddress),
 			Nonce:    ethtypes.NewHexInteger64(1),
 			GasPrice: ethtypes.NewHexInteger64(1000),
 			GasLimit: ethtypes.NewHexInteger64(100),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, mockAFTxEngine := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
@@ -459,46 +460,46 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 func TestOrchestratorHandleConfirmedTransactions(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	mockManagedTx0 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusPending,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(0),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 	mockManagedTx1 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusPending,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 	mockManagedTx2 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusPending,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 	mockManagedTx3 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusPending,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(3),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
@@ -542,19 +543,19 @@ func TestOrchestratorHandleConfirmedTransactionsNoInflightNotHang(t *testing.T) 
 	ctx := context.Background()
 
 	mockManagedTx1 := &components.PublicTX{
-		ID:     uuid.New().String(),
-		Status: components.BaseTxStatusPending,
+		ID:     uuid.New(),
+		Status: components.PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: fftypes.Now(),
+		Created: confutil.P(tktypes.TimestampNow()),
 	}
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := componentmocks.NewTransactionStore(t)
+	mTS := componentmocks.NewPublicTransactionStore(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)

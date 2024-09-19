@@ -50,15 +50,15 @@ func (pte *publicTxEngine) dispatchAction(ctx context.Context, mtx *components.P
 		switch action {
 		case ActionSuspend, ActionResume:
 			// Just update the DB directly, as we're not inflight right now.
-			newStatus := components.BaseTxStatusPending
+			newStatus := components.PubTxStatusPending
 			if action == ActionSuspend {
-				newStatus = components.BaseTxStatusSuspended
+				newStatus = components.PubTxStatusSuspended
 			}
 			inFlightOrchestrator, orchestratorInFlight := pte.InFlightOrchestrators[string(mtx.From)]
 			if !orchestratorInFlight {
 				// no in-flight orchestrator for the signing address, it's OK to update the DB directly
 				log.L(ctx).Infof("Setting status to '%s' for transaction %s", newStatus, mtx.ID)
-				err = pte.txStore.UpdateTransaction(ctx, mtx.ID, &components.BaseTXUpdates{
+				err = pte.txStore.UpdateTransaction(ctx, mtx.ID.String(), &components.BaseTXUpdates{
 					Status: &newStatus,
 				})
 				if err != nil {
@@ -95,27 +95,27 @@ func (oc *orchestrator) dispatchAction(ctx context.Context, mtx *components.Publ
 				break
 			}
 		}
-		newStatus := components.BaseTxStatusPending
+		newStatus := components.PubTxStatusPending
 		if action == ActionSuspend {
-			newStatus = components.BaseTxStatusSuspended
+			newStatus = components.PubTxStatusSuspended
 		}
 		if pending == nil {
 			// transaction not in flight yet, update the DB directly and tell the engine to not pick up the transaction until we completed
-			oc.transactionIDsInStatusUpdate = append(oc.transactionIDsInStatusUpdate, mtx.ID)
+			oc.transactionIDsInStatusUpdate = append(oc.transactionIDsInStatusUpdate, mtx.ID.String())
 			go func() {
 				defer func() {
 					oc.InFlightTxsMux.Lock()
 					defer oc.InFlightTxsMux.Unlock()
 					newTransactionIDsInStatusUpdate := make([]string, 0, len(oc.transactionIDsInStatusUpdate)-1)
 					for _, txID := range oc.transactionIDsInStatusUpdate {
-						if txID != mtx.ID {
+						if txID != mtx.ID.String() {
 							newTransactionIDsInStatusUpdate = append(newTransactionIDsInStatusUpdate, txID)
 						}
 					}
 					oc.transactionIDsInStatusUpdate = newTransactionIDsInStatusUpdate
 				}()
 				log.L(ctx).Debugf("Setting status to '%s' for transaction %s", newStatus, mtx.ID)
-				err := oc.txStore.UpdateTransaction(ctx, mtx.ID, &components.BaseTXUpdates{
+				err := oc.txStore.UpdateTransaction(ctx, mtx.ID.String(), &components.BaseTXUpdates{
 					Status: &newStatus,
 				})
 				if err != nil {

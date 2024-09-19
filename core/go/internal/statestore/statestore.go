@@ -27,17 +27,17 @@ import (
 )
 
 type Config struct {
-	SchemaCache cache.Config      `yaml:"schemaCache"`
-	StateWriter StateWriterConfig `yaml:"stateWriter"`
+	SchemaCache cache.Config   `yaml:"schemaCache"`
+	StateWriter DBWriterConfig `yaml:"stateWriter"`
 }
 
-type StateWriterConfig struct {
+type DBWriterConfig struct {
 	WorkerCount  *int    `yaml:"workerCount"`
 	BatchTimeout *string `yaml:"batchTimeout"`
 	BatchMaxSize *int    `yaml:"batchMaxSize"`
 }
 
-var StateWriterConfigDefaults = StateWriterConfig{
+var StateWriterConfigDefaults = DBWriterConfig{
 	WorkerCount:  confutil.P(10),
 	BatchTimeout: confutil.P("25ms"),
 	BatchMaxSize: confutil.P(100),

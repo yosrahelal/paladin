@@ -545,13 +545,6 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 		}
 	}
 
-	if bi.indexedTransactionPrePersistHook != nil {
-		if prePersistHookError = bi.indexedTransactionPrePersistHook(ctx, transactions); prePersistHookError != nil {
-			// if pre persist hook failed, don't write to db
-			return prePersistHookError
-		}
-	}
-
 	err := bi.retry.Do(ctx, func(attempt int) (retryable bool, err error) {
 		err = bi.persistence.DB().Transaction(func(tx *gorm.DB) error {
 			if len(blocks) > 0 {
@@ -561,6 +554,13 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 					Error
 			}
 			if err == nil && len(transactions) > 0 {
+				if bi.indexedTransactionPrePersistHook != nil {
+					if prePersistHookError = bi.indexedTransactionPrePersistHook(ctx, transactions); prePersistHookError != nil {
+						// if pre persist hook failed, don't write to db
+						return prePersistHookError
+					}
+				}
+
 				err = tx.
 					Table("indexed_transactions").
 					Create(transactions).

@@ -20,10 +20,12 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 )
@@ -189,18 +191,17 @@ const (
 )
 
 type InMemoryTxStateReadOnly interface {
-	GetTxID() string
-	GetCreatedTime() *fftypes.FFTime
-	GetDeleteRequestedTime() *fftypes.FFTime
+	GetTxID() uuid.UUID
+	GetCreatedTime() *tktypes.Timestamp
 	// get the transaction receipt from the in-memory state (note: the returned value should not be modified)
 	GetConfirmedTransaction() *blockindexer.IndexedTransaction
-	GetTransactionHash() string
+	GetTransactionHash() *tktypes.Bytes32
 	GetNonce() *big.Int
 	GetFrom() string
-	GetStatus() components.BaseTxStatus
+	GetStatus() components.PubTxStatus
 	GetGasPriceObject() *GasPriceObject
-	GetFirstSubmit() *fftypes.FFTime
-	GetLastSubmitTime() *fftypes.FFTime
+	GetFirstSubmit() *tktypes.Timestamp
+	GetLastSubmitTime() *tktypes.Timestamp
 	GetSubmittedHashes() []string
 
 	GetTx() *components.PublicTX //TODO: remove the need of this function
@@ -234,8 +235,8 @@ type StageOutput struct {
 }
 
 type SubmitOutputs struct {
-	TxHash            string
-	SubmissionTime    *fftypes.FFTime
+	TxHash            *tktypes.Bytes32
+	SubmissionTime    *tktypes.Timestamp
 	SubmissionOutcome SubmissionOutcome
 	ErrorReason       string
 	Err               error
@@ -273,7 +274,7 @@ type RunningStageContext struct {
 	InMemoryTx InMemoryTxStateReadOnly
 	context.Context
 	Stage          InFlightTxStage
-	SubStatus      components.BaseTxSubStatus
+	SubStatus      components.PubTxSubStatus
 	StageStartTime time.Time
 	StageErrored   bool
 
@@ -285,7 +286,7 @@ type RunningStageContext struct {
 	StageOutputsToBePersisted *RunningStageContextPersistenceOutput
 }
 
-func (ctx *RunningStageContext) SetSubStatus(subStatus components.BaseTxSubStatus) {
+func (ctx *RunningStageContext) SetSubStatus(subStatus components.PubTxSubStatus) {
 	ctx.SubStatus = subStatus
 }
 
@@ -303,18 +304,18 @@ func (ctx *RunningStageContext) SetNewPersistenceUpdateOutput() {
 type RunningStageContextPersistenceOutput struct {
 	UpdateType              PersistenceUpdateType
 	InMemoryTx              InMemoryTxStateReadOnly
-	SubStatus               components.BaseTxSubStatus
+	SubStatus               components.PubTxSubStatus
 	Ctx                     context.Context
 	TxUpdates               *components.BaseTXUpdates
-	HistoryUpdates          []func(p components.TransactionStore) error
+	HistoryUpdates          []func(p components.PublicTransactionStore) error
 	ConfirmedTransaction    *blockindexer.IndexedTransaction
 	MissedConfirmationEvent bool
 }
 
 func (sOut *RunningStageContextPersistenceOutput) AddSubStatusAction(action components.BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny) {
 	actionOccurred := fftypes.Now()
-	sOut.HistoryUpdates = append(sOut.HistoryUpdates, func(p components.TransactionStore) error {
-		return p.AddSubStatusAction(sOut.Ctx, sOut.InMemoryTx.GetTxID(), sOut.SubStatus, action, info, err, actionOccurred)
+	sOut.HistoryUpdates = append(sOut.HistoryUpdates, func(p components.PublicTransactionStore) error {
+		return p.AddSubStatusAction(sOut.Ctx, sOut.InMemoryTx.GetTxID().String(), sOut.SubStatus, action, info, err, actionOccurred)
 	})
 }
 
@@ -346,7 +347,7 @@ type InFlightTransactionStateManager interface {
 	CanBeRemoved(ctx context.Context) bool
 
 	// stage management
-	StartNewStageContext(ctx context.Context, stage InFlightTxStage, substatus components.BaseTxSubStatus)
+	StartNewStageContext(ctx context.Context, stage InFlightTxStage, substatus components.PubTxSubStatus)
 	GetStage(ctx context.Context) InFlightTxStage
 	SetOrchestratorContext(ctx context.Context, tec *OrchestratorContext)
 	SetTransientPreviousStageOutputs(tpso *TransientPreviousStageOutputs)
@@ -361,7 +362,7 @@ type InFlightTransactionStateManager interface {
 	AddStageOutputs(ctx context.Context, stageOutput *StageOutput)
 	ProcessStageOutputs(ctx context.Context, processFunction func(stageOutputs []*StageOutput) (unprocessedStageOutputs []*StageOutput))
 	AddPersistenceOutput(ctx context.Context, stage InFlightTxStage, persistenceTime time.Time, err error)
-	AddSubmitOutput(ctx context.Context, txHash string, submissionTime *fftypes.FFTime, submissionOutcome SubmissionOutcome, errorReason ethclient.ErrorReason, err error)
+	AddSubmitOutput(ctx context.Context, txHash *tktypes.Bytes32, submissionTime *tktypes.Timestamp, submissionOutcome SubmissionOutcome, errorReason ethclient.ErrorReason, err error)
 	AddSignOutput(ctx context.Context, signedMessage []byte, txHash string, err error)
 	AddGasPriceOutput(ctx context.Context, gasPriceObject *GasPriceObject, err error)
 	AddConfirmationsOutput(ctx context.Context, indexedTx *blockindexer.IndexedTransaction)

@@ -21,22 +21,22 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func NewTestInMemoryTxState(t *testing.T) baseTypes.InMemoryTxStateManager {
-	oldTime := fftypes.Now()
+	oldTime := confutil.P(tktypes.TimestampNow())
 	oldFrom := "0x4e598f6e918321dd47c86e7a077b4ab0e7414846"
-	oldTxHash := tktypes.Bytes32Keccak([]byte("0x00000")).String()
-	oldStatus := components.BaseTxStatusPending
+	oldTxHash := tktypes.Bytes32Keccak([]byte("0x00000"))
+	oldStatus := components.PubTxStatusPending
 	oldTo := "0x6cee73cf4d5b0ac66ce2d1c0617bec4bedd09f39"
 	oldNonce := ethtypes.NewHexInteger64(1)
 	oldGasLimit := ethtypes.NewHexInteger64(2000)
@@ -45,11 +45,10 @@ func NewTestInMemoryTxState(t *testing.T) baseTypes.InMemoryTxStateManager {
 	oldErrorMessage := "old message"
 	oldTransactionData := ethtypes.MustNewHexBytes0xPrefix(testTransactionData)
 	testManagedTx := &components.PublicTX{
-		ID:              uuid.New().String(),
+		ID:              uuid.New(),
 		Created:         oldTime,
-		DeleteRequested: oldTime,
 		Status:          oldStatus,
-		TransactionHash: oldTxHash,
+		TransactionHash: &oldTxHash,
 		Transaction: &ethsigner.Transaction{
 			From:     json.RawMessage(oldFrom),
 			To:       ethtypes.MustNewAddress(oldTo),
@@ -74,9 +73,9 @@ func NewTestInMemoryTxState(t *testing.T) baseTypes.InMemoryTxStateManager {
 }
 
 func TestSettersAndGetters(t *testing.T) {
-	oldTime := fftypes.Now()
+	oldTime := confutil.P(tktypes.TimestampNow())
 	oldFrom := "0xb3d9cf8e163bbc840195a97e81f8a34e295b8f39"
-	oldTxHash := tktypes.Bytes32Keccak([]byte("0x00000")).String()
+	oldTxHash := tktypes.Bytes32Keccak([]byte("0x00000"))
 	oldTo := "0x1f9090aae28b8a3dceadf281b0f12828e676c326"
 	oldNonce := ethtypes.NewHexInteger64(1)
 	oldGasLimit := ethtypes.NewHexInteger64(2000)
@@ -86,11 +85,10 @@ func TestSettersAndGetters(t *testing.T) {
 	oldTransactionData := ethtypes.MustNewHexBytes0xPrefix(testTransactionData)
 
 	testManagedTx := &components.PublicTX{
-		ID:              uuid.New().String(),
+		ID:              uuid.New(),
 		Created:         oldTime,
-		DeleteRequested: oldTime,
-		Status:          components.BaseTxStatusPending,
-		TransactionHash: oldTxHash,
+		Status:          components.PubTxStatusPending,
+		TransactionHash: &oldTxHash,
 		Transaction: &ethsigner.Transaction{
 			From:     json.RawMessage(oldFrom),
 			To:       ethtypes.MustNewAddress(oldTo),
@@ -117,7 +115,6 @@ func TestSettersAndGetters(t *testing.T) {
 	assert.Equal(t, testManagedTx.ID, inMemoryTxState.GetTxID())
 
 	assert.Equal(t, oldTime, inMemoryTxState.GetCreatedTime())
-	assert.Equal(t, oldTime, inMemoryTxState.GetDeleteRequestedTime())
 	assert.Nil(t, inMemoryTxState.GetConfirmedTransaction())
 	assert.Equal(t, oldTxHash, inMemoryTxState.GetTransactionHash())
 	assert.Equal(t, oldNonce.BigInt(), inMemoryTxState.GetNonce())
@@ -142,12 +139,10 @@ func TestSettersAndGetters(t *testing.T) {
 		Result:           blockindexer.TXResult_SUCCESS.Enum(),
 	}
 
-	inMemoryTxState.SetConfirmedTransaction(context.Background(), testConfirmedTx)
-	assert.Equal(t, testConfirmedTx, inMemoryTxState.GetConfirmedTransaction())
-	successStatus := components.BaseTxStatusSucceeded
-	newTime := fftypes.Now()
+	successStatus := components.PubTxStatusSucceeded
+	newTime := confutil.P(tktypes.TimestampNow())
 	newFrom := "0xf1031"
-	newTxHash := "0x000031"
+	newTxHash := tktypes.Bytes32Keccak([]byte("0x000031"))
 	newTo := "0x201"
 	newNonce := ethtypes.NewHexInteger64(2)
 	newGasLimit := ethtypes.NewHexInteger64(111)
@@ -157,7 +152,6 @@ func TestSettersAndGetters(t *testing.T) {
 
 	inMemoryTxState.ApplyTxUpdates(context.Background(), &components.BaseTXUpdates{
 		Status:          &successStatus,
-		DeleteRequested: newTime,
 		GasPrice:        newGasPrice,
 		TransactionHash: &newTxHash,
 		SubmittedHashes: []string{
@@ -180,7 +174,6 @@ func TestSettersAndGetters(t *testing.T) {
 	assert.Equal(t, testManagedTx.ID, inMemoryTxState.GetTxID())
 
 	assert.Equal(t, oldTime, inMemoryTxState.GetCreatedTime())
-	assert.Equal(t, newTime, inMemoryTxState.GetDeleteRequestedTime())
 	assert.Equal(t, newTime, inMemoryTxState.GetLastSubmitTime())
 	assert.Equal(t, testConfirmedTx, inMemoryTxState.GetConfirmedTransaction())
 	assert.Equal(t, newTxHash, inMemoryTxState.GetTransactionHash())
