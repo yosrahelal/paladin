@@ -139,6 +139,9 @@ task testE2E(type: Exec) {
     args '-cover'
     args '-covermode=atomic'
     args '-timeout=300s'
+    if (project.findProperty('verboseTests') == 'true') {
+        args '-v'
+    }
     args "-test.gocoverdir=${projectDir}/coverage"
 
     dependsOn copySolidity
@@ -163,6 +166,9 @@ task test(type: Exec) {
     args '-cover'
     args '-covermode=atomic'
     args '-timeout=30s'
+    if (project.findProperty('verboseTests') == 'true') {
+        args '-v'
+    }
     args "-test.gocoverdir=${projectDir}/coverage"
 
     dependsOn copySolidity

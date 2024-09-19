@@ -46,7 +46,7 @@ func (tb *testbed) execBaseLedgerDeployTransaction(ctx context.Context, signer s
 		Input(txInstruction.Inputs).
 		SignAndSend()
 	if err == nil {
-		_, err = tb.c.BlockIndexer().WaitForTransaction(ctx, *txHash)
+		_, err = tb.c.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to send base deploy ledger transaction: %s", err)
@@ -71,7 +71,7 @@ func (tb *testbed) execBaseLedgerTransaction(ctx context.Context, signer string,
 		Input(txInstruction.Inputs).
 		SignAndSend()
 	if err == nil {
-		_, err = tb.c.BlockIndexer().WaitForTransaction(ctx, *txHash)
+		_, err = tb.c.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to send base ledger transaction: %s", err)

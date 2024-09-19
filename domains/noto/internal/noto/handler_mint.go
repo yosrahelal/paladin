@@ -18,9 +18,10 @@ package noto
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
@@ -37,10 +38,10 @@ func (h *mintHandler) ValidateParams(ctx context.Context, params string) (interf
 		return nil, err
 	}
 	if mintParams.To == "" {
-		return nil, fmt.Errorf("parameter 'to' is required")
+		return nil, i18n.NewError(ctx, msgs.MsgParameterRequired, "to")
 	}
 	if mintParams.Amount.BigInt().Sign() != 1 {
-		return nil, fmt.Errorf("parameter 'amount' must be greater than 0")
+		return nil, i18n.NewError(ctx, msgs.MsgParameterGreaterThanZero, "amount")
 	}
 	return &mintParams, nil
 }
@@ -49,7 +50,7 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 	params := tx.Params.(*types.MintParams)
 
 	if req.Transaction.From != tx.DomainConfig.NotaryLookup {
-		return nil, fmt.Errorf("mint can only be initiated by notary")
+		return nil, i18n.NewError(ctx, msgs.MsgMintOnlyNotary)
 	}
 	return &pb.InitTransactionResponse{
 		RequiredVerifiers: []*pb.ResolveVerifierRequest{
@@ -69,12 +70,15 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 	params := tx.Params.(*types.MintParams)
 
 	notary := domain.FindVerifier(tx.DomainConfig.NotaryLookup, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
-	if notary == nil || notary.Verifier != tx.DomainConfig.NotaryAddress {
-		return nil, fmt.Errorf("notary resolved to unexpected address")
+	if notary == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "notary")
+	}
+	if notary.Verifier != tx.DomainConfig.NotaryAddress {
+		return nil, i18n.NewError(ctx, msgs.MsgNotaryUnexpectedAddress, tx.DomainConfig.NotaryAddress, notary.Verifier)
 	}
 	to := domain.FindVerifier(params.To, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
 	if to == nil {
-		return nil, fmt.Errorf("error verifying recipient address")
+		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "to")
 	}
 	toAddress, err := ethtypes.NewAddress(to.Verifier)
 	if err != nil {
@@ -104,23 +108,23 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 	}, nil
 }
 
-func (h *mintHandler) validateAmounts(params *types.MintParams, coins *gatheredCoins) error {
+func (h *mintHandler) validateAmounts(ctx context.Context, params *types.MintParams, coins *gatheredCoins) error {
 	if len(coins.inCoins) > 0 {
-		return fmt.Errorf("invalid inputs to 'mint': %v", coins.inCoins)
+		return i18n.NewError(ctx, msgs.MsgInvalidInputs, "mint", coins.inCoins)
 	}
 	if coins.outTotal.Cmp(params.Amount.BigInt()) != 0 {
-		return fmt.Errorf("invalid amount for 'mint'")
+		return i18n.NewError(ctx, msgs.MsgInvalidAmount, "mint", params.Amount.BigInt().Text(10), coins.outTotal.Text(10))
 	}
 	return nil
 }
 
 func (h *mintHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
 	params := tx.Params.(*types.MintParams)
-	coins, err := h.noto.gatherCoins(req.Inputs, req.Outputs)
+	coins, err := h.noto.gatherCoins(ctx, req.Inputs, req.Outputs)
 	if err != nil {
 		return nil, err
 	}
-	if err := h.validateAmounts(params, coins); err != nil {
+	if err := h.validateAmounts(ctx, params, coins); err != nil {
 		return nil, err
 	}
 	return &pb.EndorseTransactionResponse{

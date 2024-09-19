@@ -196,7 +196,7 @@ func goodDomainConf() *prototk.DomainConfig {
 
 func mockSchemas(schemas ...statestore.Schema) func(mc *mockComponents) {
 	return func(mc *mockComponents) {
-		mc.domainStateInterface.On("EnsureABISchemas", mock.Anything).Return(schemas, nil)
+		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return(schemas, nil)
 	}
 }
 
@@ -263,7 +263,7 @@ func TestDomainInitFactorySchemaStoreFail(t *testing.T) {
 			fakeCoinStateSchema,
 		},
 	}, func(mc *mockComponents) {
-		mc.domainStateInterface.On("EnsureABISchemas", mock.Anything).Return(nil, fmt.Errorf("pop"))
+		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
 	assert.Regexp(t, "pop", *tp.d.initError.Load())
@@ -322,7 +322,7 @@ func TestDomainFindAvailableStatesBadQuery(t *testing.T) {
 
 func TestDomainFindAvailableStatesFail(t *testing.T) {
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), func(mc *mockComponents) {
-		mc.domainStateInterface.On("EnsureABISchemas", mock.Anything).Return([]statestore.Schema{}, nil)
+		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return([]statestore.Schema{}, nil)
 		mc.domainStateInterface.On("FindAvailableStates", "12345", mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()

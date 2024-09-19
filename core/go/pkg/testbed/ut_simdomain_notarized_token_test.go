@@ -31,12 +31,12 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
-	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -144,25 +144,25 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 			stateRefs := []*prototk.StateRef{}
 			for {
 				// Simple oldest coin first algo
-				query := &filters.QueryJSON{
+				jq := &query.QueryJSON{
 					Limit: confutil.P(10),
 					Sort:  []string{".created"},
-					Statements: filters.Statements{
-						Ops: filters.Ops{
-							Eq: []*filters.OpSingleVal{
-								{Op: filters.Op{Field: "owner"}, Value: tktypes.JSONString(fromAddr.String())},
+					Statements: query.Statements{
+						Ops: query.Ops{
+							Eq: []*query.OpSingleVal{
+								{Op: query.Op{Field: "owner"}, Value: tktypes.JSONString(fromAddr.String())},
 							},
 						},
 					},
 				}
 				if lastStateTimestamp > 0 {
-					query.GT = []*filters.OpSingleVal{
-						{Op: filters.Op{Field: ".created"}, Value: tktypes.RawJSON(strconv.FormatInt(lastStateTimestamp, 10))},
+					jq.GT = []*query.OpSingleVal{
+						{Op: query.Op{Field: ".created"}, Value: tktypes.RawJSON(strconv.FormatInt(lastStateTimestamp, 10))},
 					}
 				}
 				res, err := callbacks.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
 					SchemaId:  fakeCoinSchemaID,
-					QueryJson: tktypes.JSONString(query).String(),
+					QueryJson: tktypes.JSONString(jq).String(),
 				})
 				if err != nil {
 					return nil, nil, nil, err
@@ -626,7 +626,7 @@ func deploySmartContract(t *testing.T, confFile string) *tktypes.EthAddress {
 		SignAndSend()
 	require.NoError(t, err)
 
-	deployTx, err := bi.WaitForTransaction(ctx, *deployTXHash)
+	deployTx, err := bi.WaitForTransactionSuccess(ctx, *deployTXHash, simDomainABI)
 	require.NoError(t, err)
 	require.Equal(t, deployTx.Result.V(), blockindexer.TXResult_SUCCESS)
 	return deployTx.ContractAddress

@@ -29,13 +29,13 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -100,10 +100,7 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 	// Ensure all the schemas are recorded to the DB
 	// This is a special case where we need a synchronous flush to ensure they're all established
 	var schemas []statestore.Schema
-	err := d.dm.stateStore.RunInDomainContextFlush(d.name, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
-		schemas, err = dsi.EnsureABISchemas(abiSchemas)
-		return err
-	})
+	schemas, err := d.dm.stateStore.EnsureABISchemas(d.ctx, d.name, abiSchemas)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +191,7 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 		return nil, err
 	}
 
-	var query filters.QueryJSON
+	var query query.QueryJSON
 	err := json.Unmarshal([]byte(req.QueryJson), &query)
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidQueryJSON)
