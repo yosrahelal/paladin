@@ -461,22 +461,14 @@ func (d *domain) handleEventBatch(ctx context.Context, tx *gorm.DB, batch *block
 		}
 	}
 
-	transactionsComplete := make([]string, 0, len(batch.Events))
 	for addr, events := range eventsByAddress {
-		res, err := d.handleEventBatchForContract(ctx, batch.BatchID, addr, events)
+		_, err := d.handleEventBatchForContract(ctx, batch.BatchID, addr, events)
 		if err != nil {
 			return nil, err
 		}
-		transactionsComplete = append(transactionsComplete, res.TransactionsComplete...)
 	}
 
-	return func() {
-		for _, txID := range transactionsComplete {
-			_, _ = d.api.TransactionComplete(d.ctx, &prototk.TransactionCompleteRequest{
-				TransactionId: txID,
-			})
-		}
-	}, nil
+	return nil, nil
 }
 
 func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*uuid.UUID, error) {

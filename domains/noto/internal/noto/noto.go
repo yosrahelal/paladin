@@ -30,7 +30,6 @@ import (
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
-	"github.com/kaleido-io/paladin/toolkit/pkg/inflight"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -51,7 +50,6 @@ type Noto struct {
 	factoryABI        abi.ABI
 	contractABI       abi.ABI
 	transferSignature string
-	inflight          *inflight.InflightManager[string, string]
 }
 
 type NotoDeployParams struct {
@@ -77,14 +75,6 @@ type gatheredCoins struct {
 	outTotal  *big.Int
 }
 
-func getEventSignature(ctx context.Context, abi abi.ABI, eventName string) (string, error) {
-	event := abi.Events()[eventName]
-	if event == nil {
-		return "", i18n.NewError(ctx, msgs.MsgUnknownEvent, eventName)
-	}
-	return event.SolString(), nil
-}
-
 func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
 	err := json.Unmarshal([]byte(req.ConfigJson), &n.config)
 	if err != nil {
@@ -97,12 +87,12 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	n.chainID = req.ChainId
 	n.factoryABI = factory.ABI
 	n.contractABI = contract.ABI
-	n.inflight = inflight.NewInflightManager[string, string](func(s string) (string, error) { return s, nil })
 
-	n.transferSignature, err = getEventSignature(ctx, contract.ABI, "NotoTransfer")
-	if err != nil {
-		return nil, err
+	transferEvent := contract.ABI.Events()["NotoTransfer"]
+	if transferEvent == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgUnknownEvent, "NotoTransfer")
 	}
+	n.transferSignature = transferEvent.SolString()
 
 	schemaJSON, err := json.Marshal(types.NotoCoinABI)
 	if err != nil {
@@ -225,7 +215,6 @@ func (n *Noto) PrepareTransaction(ctx context.Context, req *prototk.PrepareTrans
 	if err != nil {
 		return nil, err
 	}
-	n.inflight.AddInflight(ctx, req.Transaction.TransactionId)
 	return handler.Prepare(ctx, tx, req)
 }
 
@@ -428,28 +417,10 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 			var transfer NotoTransfer_Event
 			if err := json.Unmarshal(ev.Data, &transfer); err == nil {
 				txID := n.decodeTransferData(transfer.Data)
-				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
 				res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(txID, transfer.Inputs)...)
 				res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(txID, transfer.Outputs)...)
 			}
 		}
 	}
 	return &res, nil
-}
-
-func (n *Noto) TransactionComplete(ctx context.Context, req *prototk.TransactionCompleteRequest) (*prototk.TransactionCompleteResponse, error) {
-	inflight := n.inflight.GetInflight(req.TransactionId)
-	if inflight != nil {
-		inflight.Complete(req.TransactionId)
-	}
-	return &prototk.TransactionCompleteResponse{}, nil
-}
-
-func (n *Noto) WaitForCompletion(ctx context.Context, txID tktypes.Bytes32) error {
-	inflight := n.inflight.GetInflight(txID.String())
-	if inflight != nil {
-		_, err := inflight.Wait()
-		return err
-	}
-	return nil
 }

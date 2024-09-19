@@ -258,7 +258,3 @@ func (z *Zeto) FindCoins(ctx context.Context, contractAddress ethtypes.Address0x
 func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
 	return nil, nil
 }
-
-func (z *Zeto) TransactionComplete(ctx context.Context, req *prototk.TransactionCompleteRequest) (*prototk.TransactionCompleteResponse, error) {
-	return nil, nil
-}
