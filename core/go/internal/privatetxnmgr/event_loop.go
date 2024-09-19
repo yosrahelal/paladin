@@ -29,6 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"gorm.io/gorm"
 )
 
 // Orchestrator orchestrates transaction processing within a specific private preserving contract
@@ -460,9 +461,9 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 
 		// create a function to perform the actual submit
 		// this function will be called ini the context of the DB transaction
-		sequence.PublicTransactionsSubmit = func() (publicTxIDs []string, err error) {
+		sequence.PublicTransactionsSubmit = func(tx *gorm.DB) (publicTxIDs []string, err error) {
 			// submit the public transactions
-			publicTransactions, err := publicTransactionEngine.SubmitBatch(ctx, preparedSubmissions)
+			publicTransactions, err := publicTransactionEngine.SubmitBatch(ctx, tx, preparedSubmissions)
 			if err != nil {
 				log.L(ctx).Errorf("Error submitting batch: %s", err)
 				return nil, err

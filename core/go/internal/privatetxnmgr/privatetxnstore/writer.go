@@ -53,7 +53,7 @@ to atomically allocate and record the nonce under that same transaction.
 // do we have any other checkpoints (e.g. on delegate?)
 type dispatchSequenceOperation struct {
 	dispatches               []*DispatchPersisted
-	publicTransactionsSubmit func() (publicTxID []string, err error)
+	publicTransactionsSubmit func(tx *gorm.DB) (publicTxID []string, err error)
 }
 
 type writeOperation struct {
@@ -233,7 +233,7 @@ func (w *writer) runBatch(ctx context.Context, b *writeOperationBatch) {
 				for _, dispatchSequenceOp := range op.dispatchSequenceOperations {
 					// Call the public transaction manager to allocate nonces for all transactions in the sequence
 					// and persist them to the database under the current transaction
-					publicTxIDs, err := dispatchSequenceOp.publicTransactionsSubmit()
+					publicTxIDs, err := dispatchSequenceOp.publicTransactionsSubmit(tx)
 					if err != nil {
 						log.L(ctx).Errorf("Error submitting public transaction: %s", err)
 						// TODO  this is a really bad situation because it will cause all dispatches in the flush to rollback

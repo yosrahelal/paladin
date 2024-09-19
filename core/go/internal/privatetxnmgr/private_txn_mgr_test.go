@@ -40,6 +40,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"gorm.io/gorm"
 )
 
 // Attempt to assert the behaviour of the Engine as a whole component in isolation from the rest of the system
@@ -162,7 +163,7 @@ func TestEngineSimpleTransaction(t *testing.T) {
 			ID: uuid.New().String(),
 		},
 	}
-	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
+	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
 
 	err := engine.Start()
 	require.NoError(t, err)
@@ -294,7 +295,7 @@ func TestEngineRemoteEndorser(t *testing.T) {
 			ID: uuid.New().String(),
 		},
 	}
-	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
+	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
 
 	err := engine.Start()
 	assert.NoError(t, err)
@@ -432,7 +433,7 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 			ID: uuid.New().String(),
 		},
 	}
-	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
+	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
 
 	err := engine.Start()
 	require.NoError(t, err)
@@ -837,18 +838,8 @@ func (f *fakePublicTxEngine) Init(ctx context.Context, ethClient ethclient.EthCl
 	panic("unimplemented")
 }
 
-// PrepareSubmission implements components.PublicTxEngine.
-func (f *fakePublicTxEngine) PrepareSubmission(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}) (preparedSubmission components.PreparedSubmission, submissionRejected bool, err error) {
-	panic("unimplemented")
-}
-
 // Start implements components.PublicTxEngine.
 func (f *fakePublicTxEngine) Start(ctx context.Context) (done <-chan struct{}, err error) {
-	panic("unimplemented")
-}
-
-// Submit implements components.PublicTxEngine.
-func (f *fakePublicTxEngine) Submit(ctx context.Context, preparedSubmission components.PreparedSubmission) (mtx *components.PublicTX, err error) {
 	panic("unimplemented")
 }
 
@@ -864,7 +855,7 @@ func (f *fakePublicTxEngine) PrepareSubmissionBatch(ctx context.Context, reqOpti
 }
 
 // SubmitBatch implements components.PublicTxEngine.
-func (f *fakePublicTxEngine) SubmitBatch(ctx context.Context, preparedSubmissions []components.PreparedSubmission) ([]*components.PublicTX, error) {
+func (f *fakePublicTxEngine) SubmitBatch(ctx context.Context, tx *gorm.DB, preparedSubmissions []components.PreparedSubmission) ([]*components.PublicTX, error) {
 	publicTransactions := make([]*components.PublicTX, 0, len(preparedSubmissions))
 
 	for _, _ = range preparedSubmissions {

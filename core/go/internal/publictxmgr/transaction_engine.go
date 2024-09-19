@@ -37,6 +37,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"gorm.io/gorm"
 )
 
 // configurations
@@ -311,7 +312,7 @@ func (ble *publicTxEngine) Submit(ctx context.Context, preparedSubmission compon
 	return mtx, err
 }
 
-func (ble *publicTxEngine) SubmitBatch(ctx context.Context, preparedSubmissions []components.PreparedSubmission) ([]*components.PublicTX, error) {
+func (ble *publicTxEngine) SubmitBatch(ctx context.Context, tx *gorm.DB, preparedSubmissions []components.PreparedSubmission) ([]*components.PublicTX, error) {
 	mtxBatch := make([]*components.PublicTX, len(preparedSubmissions))
 	for i, preparedSubmission := range preparedSubmissions {
 		mtx, err := ble.Submit(ctx, preparedSubmission)
