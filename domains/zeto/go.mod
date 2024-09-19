@@ -4,9 +4,9 @@ go 1.22.5
 
 require (
 	github.com/go-resty/resty/v2 v2.14.0
-	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240905213624-43a614759076
+	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240918142015-fb7e7cd52371
 	github.com/hyperledger/firefly-signer v1.1.14
-	github.com/iden3/go-iden3-crypto v0.0.16
+	github.com/iden3/go-iden3-crypto v0.0.17
 	github.com/kaleido-io/paladin/core v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.9.0
@@ -105,7 +105,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gorm.io/driver/postgres v1.5.9 // indirect
 	gorm.io/driver/sqlite v1.5.6 // indirect
-	gorm.io/gorm v1.25.11 // indirect
+	gorm.io/gorm v1.25.12 // indirect
 )
 
 replace github.com/kaleido-io/paladin/core => ../../core/go

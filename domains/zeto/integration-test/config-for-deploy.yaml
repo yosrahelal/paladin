@@ -11,15 +11,24 @@ contracts:
     - name: Groth16Verifier_AnonEnc
       abiAndBytecode:
         path: ./abis/Groth16Verifier_AnonEnc.json
-    - name: Groth16Verifier_NfAnon
+    - name: Groth16Verifier_AnonNullifier
       abiAndBytecode:
-        path: ./abis/Groth16Verifier_NfAnon.json
+        path: ./abis/Groth16Verifier_AnonNullifier.json
     - name: Groth16Verifier_CheckHashesValue
       abiAndBytecode:
         path: ./abis/Groth16Verifier_CheckHashesValue.json
     - name: Groth16Verifier_CheckInputsOutputsValue
       abiAndBytecode:
         path: ./abis/Groth16Verifier_CheckInputsOutputsValue.json
+    - name: PoseidonUnit2L
+      abiAndBytecode:
+        path: ./abis/PoseidonUnit2L.json
+    - name: PoseidonUnit3L
+      abiAndBytecode:
+        path: ./abis/PoseidonUnit3L.json
+    - name: SmtLib
+      abiAndBytecode:
+        path: ./abis/SmtLib.json
     - name: Zeto_Anon
       verifier: Groth16Verifier_Anon
       circuitId: anon
@@ -32,9 +41,9 @@ contracts:
       cloneable: true
       abiAndBytecode:
         path: ./abis/Zeto_AnonEnc.json
-    - name: Zeto_NfAnon
-      verifier: Groth16Verifier_NfAnon
-      circuitId: nf_anon
+    - name: Zeto_AnonNullifier
+      verifier: Groth16Verifier_AnonNullifier
+      circuitId: anon_nullifier
       cloneable: true
       abiAndBytecode:
-        path: ./abis/Zeto_NfAnon.json
+        path: ./abis/Zeto_AnonNullifier.json

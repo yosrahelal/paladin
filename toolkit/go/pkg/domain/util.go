@@ -23,6 +23,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type SolidityBuild struct {
@@ -50,7 +51,7 @@ func LoadBuild(buildOutput []byte) *SolidityBuild {
 	return &build
 }
 
-func LoadBuildLinked(buildOutput []byte, libraries map[string]string) *SolidityBuild {
+func LoadBuildLinked(buildOutput []byte, libraries map[string]*tktypes.EthAddress) *SolidityBuild {
 	var build SolidityBuildWithLinks
 	err := json.Unmarshal(buildOutput, &build)
 	if err != nil {
@@ -69,7 +70,7 @@ func LoadBuildLinked(buildOutput []byte, libraries map[string]string) *SolidityB
 // linkBytecode: performs linking by replacing placeholders with deployed addresses
 // Based on a workaround from Hardhat team here:
 // https://github.com/nomiclabs/hardhat/issues/611#issuecomment-638891597
-func linkBytecode(artifact SolidityBuildWithLinks, libraries map[string]string) (ethtypes.HexBytes0xPrefix, error) {
+func linkBytecode(artifact SolidityBuildWithLinks, libraries map[string]*tktypes.EthAddress) (ethtypes.HexBytes0xPrefix, error) {
 	bytecode := artifact.Bytecode
 	for _, fileReferences := range artifact.LinkReferences {
 		for libName, fixups := range fileReferences {
@@ -80,7 +81,7 @@ func linkBytecode(artifact SolidityBuildWithLinks, libraries map[string]string) 
 			for _, fixup := range fixups {
 				start := 2 + fixup.Start*2
 				end := start + fixup.Length*2
-				bytecode = bytecode[0:start] + addr[2:] + bytecode[end:]
+				bytecode = bytecode[0:start] + addr.String()[2:] + bytecode[end:]
 			}
 		}
 	}

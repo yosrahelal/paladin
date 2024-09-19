@@ -38,6 +38,16 @@ message ProvingRequestExtras_Encryption {
   string encryptionNonce = 1;
 }
 
+message ProvingRequestExtras_Nullifiers {
+  string root = 1;
+  repeated MerkleProof merkleProofs = 2;
+  repeated bool enabled = 3;
+}
+
+message MerkleProof {
+  repeated string nodes = 1;
+}
+
 message ProvingResponse {
   SnarkProof proof = 1;
   map<string, string> publicInputs = 2;

@@ -187,6 +187,11 @@ func calculateWitness(circuitId string, commonInputs *pb.ProvingRequestCommon, e
 		if err != nil {
 			return nil, nil, err
 		}
+	case "anon_nullifier":
+		witnessInputs, publicInputs, err = assembleInputs_anon_nullifier(inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	wtns, err := circuit.CalculateWTNSBin(witnessInputs, true)

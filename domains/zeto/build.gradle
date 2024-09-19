@@ -23,7 +23,7 @@ ext {
     goFilesE2E = fileTree(".") {
         include "integration-test/**/*.go"
     }
-    zetoVersion = "v0.0.3"
+    zetoVersion = "v0.0.5"
     zkpOut = "${projectDir}/zkp"
     toolsOut = "${projectDir}/tools"
 }
@@ -52,7 +52,7 @@ dependencies {
 
 task downloadZetoProver {
     def outname = "zeto-wasm-${zetoVersion}.tar.gz"
-    def url = "https://github.com/hyperledger-labs/zeto/releases/download/${zetoVersion}/${outname}"
+    def url = "https://github.com/jimthematrix/zeto/releases/download/${zetoVersion}/${outname}"
     def f = new File(toolsOut, outname)
     doFirst {
         mkdir(f.parent)
@@ -63,7 +63,7 @@ task downloadZetoProver {
 
 task downloadZetoTestProvingKeys {
     def outname = "zeto-test-proving-keys-${zetoVersion}.tar.gz"
-    def url = "https://github.com/hyperledger-labs/zeto/releases/download/${zetoVersion}/${outname}"
+    def url = "https://github.com/jimthematrix/zeto/releases/download/${zetoVersion}/${outname}"
     def f = new File(toolsOut, outname)
     doFirst {
         mkdir(f.parent)
@@ -74,7 +74,7 @@ task downloadZetoTestProvingKeys {
 
 task downloadZetoCompiledContracts {
     def outname = "zeto-contracts-${zetoVersion}.tar.gz"
-    def url = "https://github.com/hyperledger-labs/zeto/releases/download/${zetoVersion}/${outname}"
+    def url = "https://github.com/jimthematrix/zeto/releases/download/${zetoVersion}/${outname}"
     def f = new File(toolsOut, outname)
     doFirst {
         mkdir(f.parent)
@@ -104,10 +104,15 @@ task copySolidity(type: Copy, dependsOn: [":solidity:compile"]) {
 
 task copySolidityForTest(type: Copy, dependsOn: [extractZetoArtifacts, ":solidity:compile"]) {
     inputs.files(fileTree("${zkpOut}/artifacts/contracts"))
+    inputs.files(fileTree("${zkpOut}/artifacts/@iden3/contracts"))
     from fileTree("${rootDir}/solidity/artifacts") {
         include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
     }
     from fileTree("${zkpOut}/artifacts/contracts") {
+        include '**/*.json'
+        exclude '**/*.dbg.json'
+    }
+    from fileTree("${zkpOut}/artifacts/@iden3/contracts") {
         include '**/*.json'
         exclude '**/*.dbg.json'
     }

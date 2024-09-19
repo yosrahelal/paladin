@@ -22,9 +22,11 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	corepb "github.com/kaleido-io/paladin/core/pkg/proto"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
@@ -75,7 +77,7 @@ func (h *transferHandler) loadBabyJubKey(payload []byte) (*babyjub.PublicKey, er
 	return keyCompressed.Decompress()
 }
 
-func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.ZetoCoin, circuitId string) ([]byte, error) {
+func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.ZetoCoin, circuitId, tokenName string, contractAddress *ethtypes.Address0xHex) ([]byte, error) {
 	inputCommitments := make([]string, INPUT_COUNT)
 	inputValueInts := make([]uint64, INPUT_COUNT)
 	inputSalts := make([]string, INPUT_COUNT)
@@ -106,6 +108,73 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 		}
 	}
 
+	var extras []byte
+	if circuitId == "anon_nullifier" || circuitId == "anon_enc_nullifier" {
+		smtName := smt.MerkleTreeName(tokenName, contractAddress)
+		mt, err := smt.New(h.zeto.smtStorage, smtName)
+		if err != nil {
+			return nil, err
+		}
+		// verify that the input UTXOs have been indexed by the Merkle tree DB
+		// and generate a merkle proof for each
+		var indexes []*big.Int
+		for _, coin := range inputCoins {
+			pubKeyComp := new(babyjub.PublicKeyComp)
+			err := pubKeyComp.UnmarshalText(coin.OwnerKey)
+			if err != nil {
+				return nil, err
+			}
+			pubKey, err := pubKeyComp.Decompress()
+			if err != nil {
+				return nil, err
+			}
+			idx := node.NewFungible(coin.Amount.BigInt(), pubKey, coin.Salt.BigInt())
+			leaf, err := node.NewLeafNode(idx)
+			if err != nil {
+				return nil, err
+			}
+			n, err := mt.GetNode(leaf.Ref())
+			if err != nil {
+				// TODO: deal with when the node is not found in the DB tables for the tree
+				// e.g because the transaction event hasn't been processed yet
+				return nil, err
+			}
+			if n.Index().BigInt().Cmp(coin.Hash.BigInt()) != 0 {
+				return nil, fmt.Errorf("coin %s has not been indexed", coin.Hash.String())
+			}
+			indexes = append(indexes, n.Index().BigInt())
+		}
+		mtRoot := mt.Root()
+		proofs, _, err := mt.GenerateProofs(indexes, mtRoot)
+		if err != nil {
+			return nil, err
+		}
+		var mps []*corepb.MerkleProof
+		for i, proof := range proofs {
+			cp, err := proof.ToCircomVerifierProof(indexes[i], indexes[i], mtRoot, smt.SMT_HEIGHT_UTXO)
+			if err != nil {
+				return nil, err
+			}
+			proofSiblings := make([]string, len(cp.Siblings)-1)
+			for i, s := range cp.Siblings[0 : len(cp.Siblings)-1] {
+				proofSiblings[i] = s.BigInt().Text(16)
+			}
+			p := corepb.MerkleProof{
+				Nodes: proofSiblings,
+			}
+			mps = append(mps, &p)
+		}
+		extrasObj := corepb.ProvingRequestExtras_Nullifiers{
+			Root:         mt.Root().BigInt().Text(16),
+			MerkleProofs: mps,
+		}
+		protoExtras, err := proto.Marshal(&extrasObj)
+		if err != nil {
+			return nil, err
+		}
+		extras = protoExtras
+	}
+
 	payload := &corepb.ProvingRequest{
 		CircuitId: circuitId,
 		Common: &corepb.ProvingRequestCommon{
@@ -117,6 +186,9 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 			OutputSalts:      outputSalts,
 			OutputOwners:     outputOwners,
 		},
+	}
+	if extras != nil {
+		payload.Extras = extras
 	}
 	return proto.Marshal(payload)
 }
@@ -160,7 +232,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 		outputStates = append(outputStates, returnedStates...)
 	}
 
-	payloadBytes, err := h.formatProvingRequest(inputCoins, outputCoins, tx.DomainConfig.CircuitId)
+	payloadBytes, err := h.formatProvingRequest(inputCoins, outputCoins, tx.DomainConfig.CircuitId, tx.DomainConfig.TokenName, tx.ContractAddress)
 	if err != nil {
 		return nil, err
 	}

@@ -19,11 +19,13 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	internalZeto "github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
@@ -114,6 +116,21 @@ func deployZetoContracts(t *testing.T) *zetoDomainContracts {
 	return deployedContracts
 }
 
+func newSqlitePersistence(t *testing.T) *persistence.Persistence {
+	dbfile, err := os.CreateTemp("", "gorm.db")
+	assert.NoError(t, err)
+	defer func() {
+		err := os.Remove(dbfile.Name())
+		assert.NoError(t, err)
+	}()
+	db, err := gorm.Open(sqlite.Open(dbfile.Name()), &gorm.Config{})
+	assert.NoError(t, err)
+	err = db.Table(core.TreeRootsTable).AutoMigrate(&core.SMTRoot{})
+	assert.NoError(t, err)
+	err = db.Table(core.NodesTablePrefix + "test_1").AutoMigrate(&core.SMTNode{})
+	assert.NoError(t, err)
+}
+
 func newZetoDomain(t *testing.T, config *types.DomainFactoryConfig) (zeto.Zeto, *testbed.TestbedDomain) {
 	var domain internalZeto.Zeto
 	return &domain, &testbed.TestbedDomain{
@@ -171,8 +188,8 @@ func (s *zetoDomainTestSuite) TestZeto_Anon() {
 	s.testZetoFungible(s.T(), "Zeto_Anon")
 }
 
-func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
-	s.testZetoFungible(s.T(), "Zeto_AnonEnc")
+func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
+	s.testZetoFungible(s.T(), "Zeto_AnonNullifier")
 }
 
 func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
