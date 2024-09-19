@@ -47,7 +47,7 @@ func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transaction
 	if err != nil {
 		errorMessage := fmt.Sprintf("failed to resolve key for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, endorsementRequest.Algorithm, err)
 		log.L(ctx).Error(errorMessage)
-		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError, errorMessage)
+		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, errorMessage)
 	}
 	// Invoke the domain
 	endorseRes, err := e.psc.EndorseTransaction(ctx, &components.PrivateTransactionEndorseRequest{
@@ -67,7 +67,7 @@ func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transaction
 	if err != nil {
 		errorMessage := fmt.Sprintf("failed to endorse for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, endorsementRequest.Algorithm, err)
 		log.L(ctx).Error(errorMessage)
-		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError, errorMessage)
+		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, errorMessage)
 	}
 
 	result := &prototk.AttestationResult{
@@ -92,7 +92,7 @@ func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transaction
 		if err != nil {
 			errorMessage := fmt.Sprintf("failed to endorse for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, endorsementRequest.Algorithm, err)
 			log.L(ctx).Error(errorMessage)
-			return nil, nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError, errorMessage)
+			return nil, nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, errorMessage)
 		}
 		result.Payload = signaturePayload.Payload
 	case prototk.EndorseTransactionResponse_ENDORSER_SUBMIT:

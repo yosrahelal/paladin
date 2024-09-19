@@ -18,6 +18,8 @@ package privatetxnstore
 
 import (
 	"context"
+
+	"gorm.io/gorm"
 )
 
 type DispatchPersisted struct {
@@ -29,7 +31,7 @@ type DispatchPersisted struct {
 // A dispatch sequence is a collection of private transactions that are submitted together for a given signing address in order
 type DispatchSequence struct {
 	PrivateTransactionDispatches []*DispatchPersisted
-	PublicTransactionsSubmit     func() (publicTxID []string, err error)
+	PublicTransactionsSubmit     func(tx *gorm.DB) (publicTxID []string, err error)
 }
 
 // a dispatch batch is a collection of dispatch sequences that are submitted together with no ordering requirements between sequences

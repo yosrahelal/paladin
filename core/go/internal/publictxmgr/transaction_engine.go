@@ -39,6 +39,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"gorm.io/gorm"
 )
 
 // configurations
@@ -307,16 +308,16 @@ func (ble *publicTxEngine) PrepareSubmission(ctx context.Context, reqOptions *co
 // Submit writes the prepared submission to the database using the provided context
 // This is expected to be a lightweight operation involving not much more than writing to the database, as the heavy lifting should have been done in PrepareSubmission
 // The database transaction will be coordinated by the caller
-func (ble *publicTxEngine) Submit(ctx context.Context, preparedSubmission components.PreparedSubmission) (mtx *components.PublicTX, err error) {
+func (ble *publicTxEngine) Submit(ctx context.Context, dbtx *gorm.DB, preparedSubmission components.PreparedSubmission) (mtx *components.PublicTX, err error) {
 	preparedTransaction := preparedSubmission.(*preparedTransaction)
-	mtx, err = ble.createManagedTx(ctx, preparedTransaction.ID(), preparedTransaction.ethTx)
+	mtx, err = ble.createManagedTx(ctx, dbtx, preparedTransaction.ID(), preparedTransaction.ethTx)
 	return mtx, err
 }
 
-func (ble *publicTxEngine) SubmitBatch(ctx context.Context, preparedSubmissions []components.PreparedSubmission) ([]*components.PublicTX, error) {
+func (ble *publicTxEngine) SubmitBatch(ctx context.Context, dbtx *gorm.DB, preparedSubmissions []components.PreparedSubmission) ([]*components.PublicTX, error) {
 	mtxBatch := make([]*components.PublicTX, len(preparedSubmissions))
 	for i, preparedSubmission := range preparedSubmissions {
-		mtx, err := ble.Submit(ctx, preparedSubmission)
+		mtx, err := ble.Submit(ctx, dbtx, preparedSubmission)
 		if err != nil {
 			return nil, err
 		}
@@ -330,11 +331,11 @@ func (ble *publicTxEngine) HandleNewTransaction(ctx context.Context, reqOptions 
 	if submissionRejected || err != nil {
 		return nil, submissionRejected, err
 	}
-	mtx, err = ble.Submit(ctx, preparedSubmission)
+	mtx, err = ble.Submit(ctx, nil, preparedSubmission)
 	return
 }
 
-func (ble *publicTxEngine) createManagedTx(ctx context.Context, txID string, ethTx *ethsigner.Transaction) (*components.PublicTX, error) {
+func (ble *publicTxEngine) createManagedTx(ctx context.Context, dbtx *gorm.DB, txID string, ethTx *ethsigner.Transaction) (*components.PublicTX, error) {
 	log.L(ctx).Tracef("createManagedTx creating a new managed transaction with ID: %s, and payload %+v", txID, ethTx)
 	now := tktypes.TimestampNow()
 	mtx := &components.PublicTX{
@@ -349,7 +350,7 @@ func (ble *publicTxEngine) createManagedTx(ctx context.Context, txID string, eth
 	// Sequencing ID will be added as part of persistence logic - so we have a deterministic order of transactions
 	// Note: We must ensure persistence happens this within the nonce lock, to ensure that the nonce sequence and the
 	//       global transaction sequence line up.
-	err := ble.txStore.InsertTransaction(ctx, mtx)
+	err := ble.txStore.InsertTransaction(ctx, dbtx, mtx)
 	// 	, func(ctx context.Context, signer string) (uint64, error) {
 	// 	log.L(ctx).Tracef("createManagedTx getting next nonce for transaction ID %s", mtx.ID)
 	// 	nextNonce, err := ble.ethClient.GetTransactionCount(ctx, string(ethTx.From))

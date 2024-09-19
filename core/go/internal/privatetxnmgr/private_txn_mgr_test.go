@@ -24,9 +24,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	coreProto "github.com/kaleido-io/paladin/core/pkg/proto"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
@@ -39,45 +40,41 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"gorm.io/gorm"
 )
 
-// Attempt to assert the behaviour of the Engine as a whole component in isolation from the rest of the system
+// Attempt to assert the behaviour of the private transaction manager as a whole component in isolation from the rest of the system
 // Tests in this file do not mock anything else in this package or sub packages but does mock other components and managers in paladin as per their interfaces
 
-func TestEngineInit(t *testing.T) {
+func TestPrivateTxManagerInit(t *testing.T) {
 
-	engine, mocks := newEngineForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
-	assert.Equal(t, "Kata Engine", engine.EngineName())
-	initResult, err := engine.Init(mocks.allComponents)
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
+	err := privateTxManager.PostInit(mocks.allComponents)
 	require.NoError(t, err)
-	assert.NotNil(t, initResult)
 }
 
-func TestEngineInvalidTransaction(t *testing.T) {
+func TestPrivateTxManagerInvalidTransaction(t *testing.T) {
 	ctx := context.Background()
 
-	engine, mocks := newEngineForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
-	assert.Equal(t, "Kata Engine", engine.EngineName())
-	initResult, err := engine.Init(mocks.allComponents)
-	require.NoError(t, err)
-	assert.NotNil(t, initResult)
-
-	err = engine.Start()
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
+	err := privateTxManager.PostInit(mocks.allComponents)
 	require.NoError(t, err)
 
-	txID, err := engine.HandleNewTx(ctx, &components.PrivateTransaction{})
+	err = privateTxManager.Start()
+	require.NoError(t, err)
+
+	txID, err := privateTxManager.HandleNewTx(ctx, &components.PrivateTransaction{})
 	// no input domain should err
 	assert.Regexp(t, "PD011800", err)
 	assert.Empty(t, txID)
 }
 
-func TestEngineSimpleTransaction(t *testing.T) {
+func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	//Submit a transaction that gets assembled with an attestation plan for a local endorser to sign the transaction
 	ctx := context.Background()
 
 	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-	engine, mocks := newEngineForTesting(t, domainAddress)
-	assert.Equal(t, "Kata Engine", engine.EngineName())
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
 
 	domainAddressString := domainAddress.String()
 
@@ -166,11 +163,11 @@ func TestEngineSimpleTransaction(t *testing.T) {
 			ID: uuid.New().String(),
 		},
 	}
-	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
+	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
 
-	err := engine.Start()
+	err := privateTxManager.Start()
 	require.NoError(t, err)
-	txID, err := engine.HandleNewTx(ctx, &components.PrivateTransaction{
+	txID, err := privateTxManager.HandleNewTx(ctx, &components.PrivateTransaction{
 		ID: uuid.New(),
 		Inputs: &components.TransactionInputs{
 			Domain: "domain1",
@@ -180,24 +177,24 @@ func TestEngineSimpleTransaction(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, txID)
 
-	status := pollForStatus(ctx, t, "dispatched", engine, domainAddressString, txID, 2*time.Second)
+	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, txID, 2*time.Second)
 	assert.Equal(t, "dispatched", status)
 }
 
-func TestEngineLocalEndorserSubmits(t *testing.T) {
+func TestPrivateTxManagerLocalEndorserSubmits(t *testing.T) {
 }
 
-func TestEngineRevertFromLocalEndorsement(t *testing.T) {
+func TestPrivateTxManagerRevertFromLocalEndorsement(t *testing.T) {
 }
 
-func TestEngineRemoteEndorser(t *testing.T) {
+func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 	ctx := context.Background()
 
 	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-	engine, mocks := newEngineForTesting(t, domainAddress)
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
 	domainAddressString := domainAddress.String()
 
-	remoteEngine, remoteEngineMocks := newEngineForTesting(t, domainAddress)
+	remoteEngine, remoteEngineMocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
 
 	initialised := make(chan struct{}, 1)
 	mocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
@@ -253,7 +250,7 @@ func TestEngineRemoteEndorser(t *testing.T) {
 	remoteEngineMocks.transportManager.On("Send", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		go func() {
 			transportMessage := args.Get(1).(*components.TransportMessage)
-			engine.ReceiveTransportMessage(ctx, transportMessage)
+			privateTxManager.ReceiveTransportMessage(ctx, transportMessage)
 		}()
 	}).Return(nil).Maybe()
 
@@ -298,12 +295,12 @@ func TestEngineRemoteEndorser(t *testing.T) {
 			ID: uuid.New().String(),
 		},
 	}
-	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
+	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
 
-	err := engine.Start()
+	err := privateTxManager.Start()
 	assert.NoError(t, err)
 
-	txID, err := engine.HandleNewTx(ctx, &components.PrivateTransaction{
+	txID, err := privateTxManager.HandleNewTx(ctx, &components.PrivateTransaction{
 		ID: uuid.New(),
 		Inputs: &components.TransactionInputs{
 			Domain: "domain1",
@@ -313,20 +310,19 @@ func TestEngineRemoteEndorser(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, txID)
 
-	status := pollForStatus(ctx, t, "dispatched", engine, domainAddressString, txID, 200*time.Second)
+	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, txID, 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
 }
 
-func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
+func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	//2 transactions, one dependant on the other
 	// we purposely endorse the first transaction late to ensure that the 2nd transaction
 	// is still sequenced behind the first
 	ctx := context.Background()
 
 	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-	engine, mocks := newEngineForTesting(t, domainAddress)
-	assert.Equal(t, "Kata Engine", engine.EngineName())
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
 
 	domainAddressString := domainAddress.String()
 	mocks.keyManager.On("ResolveKey", mock.Anything, "alice", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("aliceKeyHandle", "aliceVerifier", nil)
@@ -437,25 +433,25 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 			ID: uuid.New().String(),
 		},
 	}
-	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
+	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
 
-	err := engine.Start()
+	err := privateTxManager.Start()
 	require.NoError(t, err)
 
-	tx1ID, err := engine.HandleNewTx(ctx, tx1)
+	tx1ID, err := privateTxManager.HandleNewTx(ctx, tx1)
 	require.NoError(t, err)
 	require.NotNil(t, tx1ID)
 
-	tx2ID, err := engine.HandleNewTx(ctx, tx2)
+	tx2ID, err := privateTxManager.HandleNewTx(ctx, tx2)
 	require.NoError(t, err)
 	require.NotNil(t, tx2ID)
 
 	// Neither transaction should be dispatched yet
-	s, err := engine.GetTxStatus(ctx, domainAddressString, tx1ID)
+	s, err := privateTxManager.GetTxStatus(ctx, domainAddressString, tx1ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
-	s, err = engine.GetTxStatus(ctx, domainAddressString, tx2ID)
+	s, err = privateTxManager.GetTxStatus(ctx, domainAddressString, tx2ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
@@ -482,7 +478,7 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	require.NoError(t, err)
 
 	//now send the endorsement back
-	engine.ReceiveTransportMessage(ctx, &components.TransportMessage{
+	privateTxManager.ReceiveTransportMessage(ctx, &components.TransportMessage{
 		MessageType: "EndorsementResponse",
 		Payload:     endorsementResponse2Bytes,
 	})
@@ -491,11 +487,11 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	if !testing.Short() {
 		time.Sleep(1 * time.Second)
 	}
-	s, err = engine.GetTxStatus(ctx, domainAddressString, tx1ID)
+	s, err = privateTxManager.GetTxStatus(ctx, domainAddressString, tx1ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
-	s, err = engine.GetTxStatus(ctx, domainAddressString, tx2ID)
+	s, err = privateTxManager.GetTxStatus(ctx, domainAddressString, tx2ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
@@ -509,36 +505,38 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	require.NoError(t, err)
 
 	//now send the endorsement back
-	engine.ReceiveTransportMessage(ctx, &components.TransportMessage{
+	privateTxManager.ReceiveTransportMessage(ctx, &components.TransportMessage{
 		MessageType: "EndorsementResponse",
 		Payload:     endorsementResponse1Bytes,
 	})
 
-	status := pollForStatus(ctx, t, "dispatched", engine, domainAddressString, tx1ID, 200*time.Second)
+	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx1ID, 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
-	status = pollForStatus(ctx, t, "dispatched", engine, domainAddressString, tx2ID, 200*time.Second)
+	status = pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx2ID, 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
 	//TODO assert that transaction 1 got dispatched before 2
 
 }
 
-func TestEngineLocalBlockedTransaction(t *testing.T) {
+func TestPrivateTxManagerLocalBlockedTransaction(t *testing.T) {
 	//TODO
 	// 3 transactions, for different signing addresses, but two are is blocked by the other
 	// when the earlier transaction is confirmed, both blocked transactions should be dispatched
 }
 
-func TestEngineMiniLoad(t *testing.T) {
-	t.Skip("This test does not run reliably in the full gradle build for an unknown reason but it is still useful for local testing")
+func TestPrivateTxManagerMiniLoad(t *testing.T) {
+	t.Skip("This test takes too long to be included by default.  It is still useful for local testing")
+	//TODO this is actually quite a complex test given all the mocking.  Maybe this should be converted to a wider component test
+	// where the real publicTxEngine is used rather than a mock
 	r := rand.New(rand.NewSource(42))
 	loadTests := []struct {
 		name            string
 		latency         func() time.Duration
 		numTransactions int
 	}{
-		{"no-latency", func() time.Duration { return 0 }, 500},
+		{"no-latency", func() time.Duration { return 0 }, 5},
 		{"low-latency", func() time.Duration { return 10 * time.Millisecond }, 500},
 		{"medium-latency", func() time.Duration { return 50 * time.Millisecond }, 500},
 		{"high-latency", func() time.Duration { return 100 * time.Millisecond }, 500},
@@ -555,10 +553,9 @@ func TestEngineMiniLoad(t *testing.T) {
 			ctx := context.Background()
 
 			domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-			engine, mocks := newEngineForTesting(t, domainAddress)
-			assert.Equal(t, "Kata Engine", engine.EngineName())
+			privateTxManager, mocks := NewPrivateTransactionMgrForTestingWithFakePublicTxEngine(t, domainAddress, newFakePublicTxEngine(t))
 
-			remoteEngine, remoteEngineMocks := newEngineForTesting(t, domainAddress)
+			remoteEngine, remoteEngineMocks := NewPrivateTransactionMgrForTestingWithFakePublicTxEngine(t, domainAddress, newFakePublicTxEngine(t))
 
 			dependenciesByTransactionID := make(map[string][]string) // populated during assembly stage
 			nonceByTransactionID := make(map[string]uint64)          // populated when dispatch event recieved and used later to check that the nonce order matchs the dependency order
@@ -662,12 +659,19 @@ func TestEngineMiniLoad(t *testing.T) {
 					//inject random latency on the network
 					time.Sleep(test.latency())
 					transportMessage := args.Get(1).(*components.TransportMessage)
-					engine.ReceiveTransportMessage(ctx, transportMessage)
+					privateTxManager.ReceiveTransportMessage(ctx, transportMessage)
 				}()
 			}).Return(nil).Maybe()
 			remoteEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(remoteEngineMocks.domainSmartContract, nil)
 
 			remoteEngineMocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("notaryKeyHandle", "notaryVerifier", nil)
+
+			signingAddress := tktypes.RandHex(32)
+
+			mocks.domainSmartContract.On("ResolveDispatch", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+				tx := args.Get(1).(*components.PrivateTransaction)
+				tx.Signer = signingAddress
+			}).Return(nil)
 
 			//TODO match endorsement request and verifier args
 			remoteEngineMocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&components.EndorsementResult{
@@ -694,12 +698,12 @@ func TestEngineMiniLoad(t *testing.T) {
 			numDispatched := 0
 			allDispatched := make(chan bool, 1)
 			nonceWriterLock := sync.Mutex{}
-			engine.Subscribe(ctx, func(event ptmgrtypes.EngineEvent) {
+			privateTxManager.Subscribe(ctx, func(event components.PrivateTxEvent) {
 				nonceWriterLock.Lock()
 				defer nonceWriterLock.Unlock()
 				numDispatched++
 				switch event := event.(type) {
-				case *ptmgrtypes.TransactionDispatchedEvent:
+				case *components.TransactionDispatchedEvent:
 					assert.Equal(t, expectedNonce, event.Nonce)
 					expectedNonce++
 					nonceByTransactionID[event.TransactionID] = event.Nonce
@@ -709,7 +713,7 @@ func TestEngineMiniLoad(t *testing.T) {
 				}
 			})
 
-			err := engine.Start()
+			err := privateTxManager.Start()
 			require.NoError(t, err)
 
 			for i := 0; i < test.numTransactions; i++ {
@@ -721,7 +725,7 @@ func TestEngineMiniLoad(t *testing.T) {
 						From:   "Alice",
 					},
 				}
-				txID, err := engine.HandleNewTx(ctx, tx)
+				txID, err := privateTxManager.HandleNewTx(ctx, tx)
 				require.NoError(t, err)
 				require.NotNil(t, txID)
 			}
@@ -757,7 +761,7 @@ func TestEngineMiniLoad(t *testing.T) {
 	}
 }
 
-func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, engine Engine, domainAddressString, txID string, duration time.Duration) string {
+func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, privateTxManager components.PrivateTxManager, domainAddressString, txID string, duration time.Duration) string {
 	timeout := time.After(duration)
 	tick := time.Tick(100 * time.Millisecond)
 
@@ -766,11 +770,11 @@ func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, eng
 		case <-timeout:
 			// Timeout reached, exit the loop
 			assert.Failf(t, "Timed out waiting for status %s", expectedStatus)
-			s, err := engine.GetTxStatus(ctx, domainAddressString, txID)
+			s, err := privateTxManager.GetTxStatus(ctx, domainAddressString, txID)
 			require.NoError(t, err)
 			return s.Status
 		case <-tick:
-			s, err := engine.GetTxStatus(ctx, domainAddressString, txID)
+			s, err := privateTxManager.GetTxStatus(ctx, domainAddressString, txID)
 			if s.Status == expectedStatus {
 				return s.Status
 			}
@@ -791,7 +795,84 @@ type dependencyMocks struct {
 	publicTxEngine       *componentmocks.PublicTxEngine
 }
 
-func newEngineForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (Engine, *dependencyMocks) {
+// For Black box testing we return components.PrivateTxManager
+func NewPrivateTransactionMgrForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (components.PrivateTxManager, *dependencyMocks) {
+	// by default create a mock publicTxEngine if no fake was provided
+	fakePublicTxEngine := componentmocks.NewPublicTxEngine(t)
+	privateTxManager, mocks := NewPrivateTransactionMgrForTestingWithFakePublicTxEngine(t, domainAddress, fakePublicTxEngine)
+	mocks.publicTxEngine = fakePublicTxEngine
+	return privateTxManager, mocks
+}
+
+type fakePublicTxEngine struct {
+	t *testing.T
+}
+
+// CheckTransactionCompleted implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) CheckTransactionCompleted(ctx context.Context, tx *components.PublicTX) (completed bool) {
+	panic("unimplemented")
+}
+
+// GetPendingFuelingTransaction implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *components.PublicTX, err error) {
+	panic("unimplemented")
+}
+
+// HandleNewTransaction implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) HandleNewTransaction(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}) (mtx *components.PublicTX, submissionRejected bool, err error) {
+	panic("unimplemented")
+}
+
+// HandleResumeTransaction implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) HandleResumeTransaction(ctx context.Context, txID string) (mtx *components.PublicTX, err error) {
+	panic("unimplemented")
+}
+
+// HandleSuspendTransaction implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) HandleSuspendTransaction(ctx context.Context, txID string) (mtx *components.PublicTX, err error) {
+	panic("unimplemented")
+}
+
+// Init implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore components.TransactionStore, publicTXEventNotifier components.PublicTxEventNotifier, blockIndexer blockindexer.BlockIndexer) {
+	panic("unimplemented")
+}
+
+// Start implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) Start(ctx context.Context) (done <-chan struct{}, err error) {
+	panic("unimplemented")
+}
+
+//for this test, we need a hand written fake rather than a simple mock for publicTxEngine
+
+// PrepareSubmissionBatch implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) PrepareSubmissionBatch(ctx context.Context, reqOptions *components.RequestOptions, txPayloads []interface{}) (preparedSubmission []components.PreparedSubmission, submissionRejected bool, err error) {
+	mockPreparedSubmissions := make([]components.PreparedSubmission, 0, len(txPayloads))
+	for _, _ = range txPayloads {
+		mockPreparedSubmissions = append(mockPreparedSubmissions, componentmocks.NewPreparedSubmission(f.t))
+	}
+	return mockPreparedSubmissions, false, nil
+}
+
+// SubmitBatch implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) SubmitBatch(ctx context.Context, tx *gorm.DB, preparedSubmissions []components.PreparedSubmission) ([]*components.PublicTX, error) {
+	publicTransactions := make([]*components.PublicTX, 0, len(preparedSubmissions))
+
+	for _, _ = range preparedSubmissions {
+		publicTransactions = append(publicTransactions, &components.PublicTX{
+			ID: uuid.New().String(),
+		})
+	}
+	return publicTransactions, nil
+}
+
+func newFakePublicTxEngine(t *testing.T) components.PublicTxEngine {
+	return &fakePublicTxEngine{
+		t: t,
+	}
+}
+
+func NewPrivateTransactionMgrForTestingWithFakePublicTxEngine(t *testing.T, domainAddress *tktypes.EthAddress, fakePublicTxEngine components.PublicTxEngine) (components.PrivateTxManager, *dependencyMocks) {
 
 	ctx := context.Background()
 	mocks := &dependencyMocks{
@@ -803,14 +884,13 @@ func newEngineForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (Engin
 		stateStore:           componentmocks.NewStateStore(t),
 		keyManager:           componentmocks.NewKeyManager(t),
 		publicTxManager:      componentmocks.NewPublicTxManager(t),
-		publicTxEngine:       componentmocks.NewPublicTxEngine(t),
 	}
 	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
 	mocks.allComponents.On("TransportManager").Return(mocks.transportManager).Maybe()
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.allComponents.On("PublicTxManager").Return(mocks.publicTxManager).Maybe()
-	mocks.publicTxManager.On("GetEngine").Return(mocks.publicTxEngine).Maybe()
+	mocks.publicTxManager.On("GetEngine").Return(fakePublicTxEngine).Maybe()
 	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
 	mocks.allComponents.On("Persistence").Return(persistence.NewUnitTestPersistence(ctx)).Maybe()
 
@@ -820,9 +900,8 @@ func newEngineForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (Engin
 		assert.NoError(t, err)
 	}).Maybe().Return(nil)
 
-	e := NewEngine(tktypes.RandHex(16))
-	r, err := e.Init(mocks.allComponents)
-	assert.NotNil(t, r)
+	e := NewPrivateTransactionMgr(ctx, tktypes.RandHex(16), &Config{})
+	err := e.PostInit(mocks.allComponents)
 	assert.NoError(t, err)
 	return e, mocks
 
@@ -834,5 +913,11 @@ func timeTillDeadline(t *testing.T) time.Duration {
 		//there was no -timeout flag, default to 10 seconds
 		deadline = time.Now().Add(10 * time.Second)
 	}
-	return time.Until(deadline)
+	timeRemaining := time.Until(deadline)
+	//Need to leave some time to ensure that polling assertions fail before the test itself timesout
+	//otherwise we don't see diagnostic info for things like GoExit called by mocks etc
+	if timeRemaining < 100*time.Millisecond {
+		return 0
+	}
+	return timeRemaining - 100*time.Millisecond
 }

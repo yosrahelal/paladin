@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"gorm.io/gorm"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -79,7 +80,7 @@ func (pts *pubTxStore) GetTransactionByID(ctx context.Context, txID string) (*co
 	return pubTxObject, nil
 }
 
-func (pts *pubTxStore) InsertTransaction(ctx context.Context, tx *components.PublicTX) error {
+func (pts *pubTxStore) InsertTransaction(ctx context.Context, dbTx *gorm.DB, tx *components.PublicTX) error {
 	pts.writer.queue(ctx, pts.writer.newWriteOp(tx))
 	return nil
 }

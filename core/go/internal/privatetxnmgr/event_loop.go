@@ -29,6 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"gorm.io/gorm"
 )
 
 // Orchestrator orchestrates transaction processing within a specific private preserving contract
@@ -43,15 +44,6 @@ import (
 const (
 	OrchestratorSection = "orchestrator"
 )
-
-type OrchestratorConfig struct {
-	MaxConcurrentProcess    *int    `yaml:"maxConcurrentProcess,omitempty"`
-	MaxPendingEvents        *int    `yaml:"maxPendingEvents,omitempty"`
-	StageRetry              *string `yaml:"stageRetry,omitempty"`
-	EvaluationInterval      *string `yaml:"evalInterval,omitempty"`
-	PersistenceRetryTimeout *string `yaml:"persistenceRetryTimeout,omitempty"`
-	StaleTimeout            *string `yaml:"staleTimeout,omitempty"`
-}
 
 // metrics
 
@@ -92,7 +84,6 @@ var AllOrchestratorStates = []string{
 
 type Orchestrator struct {
 	ctx                     context.Context
-	stageRetryTimeout       time.Duration
 	persistenceRetryTimeout time.Duration
 
 	// each orchestrator has its own go routine
@@ -133,7 +124,6 @@ type Orchestrator struct {
 
 var orchestratorConfigDefault = OrchestratorConfig{
 	MaxConcurrentProcess:    confutil.P(500),
-	StageRetry:              confutil.P("5s"),
 	EvaluationInterval:      confutil.P("5m"),
 	PersistenceRetryTimeout: confutil.P("5s"),
 	StaleTimeout:            confutil.P("10m"),
@@ -152,10 +142,9 @@ func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string,
 		stateEntryTime:       time.Now(),
 
 		incompleteTxSProcessMap: make(map[string]ptmgrtypes.TxProcessor),
-		stageRetryTimeout:       confutil.DurationMin(oc.StageRetry, 1*time.Millisecond, *orchestratorConfigDefault.StageRetry),
 		persistenceRetryTimeout: confutil.DurationMin(oc.PersistenceRetryTimeout, 1*time.Millisecond, *orchestratorConfigDefault.PersistenceRetryTimeout),
 
-		staleTimeout:                 confutil.DurationMin(oc.StaleTimeout, 1*time.Millisecond, *orchestratorConfigDefault.StageRetry),
+		staleTimeout:                 confutil.DurationMin(oc.StaleTimeout, 1*time.Millisecond, *orchestratorConfigDefault.StaleTimeout),
 		processedTxIDs:               make(map[string]bool),
 		orchestrationEvalRequestChan: make(chan bool, 1),
 		stopProcess:                  make(chan bool, 1),
@@ -384,7 +373,7 @@ func (oc *Orchestrator) TriggerOrchestratorEvaluation() {
 	}
 }
 
-func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status ptmgrtypes.TxStatus, err error) {
+func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status components.PrivateTxStatus, err error) {
 	//TODO This is primarily here to help with testing for now
 	// this needs to be revisited ASAP as part of a holisitic review of the persistence model
 	oc.incompleteTxProcessMapMutex.Lock()
@@ -393,7 +382,7 @@ func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status pt
 		return txProc.GetTxStatus(ctx)
 	}
 	//TODO should be possible to query the status of a transaction that is not inflight
-	return ptmgrtypes.TxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError, "Transaction not found")
+	return components.PrivateTxStatus{}, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "Transaction not found")
 }
 
 // synchronously prepare and dispatch all given transactions to their associated signing address
@@ -463,7 +452,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		)
 		if rejected {
 			log.L(ctx).Errorf("Submission rejected")
-			return i18n.NewError(ctx, msgs.MsgEngineInternalError, "Submission rejected")
+			return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "Submission rejected")
 		}
 		if err != nil {
 			log.L(ctx).Errorf("Error preparing submission batch: %s", err)
@@ -472,9 +461,9 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 
 		// create a function to perform the actual submit
 		// this function will be called ini the context of the DB transaction
-		sequence.PublicTransactionsSubmit = func() (publicTxIDs []string, err error) {
+		sequence.PublicTransactionsSubmit = func(tx *gorm.DB) (publicTxIDs []string, err error) {
 			// submit the public transactions
-			publicTransactions, err := publicTransactionEngine.SubmitBatch(ctx, preparedSubmissions)
+			publicTransactions, err := publicTransactionEngine.SubmitBatch(ctx, tx, preparedSubmissions)
 			if err != nil {
 				log.L(ctx).Errorf("Error submitting batch: %s", err)
 				return nil, err
@@ -501,7 +490,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 
 			if err != nil {
 				//TODO think about how best to handle this error
-				log.L(ctx).Errorf("Error publishing stage event: %s", err)
+				log.L(ctx).Errorf("Error publishing event: %s", err)
 			}
 		}
 	}

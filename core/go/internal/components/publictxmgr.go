@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"gorm.io/gorm"
 )
 
 // PublicTransactionEventType is a enum type that contains all types of transaction process events
@@ -177,7 +178,7 @@ type PubTransactionQueries struct {
 }
 type PublicTransactionStore interface {
 	GetTransactionByID(ctx context.Context, txID string) (*PublicTX, error)
-	InsertTransaction(ctx context.Context, tx *PublicTX) error
+	InsertTransaction(ctx context.Context, dbtx *gorm.DB, tx *PublicTX) error
 	UpdateTransaction(ctx context.Context, txID string, updates *BaseTXUpdates) error
 
 	GetConfirmedTransaction(ctx context.Context, txID string) (iTX *blockindexer.IndexedTransaction, err error)
@@ -206,7 +207,7 @@ type PublicTxEngine interface {
 	Start(ctx context.Context) (done <-chan struct{}, err error)
 
 	//Syncronous functions that are executed on the callers thread
-	SubmitBatch(ctx context.Context, preparedSubmissions []PreparedSubmission) ([]*PublicTX, error)
+	SubmitBatch(ctx context.Context, tx *gorm.DB, preparedSubmissions []PreparedSubmission) ([]*PublicTX, error)
 	PrepareSubmissionBatch(ctx context.Context, reqOptions *RequestOptions, txPayloads []interface{}) (preparedSubmission []PreparedSubmission, submissionRejected bool, err error)
 
 	// Event handling functions
