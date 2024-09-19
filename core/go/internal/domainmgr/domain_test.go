@@ -914,6 +914,9 @@ func TestHandleEventBatch(t *testing.T) {
 		require.Len(t, events, 1)
 		assert.Equal(t, contract2.String(), events[0].Address.String())
 		return &prototk.HandleEventBatchResponse{
+			TransactionsComplete: []string{
+				txIDBytes32.String(),
+			},
 			SpentStates: []*prototk.StateUpdate{
 				{
 					Id:            stateSpent,
@@ -929,7 +932,13 @@ func TestHandleEventBatch(t *testing.T) {
 		}, nil
 	}
 
-	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+	complete := make(chan string, 1)
+	tp.Functions.TransactionComplete = func(ctx context.Context, req *prototk.TransactionCompleteRequest) (*prototk.TransactionCompleteResponse, error) {
+		complete <- req.TransactionId
+		return nil, nil
+	}
+
+	cb, err := d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
 		Events: []*blockindexer.EventWithData{
 			{
@@ -943,6 +952,9 @@ func TestHandleEventBatch(t *testing.T) {
 		},
 	})
 	assert.NoError(t, err)
+
+	cb()
+	assert.Equal(t, txIDBytes32.String(), <-complete)
 }
 
 func TestHandleEventBatchContractLookupFail(t *testing.T) {
