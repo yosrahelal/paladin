@@ -435,8 +435,16 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 			var transfer NotoTransfer_Event
 			if err := json.Unmarshal(ev.Data, &transfer); err == nil {
 				txID := n.decodeTransactionData(transfer.Data)
+				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
 				res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(txID, transfer.Inputs)...)
 				res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(txID, transfer.Outputs)...)
+			}
+
+		case n.approvedSignature:
+			var approved NotoApproved_Event
+			if err := json.Unmarshal(ev.Data, &approved); err == nil {
+				txID := n.decodeTransactionData(approved.Data)
+				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
 			}
 		}
 	}

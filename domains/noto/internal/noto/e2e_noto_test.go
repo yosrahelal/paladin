@@ -150,6 +150,8 @@ func TestNoto(t *testing.T) {
 	require.NoError(t, err)
 	_, recipient1Key, err := tb.Components().KeyManager().ResolveKey(ctx, recipient1Name, algorithms.ECDSA_SECP256K1_PLAINBYTES)
 	require.NoError(t, err)
+	_, recipient2Key, err := tb.Components().KeyManager().ResolveKey(ctx, recipient2Name, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	require.NoError(t, err)
 
 	log.L(ctx).Infof("Deploying an instance of Noto")
 	var notoAddress ethtypes.Address0xHex
@@ -258,7 +260,12 @@ func TestNoto(t *testing.T) {
 
 	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
-	require.Len(t, coins, 3) // TODO: verify coins
+	require.Len(t, coins, 2)
+
+	assert.Equal(t, int64(50), coins[0].Amount.Int64())
+	assert.Equal(t, notaryKey, coins[0].Owner.String())
+	assert.Equal(t, int64(50), coins[1].Amount.Int64())
+	assert.Equal(t, recipient2Key, coins[1].Owner.String())
 }
 
 func TestNotoApprove(t *testing.T) {
@@ -372,6 +379,10 @@ func TestNotoSelfSubmit(t *testing.T) {
 
 	_, notaryKey, err := tb.Components().KeyManager().ResolveKey(ctx, notaryName, algorithms.ECDSA_SECP256K1_PLAINBYTES)
 	require.NoError(t, err)
+	_, recipient1Key, err := tb.Components().KeyManager().ResolveKey(ctx, recipient1Name, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	require.NoError(t, err)
+	_, recipient2Key, err := tb.Components().KeyManager().ResolveKey(ctx, recipient2Name, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	require.NoError(t, err)
 
 	eth := tb.Components().EthClientFactory().HTTPClient()
 	notoFactory := domain.LoadBuild(notoFactoryJSON)
@@ -437,7 +448,12 @@ func TestNotoSelfSubmit(t *testing.T) {
 
 	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
-	assert.Len(t, coins, 3) // TODO: verify coins
+	require.Len(t, coins, 2)
+
+	assert.Equal(t, int64(50), coins[0].Amount.Int64())
+	assert.Equal(t, recipient1Key, coins[0].Owner.String())
+	assert.Equal(t, int64(50), coins[1].Amount.Int64())
+	assert.Equal(t, notaryKey, coins[1].Owner.String())
 
 	log.L(ctx).Infof("Transfer 50 from recipient1 to recipient2")
 	rpcerr = rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
@@ -455,5 +471,10 @@ func TestNotoSelfSubmit(t *testing.T) {
 
 	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
-	assert.Len(t, coins, 3) // TODO: verify coins
+	require.Len(t, coins, 2)
+
+	assert.Equal(t, int64(50), coins[0].Amount.Int64())
+	assert.Equal(t, notaryKey, coins[0].Owner.String())
+	assert.Equal(t, int64(50), coins[1].Amount.Int64())
+	assert.Equal(t, recipient2Key, coins[1].Owner.String())
 }

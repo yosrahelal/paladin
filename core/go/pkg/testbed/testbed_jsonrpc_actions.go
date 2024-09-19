@@ -277,7 +277,11 @@ func (tb *testbed) rpcTestbedInvoke() rpcserver.RPCHandler {
 			return false, err
 		}
 
-		// TODO: state confirmation by TXID
+		// Wait for the domain to index the transaction events
+		err = tb.c.DomainManager().WaitForTransaction(ctx, tx.ID)
+		if err != nil {
+			return false, err
+		}
 		return true, nil
 	})
 }
