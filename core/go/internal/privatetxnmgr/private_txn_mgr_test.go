@@ -27,6 +27,8 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	coreProto "github.com/kaleido-io/paladin/core/pkg/proto"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
@@ -531,14 +533,16 @@ func TestEngineLocalBlockedTransaction(t *testing.T) {
 }
 
 func TestEngineMiniLoad(t *testing.T) {
-	t.Skip("This test does not run reliably in the full gradle build for an unknown reason but it is still useful for local testing")
+	//t.Skip("This test does not run reliably in the full gradle build for an unknown reason but it is still useful for local testing")
+	//TODO this is actually quite a complex test given all the mocking.  Maybe this should be converted to a wider component test
+	// where the real publicTxEngine is used rather than a mock
 	r := rand.New(rand.NewSource(42))
 	loadTests := []struct {
 		name            string
 		latency         func() time.Duration
 		numTransactions int
 	}{
-		{"no-latency", func() time.Duration { return 0 }, 500},
+		{"no-latency", func() time.Duration { return 0 }, 5},
 		{"low-latency", func() time.Duration { return 10 * time.Millisecond }, 500},
 		{"medium-latency", func() time.Duration { return 50 * time.Millisecond }, 500},
 		{"high-latency", func() time.Duration { return 100 * time.Millisecond }, 500},
@@ -555,10 +559,10 @@ func TestEngineMiniLoad(t *testing.T) {
 			ctx := context.Background()
 
 			domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-			engine, mocks := newEngineForTesting(t, domainAddress)
+			engine, mocks := newEngineForTestingWithFakePublicTxEngine(t, domainAddress, newFakePublicTxEngine(t))
 			assert.Equal(t, "Kata Engine", engine.EngineName())
 
-			remoteEngine, remoteEngineMocks := newEngineForTesting(t, domainAddress)
+			remoteEngine, remoteEngineMocks := newEngineForTestingWithFakePublicTxEngine(t, domainAddress, newFakePublicTxEngine(t))
 
 			dependenciesByTransactionID := make(map[string][]string) // populated during assembly stage
 			nonceByTransactionID := make(map[string]uint64)          // populated when dispatch event recieved and used later to check that the nonce order matchs the dependency order
@@ -668,6 +672,13 @@ func TestEngineMiniLoad(t *testing.T) {
 			remoteEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(remoteEngineMocks.domainSmartContract, nil)
 
 			remoteEngineMocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("notaryKeyHandle", "notaryVerifier", nil)
+
+			signingAddress := tktypes.RandHex(32)
+
+			mocks.domainSmartContract.On("ResolveDispatch", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+				tx := args.Get(1).(*components.PrivateTransaction)
+				tx.Signer = signingAddress
+			}).Return(nil)
 
 			//TODO match endorsement request and verifier args
 			remoteEngineMocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&components.EndorsementResult{
@@ -792,6 +803,92 @@ type dependencyMocks struct {
 }
 
 func newEngineForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (Engine, *dependencyMocks) {
+	// by default create a mock publicTxEngine if no fake was provided
+	fakePublicTxEngine := componentmocks.NewPublicTxEngine(t)
+	engine, mocks := newEngineForTestingWithFakePublicTxEngine(t, domainAddress, fakePublicTxEngine)
+	mocks.publicTxEngine = fakePublicTxEngine
+	return engine, mocks
+}
+
+type fakePublicTxEngine struct {
+	t *testing.T
+}
+
+// CheckTransactionCompleted implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) CheckTransactionCompleted(ctx context.Context, tx *components.PublicTX) (completed bool) {
+	panic("unimplemented")
+}
+
+// GetPendingFuelingTransaction implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *components.PublicTX, err error) {
+	panic("unimplemented")
+}
+
+// HandleNewTransaction implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) HandleNewTransaction(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}) (mtx *components.PublicTX, submissionRejected bool, err error) {
+	panic("unimplemented")
+}
+
+// HandleResumeTransaction implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) HandleResumeTransaction(ctx context.Context, txID string) (mtx *components.PublicTX, err error) {
+	panic("unimplemented")
+}
+
+// HandleSuspendTransaction implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) HandleSuspendTransaction(ctx context.Context, txID string) (mtx *components.PublicTX, err error) {
+	panic("unimplemented")
+}
+
+// Init implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore components.TransactionStore, publicTXEventNotifier components.PublicTxEventNotifier, blockIndexer blockindexer.BlockIndexer) {
+	panic("unimplemented")
+}
+
+// PrepareSubmission implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) PrepareSubmission(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}) (preparedSubmission components.PreparedSubmission, submissionRejected bool, err error) {
+	panic("unimplemented")
+}
+
+// Start implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) Start(ctx context.Context) (done <-chan struct{}, err error) {
+	panic("unimplemented")
+}
+
+// Submit implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) Submit(ctx context.Context, preparedSubmission components.PreparedSubmission) (mtx *components.PublicTX, err error) {
+	panic("unimplemented")
+}
+
+//for this test, we need a hand written fake rather than a simple mock for publicTxEngine
+
+// PrepareSubmissionBatch implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) PrepareSubmissionBatch(ctx context.Context, reqOptions *components.RequestOptions, txPayloads []interface{}) (preparedSubmission []components.PreparedSubmission, submissionRejected bool, err error) {
+	mockPreparedSubmissions := make([]components.PreparedSubmission, 0, len(txPayloads))
+	for _, _ = range txPayloads {
+		mockPreparedSubmissions = append(mockPreparedSubmissions, componentmocks.NewPreparedSubmission(f.t))
+	}
+	return mockPreparedSubmissions, false, nil
+}
+
+// SubmitBatch implements components.PublicTxEngine.
+func (f *fakePublicTxEngine) SubmitBatch(ctx context.Context, preparedSubmissions []components.PreparedSubmission) ([]*components.PublicTX, error) {
+	publicTransactions := make([]*components.PublicTX, 0, len(preparedSubmissions))
+
+	for _, _ = range preparedSubmissions {
+		publicTransactions = append(publicTransactions, &components.PublicTX{
+			ID: uuid.New().String(),
+		})
+	}
+	return publicTransactions, nil
+}
+
+func newFakePublicTxEngine(t *testing.T) components.PublicTxEngine {
+	return &fakePublicTxEngine{
+		t: t,
+	}
+}
+
+func newEngineForTestingWithFakePublicTxEngine(t *testing.T, domainAddress *tktypes.EthAddress, fakePublicTxEngine components.PublicTxEngine) (Engine, *dependencyMocks) {
 
 	ctx := context.Background()
 	mocks := &dependencyMocks{
@@ -803,14 +900,13 @@ func newEngineForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (Engin
 		stateStore:           componentmocks.NewStateStore(t),
 		keyManager:           componentmocks.NewKeyManager(t),
 		publicTxManager:      componentmocks.NewPublicTxManager(t),
-		publicTxEngine:       componentmocks.NewPublicTxEngine(t),
 	}
 	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
 	mocks.allComponents.On("TransportManager").Return(mocks.transportManager).Maybe()
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.allComponents.On("PublicTxManager").Return(mocks.publicTxManager).Maybe()
-	mocks.publicTxManager.On("GetEngine").Return(mocks.publicTxEngine).Maybe()
+	mocks.publicTxManager.On("GetEngine").Return(fakePublicTxEngine).Maybe()
 	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
 	mocks.allComponents.On("Persistence").Return(persistence.NewUnitTestPersistence(ctx)).Maybe()
 
@@ -834,5 +930,11 @@ func timeTillDeadline(t *testing.T) time.Duration {
 		//there was no -timeout flag, default to 10 seconds
 		deadline = time.Now().Add(10 * time.Second)
 	}
-	return time.Until(deadline)
+	timeRemaining := time.Until(deadline)
+	//Need to leave some time to ensure that polling assertions fail before the test itself timesout
+	//otherwise we don't see diagnostic info for things like GoExit called by mocks etc
+	if timeRemaining < 100*time.Millisecond {
+		return 0
+	}
+	return timeRemaining - 100*time.Millisecond
 }
