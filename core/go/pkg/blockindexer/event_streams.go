@@ -221,7 +221,7 @@ func (bi *blockIndexer) startEventStreams() {
 	bi.eventStreamsLock.Lock()
 	defer bi.eventStreamsLock.Unlock()
 	for _, es := range bi.eventStreams {
-		log.L(es.ctx).Infof("Starting event stream %s", es.definition.ID)
+		log.L(bi.parentCtxForReset).Infof("Starting event stream %s [%s]", es.definition.Name, es.definition.ID)
 		es.start()
 	}
 }
@@ -293,7 +293,7 @@ func (bi *blockIndexer) getHighestIndexedBlock(ctx context.Context) (*int64, err
 func (es *eventStream) detector() {
 	defer close(es.detectorDone)
 
-	log.L(es.ctx).Debugf("Detector started for event stream %s", es.definition.ID)
+	log.L(es.ctx).Debugf("Detector started for event stream %s [%s]", es.definition.Name, es.definition.ID)
 
 	// This routine reads the checkpoint on startup, and maintains its view in memory,
 	// but never writes it back.
@@ -396,7 +396,7 @@ func (es *eventStream) sendToDispatcher(event *EventWithData, lastInBlock bool) 
 func (es *eventStream) dispatcher() {
 	defer close(es.dispatcherDone)
 
-	log.L(es.ctx).Debugf("Dispatcher started for event stream %s", es.definition.ID)
+	log.L(es.ctx).Debugf("Dispatcher started for event stream %s [%s]", es.definition.Name, es.definition.ID)
 
 	l := log.L(es.ctx)
 	var batch *eventBatch
