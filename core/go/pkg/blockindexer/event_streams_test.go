@@ -57,7 +57,6 @@ func TestInternalEventStreamDeliveryAtHead(t *testing.T) {
 	// This test uses a real DB, includes the full block indexer, but simulates the blockchain.
 	_, bi, mRPC, blDone := newTestBlockIndexer(t)
 	defer blDone()
-	bi.utBatchNotify = nil // we only care about the blocks
 
 	// Mock up the block calls to the blockchain for 15 blocks
 	blocks, receipts := testBlockArray(t, 15)
@@ -130,7 +129,6 @@ func TestInternalEventStreamDeliveryAtHeadWithSourceAddress(t *testing.T) {
 	// This test uses a real DB, includes the full block indexer, but simulates the blockchain.
 	_, bi, mRPC, blDone := newTestBlockIndexer(t)
 	defer blDone()
-	bi.utBatchNotify = nil // we only care about the blocks
 
 	sourceContractAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
 
@@ -225,12 +223,29 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 	}
 
 	// Do a full start now without a block listener, and wait for the ut notification of all the blocks
-	err := bi.Start()
+	utBatchNotify := make(chan []*IndexedBlock)
+	preCommitCount := 0
+	err := bi.Start(&InternalEventStream{
+		Type: IESTypePostCommitHandler,
+		PostCommitHandler: func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+			utBatchNotify <- blocks
+		},
+	}, &InternalEventStream{
+		Type: IESTypePreCommitHandler,
+		PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) error {
+			// Return an error once to drive a retry
+			preCommitCount++
+			if preCommitCount == 0 {
+				return fmt.Errorf("pop")
+			}
+			return nil
+		},
+	})
 	require.NoError(t, err)
 	for i := 0; i < len(blocks); i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1)
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifyBlocks := <-utBatchNotify
+		assert.Len(t, notifyBlocks, 1)
+		checkIndexedBlockEqual(t, blocks[i], notifyBlocks[0])
 	}
 
 	// Add a listener

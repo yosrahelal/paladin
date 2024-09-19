@@ -118,7 +118,6 @@ func newTestBlockIndexerConf(t *testing.T, config *Config) (context.Context, *bl
 	blockListener, mRPC := newTestBlockListenerConf(t, ctx, config)
 	bi, err := newBlockIndexer(ctx, config, p, blockListener)
 	require.NoError(t, err)
-	bi.utBatchNotify = make(chan *blockWriterBatch)
 	return ctx, bi, mRPC, func() {
 		r := recover()
 		if r != nil {
@@ -296,6 +295,11 @@ func TestNewBlockIndexerRestoreCheckpointFail(t *testing.T) {
 	require.NoError(t, p.Mock.ExpectationsWereMet())
 }
 
+func checkIndexedBlockEqual(t *testing.T, expected *BlockInfoJSONRPC, indexed *IndexedBlock) {
+	assert.Equal(t, expected.Hash.String(), indexed.Hash.String())
+	assert.Equal(t, expected.Number.Uint64(), uint64(indexed.Number))
+}
+
 func TestBlockIndexerCatchUpToHeadFromZeroNoConfirmations(t *testing.T) {
 	_, bi, mRPC, blDone := newTestBlockIndexer(t)
 	defer blDone()
@@ -304,12 +308,18 @@ func TestBlockIndexerCatchUpToHeadFromZeroNoConfirmations(t *testing.T) {
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 
 	bi.requiredConfirmations = 0
+
+	utBatchNotify := make(chan []*IndexedBlock)
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+		utBatchNotify <- blocks
+	})
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocks); i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 }
 
@@ -324,12 +334,18 @@ func TestBlockIndexerBatchTimeoutOne(t *testing.T) {
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 
 	bi.requiredConfirmations = 0
+
+	utBatchNotify := make(chan []*IndexedBlock)
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+		utBatchNotify <- blocks
+	})
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocks); i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 }
 
@@ -341,12 +357,18 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 
 	bi.requiredConfirmations = 5
+
+	utBatchNotify := make(chan []*IndexedBlock)
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+		utBatchNotify <- blocks
+	})
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocks)-bi.requiredConfirmations; i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 
 		// Get the block
 		indexedBlock, err := bi.GetIndexedBlockByNumber(ctx, blocks[i].Number.Uint64())
@@ -439,6 +461,11 @@ func TestBlockIndexerListenFromCurrentBlock(t *testing.T) {
 	_, err := bi.GetConfirmedBlockHeight(ctx)
 	assert.Regexp(t, "PD011308", err)
 
+	utBatchNotify := make(chan []*IndexedBlock)
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+		utBatchNotify <- blocks
+	})
+
 	// do not start block listener
 	bi.startOrReset()
 
@@ -455,9 +482,9 @@ func TestBlockIndexerListenFromCurrentBlock(t *testing.T) {
 	bi.blockListener.notifyBlock(blocks[1])
 
 	for i := 5; i < len(blocks)-bi.requiredConfirmations; i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 
 	ch, err := bi.GetConfirmedBlockHeight(ctx)
@@ -492,6 +519,11 @@ func TestBatching(t *testing.T) {
 
 	bi.batchSize = 5
 
+	utBatchNotify := make(chan []*IndexedBlock)
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+		utBatchNotify <- blocks
+	})
+
 	bi.startOrReset() // do not start block listener
 
 	// Notify starting at block 5
@@ -503,10 +535,10 @@ func TestBatching(t *testing.T) {
 	bi.blockListener.notifyBlock(blocks[1])
 
 	for i := 0; i < len(blocks)-bi.requiredConfirmations; i += 5 {
-		batch := <-bi.utBatchNotify
-		assert.Len(t, batch.blocks, 5)
-		for i2, b := range batch.blocks {
-			assert.Equal(t, blocks[i+i2], b)
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 5)
+		for i2, b := range notifiedBlocks {
+			checkIndexedBlockEqual(t, blocks[i+i2], b)
 		}
 	}
 }
@@ -637,19 +669,22 @@ func testBlockIndexerHandleReorgInConfirmationWindow(t *testing.T, blockLenBefor
 		}
 	})
 
+	utBatchNotify := make(chan []*IndexedBlock)
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+		utBatchNotify <- blocks
+	})
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocksAfterReorg)-bi.requiredConfirmations; i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
 		if i >= overlap && i < (dangerArea-reqConf) {
 			// This would be a bad situation in reality, where a reorg crossed the confirmations
 			// boundary. An indication someone incorrectly configured their confirmations
-			assert.Equal(t, b.blocks[0].Hash.String(), blocksBeforeReorg[i].Hash.String())
-			assert.Equal(t, b.blocks[0].Number, blocksBeforeReorg[i].Number)
+			checkIndexedBlockEqual(t, blocksBeforeReorg[i], notifiedBlocks[0])
 		} else {
-			assert.Equal(t, b.blocks[0].Hash.String(), blocksAfterReorg[i].Hash.String())
-			assert.Equal(t, b.blocks[0].Number, blocksAfterReorg[i].Number)
+			checkIndexedBlockEqual(t, blocksAfterReorg[i], notifiedBlocks[0])
 		}
 	}
 	// Wait for the notifications to go through
@@ -682,12 +717,17 @@ func TestBlockIndexerHandleRandomConflictingBlockNotification(t *testing.T) {
 		return blocks, receipts
 	})
 
+	utBatchNotify := make(chan []*IndexedBlock)
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+		utBatchNotify <- blocks
+	})
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocks)-bi.requiredConfirmations; i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 }
 
@@ -709,12 +749,17 @@ func TestBlockIndexerResetsAfterHashLookupFail(t *testing.T) {
 		return blocks, receipts
 	})
 
+	utBatchNotify := make(chan []*IndexedBlock)
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+		utBatchNotify <- blocks
+	})
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocks); i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 
 	assert.True(t, sentFail)
@@ -728,6 +773,11 @@ func TestBlockIndexerDispatcherFallsBehindHead(t *testing.T) {
 
 	blocks, receipts := testBlockArray(t, 30)
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
+
+	utBatchNotify := make(chan []*IndexedBlock)
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+		utBatchNotify <- blocks
+	})
 
 	bi.startOrReset() // do not start block listener
 
@@ -744,9 +794,9 @@ func TestBlockIndexerDispatcherFallsBehindHead(t *testing.T) {
 	}
 
 	for i := 0; i < len(blocks)-bi.requiredConfirmations; i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 
 }
@@ -866,12 +916,17 @@ func TestBlockIndexerWaitForTransactionSuccess(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
+	utBatchNotify := make(chan []*IndexedBlock)
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+		utBatchNotify <- blocks
+	})
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocks); i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 
 	<-gotTX
@@ -913,12 +968,17 @@ func TestBlockIndexerWaitForTransactionRevert(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
+	utBatchNotify := make(chan []*IndexedBlock)
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+		utBatchNotify <- blocks
+	})
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocks); i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 
 	<-gotTX
