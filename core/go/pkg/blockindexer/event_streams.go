@@ -85,7 +85,7 @@ func (bi *blockIndexer) loadEventStreams(ctx context.Context) error {
 	}
 
 	for _, esDefinition := range eventStreams {
-		bi.initEventStream(esDefinition, nil /* no handler at this point */)
+		bi.initEventStream(ctx, esDefinition, nil /* no handler at this point */)
 	}
 	return nil
 }
@@ -157,13 +157,13 @@ func (bi *blockIndexer) upsertInternalEventStream(ctx context.Context, ies *Inte
 
 	// We call init here
 	// TODO: Full stop/start lifecycle
-	es := bi.initEventStream(def, ies.Handler)
+	es := bi.initEventStream(ctx, def, ies.Handler)
 
 	return es, nil
 }
 
 // Note that the event stream must be stopped when this is called
-func (bi *blockIndexer) initEventStream(definition *EventStream, handler InternalStreamCallback) *eventStream {
+func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventStream, handler InternalStreamCallback) *eventStream {
 	bi.eventStreamsLock.Lock()
 	defer bi.eventStreamsLock.Unlock()
 
@@ -191,7 +191,15 @@ func (bi *blockIndexer) initEventStream(definition *EventStream, handler Interna
 	// Note the handler will be nil when this is first called on startup before we've been passed handlers.
 	es.handler = handler
 
+	location := "*"
+	if definition.Source != nil {
+		source := *definition.Source
+		es.definition.Source = &source
+		location = source.String()
+	}
+
 	// Calculate all the signatures we require
+	sigStrings := []string{}
 	for _, abiEntry := range definition.ABI {
 		if abiEntry.Type == abi.Event {
 			sig := tktypes.NewBytes32FromSlice(abiEntry.SignatureHashBytes())
@@ -199,10 +207,12 @@ func (bi *blockIndexer) initEventStream(definition *EventStream, handler Interna
 			es.eventABIs = append(es.eventABIs, abiEntry)
 			if _, dup := es.signatures[sigStr]; !dup {
 				es.signatures[sigStr] = true
+				sigStrings = append(sigStrings, sigStr)
 				es.signatureList = append(es.signatureList, sig)
 			}
 		}
 	}
+	log.L(ctx).Infof("Event stream %s configured on sourceMatch=%s signatures: %s", es.definition.ID, location, sigStrings)
 
 	// ok - all looks good, put ourselves in the blockindexer list
 	bi.eventStreams[definition.ID] = es
