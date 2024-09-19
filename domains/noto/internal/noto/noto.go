@@ -75,6 +75,14 @@ type gatheredCoins struct {
 	outTotal  *big.Int
 }
 
+func getEventSignature(ctx context.Context, abi abi.ABI, eventName string) (string, error) {
+	event := abi.Events()[eventName]
+	if event == nil {
+		return "", i18n.NewError(ctx, msgs.MsgUnknownEvent, eventName)
+	}
+	return event.SolString(), nil
+}
+
 func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
 	err := json.Unmarshal([]byte(req.ConfigJson), &n.config)
 	if err != nil {
@@ -88,11 +96,10 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	n.factoryABI = factory.ABI
 	n.contractABI = contract.ABI
 
-	transferEvent := contract.ABI.Events()["NotoTransfer"]
-	if transferEvent == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgUnknownEvent, "NotoTransfer")
+	n.transferSignature, err = getEventSignature(ctx, contract.ABI, "NotoTransfer")
+	if err != nil {
+		return nil, err
 	}
-	n.transferSignature = transferEvent.SolString()
 
 	schemaJSON, err := json.Marshal(types.NotoCoinABI)
 	if err != nil {
@@ -417,10 +424,15 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 			var transfer NotoTransfer_Event
 			if err := json.Unmarshal(ev.Data, &transfer); err == nil {
 				txID := n.decodeTransferData(transfer.Data)
+				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
 				res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(txID, transfer.Inputs)...)
 				res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(txID, transfer.Outputs)...)
 			}
 		}
 	}
 	return &res, nil
+}
+
+func (n *Noto) TransactionComplete(ctx context.Context, req *prototk.TransactionCompleteRequest) (*prototk.TransactionCompleteResponse, error) {
+	return nil, nil
 }

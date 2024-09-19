@@ -34,6 +34,7 @@ type DomainAPI interface {
 	EndorseTransaction(context.Context, *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error)
 	PrepareTransaction(context.Context, *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error)
 	HandleEventBatch(context.Context, *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error)
+	TransactionComplete(context.Context, *prototk.TransactionCompleteRequest) (*prototk.TransactionCompleteResponse, error)
 }
 
 type DomainCallbacks interface {
@@ -159,6 +160,10 @@ func (dp *domainHandler) RequestToPlugin(ctx context.Context, iReq PluginMessage
 		resMsg := &prototk.DomainMessage_HandleEventBatchRes{}
 		resMsg.HandleEventBatchRes, err = dp.api.HandleEventBatch(ctx, input.HandleEventBatch)
 		res.ResponseFromDomain = resMsg
+	case *prototk.DomainMessage_TransactionComplete:
+		resMsg := &prototk.DomainMessage_TransactionCompleteRes{}
+		resMsg.TransactionCompleteRes, err = dp.api.TransactionComplete(ctx, input.TransactionComplete)
+		res.ResponseFromDomain = resMsg
 	default:
 		err = i18n.NewError(ctx, tkmsgs.MsgPluginUnsupportedRequest, input)
 	}
@@ -208,6 +213,7 @@ type DomainAPIFunctions struct {
 	EndorseTransaction  func(context.Context, *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error)
 	PrepareTransaction  func(context.Context, *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error)
 	HandleEventBatch    func(context.Context, *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error)
+	TransactionComplete func(context.Context, *prototk.TransactionCompleteRequest) (*prototk.TransactionCompleteResponse, error)
 }
 
 type DomainAPIBase struct {
@@ -248,4 +254,8 @@ func (db *DomainAPIBase) PrepareTransaction(ctx context.Context, req *prototk.Pr
 
 func (db *DomainAPIBase) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
 	return callPluginImpl(ctx, req, db.Functions.HandleEventBatch)
+}
+
+func (db *DomainAPIBase) TransactionComplete(ctx context.Context, req *prototk.TransactionCompleteRequest) (*prototk.TransactionCompleteResponse, error) {
+	return callPluginImpl(ctx, req, db.Functions.TransactionComplete)
 }

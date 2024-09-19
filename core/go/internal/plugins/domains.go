@@ -228,3 +228,18 @@ func (br *domainBridge) HandleEventBatch(ctx context.Context, req *prototk.Handl
 	)
 	return
 }
+
+func (br *domainBridge) TransactionComplete(ctx context.Context, req *prototk.TransactionCompleteRequest) (res *prototk.TransactionCompleteResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_TransactionComplete{TransactionComplete: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_TransactionCompleteRes); ok {
+				res = r.TransactionCompleteRes
+			}
+			return res != nil
+		},
+	)
+	return
+}

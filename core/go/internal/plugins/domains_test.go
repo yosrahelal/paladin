@@ -169,6 +169,16 @@ func TestDomainRequestsOK(t *testing.T) {
 				},
 			}, nil
 		},
+		HandleEventBatch: func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+			assert.Equal(t, "batch1", req.BatchId)
+			return &prototk.HandleEventBatchResponse{
+				TransactionsComplete: []string{"tx2_complete"},
+			}, nil
+		},
+		TransactionComplete: func(ctx context.Context, req *prototk.TransactionCompleteRequest) (*prototk.TransactionCompleteResponse, error) {
+			assert.Equal(t, "tx2_complete", req.TransactionId)
+			return nil, nil
+		},
 	}
 
 	tdm := &testDomainManager{
@@ -276,6 +286,18 @@ func TestDomainRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, `{"test": "value"}`, ptr.Transaction.ParamsJson)
+
+	her, err := domainAPI.HandleEventBatch(ctx, &prototk.HandleEventBatchRequest{
+		BatchId: "batch1",
+	})
+	require.NoError(t, err)
+	assert.Len(t, her.TransactionsComplete, 1)
+	assert.Equal(t, "tx2_complete", her.TransactionsComplete[0])
+
+	_, err = domainAPI.TransactionComplete(ctx, &prototk.TransactionCompleteRequest{
+		TransactionId: "tx2_complete",
+	})
+	require.NoError(t, err)
 
 	callbacks := <-waitForCallbacks
 

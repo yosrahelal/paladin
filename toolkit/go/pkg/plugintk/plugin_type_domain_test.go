@@ -254,6 +254,23 @@ func TestDomainFunction_HandleEventBatch(t *testing.T) {
 	})
 }
 
+func TestDomainFunction_TransactionConfirmed(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// TransactionComplete - paladin to domain
+	funcs.TransactionComplete = func(ctx context.Context, cdr *prototk.TransactionCompleteRequest) (*prototk.TransactionCompleteResponse, error) {
+		return &prototk.TransactionCompleteResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_TransactionComplete{
+			TransactionComplete: &prototk.TransactionCompleteRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_TransactionCompleteRes{}, res.ResponseFromDomain)
+	})
+}
+
 func TestDomainRequestError(t *testing.T) {
 	_, exerciser, _, _, _, done := setupDomainTests(t)
 	defer done()
