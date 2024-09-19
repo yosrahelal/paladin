@@ -71,7 +71,7 @@ func (e *engine) Stop() {
 	panic("unimplemented")
 }
 
-func NewEngine(nodeID string) components.PrivateTxMgr {
+func NewEngine(nodeID string) components.PrivateTxManager {
 	return &engine{
 		orchestrators:        make(map[string]*Orchestrator),
 		endorsementGatherers: make(map[string]ptmgrtypes.EndorsementGatherer),

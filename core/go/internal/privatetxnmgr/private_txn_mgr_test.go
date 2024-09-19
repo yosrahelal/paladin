@@ -763,7 +763,7 @@ func TestEngineMiniLoad(t *testing.T) {
 	}
 }
 
-func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, engine components.PrivateTxMgr, domainAddressString, txID string, duration time.Duration) string {
+func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, engine components.PrivateTxManager, domainAddressString, txID string, duration time.Duration) string {
 	timeout := time.After(duration)
 	tick := time.Tick(100 * time.Millisecond)
 
@@ -797,7 +797,7 @@ type dependencyMocks struct {
 	publicTxEngine       *componentmocks.PublicTxEngine
 }
 
-func newEngineForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (components.PrivateTxMgr, *dependencyMocks) {
+func newEngineForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (components.PrivateTxManager, *dependencyMocks) {
 	// by default create a mock publicTxEngine if no fake was provided
 	fakePublicTxEngine := componentmocks.NewPublicTxEngine(t)
 	engine, mocks := newEngineForTestingWithFakePublicTxEngine(t, domainAddress, fakePublicTxEngine)
@@ -883,7 +883,7 @@ func newFakePublicTxEngine(t *testing.T) components.PublicTxEngine {
 	}
 }
 
-func newEngineForTestingWithFakePublicTxEngine(t *testing.T, domainAddress *tktypes.EthAddress, fakePublicTxEngine components.PublicTxEngine) (components.PrivateTxMgr, *dependencyMocks) {
+func newEngineForTestingWithFakePublicTxEngine(t *testing.T, domainAddress *tktypes.EthAddress, fakePublicTxEngine components.PublicTxEngine) (components.PrivateTxManager, *dependencyMocks) {
 
 	ctx := context.Background()
 	mocks := &dependencyMocks{

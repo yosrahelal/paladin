@@ -36,7 +36,7 @@ type PrivateTxStatus struct {
 	Status string `json:"status"`
 }
 
-type PrivateTxMgr interface {
+type PrivateTxManager interface {
 	Engine
 
 	//Synchronous functions to submit a new private transaction
