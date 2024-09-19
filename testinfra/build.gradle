@@ -31,7 +31,7 @@ task startTestInfra(type: DockerCompose, dependsOn: tasks.besuBootstrapTool) {
 task stopTestInfra(type: DockerCompose) {
     composeFile 'docker-compose-test.yml'
     projectName 'paladin-testinfra'
-    args 'down'
+    args 'down', '-v'
 }
 
 task removeBesuBootstrapTool(type: Exec, dependsOn: stopTestInfra) {
@@ -42,6 +42,5 @@ task removeBesuBootstrapTool(type: Exec, dependsOn: stopTestInfra) {
 }
 
 task clean(type: Delete, dependsOn: [tasks.removeBesuBootstrapTool, tasks.stopTestInfra]) {
-    
 }
 
