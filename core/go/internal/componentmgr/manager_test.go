@@ -29,6 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/internal/transportmgr"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/signer/api"
@@ -37,6 +38,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestInitOK(t *testing.T) {
@@ -198,6 +200,30 @@ func TestStartOK(t *testing.T) {
 
 	cm.Stop()
 	require.NoError(t, err)
+}
+
+func TestBuildInternalEventStreamsPreCommitPostCommit(t *testing.T) {
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &Config{}, nil).(*componentManager)
+	cm.initResults = map[string]*components.ManagerInitResult{
+		"utengine": {
+			EventStreams: []*components.ManagerEventStream{
+				{Type: blockindexer.IESTypePreCommitHandler, PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*blockindexer.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) error {
+					return nil
+				}},
+				{Type: blockindexer.IESTypePostCommitHandler, PostCommitHandler: func(ctx context.Context, blocks []*blockindexer.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) {
+				}},
+			},
+		},
+	}
+
+	streams, err := cm.buildInternalEventStreams()
+	assert.NoError(t, err)
+	assert.Len(t, streams, 2)
+	assert.Equal(t, blockindexer.IESTypePreCommitHandler, streams[0].Type)
+	assert.NotNil(t, streams[0].PreCommitHandler)
+	assert.Equal(t, blockindexer.IESTypePostCommitHandler, streams[1].Type)
+	assert.NotNil(t, streams[1].PostCommitHandler)
+
 }
 
 func TestBuildInternalEventStreamsError(t *testing.T) {

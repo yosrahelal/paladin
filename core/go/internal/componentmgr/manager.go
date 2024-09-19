@@ -283,22 +283,31 @@ func (cm *componentManager) buildInternalEventStreams() ([]*blockindexer.Interna
 	var streams []*blockindexer.InternalEventStream
 	for shortName, initResult := range cm.initResults {
 		for _, initStream := range initResult.EventStreams {
-			// We build a stream name in a way assured to result in a new stream if the ABI changes,
-			// TODO... and in the future with a logical way to clean up defunct streams
-			streamHash, err := tktypes.ABISolDefinitionHash(cm.bgCtx, initStream.ABI)
-			if err != nil {
-				return nil, err
+			switch initStream.Type {
+			case blockindexer.IESTypeEventStream:
+				// We build a stream name in a way assured to result in a new stream if the ABI changes,
+				// TODO... and in the future with a logical way to clean up defunct streams
+				streamHash, err := tktypes.ABISolDefinitionHash(cm.bgCtx, initStream.ABI)
+				if err != nil {
+					return nil, err
+				}
+				streamName := fmt.Sprintf("i_%s_%s", shortName, streamHash)
+				streams = append(streams, &blockindexer.InternalEventStream{
+					Definition: &blockindexer.EventStream{
+						Name:   streamName,
+						Type:   blockindexer.EventStreamTypeInternal.Enum(),
+						ABI:    initStream.ABI,
+						Source: initStream.Source,
+					},
+					Handler: initStream.Handler,
+				})
+			default:
+				streams = append(streams, &blockindexer.InternalEventStream{
+					Type:              initStream.Type,
+					PreCommitHandler:  initStream.PreCommitHandler,
+					PostCommitHandler: initStream.PostCommitHandler,
+				})
 			}
-			streamName := fmt.Sprintf("i_%s_%s", shortName, streamHash)
-			streams = append(streams, &blockindexer.InternalEventStream{
-				Definition: &blockindexer.EventStream{
-					Name:   streamName,
-					Type:   blockindexer.EventStreamTypeInternal.Enum(),
-					ABI:    initStream.ABI,
-					Source: initStream.Source,
-				},
-				Handler: initStream.Handler,
-			})
 		}
 
 	}
