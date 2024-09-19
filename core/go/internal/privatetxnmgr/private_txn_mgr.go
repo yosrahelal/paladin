@@ -43,35 +43,31 @@ type engine struct {
 	ctxCancel            func()
 	orchestrators        map[string]*Orchestrator
 	endorsementGatherers map[string]ptmgrtypes.EndorsementGatherer
-	components           components.PreInitComponentsAndManagers
+	components           components.AllComponents
 	nodeID               string
 	subscribers          []components.PrivateTxEventSubscriber
 	subscribersLock      sync.Mutex
 }
 
 // Init implements Engine.
-func (e *engine) Init(c components.PreInitComponentsAndManagers) (*components.ManagerInitResult, error) {
-	e.components = c
+func (e *engine) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
 	return &components.ManagerInitResult{}, nil
 }
 
-// Name implements Engine.
-func (e *engine) EngineName() string {
-	return "Kata Engine"
+func (e *engine) PostInit(c components.AllComponents) error {
+	e.components = c
+	return nil
 }
 
-// Start implements Engine.
 func (e *engine) Start() error {
 	e.ctx, e.ctxCancel = context.WithCancel(context.Background())
 	return nil
 }
 
-// Stop implements Engine.
 func (e *engine) Stop() {
-	panic("unimplemented")
 }
 
-func NewEngine(nodeID string) components.PrivateTxManager {
+func NewPrivateTransactionMgr(ctx context.Context, nodeID string, config *Config) components.PrivateTxManager {
 	return &engine{
 		orchestrators:        make(map[string]*Orchestrator),
 		endorsementGatherers: make(map[string]ptmgrtypes.EndorsementGatherer),

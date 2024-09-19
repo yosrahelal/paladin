@@ -44,15 +44,6 @@ const (
 	OrchestratorSection = "orchestrator"
 )
 
-type OrchestratorConfig struct {
-	MaxConcurrentProcess    *int    `yaml:"maxConcurrentProcess,omitempty"`
-	MaxPendingEvents        *int    `yaml:"maxPendingEvents,omitempty"`
-	StageRetry              *string `yaml:"stageRetry,omitempty"`
-	EvaluationInterval      *string `yaml:"evalInterval,omitempty"`
-	PersistenceRetryTimeout *string `yaml:"persistenceRetryTimeout,omitempty"`
-	StaleTimeout            *string `yaml:"staleTimeout,omitempty"`
-}
-
 // metrics
 
 // Gauge metrics
@@ -92,7 +83,6 @@ var AllOrchestratorStates = []string{
 
 type Orchestrator struct {
 	ctx                     context.Context
-	stageRetryTimeout       time.Duration
 	persistenceRetryTimeout time.Duration
 
 	// each orchestrator has its own go routine
@@ -133,7 +123,6 @@ type Orchestrator struct {
 
 var orchestratorConfigDefault = OrchestratorConfig{
 	MaxConcurrentProcess:    confutil.P(500),
-	StageRetry:              confutil.P("5s"),
 	EvaluationInterval:      confutil.P("5m"),
 	PersistenceRetryTimeout: confutil.P("5s"),
 	StaleTimeout:            confutil.P("10m"),
@@ -152,10 +141,9 @@ func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string,
 		stateEntryTime:       time.Now(),
 
 		incompleteTxSProcessMap: make(map[string]ptmgrtypes.TxProcessor),
-		stageRetryTimeout:       confutil.DurationMin(oc.StageRetry, 1*time.Millisecond, *orchestratorConfigDefault.StageRetry),
 		persistenceRetryTimeout: confutil.DurationMin(oc.PersistenceRetryTimeout, 1*time.Millisecond, *orchestratorConfigDefault.PersistenceRetryTimeout),
 
-		staleTimeout:                 confutil.DurationMin(oc.StaleTimeout, 1*time.Millisecond, *orchestratorConfigDefault.StageRetry),
+		staleTimeout:                 confutil.DurationMin(oc.StaleTimeout, 1*time.Millisecond, *orchestratorConfigDefault.StaleTimeout),
 		processedTxIDs:               make(map[string]bool),
 		orchestrationEvalRequestChan: make(chan bool, 1),
 		stopProcess:                  make(chan bool, 1),

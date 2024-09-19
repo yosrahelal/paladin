@@ -25,6 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/domainmgr"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr"
 	"github.com/kaleido-io/paladin/core/internal/registrymgr"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
@@ -155,6 +156,12 @@ func (cm *componentManager) Init() (err error) {
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
 	}*/
 
+	if err == nil {
+		cm.privateTxManager = privatetxnmgr.NewPrivateTransactionMgr(cm.bgCtx, cm.instanceUUID.String(), &cm.conf.PrivateTxManager)
+		cm.initResults["private_tx_mgr"], err = cm.privateTxManager.PreInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
+	}
+
 	// init engine
 	if err == nil {
 		cm.initResults[cm.engine.EngineName()], err = cm.engine.Init(cm)
@@ -186,6 +193,11 @@ func (cm *componentManager) Init() (err error) {
 		err = cm.publicTxManager.PostInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
 	}*/
+
+	if err == nil {
+		err = cm.privateTxManager.PostInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
+	}
 
 	return err
 }

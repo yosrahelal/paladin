@@ -47,19 +47,17 @@ import (
 
 func TestEngineInit(t *testing.T) {
 
-	engine, mocks := newEngineForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
-	initResult, err := engine.Init(mocks.allComponents)
+	engine, mocks := NewPrivateTransactionMgrForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
+	err := engine.PostInit(mocks.allComponents)
 	require.NoError(t, err)
-	assert.NotNil(t, initResult)
 }
 
 func TestEngineInvalidTransaction(t *testing.T) {
 	ctx := context.Background()
 
-	engine, mocks := newEngineForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
-	initResult, err := engine.Init(mocks.allComponents)
+	engine, mocks := NewPrivateTransactionMgrForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
+	err := engine.PostInit(mocks.allComponents)
 	require.NoError(t, err)
-	assert.NotNil(t, initResult)
 
 	err = engine.Start()
 	require.NoError(t, err)
@@ -75,7 +73,7 @@ func TestEngineSimpleTransaction(t *testing.T) {
 	ctx := context.Background()
 
 	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-	engine, mocks := newEngineForTesting(t, domainAddress)
+	engine, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
 
 	domainAddressString := domainAddress.String()
 
@@ -192,10 +190,10 @@ func TestEngineRemoteEndorser(t *testing.T) {
 	ctx := context.Background()
 
 	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-	engine, mocks := newEngineForTesting(t, domainAddress)
+	engine, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
 	domainAddressString := domainAddress.String()
 
-	remoteEngine, remoteEngineMocks := newEngineForTesting(t, domainAddress)
+	remoteEngine, remoteEngineMocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
 
 	initialised := make(chan struct{}, 1)
 	mocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
@@ -323,8 +321,7 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	ctx := context.Background()
 
 	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-	engine, mocks := newEngineForTesting(t, domainAddress)
-	assert.Equal(t, "Kata Engine", engine.EngineName())
+	engine, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
 
 	domainAddressString := domainAddress.String()
 	mocks.keyManager.On("ResolveKey", mock.Anything, "alice", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("aliceKeyHandle", "aliceVerifier", nil)
@@ -555,9 +552,9 @@ func TestEngineMiniLoad(t *testing.T) {
 			ctx := context.Background()
 
 			domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-			engine, mocks := newEngineForTestingWithFakePublicTxEngine(t, domainAddress, newFakePublicTxEngine(t))
+			engine, mocks := NewPrivateTransactionMgrForTestingWithFakePublicTxEngine(t, domainAddress, newFakePublicTxEngine(t))
 
-			remoteEngine, remoteEngineMocks := newEngineForTestingWithFakePublicTxEngine(t, domainAddress, newFakePublicTxEngine(t))
+			remoteEngine, remoteEngineMocks := NewPrivateTransactionMgrForTestingWithFakePublicTxEngine(t, domainAddress, newFakePublicTxEngine(t))
 
 			dependenciesByTransactionID := make(map[string][]string) // populated during assembly stage
 			nonceByTransactionID := make(map[string]uint64)          // populated when dispatch event recieved and used later to check that the nonce order matchs the dependency order
@@ -797,10 +794,11 @@ type dependencyMocks struct {
 	publicTxEngine       *componentmocks.PublicTxEngine
 }
 
-func newEngineForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (components.PrivateTxManager, *dependencyMocks) {
+// For Black box testing we return components.PrivateTxManager
+func NewPrivateTransactionMgrForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (components.PrivateTxManager, *dependencyMocks) {
 	// by default create a mock publicTxEngine if no fake was provided
 	fakePublicTxEngine := componentmocks.NewPublicTxEngine(t)
-	engine, mocks := newEngineForTestingWithFakePublicTxEngine(t, domainAddress, fakePublicTxEngine)
+	engine, mocks := NewPrivateTransactionMgrForTestingWithFakePublicTxEngine(t, domainAddress, fakePublicTxEngine)
 	mocks.publicTxEngine = fakePublicTxEngine
 	return engine, mocks
 }
@@ -883,7 +881,7 @@ func newFakePublicTxEngine(t *testing.T) components.PublicTxEngine {
 	}
 }
 
-func newEngineForTestingWithFakePublicTxEngine(t *testing.T, domainAddress *tktypes.EthAddress, fakePublicTxEngine components.PublicTxEngine) (components.PrivateTxManager, *dependencyMocks) {
+func NewPrivateTransactionMgrForTestingWithFakePublicTxEngine(t *testing.T, domainAddress *tktypes.EthAddress, fakePublicTxEngine components.PublicTxEngine) (components.PrivateTxManager, *dependencyMocks) {
 
 	ctx := context.Background()
 	mocks := &dependencyMocks{
@@ -911,9 +909,8 @@ func newEngineForTestingWithFakePublicTxEngine(t *testing.T, domainAddress *tkty
 		assert.NoError(t, err)
 	}).Maybe().Return(nil)
 
-	e := NewEngine(tktypes.RandHex(16))
-	r, err := e.Init(mocks.allComponents)
-	assert.NotNil(t, r)
+	e := NewPrivateTransactionMgr(ctx, tktypes.RandHex(16), &Config{})
+	err := e.PostInit(mocks.allComponents)
 	assert.NoError(t, err)
 	return e, mocks
 
