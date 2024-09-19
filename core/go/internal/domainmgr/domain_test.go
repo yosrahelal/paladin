@@ -109,6 +109,25 @@ const fakeCoinFactoryNewInstanceABI = `{
 	"outputs": null
 }`
 
+const fakeCoinEventsABI = `[{
+	"type": "event",
+    "name": "Transfer",
+	"inputs": [
+		{
+			"name": "inputs",
+			"type": "bytes32[]"
+		},
+		{
+			"name": "outputs",
+			"type": "bytes32[]"
+		},
+		{
+			"name": "data",
+			"type": "bytes"
+		}
+	]
+}]`
+
 type fakeState struct {
 	Salt   tktypes.Bytes32      `json:"salt"`
 	Owner  tktypes.EthAddress   `json:"owner"`
@@ -215,6 +234,25 @@ func TestDomainInitStates(t *testing.T) {
 
 }
 
+func TestDomainInitStatesWithEvents(t *testing.T) {
+
+	domainConf := goodDomainConf()
+	domainConf.AbiEventsJson = fakeCoinEventsABI
+	ctx, dm, tp, done := newTestDomain(t, true, domainConf, func(mc *mockComponents) {
+		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything).Return(nil, nil)
+	})
+	defer done()
+
+	assert.Nil(t, tp.d.initError.Load())
+	assert.True(t, tp.initialized.Load())
+	byAddr, err := dm.getDomainByAddress(ctx, tp.d.RegistryAddress())
+	require.NoError(t, err)
+	assert.Equal(t, tp.d, byAddr)
+	assert.True(t, tp.d.Initialized())
+	assert.NotNil(t, tp.d.Configuration().BaseLedgerSubmitConfig)
+
+}
+
 func TestDoubleRegisterReplaces(t *testing.T) {
 
 	domainConf := goodDomainConf()
@@ -249,6 +287,17 @@ func TestDomainInitBadSchemas(t *testing.T) {
 	})
 	defer done()
 	assert.Regexp(t, "PD011602", *tp.d.initError.Load())
+	assert.False(t, tp.initialized.Load())
+}
+
+func TestDomainInitBadEvents(t *testing.T) {
+	_, _, tp, done := newTestDomain(t, false, &prototk.DomainConfig{
+		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
+		AbiStateSchemasJson:    []string{},
+		AbiEventsJson:          `!!! Wrong`,
+	})
+	defer done()
+	assert.Regexp(t, "PD011642", *tp.d.initError.Load())
 	assert.False(t, tp.initialized.Load())
 }
 

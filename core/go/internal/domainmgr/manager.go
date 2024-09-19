@@ -228,21 +228,25 @@ func (dm *domainManager) getDomainByAddress(ctx context.Context, addr *tktypes.E
 	}
 	return d, nil
 }
-
 func (dm *domainManager) GetSmartContractByAddress(ctx context.Context, addr tktypes.EthAddress) (components.DomainSmartContract, error) {
+	dc, err := dm.getSmartContractCached(ctx, addr)
+	if dc != nil || err != nil {
+		return dc, err
+	}
+	return nil, i18n.NewError(ctx, msgs.MsgDomainContractNotFoundByAddr, addr)
+}
+
+func (dm *domainManager) GetSmartContractIfExists(ctx context.Context, addr tktypes.EthAddress) (components.DomainSmartContract, error) {
+	return dm.getSmartContractCached(ctx, addr)
+}
+
+func (dm *domainManager) getSmartContractCached(ctx context.Context, addr tktypes.EthAddress) (*domainContract, error) {
 	dc, isCached := dm.contractCache.Get(addr)
 	if isCached {
 		return dc, nil
 	}
 	// Updating the cache deferred down to newSmartContract (under enrichContractWithDomain)
-	dc, err := dm.dbGetSmartContract(ctx, func(db *gorm.DB) *gorm.DB { return db.Where("address = ?", addr) })
-	if err != nil {
-		return nil, err
-	}
-	if dc == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgDomainContractNotFoundByAddr, addr)
-	}
-	return dc, nil
+	return dm.dbGetSmartContract(ctx, func(db *gorm.DB) *gorm.DB { return db.Where("address = ?", addr) })
 }
 
 func (dm *domainManager) dbGetSmartContract(ctx context.Context, setWhere func(db *gorm.DB) *gorm.DB) (*domainContract, error) {

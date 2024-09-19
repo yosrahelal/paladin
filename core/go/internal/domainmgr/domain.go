@@ -22,6 +22,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
@@ -58,6 +59,7 @@ type domain struct {
 	config             *prototk.DomainConfig
 	schemasBySignature map[string]statestore.Schema
 	schemasByID        map[string]statestore.Schema
+	eventStream        *blockindexer.EventStream
 
 	initError atomic.Pointer[error]
 	initDone  chan struct{}
@@ -99,9 +101,12 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 
 	// Ensure all the schemas are recorded to the DB
 	var schemas []statestore.Schema
-	schemas, err := d.dm.stateStore.EnsureABISchemas(d.ctx, d.name, abiSchemas)
-	if err != nil {
-		return nil, err
+	if len(abiSchemas) > 0 {
+		var err error
+		schemas, err = d.dm.stateStore.EnsureABISchemas(d.ctx, d.name, abiSchemas)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Build the schema IDs to send back in the init
@@ -120,7 +125,7 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 		// Parse the events ABI
 		var eventsABI abi.ABI
 		if err := json.Unmarshal([]byte(d.config.AbiEventsJson), &eventsABI); err != nil {
-			return nil, err
+			return nil, i18n.WrapError(d.ctx, err, msgs.MsgDomainInvalidEvents)
 		}
 
 		// We build a stream name in a way assured to result in a new stream if the ABI changes,
@@ -132,7 +137,7 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 		streamName := fmt.Sprintf("domain_%s_%s", d.name, streamHash)
 
 		// Create the event stream
-		_, err = d.dm.blockIndexer.AddEventStream(d.ctx, &blockindexer.InternalEventStream{
+		d.eventStream, err = d.dm.blockIndexer.AddEventStream(d.ctx, &blockindexer.InternalEventStream{
 			Definition: &blockindexer.EventStream{
 				Name: streamName,
 				Type: blockindexer.EventStreamTypeInternal.Enum(),
@@ -442,14 +447,68 @@ func (d *domain) close() {
 }
 
 func (d *domain) handleEventBatch(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
-	eventsJSON, err := json.Marshal(batch.Events)
+	eventsByAddress := make(map[tktypes.EthAddress][]*blockindexer.EventWithData)
+	for _, ev := range batch.Events {
+		// Note: hits will be cached, but events from unrecognized contracts will always
+		// result in a cache miss and a database lookup
+		// TODO: revisit if we should optimize this
+		psc, err := d.dm.GetSmartContractIfExists(ctx, ev.Address)
+		if err != nil {
+			return nil, err
+		}
+		if psc.Domain().Name() == d.name {
+			eventsByAddress[ev.Address] = append(eventsByAddress[ev.Address], ev)
+		}
+	}
+
+	for addr, events := range eventsByAddress {
+		_, err := d.handleEventBatchForContract(ctx, batch.BatchID, addr, events)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return nil, nil
+}
+
+func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*uuid.UUID, error) {
+	txIDBytes, err := tktypes.ParseBytes32Ctx(ctx, txIDString)
 	if err != nil {
 		return nil, err
 	}
-	_, err = d.api.HandleEventBatch(ctx, &prototk.HandleEventBatchRequest{
-		BatchId:    batch.BatchID.String(),
+	txUUID := txIDBytes.UUIDFirst16()
+	return &txUUID, nil
+}
+
+func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.UUID, contractAddress tktypes.EthAddress, events []*blockindexer.EventWithData) (*prototk.HandleEventBatchResponse, error) {
+	eventsJSON, err := json.Marshal(events)
+	if err != nil {
+		return nil, err
+	}
+	res, err := d.api.HandleEventBatch(ctx, &prototk.HandleEventBatchRequest{
+		BatchId:    batchID.String(),
 		JsonEvents: string(eventsJSON),
 	})
-	// TODO: process response
-	return nil, err
+	if err != nil {
+		return nil, err
+	}
+
+	spentStates := make(map[uuid.UUID][]string)
+	for _, state := range res.SpentStates {
+		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
+		if err != nil {
+			return nil, err
+		}
+		spentStates[*txUUID] = append(spentStates[*txUUID], state.Id)
+	}
+
+	err = d.dm.stateStore.RunInDomainContext(d.name, contractAddress, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
+		for txID, states := range spentStates {
+			if err = dsi.MarkStatesSpent(txID, states); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return res, err
 }
