@@ -96,9 +96,9 @@ type EventDeliveryBatch struct {
 // Post commit callback is invoked after the DB transaction completes (only on success)
 type PostCommit func()
 
-type PreCommitHandler func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) error
+type PreCommitHandler func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) error
 
-type PostCommitHandler func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent)
+type PostCommitHandler func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify)
 
 type InternalStreamCallback func(ctx context.Context, dbTX *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error)
 

@@ -501,6 +501,7 @@ func (bi *blockIndexer) logToIndexedEvent(l *LogJSONRPC) *IndexedEvent {
 func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch) {
 
 	var blocks []*IndexedBlock
+	var notifyTransactions []*IndexedTransactionNotify
 	var transactions []*IndexedTransaction
 	var events []*IndexedEvent
 	newHighestBlock := int64(-1)
@@ -516,16 +517,21 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 			if r.Status.BigInt().Int64() == 1 {
 				result = TXResult_SUCCESS.Enum()
 			}
-			transactions = append(transactions, &IndexedTransaction{
-				Hash:             tktypes.NewBytes32FromSlice(r.TransactionHash),
-				BlockNumber:      int64(r.BlockNumber),
-				TransactionIndex: int64(txIndex),
-				From:             (*tktypes.EthAddress)(r.From),
-				To:               (*tktypes.EthAddress)(r.To),
-				Nonce:            uint64(block.Transactions[txIndex].Nonce),
-				ContractAddress:  (*tktypes.EthAddress)(r.ContractAddress),
-				Result:           result,
-			})
+			txn := IndexedTransactionNotify{
+				IndexedTransaction: IndexedTransaction{
+					Hash:             tktypes.NewBytes32FromSlice(r.TransactionHash),
+					BlockNumber:      int64(r.BlockNumber),
+					TransactionIndex: int64(txIndex),
+					From:             (*tktypes.EthAddress)(r.From),
+					To:               (*tktypes.EthAddress)(r.To),
+					Nonce:            uint64(block.Transactions[txIndex].Nonce),
+					ContractAddress:  (*tktypes.EthAddress)(r.ContractAddress),
+					Result:           result,
+				},
+				RevertReason: tktypes.HexBytes(r.RevertReason),
+			}
+			notifyTransactions = append(notifyTransactions, &txn)
+			transactions = append(transactions, &txn.IndexedTransaction)
 			for _, l := range r.Logs {
 				events = append(events, bi.logToIndexedEvent(l))
 			}
@@ -535,7 +541,7 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 	err := bi.retry.Do(ctx, func(attempt int) (retryable bool, err error) {
 		err = bi.persistence.DB().Transaction(func(dbTX *gorm.DB) (err error) {
 			for _, preCommitHandler := range bi.preCommitHandlers {
-				err = preCommitHandler(ctx, dbTX, blocks, transactions, events)
+				err = preCommitHandler(ctx, dbTX, blocks, notifyTransactions)
 			}
 			if err == nil && len(blocks) > 0 {
 				err = dbTX.
@@ -573,7 +579,7 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 	}
 	if err == nil {
 		for _, postCommitHandler := range bi.postCommitHandlers {
-			postCommitHandler(ctx, blocks, transactions, events)
+			postCommitHandler(ctx, blocks, notifyTransactions)
 		}
 		for _, t := range transactions {
 			if inflight := bi.txWaiters.GetInflight(t.Hash); inflight != nil {

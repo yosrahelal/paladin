@@ -310,7 +310,7 @@ func TestBlockIndexerCatchUpToHeadFromZeroNoConfirmations(t *testing.T) {
 	bi.requiredConfirmations = 0
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
 		utBatchNotify <- blocks
 	})
 
@@ -336,7 +336,7 @@ func TestBlockIndexerBatchTimeoutOne(t *testing.T) {
 	bi.requiredConfirmations = 0
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
 		utBatchNotify <- blocks
 	})
 
@@ -359,7 +359,7 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 	bi.requiredConfirmations = 5
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
 		utBatchNotify <- blocks
 	})
 
@@ -462,7 +462,7 @@ func TestBlockIndexerListenFromCurrentBlock(t *testing.T) {
 	assert.Regexp(t, "PD011308", err)
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
 		utBatchNotify <- blocks
 	})
 
@@ -520,7 +520,7 @@ func TestBatching(t *testing.T) {
 	bi.batchSize = 5
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
 		utBatchNotify <- blocks
 	})
 
@@ -670,7 +670,7 @@ func testBlockIndexerHandleReorgInConfirmationWindow(t *testing.T, blockLenBefor
 	})
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
 		utBatchNotify <- blocks
 	})
 
@@ -718,7 +718,7 @@ func TestBlockIndexerHandleRandomConflictingBlockNotification(t *testing.T) {
 	})
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
 		utBatchNotify <- blocks
 	})
 
@@ -750,7 +750,7 @@ func TestBlockIndexerResetsAfterHashLookupFail(t *testing.T) {
 	})
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
 		utBatchNotify <- blocks
 	})
 
@@ -775,7 +775,7 @@ func TestBlockIndexerDispatcherFallsBehindHead(t *testing.T) {
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
 		utBatchNotify <- blocks
 	})
 
@@ -917,7 +917,7 @@ func TestBlockIndexerWaitForTransactionSuccess(t *testing.T) {
 	}
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
 		utBatchNotify <- blocks
 	})
 
@@ -969,7 +969,7 @@ func TestBlockIndexerWaitForTransactionRevert(t *testing.T) {
 	}
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
 		utBatchNotify <- blocks
 	})
 

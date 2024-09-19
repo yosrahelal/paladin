@@ -227,12 +227,12 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 	preCommitCount := 0
 	err := bi.Start(&InternalEventStream{
 		Type: IESTypePostCommitHandler,
-		PostCommitHandler: func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) {
+		PostCommitHandler: func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
 			utBatchNotify <- blocks
 		},
 	}, &InternalEventStream{
 		Type: IESTypePreCommitHandler,
-		PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransaction, events []*IndexedEvent) error {
+		PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) error {
 			// Return an error once to drive a retry
 			preCommitCount++
 			if preCommitCount == 0 {
