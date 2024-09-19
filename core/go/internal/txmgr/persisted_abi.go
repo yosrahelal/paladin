@@ -65,7 +65,7 @@ func (tm *txManager) getABIByHash(ctx context.Context, hash tktypes.Bytes32) (*p
 	}
 	pa = &ptxapi.StoredABI{Hash: hash}
 	if err = json.Unmarshal(pABIs[0].ABI, &pa.ABI); err != nil {
-		return nil, err
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidStoredData)
 	}
 	tm.abiCache.Set(hash, pa)
 	return pa, nil

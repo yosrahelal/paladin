@@ -63,6 +63,10 @@ var transactionReceiptFilters = filters.FieldMap{
 
 func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*components.ReceiptInput) error {
 
+	if len(info) == 0 {
+		return nil
+	}
+
 	// It's possible for transactions to be deleted out of band, and we don't place a responsibility
 	// on the caller to know that. So we take the hit of querying for the existence of these transactions
 	// and only marking completion on those that exist.
@@ -71,11 +75,10 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, in
 	for i, ri := range info {
 		allIDs[i] = ri.TransactionID
 	}
-	var existingTXs []*idOnly
+	var existingTXs []uuid.UUID
 	err := dbTX.Table("transactions").
-		Select("id").
 		Where("id IN (?)", allIDs).
-		Find(&existingTXs).
+		Pluck("id", &existingTXs).
 		Error
 	if err != nil {
 		return err
@@ -85,7 +88,7 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, in
 	for _, ri := range info {
 		exists := false
 		for _, existing := range existingTXs {
-			if ri.TransactionID == existing.ID {
+			if ri.TransactionID == existing {
 				exists = true
 				break
 			}
@@ -124,6 +127,8 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, in
 			// We calculate the failure message - all errors handled mapped internally here
 			failureMsg = tm.calculateRevertError(ctx, dbTX, ri.RevertData).Error()
 			receipt.FailureMessage = &failureMsg
+		default:
+			return i18n.NewError(ctx, msgs.MsgTxMgrInvalidReceiptNotification, tktypes.JSONString(ri))
 		}
 		log.L(ctx).Infof("Inserting receipt txId=%s success=%t failure=%s txHash=%v", receipt.TransactionID, receipt.Success, failureMsg, receipt.TransactionHash)
 		matchedUpserts = append(matchedUpserts, receipt)

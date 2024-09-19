@@ -51,10 +51,6 @@ type persistedTransaction struct {
 	TransactionReceipt *transactionReceipt                  `gorm:"foreignKey:transaction;references:id"`
 }
 
-type idOnly struct {
-	ID uuid.UUID `gorm:"column:id;primaryKey"`
-}
-
 type transactionDep struct {
 	Transaction uuid.UUID `gorm:"column:transaction;primaryKey"`
 	DependsOn   uuid.UUID `gorm:"column:depends_on"`

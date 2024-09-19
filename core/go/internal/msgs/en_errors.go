@@ -327,4 +327,5 @@ var (
 	MsgTxMgrRevertedNoData             = ffe("PD012214", "Transaction reverted (no revert data)")
 	MsgTxMgrRevertedDataNotDecoded     = ffe("PD012215", "Transaction reverted (revert data not decoded)")
 	MsgTxMgrRevertedDecodedData        = ffe("PD012216", "Transaction reverted %s")
+	MsgTxMgrInvalidStoredData          = ffe("PD012217", "Stored data is invalid")
 )
