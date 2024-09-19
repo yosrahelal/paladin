@@ -192,14 +192,12 @@ func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventSt
 	es.handler = handler
 
 	location := "*"
-	if definition.Source != nil {
-		source := *definition.Source
-		es.definition.Source = &source
-		location = source.String()
+	if es.definition.Source != nil {
+		location = es.definition.Source.String()
 	}
 
 	// Calculate all the signatures we require
-	sigStrings := []string{}
+	solStrings := []string{}
 	for _, abiEntry := range definition.ABI {
 		if abiEntry.Type == abi.Event {
 			sig := tktypes.NewBytes32FromSlice(abiEntry.SignatureHashBytes())
@@ -207,12 +205,12 @@ func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventSt
 			es.eventABIs = append(es.eventABIs, abiEntry)
 			if _, dup := es.signatures[sigStr]; !dup {
 				es.signatures[sigStr] = true
-				sigStrings = append(sigStrings, sigStr)
+				solStrings = append(solStrings, abiEntry.SolString())
 				es.signatureList = append(es.signatureList, sig)
 			}
 		}
 	}
-	log.L(ctx).Infof("Event stream %s configured on sourceMatch=%s signatures: %s", es.definition.ID, location, sigStrings)
+	log.L(ctx).Infof("Event stream %s configured matchSource=%s events: %s", es.definition.ID, location, solStrings)
 
 	// ok - all looks good, put ourselves in the blockindexer list
 	bi.eventStreams[definition.ID] = es
@@ -370,13 +368,13 @@ func (es *eventStream) detector() {
 }
 
 func (es *eventStream) processNotifiedBlock(block *eventStreamBlock, fullBlock bool) {
+	matchSource := es.definition.Source
 	for i, l := range block.events {
 		event := &EventWithData{
 			IndexedEvent: es.bi.logToIndexedEvent(l),
 		}
-		es.matchLog(l, event)
 		// Only dispatch events that were completed by the validation against our ABI
-		if event.Data != nil {
+		if es.bi.matchLog(es.ctx, es.eventABIs, l, event, matchSource) {
 			es.sendToDispatcher(event,
 				// Can only move checkpoint past this block once we know we've processed the last one
 				fullBlock && i == (len(block.events)-1))
@@ -573,8 +571,4 @@ func (es *eventStream) processCatchupEventPage(checkpointBlock int64, catchUpToB
 
 func (es *eventStream) queryTransactionEvents(tx tktypes.Bytes32, events []*EventWithData, done chan error) {
 	done <- es.bi.enrichTransactionEvents(es.ctx, es.eventABIs, tx, events, true /* retry indefinitely */)
-}
-
-func (es *eventStream) matchLog(in *LogJSONRPC, out *EventWithData) {
-	es.bi.matchLog(es.ctx, es.eventABIs, in, out, es.definition.Source)
 }

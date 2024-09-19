@@ -304,6 +304,48 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 	}
 }
 
+func TestNoMatchingEvents(t *testing.T) {
+
+	// This test uses a real DB, includes the full block indexer, but simulates the blockchain.
+	_, bi, mRPC, blDone := newTestBlockIndexer(t)
+	defer blDone()
+
+	// Mock up the block calls to the blockchain for 15 blocks
+	blocks, receipts := testBlockArray(t, 15)
+	mockBlocksRPCCalls(mRPC, blocks, receipts)
+	mockBlockListenerNil(mRPC)
+
+	// Create a matcher that only mismatched on indexed - so same signature
+	testABICopy := testParseABI(testEventABIJSON)
+	testABICopy[1].Inputs[0].Indexed = !testABICopy[1].Inputs[0].Indexed
+
+	// Do a full start now with an internal event listener
+	err := bi.Start(&InternalEventStream{
+		Handler: func(ctx context.Context, tx *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error) {
+			require.Fail(t, "should not be called")
+			return nil, nil
+		},
+		Definition: &EventStream{
+			Name: "unit_test",
+			Config: EventStreamConfig{
+				BatchSize:    confutil.P(1),
+				BatchTimeout: confutil.P("5ms"),
+			},
+			// Listen to two out of three event types
+			ABI: abi.ABI{
+				// Mismatched only on index
+				testABICopy[1],
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	for i := 0; i < 15; i++ {
+		<-bi.utBatchNotify
+	}
+
+}
+
 func TestStartBadInternalEventStream(t *testing.T) {
 
 	// This test uses a real DB, includes the full block indexer, but simulates the blockchain.
