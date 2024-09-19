@@ -23,6 +23,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/httpserver"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -112,6 +113,13 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	assert.Equal(t, "did a thing", txns[0].Activity[1].Message)
 	assert.Greater(t, txns[0].Activity[0].Time, txns[0].Activity[1].Time)
 
+	// Check full=false
+	txns = nil
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), false)
+	require.NoError(t, err)
+	assert.Len(t, txns, 1)
+	assert.Nil(t, txns[0].Activity)
+
 	// Get the stored ABIs to check we found it
 	var abis []*ptxapi.StoredABI
 	err = rpcClient.CallRPC(ctx, &abis, "ptx_queryStoredABIs", query.NewQueryBuilder().Limit(1).Query())
@@ -150,8 +158,8 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		},
 	})
 	assert.NoError(t, err)
-	var tx2 *ptxapi.Transaction
-	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransaction", tx2ID, false)
+	var tx2 *ptxapi.TransactionFull
+	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransaction", tx2ID, true)
 	require.NoError(t, err)
 	assert.Equal(t, tx2ID, tx2.ID)
 	assert.Equal(t, "set(uint256)", tx2.Function)
@@ -161,5 +169,68 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	err = rpcClient.CallRPC(ctx, &txns, "ptx_getTransaction", uuid.New(), false)
 	require.NoError(t, err)
 	assert.Nil(t, txNotFound)
+
+	// Finalize the deploy as a success
+	txHash1 := tktypes.Bytes32(tktypes.RandBytes(32))
+	blockNumber1 := int64(12345)
+	err = tmr.FinalizeTransactions(ctx, tmr.p.DB(), []*components.ReceiptInput{
+		{
+			TransactionID:   tx1ID,
+			ReceiptType:     components.RT_Success,
+			TransactionHash: &txHash1,
+			BlockNumber:     &blockNumber1,
+		},
+	})
+	require.NoError(t, err)
+
+	// We should get that back with full
+	var txWithReceipt *ptxapi.TransactionFull
+	err = rpcClient.CallRPC(ctx, &txWithReceipt, "ptx_getTransaction", tx1ID, true)
+	require.NoError(t, err)
+	require.True(t, txWithReceipt.Receipt.Success)
+	require.Equal(t, txHash1, *txWithReceipt.Receipt.TransactionHash)
+	require.Equal(t, blockNumber1, txWithReceipt.Receipt.BlockNumber)
+	require.Nil(t, txWithReceipt.Receipt.RevertData)
+
+	// Select just pending transactions
+	var pendingTransactions []*ptxapi.TransactionReceipt
+	err = rpcClient.CallRPC(ctx, &pendingTransactions, "ptx_queryPendingTransactions", query.NewQueryBuilder().Limit(100).Query(), true)
+	require.NoError(t, err)
+	require.Len(t, pendingTransactions, 1)
+	require.Equal(t, tx2ID, pendingTransactions[0].ID)
+
+	// Finalize the invoke as a revert with an encoded error
+	txHash2 := tktypes.Bytes32(tktypes.RandBytes(32))
+	blockNumber2 := int64(12345)
+	revertData, err := sampleABI.Errors()["BadValue"].EncodeCallDataValuesCtx(ctx, []any{12345})
+	require.NoError(t, err)
+	err = tmr.FinalizeTransactions(ctx, tmr.p.DB(), []*components.ReceiptInput{
+		{
+			TransactionID:   tx2ID,
+			ReceiptType:     components.RT_FailedOnChainWithRevertData,
+			TransactionHash: &txHash2,
+			BlockNumber:     &blockNumber2,
+			RevertData:      revertData,
+		},
+	})
+	require.NoError(t, err)
+
+	// Ask for the receipt directly
+	var txReceipt *ptxapi.TransactionReceipt
+	err = rpcClient.CallRPC(ctx, &txReceipt, "ptx_getTransactionReceipt", tx2ID)
+	require.NoError(t, err)
+	require.NotNil(t, txReceipt)
+	require.False(t, txReceipt.Success)
+	require.Equal(t, txHash2, *txReceipt.TransactionHash)
+	require.Equal(t, blockNumber2, txReceipt.BlockNumber)
+	require.Equal(t, tktypes.HexBytes(revertData).String(), txReceipt.RevertData.String())
+	require.Equal(t, `PD012216: Transaction reverted BadValue("12345")`, txReceipt.FailureMessage)
+
+	// Select just success receipts
+	var successReceipts []*ptxapi.TransactionReceipt
+	err = rpcClient.CallRPC(ctx, &successReceipts, "ptx_queryTransactionReceipts", query.NewQueryBuilder().Limit(100).Equal("success", true).Query())
+	require.NoError(t, err)
+	require.Len(t, successReceipts, 1)
+	assert.Equal(t, successReceipts[0].ID, tx1ID)
 
 }

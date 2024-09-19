@@ -31,6 +31,9 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_sendTransaction", tm.rpcSendTransaction()).
 		Add("ptx_getTransaction", tm.rpcGetTransaction()).
 		Add("ptx_queryTransactions", tm.rpcQueryTransactions()).
+		Add("ptx_queryPendingTransactions", tm.rpcQueryPendingTransactions()).
+		Add("ptx_getTransactionReceipt", tm.rpcGetTransactionReceipt()).
+		Add("ptx_queryTransactionReceipts", tm.rpcQueryTransactionReceipts()).
 		Add("ptx_storeABI", tm.rpcStoreABI()).
 		Add("ptx_getStoredABI", tm.rpcGetStoredABI()).
 		Add("ptx_queryStoredABIs", tm.rpcQueryStoredABIs())
@@ -62,9 +65,37 @@ func (tm *txManager) rpcQueryTransactions() rpcserver.RPCHandler {
 		full bool,
 	) (any, error) {
 		if full {
-			return tm.queryTransactionsFull(ctx, &query)
+			return tm.queryTransactionsFull(ctx, &query, false)
 		}
-		return tm.queryTransactions(ctx, &query)
+		return tm.queryTransactions(ctx, &query, false)
+	})
+}
+
+func (tm *txManager) rpcQueryPendingTransactions() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context,
+		query query.QueryJSON,
+		full bool,
+	) (any, error) {
+		if full {
+			return tm.queryTransactionsFull(ctx, &query, true)
+		}
+		return tm.queryTransactions(ctx, &query, true)
+	})
+}
+
+func (tm *txManager) rpcGetTransactionReceipt() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		id uuid.UUID,
+	) (*ptxapi.TransactionReceipt, error) {
+		return tm.getTransactionReceiptByID(ctx, id)
+	})
+}
+
+func (tm *txManager) rpcQueryTransactionReceipts() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		query query.QueryJSON,
+	) ([]*ptxapi.TransactionReceipt, error) {
+		return tm.queryTransactionReceipts(ctx, &query)
 	})
 }
 

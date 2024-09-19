@@ -51,15 +51,13 @@ type persistedTransaction struct {
 	TransactionReceipt *transactionReceipt                  `gorm:"foreignKey:transaction;references:id"`
 }
 
+type idOnly struct {
+	ID uuid.UUID `gorm:"column:id;primaryKey"`
+}
+
 type transactionDep struct {
 	Transaction uuid.UUID `gorm:"column:transaction;primaryKey"`
 	DependsOn   uuid.UUID `gorm:"column:depends_on"`
-}
-
-type transactionReceipt struct {
-	Transaction uuid.UUID        `gorm:"column:transaction;primaryKey"`
-	Success     bool             `gorm:"column:success"`
-	TXHash      *tktypes.Bytes32 `gorm:"column:tx_hash"`
 }
 
 var transactionFilters = filters.FieldMap{
@@ -97,10 +95,7 @@ func (tm *txManager) mapPersistedTXFull(pt *persistedTransaction) *ptxapi.Transa
 	}
 	receipt := pt.TransactionReceipt
 	if receipt != nil {
-		res.Receipt = &ptxapi.TransactionReceiptData{
-			Success:         receipt.Success,
-			TransactionHash: receipt.TXHash,
-		}
+		res.Receipt = mapPersistedReceipt(receipt)
 	}
 	res.Activity = tm.getActivityRecords(res.ID)
 	return res
@@ -269,15 +264,21 @@ func (tm *txManager) sendTransaction(ctx context.Context, tx *ptxapi.Transaction
 	return &ptx.ID, nil
 }
 
-func (tm *txManager) queryTransactions(ctx context.Context, jq *query.QueryJSON) ([]*ptxapi.Transaction, error) {
+func (tm *txManager) queryTransactions(ctx context.Context, jq *query.QueryJSON, pending bool) ([]*ptxapi.Transaction, error) {
 	qw := &queryWrapper[persistedTransaction, ptxapi.Transaction]{
-		p:       tm.p,
-		table:   "transactions",
-		filters: transactionFilters,
-		query:   jq,
+		p:           tm.p,
+		table:       "transactions",
+		defaultSort: "-created",
+		filters:     transactionFilters,
+		query:       jq,
 		finalize: func(q *gorm.DB) *gorm.DB {
 			// TODO: Join public and private transaction strings
-			return q.Joins("TransactionDeps")
+			q = q.Joins("TransactionDeps")
+			if pending {
+				q = q.Joins("TransactionReceipt").
+					Where("TransactionReceipt__transaction IS NULL")
+			}
+			return q
 		},
 		mapResult: func(pt *persistedTransaction) (*ptxapi.Transaction, error) {
 			return mapPersistedTXBase(pt), nil
@@ -286,15 +287,22 @@ func (tm *txManager) queryTransactions(ctx context.Context, jq *query.QueryJSON)
 	return qw.run(ctx)
 }
 
-func (tm *txManager) queryTransactionsFull(ctx context.Context, jq *query.QueryJSON) ([]*ptxapi.TransactionFull, error) {
+func (tm *txManager) queryTransactionsFull(ctx context.Context, jq *query.QueryJSON, pending bool) ([]*ptxapi.TransactionFull, error) {
 	qw := &queryWrapper[persistedTransaction, ptxapi.TransactionFull]{
-		p:       tm.p,
-		table:   "transactions",
-		filters: transactionFilters,
-		query:   jq,
+		p:           tm.p,
+		table:       "transactions",
+		defaultSort: "-created",
+		filters:     transactionFilters,
+		query:       jq,
 		finalize: func(q *gorm.DB) *gorm.DB {
 			// TODO: Join public and private transaction info
-			return q.Joins("TransactionDeps").Joins("TransactionReceipt")
+			q = q.
+				Joins("TransactionDeps").
+				Joins("TransactionReceipt")
+			if pending {
+				q = q.Where("TransactionReceipt__transaction IS NULL")
+			}
+			return q
 		},
 		mapResult: func(pt *persistedTransaction) (*ptxapi.TransactionFull, error) {
 			return tm.mapPersistedTXFull(pt), nil
@@ -303,32 +311,18 @@ func (tm *txManager) queryTransactionsFull(ctx context.Context, jq *query.QueryJ
 	return qw.run(ctx)
 }
 
-func (tm *txManager) getPersistedTransactionByID(ctx context.Context, id uuid.UUID) (*persistedTransaction, error) {
-	var pTxns []*persistedTransaction
-	err := tm.p.DB().
-		WithContext(ctx).
-		Table("transactions").
-		Where("id = ?", id).
-		Find(&pTxns).
-		Error
-	if err != nil || len(pTxns) == 0 {
-		return nil, err
-	}
-	return pTxns[0], nil
-}
-
 func (tm *txManager) getTransactionByIDFull(ctx context.Context, id uuid.UUID) (*ptxapi.TransactionFull, error) {
-	ptx, err := tm.getPersistedTransactionByID(ctx, id)
-	if ptx == nil || err != nil {
+	ptxs, err := tm.queryTransactionsFull(ctx, query.NewQueryBuilder().Limit(1).Equal("id", id).Query(), false)
+	if len(ptxs) == 0 || err != nil {
 		return nil, err
 	}
-	return tm.mapPersistedTXFull(ptx), nil
+	return ptxs[0], nil
 }
 
 func (tm *txManager) getTransactionByID(ctx context.Context, id uuid.UUID) (*ptxapi.Transaction, error) {
-	ptx, err := tm.getPersistedTransactionByID(ctx, id)
-	if ptx == nil || err != nil {
+	ptxs, err := tm.queryTransactions(ctx, query.NewQueryBuilder().Limit(1).Equal("id", id).Query(), false)
+	if len(ptxs) == 0 || err != nil {
 		return nil, err
 	}
-	return mapPersistedTXBase(ptx), nil
+	return ptxs[0], nil
 }

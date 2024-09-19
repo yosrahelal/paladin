@@ -6,9 +6,10 @@ CREATE TABLE abis (
 CREATE INDEX abis_created ON abis("created");
 
 CREATE TABLE abi_errors (
-  "selector"                  VARCHAR         NOT NULL,
-  "abi_hash"                  VARCHAR         NOT NULL,
-  "definition"                VARCHAR         NOT NULL,
+  "selector"                  TEXT            NOT NULL,
+  "abi_hash"                  TEXT            NOT NULL,
+  "full_hash"                 TEXT            NOT NULL,
+  "definition"                TEXT            NOT NULL,
   PRIMARY KEY ("abi_hash", "selector"),
   FOREIGN KEY ("abi_hash") REFERENCES abis ("hash") ON DELETE CASCADE
 );
@@ -41,8 +42,12 @@ CREATE INDEX transaction_deps_depends_on ON transaction_deps("depends_on");
 
 CREATE TABLE transaction_receipts (
   "transaction"               UUID            NOT NULL,
+  "indexed"                   BIGINT          NOT NULL,
   "success"                   BOOLEAN         NOT NULL,
+  "failure_message"           TEXT,
+  "revert_data"               TEXT,
   "tx_hash"                   TEXT,
+  "block_number"              BIGINT,
   PRIMARY KEY ("transaction"),
   FOREIGN KEY ("transaction") REFERENCES transaction_receipts ("id") ON DELETE CASCADE
 );

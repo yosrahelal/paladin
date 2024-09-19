@@ -15,6 +15,36 @@
 
 package components
 
+import (
+	"context"
+
+	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"gorm.io/gorm"
+)
+
+type ReceiptType int
+
+const (
+	// Success should come with a transaction hash - nothing more
+	RT_Success ReceiptType = iota
+	// Asks the Transaction Manager to use the error decoding dictionary to decode an revert data and build the message
+	RT_FailedOnChainWithRevertData
+	// The provided pre-translated message states that any failure, and should be written directly
+	RT_FailedWithMessage
+)
+
+type ReceiptInput struct {
+	ReceiptType     ReceiptType      // required
+	TransactionID   uuid.UUID        // required
+	TransactionHash *tktypes.Bytes32 // if it made it to the chain - for success or failure
+	BlockNumber     *int64           // if it made it to the chain
+	FailureMessage  string           // set for RT_FailedWithMessage
+	RevertData      tktypes.HexBytes // set for RT_FailedOnChainWithRevertData
+}
+
 type TXManager interface {
 	ManagerLifecycle
+	AddActivityRecord(tx uuid.UUID, msg string)
+	FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*ReceiptInput) error
 }

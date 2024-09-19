@@ -78,10 +78,11 @@ type TransactionReceipt struct {
 }
 
 type TransactionReceiptData struct {
-	Success         bool             `json:"success,omitempty"` // true for success (note "status" is reserved for future use)
-	TransactionHash *tktypes.Bytes32 `json:"transactionHash"`   // if the result was finalized by the blockchain, this is the on-chain blockchain transaction hash
-	RevertMessage   *string          `json:"revertMessage"`     // always set to a non-empty string if the transaction reverted, with as much detail as could be extracted
-	RevertData      tktypes.HexBytes `json:"revertData"`        // encoded revert data if available
+	Success         bool             `json:"success,omitempty"`         // true for success (note "status" is reserved for future use)
+	TransactionHash *tktypes.Bytes32 `json:"transactionHash,omitempty"` // if the result was finalized by the blockchain, this is the on-chain blockchain transaction hash
+	BlockNumber     int64            `json:"blockNumber,omitempty"`     // if the result was finalized by the blockchain
+	FailureMessage  string           `json:"failureMessage,omitempty"`  // always set to a non-empty string if the transaction reverted, with as much detail as could be extracted
+	RevertData      tktypes.HexBytes `json:"revertData,omitempty"`      // encoded revert data if available
 }
 
 type TransactionActivityRecord struct {

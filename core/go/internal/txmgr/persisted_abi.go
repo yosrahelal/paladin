@@ -38,6 +38,7 @@ type PersistedABI struct {
 
 type PersistedABIError struct {
 	Selector   tktypes.HexBytes `gorm:"column:selector"`
+	FullHash   tktypes.HexBytes `gorm:"column:full_hash"`
 	ABIHash    tktypes.Bytes32  `gorm:"column:abi_hash"`
 	Definition tktypes.RawJSON  `gorm:"column:definition"`
 }
@@ -86,12 +87,13 @@ func (tm *txManager) upsertABI(ctx context.Context, a abi.ABI) (*ptxapi.StoredAB
 	// Grab all the error definitions for reverse lookup
 	var errorDefs []*PersistedABIError
 	for _, errorDef := range a {
-		selector, _ := errorDef.GenerateFunctionSelectorCtx(ctx)
+		fullHash, _ := errorDef.SignatureHashCtx(ctx)
 		defBytes, _ := json.Marshal(errorDef)
-		if selector != nil && len(defBytes) > 0 { // note we've already validated it in ABISolDefinitionHash
+		if fullHash != nil && len(defBytes) > 0 { // note we've already validated it in ABISolDefinitionHash
 			errorDefs = append(errorDefs, &PersistedABIError{
 				ABIHash:    *hash,
-				Selector:   selector,
+				Selector:   tktypes.HexBytes(fullHash[0:4]),
+				FullHash:   tktypes.HexBytes(fullHash),
 				Definition: defBytes,
 			})
 		}
@@ -141,10 +143,11 @@ func (tm *txManager) upsertABI(ctx context.Context, a abi.ABI) (*ptxapi.StoredAB
 
 func (tm *txManager) queryABIs(ctx context.Context, jq *query.QueryJSON) ([]*ptxapi.StoredABI, error) {
 	qw := &queryWrapper[PersistedABI, ptxapi.StoredABI]{
-		p:       tm.p,
-		table:   "abis",
-		filters: abiFilters,
-		query:   jq,
+		p:           tm.p,
+		table:       "abis",
+		defaultSort: "-created",
+		filters:     abiFilters,
+		query:       jq,
 		mapResult: func(pa *PersistedABI) (*ptxapi.StoredABI, error) {
 			var a abi.ABI
 			err := json.Unmarshal(pa.ABI, &a)

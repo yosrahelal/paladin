@@ -27,12 +27,13 @@ import (
 )
 
 type queryWrapper[PT, T any] struct {
-	p         persistence.Persistence
-	table     string
-	filters   filters.FieldMap
-	query     *query.QueryJSON
-	finalize  func(db *gorm.DB) *gorm.DB
-	mapResult func(*PT) (*T, error)
+	p           persistence.Persistence
+	table       string
+	defaultSort string
+	filters     filters.FieldMap
+	query       *query.QueryJSON
+	finalize    func(db *gorm.DB) *gorm.DB
+	mapResult   func(*PT) (*T, error)
 }
 
 func stringOrEmpty(ps *string) string {
@@ -49,13 +50,20 @@ func notEmptyOrNull(s string) *string {
 	return &s
 }
 
+func int64OrZero(pi *int64) int64 {
+	if pi == nil {
+		return 0
+	}
+	return *pi
+}
+
 func (qw *queryWrapper[PT, T]) run(ctx context.Context) ([]*T, error) {
 	if qw.query.Limit == nil || *qw.query.Limit <= 0 {
 		return nil, i18n.NewError(ctx, msgs.MsgTxMgrQueryLimitRequired)
 	}
 	if len(qw.query.Sort) == 0 {
 		// By default return the newest in descending order
-		qw.query.Sort = []string{"-created"}
+		qw.query.Sort = []string{qw.defaultSort}
 	}
 
 	// Build the query
