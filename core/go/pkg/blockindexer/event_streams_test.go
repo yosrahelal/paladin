@@ -142,6 +142,20 @@ func TestInternalEventStreamDeliveryAtHeadWithSourceAddress(t *testing.T) {
 
 	eventCollector := make(chan *EventWithData)
 
+	definition := &EventStream{
+		Name: "unit_test",
+		Config: EventStreamConfig{
+			BatchSize:    confutil.P(3),
+			BatchTimeout: confutil.P("5ms"),
+		},
+		// Listen to two out of three event types
+		ABI: abi.ABI{
+			testABI[1],
+			testABI[2],
+		},
+		Source: sourceContractAddress,
+	}
+
 	// Do a full start now with an internal event listener
 	var esID string
 	calledPostCommit := false
@@ -163,19 +177,7 @@ func TestInternalEventStreamDeliveryAtHeadWithSourceAddress(t *testing.T) {
 			}
 			return func() { calledPostCommit = true }, nil
 		},
-		Definition: &EventStream{
-			Name: "unit_test",
-			Config: EventStreamConfig{
-				BatchSize:    confutil.P(3),
-				BatchTimeout: confutil.P("5ms"),
-			},
-			// Listen to two out of three event types
-			ABI: abi.ABI{
-				testABI[1],
-				testABI[2],
-			},
-			Source: sourceContractAddress,
-		},
+		Definition: definition,
 	})
 	require.NoError(t, err)
 
