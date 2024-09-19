@@ -42,10 +42,11 @@ contract NotoSelfSubmit is Noto {
     function approve(
         address delegate,
         bytes32 txhash,
-        bytes calldata signature
+        bytes calldata signature,
+        bytes calldata data
     ) external override {
         address signer = ECDSA.recover(txhash, signature);
         requireNotary(signer);
-        _approve(delegate, txhash, signature);
+        _approve(delegate, txhash, signature, data);
     }
 }

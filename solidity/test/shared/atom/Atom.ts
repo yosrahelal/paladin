@@ -22,9 +22,9 @@ describe("Atom", function () {
     const ERC20Simple = await ethers.getContractFactory("ERC20Simple");
 
     // Deploy two contracts
-    const noto: Noto = Noto.attach(
+    const noto = Noto.attach(
       await deployNotoInstance(notoFactory, Noto.interface, notary1.address)
-    );
+    ) as Noto;
     const erc20 = await ERC20Simple.connect(notary2).deploy("Token", "TOK");
 
     // Bring TXOs and tokens into being
@@ -77,7 +77,7 @@ describe("Atom", function () {
     // Do the delegation/approval transactions
     const f1tx = await noto
       .connect(notary1)
-      .approve(mcAddr, multiTXF1Part.hash, "0x");
+      .approve(mcAddr, multiTXF1Part.hash, "0x", "0x");
     const delegateResult1: ContractTransactionReceipt | null =
       await f1tx.wait();
     const delegateEvent1 = noto.interface.parseLog(
@@ -111,9 +111,9 @@ describe("Atom", function () {
     const Atom = await ethers.getContractFactory("Atom");
 
     // Deploy noto contract
-    const noto: Noto = Noto.attach(
+    const noto = Noto.attach(
       await deployNotoInstance(notoFactory, Noto.interface, notary1.address)
-    );
+    ) as Noto;
 
     // Fake up a delegation
     const [f1txo1, f1txo2] = [fakeTXO(), fakeTXO()];

@@ -9,7 +9,12 @@ interface INoto {
         bytes data
     );
 
-    event NotoApproved(address delegate, bytes32 txhash, bytes signature);
+    event NotoApproved(
+        address delegate,
+        bytes32 txhash,
+        bytes signature,
+        bytes data
+    );
 
     function initialize(
         address notary,
@@ -32,7 +37,8 @@ interface INoto {
     function approve(
         address delegate,
         bytes32 txhash,
-        bytes memory signature
+        bytes memory signature,
+        bytes memory data
     ) external;
 
     function approvedTransfer(

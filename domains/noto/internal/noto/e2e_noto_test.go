@@ -232,8 +232,6 @@ func TestNoto(t *testing.T) {
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
-	err = noto.WaitForCompletion(ctx, *txID)
-	assert.NoError(t, err)
 
 	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)

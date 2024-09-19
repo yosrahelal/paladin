@@ -246,7 +246,7 @@ func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransacti
 			for i, state := range req.Outputs {
 				outputIDs[i] = state.Id
 			}
-			data, err := h.noto.encodeTransferData(ctx, req.Transaction)
+			data, err := h.noto.encodeTransactionData(ctx, req.Transaction)
 			if err != nil {
 				return nil, err
 			}
@@ -302,7 +302,7 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
 	}
 
-	data, err := h.noto.encodeTransferData(ctx, req.Transaction)
+	data, err := h.noto.encodeTransactionData(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
 	}

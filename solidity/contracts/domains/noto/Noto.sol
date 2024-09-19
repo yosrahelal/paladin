@@ -142,10 +142,11 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     function _approve(
         address delegate,
         bytes32 txhash,
-        bytes calldata signature
+        bytes calldata signature,
+        bytes calldata data
     ) internal {
         _approvals[txhash].delegate = delegate;
-        emit NotoApproved(delegate, txhash, signature);
+        emit NotoApproved(delegate, txhash, signature, data);
     }
 
     /**
@@ -251,8 +252,9 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     function approve(
         address delegate,
         bytes32 txhash,
-        bytes calldata signature
+        bytes calldata signature,
+        bytes calldata data
     ) external virtual onlyNotary {
-        _approve(delegate, txhash, signature);
+        _approve(delegate, txhash, signature, data);
     }
 }

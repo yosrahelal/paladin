@@ -138,7 +138,7 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		outputs[i] = state.Id
 	}
 
-	data, err := h.noto.encodeTransferData(ctx, req.Transaction)
+	data, err := h.noto.encodeTransactionData(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
 	}

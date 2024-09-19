@@ -50,6 +50,7 @@ type Noto struct {
 	factoryABI        abi.ABI
 	contractABI       abi.ABI
 	transferSignature string
+	approvedSignature string
 }
 
 type NotoDeployParams struct {
@@ -66,6 +67,13 @@ type NotoTransfer_Event struct {
 	Data      tktypes.HexBytes  `json:"data"`
 }
 
+type NotoApproved_Event struct {
+	Delegate  tktypes.EthAddress `json:"delegate"`
+	TXHash    tktypes.Bytes32    `json:"txhash"`
+	Signature tktypes.HexBytes   `json:"signature"`
+	Data      tktypes.HexBytes   `json:"data"`
+}
+
 type gatheredCoins struct {
 	inCoins   []*types.NotoCoin
 	inStates  []*prototk.StateRef
@@ -73,6 +81,14 @@ type gatheredCoins struct {
 	outCoins  []*types.NotoCoin
 	outStates []*prototk.StateRef
 	outTotal  *big.Int
+}
+
+func getEventSignature(ctx context.Context, abi abi.ABI, eventName string) (string, error) {
+	event := abi.Events()[eventName]
+	if event == nil {
+		return "", i18n.NewError(ctx, msgs.MsgUnknownEvent, eventName)
+	}
+	return event.SolString(), nil
 }
 
 func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
@@ -88,11 +104,14 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	n.factoryABI = factory.ABI
 	n.contractABI = contract.ABI
 
-	transferEvent := contract.ABI.Events()["NotoTransfer"]
-	if transferEvent == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgUnknownEvent, "NotoTransfer")
+	n.transferSignature, err = getEventSignature(ctx, contract.ABI, "NotoTransfer")
+	if err != nil {
+		return nil, err
 	}
-	n.transferSignature = transferEvent.SolString()
+	n.approvedSignature, err = getEventSignature(ctx, contract.ABI, "NotoApproved")
+	if err != nil {
+		return nil, err
+	}
 
 	schemaJSON, err := json.Marshal(types.NotoCoinABI)
 	if err != nil {
@@ -369,7 +388,7 @@ func (n *Noto) FindCoins(ctx context.Context, contractAddress ethtypes.Address0x
 	return coins, err
 }
 
-func (n *Noto) encodeTransferData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {
+func (n *Noto) encodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {
 	txID, err := tktypes.ParseHexBytes(ctx, transaction.TransactionId)
 	if err != nil {
 		return nil, err
@@ -381,7 +400,7 @@ func (n *Noto) encodeTransferData(ctx context.Context, transaction *prototk.Tran
 	return data, nil
 }
 
-func (n *Noto) decodeTransferData(data tktypes.HexBytes) (txID tktypes.HexBytes) {
+func (n *Noto) decodeTransactionData(data tktypes.HexBytes) (txID tktypes.HexBytes) {
 	if len(data) < 4 {
 		return nil
 	}
@@ -416,7 +435,7 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 		case n.transferSignature:
 			var transfer NotoTransfer_Event
 			if err := json.Unmarshal(ev.Data, &transfer); err == nil {
-				txID := n.decodeTransferData(transfer.Data)
+				txID := n.decodeTransactionData(transfer.Data)
 				res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(txID, transfer.Inputs)...)
 				res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(txID, transfer.Outputs)...)
 			}

@@ -170,10 +170,15 @@ func (h *approveHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 		return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
 	}
 
+	data, err := h.noto.encodeTransactionData(ctx, req.Transaction)
+	if err != nil {
+		return nil, err
+	}
 	approveParams := map[string]interface{}{
 		"delegate":  params.Delegate,
 		"txhash":    encodedTransfer,
 		"signature": ethtypes.HexBytes0xPrefix(signature.Payload),
+		"data":      data,
 	}
 	paramsJSON, err := json.Marshal(approveParams)
 	if err != nil {
