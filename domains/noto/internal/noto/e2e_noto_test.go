@@ -232,21 +232,17 @@ func TestNoto(t *testing.T) {
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
+	err = noto.WaitForCompletion(ctx, *txID)
+	assert.NoError(t, err)
 
 	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
-	require.Len(t, coins, 3)
+	require.Len(t, coins, 2)
 
-	// This should have been spent
-	// TODO: why does it still exist?
-	assert.Equal(t, int64(100), coins[0].Amount.Int64())
-	assert.Equal(t, notaryKey, coins[0].Owner.String())
-
-	// These are the expected coins after the transfer
+	assert.Equal(t, int64(50), coins[0].Amount.Int64())
+	assert.Equal(t, recipient1Key, coins[0].Owner.String())
 	assert.Equal(t, int64(50), coins[1].Amount.Int64())
-	assert.Equal(t, recipient1Key, coins[1].Owner.String())
-	assert.Equal(t, int64(50), coins[2].Amount.Int64())
-	assert.Equal(t, notaryKey, coins[2].Owner.String())
+	assert.Equal(t, notaryKey, coins[1].Owner.String())
 
 	log.L(ctx).Infof("Transfer 50 from recipient1 to recipient2")
 	rpcerr = rpc.CallRPC(ctx, &txID, "testbed_invoke", &tktypes.PrivateContractInvoke{
@@ -264,7 +260,7 @@ func TestNoto(t *testing.T) {
 
 	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
-	require.Len(t, coins, 4) // TODO: verify coins
+	require.Len(t, coins, 3) // TODO: verify coins
 }
 
 func TestNotoApprove(t *testing.T) {
@@ -461,5 +457,5 @@ func TestNotoSelfSubmit(t *testing.T) {
 
 	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
-	assert.Len(t, coins, 4) // TODO: verify coins
+	assert.Len(t, coins, 3) // TODO: verify coins
 }

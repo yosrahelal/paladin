@@ -30,6 +30,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/inflight"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -50,6 +51,7 @@ type Noto struct {
 	factoryABI        abi.ABI
 	contractABI       abi.ABI
 	transferSignature string
+	inflight          *inflight.InflightManager[string, string]
 }
 
 type NotoDeployParams struct {
@@ -95,6 +97,7 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	n.chainID = req.ChainId
 	n.factoryABI = factory.ABI
 	n.contractABI = contract.ABI
+	n.inflight = inflight.NewInflightManager[string, string](func(s string) (string, error) { return s, nil })
 
 	n.transferSignature, err = getEventSignature(ctx, contract.ABI, "NotoTransfer")
 	if err != nil {
@@ -222,6 +225,7 @@ func (n *Noto) PrepareTransaction(ctx context.Context, req *prototk.PrepareTrans
 	if err != nil {
 		return nil, err
 	}
+	n.inflight.AddInflight(ctx, req.Transaction.TransactionId)
 	return handler.Prepare(ctx, tx, req)
 }
 
@@ -434,5 +438,18 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 }
 
 func (n *Noto) TransactionComplete(ctx context.Context, req *prototk.TransactionCompleteRequest) (*prototk.TransactionCompleteResponse, error) {
-	return nil, nil
+	inflight := n.inflight.GetInflight(req.TransactionId)
+	if inflight != nil {
+		inflight.Complete(req.TransactionId)
+	}
+	return &prototk.TransactionCompleteResponse{}, nil
+}
+
+func (n *Noto) WaitForCompletion(ctx context.Context, txID tktypes.Bytes32) error {
+	inflight := n.inflight.GetInflight(txID.String())
+	if inflight != nil {
+		_, err := inflight.Wait()
+		return err
+	}
+	return nil
 }
