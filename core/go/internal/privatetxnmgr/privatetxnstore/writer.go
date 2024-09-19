@@ -240,6 +240,11 @@ func (w *writer) runBatch(ctx context.Context, b *writeOperationBatch) {
 						// Should we skip this dispatch ( or this mini batch of dispatches?)
 						return err
 					}
+					if len(publicTxIDs) != len(dispatchSequenceOp.dispatches) {
+						errorMessage := fmt.Sprintf("Expected %d public transaction IDs, got %d", len(dispatchSequenceOp.dispatches), len(publicTxIDs))
+						log.L(ctx).Errorf(errorMessage)
+						return i18n.NewError(ctx, msgs.MsgEngineInternalError, errorMessage)
+					}
 
 					//TODO this results in an `INSERT` for each dispatchSequence
 					//Would it be more efficient to pass an array for the whole flush?
