@@ -23,21 +23,21 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
-func NewPublisher(e *engine, contractAddress string) *publisher {
+func NewPublisher(p *privateTxManager, contractAddress string) *publisher {
 	return &publisher{
-		engine:          e,
-		contractAddress: contractAddress,
+		privateTxManager: p,
+		contractAddress:  contractAddress,
 	}
 }
 
 type publisher struct {
-	engine          *engine
-	contractAddress string
+	privateTxManager *privateTxManager
+	contractAddress  string
 }
 
 func (p *publisher) PublishTransactionBlockedEvent(ctx context.Context, transactionId string) error {
 
-	p.engine.HandleNewEvent(ctx, &ptmgrtypes.TransactionBlockedEvent{
+	p.privateTxManager.HandleNewEvent(ctx, &ptmgrtypes.TransactionBlockedEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
 			ContractAddress: p.contractAddress,
 			TransactionID:   transactionId,
@@ -49,7 +49,7 @@ func (p *publisher) PublishTransactionBlockedEvent(ctx context.Context, transact
 
 func (p *publisher) PublishTransactionDispatchedEvent(ctx context.Context, transactionId string, nonce uint64, signingAddress string) error {
 
-	p.engine.HandleNewEvent(ctx, &ptmgrtypes.TransactionDispatchedEvent{
+	p.privateTxManager.HandleNewEvent(ctx, &ptmgrtypes.TransactionDispatchedEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
 			ContractAddress: p.contractAddress,
 			TransactionID:   transactionId,
@@ -57,7 +57,7 @@ func (p *publisher) PublishTransactionDispatchedEvent(ctx context.Context, trans
 		Nonce:          nonce,
 		SigningAddress: signingAddress,
 	})
-	p.engine.publishToSubscribers(ctx, &components.TransactionDispatchedEvent{
+	p.privateTxManager.publishToSubscribers(ctx, &components.TransactionDispatchedEvent{
 		TransactionID:  transactionId,
 		Nonce:          nonce,
 		SigningAddress: signingAddress,
@@ -74,7 +74,7 @@ func (p *publisher) PublishTransactionSignedEvent(ctx context.Context, transacti
 		},
 		AttestationResult: attestationResult,
 	}
-	p.engine.HandleNewEvent(ctx, event)
+	p.privateTxManager.HandleNewEvent(ctx, event)
 	return nil
 }
 
@@ -87,6 +87,6 @@ func (p *publisher) PublishTransactionEndorsedEvent(ctx context.Context, transac
 		Endorsement:  endorsement,
 		RevertReason: revertReason,
 	}
-	p.engine.HandleNewEvent(ctx, event)
+	p.privateTxManager.HandleNewEvent(ctx, event)
 	return nil
 }

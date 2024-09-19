@@ -251,19 +251,19 @@ var (
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownEngine = ffe("PD011700", "Unknown engine '%s'")
 
-	// Engine PD0118XX
-	MsgDomainNotProvided           = ffe("PD011800", "Domain not found in the transaction input")
-	MsgEngineInternalError         = ffe("PD011801", "Unexpected error in engine %s")
-	MsgEngineAssembleError         = ffe("PD011802", "Error assembling transaction")
-	MsgEngineParseFailed           = ffe("PD011803", "Failed to parse message")
-	MsgEngineInvalidMessage        = ffe("PD011804", "Invalid message received from transport")
-	MsgSequencerInternalError      = ffe("PD011805", "Sequencer internal error %s, ")
-	MsgKeyResolutionFailed         = ffe("PD011806", "Key resolution failed for key %s, algorithm %s")
-	MsgDeployInitFailed            = ffe("PD011807", "Failed to initialise a deploy transaction")
-	MsgDeployPrepareFailed         = ffe("PD011808", "Failed to prepare a deploy transaction")
-	MsgDeployPrepareIncomplete     = ffe("PD011809", "Prepare step did not return a transaction to invoke, or a transaction to deploy")
-	MsgBaseLedgerTransactionFailed = ffe("PD011810", "Failed to submit base ledger transaction")
-	MsgContractAddressNotProvided  = ffe("PD011811", "Contract address (To) not found in the transaction input")
+	// PrivateTransactionManager PD0118XX
+	MsgDomainNotProvided              = ffe("PD011800", "Domain not found in the transaction input")
+	MsgPrivateTxManagerInternalError  = ffe("PD011801", "Unexpected error in engine %s")
+	MsgPrivateTxManagerAssembleError  = ffe("PD011802", "Error assembling transaction")
+	MsgPrivateTxManagerParseFailed    = ffe("PD011803", "Failed to parse message")
+	MsgPrivateTxManagerInvalidMessage = ffe("PD011804", "Invalid message received from transport")
+	MsgSequencerInternalError         = ffe("PD011805", "Sequencer internal error %s, ")
+	MsgKeyResolutionFailed            = ffe("PD011806", "Key resolution failed for key %s, algorithm %s")
+	MsgDeployInitFailed               = ffe("PD011807", "Failed to initialise a deploy transaction")
+	MsgDeployPrepareFailed            = ffe("PD011808", "Failed to prepare a deploy transaction")
+	MsgDeployPrepareIncomplete        = ffe("PD011809", "Prepare step did not return a transaction to invoke, or a transaction to deploy")
+	MsgBaseLedgerTransactionFailed    = ffe("PD011810", "Failed to submit base ledger transaction")
+	MsgContractAddressNotProvided     = ffe("PD011811", "Contract address (To) not found in the transaction input")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s ")

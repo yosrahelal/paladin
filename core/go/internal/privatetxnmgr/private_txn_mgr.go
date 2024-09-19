@@ -38,7 +38,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
-type engine struct {
+type privateTxManager struct {
 	ctx                  context.Context
 	ctxCancel            func()
 	orchestrators        map[string]*Orchestrator
@@ -50,25 +50,25 @@ type engine struct {
 }
 
 // Init implements Engine.
-func (e *engine) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
+func (p *privateTxManager) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
 	return &components.ManagerInitResult{}, nil
 }
 
-func (e *engine) PostInit(c components.AllComponents) error {
-	e.components = c
+func (p *privateTxManager) PostInit(c components.AllComponents) error {
+	p.components = c
 	return nil
 }
 
-func (e *engine) Start() error {
-	e.ctx, e.ctxCancel = context.WithCancel(context.Background())
+func (p *privateTxManager) Start() error {
+	p.ctx, p.ctxCancel = context.WithCancel(context.Background())
 	return nil
 }
 
-func (e *engine) Stop() {
+func (p *privateTxManager) Stop() {
 }
 
 func NewPrivateTransactionMgr(ctx context.Context, nodeID string, config *Config) components.PrivateTxManager {
-	return &engine{
+	return &privateTxManager{
 		orchestrators:        make(map[string]*Orchestrator),
 		endorsementGatherers: make(map[string]ptmgrtypes.EndorsementGatherer),
 		nodeID:               nodeID,
@@ -76,33 +76,33 @@ func NewPrivateTransactionMgr(ctx context.Context, nodeID string, config *Config
 	}
 }
 
-func (e *engine) getOrchestratorForContract(ctx context.Context, contractAddr tktypes.EthAddress, domainAPI components.DomainSmartContract) (oc *Orchestrator, err error) {
+func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contractAddr tktypes.EthAddress, domainAPI components.DomainSmartContract) (oc *Orchestrator, err error) {
 
-	if e.orchestrators[contractAddr.String()] == nil {
-		publisher := NewPublisher(e, contractAddr.String())
+	if p.orchestrators[contractAddr.String()] == nil {
+		publisher := NewPublisher(p, contractAddr.String())
 		seq := NewSequencer(
-			e.nodeID,
+			p.nodeID,
 			publisher,
-			NewTransportWriter(e.nodeID, e.components.TransportManager()),
+			NewTransportWriter(p.nodeID, p.components.TransportManager()),
 		)
-		endorsementGatherer, err := e.getEndorsementGathererForContract(ctx, contractAddr)
+		endorsementGatherer, err := p.getEndorsementGathererForContract(ctx, contractAddr)
 		if err != nil {
 			log.L(ctx).Errorf("Failed to get endorsement gatherer for contract %s: %s", contractAddr.String(), err)
 			return nil, err
 		}
 
-		e.orchestrators[contractAddr.String()] =
+		p.orchestrators[contractAddr.String()] =
 			NewOrchestrator(
-				ctx, e.nodeID,
+				ctx, p.nodeID,
 				contractAddr.String(), /** TODO: fill in the real plug-ins*/
 				&OrchestratorConfig{},
-				e.components,
+				p.components,
 				domainAPI,
 				seq,
 				endorsementGatherer,
 				publisher,
 			)
-		orchestratorDone, err := e.orchestrators[contractAddr.String()].Start(ctx)
+		orchestratorDone, err := p.orchestrators[contractAddr.String()].Start(ctx)
 		if err != nil {
 			log.L(ctx).Errorf("Failed to start orchestrator for contract %s: %s", contractAddr.String(), err)
 			return nil, err
@@ -113,24 +113,24 @@ func (e *engine) getOrchestratorForContract(ctx context.Context, contractAddr tk
 			log.L(ctx).Infof("Orchestrator for contract %s has stopped", contractAddr.String())
 		}()
 	}
-	return e.orchestrators[contractAddr.String()], nil
+	return p.orchestrators[contractAddr.String()], nil
 }
 
-func (e *engine) getEndorsementGathererForContract(ctx context.Context, contractAddr tktypes.EthAddress) (ptmgrtypes.EndorsementGatherer, error) {
+func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context, contractAddr tktypes.EthAddress) (ptmgrtypes.EndorsementGatherer, error) {
 
-	domainAPI, err := e.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
+	domainAPI, err := p.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
 	if err != nil {
 		return nil, err
 	}
-	if e.endorsementGatherers[contractAddr.String()] == nil {
-		endorsementGatherer := NewEndorsementGatherer(domainAPI, e.components.KeyManager())
-		e.endorsementGatherers[contractAddr.String()] = endorsementGatherer
+	if p.endorsementGatherers[contractAddr.String()] == nil {
+		endorsementGatherer := NewEndorsementGatherer(domainAPI, p.components.KeyManager())
+		p.endorsementGatherers[contractAddr.String()] = endorsementGatherer
 	}
-	return e.endorsementGatherers[contractAddr.String()], nil
+	return p.endorsementGatherers[contractAddr.String()], nil
 }
 
 // HandleNewTx implements Engine.
-func (e *engine) HandleNewTx(ctx context.Context, tx *components.PrivateTransaction) (txID string, err error) { // TODO: this function currently assumes another layer initialize transactions and store them into DB
+func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.PrivateTransaction) (txID string, err error) { // TODO: this function currently assumes another layer initialize transactions and store them into DB
 	log.L(ctx).Debugf("Handling new transaction: %v", tx)
 	if tx.Inputs == nil || tx.Inputs.Domain == "" {
 		return "", i18n.NewError(ctx, msgs.MsgDomainNotProvided)
@@ -142,7 +142,7 @@ func (e *engine) HandleNewTx(ctx context.Context, tx *components.PrivateTransact
 	}
 
 	contractAddr := tx.Inputs.To
-	domainAPI, err := e.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
+	domainAPI, err := p.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
 	if err != nil {
 		return "", err
 	}
@@ -152,9 +152,9 @@ func (e *engine) HandleNewTx(ctx context.Context, tx *components.PrivateTransact
 	}
 
 	//Resolve keys synchronously (rather than having an orchestrator stage for it) so that we can return an error if any key resolution fails
-	keyMgr := e.components.KeyManager()
+	keyMgr := p.components.KeyManager()
 	if tx.PreAssembly == nil {
-		return "", i18n.NewError(ctx, msgs.MsgEngineInternalError, "PreAssembly is nil")
+		return "", i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "PreAssembly is nil")
 	}
 	tx.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.PreAssembly.RequiredVerifiers))
 	for i, v := range tx.PreAssembly.RequiredVerifiers {
@@ -169,7 +169,7 @@ func (e *engine) HandleNewTx(ctx context.Context, tx *components.PrivateTransact
 		}
 	}
 
-	oc, err := e.getOrchestratorForContract(ctx, contractAddr, domainAPI)
+	oc, err := p.getOrchestratorForContract(ctx, contractAddr, domainAPI)
 	if err != nil {
 		return "", err
 	}
@@ -182,13 +182,13 @@ func (e *engine) HandleNewTx(ctx context.Context, tx *components.PrivateTransact
 
 // Synchronous function to deploy a domain smart contract
 // TODO should this be async?  How does this plug into the dispatch stages given that we don't have an orchestrator yet?
-func (e *engine) HandleDeployTx(ctx context.Context, tx *components.PrivateContractDeploy) (txID string, contractAddress string, err error) { // TODO: this function currently assumes another layer initialize transactions and store them into DB
+func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.PrivateContractDeploy) (txID string, contractAddress string, err error) { // TODO: this function currently assumes another layer initialize transactions and store them into DB
 	log.L(ctx).Debugf("Handling new private contract deploy transaction: %v", tx)
 	if tx.Domain == "" {
 		return "", "", i18n.NewError(ctx, msgs.MsgDomainNotProvided)
 	}
 
-	domain, err := e.components.DomainManager().GetDomainByName(ctx, tx.Domain)
+	domain, err := p.components.DomainManager().GetDomainByName(ctx, tx.Domain)
 	if err != nil {
 		return "", "", i18n.WrapError(ctx, err, msgs.MsgDomainNotFound, tx.Domain)
 	}
@@ -199,7 +199,7 @@ func (e *engine) HandleDeployTx(ctx context.Context, tx *components.PrivateContr
 	}
 
 	//Resolve keys synchronously (rather than having an orchestrator stage for it) so that we can return an error if any key resolution fails
-	keyMgr := e.components.KeyManager()
+	keyMgr := p.components.KeyManager()
 	tx.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.RequiredVerifiers))
 	for i, v := range tx.RequiredVerifiers {
 		_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm)
@@ -220,11 +220,11 @@ func (e *engine) HandleDeployTx(ctx context.Context, tx *components.PrivateContr
 		return "", "", i18n.WrapError(ctx, err, msgs.MsgDeployPrepareFailed)
 	}
 
-	//Placeholder for integration with baseledge transaction engine
+	//Placeholder for integration with public transaction manager
 	if tx.DeployTransaction != nil && tx.InvokeTransaction == nil {
-		err = e.execBaseLedgerDeployTransaction(ctx, tx.Signer, tx.DeployTransaction)
+		err = p.execBaseLedgerDeployTransaction(ctx, tx.Signer, tx.DeployTransaction)
 	} else if tx.InvokeTransaction != nil && tx.DeployTransaction == nil {
-		err = e.execBaseLedgerTransaction(ctx, tx.Signer, tx.InvokeTransaction)
+		err = p.execBaseLedgerTransaction(ctx, tx.Signer, tx.InvokeTransaction)
 	} else {
 		return "", "", i18n.NewError(ctx, msgs.MsgDeployPrepareIncomplete)
 	}
@@ -232,7 +232,7 @@ func (e *engine) HandleDeployTx(ctx context.Context, tx *components.PrivateContr
 		return "", "", i18n.WrapError(ctx, err, msgs.MsgBaseLedgerTransactionFailed)
 	}
 
-	psc, err := e.components.DomainManager().WaitForDeploy(ctx, tx.ID)
+	psc, err := p.components.DomainManager().WaitForDeploy(ctx, tx.ID)
 	if err != nil {
 		return "", "", i18n.WrapError(ctx, err, msgs.MsgBaseLedgerTransactionFailed)
 	}
@@ -242,10 +242,10 @@ func (e *engine) HandleDeployTx(ctx context.Context, tx *components.PrivateContr
 
 }
 
-func (e *engine) execBaseLedgerDeployTransaction(ctx context.Context, signer string, txInstruction *components.EthDeployTransaction) error {
+func (p *privateTxManager) execBaseLedgerDeployTransaction(ctx context.Context, signer string, txInstruction *components.EthDeployTransaction) error {
 
 	var abiFunc ethclient.ABIFunctionClient
-	ec := e.components.EthClientFactory().HTTPClient()
+	ec := p.components.EthClientFactory().HTTPClient()
 	abiFunc, err := ec.ABIConstructor(ctx, txInstruction.ConstructorABI, tktypes.HexBytes(txInstruction.Bytecode))
 	if err != nil {
 		return err
@@ -257,7 +257,7 @@ func (e *engine) execBaseLedgerDeployTransaction(ctx context.Context, signer str
 		Input(txInstruction.Inputs).
 		SignAndSend()
 	if err == nil {
-		_, err = e.components.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
+		_, err = p.components.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to send base deploy ledger transaction: %s", err)
@@ -265,10 +265,10 @@ func (e *engine) execBaseLedgerDeployTransaction(ctx context.Context, signer str
 	return nil
 }
 
-func (e *engine) execBaseLedgerTransaction(ctx context.Context, signer string, txInstruction *components.EthTransaction) error {
+func (p *privateTxManager) execBaseLedgerTransaction(ctx context.Context, signer string, txInstruction *components.EthTransaction) error {
 
 	var abiFunc ethclient.ABIFunctionClient
-	ec := e.components.EthClientFactory().HTTPClient()
+	ec := p.components.EthClientFactory().HTTPClient()
 	abiFunc, err := ec.ABIFunction(ctx, txInstruction.FunctionABI)
 	if err != nil {
 		return err
@@ -282,7 +282,7 @@ func (e *engine) execBaseLedgerTransaction(ctx context.Context, signer string, t
 		Input(txInstruction.Inputs).
 		SignAndSend()
 	if err == nil {
-		_, err = e.components.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
+		_, err = p.components.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to send base ledger transaction: %s", err)
@@ -290,22 +290,22 @@ func (e *engine) execBaseLedgerTransaction(ctx context.Context, signer string, t
 	return nil
 }
 
-func (e *engine) GetTxStatus(ctx context.Context, domainAddress string, txID string) (status components.PrivateTxStatus, err error) {
+func (p *privateTxManager) GetTxStatus(ctx context.Context, domainAddress string, txID string) (status components.PrivateTxStatus, err error) {
 	//TODO This is primarily here to help with testing for now
 	// this needs to be revisited ASAP as part of a holisitic review of the persistence model
-	targetOrchestrator := e.orchestrators[domainAddress]
+	targetOrchestrator := p.orchestrators[domainAddress]
 	if targetOrchestrator == nil {
 		//TODO should be valid to query the status of a transaction that belongs to a domain instance that is not currently active
 		errorMessage := fmt.Sprintf("Orchestrator not found for domain address %s", domainAddress)
-		return components.PrivateTxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError, errorMessage)
+		return components.PrivateTxStatus{}, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
 	} else {
 		return targetOrchestrator.GetTxStatus(ctx, txID)
 	}
 
 }
 
-func (e *engine) HandleNewEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
-	targetOrchestrator := e.orchestrators[event.GetContractAddress()]
+func (p *privateTxManager) HandleNewEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
+	targetOrchestrator := p.orchestrators[event.GetContractAddress()]
 	if targetOrchestrator == nil { // this is an event that belongs to a contract that's not in flight, throw it away and rely on the engine to trigger the action again when the orchestrator is wake up. (an enhanced version is to add weight on queueing an orchestrator)
 		log.L(ctx).Warnf("Ignored %T event for domain contract %s and transaction %s . If this happens a lot, check the orchestrator idle timeout is set to a reasonable number", event, event.GetContractAddress(), event.GetTransactionID())
 	} else {
@@ -313,7 +313,7 @@ func (e *engine) HandleNewEvent(ctx context.Context, event ptmgrtypes.PrivateTra
 	}
 }
 
-func (e *engine) HandleEndorsementRequest(ctx context.Context, messagePayload []byte) {
+func (p *privateTxManager) HandleEndorsementRequest(ctx context.Context, messagePayload []byte) {
 	endorsementRequest := &pbEngine.EndorsementRequest{}
 	err := proto.Unmarshal(messagePayload, endorsementRequest)
 	if err != nil {
@@ -327,7 +327,7 @@ func (e *engine) HandleEndorsementRequest(ctx context.Context, messagePayload []
 		return
 	}
 
-	endorsementGatherer, err := e.getEndorsementGathererForContract(ctx, *contractAddress)
+	endorsementGatherer, err := p.getEndorsementGathererForContract(ctx, *contractAddress)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to get endorsement gathere for contract address %s: %s", contractAddressString, err)
 		return
@@ -436,7 +436,7 @@ func (e *engine) HandleEndorsementRequest(ctx context.Context, messagePayload []
 		return
 	}
 
-	err = e.components.TransportManager().Send(ctx, &components.TransportMessage{
+	err = p.components.TransportManager().Send(ctx, &components.TransportMessage{
 		MessageType: "EndorsementResponse",
 		Payload:     endorsementResponseBytes,
 	})
@@ -446,7 +446,7 @@ func (e *engine) HandleEndorsementRequest(ctx context.Context, messagePayload []
 	}
 }
 
-func (e *engine) HandleEndorsementResponse(ctx context.Context, messagePayload []byte) {
+func (p *privateTxManager) HandleEndorsementResponse(ctx context.Context, messagePayload []byte) {
 
 	endorsementResponse := &pbEngine.EndorsementResponse{}
 	err := proto.Unmarshal(messagePayload, endorsementResponse)
@@ -468,7 +468,7 @@ func (e *engine) HandleEndorsementResponse(ctx context.Context, messagePayload [
 		return
 	}
 
-	e.HandleNewEvent(ctx, &ptmgrtypes.TransactionEndorsedEvent{
+	p.HandleNewEvent(ctx, &ptmgrtypes.TransactionEndorsedEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
 			TransactionID:   endorsementResponse.TransactionId,
 			ContractAddress: contractAddressString,
@@ -479,7 +479,7 @@ func (e *engine) HandleEndorsementResponse(ctx context.Context, messagePayload [
 
 }
 
-func (e *engine) ReceiveTransportMessage(ctx context.Context, message *components.TransportMessage) {
+func (p *privateTxManager) ReceiveTransportMessage(ctx context.Context, message *components.TransportMessage) {
 	//TODO this is supposed to be a quick handover to another thread.
 
 	//Send the event to the orchestrator for the contract and any transaction manager for the signing key
@@ -487,9 +487,9 @@ func (e *engine) ReceiveTransportMessage(ctx context.Context, message *component
 
 	switch message.MessageType {
 	case "EndorsementRequest":
-		go e.HandleEndorsementRequest(ctx, messagePayload)
+		go p.HandleEndorsementRequest(ctx, messagePayload)
 	case "EndorsementResponse":
-		go e.HandleEndorsementResponse(ctx, messagePayload)
+		go p.HandleEndorsementResponse(ctx, messagePayload)
 	default:
 		log.L(ctx).Errorf("Unknown message type: %s", message.MessageType)
 	}
@@ -499,18 +499,18 @@ func (e *engine) ReceiveTransportMessage(ctx context.Context, message *component
 // in the future if we want to have an eventing interface but at such time we would need to put more effort
 // into the reliabilty of the event delivery or maybe there is only a consumer of the event and it is responsible
 // for managing multiple subscribers and durability etc...
-func (e *engine) Subscribe(ctx context.Context, subscriber components.PrivateTxEventSubscriber) {
-	e.subscribersLock.Lock()
-	defer e.subscribersLock.Unlock()
+func (p *privateTxManager) Subscribe(ctx context.Context, subscriber components.PrivateTxEventSubscriber) {
+	p.subscribersLock.Lock()
+	defer p.subscribersLock.Unlock()
 	//TODO implement this
-	e.subscribers = append(e.subscribers, subscriber)
+	p.subscribers = append(p.subscribers, subscriber)
 }
 
-func (e *engine) publishToSubscribers(ctx context.Context, event components.PrivateTxEvent) {
+func (p *privateTxManager) publishToSubscribers(ctx context.Context, event components.PrivateTxEvent) {
 	log.L(ctx).Debugf("Publishing event to subscribers")
-	e.subscribersLock.Lock()
-	defer e.subscribersLock.Unlock()
-	for _, subscriber := range e.subscribers {
+	p.subscribersLock.Lock()
+	defer p.subscribersLock.Unlock()
+	for _, subscriber := range p.subscribers {
 		subscriber(event)
 	}
 }

@@ -141,7 +141,7 @@ func (ts *PaladinTxProcessor) HandleTransactionSubmittedEvent(ctx context.Contex
 
 	if ts.transaction.PostAssembly == nil {
 		log.L(ctx).Errorf("PostAssembly is nil. Should never have reached this stage without a PostAssembly")
-		//return nil, i18n.NewError(ctx, msgs.MsgEngineInternalError, "")
+		//return nil, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "")
 	}
 
 	if ts.transaction.PostAssembly.OutputStatesPotential != nil && ts.transaction.PostAssembly.OutputStates == nil {
@@ -156,14 +156,14 @@ func (ts *PaladinTxProcessor) HandleTransactionSubmittedEvent(ctx context.Contex
 			//TODO better error message
 			errorMessage := fmt.Sprintf("Failed to write potential states: %s", err)
 			log.L(ctx).Error(errorMessage)
-			//return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError, errorMessage)
+			//return nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, errorMessage)
 		}
 	}
 
 	err = ts.sequencer.AssignTransaction(ctx, ts.transaction.ID.String())
 	if err != nil {
 		log.L(ctx).Errorf("Failed to assign transaction to sequencer: %s", err)
-		//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
+		//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError)
 	}
 
 	//start an async process to gather signatures
@@ -328,7 +328,7 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 	partyNode, err := partyLocator.Node(ctx, true)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to get node name from locator %s: %s", party, err)
-		//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
+		//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError)
 	}
 
 	if ts.transaction == nil {
@@ -359,7 +359,7 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 			log.L(ctx).Errorf("Failed to gather endorsement for party %s: %s", party, err)
 			return
 			//TODO specific error message
-			//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
+			//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError)
 		}
 		if err = ts.publisher.PublishTransactionEndorsedEvent(ctx,
 			ts.transaction.ID.String(),
@@ -451,7 +451,7 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 		if err != nil {
 			//TODO need better error handling here.  Should we retry? Should we fail the transaction? Should we try sending the other requests?
 			log.L(ctx).Errorf("Failed to send endorsement request to party %s: %s", party, err)
-			//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgEngineInternalError)
+			//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError)
 		}
 	}
 }
@@ -482,11 +482,11 @@ func (ts *PaladinTxProcessor) requestEndorsements(ctx context.Context) {
 		case prototk.AttestationType_GENERATE_PROOF:
 			errorMessage := "AttestationType_GENERATE_PROOF is not implemented yet"
 			log.L(ctx).Error(errorMessage)
-			//TODO return nil, i18n.NewError(ctx, msgs.MsgEngineInternalError, errorMessage)
+			//TODO return nil, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
 		default:
 			errorMessage := fmt.Sprintf("Unsupported attestation type: %s", attRequest.AttestationType)
 			log.L(ctx).Error(errorMessage)
-			//TODO return nil, i18n.NewError(ctx, msgs.MsgEngineInternalError, errorMessage)
+			//TODO return nil, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
 		}
 
 	}

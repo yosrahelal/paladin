@@ -382,7 +382,7 @@ func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status co
 		return txProc.GetTxStatus(ctx)
 	}
 	//TODO should be possible to query the status of a transaction that is not inflight
-	return components.PrivateTxStatus{}, i18n.NewError(ctx, msgs.MsgEngineInternalError, "Transaction not found")
+	return components.PrivateTxStatus{}, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "Transaction not found")
 }
 
 // synchronously prepare and dispatch all given transactions to their associated signing address
@@ -452,7 +452,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		)
 		if rejected {
 			log.L(ctx).Errorf("Submission rejected")
-			return i18n.NewError(ctx, msgs.MsgEngineInternalError, "Submission rejected")
+			return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "Submission rejected")
 		}
 		if err != nil {
 			log.L(ctx).Errorf("Error preparing submission batch: %s", err)

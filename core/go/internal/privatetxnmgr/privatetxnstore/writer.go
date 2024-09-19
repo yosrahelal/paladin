@@ -243,7 +243,7 @@ func (w *writer) runBatch(ctx context.Context, b *writeOperationBatch) {
 					if len(publicTxIDs) != len(dispatchSequenceOp.dispatches) {
 						errorMessage := fmt.Sprintf("Expected %d public transaction IDs, got %d", len(dispatchSequenceOp.dispatches), len(publicTxIDs))
 						log.L(ctx).Error(errorMessage)
-						return i18n.NewError(ctx, msgs.MsgEngineInternalError, errorMessage)
+						return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
 					}
 
 					//TODO this results in an `INSERT` for each dispatchSequence

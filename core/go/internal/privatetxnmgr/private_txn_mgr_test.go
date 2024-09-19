@@ -43,38 +43,38 @@ import (
 	"gorm.io/gorm"
 )
 
-// Attempt to assert the behaviour of the Engine as a whole component in isolation from the rest of the system
+// Attempt to assert the behaviour of the private transaction manager as a whole component in isolation from the rest of the system
 // Tests in this file do not mock anything else in this package or sub packages but does mock other components and managers in paladin as per their interfaces
 
-func TestEngineInit(t *testing.T) {
+func TestPrivateTxManagerInit(t *testing.T) {
 
-	engine, mocks := NewPrivateTransactionMgrForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
-	err := engine.PostInit(mocks.allComponents)
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
+	err := privateTxManager.PostInit(mocks.allComponents)
 	require.NoError(t, err)
 }
 
-func TestEngineInvalidTransaction(t *testing.T) {
+func TestPrivateTxManagerInvalidTransaction(t *testing.T) {
 	ctx := context.Background()
 
-	engine, mocks := NewPrivateTransactionMgrForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
-	err := engine.PostInit(mocks.allComponents)
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
+	err := privateTxManager.PostInit(mocks.allComponents)
 	require.NoError(t, err)
 
-	err = engine.Start()
+	err = privateTxManager.Start()
 	require.NoError(t, err)
 
-	txID, err := engine.HandleNewTx(ctx, &components.PrivateTransaction{})
+	txID, err := privateTxManager.HandleNewTx(ctx, &components.PrivateTransaction{})
 	// no input domain should err
 	assert.Regexp(t, "PD011800", err)
 	assert.Empty(t, txID)
 }
 
-func TestEngineSimpleTransaction(t *testing.T) {
+func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	//Submit a transaction that gets assembled with an attestation plan for a local endorser to sign the transaction
 	ctx := context.Background()
 
 	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-	engine, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
 
 	domainAddressString := domainAddress.String()
 
@@ -165,9 +165,9 @@ func TestEngineSimpleTransaction(t *testing.T) {
 	}
 	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
 
-	err := engine.Start()
+	err := privateTxManager.Start()
 	require.NoError(t, err)
-	txID, err := engine.HandleNewTx(ctx, &components.PrivateTransaction{
+	txID, err := privateTxManager.HandleNewTx(ctx, &components.PrivateTransaction{
 		ID: uuid.New(),
 		Inputs: &components.TransactionInputs{
 			Domain: "domain1",
@@ -177,21 +177,21 @@ func TestEngineSimpleTransaction(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, txID)
 
-	status := pollForStatus(ctx, t, "dispatched", engine, domainAddressString, txID, 2*time.Second)
+	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, txID, 2*time.Second)
 	assert.Equal(t, "dispatched", status)
 }
 
-func TestEngineLocalEndorserSubmits(t *testing.T) {
+func TestPrivateTxManagerLocalEndorserSubmits(t *testing.T) {
 }
 
-func TestEngineRevertFromLocalEndorsement(t *testing.T) {
+func TestPrivateTxManagerRevertFromLocalEndorsement(t *testing.T) {
 }
 
-func TestEngineRemoteEndorser(t *testing.T) {
+func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 	ctx := context.Background()
 
 	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-	engine, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
 	domainAddressString := domainAddress.String()
 
 	remoteEngine, remoteEngineMocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
@@ -250,7 +250,7 @@ func TestEngineRemoteEndorser(t *testing.T) {
 	remoteEngineMocks.transportManager.On("Send", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		go func() {
 			transportMessage := args.Get(1).(*components.TransportMessage)
-			engine.ReceiveTransportMessage(ctx, transportMessage)
+			privateTxManager.ReceiveTransportMessage(ctx, transportMessage)
 		}()
 	}).Return(nil).Maybe()
 
@@ -297,10 +297,10 @@ func TestEngineRemoteEndorser(t *testing.T) {
 	}
 	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
 
-	err := engine.Start()
+	err := privateTxManager.Start()
 	assert.NoError(t, err)
 
-	txID, err := engine.HandleNewTx(ctx, &components.PrivateTransaction{
+	txID, err := privateTxManager.HandleNewTx(ctx, &components.PrivateTransaction{
 		ID: uuid.New(),
 		Inputs: &components.TransactionInputs{
 			Domain: "domain1",
@@ -310,19 +310,19 @@ func TestEngineRemoteEndorser(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, txID)
 
-	status := pollForStatus(ctx, t, "dispatched", engine, domainAddressString, txID, 200*time.Second)
+	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, txID, 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
 }
 
-func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
+func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	//2 transactions, one dependant on the other
 	// we purposely endorse the first transaction late to ensure that the 2nd transaction
 	// is still sequenced behind the first
 	ctx := context.Background()
 
 	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-	engine, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
 
 	domainAddressString := domainAddress.String()
 	mocks.keyManager.On("ResolveKey", mock.Anything, "alice", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("aliceKeyHandle", "aliceVerifier", nil)
@@ -435,23 +435,23 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	}
 	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
 
-	err := engine.Start()
+	err := privateTxManager.Start()
 	require.NoError(t, err)
 
-	tx1ID, err := engine.HandleNewTx(ctx, tx1)
+	tx1ID, err := privateTxManager.HandleNewTx(ctx, tx1)
 	require.NoError(t, err)
 	require.NotNil(t, tx1ID)
 
-	tx2ID, err := engine.HandleNewTx(ctx, tx2)
+	tx2ID, err := privateTxManager.HandleNewTx(ctx, tx2)
 	require.NoError(t, err)
 	require.NotNil(t, tx2ID)
 
 	// Neither transaction should be dispatched yet
-	s, err := engine.GetTxStatus(ctx, domainAddressString, tx1ID)
+	s, err := privateTxManager.GetTxStatus(ctx, domainAddressString, tx1ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
-	s, err = engine.GetTxStatus(ctx, domainAddressString, tx2ID)
+	s, err = privateTxManager.GetTxStatus(ctx, domainAddressString, tx2ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
@@ -478,7 +478,7 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	require.NoError(t, err)
 
 	//now send the endorsement back
-	engine.ReceiveTransportMessage(ctx, &components.TransportMessage{
+	privateTxManager.ReceiveTransportMessage(ctx, &components.TransportMessage{
 		MessageType: "EndorsementResponse",
 		Payload:     endorsementResponse2Bytes,
 	})
@@ -487,11 +487,11 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	if !testing.Short() {
 		time.Sleep(1 * time.Second)
 	}
-	s, err = engine.GetTxStatus(ctx, domainAddressString, tx1ID)
+	s, err = privateTxManager.GetTxStatus(ctx, domainAddressString, tx1ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
-	s, err = engine.GetTxStatus(ctx, domainAddressString, tx2ID)
+	s, err = privateTxManager.GetTxStatus(ctx, domainAddressString, tx2ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
@@ -505,28 +505,28 @@ func TestEngineDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	require.NoError(t, err)
 
 	//now send the endorsement back
-	engine.ReceiveTransportMessage(ctx, &components.TransportMessage{
+	privateTxManager.ReceiveTransportMessage(ctx, &components.TransportMessage{
 		MessageType: "EndorsementResponse",
 		Payload:     endorsementResponse1Bytes,
 	})
 
-	status := pollForStatus(ctx, t, "dispatched", engine, domainAddressString, tx1ID, 200*time.Second)
+	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx1ID, 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
-	status = pollForStatus(ctx, t, "dispatched", engine, domainAddressString, tx2ID, 200*time.Second)
+	status = pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx2ID, 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
 	//TODO assert that transaction 1 got dispatched before 2
 
 }
 
-func TestEngineLocalBlockedTransaction(t *testing.T) {
+func TestPrivateTxManagerLocalBlockedTransaction(t *testing.T) {
 	//TODO
 	// 3 transactions, for different signing addresses, but two are is blocked by the other
 	// when the earlier transaction is confirmed, both blocked transactions should be dispatched
 }
 
-func TestEngineMiniLoad(t *testing.T) {
+func TestPrivateTxManagerMiniLoad(t *testing.T) {
 	t.Skip("This test takes too long to be included by default.  It is still useful for local testing")
 	//TODO this is actually quite a complex test given all the mocking.  Maybe this should be converted to a wider component test
 	// where the real publicTxEngine is used rather than a mock
@@ -553,7 +553,7 @@ func TestEngineMiniLoad(t *testing.T) {
 			ctx := context.Background()
 
 			domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-			engine, mocks := NewPrivateTransactionMgrForTestingWithFakePublicTxEngine(t, domainAddress, newFakePublicTxEngine(t))
+			privateTxManager, mocks := NewPrivateTransactionMgrForTestingWithFakePublicTxEngine(t, domainAddress, newFakePublicTxEngine(t))
 
 			remoteEngine, remoteEngineMocks := NewPrivateTransactionMgrForTestingWithFakePublicTxEngine(t, domainAddress, newFakePublicTxEngine(t))
 
@@ -659,7 +659,7 @@ func TestEngineMiniLoad(t *testing.T) {
 					//inject random latency on the network
 					time.Sleep(test.latency())
 					transportMessage := args.Get(1).(*components.TransportMessage)
-					engine.ReceiveTransportMessage(ctx, transportMessage)
+					privateTxManager.ReceiveTransportMessage(ctx, transportMessage)
 				}()
 			}).Return(nil).Maybe()
 			remoteEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(remoteEngineMocks.domainSmartContract, nil)
@@ -698,7 +698,7 @@ func TestEngineMiniLoad(t *testing.T) {
 			numDispatched := 0
 			allDispatched := make(chan bool, 1)
 			nonceWriterLock := sync.Mutex{}
-			engine.Subscribe(ctx, func(event components.PrivateTxEvent) {
+			privateTxManager.Subscribe(ctx, func(event components.PrivateTxEvent) {
 				nonceWriterLock.Lock()
 				defer nonceWriterLock.Unlock()
 				numDispatched++
@@ -713,7 +713,7 @@ func TestEngineMiniLoad(t *testing.T) {
 				}
 			})
 
-			err := engine.Start()
+			err := privateTxManager.Start()
 			require.NoError(t, err)
 
 			for i := 0; i < test.numTransactions; i++ {
@@ -725,7 +725,7 @@ func TestEngineMiniLoad(t *testing.T) {
 						From:   "Alice",
 					},
 				}
-				txID, err := engine.HandleNewTx(ctx, tx)
+				txID, err := privateTxManager.HandleNewTx(ctx, tx)
 				require.NoError(t, err)
 				require.NotNil(t, txID)
 			}
@@ -761,7 +761,7 @@ func TestEngineMiniLoad(t *testing.T) {
 	}
 }
 
-func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, engine components.PrivateTxManager, domainAddressString, txID string, duration time.Duration) string {
+func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, privateTxManager components.PrivateTxManager, domainAddressString, txID string, duration time.Duration) string {
 	timeout := time.After(duration)
 	tick := time.Tick(100 * time.Millisecond)
 
@@ -770,11 +770,11 @@ func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, eng
 		case <-timeout:
 			// Timeout reached, exit the loop
 			assert.Failf(t, "Timed out waiting for status %s", expectedStatus)
-			s, err := engine.GetTxStatus(ctx, domainAddressString, txID)
+			s, err := privateTxManager.GetTxStatus(ctx, domainAddressString, txID)
 			require.NoError(t, err)
 			return s.Status
 		case <-tick:
-			s, err := engine.GetTxStatus(ctx, domainAddressString, txID)
+			s, err := privateTxManager.GetTxStatus(ctx, domainAddressString, txID)
 			if s.Status == expectedStatus {
 				return s.Status
 			}
@@ -799,9 +799,9 @@ type dependencyMocks struct {
 func NewPrivateTransactionMgrForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (components.PrivateTxManager, *dependencyMocks) {
 	// by default create a mock publicTxEngine if no fake was provided
 	fakePublicTxEngine := componentmocks.NewPublicTxEngine(t)
-	engine, mocks := NewPrivateTransactionMgrForTestingWithFakePublicTxEngine(t, domainAddress, fakePublicTxEngine)
+	privateTxManager, mocks := NewPrivateTransactionMgrForTestingWithFakePublicTxEngine(t, domainAddress, fakePublicTxEngine)
 	mocks.publicTxEngine = fakePublicTxEngine
-	return engine, mocks
+	return privateTxManager, mocks
 }
 
 type fakePublicTxEngine struct {
