@@ -18,7 +18,6 @@ package blockindexer
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,8 +44,6 @@ type eventStream struct {
 	batchTimeout   time.Duration
 	blocks         chan *eventStreamBlock
 	dispatch       chan *eventDispatch
-	handlerLock    sync.Mutex
-	waitForHandler chan struct{}
 	handler        InternalStreamCallback
 	detectorDone   chan struct{}
 	dispatcherDone chan struct{}
@@ -88,7 +85,7 @@ func (bi *blockIndexer) loadEventStreams(ctx context.Context) error {
 	}
 
 	for _, esDefinition := range eventStreams {
-		bi.initEventStream(esDefinition)
+		bi.initEventStream(esDefinition, nil /* no handler at this point */)
 	}
 	return nil
 }
@@ -160,25 +157,13 @@ func (bi *blockIndexer) upsertInternalEventStream(ctx context.Context, ies *Inte
 
 	// We call init here
 	// TODO: Full stop/start lifecycle
-	es := bi.initEventStream(def)
-
-	// Register the internal handler against the new or existing stream
-	es.attachHandler(ies.Handler)
+	es := bi.initEventStream(def, ies.Handler)
 
 	return es, nil
 }
 
-func (es *eventStream) attachHandler(handler InternalStreamCallback) {
-	es.handlerLock.Lock()
-	prevHandler := es.handler
-	es.handler = handler
-	if prevHandler == nil {
-		close(es.waitForHandler)
-	}
-	es.handlerLock.Unlock()
-}
-
-func (bi *blockIndexer) initEventStream(definition *EventStream) *eventStream {
+// Note that the event stream must be stopped when this is called
+func (bi *blockIndexer) initEventStream(definition *EventStream, handler InternalStreamCallback) *eventStream {
 	bi.eventStreamsLock.Lock()
 	defer bi.eventStreamsLock.Unlock()
 
@@ -190,19 +175,21 @@ func (bi *blockIndexer) initEventStream(definition *EventStream) *eventStream {
 		es.definition.Config = definition.Config
 	} else {
 		es = &eventStream{
-			bi:             bi,
-			definition:     definition,
-			eventABIs:      []*abi.Entry{},
-			signatures:     make(map[string]bool),
-			blocks:         make(chan *eventStreamBlock, bi.esBlockDispatchQueueLength),
-			dispatch:       make(chan *eventDispatch, batchSize),
-			waitForHandler: make(chan struct{}),
+			bi:         bi,
+			definition: definition,
+			eventABIs:  []*abi.Entry{},
+			signatures: make(map[string]bool),
+			blocks:     make(chan *eventStreamBlock, bi.esBlockDispatchQueueLength),
+			dispatch:   make(chan *eventDispatch, batchSize),
 		}
 	}
 
 	// Set the batch config
 	es.batchSize = batchSize
 	es.batchTimeout = confutil.DurationMin(definition.Config.BatchTimeout, 0, *EventStreamDefaults.BatchTimeout)
+
+	// Note the handler will be nil when this is first called on startup before we've been passed handlers.
+	es.handler = handler
 
 	// Calculate all the signatures we require
 	for _, abiEntry := range definition.ABI {
@@ -231,28 +218,13 @@ func (bi *blockIndexer) startEventStreams() {
 }
 
 func (es *eventStream) start() {
-	if es.detectorDone == nil && es.dispatcherDone == nil {
+	if es.handler != nil && es.detectorDone == nil && es.dispatcherDone == nil {
 		es.ctx, es.cancelCtx = context.WithCancel(log.WithLogField(es.bi.parentCtxForReset, "eventstream", es.definition.ID.String()))
 		es.detectorDone = make(chan struct{})
 		es.dispatcherDone = make(chan struct{})
-		es.run()
+		go es.detector()
+		go es.dispatcher()
 	}
-}
-
-func (es *eventStream) run() {
-
-	select {
-	case <-es.waitForHandler:
-	case <-es.ctx.Done():
-		log.L(es.ctx).Debugf("stopping before event handler registered")
-		close(es.detectorDone)
-		close(es.dispatcherDone)
-		return
-	}
-
-	go es.detector()
-	go es.dispatcher()
-
 }
 
 func (es *eventStream) stop() {
@@ -475,15 +447,7 @@ func (es *eventStream) runBatch(batch *eventBatch) error {
 	return es.bi.retry.Do(es.ctx, func(attempt int) (retryable bool, err error) {
 		var postCommit PostCommit
 		err = es.bi.persistence.DB().Transaction(func(tx *gorm.DB) (err error) {
-
-			es.handlerLock.Lock()
-			handler := es.handler
-			es.handlerLock.Unlock()
-
-			if handler == nil {
-				return i18n.NewError(es.ctx, msgs.MsgBlockMissingHandler)
-			}
-			postCommit, err = handler(es.ctx, tx, &batch.EventDeliveryBatch)
+			postCommit, err = es.handler(es.ctx, tx, &batch.EventDeliveryBatch)
 			if err != nil {
 				return err
 			}
