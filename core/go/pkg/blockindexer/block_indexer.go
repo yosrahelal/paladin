@@ -853,13 +853,12 @@ func (bi *blockIndexer) enrichTransactionEvents(ctx context.Context, abi abi.ABI
 	}
 
 	// Spin through the logs to find the corresponding result entries
-	for _, e := range events {
-		for _, l := range receipt.Logs {
+	for _, l := range receipt.Logs {
+		for _, e := range events {
 			if ethtypes.HexUint64(e.LogIndex) == l.LogIndex {
-				// We decode the data if possible (sets .Data on each event if there's a match)
-				if bi.matchLog(ctx, abi, l, e, nil) {
-					break // next log
-				}
+				// This the the log for this event - try and enrich the .Data field
+				_ = bi.matchLog(ctx, abi, l, e, nil)
+				break
 			}
 		}
 	}
