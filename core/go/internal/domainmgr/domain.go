@@ -461,14 +461,29 @@ func (d *domain) handleEventBatch(ctx context.Context, tx *gorm.DB, batch *block
 		}
 	}
 
+	transactionsComplete := make([]uuid.UUID, 0, len(batch.Events))
 	for addr, events := range eventsByAddress {
-		_, err := d.handleEventBatchForContract(ctx, batch.BatchID, addr, events)
+		res, err := d.handleEventBatchForContract(ctx, batch.BatchID, addr, events)
 		if err != nil {
 			return nil, err
 		}
+		for _, txIDStr := range res.TransactionsComplete {
+			txID, err := d.recoverTransactionID(ctx, txIDStr)
+			if err != nil {
+				return nil, err
+			}
+			transactionsComplete = append(transactionsComplete, *txID)
+		}
 	}
 
-	return nil, nil
+	return func() {
+		for _, c := range transactionsComplete {
+			inflight := d.dm.transactionWaiter.GetInflight(c)
+			if inflight != nil {
+				inflight.Complete(nil)
+			}
+		}
+	}, nil
 }
 
 func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*uuid.UUID, error) {

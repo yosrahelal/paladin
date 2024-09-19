@@ -415,7 +415,6 @@ func (n *Noto) parseStatesFromEvent(txID tktypes.HexBytes, states []tktypes.Byte
 	refs := make([]*prototk.StateUpdate, len(states))
 	for i, state := range states {
 		refs[i] = &prototk.StateUpdate{
-			SchemaId:      n.coinSchema.Id,
 			Id:            state.String(),
 			TransactionId: txID.String(),
 		}

@@ -56,12 +56,13 @@ func NewDomainManager(bgCtx context.Context, conf *DomainManagerConfig) componen
 	}
 	log.L(bgCtx).Infof("Domains configured: %v", allDomains)
 	return &domainManager{
-		bgCtx:            bgCtx,
-		conf:             conf,
-		domainsByName:    make(map[string]*domain),
-		domainsByAddress: make(map[tktypes.EthAddress]*domain),
-		contractWaiter:   inflight.NewInflightManager[uuid.UUID, *PrivateSmartContract](uuid.Parse),
-		contractCache:    cache.NewCache[tktypes.EthAddress, *domainContract](&conf.DomainManager.ContractCache, ContractCacheDefaults),
+		bgCtx:             bgCtx,
+		conf:              conf,
+		domainsByName:     make(map[string]*domain),
+		domainsByAddress:  make(map[tktypes.EthAddress]*domain),
+		contractWaiter:    inflight.NewInflightManager[uuid.UUID, *PrivateSmartContract](uuid.Parse),
+		transactionWaiter: inflight.NewInflightManager[uuid.UUID, any](uuid.Parse),
+		contractCache:     cache.NewCache[tktypes.EthAddress, *domainContract](&conf.DomainManager.ContractCache, ContractCacheDefaults),
 	}
 }
 
@@ -78,8 +79,9 @@ type domainManager struct {
 	domainsByName    map[string]*domain
 	domainsByAddress map[tktypes.EthAddress]*domain
 
-	contractWaiter *inflight.InflightManager[uuid.UUID, *PrivateSmartContract]
-	contractCache  cache.Cache[tktypes.EthAddress, *domainContract]
+	contractWaiter    *inflight.InflightManager[uuid.UUID, *PrivateSmartContract]
+	transactionWaiter *inflight.InflightManager[uuid.UUID, any]
+	contractCache     cache.Cache[tktypes.EthAddress, *domainContract]
 }
 
 type event_PaladinRegisterSmartContract_V0 struct {
@@ -208,7 +210,15 @@ func (dm *domainManager) waitAndEnrich(ctx context.Context, req *inflight.Inflig
 		return nil, err
 	}
 	return dm.enrichContractWithDomain(ctx, def)
+}
 
+func (dm *domainManager) WaitForTransaction(ctx context.Context, txID uuid.UUID) error {
+	// Waits for the event that confirms a transaction has been processed (or a context timeout)
+	// using the ID of the transaction
+	req := dm.transactionWaiter.AddInflight(ctx, txID)
+	defer req.Cancel()
+	_, err := req.Wait()
+	return err
 }
 
 func (dm *domainManager) setDomainAddress(d *domain) {

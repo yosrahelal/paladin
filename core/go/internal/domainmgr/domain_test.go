@@ -915,6 +915,9 @@ func TestHandleEventBatch(t *testing.T) {
 		require.Len(t, events, 1)
 		assert.Equal(t, contract2.String(), events[0].Address.String())
 		return &prototk.HandleEventBatchResponse{
+			TransactionsComplete: []string{
+				txIDBytes32.String(),
+			},
 			SpentStates: []*prototk.StateUpdate{
 				{
 					Id:            stateSpent,
@@ -930,7 +933,7 @@ func TestHandleEventBatch(t *testing.T) {
 		}, nil
 	}
 
-	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+	cb, err := d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
 		Events: []*blockindexer.EventWithData{
 			{
@@ -943,6 +946,11 @@ func TestHandleEventBatch(t *testing.T) {
 			},
 		},
 	})
+	assert.NoError(t, err)
+
+	req := d.dm.transactionWaiter.AddInflight(ctx, txID)
+	cb()
+	_, err = req.Wait()
 	assert.NoError(t, err)
 }
 
@@ -1064,6 +1072,41 @@ func TestHandleEventBatchConfirmBadTransactionID(t *testing.T) {
 					Id:            stateSpent,
 					TransactionId: "badnotgood",
 				},
+			},
+		}, nil
+	}
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				Address: *contract1,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.ErrorContains(t, err, "PD020007")
+}
+
+func TestHandleEventBatchBadTransactionID(t *testing.T) {
+	batchID := uuid.New()
+	contract1 := tktypes.RandAddress()
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{"address", "domain_address"},
+	).AddRow(contract1, d.registryAddress))
+
+	tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return &prototk.HandleEventBatchResponse{
+			TransactionsComplete: []string{
+				"badnotgood",
 			},
 		}, nil
 	}
