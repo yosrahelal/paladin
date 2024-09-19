@@ -68,6 +68,9 @@ type DomainStateInterface interface {
 	// no longer be used as an input to a future transaction.
 	MarkStatesSpent(transactionID uuid.UUID, stateIDs []string) error
 
+	// MarkStatesConfirmed writes a confirmation record so the state is now confirmed and unspent.
+	MarkStatesConfirmed(transactionID uuid.UUID, stateIDs []string) error
+
 	// UpsertStates creates or updates states.
 	// They are available immediately within the domain for return in FindAvailableStates
 	// on the domain (even before the flush).
@@ -457,6 +460,22 @@ func (dc *domainContext) setUnFlushedSpend(transactionID uuid.UUID, stateID tkty
 	return s, nil
 }
 
+func (dc *domainContext) setUnFlushedConfirm(transactionID uuid.UUID, stateID tktypes.Bytes32) (*StateConfirm, error) {
+	// Check for an existing record
+	for _, confirm := range dc.unFlushed.stateConfirms {
+		if confirm.State == stateID {
+			if confirm.Transaction != transactionID {
+				// Should never happen - two transactions cannot confirm the same state
+				return nil, i18n.NewError(dc.ctx, msgs.MsgStateConfirmConflictUnexpected, confirm.Transaction, transactionID)
+			}
+			return confirm, nil
+		}
+	}
+	s := &StateConfirm{State: stateID, Transaction: transactionID}
+	dc.unFlushed.stateConfirms = append(dc.unFlushed.stateConfirms, s)
+	return s, nil
+}
+
 func (dc *domainContext) MarkStatesRead(transactionID uuid.UUID, stateIDs []string) (err error) {
 	return dc.lockStates(transactionID, stateIDs, func(*StateLock) {})
 }
@@ -484,6 +503,31 @@ func (dc *domainContext) MarkStatesSpent(transactionID uuid.UUID, stateIDStrings
 	// Add a new un-flushed spend record
 	for _, id := range stateIDs {
 		if _, err := dc.setUnFlushedSpend(transactionID, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (dc *domainContext) MarkStatesConfirmed(transactionID uuid.UUID, stateIDStrings []string) (err error) {
+	stateIDs := make([]tktypes.Bytes32, len(stateIDStrings))
+	for i, id := range stateIDStrings {
+		stateIDs[i], err = tktypes.ParseBytes32Ctx(dc.ctx, id)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Take lock and check flush state
+	dc.stateLock.Lock()
+	defer dc.stateLock.Unlock()
+	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
+		return flushErr
+	}
+
+	// Add a new un-flushed confirmation record
+	for _, id := range stateIDs {
+		if _, err := dc.setUnFlushedConfirm(transactionID, id); err != nil {
 			return err
 		}
 	}

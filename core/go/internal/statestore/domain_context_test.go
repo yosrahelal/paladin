@@ -270,6 +270,17 @@ func TestStateContextMintSpendMint(t *testing.T) {
 		assert.Len(t, states, 1)
 		assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
 
+		// Mark a state confirmed
+		confirmState := states[0].ID.String() // 20
+		err = dsi.MarkStatesConfirmed(transactionID, []string{confirmState})
+		require.NoError(t, err)
+
+		// Can't confirm again from a different transaction (but can from the same transaction)
+		err = dsi.MarkStatesConfirmed(uuid.New(), []string{confirmState})
+		require.ErrorContains(t, err, "PD010121")
+		err = dsi.MarkStatesConfirmed(transactionID, []string{confirmState})
+		require.NoError(t, err)
+
 		// Mark a state spent
 		spendState := states[0].ID.String() // 20
 		err = dsi.MarkStatesSpent(transactionID, []string{spendState})
@@ -384,6 +395,10 @@ func TestDSIFlushErrorCapture(t *testing.T) {
 
 		fakeFlushError(dc)
 		err = dsi.MarkStatesSpent(uuid.New(), nil)
+		assert.Regexp(t, "pop", err)
+
+		fakeFlushError(dc)
+		err = dsi.MarkStatesConfirmed(uuid.New(), nil)
 		assert.Regexp(t, "pop", err)
 
 		fakeFlushError(dc)
@@ -650,6 +665,9 @@ func TestDSIBadIDs(t *testing.T) {
 		assert.Regexp(t, "PD020007", err)
 
 		err = dsi.MarkStatesSpent(uuid.New(), []string{"wrong"})
+		assert.Regexp(t, "PD020007", err)
+
+		err = dsi.MarkStatesConfirmed(uuid.New(), []string{"wrong"})
 		assert.Regexp(t, "PD020007", err)
 
 		return nil

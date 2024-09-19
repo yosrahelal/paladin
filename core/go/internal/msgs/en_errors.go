@@ -85,6 +85,7 @@ var (
 	MsgStateLockConflictUnexpected    = ffe("PD010118", "Pending lock for transaction %s found when attempting to lock to transaction %s")
 	MsgStateFlushFailedDomainReset    = ffe("PD010119", "Flush of state for domain %s has failed, and the domain has been reset")
 	MsgStateSpendConflictUnexpected   = ffe("PD010120", "Pending spend for transaction %s found when attempting to spend from transaction %s")
+	MsgStateConfirmConflictUnexpected = ffe("PD010121", "Pending confirmation for transaction %s found when attempting to confirm from transaction %s")
 
 	// Persistence PD0102XX
 	MsgPersistenceInvalidType         = ffe("PD010200", "Invalid persistence type: %s")
