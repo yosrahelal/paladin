@@ -79,9 +79,6 @@ func mapPersistedTXBase(pt *persistedTransaction) *ptxapi.Transaction {
 		To:             pt.To,
 		Data:           pt.Data,
 	}
-	for _, dep := range pt.TransactionDeps {
-		res.DependsOn = append(res.DependsOn, dep.DependsOn)
-	}
 	return res
 }
 
@@ -92,6 +89,9 @@ func (tm *txManager) mapPersistedTXFull(pt *persistedTransaction) *ptxapi.Transa
 	receipt := pt.TransactionReceipt
 	if receipt != nil {
 		res.Receipt = mapPersistedReceipt(receipt)
+	}
+	for _, dep := range pt.TransactionDeps {
+		res.DependsOn = append(res.DependsOn, dep.DependsOn)
 	}
 	res.Activity = tm.getActivityRecords(res.ID)
 	return res
@@ -104,7 +104,7 @@ type resolvedFunction struct {
 	signature    string
 }
 
-func (tm *txManager) resolveFunction(ctx context.Context, inputABI abi.ABI, inputABIRef *tktypes.Bytes32, requiredFunction string, to *tktypes.EthAddress) (_ *resolvedFunction, err error) {
+func (tm *txManager) resolveFunction(ctx context.Context, dbTX *gorm.DB, inputABI abi.ABI, inputABIRef *tktypes.Bytes32, requiredFunction string, to *tktypes.EthAddress) (_ *resolvedFunction, err error) {
 
 	// Lookup the ABI we're working with.
 	// Only needs to contain the function definition we're calling, but can be the whole ABI of the contract.
@@ -116,7 +116,7 @@ func (tm *txManager) resolveFunction(ctx context.Context, inputABI abi.ABI, inpu
 		}
 		pa, err = tm.getABIByHash(ctx, *inputABIRef)
 	} else {
-		pa, err = tm.upsertABI(ctx, inputABI)
+		pa, err = tm.upsertABI(ctx, dbTX, inputABI)
 	}
 	if err != nil || pa == nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrABIReferenceLookupFailed, inputABIRef)
@@ -227,37 +227,71 @@ func (tm *txManager) parseInputs(
 }
 
 func (tm *txManager) sendTransaction(ctx context.Context, tx *ptxapi.TransactionInput) (*uuid.UUID, error) {
-
-	fn, err := tm.resolveFunction(ctx, tx.ABI, tx.ABIReference, tx.Function, tx.To)
+	var txIDs []uuid.UUID
+	err := tm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+		txIDs, err = tm.insertTransactions(ctx, dbTX, []*ptxapi.TransactionInput{tx})
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
+	return &txIDs[0], err
+}
 
-	normalizedJSON, err := tm.parseInputs(ctx, fn.definition, tx.Type, tx.Data, tx.Bytecode)
-	if err != nil {
-		return nil, err
+func (tm *txManager) insertTransactions(ctx context.Context, dbTX *gorm.DB, txs []*ptxapi.TransactionInput) ([]uuid.UUID, error) {
+	txIDs := make([]uuid.UUID, len(txs))
+	ptxs := make([]*persistedTransaction, len(txs))
+	var transactionDeps []*transactionDep
+	for i := range txs {
+		tx := txs[i]
+		txID := uuid.New()
+		txIDs[i] = txID
+
+		fn, err := tm.resolveFunction(ctx, dbTX, tx.ABI, tx.ABIReference, tx.Function, tx.To)
+		if err != nil {
+			return nil, err
+		}
+
+		normalizedJSON, err := tm.parseInputs(ctx, fn.definition, tx.Type, tx.Data, tx.Bytecode)
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: Flush writer for singleton transactions vs batch
+		ptxs[i] = &persistedTransaction{
+			ID:             txID,
+			IdempotencyKey: notEmptyOrNull(tx.IdempotencyKey),
+			Type:           tx.Type,
+			ABIReference:   fn.abiReference,
+			Function:       notEmptyOrNull(fn.signature),
+			Domain:         notEmptyOrNull(tx.Domain),
+			From:           tx.From,
+			To:             tx.To,
+			Data:           normalizedJSON,
+		}
+		for _, d := range tx.DependsOn {
+			transactionDeps = append(transactionDeps, &transactionDep{
+				Transaction: txID,
+				DependsOn:   d,
+			})
+		}
 	}
 
-	// TODO: Flush writer for singleton transactions vs batch
-	ptx := &persistedTransaction{
-		ID:             uuid.New(),
-		IdempotencyKey: notEmptyOrNull(tx.IdempotencyKey),
-		Type:           tx.Type,
-		ABIReference:   fn.abiReference,
-		Function:       notEmptyOrNull(fn.signature),
-		Domain:         notEmptyOrNull(tx.Domain),
-		From:           tx.From,
-		To:             tx.To,
-		Data:           normalizedJSON,
-	}
-	err = tm.p.DB().
+	err := dbTX.
 		Table("transactions").
-		Create(ptx).
+		Create(ptxs).
+		Omit("TransactionDeps").
 		Error
+	if err == nil && len(transactionDeps) > 0 {
+		err = dbTX.
+			Table("transaction_deps").
+			Create(transactionDeps).
+			Error
+	}
 	if err != nil {
 		return nil, err
 	}
-	return &ptx.ID, nil
+	return txIDs, nil
 }
 
 func (tm *txManager) queryTransactions(ctx context.Context, jq *query.QueryJSON, pending bool) ([]*ptxapi.Transaction, error) {
@@ -269,7 +303,6 @@ func (tm *txManager) queryTransactions(ctx context.Context, jq *query.QueryJSON,
 		query:       jq,
 		finalize: func(q *gorm.DB) *gorm.DB {
 			// TODO: Join public and private transaction strings
-			q = q.Joins("TransactionDeps")
 			if pending {
 				q = q.Joins("TransactionReceipt").
 					Where("TransactionReceipt__transaction IS NULL")
@@ -280,7 +313,7 @@ func (tm *txManager) queryTransactions(ctx context.Context, jq *query.QueryJSON,
 			return mapPersistedTXBase(pt), nil
 		},
 	}
-	return qw.run(ctx)
+	return qw.run(ctx, nil)
 }
 
 func (tm *txManager) queryTransactionsFull(ctx context.Context, jq *query.QueryJSON, pending bool) ([]*ptxapi.TransactionFull, error) {
@@ -293,7 +326,7 @@ func (tm *txManager) queryTransactionsFull(ctx context.Context, jq *query.QueryJ
 		finalize: func(q *gorm.DB) *gorm.DB {
 			// TODO: Join public and private transaction info
 			q = q.
-				Joins("TransactionDeps").
+				Preload("TransactionDeps").
 				Joins("TransactionReceipt")
 			if pending {
 				q = q.Where("TransactionReceipt__transaction IS NULL")
@@ -304,7 +337,7 @@ func (tm *txManager) queryTransactionsFull(ctx context.Context, jq *query.QueryJ
 			return tm.mapPersistedTXFull(pt), nil
 		},
 	}
-	return qw.run(ctx)
+	return qw.run(ctx, nil)
 }
 
 func (tm *txManager) getTransactionByIDFull(ctx context.Context, id uuid.UUID) (*ptxapi.TransactionFull, error) {
@@ -321,4 +354,29 @@ func (tm *txManager) getTransactionByID(ctx context.Context, id uuid.UUID) (*ptx
 		return nil, err
 	}
 	return ptxs[0], nil
+}
+
+func (tm *txManager) getTransactionDependencies(ctx context.Context, id uuid.UUID) (*ptxapi.TransactionDependencies, error) {
+	var persistedDeps []*transactionDep
+	err := tm.p.DB().
+		Table(`transaction_deps`).
+		Where(`"transaction" = ?`, id).
+		Or("depends_on = ?", id).
+		Find(&persistedDeps).
+		Error
+	if err != nil {
+		return nil, err
+	}
+	res := &ptxapi.TransactionDependencies{
+		DependsOn: make([]uuid.UUID, 0, len(persistedDeps)),
+		PrereqOf:  make([]uuid.UUID, 0, len(persistedDeps)),
+	}
+	for _, td := range persistedDeps {
+		if td.Transaction == id {
+			res.DependsOn = append(res.DependsOn, td.DependsOn)
+		} else {
+			res.PrereqOf = append(res.PrereqOf, td.Transaction)
+		}
+	}
+	return res, nil
 }

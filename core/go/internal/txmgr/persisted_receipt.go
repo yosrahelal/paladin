@@ -202,7 +202,7 @@ func (tm *txManager) queryTransactionReceipts(ctx context.Context, jq *query.Que
 			}, nil
 		},
 	}
-	return qw.run(ctx)
+	return qw.run(ctx, nil)
 }
 
 func (tm *txManager) getTransactionReceiptByID(ctx context.Context, id uuid.UUID) (*ptxapi.TransactionReceipt, error) {

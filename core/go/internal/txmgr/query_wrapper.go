@@ -57,7 +57,7 @@ func int64OrZero(pi *int64) int64 {
 	return *pi
 }
 
-func (qw *queryWrapper[PT, T]) run(ctx context.Context) ([]*T, error) {
+func (qw *queryWrapper[PT, T]) run(ctx context.Context, dbTX *gorm.DB) ([]*T, error) {
 	if qw.query.Limit == nil || *qw.query.Limit <= 0 {
 		return nil, i18n.NewError(ctx, msgs.MsgTxMgrQueryLimitRequired)
 	}
@@ -68,10 +68,12 @@ func (qw *queryWrapper[PT, T]) run(ctx context.Context) ([]*T, error) {
 
 	// Build the query
 	var dbResults []*PT
-	db := qw.p.DB()
+	if dbTX == nil {
+		dbTX = qw.p.DB()
+	}
 	q := filters.BuildGORM(ctx,
 		qw.query,
-		db.Table(qw.table).WithContext(ctx),
+		dbTX.Table(qw.table).WithContext(ctx),
 		qw.filters)
 	if qw.finalize != nil {
 		q = qw.finalize(q)

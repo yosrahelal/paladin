@@ -82,10 +82,12 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	}
 
 	// Submit in a public deploy with array encoded params and bytecode
+	tx0ID := uuid.New()
 	var tx1ID uuid.UUID
 	err = rpcClient.CallRPC(ctx, &tx1ID, "ptx_sendTransaction", &ptxapi.TransactionInput{
-		ABI:      sampleABI,
-		Bytecode: tktypes.MustParseHexBytes("0x11223344"),
+		ABI:       sampleABI,
+		Bytecode:  tktypes.MustParseHexBytes("0x11223344"),
+		DependsOn: []uuid.UUID{tx0ID},
 		Transaction: ptxapi.Transaction{
 			IdempotencyKey: "tx1",
 			Type:           ptxapi.TransactionTypePublic.Enum(),
@@ -106,6 +108,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, txns, 1)
 	assert.Equal(t, tx1ID, txns[0].ID)
+	assert.Equal(t, tx0ID, txns[0].DependsOn[0])
 	assert.Equal(t, `{"0":"12345"}`, txns[0].Data.String())
 	assert.Equal(t, "(uint256)", txns[0].Function)
 	assert.Len(t, txns[0].Activity, 2)
@@ -148,6 +151,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	// Submit in a public invoke using that same ABI referring to the function
 	var tx2ID uuid.UUID
 	err = rpcClient.CallRPC(ctx, &tx2ID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+		DependsOn: []uuid.UUID{tx1ID},
 		Transaction: ptxapi.Transaction{
 			ABIReference:   &abiHash,
 			IdempotencyKey: "tx2",
@@ -232,5 +236,12 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, successReceipts, 1)
 	assert.Equal(t, successReceipts[0].ID, tx1ID)
+
+	// Get the dependency in the middle of the chain 0, 1, 2 to see both sides
+	var tx1Deps *ptxapi.TransactionDependencies
+	err = rpcClient.CallRPC(ctx, &tx1Deps, "ptx_getTransactionDependencies", tx1ID)
+	require.NoError(t, err)
+	assert.Equal(t, []uuid.UUID{tx0ID}, tx1Deps.DependsOn)
+	assert.Equal(t, []uuid.UUID{tx2ID}, tx1Deps.PrereqOf)
 
 }

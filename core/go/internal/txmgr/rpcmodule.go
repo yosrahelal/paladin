@@ -34,6 +34,7 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_queryPendingTransactions", tm.rpcQueryPendingTransactions()).
 		Add("ptx_getTransactionReceipt", tm.rpcGetTransactionReceipt()).
 		Add("ptx_queryTransactionReceipts", tm.rpcQueryTransactionReceipts()).
+		Add("ptx_getTransactionDependencies", tm.rpcGetTransactionDependencies()).
 		Add("ptx_storeABI", tm.rpcStoreABI()).
 		Add("ptx_getStoredABI", tm.rpcGetStoredABI()).
 		Add("ptx_queryStoredABIs", tm.rpcQueryStoredABIs())
@@ -91,6 +92,14 @@ func (tm *txManager) rpcGetTransactionReceipt() rpcserver.RPCHandler {
 	})
 }
 
+func (tm *txManager) rpcGetTransactionDependencies() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		id uuid.UUID,
+	) (*ptxapi.TransactionDependencies, error) {
+		return tm.getTransactionDependencies(ctx, id)
+	})
+}
+
 func (tm *txManager) rpcQueryTransactionReceipts() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
@@ -103,7 +112,7 @@ func (tm *txManager) rpcStoreABI() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		a abi.ABI,
 	) (*tktypes.Bytes32, error) {
-		pa, err := tm.upsertABI(ctx, a)
+		pa, err := tm.storeABI(ctx, a)
 		if err != nil {
 			return nil, err
 		}

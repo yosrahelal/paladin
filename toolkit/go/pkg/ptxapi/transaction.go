@@ -51,7 +51,6 @@ type Transaction struct {
 	From           string                        `json:"from,omitempty"`           // locator for a local signing identity to use for submission of this transaction
 	To             *tktypes.EthAddress           `json:"to,omitempty"`             // the target transaction, or null for a deploy
 	Data           tktypes.RawJSON               `json:"data,omitempty"`           // pre-encoded array with/without function selector, array, or object input
-	DependsOn      []uuid.UUID                   `json:"dependsOn,omitempty"`      // these transactions must be mined on the blockchain successfully (or deleted) before this transaction submits. Failure of pre-reqs results in failure of this TX
 	// TODO: PrivateTransactions string list
 	// TODO: PublicTransactions string list
 }
@@ -59,15 +58,17 @@ type Transaction struct {
 // Additional optional fields on input not returned on output
 type TransactionInput struct {
 	Transaction
-	ABI      abi.ABI          `json:"abi,omitempty"`      // required if abiReference not supplied
-	Bytecode tktypes.HexBytes `json:"bytecode,omitempty"` // for deploy this is prepended to the encoded data inputs
+	DependsOn []uuid.UUID      `json:"dependsOn,omitempty"` // these transactions must be mined on the blockchain successfully (or deleted) before this transaction submits. Failure of pre-reqs results in failure of this TX
+	ABI       abi.ABI          `json:"abi,omitempty"`       // required if abiReference not supplied
+	Bytecode  tktypes.HexBytes `json:"bytecode,omitempty"`  // for deploy this is prepended to the encoded data inputs
 }
 
 // Additional fields returned on output when "full" specified
 type TransactionFull struct {
 	*Transaction
-	Receipt  *TransactionReceiptData     `json:"receipt"`  // available if the transaction has reached a final state
-	Activity []TransactionActivityRecord `json:"activity"` // if active processing is being performed on this transaction this provides a rolling buffer of updates
+	DependsOn []uuid.UUID                 `json:"dependsOn,omitempty"` // transactions registered as dependencies when the transaction was created
+	Receipt   *TransactionReceiptData     `json:"receipt"`             // available if the transaction has reached a final state
+	Activity  []TransactionActivityRecord `json:"activity"`            // if active processing is being performed on this transaction this provides a rolling buffer of updates
 	// TODO: PrivateTransactions object list
 	// TODO: PublicTransactions object list
 }
@@ -88,4 +89,9 @@ type TransactionReceiptData struct {
 type TransactionActivityRecord struct {
 	Time    tktypes.Timestamp `json:"time"`    // time the record occurred
 	Message string            `json:"message"` //
+}
+
+type TransactionDependencies struct {
+	DependsOn []uuid.UUID `json:"dependsOn"`
+	PrereqOf  []uuid.UUID `json:"prereqOf"`
 }

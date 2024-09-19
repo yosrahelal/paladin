@@ -71,7 +71,16 @@ func (tm *txManager) getABIByHash(ctx context.Context, hash tktypes.Bytes32) (*p
 	return pa, nil
 }
 
-func (tm *txManager) upsertABI(ctx context.Context, a abi.ABI) (*ptxapi.StoredABI, error) {
+func (tm *txManager) storeABI(ctx context.Context, a abi.ABI) (*ptxapi.StoredABI, error) {
+	var pa *ptxapi.StoredABI
+	err := tm.p.DB().Transaction(func(tx *gorm.DB) (err error) {
+		pa, err = tm.upsertABI(ctx, tx, a)
+		return err
+	})
+	return pa, err
+}
+
+func (tm *txManager) upsertABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (*ptxapi.StoredABI, error) {
 	hash, err := tktypes.ABISolDefinitionHash(ctx, a)
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidABI)
@@ -100,38 +109,35 @@ func (tm *txManager) upsertABI(ctx context.Context, a abi.ABI) (*ptxapi.StoredAB
 	}
 
 	// Otherwise ask the DB to store
-	err = tm.p.DB().Transaction(func(tx *gorm.DB) error {
-		abiBytes, err := json.Marshal(a)
-		if err == nil {
-			err = tx.
-				Table("abis").
-				Clauses(clause.OnConflict{
-					Columns: []clause.Column{
-						{Name: "hash"},
-					},
-					DoNothing: true, // immutable
-				}).
-				Create(&PersistedABI{
-					Hash: *hash,
-					ABI:  abiBytes,
-				}).
-				Error
-		}
-		if err == nil && len(errorDefs) > 0 {
-			err = tx.
-				Table("abi_errors").
-				Clauses(clause.OnConflict{
-					Columns: []clause.Column{
-						{Name: "abi_hash"},
-						{Name: "selector"},
-					},
-					DoNothing: true, // immutable
-				}).
-				Create(errorDefs).
-				Error
-		}
-		return err
-	})
+	abiBytes, err := json.Marshal(a)
+	if err == nil {
+		err = dbTX.
+			Table("abis").
+			Clauses(clause.OnConflict{
+				Columns: []clause.Column{
+					{Name: "hash"},
+				},
+				DoNothing: true, // immutable
+			}).
+			Create(&PersistedABI{
+				Hash: *hash,
+				ABI:  abiBytes,
+			}).
+			Error
+	}
+	if err == nil && len(errorDefs) > 0 {
+		err = dbTX.
+			Table("abi_errors").
+			Clauses(clause.OnConflict{
+				Columns: []clause.Column{
+					{Name: "abi_hash"},
+					{Name: "selector"},
+				},
+				DoNothing: true, // immutable
+			}).
+			Create(errorDefs).
+			Error
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -157,5 +163,5 @@ func (tm *txManager) queryABIs(ctx context.Context, jq *query.QueryJSON) ([]*ptx
 			}, err
 		},
 	}
-	return qw.run(ctx)
+	return qw.run(ctx, nil)
 }
