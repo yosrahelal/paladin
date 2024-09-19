@@ -141,8 +141,8 @@ func notoDeploy(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domai
 }
 
 func notoMint(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, notoAddress ethtypes.Address0xHex, from, to string, amount int64) {
-	var txID *tktypes.Bytes32
-	rpcerr := rpc.CallRPC(ctx, &txID, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	var result bool
+	rpcerr := rpc.CallRPC(ctx, &result, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     from,
 		To:       tktypes.EthAddress(notoAddress),
 		Function: *types.NotoABI.Functions()["mint"],
@@ -154,7 +154,7 @@ func notoMint(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, notoAdd
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
-	assert.NotNil(t, txID)
+	assert.True(t, result)
 }
 
 func notoPrepareTransfer(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, notoAddress ethtypes.Address0xHex, from, to string, amount int64) *tktypes.PrivateContractPreparedTransaction {
@@ -175,8 +175,8 @@ func notoPrepareTransfer(ctx context.Context, t *testing.T, rpc rpcbackend.Backe
 }
 
 func notoApprove(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, notoAddress ethtypes.Address0xHex, from string, delegate ethtypes.Address0xHex, call []byte) {
-	var txID *tktypes.Bytes32
-	rpcerr := rpc.CallRPC(ctx, &txID, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	var result bool
+	rpcerr := rpc.CallRPC(ctx, &result, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     from,
 		To:       tktypes.EthAddress(notoAddress),
 		Function: *types.NotoABI.Functions()["approve"],
@@ -188,7 +188,7 @@ func notoApprove(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, noto
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
-	assert.NotNil(t, txID)
+	assert.True(t, result)
 }
 
 func deployBuilder(ctx context.Context, t *testing.T, eth ethclient.EthClient, abi abi.ABI, bytecode []byte) ethclient.ABIFunctionRequestBuilder {
