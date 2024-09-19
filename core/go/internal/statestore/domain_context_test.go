@@ -252,8 +252,8 @@ func TestStateContextMintSpendMint(t *testing.T) {
 
 		// Now check that we merge the DB and in-memory state
 		states, err = dsi.FindAvailableStates(schemaID, toQuery(t, `{
-					"sort": [ "owner", "amount" ]
-				}`))
+			"sort": [ "owner", "amount" ]
+		}`))
 		require.NoError(t, err)
 		assert.Len(t, states, 4)
 		assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
@@ -269,6 +269,27 @@ func TestStateContextMintSpendMint(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, states, 1)
 		assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
+
+		// Mark a state spent
+		spendState := states[0].ID.String() // 20
+		err = dsi.MarkStatesSpent(transactionID, []string{spendState})
+		require.NoError(t, err)
+
+		// Check the remaining states
+		states, err = dsi.FindAvailableStates(schemaID, toQuery(t, `{
+			"sort": [ "owner", "amount" ]
+		}`))
+		require.NoError(t, err)
+		assert.Len(t, states, 3)
+		assert.Equal(t, int64(30), parseFakeCoin(t, states[0]).Amount.Int64())
+		assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
+		assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
+
+		// Can't spend again from a different transaction (but can from the same transaction)
+		err = dsi.MarkStatesSpent(uuid.New(), []string{spendState})
+		require.ErrorContains(t, err, "PD010120")
+		err = dsi.MarkStatesSpent(transactionID, []string{spendState})
+		require.NoError(t, err)
 
 		// Reset the transaction - this will clear the in-memory state,
 		// and remove the locks from the DB. It will not remove the states
@@ -362,6 +383,10 @@ func TestDSIFlushErrorCapture(t *testing.T) {
 		assert.Regexp(t, "pop", err)
 
 		fakeFlushError(dc)
+		err = dsi.MarkStatesSpent(uuid.New(), nil)
+		assert.Regexp(t, "pop", err)
+
+		fakeFlushError(dc)
 		err = dsi.ResetTransaction(uuid.New())
 		assert.Regexp(t, "pop", err)
 
@@ -410,6 +435,45 @@ func TestDSIMergedUnFlushedWhileFlushing(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
+
+}
+
+func TestDSIMergedUnFlushedSpend(t *testing.T) {
+
+	ctx, ss, _, done := newDBMockStateStore(t)
+	defer done()
+
+	schema, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
+	require.NoError(t, err)
+
+	contractAddress := tktypes.RandAddress()
+	dc := ss.getDomainContext("domain1", *contractAddress)
+
+	s1, err := schema.ProcessState(ctx, *contractAddress, tktypes.RawJSON(fmt.Sprintf(
+		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
+		tktypes.RandHex(32))))
+	require.NoError(t, err)
+	s1.Locked = &StateLock{State: s1.ID, Transaction: uuid.New(), Creating: true}
+
+	dc.flushing = &writeOperation{
+		states: []*StateWithLabels{s1},
+		stateSpends: []*StateSpend{
+			{State: s1.ID},
+		},
+	}
+	dc.unFlushed = &writeOperation{
+		stateSpends: []*StateSpend{
+			{State: tktypes.Bytes32(tktypes.RandBytes(32))},
+		},
+	}
+
+	spending, err := dc.getUnFlushedSpending()
+	require.NoError(t, err)
+	assert.Len(t, spending, 2)
+
+	states, err := dc.mergedUnFlushed(schema, []*State{}, &query.QueryJSON{})
+	require.NoError(t, err)
+	assert.Len(t, states, 0)
 
 }
 
@@ -583,6 +647,9 @@ func TestDSIBadIDs(t *testing.T) {
 		assert.Regexp(t, "PD020007", err)
 
 		err = dsi.MarkStatesSpending(uuid.New(), []string{"wrong"})
+		assert.Regexp(t, "PD020007", err)
+
+		err = dsi.MarkStatesSpent(uuid.New(), []string{"wrong"})
 		assert.Regexp(t, "PD020007", err)
 
 		return nil
