@@ -533,7 +533,7 @@ func TestEngineLocalBlockedTransaction(t *testing.T) {
 }
 
 func TestEngineMiniLoad(t *testing.T) {
-	//t.Skip("This test does not run reliably in the full gradle build for an unknown reason but it is still useful for local testing")
+	t.Skip("This test takes too long to be included by default.  It is still useful for local testing")
 	//TODO this is actually quite a complex test given all the mocking.  Maybe this should be converted to a wider component test
 	// where the real publicTxEngine is used rather than a mock
 	r := rand.New(rand.NewSource(42))
