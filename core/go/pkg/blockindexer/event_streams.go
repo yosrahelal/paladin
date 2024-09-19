@@ -217,11 +217,18 @@ func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventSt
 	return es
 }
 
-func (bi *blockIndexer) startEventStreams() {
+func (bi *blockIndexer) getStreamList() []*eventStream {
 	bi.eventStreamsLock.Lock()
 	defer bi.eventStreamsLock.Unlock()
+	streams := make([]*eventStream, 0, len(bi.eventStreams))
 	for _, es := range bi.eventStreams {
-		log.L(bi.parentCtxForReset).Infof("Starting event stream %s [%s]", es.definition.Name, es.definition.ID)
+		streams = append(streams, es)
+	}
+	return streams
+}
+
+func (bi *blockIndexer) startEventStreams() {
+	for _, es := range bi.getStreamList() {
 		es.start()
 	}
 }
@@ -229,6 +236,7 @@ func (bi *blockIndexer) startEventStreams() {
 func (es *eventStream) start() {
 	if es.handler != nil && es.detectorDone == nil && es.dispatcherDone == nil {
 		es.ctx, es.cancelCtx = context.WithCancel(log.WithLogField(es.bi.parentCtxForReset, "eventstream", es.definition.ID.String()))
+		log.L(es.ctx).Infof("Starting event stream %s [%s]", es.definition.Name, es.definition.ID)
 		es.detectorDone = make(chan struct{})
 		es.dispatcherDone = make(chan struct{})
 		go es.detector()
