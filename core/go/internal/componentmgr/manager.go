@@ -64,6 +64,7 @@ type componentManager struct {
 	registryManager  components.RegistryManager
 	pluginManager    components.PluginManager
 	publicTxManager  components.PublicTxManager
+	privateTxManager components.PrivateTxManager
 	// engine
 	engine components.Engine
 	// init to start tracking
@@ -387,6 +388,10 @@ func (cm *componentManager) PluginManager() components.PluginManager {
 
 func (cm *componentManager) PublicTxManager() components.PublicTxManager {
 	return cm.publicTxManager
+}
+
+func (cm *componentManager) PrivateTxManager() components.PrivateTxManager {
+	return cm.privateTxManager
 }
 
 func (cm *componentManager) Engine() components.Engine {
