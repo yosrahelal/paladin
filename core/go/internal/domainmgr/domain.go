@@ -452,11 +452,11 @@ func (d *domain) handleEventBatch(ctx context.Context, tx *gorm.DB, batch *block
 		// Note: hits will be cached, but events from unrecognized contracts will always
 		// result in a cache miss and a database lookup
 		// TODO: revisit if we should optimize this
-		psc, err := d.dm.GetSmartContractIfExists(ctx, ev.Address)
+		psc, err := d.dm.getSmartContractCached(ctx, tx, ev.Address)
 		if err != nil {
 			return nil, err
 		}
-		if psc.Domain().Name() == d.name {
+		if psc != nil && psc.Domain().Name() == d.name {
 			eventsByAddress[ev.Address] = append(eventsByAddress[ev.Address], ev)
 		}
 	}
@@ -481,14 +481,14 @@ func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*
 }
 
 func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.UUID, contractAddress tktypes.EthAddress, events []*blockindexer.EventWithData) (*prototk.HandleEventBatchResponse, error) {
+	var res *prototk.HandleEventBatchResponse
 	eventsJSON, err := json.Marshal(events)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		res, err = d.api.HandleEventBatch(ctx, &prototk.HandleEventBatchRequest{
+			BatchId:    batchID.String(),
+			JsonEvents: string(eventsJSON),
+		})
 	}
-	res, err := d.api.HandleEventBatch(ctx, &prototk.HandleEventBatchRequest{
-		BatchId:    batchID.String(),
-		JsonEvents: string(eventsJSON),
-	})
 	if err != nil {
 		return nil, err
 	}

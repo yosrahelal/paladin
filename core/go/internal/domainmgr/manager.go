@@ -190,7 +190,7 @@ func (dm *domainManager) WaitForDeploy(ctx context.Context, txID uuid.UUID) (com
 	req := dm.contractWaiter.AddInflight(ctx, txID)
 	defer req.Cancel()
 
-	dc, err := dm.dbGetSmartContract(ctx, func(db *gorm.DB) *gorm.DB { return db.Where("deploy_tx = ?", txID) })
+	dc, err := dm.dbGetSmartContract(ctx, dm.persistence.DB(), func(db *gorm.DB) *gorm.DB { return db.Where("deploy_tx = ?", txID) })
 	if err != nil {
 		return nil, err
 	}
@@ -228,30 +228,27 @@ func (dm *domainManager) getDomainByAddress(ctx context.Context, addr *tktypes.E
 	}
 	return d, nil
 }
+
 func (dm *domainManager) GetSmartContractByAddress(ctx context.Context, addr tktypes.EthAddress) (components.DomainSmartContract, error) {
-	dc, err := dm.getSmartContractCached(ctx, addr)
+	dc, err := dm.getSmartContractCached(ctx, dm.persistence.DB(), addr)
 	if dc != nil || err != nil {
 		return dc, err
 	}
 	return nil, i18n.NewError(ctx, msgs.MsgDomainContractNotFoundByAddr, addr)
 }
 
-func (dm *domainManager) GetSmartContractIfExists(ctx context.Context, addr tktypes.EthAddress) (components.DomainSmartContract, error) {
-	return dm.getSmartContractCached(ctx, addr)
-}
-
-func (dm *domainManager) getSmartContractCached(ctx context.Context, addr tktypes.EthAddress) (*domainContract, error) {
+func (dm *domainManager) getSmartContractCached(ctx context.Context, tx *gorm.DB, addr tktypes.EthAddress) (*domainContract, error) {
 	dc, isCached := dm.contractCache.Get(addr)
 	if isCached {
 		return dc, nil
 	}
 	// Updating the cache deferred down to newSmartContract (under enrichContractWithDomain)
-	return dm.dbGetSmartContract(ctx, func(db *gorm.DB) *gorm.DB { return db.Where("address = ?", addr) })
+	return dm.dbGetSmartContract(ctx, tx, func(db *gorm.DB) *gorm.DB { return db.Where("address = ?", addr) })
 }
 
-func (dm *domainManager) dbGetSmartContract(ctx context.Context, setWhere func(db *gorm.DB) *gorm.DB) (*domainContract, error) {
+func (dm *domainManager) dbGetSmartContract(ctx context.Context, tx *gorm.DB, setWhere func(db *gorm.DB) *gorm.DB) (*domainContract, error) {
 	var contracts []*PrivateSmartContract
-	query := dm.persistence.DB().Table("private_smart_contracts")
+	query := tx.Table("private_smart_contracts")
 	query = setWhere(query)
 	err := query.
 		WithContext(ctx).
