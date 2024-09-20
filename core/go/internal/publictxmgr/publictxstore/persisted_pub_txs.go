@@ -34,31 +34,31 @@ import (
 
 // public_transactions
 type PublicTransaction struct {
-	ID                     uuid.UUID           `gorm:"column:id;primaryKey"`
-	Created                tktypes.Timestamp   `gorm:"column:created;autoCreateTime:nano"`
-	Updated                tktypes.Timestamp   `gorm:"column:updated;autoCreateTime:nano"`
-	Status                 string              `gorm:"column:status"`
-	SubStatus              string              `gorm:"column:sub_status"`
-	TxFrom                 string              `gorm:"column:tx_from"`
-	TxTo                   *tktypes.EthAddress `gorm:"column:tx_to,omitempty"`
-	TxNonce                uint64              `gorm:"column:tx_nonce"`
-	TxGasLimit             *uint64             `gorm:"column:tx_gas_limit,omitempty"`
-	TxValue                *uint64             `gorm:"column:tx_value,omitempty"`
-	TxGasPrice             *uint64             `gorm:"column:tx_gas_price,omitempty"`
-	TxMaxFeePerGas         *uint64             `gorm:"column:tx_max_fee_per_gas,omitempty"`
-	TxMaxPriorityFeePerGas *uint64             `gorm:"column:tx_max_priority_fee_per_gas,omitempty"`
-	TxData                 *string             `gorm:"column:tx_data,omitempty"`
-	TxHash                 *tktypes.Bytes32    `gorm:"column:tx_hash,omitempty"`
-	FirstSubmit            *tktypes.Timestamp  `gorm:"column:first_submit,omitempty"`
-	LastSubmit             *tktypes.Timestamp  `gorm:"column:last_submit,omitempty"`
-	ErrorMessage           *string             `gorm:"column:error_message,omitempty"`
-	SubmittedHashes        []*PublicTransactionHash
+	ID                     uuid.UUID                `gorm:"column:id;primaryKey"`
+	Created                tktypes.Timestamp        `gorm:"column:created;autoCreateTime:nano"`
+	Updated                tktypes.Timestamp        `gorm:"column:updated;autoCreateTime:nano"`
+	Status                 string                   `gorm:"column:status"`
+	SubStatus              string                   `gorm:"column:sub_status"`
+	TxFrom                 string                   `gorm:"column:tx_from"`
+	TxTo                   *tktypes.EthAddress      `gorm:"column:tx_to"`
+	TxNonce                uint64                   `gorm:"column:tx_nonce"`
+	TxGasLimit             *uint64                  `gorm:"column:tx_gas_limit"`
+	TxValue                *uint64                  `gorm:"column:tx_value"`
+	TxGasPrice             *uint64                  `gorm:"column:tx_gas_price"`
+	TxMaxFeePerGas         *uint64                  `gorm:"column:tx_max_fee_per_gas"`
+	TxMaxPriorityFeePerGas *uint64                  `gorm:"column:tx_max_priority_fee_per_gas"`
+	TxData                 *string                  `gorm:"column:tx_data"`
+	TxHash                 *tktypes.Bytes32         `gorm:"column:tx_hash"`
+	FirstSubmit            *tktypes.Timestamp       `gorm:"column:first_submit"`
+	LastSubmit             *tktypes.Timestamp       `gorm:"column:last_submit"`
+	ErrorMessage           *string                  `gorm:"column:error_message"`
+	SubmittedHashes        []*PublicTransactionHash `gorm:"foreignKey:public_tx_id;references:id;"`
 }
 
 // public_transaction_hashes
 type PublicTransactionHash struct {
 	PublicTxID uuid.UUID       `gorm:"column:public_tx_id"`
-	Hash       tktypes.Bytes32 `gorm:"column:hash;primaryKey"`
+	Hash       tktypes.Bytes32 `gorm:"column:hash"`
 }
 
 func (pts *pubTxStore) GetTransactionByID(ctx context.Context, txID string) (*components.PublicTX, error) {

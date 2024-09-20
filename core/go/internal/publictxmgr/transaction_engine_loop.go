@@ -166,7 +166,7 @@ func (ble *publicTxEngine) poll(ctx context.Context) (polled int, total int) {
 		err := ble.retry.Do(ctx, "get pending transactions with non InFlight signing addresses", func(attempt int) (retry bool, err error) {
 			tf := &components.PubTransactionQueries{
 				InStatus: []string{string(components.PubTxStatusPending)},
-				Sort:     confutil.P("sequence"),
+				Sort:     confutil.P("tx_nonce"),
 				Limit:    &spaces,
 			}
 			if len(InFlightSigningAddresses) > 0 {
@@ -231,7 +231,7 @@ func (ble *publicTxEngine) GetPendingFuelingTransaction(ctx context.Context, sou
 		InStatus:   []string{string(components.PubTxStatusPending)},
 		To:         confutil.P(destinationAddress),
 		From:       confutil.P(sourceAddress),
-		Sort:       confutil.P("-nonce"),
+		Sort:       confutil.P("-tx_nonce"),
 		Limit:      confutil.P(1),
 		HasTxValue: true, // NB: we assume if a transaction has value then it's a fueling transaction
 	}
@@ -255,7 +255,7 @@ func (ble *publicTxEngine) CheckTransactionCompleted(ctx context.Context, tx *co
 		tf := &components.PubTransactionQueries{
 			InStatus: []string{string(components.PubTxStatusSucceeded), string(components.PubTxStatusFailed)},
 			From:     confutil.P(string(tx.From)),
-			Sort:     confutil.P("-nonce"),
+			Sort:     confutil.P("-tx_nonce"),
 			Limit:    confutil.P(1),
 		}
 

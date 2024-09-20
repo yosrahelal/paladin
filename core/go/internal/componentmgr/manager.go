@@ -256,10 +256,10 @@ func (cm *componentManager) StartManagers() (err error) {
 		err = cm.addIfStarted("plugin_manager", cm.pluginManager, err, msgs.MsgComponentPluginStartError)
 	}
 
-	// if err == nil {
-	// 	err = cm.publicTxManager.Start()
-	// 	err = cm.addIfStarted("public_tx_manager", cm.publicTxManager, err, msgs.MsgComponentPluginStartError)
-	// }
+	if err == nil {
+		err = cm.publicTxManager.Start()
+		err = cm.addIfStarted("public_tx_manager", cm.publicTxManager, err, msgs.MsgComponentPluginStartError)
+	}
 	return err
 }
 

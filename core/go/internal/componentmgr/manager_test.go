@@ -153,6 +153,12 @@ func TestStartOK(t *testing.T) {
 	mockRegistryManager.On("Start").Return(nil)
 	mockRegistryManager.On("Stop").Return()
 
+	mockPublicTxManager := componentmocks.NewPublicTxManager(t)
+	mockPublicTxManager.On("Start").Return(nil)
+	mockPublicTxManager.On("Stop").Return()
+
+	mockPublicTxStore := componentmocks.NewPublicTransactionStore(t)
+
 	mockStateStore := componentmocks.NewStateStore(t)
 	mockStateStore.On("RPCModule").Return(rpcserver.NewRPCModule("utss"))
 
@@ -188,6 +194,8 @@ func TestStartOK(t *testing.T) {
 	cm.stateStore = mockStateStore
 	cm.rpcServer = mockRPCServer
 	cm.engine = mockEngine
+	cm.publicTxManager = mockPublicTxManager
+	cm.pubTxStore = mockPublicTxStore
 
 	err := cm.StartComponents()
 	require.NoError(t, err)

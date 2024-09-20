@@ -343,7 +343,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 		tf := &components.PubTransactionQueries{
 			InStatus:   []string{string(components.PubTxStatusPending)},
 			From:       confutil.P(oc.signingAddress),
-			Sort:       confutil.P("nonce"),
+			Sort:       confutil.P("tx_nonce"),
 			Limit:      confutil.P(spaces),
 			HasTxValue: true, // NB: we assume if a transaction has value then it's a fueling transaction
 		}
