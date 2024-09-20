@@ -793,7 +793,7 @@ func (bi *blockIndexer) GetIndexedTransactionByNonce(ctx context.Context, from t
 	err := db.
 		WithContext(ctx).
 		Table("indexed_transactions").
-		Where("from = ?", from).
+		Where(`"from" = ?`, from).
 		Where("nonce = ?", nonce).
 		Find(&txns).
 		Error

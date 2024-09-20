@@ -380,6 +380,11 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, receipts[blocks[i].Hash.String()][0].TransactionHash.String(), indexedTX.Hash.String())
 
+		// Get by nonce
+		indexedTX, err = bi.GetIndexedTransactionByNonce(ctx, *indexedTX.From, indexedTX.Nonce)
+		require.NoError(t, err)
+		assert.Equal(t, receipts[blocks[i].Hash.String()][0].TransactionHash.String(), indexedTX.Hash.String())
+
 		// Get the events
 		tx0 := receipts[blocks[i].Hash.String()][0]
 		txEvents, err := bi.GetTransactionEventsByHash(ctx, tktypes.Bytes32(tx0.TransactionHash))

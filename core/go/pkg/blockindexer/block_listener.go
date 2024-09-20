@@ -201,7 +201,7 @@ func (bl *blockListener) listenLoop(listenerInitiated *chan struct{}) {
 
 	var filter string
 	failCount := 0
-	blockPollingInterval := time.Duration(0) // Start with no delay
+	bl.tapNewHeads() // poll once to start
 	notifyStarted := sync.Once{}
 	iterate := true
 	for iterate {
@@ -216,60 +216,18 @@ func (bl *blockListener) listenLoop(listenerInitiated *chan struct{}) {
 
 			// Sleep for the polling interval, or until we're shoulder tapped by the newHeads listener
 			select {
-			case <-time.After(blockPollingInterval):
+			case <-time.After(bl.blockPollingInterval):
 			case <-bl.newHeadsTap:
 			case <-bl.ctx.Done():
 				return false // context cancelled, exit loop
 			}
 
-<<<<<<< HEAD
-		if filter == "" {
-			err := bl.wsConn.CallRPC(bl.ctx, &filter, "eth_newBlockFilter")
-			if err != nil {
-				log.L(bl.ctx).Errorf("Failed to establish new block filter: %s", err)
-				failCount++
-				continue
-			}
-		}
-
-		var blockHashes []ethtypes.HexBytes0xPrefix
-		rpcErr := bl.wsConn.CallRPC(bl.ctx, &blockHashes, "eth_getFilterChanges", filter)
-		if rpcErr != nil {
-			if isNotFound(rpcErr) {
-				log.L(bl.ctx).Warnf("Block filter '%v' no longer valid. Recreating filter: %s", filter, rpcErr)
-				filter = ""
-			}
-			log.L(bl.ctx).Errorf("Failed to query block filter changes: %s", rpcErr)
-			failCount++
-			continue
-		}
-
-		var notifyPos *list.Element
-		for _, h := range blockHashes {
-			// Do a lookup of the block (which will then go into our cache).
-			bi, err := bl.getBlockInfoByHash(bl.ctx, h.String())
-			switch {
-			case err != nil:
-				log.L(bl.ctx).Debugf("Failed to query block '%s': %s", h, err)
-			case bi == nil:
-				log.L(bl.ctx).Debugf("Block '%s' no longer available after notification (assuming due to re-org)", h)
-			default:
-				candidate := bl.reconcileCanonicalChain(bi)
-				// Check this is the lowest position to notify from
-				if candidate != nil && (notifyPos == nil || candidate.Value.(*BlockInfoJSONRPC).Number <= notifyPos.Value.(*BlockInfoJSONRPC).Number) {
-					notifyPos = candidate
-=======
-			// Reset the polling interval to the configured value
-			// This is to ensure we don't get stuck in a fast polling loop if we're shoulder tapped
-			blockPollingInterval = bl.blockPollingInterval
-
 			if filter == "" {
 				err := bl.wsConn.CallRPC(bl.ctx, &filter, "eth_newBlockFilter")
 				if err != nil {
-					log.L(bl.ctx).Errorf("Failed to establish new block filter: %s", err.Message)
+					log.L(bl.ctx).Errorf("Failed to establish new block filter: %s", err)
 					failCount++
 					return true
->>>>>>> c166cac5a387e8b53863e51729611c19201158da
 				}
 			}
 
@@ -277,10 +235,10 @@ func (bl *blockListener) listenLoop(listenerInitiated *chan struct{}) {
 			rpcErr := bl.wsConn.CallRPC(bl.ctx, &blockHashes, "eth_getFilterChanges", filter)
 			if rpcErr != nil {
 				if isNotFound(rpcErr) {
-					log.L(bl.ctx).Warnf("Block filter '%v' no longer valid. Recreating filter: %s", filter, rpcErr.Message)
+					log.L(bl.ctx).Warnf("Block filter '%v' no longer valid. Recreating filter: %s", filter, rpcErr)
 					filter = ""
 				}
-				log.L(bl.ctx).Errorf("Failed to query block filter changes: %s", rpcErr.Message)
+				log.L(bl.ctx).Errorf("Failed to query block filter changes: %s", rpcErr)
 				failCount++
 				return true
 			}
