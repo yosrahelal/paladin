@@ -115,8 +115,10 @@ func (tm *txManager) resolveFunction(ctx context.Context, dbTX *gorm.DB, inputAB
 			return nil, i18n.NewError(ctx, msgs.MsgTxMgrABIAndDefinition)
 		}
 		pa, err = tm.getABIByHash(ctx, *inputABIRef)
-	} else {
+	} else if len(inputABI) > 0 {
 		pa, err = tm.upsertABI(ctx, dbTX, inputABI)
+	} else {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrNoABIOrReference)
 	}
 	if err != nil || pa == nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrABIReferenceLookupFailed, inputABIRef)
@@ -152,7 +154,7 @@ func (tm *txManager) resolveFunction(ctx context.Context, dbTX *gorm.DB, inputAB
 			oldSelector := functionSignature
 			functionSignature, _ = e.Signature()
 			if oldSelector != "" {
-				i18n.NewError(ctx, msgs.MsgTxMgrFunctionMultiMatch, oldSelector, functionSignature)
+				return nil, i18n.NewError(ctx, msgs.MsgTxMgrFunctionMultiMatch, oldSelector, functionSignature)
 			}
 			selectedFunction = e
 		}
@@ -180,9 +182,14 @@ func (tm *txManager) parseInputs(
 	if _, err := txType.MapToString(); err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidTXType)
 	}
-	if e.Type != abi.Constructor && len(bytecode) != 0 {
-		return nil, i18n.NewError(ctx, msgs.MsgTxMgrBytecodeNonConstructor, e.String())
+	if (e.Type != abi.Constructor || txType.V() != ptxapi.TransactionTypePublic) && len(bytecode) != 0 {
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrBytecodeNonPublicConstructor, txType.V(), e.String())
+	} else if e.Type == abi.Constructor && len(bytecode) == 0 && txType == ptxapi.TransactionTypePublic.Enum() {
+		// We don't support supplying bytecode for public transactions precompiled ahead of the constructor
+		// inputs, you must split the contract code out into bytecode
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrBytecodeAndHexData, e.String())
 	}
+
 	// TODO: Resolve domain for private TX
 
 	var iDecoded any
@@ -199,17 +206,13 @@ func (tm *txManager) parseInputs(
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidInputDataBytes, e.String())
 		}
-		if e.Type != abi.Constructor && len(bytecode) == 0 {
-			// We don't support u
-			return nil, i18n.NewError(ctx, msgs.MsgTxMgrBytecodeAndHexData, e.String())
-		}
 		// We might have the function selector
-		cv, err = e.Inputs.DecodeABIDataCtx(ctx, dataBytes, 0)
-		if err != nil && e.Type == abi.Function {
-			selector := e.FunctionSelectorBytes()
-			if len(dataBytes) >= len(selector) && bytes.Equal(selector, dataBytes[0:4]) {
-				cv, err = e.Inputs.DecodeABIDataCtx(ctx, selector, 4)
-			}
+		selector := e.FunctionSelectorBytes()
+		if len(dataBytes) >= len(selector) && len(dataBytes)%32 == 4 && bytes.Equal(selector, dataBytes[0:4]) {
+			cv, err = e.Inputs.DecodeABIDataCtx(ctx, selector, 4) // we will run out of data if this is not right, so safe to do first
+		}
+		if cv == nil || err != nil {
+			cv, err = e.Inputs.DecodeABIDataCtx(ctx, dataBytes, 0)
 		}
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidInputDataBytes, e.String())
@@ -359,6 +362,7 @@ func (tm *txManager) getTransactionByID(ctx context.Context, id uuid.UUID) (*ptx
 func (tm *txManager) getTransactionDependencies(ctx context.Context, id uuid.UUID) (*ptxapi.TransactionDependencies, error) {
 	var persistedDeps []*transactionDep
 	err := tm.p.DB().
+		WithContext(ctx).
 		Table(`transaction_deps`).
 		Where(`"transaction" = ?`, id).
 		Or("depends_on = ?", id).

@@ -71,13 +71,16 @@ func (tm *txManager) getABIByHash(ctx context.Context, hash tktypes.Bytes32) (*p
 	return pa, nil
 }
 
-func (tm *txManager) storeABI(ctx context.Context, a abi.ABI) (*ptxapi.StoredABI, error) {
+func (tm *txManager) storeABI(ctx context.Context, a abi.ABI) (*tktypes.Bytes32, error) {
 	var pa *ptxapi.StoredABI
 	err := tm.p.DB().Transaction(func(tx *gorm.DB) (err error) {
 		pa, err = tm.upsertABI(ctx, tx, a)
 		return err
 	})
-	return pa, err
+	if err != nil {
+		return nil, err
+	}
+	return &pa.Hash, err
 }
 
 func (tm *txManager) upsertABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (*ptxapi.StoredABI, error) {

@@ -167,6 +167,9 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, tx2ID, tx2.ID)
 	assert.Equal(t, "set(uint256)", tx2.Function)
+	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransaction", tx2ID, false)
+	require.NoError(t, err)
+	assert.Equal(t, tx2ID, tx2.ID)
 
 	// Null on not found is the consistent ethereum pattern
 	var txNotFound *ptxapi.Transaction
@@ -197,11 +200,16 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.Nil(t, txWithReceipt.Receipt.RevertData)
 
 	// Select just pending transactions
-	var pendingTransactions []*ptxapi.TransactionReceipt
-	err = rpcClient.CallRPC(ctx, &pendingTransactions, "ptx_queryPendingTransactions", query.NewQueryBuilder().Limit(100).Query(), true)
+	var pendingTransactionFull []*ptxapi.TransactionFull
+	err = rpcClient.CallRPC(ctx, &pendingTransactionFull, "ptx_queryPendingTransactions", query.NewQueryBuilder().Limit(100).Query(), true)
+	require.NoError(t, err)
+	require.Len(t, pendingTransactionFull, 1)
+	require.Equal(t, tx2ID, pendingTransactionFull[0].ID)
+	require.Len(t, pendingTransactionFull[0].DependsOn, 1)
+	var pendingTransactions []*ptxapi.Transaction
+	err = rpcClient.CallRPC(ctx, &pendingTransactions, "ptx_queryPendingTransactions", query.NewQueryBuilder().Limit(100).Query(), false)
 	require.NoError(t, err)
 	require.Len(t, pendingTransactions, 1)
-	require.Equal(t, tx2ID, pendingTransactions[0].ID)
 
 	// Finalize the invoke as a revert with an encoded error
 	txHash2 := tktypes.Bytes32(tktypes.RandBytes(32))

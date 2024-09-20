@@ -14,3 +14,405 @@
  */
 
 package txmgr
+
+import (
+	"database/sql/driver"
+	"fmt"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestResolveFunctionABIAndDef(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+		mc.db.ExpectBegin()
+		mc.db.ExpectRollback()
+	})
+	defer done()
+
+	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			ABIReference: confutil.P(tktypes.Bytes32(tktypes.RandBytes(32))),
+		},
+		ABI: abi.ABI{},
+	})
+	assert.Regexp(t, "PD012202", err)
+}
+
+func TestResolveFunctionNoABI(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+		mc.db.ExpectBegin()
+		mc.db.ExpectRollback()
+	})
+	defer done()
+
+	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			To: tktypes.MustEthAddress(tktypes.RandHex(20)),
+		},
+		ABI: abi.ABI{},
+	})
+	assert.Regexp(t, "PD012218", err)
+}
+
+func TestResolveFunctionBadABI(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+		mc.db.ExpectBegin()
+		mc.db.ExpectRollback()
+	})
+	defer done()
+
+	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			To: tktypes.MustEthAddress(tktypes.RandHex(20)),
+		},
+		ABI: abi.ABI{{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "wrong"}}}},
+	})
+	assert.Regexp(t, "PD012203.*FF22025", err)
+}
+
+func mockInsertABIRollback(conf *Config, mc *mockComponents) {
+	mc.db.ExpectBegin()
+	mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
+	mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
+	mc.db.ExpectRollback()
+}
+
+func TestResolveFunctionNamedWithNoTarget(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	defer done()
+
+	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Function: "doIt",
+		},
+		ABI: abi.ABI{{Type: abi.Function, Name: "doIt"}},
+	})
+	assert.Regexp(t, "PD012204", err)
+}
+
+func mockInsertABIAndTransactionOK(conf *Config, mc *mockComponents) {
+	mc.db.ExpectBegin()
+	mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
+	mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
+	mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)
+	mc.db.ExpectCommit()
+}
+
+func TestResolveFunctionHexInputOK(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK)
+	defer done()
+
+	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
+	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
+	require.NoError(t, err)
+
+	_, err = txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type:     ptxapi.TransactionTypePublic.Enum(),
+			Function: exampleABI[0].FunctionSelectorBytes().String(),
+			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data:     tktypes.JSONString(tktypes.HexBytes(callData)),
+		},
+		ABI: exampleABI,
+	})
+	assert.NoError(t, err)
+}
+
+func TestResolveFunctionHexInputFail(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	defer done()
+
+	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}}}
+
+	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type:     ptxapi.TransactionTypePublic.Enum(),
+			Function: exampleABI[0].FunctionSelectorBytes().String(),
+			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data:     tktypes.RawJSON(`"0x"`),
+		},
+		ABI: exampleABI,
+	})
+	assert.Regexp(t, "PD012209", err)
+}
+
+func TestResolveFunctionUnsupportedInput(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	defer done()
+
+	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}}}
+
+	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type:     ptxapi.TransactionTypePublic.Enum(),
+			Function: exampleABI[0].FunctionSelectorBytes().String(),
+			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data:     tktypes.RawJSON(`false`),
+		},
+		ABI: exampleABI,
+	})
+	assert.Regexp(t, "PD012212", err)
+}
+
+func TestResolveFunctionPlainNameOK(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK)
+	defer done()
+
+	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
+	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
+	require.NoError(t, err)
+
+	_, err = txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type:     ptxapi.TransactionTypePublic.Enum(),
+			Function: "doIt",
+			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data:     tktypes.JSONString(tktypes.HexBytes(callData)),
+		},
+		ABI: exampleABI,
+	})
+	assert.NoError(t, err)
+}
+
+func TestResolveFunctionOnlyOneToMatch(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK)
+	defer done()
+
+	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
+	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
+	require.NoError(t, err)
+
+	_, err = txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type: ptxapi.TransactionTypePublic.Enum(),
+			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
+		},
+		ABI: exampleABI,
+	})
+	assert.NoError(t, err)
+}
+
+func TestResolveFunctionOnlyDuplicateMatch(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	defer done()
+
+	exampleABI := abi.ABI{
+		{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{}},
+		{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Name: "polymorphic", Type: "string"}}},
+	}
+	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
+	require.NoError(t, err)
+
+	_, err = txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type: ptxapi.TransactionTypePublic.Enum(),
+			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
+		},
+		ABI: exampleABI,
+	})
+	assert.Regexp(t, "PD012205", err)
+}
+
+func TestResolveFunctionNoMatch(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	defer done()
+
+	exampleABI := abi.ABI{
+		{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{}},
+	}
+	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
+	require.NoError(t, err)
+
+	_, err = txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type:     ptxapi.TransactionTypePublic.Enum(),
+			Function: "nope",
+			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data:     tktypes.JSONString(tktypes.HexBytes(callData)),
+		},
+		ABI: exampleABI,
+	})
+	assert.Regexp(t, "PD012206", err)
+}
+
+func TestParseInputsBadTxType(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	defer done()
+
+	exampleABI := abi.ABI{
+		{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{}},
+	}
+	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
+	require.NoError(t, err)
+
+	_, err = txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
+		},
+		ABI: exampleABI,
+	})
+	assert.Regexp(t, "PD012211", err)
+}
+
+func TestParseInputsBytecodeNonConstructor(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	defer done()
+
+	exampleABI := abi.ABI{
+		{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{}},
+	}
+	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
+	require.NoError(t, err)
+
+	_, err = txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type: ptxapi.TransactionTypePublic.Enum(),
+			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
+		},
+		ABI:      exampleABI,
+		Bytecode: tktypes.HexBytes(tktypes.RandBytes(1)),
+	})
+	assert.Regexp(t, "PD012207", err)
+}
+
+func TestParseInputsBytecodeMissingConstructor(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	defer done()
+
+	exampleABI := abi.ABI{
+		{Type: abi.Constructor, Inputs: abi.ParameterArray{}},
+	}
+	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
+	require.NoError(t, err)
+
+	_, err = txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type: ptxapi.TransactionTypePublic.Enum(),
+			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
+		},
+		ABI: exampleABI,
+	})
+	assert.Regexp(t, "PD012210", err)
+}
+
+func TestParseInputsBadDataJSON(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	defer done()
+
+	exampleABI := abi.ABI{
+		{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}},
+	}
+
+	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type: ptxapi.TransactionTypePublic.Enum(),
+			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data: tktypes.RawJSON(`{!!! bad json`),
+		},
+		ABI: exampleABI,
+	})
+	assert.Regexp(t, "PD012208", err)
+}
+
+func TestParseInputsBadDataForFunction(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	defer done()
+
+	exampleABI := abi.ABI{
+		{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}},
+	}
+
+	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type: ptxapi.TransactionTypePublic.Enum(),
+			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data: tktypes.RawJSON(`["not a number"]`),
+		},
+		ABI: exampleABI,
+	})
+	assert.Regexp(t, "FF22030", err)
+}
+
+func TestParseInputsBadByteString(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	defer done()
+
+	exampleABI := abi.ABI{
+		{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}},
+	}
+
+	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type: ptxapi.TransactionTypePublic.Enum(),
+			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data: tktypes.RawJSON(`"not hex"`),
+		},
+		ABI: exampleABI,
+	})
+	assert.Regexp(t, "PD012209", err)
+}
+
+func TestInsertTransactionFail(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+		mc.db.ExpectBegin()
+		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectExec("INSERT.*transactions").WillReturnError(fmt.Errorf("pop"))
+		mc.db.ExpectRollback()
+	})
+	defer done()
+
+	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
+
+	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type:     ptxapi.TransactionTypePublic.Enum(),
+			Function: exampleABI[0].FunctionSelectorBytes().String(),
+			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data:     tktypes.RawJSON(`[]`),
+		},
+		ABI: exampleABI,
+	})
+	assert.Regexp(t, "pop", err)
+}
+
+func TestGetTransactionByIDFullFail(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+		mc.db.ExpectQuery("SELECT.*transactions").WillReturnError(fmt.Errorf("pop"))
+	})
+	defer done()
+
+	_, err := txm.getTransactionByIDFull(ctx, uuid.New())
+	assert.Regexp(t, "pop", err)
+}
+
+func TestGetTransactionByIDFail(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+		mc.db.ExpectQuery("SELECT.*transactions").WillReturnError(fmt.Errorf("pop"))
+	})
+	defer done()
+
+	_, err := txm.getTransactionByID(ctx, uuid.New())
+	assert.Regexp(t, "pop", err)
+}
+
+func TestGetTransactionDependenciesFail(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+		mc.db.ExpectQuery("SELECT.*transaction_deps").WillReturnError(fmt.Errorf("pop"))
+	})
+	defer done()
+
+	_, err := txm.getTransactionDependencies(ctx, uuid.New())
+	assert.Regexp(t, "pop", err)
+}

@@ -112,11 +112,7 @@ func (tm *txManager) rpcStoreABI() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		a abi.ABI,
 	) (*tktypes.Bytes32, error) {
-		pa, err := tm.storeABI(ctx, a)
-		if err != nil {
-			return nil, err
-		}
-		return &pa.Hash, nil
+		return tm.storeABI(ctx, a)
 	})
 }
 
