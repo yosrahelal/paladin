@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -36,7 +37,7 @@ import (
 type PublicTransaction struct {
 	ID                     uuid.UUID                `gorm:"column:id;primaryKey"`
 	Created                tktypes.Timestamp        `gorm:"column:created;autoCreateTime:nano"`
-	Updated                tktypes.Timestamp        `gorm:"column:updated"`
+	Updated                tktypes.Timestamp        `gorm:"column:updated;autoCreateTime:nano"`
 	Status                 string                   `gorm:"column:status"`
 	SubStatus              string                   `gorm:"column:sub_status"`
 	TxFrom                 string                   `gorm:"column:tx_from"`
@@ -48,46 +49,127 @@ type PublicTransaction struct {
 	TxMaxFeePerGas         *big.Int                 `gorm:"column:tx_max_fee_per_gas,omitempty"`
 	TxMaxPriorityFeePerGas *big.Int                 `gorm:"column:tx_max_priority_fee_per_gas,omitempty"`
 	TxData                 *string                  `gorm:"column:tx_data,omitempty"`
-	TxHash                 tktypes.Bytes32          `gorm:"column:tx_hash,omitempty"`
-	FirstSubmit            tktypes.Timestamp        `gorm:"column:first_submit,omitempty"`
-	LastSubmit             tktypes.Timestamp        `gorm:"column:last_submit,omitempty"`
-	ErrorMessage           string                   `gorm:"column:error_message,omitempty"`
+	TxHash                 *tktypes.Bytes32         `gorm:"column:tx_hash,omitempty"`
+	FirstSubmit            *tktypes.Timestamp       `gorm:"column:first_submit,omitempty"`
+	LastSubmit             *tktypes.Timestamp       `gorm:"column:last_submit,omitempty"`
+	ErrorMessage           *string                  `gorm:"column:error_message,omitempty"`
 	SubmittedHashes        []*PublicTransactionHash `gorm:"foreignKey:public_transactions;references:id;"`
 }
 
+// public_transaction_hashes
 type PublicTransactionHash struct {
 	PublicTxID uuid.UUID       `gorm:"column:public_tx_id"`
-	Hash       tktypes.Bytes32 `gorm:"column:hash"`
+	Hash       tktypes.Bytes32 `gorm:"column:hash;primaryKey"`
 }
 
 func (pts *pubTxStore) GetTransactionByID(ctx context.Context, txID string) (*components.PublicTX, error) {
-	ptx, cached := pts.publicTxCache.Get(txID)
-	if cached {
-		return ptx, nil
-	}
+	// ptx, cached := pts.publicTxCache.Get(txID)
+	// if cached {
+	// 	return ptx, nil
+	// }
 
-	var pubTx *PublicTransaction
-
-	query := pts.p.DB().Model(&PublicTransaction{}).Joins("LEFT JOIN public_transaction_hashes ON public_transaction_hashes.public_tx_id = public_transactions.id")
-	query.Where("public_transactions.id = ?", txID)
-	query = query.Preload("SubmittedHashes")
-	query = query.Limit(1)
-	if err := query.Find(pubTx).Error; err != nil {
+	var dbTxModel *PublicTransaction
+	if err := pts.p.DB().WithContext(ctx).Table("public_transactions").Omit("SubmittedHashes").Where("id = ?", txID).Limit(1).First(&dbTxModel).Error; err != nil {
 		return nil, err
 	}
-	pubTxObject := &components.PublicTX{}
-	pts.publicTxCache.Set(txID, pubTxObject)
+
+	// retrieve associated transaction hashes
+	if dbTxModel != nil {
+
+		// Retrieve all hashes for the transaction
+		var txHashes []*PublicTransactionHash
+		if err := pts.p.DB().WithContext(ctx).Table("public_transaction_hashes").
+			Where("public_tx_id = ?", dbTxModel.ID).Find(&txHashes).Error; err != nil {
+			return nil, err
+		}
+		dbTxModel.SubmittedHashes = append(dbTxModel.SubmittedHashes, txHashes...)
+
+	}
+
+	pubTxObject := MapDBToInternal(dbTxModel)
+
+	// pts.publicTxCache.Set(txID, pubTxObject)
 	return pubTxObject, nil
 }
 
 func (pts *pubTxStore) InsertTransaction(ctx context.Context, dbTx *gorm.DB, tx *components.PublicTX) error {
-	pts.writer.queue(ctx, pts.writer.newWriteOp(tx))
+	if dbTx == nil {
+		pts.writer.queue(ctx, pts.writer.newWriteOp(MapInternalToDB(tx)))
+	} else {
+		dbTx.Table("public_transactions").Omit("SubmittedHashes").Create(MapInternalToDB(tx))
+	}
 	return nil
 }
 func (pts *pubTxStore) UpdateTransaction(ctx context.Context, txID string, updates *components.BaseTXUpdates) error {
-	// pts.writer.queue(ctx, pts.writer.newWriteOp(tx))
+	var dbTxModel *PublicTransaction
+	if err := pts.p.DB().WithContext(ctx).Table("public_transactions").Omit("SubmittedHashes").Where("id = ?", txID).Limit(1).First(&dbTxModel).Error; err != nil {
+		return err
+	}
+	// Track if we need to perform an update
+	updated := false
+
+	// Apply updates only to non-nil fields
+	if updates.Status != nil {
+		dbTxModel.Status = string(*updates.Status)
+		updated = true
+	}
+
+	if updates.GasPrice != nil {
+		dbTxModel.TxGasPrice = updates.GasLimit.BigInt()
+		updated = true
+	}
+	if updates.MaxPriorityFeePerGas != nil {
+		dbTxModel.TxMaxPriorityFeePerGas = updates.MaxPriorityFeePerGas.BigInt()
+		updated = true
+	}
+	if updates.MaxFeePerGas != nil {
+		dbTxModel.TxMaxFeePerGas = updates.MaxFeePerGas.BigInt()
+		updated = true
+	}
+	if updates.GasLimit != nil {
+		dbTxModel.TxGasLimit = updates.GasLimit.BigInt()
+		updated = true
+	}
+	if updates.TransactionHash != nil {
+		dbTxModel.TxHash = updates.TransactionHash
+		updated = true
+	}
+	if updates.FirstSubmit != nil {
+		dbTxModel.FirstSubmit = updates.FirstSubmit
+		updated = true
+	}
+	if updates.LastSubmit != nil {
+		dbTxModel.LastSubmit = updates.LastSubmit
+		updated = true
+	}
+	if updates.ErrorMessage != nil {
+		dbTxModel.ErrorMessage = updates.ErrorMessage
+		updated = true
+	}
+
+	// Insert new submitted hashes if provided
+	if updates.NewSubmittedHashes != nil && len(updates.NewSubmittedHashes) > 0 {
+		if err := pts.p.DB().WithContext(ctx).Table("public_transaction_hashes").
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "hash"}},
+				DoNothing: true, // immutable
+			}).
+			Create(MapInternalSubmittedHashes(dbTxModel.ID, updates.NewSubmittedHashes)).Error; err != nil {
+			return err
+		}
+		updated = true
+
+	}
+
+	// Save the updated transaction only if there were changes
+	if updated {
+		if err := pts.p.DB().WithContext(ctx).Table("public_transactions").Omit("SubmittedHashes").Save(&dbTxModel).Error; err != nil {
+			return err
+		}
+	}
 	return nil
 }
+
 func (pts *pubTxStore) GetConfirmedTransaction(ctx context.Context, txID string) (iTX *blockindexer.IndexedTransaction, err error) {
 	return nil, nil
 }
@@ -106,17 +188,21 @@ func (pts *pubTxStore) AddSubStatusAction(ctx context.Context, txID string, subS
 
 func (pts *pubTxStore) ListTransactions(ctx context.Context, filter *components.PubTransactionQueries) ([]*components.PublicTX, error) {
 	var transactions []*PublicTransaction
-	query := pts.p.DB().WithContext(ctx).Model(&PublicTransaction{})
+	query := pts.p.DB().WithContext(ctx).Table("public_transactions").Omit("SubmittedHashes")
 
 	// Apply dynamic filters
-	if len(filter.NotIDAND) > 0 {
-		query = query.Where("id NOT IN ?", filter.NotIDAND)
+	if len(filter.InIDs) > 0 {
+		query = query.Where("id IN ?", filter.InIDs)
 	}
-	if len(filter.StatusOR) > 0 {
-		query = query.Where("status IN ?", filter.StatusOR)
+
+	if len(filter.NotInIDs) > 0 {
+		query = query.Where("id NOT IN ?", filter.NotInIDs)
 	}
-	if len(filter.NotFromAND) > 0 {
-		query = query.Where("tx_from NOT IN ?", filter.NotFromAND)
+	if len(filter.InStatus) > 0 {
+		query = query.Where("status IN ?", filter.InStatus)
+	}
+	if len(filter.NotFrom) > 0 {
+		query = query.Where("tx_from NOT IN ?", filter.NotFrom)
 	}
 	if filter.From != nil {
 		query = query.Where("tx_from = ?", *filter.From)
@@ -127,7 +213,7 @@ func (pts *pubTxStore) ListTransactions(ctx context.Context, filter *components.
 	if filter.AfterNonce != nil {
 		query = query.Where("nonce > ?", filter.AfterNonce)
 	}
-	if filter.HasValue {
+	if filter.HasTxValue {
 		query = query.Where("tx_value IS NOT NULL")
 	}
 
@@ -147,23 +233,51 @@ func (pts *pubTxStore) ListTransactions(ctx context.Context, filter *components.
 		return nil, err
 	}
 
-	return MapDBToCodeBatch(transactions), nil
-}
+	// retrieve associated transaction hashes
+	if len(transactions) > 0 {
+		txIDs := []*uuid.UUID{}
+		for _, tx := range transactions {
+			txIDs = append(txIDs, &tx.ID)
+		}
 
-func MapDBToCodeBatch(dbTxs []*PublicTransaction) []*components.PublicTX {
-	var codeTxs []*components.PublicTX
-	for _, dbTx := range dbTxs {
-		codeTx := MapDBToCode(dbTx)
-		codeTxs = append(codeTxs, codeTx)
+		// Retrieve all hashes for the transaction IDs
+		var txHashes []*PublicTransactionHash
+		if err := pts.p.DB().WithContext(ctx).Table("public_transaction_hashes").
+			Where("public_tx_id IN ?", txIDs).Find(&txHashes).Error; err != nil {
+			return nil, err
+		}
+
+		// Create a map to group hashes by transaction ID
+		txHashMap := make(map[uuid.UUID][]*PublicTransactionHash)
+		for _, txH := range txHashes {
+			txHashMap[txH.PublicTxID] = append(txHashMap[txH.PublicTxID], txH)
+		}
+
+		// Assign hashes back to the corresponding transactions
+		for _, tx := range transactions {
+			if hashes, ok := txHashMap[tx.ID]; ok {
+				tx.SubmittedHashes = hashes
+			}
+		}
 	}
-	return codeTxs
+
+	return MapDBToInternalBatch(transactions), nil
 }
 
-func MapDBToCode(dbTx *PublicTransaction) *components.PublicTX {
+func MapDBToInternalBatch(dbTxs []*PublicTransaction) []*components.PublicTX {
+	var internalTxs []*components.PublicTX
+	for _, dbTx := range dbTxs {
+		internalTx := MapDBToInternal(dbTx)
+		internalTxs = append(internalTxs, internalTx)
+	}
+	return internalTxs
+}
+
+func MapDBToInternal(dbTx *PublicTransaction) *components.PublicTX {
 	return &components.PublicTX{
 		ID:        dbTx.ID,
-		Created:   &dbTx.Created,
-		Updated:   &dbTx.Updated,
+		Created:   dbTx.Created,
+		Updated:   dbTx.Updated,
 		Status:    components.PubTxStatus(dbTx.Status),
 		SubStatus: components.PubTxSubStatus(dbTx.SubStatus),
 		Transaction: &ethsigner.Transaction{
@@ -177,9 +291,9 @@ func MapDBToCode(dbTx *PublicTransaction) *components.PublicTX {
 			MaxPriorityFeePerGas: ethtypes.NewHexInteger(dbTx.TxMaxPriorityFeePerGas),
 			Data:                 ethtypes.MustNewHexBytes0xPrefix(*dbTx.TxData),
 		},
-		TransactionHash: &dbTx.TxHash,
-		FirstSubmit:     &dbTx.FirstSubmit,
-		LastSubmit:      &dbTx.LastSubmit,
+		TransactionHash: dbTx.TxHash,
+		FirstSubmit:     dbTx.FirstSubmit,
+		LastSubmit:      dbTx.LastSubmit,
 		ErrorMessage:    dbTx.ErrorMessage,
 		SubmittedHashes: MapSubmittedHashes(dbTx.SubmittedHashes),
 	}
@@ -193,46 +307,72 @@ func MapSubmittedHashes(dbHashes []*PublicTransactionHash) []string {
 	return hashes
 }
 
-func MapCodeToDBBatch(codeTxs []*components.PublicTX) []*PublicTransaction {
+func MapInternalToDBBatch(internalTxs []*components.PublicTX) []*PublicTransaction {
 	var dbTxs []*PublicTransaction
-	for _, codeTx := range codeTxs {
-		dbTx := MapCodeToDB(codeTx)
+	for _, internalTx := range internalTxs {
+		dbTx := MapInternalToDB(internalTx)
 		dbTxs = append(dbTxs, dbTx)
 	}
 	return dbTxs
 }
 
-func MapCodeToDB(codeTx *components.PublicTX) *PublicTransaction {
+func MapInternalToDB(internalTx *components.PublicTX) *PublicTransaction {
+	if internalTx == nil {
+		return nil
+	}
+
+	// Initialize default values to avoid nil dereference
+	var txTo *tktypes.EthAddress
+	if internalTx.To != nil {
+		txTo = (*tktypes.EthAddress)(internalTx.To)
+	}
+
+	var txData *string
+	if internalTx.Data != nil {
+		txData = confutil.P(internalTx.Data.String())
+	}
+
 	return &PublicTransaction{
-		ID:                     codeTx.ID,
-		Created:                *codeTx.Created,
-		Updated:                *codeTx.Updated,
-		Status:                 string(codeTx.Status),
-		SubStatus:              string(codeTx.SubStatus),
-		TxFrom:                 string(codeTx.From),
-		TxTo:                   (*tktypes.EthAddress)(codeTx.To),
-		TxNonce:                *codeTx.Nonce.BigInt(),
-		TxGasLimit:             codeTx.GasLimit.BigInt(),
-		TxValue:                codeTx.Value.BigInt(),
-		TxGasPrice:             codeTx.GasPrice.BigInt(),
-		TxMaxFeePerGas:         codeTx.MaxFeePerGas.BigInt(),
-		TxMaxPriorityFeePerGas: codeTx.MaxPriorityFeePerGas.BigInt(),
-		TxData:                 confutil.P(codeTx.Data.String()),
-		TxHash:                 *codeTx.TransactionHash,
-		FirstSubmit:            *codeTx.FirstSubmit,
-		LastSubmit:             *codeTx.LastSubmit,
-		ErrorMessage:           codeTx.ErrorMessage,
-		SubmittedHashes:        MapCodeSubmittedHashes(codeTx.ID, codeTx.SubmittedHashes),
+		ID:                     internalTx.ID,
+		Created:                internalTx.Created,
+		Updated:                internalTx.Updated,
+		Status:                 string(internalTx.Status),
+		SubStatus:              string(internalTx.SubStatus),
+		TxFrom:                 string(internalTx.From),
+		TxTo:                   txTo,
+		TxNonce:                *internalTx.Nonce.BigInt(),
+		TxGasLimit:             safeBigIntPtr(internalTx.GasLimit),
+		TxValue:                safeBigIntPtr(internalTx.Value),
+		TxGasPrice:             safeBigIntPtr(internalTx.GasPrice),
+		TxMaxFeePerGas:         safeBigIntPtr(internalTx.MaxFeePerGas),
+		TxMaxPriorityFeePerGas: safeBigIntPtr(internalTx.MaxPriorityFeePerGas),
+		TxData:                 txData,
+		TxHash:                 internalTx.TransactionHash,
+		FirstSubmit:            internalTx.FirstSubmit,
+		LastSubmit:             internalTx.LastSubmit,
+		ErrorMessage:           internalTx.ErrorMessage,
+		SubmittedHashes:        MapInternalSubmittedHashes(internalTx.ID, internalTx.SubmittedHashes),
 	}
 }
 
-func MapCodeSubmittedHashes(txID uuid.UUID, codeHashes []string) []*PublicTransactionHash {
+func MapInternalSubmittedHashes(txID uuid.UUID, internalHashes []string) []*PublicTransactionHash {
+	if len(internalHashes) == 0 {
+		return nil
+	}
+
 	var hashes []*PublicTransactionHash
-	for _, h := range codeHashes {
+	for _, h := range internalHashes {
 		hashes = append(hashes, &PublicTransactionHash{
 			Hash:       tktypes.MustParseBytes32(h),
 			PublicTxID: txID,
 		})
 	}
 	return hashes
+}
+
+func safeBigIntPtr(bi *ethtypes.HexInteger) *big.Int {
+	if bi == nil {
+		return nil
+	}
+	return bi.BigInt()
 }

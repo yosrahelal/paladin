@@ -15,7 +15,7 @@ CREATE TABLE public_transactions (
   tx_data                      TEXT            NOT NULL,
   tx_hash                      TEXT            NOT NULL,
   first_submit                 BIGINT,
-  last_submit                  BIGINT,
+  last_submit                  BIGINT, -- this tracks the latest attempt of submissions, include failures and retries of the same hash 
   error_message                TEXT            NOT NULL
 );
 

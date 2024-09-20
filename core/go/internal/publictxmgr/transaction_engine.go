@@ -340,8 +340,8 @@ func (ble *publicTxEngine) createManagedTx(ctx context.Context, dbtx *gorm.DB, t
 	now := tktypes.TimestampNow()
 	mtx := &components.PublicTX{
 		ID:          uuid.MustParse(txID),
-		Created:     &now,
-		Updated:     &now,
+		Created:     now,
+		Updated:     now,
 		Transaction: ethTx,
 		Status:      components.PubTxStatusPending,
 	}
@@ -407,6 +407,7 @@ func (ble *publicTxEngine) HandleConfirmedTransactions(ctx context.Context, conf
 		eventHandlingErrors := make(chan error, len(itMap))
 		for from, its := range itMap {
 			fromAddress := from
+			indexedTxs := its
 			go func() {
 				localRWLock.RLock()
 				inFlightOrchestrator := ble.InFlightOrchestrators[fromAddress]
@@ -428,7 +429,7 @@ func (ble *publicTxEngine) HandleConfirmedTransactions(ctx context.Context, conf
 						return
 					}
 				}
-				err := inFlightOrchestrator.HandleConfirmedTransactions(ctx, its, itMaxNonce[fromAddress])
+				err := inFlightOrchestrator.HandleConfirmedTransactions(ctx, indexedTxs, itMaxNonce[fromAddress])
 				// finally, we update the confirmed nonce for each address to the highest number that is observed ever. This then can be used by the orchestrator to retrospectively fetch missed confirmed transaction data.
 				ble.updateConfirmedTxNonce(fromAddress, itMaxNonce[fromAddress])
 				eventHandlingErrors <- err

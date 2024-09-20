@@ -501,8 +501,9 @@ func TestAssignNonceMultiThreadedMultiSigningAddresses(t *testing.T) {
 				var wg sync.WaitGroup
 				wg.Add(numThreadsPerSigningAddress)
 				for thread := 0; thread < numThreadsPerSigningAddress; thread++ {
+					threadIndex := thread
 					go func() {
-						runItterationsForThread(thread, signingAddressIndex, signingAddress)
+						runItterationsForThread(threadIndex, signingAddressIndex, signingAddress)
 						wg.Done()
 					}()
 				}
@@ -512,8 +513,9 @@ func TestAssignNonceMultiThreadedMultiSigningAddresses(t *testing.T) {
 			var wg sync.WaitGroup
 			wg.Add(numSigningAddresses)
 			for signingAddressIndex, signingAddress := range signingAddresses {
+				saIndex, sA := signingAddressIndex, signingAddress
 				go func() {
-					runThreadsForSigningAddress(signingAddressIndex, signingAddress)
+					runThreadsForSigningAddress(saIndex, sA)
 					wg.Done()
 				}()
 			}

@@ -54,7 +54,7 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeSubmittedNew, outCome)
-	assert.Equal(t, testTxHash, txHash)
+	assert.Equal(t, testTxHash, txHash.String())
 
 	// successful send with tx hash missing
 	txSendMock.Run(func(args mock.Arguments) {
@@ -67,7 +67,7 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeSubmittedNew, outCome)
-	assert.Equal(t, testTxHash, txHash) // able to use the calculated hash
+	assert.Equal(t, testTxHash, txHash.String()) // able to use the calculated hash
 
 	// error send due to tx hash mismatch
 	txSendMock.Run(func(args mock.Arguments) {
@@ -80,7 +80,7 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 	assert.Regexp(t, "PD011905", err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeFailedRequiresRetry, outCome)
-	assert.Equal(t, "", txHash)
+	assert.Nil(t, txHash)
 
 	// underpriced
 	txSendMock.Run(func(args mock.Arguments) {
@@ -93,7 +93,7 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 	assert.Regexp(t, "transaction underpriced", err)
 	assert.Equal(t, ethclient.ErrorReasonTransactionUnderpriced, errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeFailedRequiresRetry, outCome)
-	assert.Equal(t, testTxHash, txHash)
+	assert.Equal(t, testTxHash, txHash.String())
 	// reverted
 	txSendMock.Run(func(args mock.Arguments) {
 		txRawMessage := args[1].(tktypes.HexBytes)
@@ -105,7 +105,7 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 	assert.Regexp(t, "execution reverted", err)
 	assert.Equal(t, ethclient.ErrorReasonTransactionReverted, errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeFailedRequiresRetry, outCome)
-	assert.Equal(t, testTxHash, txHash)
+	assert.Equal(t, testTxHash, txHash.String())
 	// known transaction
 	txSendMock.Run(func(args mock.Arguments) {
 		txRawMessage := args[1].(tktypes.HexBytes)
@@ -117,7 +117,7 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeAlreadyKnown, outCome)
-	assert.Equal(t, testTxHash, txHash) // able to use the calculated hash
+	assert.Equal(t, testTxHash, txHash.String()) // able to use the calculated hash
 	// nonce too low
 	txSendMock.Run(func(args mock.Arguments) {
 		txRawMessage := args[1].(tktypes.HexBytes)
@@ -129,7 +129,7 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeNonceTooLow, outCome)
-	assert.Equal(t, testTxHash, txHash) // able to use the calculated hash
+	assert.Equal(t, testTxHash, txHash.String()) // able to use the calculated hash
 
 	// other error
 	txSendMock.Run(func(args mock.Arguments) {
@@ -142,7 +142,7 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 	assert.Regexp(t, "error submitting", err)
 	assert.Equal(t, ethclient.ErrorReason(""), errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeFailedRequiresRetry, outCome)
-	assert.Equal(t, testTxHash, txHash) // able to use the calculated hash
+	assert.Equal(t, testTxHash, txHash.String()) // able to use the calculated hash
 }
 
 func TestTxSubmissionWithSignedMessageWithRetry(t *testing.T) {
@@ -164,7 +164,7 @@ func TestTxSubmissionWithSignedMessageWithRetry(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeSubmittedNew, outCome)
-	assert.Equal(t, testTxHash, txHash)
+	assert.Equal(t, testTxHash, txHash.String())
 
 	// successful send with tx hash missing
 	mEC.On("SendRawTransaction", ctx, mock.Anything).Return(
@@ -176,7 +176,7 @@ func TestTxSubmissionWithSignedMessageWithRetry(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeSubmittedNew, outCome)
-	assert.Equal(t, testTxHash, txHash) // able to use the calculated hash
+	assert.Equal(t, testTxHash, txHash.String()) // able to use the calculated hash
 
 	// successful send but tx hash mismatch first time
 	mEC.On("SendRawTransaction", ctx, mock.Anything).Return(&textWrongTxHashByte32, nil).Once()
@@ -187,7 +187,7 @@ func TestTxSubmissionWithSignedMessageWithRetry(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeSubmittedNew, outCome)
-	assert.Equal(t, testTxHash, txHash)
+	assert.Equal(t, testTxHash, txHash.String())
 
 	// categorized errors should not be retried
 	// underpriced
@@ -197,7 +197,7 @@ func TestTxSubmissionWithSignedMessageWithRetry(t *testing.T) {
 	assert.Regexp(t, "transaction underpriced", err)
 	assert.Equal(t, ethclient.ErrorReasonTransactionUnderpriced, errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeFailedRequiresRetry, outCome)
-	assert.Equal(t, testTxHash, txHash)
+	assert.Equal(t, testTxHash, txHash.String())
 	// reverted
 	mEC.On("SendRawTransaction", ctx, mock.Anything).Return(nil, fmt.Errorf("execution reverted")).Once()
 
@@ -205,7 +205,7 @@ func TestTxSubmissionWithSignedMessageWithRetry(t *testing.T) {
 	assert.Regexp(t, "execution reverted", err)
 	assert.Equal(t, ethclient.ErrorReasonTransactionReverted, errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeFailedRequiresRetry, outCome)
-	assert.Equal(t, testTxHash, txHash)
+	assert.Equal(t, testTxHash, txHash.String())
 	// known transaction
 	mEC.On("SendRawTransaction", ctx, mock.Anything).Return(nil, fmt.Errorf("known transaction")).Once()
 
@@ -213,7 +213,7 @@ func TestTxSubmissionWithSignedMessageWithRetry(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeAlreadyKnown, outCome)
-	assert.Equal(t, testTxHash, txHash) // able to use the calculated hash
+	assert.Equal(t, testTxHash, txHash.String()) // able to use the calculated hash
 	// nonce too low
 	mEC.On("SendRawTransaction", ctx, mock.Anything).Return(nil, fmt.Errorf("nonce too low")).Once()
 
@@ -221,7 +221,7 @@ func TestTxSubmissionWithSignedMessageWithRetry(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeNonceTooLow, outCome)
-	assert.Equal(t, testTxHash, txHash) // able to use the calculated hash
+	assert.Equal(t, testTxHash, txHash.String()) // able to use the calculated hash
 
 	// un-categorized errors should be retried
 	// successful send when first time returned un-categorized error
@@ -234,7 +234,7 @@ func TestTxSubmissionWithSignedMessageWithRetry(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeSubmittedNew, outCome)
-	assert.Equal(t, testTxHash, txHash)
+	assert.Equal(t, testTxHash, txHash.String())
 
 	// retry error
 	canceledContext, cancel := context.WithCancel(ctx)
@@ -244,5 +244,5 @@ func TestTxSubmissionWithSignedMessageWithRetry(t *testing.T) {
 	assert.Regexp(t, "FF00154", err)
 	assert.Regexp(t, "FF00154", errReason)
 	assert.Equal(t, baseTypes.SubmissionOutcomeFailedRequiresRetry, outCome)
-	assert.Equal(t, "", txHash)
+	assert.Nil(t, txHash)
 }

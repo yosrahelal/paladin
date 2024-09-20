@@ -81,10 +81,7 @@ const (
 // mechanism might be in separate tables - including History, Receipt, and Confirmations
 type BaseTXUpdates struct {
 	Status               *PubTxStatus         `json:"status"`
-	From                 *string              `json:"from,omitempty"`
-	To                   *string              `json:"to,omitempty"`
-	Nonce                *ethtypes.HexInteger `json:"nonce,omitempty"`
-	Value                *ethtypes.HexInteger `json:"value,omitempty"`
+	SubStatus            *PubTxSubStatus      `json:"subStatus"`
 	GasPrice             *ethtypes.HexInteger `json:"gasPrice,omitempty"`
 	MaxPriorityFeePerGas *ethtypes.HexInteger `json:"maxPriorityFeePerGas,omitempty"`
 	MaxFeePerGas         *ethtypes.HexInteger `json:"maxFeePerGas,omitempty"`
@@ -93,21 +90,21 @@ type BaseTXUpdates struct {
 	FirstSubmit          *tktypes.Timestamp   `json:"firstSubmit,omitempty"`
 	LastSubmit           *tktypes.Timestamp   `json:"lastSubmit,omitempty"`
 	ErrorMessage         *string              `json:"errorMessage,omitempty"`
-	SubmittedHashes      []string             `json:"submittedHashes,omitempty"`
+	NewSubmittedHashes   []string             `json:"submittedHashes,omitempty"`
 }
 
 type PublicTX struct {
-	ID         uuid.UUID          `json:"id"`
-	Created    *tktypes.Timestamp `json:"created"`
-	Updated    *tktypes.Timestamp `json:"updated"`
-	Status     PubTxStatus        `json:"status"`
-	SubStatus  PubTxSubStatus     `json:"subStatus"`
-	SequenceID string             `json:"sequenceId,omitempty"`
+	ID         uuid.UUID         `json:"id"`
+	Created    tktypes.Timestamp `json:"created"`
+	Updated    tktypes.Timestamp `json:"updated"`
+	Status     PubTxStatus       `json:"status"`
+	SubStatus  PubTxSubStatus    `json:"subStatus"`
+	SequenceID string            `json:"sequenceId,omitempty"`
 	*ethsigner.Transaction
 	TransactionHash *tktypes.Bytes32   `json:"transactionHash,omitempty"`
 	FirstSubmit     *tktypes.Timestamp `json:"firstSubmit,omitempty"`
 	LastSubmit      *tktypes.Timestamp `json:"lastSubmit,omitempty"`
-	ErrorMessage    string             `json:"errorMessage,omitempty"`
+	ErrorMessage    *string            `json:"errorMessage,omitempty"`
 	// submitted transaction hashes are in a separate DB table, we load and manage it in memory in the same object for code convenience
 	SubmittedHashes []string `json:"submittedHashes,omitempty"`
 }
@@ -166,15 +163,16 @@ const (
 type NextNonceCallback func(ctx context.Context, signer string) (uint64, error)
 
 type PubTransactionQueries struct {
-	NotIDAND   []string
-	StatusOR   []string
-	NotFromAND []string
+	InIDs      []string
+	NotInIDs   []string
+	InStatus   []string
+	NotFrom    []string
 	From       *string
 	To         *string
 	Sort       *string
 	Limit      *int
 	AfterNonce *big.Int
-	HasValue   bool
+	HasTxValue bool
 }
 type PublicTransactionStore interface {
 	GetTransactionByID(ctx context.Context, txID string) (*PublicTX, error)

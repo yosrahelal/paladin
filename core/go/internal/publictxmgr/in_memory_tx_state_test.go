@@ -33,7 +33,7 @@ import (
 )
 
 func NewTestInMemoryTxState(t *testing.T) baseTypes.InMemoryTxStateManager {
-	oldTime := confutil.P(tktypes.TimestampNow())
+	oldTime := tktypes.TimestampNow()
 	oldFrom := "0x4e598f6e918321dd47c86e7a077b4ab0e7414846"
 	oldTxHash := tktypes.Bytes32Keccak([]byte("0x00000"))
 	oldStatus := components.PubTxStatusPending
@@ -63,9 +63,9 @@ func NewTestInMemoryTxState(t *testing.T) baseTypes.InMemoryTxStateManager {
 			tktypes.Bytes32Keccak([]byte("0x00001")).String(),
 			tktypes.Bytes32Keccak([]byte("0x00002")).String(),
 		},
-		FirstSubmit:  oldTime,
-		LastSubmit:   oldTime,
-		ErrorMessage: oldErrorMessage,
+		FirstSubmit:  &oldTime,
+		LastSubmit:   &oldTime,
+		ErrorMessage: &oldErrorMessage,
 	}
 
 	return NewInMemoryTxStateMananger(context.Background(), testManagedTx)
@@ -73,7 +73,7 @@ func NewTestInMemoryTxState(t *testing.T) baseTypes.InMemoryTxStateManager {
 }
 
 func TestSettersAndGetters(t *testing.T) {
-	oldTime := confutil.P(tktypes.TimestampNow())
+	oldTime := tktypes.TimestampNow()
 	oldFrom := "0xb3d9cf8e163bbc840195a97e81f8a34e295b8f39"
 	oldTxHash := tktypes.Bytes32Keccak([]byte("0x00000"))
 	oldTo := "0x1f9090aae28b8a3dceadf281b0f12828e676c326"
@@ -103,9 +103,9 @@ func TestSettersAndGetters(t *testing.T) {
 			tktypes.Bytes32Keccak([]byte("0x00001")).String(),
 			tktypes.Bytes32Keccak([]byte("0x00002")).String(),
 		},
-		FirstSubmit:  oldTime,
-		LastSubmit:   oldTime,
-		ErrorMessage: oldErrorMessage,
+		FirstSubmit:  &oldTime,
+		LastSubmit:   &oldTime,
+		ErrorMessage: &oldErrorMessage,
 	}
 
 	inMemoryTxState := NewInMemoryTxStateMananger(context.Background(), testManagedTx)
@@ -114,14 +114,14 @@ func TestSettersAndGetters(t *testing.T) {
 
 	assert.Equal(t, testManagedTx.ID, inMemoryTxState.GetTxID())
 
-	assert.Equal(t, oldTime, inMemoryTxState.GetCreatedTime())
+	assert.Equal(t, oldTime, *inMemoryTxState.GetCreatedTime())
 	assert.Nil(t, inMemoryTxState.GetConfirmedTransaction())
-	assert.Equal(t, oldTxHash, inMemoryTxState.GetTransactionHash())
+	assert.Equal(t, oldTxHash, *inMemoryTxState.GetTransactionHash())
 	assert.Equal(t, oldNonce.BigInt(), inMemoryTxState.GetNonce())
 	assert.Equal(t, oldFrom, inMemoryTxState.GetFrom())
 	assert.Equal(t, testManagedTx.Status, inMemoryTxState.GetStatus())
 	assert.Equal(t, oldGasPrice.BigInt(), inMemoryTxState.GetGasPriceObject().GasPrice)
-	assert.Equal(t, oldTime, inMemoryTxState.GetFirstSubmit())
+	assert.Equal(t, oldTime, *inMemoryTxState.GetFirstSubmit())
 	assert.Equal(t, []string{
 		tktypes.Bytes32Keccak([]byte("0x00000")).String(),
 		tktypes.Bytes32Keccak([]byte("0x00001")).String(),
@@ -141,12 +141,8 @@ func TestSettersAndGetters(t *testing.T) {
 
 	successStatus := components.PubTxStatusSucceeded
 	newTime := confutil.P(tktypes.TimestampNow())
-	newFrom := "0xf1031"
 	newTxHash := tktypes.Bytes32Keccak([]byte("0x000031"))
-	newTo := "0x201"
-	newNonce := ethtypes.NewHexInteger64(2)
 	newGasLimit := ethtypes.NewHexInteger64(111)
-	newValue := ethtypes.NewHexInteger64(222)
 	newGasPrice := ethtypes.NewHexInteger64(111)
 	newErrorMessage := "new message"
 
@@ -154,7 +150,7 @@ func TestSettersAndGetters(t *testing.T) {
 		Status:          &successStatus,
 		GasPrice:        newGasPrice,
 		TransactionHash: &newTxHash,
-		SubmittedHashes: []string{
+		NewSubmittedHashes: []string{
 			tktypes.Bytes32Keccak([]byte("0x00000")).String(),
 			tktypes.Bytes32Keccak([]byte("0x00001")).String(),
 			tktypes.Bytes32Keccak([]byte("0x00002")).String(),
@@ -164,19 +160,15 @@ func TestSettersAndGetters(t *testing.T) {
 		LastSubmit:   newTime,
 		ErrorMessage: &newErrorMessage,
 		GasLimit:     newGasLimit,
-		// field that cannot be updated
-		From:  &newFrom,
-		To:    &newTo,
-		Nonce: newNonce,
-		Value: newValue,
 	})
 
 	assert.Equal(t, testManagedTx.ID, inMemoryTxState.GetTxID())
 
-	assert.Equal(t, oldTime, inMemoryTxState.GetCreatedTime())
+	assert.Equal(t, oldTime, *inMemoryTxState.GetCreatedTime())
 	assert.Equal(t, newTime, inMemoryTxState.GetLastSubmitTime())
+	inMemoryTxState.SetConfirmedTransaction(context.Background(), testConfirmedTx)
 	assert.Equal(t, testConfirmedTx, inMemoryTxState.GetConfirmedTransaction())
-	assert.Equal(t, newTxHash, inMemoryTxState.GetTransactionHash())
+	assert.Equal(t, newTxHash, *inMemoryTxState.GetTransactionHash())
 	assert.Equal(t, successStatus, inMemoryTxState.GetStatus())
 	assert.Equal(t, newGasPrice.BigInt(), inMemoryTxState.GetGasPriceObject().GasPrice)
 	assert.Nil(t, inMemoryTxState.GetGasPriceObject().MaxFeePerGas)

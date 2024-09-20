@@ -470,7 +470,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 			}
 			publicTxIDs = make([]string, len(publicTransactions))
 			for i, publicTransaction := range publicTransactions {
-				publicTxIDs[i] = publicTransaction.ID
+				publicTxIDs[i] = publicTransaction.ID.String()
 			}
 
 			return publicTxIDs, nil

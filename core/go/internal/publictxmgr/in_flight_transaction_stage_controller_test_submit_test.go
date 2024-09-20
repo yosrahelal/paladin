@@ -91,9 +91,9 @@ func TestProduceLatestInFlightStageContextSubmitComplete(t *testing.T) {
 	assert.Equal(t, baseTypes.InFlightTxStageSubmitting, rsc.Stage)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
-	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"txHash":"`+txHash.String()+`"}`), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
+	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"txHash":"`+txHash.String()+`"}`), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
 	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
-	assert.Equal(t, txHash, *rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
+	assert.Equal(t, txHash, rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
 	assert.Equal(t, submissionTime, rsc.StageOutputsToBePersisted.TxUpdates.FirstSubmit)
 	assert.Equal(t, submissionTime, rsc.StageOutputsToBePersisted.TxUpdates.LastSubmit)
 
@@ -111,10 +111,10 @@ func TestProduceLatestInFlightStageContextSubmitComplete(t *testing.T) {
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.Equal(t, baseTypes.InFlightTxStageSubmitting, rsc.Stage)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
-	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"txHash":"`+txHash.String()+`"}`), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
+	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"txHash":"`+txHash.String()+`"}`), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
 	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
 	assert.Equal(t, submissionTime, rsc.StageOutputsToBePersisted.TxUpdates.LastSubmit)
-	assert.Equal(t, txHash, *rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
+	assert.Equal(t, txHash, rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
 }
 
 func TestProduceLatestInFlightStageContextCannotSubmit(t *testing.T) {
@@ -191,7 +191,7 @@ func TestProduceLatestInFlightStageContextSubmitCompleteAlreadyKnown(t *testing.
 	assert.Equal(t, baseTypes.InFlightTxStageSubmitting, rsc.Stage)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Empty(t, rsc.StageOutputsToBePersisted.HistoryUpdates)
-	assert.Equal(t, txHash, *rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
+	assert.Equal(t, txHash, rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
 
 	// submission attempt completed - already known for the first time submission
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
@@ -209,7 +209,7 @@ func TestProduceLatestInFlightStageContextSubmitCompleteAlreadyKnown(t *testing.
 	assert.Equal(t, baseTypes.InFlightTxStageSubmitting, rsc.Stage)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Empty(t, rsc.StageOutputsToBePersisted.HistoryUpdates)
-	assert.Equal(t, txHash, *rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
+	assert.Equal(t, txHash, rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
 
 	// submission attempt completed - already known for the an existing time submission
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
@@ -228,7 +228,7 @@ func TestProduceLatestInFlightStageContextSubmitCompleteAlreadyKnown(t *testing.
 	assert.Equal(t, baseTypes.InFlightTxStageSubmitting, rsc.Stage)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Empty(t, rsc.StageOutputsToBePersisted.HistoryUpdates)
-	assert.Equal(t, txHash, *rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
+	assert.Equal(t, txHash, rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
 }
 func TestProduceLatestInFlightStageContextSubmitErrors(t *testing.T) {
 	ctx := context.Background()
@@ -267,14 +267,14 @@ func TestProduceLatestInFlightStageContextSubmitErrors(t *testing.T) {
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
 	called := make(chan bool, 3)
-	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"reason":"`+string(ethclient.ErrorReasonTransactionReverted)+`"}`), fftypes.JSONAnyPtr(`{"error":"`+submissionErr.Error()+`"}`), mock.Anything).Run(func(args mock.Arguments) {
+	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"reason":"`+string(ethclient.ErrorReasonTransactionReverted)+`"}`), fftypes.JSONAnyPtr(`{"error":"`+submissionErr.Error()+`"}`), mock.Anything).Run(func(args mock.Arguments) {
 		called <- true
 	}).Return(nil).Maybe()
 	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
 	<-called
 	assert.Equal(t, submissionErr.Error(), *rsc.StageOutputsToBePersisted.TxUpdates.ErrorMessage)
 	assert.Equal(t, baseTypes.InFlightTxStageSubmitting, rsc.Stage)
-	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.SubmittedHashes)
+	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.NewSubmittedHashes)
 
 	// submission attempt errored - required re-preparation during resubmission
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
@@ -295,7 +295,7 @@ func TestProduceLatestInFlightStageContextSubmitErrors(t *testing.T) {
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
 	called = make(chan bool, 3)
-	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"reason":"`+string(ethclient.ErrorReasonTransactionReverted)+`"}`), fftypes.JSONAnyPtr(`{"error":"`+submissionErr.Error()+`"}`), mock.Anything).Run(func(args mock.Arguments) {
+	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"reason":"`+string(ethclient.ErrorReasonTransactionReverted)+`"}`), fftypes.JSONAnyPtr(`{"error":"`+submissionErr.Error()+`"}`), mock.Anything).Run(func(args mock.Arguments) {
 		called <- true
 	}).Return(nil).Maybe()
 	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)

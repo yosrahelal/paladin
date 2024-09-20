@@ -160,7 +160,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 
 	publicTransactions := []*components.PublicTX{
 		{
-			ID: uuid.New().String(),
+			ID: uuid.New(),
 		},
 	}
 	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
@@ -292,7 +292,7 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 
 	publicTransactions := []*components.PublicTX{
 		{
-			ID: uuid.New().String(),
+			ID: uuid.New(),
 		},
 	}
 	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
@@ -427,10 +427,10 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 
 	publicTransactions := []*components.PublicTX{
 		{
-			ID: uuid.New().String(),
+			ID: uuid.New(),
 		},
 		{
-			ID: uuid.New().String(),
+			ID: uuid.New(),
 		},
 	}
 	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
@@ -834,7 +834,7 @@ func (f *fakePublicTxEngine) HandleSuspendTransaction(ctx context.Context, txID 
 }
 
 // Init implements components.PublicTxEngine.
-func (f *fakePublicTxEngine) Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore components.TransactionStore, publicTXEventNotifier components.PublicTxEventNotifier, blockIndexer blockindexer.BlockIndexer) {
+func (f *fakePublicTxEngine) Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore components.PublicTransactionStore, publicTXEventNotifier components.PublicTxEventNotifier, blockIndexer blockindexer.BlockIndexer) {
 	panic("unimplemented")
 }
 
@@ -848,7 +848,7 @@ func (f *fakePublicTxEngine) Start(ctx context.Context) (done <-chan struct{}, e
 // PrepareSubmissionBatch implements components.PublicTxEngine.
 func (f *fakePublicTxEngine) PrepareSubmissionBatch(ctx context.Context, reqOptions *components.RequestOptions, txPayloads []interface{}) (preparedSubmission []components.PreparedSubmission, submissionRejected bool, err error) {
 	mockPreparedSubmissions := make([]components.PreparedSubmission, 0, len(txPayloads))
-	for _, _ = range txPayloads {
+	for range txPayloads {
 		mockPreparedSubmissions = append(mockPreparedSubmissions, componentmocks.NewPreparedSubmission(f.t))
 	}
 	return mockPreparedSubmissions, false, nil
@@ -858,9 +858,9 @@ func (f *fakePublicTxEngine) PrepareSubmissionBatch(ctx context.Context, reqOpti
 func (f *fakePublicTxEngine) SubmitBatch(ctx context.Context, tx *gorm.DB, preparedSubmissions []components.PreparedSubmission) ([]*components.PublicTX, error) {
 	publicTransactions := make([]*components.PublicTX, 0, len(preparedSubmissions))
 
-	for _, _ = range preparedSubmissions {
+	for range preparedSubmissions {
 		publicTransactions = append(publicTransactions, &components.PublicTX{
-			ID: uuid.New().String(),
+			ID: uuid.New(),
 		})
 	}
 	return publicTransactions, nil

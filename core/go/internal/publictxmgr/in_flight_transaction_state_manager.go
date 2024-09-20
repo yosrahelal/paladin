@@ -308,7 +308,7 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 			}
 			if !hashAlreadyTracked {
 				matchFound = matchFound || newTxHash == it.Hash
-				rsc.StageOutputsToBePersisted.TxUpdates.SubmittedHashes = append(trackedHashes[:], newTxHash.String())
+				rsc.StageOutputsToBePersisted.TxUpdates.NewSubmittedHashes = append(trackedHashes[:], newTxHash.String())
 			}
 		}
 		if it != nil || rsc.StageOutputsToBePersisted.MissedConfirmationEvent {

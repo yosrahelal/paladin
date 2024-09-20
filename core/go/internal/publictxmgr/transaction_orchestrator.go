@@ -341,19 +341,15 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 	if spaces > 0 {
 		completedTxIDsStillBeingPersisted := make(map[string]bool)
 		tf := &components.PubTransactionQueries{
-			StatusOR: []string{string(components.PubTxStatusPending)},
-			From:     confutil.P(oc.signingAddress),
-			Sort:     confutil.P("nonce"),
-			Limit:    confutil.P(spaces),
-			HasValue: true, // NB: we assume if a transaction has value then it's a fueling transaction
+			InStatus:   []string{string(components.PubTxStatusPending)},
+			From:       confutil.P(oc.signingAddress),
+			Sort:       confutil.P("nonce"),
+			Limit:      confutil.P(spaces),
+			HasTxValue: true, // NB: we assume if a transaction has value then it's a fueling transaction
 		}
 
 		if len(oc.transactionIDsInStatusUpdate) > 0 {
-			transactionIDInStatusUpdate := make([]string, 0, len(oc.transactionIDsInStatusUpdate))
-			for _, txID := range oc.transactionIDsInStatusUpdate {
-				transactionIDInStatusUpdate = append(transactionIDInStatusUpdate, txID)
-			}
-			tf.NotIDAND = transactionIDInStatusUpdate
+			tf.NotInIDs = oc.transactionIDsInStatusUpdate
 		}
 		var after string
 		if len(oc.InFlightTxs) > 0 {

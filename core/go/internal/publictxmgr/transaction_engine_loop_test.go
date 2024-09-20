@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -57,9 +56,6 @@ func TestNewEngineNoNewOrchestrator(t *testing.T) {
 
 func TestNewEnginePollingCancelledContext(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	qFields := &ffapi.QueryFields{}
-
-	mockTransactionFilter := qFields.NewFilter(ctx)
 
 	ble, _ := NewTestTransactionEngine(t)
 
@@ -74,7 +70,6 @@ func TestNewEnginePollingCancelledContext(t *testing.T) {
 	ble.maxInFlightOrchestrators = 1
 	ble.enginePollingInterval = 1 * time.Hour
 	// already has a running orchestrator for the address so no new orchestrator should be started
-	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, fmt.Errorf("error")).Run(func(args mock.Arguments) {
 		cancelCtx()
 	}).Once()
@@ -99,9 +94,6 @@ func TestNewEnginePollingReAddStoppedOrchestrator(t *testing.T) {
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
 	}
-	qFields := &ffapi.QueryFields{}
-
-	mockTransactionFilter := qFields.NewFilter(ctx)
 
 	ble, _ := NewTestTransactionEngine(t)
 
@@ -119,7 +111,6 @@ func TestNewEnginePollingReAddStoppedOrchestrator(t *testing.T) {
 	zeroTransactionListedForIdle := make(chan struct{})
 
 	// already has a running orchestrator for the address so no new orchestrator should be started
-	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter)
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Once()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Run(func(args mock.Arguments) {
 		close(zeroTransactionListedForIdle)
@@ -155,10 +146,6 @@ func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
 	}
-	qFields := &ffapi.QueryFields{}
-
-	mockTransactionFilter := qFields.NewFilter(ctx)
-
 	ble, _ := NewTestTransactionEngine(t)
 
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
@@ -174,7 +161,6 @@ func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 	ble.enginePollingInterval = 1 * time.Hour
 	ble.engineLoopDone = make(chan struct{})
 	// already has a running orchestrator for the address so no new orchestrator should be started
-	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Once()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Maybe()
 	go ble.engineLoop()
@@ -202,7 +188,6 @@ func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 	//stops OK
 	cancelCtx()
 	<-ble.engineLoopDone
-	time.Sleep(2 * time.Second)
 }
 
 func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) {
@@ -221,9 +206,6 @@ func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) 
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
 	}
-	qFields := &ffapi.QueryFields{}
-
-	mockTransactionFilter := qFields.NewFilter(ctx)
 
 	ble, _ := NewTestTransactionEngine(t)
 
@@ -254,7 +236,6 @@ func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) 
 		bIndexer:                    mBI,
 	}
 	// already has a running orchestrator for the address so no new orchestrator should be started
-	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Maybe()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Maybe()
 	ble.InFlightOrchestrators = map[string]*orchestrator{
@@ -270,10 +251,6 @@ func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) 
 
 func TestNewEnginePollingExcludePausedOrchestrator(t *testing.T) {
 	ctx := context.Background()
-	qFields := &ffapi.QueryFields{}
-
-	mockTransactionFilter := qFields.NewFilter(ctx)
-
 	ble, _ := NewTestTransactionEngine(t)
 
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
@@ -289,7 +266,6 @@ func TestNewEnginePollingExcludePausedOrchestrator(t *testing.T) {
 	ble.enginePollingInterval = 1 * time.Hour
 
 	// already has a running orchestrator for the address so no new orchestrator should be started
-	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
 	listed := make(chan struct{})
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Run(func(args mock.Arguments) {
 		close(listed)
@@ -310,10 +286,6 @@ func TestNewEngineGetPendingFuelingTxs(t *testing.T) {
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 	}
-	qFields := &ffapi.QueryFields{}
-
-	mockTransactionFilter := qFields.NewFilter(ctx)
-
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewPublicTransactionStore(t)
@@ -327,7 +299,6 @@ func TestNewEngineGetPendingFuelingTxs(t *testing.T) {
 	ble.enginePollingInterval = 1 * time.Hour
 
 	// already has a running orchestrator for the address so no new orchestrator should be started
-	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1}, nil).Once()
 	tx, err := ble.GetPendingFuelingTransaction(ctx, "0x0", testMainSigningAddress)
 	assert.Equal(t, mockManagedTx1, tx)
@@ -349,9 +320,6 @@ func TestNewEngineCheckTxCompleteness(t *testing.T) {
 			Nonce: ethtypes.NewHexInteger64(0),
 		},
 	}
-	qFields := &ffapi.QueryFields{}
-
-	mockTransactionFilter := qFields.NewFilter(ctx)
 
 	ble, _ := NewTestTransactionEngine(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
@@ -363,7 +331,6 @@ func TestNewEngineCheckTxCompleteness(t *testing.T) {
 	mKM := componentmocks.NewKeyManager(t)
 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
 	ble.ctx = ctx
-	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
 	ble.enginePollingInterval = 1 * time.Hour
 
 	// when no nonce cached

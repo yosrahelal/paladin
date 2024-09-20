@@ -22,7 +22,6 @@ import (
 	"hash/fnv"
 	"time"
 
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
@@ -45,7 +44,7 @@ type writeOperation struct {
 	id         string
 	done       chan error
 	isShutdown bool
-	tx         *components.PublicTX
+	tx         *PublicTransaction
 }
 
 type pubTxWriter struct {
@@ -87,7 +86,7 @@ func newPubTxWriter(bgCtx context.Context, conf *statestore.DBWriterConfig) *pub
 	return sw
 }
 
-func (sw *pubTxWriter) newWriteOp(tx *components.PublicTX) *writeOperation {
+func (sw *pubTxWriter) newWriteOp(tx *PublicTransaction) *writeOperation {
 	return &writeOperation{
 		id:   tktypes.ShortID(),
 		tx:   tx,
@@ -95,15 +94,15 @@ func (sw *pubTxWriter) newWriteOp(tx *components.PublicTX) *writeOperation {
 	}
 }
 
-func (op *writeOperation) flush(ctx context.Context) error {
-	select {
-	case err := <-op.done:
-		log.L(ctx).Debugf("Flushed write operation %s (err=%v)", op.id, err)
-		return err
-	case <-ctx.Done():
-		return i18n.NewError(ctx, msgs.MsgContextCanceled)
-	}
-}
+// func (op *writeOperation) flush(ctx context.Context) error {
+// 	select {
+// 	case err := <-op.done:
+// 		log.L(ctx).Debugf("Flushed write operation %s (err=%v)", op.id, err)
+// 		return err
+// 	case <-ctx.Done():
+// 		return i18n.NewError(ctx, msgs.MsgContextCanceled)
+// 	}
+// }
 
 func (sw *pubTxWriter) queue(ctx context.Context, op *writeOperation) {
 	// All insert/nonce-allocation requests for the same domain go to the same worker
@@ -193,19 +192,8 @@ func (sw *pubTxWriter) runBatch(ctx context.Context, b *stateWriterBatch) {
 	var pubTxHashes []*PublicTransactionHash
 	for _, op := range b.ops {
 		tx := op.tx
-		pubTxs = append(pubTxs, &PublicTransaction{
-			ID:        tx.ID,
-			Created:   *tx.Created,
-			Updated:   *tx.Updated,
-			Status:    string(tx.Status),
-			SubStatus: string(tx.SubStatus),
-		})
-		for _, hash := range tx.SubmittedHashes {
-			pubTxHashes = append(pubTxHashes, &PublicTransactionHash{
-				PublicTxID: tx.ID,
-				Hash:       tktypes.MustParseBytes32(hash),
-			})
-		}
+		pubTxs = append(pubTxs, tx)
+		pubTxHashes = append(pubTxHashes, tx.SubmittedHashes...)
 
 	}
 	log.L(ctx).Debugf("Writing txs batch txs=%d, hashes=%d", len(pubTxs), len(pubTxHashes))
@@ -213,7 +201,7 @@ func (sw *pubTxWriter) runBatch(ctx context.Context, b *stateWriterBatch) {
 	err := sw.p.DB().Transaction(func(tx *gorm.DB) (err error) {
 		if len(pubTxs) > 0 {
 			err = tx.
-				Table("public_transactions").
+				Table("public_transactions").Omit("SubmittedHashes").
 				Create(pubTxs).
 				Error
 		}

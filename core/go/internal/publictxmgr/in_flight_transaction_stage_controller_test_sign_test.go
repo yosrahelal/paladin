@@ -70,7 +70,7 @@ func TestProduceLatestInFlightStageContextSigning(t *testing.T) {
 	assert.Equal(t, baseTypes.InFlightTxStageSigning, rsc.Stage)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
-	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, components.PubTxSubStatusReceived, components.BaseTxActionSign, fftypes.JSONAnyPtr(`{"hash":"`+txHash+`"}`), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
+	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionSign, fftypes.JSONAnyPtr(`{"hash":"`+txHash+`"}`), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
 	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
 	// failed signing
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
@@ -86,7 +86,7 @@ func TestProduceLatestInFlightStageContextSigning(t *testing.T) {
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
-	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, components.PubTxSubStatusReceived, components.BaseTxActionSign, (*fftypes.JSONAny)(nil), fftypes.JSONAnyPtr(`{"error":"sign error"}`), mock.Anything).Return(nil).Maybe()
+	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionSign, (*fftypes.JSONAny)(nil), fftypes.JSONAnyPtr(`{"error":"sign error"}`), mock.Anything).Return(nil).Maybe()
 
 	// persisting error waiting for persistence retry timeout
 	assert.False(t, rsc.StageErrored)
@@ -117,7 +117,7 @@ func TestProduceLatestInFlightStageContextSigning(t *testing.T) {
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
 	it.stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageSigning, time.Now(), nil)
 	assert.NotNil(t, rsc.StageOutput.SignOutput.Err)
-	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID, components.PubTxSubStatusReceived, components.BaseTxActionSign, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionSign, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,

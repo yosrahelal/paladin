@@ -24,13 +24,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -46,7 +44,7 @@ func TestNewOrchestratorPolling(t *testing.T) {
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
 	mockManagedTx2 := &components.PublicTX{
 		ID:     uuid.New(),
@@ -55,12 +53,8 @@ func TestNewOrchestratorPolling(t *testing.T) {
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
-
-	qFields := &ffapi.QueryFields{}
-
-	mockTransactionFilter := qFields.NewFilter(ctx)
 
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
@@ -86,7 +80,6 @@ func TestNewOrchestratorPolling(t *testing.T) {
 	mTS.On("UpdateTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		time.Sleep(1 * time.Hour) // make sure the async action never got returned as the test will mock the events
 	}).Maybe()
-	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Once()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Maybe()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
@@ -109,10 +102,6 @@ func TestNewOrchestratorPollingContextCancelled(t *testing.T) {
 		},
 	}
 
-	qFields := &ffapi.QueryFields{}
-
-	mockTransactionFilter := qFields.NewFilter(ctx)
-
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
@@ -129,7 +118,6 @@ func TestNewOrchestratorPollingContextCancelled(t *testing.T) {
 
 	oc.balanceManager = mockBM
 
-	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("list transactions error")).Run(func(args mock.Arguments) {
 		cancelCtx()
 	}).Once()
@@ -146,7 +134,7 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
 	mockManagedTx2 := &components.PublicTX{
 		ID:     uuid.New(),
@@ -155,11 +143,8 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
-	qFields := &ffapi.QueryFields{}
-
-	mockTransactionFilter := qFields.NewFilter(ctx)
 
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
@@ -178,7 +163,6 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 	oc.balanceManager = mockBM
 	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
-	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Once()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT,
@@ -201,7 +185,7 @@ func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
 	mockManagedTx2 := &components.PublicTX{
 		ID:     uuid.New(),
@@ -210,12 +194,8 @@ func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
-
-	qFields := &ffapi.QueryFields{}
-
-	mockTransactionFilter := qFields.NewFilter(ctx)
 
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
@@ -235,7 +215,6 @@ func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 	oc.balanceManager = mockBM
 	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
-	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Once()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Once()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT,
@@ -259,12 +238,8 @@ func TestNewOrchestratorPollingMarkStale(t *testing.T) {
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
-
-	qFields := &ffapi.QueryFields{}
-
-	mockTransactionFilter := qFields.NewFilter(ctx)
 
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
@@ -284,7 +259,6 @@ func TestNewOrchestratorPollingMarkStale(t *testing.T) {
 	oc.lastQueueUpdate = time.Now().Add(-1 * time.Hour)
 	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
-	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1}, nil).Once()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT,
@@ -309,7 +283,7 @@ func TestOrchestratorStop(t *testing.T) {
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
 	mockManagedTx2 := &components.PublicTX{
 		ID:     uuid.New(),
@@ -318,17 +292,12 @@ func TestOrchestratorStop(t *testing.T) {
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
-
-	qFields := &ffapi.QueryFields{}
-
-	mockTransactionFilter := qFields.NewFilter(ctx)
 
 	ble, _ := NewTestTransactionEngine(t)
 
 	mTS := componentmocks.NewPublicTransactionStore(t)
-	mTS.On("NewTransactionFilter", mock.Anything).Return(mockTransactionFilter).Maybe()
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Maybe()
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
@@ -361,7 +330,7 @@ func TestOrchestratorStopWhenBalanceUnavailable(t *testing.T) {
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
 
 	ble, _ := NewTestTransactionEngine(t)
@@ -419,7 +388,7 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 			GasPrice: ethtypes.NewHexInteger64(1000),
 			GasLimit: ethtypes.NewHexInteger64(100),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
 
 	ble, _ := NewTestTransactionEngine(t)
@@ -466,7 +435,7 @@ func TestOrchestratorHandleConfirmedTransactions(t *testing.T) {
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(0),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
 	mockManagedTx1 := &components.PublicTX{
 		ID:     uuid.New(),
@@ -475,7 +444,7 @@ func TestOrchestratorHandleConfirmedTransactions(t *testing.T) {
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
 	mockManagedTx2 := &components.PublicTX{
 		ID:     uuid.New(),
@@ -484,7 +453,7 @@ func TestOrchestratorHandleConfirmedTransactions(t *testing.T) {
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
 	mockManagedTx3 := &components.PublicTX{
 		ID:     uuid.New(),
@@ -493,7 +462,7 @@ func TestOrchestratorHandleConfirmedTransactions(t *testing.T) {
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(3),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
@@ -549,7 +518,7 @@ func TestOrchestratorHandleConfirmedTransactionsNoInflightNotHang(t *testing.T) 
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
-		Created: confutil.P(tktypes.TimestampNow()),
+		Created: tktypes.TimestampNow(),
 	}
 	ble, _ := NewTestTransactionEngine(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)

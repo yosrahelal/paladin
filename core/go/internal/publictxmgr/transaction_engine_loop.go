@@ -165,12 +165,12 @@ func (ble *publicTxEngine) poll(ctx context.Context) (polled int, total int) {
 		// We retry the get from persistence indefinitely (until the context cancels)
 		err := ble.retry.Do(ctx, "get pending transactions with non InFlight signing addresses", func(attempt int) (retry bool, err error) {
 			tf := &components.PubTransactionQueries{
-				StatusOR: []string{string(components.PubTxStatusPending)},
+				InStatus: []string{string(components.PubTxStatusPending)},
 				Sort:     confutil.P("sequence"),
 				Limit:    &spaces,
 			}
 			if len(InFlightSigningAddresses) > 0 {
-				tf.NotFromAND = InFlightSigningAddresses
+				tf.NotFrom = InFlightSigningAddresses
 			}
 			additionalTxFromNonInFlightSigners, err = ble.txStore.ListTransactions(ctx, tf)
 			return true, err
@@ -228,12 +228,12 @@ func (ble *publicTxEngine) MarkInFlightOrchestratorsStale() {
 
 func (ble *publicTxEngine) GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *components.PublicTX, err error) {
 	tf := &components.PubTransactionQueries{
-		StatusOR: []string{string(components.PubTxStatusPending)},
-		To:       confutil.P(destinationAddress),
-		From:     confutil.P(sourceAddress),
-		Sort:     confutil.P("-nonce"),
-		Limit:    confutil.P(1),
-		HasValue: true, // NB: we assume if a transaction has value then it's a fueling transaction
+		InStatus:   []string{string(components.PubTxStatusPending)},
+		To:         confutil.P(destinationAddress),
+		From:       confutil.P(sourceAddress),
+		Sort:       confutil.P("-nonce"),
+		Limit:      confutil.P(1),
+		HasTxValue: true, // NB: we assume if a transaction has value then it's a fueling transaction
 	}
 
 	txs, err := ble.txStore.ListTransactions(ctx, tf)
@@ -253,7 +253,7 @@ func (ble *publicTxEngine) CheckTransactionCompleted(ctx context.Context, tx *co
 	if !exists {
 		// need to query the database to check the status of managed transaction
 		tf := &components.PubTransactionQueries{
-			StatusOR: []string{string(components.PubTxStatusSucceeded), string(components.PubTxStatusFailed)},
+			InStatus: []string{string(components.PubTxStatusSucceeded), string(components.PubTxStatusFailed)},
 			From:     confutil.P(string(tx.From)),
 			Sort:     confutil.P("-nonce"),
 			Limit:    confutil.P(1),

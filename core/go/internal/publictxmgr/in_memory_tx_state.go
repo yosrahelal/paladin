@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -50,13 +49,8 @@ func (imtxs *inMemoryTxState) SetConfirmedTransaction(ctx context.Context, iTX *
 
 func (imtxs *inMemoryTxState) ApplyTxUpdates(ctx context.Context, txUpdates *components.BaseTXUpdates) {
 	mtx := imtxs.mtx
-
-	if txUpdates.From != nil || txUpdates.To != nil || txUpdates.Nonce != nil || txUpdates.Value != nil {
-		log.L(ctx).Warnf("ApplyTxUpdates received fields that are not expected to be updated: %+v", txUpdates)
-	}
-
 	if txUpdates.ErrorMessage != nil {
-		mtx.ErrorMessage = *txUpdates.ErrorMessage
+		mtx.ErrorMessage = txUpdates.ErrorMessage
 	}
 
 	if txUpdates.FirstSubmit != nil {
@@ -87,8 +81,8 @@ func (imtxs *inMemoryTxState) ApplyTxUpdates(ctx context.Context, txUpdates *com
 		}
 	}
 
-	if txUpdates.SubmittedHashes != nil {
-		mtx.SubmittedHashes = txUpdates.SubmittedHashes
+	if txUpdates.NewSubmittedHashes != nil {
+		mtx.SubmittedHashes = txUpdates.NewSubmittedHashes
 	}
 
 	if txUpdates.LastSubmit != nil {
@@ -113,7 +107,7 @@ func (imtxs *inMemoryTxState) GetTxID() uuid.UUID {
 }
 
 func (imtxs *inMemoryTxState) GetCreatedTime() *tktypes.Timestamp {
-	return imtxs.mtx.Created
+	return &imtxs.mtx.Created
 }
 
 func (imtxs *inMemoryTxState) GetTransactionHash() *tktypes.Bytes32 {
