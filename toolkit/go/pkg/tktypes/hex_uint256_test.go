@@ -25,48 +25,39 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHexInt256(t *testing.T) {
+func TestHexUint256(t *testing.T) {
 
-	v := MustParseHexInt256("9223372036854775807")
+	v := MustParseHexUint256("9223372036854775807")
 	assert.Equal(t, uint64(9223372036854775807), v.Int().Uint64())
 	dbv, err := v.Value()
 	require.NoError(t, err)
 	assert.Equal(t, "0x7fffffffffffffff", v.String())
 	err = v.Scan(dbv)
 	require.NoError(t, err)
-	assert.Equal(t, int64(9223372036854775807), v.Int().Int64())
+	assert.Equal(t, uint64(9223372036854775807), v.Int().Uint64())
 
-	v = MustParseHexInt256("-9223372036854775808")
-	assert.Equal(t, int64(-9223372036854775808), v.Int().Int64())
-	v = MustParseHexInt256("-0x8000000000000000")
-	assert.Equal(t, int64(-9223372036854775808), v.Int().Int64())
+	v = MustParseHexUint256("0x8000000000000000")
+	assert.Equal(t, uint64(9223372036854775808), v.Int().Uint64())
 	dbv, err = v.Value()
 	require.NoError(t, err)
-	assert.Equal(t, "0ffffffffffffffffffffffffffffffffffffffffffffffff8000000000000000", dbv)
-	assert.Equal(t, "-0x8000000000000000", v.String())
+	assert.Equal(t, "0000000000000000000000000000000000000000000000008000000000000000", dbv)
+	assert.Equal(t, "0x8000000000000000", v.String())
 	err = v.Scan(dbv)
 	require.NoError(t, err)
-	assert.Equal(t, int64(-9223372036854775808), v.Int().Int64())
-
-	v = MustParseHexInt256("9223372036854775808")
 	assert.Equal(t, uint64(0x8000000000000000), v.Int().Uint64())
-	dbv, err = v.Value()
-	require.NoError(t, err)
-	assert.Equal(t, "0x8000000000000000", v.String())
-	assert.Equal(t, "10000000000000000000000000000000000000000000000008000000000000000", dbv)
 
-	v = MustParseHexInt256("0x8000000000000000")
+	v = MustParseHexUint256("0x8000000000000000")
 	assert.Equal(t, uint64(0x8000000000000000), v.Int().Uint64())
 
 	assert.Panics(t, func() {
-		_ = MustParseHexInt256("wrong")
+		_ = MustParseHexUint256("wrong")
 	})
 
-	_, err = ParseHexInt256(context.Background(), "wrong")
+	_, err = ParseHexUint256(context.Background(), "wrong")
 	require.Regexp(t, "PD020009", err)
 
 	type testStruct struct {
-		F1 *HexInt256 `json:"f1"`
+		F1 *HexUint256 `json:"f1"`
 	}
 	var ts testStruct
 	err = json.Unmarshal([]byte(`{
@@ -100,9 +91,9 @@ func TestHexInt256(t *testing.T) {
 	assert.Equal(t, `{"f1":"0x3039"}`, string(b))
 
 	err = ts.F1.Scan("0x12346")
-	assert.Regexp(t, "PD020012", err)
+	assert.Regexp(t, "PD020013", err)
 
 	err = v.Scan("wrong000000000000000000000000000000000000000000007fffffffffffffff")
-	assert.Regexp(t, "PD020012", err)
+	assert.Regexp(t, "PD020013", err)
 
 }

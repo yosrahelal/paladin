@@ -20,30 +20,28 @@ import (
 	"bytes"
 	"context"
 	"database/sql/driver"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 )
 
-// HexInt256 is any integer (signed or unsigned) up to 256 bits in size, serialized to the DB using a 65 sortable string (a 0/1 sign character, followed by 32 hex bytes)
-type HexInt256 big.Int
+// HexUint256 is any integer (signed or unsigned) up to 256 bits in size, serialized to the DB using a 65 sortable string (a 0/1 sign character, followed by 32 hex bytes)
+type HexUint256 big.Int
 
 // Parse a string
-func ParseHexInt256(ctx context.Context, s string) (*HexInt256, error) {
+func ParseHexUint256(ctx context.Context, s string) (*HexUint256, error) {
 	bi, ok := new(big.Int).SetString(s, 0)
 	if !ok {
 		return nil, i18n.NewError(ctx, tkmsgs.MsgTypesInvalidHexInteger, s)
 	}
-	return (*HexInt256)(bi), nil
+	return (*HexUint256)(bi), nil
 }
 
-func MustParseHexInt256(s string) *HexInt256 {
-	hi, err := ParseHexInt256(context.Background(), s)
+func MustParseHexUint256(s string) *HexUint256 {
+	hi, err := ParseHexUint256(context.Background(), s)
 	if err != nil {
 		panic(err)
 	}
@@ -51,17 +49,17 @@ func MustParseHexInt256(s string) *HexInt256 {
 }
 
 // Natural string representation is HexString0xPrefix() if non-nil, or empty string if ""
-func (hi *HexInt256) String() string {
+func (hi *HexUint256) String() string {
 	return hi.HexString0xPrefix()
 }
 
 // JSON representation is lower case hex, with 0x prefix
-func (hi *HexInt256) MarshalJSON() ([]byte, error) {
+func (hi *HexUint256) MarshalJSON() ([]byte, error) {
 	return json.Marshal(hi.HexString0xPrefix())
 }
 
-func (hi *HexInt256) setJSONString(text string) error {
-	pID, err := ParseHexInt256(context.Background(), string(text))
+func (hi *HexUint256) setJSONString(text string) error {
+	pID, err := ParseHexUint256(context.Background(), string(text))
 	if err != nil {
 		return err
 	}
@@ -70,7 +68,7 @@ func (hi *HexInt256) setJSONString(text string) error {
 }
 
 // Parses with/without 0x in any case
-func (hi *HexInt256) UnmarshalJSON(b []byte) error {
+func (hi *HexUint256) UnmarshalJSON(b []byte) error {
 	var iVal interface{}
 	decoder := json.NewDecoder(bytes.NewReader(b))
 	decoder.UseNumber() // It's not safe to use a JSON number decoder as it uses float64, so can (and does) lose precision
@@ -89,74 +87,52 @@ func (hi *HexInt256) UnmarshalJSON(b []byte) error {
 	return err
 }
 
-func (hi *HexInt256) Int() *big.Int {
+func (hi *HexUint256) Int() *big.Int {
 	return (*big.Int)(hi)
 }
 
 // Get string with 0x prefix - nil is all zeros
-func (hi *HexInt256) HexString0xPrefix() string {
+func (hi *HexUint256) HexString0xPrefix() string {
 	absHi := new(big.Int).Abs(hi.Int())
-	sign := ""
-	if hi.Int().Sign() < 0 {
-		sign = "-"
-	}
-	return fmt.Sprintf("%s0x%s", sign, absHi.Text(16))
+	return fmt.Sprintf("0x%s", absHi.Text(16))
 }
 
 // Get string (without 0x prefix) - nil is all zeros
-func (hi *HexInt256) HexString() string {
+func (hi *HexUint256) HexString() string {
 	return hi.Int().Text(16)
 }
 
-func (hi *HexInt256) Value() (driver.Value, error) {
-	return Int256To65CharDBSafeSortableString((*big.Int)(hi)), nil
+func (hi *HexUint256) Value() (driver.Value, error) {
+	return string(PadHexBigUint((*big.Int)(hi), make([]byte, 64))), nil
 }
 
-func (hi *HexInt256) Scan(src interface{}) error {
+func (hi *HexUint256) Scan(src interface{}) error {
 	switch v := src.(type) {
 	case string:
-		if len(v) != 65 {
+		bi, ok := new(big.Int).SetString(v, 16)
+		if len(v) != 64 || !ok {
 			// This type was not used to serialize to the database
-			return i18n.NewError(context.Background(), tkmsgs.MsgTypesInvalidDBInt256, v)
+			return i18n.NewError(context.Background(), tkmsgs.MsgTypesInvalidDBUint256, v)
 		}
-		b, err := hex.DecodeString(v[1:])
-		if err != nil {
-			return i18n.WrapError(context.Background(), err, tkmsgs.MsgTypesInvalidDBInt256, v)
-		}
-		bi := abi.ParseInt256TwosComplementBytes(b)
-		*hi = HexInt256(*bi)
+		*hi = (HexUint256)(*bi)
 		return nil
 	case int64:
-		*hi = (HexInt256)(*big.NewInt(v))
+		*hi = (HexUint256)(*big.NewInt(v))
 		return nil
 	default:
 		return i18n.NewError(context.Background(), tkmsgs.MsgTypesScanFail, src, hi)
 	}
 }
 
-func Int256To65CharDBSafeSortableString(bi *big.Int) string {
-	sign := bi.Sign()
-	signPlusZeroPaddedInt256 := PadHexBigIntTwosComplement(bi, make([]byte, 65))
-	if sign < 0 {
-		signPlusZeroPaddedInt256[0] = '0'
-	} else {
-		// Zero or positive get a "1" in the first string position, which makes them
-		signPlusZeroPaddedInt256[0] = '1'
-	}
-	return (string)(signPlusZeroPaddedInt256)
-}
-
-// PadHexBigIntTwosComplement returns the supplied buffer, with all the bytes to the left of
-// the two's complement formatted string set to 0
-func PadHexBigIntTwosComplement(bi *big.Int, buff []byte) []byte {
-	twosComplement := abi.SerializeInt256TwosComplementBytes(bi)
-	unPadded := hex.EncodeToString(twosComplement)
+// PadHexBigUint returns the supplied buffer, with all the bytes to the left of the integer set to '0'
+func PadHexBigUint(bi *big.Int, buff []byte) []byte {
+	unPadded := bi.Abs(bi).Text(16)
 	boundary := len(buff) - len(unPadded)
 	for i := 0; i < len(buff); i++ {
 		if i >= boundary {
 			buff[i] = unPadded[i-boundary]
 		} else {
-			buff[i] = 'f'
+			buff[i] = '0'
 		}
 	}
 	return buff
