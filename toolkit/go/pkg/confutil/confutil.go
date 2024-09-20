@@ -19,6 +19,7 @@ package confutil
 import (
 	"io/fs"
 	"math"
+	"math/big"
 	"strconv"
 	"time"
 
@@ -123,6 +124,31 @@ func DurationMin(sVal *string, min time.Duration, def string) time.Duration {
 		dVal = &defDuration
 	}
 	return *dVal
+}
+
+func BigInt(sVal *string, def string) *big.Int {
+	var biVal *big.Int
+	if sVal != nil {
+		bi, ok := new(big.Int).SetString(*sVal, 0)
+		if ok {
+			biVal = bi
+		}
+	}
+	if biVal == nil {
+		biVal, _ = new(big.Int).SetString(def, 0)
+	}
+	return biVal
+}
+
+func BigIntOrNil(sVal *string) *big.Int {
+	var biVal *big.Int
+	if sVal != nil {
+		bi, ok := new(big.Int).SetString(*sVal, 0)
+		if ok {
+			biVal = bi
+		}
+	}
+	return biVal
 }
 
 func DurationSeconds(sVal *string, min time.Duration, def string) int64 {

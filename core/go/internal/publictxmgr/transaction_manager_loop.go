@@ -19,6 +19,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -40,8 +41,9 @@ type TransactionEngineConfig struct {
 	MaxInFlightOrchestrators *int         `yaml:"maxInFlightOrchestrators"`
 	Interval                 *string      `yaml:"interval"`
 	MaxStaleTime             *string      `yaml:"maxStaleTime"`
-	MaxIdleTim               *string      `yaml:"maxIdleTime"`
+	MaxIdleTime              *string      `yaml:"maxIdleTime"`
 	MaxOverloadProcessTime   *string      `yaml:"maxOverloadProcessTime"`
+	TransactionCache         cache.Config `yaml:"transactionCache"` // can be larger than number of orchestrators for hot swapping
 	Retry                    retry.Config `yaml:"retry"`
 }
 
@@ -54,6 +56,9 @@ var DefaultTransactionEngineConfig = &TransactionEngineConfig{
 		InitialDelay: confutil.P("250ms"),
 		MaxDelay:     confutil.P("30s"),
 		Factor:       confutil.P(2.0),
+	},
+	TransactionCache: cache.Config{
+		Capacity: confutil.P(1000),
 	},
 }
 

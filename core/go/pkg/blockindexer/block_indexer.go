@@ -861,7 +861,7 @@ func (bi *blockIndexer) DecodeTransactionEvents(ctx context.Context, hash tktype
 	for i, event := range events {
 		decoded[i] = &EventWithData{IndexedEvent: event}
 	}
-	err = bi.enrichTransactionEvents(ctx, abi, hash, decoded, false /* no retry */)
+	err = bi.enrichTransactionEvents(ctx, abi, nil, hash, decoded, false /* no retry */)
 	return decoded, err
 }
 
@@ -877,7 +877,7 @@ func (bi *blockIndexer) getConfirmedTransactionReceipt(ctx context.Context, tx e
 	return receipt, nil
 }
 
-func (bi *blockIndexer) enrichTransactionEvents(ctx context.Context, abi abi.ABI, tx tktypes.Bytes32, events []*EventWithData, indefiniteRetry bool) error {
+func (bi *blockIndexer) enrichTransactionEvents(ctx context.Context, abi abi.ABI, source *tktypes.EthAddress, tx tktypes.Bytes32, events []*EventWithData, indefiniteRetry bool) error {
 	// Get the TX receipt with all the logs
 	var receipt *TXReceiptJSONRPC
 	err := bi.retry.Do(ctx, func(attempt int) (_ bool, err error) {
@@ -893,7 +893,7 @@ func (bi *blockIndexer) enrichTransactionEvents(ctx context.Context, abi abi.ABI
 		for _, e := range events {
 			if ethtypes.HexUint64(e.LogIndex) == l.LogIndex {
 				// This the the log for this event - try and enrich the .Data field
-				_ = bi.matchLog(ctx, abi, l, e, nil)
+				_ = bi.matchLog(ctx, abi, l, e, source)
 				break
 			}
 		}

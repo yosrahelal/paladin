@@ -23,7 +23,6 @@ import (
 
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 
-	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
@@ -163,7 +162,9 @@ func (hGpc *HybridGasPriceClient) DeleteCache(ctx context.Context) bool {
 	return hGpc.gasPriceCache.Delete("gasPrice")
 }
 
-func NewGasPriceClient(ctx context.Context, conf config.Section, gasPriceCache cache.CInterface) GasPriceClient {
+func NewGasPriceClient(ctx context.Context, conf *Config) GasPriceClient {
+	gasPriceCache := cache.NewCache[string, *big.Int](&conf.GasPrice.Cache, &DefaultConfig.GasPrice.Cache)
+	log.L(ctx).Debugf("Gas price cache size: %d", gasPriceCache.Capacity())
 	gasPriceClient := &HybridGasPriceClient{}
 	// initialize gas oracle
 	// set fixed gas price

@@ -23,10 +23,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-common/pkg/retry"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -35,9 +33,9 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
-	"github.com/hyperledger/firefly-common/pkg/cache"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -68,8 +66,9 @@ type pubTxManager struct {
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 
+	conf      *Config
 	thMetrics *publicTxEngineMetrics
-	txStore   *pubTxStore
+	p         persistence.Persistence
 	bIndexer  blockindexer.BlockIndexer
 	ethClient ethclient.EthClient
 	keymgr    ethclient.KeyManager
@@ -104,42 +103,19 @@ type pubTxManager struct {
 	enginePollingInterval    time.Duration
 	engineLoopDone           chan struct{}
 
-	cacheManager cache.Manager
 	// balance manager
-	balanceManager       baseTypes.BalanceManager
-	balanceManagerConfig config.Section
+	balanceManager baseTypes.BalanceManager
 
 	// orchestrator config
-	orchestratorConfig      config.Section
 	gasPriceIncreaseMax     *big.Int
-	gasPriceIncreasePercent *big.Int
+	gasPriceIncreasePercent int
 }
 
 func NewPublicTransactionManager(ctx context.Context, conf *Config) (components.PublicTxManager, error) {
 	log.L(ctx).Debugf("Creating new enterprise transaction handler")
-	cm := cache.NewCacheManager(ctx, true)
 
-	gasPriceConf := conf.SubSection(GasPriceSection)
-	gasPriceCache, _ := cm.GetCache(ctx, "enterprise", "gasPrice", gasPriceConf.GetByteSize(GasPriceCacheSizeByteString), gasPriceConf.GetDuration(GasPriceCacheTTLDurationString), gasPriceConf.GetBool(GasPriceCacheEnabled), cache.StrictExpiry, cache.TTLFromInitialAdd)
-	log.L(ctx).Debugf("Gas price cache setting. Enabled: %t , size: %d , ttl: %s", gasPriceConf.GetBool(GasPriceCacheEnabled), gasPriceConf.GetByteSize(GasPriceCacheSizeByteString), gasPriceConf.GetDuration(GasPriceCacheTTLDurationString))
-
-	gasPriceClient := NewGasPriceClient(ctx, gasPriceConf, gasPriceCache)
-	engineConfig := conf.SubSection(TransactionEngineSection)
-	orchestratorConfig := conf.SubSection(OrchestratorSection)
-	balanceManagerConfig := conf.SubSection(BalanceManagerSection)
-
-	var gasPriceIncreaseMax *big.Int
-	configuredGasPriceIncreaseMax := &big.Int{}
-	gasPriceIncreaseMaxString := orchestratorConfig.GetString(OrchestratorGasPriceIncreaseMaxBigIntString)
-	if gasPriceIncreaseMaxString != "" {
-		_, ok := configuredGasPriceIncreaseMax.SetString(gasPriceIncreaseMaxString, 10)
-		if !ok {
-			log.L(ctx).Errorf("Failed to parse max increase gas price %s into a bigInt", gasPriceIncreaseMaxString)
-			return nil, i18n.NewError(ctx, msgs.MsgInvalidGasPriceIncreaseMax, gasPriceIncreaseMaxString)
-		}
-		gasPriceIncreaseMax = configuredGasPriceIncreaseMax
-		log.L(ctx).Debugf("Gas price increment gasPriceIncreaseMax setting: %s", gasPriceIncreaseMax.String())
-	}
+	gasPriceClient := NewGasPriceClient(ctx, conf)
+	gasPriceIncreaseMax := confutil.BigIntOrNil(conf.GasPrice.IncreaseMax)
 
 	log.L(ctx).Debugf("Enterprise transaction handler created")
 
@@ -151,23 +127,16 @@ func NewPublicTransactionManager(ctx context.Context, conf *Config) (components.
 		gasPriceClient:              gasPriceClient,
 		InFlightOrchestratorStale:   make(chan bool, 1),
 		SigningAddressesPausedUntil: make(map[string]time.Time),
-		maxInFlightOrchestrators:    engineConfig.GetInt(TransactionEngineMaxInFlightOrchestratorsInt),
-		maxOverloadProcessTime:      engineConfig.GetDuration(TransactionEngineMaxOverloadProcessTimeDurationString),
-		maxOrchestratorStale:        engineConfig.GetDuration(TransactionEngineMaxStaleDurationString),
-		maxOrchestratorIdle:         engineConfig.GetDuration(TransactionEngineMaxIdleDurationString),
-		enginePollingInterval:       engineConfig.GetDuration(TransactionEngineIntervalDurationString),
-		retry: &retry.Retry{
-			InitialDelay: engineConfig.GetDuration(TransactionEngineRetryInitDelayDurationString),
-			MaximumDelay: engineConfig.GetDuration(TransactionEngineRetryMaxDelayDurationString),
-			Factor:       engineConfig.GetFloat64(TransactionEngineRetryFactorFloat),
-		},
-		cacheManager:               cm,
-		balanceManagerConfig:       balanceManagerConfig,
-		completedTxNoncePerAddress: make(map[string]big.Int),
-		confirmedTxNoncePerAddress: make(map[string]*big.Int),
-		orchestratorConfig:         orchestratorConfig,
-		gasPriceIncreaseMax:        gasPriceIncreaseMax,
-		gasPriceIncreasePercent:    big.NewInt(orchestratorConfig.GetInt64(OrchestratorGasPriceIncreasePercentageInt)),
+		maxInFlightOrchestrators:    confutil.IntMin(conf.Orchestrator.MaxInFlight, 1, *DefaultConfig.Orchestrator.MaxInFlight),
+		maxOverloadProcessTime:      confutil.DurationMin(conf.TransactionEngine.MaxOverloadProcessTime, 0, *DefaultConfig.TransactionEngine.MaxOverloadProcessTime),
+		maxOrchestratorStale:        confutil.DurationMin(conf.TransactionEngine.MaxStaleTime, 0, *DefaultConfig.TransactionEngine.MaxStaleTime),
+		maxOrchestratorIdle:         confutil.DurationMin(conf.TransactionEngine.MaxIdleTime, 0, *DefaultConfig.TransactionEngine.MaxIdleTime),
+		enginePollingInterval:       confutil.DurationMin(conf.TransactionEngine.Interval, 50*time.Millisecond, *conf.TransactionEngine.Interval),
+		retry:                       retry.NewRetryIndefinite(&conf.TransactionEngine.Retry),
+		completedTxNoncePerAddress:  make(map[string]big.Int),
+		confirmedTxNoncePerAddress:  make(map[string]*big.Int),
+		gasPriceIncreaseMax:         gasPriceIncreaseMax,
+		gasPriceIncreasePercent:     confutil.Int(conf.GasPrice.IncreasePercentage, *DefaultConfig.GasPrice.IncreasePercentage),
 	}, nil
 }
 
@@ -179,12 +148,10 @@ func (ble *pubTxManager) PostInit(components.AllComponents) error {
 func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *components.ManagerInitResult, err error) {
 	ctx := ble.ctx
 	log.L(ctx).Debugf("Initializing enterprise transaction handler")
-	ble.txStore = newPubTxStore(ptmCtx, conf, pic.Persistence())
 	ble.ethClient = pic.EthClientFactory().SharedWS()
 	ble.keymgr = pic.KeyManager()
-	ble.gasPriceClient.Init(ctx, ethClient)
-	ble.publicTXEventNotifier = publicTXEventNotifier
-	ble.bIndexer = blockIndexer
+	ble.gasPriceClient.Init(ctx, ble.ethClient)
+	ble.bIndexer = pic.BlockIndexer()
 	ble.nonceManager = newNonceCache(1*time.Hour, func(ctx context.Context, signer string) (uint64, error) {
 		log.L(ctx).Tracef("NonceFromChain getting next nonce for signing address ID %s", signer)
 		nextNonce, err := ble.ethClient.GetTransactionCount(ctx, signer)
@@ -196,7 +163,7 @@ func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *comp
 		return nextNonce.Uint64(), nil
 	})
 
-	balanceManager, err := NewBalanceManagerWithInMemoryTracking(ctx, ble.balanceManagerConfig, ethClient, ble)
+	balanceManager, err := NewBalanceManagerWithInMemoryTracking(ctx, ble.conf, ble.ethClient, ble)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to create balance manager for enterprise transaction handler due to %+v", err)
 		panic(err)
@@ -241,8 +208,8 @@ func (pt *preparedTransaction) Finalize(ctx context.Context) {
 	pt.nsi.Complete(ctx)
 }
 
-func (ble *pubTxManager) PrepareSubmissionBatch(ctx context.Context, reqOptions *components.RequestOptions, txPayloads []interface{}) (preparedSubmission []components.PreparedSubmission, submissionRejected bool, err error) {
-	preparedSubmissions := make([]components.PreparedSubmission, len(txPayloads))
+func (ble *pubTxManager) PrepareSubmissionBatch(ctx context.Context, reqOptions *components.PublicTxRequestOptions, txPayloads []interface{}) (preparedSubmission []components.PreparedSubmission, submissionRejected bool, err error) {
+	preparedSubmissions := make([]components.PublicTxPreparedSubmission, len(txPayloads))
 	var nsi baseTypes.NonceAssignmentIntent
 	for i, tx := range txPayloads {
 		preparedSubmission, submissionRejected, err := ble.PrepareSubmission(ctx, reqOptions, tx, nsi)
@@ -257,7 +224,7 @@ func (ble *pubTxManager) PrepareSubmissionBatch(ctx context.Context, reqOptions 
 
 // PrepareSubmission prepares and validates the transaction input data so that a later call to
 // Submit can be made in the middle of a wider database transaction with minimal risk of error
-func (ble *pubTxManager) PrepareSubmission(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}, nonceAssignmentIntent baseTypes.NonceAssignmentIntent) (preparedSubmission components.PreparedSubmission, submissionRejected bool, err error) {
+func (ble *pubTxManager) PrepareSubmission(ctx context.Context, reqOptions *components.PublicTxRequestOptions, txPayload interface{}, nonceAssignmentIntent baseTypes.NonceAssignmentIntent) (preparedSubmission components.PreparedSubmission, submissionRejected bool, err error) {
 	log.L(ctx).Tracef("PrepareSubmission new request, options: %+v, payload: %+v", reqOptions, txPayload)
 
 	err = reqOptions.Validate(ctx)
@@ -316,7 +283,6 @@ func (ble *pubTxManager) PrepareSubmission(ctx context.Context, reqOptions *comp
 	}
 
 	estimatedGasLimit := reqOptions.GasLimit
-
 	if estimatedGasLimit == nil {
 		estimatedGasLimitHexInt, err := ble.ethClient.GasEstimate(ctx, ethTx, nil /* TODO: Would be great to have the ABI errors available here */)
 		if err != nil {

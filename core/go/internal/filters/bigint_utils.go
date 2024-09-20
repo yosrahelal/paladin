@@ -17,10 +17,7 @@
 package filters
 
 import (
-	"encoding/hex"
 	"math/big"
-
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 )
 
 // PadHexBigUint returns the supplied buffer, with all the bytes to the left of the integer set to '0'
@@ -32,22 +29,6 @@ func PadHexBigUint(bi *big.Int, buff []byte) []byte {
 			buff[i] = unPadded[i-boundary]
 		} else {
 			buff[i] = '0'
-		}
-	}
-	return buff
-}
-
-// PadHexBigIntTwosComplement returns the supplied buffer, with all the bytes to the left of
-// the two's complement formatted string set to 0
-func PadHexBigIntTwosComplement(bi *big.Int, buff []byte) []byte {
-	twosComplement := abi.SerializeInt256TwosComplementBytes(bi)
-	unPadded := hex.EncodeToString(twosComplement)
-	boundary := len(buff) - len(unPadded)
-	for i := 0; i < len(buff); i++ {
-		if i >= boundary {
-			buff[i] = unPadded[i-boundary]
-		} else {
-			buff[i] = 'f'
 		}
 	}
 	return buff

@@ -22,8 +22,9 @@ type Config struct {
 	BalanceManager    BalanceManagerConfig    `yaml:"balanceManager"`
 }
 
-type CacheConfig struct {
-	Enabled *bool   `yaml:"enabled"`
-	Size    *string `yaml:"size"`
-	TTL     *string `yaml:"ttl"`
+var DefaultConfig = &Config{
+	TransactionEngine: *DefaultTransactionEngineConfig,
+	Orchestrator:      *DefaultOrchestratorConfig,
+	GasPrice:          *DefaultGasPriceConfig,
+	BalanceManager:    *DefaultBalanceManagerConfig,
 }

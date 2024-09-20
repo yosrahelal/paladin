@@ -75,8 +75,15 @@ func newTestBlockListenerConf(t *testing.T, ctx context.Context, config *Config)
 }
 
 func TestBlockListenerStartGettingHighestBlockRetry(t *testing.T) {
-
 	ctx, bl, mRPC, done := newTestBlockListener(t)
+
+	// Mock eth_newBlockFilter call (happens on initialization)
+	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_newBlockFilter").
+		Return(nil).Once()
+
+	// Mock eth_getFilterChanges call (this is called after eth_newBlockFilter)
+	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getFilterChanges", "").
+		Return(nil).Once()
 
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_blockNumber").
 		Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop"))).Once()
@@ -93,7 +100,6 @@ func TestBlockListenerStartGettingHighestBlockRetry(t *testing.T) {
 	done() // Stop immediately in this case, while we're in the polling interval
 
 	<-bl.listenLoopDone
-
 }
 
 func TestBlockListenerStartGettingHighestBlockFailBeforeStop(t *testing.T) {
@@ -1429,6 +1435,7 @@ func TestBlockListenerClosedBeforeEstablishingBlockHeight(t *testing.T) {
 		Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop"))).Once()
 
 	bl.listenLoopDone = make(chan struct{})
-	bl.listenLoop()
+	listenerInitiated := make(chan struct{})
+	bl.listenLoop(&listenerInitiated)
 
 }

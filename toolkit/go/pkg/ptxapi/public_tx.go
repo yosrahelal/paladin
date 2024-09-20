@@ -1,0 +1,44 @@
+// Copyright © 2024 Kaleido, Inc.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package ptxapi
+
+import (
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+)
+
+// These are user-supplied directly on the external interface (vs. calculated)
+// If set these affect the submission of the public transaction.
+// All are optional
+type PublicTxOptions struct {
+	Gas                  *tktypes.HexBigInteger `json:"gas,omitempty"`
+	MaxPriorityFeePerGas *tktypes.HexBigInteger `json:"maxPriorityFeePerGas,omitempty"`
+	MaxFeePerGas         *tktypes.HexBigInteger `json:"maxFeePerGas,omitempty"`
+	GasPrice             *tktypes.HexBigInteger `json:"gasPrice,omitempty"`
+	Value                *tktypes.HexBigInteger `json:"value,omitempty"`
+}
+
+type PublicTxInput struct {
+	From tktypes.EthAddress  `json:"from"`         // unresolved signing account locator (public TX manager will resolve)
+	To   *tktypes.EthAddress `json:"to,omitempty"` // target contract address, or nil for deploy
+	PublicTxOptions
+	Input tktypes.HexBytes `json:"input,omitempty"` // the pre-encoded calldata
+}
+
+type PublicTx struct {
+	PublicTxInput
+	Nonce tktypes.HexUint64 `json:"nonce"` // unresolved signing account locator (public TX manager will resolve)
+}

@@ -18,18 +18,8 @@ package components
 import (
 	"context"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 )
-
-type PublicTX struct {
-	ID              string             `json:"id"`
-	SubmittedHashes []*tktypes.Bytes32 `json:"submittedHashes,omitempty"`
-}
-
-type PublicTxRequestOptions struct {
-	SignerID string
-}
 
 type PublicTxPreparedSubmission interface {
 	ID() string
@@ -41,6 +31,6 @@ type PublicTxManager interface {
 	ManagerLifecycle
 
 	//Syncronous functions that are executed on the callers thread
-	PrepareSubmissionBatch(ctx context.Context, reqOptions *PublicTxRequestOptions, txPayloads []interface{}) (preparedSubmission []PublicTxPreparedSubmission, submissionRejected bool, err error)
-	SubmitBatch(ctx context.Context, tx *gorm.DB, preparedSubmissions []PublicTxPreparedSubmission) ([]*PublicTX, error)
+	PrepareSubmissionBatch(ctx context.Context, tx *PublicTx, txPayloads []interface{}) (preparedSubmission []PublicTxPreparedSubmission, submissionRejected bool, err error)
+	SubmitBatch(ctx context.Context, tx *gorm.DB, preparedSubmissions []*PublicTx) (*PublicTx, error)
 }
