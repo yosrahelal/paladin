@@ -526,7 +526,25 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		confirmedStates[*txUUID] = append(confirmedStates[*txUUID], state.Id)
 	}
 
+	newStates := make(map[uuid.UUID][]*statestore.StateUpsert)
+	for _, state := range res.NewStates {
+		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
+		if err != nil {
+			return nil, err
+		}
+		newStates[*txUUID] = append(newStates[*txUUID], &statestore.StateUpsert{
+			SchemaID: state.SchemaId,
+			Data:     tktypes.RawJSON(state.StateDataJson),
+			Creating: true,
+		})
+	}
+
 	err = d.dm.stateStore.RunInDomainContext(d.name, contractAddress, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
+		for txID, states := range newStates {
+			if _, err = dsi.UpsertStates(&txID, states); err != nil {
+				return err
+			}
+		}
 		for txID, states := range spentStates {
 			if err = dsi.MarkStatesSpent(txID, states); err != nil {
 				return err
