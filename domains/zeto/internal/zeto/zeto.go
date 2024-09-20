@@ -39,7 +39,6 @@ type Zeto struct {
 
 	config     *types.DomainFactoryConfig
 	chainID    int64
-	domainID   string
 	coinSchema *pb.StateSchema
 	factoryABI abi.ABI
 }
@@ -79,7 +78,6 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *pb.ConfigureDomainReque
 }
 
 func (z *Zeto) InitDomain(ctx context.Context, req *pb.InitDomainRequest) (*pb.InitDomainResponse, error) {
-	z.domainID = req.DomainUuid
 	z.coinSchema = req.AbiStateSchemas[0]
 	return &pb.InitDomainResponse{}, nil
 }
@@ -241,8 +239,8 @@ func (z *Zeto) validateTransaction(ctx context.Context, tx *pb.TransactionSpecif
 	}, handler, nil
 }
 
-func (z *Zeto) FindCoins(ctx context.Context, query string) ([]*types.ZetoCoin, error) {
-	states, err := z.findAvailableStates(ctx, query)
+func (z *Zeto) FindCoins(ctx context.Context, contractAddress ethtypes.Address0xHex, query string) ([]*types.ZetoCoin, error) {
+	states, err := z.findAvailableStates(ctx, contractAddress.String(), query)
 	if err != nil {
 		return nil, err
 	}

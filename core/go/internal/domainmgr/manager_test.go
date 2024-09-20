@@ -79,15 +79,15 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *DomainManagerConfig, 
 			require.NoError(t, mp.Mock.ExpectationsWereMet())
 		}
 		componentMocks.On("StateStore").Return(mc.stateStore)
-		mridc := mc.stateStore.On("RunInDomainContext", mock.Anything, mock.Anything)
+		mridc := mc.stateStore.On("RunInDomainContext", mock.Anything, mock.Anything, mock.Anything)
 		mridc.Run(func(args mock.Arguments) {
-			mridc.Return((args[1].(statestore.DomainContextFunction))(
+			mridc.Return((args[2].(statestore.DomainContextFunction))(
 				ctx, mc.domainStateInterface,
 			))
 		}).Maybe()
-		mridcf := mc.stateStore.On("RunInDomainContextFlush", mock.Anything, mock.Anything)
+		mridcf := mc.stateStore.On("RunInDomainContextFlush", mock.Anything, mock.Anything, mock.Anything)
 		mridcf.Run(func(args mock.Arguments) {
-			mridcf.Return((args[1].(statestore.DomainContextFunction))(
+			mridcf.Return((args[2].(statestore.DomainContextFunction))(
 				ctx, mc.domainStateInterface,
 			))
 		}).Maybe()
@@ -147,7 +147,7 @@ func TestDomainRegisteredNotFound(t *testing.T) {
 	})
 	defer done()
 
-	_, err := dm.DomainRegistered("unknown", uuid.New(), nil)
+	_, err := dm.DomainRegistered("unknown", nil)
 	assert.Regexp(t, "PD011600", err)
 }
 

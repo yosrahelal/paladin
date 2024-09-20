@@ -21,7 +21,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
@@ -46,7 +45,6 @@ type domain struct {
 
 	conf            *DomainConfig
 	dm              *domainManager
-	id              uuid.UUID
 	name            string
 	api             components.DomainManagerToDomain
 	registryAddress *tktypes.EthAddress
@@ -62,13 +60,12 @@ type domain struct {
 	initDone  chan struct{}
 }
 
-func (dm *domainManager) newDomain(id uuid.UUID, name string, conf *DomainConfig, toDomain components.DomainManagerToDomain) *domain {
+func (dm *domainManager) newDomain(name string, conf *DomainConfig, toDomain components.DomainManagerToDomain) *domain {
 	d := &domain{
 		dm:              dm,
 		conf:            conf,
 		initRetry:       retry.NewRetryIndefinite(&conf.Init.Retry),
 		name:            name,
-		id:              id,
 		api:             toDomain,
 		initDone:        make(chan struct{}),
 		registryAddress: tktypes.MustEthAddress(conf.RegistryAddress), // check earlier in startup
@@ -117,7 +114,6 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 		}
 	}
 	return &prototk.InitDomainRequest{
-		DomainUuid:      d.id.String(),
 		AbiStateSchemas: schemasProto,
 	}, nil
 }
@@ -196,9 +192,13 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidQueryJSON)
 	}
+	addr, err := tktypes.ParseEthAddress(req.ContractAddress)
+	if err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainErrorParsingAddress)
+	}
 
 	var states []*statestore.State
-	err = d.dm.stateStore.RunInDomainContext(d.name, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
+	err = d.dm.stateStore.RunInDomainContext(d.name, *addr, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
 		states, err = dsi.FindAvailableStates(req.SchemaId, &query)
 		return err
 	})
