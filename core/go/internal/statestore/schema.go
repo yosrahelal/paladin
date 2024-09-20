@@ -23,6 +23,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"gorm.io/gorm/clause"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -48,7 +49,7 @@ const (
 type SchemaPersisted struct {
 	ID         tktypes.Bytes32   `json:"id"          gorm:"primaryKey"`
 	CreatedAt  tktypes.Timestamp `json:"created"     gorm:"autoCreateTime:false"` // we calculate the created time ourselves due to complex in-memory caching
-	DomainID   string            `json:"domain"`
+	DomainName string            `json:"domain"`
 	Type       SchemaType        `json:"type"`
 	Signature  string            `json:"signature"`
 	Definition tktypes.RawJSON   `json:"definition"`
@@ -71,7 +72,7 @@ type Schema interface {
 	IDString() string
 	Signature() string
 	Persisted() *SchemaPersisted
-	ProcessState(ctx context.Context, data tktypes.RawJSON) (*StateWithLabels, error)
+	ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON) (*StateWithLabels, error)
 	RecoverLabels(ctx context.Context, s *State) (*StateWithLabels, error)
 }
 
@@ -79,28 +80,35 @@ type labelInfoAccess interface {
 	labelInfo() []*schemaLabelInfo
 }
 
-func schemaCacheKey(domainID string, id tktypes.Bytes32) string {
-	return domainID + "/" + id.String()
+func schemaCacheKey(domainName string, id tktypes.Bytes32) string {
+	return domainName + "/" + id.String()
 }
 
-func (ss *stateStore) PersistSchema(ctx context.Context, s Schema) error {
-	op := ss.writer.newWriteOp(s.Persisted().DomainID)
-	op.schemas = []*SchemaPersisted{s.Persisted()}
-	ss.writer.queue(ctx, op)
-	return op.flush(ctx)
+func (ss *stateStore) persistSchemas(schemas []*SchemaPersisted) error {
+	return ss.p.DB().
+		Table("schemas").
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "domain_name"},
+				{Name: "id"},
+			},
+			DoNothing: true, // immutable
+		}).
+		Create(schemas).
+		Error
 }
 
-func (ss *stateStore) GetSchema(ctx context.Context, domainID, schemaID string, failNotFound bool) (Schema, error) {
+func (ss *stateStore) GetSchema(ctx context.Context, domainName, schemaID string, failNotFound bool) (Schema, error) {
 	id, err := tktypes.ParseBytes32Ctx(ctx, schemaID)
 	if err != nil {
 		return nil, err
 	}
-	return ss.getSchemaByID(ctx, domainID, id, failNotFound)
+	return ss.getSchemaByID(ctx, domainName, id, failNotFound)
 }
 
-func (ss *stateStore) getSchemaByID(ctx context.Context, domainID string, schemaID tktypes.Bytes32, failNotFound bool) (Schema, error) {
+func (ss *stateStore) getSchemaByID(ctx context.Context, domainName string, schemaID tktypes.Bytes32, failNotFound bool) (Schema, error) {
 
-	cacheKey := schemaCacheKey(domainID, schemaID)
+	cacheKey := schemaCacheKey(domainName, schemaID)
 	s, cached := ss.abiSchemaCache.Get(cacheKey)
 	if cached {
 		return s, nil
@@ -109,7 +117,7 @@ func (ss *stateStore) getSchemaByID(ctx context.Context, domainID string, schema
 	var results []*SchemaPersisted
 	err := ss.p.DB().
 		Table("schemas").
-		Where("domain_id = ?", domainID).
+		Where("domain_name = ?", domainName).
 		Where("id = ?", schemaID).
 		Limit(1).
 		Find(&results).
@@ -135,12 +143,12 @@ func (ss *stateStore) getSchemaByID(ctx context.Context, domainID string, schema
 	return s, nil
 }
 
-func (ss *stateStore) ListSchemas(ctx context.Context, domainID string) (results []Schema, err error) {
+func (ss *stateStore) ListSchemas(ctx context.Context, domainName string) (results []Schema, err error) {
 	var ids []*idOnly
 	err = ss.p.DB().
 		Table("schemas").
 		Select("id").
-		Where("domain_id = ?", domainID).
+		Where("domain_name = ?", domainName).
 		Find(&ids).
 		Error
 	if err != nil {
@@ -148,20 +156,23 @@ func (ss *stateStore) ListSchemas(ctx context.Context, domainID string) (results
 	}
 	results = make([]Schema, len(ids))
 	for i, id := range ids {
-		if results[i], err = ss.getSchemaByID(ctx, domainID, id.ID, true); err != nil {
+		if results[i], err = ss.getSchemaByID(ctx, domainName, id.ID, true); err != nil {
 			return nil, err
 		}
 	}
 	return results, nil
 }
 
-func (ss *stateStore) EnsureABISchemas(ctx context.Context, domainID string, defs []*abi.Parameter) ([]Schema, error) {
+func (ss *stateStore) EnsureABISchemas(ctx context.Context, domainName string, defs []*abi.Parameter) ([]Schema, error) {
+	if len(defs) == 0 {
+		return nil, nil
+	}
 
 	// Validate all the schemas
 	prepared := make([]Schema, len(defs))
 	toFlush := make([]*SchemaPersisted, len(defs))
 	for i, def := range defs {
-		s, err := newABISchema(ctx, domainID, def)
+		s, err := newABISchema(ctx, domainName, def)
 		if err != nil {
 			return nil, err
 		}
@@ -169,10 +180,5 @@ func (ss *stateStore) EnsureABISchemas(ctx context.Context, domainID string, def
 		toFlush[i] = s.SchemaPersisted
 	}
 
-	op := ss.writer.newWriteOp(domainID)
-	op.schemas = toFlush
-	ss.writer.queue(ctx, op)
-	err := op.flush(ctx)
-
-	return prepared, err
+	return prepared, ss.persistSchemas(toFlush)
 }

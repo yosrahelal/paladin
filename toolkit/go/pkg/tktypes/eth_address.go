@@ -50,6 +50,10 @@ func EthAddressBytes(b []byte) *EthAddress {
 	return &a
 }
 
+func RandAddress() *EthAddress {
+	return (*EthAddress)(RandBytes(20))
+}
+
 func (a *EthAddress) Address0xHex() *ethtypes.Address0xHex {
 	return (*ethtypes.Address0xHex)(a)
 }

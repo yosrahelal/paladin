@@ -7,7 +7,7 @@ CREATE TABLE transactions (
   contract                  TEXT            NOT NULL,
   "from"                    TEXT            NOT NULL,
   sequence_id               UUID,
-  domain_id                 TEXT,
+  domain_name               TEXT,
   schema_id                 TEXT,
   assembled_round           BIGINT,
   attestation_plan          TEXT,

@@ -252,7 +252,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	}
 	assert.True(t, boolResult)
 
-	coins, err := s.domain.FindCoins(ctx, "{}")
+	coins, err := s.domain.FindCoins(ctx, zetoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 1)
 	assert.Equal(t, int64(10), coins[0].Amount.Int64())
@@ -273,7 +273,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	}
 	assert.True(t, boolResult)
 
-	coins, err = s.domain.FindCoins(ctx, "{}")
+	coins, err = s.domain.FindCoins(ctx, zetoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 2)
 	assert.Equal(t, int64(10), coins[0].Amount.Int64())

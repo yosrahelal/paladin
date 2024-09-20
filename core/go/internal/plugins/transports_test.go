@@ -193,9 +193,10 @@ func TestTransportRegisterFail(t *testing.T) {
 	tdm := &testTransportManager{
 		transports: map[string]plugintk.Plugin{
 			"transport1": &mockPlugin[prototk.TransportMessage]{
-				t:              t,
-				connectFactory: transportConnectFactory,
-				headerAccessor: transportHeaderAccessor,
+				t:                   t,
+				allowRegisterErrors: true,
+				connectFactory:      transportConnectFactory,
+				headerAccessor:      transportHeaderAccessor,
 				preRegister: func(transportID string) *prototk.TransportMessage {
 					return &prototk.TransportMessage{
 						Header: &prototk.Header{

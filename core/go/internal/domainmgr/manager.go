@@ -58,7 +58,6 @@ func NewDomainManager(bgCtx context.Context, conf *DomainManagerConfig) componen
 	return &domainManager{
 		bgCtx:            bgCtx,
 		conf:             conf,
-		domainsByID:      make(map[uuid.UUID]*domain),
 		domainsByName:    make(map[string]*domain),
 		domainsByAddress: make(map[tktypes.EthAddress]*domain),
 		contractWaiter:   inflight.NewInflightManager[uuid.UUID, *PrivateSmartContract](uuid.Parse),
@@ -76,7 +75,6 @@ type domainManager struct {
 	blockIndexer     blockindexer.BlockIndexer
 	ethClientFactory ethclient.EthClientFactory
 
-	domainsByID      map[uuid.UUID]*domain
 	domainsByName    map[string]*domain
 	domainsByAddress map[tktypes.EthAddress]*domain
 
@@ -123,7 +121,7 @@ func (dm *domainManager) Start() error { return nil }
 func (dm *domainManager) Stop() {
 	dm.mux.Lock()
 	var allDomains []*domain
-	for _, d := range dm.domainsByID {
+	for _, d := range dm.domainsByName {
 		allDomains = append(allDomains, d)
 	}
 	dm.mux.Unlock()
@@ -136,7 +134,6 @@ func (dm *domainManager) Stop() {
 func (dm *domainManager) cleanupDomain(d *domain) {
 	// must not hold the domain lock when running this
 	d.close()
-	delete(dm.domainsByID, d.id)
 	delete(dm.domainsByName, d.name)
 	delete(dm.domainsByAddress, *d.RegistryAddress())
 }
@@ -149,7 +146,7 @@ func (dm *domainManager) ConfiguredDomains() map[string]*components.PluginConfig
 	return pluginConf
 }
 
-func (dm *domainManager) DomainRegistered(name string, id uuid.UUID, toDomain components.DomainManagerToDomain) (fromDomain plugintk.DomainCallbacks, err error) {
+func (dm *domainManager) DomainRegistered(name string, toDomain components.DomainManagerToDomain) (fromDomain plugintk.DomainCallbacks, err error) {
 	dm.mux.Lock()
 	defer dm.mux.Unlock()
 
@@ -171,8 +168,7 @@ func (dm *domainManager) DomainRegistered(name string, id uuid.UUID, toDomain co
 	}
 
 	// Initialize
-	d := dm.newDomain(id, name, conf, toDomain)
-	dm.domainsByID[id] = d
+	d := dm.newDomain(name, conf, toDomain)
 	dm.domainsByName[name] = d
 	go d.init()
 	return d, nil
