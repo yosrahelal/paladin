@@ -23,8 +23,8 @@ ext {
     goFilesE2E = fileTree(".") {
         include "integration-test/**/*.go"
     }
-    zetoVersion = "v0.0.3"
-    zetoHost = "hyperledger-labs"
+    zetoVersion = "v0.0.4"
+    zetoHost = "jimthematrix"
     zkpOut = "${projectDir}/zkp"
     toolsOut = "${projectDir}/tools"
 }
@@ -117,6 +117,7 @@ task extractZetoArtifacts(type: Copy, dependsOn: [downloadZetoProver, downloadZe
 
 task copySolidity(type: Copy, dependsOn: [":solidity:compile"]) {
     inputs.files(fileTree("${rootDir}/solidity/artifacts"))
+    outputs.dir('internal/zeto/abis')
     from fileTree("${rootDir}/solidity/artifacts") {
         include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
     }
@@ -127,9 +128,10 @@ task copySolidity(type: Copy, dependsOn: [":solidity:compile"]) {
     includeEmptyDirs = false
 }
 
-task copySolidityForTest(type: Copy, dependsOn: [extractZetoArtifacts, ":solidity:compile"]) {
+task copySolidityForTest(type: Copy, dependsOn: [extractZetoArtifacts, generatePoseidonArtifacts, ":solidity:compile"]) {
     inputs.files(fileTree("${zkpOut}/artifacts/contracts"))
     inputs.files(fileTree("${zkpOut}/artifacts/@iden3/contracts"))
+    outputs.dir('integration-test/abis')
     from fileTree("${rootDir}/solidity/artifacts") {
         include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
     }
@@ -152,7 +154,7 @@ task copySolidityForTest(type: Copy, dependsOn: [extractZetoArtifacts, ":solidit
     includeEmptyDirs = false
 }
 
-task testE2E(type: Exec) {
+task testE2E(type: Exec, dependsOn: [copySolidity, copySolidityForTest, ':testinfra:startTestInfra']) {
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
     inputs.files(goFiles)
@@ -173,9 +175,6 @@ task testE2E(type: Exec) {
     }
     args "-test.gocoverdir=${projectDir}/coverage"
 
-    dependsOn copySolidity
-    dependsOn copySolidityForTest
-    dependsOn ':testinfra:startTestInfra'
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
@@ -213,6 +212,7 @@ task build {
 task clean(type: Delete) {
     delete 'coverage'
     delete 'internal/zeto/abis'
+    delete 'integration-test/abis'
     delete zkpOut
     delete toolsOut
 }
