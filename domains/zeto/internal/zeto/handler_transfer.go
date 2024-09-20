@@ -331,7 +331,6 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		params["nullifiers"] = strings.Split(proofRes.PublicInputs["nullifiers"], ",")
 		params["root"] = proofRes.PublicInputs["root"]
 	}
-	fmt.Printf("tx params: %+v\n", params)
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
 		return nil, err

@@ -149,7 +149,6 @@ func (z *Zeto) PrepareDeploy(ctx context.Context, req *pb.PrepareDeployRequest) 
 }
 
 func (z *Zeto) InitTransaction(ctx context.Context, req *pb.InitTransactionRequest) (*pb.InitTransactionResponse, error) {
-	fmt.Println("InitTransaction")
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
@@ -158,7 +157,6 @@ func (z *Zeto) InitTransaction(ctx context.Context, req *pb.InitTransactionReque
 }
 
 func (z *Zeto) AssembleTransaction(ctx context.Context, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
-	fmt.Println("AssembleTransaction")
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
@@ -167,7 +165,6 @@ func (z *Zeto) AssembleTransaction(ctx context.Context, req *pb.AssembleTransact
 }
 
 func (z *Zeto) EndorseTransaction(ctx context.Context, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
-	fmt.Println("EndorseTransaction")
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
@@ -176,7 +173,6 @@ func (z *Zeto) EndorseTransaction(ctx context.Context, req *pb.EndorseTransactio
 }
 
 func (z *Zeto) PrepareTransaction(ctx context.Context, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
-	fmt.Println("PrepareTransaction")
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
