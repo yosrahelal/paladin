@@ -174,13 +174,17 @@ func (pts *pubTxStore) GetConfirmedTransaction(ctx context.Context, txID string)
 	return nil, nil
 }
 
-func (pts *pubTxStore) AddSubStatusAction(ctx context.Context, txID string, subStatus components.PubTxSubStatus, action components.BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *fftypes.FFTime) error {
+func (pts *pubTxStore) UpdateSubStatus(ctx context.Context, txID string, subStatus components.PubTxSubStatus, action components.BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
 	ptx, getTxErr := pts.GetTransactionByID(ctx, txID)
 	if getTxErr != nil || ptx == nil {
 		return getTxErr
 	}
 	if ptx.SubStatus != subStatus {
-		pts.p.DB().UpdateColumn("", "")
+		if err := pts.UpdateTransaction(ctx, txID, &components.BaseTXUpdates{
+			SubStatus: &subStatus,
+		}); err != nil {
+			return err
+		}
 	}
 	return nil
 

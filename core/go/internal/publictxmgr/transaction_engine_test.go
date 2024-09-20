@@ -193,7 +193,7 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 	// create transaction succeeded
 	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(ethtypes.NewHexInteger(big.NewInt(10)), nil)
 	mTS.On("InsertTransaction", ctx, mock.Anything, mock.Anything).Return(nil).Once()
-	mTS.On("AddSubStatusAction", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mTS.On("UpdateSubStatus", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	_, _, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
@@ -234,7 +234,7 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 		insertMock.Return(nil)
 	}).Once()
 	txID := uuid.New()
-	mTS.On("AddSubStatusAction", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mTS.On("UpdateSubStatus", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	_, _, err := ble.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
@@ -275,7 +275,7 @@ func TestHandleNewTransactionTransferAndInvalidType(t *testing.T) {
 		insertMock.Return(nil)
 	}).Once()
 	txID := uuid.New()
-	mTS.On("AddSubStatusAction", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mTS.On("UpdateSubStatus", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	_, _, err := ble.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
@@ -421,7 +421,7 @@ func TestHandleNewTransaction(t *testing.T) {
 		assert.Equal(t, big.NewInt(200), mtx.GasLimit.BigInt())
 		insertMock.Return(nil)
 	}).Once()
-	mTS.On("AddSubStatusAction", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mTS.On("UpdateSubStatus", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	_, _, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
 		SignerID: string(testEthTxInput.From),
@@ -538,7 +538,7 @@ func TestHandleNewDeployment(t *testing.T) {
 		assert.Equal(t, big.NewInt(200), mtx.GasLimit.BigInt())
 		insertMock.Return(nil)
 	}).Once()
-	mTS.On("AddSubStatusAction", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mTS.On("UpdateSubStatus", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	_, _, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
 		SignerID: string(testEthTxInput.From),

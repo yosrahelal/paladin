@@ -74,7 +74,7 @@ func TestNewOrchestratorPolling(t *testing.T) {
 	oc.InFlightTxs = []*InFlightTransactionStageController{mockIT}
 	oc.transactionIDsInStatusUpdate = []string{"randomID"}
 	oc.updateConfirmedTxNonce(testMainSigningAddress, big.NewInt(2))
-	mTS.On("AddSubStatusAction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	mTS.On("UpdateSubStatus", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		time.Sleep(1 * time.Hour) // make sure the async action never got returned as the test will mock the events
 	}).Maybe()
 	mTS.On("UpdateTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {

@@ -39,10 +39,10 @@ func TestRunningStageContext(t *testing.T) {
 	assert.NotNil(t, testRunningStageContext.StageOutputsToBePersisted)
 
 	assert.Empty(t, testRunningStageContext.StageOutputsToBePersisted.HistoryUpdates)
-	testRunningStageContext.StageOutputsToBePersisted.AddSubStatusAction(components.BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr("info"), fftypes.JSONAnyPtr("error"))
+	testRunningStageContext.StageOutputsToBePersisted.UpdateSubStatus(components.BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr("info"), fftypes.JSONAnyPtr("error"))
 	assert.Equal(t, 1, len(testRunningStageContext.StageOutputsToBePersisted.HistoryUpdates))
 
 	mTS := componentmocks.NewPublicTransactionStore(t)
-	mTS.On("AddSubStatusAction", mock.Anything, mock.Anything, newSubStatus, components.BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr("info"), fftypes.JSONAnyPtr("error"), mock.Anything).Return(nil).Once()
+	mTS.On("UpdateSubStatus", mock.Anything, mock.Anything, newSubStatus, components.BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr("info"), fftypes.JSONAnyPtr("error"), mock.Anything).Return(nil).Once()
 	_ = testRunningStageContext.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
 }

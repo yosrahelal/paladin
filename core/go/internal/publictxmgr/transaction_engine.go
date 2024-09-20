@@ -32,6 +32,7 @@ import (
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
@@ -363,7 +364,7 @@ func (ble *publicTxEngine) createManagedTx(ctx context.Context, dbtx *gorm.DB, t
 	// })
 	if err == nil {
 		log.L(ctx).Tracef("createManagedTx persisted transaction with ID: %s, using nonce %s", mtx.ID, mtx.Nonce.String())
-		err = ble.txStore.AddSubStatusAction(ctx, txID, components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, fftypes.JSONAnyPtr(`{"nonce":"`+mtx.Nonce.String()+`"}`), nil, fftypes.Now())
+		err = ble.txStore.UpdateSubStatus(ctx, txID, components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, fftypes.JSONAnyPtr(`{"nonce":"`+mtx.Nonce.String()+`"}`), nil, confutil.P(tktypes.TimestampNow()))
 	}
 	if err != nil {
 		log.L(ctx).Errorf("createManagedTx failed to create managed traction with ID: %s, due to %+v", mtx.ID, err)

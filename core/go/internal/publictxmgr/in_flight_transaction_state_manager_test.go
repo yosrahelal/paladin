@@ -408,7 +408,7 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmed(t *testing.T) {
 	}
 	mTS := testStateManagerWithMocks.mTS
 	txIDStr := stateManager.GetTxID().String()
-	mTS.On("AddSubStatusAction", mock.Anything, txIDStr, components.PubTxSubStatusTracking, components.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
+	mTS.On("UpdateSubStatus", mock.Anything, txIDStr, components.PubTxSubStatusTracking, components.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
 	mTS.On("UpdateTransaction", mock.Anything, txIDStr, rsc.StageOutputsToBePersisted.TxUpdates).Return(nil).Once()
 	_, _, err = stateManager.PersistTxState(ctx)
 	assert.Nil(t, err)
@@ -493,7 +493,7 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmedOnPreviousHash(t
 	}
 	mTS := testStateManagerWithMocks.mTS
 	txIDStr := stateManager.GetTxID().String()
-	mTS.On("AddSubStatusAction", mock.Anything, txIDStr, components.PubTxSubStatusTracking, components.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
+	mTS.On("UpdateSubStatus", mock.Anything, txIDStr, components.PubTxSubStatusTracking, components.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
 	mTS.On("UpdateTransaction", mock.Anything, txIDStr, rsc.StageOutputsToBePersisted.TxUpdates).Return(nil).Once()
 	_, _, err = stateManager.PersistTxState(ctx)
 	assert.Nil(t, err)
@@ -577,7 +577,7 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmedRetrieveConfirme
 
 	mTS := testStateManagerWithMocks.mTS
 	txIDStr := stateManager.GetTxID().String()
-	mTS.On("AddSubStatusAction", mock.Anything, txIDStr, components.PubTxSubStatusTracking, components.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
+	mTS.On("UpdateSubStatus", mock.Anything, txIDStr, components.PubTxSubStatusTracking, components.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
 	mTS.On("UpdateTransaction", mock.Anything, txIDStr, rsc.StageOutputsToBePersisted.TxUpdates).Return(nil).Once()
 	_, _, err = stateManager.PersistTxState(ctx)
 	assert.Nil(t, err)
@@ -659,13 +659,13 @@ func TestStateManagerTxPersistenceManagementUpdateErrors(t *testing.T) {
 
 	// history update fail
 	mBI.On("GetIndexedTransactionByNonce", mock.Anything, *tktypes.MustEthAddress(stateManager.GetFrom()), stateManager.GetNonce().Uint64()).Return(testConfirmedTx, nil)
-	mTS.On("AddSubStatusAction", mock.Anything, txIDStr, components.PubTxSubStatusTracking, components.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(fmt.Errorf("AddSubStatusAction error")).Once()
+	mTS.On("UpdateSubStatus", mock.Anything, txIDStr, components.PubTxSubStatusTracking, components.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(fmt.Errorf("UpdateSubStatus error")).Once()
 	_, _, err = stateManager.PersistTxState(ctx)
 	assert.NotNil(t, err)
-	assert.Regexp(t, "AddSubStatusAction error", err)
+	assert.Regexp(t, "UpdateSubStatus error", err)
 
 	// update transaction fail
-	mTS.On("AddSubStatusAction", mock.Anything, txIDStr, components.PubTxSubStatusTracking, components.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
+	mTS.On("UpdateSubStatus", mock.Anything, txIDStr, components.PubTxSubStatusTracking, components.BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
 	mTS.On("UpdateTransaction", mock.Anything, txIDStr, rsc.StageOutputsToBePersisted.TxUpdates).Return(fmt.Errorf("UpdateTransaction error")).Once()
 	_, _, err = stateManager.PersistTxState(ctx)
 	assert.NotNil(t, err)

@@ -91,7 +91,7 @@ func TestProduceLatestInFlightStageContextSubmitComplete(t *testing.T) {
 	assert.Equal(t, baseTypes.InFlightTxStageSubmitting, rsc.Stage)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
-	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"txHash":"`+txHash.String()+`"}`), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
+	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"txHash":"`+txHash.String()+`"}`), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
 	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
 	assert.Equal(t, txHash, rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
 	assert.Equal(t, submissionTime, rsc.StageOutputsToBePersisted.TxUpdates.FirstSubmit)
@@ -111,7 +111,7 @@ func TestProduceLatestInFlightStageContextSubmitComplete(t *testing.T) {
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.Equal(t, baseTypes.InFlightTxStageSubmitting, rsc.Stage)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
-	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"txHash":"`+txHash.String()+`"}`), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
+	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"txHash":"`+txHash.String()+`"}`), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
 	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
 	assert.Equal(t, submissionTime, rsc.StageOutputsToBePersisted.TxUpdates.LastSubmit)
 	assert.Equal(t, txHash, rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash)
@@ -267,7 +267,7 @@ func TestProduceLatestInFlightStageContextSubmitErrors(t *testing.T) {
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
 	called := make(chan bool, 3)
-	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"reason":"`+string(ethclient.ErrorReasonTransactionReverted)+`"}`), fftypes.JSONAnyPtr(`{"error":"`+submissionErr.Error()+`"}`), mock.Anything).Run(func(args mock.Arguments) {
+	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"reason":"`+string(ethclient.ErrorReasonTransactionReverted)+`"}`), fftypes.JSONAnyPtr(`{"error":"`+submissionErr.Error()+`"}`), mock.Anything).Run(func(args mock.Arguments) {
 		called <- true
 	}).Return(nil).Maybe()
 	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
@@ -295,7 +295,7 @@ func TestProduceLatestInFlightStageContextSubmitErrors(t *testing.T) {
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
 	called = make(chan bool, 3)
-	mTS.On("AddSubStatusAction", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"reason":"`+string(ethclient.ErrorReasonTransactionReverted)+`"}`), fftypes.JSONAnyPtr(`{"error":"`+submissionErr.Error()+`"}`), mock.Anything).Run(func(args mock.Arguments) {
+	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"reason":"`+string(ethclient.ErrorReasonTransactionReverted)+`"}`), fftypes.JSONAnyPtr(`{"error":"`+submissionErr.Error()+`"}`), mock.Anything).Run(func(args mock.Arguments) {
 		called <- true
 	}).Return(nil).Maybe()
 	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)

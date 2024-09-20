@@ -181,7 +181,8 @@ type PublicTransactionStore interface {
 
 	GetConfirmedTransaction(ctx context.Context, txID string) (iTX *blockindexer.IndexedTransaction, err error)
 
-	AddSubStatusAction(ctx context.Context, txID string, subStatus PubTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *fftypes.FFTime) error
+	// TODO: decide whether this is still needed. It's currently an important function for validating a specific action has happens in unit testing
+	UpdateSubStatus(ctx context.Context, txID string, subStatus PubTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error
 
 	ListTransactions(ctx context.Context, filter *PubTransactionQueries) ([]*PublicTX, error)
 }

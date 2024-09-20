@@ -350,7 +350,7 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 				iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusConflict))
 			}
 			if rsc.SubStatus != components.PubTxSubStatusConfirmed {
-				rsc.StageOutputsToBePersisted.AddSubStatusAction(components.BaseTxActionConfirmTransaction, nil, nil)
+				rsc.StageOutputsToBePersisted.UpdateSubStatus(components.BaseTxActionConfirmTransaction, nil, nil)
 				rsc.SetSubStatus(components.PubTxSubStatusConfirmed)
 			}
 		}

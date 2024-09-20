@@ -312,10 +312,10 @@ type RunningStageContextPersistenceOutput struct {
 	MissedConfirmationEvent bool
 }
 
-func (sOut *RunningStageContextPersistenceOutput) AddSubStatusAction(action components.BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny) {
-	actionOccurred := fftypes.Now()
+func (sOut *RunningStageContextPersistenceOutput) UpdateSubStatus(action components.BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny) {
+	actionOccurred := tktypes.TimestampNow()
 	sOut.HistoryUpdates = append(sOut.HistoryUpdates, func(p components.PublicTransactionStore) error {
-		return p.AddSubStatusAction(sOut.Ctx, sOut.InMemoryTx.GetTxID().String(), sOut.SubStatus, action, info, err, actionOccurred)
+		return p.UpdateSubStatus(sOut.Ctx, sOut.InMemoryTx.GetTxID().String(), sOut.SubStatus, action, info, err, &actionOccurred)
 	})
 }
 
