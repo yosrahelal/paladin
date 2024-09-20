@@ -23,13 +23,9 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
-	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
-
-// an ordered list of transactions that are handed over to the dispatcher to be submitted to the base ledger in that order
-type Sequence []*transactionstore.Transaction
 
 func NewSequencer(
 	nodeID string,

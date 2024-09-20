@@ -137,10 +137,6 @@ type fakeTransportLayer struct {
 	t       *testing.T
 }
 
-// func (f *fakeTransportLayer) addEngine(nodeID string, engine FakeEngine) {
-// 	f.engines[nodeID] = engine
-// }
-
 // PublishEvent implements ptmgrtypes.Publisher.
 func (f *fakeTransportLayer) PublishEvent(ctx context.Context, event interface{}) error {
 	log.L(ctx).Info("PublishEvent")
@@ -180,10 +176,6 @@ type fakeDelegator struct {
 	t       *testing.T
 	nodeID  string
 }
-
-// func (f *fakeDelegator) addEngine(nodeID string, engine FakeEngine) {
-// 	f.engines[nodeID] = engine
-// }
 
 // Delegate implements ptmgrtypes.Delegator.
 func (f *fakeDelegator) Delegate(ctx context.Context, txnID, delegate string) error {
@@ -377,7 +369,6 @@ func (a *testTransactionInvoker) run(t *testing.T, postInvoke func()) {
 			return
 		}
 	}
-
 }
 
 func newtestTransactionInvoker(nodeId string, name string, engine FakeEngine) *testTransactionInvoker {

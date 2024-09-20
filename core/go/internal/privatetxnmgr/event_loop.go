@@ -32,27 +32,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Orchestrator orchestrates transaction processing within a specific private preserving contract
-// Key responsibilities:
-// - Fairness control for transaction processing within a contract
-// - Apply ordering constraints between transactions
-// - Detect and initiating stage processing of each transactions through 2 ways:
-//    a. events through a buffered channel for back-pressure to drive the pace
-//    b. fetching from DB as a fallback mechanism when events are missed
-
-// configurations
-const (
-	OrchestratorSection = "orchestrator"
-)
-
-// metrics
-
-// Gauge metrics
-
-// Counter metrics
-
-// Histograms metrics
-
 type OrchestratorState string
 
 const (
@@ -107,7 +86,6 @@ type Orchestrator struct {
 	stateEntryTime time.Time // when the orchestrator entered the current state
 
 	staleTimeout time.Duration
-	// lastActivityTime time.Time
 
 	pendingEvents chan ptmgrtypes.PrivateTransactionEvent
 
@@ -205,7 +183,7 @@ func (oc *Orchestrator) evaluationLoop() {
 	// Select from the event channel and process each event on a single thread
 	// individual event handlers are responsible for kicking off another go routine if they have
 	// long running tasks that are not dependant on the order of events
-	// if the channel ever fills up, then we need to be aware that we have potentially missed some events
+	// TODO if the channel ever fills up, then we need to be aware that we have potentially missed some events
 	// and we need to poll the database for any events that we missed
 
 	ctx := log.WithLogField(oc.ctx, "role", fmt.Sprintf("pctm-loop-%s", oc.contractAddress))
@@ -231,81 +209,8 @@ func (oc *Orchestrator) evaluationLoop() {
 			// TODO: trigger parent loop for removal
 			return
 		}
-		added, total := oc.evaluateTransactions(ctx)
-		log.L(ctx).Debugf("Orchestrator loop added %d txs, there are %d txs in total", added, total)
+		// TODO while we have woken up, itterate through all transactions in memory and check if any are stale or completed and query the database for any in flight transactions that need to be brougt into memory
 	}
-}
-
-func (oc *Orchestrator) evaluateTransactions(ctx context.Context) (added int, newTotal int) {
-	evalStart := time.Now()
-	oc.incompleteTxProcessMapMutex.Lock()
-	defer oc.incompleteTxProcessMapMutex.Unlock()
-	// hasActivity := false
-
-	oldIncompleteMap := oc.incompleteTxSProcessMap
-	oc.incompleteTxSProcessMap = make(map[string]ptmgrtypes.TxProcessor, len(oldIncompleteMap))
-
-	for txID, txp := range oldIncompleteMap {
-		oc.processedTxIDs[txID] = true
-		sc := txp.GetStatus(ctx)
-		if sc == ptmgrtypes.TxProcessorRemove {
-			// no longer in an incomplete stage
-			oc.totalCompleted = oc.totalCompleted + 1
-			// hasActivity = true
-			log.L(ctx).Debugf("Orchestrator evaluate and process, marking %s as complete.", txID)
-			break
-		} else if sc == ptmgrtypes.TxProcessorSuspend {
-			log.L(ctx).Debugf("Orchestrator evaluate and process, removed suspended tx %s", txID)
-			break
-		}
-		oc.incompleteTxSProcessMap[txID] = txp
-	}
-
-	log.L(ctx).Debugf("Orchestrator evaluate and process")
-
-	oldTotal := len(oc.incompleteTxSProcessMap)
-	newTotal = oldTotal
-
-	// in case there are event we missed
-	// check and evaluate new transactions from the persistence if we can handle more
-	// If we are not at maximum, then query if there are more candidates now
-
-	// spaces := oc.maxConcurrentProcess - oldTotal
-	// if spaces > 0 {
-	// 	completedTxIDsStillBeingPersisted := make(map[string]bool)
-	// 	// TODO: evaluate and put kick off stage processing for transactions
-	// 	oc.processedTxIDs = completedTxIDsStillBeingPersisted
-	// 	newTotal = len(oc.incompleteTxSProcessMap)
-	// 	added = newTotal - oldTotal
-	// 	if added > 0 {
-	// 		log.L(ctx).Infof("Evaluation loop added %d new transactions", added)
-	// 	}
-	// 	// TODO: emit metrics
-	// }
-	log.L(ctx).Debugf("Orchestrator evaluate from DB took %s", time.Since(evalStart))
-	// now check and process each transaction
-
-	// if newTotal > 0 {
-	// 	blockedByPreReq := oc.ProcessIncompleteTransactions(ctx, oc.incompleteTxSProcessMap)
-	// 	if hasActivity {
-	// 		oc.lastActivityTime = time.Now()
-	// 	}
-	// 	if time.Since(oc.lastActivityTime) > oc.staleTimeout && oc.state != OrchestratorStateStale {
-	// 		oc.state = OrchestratorStateStale
-	// 		oc.stateEntryTime = time.Now()
-	// 	} else if blockedByPreReq && oc.state != OrchestratorStateWaiting {
-	// 		oc.state = OrchestratorStateWaiting
-	// 		oc.stateEntryTime = time.Now()
-	// 	} else if oc.state != OrchestratorStateRunning {
-	// 		oc.state = OrchestratorStateRunning
-	// 		oc.stateEntryTime = time.Now()
-	// 	}
-	// } else if oc.state != OrchestratorStateIdle {
-	// 	oc.state = OrchestratorStateIdle
-	// 	oc.stateEntryTime = time.Now()
-	// }
-	log.L(ctx).Debugf("Orchestrator process loop took %s", time.Since(evalStart))
-	return added, newTotal
 }
 
 func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *components.PrivateTransaction) (queued bool) {
@@ -333,9 +238,6 @@ func (oc *Orchestrator) HandleEvent(ctx context.Context, event ptmgrtypes.Privat
 	defer oc.incompleteTxProcessMapMutex.Unlock()
 	txProc := oc.incompleteTxSProcessMap[event.GetTransactionID()]
 	if txProc == nil {
-		// TODO: is bypassing max concurrent process correct?
-		// or throw the event away and waste another cycle to redo the actions
-		// (doesn't feel right, maybe for some events only persistence is needed)
 
 		// TODO we have an event for a transaction that we have swapped out of memory.  Need to reload the transaction from the database before we can proces this event
 		// and we need to do this in a way that doesn't exceed the maxConcurrentProcess and doesn't allow events from a runaway remote node to cause a noisy neighbor problem for events
