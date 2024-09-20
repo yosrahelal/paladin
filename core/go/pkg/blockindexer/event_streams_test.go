@@ -139,6 +139,20 @@ func TestInternalEventStreamDeliveryAtHeadWithSourceAddress(t *testing.T) {
 
 	eventCollector := make(chan *EventWithData)
 
+	definition := &EventStream{
+		Name: "unit_test",
+		Config: EventStreamConfig{
+			BatchSize:    confutil.P(3),
+			BatchTimeout: confutil.P("5ms"),
+		},
+		// Listen to two out of three event types
+		ABI: abi.ABI{
+			testABI[1],
+			testABI[2],
+		},
+		Source: sourceContractAddress,
+	}
+
 	// Do a full start now with an internal event listener
 	var esID string
 	calledPostCommit := false
@@ -160,19 +174,7 @@ func TestInternalEventStreamDeliveryAtHeadWithSourceAddress(t *testing.T) {
 			}
 			return func() { calledPostCommit = true }, nil
 		},
-		Definition: &EventStream{
-			Name: "unit_test",
-			Config: EventStreamConfig{
-				BatchSize:    confutil.P(3),
-				BatchTimeout: confutil.P("5ms"),
-			},
-			// Listen to two out of three event types
-			ABI: abi.ABI{
-				testABI[1],
-				testABI[2],
-			},
-			Source: sourceContractAddress,
-		},
+		Definition: definition,
 	})
 	require.NoError(t, err)
 
@@ -316,6 +318,54 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 		panic("redelivery")
 	case <-time.After(5 * time.Millisecond):
 	}
+}
+
+func TestNoMatchingEvents(t *testing.T) {
+
+	// This test uses a real DB, includes the full block indexer, but simulates the blockchain.
+	_, bi, mRPC, blDone := newTestBlockIndexer(t)
+	defer blDone()
+
+	// Mock up the block calls to the blockchain for 15 blocks
+	blocks, receipts := testBlockArray(t, 15)
+	mockBlocksRPCCalls(mRPC, blocks, receipts)
+	mockBlockListenerNil(mRPC)
+
+	// Create a matcher that only mismatched on indexed - so same signature
+	testABICopy := testParseABI(testEventABIJSON)
+	testABICopy[1].Inputs[0].Indexed = !testABICopy[1].Inputs[0].Indexed
+
+	// Do a full start now with an internal event listener
+	utBatchNotify := make(chan []*IndexedBlock)
+	err := bi.Start(&InternalEventStream{
+		Type: IESTypePostCommitHandler,
+		PostCommitHandler: func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
+			utBatchNotify <- blocks
+		},
+	}, &InternalEventStream{
+		Handler: func(ctx context.Context, tx *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error) {
+			require.Fail(t, "should not be called")
+			return nil, nil
+		},
+		Definition: &EventStream{
+			Name: "unit_test",
+			Config: EventStreamConfig{
+				BatchSize:    confutil.P(1),
+				BatchTimeout: confutil.P("5ms"),
+			},
+			// Listen to two out of three event types
+			ABI: abi.ABI{
+				// Mismatched only on index
+				testABICopy[1],
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	for i := 0; i < 15; i++ {
+		<-utBatchNotify
+	}
+
 }
 
 func TestStartBadInternalEventStream(t *testing.T) {
@@ -661,107 +711,6 @@ func TestDispatcherDispatchClosed(t *testing.T) {
 	<-es.dispatcherDone
 
 	assert.True(t, called)
-}
-
-func TestDispatcherRunLateHandler(t *testing.T) {
-	ctx, bi, _, p, done := newMockBlockIndexer(t, &Config{})
-	defer done()
-
-	p.Mock.ExpectBegin()
-	p.Mock.ExpectRollback()
-
-	called := false
-
-	bi.retry.UTSetMaxAttempts(1)
-	es := &eventStream{
-		bi:  bi,
-		ctx: ctx,
-		definition: &EventStream{
-			ID:   uuid.New(),
-			Type: tktypes.Enum[EventStreamType]("wrong"),
-			ABI:  testABI,
-		},
-		eventABIs:      testABI,
-		batchSize:      2,                    // aim for two
-		batchTimeout:   1 * time.Microsecond, // but not going to wait
-		dispatch:       make(chan *eventDispatch),
-		dispatcherDone: make(chan struct{}),
-		detectorDone:   make(chan struct{}),
-		waitForHandler: make(chan struct{}),
-	}
-	go func() {
-		assert.NotPanics(t, func() { es.run() })
-	}()
-
-	time.Sleep(1 * time.Millisecond)
-	es.attachHandler(func(ctx context.Context, tx *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error) {
-		called = true
-		return nil, fmt.Errorf("pop")
-	})
-
-	es.dispatch <- &eventDispatch{
-		event: &EventWithData{
-			IndexedEvent: &IndexedEvent{},
-		},
-	}
-
-	<-es.dispatcherDone
-
-	assert.True(t, called)
-}
-
-func TestDispatcherRunMissingHandler(t *testing.T) {
-	ctx, bi, _, p, done := newMockBlockIndexer(t, &Config{})
-	defer done()
-
-	p.Mock.ExpectBegin()
-	p.Mock.ExpectRollback()
-
-	bi.retry.UTSetMaxAttempts(1)
-	es := &eventStream{
-		bi:  bi,
-		ctx: ctx,
-		definition: &EventStream{
-			ID:   uuid.New(),
-			Type: tktypes.Enum[EventStreamType]("wrong"),
-			ABI:  testABI,
-		},
-		eventABIs:      testABI,
-		batchSize:      2,                    // aim for two
-		batchTimeout:   1 * time.Microsecond, // but not going to wait
-		dispatch:       make(chan *eventDispatch),
-		dispatcherDone: make(chan struct{}),
-		waitForHandler: make(chan struct{}),
-	}
-	close(es.waitForHandler)
-
-	go func() {
-		assert.NotPanics(t, func() { es.dispatcher() })
-	}()
-
-	es.dispatch <- &eventDispatch{
-		event: &EventWithData{
-			IndexedEvent: &IndexedEvent{},
-		},
-	}
-
-	<-es.dispatcherDone
-}
-
-func TestDispatcherCloseBeforeHandler(t *testing.T) {
-	ctx, bi, _, _, done := newMockBlockIndexer(t, &Config{})
-	defer done()
-
-	cancelledCtx, cancelCtx := context.WithCancel(ctx)
-	cancelCtx()
-	es := &eventStream{
-		bi:             bi,
-		ctx:            cancelledCtx,
-		waitForHandler: make(chan struct{}),
-		detectorDone:   make(chan struct{}),
-		dispatcherDone: make(chan struct{}),
-	}
-	es.run()
 }
 
 func TestProcessCatchupEventPageFailRPC(t *testing.T) {

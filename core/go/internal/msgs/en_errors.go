@@ -164,7 +164,6 @@ var (
 	MsgBlockIndexerESAlreadyInit            = ffe("PD011304", "Event stream already initialized")
 	MsgBlockIndexerConfirmedReceiptNotFound = ffe("PD011305", "Receipt for confirmed transaction %s not found")
 	MsgBlockIndexerInvalidEventStreamType   = ffe("PD011306", "Unsupported event stream type: %s")
-	MsgBlockMissingHandler                  = ffe("PD011307", "Handler not registered for stream")
 	MsgBlockIndexerNoBlocksIndexed          = ffe("PD011308", "No confirmed blocks have yet been indexed")
 	MsgBlockIndexerTransactionReverted      = ffe("PD011309", "Transaction reverted: %s")
 
@@ -245,6 +244,7 @@ var (
 	MsgDomainABIRecoverRequestSignature       = ffe("PD011638", "Invalid signature")
 	MsgDomainABIEncodingTypedDataInvalid      = ffe("PD011639", "EIP-712 typed data V4 encoding request invalid")
 	MsgDomainABIEncodingTypedDataFail         = ffe("PD011640", "EIP-712 typed data V4 encoding request failed")
+	MsgDomainErrorParsingAddress              = ffe("PD011641", "Error parsing address")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownEngine = ffe("PD011700", "Unknown engine '%s'")

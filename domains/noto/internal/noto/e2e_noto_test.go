@@ -170,7 +170,7 @@ func TestNoto(t *testing.T) {
 	}
 	assert.True(t, boolResult)
 
-	coins, err := noto.FindCoins(ctx, "{}")
+	coins, err := noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 1)
 	assert.Equal(t, int64(100), coins[0].Amount.Int64())
@@ -190,7 +190,7 @@ func TestNoto(t *testing.T) {
 	assert.ErrorContains(t, rpcerr.Error(), "PD200009")
 	assert.True(t, boolResult)
 
-	coins, err = noto.FindCoins(ctx, "{}")
+	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 1)
 
@@ -207,7 +207,7 @@ func TestNoto(t *testing.T) {
 	require.NotNil(t, rpcerr)
 	assert.ErrorContains(t, rpcerr.Error(), "PD200005")
 
-	coins, err = noto.FindCoins(ctx, "{}")
+	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 1)
 
@@ -225,7 +225,7 @@ func TestNoto(t *testing.T) {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err = noto.FindCoins(ctx, "{}")
+	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 3)
 
@@ -254,7 +254,7 @@ func TestNoto(t *testing.T) {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err = noto.FindCoins(ctx, "{}")
+	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 4) // TODO: verify coins
 }
@@ -413,7 +413,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 	}
 	assert.True(t, boolResult)
 
-	coins, err := noto.FindCoins(ctx, "{}")
+	coins, err := noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
 	assert.Len(t, coins, 1)
 	assert.Equal(t, int64(100), coins[0].Amount.Int64())
@@ -433,7 +433,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err = noto.FindCoins(ctx, "{}")
+	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
 	assert.Len(t, coins, 3) // TODO: verify coins
 
@@ -451,7 +451,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err = noto.FindCoins(ctx, "{}")
+	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
 	assert.Len(t, coins, 4) // TODO: verify coins
 }

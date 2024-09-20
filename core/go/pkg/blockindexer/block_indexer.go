@@ -875,17 +875,19 @@ func (bi *blockIndexer) enrichTransactionEvents(ctx context.Context, abi abi.ABI
 	for _, l := range receipt.Logs {
 		for _, e := range events {
 			if ethtypes.HexUint64(e.LogIndex) == l.LogIndex {
-				bi.matchLog(ctx, abi, l, e, nil)
+				// This the the log for this event - try and enrich the .Data field
+				_ = bi.matchLog(ctx, abi, l, e, nil)
+				break
 			}
 		}
 	}
 	return nil
 }
 
-func (bi *blockIndexer) matchLog(ctx context.Context, abi abi.ABI, in *LogJSONRPC, out *EventWithData, source *tktypes.EthAddress) {
+func (bi *blockIndexer) matchLog(ctx context.Context, abi abi.ABI, in *LogJSONRPC, out *EventWithData, source *tktypes.EthAddress) bool {
 	if !source.IsZero() && !source.Equals((*tktypes.EthAddress)(in.Address)) {
 		log.L(ctx).Debugf("Event %d/%d/%d does not match source=%s (tx=%s,address=%s)", in.BlockNumber, in.TransactionIndex, in.LogIndex, source, in.TransactionHash, in.Address)
-		return
+		return false
 	}
 	// This is one that matches our signature, but we need to check it against our ABI list.
 	// We stop at the first entry that parses it, and it's perfectly fine and expected that
@@ -902,9 +904,10 @@ func (bi *blockIndexer) matchLog(ctx context.Context, abi abi.ABI, in *LogJSONRP
 			if in.Address != nil {
 				out.Address = tktypes.EthAddress(*in.Address)
 			}
-			return
+			return true
 		} else {
 			log.L(ctx).Debugf("Event %d/%d/%d does not match ABI event %s matchSource=%v (tx=%s,address=%s): %s", in.BlockNumber, in.TransactionIndex, in.LogIndex, abiEntry, source, in.TransactionHash, in.Address, err)
 		}
 	}
+	return false
 }

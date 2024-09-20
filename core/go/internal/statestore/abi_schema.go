@@ -42,12 +42,12 @@ type abiSchema struct {
 	abiLabelInfo []*schemaLabelInfo
 }
 
-func newABISchema(ctx context.Context, domainID string, def *abi.Parameter) (*abiSchema, error) {
+func newABISchema(ctx context.Context, domainName string, def *abi.Parameter) (*abiSchema, error) {
 	as := &abiSchema{
 		SchemaPersisted: &SchemaPersisted{
-			DomainID: domainID,
-			Type:     SchemaTypeABI,
-			Labels:   []string{},
+			DomainName: domainName,
+			Type:       SchemaTypeABI,
+			Labels:     []string{},
 		},
 		definition: def,
 	}
@@ -323,7 +323,7 @@ func (as *abiSchema) parseStateData(ctx context.Context, data tktypes.RawJSON) (
 
 // Take the state, parse the value into the type tree of this schema, and from that
 // build the label values to store in the DB for comparison appropriate to the type.
-func (as *abiSchema) ProcessState(ctx context.Context, data tktypes.RawJSON) (*StateWithLabels, error) {
+func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON) (*StateWithLabels, error) {
 
 	psd, err := as.parseStateData(ctx, data)
 	if err != nil {
@@ -355,13 +355,14 @@ func (as *abiSchema) ProcessState(ctx context.Context, data tktypes.RawJSON) (*S
 	now := tktypes.TimestampNow()
 	return &StateWithLabels{
 		State: &State{
-			ID:          hashID,
-			CreatedAt:   now,
-			DomainID:    as.DomainID,
-			Schema:      as.ID,
-			Data:        jsonData,
-			Labels:      psd.labels,
-			Int64Labels: psd.int64Labels,
+			ID:              hashID,
+			CreatedAt:       now,
+			DomainName:      as.DomainName,
+			Schema:          as.ID,
+			ContractAddress: contractAddress,
+			Data:            jsonData,
+			Labels:          psd.labels,
+			Int64Labels:     psd.int64Labels,
 		},
 		LabelValues: addStateBaseLabels(psd.labelValues, hashID, now),
 	}, nil

@@ -1,10 +1,10 @@
 CREATE TABLE schemas (
     "id"             VARCHAR NOT NULL,
     "created_at"     BIGINT,
-    "domain_id"      VARCHAR,
+    "domain_name"    VARCHAR,
     "type"           VARCHAR,
     "signature"      VARCHAR,
     "definition"     VARCHAR,
     "labels"         VARCHAR,
-    PRIMARY KEY ("domain_id", "id")
+    PRIMARY KEY ("domain_name", "id")
 );
