@@ -49,6 +49,8 @@ public class PenteConfiguration {
 
     private final JsonABI privacyGroupABI;
 
+    public final JsonABI interfaceABI;
+
     private long chainId;
 
     private String schemaId_AccountState_v24_9_0;
@@ -64,6 +66,9 @@ public class PenteConfiguration {
                     "abi");
             privacyGroupABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
                     "contracts/domains/pente/PentePrivacyGroup.sol/PentePrivacyGroup.json",
+                    "abi");
+            interfaceABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
+                    "contracts/domains/interfaces/IPente.sol/IPente.json",
                     "abi");
         } catch (Exception t) {
             LOGGER.error("failed to initialize configuration", t);

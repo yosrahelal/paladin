@@ -55,6 +55,7 @@ public class PenteDomain extends DomainInstance {
                 .setBaseLedgerSubmitConfig(ToDomain.BaseLedgerSubmitConfig.newBuilder()
                         .setSubmitMode(ToDomain.BaseLedgerSubmitConfig.Mode.ONE_TIME_USE_KEYS)
                         .build())
+                .setAbiEventsJson(config.interfaceABI.toString())
                 .build();
         return CompletableFuture.completedFuture(ToDomain.ConfigureDomainResponse.newBuilder()
                 .setDomainConfig(domainConfig)
