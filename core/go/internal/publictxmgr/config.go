@@ -15,15 +15,15 @@
 
 package publictxmgr
 
-import (
-	"github.com/hyperledger/firefly-common/pkg/config"
-)
+type Config struct {
+	TransactionEngine TransactionEngineConfig `yaml:"transactionEngine"`
+	Orchestrator      OrchestratorConfig      `yaml:"orchestrator"`
+	GasPrice          GasPriceConfig          `yaml:"gasPrice"`
+	BalanceManager    BalanceManagerConfig    `yaml:"balanceManager"`
+}
 
-const HTTPClientSection = "HTTPClient"
-
-func InitConfig(conf config.Section) {
-	InitTransactionEngineConfig(conf)
-	InitOrchestratorConfig(conf)
-	InitGasPriceConfig(conf)
-	InitBalanceManagerConfig(conf)
+type CacheConfig struct {
+	Enabled *bool   `yaml:"enabled"`
+	Size    *string `yaml:"size"`
+	TTL     *string `yaml:"ttl"`
 }

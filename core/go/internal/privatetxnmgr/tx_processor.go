@@ -129,7 +129,7 @@ func (ts *PaladinTxProcessor) HandleTransactionSubmittedEvent(ctx context.Contex
 
 	//start an async process to gather signatures
 	// this will emit a TransactionSignedEvent for each signature collected
-	if ts.hasOutstandingSignatureRequests(ctx) {
+	if ts.hasOutstandingSignatureRequests() {
 		ts.requestSignatures(ctx)
 	} else {
 		ts.requestEndorsements(ctx)
@@ -145,7 +145,7 @@ func (ts *PaladinTxProcessor) HandleTransactionSignedEvent(ctx context.Context, 
 	ts.latestEvent = "HandleTransactionSignedEvent"
 	log.L(ctx).Debugf("Adding signature to transaction %s", ts.transaction.ID.String())
 	ts.transaction.PostAssembly.Signatures = append(ts.transaction.PostAssembly.Signatures, event.AttestationResult)
-	if !ts.hasOutstandingSignatureRequests(ctx) {
+	if !ts.hasOutstandingSignatureRequests() {
 		ts.status = "signed"
 		ts.requestEndorsements(ctx)
 	}
@@ -171,7 +171,7 @@ func (ts *PaladinTxProcessor) HandleTransactionEndorsedEvent(ctx context.Context
 				}
 			}
 		}
-		if !ts.hasOutstandingEndorsementRequests(ctx) {
+		if !ts.hasOutstandingEndorsementRequests() {
 			ts.status = "endorsed"
 			//resolve the signing address here before informing the sequencer about endorsement
 			// because endorsement will could trigger a dispatch but
@@ -453,7 +453,7 @@ func (ts *PaladinTxProcessor) requestEndorsements(ctx context.Context) {
 	}
 }
 
-func (ts *PaladinTxProcessor) hasOutstandingSignatureRequests(ctx context.Context) bool {
+func (ts *PaladinTxProcessor) hasOutstandingSignatureRequests() bool {
 	outstandingSignatureRequests := false
 out:
 	for _, attRequest := range ts.transaction.PostAssembly.AttestationPlan {
@@ -475,7 +475,7 @@ out:
 	return outstandingSignatureRequests
 }
 
-func (ts *PaladinTxProcessor) hasOutstandingEndorsementRequests(ctx context.Context) bool {
+func (ts *PaladinTxProcessor) hasOutstandingEndorsementRequests() bool {
 	outstandingEndorsementRequests := false
 out:
 	for _, attRequest := range ts.transaction.PostAssembly.AttestationPlan {

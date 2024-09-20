@@ -21,7 +21,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
-type PublicTxEngineMetricsManager interface {
+type PublicTxManagerMetricsManager interface {
 	InitMetrics(ctx context.Context)
 	RecordOperationMetrics(ctx context.Context, operationName string, operationResult string, durationInSeconds float64)
 	RecordStageChangeMetrics(ctx context.Context, stage string, durationInSeconds float64)

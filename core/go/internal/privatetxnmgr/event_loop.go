@@ -338,7 +338,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		}
 
 		//Now we have the payloads, we can prepare the submission
-		publicTransactionEngine := oc.components.PublicTxManager().GetEngine()
+		publicTransactionEngine := oc.components.PublicTxManager()
 
 		convertToInterfaceSlice := func(slice []*components.EthTransaction) []interface{} {
 			converted := make([]interface{}, len(slice))
@@ -348,7 +348,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 			return converted
 		}
 		preparedSubmissions, rejected, err := publicTransactionEngine.PrepareSubmissionBatch(ctx,
-			&components.RequestOptions{
+			&components.PublicTxRequestOptions{
 				SignerID: signingAddress,
 			},
 			convertToInterfaceSlice(preparedTransactionPayloads),

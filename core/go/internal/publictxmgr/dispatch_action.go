@@ -39,7 +39,7 @@ type APIResponse struct {
 	status int // http status code (200 Ok vs. 202 Accepted) - only set for success cases
 }
 
-func (pte *publicTxEngine) dispatchAction(ctx context.Context, mtx *components.PublicTX, action APIRequestType) APIResponse {
+func (pte *pubTxManager) dispatchAction(ctx context.Context, mtx *components.PublicTX, action APIRequestType) APIResponse {
 	response := make(chan APIResponse, 1)
 	startTime := time.Now()
 	var err error

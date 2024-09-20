@@ -19,30 +19,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-)
-
-// configurations
-const (
-	TransactionEngineSection = "engine"
-
-	TransactionEngineMaxInFlightOrchestratorsInt = "maxInFlightOrchestrators"
-	TransactionEngineIntervalDurationString      = "interval"
-
-	// after how long if the transaction orchestrator stayed in stale state, we stop the transaction orchestrator
-	TransactionEngineMaxStaleDurationString = "maxStale"
-	// after how long if the transaction orchestrator stayed in idle state, we stop the transaction orchestrator
-	TransactionEngineMaxIdleDurationString = "maxIdle"
-
-	// when the in-flight orchestrator pool is full, after how long a transaction orchestrator will be stopped since it started to ensure fairness
-	TransactionEngineMaxOverloadProcessTimeDurationString = "maxOverloadProcessTime"
-
-	TransactionEngineRetryInitDelayDurationString = "retry.initialDelay"
-	TransactionEngineRetryMaxDelayDurationString  = "retry.maxDelay"
-	TransactionEngineRetryFactorFloat             = "retry.factor"
+	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 )
 
 const (
@@ -56,19 +36,25 @@ const (
 	defaultTransactionEngineRetryFactor              = 2.0
 )
 
-func InitTransactionEngineConfig(conf config.Section) {
+type TransactionEngineConfig struct {
+	MaxInFlightOrchestrators *int         `yaml:"maxInFlightOrchestrators"`
+	Interval                 *string      `yaml:"interval"`
+	MaxStaleTime             *string      `yaml:"maxStaleTime"`
+	MaxIdleTim               *string      `yaml:"maxIdleTime"`
+	MaxOverloadProcessTime   *string      `yaml:"maxOverloadProcessTime"`
+	Retry                    retry.Config `yaml:"retry"`
+}
 
-	engineConfig := conf.SubSection(TransactionEngineSection)
-
-	engineConfig.AddKnownKey(TransactionEngineMaxInFlightOrchestratorsInt, defaultTransactionEngineMaxInFlightOrchestrators)
-	engineConfig.AddKnownKey(TransactionEngineIntervalDurationString, defaultTransactionEngineInterval)
-	engineConfig.AddKnownKey(TransactionEngineMaxStaleDurationString, defaultTransactionEngineMaxStale)
-	engineConfig.AddKnownKey(TransactionEngineMaxIdleDurationString, defaultTransactionEngineMaxIdle)
-	engineConfig.AddKnownKey(TransactionEngineMaxOverloadProcessTimeDurationString, defaultMaxOverloadProcessTime)
-
-	engineConfig.AddKnownKey(TransactionEngineRetryInitDelayDurationString, defaultTransactionEngineRetryInitDelay)
-	engineConfig.AddKnownKey(TransactionEngineRetryMaxDelayDurationString, defaultTransactionEngineRetryMaxDelay)
-	engineConfig.AddKnownKey(TransactionEngineRetryFactorFloat, defaultTransactionEngineRetryFactor)
+var DefaultTransactionEngineConfig = &TransactionEngineConfig{
+	MaxInFlightOrchestrators: confutil.P(50),
+	Interval:                 confutil.P("5s"),
+	MaxStaleTime:             confutil.P("1m"),
+	MaxIdleTim:               confutil.P("10s"),
+	Retry: retry.Config{
+		InitialDelay: confutil.P("250ms"),
+		MaxDelay:     confutil.P("30s"),
+		Factor:       confutil.P(2.0),
+	},
 }
 
 // role of transaction engine:
@@ -90,7 +76,7 @@ func InitTransactionEngineConfig(conf config.Section) {
 // 4. provides shared functionalities for optimization
 //    - handles gas price information which is not signer specific
 
-func (ble *publicTxEngine) engineLoop() {
+func (ble *pubTxManager) engineLoop() {
 	defer close(ble.engineLoopDone)
 	ctx := log.WithLogField(ble.ctx, "role", "engine-loop")
 	log.L(ctx).Infof("Engine started polling on interval %s", ble.enginePollingInterval)
@@ -112,7 +98,7 @@ func (ble *publicTxEngine) engineLoop() {
 	}
 }
 
-func (ble *publicTxEngine) poll(ctx context.Context) (polled int, total int) {
+func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 	pollStart := time.Now()
 	ble.InFlightOrchestratorMux.Lock()
 	defer ble.InFlightOrchestratorMux.Unlock()
@@ -216,7 +202,7 @@ func (ble *publicTxEngine) poll(ctx context.Context) (polled int, total int) {
 	return polled, total
 }
 
-func (ble *publicTxEngine) MarkInFlightOrchestratorsStale() {
+func (ble *pubTxManager) MarkInFlightOrchestratorsStale() {
 	// try to send an item in `InFlightStale` channel, which has a buffer of 1
 	// to trigger a polling event to update the in flight transaction orchestrators
 	// if it already has an item in the channel, this function does nothing
@@ -226,7 +212,7 @@ func (ble *publicTxEngine) MarkInFlightOrchestratorsStale() {
 	}
 }
 
-func (ble *publicTxEngine) GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *components.PublicTX, err error) {
+func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *components.PublicTX, err error) {
 	tf := &components.PubTransactionQueries{
 		InStatus:   []string{string(components.PubTxStatusPending)},
 		To:         confutil.P(destinationAddress),
@@ -246,7 +232,7 @@ func (ble *publicTxEngine) GetPendingFuelingTransaction(ctx context.Context, sou
 	return tx, nil
 }
 
-func (ble *publicTxEngine) CheckTransactionCompleted(ctx context.Context, tx *components.PublicTX) (completed bool) {
+func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, tx *components.PublicTX) (completed bool) {
 	// no need for locking here as outdated information is OK given we do frequent retires
 	log.L(ctx).Debugf("CheckTransactionCompleted checking state for transaction %s.", tx.ID)
 	completedTxNonce, exists := ble.completedTxNoncePerAddress[string(tx.From)]
@@ -281,7 +267,7 @@ func (ble *publicTxEngine) CheckTransactionCompleted(ctx context.Context, tx *co
 
 }
 
-func (ble *publicTxEngine) updateCompletedTxNonce(tx *components.PublicTX) (updated bool) {
+func (ble *pubTxManager) updateCompletedTxNonce(tx *components.PublicTX) (updated bool) {
 	updated = false
 	// no need for locking here as outdated information is OK given we do frequent retires
 	ble.completedTxNoncePerAddressMutex.Lock()

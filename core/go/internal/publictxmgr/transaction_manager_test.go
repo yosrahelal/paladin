@@ -42,7 +42,7 @@ import (
 
 const testMainSigningAddress = testDestAddress
 
-func NewTestTransactionEngine(t *testing.T) (*publicTxEngine, config.Section) {
+func NewTestTransactionEngine(t *testing.T) (*pubTxManager, config.Section) {
 	ctx := context.Background()
 	conf := config.RootSection("unittest")
 	InitConfig(conf)
@@ -56,7 +56,7 @@ func NewTestTransactionEngine(t *testing.T) (*publicTxEngine, config.Section) {
 
 	th, err := NewTransactionEngine(ctx, conf)
 	assert.Nil(t, err)
-	return th.(*publicTxEngine), conf
+	return th.(*pubTxManager), conf
 }
 
 func TestNewEngineErrors(t *testing.T) {
@@ -75,7 +75,7 @@ func TestNewEngineErrors(t *testing.T) {
 
 	orchestratorConf.Set(OrchestratorGasPriceIncreaseMaxBigIntString, "1")
 	h, err := NewTransactionEngine(ctx, conf)
-	ble := h.(*publicTxEngine)
+	ble := h.(*pubTxManager)
 	require.NoError(t, err)
 	assert.Equal(t, big.NewInt(1), ble.gasPriceIncreaseMax)
 	orchestratorConf.Set(OrchestratorGasPriceIncreaseMaxBigIntString, "")
@@ -618,7 +618,7 @@ func TestEngineSuspend(t *testing.T) {
 	// orchestrator handler tests
 	ble.InFlightOrchestrators = make(map[string]*orchestrator)
 	ble.InFlightOrchestrators[string(mtx.From)] = &orchestrator{
-		publicTxEngine:               ble,
+		pubTxManager:                 ble,
 		orchestratorPollingInterval:  ble.enginePollingInterval,
 		state:                        OrchestratorStateIdle,
 		stateEntryTime:               time.Now().Add(-ble.maxOrchestratorIdle).Add(-1 * time.Minute),
@@ -721,7 +721,7 @@ func TestEngineResume(t *testing.T) {
 	// orchestrator handler tests
 	ble.InFlightOrchestrators = make(map[string]*orchestrator)
 	ble.InFlightOrchestrators[string(mtx.From)] = &orchestrator{
-		publicTxEngine:               ble,
+		pubTxManager:                 ble,
 		orchestratorPollingInterval:  ble.enginePollingInterval,
 		state:                        OrchestratorStateIdle,
 		stateEntryTime:               time.Now().Add(-ble.maxOrchestratorIdle).Add(-1 * time.Minute),
@@ -857,7 +857,7 @@ func TestEngineHandleConfirmedTransactionEvents(t *testing.T) {
 
 	ble.InFlightOrchestrators = make(map[string]*orchestrator)
 	ble.InFlightOrchestrators[string(mtx.From)] = &orchestrator{
-		publicTxEngine:               ble,
+		pubTxManager:                 ble,
 		orchestratorPollingInterval:  ble.enginePollingInterval,
 		state:                        OrchestratorStateIdle,
 		stateEntryTime:               time.Now().Add(-ble.maxOrchestratorIdle).Add(-1 * time.Minute),

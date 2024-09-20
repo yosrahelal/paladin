@@ -23,41 +23,36 @@ import (
 
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 
-	"github.com/hyperledger/firefly-common/pkg/cache"
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
-// configurations
-const (
-	GasPriceSection = "gasPrice"
+type GasPriceConfig struct {
+	IncreaseMax        *string      `yaml:"increaseMax"`
+	IncreasePercentage *int         `yaml:"increasePercentage"`
+	FixedGasPrice      any          `yaml:"fixedGasPrice"` // number or object
+	Cache              cache.Config `yaml:"cache"`
+}
 
-	GasPriceFixedJSONString = "fixedGasPrice" // when not using a gas station - will be treated as a raw JSON string, so can be numeric 123, or string "123", or object {"maxPriorityFeePerGas":123})
-
-	// Gas Price cache config
-	GasPriceCacheEnabled           = "cache.enabled"
-	GasPriceCacheSizeByteString    = "cache.size"
-	GasPriceCacheTTLDurationString = "cache.ttl"
-)
-
-const (
-	defaultGasPriceCacheEnabled = true // shouldn't really turn this off, default to a 1 second debounce is to avoid hammering gas price client
-	defaultGasPriceCacheSize    = "1kb"
-	defaultGasPriceCacheTTL     = "1s"
-)
-
-func InitGasPriceConfig(conf config.Section) {
-	gasPriceConfig := conf.SubSection(GasPriceSection)
-	gasPriceConfig.AddKnownKey(GasPriceFixedJSONString)
-	gasPriceConfig.AddKnownKey(GasPriceCacheEnabled, defaultGasPriceCacheEnabled)
-	gasPriceConfig.AddKnownKey(GasPriceCacheSizeByteString, defaultGasPriceCacheSize)
-	gasPriceConfig.AddKnownKey(GasPriceCacheTTLDurationString, defaultGasPriceCacheTTL)
+var DefaultGasPriceConfig = &GasPriceConfig{
+	IncreaseMax:        nil,
+	IncreasePercentage: confutil.P(0),
+	FixedGasPrice:      nil,
+	Cache: cache.Config{
+		Capacity: confutil.P(100),
+		// TODO: Enable a KB based cache with TTL in Paladin
+		// Enabled: confutil.P(true),
+		// Size:    confutil.P("1kb"),
+		// TTL:     confutil.P("1s"),
+	},
 }
 
 type GasPriceClient interface {

@@ -225,12 +225,6 @@ task makeMocks(type: Mockery, dependsOn: [tasks.installTools, tasks.protoc, task
     }
     mock {
         inputDir 'internal/components'
-        name 'PublicTxEngine'
-        outputPackage 'componentmocks'
-        outputDir 'mocks/componentmocks'
-    }
-    mock {
-        inputDir 'internal/components'
         name 'PreparedSubmission'
         outputPackage 'componentmocks'
         outputDir 'mocks/componentmocks'

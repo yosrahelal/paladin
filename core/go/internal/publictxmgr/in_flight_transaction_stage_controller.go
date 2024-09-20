@@ -100,7 +100,7 @@ type BasicActionError struct {
 }
 
 func NewInFlightTransactionStageController(
-	enth *publicTxEngine,
+	enth *pubTxManager,
 	oc *orchestrator,
 	mtx *components.PublicTX,
 ) *InFlightTransactionStageController {

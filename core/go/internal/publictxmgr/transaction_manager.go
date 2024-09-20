@@ -64,14 +64,15 @@ const (
 // - It offers caches of gas price for transactions targeting same method of a smart contract
 // - It provide a outbound request concurrency control
 
-type publicTxEngine struct {
-	ctx                   context.Context
-	thMetrics             *publicTxEngineMetrics
-	txStore               components.PublicTransactionStore
-	bIndexer              blockindexer.BlockIndexer
-	ethClient             ethclient.EthClient
-	publicTXEventNotifier components.PublicTxEventNotifier
-	keymgr                ethclient.KeyManager
+type pubTxManager struct {
+	ctx       context.Context
+	ctxCancel context.CancelFunc
+
+	thMetrics *publicTxEngineMetrics
+	txStore   *pubTxStore
+	bIndexer  blockindexer.BlockIndexer
+	ethClient ethclient.EthClient
+	keymgr    ethclient.KeyManager
 	// gas price
 	gasPriceClient GasPriceClient
 
@@ -114,7 +115,7 @@ type publicTxEngine struct {
 	gasPriceIncreasePercent *big.Int
 }
 
-func NewTransactionEngine(ctx context.Context, conf config.Section) (components.PublicTxEngine, error) {
+func NewPublicTransactionManager(ctx context.Context, conf *Config) (components.PublicTxManager, error) {
 	log.L(ctx).Debugf("Creating new enterprise transaction handler")
 	cm := cache.NewCacheManager(ctx, true)
 
@@ -140,7 +141,13 @@ func NewTransactionEngine(ctx context.Context, conf config.Section) (components.
 		log.L(ctx).Debugf("Gas price increment gasPriceIncreaseMax setting: %s", gasPriceIncreaseMax.String())
 	}
 
-	ble := &publicTxEngine{
+	log.L(ctx).Debugf("Enterprise transaction handler created")
+
+	ptmCtx, ptmCtxCancel := context.WithCancel(log.WithLogField(ctx, "role", "public_tx_mgr"))
+
+	return &pubTxManager{
+		ctx:                         ptmCtx,
+		ctxCancel:                   ptmCtxCancel,
 		gasPriceClient:              gasPriceClient,
 		InFlightOrchestratorStale:   make(chan bool, 1),
 		SigningAddressesPausedUntil: make(map[string]time.Time),
@@ -161,17 +168,20 @@ func NewTransactionEngine(ctx context.Context, conf config.Section) (components.
 		orchestratorConfig:         orchestratorConfig,
 		gasPriceIncreaseMax:        gasPriceIncreaseMax,
 		gasPriceIncreasePercent:    big.NewInt(orchestratorConfig.GetInt64(OrchestratorGasPriceIncreasePercentageInt)),
-	}
-
-	log.L(ctx).Debugf("Enterprise transaction handler created")
-	return ble, nil
+	}, nil
 }
 
-func (ble *publicTxEngine) Init(ctx context.Context, ethClient ethclient.EthClient, keymgr ethclient.KeyManager, txStore components.PublicTransactionStore, publicTXEventNotifier components.PublicTxEventNotifier, blockIndexer blockindexer.BlockIndexer) {
+// Post-init allows the manager to cross-bind to other components, or the Engine
+func (ble *pubTxManager) PostInit(components.AllComponents) error {
+	return nil
+}
+
+func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *components.ManagerInitResult, err error) {
+	ctx := ble.ctx
 	log.L(ctx).Debugf("Initializing enterprise transaction handler")
-	ble.ethClient = ethClient
-	ble.keymgr = keymgr
-	ble.txStore = txStore
+	ble.txStore = newPubTxStore(ptmCtx, conf, pic.Persistence())
+	ble.ethClient = pic.EthClientFactory().SharedWS()
+	ble.keymgr = pic.KeyManager()
 	ble.gasPriceClient.Init(ctx, ethClient)
 	ble.publicTXEventNotifier = publicTXEventNotifier
 	ble.bIndexer = blockIndexer
@@ -193,22 +203,25 @@ func (ble *publicTxEngine) Init(ctx context.Context, ethClient ethclient.EthClie
 	}
 	log.L(ctx).Debugf("Initialized enterprise transaction handler")
 	ble.balanceManager = balanceManager
+	return &components.ManagerInitResult{}, nil
 }
 
-func (ble *publicTxEngine) Start(ctx context.Context) (done <-chan struct{}, err error) {
+func (ble *pubTxManager) Start(ctx context.Context) error {
 	log.L(ctx).Debugf("Starting enterprise transaction handler")
 	if ble.ctx == nil { // only start once
 		ble.ctx = ctx // set the context for policy loop
 		ble.engineLoopDone = make(chan struct{})
 		log.L(ctx).Debugf("Kicking off  enterprise handler engine loop")
-		if err = ble.bIndexer.RegisterIndexedTransactionHandler(ctx, ble.HandleConfirmedTransactions); err != nil {
-			return
-		}
 		go ble.engineLoop()
 	}
 	ble.MarkInFlightOrchestratorsStale()
 	log.L(ctx).Infof("Started enterprise transaction handler")
-	return ble.engineLoopDone, nil
+	return nil
+}
+
+func (ble *pubTxManager) Stop() {
+	ble.ctxCancel()
+	<-ble.engineLoopDone
 }
 
 type preparedTransaction struct {
@@ -228,7 +241,7 @@ func (pt *preparedTransaction) Finalize(ctx context.Context) {
 	pt.nsi.Complete(ctx)
 }
 
-func (ble *publicTxEngine) PrepareSubmissionBatch(ctx context.Context, reqOptions *components.RequestOptions, txPayloads []interface{}) (preparedSubmission []components.PreparedSubmission, submissionRejected bool, err error) {
+func (ble *pubTxManager) PrepareSubmissionBatch(ctx context.Context, reqOptions *components.RequestOptions, txPayloads []interface{}) (preparedSubmission []components.PreparedSubmission, submissionRejected bool, err error) {
 	preparedSubmissions := make([]components.PreparedSubmission, len(txPayloads))
 	var nsi baseTypes.NonceAssignmentIntent
 	for i, tx := range txPayloads {
@@ -244,7 +257,7 @@ func (ble *publicTxEngine) PrepareSubmissionBatch(ctx context.Context, reqOption
 
 // PrepareSubmission prepares and validates the transaction input data so that a later call to
 // Submit can be made in the middle of a wider database transaction with minimal risk of error
-func (ble *publicTxEngine) PrepareSubmission(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}, nonceAssignmentIntent baseTypes.NonceAssignmentIntent) (preparedSubmission components.PreparedSubmission, submissionRejected bool, err error) {
+func (ble *pubTxManager) PrepareSubmission(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}, nonceAssignmentIntent baseTypes.NonceAssignmentIntent) (preparedSubmission components.PreparedSubmission, submissionRejected bool, err error) {
 	log.L(ctx).Tracef("PrepareSubmission new request, options: %+v, payload: %+v", reqOptions, txPayload)
 
 	err = reqOptions.Validate(ctx)
@@ -341,13 +354,13 @@ func (ble *publicTxEngine) PrepareSubmission(ctx context.Context, reqOptions *co
 // Submit writes the prepared submission to the database using the provided context
 // This is expected to be a lightweight operation involving not much more than writing to the database, as the heavy lifting should have been done in PrepareSubmission
 // The database transaction will be coordinated by the caller
-func (ble *publicTxEngine) Submit(ctx context.Context, dbtx *gorm.DB, preparedSubmission components.PreparedSubmission) (mtx *components.PublicTX, err error) {
+func (ble *pubTxManager) Submit(ctx context.Context, dbtx *gorm.DB, preparedSubmission components.PreparedSubmission) (mtx *components.PublicTX, err error) {
 	preparedTransaction := preparedSubmission.(*preparedTransaction)
 	mtx, err = ble.createManagedTx(ctx, dbtx, preparedTransaction.ID(), preparedTransaction.ethTx, preparedTransaction.nsi)
 	return mtx, err
 }
 
-func (ble *publicTxEngine) SubmitBatch(ctx context.Context, dbtx *gorm.DB, preparedSubmissions []components.PreparedSubmission) ([]*components.PublicTX, error) {
+func (ble *pubTxManager) SubmitBatch(ctx context.Context, dbtx *gorm.DB, preparedSubmissions []components.PreparedSubmission) ([]*components.PublicTX, error) {
 	mtxBatch := make([]*components.PublicTX, len(preparedSubmissions))
 	for i, preparedSubmission := range preparedSubmissions {
 		mtx, err := ble.Submit(ctx, dbtx, preparedSubmission)
@@ -359,7 +372,7 @@ func (ble *publicTxEngine) SubmitBatch(ctx context.Context, dbtx *gorm.DB, prepa
 	return mtxBatch, nil
 }
 
-func (ble *publicTxEngine) HandleNewTransaction(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}) (mtx *components.PublicTX, submissionRejected bool, err error) {
+func (ble *pubTxManager) HandleNewTransaction(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}) (mtx *components.PublicTX, submissionRejected bool, err error) {
 	preparedSubmission, submissionRejected, err := ble.PrepareSubmission(ctx, reqOptions, txPayload, nil)
 	if preparedSubmission != nil {
 		defer preparedSubmission.CleanUp(ctx)
@@ -374,7 +387,7 @@ func (ble *publicTxEngine) HandleNewTransaction(ctx context.Context, reqOptions 
 	return
 }
 
-func (ble *publicTxEngine) createManagedTx(ctx context.Context, dbtx *gorm.DB, txID string, ethTx *ethsigner.Transaction, nsi baseTypes.NonceAssignmentIntent) (*components.PublicTX, error) {
+func (ble *pubTxManager) createManagedTx(ctx context.Context, dbtx *gorm.DB, txID string, ethTx *ethsigner.Transaction, nsi baseTypes.NonceAssignmentIntent) (*components.PublicTX, error) {
 	log.L(ctx).Tracef("createManagedTx creating a new managed transaction with ID: %s, and payload %+v", txID, ethTx)
 	nonce, err := nsi.AssignNextNonce(ctx)
 	if err != nil {
@@ -414,7 +427,7 @@ func (ble *publicTxEngine) createManagedTx(ctx context.Context, dbtx *gorm.DB, t
 // HandleConfirmedTransactions
 // handover events to the inflight orchestrators for the related signing addresses and record the highest confirmed nonce
 // new orchestrators will be created if there are space, orchestrators will use the recorded highest nonce to drive completion logic of transactions
-func (ble *publicTxEngine) HandleConfirmedTransactions(ctx context.Context, confirmedTransactions []*blockindexer.IndexedTransaction) error {
+func (ble *pubTxManager) HandleConfirmedTransactions(ctx context.Context, confirmedTransactions []*blockindexer.IndexedTransaction) error {
 	// firstly, we group the confirmed transactions by from address
 	// note: filter out transactions that are before the recorded nonce in confirmedTXNonce map requires multiple reads to a single address (as the loop keep switching between addresses)
 	// so we delegate the logic to the orchestrator as it will have a list of records for a single address
@@ -495,7 +508,7 @@ func (ble *publicTxEngine) HandleConfirmedTransactions(ctx context.Context, conf
 	return nil
 }
 
-func (ble *publicTxEngine) HandleSuspendTransaction(ctx context.Context, txID string) (mtx *components.PublicTX, err error) {
+func (ble *pubTxManager) HandleSuspendTransaction(ctx context.Context, txID string) (mtx *components.PublicTX, err error) {
 	mtx, err = ble.txStore.GetTransactionByID(ctx, txID)
 	if err != nil {
 		return nil, err
@@ -507,7 +520,7 @@ func (ble *publicTxEngine) HandleSuspendTransaction(ctx context.Context, txID st
 	return res.tx, nil
 }
 
-func (ble *publicTxEngine) HandleResumeTransaction(ctx context.Context, txID string) (mtx *components.PublicTX, err error) {
+func (ble *pubTxManager) HandleResumeTransaction(ctx context.Context, txID string) (mtx *components.PublicTX, err error) {
 	mtx, err = ble.txStore.GetTransactionByID(ctx, txID)
 	if err != nil {
 		return nil, err
@@ -519,14 +532,14 @@ func (ble *publicTxEngine) HandleResumeTransaction(ctx context.Context, txID str
 	return res.tx, nil
 }
 
-func (ble *publicTxEngine) getConfirmedTxNonce(addr string) (nonce *big.Int) {
+func (ble *pubTxManager) getConfirmedTxNonce(addr string) (nonce *big.Int) {
 	ble.confirmedTxNoncePerAddressRWMutex.RLock()
 	nonce = ble.confirmedTxNoncePerAddress[addr]
 	defer ble.confirmedTxNoncePerAddressRWMutex.RUnlock()
 	return
 }
 
-func (ble *publicTxEngine) updateConfirmedTxNonce(addr string, nonce *big.Int) {
+func (ble *pubTxManager) updateConfirmedTxNonce(addr string, nonce *big.Int) {
 	ble.confirmedTxNoncePerAddressRWMutex.Lock()
 	defer ble.confirmedTxNoncePerAddressRWMutex.Unlock()
 	if ble.confirmedTxNoncePerAddress[addr] == nil || ble.confirmedTxNoncePerAddress[addr].Cmp(nonce) != 1 {

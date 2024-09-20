@@ -35,7 +35,6 @@ type PreInitComponents interface {
 	EthClientFactory() ethclient.EthClientFactory
 	Persistence() persistence.Persistence
 	StateStore() statestore.StateStore
-	PublicTxStore() PublicTransactionStore
 	BlockIndexer() blockindexer.BlockIndexer
 	RPCServer() rpcserver.RPCServer
 }

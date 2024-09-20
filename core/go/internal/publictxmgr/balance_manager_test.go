@@ -42,7 +42,7 @@ const testSourceAddressBalanceString = "400"
 const testSourceAddressBalanceNew = 500
 const testSourceAddressBalanceNewString = "500"
 
-func NewTestBalanceManager(ctx context.Context, t *testing.T) (*BalanceManagerWithInMemoryTracking, *componentmocks.EthClient, *componentmocks.PublicTxEngine) {
+func NewTestBalanceManager(ctx context.Context, t *testing.T) (*BalanceManagerWithInMemoryTracking, *componentmocks.EthClient, *componentmocks.PublicTxManager) {
 	conf := config.RootSection("unittest")
 	InitBalanceManagerConfig(conf)
 	ResetBalanceManagerConfig(conf)
@@ -53,7 +53,7 @@ func NewTestBalanceManager(ctx context.Context, t *testing.T) (*BalanceManagerWi
 
 	mEthClient := componentmocks.NewEthClient(t)
 
-	mockAFTxEngine := componentmocks.NewPublicTxEngine(t)
+	mockAFTxEngine := componentmocks.NewPublicTxManager(t)
 
 	testManagerWithMocks, err := NewBalanceManagerWithInMemoryTracking(ctx, bmConf, mEthClient, mockAFTxEngine)
 	require.NoError(t, err)
@@ -70,7 +70,7 @@ func TestNewBalanceManagerError(t *testing.T) {
 
 	mEthClient := componentmocks.NewEthClient(t)
 
-	mockAFTxEngine := componentmocks.NewPublicTxEngine(t)
+	mockAFTxEngine := componentmocks.NewPublicTxManager(t)
 
 	afConfig := conf.SubSection(fmt.Sprintf("%s.%s", BalanceManagerSection, BalanceManagerAutoFuelingSection))
 
@@ -126,7 +126,7 @@ func TestIsAutoFuelingEnabled(t *testing.T) {
 
 	mEthClient := componentmocks.NewEthClient(t)
 
-	mockAFTxEngine := componentmocks.NewPublicTxEngine(t)
+	mockAFTxEngine := componentmocks.NewPublicTxManager(t)
 
 	afConfig := conf.SubSection(fmt.Sprintf("%s.%s", BalanceManagerSection, BalanceManagerAutoFuelingSection))
 	afConfig.Set(BalanceManagerAutoFuelingSourceAddressString, testAutoFuelingSourceAddress)

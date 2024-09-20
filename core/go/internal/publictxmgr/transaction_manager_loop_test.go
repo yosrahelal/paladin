@@ -38,7 +38,6 @@ func TestNewEngineNoNewOrchestrator(t *testing.T) {
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
-	mBI.On("RegisterIndexedTransactionHandler", ctx, mock.Anything).Return(nil).Once()
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
 
 	mEC := componentmocks.NewEthClient(t)
@@ -165,7 +164,7 @@ func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Maybe()
 	go ble.engineLoop()
 	existingOrchestrator := &orchestrator{
-		publicTxEngine:              ble,
+		pubTxManager:                ble,
 		orchestratorPollingInterval: ble.enginePollingInterval,
 		state:                       OrchestratorStateIdle,
 		stateEntryTime:              time.Now().Add(-ble.maxOrchestratorIdle).Add(-1 * time.Minute),
@@ -224,7 +223,7 @@ func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) 
 	ble.maxInFlightOrchestrators = 1
 	existingOrchestrator := &orchestrator{
 		orchestratorBirthTime:       time.Now().Add(-1 * time.Hour),
-		publicTxEngine:              ble,
+		pubTxManager:                ble,
 		orchestratorPollingInterval: ble.enginePollingInterval,
 		state:                       OrchestratorStateRunning,
 		stateEntryTime:              time.Now().Add(-ble.maxOrchestratorIdle).Add(-1 * time.Minute),

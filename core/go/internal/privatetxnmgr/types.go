@@ -19,7 +19,6 @@ import (
 	"context"
 
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
-	"github.com/kaleido-io/paladin/core/internal/transactionstore"
 )
 
 type IdentityResolver interface {
@@ -28,7 +27,7 @@ type IdentityResolver interface {
 	GetDispatchAddress(preferredAddresses []string) string
 }
 type DependencyChecker interface {
-	PreReqsMatchCondition(ctx context.Context, preReqTxIDs []string, conditionFunc func(tsg transactionstore.TxStateGetters) (preReqComplete bool)) (filteredPreReqTxIDs []string)
+	PreReqsMatchCondition(ctx context.Context, preReqTxIDs []string, conditionFunc func(tsg TxStateGetters) (preReqComplete bool)) (filteredPreReqTxIDs []string)
 	GetPreReqDispatchAddresses(ctx context.Context, preReqTxIDs []string) (dispatchAddresses []string)
 	RegisterPreReqTrigger(ctx context.Context, txID string, txPreReq *ptmgrtypes.TxProcessPreReq)
 }

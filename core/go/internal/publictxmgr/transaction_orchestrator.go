@@ -23,7 +23,6 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-common/pkg/retry"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
@@ -31,73 +30,39 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 )
 
-// configurations
 const (
-	OrchestratorSection = "orchestrator"
-
-	OrchestratorMaxInFlightTransactionsInt = "maxInFlight"
-	OrchestratorTurnOffHistory             = "turnOffHistory"
-	OrchestratorIntervalDurationString     = "interval"
-
-	// after how long if the queue hasn't change, we mark the transaction orchestrator stale
-	OrchestratorStaleTimeoutDurationString = "staleTimeout"
-
-	OrchestratorResubmitIntervalDurationString = "resubmitInterval" // warnings will be written to the log at this interval if mining has not occurred, and the TX will be resubmitted
-
-	OrchestratorStageRetryDurationString       = "stageRetry"
-	OrchestratorPersistenceRetryDurationString = "persistenceRetry"
-
-	OrchestratorSubmissionRetryInitDelayDurationString = "submissionRetry.initialDelay"
-	OrchestratorSubmissionRetryMaxDelayDurationString  = "submissionRetry.maxDelay"
-	OrchestratorSubmissionRetryFactorFloat             = "submissionRetry.factor"
-	OrchestratorSubmissionRetryCountInt                = "submissionRetry.count"
-
-	// balance check configuration
-	OrchestratorGasPriceIncreaseMaxBigIntString = "gasPriceIncreaseMax"
-	OrchestratorGasPriceIncreasePercentageInt   = "gasPriceIncreasePercentage"
 	// what happens to the transaction orchestrator processing loop if the balance of the current account cannot be retrieved
 	OrchestratorUnavailableBalanceHandlerString = "unavailableBalanceHandler"
 )
 
-const (
-	defaultOrchestratorTurnOffHistory             = false
-	defaultOrchestratorMaxInFlight                = 500
-	defaultOrchestratorGasPriceIncreaseMax        = "" // empty
-	defaultOrchestratorGasPriceIncreasePercentage = 0
-	defaultOrchestratorInterval                   = "5s"
-	defaultOrchestratorResubmitInterval           = "5m"
-	defaultOrchestratorStaleTimeout               = "5m"
-	defaultOrchestratorStageRetry                 = "10s"
-	defaultOrchestratorPersistenceRetry           = "5s"
+type OrchestratorConfig struct {
+	MaxInFlight          *int                `yaml:"maxInFlight"`
+	Interval             *string             `yaml:"interval"`
+	ResubmitInterval     *string             `yaml:"resubmitInterval"`
+	StaleTimeout         *string             `yaml:"staleTimeout"`
+	StageRetryTime       *string             `yaml:"stageRetryTime"`
+	PersistenceRetryTime *string             `yaml:"persistenceRetryTime"`
+	SubmissionRetry      retry.ConfigWithMax `yaml:"submissionRetry"`
+}
 
-	defaultOrchestratorSubmissionRetryInitDelay = "250ms"
-	defaultOrchestratorSubmissionRetryMaxDelay  = "10s"
-	defaultOrchestratorSubmissionRetryFactor    = 4.0
-	defaultOrchestratorSubmissionRetryCountInt  = 3
-)
-
-func InitOrchestratorConfig(conf config.Section) {
-	orchestratorConfig := conf.SubSection(OrchestratorSection)
-
-	orchestratorConfig.AddKnownKey(OrchestratorTurnOffHistory, defaultOrchestratorTurnOffHistory)
-	orchestratorConfig.AddKnownKey(OrchestratorIntervalDurationString, defaultOrchestratorInterval)
-	orchestratorConfig.AddKnownKey(OrchestratorMaxInFlightTransactionsInt, defaultOrchestratorMaxInFlight)
-	orchestratorConfig.AddKnownKey(OrchestratorStaleTimeoutDurationString, defaultOrchestratorStaleTimeout)
-
-	// Transaction Processing configs
-	orchestratorConfig.AddKnownKey(OrchestratorResubmitIntervalDurationString, defaultOrchestratorResubmitInterval)
-	orchestratorConfig.AddKnownKey(OrchestratorStageRetryDurationString, defaultOrchestratorStageRetry)
-	orchestratorConfig.AddKnownKey(OrchestratorPersistenceRetryDurationString, defaultOrchestratorPersistenceRetry)
-	orchestratorConfig.AddKnownKey(OrchestratorGasPriceIncreaseMaxBigIntString, defaultOrchestratorGasPriceIncreaseMax)
-	orchestratorConfig.AddKnownKey(OrchestratorGasPriceIncreasePercentageInt, defaultOrchestratorGasPriceIncreasePercentage)
-	orchestratorConfig.AddKnownKey(OrchestratorUnavailableBalanceHandlerString, string(OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyWait))
-
-	orchestratorConfig.AddKnownKey(OrchestratorSubmissionRetryInitDelayDurationString, defaultOrchestratorSubmissionRetryInitDelay)
-	orchestratorConfig.AddKnownKey(OrchestratorSubmissionRetryMaxDelayDurationString, defaultOrchestratorSubmissionRetryMaxDelay)
-	orchestratorConfig.AddKnownKey(OrchestratorSubmissionRetryFactorFloat, defaultOrchestratorSubmissionRetryFactor)
-	orchestratorConfig.AddKnownKey(OrchestratorSubmissionRetryCountInt, defaultOrchestratorSubmissionRetryCountInt)
+var DefaultOrchestratorConfig = &OrchestratorConfig{
+	MaxInFlight:          confutil.P(500),
+	Interval:             confutil.P("5s"),
+	ResubmitInterval:     confutil.P("5m"),
+	StaleTimeout:         confutil.P("5m"),
+	StageRetryTime:       confutil.P("10s"),
+	PersistenceRetryTime: confutil.P("5s"),
+	SubmissionRetry: retry.ConfigWithMax{
+		Config: retry.Config{
+			InitialDelay: confutil.P("250ms"),
+			MaxDelay:     confutil.P("10s"),
+			Factor:       confutil.P(4.0),
+		},
+		MaxAttempts: confutil.P(3),
+	},
 }
 
 // what happens to the transaction orchestrator processing loop if the balance of the current account cannot be retrieved
@@ -166,7 +131,7 @@ var AllOrchestratorStates = []string{
 //    - need more thinking on nonce too low and we lost the information for tracking the submitted transactions
 
 type orchestrator struct {
-	*publicTxEngine
+	*pubTxManager
 
 	// in-flight transaction config
 	resubmitInterval        time.Duration
@@ -212,14 +177,14 @@ type orchestrator struct {
 }
 
 func NewOrchestrator(
-	ble *publicTxEngine,
+	ble *pubTxManager,
 	signingAddress string,
 	conf config.Section,
 ) *orchestrator {
 	ctx := ble.ctx
 
 	newOrchestrator := &orchestrator{
-		publicTxEngine:                     ble,
+		pubTxManager:                       ble,
 		orchestratorBirthTime:              time.Now(),
 		orchestratorPollingInterval:        conf.GetDuration(OrchestratorIntervalDurationString),
 		maxInFlightTxs:                     conf.GetInt(OrchestratorMaxInFlightTransactionsInt),
@@ -376,7 +341,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 				log.L(ctx).Debugf("Orchestrator polled transaction with ID: %s but it's already being processed before, ignoring it", mtx.ID)
 			} else if mtx.Status == components.PubTxStatusPending {
 				queueUpdated = true
-				it := NewInFlightTransactionStageController(oc.publicTxEngine, oc, mtx)
+				it := NewInFlightTransactionStageController(oc.pubTxManager, oc, mtx)
 				if it.getConfirmedTxNonce(oc.signingAddress) != nil && it.getConfirmedTxNonce(oc.signingAddress).Cmp(mtx.Nonce.BigInt()) != -1 /* an confirmed tx is missed*/ {
 					it.stateManager.AddConfirmationsOutput(ctx, nil) // trigger confirmation stage
 				}

@@ -36,7 +36,7 @@ type inFlightTransactionState struct {
 	testOnlyNoEventMode bool // Note: this flag can never be set in normal code path, exposed for testing only
 	retry               *retry.Retry
 
-	PublicTxEngineMetricsManager
+	PublicTxManagerMetricsManager
 	baseTypes.BalanceManager
 
 	txStore  components.PublicTransactionStore
@@ -179,7 +179,7 @@ func (iftxs *inFlightTransactionState) AddStageOutputs(ctx context.Context, stag
 	iftxs.bufferedStageOutputs = append(iftxs.bufferedStageOutputs, stageOutput)
 }
 
-func NewInFlightTransactionStateManager(thm PublicTxEngineMetricsManager,
+func NewInFlightTransactionStateManager(thm PublicTxManagerMetricsManager,
 	bm baseTypes.BalanceManager,
 	txStore components.PublicTransactionStore,
 	bIndexer blockindexer.BlockIndexer,
@@ -190,17 +190,17 @@ func NewInFlightTransactionStateManager(thm PublicTxEngineMetricsManager,
 	noEventMode bool,
 ) baseTypes.InFlightTransactionStateManager {
 	return &inFlightTransactionState{
-		testOnlyNoEventMode:          noEventMode,
-		retry:                        retry,
-		PublicTxEngineMetricsManager: thm,
-		BalanceManager:               bm,
-		txStore:                      txStore,
-		bIndexer:                     bIndexer,
-		InFlightStageActionTriggers:  ifsat,
-		bufferedStageOutputs:         make([]*baseTypes.StageOutput, 0),
-		txLevelStageStartTime:        time.Now(),
-		InMemoryTxStateManager:       imtxs,
-		turnOffHistory:               turnOffHistory,
+		testOnlyNoEventMode:           noEventMode,
+		retry:                         retry,
+		PublicTxManagerMetricsManager: thm,
+		BalanceManager:                bm,
+		txStore:                       txStore,
+		bIndexer:                      bIndexer,
+		InFlightStageActionTriggers:   ifsat,
+		bufferedStageOutputs:          make([]*baseTypes.StageOutput, 0),
+		txLevelStageStartTime:         time.Now(),
+		InMemoryTxStateManager:        imtxs,
+		turnOffHistory:                turnOffHistory,
 	}
 }
 

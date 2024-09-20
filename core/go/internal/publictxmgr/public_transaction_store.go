@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package publictxstore
+package publictxmgr
 
 import (
 	"context"
@@ -29,7 +29,6 @@ import (
 type pubTxStore struct {
 	bgCtx         context.Context
 	cancelCtx     context.CancelFunc
-	writer        *pubTxWriter
 	publicTxCache cache.Cache[string, *components.PublicTX]
 	p             persistence.Persistence
 }
@@ -39,13 +38,12 @@ type Config struct {
 	writer statestore.DBWriterConfig `yaml:"writer"`
 }
 
-func NewPubTxStore(ctx context.Context, conf *Config, p persistence.Persistence) components.PublicTransactionStore {
+func newPubTxStore(ctx context.Context, conf *Config, p persistence.Persistence) *pubTxStore {
 	pts := &pubTxStore{
 		p:             p,
 		publicTxCache: cache.NewCache[string, *components.PublicTX](&conf.cache, pubTxCacheDefaults),
 	}
 	pts.bgCtx, pts.cancelCtx = context.WithCancel(ctx)
-	pts.writer = newPubTxWriter(ctx, &conf.writer)
 	return pts
 }
 
@@ -54,6 +52,5 @@ var pubTxCacheDefaults = &cache.Config{
 }
 
 func (pts *pubTxStore) Close() {
-	pts.writer.stop()
 	pts.cancelCtx()
 }

@@ -99,6 +99,7 @@ func (pts *pubTxStore) InsertTransaction(ctx context.Context, dbTx *gorm.DB, tx 
 	}
 	return nil
 }
+
 func (pts *pubTxStore) UpdateTransaction(ctx context.Context, txID string, updates *components.BaseTXUpdates) error {
 	var dbTxModel *PublicTransaction
 	if err := pts.p.DB().WithContext(ctx).Table("public_transactions").Omit("SubmittedHashes").Where("id = ?", txID).Limit(1).First(&dbTxModel).Error; err != nil {

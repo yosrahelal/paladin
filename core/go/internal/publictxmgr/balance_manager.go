@@ -21,14 +21,15 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/cache"
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -36,29 +37,6 @@ import (
 // Balance manager is a component that provides the following services
 // - retrieve the balance of a given address either from the node or from the cache
 // - handle auto fueling requests when the feature is turned on
-
-// configurations
-const (
-	BalanceManagerSection = "balance"
-
-	// Balance cache config
-	BalanceManagerCacheEnabled           = "cache.enabled"
-	BalanceManagerCacheSizeByteString    = "cache.size"
-	BalanceManagerCacheTTLDurationString = "cache.ttl"
-
-	// Auto-fueling config
-	BalanceManagerAutoFuelingSection = "autoFueling"
-
-	BalanceManagerAutoFuelingSourceAddressString                     = "sourceAddress"
-	BalanceManagerAutoFuelingSourceAddressMinimumBalanceBigIntString = "minSourceBalance"
-	BalanceManagerAutoFuelingMinDestBalanceBigIntString              = "minDestBalance"
-	BalanceManagerAutoFuelingMaxDestBalanceBigIntString              = "maxDestBalance"
-
-	BalanceManagerAutoFuelingProactiveFuelingTransactionTotalInt = "proactiveFuelingTransactionTotal"
-	BalanceManagerAutoFuelingProactiveCostEstimationMethodString = "proactiveCostEstimationMethod"
-
-	BalanceManagerAutoFuelingMinThresholdBigIntString = "minThreshold"
-)
 
 type BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethod string
 
@@ -68,47 +46,38 @@ const (
 	BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethodMax     BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethod = "max"
 )
 
-const (
-	defaultBalanceManagerAutoFuelingProactiveFuelingTransactionTotal = 1
-)
-
-func InitBalanceManagerConfig(conf config.Section) {
-	bmConfig := conf.SubSection(BalanceManagerSection)
-
-	// Balance cache config
-	bmConfig.AddKnownKey(BalanceManagerCacheEnabled, true)
-	bmConfig.AddKnownKey(BalanceManagerCacheSizeByteString, "5m")
-	bmConfig.AddKnownKey(BalanceManagerCacheTTLDurationString, "30s")
-
-	// Auto-fueling config
-	afConfig := bmConfig.SubSection(BalanceManagerAutoFuelingSection)
-	afConfig.AddKnownKey(BalanceManagerAutoFuelingSourceAddressString)
-	afConfig.AddKnownKey(BalanceManagerAutoFuelingSourceAddressMinimumBalanceBigIntString)
-	afConfig.AddKnownKey(BalanceManagerAutoFuelingProactiveFuelingTransactionTotalInt, defaultBalanceManagerAutoFuelingProactiveFuelingTransactionTotal)
-	afConfig.AddKnownKey(BalanceManagerAutoFuelingProactiveCostEstimationMethodString, string(BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethodMax))
-	afConfig.AddKnownKey(BalanceManagerAutoFuelingMinDestBalanceBigIntString)
-	afConfig.AddKnownKey(BalanceManagerAutoFuelingMaxDestBalanceBigIntString)
-	afConfig.AddKnownKey(BalanceManagerAutoFuelingMinThresholdBigIntString)
-
+type BalanceManagerConfig struct {
+	Cache       cache.Config      `yaml:"cache"`
+	AutoFueling AutoFuelingConfig `yaml:"autoFueling"`
 }
 
-// for test purpose only
-func ResetBalanceManagerConfig(conf config.Section) {
-	bmConfig := conf.SubSection(BalanceManagerSection)
+type AutoFuelingConfig struct {
+	SourceAddress                    *string `yaml:"sourceAddress"`
+	SourceAddressMinBalance          *string `yaml:"sourceAddressMinBalance"`
+	ProactiveFuelingTransactionTotal *int    `yaml:"proactiveFuelingTransactionTotal"`
+	ProactiveCostEstimationMethod    *string `yaml:"proactiveCostEstimationMethod"`
+	MinDestBalance                   *string `yaml:"minDestBalance"`
+	MaxDestBalance                   *string `yaml:"maxDestBalance"`
+	MinThreshold                     *string `yaml:"minThreshold"`
+}
 
-	bmConfig.Set(BalanceManagerCacheEnabled, true)
-	bmConfig.Set(BalanceManagerCacheSizeByteString, "5m")
-	bmConfig.Set(BalanceManagerCacheTTLDurationString, "30s")
-
-	afConfig := bmConfig.SubSection(BalanceManagerAutoFuelingSection)
-	afConfig.Set(BalanceManagerAutoFuelingSourceAddressString, "")
-	afConfig.Set(BalanceManagerAutoFuelingSourceAddressMinimumBalanceBigIntString, "")
-	afConfig.Set(BalanceManagerAutoFuelingProactiveFuelingTransactionTotalInt, defaultBalanceManagerAutoFuelingProactiveFuelingTransactionTotal)
-	afConfig.Set(BalanceManagerAutoFuelingProactiveCostEstimationMethodString, string(BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethodMax))
-	afConfig.Set(BalanceManagerAutoFuelingMinDestBalanceBigIntString, "")
-	afConfig.Set(BalanceManagerAutoFuelingMaxDestBalanceBigIntString, "")
-	afConfig.Set(BalanceManagerAutoFuelingMinThresholdBigIntString, "")
-
+var DefaultBalanceManagerConfig = &BalanceManagerConfig{
+	Cache: cache.Config{
+		Capacity: confutil.P(100),
+		// TODO: Enable a KB based cache with TTL in Paladin
+		// Enabled:  confutil.P(true),
+		// Size:     confutil.P("5m"),
+		// TTL:      confutil.P("30s"),
+	},
+	AutoFueling: AutoFuelingConfig{
+		SourceAddress:                    nil,
+		SourceAddressMinBalance:          nil,
+		ProactiveFuelingTransactionTotal: confutil.P(1),
+		ProactiveCostEstimationMethod:    confutil.P(string(BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethodMax)),
+		MinDestBalance:                   nil,
+		MaxDestBalance:                   nil,
+		MinThreshold:                     nil,
+	},
 }
 
 type BalanceManagerWithInMemoryTracking struct {
@@ -116,10 +85,10 @@ type BalanceManagerWithInMemoryTracking struct {
 	ethClient ethclient.EthClient
 
 	// transaction handler is used to submit and fetch autofueling transaction status
-	txEngine components.PublicTxEngine
+	pubTxMgr *publicTxMgr
 
 	// balance cache is used to store cached balances of any address
-	balanceCache cache.CInterface
+	balanceCache cache.Cache[string, *big.Int]
 
 	// if set to a valid ethereum address, autofueling is turned on
 	sourceAddress string
@@ -246,7 +215,7 @@ func (af *BalanceManagerWithInMemoryTracking) GetAddressBalance(ctx context.Cont
 	defer af.addressBalanceChangedMapMux.Unlock()
 	log.L(ctx).Debugf("Retrieving balance for address %s ", address)
 
-	cachedAddressBalance := af.balanceCache.Get(address)
+	cachedAddressBalance, _ := af.balanceCache.Get(address)
 	var addressBalance big.Int
 	balanceChangedOnChain := af.addressBalanceChangedMap[address]
 	if balanceChangedOnChain || cachedAddressBalance == nil {
@@ -258,12 +227,12 @@ func (af *BalanceManagerWithInMemoryTracking) GetAddressBalance(ctx context.Cont
 			return nil, err
 		}
 		addressBalance = *addressBalancePtr.BigInt()
-		af.balanceCache.Set(address, addressBalance)
+		af.balanceCache.Set(address, addressBalancePtr.BigInt())
 		// set the flag to false so that the following requests of this address
 		// uses cache if there is no new balance change
 		af.addressBalanceChangedMap[address] = false
 	} else {
-		addressBalance = cachedAddressBalance.(big.Int)
+		addressBalance = *cachedAddressBalance
 		log.L(ctx).Tracef("Retrieved balance for address %s from cache: %s", address, addressBalance.String())
 	}
 	log.L(ctx).Debugf("Retrieved balance for address %s: %s", address, addressBalance.String())
@@ -297,7 +266,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 		log.L(ctx).Debugf("TransferGasFromAutoFuelingSource no existing tracking fueling request for  destination address: %s", destAddress)
 		// there is no tracked fueling transaction for this address, do a lookup in the db in case we've restarted or couldn't record the last one submitted
 		// in the middle of tracking
-		fuelingTx, err = af.txEngine.GetPendingFuelingTransaction(ctx, af.sourceAddress, destAddress)
+		fuelingTx, err = af.pubTxMgr.GetPendingFuelingTransaction(ctx, af.sourceAddress, destAddress)
 		if err != nil {
 			log.L(ctx).Errorf("TransferGasFromAutoFuelingSource error occurred when getting pending fueling tx for address: %s, error: %+v", destAddress, err)
 			// we don't risk the chance of having duplicate fueling transactions when we cannot fetching all the in-flight transactions
@@ -305,7 +274,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 		}
 		af.trackedFuelingTransactions[destAddress] = fuelingTx
 	}
-	if fuelingTx != nil && !af.txEngine.CheckTransactionCompleted(ctx, fuelingTx) {
+	if fuelingTx != nil && !af.pubTxMgr.CheckTransactionCompleted(ctx, fuelingTx) {
 		log.L(ctx).Debugf("TransferGasFromAutoFuelingSource fueling request with ID: %s for  destination address: %s still not complete", fuelingTx.ID, destAddress)
 		// transaction is tracked and is still pending, return the transaction as it is
 		return fuelingTx, nil
@@ -343,7 +312,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 
 	log.L(ctx).Debugf("TransferGasFromAutoFuelingSource submitting a fueling tx for  destination address: %s ", destAddress)
 	txID := uuid.New()
-	mtx, _, err = af.txEngine.HandleNewTransaction(ctx, &components.RequestOptions{
+	mtx, _, err = af.pubTxMgr.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
 		SignerID: af.sourceAddress,
 	}, &components.EthTransfer{
@@ -361,7 +330,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 	return mtx, nil
 }
 
-func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf config.Section, ethClient ethclient.EthClient, txEngine components.PublicTxEngine) (baseTypes.BalanceManager, error) {
+func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf config.Section, ethClient ethclient.EthClient, txEngine components.PublicTxManager) (baseTypes.BalanceManager, error) {
 	cm, _ := cache.NewCacheManager(ctx, true).GetCache(ctx, "balance-manager", "balance", conf.GetByteSize(BalanceManagerCacheSizeByteString), conf.GetDuration(BalanceManagerCacheTTLDurationString), conf.GetBool(BalanceManagerCacheEnabled), cache.StrictExpiry, cache.TTLFromInitialAdd)
 	log.L(ctx).Debugf("Balance manager cache setting. Enabled: %t , size: %d , ttl: %s", conf.GetBool(BalanceManagerCacheEnabled), conf.GetByteSize(BalanceManagerCacheSizeByteString), conf.GetDuration(BalanceManagerCacheTTLDurationString))
 	afConfig := conf.SubSection(BalanceManagerAutoFuelingSection)
@@ -432,7 +401,7 @@ func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf config.Sect
 	bm := &BalanceManagerWithInMemoryTracking{
 		sourceAddress:                    afConfig.GetString(BalanceManagerAutoFuelingSourceAddressString),
 		ethClient:                        ethClient,
-		txEngine:                         txEngine,
+		pubTxMgr:                         txEngine,
 		balanceCache:                     cm,
 		minSourceBalance:                 minSourceBalance,
 		proactiveFuelingTransactionTotal: afConfig.GetInt(BalanceManagerAutoFuelingProactiveFuelingTransactionTotalInt),
