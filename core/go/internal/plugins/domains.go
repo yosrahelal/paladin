@@ -35,7 +35,7 @@ func (pm *pluginManager) ConnectDomain(stream prototk.PluginController_ConnectDo
 				pluginId:   plugin.id.String(),
 				toPlugin:   toPlugin,
 			}
-			br.manager, err = pm.domainManager.DomainRegistered(plugin.name, plugin.id, br)
+			br.manager, err = pm.domainManager.DomainRegistered(plugin.name, br)
 			if err != nil {
 				return nil, err
 			}

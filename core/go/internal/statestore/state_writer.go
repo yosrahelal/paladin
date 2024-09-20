@@ -36,7 +36,7 @@ import (
 
 type writeOperation struct {
 	id                     string
-	domain                 string
+	domainKey              string
 	done                   chan error
 	isShutdown             bool
 	states                 []*StateWithLabels
@@ -44,7 +44,6 @@ type writeOperation struct {
 	stateSpends            []*StateSpend
 	stateLocks             []*StateLock
 	transactionLockDeletes []uuid.UUID
-	schemas                []*SchemaPersisted
 }
 
 type stateWriter struct {
@@ -87,11 +86,11 @@ func newStateWriter(bgCtx context.Context, ss *stateStore, conf *StateWriterConf
 	return sw
 }
 
-func (sw *stateWriter) newWriteOp(domain string) *writeOperation {
+func (sw *stateWriter) newWriteOp(domainName string, contractAddress tktypes.EthAddress) *writeOperation {
 	return &writeOperation{
-		id:     tktypes.ShortID(),
-		domain: domain,
-		done:   make(chan error, 1), // 1 slot to ensure we don't block the writer
+		id:        tktypes.ShortID(),
+		domainKey: domainName + ":" + contractAddress.String(),
+		done:      make(chan error, 1), // 1 slot to ensure we don't block the writer
 	}
 }
 
@@ -109,12 +108,12 @@ func (sw *stateWriter) queue(ctx context.Context, op *writeOperation) {
 	// All insert/nonce-allocation requests for the same domain go to the same worker
 	// currently. This allows assertions to be made between threads writing schemas,
 	// threads writing state updates, and threads writing new states.
-	if op.domain == "" {
+	if op.domainKey == "" {
 		op.done <- i18n.NewError(ctx, msgs.MsgStateOpInvalid)
 		return
 	}
 	h := fnv.New32a() // simple non-cryptographic hash algo
-	_, _ = h.Write([]byte(op.domain))
+	_, _ = h.Write([]byte(op.domainKey))
 	routine := h.Sum32() % sw.workerCount
 	log.L(ctx).Debugf("Queuing write operation %s to worker state_writer_%.4d", op.id, routine)
 	select {
@@ -189,7 +188,6 @@ func (sw *stateWriter) worker(i int) {
 func (sw *stateWriter) runBatch(ctx context.Context, b *stateWriterBatch) {
 
 	// Build lists of things to insert (we are insert only)
-	var schemas []*SchemaPersisted
 	var states []*State
 	var labels []*StateLabel
 	var int64Labels []*StateInt64Label
@@ -198,9 +196,6 @@ func (sw *stateWriter) runBatch(ctx context.Context, b *stateWriterBatch) {
 	var stateLocks []*StateLock
 	var transactionLockDeletes []uuid.UUID
 	for _, op := range b.ops {
-		if len(op.schemas) > 0 {
-			schemas = append(schemas, op.schemas...)
-		}
 		for _, s := range op.states {
 			states = append(states, s.State)
 			labels = append(labels, s.State.Labels...)
@@ -219,24 +214,11 @@ func (sw *stateWriter) runBatch(ctx context.Context, b *stateWriterBatch) {
 			transactionLockDeletes = append(transactionLockDeletes, op.transactionLockDeletes...)
 		}
 	}
-	log.L(ctx).Debugf("Writing state batch schemas=%d states=%d confirms=%d spends=%d locks=%d seqLockDeletes=%d labels=%d int64Labels=%d",
-		len(schemas), len(states), len(stateConfirms), len(stateSpends), len(stateLocks), len(transactionLockDeletes), len(labels), len(int64Labels))
+	log.L(ctx).Debugf("Writing state batch states=%d confirms=%d spends=%d locks=%d seqLockDeletes=%d labels=%d int64Labels=%d",
+		len(states), len(stateConfirms), len(stateSpends), len(stateLocks), len(transactionLockDeletes), len(labels), len(int64Labels))
 
 	err := sw.ss.p.DB().Transaction(func(tx *gorm.DB) (err error) {
-		if len(schemas) > 0 {
-			err = tx.
-				Table("schemas").
-				Clauses(clause.OnConflict{
-					Columns: []clause.Column{
-						{Name: "domain_id"},
-						{Name: "id"},
-					},
-					DoNothing: true, // immutable
-				}).
-				Create(schemas).
-				Error
-		}
-		if err == nil && len(states) > 0 {
+		if len(states) > 0 {
 			err = tx.
 				Table("states").
 				Clauses(clause.OnConflict{

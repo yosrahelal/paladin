@@ -69,9 +69,9 @@ func TestFlushTimeout(t *testing.T) {
 	defer done()
 
 	txOp := &writeOperation{
-		id:     tktypes.ShortID(),
-		done:   make(chan error, 1),
-		domain: "domain1",
+		id:        tktypes.ShortID(),
+		done:      make(chan error, 1),
+		domainKey: "domain1",
 	}
 	ss.writer.queue(ctx, txOp)
 	closedCtx, closeCtx := context.WithCancel(ctx)
@@ -85,9 +85,9 @@ func TestFlushClosed(t *testing.T) {
 	defer done()
 
 	txOp := &writeOperation{
-		id:     tktypes.ShortID(),
-		done:   make(chan error, 1),
-		domain: "domain1",
+		id:        tktypes.ShortID(),
+		done:      make(chan error, 1),
+		domainKey: "domain1",
 	}
 	ss.writer.cancelCtx()
 	<-ss.writer.workersDone[0]
@@ -100,9 +100,9 @@ func TestFlushCallerClosed(t *testing.T) {
 	defer done()
 
 	txOp := &writeOperation{
-		id:     tktypes.ShortID(),
-		done:   make(chan error, 1),
-		domain: "domain1",
+		id:        tktypes.ShortID(),
+		done:      make(chan error, 1),
+		domainKey: "domain1",
 	}
 	ss.writer.cancelCtx()
 	<-ss.writer.workersDone[0]

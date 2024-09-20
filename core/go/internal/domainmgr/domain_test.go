@@ -171,8 +171,7 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 }
 
 func registerTestDomain(t *testing.T, dm *domainManager, tp *testPlugin) {
-	domainID := uuid.New()
-	_, err := dm.DomainRegistered("test1", domainID, tp)
+	_, err := dm.DomainRegistered("test1", tp)
 	require.NoError(t, err)
 
 	da, err := dm.GetDomainByName(context.Background(), "test1")
@@ -238,9 +237,6 @@ func TestDoubleRegisterReplaces(t *testing.T) {
 	byName, err := dm.GetDomainByName(ctx, "test1")
 	require.NoError(t, err)
 	assert.Same(t, tp1.d, byName)
-	byUUID := dm.domainsByID[tp1.d.id]
-	require.NoError(t, err)
-	assert.Same(t, tp1.d, byUUID)
 
 }
 
@@ -288,8 +284,7 @@ func TestDomainConfigureFail(t *testing.T) {
 		},
 	})
 
-	domainID := uuid.New()
-	_, err := dm.DomainRegistered("test1", domainID, tp)
+	_, err := dm.DomainRegistered("test1", tp)
 	require.NoError(t, err)
 
 	da, err := dm.GetDomainByName(ctx, "test1")
@@ -320,6 +315,18 @@ func TestDomainFindAvailableStatesBadQuery(t *testing.T) {
 	assert.Regexp(t, "PD011608", err)
 }
 
+func TestDomainFindAvailableStatesBadAddress(t *testing.T) {
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, tp.d.initError.Load())
+	_, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
+		SchemaId:        "12345",
+		ContractAddress: "0x",
+		QueryJson:       `{}`,
+	})
+	assert.Regexp(t, "PD011641", err)
+}
+
 func TestDomainFindAvailableStatesFail(t *testing.T) {
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), func(mc *mockComponents) {
 		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return([]statestore.Schema{}, nil)
@@ -328,13 +335,14 @@ func TestDomainFindAvailableStatesFail(t *testing.T) {
 	defer done()
 	assert.Nil(t, tp.d.initError.Load())
 	_, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		SchemaId:  "12345",
-		QueryJson: `{}`,
+		ContractAddress: tktypes.RandAddress().String(),
+		SchemaId:        "12345",
+		QueryJson:       `{}`,
 	})
 	assert.Regexp(t, "pop", err)
 }
 
-func storeState(t *testing.T, dm *domainManager, tp *testPlugin, txID uuid.UUID, amount *ethtypes.HexInteger) *fakeState {
+func storeState(t *testing.T, dm *domainManager, tp *testPlugin, contractAddress tktypes.EthAddress, txID uuid.UUID, amount *ethtypes.HexInteger) *fakeState {
 	state := &fakeState{
 		Salt:   tktypes.Bytes32(tktypes.RandBytes(32)),
 		Owner:  tktypes.EthAddress(tktypes.RandBytes(20)),
@@ -343,7 +351,7 @@ func storeState(t *testing.T, dm *domainManager, tp *testPlugin, txID uuid.UUID,
 	stateJSON, err := json.Marshal(state)
 	require.NoError(t, err)
 
-	err = dm.stateStore.RunInDomainContextFlush("test1", func(ctx context.Context, dsi statestore.DomainStateInterface) error {
+	err = dm.stateStore.RunInDomainContextFlush("test1", contractAddress, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
 		newStates, err := dsi.UpsertStates(&txID, []*statestore.StateUpsert{
 			{
 				SchemaID: tp.stateSchemas[0].Id,
@@ -364,11 +372,13 @@ func TestDomainFindAvailableStatesOK(t *testing.T) {
 	assert.Nil(t, tp.d.initError.Load())
 
 	txID := uuid.New()
-	state1 := storeState(t, dm, tp, txID, ethtypes.NewHexIntegerU64(100000000))
+	contractAddress := tktypes.RandAddress()
+	state1 := storeState(t, dm, tp, *contractAddress, txID, ethtypes.NewHexIntegerU64(100000000))
 
 	// Filter match
 	states, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		SchemaId: tp.stateSchemas[0].Id,
+		ContractAddress: contractAddress.String(),
+		SchemaId:        tp.stateSchemas[0].Id,
 		QueryJson: `{
 		  "eq": [
 		    { "field": "owner", "value": "` + state1.Owner.String() + `" }
@@ -380,7 +390,8 @@ func TestDomainFindAvailableStatesOK(t *testing.T) {
 
 	// Filter miss
 	states, err = tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		SchemaId: tp.stateSchemas[0].Id,
+		ContractAddress: contractAddress.String(),
+		SchemaId:        tp.stateSchemas[0].Id,
 		QueryJson: `{
 		  "eq": [
 		    { "field": "owner", "value": "` + tktypes.EthAddress(tktypes.RandBytes(20)).String() + `" }
