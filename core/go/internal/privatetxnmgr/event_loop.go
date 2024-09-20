@@ -395,6 +395,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 	dispatchBatch := &privatetxnstore.DispatchBatch{
 		DispatchSequences: make([]*privatetxnstore.DispatchSequence, 0, len(dispatchableTransactions)),
 	}
+	var finalize func(context.Context)
 
 	for signingAddress, transactionIDs := range dispatchableTransactions {
 
@@ -459,6 +460,11 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 			return err
 		}
 
+		if len(preparedSubmissions) > 0 {
+			defer preparedSubmissions[0].CleanUp(ctx)
+			finalize = preparedSubmissions[0].Finalize
+		}
+
 		// create a function to perform the actual submit
 		// this function will be called ini the context of the DB transaction
 		sequence.PublicTransactionsSubmit = func(tx *gorm.DB) (publicTxIDs []string, err error) {
@@ -483,6 +489,9 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 	if err != nil {
 		log.L(ctx).Errorf("Error persisting batch: %s", err)
 		return err
+	}
+	if finalize != nil {
+		finalize(ctx)
 	}
 	for signingAddress, sequence := range dispatchableTransactions {
 		for _, privateTransactionID := range sequence {

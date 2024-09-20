@@ -154,6 +154,8 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
 
 	mockPreparedSubmission := componentmocks.NewPreparedSubmission(t)
+	mockPreparedSubmission.On("Finalize", mock.Anything).Return().Maybe()
+	mockPreparedSubmission.On("CleanUp", mock.Anything).Return().Maybe()
 	mockPreparedSubmissions := []components.PreparedSubmission{mockPreparedSubmission}
 
 	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPreparedSubmissions, false, nil)
@@ -286,6 +288,8 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
 
 	mockPreparedSubmission := componentmocks.NewPreparedSubmission(t)
+	mockPreparedSubmission.On("Finalize", mock.Anything).Return().Maybe()
+	mockPreparedSubmission.On("CleanUp", mock.Anything).Return().Maybe()
 	mockPreparedSubmissions := []components.PreparedSubmission{mockPreparedSubmission}
 
 	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPreparedSubmissions, false, nil)
@@ -420,7 +424,11 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	}).Return(nil)
 
 	mockPreparedSubmission1 := componentmocks.NewPreparedSubmission(t)
+	mockPreparedSubmission1.On("Finalize", mock.Anything).Return().Maybe()
+	mockPreparedSubmission1.On("CleanUp", mock.Anything).Return().Maybe()
 	mockPreparedSubmission2 := componentmocks.NewPreparedSubmission(t)
+	mockPreparedSubmission2.On("Finalize", mock.Anything).Return().Maybe()
+	mockPreparedSubmission2.On("CleanUp", mock.Anything).Return().Maybe()
 	mockPreparedSubmissions := []components.PreparedSubmission{mockPreparedSubmission1, mockPreparedSubmission2}
 
 	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPreparedSubmissions, false, nil)
@@ -849,7 +857,10 @@ func (f *fakePublicTxEngine) Start(ctx context.Context) (done <-chan struct{}, e
 func (f *fakePublicTxEngine) PrepareSubmissionBatch(ctx context.Context, reqOptions *components.RequestOptions, txPayloads []interface{}) (preparedSubmission []components.PreparedSubmission, submissionRejected bool, err error) {
 	mockPreparedSubmissions := make([]components.PreparedSubmission, 0, len(txPayloads))
 	for range txPayloads {
-		mockPreparedSubmissions = append(mockPreparedSubmissions, componentmocks.NewPreparedSubmission(f.t))
+		mockPreparedSubmission := componentmocks.NewPreparedSubmission(f.t)
+		mockPreparedSubmission.On("Finalize", mock.Anything).Return().Maybe()
+		mockPreparedSubmission.On("CleanUp", mock.Anything).Return().Maybe()
+		mockPreparedSubmissions = append(mockPreparedSubmissions, mockPreparedSubmission)
 	}
 	return mockPreparedSubmissions, false, nil
 }

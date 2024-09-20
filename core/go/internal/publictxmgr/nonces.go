@@ -28,6 +28,7 @@ import (
 
 type nonceCacheStruct struct {
 	nextNonceBySigner map[string]*cachedNonce
+	nextNonceCB       components.NextNonceCallback
 	nonceStateTimeout time.Duration
 	reaperLock        sync.RWMutex //if this proves to be a bottleneck, we could maintain a finer grained lock on each cache entry but would be more complex and error prone
 	inserterLock      sync.Mutex   //we should only ever grab this lock if we have a reader lock on the reaperLock otherwise we could cause a deadlock
@@ -39,11 +40,12 @@ func (nc *nonceCacheStruct) stop() {
 	close(nc.stopChannel)
 }
 
-func newNonceCache(nonceStateTimeout time.Duration) enginespi.NonceCache {
+func newNonceCache(nonceStateTimeout time.Duration, nextNonceCB components.NextNonceCallback) enginespi.NonceCache {
 	n := &nonceCacheStruct{
 		nextNonceBySigner: make(map[string]*cachedNonce),
 		nonceStateTimeout: nonceStateTimeout,
 		stopChannel:       make(chan struct{}),
+		nextNonceCB:       nextNonceCB,
 	}
 	go n.reap()
 	return n
@@ -100,7 +102,7 @@ func (nc *nonceCacheStruct) setNextNonceBySigner(signer string, record *cachedNo
 // NOTE:  multiple readers can hold intents to assign concurrently so the nonce is not actually assigned at this point
 //
 //	nonce assignment itself is protected by a mutex so only one reader can assign at a time but thanks to the pre intent declaration, the assignment is quick
-func (nc *nonceCacheStruct) IntentToAssignNonce(ctx context.Context, signer string, nextNonceCB components.NextNonceCallback) (enginespi.NonceAssignmentIntent, error) {
+func (nc *nonceCacheStruct) IntentToAssignNonce(ctx context.Context, signer string) (enginespi.NonceAssignmentIntent, error) {
 
 	// take a read lock to block the reaper thread
 	nc.reaperLock.RLock()
@@ -116,7 +118,7 @@ func (nc *nonceCacheStruct) IntentToAssignNonce(ctx context.Context, signer stri
 
 		if !isCached {
 
-			nextNonce, err := nextNonceCB(ctx, signer)
+			nextNonce, err := nc.nextNonceCB(ctx, signer)
 			if err != nil {
 				log.L(ctx).Errorf("failed to get next nonce")
 				return nil, err

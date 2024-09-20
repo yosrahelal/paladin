@@ -189,6 +189,8 @@ type PublicTransactionStore interface {
 
 type PreparedSubmission interface {
 	ID() string
+	CleanUp(context.Context)
+	Finalize(context.Context)
 }
 
 type PublicTxEngine interface {

@@ -28,6 +28,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/retry"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
+	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
@@ -73,6 +74,9 @@ type publicTxEngine struct {
 	keymgr                ethclient.KeyManager
 	// gas price
 	gasPriceClient GasPriceClient
+
+	// nonce manager
+	nonceManager baseTypes.NonceCache
 
 	// a map of signing addresses and transaction engines
 	InFlightOrchestrators       map[string]*orchestrator
@@ -172,6 +176,16 @@ func (ble *publicTxEngine) Init(ctx context.Context, ethClient ethclient.EthClie
 	ble.gasPriceClient.Init(ctx, ethClient)
 	ble.publicTXEventNotifier = publicTXEventNotifier
 	ble.bIndexer = blockIndexer
+	ble.nonceManager = newNonceCache(1*time.Hour, func(ctx context.Context, signer string) (uint64, error) {
+		log.L(ctx).Tracef("NonceFromChain getting next nonce for signing address ID %s", signer)
+		nextNonce, err := ble.ethClient.GetTransactionCount(ctx, signer)
+		if err != nil {
+			log.L(ctx).Errorf("NonceFromChain getting next nonce for signer %s failed: %+v", signer, err)
+			return 0, err
+		}
+		log.L(ctx).Tracef("NonceFromChain getting next nonce for signer %s succeeded: %s, converting to uint: %d", signer, nextNonce.String(), nextNonce.Uint64())
+		return nextNonce.Uint64(), nil
+	})
 
 	balanceManager, err := NewBalanceManagerWithInMemoryTracking(ctx, ble.balanceManagerConfig, ethClient, ble)
 	if err != nil {
@@ -201,27 +215,37 @@ func (ble *publicTxEngine) Start(ctx context.Context) (done <-chan struct{}, err
 type preparedTransaction struct {
 	ethTx *ethsigner.Transaction
 	id    string
+	nsi   baseTypes.NonceAssignmentIntent
 }
 
-func (txn *preparedTransaction) ID() string {
-	return txn.id
+func (pt *preparedTransaction) ID() string {
+	return pt.id
+}
+
+func (pt *preparedTransaction) CleanUp(ctx context.Context) {
+	pt.nsi.Rollback(ctx)
+}
+func (pt *preparedTransaction) Finalize(ctx context.Context) {
+	pt.nsi.Complete(ctx)
 }
 
 func (ble *publicTxEngine) PrepareSubmissionBatch(ctx context.Context, reqOptions *components.RequestOptions, txPayloads []interface{}) (preparedSubmission []components.PreparedSubmission, submissionRejected bool, err error) {
 	preparedSubmissions := make([]components.PreparedSubmission, len(txPayloads))
+	var nsi baseTypes.NonceAssignmentIntent
 	for i, tx := range txPayloads {
-		preparedSubmission, submissionRejected, err := ble.PrepareSubmission(ctx, reqOptions, tx)
+		preparedSubmission, submissionRejected, err := ble.PrepareSubmission(ctx, reqOptions, tx, nsi)
 		if submissionRejected || err != nil {
 			return nil, submissionRejected, err
 		}
 		preparedSubmissions[i] = preparedSubmission
+		nsi = preparedSubmission.(*preparedTransaction).nsi
 	}
 	return preparedSubmissions, false, nil
 }
 
 // PrepareSubmission prepares and validates the transaction input data so that a later call to
 // Submit can be made in the middle of a wider database transaction with minimal risk of error
-func (ble *publicTxEngine) PrepareSubmission(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}) (preparedSubmission components.PreparedSubmission, submissionRejected bool, err error) {
+func (ble *publicTxEngine) PrepareSubmission(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}, nonceAssignmentIntent baseTypes.NonceAssignmentIntent) (preparedSubmission components.PreparedSubmission, submissionRejected bool, err error) {
 	log.L(ctx).Tracef("PrepareSubmission new request, options: %+v, payload: %+v", reqOptions, txPayload)
 
 	err = reqOptions.Validate(ctx)
@@ -296,12 +320,21 @@ func (ble *publicTxEngine) PrepareSubmission(ctx context.Context, reqOptions *co
 	ethTx.GasLimit = estimatedGasLimit
 
 	ble.gasPriceClient.SetFixedGasPriceIfConfigured(ctx, ethTx)
-
+	nsi := nonceAssignmentIntent
+	if nsi == nil {
+		nsi, err = ble.nonceManager.IntentToAssignNonce(ctx, fromAddr)
+		if err != nil {
+			log.L(ctx).Errorf("HandleNewTx <%s> error assigning nonce for transfer request: %+v, request: (%+v)", txType, err, txPayload)
+			ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusFail), time.Since(prepareStart).Seconds())
+			return nil, false, err
+		}
+	}
 	ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusSuccess), time.Since(prepareStart).Seconds())
 	log.L(ctx).Debugf("HandleNewTx <%s> creating a new managed transaction with ID %s", txType, reqOptions.ID)
 	return &preparedTransaction{
 		ethTx: ethTx,
 		id:    reqOptions.ID.String(),
+		nsi:   nsi,
 	}, false, nil
 
 }
@@ -311,7 +344,7 @@ func (ble *publicTxEngine) PrepareSubmission(ctx context.Context, reqOptions *co
 // The database transaction will be coordinated by the caller
 func (ble *publicTxEngine) Submit(ctx context.Context, dbtx *gorm.DB, preparedSubmission components.PreparedSubmission) (mtx *components.PublicTX, err error) {
 	preparedTransaction := preparedSubmission.(*preparedTransaction)
-	mtx, err = ble.createManagedTx(ctx, dbtx, preparedTransaction.ID(), preparedTransaction.ethTx)
+	mtx, err = ble.createManagedTx(ctx, dbtx, preparedTransaction.ID(), preparedTransaction.ethTx, preparedTransaction.nsi)
 	return mtx, err
 }
 
@@ -328,16 +361,28 @@ func (ble *publicTxEngine) SubmitBatch(ctx context.Context, dbtx *gorm.DB, prepa
 }
 
 func (ble *publicTxEngine) HandleNewTransaction(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}) (mtx *components.PublicTX, submissionRejected bool, err error) {
-	preparedSubmission, submissionRejected, err := ble.PrepareSubmission(ctx, reqOptions, txPayload)
+	preparedSubmission, submissionRejected, err := ble.PrepareSubmission(ctx, reqOptions, txPayload, nil)
+	if preparedSubmission != nil {
+		defer preparedSubmission.CleanUp(ctx)
+	}
 	if submissionRejected || err != nil {
 		return nil, submissionRejected, err
 	}
 	mtx, err = ble.Submit(ctx, nil, preparedSubmission)
+	if err != nil {
+		preparedSubmission.Finalize(ctx)
+	}
 	return
 }
 
-func (ble *publicTxEngine) createManagedTx(ctx context.Context, dbtx *gorm.DB, txID string, ethTx *ethsigner.Transaction) (*components.PublicTX, error) {
+func (ble *publicTxEngine) createManagedTx(ctx context.Context, dbtx *gorm.DB, txID string, ethTx *ethsigner.Transaction, nsi baseTypes.NonceAssignmentIntent) (*components.PublicTX, error) {
 	log.L(ctx).Tracef("createManagedTx creating a new managed transaction with ID: %s, and payload %+v", txID, ethTx)
+	nonce, err := nsi.AssignNextNonce(ctx)
+	if err != nil {
+		log.L(ctx).Errorf("createManagedTx failed to create managed traction with ID: %s, due to %+v", txID, err)
+		return nil, err
+	}
+	ethTx.Nonce = ethtypes.NewHexIntegerU64(nonce)
 	now := tktypes.TimestampNow()
 	mtx := &components.PublicTX{
 		ID:          uuid.MustParse(txID),
@@ -351,17 +396,8 @@ func (ble *publicTxEngine) createManagedTx(ctx context.Context, dbtx *gorm.DB, t
 	// Sequencing ID will be added as part of persistence logic - so we have a deterministic order of transactions
 	// Note: We must ensure persistence happens this within the nonce lock, to ensure that the nonce sequence and the
 	//       global transaction sequence line up.
-	err := ble.txStore.InsertTransaction(ctx, dbtx, mtx)
-	// 	, func(ctx context.Context, signer string) (uint64, error) {
-	// 	log.L(ctx).Tracef("createManagedTx getting next nonce for transaction ID %s", mtx.ID)
-	// 	nextNonce, err := ble.ethClient.GetTransactionCount(ctx, string(ethTx.From))
-	// 	if err != nil {
-	// 		log.L(ctx).Errorf("createManagedTx getting next nonce for transaction ID %s failed: %+v", mtx.ID, err)
-	// 		return 0, err
-	// 	}
-	// 	log.L(ctx).Tracef("createManagedTx getting next nonce for transaction ID %s succeeded: %s, converting to uint: %d", mtx.ID, nextNonce.String(), nextNonce.Uint64())
-	// 	return nextNonce.Uint64(), nil
-	// })
+	err = ble.txStore.InsertTransaction(ctx, dbtx, mtx)
+
 	if err == nil {
 		log.L(ctx).Tracef("createManagedTx persisted transaction with ID: %s, using nonce %s", mtx.ID, mtx.Nonce.String())
 		err = ble.txStore.UpdateSubStatus(ctx, txID, components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, fftypes.JSONAnyPtr(`{"nonce":"`+mtx.Nonce.String()+`"}`), nil, confutil.P(tktypes.TimestampNow()))

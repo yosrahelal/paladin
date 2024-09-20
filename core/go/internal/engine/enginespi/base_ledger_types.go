@@ -378,5 +378,5 @@ type NonceAssignmentIntent interface {
 }
 
 type NonceCache interface {
-	IntentToAssignNonce(ctx context.Context, signer string, nextNonceCB components.NextNonceCallback) (NonceAssignmentIntent, error)
+	IntentToAssignNonce(ctx context.Context, signer string) (NonceAssignmentIntent, error)
 }

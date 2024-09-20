@@ -33,6 +33,7 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -189,10 +190,25 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 	assert.NotNil(t, err)
 	assert.True(t, submissionRejected)
 	assert.Regexp(t, "execution reverted", err)
-
-	// create transaction succeeded
+	// insert transaction next nonce error
 	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(ethtypes.NewHexInteger(big.NewInt(10)), nil)
+	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
+		Return(nil, fmt.Errorf("pop")).Once().Once()
+	_, submissionRejected, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
+		ID:       &txID,
+		SignerID: string(testEthTxInput.From),
+	}, &components.EthTransfer{
+		To:    *tktypes.MustEthAddress(testEthTxInput.To.String()),
+		Value: testEthTxInput.Value,
+	})
+	assert.NotNil(t, err)
+	assert.Regexp(t, "pop", err)
+	assert.False(t, submissionRejected)
+	// create transaction succeeded
+	// gas estimate should be cached
 	mTS.On("InsertTransaction", ctx, mock.Anything, mock.Anything).Return(nil).Once()
+	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
+		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	mTS.On("UpdateSubStatus", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	_, _, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
@@ -227,6 +243,8 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 	// create transaction succeeded
 	// gas estimate should be cached
 	insertMock := mTS.On("InsertTransaction", ctx, mock.Anything, mock.Anything)
+	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
+		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		mtx := args[2].(*components.PublicTX)
 		assert.Equal(t, "1223451", mtx.GasLimit.BigInt().String())
@@ -268,6 +286,8 @@ func TestHandleNewTransactionTransferAndInvalidType(t *testing.T) {
 	// create transaction succeeded
 	// gas estimate should be cached
 	insertMock := mTS.On("InsertTransaction", ctx, mock.Anything, mock.Anything)
+	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
+		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		mtx := args[2].(*components.PublicTX)
 		assert.Equal(t, "1223451", mtx.GasLimit.BigInt().String())
@@ -416,6 +436,8 @@ func TestHandleNewTransaction(t *testing.T) {
 	mABIBuilder.On("TX", mock.Anything).Return(testEthTxInput).Once()
 	mEC.On("ABIFunction", ctx, mock.Anything).Return(mABIF, nil).Once()
 	insertMock := mTS.On("InsertTransaction", ctx, mock.Anything, mock.Anything)
+	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
+		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		mtx := args[2].(*components.PublicTX)
 		assert.Equal(t, big.NewInt(200), mtx.GasLimit.BigInt())
@@ -533,6 +555,8 @@ func TestHandleNewDeployment(t *testing.T) {
 	mABIBuilder.On("TX", mock.Anything).Return(testEthTxInput).Once()
 	mEC.On("ABIConstructor", ctx, mock.Anything, mock.Anything).Return(mABIF, nil).Once()
 	insertMock := mTS.On("InsertTransaction", ctx, mock.Anything, mock.Anything)
+	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
+		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
 		mtx := args[2].(*components.PublicTX)
 		assert.Equal(t, big.NewInt(200), mtx.GasLimit.BigInt())
