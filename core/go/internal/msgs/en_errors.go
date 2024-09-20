@@ -163,7 +163,6 @@ var (
 	MsgBlockIndexerESAlreadyInit            = ffe("PD011304", "Event stream already initialized")
 	MsgBlockIndexerConfirmedReceiptNotFound = ffe("PD011305", "Receipt for confirmed transaction %s not found")
 	MsgBlockIndexerInvalidEventStreamType   = ffe("PD011306", "Unsupported event stream type: %s")
-	MsgBlockMissingHandler                  = ffe("PD011307", "Handler not registered for stream")
 	MsgBlockIndexerNoBlocksIndexed          = ffe("PD011308", "No confirmed blocks have yet been indexed")
 	MsgBlockIndexerTransactionReverted      = ffe("PD011309", "Transaction reverted: %s")
 

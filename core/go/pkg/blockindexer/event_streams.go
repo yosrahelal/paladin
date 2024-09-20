@@ -18,7 +18,6 @@ package blockindexer
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,8 +44,6 @@ type eventStream struct {
 	batchTimeout   time.Duration
 	blocks         chan *eventStreamBlock
 	dispatch       chan *eventDispatch
-	handlerLock    sync.Mutex
-	waitForHandler chan struct{}
 	handler        InternalStreamCallback
 	detectorDone   chan struct{}
 	dispatcherDone chan struct{}
@@ -88,7 +85,7 @@ func (bi *blockIndexer) loadEventStreams(ctx context.Context) error {
 	}
 
 	for _, esDefinition := range eventStreams {
-		bi.initEventStream(esDefinition)
+		bi.initEventStream(ctx, esDefinition, nil /* no handler at this point */)
 	}
 	return nil
 }
@@ -160,25 +157,13 @@ func (bi *blockIndexer) upsertInternalEventStream(ctx context.Context, ies *Inte
 
 	// We call init here
 	// TODO: Full stop/start lifecycle
-	es := bi.initEventStream(def)
-
-	// Register the internal handler against the new or existing stream
-	es.attachHandler(ies.Handler)
+	es := bi.initEventStream(ctx, def, ies.Handler)
 
 	return es, nil
 }
 
-func (es *eventStream) attachHandler(handler InternalStreamCallback) {
-	es.handlerLock.Lock()
-	prevHandler := es.handler
-	es.handler = handler
-	if prevHandler == nil {
-		close(es.waitForHandler)
-	}
-	es.handlerLock.Unlock()
-}
-
-func (bi *blockIndexer) initEventStream(definition *EventStream) *eventStream {
+// Note that the event stream must be stopped when this is called
+func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventStream, handler InternalStreamCallback) *eventStream {
 	bi.eventStreamsLock.Lock()
 	defer bi.eventStreamsLock.Unlock()
 
@@ -190,13 +175,12 @@ func (bi *blockIndexer) initEventStream(definition *EventStream) *eventStream {
 		es.definition.Config = definition.Config
 	} else {
 		es = &eventStream{
-			bi:             bi,
-			definition:     definition,
-			eventABIs:      []*abi.Entry{},
-			signatures:     make(map[string]bool),
-			blocks:         make(chan *eventStreamBlock, bi.esBlockDispatchQueueLength),
-			dispatch:       make(chan *eventDispatch, batchSize),
-			waitForHandler: make(chan struct{}),
+			bi:         bi,
+			definition: definition,
+			eventABIs:  []*abi.Entry{},
+			signatures: make(map[string]bool),
+			blocks:     make(chan *eventStreamBlock, bi.esBlockDispatchQueueLength),
+			dispatch:   make(chan *eventDispatch, batchSize),
 		}
 	}
 
@@ -204,7 +188,16 @@ func (bi *blockIndexer) initEventStream(definition *EventStream) *eventStream {
 	es.batchSize = batchSize
 	es.batchTimeout = confutil.DurationMin(definition.Config.BatchTimeout, 0, *EventStreamDefaults.BatchTimeout)
 
+	// Note the handler will be nil when this is first called on startup before we've been passed handlers.
+	es.handler = handler
+
+	location := "*"
+	if es.definition.Source != nil {
+		location = es.definition.Source.String()
+	}
+
 	// Calculate all the signatures we require
+	solStrings := []string{}
 	for _, abiEntry := range definition.ABI {
 		if abiEntry.Type == abi.Event {
 			sig := tktypes.NewBytes32FromSlice(abiEntry.SignatureHashBytes())
@@ -212,47 +205,43 @@ func (bi *blockIndexer) initEventStream(definition *EventStream) *eventStream {
 			es.eventABIs = append(es.eventABIs, abiEntry)
 			if _, dup := es.signatures[sigStr]; !dup {
 				es.signatures[sigStr] = true
+				solStrings = append(solStrings, abiEntry.SolString())
 				es.signatureList = append(es.signatureList, sig)
 			}
 		}
 	}
+	log.L(ctx).Infof("Event stream %s configured matchSource=%s events: %s", es.definition.ID, location, solStrings)
 
 	// ok - all looks good, put ourselves in the blockindexer list
 	bi.eventStreams[definition.ID] = es
 	return es
 }
 
-func (bi *blockIndexer) startEventStreams() {
+func (bi *blockIndexer) getStreamList() []*eventStream {
 	bi.eventStreamsLock.Lock()
 	defer bi.eventStreamsLock.Unlock()
+	streams := make([]*eventStream, 0, len(bi.eventStreams))
 	for _, es := range bi.eventStreams {
+		streams = append(streams, es)
+	}
+	return streams
+}
+
+func (bi *blockIndexer) startEventStreams() {
+	for _, es := range bi.getStreamList() {
 		es.start()
 	}
 }
 
 func (es *eventStream) start() {
-	if es.detectorDone == nil && es.dispatcherDone == nil {
+	if es.handler != nil && es.detectorDone == nil && es.dispatcherDone == nil {
 		es.ctx, es.cancelCtx = context.WithCancel(log.WithLogField(es.bi.parentCtxForReset, "eventstream", es.definition.ID.String()))
+		log.L(es.ctx).Infof("Starting event stream %s [%s]", es.definition.Name, es.definition.ID)
 		es.detectorDone = make(chan struct{})
 		es.dispatcherDone = make(chan struct{})
-		es.run()
+		go es.detector()
+		go es.dispatcher()
 	}
-}
-
-func (es *eventStream) run() {
-
-	select {
-	case <-es.waitForHandler:
-	case <-es.ctx.Done():
-		log.L(es.ctx).Debugf("stopping before event handler registered")
-		close(es.detectorDone)
-		close(es.dispatcherDone)
-		return
-	}
-
-	go es.detector()
-	go es.dispatcher()
-
 }
 
 func (es *eventStream) stop() {
@@ -311,6 +300,8 @@ func (bi *blockIndexer) getHighestIndexedBlock(ctx context.Context) (*int64, err
 
 func (es *eventStream) detector() {
 	defer close(es.detectorDone)
+
+	log.L(es.ctx).Debugf("Detector started for event stream %s [%s]", es.definition.Name, es.definition.ID)
 
 	// This routine reads the checkpoint on startup, and maintains its view in memory,
 	// but never writes it back.
@@ -388,13 +379,13 @@ func (es *eventStream) detector() {
 }
 
 func (es *eventStream) processNotifiedBlock(block *eventStreamBlock, fullBlock bool) {
+	matchSource := es.definition.Source
 	for i, l := range block.events {
 		event := &EventWithData{
 			IndexedEvent: es.bi.logToIndexedEvent(l),
 		}
-		es.matchLog(l, event)
 		// Only dispatch events that were completed by the validation against our ABI
-		if event.Data != nil {
+		if es.bi.matchLog(es.ctx, es.eventABIs, l, event, matchSource) {
 			es.sendToDispatcher(event,
 				// Can only move checkpoint past this block once we know we've processed the last one
 				fullBlock && i == (len(block.events)-1))
@@ -412,6 +403,8 @@ func (es *eventStream) sendToDispatcher(event *EventWithData, lastInBlock bool) 
 
 func (es *eventStream) dispatcher() {
 	defer close(es.dispatcherDone)
+
+	log.L(es.ctx).Debugf("Dispatcher started for event stream %s [%s]", es.definition.Name, es.definition.ID)
 
 	l := log.L(es.ctx)
 	var batch *eventBatch
@@ -475,15 +468,7 @@ func (es *eventStream) runBatch(batch *eventBatch) error {
 	return es.bi.retry.Do(es.ctx, func(attempt int) (retryable bool, err error) {
 		var postCommit PostCommit
 		err = es.bi.persistence.DB().Transaction(func(tx *gorm.DB) (err error) {
-
-			es.handlerLock.Lock()
-			handler := es.handler
-			es.handlerLock.Unlock()
-
-			if handler == nil {
-				return i18n.NewError(es.ctx, msgs.MsgBlockMissingHandler)
-			}
-			postCommit, err = handler(es.ctx, tx, &batch.EventDeliveryBatch)
+			postCommit, err = es.handler(es.ctx, tx, &batch.EventDeliveryBatch)
 			if err != nil {
 				return err
 			}
@@ -599,8 +584,4 @@ func (es *eventStream) processCatchupEventPage(checkpointBlock int64, catchUpToB
 
 func (es *eventStream) queryTransactionEvents(tx tktypes.Bytes32, events []*EventWithData, done chan error) {
 	done <- es.bi.enrichTransactionEvents(es.ctx, es.eventABIs, tx, events, true /* retry indefinitely */)
-}
-
-func (es *eventStream) matchLog(in *LogJSONRPC, out *EventWithData) {
-	es.bi.matchLog(es.ctx, es.eventABIs, in, out, es.definition.Source)
 }
