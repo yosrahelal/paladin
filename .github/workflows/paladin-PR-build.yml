@@ -45,12 +45,7 @@ jobs:
         with:
           go-version: '1.22'
           check-latest: true
-
-      # Log in to Amazon ECR
-      - name: Login to Amazon ECR
-        run: |
-          aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 604386504253.dkr.ecr.us-east-2.amazonaws.com
-    
+   
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
