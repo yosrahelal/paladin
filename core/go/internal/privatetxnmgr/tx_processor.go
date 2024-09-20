@@ -33,14 +33,6 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-// type stageContextAction int
-
-// const (
-// 	resumeStage = iota
-// 	initStage
-// 	switchStage
-// )
-
 func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer) ptmgrtypes.TxProcessor {
 	return &PaladinTxProcessor{
 		stageErrorRetry:     10 * time.Second,
@@ -56,18 +48,8 @@ func NewPaladinTransactionProcessor(ctx context.Context, transaction *components
 }
 
 type PaladinTxProcessor struct {
-	// stageContextMutex sync.Mutex
-	// stageContext      *ptmgrtypes.StageContext
-	// stageTriggerError error
-	stageErrorRetry time.Duration
-	// tsm               transactionstore.TxStateManager
-
-	// bufferedStageEventsMapMutex sync.Mutex
-	// bufferedStageEvents         []*ptmgrtypes.StageEvent
-	// contractAddress             string // the contract address managed by the current orchestrator
-
-	components components.PreInitComponentsAndManagers
-
+	stageErrorRetry     time.Duration
+	components          components.PreInitComponentsAndManagers
 	nodeID              string
 	domainAPI           components.DomainSmartContract
 	sequencer           ptmgrtypes.Sequencer
@@ -80,27 +62,6 @@ type PaladinTxProcessor struct {
 
 func (ts *PaladinTxProcessor) Init(ctx context.Context) {
 }
-
-// func (ts *PaladinTxProcessor) addPanicOutput(ctx context.Context) {
-// 	//TODO
-// 	start := time.Now()
-// 	// unexpected error, set an empty input for the stage
-// 	// so that the stage handler will handle this as unexpected error
-// 	log.L(ctx).Debugf("%s addPanicOutput took %s to write the result", ts.tsm.GetTxID(ctx), time.Since(start))
-// }
-
-// func (ts *PaladinTxProcessor) executeAsync(funcToExecute func(), ctx context.Context) {
-// 	go func() {
-// 		defer func() {
-// 			if err := recover(); err != nil {
-// 				// if the function panicked, catch it and write a panic error to the output queue
-// 				log.L(ctx).Errorf("Panic error detected for transaction %s, when executing: %s, error: %+v", ts.tsm.GetTxID(ctx), ts.latestEvent, err)
-// 				ts.addPanicOutput(ctx)
-// 			}
-// 		}()
-// 		funcToExecute() // in non-panic scenarios, this function will add output to the output queue
-// 	}()
-// }
 
 func (ts *PaladinTxProcessor) GetStatus(ctx context.Context) ptmgrtypes.TxProcessorStatus {
 	return ptmgrtypes.TxProcessorActive
@@ -212,7 +173,7 @@ func (ts *PaladinTxProcessor) HandleTransactionEndorsedEvent(ctx context.Context
 		}
 		if !ts.hasOutstandingEndorsementRequests(ctx) {
 			ts.status = "endorsed"
-			//resolve the singing address here before informing the sequencer about endorsement
+			//resolve the signing address here before informing the sequencer about endorsement
 			// because endorsement will could trigger a dispatch but
 			// a change of signing address could affect the dispatchabiliy of the transaction and/or any transations that depend on it
 

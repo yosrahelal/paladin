@@ -129,8 +129,15 @@ func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context
 	return p.endorsementGatherers[contractAddr.String()], nil
 }
 
-// HandleNewTx implements Engine.
-func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.PrivateTransaction) (txID string, err error) { // TODO: this function currently assumes another layer initialize transactions and store them into DB
+// HandleNewTx synchronously receives a new transaction submission
+// TODO this should really be a 2 (or 3?) phase handshake with
+//   - Pre submit phase to validate the inputs
+//   - Submit phase to persist the record of the submissino as part of a database transaction that is co-ordinated by the caller
+//   - Post submit phase to clean up any locks / resources that were held during the submission after the database transaction has been committed ( given that we cannot be sure on completeion of phase 2 that the transaction will be committed)
+//
+// We are currently proving out this pattern on the boundary of the private transaction manager and the public transaction manager and once that has settled, we will implement the same pattern here.
+// In the meantime, we a single function to submit a transaction and there is currently no persistence of the submission record.  It is all held in memory only
+func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.PrivateTransaction) (txID string, err error) {
 	log.L(ctx).Debugf("Handling new transaction: %v", tx)
 	if tx.Inputs == nil || tx.Inputs.Domain == "" {
 		return "", i18n.NewError(ctx, msgs.MsgDomainNotProvided)
@@ -151,7 +158,7 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.Priva
 		return "", err
 	}
 
-	//Resolve keys synchronously (rather than having an orchestrator stage for it) so that we can return an error if any key resolution fails
+	//Resolve keys synchronously so that we can return an error if any key resolution fails
 	keyMgr := p.components.KeyManager()
 	if tx.PreAssembly == nil {
 		return "", i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "PreAssembly is nil")
@@ -181,8 +188,8 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.Priva
 }
 
 // Synchronous function to deploy a domain smart contract
-// TODO should this be async?  How does this plug into the dispatch stages given that we don't have an orchestrator yet?
-func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.PrivateContractDeploy) (txID string, contractAddress string, err error) { // TODO: this function currently assumes another layer initialize transactions and store them into DB
+// TODO should this be async?  If async, do we have a chicken and egg problem given that all async event handling relies on a threading model of one thread per contract instance?  What thread would be responsible for deploying a new contract instance?
+func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.PrivateContractDeploy) (txID string, contractAddress string, err error) {
 	log.L(ctx).Debugf("Handling new private contract deploy transaction: %v", tx)
 	if tx.Domain == "" {
 		return "", "", i18n.NewError(ctx, msgs.MsgDomainNotProvided)
@@ -242,6 +249,7 @@ func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.Pr
 
 }
 
+// TODO this is a temporary function to execute a base ledger transaction.  It should be replaced with a call to the public transaction manager
 func (p *privateTxManager) execBaseLedgerDeployTransaction(ctx context.Context, signer string, txInstruction *components.EthDeployTransaction) error {
 
 	var abiFunc ethclient.ABIFunctionClient
@@ -265,6 +273,7 @@ func (p *privateTxManager) execBaseLedgerDeployTransaction(ctx context.Context, 
 	return nil
 }
 
+// TODO this is a temporary function to execute a base ledger transaction.  It should be replaced with a call to the public transaction manager
 func (p *privateTxManager) execBaseLedgerTransaction(ctx context.Context, signer string, txInstruction *components.EthTransaction) error {
 
 	var abiFunc ethclient.ABIFunctionClient
@@ -480,7 +489,8 @@ func (p *privateTxManager) HandleEndorsementResponse(ctx context.Context, messag
 }
 
 func (p *privateTxManager) ReceiveTransportMessage(ctx context.Context, message *components.TransportMessage) {
-	//TODO this is supposed to be a quick handover to another thread.
+	//TODO this need to become an ultra low latency, non blocking, handover to the event loop thread.
+	// need some thought on how to handle errors, retries, buffering, swapping idle orchestrators in and out of memory etc...
 
 	//Send the event to the orchestrator for the contract and any transaction manager for the signing key
 	messagePayload := message.Payload

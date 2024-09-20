@@ -182,7 +182,7 @@ func TestOrchestratorHandleEvents(t *testing.T) {
 
 			//Emulate ProcessNewTransaction with a mockTxProcessor
 			mockTxProcessor := privatetxnmgrmocks.NewTxProcessor(t)
-			mockTxProcessor.On("GetStatus", mock.Anything).Return(ptmgrtypes.TxProcessorActive)
+			mockTxProcessor.On("GetStatus", mock.Anything).Return(ptmgrtypes.TxProcessorActive).Maybe()
 			mockTxProcessor.On(tt.handlerName, mock.Anything, tt.event).Run(func(args mock.Arguments) {
 				waitForAction <- true
 			}).Return()
