@@ -174,7 +174,7 @@ func TestNoto(t *testing.T) {
 			To:     notaryName,
 			Amount: ethtypes.NewHexInteger64(100),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -195,7 +195,7 @@ func TestNoto(t *testing.T) {
 			To:     recipient1Name,
 			Amount: ethtypes.NewHexInteger64(100),
 		}),
-	})
+	}, true)
 	require.NotNil(t, rpcerr)
 	assert.ErrorContains(t, rpcerr.Error(), "PD200009")
 	assert.True(t, boolResult)
@@ -213,7 +213,7 @@ func TestNoto(t *testing.T) {
 			To:     recipient1Name,
 			Amount: ethtypes.NewHexInteger64(150),
 		}),
-	})
+	}, true)
 	require.NotNil(t, rpcerr)
 	assert.ErrorContains(t, rpcerr.Error(), "PD200005")
 
@@ -230,7 +230,7 @@ func TestNoto(t *testing.T) {
 			To:     recipient1Name,
 			Amount: ethtypes.NewHexInteger64(50),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -253,7 +253,7 @@ func TestNoto(t *testing.T) {
 			To:     recipient2Name,
 			Amount: ethtypes.NewHexInteger64(50),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -315,7 +315,7 @@ func TestNotoApprove(t *testing.T) {
 			To:     notaryName,
 			Amount: ethtypes.NewHexInteger64(100),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -343,7 +343,7 @@ func TestNotoApprove(t *testing.T) {
 			Delegate: *ethtypes.MustNewAddress(recipient1Key),
 			Call:     prepared.EncodedCall,
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -420,7 +420,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 			To:     notaryName,
 			Amount: ethtypes.NewHexInteger64(100),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -441,7 +441,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 			To:     recipient1Name,
 			Amount: ethtypes.NewHexInteger64(50),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -464,7 +464,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 			To:     recipient2Name,
 			Amount: ethtypes.NewHexInteger64(50),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}

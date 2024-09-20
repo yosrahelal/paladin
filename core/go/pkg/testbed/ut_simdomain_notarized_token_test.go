@@ -625,7 +625,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 			"to": "wallets.org1.aaaaaa",
 			"amount": "123000000000000000000"
 		}`),
-	})
+	}, true)
 	assert.Nil(t, rpcErr)
 
 	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &tktypes.PrivateContractInvoke{
@@ -637,7 +637,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 			"to": "wallets.org2.bbbbbb",
 			"amount": "23000000000000000000"
 		}`),
-	})
+	}, true)
 	assert.Nil(t, rpcErr)
 
 	// Check we can also use the utility function externally to resolve verifiers

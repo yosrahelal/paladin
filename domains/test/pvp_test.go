@@ -150,7 +150,7 @@ func notoMint(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, notoAdd
 			To:     to,
 			Amount: ethtypes.NewHexInteger64(amount),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -184,7 +184,7 @@ func notoApprove(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, noto
 			Delegate: delegate,
 			Call:     call,
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}

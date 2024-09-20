@@ -122,7 +122,7 @@ public class PenteDomainTests {
                             JsonHex.addressFrom(contractAddr),
                             simpleStorageDeployABI,
                             deployValues
-                    ));
+                    ), false);
             assertFalse(contractAddr.isBlank());
 
             // TODO: This is a hack because we need to define a way for domain transactions to
@@ -148,7 +148,7 @@ public class PenteDomainTests {
                             JsonHex.addressFrom(contractAddr),
                             simpleStorageSetABI,
                             setValues
-                    ));
+                    ), false);
             assertFalse(contractAddr.isBlank());
 
         }
