@@ -179,7 +179,7 @@ public class PenteDomain extends DomainInstance {
             var tx = new PenteTransaction(this, request.getTransaction());
 
             // Execution throws an EVMExecutionException if fails
-            var accountLoader = new AssemblyAccountLoader();
+            var accountLoader = new AssemblyAccountLoader(request.getTransaction().getContractAddress());
             var execResult = tx.executeEVM(config.getChainId(), tx.getFromVerifier(request.getResolvedVerifiersList()), accountLoader);
             var result = ToDomain.AssembleTransactionResponse.newBuilder();
             var assembledTransaction = tx.buildAssembledTransaction(execResult.evm(), accountLoader);
@@ -357,6 +357,12 @@ public class PenteDomain extends DomainInstance {
     /** during assembly we load available states from the Paladin state store */
     class AssemblyAccountLoader implements AccountLoader {
         private final HashMap<org.hyperledger.besu.datatypes.Address, FromDomain.StoredState> loadedAccountStates = new HashMap<>();
+        private final String contractAddress;
+
+        AssemblyAccountLoader(String contractAddress) {
+            this.contractAddress = contractAddress;
+        }
+
         public Optional<PersistedAccount> load(org.hyperledger.besu.datatypes.Address address) throws IOException {
             return withIOException(() -> {
                 var queryJson = JsonQuery.newBuilder().
@@ -364,6 +370,7 @@ public class PenteDomain extends DomainInstance {
                         isEqual("address", address.toString()).
                         json();
                 var response = findAvailableStates(FromDomain.FindAvailableStatesRequest.newBuilder().
+                        setContractAddress(this.contractAddress).
                         setSchemaId(config.schemaId_AccountStateLatest()).
                         setQueryJson(queryJson).
                         build()).get();

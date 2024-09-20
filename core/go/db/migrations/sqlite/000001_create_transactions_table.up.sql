@@ -6,7 +6,7 @@ CREATE TABLE transactions (
   contract                  VARCHAR         NOT NULL,
   "from"                    VARCHAR         NOT NULL,
   sequence_id               UUID,
-  domain_id                 VARCHAR,
+  domain_name               VARCHAR,
   schema_id                 VARCHAR,
   payload_json              VARCHAR,
   payload_rlp               VARCHAR,
