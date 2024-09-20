@@ -354,6 +354,15 @@ public class PenteDomain extends DomainInstance {
         }
     }
 
+    @Override
+    protected CompletableFuture<ToDomain.HandleEventBatchResponse> handleEventBatch(ToDomain.HandleEventBatchRequest request) {
+        try {
+            return CompletableFuture.completedFuture(null);
+        } catch(Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
     /** during assembly we load available states from the Paladin state store */
     class AssemblyAccountLoader implements AccountLoader {
         private final HashMap<org.hyperledger.besu.datatypes.Address, FromDomain.StoredState> loadedAccountStates = new HashMap<>();
