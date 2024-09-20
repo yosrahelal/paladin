@@ -544,9 +544,13 @@ func TestSerializeProofResponse(t *testing.T) {
 			},
 			C: []string{"c"},
 		},
-		PubSignals: []string{"1", "2", "3", "4"},
+		PubSignals: []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"},
 	}
 	bytes, err := serializeProofResponse("anon_enc", &snark)
 	assert.NoError(t, err)
-	assert.Equal(t, 64, len(bytes))
+	assert.Equal(t, 86, len(bytes))
+
+	bytes, err = serializeProofResponse("anon_nullifier", &snark)
+	assert.NoError(t, err)
+	assert.Equal(t, 66, len(bytes))
 }

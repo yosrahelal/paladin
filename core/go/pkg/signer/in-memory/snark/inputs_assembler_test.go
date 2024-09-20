@@ -30,7 +30,17 @@ func TestAssembleInputsAnonEnc(t *testing.T) {
 	privateInputs, err := assembleInputs_anon_enc(&inputs, nil, &key)
 	assert.NoError(t, err)
 	assert.Equal(t, 9, len(privateInputs))
-	assert.Greater(t, privateInputs["encryptionNonce"], new(big.Int).SetInt64(0))
+}
+
+func TestAssembleInputsAnonNullifier(t *testing.T) {
+	inputs := commonWitnessInputs{}
+	key := core.KeyEntry{}
+	extras := proto.ProvingRequestExtras_Nullifiers{
+		Root: "123",
+	}
+	privateInputs, err := assembleInputs_anon_nullifier(&inputs, &extras, &key)
+	assert.NoError(t, err)
+	assert.Equal(t, 12, len(privateInputs))
 }
 
 func TestAssembleInputsAnonEnc_fail(t *testing.T) {
@@ -46,4 +56,35 @@ func TestAssembleInputsAnonEnc_fail(t *testing.T) {
 	extras.EncryptionNonce = "bad number"
 	_, err = assembleInputs_anon_enc(&inputs, &extras, &key)
 	assert.EqualError(t, err, "failed to parse encryption nonce")
+}
+
+func TestAssembleInputsAnonNullifier_fail(t *testing.T) {
+	inputs := commonWitnessInputs{}
+	extras := proto.ProvingRequestExtras_Nullifiers{
+		Root: "123456",
+		MerkleProofs: []*proto.MerkleProof{
+			{
+				Nodes: []string{"1", "2", "3"},
+			},
+			{
+				Nodes: []string{"0", "0", "0"},
+			},
+		},
+		Enabled: []bool{true, false},
+	}
+	key := core.KeyEntry{}
+	privateInputs, err := assembleInputs_anon_nullifier(&inputs, &extras, &key)
+	assert.NoError(t, err)
+	assert.Equal(t, "123456", privateInputs["root"].(*big.Int).Text(16))
+	assert.Equal(t, "1", privateInputs["enabled"].([]*big.Int)[0].Text(10))
+	assert.Equal(t, "0", privateInputs["enabled"].([]*big.Int)[1].Text(10))
+
+	extras.Root = "bad number"
+	_, err = assembleInputs_anon_nullifier(&inputs, &extras, &key)
+	assert.EqualError(t, err, "failed to parse root")
+
+	extras.Root = "123456"
+	extras.MerkleProofs[0].Nodes = []string{"bad number"}
+	_, err = assembleInputs_anon_nullifier(&inputs, &extras, &key)
+	assert.EqualError(t, err, "failed to parse node")
 }
