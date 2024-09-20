@@ -35,6 +35,7 @@ type PreInitComponents interface {
 	EthClientFactory() ethclient.EthClientFactory
 	Persistence() persistence.Persistence
 	StateStore() statestore.StateStore
+	PublicTxStore() PublicTransactionStore
 	BlockIndexer() blockindexer.BlockIndexer
 	RPCServer() rpcserver.RPCServer
 }
@@ -52,6 +53,8 @@ type Managers interface {
 	TransportManager() TransportManager
 	RegistryManager() RegistryManager
 	PluginManager() PluginManager
+	PrivateTxManager() PrivateTxManager
+	PublicTxManager() PublicTxManager
 }
 
 // All managers conform to a standard lifecycle

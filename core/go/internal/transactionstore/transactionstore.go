@@ -18,7 +18,6 @@ package transactionstore
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -26,7 +25,6 @@ import (
 
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
 type Config struct {
@@ -36,23 +34,6 @@ type TxStateGetters interface {
 	HACKGetPrivateTx() *components.PrivateTransaction
 	GetContractAddress(ctx context.Context) string
 	GetTxID(ctx context.Context) string
-	GetDomainID(ctx context.Context) string
-	GetSchemaID(ctx context.Context) string
-
-	GetDispatchTxPayload(ctx context.Context) string
-	GetAttestationPlan(ctx context.Context) []*prototk.AttestationRequest
-	GetAttestationResults(ctx context.Context) []*prototk.AttestationResult
-	GetPayloadJSON(ctx context.Context) string
-
-	IsAttestationCompleted(ctx context.Context) bool
-
-	GetAssembledRound(ctx context.Context) int64
-
-	GetPreReqTransactions(ctx context.Context) []string
-	GetDispatchAddress(ctx context.Context) string
-	GetDispatchNode(ctx context.Context) string
-	GetDispatchTxID(ctx context.Context) string
-	GetConfirmedTxHash(ctx context.Context) string
 }
 
 type TxStateSetters interface {
@@ -208,41 +189,6 @@ func (t *TransactionWrapper) GetSchemaID(ctx context.Context) string {
 
 func (t *TransactionWrapper) GetTxID(ctx context.Context) string {
 	return t.Transaction.ID.String()
-}
-
-func (t *TransactionWrapper) GetAssembledRound(ctx context.Context) int64 {
-	return t.AssembledRound
-}
-
-func (t *TransactionWrapper) GetDispatchAddress(ctx context.Context) string {
-	return t.DispatchAddress
-}
-
-func (t *TransactionWrapper) GetDispatchNode(ctx context.Context) string {
-	return t.DispatchNode
-}
-
-func (t *TransactionWrapper) GetDispatchTxID(ctx context.Context) string {
-	return t.DispatchTxID
-}
-
-func (t *TransactionWrapper) GetDispatchTxPayload(ctx context.Context) string {
-	return t.DispatchTxPayload
-}
-
-func (t *TransactionWrapper) GetPayloadJSON(ctx context.Context) string {
-	if t.PayloadJSON == nil {
-		return ""
-	}
-	return *t.PayloadJSON
-}
-
-func (t *TransactionWrapper) GetConfirmedTxHash(ctx context.Context) string {
-	return t.ConfirmedTxHash
-}
-
-func (t *TransactionWrapper) GetPreReqTransactions(ctx context.Context) []string {
-	return t.PreReqTxs
 }
 
 type TransactionStore interface {

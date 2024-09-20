@@ -330,7 +330,7 @@ func TestGetReceiptOkFailedMissingReason(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, receipt.Success)
-	assert.Contains(t, receipt.ExtraInfo.String(), "PD011913")
+	assert.Contains(t, receipt.ExtraInfo.String(), "PD011516")
 }
 
 func TestGetReceiptOkFailedCustomReason(t *testing.T) {
@@ -380,7 +380,7 @@ func TestGetReceiptNotFound(t *testing.T) {
 	defer done()
 
 	_, err := ec.HTTPClient().GetTransactionReceipt(ctx, testTxHash)
-	assert.Regexp(t, "PD011914", err)
+	assert.Regexp(t, "PD011514", err)
 
 }
 func TestProtocolIDForReceipt(t *testing.T) {

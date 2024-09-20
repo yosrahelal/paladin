@@ -22,6 +22,8 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/domainmgr"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr"
+	"github.com/kaleido-io/paladin/core/internal/publictxmgr/publictxstore"
 	"github.com/kaleido-io/paladin/core/internal/registrymgr"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
@@ -40,14 +42,16 @@ type Config struct {
 	plugins.PluginManagerConfig         `yaml:",inline"`
 	transportmgr.TransportManagerConfig `yaml:",inline"`
 	registrymgr.RegistryManagerConfig   `yaml:",inline"`
-	Log                                 log.Config          `yaml:"log"`
-	Blockchain                          ethclient.Config    `yaml:"blockchain"`
-	DB                                  persistence.Config  `yaml:"db"`
-	RPCServer                           rpcserver.Config    `yaml:"rpcServer"`
-	StateStore                          statestore.Config   `yaml:"statestore"`
-	BlockIndexer                        blockindexer.Config `yaml:"blockIndexer"`
-	Signer                              api.Config          `yaml:"signer"`
-	TempDir                             *string             `yaml:"tempDir"`
+	Log                                 log.Config           `yaml:"log"`
+	Blockchain                          ethclient.Config     `yaml:"blockchain"`
+	DB                                  persistence.Config   `yaml:"db"`
+	RPCServer                           rpcserver.Config     `yaml:"rpcServer"`
+	StateStore                          statestore.Config    `yaml:"statestore"`
+	PublicTxStore                       publictxstore.Config `yaml:"publicTxStore"`
+	BlockIndexer                        blockindexer.Config  `yaml:"blockIndexer"`
+	Signer                              api.Config           `yaml:"signer"`
+	TempDir                             *string              `yaml:"tempDir"`
+	PrivateTxManager                    privatetxnmgr.Config `yaml:"privateTxManager"`
 }
 
 func ReadAndParseYAMLFile(ctx context.Context, filePath string, config interface{}) error {

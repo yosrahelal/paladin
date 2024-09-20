@@ -25,6 +25,9 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/domainmgr"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr"
+	"github.com/kaleido-io/paladin/core/internal/publictxmgr"
+	"github.com/kaleido-io/paladin/core/internal/publictxmgr/publictxstore"
 	"github.com/kaleido-io/paladin/core/internal/registrymgr"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
@@ -56,6 +59,7 @@ type componentManager struct {
 	ethClientFactory ethclient.EthClientFactory
 	persistence      persistence.Persistence
 	stateStore       statestore.StateStore
+	pubTxStore       components.PublicTransactionStore
 	blockIndexer     blockindexer.BlockIndexer
 	rpcServer        rpcserver.RPCServer
 	// managers
@@ -63,6 +67,8 @@ type componentManager struct {
 	transportManager components.TransportManager
 	registryManager  components.RegistryManager
 	pluginManager    components.PluginManager
+	publicTxManager  components.PublicTxManager
+	privateTxManager components.PrivateTxManager
 	// engine
 	engine components.Engine
 	// init to start tracking
@@ -113,6 +119,12 @@ func (cm *componentManager) Init() (err error) {
 		cm.stateStore = statestore.NewStateStore(cm.bgCtx, &cm.conf.StateStore, cm.persistence)
 		err = cm.addIfOpened("state_store", cm.stateStore, err, msgs.MsgComponentStateStoreInitError)
 	}
+
+	if err == nil {
+		cm.pubTxStore = publictxstore.NewPubTxStore(cm.bgCtx, &cm.conf.PublicTxStore, cm.persistence)
+		err = cm.addIfOpened("public_tx_store", cm.pubTxStore, err, msgs.MsgComponentPublicTransactionStoreInitError)
+	}
+
 	if err == nil {
 		cm.blockIndexer, err = blockindexer.NewBlockIndexer(cm.bgCtx, &cm.conf.BlockIndexer, &cm.conf.Blockchain.WS, cm.persistence)
 		err = cm.wrapIfErr(err, msgs.MsgComponentBlockIndexerInitError)
@@ -147,6 +159,18 @@ func (cm *componentManager) Init() (err error) {
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
 	}
 
+	if err == nil {
+		cm.publicTxManager = publictxmgr.NewPublicTransactionMgr(cm.bgCtx)
+		cm.initResults["public_tx_mgr"], err = cm.publicTxManager.PreInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
+	}
+
+	if err == nil {
+		cm.privateTxManager = privatetxnmgr.NewPrivateTransactionMgr(cm.bgCtx, cm.instanceUUID.String(), &cm.conf.PrivateTxManager)
+		cm.initResults["private_tx_mgr"], err = cm.privateTxManager.PreInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
+	}
+
 	// init engine
 	if err == nil {
 		cm.initResults[cm.engine.EngineName()], err = cm.engine.Init(cm)
@@ -171,6 +195,16 @@ func (cm *componentManager) Init() (err error) {
 
 	if err == nil {
 		err = cm.pluginManager.PostInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
+	}
+
+	if err == nil {
+		err = cm.publicTxManager.PostInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
+	}
+
+	if err == nil {
+		err = cm.privateTxManager.PostInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
 	}
 
@@ -221,6 +255,11 @@ func (cm *componentManager) StartManagers() (err error) {
 		err = cm.pluginManager.Start()
 		err = cm.addIfStarted("plugin_manager", cm.pluginManager, err, msgs.MsgComponentPluginStartError)
 	}
+
+	// if err == nil {
+	// 	err = cm.publicTxManager.Start()
+	// 	err = cm.addIfStarted("public_tx_manager", cm.publicTxManager, err, msgs.MsgComponentPluginStartError)
+	// }
 	return err
 }
 
@@ -358,6 +397,10 @@ func (cm *componentManager) StateStore() statestore.StateStore {
 	return cm.stateStore
 }
 
+func (cm *componentManager) PublicTxStore() components.PublicTransactionStore {
+	return cm.pubTxStore
+}
+
 func (cm *componentManager) RPCServer() rpcserver.RPCServer {
 	return cm.rpcServer
 }
@@ -380,6 +423,14 @@ func (cm *componentManager) RegistryManager() components.RegistryManager {
 
 func (cm *componentManager) PluginManager() components.PluginManager {
 	return cm.pluginManager
+}
+
+func (cm *componentManager) PublicTxManager() components.PublicTxManager {
+	return cm.publicTxManager
+}
+
+func (cm *componentManager) PrivateTxManager() components.PrivateTxManager {
+	return cm.privateTxManager
 }
 
 func (cm *componentManager) Engine() components.Engine {

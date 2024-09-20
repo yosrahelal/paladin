@@ -65,7 +65,7 @@ type stateWriterBatch struct {
 	timeoutCancel  func()
 }
 
-func newStateWriter(bgCtx context.Context, ss *stateStore, conf *StateWriterConfig) *stateWriter {
+func newStateWriter(bgCtx context.Context, ss *stateStore, conf *DBWriterConfig) *stateWriter {
 	workerCount := confutil.IntMin(conf.WorkerCount, 1, *StateWriterConfigDefaults.WorkerCount)
 	batchMaxSize := confutil.IntMin(conf.BatchMaxSize, 1, *StateWriterConfigDefaults.BatchMaxSize)
 	batchTimeout := confutil.DurationMin(conf.BatchTimeout, 0, *StateWriterConfigDefaults.BatchTimeout)

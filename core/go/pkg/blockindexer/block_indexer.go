@@ -47,6 +47,7 @@ type BlockIndexer interface {
 	Stop()
 	GetIndexedBlockByNumber(ctx context.Context, number uint64) (*IndexedBlock, error)
 	GetIndexedTransactionByHash(ctx context.Context, hash tktypes.Bytes32) (*IndexedTransaction, error)
+	GetIndexedTransactionByNonce(ctx context.Context, from tktypes.EthAddress, nonce uint64) (*IndexedTransaction, error)
 	GetBlockTransactionsByNumber(ctx context.Context, blockNumber int64) ([]*IndexedTransaction, error)
 	GetTransactionEventsByHash(ctx context.Context, hash tktypes.Bytes32) ([]*IndexedEvent, error)
 	ListTransactionEvents(ctx context.Context, lastBlock int64, lastIndex, limit int, withTransaction, withBlock bool) ([]*IndexedEvent, error)
@@ -778,6 +779,22 @@ func (bi *blockIndexer) getIndexedTransactionByHash(ctx context.Context, hashID 
 		WithContext(ctx).
 		Table("indexed_transactions").
 		Where("hash = ?", hashID).
+		Find(&txns).
+		Error
+	if err != nil || len(txns) < 1 {
+		return nil, err
+	}
+	return txns[0], nil
+}
+
+func (bi *blockIndexer) GetIndexedTransactionByNonce(ctx context.Context, from tktypes.EthAddress, nonce uint64) (*IndexedTransaction, error) {
+	var txns []*IndexedTransaction
+	db := bi.persistence.DB()
+	err := db.
+		WithContext(ctx).
+		Table("indexed_transactions").
+		Where("from = ?", from).
+		Where("nonce = ?", nonce).
 		Find(&txns).
 		Error
 	if err != nil || len(txns) < 1 {

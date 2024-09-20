@@ -182,7 +182,7 @@ func (ec *ethClient) GetTransactionReceipt(ctx context.Context, txHash string) (
 		return nil, rpcErr
 	}
 	if ethReceipt == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgReceiptNotAvailable, txHash)
+		return nil, i18n.NewError(ctx, msgs.MsgEthClientReceiptNotAvailable, txHash)
 	}
 	isSuccess := (ethReceipt.Status != nil && ethReceipt.Status.BigInt().Int64() > 0)
 
@@ -350,6 +350,7 @@ func logJSON(v interface{}) string {
 	}
 	return ret
 }
+
 func (ec *ethClient) getErrorInfo(ctx context.Context, revertFromReceipt *ethtypes.HexBytes0xPrefix) (pReturnValue *string, pErrorMessage *string) {
 
 	var revertReason string
@@ -370,9 +371,9 @@ func (ec *ethClient) getErrorInfo(ctx context.Context, revertFromReceipt *ethtyp
 	// Otherwise we can't decode it, so put it directly in the error
 	if errorMessage == "" {
 		if len(returnDataBytes) > 0 {
-			errorMessage = i18n.NewError(ctx, msgs.MsgReturnValueNotDecoded, revertReason).Error()
+			errorMessage = i18n.NewError(ctx, msgs.MsgEthClientReturnValueNotDecoded, revertReason).Error()
 		} else {
-			errorMessage = i18n.NewError(ctx, msgs.MsgReturnValueNotAvailable).Error()
+			errorMessage = i18n.NewError(ctx, msgs.MsgEthClientReturnValueNotAvailable).Error()
 		}
 	}
 	return &revertReason, &errorMessage
