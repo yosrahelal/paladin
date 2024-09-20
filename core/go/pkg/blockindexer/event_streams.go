@@ -558,7 +558,7 @@ func (es *eventStream) processCatchupEventPage(checkpointBlock int64, catchUpToB
 		events := _events // not safe to pass loop pointer
 		tx := tktypes.MustParseBytes32(txStr)
 		go func() {
-			enrichments <- es.bi.enrichTransactionEvents(es.ctx, es.eventABIs, tx, events, true /* retry indefinitely */)
+			enrichments <- es.bi.enrichTransactionEvents(es.ctx, es.eventABIs, es.definition.Source, tx, events, true /* retry indefinitely */)
 		}()
 	}
 	// Collect all the results
