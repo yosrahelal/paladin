@@ -49,7 +49,9 @@ public class PenteConfiguration {
 
     private final JsonABI privacyGroupABI;
 
-    public final JsonABI interfaceABI;
+    private final JsonABI interfaceABI;
+
+    private final String transferSignature = "event UTXOTransfer(bytes32 txId, bytes32[] inputs, bytes32[] outputs, bytes data)";
 
     private long chainId;
 
@@ -218,6 +220,10 @@ public class PenteConfiguration {
     synchronized JsonABI getPrivacyGroupABI() {
         return privacyGroupABI;
     }
+
+    synchronized JsonABI getInterfaceABI() { return interfaceABI; }
+
+    synchronized String getTransferSignature() { return transferSignature; }
 
     synchronized long getChainId() {
         return chainId;
