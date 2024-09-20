@@ -583,5 +583,5 @@ func (es *eventStream) processCatchupEventPage(checkpointBlock int64, catchUpToB
 }
 
 func (es *eventStream) queryTransactionEvents(tx tktypes.Bytes32, events []*EventWithData, done chan error) {
-	done <- es.bi.enrichTransactionEvents(es.ctx, es.eventABIs, tx, events, true /* retry indefinitely */)
+	done <- es.bi.enrichTransactionEvents(es.ctx, es.eventABIs, es.definition.Source, tx, events, true /* retry indefinitely */)
 }
