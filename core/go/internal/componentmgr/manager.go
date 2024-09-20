@@ -26,6 +26,8 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr"
+	"github.com/kaleido-io/paladin/core/internal/publictxmgr"
+	"github.com/kaleido-io/paladin/core/internal/publictxmgr/publictxstore"
 	"github.com/kaleido-io/paladin/core/internal/registrymgr"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
@@ -57,6 +59,7 @@ type componentManager struct {
 	ethClientFactory ethclient.EthClientFactory
 	persistence      persistence.Persistence
 	stateStore       statestore.StateStore
+	pubTxStore       components.PublicTransactionStore
 	blockIndexer     blockindexer.BlockIndexer
 	rpcServer        rpcserver.RPCServer
 	// managers
@@ -116,6 +119,12 @@ func (cm *componentManager) Init() (err error) {
 		cm.stateStore = statestore.NewStateStore(cm.bgCtx, &cm.conf.StateStore, cm.persistence)
 		err = cm.addIfOpened("state_store", cm.stateStore, err, msgs.MsgComponentStateStoreInitError)
 	}
+
+	if err == nil {
+		cm.pubTxStore = publictxstore.NewPubTxStore(cm.bgCtx, &cm.conf.PublicTxStore, cm.persistence)
+		err = cm.addIfOpened("public_tx_store", cm.pubTxStore, err, msgs.MsgComponentPublicTransactionStoreInitError)
+	}
+
 	if err == nil {
 		cm.blockIndexer, err = blockindexer.NewBlockIndexer(cm.bgCtx, &cm.conf.BlockIndexer, &cm.conf.Blockchain.WS, cm.persistence)
 		err = cm.wrapIfErr(err, msgs.MsgComponentBlockIndexerInitError)
@@ -150,11 +159,11 @@ func (cm *componentManager) Init() (err error) {
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
 	}
 
-	/*if err == nil {
+	if err == nil {
 		cm.publicTxManager = publictxmgr.NewPublicTransactionMgr(cm.bgCtx)
 		cm.initResults["public_tx_mgr"], err = cm.publicTxManager.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
-	}*/
+	}
 
 	if err == nil {
 		cm.privateTxManager = privatetxnmgr.NewPrivateTransactionMgr(cm.bgCtx, cm.instanceUUID.String(), &cm.conf.PrivateTxManager)
@@ -189,10 +198,10 @@ func (cm *componentManager) Init() (err error) {
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
 	}
 
-	/*if err == nil {
+	if err == nil {
 		err = cm.publicTxManager.PostInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
-	}*/
+	}
 
 	if err == nil {
 		err = cm.privateTxManager.PostInit(cm)
@@ -246,6 +255,11 @@ func (cm *componentManager) StartManagers() (err error) {
 		err = cm.pluginManager.Start()
 		err = cm.addIfStarted("plugin_manager", cm.pluginManager, err, msgs.MsgComponentPluginStartError)
 	}
+
+	// if err == nil {
+	// 	err = cm.publicTxManager.Start()
+	// 	err = cm.addIfStarted("public_tx_manager", cm.publicTxManager, err, msgs.MsgComponentPluginStartError)
+	// }
 	return err
 }
 
@@ -372,6 +386,10 @@ func (cm *componentManager) Persistence() persistence.Persistence {
 
 func (cm *componentManager) StateStore() statestore.StateStore {
 	return cm.stateStore
+}
+
+func (cm *componentManager) PublicTxStore() components.PublicTransactionStore {
+	return cm.pubTxStore
 }
 
 func (cm *componentManager) RPCServer() rpcserver.RPCServer {

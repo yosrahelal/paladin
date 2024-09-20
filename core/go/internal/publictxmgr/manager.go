@@ -40,16 +40,25 @@ func NewPublicTransactionMgr(ctx context.Context) components.PublicTxManager {
 	}
 }
 
+type mockNotificationReceiver struct {
+}
+
+func (mnr *mockNotificationReceiver) Notify(ctx context.Context, e components.PublicTransactionEvent) error {
+	return nil
+}
+
 // Init only depends on the configuration and components - no other managers
 func (ptm *publicTxMgr) PreInit(pic components.PreInitComponents) (result *components.ManagerInitResult, err error) {
 	if ptm.publicTxEngine == nil {
 		tmpConfigSection := config.RootSection("tmp")
+		InitConfig(tmpConfigSection)
+		tmpConfigSection.Set("gasPrice.fixedGasPrice", "0")
 		ptm.publicTxEngine, err = NewTransactionEngine(ptm.rootCtx, tmpConfigSection)
 		if err != nil {
 			return nil, err
 		}
-		ptm.publicTxEngine.Init(ptm.rootCtx, pic.EthClientFactory().HTTPClient(), pic.KeyManager(), nil /*TODO: transaction storage**/, nil, pic.BlockIndexer())
-		return nil, nil
+		ptm.publicTxEngine.Init(ptm.rootCtx, pic.EthClientFactory().HTTPClient(), pic.KeyManager(), pic.PublicTxStore(), &mockNotificationReceiver{}, pic.BlockIndexer())
+		return &components.ManagerInitResult{}, nil
 	} else {
 		return nil, i18n.NewError(ptm.rootCtx, msgs.MsgPublicTxMgrAlreadyInit)
 	}

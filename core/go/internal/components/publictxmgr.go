@@ -185,6 +185,8 @@ type PublicTransactionStore interface {
 	UpdateSubStatus(ctx context.Context, txID string, subStatus PubTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error
 
 	ListTransactions(ctx context.Context, filter *PubTransactionQueries) ([]*PublicTX, error)
+
+	Close()
 }
 
 type PreparedSubmission interface {

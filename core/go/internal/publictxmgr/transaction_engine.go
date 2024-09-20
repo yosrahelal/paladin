@@ -116,7 +116,6 @@ type publicTxEngine struct {
 
 func NewTransactionEngine(ctx context.Context, conf config.Section) (components.PublicTxEngine, error) {
 	log.L(ctx).Debugf("Creating new enterprise transaction handler")
-	InitConfig(conf)
 	cm := cache.NewCacheManager(ctx, true)
 
 	gasPriceConf := conf.SubSection(GasPriceSection)

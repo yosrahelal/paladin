@@ -18,7 +18,6 @@ package publictxstore
 
 import (
 	"context"
-	"math/big"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
@@ -35,25 +34,25 @@ import (
 
 // public_transactions
 type PublicTransaction struct {
-	ID                     uuid.UUID                `gorm:"column:id;primaryKey"`
-	Created                tktypes.Timestamp        `gorm:"column:created;autoCreateTime:nano"`
-	Updated                tktypes.Timestamp        `gorm:"column:updated;autoCreateTime:nano"`
-	Status                 string                   `gorm:"column:status"`
-	SubStatus              string                   `gorm:"column:sub_status"`
-	TxFrom                 string                   `gorm:"column:tx_from"`
-	TxTo                   *tktypes.EthAddress      `gorm:"column:tx_to,omitempty"`
-	TxNonce                big.Int                  `gorm:"column:tx_nonce"`
-	TxGasLimit             *big.Int                 `gorm:"column:tx_gas_limit,omitempty"`
-	TxValue                *big.Int                 `gorm:"column:tx_value,omitempty"`
-	TxGasPrice             *big.Int                 `gorm:"column:tx_gas_price,omitempty"`
-	TxMaxFeePerGas         *big.Int                 `gorm:"column:tx_max_fee_per_gas,omitempty"`
-	TxMaxPriorityFeePerGas *big.Int                 `gorm:"column:tx_max_priority_fee_per_gas,omitempty"`
-	TxData                 *string                  `gorm:"column:tx_data,omitempty"`
-	TxHash                 *tktypes.Bytes32         `gorm:"column:tx_hash,omitempty"`
-	FirstSubmit            *tktypes.Timestamp       `gorm:"column:first_submit,omitempty"`
-	LastSubmit             *tktypes.Timestamp       `gorm:"column:last_submit,omitempty"`
-	ErrorMessage           *string                  `gorm:"column:error_message,omitempty"`
-	SubmittedHashes        []*PublicTransactionHash `gorm:"foreignKey:public_transactions;references:id;"`
+	ID                     uuid.UUID           `gorm:"column:id;primaryKey"`
+	Created                tktypes.Timestamp   `gorm:"column:created;autoCreateTime:nano"`
+	Updated                tktypes.Timestamp   `gorm:"column:updated;autoCreateTime:nano"`
+	Status                 string              `gorm:"column:status"`
+	SubStatus              string              `gorm:"column:sub_status"`
+	TxFrom                 string              `gorm:"column:tx_from"`
+	TxTo                   *tktypes.EthAddress `gorm:"column:tx_to,omitempty"`
+	TxNonce                uint64              `gorm:"column:tx_nonce"`
+	TxGasLimit             *uint64             `gorm:"column:tx_gas_limit,omitempty"`
+	TxValue                *uint64             `gorm:"column:tx_value,omitempty"`
+	TxGasPrice             *uint64             `gorm:"column:tx_gas_price,omitempty"`
+	TxMaxFeePerGas         *uint64             `gorm:"column:tx_max_fee_per_gas,omitempty"`
+	TxMaxPriorityFeePerGas *uint64             `gorm:"column:tx_max_priority_fee_per_gas,omitempty"`
+	TxData                 *string             `gorm:"column:tx_data,omitempty"`
+	TxHash                 *tktypes.Bytes32    `gorm:"column:tx_hash,omitempty"`
+	FirstSubmit            *tktypes.Timestamp  `gorm:"column:first_submit,omitempty"`
+	LastSubmit             *tktypes.Timestamp  `gorm:"column:last_submit,omitempty"`
+	ErrorMessage           *string             `gorm:"column:error_message,omitempty"`
+	SubmittedHashes        []*PublicTransactionHash
 }
 
 // public_transaction_hashes
@@ -115,19 +114,19 @@ func (pts *pubTxStore) UpdateTransaction(ctx context.Context, txID string, updat
 	}
 
 	if updates.GasPrice != nil {
-		dbTxModel.TxGasPrice = updates.GasLimit.BigInt()
+		dbTxModel.TxGasPrice = confutil.P(updates.GasPrice.Uint64())
 		updated = true
 	}
 	if updates.MaxPriorityFeePerGas != nil {
-		dbTxModel.TxMaxPriorityFeePerGas = updates.MaxPriorityFeePerGas.BigInt()
+		dbTxModel.TxMaxPriorityFeePerGas = confutil.P(updates.MaxPriorityFeePerGas.Uint64())
 		updated = true
 	}
 	if updates.MaxFeePerGas != nil {
-		dbTxModel.TxMaxFeePerGas = updates.MaxFeePerGas.BigInt()
+		dbTxModel.TxMaxFeePerGas = confutil.P(updates.MaxFeePerGas.Uint64())
 		updated = true
 	}
 	if updates.GasLimit != nil {
-		dbTxModel.TxGasLimit = updates.GasLimit.BigInt()
+		dbTxModel.TxGasLimit = confutil.P(updates.GasLimit.Uint64())
 		updated = true
 	}
 	if updates.TransactionHash != nil {
@@ -287,12 +286,12 @@ func MapDBToInternal(dbTx *PublicTransaction) *components.PublicTX {
 		Transaction: &ethsigner.Transaction{
 			From:                 []byte(dbTx.TxFrom),
 			To:                   dbTx.TxTo.Address0xHex(),
-			Nonce:                ethtypes.NewHexInteger(&dbTx.TxNonce),
-			GasLimit:             ethtypes.NewHexInteger(dbTx.TxGasLimit),
-			Value:                ethtypes.NewHexInteger(dbTx.TxValue),
-			GasPrice:             ethtypes.NewHexInteger(dbTx.TxGasPrice),
-			MaxFeePerGas:         ethtypes.NewHexInteger(dbTx.TxMaxFeePerGas),
-			MaxPriorityFeePerGas: ethtypes.NewHexInteger(dbTx.TxMaxPriorityFeePerGas),
+			Nonce:                ethtypes.NewHexIntegerU64(dbTx.TxNonce),
+			GasLimit:             safeHexIntegerPtr(dbTx.TxGasLimit),
+			Value:                safeHexIntegerPtr(dbTx.TxValue),
+			GasPrice:             safeHexIntegerPtr(dbTx.TxGasPrice),
+			MaxFeePerGas:         safeHexIntegerPtr(dbTx.TxMaxFeePerGas),
+			MaxPriorityFeePerGas: safeHexIntegerPtr(dbTx.TxMaxPriorityFeePerGas),
 			Data:                 ethtypes.MustNewHexBytes0xPrefix(*dbTx.TxData),
 		},
 		TransactionHash: dbTx.TxHash,
@@ -344,12 +343,12 @@ func MapInternalToDB(internalTx *components.PublicTX) *PublicTransaction {
 		SubStatus:              string(internalTx.SubStatus),
 		TxFrom:                 string(internalTx.From),
 		TxTo:                   txTo,
-		TxNonce:                *internalTx.Nonce.BigInt(),
-		TxGasLimit:             safeBigIntPtr(internalTx.GasLimit),
-		TxValue:                safeBigIntPtr(internalTx.Value),
-		TxGasPrice:             safeBigIntPtr(internalTx.GasPrice),
-		TxMaxFeePerGas:         safeBigIntPtr(internalTx.MaxFeePerGas),
-		TxMaxPriorityFeePerGas: safeBigIntPtr(internalTx.MaxPriorityFeePerGas),
+		TxNonce:                internalTx.Nonce.Uint64(),
+		TxGasLimit:             safeUint64Ptr(internalTx.GasLimit),
+		TxValue:                safeUint64Ptr(internalTx.Value),
+		TxGasPrice:             safeUint64Ptr(internalTx.GasPrice),
+		TxMaxFeePerGas:         safeUint64Ptr(internalTx.MaxFeePerGas),
+		TxMaxPriorityFeePerGas: safeUint64Ptr(internalTx.MaxPriorityFeePerGas),
 		TxData:                 txData,
 		TxHash:                 internalTx.TransactionHash,
 		FirstSubmit:            internalTx.FirstSubmit,
@@ -374,9 +373,16 @@ func MapInternalSubmittedHashes(txID uuid.UUID, internalHashes []string) []*Publ
 	return hashes
 }
 
-func safeBigIntPtr(bi *ethtypes.HexInteger) *big.Int {
-	if bi == nil {
+func safeUint64Ptr(hi *ethtypes.HexInteger) *uint64 {
+	if hi == nil {
 		return nil
 	}
-	return bi.BigInt()
+	return confutil.P(hi.Uint64())
+}
+
+func safeHexIntegerPtr(ui *uint64) *ethtypes.HexInteger {
+	if ui == nil {
+		return nil
+	}
+	return ethtypes.NewHexIntegerU64(*ui)
 }

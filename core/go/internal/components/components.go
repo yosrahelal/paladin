@@ -35,6 +35,7 @@ type PreInitComponents interface {
 	EthClientFactory() ethclient.EthClientFactory
 	Persistence() persistence.Persistence
 	StateStore() statestore.StateStore
+	PublicTxStore() PublicTransactionStore
 	BlockIndexer() blockindexer.BlockIndexer
 	RPCServer() rpcserver.RPCServer
 }
@@ -76,9 +77,8 @@ type ManagerEventStream struct {
 
 // Managers can instruct the init of some of the PostInitComponents in a generic way
 type ManagerInitResult struct {
-	EventStreams          []*ManagerEventStream
-	RPCModules            []*rpcserver.RPCModule
-	PublicTxEventNotifier PublicTxEventNotifier
+	EventStreams []*ManagerEventStream
+	RPCModules   []*rpcserver.RPCModule
 }
 
 type PreInitComponentsAndManagers interface {
