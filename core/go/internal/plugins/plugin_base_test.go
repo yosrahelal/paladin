@@ -35,10 +35,11 @@ import (
 type mockPlugin[T any] struct {
 	t *testing.T
 
-	conf            *components.PluginConfig
-	preRegister     func(domainID string) *T
-	customResponses func(*T) []*T
-	expectClose     func(err error)
+	conf                *components.PluginConfig
+	allowRegisterErrors bool
+	preRegister         func(domainID string) *T
+	customResponses     func(*T) []*T
+	expectClose         func(err error)
 
 	headerAccessor func(*T) *prototk.Header
 	connectFactory func(ctx context.Context, client prototk.PluginControllerClient) (grpc.BidiStreamingClient[T, T], error)
@@ -81,7 +82,12 @@ func (tp *mockPlugin[T]) Run(grpcTarget, pluginId string) {
 	header.MessageId = uuid.New().String()
 	header.MessageType = prototk.Header_REGISTER
 	err = stream.Send(regMsg)
-	require.NoError(t, err)
+	if err != nil {
+		if tp.allowRegisterErrors {
+			return
+		}
+		require.NoError(t, err)
+	}
 
 	// Switch to stream conect
 	ctx := stream.Context()
