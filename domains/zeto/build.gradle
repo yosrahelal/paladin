@@ -83,6 +83,30 @@ task downloadZetoCompiledContracts {
     outputs.file(f)
 }
 
+task installPoseidonDependencies(type: Exec) {
+    outputs.dir("${toolsOut}/solidity")
+
+    workingDir "${toolsOut}/solidity"
+    executable "npm"
+    args "install"
+    args "circomlibjs"
+}
+
+task copyPoseidonBuildScript(type: Copy) {
+    inputs.file(file("${projectDir}/scripts/build-poseidon.js"))
+    from file("${projectDir}/scripts/build-poseidon.js")
+    into "${toolsOut}/solidity"
+}
+
+task generatePoseidonArtifacts(type: Exec, dependsOn: [installPoseidonDependencies, copyPoseidonBuildScript]) {
+    inputs.files(fileTree("${toolsOut}/solidity/node_modules/circomlibjs"))
+    outputs.dir("${toolsOut}/solidity")
+
+    workingDir "${toolsOut}/solidity"
+    executable "node"
+    args "build-poseidon.js"
+}
+
 task extractZetoArtifacts(type: Copy, dependsOn: [downloadZetoProver, downloadZetoTestProvingKeys, downloadZetoCompiledContracts]) {
     from tarTree("${toolsOut}/zeto-wasm-${zetoVersion}.tar.gz")
     from tarTree("${toolsOut}/zeto-test-proving-keys-${zetoVersion}.tar.gz")
@@ -115,6 +139,10 @@ task copySolidityForTest(type: Copy, dependsOn: [extractZetoArtifacts, ":solidit
     from fileTree("${zkpOut}/artifacts/@iden3/contracts") {
         include '**/*.json'
         exclude '**/*.dbg.json'
+    }
+    from fileTree("${toolsOut}/solidity") {
+        include 'Poseidon2.json'
+        include 'Poseidon3.json'
     }
     into 'integration-test/abis'
 

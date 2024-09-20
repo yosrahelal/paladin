@@ -21,9 +21,22 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/storage"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/core/pkg/proto"
 )
 
 const SMT_HEIGHT_UTXO = 64
+
+var Empty_Proof proto.MerkleProof
+
+func init() {
+	var nodes []string
+	for i := 0; i < SMT_HEIGHT_UTXO; i++ {
+		nodes = append(nodes, "0")
+	}
+	Empty_Proof = proto.MerkleProof{
+		Nodes: nodes,
+	}
+}
 
 func New(p persistence.Persistence, name string) (core.SparseMerkleTree, error) {
 	strg, err := storage.NewSqlStorage(p, name)
@@ -34,5 +47,5 @@ func New(p persistence.Persistence, name string) (core.SparseMerkleTree, error) 
 }
 
 func MerkleTreeName(tokenName string, domainInstanceContract *ethtypes.Address0xHex) string {
-	return "smt-" + tokenName + "-" + domainInstanceContract.String()
+	return "smt_" + tokenName + "_" + domainInstanceContract.String()
 }

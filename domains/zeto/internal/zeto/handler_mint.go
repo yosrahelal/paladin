@@ -110,8 +110,6 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 			return nil, err
 		}
 		outputs[i] = coin.Hash.String()
-
-		fmt.Printf("Output %d: %s (%s)\n", i, outputs[i], coin.Hash.BigInt().Text(10))
 	}
 
 	params := map[string]interface{}{

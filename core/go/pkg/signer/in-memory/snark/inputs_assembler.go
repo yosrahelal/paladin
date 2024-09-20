@@ -24,12 +24,12 @@ func assembleInputs_anon(inputs *commonWitnessInputs, keyEntry *core.KeyEntry) m
 	return witnessInputs
 }
 
-func assembleInputs_anon_enc(inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Encryption, keyEntry *core.KeyEntry) (map[string]any, map[string]string, error) {
+func assembleInputs_anon_enc(inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Encryption, keyEntry *core.KeyEntry) (map[string]any, error) {
 	var nonce *big.Int
 	if extras != nil && extras.EncryptionNonce != "" {
 		n, ok := new(big.Int).SetString(extras.EncryptionNonce, 10)
 		if !ok {
-			return nil, nil, fmt.Errorf("failed to parse encryption nonce")
+			return nil, fmt.Errorf("failed to parse encryption nonce")
 		}
 		nonce = n
 	} else {
@@ -46,33 +46,30 @@ func assembleInputs_anon_enc(inputs *commonWitnessInputs, extras *pb.ProvingRequ
 		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
 		"encryptionNonce":       nonce,
 	}
-	publicInputs := map[string]string{
-		"encryptionNonce": nonce.Text(10),
-	}
-	return witnessInputs, publicInputs, nil
+	return witnessInputs, nil
 }
 
-func assembleInputs_anon_nullifier(inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Nullifiers, keyEntry *core.KeyEntry) (map[string]any, map[string]string, error) {
+func assembleInputs_anon_nullifier(inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Nullifiers, keyEntry *core.KeyEntry) (map[string]any, error) {
 	// calculate the nullifiers for the input UTXOs
 	nullifiers := make([]*big.Int, len(inputs.inputCommitments))
 	for i := 0; i < len(inputs.inputCommitments); i++ {
 		nullifier, err := poseidon.Hash([]*big.Int{inputs.inputValues[i], inputs.inputSalts[i], keyEntry.PrivateKeyForZkp})
 		if err != nil {
-			return nil, nil, err
+			return nil, fmt.Errorf("failed to create the nullifier hash. %s", err)
 		}
 		nullifiers[i] = nullifier
 	}
 	root, ok := new(big.Int).SetString(extras.Root, 16)
 	if !ok {
-		return nil, nil, fmt.Errorf("failed to parse root")
+		return nil, fmt.Errorf("failed to parse root")
 	}
 	var proofs [][]*big.Int
 	for _, proof := range extras.MerkleProofs {
-		mp := make([]*big.Int, len(proof.Nodes))
+		var mp []*big.Int
 		for _, node := range proof.Nodes {
 			n, ok := new(big.Int).SetString(node, 16)
 			if !ok {
-				return nil, nil, fmt.Errorf("failed to parse node")
+				return nil, fmt.Errorf("failed to parse node")
 			}
 			mp = append(mp, n)
 		}
@@ -101,8 +98,5 @@ func assembleInputs_anon_nullifier(inputs *commonWitnessInputs, extras *pb.Provi
 		"outputSalts":           inputs.outputSalts,
 		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
 	}
-	publicInputs := map[string]string{
-		"root": root.Text(10),
-	}
-	return witnessInputs, publicInputs, nil
+	return witnessInputs, nil
 }

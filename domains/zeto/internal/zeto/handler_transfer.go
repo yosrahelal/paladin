@@ -111,33 +111,28 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 	var extras []byte
 	if circuitId == "anon_nullifier" || circuitId == "anon_enc_nullifier" {
 		smtName := smt.MerkleTreeName(tokenName, contractAddress)
-		mt, err := smt.New(h.zeto.smtStorage, smtName)
+		mt, err := smt.New(h.zeto.SmtStorage, smtName)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create new smt object. %s", err)
 		}
 		// verify that the input UTXOs have been indexed by the Merkle tree DB
 		// and generate a merkle proof for each
 		var indexes []*big.Int
 		for _, coin := range inputCoins {
-			pubKeyComp := new(babyjub.PublicKeyComp)
-			err := pubKeyComp.UnmarshalText(coin.OwnerKey)
+			pubKey, err := coin.OwnerKey.Decompress()
 			if err != nil {
-				return nil, err
-			}
-			pubKey, err := pubKeyComp.Decompress()
-			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to decompress owner key. %s", err)
 			}
 			idx := node.NewFungible(coin.Amount.BigInt(), pubKey, coin.Salt.BigInt())
 			leaf, err := node.NewLeafNode(idx)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to create new leaf node. %s", err)
 			}
 			n, err := mt.GetNode(leaf.Ref())
 			if err != nil {
 				// TODO: deal with when the node is not found in the DB tables for the tree
 				// e.g because the transaction event hasn't been processed yet
-				return nil, err
+				return nil, fmt.Errorf("failed to query the smt DB for leaf node. %s", err)
 			}
 			if n.Index().BigInt().Cmp(coin.Hash.BigInt()) != 0 {
 				return nil, fmt.Errorf("coin %s has not been indexed", coin.Hash.String())
@@ -147,13 +142,14 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 		mtRoot := mt.Root()
 		proofs, _, err := mt.GenerateProofs(indexes, mtRoot)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to generate merkle proofs. %s", err)
 		}
 		var mps []*corepb.MerkleProof
+		var enabled []bool
 		for i, proof := range proofs {
 			cp, err := proof.ToCircomVerifierProof(indexes[i], indexes[i], mtRoot, smt.SMT_HEIGHT_UTXO)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to convert to circom verifier proof. %s", err)
 			}
 			proofSiblings := make([]string, len(cp.Siblings)-1)
 			for i, s := range cp.Siblings[0 : len(cp.Siblings)-1] {
@@ -163,14 +159,20 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 				Nodes: proofSiblings,
 			}
 			mps = append(mps, &p)
+			enabled = append(enabled, true)
 		}
 		extrasObj := corepb.ProvingRequestExtras_Nullifiers{
 			Root:         mt.Root().BigInt().Text(16),
 			MerkleProofs: mps,
+			Enabled:      enabled,
+		}
+		for i := len(proofs); i < INPUT_COUNT; i++ {
+			extrasObj.MerkleProofs = append(extrasObj.MerkleProofs, &smt.Empty_Proof)
+			extrasObj.Enabled = append(extrasObj.Enabled, false)
 		}
 		protoExtras, err := proto.Marshal(&extrasObj)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to marshal the extras object in the proving request. %s", err)
 		}
 		extras = protoExtras
 	}
@@ -207,26 +209,26 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 
 	senderKey, err := h.loadBabyJubKey([]byte(resolvedSender.Verifier))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load sender public key. %s", err)
 	}
 	recipientKey, err := h.loadBabyJubKey([]byte(resolvedRecipient.Verifier))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed load receiver public key. %s", err)
 	}
 
 	inputCoins, inputStates, total, err := h.zeto.prepareInputs(ctx, tx.Transaction.From, params.Amount)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to prepare inputs. %s", err)
 	}
 	outputCoins, outputStates, err := h.zeto.prepareOutputs(params.To, recipientKey, params.Amount)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to prepare outputs. %s", err)
 	}
 	if total.Cmp(params.Amount.BigInt()) == 1 {
 		remainder := big.NewInt(0).Sub(total, params.Amount.BigInt())
 		returnedCoins, returnedStates, err := h.zeto.prepareOutputs(tx.Transaction.From, senderKey, ethtypes.NewHexInteger(remainder))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to prepare outputs for change coins. %s", err)
 		}
 		outputCoins = append(outputCoins, returnedCoins...)
 		outputStates = append(outputStates, returnedStates...)
@@ -234,7 +236,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 
 	payloadBytes, err := h.formatProvingRequest(inputCoins, outputCoins, tx.DomainConfig.CircuitId, tx.DomainConfig.TokenName, tx.ContractAddress)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to format proving request. %s", err)
 	}
 
 	return &pb.AssembleTransactionResponse{
@@ -324,7 +326,12 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 	if tx.DomainConfig.TokenName == "Zeto_AnonEnc" {
 		params["encryptionNonce"] = proofRes.PublicInputs["encryptionNonce"]
 		params["encryptedValues"] = strings.Split(proofRes.PublicInputs["encryptedValues"], ",")
+	} else if tx.DomainConfig.TokenName == "Zeto_AnonNullifier" {
+		delete(params, "inputs")
+		params["nullifiers"] = strings.Split(proofRes.PublicInputs["nullifiers"], ",")
+		params["root"] = proofRes.PublicInputs["root"]
 	}
+	fmt.Printf("tx params: %+v\n", params)
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
 		return nil, err

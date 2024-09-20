@@ -18,14 +18,15 @@ package types
 import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/iden3/go-iden3-crypto/babyjub"
 )
 
 type ZetoCoin struct {
-	Salt     *ethtypes.HexInteger   `json:"salt"`
-	Owner    string                 `json:"owner"`
-	OwnerKey ethtypes.HexBytesPlain `json:"ownerKey"`
-	Amount   *ethtypes.HexInteger   `json:"amount"`
-	Hash     *ethtypes.HexInteger   `json:"hash"`
+	Salt     *ethtypes.HexInteger  `json:"salt"`
+	Owner    string                `json:"owner"`
+	OwnerKey babyjub.PublicKeyComp `json:"ownerKey"`
+	Amount   *ethtypes.HexInteger  `json:"amount"`
+	Hash     *ethtypes.HexInteger  `json:"hash"`
 }
 
 var ZetoCoinABI = &abi.Parameter{

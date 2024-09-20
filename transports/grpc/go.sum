@@ -90,8 +90,8 @@ github.com/hashicorp/go-version v1.7.0 h1:5tqGy27NaOTB8yJKUZELlFAS/LTKJkrmONwQKe
 github.com/hashicorp/hcl v1.0.0 h1:0Anlzjpi4vEasTeNFn2mLJgTSwt0+6sfsiTG8qcWGx4=
 github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUqJM=
 github.com/huandu/xstrings v1.4.0 h1:D17IlohoQq4UcpqD7fDk80P7l+lwAmlFaBHgOipl2FU=
-github.com/hyperledger/firefly-common v1.4.8 h1:0o1Qp1c5YzQo8nbnX+gAo9SVd2tR4Z9U2t8Y4zEzyaA=
-github.com/hyperledger/firefly-signer v1.1.14 h1:gSGwdBHTLPchGlmLOKk2Y2nawfMhlH2CDm2owt0lIUE=
+github.com/hyperledger/firefly-common v1.4.11 h1:WKv2hQuNpS7yP51THxzpzrqU3jkln23C9vq5iminzBk=
+github.com/hyperledger/firefly-signer v1.1.18-0.20240916233856-eb284ced6841 h1:Xd7ZUhKxful/ZqkRTvrzSfb4WQALu5E6OANaWQ3OKFI=
 github.com/iancoleman/strcase v0.3.0 h1:nTXanmYxhfFAMjZL34Ov6gkzEsSJZ5DbhxWjvSASxEI=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/invopop/yaml v0.2.0 h1:7zky/qH+O0DwAyoobXUqvVBwgBFRxKoQ/3FjcVpjTMY=

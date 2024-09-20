@@ -27,10 +27,10 @@ import (
 func TestAssembleInputsAnonEnc(t *testing.T) {
 	inputs := commonWitnessInputs{}
 	key := core.KeyEntry{}
-	_, publicInputs, err := assembleInputs_anon_enc(&inputs, nil, &key)
+	privateInputs, err := assembleInputs_anon_enc(&inputs, nil, &key)
 	assert.NoError(t, err)
-	_, ok := new(big.Int).SetString(publicInputs["encryptionNonce"], 10)
-	assert.True(t, ok)
+	assert.Equal(t, 9, len(privateInputs))
+	assert.Greater(t, privateInputs["encryptionNonce"], new(big.Int).SetInt64(0))
 }
 
 func TestAssembleInputsAnonEnc_fail(t *testing.T) {
@@ -39,11 +39,11 @@ func TestAssembleInputsAnonEnc_fail(t *testing.T) {
 		EncryptionNonce: "1234",
 	}
 	key := core.KeyEntry{}
-	_, publicInputs, err := assembleInputs_anon_enc(&inputs, &extras, &key)
+	privateInputs, err := assembleInputs_anon_enc(&inputs, &extras, &key)
 	assert.NoError(t, err)
-	assert.Equal(t, "1234", publicInputs["encryptionNonce"])
+	assert.Equal(t, privateInputs["encryptionNonce"], new(big.Int).SetInt64(1234))
 
 	extras.EncryptionNonce = "bad number"
-	_, _, err = assembleInputs_anon_enc(&inputs, &extras, &key)
+	_, err = assembleInputs_anon_enc(&inputs, &extras, &key)
 	assert.EqualError(t, err, "failed to parse encryption nonce")
 }

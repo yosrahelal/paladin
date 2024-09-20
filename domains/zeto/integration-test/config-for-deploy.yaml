@@ -22,10 +22,10 @@ contracts:
         path: ./abis/Groth16Verifier_CheckInputsOutputsValue.json
     - name: PoseidonUnit2L
       abiAndBytecode:
-        path: ./abis/PoseidonUnit2L.json
+        path: ./abis/Poseidon2.json
     - name: PoseidonUnit3L
       abiAndBytecode:
-        path: ./abis/PoseidonUnit3L.json
+        path: ./abis/Poseidon3.json
     - name: SmtLib
       abiAndBytecode:
         path: ./abis/SmtLib.json

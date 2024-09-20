@@ -546,10 +546,7 @@ func TestSerializeProofResponse(t *testing.T) {
 		},
 		PubSignals: []string{"1", "2", "3", "4"},
 	}
-	publicInputs := map[string]string{
-		"encryptedValues": "1,2,3,4",
-	}
-	bytes, err := serializeProofResponse("anon_enc", &snark, publicInputs)
+	bytes, err := serializeProofResponse("anon_enc", &snark)
 	assert.NoError(t, err)
 	assert.Equal(t, 64, len(bytes))
 }

@@ -111,11 +111,10 @@ func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount 
 	// Always produce a single coin for the entire output amount
 	// TODO: make this configurable
 	salt := crypto.NewSalt()
-	keyCompressed := ownerKey.Compress()
 	newCoin := &types.ZetoCoin{
 		Salt:     (*ethtypes.HexInteger)(salt),
 		Owner:    owner,
-		OwnerKey: keyCompressed[:],
+		OwnerKey: ownerKey.Compress(),
 		Amount:   amount,
 	}
 	if err := z.addHash(newCoin, ownerKey); err != nil {

@@ -16,6 +16,8 @@
 package snark
 
 import (
+	"fmt"
+
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
 	"google.golang.org/protobuf/proto"
 )
@@ -34,10 +36,17 @@ func decodeProvingRequest(req *pb.SignRequest) (*pb.ProvingRequest, interface{},
 		if len(inputs.Extras) > 0 {
 			err := proto.Unmarshal(inputs.Extras, &encExtras)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, fmt.Errorf("failed to unmarshal proving request extras for circuit %s. %s", inputs.CircuitId, err)
 			}
 		}
 		return &inputs, &encExtras, nil
+	} else if inputs.CircuitId == "anon_nullifier" {
+		var nullifierExtras pb.ProvingRequestExtras_Nullifiers
+		err := proto.Unmarshal(inputs.Extras, &nullifierExtras)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to unmarshal proving request extras for circuit %s. %s", inputs.CircuitId, err)
+		}
+		return &inputs, &nullifierExtras, nil
 	}
 	return &inputs, nil, nil
 }

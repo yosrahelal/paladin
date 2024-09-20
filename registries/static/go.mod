@@ -4,7 +4,7 @@ go 1.22.5
 
 require (
 	github.com/golangci/golangci-lint v1.60.1
-	github.com/hyperledger/firefly-common v1.4.8
+	github.com/hyperledger/firefly-common v1.4.11
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.9.0
 	github.com/vektra/mockery/v2 v2.44.2
@@ -89,7 +89,7 @@ require (
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/huandu/xstrings v1.4.0 // indirect
-	github.com/hyperledger/firefly-signer v1.1.14 // indirect
+	github.com/hyperledger/firefly-signer v1.1.18-0.20240916233856-eb284ced6841 // indirect
 	github.com/iancoleman/strcase v0.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jgautheron/goconst v1.7.1 // indirect

@@ -7,8 +7,8 @@ require (
 	github.com/docker/go-units v0.5.0
 	github.com/golangci/golangci-lint v1.60.1
 	github.com/google/uuid v1.6.0
-	github.com/hyperledger/firefly-common v1.4.8
-	github.com/hyperledger/firefly-signer v1.1.14
+	github.com/hyperledger/firefly-common v1.4.11
+	github.com/hyperledger/firefly-signer v1.1.18-0.20240916233856-eb284ced6841
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 	github.com/vektra/mockery/v2 v2.44.2
@@ -48,8 +48,6 @@ require (
 	github.com/bombsimon/wsl/v4 v4.4.1 // indirect
 	github.com/breml/bidichk v0.2.7 // indirect
 	github.com/breml/errchkjson v0.3.6 // indirect
-	github.com/btcsuite/btcd/btcec/v2 v2.3.2 // indirect
-	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
 	github.com/butuzov/ireturn v0.3.0 // indirect
 	github.com/butuzov/mirror v1.2.0 // indirect
 	github.com/catenacyber/perfsprint v0.7.1 // indirect
@@ -62,7 +60,6 @@ require (
 	github.com/curioswitch/go-reassign v0.2.0 // indirect
 	github.com/daixiang0/gci v0.13.4 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/denis-tingaikin/go-header v0.5.0 // indirect
 	github.com/ettle/strcase v0.2.0 // indirect
 	github.com/fatih/color v1.17.0 // indirect

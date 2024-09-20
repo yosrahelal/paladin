@@ -12,10 +12,10 @@ require (
 	github.com/golangci/golangci-lint v1.60.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240905213624-43a614759076
+	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240918142015-fb7e7cd52371
 	github.com/hyperledger/firefly-common v1.4.11
 	github.com/hyperledger/firefly-signer v1.1.18-0.20240916233856-eb284ced6841
-	github.com/iden3/go-iden3-crypto v0.0.16
+	github.com/iden3/go-iden3-crypto v0.0.17
 	github.com/iden3/go-rapidsnark/witness/v2 v2.0.0
 	github.com/iden3/go-rapidsnark/witness/wasmer v0.0.0-20240621085734-9323fbec34a3
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000
@@ -34,7 +34,7 @@ require (
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/driver/postgres v1.5.9
 	gorm.io/driver/sqlite v1.5.6
-	gorm.io/gorm v1.25.11
+	gorm.io/gorm v1.25.12
 
 )
 

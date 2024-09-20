@@ -23,11 +23,14 @@ import (
 	"testing"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
+	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	internalZeto "github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zeto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -37,6 +40,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v3"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 var (
@@ -116,21 +121,6 @@ func deployZetoContracts(t *testing.T) *zetoDomainContracts {
 	return deployedContracts
 }
 
-func newSqlitePersistence(t *testing.T) *persistence.Persistence {
-	dbfile, err := os.CreateTemp("", "gorm.db")
-	assert.NoError(t, err)
-	defer func() {
-		err := os.Remove(dbfile.Name())
-		assert.NoError(t, err)
-	}()
-	db, err := gorm.Open(sqlite.Open(dbfile.Name()), &gorm.Config{})
-	assert.NoError(t, err)
-	err = db.Table(core.TreeRootsTable).AutoMigrate(&core.SMTRoot{})
-	assert.NoError(t, err)
-	err = db.Table(core.NodesTablePrefix + "test_1").AutoMigrate(&core.SMTNode{})
-	assert.NoError(t, err)
-}
-
 func newZetoDomain(t *testing.T, config *types.DomainFactoryConfig) (zeto.Zeto, *testbed.TestbedDomain) {
 	var domain internalZeto.Zeto
 	return &domain, &testbed.TestbedDomain{
@@ -151,13 +141,38 @@ func newTestbed(t *testing.T, domains map[string]*testbed.TestbedDomain) (contex
 	return done, tb, rpc
 }
 
+type testSqlProvider struct {
+	db *gorm.DB
+}
+
+func (s *testSqlProvider) DB() *gorm.DB {
+	return s.db
+}
+
+func (s *testSqlProvider) Close() {}
+
+func newTestPersistence(t *testing.T) (persistence.Persistence, *gorm.DB, *os.File) {
+	dbfile, err := os.CreateTemp("", "gorm.db")
+	assert.NoError(t, err)
+	db, err := gorm.Open(sqlite.Open(dbfile.Name()), &gorm.Config{})
+	assert.NoError(t, err)
+	err = db.Table(core.TreeRootsTable).AutoMigrate(&core.SMTRoot{})
+	assert.NoError(t, err)
+
+	provider := &testSqlProvider{db: db}
+	return provider, db, dbfile
+}
+
 type zetoDomainTestSuite struct {
 	suite.Suite
 	deployedContracts *zetoDomainContracts
 	domainName        string
 	domain            zeto.Zeto
 	rpc               rpcbackend.Backend
-	done              context.CancelFunc
+	done              func()
+	p                 persistence.Persistence
+	dbfile            *os.File
+	gormDB            *gorm.DB
 }
 
 func (s *zetoDomainTestSuite) SetupSuite() {
@@ -170,7 +185,9 @@ func (s *zetoDomainTestSuite) SetupTest() {
 	domainName := "zeto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
 	config := prepareDomainConfig(s.T(), s.deployedContracts)
+	p, db, dbfile := newTestPersistence(s.T())
 	zeto, zetoTestbed := newZetoDomain(s.T(), config)
+	zeto.(*internalZeto.Zeto).SmtStorage = p
 	done, _, rpc := newTestbed(s.T(), map[string]*testbed.TestbedDomain{
 		domainName: zetoTestbed,
 	})
@@ -178,14 +195,22 @@ func (s *zetoDomainTestSuite) SetupTest() {
 	s.domain = zeto
 	s.rpc = rpc
 	s.done = done
+	s.p = p
+	s.gormDB = db
+	s.dbfile = dbfile
 }
 
 func (s *zetoDomainTestSuite) TearDownSuite() {
 	s.done()
+	os.Remove(s.dbfile.Name())
 }
 
 func (s *zetoDomainTestSuite) TestZeto_Anon() {
 	s.testZetoFungible(s.T(), "Zeto_Anon")
+}
+
+func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
+	s.testZetoFungible(s.T(), "Zeto_AnonEnc")
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
@@ -205,6 +230,11 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 		require.NoError(t, rpcerr.Error())
 	}
 	log.L(ctx).Infof("Zeto instance deployed to %s", zetoAddress)
+
+	// TODO: temporary until we have an interface to the state DB
+	smtName := smt.MerkleTreeName(tokenName, ethtypes.MustNewAddress(zetoAddress.String()))
+	err := s.gormDB.Table(core.NodesTablePrefix + smtName).AutoMigrate(&core.SMTNode{})
+	assert.NoError(t, err)
 
 	log.L(ctx).Infof("Mint 10 from controller to controller")
 	var boolResult bool
@@ -250,6 +280,19 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	assert.Equal(t, controllerName, coins[0].Owner)
 	assert.Equal(t, int64(20), coins[1].Amount.Int64())
 	assert.Equal(t, controllerName, coins[1].Owner)
+
+	// TODO: replace with handling in the event indexer
+	tree, err := smt.New(s.p, smtName)
+	require.NoError(t, err)
+	for _, coin := range coins {
+		idx, err := node.NewNodeIndexFromBigInt(coin.Hash.BigInt())
+		assert.NoError(t, err)
+		n := node.NewIndexOnly(idx)
+		leaf, err := node.NewLeafNode(n)
+		assert.NoError(t, err)
+		err = tree.AddLeaf(leaf)
+		assert.NoError(t, err)
+	}
 
 	log.L(ctx).Infof("Attempt mint from non-controller (should fail)")
 	rpcerr = s.rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{

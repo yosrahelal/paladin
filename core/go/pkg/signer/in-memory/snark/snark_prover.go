@@ -18,6 +18,7 @@ package snark
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
@@ -102,7 +103,7 @@ func (sp *snarkProver) Sign(ctx context.Context, privateKey []byte, req *pb.Sign
 		provingKey = p
 	}
 
-	wtns, publicInputs, err := calculateWitness(inputs.CircuitId, inputs.Common, extras, keyEntry, circuit)
+	wtns, err := calculateWitness(inputs.CircuitId, inputs.Common, extras, keyEntry, circuit)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +113,7 @@ func (sp *snarkProver) Sign(ctx context.Context, privateKey []byte, req *pb.Sign
 		return nil, err
 	}
 
-	proofBytes, err := serializeProofResponse(inputs.CircuitId, proof, publicInputs)
+	proofBytes, err := serializeProofResponse(inputs.CircuitId, proof)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +148,7 @@ func validateInputs(inputs *pb.ProvingRequestCommon) error {
 	return nil
 }
 
-func serializeProofResponse(circuitId string, proof *types.ZKProof, publicInputs map[string]string) ([]byte, error) {
+func serializeProofResponse(circuitId string, proof *types.ZKProof) ([]byte, error) {
 	snark := pb.SnarkProof{}
 	snark.A = proof.Proof.A
 	snark.B = make([]*pb.B_Item, 0, len(proof.Proof.B))
@@ -158,9 +159,14 @@ func serializeProofResponse(circuitId string, proof *types.ZKProof, publicInputs
 	}
 	snark.C = proof.Proof.C
 
+	publicInputs := make(map[string]string)
 	switch circuitId {
 	case "anon_enc":
 		publicInputs["encryptedValues"] = strings.Join(proof.PubSignals[0:4], ",")
+		publicInputs["encryptionNonce"] = proof.PubSignals[8]
+	case "anon_nullifier":
+		publicInputs["nullifiers"] = strings.Join(proof.PubSignals[:2], ",")
+		publicInputs["root"] = proof.PubSignals[2]
 	}
 
 	res := pb.ProvingResponse{
@@ -171,41 +177,40 @@ func serializeProofResponse(circuitId string, proof *types.ZKProof, publicInputs
 	return proto.Marshal(&res)
 }
 
-func calculateWitness(circuitId string, commonInputs *pb.ProvingRequestCommon, extras interface{}, keyEntry *core.KeyEntry, circuit witness.Calculator) ([]byte, map[string]string, error) {
+func calculateWitness(circuitId string, commonInputs *pb.ProvingRequestCommon, extras interface{}, keyEntry *core.KeyEntry, circuit witness.Calculator) ([]byte, error) {
 	inputs, err := buildCircuitInputs(commonInputs)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	var witnessInputs map[string]any
-	var publicInputs map[string]string
 	switch circuitId {
 	case "anon":
 		witnessInputs = assembleInputs_anon(inputs, keyEntry)
 	case "anon_enc":
-		witnessInputs, publicInputs, err = assembleInputs_anon_enc(inputs, extras.(*pb.ProvingRequestExtras_Encryption), keyEntry)
+		witnessInputs, err = assembleInputs_anon_enc(inputs, extras.(*pb.ProvingRequestExtras_Encryption), keyEntry)
 		if err != nil {
-			return nil, nil, err
+			return nil, fmt.Errorf("failed to assemble private inputs for witness calculation. %s", err)
 		}
 	case "anon_nullifier":
-		witnessInputs, publicInputs, err = assembleInputs_anon_nullifier(inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
+		witnessInputs, err = assembleInputs_anon_nullifier(inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
 		if err != nil {
-			return nil, nil, err
+			return nil, fmt.Errorf("failed to assemble private inputs for witness calculation. %s", err)
 		}
 	}
 
 	wtns, err := circuit.CalculateWTNSBin(witnessInputs, true)
 	if err != nil {
-		return nil, nil, err
+		return nil, fmt.Errorf("failed to calculate the witness. %s", err)
 	}
 
-	return wtns, publicInputs, nil
+	return wtns, nil
 }
 
 func generateProof(wtns, provingKey []byte) (*types.ZKProof, error) {
 	proof, err := prover.Groth16Prover(provingKey, wtns)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate proof. %s", err)
 	}
 	return proof, nil
 }
