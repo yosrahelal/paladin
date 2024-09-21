@@ -162,11 +162,11 @@ public class PersistedAccount implements Account {
                 '[' +
                 "nonce=" +
                 this.getNonce() +
-                "balance=" +
+                " balance=" +
                 this.getBalance() +
-                "codehash=" +
+                " codehash=" +
                 this.getCodeHashOrZero().toString() +
-                "storagehash=" +
+                " storagehash=" +
                 this.storageTrie.getRootHash().toString() +
                 ']';
     }
