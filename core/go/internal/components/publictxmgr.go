@@ -19,19 +19,30 @@ import (
 	"context"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 )
 
-type PublicTxPreparedSubmission interface {
-	ID() string
-	CleanUp(context.Context)
-	Finalize(context.Context)
+type PublicTxAccepted interface {
+	TX() *ptxapi.PublicTx // the nonce can only be read after Submit() on the batch succeeds
+}
+
+type PublicTxRejected interface {
+	TX() *ptxapi.PublicTx
+	RejectedError() error         // non-nil if the transaction was rejected during prepare (estimate gas error), so cannot be submitted
+	RevertData() tktypes.HexBytes // if revert data is available for error decoding
+}
+
+type PublicTxBatch interface {
+	Submit(ctx context.Context, dbTX *gorm.DB) error
+	Accepted() []PublicTxAccepted
+	Rejected() []PublicTxRejected
+	Completed(ctx context.Context, committed bool) // caller must ensure this is called on all code paths, and only with true after DB TX has committed
 }
 
 type PublicTxManager interface {
 	ManagerLifecycle
 
 	// Synchronous functions that are executed on the callers thread
-	PrepareSubmissionBatch(ctx context.Context, transactions []*ptxapi.PublicTxInput) (preparedSubmission []PublicTxPreparedSubmission, submissionRejected bool, err error)
-	SubmitBatch(ctx context.Context, dbTX *gorm.DB, preparedSubmissions []PublicTxPreparedSubmission) ([]*ptxapi.PublicTx, error)
+	PrepareSubmissionBatch(ctx context.Context, transactions []*ptxapi.PublicTx /* nonce is ignored on input */) (batch PublicTxBatch, err error)
 }

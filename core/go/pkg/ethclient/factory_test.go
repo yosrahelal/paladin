@@ -40,7 +40,7 @@ type mockEth struct {
 	eth_chainId               func(context.Context) (ethtypes.HexUint64, error)
 	eth_getTransactionCount   func(context.Context, ethtypes.Address0xHex, string) (ethtypes.HexUint64, error)
 	eth_getTransactionReceipt func(context.Context, ethtypes.HexBytes0xPrefix) (*txReceiptJSONRPC, error)
-	eth_estimateGas           func(context.Context, ethsigner.Transaction) (ethtypes.HexInteger, error)
+	eth_estimateGas           func(context.Context, ethsigner.Transaction) (tktypes.HexUint64, error)
 	eth_sendRawTransaction    func(context.Context, tktypes.HexBytes) (tktypes.HexBytes, error)
 	eth_call                  func(context.Context, ethsigner.Transaction, string) (tktypes.HexBytes, error)
 	eth_callErr               func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse

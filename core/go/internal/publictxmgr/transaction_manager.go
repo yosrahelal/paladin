@@ -17,12 +17,11 @@ package publictxmgr
 
 import (
 	"context"
+	"encoding/json"
 	"math/big"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
@@ -39,7 +38,6 @@ import (
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"gorm.io/gorm"
 )
 
@@ -77,7 +75,7 @@ type pubTxManager struct {
 	gasPriceClient GasPriceClient
 
 	// nonce manager
-	nonceManager baseTypes.NonceCache
+	nonceManager NonceCache
 
 	// a map of signing addresses and transaction engines
 	InFlightOrchestrators       map[string]*orchestrator
@@ -153,7 +151,7 @@ func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *comp
 	ble.keymgr = pic.KeyManager()
 	ble.gasPriceClient.Init(ctx, ble.ethClient)
 	ble.bIndexer = pic.BlockIndexer()
-	ble.nonceManager = newNonceCache(1*time.Hour, func(ctx context.Context, signer string) (uint64, error) {
+	ble.nonceManager = newNonceCache(1*time.Hour, func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
 		log.L(ctx).Tracef("NonceFromChain getting next nonce for signing address ID %s", signer)
 		nextNonce, err := ble.ethClient.GetTransactionCount(ctx, signer)
 		if err != nil {
@@ -194,159 +192,182 @@ func (ble *pubTxManager) Stop() {
 }
 
 type preparedTransaction struct {
-	ethTx *ethsigner.Transaction
-	id    string
-	nsi   baseTypes.NonceAssignmentIntent
+	ctx         context.Context
+	tx          *ptxapi.PublicTx
+	sender      *tktypes.EthAddress
+	rejectError error                 // only if rejected
+	revertData  tktypes.HexBytes      // only if rejected, and was available
+	nsi         NonceAssignmentIntent // only if accepted
 }
 
-func (pt *preparedTransaction) ID() string {
-	return pt.id
-}
-
-func (pt *preparedTransaction) CleanUp(ctx context.Context) {
-	pt.nsi.Rollback(ctx)
-}
-func (pt *preparedTransaction) Finalize(ctx context.Context) {
-	pt.nsi.Complete(ctx)
-}
-
-func (ble *pubTxManager) PrepareSubmissionBatch(ctx context.Context, transactions []*ptxapi.PublicTxInput) (preparedSubmission []components.PublicTxPreparedSubmission, submissionRejected bool, err error) {
-	preparedSubmissions := make([]components.PublicTxPreparedSubmission, len(transactions))
-	var nsi baseTypes.NonceAssignmentIntent
-	for i, tx := range transactions {
-		preparedSubmission, submissionRejected, err := ble.PrepareSubmission(ctx, tx, nsi)
-		if submissionRejected || err != nil {
-			return nil, submissionRejected, err
-		}
-		preparedSubmissions[i] = preparedSubmission
-		nsi = preparedSubmission.(*preparedTransaction).nsi
-	}
-	return preparedSubmissions, false, nil
-}
-
-func (ble *pubTxManager) buildEthTX(tx *ptxapi.PublicTxInput) *ethsigner.Transaction {
-	return &ethsigner.Transaction{
-		To:                   tx.To.Address0xHex(),
-		GasLimit:             (*ethtypes.HexInteger)(tx.Gas),
-		GasPrice:             (*ethtypes.HexInteger)(tx.GasPrice),
-		MaxPriorityFeePerGas: (*ethtypes.HexInteger)(tx.MaxPriorityFeePerGas),
-		MaxFeePerGas:         (*ethtypes.HexInteger)(tx.MaxFeePerGas),
-		Value:                (*ethtypes.HexInteger)(tx.Value),
-		Data:                 ethtypes.HexBytes0xPrefix(tx.Data),
-	}
-}
-
-// PrepareSubmission prepares and validates the transaction input data so that a later call to
-// Submit can be made in the middle of a wider database transaction with minimal risk of error
-func (ble *pubTxManager) PrepareSubmission(ctx context.Context, tx *ptxapi.PublicTxInput, nonceAssignmentIntent baseTypes.NonceAssignmentIntent) (preparedSubmission components.PublicTxPreparedSubmission, submissionRejected bool, err error) {
-	log.L(ctx).Tracef("PrepareSubmission transaction: %+v", tx)
-
-	prepareStart := time.Now()
-	var txType InFlightTxOperation
-
-	if tx.Gas.NilOrZero() {
-		estimatedGasLimitHexInt, err := ble.ethClient.GasEstimate(ctx, ble.buildEthTX(tx), nil /* TODO: Would be great to have the ABI errors available here */)
-		if err != nil {
-			log.L(ctx).Errorf("HandleNewTx <%s> error estimating gas for transfer request: %+v, request: (%+v)", txType, err, tx)
-			ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusFail), time.Since(prepareStart).Seconds())
-			return nil, ethclient.MapSubmissionRejected(err), err
-		}
-		tx.Gas = (*tktypes.HexUint256)(estimatedGasLimitHexInt)
-		log.L(ctx).Tracef("HandleNewTx <%s> using the estimated gas limit %s for transfer request: %+v", txType, estimatedGasLimit.String(), txPayload)
-	} else {
-		log.L(ctx).Tracef("HandleNewTx <%s> using the provided gas limit %s for transfer request: %+v", txType, estimatedGasLimit.String(), txPayload)
-	}
-
-	nsi := nonceAssignmentIntent
-	if nsi == nil {
-		nsi, err = ble.nonceManager.IntentToAssignNonce(ctx, tx.From)
-		if err != nil {
-			log.L(ctx).Errorf("HandleNewTx <%s> error assigning nonce for transfer request: %+v, request: (%+v)", txType, err, txPayload)
-			ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusFail), time.Since(prepareStart).Seconds())
-			return nil, false, err
-		}
-	}
-	ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusSuccess), time.Since(prepareStart).Seconds())
-	log.L(ctx).Debugf("HandleNewTx <%s> creating a new managed transaction with ID %s", txType, reqOptions.ID)
-	return &preparedTransaction{
-		ethTx: ethTx,
-		id:    reqOptions.ID.String(),
-		nsi:   nsi,
-	}, false, nil
-
+type preparedTransactionBatch struct {
+	ble      *pubTxManager
+	accepted []components.PublicTxAccepted
+	rejected []components.PublicTxRejected
 }
 
 // Submit writes the prepared submission to the database using the provided context
 // This is expected to be a lightweight operation involving not much more than writing to the database, as the heavy lifting should have been done in PrepareSubmission
 // The database transaction will be coordinated by the caller
-func (ble *pubTxManager) Submit(ctx context.Context, dbtx *gorm.DB, preparedSubmission components.PreparedSubmission) (mtx *components.PublicTX, err error) {
-	preparedTransaction := preparedSubmission.(*preparedTransaction)
-	mtx, err = ble.createManagedTx(ctx, dbtx, preparedTransaction.ID(), preparedTransaction.ethTx, preparedTransaction.nsi)
-	return mtx, err
+func (pb *preparedTransactionBatch) Submit(ctx context.Context, dbTX *gorm.DB) (err error) {
+	persistedTransactions := make([]*persistedPubTx, len(pb.accepted))
+	for i, accepted := range pb.accepted {
+		ptx := accepted.(*preparedTransaction)
+		persistedTransactions[i], err = pb.ble.finalizeNonceForPersistedTX(ctx, ptx)
+		if err != nil {
+			return err
+		}
+	}
+	// All the nonce processing to this point should have ensured we do not have a conflict on nonces.
+	// It is the caller's responsibility to ensure we do not have a conflict on transaction+resubmit_idx.
+	return dbTX.
+		WithContext(ctx).
+		Table("public_tx").
+		Create(persistedTransactions).
+		Error
 }
 
-func (ble *pubTxManager) SubmitBatch(ctx context.Context, dbtx *gorm.DB, preparedSubmissions []components.PreparedSubmission) ([]*components.PublicTX, error) {
-	mtxBatch := make([]*components.PublicTX, len(preparedSubmissions))
-	for i, preparedSubmission := range preparedSubmissions {
-		mtx, err := ble.Submit(ctx, dbtx, preparedSubmission)
+func (pb *preparedTransactionBatch) Accepted() []components.PublicTxAccepted { return pb.accepted }
+func (pb *preparedTransactionBatch) Rejected() []components.PublicTxRejected { return pb.rejected }
+
+func (pb *preparedTransactionBatch) Completed(ctx context.Context, committed bool) {
+	for _, pt := range pb.accepted {
+		if !committed {
+			pt.(*preparedTransaction).nsi.Rollback(ctx)
+		}
+	}
+	if committed && len(pb.accepted) > 0 {
+		log.L(ctx).Debugf("%d transactions committed to DB", len(pb.accepted))
+		pb.ble.MarkInFlightOrchestratorsStale()
+	}
+}
+
+func (pt *preparedTransaction) TX() *ptxapi.PublicTx {
+	return pt.tx
+}
+
+func (pt *preparedTransaction) RejectedError() error {
+	return pt.rejectError
+}
+
+func (pt *preparedTransaction) RevertData() tktypes.HexBytes {
+	return pt.revertData
+}
+
+func (ble *pubTxManager) PrepareSubmissionBatch(ctx context.Context, transactions []*ptxapi.PublicTx) (components.PublicTxBatch, error) {
+	batch := &preparedTransactionBatch{
+		ble:      ble,
+		accepted: make([]components.PublicTxAccepted, 0, len(transactions)),
+		rejected: make([]components.PublicTxRejected, 0),
+	}
+	earlyReturn := true
+	defer func() {
+		if earlyReturn {
+			// Ensure we always cleanup if we fail (for error or panic) before we've
+			// delegated responsibility for calling this to our caller
+			batch.Completed(ctx, false)
+		}
+	}()
+	for _, tx := range transactions {
+		preparedSubmission, err := ble.prepareSubmission(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
-		mtxBatch[i] = mtx
+		if preparedSubmission.rejectError != nil {
+			batch.rejected = append(batch.rejected, preparedSubmission)
+		} else {
+			batch.accepted = append(batch.accepted, preparedSubmission)
+		}
 	}
-	return mtxBatch, nil
+	earlyReturn = false
+	return batch, nil
 }
 
-func (ble *pubTxManager) HandleNewTransaction(ctx context.Context, reqOptions *components.RequestOptions, txPayload interface{}) (mtx *components.PublicTX, submissionRejected bool, err error) {
-	preparedSubmission, submissionRejected, err := ble.PrepareSubmission(ctx, reqOptions, txPayload, nil)
-	if preparedSubmission != nil {
-		defer preparedSubmission.CleanUp(ctx)
+func (ble *pubTxManager) buildEthTX(tx *ptxapi.PublicTx) *ethsigner.Transaction {
+	ethTx := &ethsigner.Transaction{
+		From:                 json.RawMessage(tktypes.JSONString(tx.From)),
+		To:                   tx.To.Address0xHex(),
+		GasPrice:             (*ethtypes.HexInteger)(tx.GasPrice),
+		MaxPriorityFeePerGas: (*ethtypes.HexInteger)(tx.MaxPriorityFeePerGas),
+		MaxFeePerGas:         (*ethtypes.HexInteger)(tx.MaxFeePerGas),
+		Value:                (*ethtypes.HexInteger)(tx.Value),
+		Data:                 ethtypes.HexBytes0xPrefix(tx.Data),
+		Nonce:                ethtypes.NewHexIntegerU64(tx.Nonce.Uint64()),
 	}
-	if submissionRejected || err != nil {
-		return nil, submissionRejected, err
+	if tx.Gas != nil {
+		ethTx.GasLimit = ethtypes.NewHexIntegerU64(tx.Gas.Uint64())
 	}
-	mtx, err = ble.Submit(ctx, nil, preparedSubmission)
-	if err != nil {
-		preparedSubmission.Finalize(ctx)
-	}
-	return
+	return ethTx
 }
 
-func (ble *pubTxManager) createManagedTx(ctx context.Context, dbtx *gorm.DB, txID string, ethTx *ethsigner.Transaction, nsi baseTypes.NonceAssignmentIntent) (*components.PublicTX, error) {
-	log.L(ctx).Tracef("createManagedTx creating a new managed transaction with ID: %s, and payload %+v", txID, ethTx)
-	nonce, err := nsi.AssignNextNonce(ctx)
+// PrepareSubmission prepares and validates the transaction input data so that a later call to
+// Submit can be made in the middle of a wider database transaction with minimal risk of error
+func (ble *pubTxManager) prepareSubmission(ctx context.Context, tx *ptxapi.PublicTx) (preparedSubmission *preparedTransaction, err error) {
+	log.L(ctx).Tracef("PrepareSubmission transaction: %+v", tx)
+
+	prepareStart := time.Now()
+	var txType InFlightTxOperation
+
+	pt := &preparedTransaction{
+		tx: tx,
+	}
+
+	rejected := false
+	if tx.Gas == nil || *tx.Gas == 0 {
+		gasEstimateResult, err := ble.ethClient.EstimateGasNoResolve(ctx, ble.buildEthTX(tx))
+		if err != nil {
+			log.L(ctx).Errorf("HandleNewTx <%s> error estimating gas for transaction: %+v, request: (%+v)", txType, err, tx)
+			ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusFail), time.Since(prepareStart).Seconds())
+			if ethclient.MapSubmissionRejected(err) {
+				// transaction is rejected, so no nonce will be assigned - but we have not failed in our task
+				pt.rejectError = err
+				// TODO: we pass the revert data back currently, but we probably should use the dictionary service
+				// in the transaction manager to resolve this error to something friendly.
+				// Or we need to explicitly decide we are pushing that back to our caller.
+				pt.revertData = gasEstimateResult.RevertData
+				return pt, nil
+			}
+			return nil, err
+		}
+		tx.Gas = &gasEstimateResult.GasLimit
+		log.L(ctx).Tracef("HandleNewTx <%s> using the estimated gas limit %s for transaction: %+v", txType, tx.Gas, tx)
+	} else {
+		log.L(ctx).Tracef("HandleNewTx <%s> using the provided gas limit %s for transaction: %+v", txType, tx.Gas, tx)
+	}
+
+	if !rejected {
+		pt.nsi, err = ble.nonceManager.IntentToAssignNonce(ctx, tx.From)
+		if err != nil {
+			log.L(ctx).Errorf("HandleNewTx <%s> error assigning nonce for transaction: %+v, request: (%+v)", txType, err, tx)
+			ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusFail), time.Since(prepareStart).Seconds())
+			return nil, err
+		}
+	}
+
+	ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusSuccess), time.Since(prepareStart).Seconds())
+	log.L(ctx).Debugf("HandleNewTx <%s> transaction validated and nonce assignment intent created for %s", txType, tx.From)
+	return pt, nil
+
+}
+
+func (ble *pubTxManager) finalizeNonceForPersistedTX(ctx context.Context, ptx *preparedTransaction) (*persistedPubTx, error) {
+	nonce, err := ptx.nsi.AssignNextNonce(ctx)
 	if err != nil {
-		log.L(ctx).Errorf("createManagedTx failed to create managed traction with ID: %s, due to %+v", txID, err)
+		log.L(ctx).Errorf("Failed to assign nonce to public transaction %+v: %s", ptx, err)
 		return nil, err
 	}
-	ethTx.Nonce = ethtypes.NewHexIntegerU64(nonce)
-	now := tktypes.TimestampNow()
-	mtx := &components.PublicTX{
-		ID:          uuid.MustParse(txID),
-		Created:     now,
-		Updated:     now,
-		Transaction: ethTx,
-		Status:      components.PubTxStatusPending,
-	}
-
-	log.L(ctx).Tracef("createManagedTx persisting managed transaction %+v", mtx)
-	// Sequencing ID will be added as part of persistence logic - so we have a deterministic order of transactions
-	// Note: We must ensure persistence happens this within the nonce lock, to ensure that the nonce sequence and the
-	//       global transaction sequence line up.
-	err = ble.txStore.InsertTransaction(ctx, dbtx, mtx)
-
-	if err == nil {
-		log.L(ctx).Tracef("createManagedTx persisted transaction with ID: %s, using nonce %s", mtx.ID, mtx.Nonce.String())
-		err = ble.txStore.UpdateSubStatus(ctx, txID, components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, fftypes.JSONAnyPtr(`{"nonce":"`+mtx.Nonce.String()+`"}`), nil, confutil.P(tktypes.TimestampNow()))
-	}
-	if err != nil {
-		log.L(ctx).Errorf("createManagedTx failed to create managed traction with ID: %s, due to %+v", mtx.ID, err)
-		return nil, err
-	}
-	log.L(ctx).Debugf("createManagedTx a new managed transaction with ID %s is persisted", mtx.ID)
-	ble.MarkInFlightOrchestratorsStale()
-
-	return mtx, nil
+	tx := ptx.tx
+	tx.Nonce = tktypes.HexUint64(nonce)
+	log.L(ctx).Infof("Creating a new public transaction %s [%s] from=%s nonce=%d (%s)", tx.Transaction, tx.ResubmitIndex, tx.From /* number */, tx.From /* hex */)
+	log.L(ctx).Tracef("payload: %+v", tx)
+	return &persistedPubTx{
+		From:          tx.From,
+		Nonce:         tx.Nonce.Uint64(),
+		Transaction:   tx.Transaction,
+		ResubmitIndex: uint64(tx.ResubmitIndex),
+		To:            *tx.To,
+		Gas:           tx.Gas.Uint64(),
+	}, nil
 }
 
 // HandleConfirmedTransactions

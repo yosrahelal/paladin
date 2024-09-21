@@ -54,9 +54,11 @@ type EthClient interface {
 	// Below are raw functions that the ABI() above provides wrappers for
 	GasPrice(ctx context.Context) (gasPrice *ethtypes.HexInteger, err error)
 	GetBalance(ctx context.Context, address string, block string) (balance *ethtypes.HexInteger, err error)
+	EstimateGasNoResolve(ctx context.Context, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error)
 	EstimateGas(ctx context.Context, from *string, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error)
 	GetTransactionCount(ctx context.Context, fromAddr tktypes.EthAddress) (transactionCount *ethtypes.HexUint64, err error)
 	GetTransactionReceipt(ctx context.Context, txHash string) (*TransactionReceiptResponse, error)
+	CallContractNoResolve(ctx context.Context, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error)
 	CallContract(ctx context.Context, from *string, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error)
 	BuildRawTransaction(ctx context.Context, txVersion EthTXVersion, from string, tx *ethsigner.Transaction, opts ...CallOption) (tktypes.HexBytes, error)
 	SendRawTransaction(ctx context.Context, rawTX tktypes.HexBytes) (*tktypes.Bytes32, error)
@@ -92,7 +94,7 @@ func WithOutputs(outputs abi.TypeComponent) CallOption {
 }
 
 type EstimateGasResult struct {
-	GasLimit   *tktypes.HexUint256
+	GasLimit   tktypes.HexUint64
 	RevertData tktypes.HexBytes
 }
 
@@ -181,10 +183,10 @@ func (ec *ethClient) CallContract(ctx context.Context, from *string, tx *ethsign
 	if _, _, err := ec.resolveFrom(ctx, from, tx); err != nil {
 		return res, err
 	}
-	return ec.callContract(ctx, tx, block, opts...)
+	return ec.CallContractNoResolve(ctx, tx, block, opts...)
 }
 
-func (ec *ethClient) callContract(ctx context.Context, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error) {
+func (ec *ethClient) CallContractNoResolve(ctx context.Context, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error) {
 
 	var outputs abi.TypeComponent
 	errABI := abi.ABI{}
@@ -302,14 +304,14 @@ func (ec *ethClient) EstimateGas(ctx context.Context, from *string, tx *ethsigne
 	if _, _, err := ec.resolveFrom(ctx, from, tx); err != nil {
 		return res, err
 	}
-	return ec.gasEstimate(ctx, tx, opts...)
+	return ec.EstimateGasNoResolve(ctx, tx, opts...)
 }
 
-func (ec *ethClient) gasEstimate(ctx context.Context, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error) {
+func (ec *ethClient) EstimateGasNoResolve(ctx context.Context, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error) {
 	if err = ec.rpc.CallRPC(ctx, &res.GasLimit, "eth_estimateGas", tx); err != nil {
 		log.L(ctx).Errorf("eth_estimateGas failed: %+v", err)
 		// Fall back to a call, to see if we can get an error
-		callRes, callErr := ec.callContract(ctx, tx, "latest", opts...)
+		callRes, callErr := ec.CallContractNoResolve(ctx, tx, "latest", opts...)
 		if callErr != nil {
 			err = callErr
 		}
@@ -346,16 +348,14 @@ func (ec *ethClient) BuildRawTransaction(ctx context.Context, txVersion EthTXVer
 
 	if tx.GasLimit == nil {
 		// Estimate gas before submission
-		gasEstimate, err := ec.gasEstimate(ctx, tx, opts...)
+		gasEstimate, err := ec.EstimateGasNoResolve(ctx, tx, opts...)
 		if err != nil {
 			log.L(ctx).Errorf("eth_estimateGas failed: %+v", err)
 			return nil, err
 		}
 		// If that went well, so submission with a bump on the estimation
-		gasLimitFactored := new(big.Float).SetInt(gasEstimate.GasLimit.Int())
-		gasLimitFactored = gasLimitFactored.Mul(gasLimitFactored, big.NewFloat(ec.gasEstimateFactor))
-		gasLimit, _ := gasLimitFactored.Int(nil)
-		tx.GasLimit = ethtypes.NewHexInteger(gasLimit)
+		factoredGasLimit := int64((float64)(gasEstimate.GasLimit) * ec.gasEstimateFactor)
+		tx.GasLimit = (*ethtypes.HexInteger)(big.NewInt(factoredGasLimit))
 	}
 
 	// Sign

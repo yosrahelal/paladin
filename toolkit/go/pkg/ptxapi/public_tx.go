@@ -17,6 +17,7 @@
 package ptxapi
 
 import (
+	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -24,7 +25,7 @@ import (
 // If set these affect the submission of the public transaction.
 // All are optional
 type PublicTxOptions struct {
-	Gas                  *tktypes.HexUint256 `json:"gas,omitempty"`
+	Gas                  *tktypes.HexUint64  `json:"gas,omitempty"`
 	MaxPriorityFeePerGas *tktypes.HexUint256 `json:"maxPriorityFeePerGas,omitempty"`
 	MaxFeePerGas         *tktypes.HexUint256 `json:"maxFeePerGas,omitempty"`
 	GasPrice             *tktypes.HexUint256 `json:"gasPrice,omitempty"`
@@ -39,6 +40,8 @@ type PublicTxInput struct {
 }
 
 type PublicTx struct {
+	Transaction   uuid.UUID `json:"transaction"`             // the paladin transaction containing this public transaction
+	ResubmitIndex int       `json:"resubmitIndex,omitempty"` // resubmission of the public transaction can occur for private transactions, meaning more than one public TX
 	PublicTxInput
 	Nonce tktypes.HexUint64 `json:"nonce"` // unresolved signing account locator (public TX manager will resolve)
 }

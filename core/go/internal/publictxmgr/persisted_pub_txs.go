@@ -23,7 +23,6 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -33,26 +32,24 @@ import (
 )
 
 // public_transactions
-type PublicTransaction struct {
-	ID                     uuid.UUID           `gorm:"column:id;primaryKey"`
-	Created                tktypes.Timestamp   `gorm:"column:created;autoCreateTime:nano"`
-	Updated                tktypes.Timestamp   `gorm:"column:updated;autoCreateTime:nano"`
-	Status                 string              `gorm:"column:status"`
-	SubStatus              string              `gorm:"column:sub_status"`
-	TxFrom                 string              `gorm:"column:tx_from"`
-	TxTo                   *tktypes.EthAddress `gorm:"column:tx_to,omitempty"`
-	TxNonce                uint64              `gorm:"column:tx_nonce"`
-	TxGasLimit             *uint64             `gorm:"column:tx_gas_limit,omitempty"`
-	TxValue                *uint64             `gorm:"column:tx_value,omitempty"`
-	TxGasPrice             *uint64             `gorm:"column:tx_gas_price,omitempty"`
-	TxMaxFeePerGas         *uint64             `gorm:"column:tx_max_fee_per_gas,omitempty"`
-	TxMaxPriorityFeePerGas *uint64             `gorm:"column:tx_max_priority_fee_per_gas,omitempty"`
-	TxData                 *string             `gorm:"column:tx_data,omitempty"`
-	TxHash                 *tktypes.Bytes32    `gorm:"column:tx_hash,omitempty"`
-	FirstSubmit            *tktypes.Timestamp  `gorm:"column:first_submit,omitempty"`
-	LastSubmit             *tktypes.Timestamp  `gorm:"column:last_submit,omitempty"`
-	ErrorMessage           *string             `gorm:"column:error_message,omitempty"`
-	SubmittedHashes        []*PublicTransactionHash
+type persistedPubTx struct {
+	From          tktypes.EthAddress `gorm:"column:from;primaryKey"`
+	Nonce         uint64             `gorm:"column:nonce;primaryKey"`
+	Created       tktypes.Timestamp  `gorm:"column:created;autoCreateTime:nano"`
+	Transaction   uuid.UUID          `gorm:"column:transaction"`  // only unique when combined with ResubmitIndex
+	ResubmitIndex uint64             `gorm:"column:resubmit_idx"` // can have multiple public TX under a single paladin TX for resubmits
+	To            tktypes.EthAddress `gorm:"column:to"`
+	Gas           uint64             `gorm:"column:gas"`
+	Value         uint64             `gorm:"column:value"`
+	Data          tktypes.HexBytes   `gorm:"column:data"`
+}
+
+type persistedTxSubmission struct {
+	From            uuid.UUID         `gorm:"column:transaction;primaryKey"`
+	Nonce           uint64            `gorm:"column:resubmit_idx;primaryKey"`
+	Created         tktypes.Timestamp `gorm:"column:created;autoCreateTime:nano"`
+	TransactionHash tktypes.HexBytes  `gorm:"column:tx_hash"`
+	GasPricing      tktypes.RawJSON   `gorm:"column:gas_pricing"` // no filtering allowed on this field as it's complex JSON gasPrice/maxFeePerGas/maxPriorityFeePerGas calculation
 }
 
 // public_transaction_hashes
@@ -96,76 +93,6 @@ func (pts *pubTxStore) InsertTransaction(ctx context.Context, dbTx *gorm.DB, tx 
 		pts.writer.queue(ctx, pts.writer.newWriteOp(MapInternalToDB(tx)))
 	} else {
 		dbTx.Table("public_transactions").Omit("SubmittedHashes").Create(MapInternalToDB(tx))
-	}
-	return nil
-}
-
-func (pts *pubTxStore) UpdateTransaction(ctx context.Context, txID string, updates *components.BaseTXUpdates) error {
-	var dbTxModel *PublicTransaction
-	if err := pts.p.DB().WithContext(ctx).Table("public_transactions").Omit("SubmittedHashes").Where("id = ?", txID).Limit(1).First(&dbTxModel).Error; err != nil {
-		return err
-	}
-	// Track if we need to perform an update
-	updated := false
-
-	// Apply updates only to non-nil fields
-	if updates.Status != nil {
-		dbTxModel.Status = string(*updates.Status)
-		updated = true
-	}
-
-	if updates.GasPrice != nil {
-		dbTxModel.TxGasPrice = confutil.P(updates.GasPrice.Uint64())
-		updated = true
-	}
-	if updates.MaxPriorityFeePerGas != nil {
-		dbTxModel.TxMaxPriorityFeePerGas = confutil.P(updates.MaxPriorityFeePerGas.Uint64())
-		updated = true
-	}
-	if updates.MaxFeePerGas != nil {
-		dbTxModel.TxMaxFeePerGas = confutil.P(updates.MaxFeePerGas.Uint64())
-		updated = true
-	}
-	if updates.GasLimit != nil {
-		dbTxModel.TxGasLimit = confutil.P(updates.GasLimit.Uint64())
-		updated = true
-	}
-	if updates.TransactionHash != nil {
-		dbTxModel.TxHash = updates.TransactionHash
-		updated = true
-	}
-	if updates.FirstSubmit != nil {
-		dbTxModel.FirstSubmit = updates.FirstSubmit
-		updated = true
-	}
-	if updates.LastSubmit != nil {
-		dbTxModel.LastSubmit = updates.LastSubmit
-		updated = true
-	}
-	if updates.ErrorMessage != nil {
-		dbTxModel.ErrorMessage = updates.ErrorMessage
-		updated = true
-	}
-
-	// Insert new submitted hashes if provided
-	if updates.NewSubmittedHashes != nil && len(updates.NewSubmittedHashes) > 0 {
-		if err := pts.p.DB().WithContext(ctx).Table("public_transaction_hashes").
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "hash"}},
-				DoNothing: true, // immutable
-			}).
-			Create(MapInternalSubmittedHashes(dbTxModel.ID, updates.NewSubmittedHashes)).Error; err != nil {
-			return err
-		}
-		updated = true
-
-	}
-
-	// Save the updated transaction only if there were changes
-	if updated {
-		if err := pts.p.DB().WithContext(ctx).Table("public_transactions").Omit("SubmittedHashes").Save(&dbTxModel).Error; err != nil {
-			return err
-		}
 	}
 	return nil
 }

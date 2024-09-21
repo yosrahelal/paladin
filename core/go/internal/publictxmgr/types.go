@@ -154,15 +154,3 @@ const (
 	// BaseTxActionConfirmTransaction indicates that the transaction has been confirmed
 	BaseTxActionConfirmTransaction BaseTxAction = "Confirm"
 )
-
-type NextNonceCallback func(ctx context.Context, signer string) (uint64, error)
-
-type NonceAssignmentIntent interface {
-	Complete(ctx context.Context)
-	AssignNextNonce(ctx context.Context) (uint64, error)
-	Rollback(ctx context.Context)
-}
-
-type NonceCache interface {
-	IntentToAssignNonce(ctx context.Context, signer string) (NonceAssignmentIntent, error)
-}

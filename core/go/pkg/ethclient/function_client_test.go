@@ -145,9 +145,9 @@ func testInvokeNewWidgetOk(t *testing.T, isWS bool, txVersion EthTXVersion, gasL
 			assert.Equal(t, "latest", block)
 			return 10, nil
 		},
-		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (ethtypes.HexInteger, error) {
+		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (tktypes.HexUint64, error) {
 			assert.False(t, gasLimit)
-			return *ethtypes.NewHexInteger64(100000), nil
+			return 100000, nil
 		},
 		eth_sendRawTransaction: func(ctx context.Context, rawTX tktypes.HexBytes) (tktypes.HexBytes, error) {
 			addr, tx, err := ethsigner.RecoverRawTransaction(ctx, ethtypes.HexBytes0xPrefix(rawTX), 12345)
@@ -546,8 +546,8 @@ func TestInvokeConstructor(t *testing.T) {
 			assert.Equal(t, "latest", block)
 			return 10, nil
 		},
-		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (ethtypes.HexInteger, error) {
-			return *ethtypes.NewHexInteger64(100000), nil
+		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (tktypes.HexUint64, error) {
+			return 100000, nil
 		},
 		eth_sendRawTransaction: func(ctx context.Context, rawTX tktypes.HexBytes) (tktypes.HexBytes, error) {
 			addr, tx, err := ethsigner.RecoverRawTransaction(ctx, ethtypes.HexBytes0xPrefix(rawTX), 12345)
@@ -594,8 +594,8 @@ func TestInvokeNewWidgetCustomError(t *testing.T) {
 	assert.NoError(t, err)
 
 	ctx, ecf, done := newTestClientAndServer(t, &mockEth{
-		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (ethtypes.HexInteger, error) {
-			return *ethtypes.NewHexInteger64(0), fmt.Errorf("pop")
+		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (tktypes.HexUint64, error) {
+			return 0, fmt.Errorf("pop")
 		},
 		eth_callErr: func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse {
 			return &rpcclient.RPCResponse{

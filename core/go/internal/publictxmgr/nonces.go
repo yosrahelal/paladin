@@ -21,13 +21,25 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
+type NextNonceCallback func(ctx context.Context, signer tktypes.EthAddress) (uint64, error)
+
+type NonceAssignmentIntent interface {
+	Complete(ctx context.Context)
+	AssignNextNonce(ctx context.Context) (uint64, error)
+	Rollback(ctx context.Context)
+}
+
+type NonceCache interface {
+	IntentToAssignNonce(ctx context.Context, signer tktypes.EthAddress) (NonceAssignmentIntent, error)
+}
+
 type nonceCacheStruct struct {
-	nextNonceBySigner map[string]*cachedNonce
-	nextNonceCB       components.NextNonceCallback
+	nextNonceBySigner map[tktypes.EthAddress]*cachedNonce
+	nextNonceCB       NextNonceCallback
 	nonceStateTimeout time.Duration
 	reaperLock        sync.RWMutex //if this proves to be a bottleneck, we could maintain a finer grained lock on each cache entry but would be more complex and error prone
 	inserterLock      sync.Mutex   //we should only ever grab this lock if we have a reader lock on the reaperLock otherwise we could cause a deadlock
@@ -39,9 +51,9 @@ func (nc *nonceCacheStruct) stop() {
 	close(nc.stopChannel)
 }
 
-func newNonceCache(nonceStateTimeout time.Duration, nextNonceCB components.NextNonceCallback) NonceCache {
+func newNonceCache(nonceStateTimeout time.Duration, nextNonceCB NextNonceCallback) NonceCache {
 	n := &nonceCacheStruct{
-		nextNonceBySigner: make(map[string]*cachedNonce),
+		nextNonceBySigner: make(map[tktypes.EthAddress]*cachedNonce),
 		nonceStateTimeout: nonceStateTimeout,
 		stopChannel:       make(chan struct{}),
 		nextNonceCB:       nextNonceCB,
@@ -52,7 +64,7 @@ func newNonceCache(nonceStateTimeout time.Duration, nextNonceCB components.NextN
 
 type cachedNonce struct {
 	nonceMux    sync.Mutex
-	signer      string
+	signer      tktypes.EthAddress
 	value       uint64
 	updatedTime time.Time
 }
@@ -79,14 +91,14 @@ func (nc *nonceCacheStruct) reap() {
 	}
 }
 
-func (nc *nonceCacheStruct) getNextNonceBySigner(signer string) (*cachedNonce, bool) {
+func (nc *nonceCacheStruct) getNextNonceBySigner(signer tktypes.EthAddress) (*cachedNonce, bool) {
 	nc.mapMux.Lock()
 	defer nc.mapMux.Unlock()
 	result, found := nc.nextNonceBySigner[signer]
 	return result, found
 }
 
-func (nc *nonceCacheStruct) setNextNonceBySigner(signer string, record *cachedNonce) {
+func (nc *nonceCacheStruct) setNextNonceBySigner(signer tktypes.EthAddress, record *cachedNonce) {
 	nc.mapMux.Lock()
 	defer nc.mapMux.Unlock()
 	nc.nextNonceBySigner[signer] = record
@@ -101,7 +113,7 @@ func (nc *nonceCacheStruct) setNextNonceBySigner(signer string, record *cachedNo
 // NOTE:  multiple readers can hold intents to assign concurrently so the nonce is not actually assigned at this point
 //
 //	nonce assignment itself is protected by a mutex so only one reader can assign at a time but thanks to the pre intent declaration, the assignment is quick
-func (nc *nonceCacheStruct) IntentToAssignNonce(ctx context.Context, signer string) (NonceAssignmentIntent, error) {
+func (nc *nonceCacheStruct) IntentToAssignNonce(ctx context.Context, signer tktypes.EthAddress) (NonceAssignmentIntent, error) {
 
 	// take a read lock to block the reaper thread
 	nc.reaperLock.RLock()

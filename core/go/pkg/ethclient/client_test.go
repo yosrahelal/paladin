@@ -137,24 +137,24 @@ func TestGasPriceFail(t *testing.T) {
 }
 
 func TestEstimateGas(t *testing.T) {
-	gasEstimateHexInt := ethtypes.NewHexInteger(big.NewInt(200000))
+	gasEstimateHexInt := tktypes.HexUint64(200000)
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (ethtypes.HexInteger, error) {
-			return *gasEstimateHexInt, nil
+		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (tktypes.HexUint64, error) {
+			return gasEstimateHexInt, nil
 		},
 	})
 	defer done()
 
 	res, err := ec.HTTPClient().EstimateGas(ctx, nil, &ethsigner.Transaction{}, nil)
 	require.NoError(t, err)
-	assert.Equal(t, gasEstimateHexInt, (*ethtypes.HexInteger)(res.GasLimit))
+	assert.Equal(t, gasEstimateHexInt, tktypes.HexUint64(res.GasLimit.Uint64()))
 
 }
 
 func TestEstimateGasFail(t *testing.T) {
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (ethtypes.HexInteger, error) {
-			return ethtypes.HexInteger{}, fmt.Errorf("pop1")
+		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (tktypes.HexUint64, error) {
+			return 0, fmt.Errorf("pop1")
 		},
 		eth_call: func(ctx context.Context, t ethsigner.Transaction, s string) (tktypes.HexBytes, error) {
 			return nil, fmt.Errorf("pop2")
@@ -198,8 +198,8 @@ func TestBuildRawTransactionEstimateGasFail(t *testing.T) {
 		eth_getTransactionCount: func(ctx context.Context, ah ethtypes.Address0xHex, s string) (ethtypes.HexUint64, error) {
 			return 0, nil
 		},
-		eth_estimateGas: func(ctx context.Context, t ethsigner.Transaction) (ethtypes.HexInteger, error) {
-			return *ethtypes.NewHexInteger64(0), fmt.Errorf("pop1")
+		eth_estimateGas: func(ctx context.Context, t ethsigner.Transaction) (tktypes.HexUint64, error) {
+			return 0, fmt.Errorf("pop1")
 		},
 		eth_call: func(ctx context.Context, t ethsigner.Transaction, s string) (tktypes.HexBytes, error) {
 			return nil, fmt.Errorf("pop2")
