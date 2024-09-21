@@ -30,6 +30,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -117,7 +118,7 @@ type BalanceManagerWithInMemoryTracking struct {
 	// fueling transactions by search for the latest transfer type transaction to the destination address. (this involves
 	//  read from database and is necessary to recover balance manager from crashes)
 	destinationAddressesFuelingTracked    map[string]*sync.Mutex
-	trackedFuelingTransactions            map[string]*components.PublicTX
+	trackedFuelingTransactions            map[string]*ptxapi.PublicTx
 	destinationAddressesFuelingTrackedMux sync.Mutex
 
 	// a map of signing addresses and a boolean to indicate whether balance manager should fetch
@@ -126,7 +127,7 @@ type BalanceManagerWithInMemoryTracking struct {
 	addressBalanceChangedMapMux sync.Mutex
 }
 
-func (af *BalanceManagerWithInMemoryTracking) TopUpAccount(ctx context.Context, addAccount *baseTypes.AddressAccount) (mtx *components.PublicTX, err error) {
+func (af *BalanceManagerWithInMemoryTracking) TopUpAccount(ctx context.Context, addAccount *baseTypes.AddressAccount) (mtx *ptxapi.PublicTx, err error) {
 	if af.sourceAddress == "" {
 		log.L(ctx).Debugf("Skip top up transaction as no fueling source configured")
 		// No-op
@@ -245,12 +246,12 @@ func (af *BalanceManagerWithInMemoryTracking) GetAddressBalance(ctx context.Cont
 	}, nil
 }
 
-func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(ctx context.Context, destAddress string, value *big.Int) (mtx *components.PublicTX, err error) {
+func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(ctx context.Context, destAddress string, value *big.Int) (mtx *ptxapi.PublicTx, err error) {
 	// check whether there is a pending fueling transaction already
 	// check whether the current balance manager already tracking the existing in-flight fueling transactions
 	log.L(ctx).Tracef("TransferGasFromAutoFuelingSource entry, source address: %s, destination address: %s, amount: %s", af.sourceAddress, destAddress, value.String())
 
-	var fuelingTx *components.PublicTX
+	var fuelingTx *ptxapi.PublicTx
 	af.destinationAddressesFuelingTrackedMux.Lock()
 	perAddressMux, ok := af.destinationAddressesFuelingTracked[destAddress] // there is no lock here as the map of tracked transactions is the one that is critical to get right
 	if !ok {
@@ -409,7 +410,7 @@ func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf *Config, et
 		maxDestBalance:                     maxDestBalance,
 		minThreshold:                       minThreshold,
 		destinationAddressesFuelingTracked: make(map[string]*sync.Mutex),
-		trackedFuelingTransactions:         make(map[string]*components.PublicTX),
+		trackedFuelingTransactions:         make(map[string]*ptxapi.PublicTx),
 		addressBalanceChangedMap:           make(map[string]bool),
 	}
 	return bm, nil

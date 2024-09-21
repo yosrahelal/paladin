@@ -30,6 +30,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 )
 
@@ -266,7 +267,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 		stageCounts[stageName] = 0
 	}
 
-	var latestCompleted *components.PublicTX
+	var latestCompleted *ptxapi.PublicTx
 	startFromNonce, hasCompletedNonce := oc.completedTxNoncePerAddress[oc.signingAddress]
 	// Run through copying across from the old InFlight list to the new one, those that aren't ready to be deleted
 	for _, p := range oldInFlight {
@@ -306,7 +307,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 	if spaces > 0 {
 		completedTxIDsStillBeingPersisted := make(map[string]bool)
 		tf := &components.PubTransactionQueries{
-			InStatus:   []string{string(components.PubTxStatusPending)},
+			InStatus:   []string{string(PubTxStatusPending)},
 			From:       confutil.P(oc.signingAddress),
 			Sort:       confutil.P("nonce"),
 			Limit:      confutil.P(spaces),
@@ -321,7 +322,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			tf.AfterNonce = &startFromNonce
 		}
 
-		var additional []*components.PublicTX
+		var additional []*ptxapi.PublicTx
 		// We retry the get from persistence indefinitely (until the context cancels)
 		err := oc.retry.Do(ctx, "get pending transactions", func(attempt int) (retry bool, err error) {
 
@@ -339,7 +340,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 				// already processed, still being persisted
 				completedTxIDsStillBeingPersisted[mtx.ID.String()] = true
 				log.L(ctx).Debugf("Orchestrator polled transaction with ID: %s but it's already being processed before, ignoring it", mtx.ID)
-			} else if mtx.Status == components.PubTxStatusPending {
+			} else if mtx.Status == PubTxStatusPending {
 				queueUpdated = true
 				it := NewInFlightTransactionStageController(oc.pubTxManager, oc, mtx)
 				if it.getConfirmedTxNonce(oc.signingAddress) != nil && it.getConfirmedTxNonce(oc.signingAddress).Cmp(mtx.Nonce.BigInt()) != -1 /* an confirmed tx is missed*/ {

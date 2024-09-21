@@ -82,7 +82,7 @@ func (iftxs *inFlightTransactionState) CanSubmit(ctx context.Context, cost *big.
 	return false
 }
 
-func (iftxs *inFlightTransactionState) StartNewStageContext(ctx context.Context, stage baseTypes.InFlightTxStage, substatus components.PubTxSubStatus) {
+func (iftxs *inFlightTransactionState) StartNewStageContext(ctx context.Context, stage baseTypes.InFlightTxStage, substatus PubTxSubStatus) {
 	nowTime := time.Now() // pin the now time
 	rsc := NewRunningStageContext(ctx, stage, substatus, iftxs.InMemoryTxStateManager)
 	if rsc.Stage != iftxs.stage {
@@ -336,22 +336,22 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 				*rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash = it.Hash
 				updateConfirmedTx = it
 				if it.Result == blockindexer.TXResult_SUCCESS.Enum() {
-					mtx.Status = components.PubTxStatusSucceeded
+					mtx.Status = PubTxStatusSucceeded
 					rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
 					iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusSuccess))
 				} else {
-					mtx.Status = components.PubTxStatusFailed
+					mtx.Status = PubTxStatusFailed
 					rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
 					iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusFail))
 				}
 			} else {
-				mtx.Status = components.PubTxStatusConflict
+				mtx.Status = PubTxStatusConflict
 				rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
 				iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusConflict))
 			}
-			if rsc.SubStatus != components.PubTxSubStatusConfirmed {
-				rsc.StageOutputsToBePersisted.UpdateSubStatus(components.BaseTxActionConfirmTransaction, nil, nil)
-				rsc.SetSubStatus(components.PubTxSubStatusConfirmed)
+			if rsc.SubStatus != PubTxSubStatusConfirmed {
+				rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionConfirmTransaction, nil, nil)
+				rsc.SetSubStatus(PubTxSubStatusConfirmed)
 			}
 		}
 		if !iftxs.turnOffHistory {

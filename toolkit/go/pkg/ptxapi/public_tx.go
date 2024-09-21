@@ -25,11 +25,15 @@ import (
 // If set these affect the submission of the public transaction.
 // All are optional
 type PublicTxOptions struct {
-	Gas                  *tktypes.HexUint64  `json:"gas,omitempty"`
+	Gas                *tktypes.HexUint64  `json:"gas,omitempty"`
+	Value              *tktypes.HexUint256 `json:"value,omitempty"`
+	PublicTxGasPricing                     // fixed when any of these are supplied - disabling the gas pricing engine for this TX
+}
+
+type PublicTxGasPricing struct {
 	MaxPriorityFeePerGas *tktypes.HexUint256 `json:"maxPriorityFeePerGas,omitempty"`
 	MaxFeePerGas         *tktypes.HexUint256 `json:"maxFeePerGas,omitempty"`
 	GasPrice             *tktypes.HexUint256 `json:"gasPrice,omitempty"`
-	Value                *tktypes.HexUint256 `json:"value,omitempty"`
 }
 
 type PublicTxInput struct {
@@ -39,9 +43,26 @@ type PublicTxInput struct {
 	Data tktypes.HexBytes `json:"data,omitempty"` // the pre-encoded calldata
 }
 
-type PublicTx struct {
+type PublicTxID struct {
 	Transaction   uuid.UUID `json:"transaction"`             // the paladin transaction containing this public transaction
 	ResubmitIndex int       `json:"resubmitIndex,omitempty"` // resubmission of the public transaction can occur for private transactions, meaning more than one public TX
+}
+
+type PublicTxSubmission struct {
+	PublicTxID
+	PublicTxSubmissionData
+}
+
+type PublicTxSubmissionData struct {
+	Time            tktypes.Timestamp `json:"time"`
+	TransactionHash tktypes.Bytes32   `json:"transactionHash"`
+	PublicTxGasPricing
+}
+
+type PublicTx struct {
+	PublicTxID
 	PublicTxInput
-	Nonce tktypes.HexUint64 `json:"nonce"` // unresolved signing account locator (public TX manager will resolve)
+	Nonce       tktypes.HexUint64         `json:"nonce"` // unresolved signing account locator (public TX manager will resolve)
+	Created     tktypes.Timestamp         `json:"created"`
+	Submissions []*PublicTxSubmissionData `json:"submissions,omitempty"`
 }

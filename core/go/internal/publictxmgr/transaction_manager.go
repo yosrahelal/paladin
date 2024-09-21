@@ -18,21 +18,25 @@ package publictxmgr
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
+	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
@@ -78,7 +82,7 @@ type pubTxManager struct {
 	nonceManager NonceCache
 
 	// a map of signing addresses and transaction engines
-	InFlightOrchestrators       map[string]*orchestrator
+	InFlightOrchestrators       map[tktypes.EthAddress]*orchestrator
 	SigningAddressesPausedUntil map[string]time.Time
 	InFlightOrchestratorMux     sync.Mutex
 	InFlightOrchestratorStale   chan bool
@@ -454,28 +458,109 @@ func (ble *pubTxManager) HandleConfirmedTransactions(ctx context.Context, confir
 	return nil
 }
 
-func (ble *pubTxManager) HandleSuspendTransaction(ctx context.Context, txID string) (mtx *components.PublicTX, err error) {
-	mtx, err = ble.txStore.GetTransactionByID(ctx, txID)
-	if err != nil {
-		return nil, err
+func recoverGasPriceOptions(gpoJSON tktypes.RawJSON) (ptgp ptxapi.PublicTxGasPricing) {
+	if gpoJSON != nil {
+		_ = json.Unmarshal(gpoJSON, &ptgp)
 	}
-	res := ble.dispatchAction(ctx, mtx, ActionSuspend)
-	if res.err != nil {
-		return nil, res.err
-	}
-	return res.tx, nil
+	return
 }
 
-func (ble *pubTxManager) HandleResumeTransaction(ctx context.Context, txID string) (mtx *components.PublicTX, err error) {
-	mtx, err = ble.txStore.GetTransactionByID(ctx, txID)
+func (ble *pubTxManager) GetTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON, submissions bool) ([]*ptxapi.PublicTx, error) {
+	var ptxs []*persistedPubTx
+	q := filters.BuildGORM(ctx, jq, dbTX.Table("public_txns").WithContext(ctx), components.PublicTxFilterFields)
+	err := q.Find(&ptxs).Error
 	if err != nil {
 		return nil, err
 	}
-	res := ble.dispatchAction(ctx, mtx, ActionResume)
-	if res.err != nil {
-		return nil, res.err
+
+	results := make([]*ptxapi.PublicTx, len(ptxs))
+	signerNonceRefs := make([]string, len(ptxs))
+	for i, ptx := range ptxs {
+		signerNonceRefs[i] = fmt.Sprintf("%s:%s", ptx.From, ptx.Nonce)
+		results[i] = mapPersistedTransaction(ptx)
 	}
-	return res.tx, nil
+	if len(signerNonceRefs) > 0 && submissions {
+		allSubs, err := ble.getTransactionSubmissions(ctx, dbTX, signerNonceRefs)
+		if err != nil {
+			return nil, err
+		}
+		for _, sub := range allSubs {
+			for _, tx := range results {
+				if sub.SignerNonceRef == fmt.Sprintf("%s:%s", tx.From, tx.Nonce) {
+					tx.Submissions = append(tx.Submissions, mapPersistedSubmissionData(sub))
+				}
+			}
+		}
+	}
+	return results, nil
+}
+
+func mapPersistedTransaction(ptx *persistedPubTx) *ptxapi.PublicTx {
+	return &ptxapi.PublicTx{
+		PublicTxID: ptxapi.PublicTxID{
+			Transaction:   ptx.Transaction,
+			ResubmitIndex: ptx.ResubmitIndex,
+		},
+		PublicTxInput: ptxapi.PublicTxInput{
+			From: ptx.From,
+			To:   ptx.To,
+			PublicTxOptions: ptxapi.PublicTxOptions{
+				Gas:                (*tktypes.HexUint64)(&ptx.Gas),
+				Value:              ptx.Value,
+				PublicTxGasPricing: recoverGasPriceOptions(ptx.FixedGasPricing),
+			},
+			Data: ptx.Data,
+		},
+		Nonce:   tktypes.HexUint64(ptx.Nonce),
+		Created: ptx.Created,
+	}
+}
+
+func mapPersistedSubmissionData(pSub *persistedTxSubmission) *ptxapi.PublicTxSubmissionData {
+	return &ptxapi.PublicTxSubmissionData{
+		Time:               pSub.Created,
+		TransactionHash:    tktypes.Bytes32(pSub.TransactionHash),
+		PublicTxGasPricing: recoverGasPriceOptions(pSub.GasPricing),
+	}
+}
+
+func (ble *pubTxManager) getTransactionSubmissions(ctx context.Context, dbTX *gorm.DB, signerNonceRefs []string) ([]*persistedTxSubmission, error) {
+	var ptxs []*persistedTxSubmission
+	err := dbTX.
+		WithContext(ctx).
+		Table("public_submissions").
+		Where("signer_nonce_ref IN (?)", signerNonceRefs).
+		Order("created DESC").
+		Error
+	return ptxs, err
+}
+
+func (ble *pubTxManager) SuspendTransactionsForID(ctx context.Context, txID uuid.UUID) error {
+	txns, err := ble.GetTransactions(ctx, ble.p.DB(), query.NewQueryBuilder().Equal("transaction", txID).Query(), false)
+	if err != nil {
+		return err
+	}
+	for _, tx := range txns {
+		res := ble.dispatchAction(ctx, tx, ActionSuspend)
+		if res.err != nil {
+			return res.err
+		}
+	}
+	return nil
+}
+
+func (ble *pubTxManager) ResumeTransactionsForID(ctx context.Context, txID uuid.UUID) error {
+	txns, err := ble.GetTransactions(ctx, ble.p.DB(), query.NewQueryBuilder().Equal("transaction", txID).Query(), false)
+	if err != nil {
+		return err
+	}
+	for _, tx := range txns {
+		res := ble.dispatchAction(ctx, tx, ActionResume)
+		if res.err != nil {
+			return res.err
+		}
+	}
+	return nil
 }
 
 func (ble *pubTxManager) getConfirmedTxNonce(addr string) (nonce *big.Int) {

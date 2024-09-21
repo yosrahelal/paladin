@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -302,9 +303,9 @@ func TestTopUpAddressNoOpScenarios(t *testing.T) {
 
 }
 
-func generateExpectedFuelingTransaction(amountToTransfer int64) *components.PublicTX {
-	return &components.PublicTX{
-		Status: components.PubTxStatusPending,
+func generateExpectedFuelingTransaction(amountToTransfer int64) *ptxapi.PublicTx {
+	return &ptxapi.PublicTx{
+		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 
 			From:  []byte(testAutoFuelingSourceAddress),

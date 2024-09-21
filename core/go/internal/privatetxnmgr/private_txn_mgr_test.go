@@ -158,7 +158,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 
 	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPreparedSubmissions, false, nil)
 
-	publicTransactions := []*components.PublicTX{
+	publicTransactions := []*ptxapi.PublicTx{
 		{
 			ID: uuid.New(),
 		},
@@ -292,7 +292,7 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 
 	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPreparedSubmissions, false, nil)
 
-	publicTransactions := []*components.PublicTX{
+	publicTransactions := []*ptxapi.PublicTx{
 		{
 			ID: uuid.New(),
 		},
@@ -431,7 +431,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 
 	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPreparedSubmissions, false, nil)
 
-	publicTransactions := []*components.PublicTX{
+	publicTransactions := []*ptxapi.PublicTx{
 		{
 			ID: uuid.NewString(),
 		},
@@ -849,11 +849,11 @@ func (f *fakePublicTxManager) PrepareSubmissionBatch(ctx context.Context, reqOpt
 }
 
 // SubmitBatch implements components.PublicTxManager.
-func (f *fakePublicTxManager) SubmitBatch(ctx context.Context, tx *gorm.DB, preparedSubmissions []components.PublicTxPreparedSubmission) ([]*components.PublicTX, error) {
-	publicTransactions := make([]*components.PublicTX, 0, len(preparedSubmissions))
+func (f *fakePublicTxManager) SubmitBatch(ctx context.Context, tx *gorm.DB, preparedSubmissions []components.PublicTxPreparedSubmission) ([]*ptxapi.PublicTx, error) {
+	publicTransactions := make([]*ptxapi.PublicTx, 0, len(preparedSubmissions))
 
 	for range preparedSubmissions {
-		publicTransactions = append(publicTransactions, &components.PublicTX{
+		publicTransactions = append(publicTransactions, &ptxapi.PublicTx{
 			ID: uuid.NewString(),
 		})
 	}

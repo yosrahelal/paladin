@@ -26,9 +26,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -37,18 +37,18 @@ import (
 
 func TestNewOrchestratorPolling(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusPending,
+		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 		Created: tktypes.TimestampNow(),
 	}
-	mockManagedTx2 := &components.PublicTX{
+	mockManagedTx2 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusPending,
+		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
@@ -80,8 +80,8 @@ func TestNewOrchestratorPolling(t *testing.T) {
 	mTS.On("UpdateTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		time.Sleep(1 * time.Hour) // make sure the async action never got returned as the test will mock the events
 	}).Maybe()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Once()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Maybe()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{mockManagedTx1, mockManagedTx2}, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{}, nil).Maybe()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT}
 	addressBalanceChecked := make(chan bool)
@@ -95,7 +95,7 @@ func TestNewOrchestratorPolling(t *testing.T) {
 
 func TestNewOrchestratorPollingContextCancelled(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
@@ -127,18 +127,18 @@ func TestNewOrchestratorPollingContextCancelled(t *testing.T) {
 
 func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusFailed,
+		Status: PubTxStatusFailed,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 		Created: tktypes.TimestampNow(),
 	}
-	mockManagedTx2 := &components.PublicTX{
+	mockManagedTx2 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusPending,
+		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
@@ -163,7 +163,7 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 	oc.balanceManager = mockBM
 	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{mockManagedTx1, mockManagedTx2}, nil).Once()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT,
 	}
@@ -178,18 +178,18 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 
 func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusSuspended,
+		Status: PubTxStatusSuspended,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 		Created: tktypes.TimestampNow(),
 	}
-	mockManagedTx2 := &components.PublicTX{
+	mockManagedTx2 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusPending,
+		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
@@ -215,7 +215,7 @@ func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 	oc.balanceManager = mockBM
 	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{mockManagedTx1, mockManagedTx2}, nil).Once()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT,
 	}
@@ -231,9 +231,9 @@ func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 
 func TestNewOrchestratorPollingMarkStale(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusPending,
+		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
@@ -259,7 +259,7 @@ func TestNewOrchestratorPollingMarkStale(t *testing.T) {
 	oc.lastQueueUpdate = time.Now().Add(-1 * time.Hour)
 	mockIT := NewInFlightTransactionStageController(ble, oc, mockManagedTx1)
 
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1}, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{mockManagedTx1}, nil).Once()
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT,
 	}
@@ -276,18 +276,18 @@ func TestNewOrchestratorPollingMarkStale(t *testing.T) {
 func TestOrchestratorStop(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusSuspended,
+		Status: PubTxStatusSuspended,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 		Created: tktypes.TimestampNow(),
 	}
-	mockManagedTx2 := &components.PublicTX{
+	mockManagedTx2 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusPending,
+		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
@@ -298,7 +298,7 @@ func TestOrchestratorStop(t *testing.T) {
 	ble, _ := NewTestTransactionEngine(t)
 
 	mTS := componentmocks.NewPublicTransactionStore(t)
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Maybe()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{mockManagedTx1, mockManagedTx2}, nil).Maybe()
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
 	mEN := componentmocks.NewPublicTxEventNotifier(t)
@@ -323,9 +323,9 @@ func TestOrchestratorStop(t *testing.T) {
 
 func TestOrchestratorStopWhenBalanceUnavailable(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusSucceeded,
+		Status: PubTxStatusSucceeded,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
@@ -379,9 +379,9 @@ func TestOrchestratorStopWhenBalanceUnavailable(t *testing.T) {
 
 func TestOrchestratorTriggerTopUp(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusSucceeded,
+		Status: PubTxStatusSucceeded,
 		Transaction: &ethsigner.Transaction{
 			From:     json.RawMessage(testMainSigningAddress),
 			Nonce:    ethtypes.NewHexInteger64(1),
@@ -428,36 +428,36 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 
 func TestOrchestratorHandleConfirmedTransactions(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	mockManagedTx0 := &components.PublicTX{
+	mockManagedTx0 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusPending,
+		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(0),
 		},
 		Created: tktypes.TimestampNow(),
 	}
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusPending,
+		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 		Created: tktypes.TimestampNow(),
 	}
-	mockManagedTx2 := &components.PublicTX{
+	mockManagedTx2 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusPending,
+		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(2),
 		},
 		Created: tktypes.TimestampNow(),
 	}
-	mockManagedTx3 := &components.PublicTX{
+	mockManagedTx3 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusPending,
+		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(3),
@@ -511,9 +511,9 @@ func TestOrchestratorHandleConfirmedTransactions(t *testing.T) {
 func TestOrchestratorHandleConfirmedTransactionsNoInflightNotHang(t *testing.T) {
 	ctx := context.Background()
 
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusPending,
+		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),

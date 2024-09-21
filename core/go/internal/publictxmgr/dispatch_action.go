@@ -21,9 +21,9 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 )
 
 type APIRequestType int
@@ -33,14 +33,18 @@ const (
 	ActionResume
 )
 
-type APIResponse struct {
-	tx     *components.PublicTX
-	err    error
-	status int // http status code (200 Ok vs. 202 Accepted) - only set for success cases
+func (pte *pubTxManager) persistSuspendedFlag(ctx context.Context, txID *ptxapi.PublicTxID, suspended bool) error {
+	log.L(ctx).Infof("Setting suspend status to '%t' for transaction %s:%d", suspended, txID.Transaction, txID.ResubmitIndex)
+	return pte.p.DB().
+		WithContext(ctx).
+		UpdateColumn("suspended", suspended).
+		Where("transaction = ?", txID.Transaction).
+		Where("resubmit_idx = ?", txID.ResubmitIndex).
+		Error
 }
 
-func (pte *pubTxManager) dispatchAction(ctx context.Context, mtx *components.PublicTX, action APIRequestType) APIResponse {
-	response := make(chan APIResponse, 1)
+func (pte *pubTxManager) dispatchAction(ctx context.Context, tx *ptxapi.PublicTx, action APIRequestType) error {
+	response := make(chan error, 1)
 	startTime := time.Now()
 	var err error
 
@@ -49,41 +53,30 @@ func (pte *pubTxManager) dispatchAction(ctx context.Context, mtx *components.Pub
 		defer pte.InFlightOrchestratorMux.Unlock()
 		switch action {
 		case ActionSuspend, ActionResume:
-			// Just update the DB directly, as we're not inflight right now.
-			newStatus := components.PubTxStatusPending
+			suspended := false
 			if action == ActionSuspend {
-				newStatus = components.PubTxStatusSuspended
+				suspended = true
 			}
-			inFlightOrchestrator, orchestratorInFlight := pte.InFlightOrchestrators[string(mtx.From)]
+			// Just update the DB directly, as we're not inflight right now.
+			inFlightOrchestrator, orchestratorInFlight := pte.InFlightOrchestrators[tx.From]
 			if !orchestratorInFlight {
 				// no in-flight orchestrator for the signing address, it's OK to update the DB directly
-				log.L(ctx).Infof("Setting status to '%s' for transaction %s", newStatus, mtx.ID)
-				err = pte.txStore.UpdateTransaction(ctx, mtx.ID.String(), &components.BaseTXUpdates{
-					Status: &newStatus,
-				})
-				if err != nil {
-					response <- APIResponse{err: err}
-					return
-				}
-				mtx.Status = newStatus
-				response <- APIResponse{tx: mtx, status: http.StatusOK}
+				response <- pte.persistSuspendedFlag(ctx, &tx.PublicTxID, suspended)
 			} else {
-				inFlightOrchestrator.dispatchAction(ctx, mtx, action, response)
+				inFlightOrchestrator.dispatchAction(ctx, tx, action, response)
 			}
 		}
 	}()
 
 	select {
-	case res := <-response:
-		return res
+	case err := <-response:
+		return err
 	case <-ctx.Done():
-		return APIResponse{
-			err: i18n.NewError(ctx, msgs.MsgTransactionEngineRequestTimeout, time.Since(startTime).Seconds()),
-		}
+		return i18n.NewError(ctx, msgs.MsgTransactionEngineRequestTimeout, time.Since(startTime).Seconds())
 	}
 }
 
-func (oc *orchestrator) dispatchAction(ctx context.Context, mtx *components.PublicTX, action APIRequestType, response chan<- APIResponse) {
+func (oc *orchestrator) dispatchAction(ctx context.Context, mtx *ptxapi.PublicTx, action APIRequestType, response chan<- error) {
 	switch action {
 	case ActionSuspend, ActionResume:
 		oc.InFlightTxsMux.Lock()
@@ -95,9 +88,9 @@ func (oc *orchestrator) dispatchAction(ctx context.Context, mtx *components.Publ
 				break
 			}
 		}
-		newStatus := components.PubTxStatusPending
+		newStatus := PubTxStatusPending
 		if action == ActionSuspend {
-			newStatus = components.PubTxStatusSuspended
+			newStatus = PubTxStatusSuspended
 		}
 		if pending == nil {
 			// transaction not in flight yet, update the DB directly and tell the engine to not pick up the transaction until we completed
@@ -115,7 +108,7 @@ func (oc *orchestrator) dispatchAction(ctx context.Context, mtx *components.Publ
 					oc.transactionIDsInStatusUpdate = newTransactionIDsInStatusUpdate
 				}()
 				log.L(ctx).Debugf("Setting status to '%s' for transaction %s", newStatus, mtx.ID)
-				err := oc.txStore.UpdateTransaction(ctx, mtx.ID.String(), &components.BaseTXUpdates{
+				err := oc.txStore.UpdateTransaction(ctx, mtx.ID.String(), &BaseTXUpdates{
 					Status: &newStatus,
 				})
 				if err != nil {

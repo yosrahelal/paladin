@@ -22,12 +22,12 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"golang.org/x/crypto/sha3"
 )
@@ -42,7 +42,7 @@ func calculateTransactionHash(rawTxnData []byte) *tktypes.Bytes32 {
 	return &hashBytes
 }
 
-func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx *components.PublicTX, signedMessage []byte) (*tktypes.Bytes32, *tktypes.Timestamp, ethclient.ErrorReason, baseTypes.SubmissionOutcome, error) {
+func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx *ptxapi.PublicTx, signedMessage []byte) (*tktypes.Bytes32, *tktypes.Timestamp, ethclient.ErrorReason, baseTypes.SubmissionOutcome, error) {
 	var txHash *tktypes.Bytes32
 	sendStart := time.Now()
 	calculatedTxHash := calculateTransactionHash(signedMessage)

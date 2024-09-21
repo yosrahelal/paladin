@@ -19,12 +19,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 )
 
-func (it *InFlightTransactionStageController) signTx(ctx context.Context, mtx *components.PublicTX) ([]byte, string, error) {
+func (it *InFlightTransactionStageController) signTx(ctx context.Context, mtx *ptxapi.PublicTx) ([]byte, string, error) {
 
 	log.L(ctx).Debugf("signTx entry")
 	signStart := time.Now()

@@ -34,6 +34,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -92,7 +93,7 @@ func TestInit(t *testing.T) {
 	mKM := componentmocks.NewKeyManager(t)
 	listed := make(chan struct{})
 	mBI.On("RegisterIndexedTransactionHandler", ctx, mock.Anything).Return(nil).Once()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Run(func(args mock.Arguments) {
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{}, nil).Run(func(args mock.Arguments) {
 		listed <- struct{}{}
 	}).Once()
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
@@ -209,7 +210,7 @@ func TestHandleNewTransactionForTransferOnly(t *testing.T) {
 	mTS.On("InsertTransaction", ctx, mock.Anything, mock.Anything).Return(nil).Once()
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
-	mTS.On("UpdateSubStatus", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mTS.On("UpdateSubStatus", ctx, txID.String(), PubTxSubStatusReceived, BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	_, _, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
@@ -246,13 +247,13 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
-		mtx := args[2].(*components.PublicTX)
+		mtx := args[2].(*ptxapi.PublicTx)
 		assert.Equal(t, "1223451", mtx.GasLimit.BigInt().String())
 		assert.Nil(t, mtx.GasPrice)
 		insertMock.Return(nil)
 	}).Once()
 	txID := uuid.New()
-	mTS.On("UpdateSubStatus", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mTS.On("UpdateSubStatus", ctx, txID.String(), PubTxSubStatusReceived, BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	_, _, err := ble.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
@@ -289,13 +290,13 @@ func TestHandleNewTransactionTransferAndInvalidType(t *testing.T) {
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
-		mtx := args[2].(*components.PublicTX)
+		mtx := args[2].(*ptxapi.PublicTx)
 		assert.Equal(t, "1223451", mtx.GasLimit.BigInt().String())
 		assert.Equal(t, "0", mtx.GasPrice.BigInt().String())
 		insertMock.Return(nil)
 	}).Once()
 	txID := uuid.New()
-	mTS.On("UpdateSubStatus", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mTS.On("UpdateSubStatus", ctx, txID.String(), PubTxSubStatusReceived, BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	_, _, err := ble.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
@@ -439,11 +440,11 @@ func TestHandleNewTransaction(t *testing.T) {
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
-		mtx := args[2].(*components.PublicTX)
+		mtx := args[2].(*ptxapi.PublicTx)
 		assert.Equal(t, big.NewInt(200), mtx.GasLimit.BigInt())
 		insertMock.Return(nil)
 	}).Once()
-	mTS.On("UpdateSubStatus", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mTS.On("UpdateSubStatus", ctx, txID.String(), PubTxSubStatusReceived, BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	_, _, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
 		SignerID: string(testEthTxInput.From),
@@ -558,11 +559,11 @@ func TestHandleNewDeployment(t *testing.T) {
 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
 	insertMock.Run(func(args mock.Arguments) {
-		mtx := args[2].(*components.PublicTX)
+		mtx := args[2].(*ptxapi.PublicTx)
 		assert.Equal(t, big.NewInt(200), mtx.GasLimit.BigInt())
 		insertMock.Return(nil)
 	}).Once()
-	mTS.On("UpdateSubStatus", ctx, txID.String(), components.PubTxSubStatusReceived, components.BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mTS.On("UpdateSubStatus", ctx, txID.String(), PubTxSubStatusReceived, BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	_, _, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
 		ID:       &txID,
 		SignerID: string(testEthTxInput.From),
@@ -597,18 +598,18 @@ func TestEngineSuspend(t *testing.T) {
 	assert.Regexp(t, "get error", err)
 
 	// engine update error
-	suspendedStatus := components.PubTxStatusSuspended
+	suspendedStatus := PubTxStatusSuspended
 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &BaseTXUpdates{
 		Status: &suspendedStatus,
 	}).Return(fmt.Errorf("update error")).Once()
 	_, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "update error", err)
 
 	// engine update success
-	mtx.Status = components.PubTxStatusPending
+	mtx.Status = PubTxStatusPending
 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &BaseTXUpdates{
 		Status: &suspendedStatus,
 	}).Return(nil).Once()
 	tx, err := ble.HandleSuspendTransaction(ctx, mtx.ID.String())
@@ -632,16 +633,16 @@ func TestEngineSuspend(t *testing.T) {
 	}
 	// orchestrator update error
 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &BaseTXUpdates{
 		Status: &suspendedStatus,
 	}).Return(fmt.Errorf("update error")).Once()
 	_, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "update error", err)
 
 	// orchestrator update success
-	mtx.Status = components.PubTxStatusPending
+	mtx.Status = PubTxStatusPending
 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &BaseTXUpdates{
 		Status: &suspendedStatus,
 	}).Return(nil).Once()
 	tx, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
@@ -657,21 +658,21 @@ func TestEngineSuspend(t *testing.T) {
 	}
 
 	// async status update queued
-	mtx.Status = components.PubTxStatusPending
+	mtx.Status = PubTxStatusPending
 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
 	tx, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
 	require.NoError(t, err)
-	assert.Equal(t, components.PubTxStatusPending, tx.Status)
+	assert.Equal(t, PubTxStatusPending, tx.Status)
 
 	// already on the target status
-	mtx.Status = components.PubTxStatusSuspended
+	mtx.Status = PubTxStatusSuspended
 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
 	tx, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
 	require.NoError(t, err)
-	assert.Equal(t, components.PubTxStatusSuspended, tx.Status)
+	assert.Equal(t, PubTxStatusSuspended, tx.Status)
 
 	// error when try to update the status of a completed tx
-	mtx.Status = components.PubTxStatusFailed
+	mtx.Status = PubTxStatusFailed
 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
 	_, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "PD011921", err)
@@ -700,18 +701,18 @@ func TestEngineResume(t *testing.T) {
 	assert.Regexp(t, "get error", err)
 
 	// engine update error
-	pendingStatus := components.PubTxStatusPending
+	pendingStatus := PubTxStatusPending
 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &BaseTXUpdates{
 		Status: &pendingStatus,
 	}).Return(fmt.Errorf("update error")).Once()
 	_, err = ble.HandleResumeTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "update error", err)
 
 	// engine update success
-	mtx.Status = components.PubTxStatusSuspended
+	mtx.Status = PubTxStatusSuspended
 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &BaseTXUpdates{
 		Status: &pendingStatus,
 	}).Return(nil).Once()
 	tx, err := ble.HandleResumeTransaction(ctx, mtx.ID.String())
@@ -735,16 +736,16 @@ func TestEngineResume(t *testing.T) {
 	}
 	// orchestrator update error
 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &BaseTXUpdates{
 		Status: &pendingStatus,
 	}).Return(fmt.Errorf("update error")).Once()
 	_, err = ble.HandleResumeTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "update error", err)
 
 	// orchestrator update success
-	mtx.Status = components.PubTxStatusSuspended
+	mtx.Status = PubTxStatusSuspended
 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
-	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &components.BaseTXUpdates{
+	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &BaseTXUpdates{
 		Status: &pendingStatus,
 	}).Return(nil).Once()
 	tx, err = ble.HandleResumeTransaction(ctx, mtx.ID.String())
@@ -760,21 +761,21 @@ func TestEngineResume(t *testing.T) {
 	}
 
 	// async status update queued
-	mtx.Status = components.PubTxStatusSuspended
+	mtx.Status = PubTxStatusSuspended
 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
 	tx, err = ble.HandleResumeTransaction(ctx, mtx.ID.String())
 	require.NoError(t, err)
-	assert.Equal(t, components.PubTxStatusSuspended, tx.Status)
+	assert.Equal(t, PubTxStatusSuspended, tx.Status)
 
 	// already on the target status
-	mtx.Status = components.PubTxStatusPending
+	mtx.Status = PubTxStatusPending
 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
 	tx, err = ble.HandleResumeTransaction(ctx, mtx.ID.String())
 	require.NoError(t, err)
-	assert.Equal(t, components.PubTxStatusPending, tx.Status)
+	assert.Equal(t, PubTxStatusPending, tx.Status)
 
 	// error when try to update the status of a completed tx
-	mtx.Status = components.PubTxStatusFailed
+	mtx.Status = PubTxStatusFailed
 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
 	_, err = ble.HandleResumeTransaction(ctx, mtx.ID.String())
 	assert.Regexp(t, "PD011921", err)
@@ -830,25 +831,25 @@ func TestEngineHandleConfirmedTransactionEvents(t *testing.T) {
 	imtxs := NewTestInMemoryTxState(t)
 	mtx := imtxs.GetTx()
 
-	mockManagedTx0 := &components.PublicTX{
+	mockManagedTx0 := &ptxapi.PublicTx{
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(string(mtx.From)),
 			Nonce: ethtypes.NewHexInteger64(4),
 		},
 	}
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(string(mtx.From)),
 			Nonce: ethtypes.NewHexInteger64(5),
 		},
 	}
-	mockManagedTx2 := &components.PublicTX{
+	mockManagedTx2 := &ptxapi.PublicTx{
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage("0x12345f6e918321dd47c86e7a077b4ab0e7411234"),
 			Nonce: ethtypes.NewHexInteger64(6),
 		},
 	}
-	mockManagedTx3 := &components.PublicTX{
+	mockManagedTx3 := &ptxapi.PublicTx{
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage("0x43215f6e918321dd47c86e7a077b4ab0e7414321"),
 			Nonce: ethtypes.NewHexInteger64(7),

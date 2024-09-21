@@ -25,8 +25,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -69,7 +69,7 @@ func TestNewEnginePollingCancelledContext(t *testing.T) {
 	ble.maxInFlightOrchestrators = 1
 	ble.enginePollingInterval = 1 * time.Hour
 	// already has a running orchestrator for the address so no new orchestrator should be started
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, fmt.Errorf("error")).Run(func(args mock.Arguments) {
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{}, fmt.Errorf("error")).Run(func(args mock.Arguments) {
 		cancelCtx()
 	}).Once()
 	ble.ctx = ctx
@@ -79,14 +79,14 @@ func TestNewEnginePollingCancelledContext(t *testing.T) {
 
 func TestNewEnginePollingReAddStoppedOrchestrator(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		ID: uuid.New(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 	}
-	mockManagedTx2 := &components.PublicTX{
+	mockManagedTx2 := &ptxapi.PublicTx{
 		ID: uuid.New(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
@@ -110,12 +110,12 @@ func TestNewEnginePollingReAddStoppedOrchestrator(t *testing.T) {
 	zeroTransactionListedForIdle := make(chan struct{})
 
 	// already has a running orchestrator for the address so no new orchestrator should be started
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Once()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Run(func(args mock.Arguments) {
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{mockManagedTx1, mockManagedTx2}, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{}, nil).Run(func(args mock.Arguments) {
 		close(zeroTransactionListedForIdle)
 	}).Once()
 
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Maybe()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{}, nil).Maybe()
 	ble.InFlightOrchestrators = map[string]*orchestrator{
 		testMainSigningAddress: {state: OrchestratorStateStopped, stateEntryTime: time.Now()}, // already has an orchestrator for 0x1
 	}
@@ -131,14 +131,14 @@ func TestNewEnginePollingReAddStoppedOrchestrator(t *testing.T) {
 
 func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		ID: uuid.New(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 	}
-	mockManagedTx2 := &components.PublicTX{
+	mockManagedTx2 := &ptxapi.PublicTx{
 		ID: uuid.New(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
@@ -160,8 +160,8 @@ func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 	ble.enginePollingInterval = 1 * time.Hour
 	ble.engineLoopDone = make(chan struct{})
 	// already has a running orchestrator for the address so no new orchestrator should be started
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Once()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Maybe()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{mockManagedTx1, mockManagedTx2}, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{}, nil).Maybe()
 	go ble.engineLoop()
 	existingOrchestrator := &orchestrator{
 		pubTxManager:                ble,
@@ -191,14 +191,14 @@ func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 
 func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		ID: uuid.New(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
 		},
 	}
-	mockManagedTx2 := &components.PublicTX{
+	mockManagedTx2 := &ptxapi.PublicTx{
 		ID: uuid.New(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
@@ -235,8 +235,8 @@ func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) 
 		bIndexer:                    mBI,
 	}
 	// already has a running orchestrator for the address so no new orchestrator should be started
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1, mockManagedTx2}, nil).Maybe()
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Maybe()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{mockManagedTx1, mockManagedTx2}, nil).Maybe()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{}, nil).Maybe()
 	ble.InFlightOrchestrators = map[string]*orchestrator{
 		testMainSigningAddress: existingOrchestrator, // already has an orchestrator for 0x1
 	}
@@ -266,7 +266,7 @@ func TestNewEnginePollingExcludePausedOrchestrator(t *testing.T) {
 
 	// already has a running orchestrator for the address so no new orchestrator should be started
 	listed := make(chan struct{})
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Run(func(args mock.Arguments) {
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{}, nil).Run(func(args mock.Arguments) {
 		close(listed)
 	}).Once()
 	ble.InFlightOrchestrators = map[string]*orchestrator{}
@@ -278,7 +278,7 @@ func TestNewEnginePollingExcludePausedOrchestrator(t *testing.T) {
 
 func TestNewEngineGetPendingFuelingTxs(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		ID: uuid.New(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
@@ -298,7 +298,7 @@ func TestNewEngineGetPendingFuelingTxs(t *testing.T) {
 	ble.enginePollingInterval = 1 * time.Hour
 
 	// already has a running orchestrator for the address so no new orchestrator should be started
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1}, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{mockManagedTx1}, nil).Once()
 	tx, err := ble.GetPendingFuelingTransaction(ctx, "0x0", testMainSigningAddress)
 	assert.Equal(t, mockManagedTx1, tx)
 	require.NoError(t, err)
@@ -311,9 +311,9 @@ func TestNewEngineGetPendingFuelingTxs(t *testing.T) {
 
 func TestNewEngineCheckTxCompleteness(t *testing.T) {
 	ctx := context.Background()
-	mockManagedTx1 := &components.PublicTX{
+	mockManagedTx1 := &ptxapi.PublicTx{
 		ID:     uuid.New(),
-		Status: components.PubTxStatusSucceeded,
+		Status: PubTxStatusSucceeded,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(0),
@@ -335,19 +335,19 @@ func TestNewEngineCheckTxCompleteness(t *testing.T) {
 	// when no nonce cached
 
 	// return false for a transaction with nonce "0" that is still pending
-	testTxWithZeroNonce := &components.PublicTX{
-		Status: components.PubTxStatusPending,
+	testTxWithZeroNonce := &ptxapi.PublicTx{
+		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(0),
 		},
 	}
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{}, nil).Once()
 	assert.False(t, ble.CheckTransactionCompleted(ctx, testTxWithZeroNonce))
 
 	// for transactions with a non-zero nonce
-	testTxToCheck := &components.PublicTX{
-		Status: components.PubTxStatusPending,
+	testTxToCheck := &ptxapi.PublicTx{
+		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
 			Nonce: ethtypes.NewHexInteger64(1),
@@ -357,10 +357,10 @@ func TestNewEngineCheckTxCompleteness(t *testing.T) {
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("List transaction errored")).Once()
 	assert.False(t, ble.CheckTransactionCompleted(ctx, testTxToCheck))
 	// return false when no transactions retrieved
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{}, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{}, nil).Once()
 	assert.False(t, ble.CheckTransactionCompleted(ctx, testTxToCheck))
 	// return false when the retrieved transaction has a lower nonce
-	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*components.PublicTX{mockManagedTx1}, nil).Once()
+	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{mockManagedTx1}, nil).Once()
 	assert.False(t, ble.CheckTransactionCompleted(ctx, testTxToCheck))
 
 	// try to update nonce when transaction incomplete shouldn't take affect
@@ -369,7 +369,7 @@ func TestNewEngineCheckTxCompleteness(t *testing.T) {
 	assert.False(t, ble.CheckTransactionCompleted(ctx, testTxToCheck))
 
 	// try to update the nonce with a completed transaction works
-	testTxToCheck.Status = components.PubTxStatusFailed
+	testTxToCheck.Status = PubTxStatusFailed
 	ble.updateCompletedTxNonce(testTxToCheck) // nonce stayed at 0
 	assert.True(t, ble.CheckTransactionCompleted(ctx, testTxToCheck))
 }

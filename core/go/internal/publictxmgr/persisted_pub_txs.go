@@ -28,25 +28,27 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 // public_transactions
 type persistedPubTx struct {
-	From          tktypes.EthAddress `gorm:"column:from;primaryKey"`
-	Nonce         uint64             `gorm:"column:nonce;primaryKey"`
-	Created       tktypes.Timestamp  `gorm:"column:created;autoCreateTime:nano"`
-	Transaction   uuid.UUID          `gorm:"column:transaction"`  // only unique when combined with ResubmitIndex
-	ResubmitIndex uint64             `gorm:"column:resubmit_idx"` // can have multiple public TX under a single paladin TX for resubmits
-	To            tktypes.EthAddress `gorm:"column:to"`
-	Gas           uint64             `gorm:"column:gas"`
-	Value         uint64             `gorm:"column:value"`
-	Data          tktypes.HexBytes   `gorm:"column:data"`
+	From            tktypes.EthAddress  `gorm:"column:from;primaryKey"`
+	Nonce           uint64              `gorm:"column:nonce;primaryKey"`
+	Created         tktypes.Timestamp   `gorm:"column:created;autoCreateTime:nano"`
+	Transaction     uuid.UUID           `gorm:"column:transaction"`  // only unique when combined with ResubmitIndex
+	ResubmitIndex   int                 `gorm:"column:resubmit_idx"` // can have multiple public TX under a single paladin TX for resubmits
+	To              *tktypes.EthAddress `gorm:"column:to"`
+	Gas             uint64              `gorm:"column:gas"`
+	FixedGasPricing tktypes.RawJSON     `gorm:"column:fixed_gas_pricing"`
+	Value           *tktypes.HexUint256 `gorm:"column:value"`
+	Data            tktypes.HexBytes    `gorm:"column:data"`
+	Suspended       bool                `gorm:"column:suspended"`
 }
 
 type persistedTxSubmission struct {
-	From            uuid.UUID         `gorm:"column:transaction;primaryKey"`
-	Nonce           uint64            `gorm:"column:resubmit_idx;primaryKey"`
+	SignerNonceRef  string            `gorm:"column:signer_nonce_ref;primaryKey"` // simplifies lookups for us to do the compound key, rather than having two columns
 	Created         tktypes.Timestamp `gorm:"column:created;autoCreateTime:nano"`
 	TransactionHash tktypes.HexBytes  `gorm:"column:tx_hash"`
 	GasPricing      tktypes.RawJSON   `gorm:"column:gas_pricing"` // no filtering allowed on this field as it's complex JSON gasPrice/maxFeePerGas/maxPriorityFeePerGas calculation
@@ -58,7 +60,7 @@ type PublicTransactionHash struct {
 	Hash       tktypes.Bytes32 `gorm:"column:hash;primaryKey"`
 }
 
-func (pts *pubTxStore) GetTransactionByID(ctx context.Context, txID string) (*components.PublicTX, error) {
+func (pts *pubTxStore) GetTransactionByID(ctx context.Context, txID string) (*ptxapi.PublicTx, error) {
 	// ptx, cached := pts.publicTxCache.Get(txID)
 	// if cached {
 	// 	return ptx, nil
@@ -88,7 +90,7 @@ func (pts *pubTxStore) GetTransactionByID(ctx context.Context, txID string) (*co
 	return pubTxObject, nil
 }
 
-func (pts *pubTxStore) InsertTransaction(ctx context.Context, dbTx *gorm.DB, tx *components.PublicTX) error {
+func (pts *pubTxStore) InsertTransaction(ctx context.Context, dbTx *gorm.DB, tx *ptxapi.PublicTx) error {
 	if dbTx == nil {
 		pts.writer.queue(ctx, pts.writer.newWriteOp(MapInternalToDB(tx)))
 	} else {
@@ -101,13 +103,13 @@ func (pts *pubTxStore) GetConfirmedTransaction(ctx context.Context, txID string)
 	return nil, nil
 }
 
-func (pts *pubTxStore) UpdateSubStatus(ctx context.Context, txID string, subStatus components.PubTxSubStatus, action components.BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
+func (pts *pubTxStore) UpdateSubStatus(ctx context.Context, txID string, subStatus PubTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
 	ptx, getTxErr := pts.GetTransactionByID(ctx, txID)
 	if getTxErr != nil || ptx == nil {
 		return getTxErr
 	}
 	if ptx.SubStatus != subStatus {
-		if err := pts.UpdateTransaction(ctx, txID, &components.BaseTXUpdates{
+		if err := pts.UpdateTransaction(ctx, txID, &BaseTXUpdates{
 			SubStatus: &subStatus,
 		}); err != nil {
 			return err
@@ -117,7 +119,7 @@ func (pts *pubTxStore) UpdateSubStatus(ctx context.Context, txID string, subStat
 
 }
 
-func (pts *pubTxStore) ListTransactions(ctx context.Context, filter *components.PubTransactionQueries) ([]*components.PublicTX, error) {
+func (pts *pubTxStore) ListTransactions(ctx context.Context, filter *components.PubTransactionQueries) ([]*ptxapi.PublicTx, error) {
 	var transactions []*PublicTransaction
 	query := pts.p.DB().WithContext(ctx).Table("public_transactions").Omit("SubmittedHashes")
 
@@ -195,8 +197,8 @@ func (pts *pubTxStore) ListTransactions(ctx context.Context, filter *components.
 	return MapDBToInternalBatch(transactions), nil
 }
 
-func MapDBToInternalBatch(dbTxs []*PublicTransaction) []*components.PublicTX {
-	var internalTxs []*components.PublicTX
+func MapDBToInternalBatch(dbTxs []*PublicTransaction) []*ptxapi.PublicTx {
+	var internalTxs []*ptxapi.PublicTx
 	for _, dbTx := range dbTxs {
 		internalTx := MapDBToInternal(dbTx)
 		internalTxs = append(internalTxs, internalTx)
@@ -204,13 +206,13 @@ func MapDBToInternalBatch(dbTxs []*PublicTransaction) []*components.PublicTX {
 	return internalTxs
 }
 
-func MapDBToInternal(dbTx *PublicTransaction) *components.PublicTX {
-	return &components.PublicTX{
+func MapDBToInternal(dbTx *PublicTransaction) *ptxapi.PublicTx {
+	return &ptxapi.PublicTx{
 		ID:        dbTx.ID,
 		Created:   dbTx.Created,
 		Updated:   dbTx.Updated,
-		Status:    components.PubTxStatus(dbTx.Status),
-		SubStatus: components.PubTxSubStatus(dbTx.SubStatus),
+		Status:    PubTxStatus(dbTx.Status),
+		SubStatus: PubTxSubStatus(dbTx.SubStatus),
 		Transaction: &ethsigner.Transaction{
 			From:                 []byte(dbTx.TxFrom),
 			To:                   dbTx.TxTo.Address0xHex(),
@@ -238,7 +240,7 @@ func MapSubmittedHashes(dbHashes []*PublicTransactionHash) []string {
 	return hashes
 }
 
-func MapInternalToDBBatch(internalTxs []*components.PublicTX) []*PublicTransaction {
+func MapInternalToDBBatch(internalTxs []*ptxapi.PublicTx) []*PublicTransaction {
 	var dbTxs []*PublicTransaction
 	for _, internalTx := range internalTxs {
 		dbTx := MapInternalToDB(internalTx)
@@ -247,7 +249,7 @@ func MapInternalToDBBatch(internalTxs []*components.PublicTX) []*PublicTransacti
 	return dbTxs
 }
 
-func MapInternalToDB(internalTx *components.PublicTX) *PublicTransaction {
+func MapInternalToDB(internalTx *ptxapi.PublicTx) *PublicTransaction {
 	if internalTx == nil {
 		return nil
 	}

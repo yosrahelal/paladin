@@ -25,7 +25,6 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -72,9 +71,9 @@ func TestProduceLatestInFlightStageContextRetrieveGas(t *testing.T) {
 	assert.Equal(t, retrievedGasPrice.GasPrice, rsc.StageOutputsToBePersisted.TxUpdates.GasPrice.BigInt())
 	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.MaxFeePerGas)
 	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.MaxPriorityFeePerGas)
-	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr(string(retrievedGasPriceJSON)), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
+	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
+	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), PubTxSubStatusReceived, BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr(string(retrievedGasPriceJSON)), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
 	// failed retrieving gas price
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
 	it.stateManager.AddGasPriceOutput(ctx, nil, fmt.Errorf("gas retrieve error"))
@@ -87,8 +86,8 @@ func TestProduceLatestInFlightStageContextRetrieveGas(t *testing.T) {
 	assert.Empty(t, *tOut)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates)
-	assert.GreaterOrEqual(t, len(rsc.StageOutputsToBePersisted.HistoryUpdates), 1)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionRetrieveGasPrice, (*fftypes.JSONAny)(nil), fftypes.JSONAnyPtr(`{"error":"gas retrieve error"}`), mock.Anything).Return(nil).Maybe()
+	assert.GreaterOrEqual(t, len(rsc.StageOutputsToBePersisted.StatusUpdates), 1)
+	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), PubTxSubStatusReceived, BaseTxActionRetrieveGasPrice, (*fftypes.JSONAny)(nil), fftypes.JSONAnyPtr(`{"error":"gas retrieve error"}`), mock.Anything).Return(nil).Maybe()
 
 	// persisting error waiting for persistence retry timeout
 	assert.False(t, rsc.StageErrored)
@@ -169,7 +168,7 @@ func TestProduceLatestInFlightStageContextRetrieveGasWithPersistence(t *testing.
 	// persisted stage success and move on
 	mTS := testInFlightTransactionStateManagerWithMocks.mTS
 	called := make(chan bool)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
+	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), PubTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
 		called <- true
 	}).Return(nil).Maybe()
 	mTS.On("UpdateTransaction", mock.Anything, mtx.ID.String(), mock.Anything).Return(nil).Once()
@@ -224,12 +223,12 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrements(t *testing.T) {
 	rsc = it.stateManager.GetRunningStageContext(ctx)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, big.NewInt(30), rsc.StageOutputsToBePersisted.TxUpdates.GasPrice.BigInt())
-	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
+	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
 	called := make(chan bool, 3)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
+	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), PubTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
 		called <- true
 	}).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
 	<-called
 }
 
@@ -276,12 +275,12 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsReachedCap(t *tes
 	rsc = it.stateManager.GetRunningStageContext(ctx)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, big.NewInt(26), rsc.StageOutputsToBePersisted.TxUpdates.GasPrice.BigInt())
-	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
+	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
 	called := make(chan bool, 3)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
+	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), PubTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
 		called <- true
 	}).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
 	<-called
 }
 
@@ -327,12 +326,12 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsRetrievedHigherPr
 	rsc = it.stateManager.GetRunningStageContext(ctx)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, higherRetrievedPrice.GasPrice, rsc.StageOutputsToBePersisted.TxUpdates.GasPrice.BigInt())
-	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
+	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
 	called := make(chan bool, 3)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
+	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), PubTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
 		called <- true
 	}).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
 	<-called
 }
 
@@ -384,12 +383,12 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559HigherExis
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, big.NewInt(30), rsc.StageOutputsToBePersisted.TxUpdates.MaxFeePerGas.BigInt())
 	assert.Equal(t, big.NewInt(1), rsc.StageOutputsToBePersisted.TxUpdates.MaxPriorityFeePerGas.BigInt())
-	assert.GreaterOrEqual(t, len(rsc.StageOutputsToBePersisted.HistoryUpdates), 1)
+	assert.GreaterOrEqual(t, len(rsc.StageOutputsToBePersisted.StatusUpdates), 1)
 	called := make(chan bool, 3)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
+	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), PubTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
 		called <- true
 	}).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
 	<-called
 }
 func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559MismatchFormat(t *testing.T) {
@@ -436,12 +435,12 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559MismatchFo
 	rsc = it.stateManager.GetRunningStageContext(ctx)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, retrievedGasPrice.GasPrice, rsc.StageOutputsToBePersisted.TxUpdates.GasPrice.BigInt())
-	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
+	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
 	called := make(chan bool, 3)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
+	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), PubTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
 		called <- true
 	}).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
 	<-called
 }
 func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559ReachedCap(t *testing.T) {
@@ -494,13 +493,13 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559ReachedCap
 	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.MaxFeePerGas)
 	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.MaxPriorityFeePerGas)
 	assert.Equal(t, retrievedGasPrice.GasPrice, rsc.StageOutputsToBePersisted.TxUpdates.GasPrice.BigInt())
-	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
+	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
 
 	called := make(chan bool, 3)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
+	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), PubTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
 		called <- true
 	}).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
 	<-called
 
 	// when reached the cap
@@ -522,12 +521,12 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559ReachedCap
 	assert.Equal(t, big.NewInt(26), rsc.StageOutputsToBePersisted.TxUpdates.MaxFeePerGas.BigInt())
 	assert.Equal(t, big.NewInt(1), rsc.StageOutputsToBePersisted.TxUpdates.MaxPriorityFeePerGas.BigInt())
 	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.GasPrice)
-	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.HistoryUpdates))
+	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
 	called = make(chan bool, 3)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), components.PubTxSubStatusReceived, components.BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
+	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), PubTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
 		called <- true
 	}).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
 	<-called
 }
 

@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/config"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/stretchr/testify/assert"
@@ -112,10 +111,10 @@ func TestProduceLatestInFlightStageContextStatusChange(t *testing.T) {
 	mtx.GasPrice = nil
 	mtx.TransactionHash = nil
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
-	suspended := components.PubTxStatusSuspended
+	suspended := PubTxStatusSuspended
 	it.newStatus = &suspended
 	iftxms := it.stateManager.(*inFlightTransactionState)
-	iftxms.runningStageContext = NewRunningStageContext(ctx, baseTypes.InFlightTxStageStatusUpdate, components.PubTxSubStatusReceived, iftxms)
+	iftxms.runningStageContext = NewRunningStageContext(ctx, baseTypes.InFlightTxStageStatusUpdate, PubTxSubStatusReceived, iftxms)
 
 	assert.NotNil(t, it.stateManager.GetRunningStageContext(ctx))
 	rsc := it.stateManager.GetRunningStageContext(ctx)
@@ -188,7 +187,7 @@ func TestProduceLatestInFlightStageContextStatusUpdatePanic(t *testing.T) {
 	mtx.GasPrice = nil
 	mtx.TransactionHash = nil
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
-	suspend := components.PubTxStatusSuspended
+	suspend := PubTxStatusSuspended
 	it.newStatus = &suspend
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
 		AvailableToSpend:         nil,

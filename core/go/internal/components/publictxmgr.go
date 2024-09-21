@@ -18,7 +18,9 @@ package components
 import (
 	"context"
 
+	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 )
@@ -40,9 +42,18 @@ type PublicTxBatch interface {
 	Completed(ctx context.Context, committed bool) // caller must ensure this is called on all code paths, and only with true after DB TX has committed
 }
 
+var PublicTxFilterFields filters.FieldSet = filters.FieldMap{
+	"transaction":   filters.UUIDField("transaction"),
+	"resubmitIndex": filters.UUIDField("resubmit_idx"),
+	"from":          filters.HexBytesField("from"),
+	"nonce":         filters.Int64Field("nonce"),
+	"created":       filters.Int64Field("created"),
+}
+
 type PublicTxManager interface {
 	ManagerLifecycle
 
 	// Synchronous functions that are executed on the callers thread
+	GetTransactions(ctx context.Context, dbTX *gorm.Tx, jq *query.QueryJSON, submissions bool) ([]*ptxapi.PublicTx, error)
 	PrepareSubmissionBatch(ctx context.Context, transactions []*ptxapi.PublicTx /* nonce is ignored on input */) (batch PublicTxBatch, err error)
 }

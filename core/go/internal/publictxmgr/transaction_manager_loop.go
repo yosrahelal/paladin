@@ -23,6 +23,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 )
 
@@ -152,11 +153,11 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 			}
 		}
 
-		var additionalTxFromNonInFlightSigners []*components.PublicTX
+		var additionalTxFromNonInFlightSigners []*ptxapi.PublicTx
 		// We retry the get from persistence indefinitely (until the context cancels)
 		err := ble.retry.Do(ctx, "get pending transactions with non InFlight signing addresses", func(attempt int) (retry bool, err error) {
 			tf := &components.PubTransactionQueries{
-				InStatus: []string{string(components.PubTxStatusPending)},
+				InStatus: []string{string(PubTxStatusPending)},
 				Sort:     confutil.P("sequence"),
 				Limit:    &spaces,
 			}
@@ -217,9 +218,9 @@ func (ble *pubTxManager) MarkInFlightOrchestratorsStale() {
 	}
 }
 
-func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *components.PublicTX, err error) {
+func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *ptxapi.PublicTx, err error) {
 	tf := &components.PubTransactionQueries{
-		InStatus:   []string{string(components.PubTxStatusPending)},
+		InStatus:   []string{string(PubTxStatusPending)},
 		To:         confutil.P(destinationAddress),
 		From:       confutil.P(sourceAddress),
 		Sort:       confutil.P("-nonce"),
@@ -237,14 +238,14 @@ func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourc
 	return tx, nil
 }
 
-func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, tx *components.PublicTX) (completed bool) {
+func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, tx *ptxapi.PublicTx) (completed bool) {
 	// no need for locking here as outdated information is OK given we do frequent retires
 	log.L(ctx).Debugf("CheckTransactionCompleted checking state for transaction %s.", tx.ID)
 	completedTxNonce, exists := ble.completedTxNoncePerAddress[string(tx.From)]
 	if !exists {
 		// need to query the database to check the status of managed transaction
 		tf := &components.PubTransactionQueries{
-			InStatus: []string{string(components.PubTxStatusSucceeded), string(components.PubTxStatusFailed)},
+			InStatus: []string{string(PubTxStatusSucceeded), string(PubTxStatusFailed)},
 			From:     confutil.P(string(tx.From)),
 			Sort:     confutil.P("-nonce"),
 			Limit:    confutil.P(1),
@@ -272,12 +273,12 @@ func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, tx *comp
 
 }
 
-func (ble *pubTxManager) updateCompletedTxNonce(tx *components.PublicTX) (updated bool) {
+func (ble *pubTxManager) updateCompletedTxNonce(tx *ptxapi.PublicTx) (updated bool) {
 	updated = false
 	// no need for locking here as outdated information is OK given we do frequent retires
 	ble.completedTxNoncePerAddressMutex.Lock()
 	defer ble.completedTxNoncePerAddressMutex.Unlock()
-	if tx.Status != components.PubTxStatusSucceeded && tx.Status != components.PubTxStatusFailed {
+	if tx.Status != PubTxStatusSucceeded && tx.Status != PubTxStatusFailed {
 		// not a completed tx, no op
 		return updated
 	}
