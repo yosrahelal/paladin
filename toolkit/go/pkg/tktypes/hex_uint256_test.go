@@ -96,4 +96,6 @@ func TestHexUint256(t *testing.T) {
 	err = v.Scan("wrong000000000000000000000000000000000000000000007fffffffffffffff")
 	assert.Regexp(t, "PD020013", err)
 
+	assert.True(t, ((*HexUint256)(nil)).NilOrZero())
+
 }

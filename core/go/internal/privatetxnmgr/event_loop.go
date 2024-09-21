@@ -348,7 +348,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 			return converted
 		}
 		preparedSubmissions, rejected, err := publicTransactionEngine.PrepareSubmissionBatch(ctx,
-			&components.PublicTxRequestOptions{
+			&ptxapi.PublicTxRequestOptions{
 				SignerID: signingAddress,
 			},
 			convertToInterfaceSlice(preparedTransactionPayloads),

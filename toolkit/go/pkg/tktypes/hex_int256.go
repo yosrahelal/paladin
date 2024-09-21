@@ -93,6 +93,10 @@ func (hi *HexInt256) Int() *big.Int {
 	return (*big.Int)(hi)
 }
 
+func (hi *HexInt256) NilOrZero() bool {
+	return hi == nil || hi.Int().Sign() == 0
+}
+
 // Get string with 0x prefix - nil is all zeros
 func (hi *HexInt256) HexString0xPrefix() string {
 	absHi := new(big.Int).Abs(hi.Int())

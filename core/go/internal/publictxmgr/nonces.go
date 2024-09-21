@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
@@ -40,7 +39,7 @@ func (nc *nonceCacheStruct) stop() {
 	close(nc.stopChannel)
 }
 
-func newNonceCache(nonceStateTimeout time.Duration, nextNonceCB components.NextNonceCallback) enginespi.NonceCache {
+func newNonceCache(nonceStateTimeout time.Duration, nextNonceCB components.NextNonceCallback) NonceCache {
 	n := &nonceCacheStruct{
 		nextNonceBySigner: make(map[string]*cachedNonce),
 		nonceStateTimeout: nonceStateTimeout,
@@ -102,7 +101,7 @@ func (nc *nonceCacheStruct) setNextNonceBySigner(signer string, record *cachedNo
 // NOTE:  multiple readers can hold intents to assign concurrently so the nonce is not actually assigned at this point
 //
 //	nonce assignment itself is protected by a mutex so only one reader can assign at a time but thanks to the pre intent declaration, the assignment is quick
-func (nc *nonceCacheStruct) IntentToAssignNonce(ctx context.Context, signer string) (enginespi.NonceAssignmentIntent, error) {
+func (nc *nonceCacheStruct) IntentToAssignNonce(ctx context.Context, signer string) (NonceAssignmentIntent, error) {
 
 	// take a read lock to block the reaper thread
 	nc.reaperLock.RLock()

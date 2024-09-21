@@ -17,7 +17,6 @@ package publictxmgr
 
 import (
 	"context"
-	"encoding/json"
 	"math/big"
 	"sync"
 	"time"
@@ -31,8 +30,10 @@ import (
 	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
@@ -111,7 +112,7 @@ type pubTxManager struct {
 	gasPriceIncreasePercent int
 }
 
-func NewPublicTransactionManager(ctx context.Context, conf *Config) (components.PublicTxManager, error) {
+func NewPublicTransactionManager(ctx context.Context, conf *Config) components.PublicTxManager {
 	log.L(ctx).Debugf("Creating new enterprise transaction handler")
 
 	gasPriceClient := NewGasPriceClient(ctx, conf)
@@ -137,7 +138,7 @@ func NewPublicTransactionManager(ctx context.Context, conf *Config) (components.
 		confirmedTxNoncePerAddress:  make(map[string]*big.Int),
 		gasPriceIncreaseMax:         gasPriceIncreaseMax,
 		gasPriceIncreasePercent:     confutil.Int(conf.GasPrice.IncreasePercentage, *DefaultConfig.GasPrice.IncreasePercentage),
-	}, nil
+	}
 }
 
 // Post-init allows the manager to cross-bind to other components, or the Engine
@@ -173,7 +174,8 @@ func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *comp
 	return &components.ManagerInitResult{}, nil
 }
 
-func (ble *pubTxManager) Start(ctx context.Context) error {
+func (ble *pubTxManager) Start() error {
+	ctx := ble.ctx
 	log.L(ctx).Debugf("Starting enterprise transaction handler")
 	if ble.ctx == nil { // only start once
 		ble.ctx = ctx // set the context for policy loop
@@ -208,11 +210,11 @@ func (pt *preparedTransaction) Finalize(ctx context.Context) {
 	pt.nsi.Complete(ctx)
 }
 
-func (ble *pubTxManager) PrepareSubmissionBatch(ctx context.Context, reqOptions *components.PublicTxRequestOptions, txPayloads []interface{}) (preparedSubmission []components.PreparedSubmission, submissionRejected bool, err error) {
-	preparedSubmissions := make([]components.PublicTxPreparedSubmission, len(txPayloads))
+func (ble *pubTxManager) PrepareSubmissionBatch(ctx context.Context, transactions []*ptxapi.PublicTxInput) (preparedSubmission []components.PublicTxPreparedSubmission, submissionRejected bool, err error) {
+	preparedSubmissions := make([]components.PublicTxPreparedSubmission, len(transactions))
 	var nsi baseTypes.NonceAssignmentIntent
-	for i, tx := range txPayloads {
-		preparedSubmission, submissionRejected, err := ble.PrepareSubmission(ctx, reqOptions, tx, nsi)
+	for i, tx := range transactions {
+		preparedSubmission, submissionRejected, err := ble.PrepareSubmission(ctx, tx, nsi)
 		if submissionRejected || err != nil {
 			return nil, submissionRejected, err
 		}
@@ -222,85 +224,42 @@ func (ble *pubTxManager) PrepareSubmissionBatch(ctx context.Context, reqOptions 
 	return preparedSubmissions, false, nil
 }
 
+func (ble *pubTxManager) buildEthTX(tx *ptxapi.PublicTxInput) *ethsigner.Transaction {
+	return &ethsigner.Transaction{
+		To:                   tx.To.Address0xHex(),
+		GasLimit:             (*ethtypes.HexInteger)(tx.Gas),
+		GasPrice:             (*ethtypes.HexInteger)(tx.GasPrice),
+		MaxPriorityFeePerGas: (*ethtypes.HexInteger)(tx.MaxPriorityFeePerGas),
+		MaxFeePerGas:         (*ethtypes.HexInteger)(tx.MaxFeePerGas),
+		Value:                (*ethtypes.HexInteger)(tx.Value),
+		Data:                 ethtypes.HexBytes0xPrefix(tx.Data),
+	}
+}
+
 // PrepareSubmission prepares and validates the transaction input data so that a later call to
 // Submit can be made in the middle of a wider database transaction with minimal risk of error
-func (ble *pubTxManager) PrepareSubmission(ctx context.Context, reqOptions *components.PublicTxRequestOptions, txPayload interface{}, nonceAssignmentIntent baseTypes.NonceAssignmentIntent) (preparedSubmission components.PreparedSubmission, submissionRejected bool, err error) {
-	log.L(ctx).Tracef("PrepareSubmission new request, options: %+v, payload: %+v", reqOptions, txPayload)
+func (ble *pubTxManager) PrepareSubmission(ctx context.Context, tx *ptxapi.PublicTxInput, nonceAssignmentIntent baseTypes.NonceAssignmentIntent) (preparedSubmission components.PublicTxPreparedSubmission, submissionRejected bool, err error) {
+	log.L(ctx).Tracef("PrepareSubmission transaction: %+v", tx)
 
-	err = reqOptions.Validate(ctx)
-	if err != nil {
-		return nil, true, err
-	}
 	prepareStart := time.Now()
 	var txType InFlightTxOperation
 
-	// this is a transfer only transaction
-	// Resolve the key (directly with the signer - we have no key manager here in the teseced)
-	_, fromAddr, err := ble.keymgr.ResolveKey(ctx, reqOptions.SignerID, algorithms.ECDSA_SECP256K1_PLAINBYTES)
-	if err != nil {
-		return nil, false, err
-	}
-
-	var ethTx *ethsigner.Transaction
-	switch ethPayload := txPayload.(type) {
-	case *components.EthTransfer:
-		ethTx = &ethsigner.Transaction{
-			From:  json.RawMessage(fromAddr),
-			To:    ethPayload.To.Address0xHex(),
-			Value: ethPayload.Value,
-		}
-		txType = InFlightTxOperationTransferPreparation
-	case *components.EthTransaction:
-		abiFunc, err := ble.ethClient.ABIFunction(ctx, ethPayload.FunctionABI)
+	if tx.Gas.NilOrZero() {
+		estimatedGasLimitHexInt, err := ble.ethClient.GasEstimate(ctx, ble.buildEthTX(tx), nil /* TODO: Would be great to have the ABI errors available here */)
 		if err != nil {
-			return nil, false, err
-		}
-		addr := ethPayload.To.Address0xHex()
-		txCallDataBuilder := abiFunc.R(ctx).
-			To(addr).
-			Input(ethPayload.Inputs)
-		buildErr := txCallDataBuilder.BuildCallData()
-		if buildErr != nil {
-			return nil, false, buildErr
-		}
-		ethTx = txCallDataBuilder.TX()
-		txType = InFlightTxOperationInvokePreparation
-	case *components.EthDeployTransaction:
-		abiFunc, err := ble.ethClient.ABIConstructor(ctx, ethPayload.ConstructorABI, ethPayload.Bytecode)
-		if err != nil {
-			return nil, false, err
-		}
-		txCallDataBuilder := abiFunc.R(ctx).
-			Input(ethPayload.Inputs)
-		buildErr := txCallDataBuilder.BuildCallData()
-		if buildErr != nil {
-			return nil, false, buildErr
-		}
-		ethTx = txCallDataBuilder.TX()
-		txType = InFlightTxOperationDeployPreparation
-	default:
-		return nil, true, i18n.NewError(ctx, msgs.MsgInvalidTransactionType)
-	}
-
-	estimatedGasLimit := reqOptions.GasLimit
-	if estimatedGasLimit == nil {
-		estimatedGasLimitHexInt, err := ble.ethClient.GasEstimate(ctx, ethTx, nil /* TODO: Would be great to have the ABI errors available here */)
-		if err != nil {
-			log.L(ctx).Errorf("HandleNewTx <%s> error estimating gas for transfer request: %+v, request: (%+v)", txType, err, txPayload)
+			log.L(ctx).Errorf("HandleNewTx <%s> error estimating gas for transfer request: %+v, request: (%+v)", txType, err, tx)
 			ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusFail), time.Since(prepareStart).Seconds())
 			return nil, ethclient.MapSubmissionRejected(err), err
 		}
-		estimatedGasLimit = estimatedGasLimitHexInt
+		tx.Gas = (*tktypes.HexUint256)(estimatedGasLimitHexInt)
 		log.L(ctx).Tracef("HandleNewTx <%s> using the estimated gas limit %s for transfer request: %+v", txType, estimatedGasLimit.String(), txPayload)
 	} else {
 		log.L(ctx).Tracef("HandleNewTx <%s> using the provided gas limit %s for transfer request: %+v", txType, estimatedGasLimit.String(), txPayload)
 	}
-	ethTx.GasLimit = estimatedGasLimit
 
-	ble.gasPriceClient.SetFixedGasPriceIfConfigured(ctx, ethTx)
 	nsi := nonceAssignmentIntent
 	if nsi == nil {
-		nsi, err = ble.nonceManager.IntentToAssignNonce(ctx, fromAddr)
+		nsi, err = ble.nonceManager.IntentToAssignNonce(ctx, tx.From)
 		if err != nil {
 			log.L(ctx).Errorf("HandleNewTx <%s> error assigning nonce for transfer request: %+v, request: (%+v)", txType, err, txPayload)
 			ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusFail), time.Since(prepareStart).Seconds())

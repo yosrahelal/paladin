@@ -17,17 +17,13 @@ package publictxmgr
 
 import (
 	"context"
-	"math/big"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"gorm.io/gorm"
 )
 
 // PublicTransactionEventType is a enum type that contains all types of transaction process events
@@ -161,36 +157,12 @@ const (
 
 type NextNonceCallback func(ctx context.Context, signer string) (uint64, error)
 
-type PubTransactionQueries struct {
-	InIDs      []string
-	NotInIDs   []string
-	InStatus   []string
-	NotFrom    []string
-	From       *string
-	To         *string
-	Sort       *string
-	Limit      *int
-	AfterNonce *big.Int
-	HasTxValue bool
-}
-type PublicTransactionStore interface {
-	GetTransactionByID(ctx context.Context, txID string) (*PublicTX, error)
-	InsertTransaction(ctx context.Context, dbtx *gorm.DB, tx *PublicTX) error
-	UpdateTransaction(ctx context.Context, txID string, updates *BaseTXUpdates) error
-
-	GetConfirmedTransaction(ctx context.Context, txID string) (iTX *blockindexer.IndexedTransaction, err error)
-	HandleConfirmedTransactions(ctx context.Context, confirmedTransactions []*blockindexer.IndexedTransaction) error
-
-	// TODO: decide whether this is still needed. It's currently an important function for validating a specific action has happens in unit testing
-	UpdateSubStatus(ctx context.Context, txID string, subStatus PubTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error
-
-	ListTransactions(ctx context.Context, filter *PubTransactionQueries) ([]*PublicTX, error)
-
-	Close()
+type NonceAssignmentIntent interface {
+	Complete(ctx context.Context)
+	AssignNextNonce(ctx context.Context) (uint64, error)
+	Rollback(ctx context.Context)
 }
 
-type PreparedSubmission interface {
-	ID() string
-	CleanUp(context.Context)
-	Finalize(context.Context)
+type NonceCache interface {
+	IntentToAssignNonce(ctx context.Context, signer string) (NonceAssignmentIntent, error)
 }

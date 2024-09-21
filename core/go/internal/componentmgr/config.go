@@ -23,7 +23,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/domainmgr"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr"
-	"github.com/kaleido-io/paladin/core/internal/publictxmgr/publictxstore"
+	"github.com/kaleido-io/paladin/core/internal/publictxmgr"
 	"github.com/kaleido-io/paladin/core/internal/registrymgr"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
@@ -47,11 +47,11 @@ type Config struct {
 	DB                                  persistence.Config   `yaml:"db"`
 	RPCServer                           rpcserver.Config     `yaml:"rpcServer"`
 	StateStore                          statestore.Config    `yaml:"statestore"`
-	PublicTxStore                       publictxstore.Config `yaml:"publicTxStore"`
 	BlockIndexer                        blockindexer.Config  `yaml:"blockIndexer"`
 	Signer                              api.Config           `yaml:"signer"`
 	TempDir                             *string              `yaml:"tempDir"`
 	PrivateTxManager                    privatetxnmgr.Config `yaml:"privateTxManager"`
+	PublicTxManager                     publictxmgr.Config   `yaml:"publicTxManager"`
 }
 
 func ReadAndParseYAMLFile(ctx context.Context, filePath string, config interface{}) error {

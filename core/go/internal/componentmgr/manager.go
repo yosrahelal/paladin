@@ -27,7 +27,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/plugins"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr"
 	"github.com/kaleido-io/paladin/core/internal/publictxmgr"
-	"github.com/kaleido-io/paladin/core/internal/publictxmgr/publictxstore"
 	"github.com/kaleido-io/paladin/core/internal/registrymgr"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
@@ -59,7 +58,6 @@ type componentManager struct {
 	ethClientFactory ethclient.EthClientFactory
 	persistence      persistence.Persistence
 	stateStore       statestore.StateStore
-	pubTxStore       components.PublicTransactionStore
 	blockIndexer     blockindexer.BlockIndexer
 	rpcServer        rpcserver.RPCServer
 	// managers
@@ -121,11 +119,6 @@ func (cm *componentManager) Init() (err error) {
 	}
 
 	if err == nil {
-		cm.pubTxStore = publictxstore.NewPubTxStore(cm.bgCtx, &cm.conf.PublicTxStore, cm.persistence)
-		err = cm.addIfOpened("public_tx_store", cm.pubTxStore, err, msgs.MsgComponentPublicTransactionStoreInitError)
-	}
-
-	if err == nil {
 		cm.blockIndexer, err = blockindexer.NewBlockIndexer(cm.bgCtx, &cm.conf.BlockIndexer, &cm.conf.Blockchain.WS, cm.persistence)
 		err = cm.wrapIfErr(err, msgs.MsgComponentBlockIndexerInitError)
 	}
@@ -160,7 +153,7 @@ func (cm *componentManager) Init() (err error) {
 	}
 
 	if err == nil {
-		cm.publicTxManager = publictxmgr.NewPublicTransactionMgr(cm.bgCtx)
+		cm.publicTxManager = publictxmgr.NewPublicTransactionManager(cm.bgCtx, &cm.conf.PublicTxManager)
 		cm.initResults["public_tx_mgr"], err = cm.publicTxManager.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
 	}
@@ -395,10 +388,6 @@ func (cm *componentManager) Persistence() persistence.Persistence {
 
 func (cm *componentManager) StateStore() statestore.StateStore {
 	return cm.stateStore
-}
-
-func (cm *componentManager) PublicTxStore() components.PublicTransactionStore {
-	return cm.pubTxStore
 }
 
 func (cm *componentManager) RPCServer() rpcserver.RPCServer {

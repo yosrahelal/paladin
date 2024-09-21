@@ -24,18 +24,18 @@ import (
 // If set these affect the submission of the public transaction.
 // All are optional
 type PublicTxOptions struct {
-	Gas                  *tktypes.HexBigInteger `json:"gas,omitempty"`
-	MaxPriorityFeePerGas *tktypes.HexBigInteger `json:"maxPriorityFeePerGas,omitempty"`
-	MaxFeePerGas         *tktypes.HexBigInteger `json:"maxFeePerGas,omitempty"`
-	GasPrice             *tktypes.HexBigInteger `json:"gasPrice,omitempty"`
-	Value                *tktypes.HexBigInteger `json:"value,omitempty"`
+	Gas                  *tktypes.HexUint256 `json:"gas,omitempty"`
+	MaxPriorityFeePerGas *tktypes.HexUint256 `json:"maxPriorityFeePerGas,omitempty"`
+	MaxFeePerGas         *tktypes.HexUint256 `json:"maxFeePerGas,omitempty"`
+	GasPrice             *tktypes.HexUint256 `json:"gasPrice,omitempty"`
+	Value                *tktypes.HexUint256 `json:"value,omitempty"`
 }
 
 type PublicTxInput struct {
 	From tktypes.EthAddress  `json:"from"`         // unresolved signing account locator (public TX manager will resolve)
 	To   *tktypes.EthAddress `json:"to,omitempty"` // target contract address, or nil for deploy
 	PublicTxOptions
-	Input tktypes.HexBytes `json:"input,omitempty"` // the pre-encoded calldata
+	Data tktypes.HexBytes `json:"data,omitempty"` // the pre-encoded calldata
 }
 
 type PublicTx struct {

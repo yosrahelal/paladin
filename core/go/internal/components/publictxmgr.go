@@ -18,6 +18,7 @@ package components
 import (
 	"context"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"gorm.io/gorm"
 )
 
@@ -30,7 +31,7 @@ type PublicTxPreparedSubmission interface {
 type PublicTxManager interface {
 	ManagerLifecycle
 
-	//Syncronous functions that are executed on the callers thread
-	PrepareSubmissionBatch(ctx context.Context, tx *PublicTx, txPayloads []interface{}) (preparedSubmission []PublicTxPreparedSubmission, submissionRejected bool, err error)
-	SubmitBatch(ctx context.Context, tx *gorm.DB, preparedSubmissions []*PublicTx) (*PublicTx, error)
+	// Synchronous functions that are executed on the callers thread
+	PrepareSubmissionBatch(ctx context.Context, transactions []*ptxapi.PublicTxInput) (preparedSubmission []PublicTxPreparedSubmission, submissionRejected bool, err error)
+	SubmitBatch(ctx context.Context, dbTX *gorm.DB, preparedSubmissions []PublicTxPreparedSubmission) ([]*ptxapi.PublicTx, error)
 }
