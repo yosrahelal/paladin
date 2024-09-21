@@ -30,6 +30,8 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type GasPriceConfig struct {
@@ -58,8 +60,8 @@ type GasPriceClient interface {
 	HasZeroGasPrice(ctx context.Context) bool
 	SetFixedGasPriceIfConfigured(ctx context.Context, ethTx *ethsigner.Transaction)
 	GetFixedGasPriceJSON(ctx context.Context) (gasPrice *fftypes.JSONAny)
-	ParseGasPriceJSON(ctx context.Context, input *fftypes.JSONAny) (gpo *GasPriceObject, err error)
-	GetGasPriceObject(ctx context.Context) (gasPrice *GasPriceObject, err error)
+	ParseGasPriceJSON(ctx context.Context, input *fftypes.JSONAny) (gpo *ptxapi.PublicTxGasPricing, err error)
+	GasPriceObject(ctx context.Context) (gasPrice *ptxapi.PublicTxGasPricing, err error)
 	Init(ctx context.Context, cAPI ethclient.EthClient)
 }
 
@@ -99,7 +101,7 @@ func (hGpc *HybridGasPriceClient) SetFixedGasPriceIfConfigured(ctx context.Conte
 	}
 }
 
-func (hGpc *HybridGasPriceClient) GetGasPriceObject(ctx context.Context) (gasPrice *GasPriceObject, err error) {
+func (hGpc *HybridGasPriceClient) GasPriceObject(ctx context.Context) (gasPrice *ptxapi.PublicTxGasPricing, err error) {
 
 	gasPriceJSON, err := hGpc.getGasPriceJSON(ctx)
 	if err != nil {
@@ -149,9 +151,9 @@ func (hGpc *HybridGasPriceClient) Init(ctx context.Context, cAPI ethclient.EthCl
 		log.L(ctx).Warnf("Cannot get gas price due to %+v", err)
 	}
 
-	if gpo != nil && ((gpo.GasPrice != nil && gpo.GasPrice.Sign() == 0) ||
-		(gpo.MaxFeePerGas != nil && gpo.MaxFeePerGas.Sign() == 0 &&
-			gpo.MaxPriorityFeePerGas != nil && gpo.MaxPriorityFeePerGas.Sign() == 0)) {
+	if gpo != nil && ((gpo.GasPrice != nil && gpo.GasPrice.Int().Sign() == 0) ||
+		(gpo.MaxFeePerGas != nil && gpo.MaxFeePerGas.Int().Sign() == 0 &&
+			gpo.MaxPriorityFeePerGas != nil && gpo.MaxPriorityFeePerGas.Int().Sign() == 0)) {
 		hGpc.hasZeroGasPrice = true
 		hGpc.fixedGasPrice = gasPriceJson
 	}
@@ -175,10 +177,10 @@ func NewGasPriceClient(ctx context.Context, conf *Config) GasPriceClient {
 	return gasPriceClient
 }
 
-func (hGpc *HybridGasPriceClient) ParseGasPriceJSON(ctx context.Context, input *fftypes.JSONAny) (gpo *GasPriceObject, err error) {
-	gpo = &GasPriceObject{}
+func (hGpc *HybridGasPriceClient) ParseGasPriceJSON(ctx context.Context, input *fftypes.JSONAny) (gpo *ptxapi.PublicTxGasPricing, err error) {
+	gpo = &ptxapi.PublicTxGasPricing{}
 	if input == nil {
-		gpo.GasPrice = big.NewInt(0)
+		gpo.GasPrice = (*tktypes.HexUint256)(big.NewInt(0))
 		log.L(ctx).Tracef("Gas price object generated using empty input, gasPrice=%+v", gpo)
 		return gpo, nil
 	}
@@ -187,21 +189,21 @@ func (hGpc *HybridGasPriceClient) ParseGasPriceJSON(ctx context.Context, input *
 	maxPriorityFeePerGas := gasPriceObject.GetInteger("maxPriorityFeePerGas")
 	maxFeePerGas := gasPriceObject.GetInteger("maxFeePerGas")
 	if maxPriorityFeePerGas.Sign() > 0 || maxFeePerGas.Sign() > 0 {
-		gpo = &GasPriceObject{
-			MaxPriorityFeePerGas: maxPriorityFeePerGas,
-			MaxFeePerGas:         maxFeePerGas,
+		gpo = &ptxapi.PublicTxGasPricing{
+			MaxPriorityFeePerGas: (*tktypes.HexUint256)(maxPriorityFeePerGas),
+			MaxFeePerGas:         (*tktypes.HexUint256)(maxFeePerGas),
 		}
 		log.L(ctx).Tracef("Gas price object generated using EIP1559 fields, gasPrice=%+v", gpo)
 		return gpo, nil
 	}
-	gpo.GasPrice = gasPriceObject.GetInteger("gasPrice")
-	if gpo.GasPrice.Sign() == 0 {
-		tempHexInt := ethtypes.NewHexInteger(big.NewInt(0))
+	gpo.GasPrice = (*tktypes.HexUint256)(gasPriceObject.GetInteger("gasPrice"))
+	if gpo.GasPrice.Int().Sign() == 0 {
+		tempHexInt := (*tktypes.HexUint256)(big.NewInt(0))
 		err := json.Unmarshal(input.Bytes(), tempHexInt)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgGasPriceError, input.String(), err.Error())
 		}
-		gpo.GasPrice = tempHexInt.BigInt()
+		gpo.GasPrice = tempHexInt
 		log.L(ctx).Tracef("Gas price object generated using gasPrice number, gasPrice=%+v", gpo)
 		return gpo, nil
 	}

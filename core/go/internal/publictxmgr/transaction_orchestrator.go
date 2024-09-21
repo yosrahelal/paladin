@@ -168,8 +168,8 @@ type orchestrator struct {
 	staleTimeout    time.Duration
 	lastQueueUpdate time.Time
 
-	completedNonceLock    sync.Mutex
-	highestCompletedNonce *uint64
+	confirmedNonceLock    sync.Mutex
+	highestConfirmedNonce *uint64
 }
 
 const veryShortMinimum = 50 * time.Millisecond
@@ -256,8 +256,13 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 	}
 
 	var latestCompletedNonce *uint64
-	highestConfirmedNonce, hasCompletedNonce := oc.getHighestCompletedNonce()
-	startFromNonce := highestConfirmedNonce
+	highestConfirmedNonce := oc.getHighestCompletedNonce()
+	var startFromNonce uint64
+	hasCompletedNonce := false
+	if highestConfirmedNonce != nil {
+		hasCompletedNonce = true
+		startFromNonce = *highestConfirmedNonce
+	}
 	// Run through copying across from the old InFlight list to the new one, those that aren't ready to be deleted
 	for _, p := range oldInFlight {
 		if !hasCompletedNonce || p.stateManager.GetNonce()-startFromNonce <= 1 {
@@ -325,7 +330,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 		for _, mtx := range additional {
 			queueUpdated = true
 			it := NewInFlightTransactionStageController(oc.pubTxManager, oc, mtx)
-			if hasCompletedNonce && highestConfirmedNonce < mtx.Nonce /* an confirmed tx is missed*/ {
+			if highestConfirmedNonce != nil && *highestConfirmedNonce < mtx.Nonce /* an confirmed tx is missed*/ {
 				it.stateManager.AddConfirmationsOutput(ctx, nil) // trigger confirmation stage
 			}
 			oc.InFlightTxs = append(oc.InFlightTxs, it)
@@ -334,12 +339,12 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 				txStage = InFlightTxStageQueued
 			}
 			stageCounts[string(txStage)] = stageCounts[string(txStage)] + 1
-			log.L(ctx).Debugf("Orchestrator added transaction with ID: %s", mtx.ID)
+			log.L(ctx).Debugf("Orchestrator added transaction with ID: %s", mtx.getIDString())
 		}
 		total = len(oc.InFlightTxs)
 		polled = total - oldLen
 		if polled > 0 {
-			log.L(ctx).Debugf("InFlight set updated len=%d head-seq=%s tail-seq=%s old-tail=%s", len(oc.InFlightTxs), oc.InFlightTxs[0].stateManager.GetTx().SequenceID, oc.InFlightTxs[total-1].stateManager.GetTx().SequenceID, after)
+			log.L(ctx).Debugf("InFlight set updated len=%d head-nonce=%d tail-nonce=%d old-tail=%d", len(oc.InFlightTxs), oc.InFlightTxs[0].stateManager.GetNonce(), oc.InFlightTxs[total-1].stateManager.GetNonce(), startFromNonce)
 		}
 		oc.thMetrics.RecordInFlightTxQueueMetrics(ctx, stageCounts, oc.maxInFlightTxs-len(oc.InFlightTxs))
 	}
@@ -347,7 +352,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 	// now check and process each transaction
 
 	if total > 0 {
-		waitingForBalance, _ := oc.ProcessInFlightTransaction(ctx, oc.InFlightTxs)
+		waitingForBalance, _ := oc.ProcessInFlightTransactions(ctx, oc.InFlightTxs)
 		if queueUpdated {
 			oc.lastQueueUpdate = time.Now()
 		}
@@ -371,7 +376,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 }
 
 // this function should only have one running instance at any given time
-func (oc *orchestrator) ProcessInFlightTransaction(ctx context.Context, its []*InFlightTransactionStageController) (waitingForBalance bool, err error) {
+func (oc *orchestrator) ProcessInFlightTransactions(ctx context.Context, its []*InFlightTransactionStageController) (waitingForBalance bool, err error) {
 	processStart := time.Now()
 	waitingForBalance = false
 	var addressAccount *AddressAccount
@@ -400,7 +405,7 @@ func (oc *orchestrator) ProcessInFlightTransaction(ctx context.Context, its []*I
 	}
 
 	previousNonceCostUnknown := false
-	currentConfirmedNonce := oc.getConfirmedTxNonce(oc.signingAddress)
+	currentConfirmedNonce := oc.getHighestCompletedNonce()
 	for i, it := range its {
 		log.L(ctx).Debugf("%s ProcessInFlightTransaction for signing address %s processing transaction with ID: %s, index: %d", now.String(), oc.signingAddress, it.stateManager.GetTxID(), i)
 		var availableToSpend *big.Int
@@ -458,11 +463,11 @@ func (oc *orchestrator) HandleConfirmedTransactions(ctx context.Context, confirm
 		for _, it := range oc.InFlightTxs { // no new transaction orchestrator is started, rely on the main loop to apply strict order
 			if it != nil {
 				currentTx := it
-				if maxNonce.Cmp(currentTx.stateManager.GetNonce()) != -1 {
+				itNonce := currentTx.stateManager.GetNonce()
+				if maxNonce < itNonce {
 					// there is a confirmed transaction available for this transaction
 					go func() {
-						nonceStr := currentTx.stateManager.GetNonce().String()
-						indexTx := confirmedTransactions[nonceStr]
+						indexTx := confirmedTransactions[itNonce]
 						if indexTx != nil {
 							currentTx.MarkHistoricalTime("confirmation_event_wait_to_be_recorded", recordStart)
 							currentTx.MarkTime("confirmation_event_wait_to_be_processed")
@@ -521,19 +526,16 @@ func (oc *orchestrator) MarkInFlightTxStale() {
 	}
 }
 
-func (oc *orchestrator) notifyCompletedNonce(nonce uint64) {
-	oc.completedNonceLock.Lock()
-	defer oc.completedNonceLock.Unlock()
-	if oc.highestCompletedNonce == nil || nonce > *oc.highestCompletedNonce {
-		oc.highestCompletedNonce = &nonce
+func (oc *orchestrator) notifyConfirmedNonceOrchestrator(nonce uint64) {
+	oc.confirmedNonceLock.Lock()
+	defer oc.confirmedNonceLock.Unlock()
+	if oc.highestConfirmedNonce == nil || nonce > *oc.highestConfirmedNonce {
+		oc.highestConfirmedNonce = &nonce
 	}
 }
 
-func (oc *orchestrator) getHighestCompletedNonce() (uint64, bool) {
-	oc.completedNonceLock.Lock()
-	defer oc.completedNonceLock.Unlock()
-	if oc.highestCompletedNonce == nil {
-		return 0, false
-	}
-	return *oc.highestCompletedNonce, true
+func (oc *orchestrator) getHighestCompletedNonce() *uint64 {
+	oc.confirmedNonceLock.Lock()
+	defer oc.confirmedNonceLock.Unlock()
+	return oc.highestConfirmedNonce
 }

@@ -22,9 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/cache"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -87,10 +85,10 @@ type BalanceManagerWithInMemoryTracking struct {
 	pubTxMgr *pubTxManager
 
 	// balance cache is used to store cached balances of any address
-	balanceCache cache.Cache[string, *big.Int]
+	balanceCache cache.Cache[tktypes.EthAddress, *big.Int]
 
 	// if set to a valid ethereum address, autofueling is turned on
-	sourceAddress string
+	sourceAddress *tktypes.EthAddress
 
 	// reject autofueling when the source address below this balance
 	minSourceBalance *big.Int
@@ -116,18 +114,18 @@ type BalanceManagerWithInMemoryTracking struct {
 	// When the mutex is not set, balance manager will query transaction persistence to fetch the in-flight
 	// fueling transactions by search for the latest transfer type transaction to the destination address. (this involves
 	//  read from database and is necessary to recover balance manager from crashes)
-	destinationAddressesFuelingTracked    map[string]*sync.Mutex
-	trackedFuelingTransactions            map[string]*ptxapi.PublicTx
+	destinationAddressesFuelingTracked    map[tktypes.EthAddress]*sync.Mutex
+	trackedFuelingTransactions            map[tktypes.EthAddress]*ptxapi.PublicTx
 	destinationAddressesFuelingTrackedMux sync.Mutex
 
 	// a map of signing addresses and a boolean to indicate whether balance manager should fetch
 	// the balance of the signing address from the chain
-	addressBalanceChangedMap    map[string]bool
+	addressBalanceChangedMap    map[tktypes.EthAddress]bool
 	addressBalanceChangedMapMux sync.Mutex
 }
 
 func (af *BalanceManagerWithInMemoryTracking) TopUpAccount(ctx context.Context, addAccount *AddressAccount) (mtx *ptxapi.PublicTx, err error) {
-	if af.sourceAddress == "" {
+	if af.sourceAddress == nil {
 		log.L(ctx).Debugf("Skip top up transaction as no fueling source configured")
 		// No-op
 		return nil, nil
@@ -199,17 +197,17 @@ func (af *BalanceManagerWithInMemoryTracking) TopUpAccount(ctx context.Context, 
 	return nil, nil
 }
 
-func (af *BalanceManagerWithInMemoryTracking) NotifyAddressBalanceChanged(ctx context.Context, address string) {
+func (af *BalanceManagerWithInMemoryTracking) NotifyAddressBalanceChanged(ctx context.Context, address tktypes.EthAddress) {
 	af.addressBalanceChangedMapMux.Lock()
 	defer af.addressBalanceChangedMapMux.Unlock()
 	af.addressBalanceChangedMap[address] = true
 }
 
 func (af *BalanceManagerWithInMemoryTracking) IsAutoFuelingEnabled(ctx context.Context) bool {
-	return af.sourceAddress != ""
+	return af.sourceAddress != nil
 }
 
-func (af *BalanceManagerWithInMemoryTracking) GetAddressBalance(ctx context.Context, address string) (*AddressAccount, error) {
+func (af *BalanceManagerWithInMemoryTracking) GetAddressBalance(ctx context.Context, address tktypes.EthAddress) (*AddressAccount, error) {
 	af.addressBalanceChangedMapMux.Lock()
 	defer af.addressBalanceChangedMapMux.Unlock()
 	log.L(ctx).Debugf("Retrieving balance for address %s ", address)
@@ -225,8 +223,8 @@ func (af *BalanceManagerWithInMemoryTracking) GetAddressBalance(ctx context.Cont
 			log.L(ctx).Errorf("Failed retrieving balance for address %s from connector due to: %+v", address, err)
 			return nil, err
 		}
-		addressBalance = *addressBalancePtr.BigInt()
-		af.balanceCache.Set(address, addressBalancePtr.BigInt())
+		addressBalance = *addressBalancePtr.Int()
+		af.balanceCache.Set(address, addressBalancePtr.Int())
 		// set the flag to false so that the following requests of this address
 		// uses cache if there is no new balance change
 		af.addressBalanceChangedMap[address] = false
@@ -245,7 +243,7 @@ func (af *BalanceManagerWithInMemoryTracking) GetAddressBalance(ctx context.Cont
 	}, nil
 }
 
-func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(ctx context.Context, destAddress string, value *big.Int) (mtx *ptxapi.PublicTx, err error) {
+func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(ctx context.Context, destAddress tktypes.EthAddress, value *big.Int) (mtx *ptxapi.PublicTx, err error) {
 	// check whether there is a pending fueling transaction already
 	// check whether the current balance manager already tracking the existing in-flight fueling transactions
 	log.L(ctx).Tracef("TransferGasFromAutoFuelingSource entry, source address: %s, destination address: %s, amount: %s", af.sourceAddress, destAddress, value.String())
@@ -265,7 +263,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 		log.L(ctx).Debugf("TransferGasFromAutoFuelingSource no existing tracking fueling request for  destination address: %s", destAddress)
 		// there is no tracked fueling transaction for this address, do a lookup in the db in case we've restarted or couldn't record the last one submitted
 		// in the middle of tracking
-		fuelingTx, err = af.pubTxMgr.GetPendingFuelingTransaction(ctx, af.sourceAddress, destAddress)
+		fuelingTx, err = af.pubTxMgr.GetPendingFuelingTransaction(ctx, *af.sourceAddress, destAddress)
 		if err != nil {
 			log.L(ctx).Errorf("TransferGasFromAutoFuelingSource error occurred when getting pending fueling tx for address: %s, error: %+v", destAddress, err)
 			// we don't risk the chance of having duplicate fueling transactions when we cannot fetching all the in-flight transactions
@@ -273,10 +271,16 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 		}
 		af.trackedFuelingTransactions[destAddress] = fuelingTx
 	}
-	if fuelingTx != nil && !af.pubTxMgr.CheckTransactionCompleted(ctx, fuelingTx) {
-		log.L(ctx).Debugf("TransferGasFromAutoFuelingSource fueling request with ID: %s for  destination address: %s still not complete", fuelingTx.ID, destAddress)
-		// transaction is tracked and is still pending, return the transaction as it is
-		return fuelingTx, nil
+	if fuelingTx != nil {
+		completed, err := af.pubTxMgr.CheckTransactionCompleted(ctx, &fuelingTx.PublicTxID)
+		if err != nil {
+			return nil, err
+		}
+		if !completed {
+			log.L(ctx).Debugf("TransferGasFromAutoFuelingSource fueling request with ID: %s for destination address: %s still not complete", fuelingTx.Transaction, destAddress)
+			// transaction is tracked and is still pending, return the transaction as it is
+			return fuelingTx, nil
+		}
 	}
 
 	// otherwise, new fueling tx is required
@@ -285,7 +289,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 	af.trackedFuelingTransactions[destAddress] = nil
 
 	// 1) Check balance of source address to ensure we have enough to transfer
-	sourceAccount, err := af.GetAddressBalance(ctx, af.sourceAddress)
+	sourceAccount, err := af.GetAddressBalance(ctx, *af.sourceAddress)
 
 	if err != nil {
 		log.L(ctx).Errorf("TransferGasFromAutoFuelingSource failed to get balance of source: %s", af.sourceAddress)
@@ -311,106 +315,74 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 
 	log.L(ctx).Debugf("TransferGasFromAutoFuelingSource submitting a fueling tx for  destination address: %s ", destAddress)
 	txID := uuid.New()
-	mtx, _, err = af.pubTxMgr.HandleNewTransaction(ctx, &components.RequestOptions{
-		ID:       &txID,
-		SignerID: af.sourceAddress,
-	}, &components.EthTransfer{
-		To:    *tktypes.MustEthAddress(destAddress),
-		Value: ethtypes.NewHexInteger(value),
+	_, err = af.pubTxMgr.SingleTransactionSubmit(ctx, &ptxapi.PublicTx{
+		PublicTxID: ptxapi.PublicTxID{
+			Transaction:   txID, // this means these public TXs will not be visible outside of the public TX manager
+			ResubmitIndex: 0,
+		},
+		PublicTxInput: ptxapi.PublicTxInput{
+			From: *af.sourceAddress,
+			To:   &destAddress,
+			PublicTxOptions: ptxapi.PublicTxOptions{
+				Value: (*tktypes.HexUint256)(value),
+			},
+		},
 	})
 
 	if err != nil {
 		log.L(ctx).Errorf("TransferGasFromAutoFuelingSource fueling tx submission for destination address: %s failed due to: %+v", destAddress, err)
 		return nil, err
 	}
-	log.L(ctx).Debugf("TransferGasFromAutoFuelingSource tracking fueling tx with ID %s, for destination address: %s ", mtx.ID, destAddress)
+	log.L(ctx).Debugf("TransferGasFromAutoFuelingSource tracking fueling tx with ID %s, for destination address: %s ", mtx.Transaction, destAddress)
 	// start tracking the new transactions
 	af.trackedFuelingTransactions[destAddress] = mtx
 	return mtx, nil
 }
 
-func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf *Config, ethClient ethclient.EthClient, publicTxMgr *pubTxManager) (BalanceManager, error) {
-	cm, _ := cache.NewCacheManager(ctx, true).GetCache(ctx, "balance-manager", "balance", conf.GetByteSize(BalanceManagerCacheSizeByteString), conf.GetDuration(BalanceManagerCacheTTLDurationString), conf.GetBool(BalanceManagerCacheEnabled), cache.StrictExpiry, cache.TTLFromInitialAdd)
-	log.L(ctx).Debugf("Balance manager cache setting. Enabled: %t , size: %d , ttl: %s", conf.GetBool(BalanceManagerCacheEnabled), conf.GetByteSize(BalanceManagerCacheSizeByteString), conf.GetDuration(BalanceManagerCacheTTLDurationString))
-	afConfig := conf.SubSection(BalanceManagerAutoFuelingSection)
+func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf *Config, ethClient ethclient.EthClient, publicTxMgr *pubTxManager) (_ BalanceManager, err error) {
 
-	var minSourceBalance *big.Int
-	minSourceAddressBalanceString := afConfig.GetString(BalanceManagerAutoFuelingSourceAddressMinimumBalanceBigIntString)
-	if minSourceAddressBalanceString != "" {
-		minSourceBalance = &big.Int{}
-		_, ok := minSourceBalance.SetString(minSourceAddressBalanceString, 10)
-		if !ok {
-			log.L(ctx).Errorf("Failed to parse %s into a bigInt", minSourceAddressBalanceString)
-			return nil, i18n.NewError(ctx, msgs.MsgInvalidBigIntString, BalanceManagerAutoFuelingSourceAddressMinimumBalanceBigIntString, minSourceAddressBalanceString)
-		}
-		log.L(ctx).Debugf("Balance manager minSourceBalance setting: %s", minSourceBalance.String())
-	}
-
-	var minDestBalance *big.Int
-	minDestBalanceString := afConfig.GetString(BalanceManagerAutoFuelingMinDestBalanceBigIntString)
-	if minDestBalanceString != "" {
-		minDestBalance = &big.Int{}
-		_, ok := minDestBalance.SetString(minDestBalanceString, 10)
-		if !ok {
-			log.L(ctx).Errorf("Failed to parse %s into a bigInt", minDestBalanceString)
-			return nil, i18n.NewError(ctx, msgs.MsgInvalidBigIntString, BalanceManagerAutoFuelingMinDestBalanceBigIntString, minDestBalanceString)
-		}
-		log.L(ctx).Debugf("Balance manager minDestBalance setting: %s", minDestBalance.String())
-	}
-
-	var maxDestBalance *big.Int
-	maxDestBalanceString := afConfig.GetString(BalanceManagerAutoFuelingMaxDestBalanceBigIntString)
-	if maxDestBalanceString != "" {
-		maxDestBalance = &big.Int{}
-		_, ok := maxDestBalance.SetString(maxDestBalanceString, 10)
-		if !ok {
-			log.L(ctx).Errorf("Failed to parse %s into a bigInt", maxDestBalanceString)
-			return nil, i18n.NewError(ctx, msgs.MsgInvalidBigIntString, BalanceManagerAutoFuelingMaxDestBalanceBigIntString, maxDestBalanceString)
-		}
-		log.L(ctx).Debugf("Balance manager maxDestBalance setting: %s", maxDestBalance.String())
-	}
-
-	var minThreshold *big.Int
-	minThresholdString := afConfig.GetString(BalanceManagerAutoFuelingMinThresholdBigIntString)
-	if minThresholdString != "" {
-		minThreshold = &big.Int{}
-		_, ok := minThreshold.SetString(minThresholdString, 10)
-		if !ok {
-			log.L(ctx).Errorf("Failed to parse %s into a bigInt", minThresholdString)
-			return nil, i18n.NewError(ctx, msgs.MsgInvalidBigIntString, BalanceManagerAutoFuelingMinThresholdBigIntString, minThresholdString)
-		}
-		log.L(ctx).Debugf("Balance manager minThreshold setting: %s", minThreshold.String())
-	}
+	minSourceBalance := confutil.BigIntOrNil(conf.BalanceManager.AutoFueling.MinDestBalance)
+	minDestBalance := confutil.BigIntOrNil(conf.BalanceManager.AutoFueling.MinDestBalance)
+	maxDestBalance := confutil.BigIntOrNil(conf.BalanceManager.AutoFueling.MaxDestBalance)
+	minThreshold := confutil.BigIntOrNil(conf.BalanceManager.AutoFueling.MinThreshold)
 
 	if maxDestBalance != nil && minDestBalance != nil {
 		if maxDestBalance.Cmp(minDestBalance) < 0 {
 			log.L(ctx).Errorf("Failed initialization due to maxDestBalance is not greater than minDestBalance")
-			return nil, i18n.NewError(ctx, msgs.MsgMaxBelowMin, BalanceManagerAutoFuelingMaxDestBalanceBigIntString, maxDestBalanceString, minDestBalanceString)
+			return nil, i18n.NewError(ctx, msgs.MsgMaxBelowMin, "maxDestBalance")
 		}
 	}
 
 	if maxDestBalance != nil && minThreshold != nil {
 		if maxDestBalance.Cmp(minThreshold) < 0 {
 			log.L(ctx).Errorf("Failed initialization due to maxDestBalance is not greater than minThreshold")
-			return nil, i18n.NewError(ctx, msgs.MsgMaxBelowMinThreshold, BalanceManagerAutoFuelingMaxDestBalanceBigIntString, maxDestBalanceString, minThresholdString)
+			return nil, i18n.NewError(ctx, msgs.MsgMaxBelowMinThreshold, "maxDestBalance")
 		}
 	}
-	calcMethod := afConfig.GetString(BalanceManagerAutoFuelingProactiveCostEstimationMethodString)
+	var sourceAddress *tktypes.EthAddress
+	sourceAddrString := confutil.StringOrEmpty(conf.BalanceManager.AutoFueling.SourceAddress, "")
+	if sourceAddrString != "" {
+		sourceAddress, err = tktypes.ParseEthAddress(sourceAddrString)
+		if err != nil {
+			return nil, err
+		}
+	}
+	calcMethod := confutil.StringNotEmpty(conf.BalanceManager.AutoFueling.ProactiveCostEstimationMethod, string(BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethodMax))
 	log.L(ctx).Debugf("Balance manager calcMethod setting: %s", calcMethod)
 	bm := &BalanceManagerWithInMemoryTracking{
-		sourceAddress:                    afConfig.GetString(BalanceManagerAutoFuelingSourceAddressString),
+		sourceAddress:                    sourceAddress,
 		ethClient:                        ethClient,
-		pubTxMgr:                         txEngine,
-		balanceCache:                     cm,
+		pubTxMgr:                         publicTxMgr,
+		balanceCache:                     cache.NewCache[tktypes.EthAddress, *big.Int](&conf.BalanceManager.Cache, &DefaultConfig.BalanceManager.Cache),
 		minSourceBalance:                 minSourceBalance,
-		proactiveFuelingTransactionTotal: afConfig.GetInt(BalanceManagerAutoFuelingProactiveFuelingTransactionTotalInt),
+		proactiveFuelingTransactionTotal: confutil.IntMin(conf.BalanceManager.AutoFueling.ProactiveFuelingTransactionTotal, 0, *DefaultConfig.BalanceManager.AutoFueling.ProactiveFuelingTransactionTotal),
 		proactiveFuelingTransactionTotalEmptySlotCostCalcMethod: BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethod(calcMethod),
 		minDestBalance:                     minDestBalance,
 		maxDestBalance:                     maxDestBalance,
 		minThreshold:                       minThreshold,
-		destinationAddressesFuelingTracked: make(map[string]*sync.Mutex),
-		trackedFuelingTransactions:         make(map[string]*ptxapi.PublicTx),
-		addressBalanceChangedMap:           make(map[string]bool),
+		destinationAddressesFuelingTracked: make(map[tktypes.EthAddress]*sync.Mutex),
+		trackedFuelingTransactions:         make(map[tktypes.EthAddress]*ptxapi.PublicTx),
+		addressBalanceChangedMap:           make(map[tktypes.EthAddress]bool),
 	}
 	return bm, nil
 }

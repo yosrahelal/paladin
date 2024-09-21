@@ -217,23 +217,3 @@ func (ble *pubTxManager) MarkInFlightOrchestratorsStale() {
 	default:
 	}
 }
-
-func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourceAddress string, destinationAddress string) (tx *ptxapi.PublicTx, err error) {
-	tf := &components.PubTransactionQueries{
-		InStatus:   []string{string(PubTxStatusPending)},
-		To:         confutil.P(destinationAddress),
-		From:       confutil.P(sourceAddress),
-		Sort:       confutil.P("-nonce"),
-		Limit:      confutil.P(1),
-		HasTxValue: true, // NB: we assume if a transaction has value then it's a fueling transaction
-	}
-
-	txs, err := ble.txStore.ListTransactions(ctx, tf)
-	if err != nil {
-		return nil, err
-	}
-	if len(txs) > 0 {
-		tx = txs[0]
-	}
-	return tx, nil
-}

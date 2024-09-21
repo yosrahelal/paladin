@@ -54,6 +54,6 @@ type PublicTxManager interface {
 	ManagerLifecycle
 
 	// Synchronous functions that are executed on the callers thread
-	GetTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON, submissions bool) ([]*ptxapi.PublicTx, error)
+	GetTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTx, error)
 	PrepareSubmissionBatch(ctx context.Context, transactions []*ptxapi.PublicTx /* nonce is ignored on input */) (batch PublicTxBatch, err error)
 }

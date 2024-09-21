@@ -444,7 +444,7 @@ func (ble *pubTxManager) HandleConfirmedTransactions(ctx context.Context, confir
 				}
 				err := inFlightOrchestrator.HandleConfirmedTransactions(ctx, indexedTxs, itMaxNonce[fromAddress])
 				// finally, we update the confirmed nonce for each address to the highest number that is observed ever. This then can be used by the orchestrator to retrospectively fetch missed confirmed transaction data.
-				ble.updateConfirmedTxNonce(fromAddress, itMaxNonce[fromAddress])
+				ble.notifyConfirmedTxNonce(fromAddress, itMaxNonce[fromAddress])
 				eventHandlingErrors <- err
 			}()
 		}
@@ -495,6 +495,48 @@ func (ble *pubTxManager) GetTransactions(ctx context.Context, dbTX *gorm.DB, jq 
 		results[iTx] = tx
 	}
 	return results, nil
+}
+
+func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, id *ptxapi.PublicTxID) (bool, error) {
+	// Runs a DB query to see if the transaction is marked completed (for good or bad)
+	// A non existent transaction results in false
+	var ptxs []*persistedPubTx
+	err := ble.p.DB().
+		WithContext(ctx).
+		Where("transaction = ?", id.Transaction).
+		Where("resubmit_idx = ?", id.ResubmitIndex).
+		Select("completed").
+		Limit(1).
+		Error
+	if err != nil {
+		return false, err
+	}
+	if len(ptxs) > 0 && ptxs[0].Completed {
+		log.L(ctx).Debugf("CheckTransactionCompleted returned true for %s", ptxs[0].getIDString())
+		return true, nil
+	}
+	return false, nil
+}
+
+// the return does NOT include submissions (only the top level TX data)
+func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourceAddress tktypes.EthAddress, destinationAddress tktypes.EthAddress) (*ptxapi.PublicTx, error) {
+	var ptxs []*persistedPubTx
+	err := ble.p.DB().
+		WithContext(ctx).
+		Where("from = ?", sourceAddress).
+		Where("to = ?", destinationAddress).
+		Where("completed IS FALSE").
+		Where("data IS NULL").
+		Limit(1).
+		Error
+	if err != nil {
+		return nil, err
+	}
+	if len(ptxs) > 0 {
+		log.L(ctx).Debugf("GetPendingFuelingTransaction returned %s", ptxs[0].getIDString())
+		return mapPersistedTransaction(ptxs[0]), nil
+	}
+	return nil, nil
 }
 
 func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB, q *gorm.DB) ([]*persistedPubTx, error) {
@@ -595,6 +637,6 @@ func (pte *pubTxManager) notifyConfirmedTxNonce(addr tktypes.EthAddress, nonce u
 	defer pte.InFlightOrchestratorMux.Unlock()
 	orchestrator := pte.InFlightOrchestrators[addr]
 	if orchestrator != nil {
-		orchestrator.notifyConfirmedTxNonce(nonce)
+		orchestrator.notifyConfirmedNonceOrchestrator(nonce)
 	}
 }

@@ -52,11 +52,11 @@ type EthClient interface {
 	ChainID() int64
 
 	// Below are raw functions that the ABI() above provides wrappers for
-	GasPrice(ctx context.Context) (gasPrice *ethtypes.HexInteger, err error)
-	GetBalance(ctx context.Context, address string, block string) (balance *ethtypes.HexInteger, err error)
+	GasPrice(ctx context.Context) (gasPrice *tktypes.HexUint256, err error)
+	GetBalance(ctx context.Context, address tktypes.EthAddress, block string) (balance *tktypes.HexUint256, err error)
 	EstimateGasNoResolve(ctx context.Context, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error)
 	EstimateGas(ctx context.Context, from *string, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error)
-	GetTransactionCount(ctx context.Context, fromAddr tktypes.EthAddress) (transactionCount *ethtypes.HexUint64, err error)
+	GetTransactionCount(ctx context.Context, fromAddr tktypes.EthAddress) (transactionCount *tktypes.HexUint64, err error)
 	GetTransactionReceipt(ctx context.Context, txHash string) (*TransactionReceiptResponse, error)
 	CallContractNoResolve(ctx context.Context, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error)
 	CallContract(ctx context.Context, from *string, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error)
@@ -225,8 +225,8 @@ func (ec *ethClient) CallContractNoResolve(ctx context.Context, tx *ethsigner.Tr
 
 }
 
-func (ec *ethClient) GetBalance(ctx context.Context, address string, block string) (*ethtypes.HexInteger, error) {
-	var addressBalance ethtypes.HexInteger
+func (ec *ethClient) GetBalance(ctx context.Context, address tktypes.EthAddress, block string) (*tktypes.HexUint256, error) {
+	var addressBalance tktypes.HexUint256
 
 	if rpcErr := ec.rpc.CallRPC(ctx, &addressBalance, "eth_getBalance", address, block); rpcErr != nil {
 		log.L(ctx).Errorf("eth_getBalance failed: %+v", rpcErr)
@@ -235,10 +235,10 @@ func (ec *ethClient) GetBalance(ctx context.Context, address string, block strin
 	return &addressBalance, nil
 }
 
-func (ec *ethClient) GasPrice(ctx context.Context) (*ethtypes.HexInteger, error) {
+func (ec *ethClient) GasPrice(ctx context.Context) (*tktypes.HexUint256, error) {
 	// currently only support London style gas price
 	// For EIP1559, will need to add support for `eth_maxPriorityFeePerGas`
-	var gasPrice ethtypes.HexInteger
+	var gasPrice tktypes.HexUint256
 
 	if rpcErr := ec.rpc.CallRPC(ctx, &gasPrice, "eth_gasPrice"); rpcErr != nil {
 		log.L(ctx).Errorf("eth_gasPrice failed: %+v", rpcErr)
@@ -321,8 +321,8 @@ func (ec *ethClient) EstimateGasNoResolve(ctx context.Context, tx *ethsigner.Tra
 	return res, nil
 }
 
-func (ec *ethClient) GetTransactionCount(ctx context.Context, fromAddr tktypes.EthAddress) (*ethtypes.HexUint64, error) {
-	var transactionCount ethtypes.HexUint64
+func (ec *ethClient) GetTransactionCount(ctx context.Context, fromAddr tktypes.EthAddress) (*tktypes.HexUint64, error) {
+	var transactionCount tktypes.HexUint64
 	if rpcErr := ec.rpc.CallRPC(ctx, &transactionCount, "eth_getTransactionCount", fromAddr, "latest"); rpcErr != nil {
 		log.L(ctx).Errorf("eth_getTransactionCount(%s) failed: %+v", fromAddr, rpcErr)
 		return nil, rpcErr

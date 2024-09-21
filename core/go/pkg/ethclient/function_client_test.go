@@ -140,7 +140,7 @@ func testInvokeNewWidgetOk(t *testing.T, isWS bool, txVersion EthTXVersion, gasL
 	var testABI ABIClient
 	var key1 string
 	ctx, ecf, done := newTestClientAndServer(t, &mockEth{
-		eth_getTransactionCount: func(ctx context.Context, a ethtypes.Address0xHex, block string) (ethtypes.HexUint64, error) {
+		eth_getTransactionCount: func(ctx context.Context, a tktypes.EthAddress, block string) (tktypes.HexUint64, error) {
 			assert.Equal(t, key1, a.String())
 			assert.Equal(t, "latest", block)
 			return 10, nil
@@ -541,7 +541,7 @@ func TestInvokeConstructor(t *testing.T) {
 	var testABI ABIClient
 	var key1 string
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_getTransactionCount: func(ctx context.Context, a ethtypes.Address0xHex, block string) (ethtypes.HexUint64, error) {
+		eth_getTransactionCount: func(ctx context.Context, a tktypes.EthAddress, block string) (tktypes.HexUint64, error) {
 			assert.Equal(t, key1, a.String())
 			assert.Equal(t, "latest", block)
 			return 10, nil

@@ -69,7 +69,7 @@ func TestCallFail(t *testing.T) {
 
 func TestGetTransactionCountFailForBuildRawTx(t *testing.T) {
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_getTransactionCount: func(ctx context.Context, ah ethtypes.Address0xHex, s string) (ethtypes.HexUint64, error) {
+		eth_getTransactionCount: func(ctx context.Context, ah tktypes.EthAddress, s string) (tktypes.HexUint64, error) {
 			return 0, fmt.Errorf("pop")
 		},
 	})
@@ -81,15 +81,15 @@ func TestGetTransactionCountFailForBuildRawTx(t *testing.T) {
 }
 
 func TestGetBalance(t *testing.T) {
-	balanceHexInt := ethtypes.NewHexInteger(big.NewInt(200000))
+	balanceHexInt := (*tktypes.HexUint256)(big.NewInt(200000))
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_getBalance: func(ctx context.Context, ah ethtypes.Address0xHex, s string) (ethtypes.HexInteger, error) {
-			return *balanceHexInt, nil
+		eth_getBalance: func(ctx context.Context, ah tktypes.EthAddress, s string) (*tktypes.HexUint256, error) {
+			return balanceHexInt, nil
 		},
 	})
 	defer done()
 
-	balance, err := ec.HTTPClient().GetBalance(ctx, "0x1d0cD5b99d2E2a380e52b4000377Dd507c6df754", "latest")
+	balance, err := ec.HTTPClient().GetBalance(ctx, *tktypes.MustEthAddress("0x1d0cD5b99d2E2a380e52b4000377Dd507c6df754"), "latest")
 	require.NoError(t, err)
 	assert.Equal(t, balanceHexInt, balance)
 
@@ -97,22 +97,22 @@ func TestGetBalance(t *testing.T) {
 
 func TestGetBalanceFail(t *testing.T) {
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_getBalance: func(ctx context.Context, ah ethtypes.Address0xHex, s string) (ethtypes.HexInteger, error) {
-			return ethtypes.HexInteger{}, fmt.Errorf("pop")
+		eth_getBalance: func(ctx context.Context, ah tktypes.EthAddress, s string) (*tktypes.HexUint256, error) {
+			return nil, fmt.Errorf("pop")
 		},
 	})
 	defer done()
 
-	_, err := ec.HTTPClient().GetBalance(ctx, "0x1d0cD5b99d2E2a380e52b4000377Dd507c6df754", "latest")
+	_, err := ec.HTTPClient().GetBalance(ctx, *tktypes.MustEthAddress("0x1d0cD5b99d2E2a380e52b4000377Dd507c6df754"), "latest")
 	assert.Regexp(t, "pop", err)
 
 }
 
 func TestGasPrice(t *testing.T) {
-	gasPriceHexInt := ethtypes.NewHexInteger(big.NewInt(200000))
+	gasPriceHexInt := (*tktypes.HexUint256)(big.NewInt(200000))
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_gasPrice: func(ctx context.Context) (ethtypes.HexInteger, error) {
-			return *gasPriceHexInt, nil
+		eth_gasPrice: func(ctx context.Context) (*tktypes.HexUint256, error) {
+			return gasPriceHexInt, nil
 		},
 	})
 	defer done()
@@ -125,8 +125,8 @@ func TestGasPrice(t *testing.T) {
 
 func TestGasPriceFail(t *testing.T) {
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_gasPrice: func(ctx context.Context) (ethtypes.HexInteger, error) {
-			return ethtypes.HexInteger{}, fmt.Errorf("pop")
+		eth_gasPrice: func(ctx context.Context) (*tktypes.HexUint256, error) {
+			return nil, fmt.Errorf("pop")
 		},
 	})
 	defer done()
@@ -167,9 +167,9 @@ func TestEstimateGasFail(t *testing.T) {
 }
 
 func TestGetTransactionCount(t *testing.T) {
-	txCountHexUint := (ethtypes.HexUint64)(200000)
+	txCountHexUint := (tktypes.HexUint64)(200000)
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_getTransactionCount: func(ctx context.Context, addr ethtypes.Address0xHex, block string) (ethtypes.HexUint64, error) {
+		eth_getTransactionCount: func(ctx context.Context, addr tktypes.EthAddress, block string) (tktypes.HexUint64, error) {
 			return txCountHexUint, nil
 		},
 	})
@@ -183,8 +183,8 @@ func TestGetTransactionCount(t *testing.T) {
 
 func TestGetTransactionCountFail(t *testing.T) {
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_getTransactionCount: func(ctx context.Context, addr ethtypes.Address0xHex, block string) (ethtypes.HexUint64, error) {
-			return (ethtypes.HexUint64)(0), fmt.Errorf("pop")
+		eth_getTransactionCount: func(ctx context.Context, addr tktypes.EthAddress, block string) (tktypes.HexUint64, error) {
+			return (tktypes.HexUint64)(0), fmt.Errorf("pop")
 		},
 	})
 	defer done()
@@ -195,7 +195,7 @@ func TestGetTransactionCountFail(t *testing.T) {
 
 func TestBuildRawTransactionEstimateGasFail(t *testing.T) {
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_getTransactionCount: func(ctx context.Context, ah ethtypes.Address0xHex, s string) (ethtypes.HexUint64, error) {
+		eth_getTransactionCount: func(ctx context.Context, ah tktypes.EthAddress, s string) (tktypes.HexUint64, error) {
 			return 0, nil
 		},
 		eth_estimateGas: func(ctx context.Context, t ethsigner.Transaction) (tktypes.HexUint64, error) {
@@ -278,7 +278,7 @@ func TestGetReceiptOkSuccess(t *testing.T) {
 		ContractAddress:  ethtypes.MustNewAddress("0x87ae94ab290932c4e6269648bb47c86978af4436"),
 	}
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_getTransactionReceipt: func(context.Context, ethtypes.HexBytes0xPrefix) (*txReceiptJSONRPC, error) {
+		eth_getTransactionReceipt: func(context.Context, tktypes.Bytes32) (*txReceiptJSONRPC, error) {
 			return sampleJSONRPCReceipt, nil
 		},
 	})
@@ -302,7 +302,7 @@ func TestGetReceiptOkFailed(t *testing.T) {
 		RevertReason:     &revertReasonTooSmallHex,
 	}
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_getTransactionReceipt: func(context.Context, ethtypes.HexBytes0xPrefix) (*txReceiptJSONRPC, error) {
+		eth_getTransactionReceipt: func(context.Context, tktypes.Bytes32) (*txReceiptJSONRPC, error) {
 			return sampleJSONRPCReceipt, nil
 		},
 	})
@@ -323,7 +323,7 @@ func TestGetReceiptOkFailedMissingReason(t *testing.T) {
 		ContractAddress:  ethtypes.MustNewAddress("0x87ae94ab290932c4e6269648bb47c86978af4436"),
 	}
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_getTransactionReceipt: func(context.Context, ethtypes.HexBytes0xPrefix) (*txReceiptJSONRPC, error) {
+		eth_getTransactionReceipt: func(context.Context, tktypes.Bytes32) (*txReceiptJSONRPC, error) {
 			return sampleJSONRPCReceipt, nil
 		},
 	})
@@ -347,7 +347,7 @@ func TestGetReceiptOkFailedCustomReason(t *testing.T) {
 		RevertReason:     &revertCustomHex,
 	}
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_getTransactionReceipt: func(context.Context, ethtypes.HexBytes0xPrefix) (*txReceiptJSONRPC, error) {
+		eth_getTransactionReceipt: func(context.Context, tktypes.Bytes32) (*txReceiptJSONRPC, error) {
 			return sampleJSONRPCReceipt, nil
 		},
 	})
@@ -363,7 +363,7 @@ func TestGetReceiptOkFailedCustomReason(t *testing.T) {
 func TestGetReceiptError(t *testing.T) {
 
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_getTransactionReceipt: func(context.Context, ethtypes.HexBytes0xPrefix) (*txReceiptJSONRPC, error) {
+		eth_getTransactionReceipt: func(context.Context, tktypes.Bytes32) (*txReceiptJSONRPC, error) {
 			return nil, fmt.Errorf("pop")
 		},
 	})
@@ -376,7 +376,7 @@ func TestGetReceiptError(t *testing.T) {
 func TestGetReceiptNotFound(t *testing.T) {
 
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_getTransactionReceipt: func(context.Context, ethtypes.HexBytes0xPrefix) (*txReceiptJSONRPC, error) {
+		eth_getTransactionReceipt: func(context.Context, tktypes.Bytes32) (*txReceiptJSONRPC, error) {
 			return nil, nil
 		},
 	})

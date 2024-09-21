@@ -144,7 +144,7 @@ type AutoFuelTransactionHandler interface {
 // - record the total spent of a series of transaction emitted by this signing address
 // - provide an interface to top up the signing address when spent is higher than the balance
 type AddressAccount struct {
-	Address               string
+	Address               tktypes.EthAddress
 	Balance               *big.Int
 	SpentTransactionCount int
 	MinCost               *big.Int
@@ -421,7 +421,7 @@ type OrchestratorContext struct {
 	// input from transaction engine
 	AvailableToSpend         *big.Int
 	PreviousNonceCostUnknown bool
-	CurrentConfirmedNonce    *big.Int
+	CurrentConfirmedNonce    *uint64
 }
 
 // output of some stages doesn't get written into the database
