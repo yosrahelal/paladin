@@ -61,14 +61,16 @@ type ABIFunctionRequestBuilder interface {
 	Block(uint64) ABIFunctionRequestBuilder
 	Input(any) ABIFunctionRequestBuilder
 	Output(any) ABIFunctionRequestBuilder
+	CallOptions(...CallOption) ABIFunctionRequestBuilder // adds extra call options (defaults are to use the ABI for errors and decoding)
 
 	// Query functions
 	TX() *ethsigner.Transaction
 
 	// Execution functions
 	BuildCallData() (err error)
-	Call() (err error)
-	CallJSON() (jsonData []byte, err error)
+	Call() (err error)                          // unmarshals the output into the output struct supplied in the builder
+	CallRawResult() (res CallResult, err error) // returns the detailed result, without unmarshalling into your output struct
+	EstimateGas() (res EstimateGasResult, err error)
 	RawTransaction() (rawTX tktypes.HexBytes, err error)
 	SignAndSend() (txHash *tktypes.Bytes32, err error)
 }
@@ -104,13 +106,14 @@ type abiFunctionClient struct {
 
 type abiFunctionRequestBuilder struct {
 	*abiFunctionClient
-	ctx       context.Context
-	txVersion EthTXVersion
-	tx        ethsigner.Transaction
-	block     string
-	fromStr   *string
-	input     any
-	output    any
+	ctx          context.Context
+	txVersion    EthTXVersion
+	tx           ethsigner.Transaction
+	block        string
+	fromStr      *string
+	input        any
+	output       any
+	extendedOpts []CallOption
 }
 
 func (ec *ethClient) ABIJSON(ctx context.Context, abiJson []byte) (ABIClient, error) {
@@ -293,6 +296,11 @@ func (ac *abiFunctionRequestBuilder) Output(output any) ABIFunctionRequestBuilde
 	return ac
 }
 
+func (ac *abiFunctionRequestBuilder) CallOptions(extendedOpts ...CallOption) ABIFunctionRequestBuilder {
+	ac.extendedOpts = append(ac.extendedOpts, extendedOpts...)
+	return ac
+}
+
 func (ac *abiFunctionRequestBuilder) TX() *ethsigner.Transaction {
 	return &ac.tx
 }
@@ -357,7 +365,11 @@ func (ac *abiFunctionRequestBuilder) Call() (err error) {
 	if ac.output == nil {
 		return i18n.NewError(ac.ctx, msgs.MsgEthClientMissingOutput)
 	}
-	jsonData, err := ac.CallJSON()
+	var jsonData []byte
+	res, err := ac.CallRawResult()
+	if err == nil {
+		jsonData, err = res.DecodedResult.JSON()
+	}
 	if err == nil {
 		err = json.Unmarshal(jsonData, ac.output)
 	}
@@ -367,21 +379,29 @@ func (ac *abiFunctionRequestBuilder) Call() (err error) {
 	return nil
 }
 
-func (ac *abiFunctionRequestBuilder) CallJSON() (jsonData []byte, err error) {
+func (ac *abiFunctionRequestBuilder) callOps() []CallOption {
+	return append([]CallOption{
+		WithErrorsFrom(ac.abi),
+		WithOutputs(ac.outputs),
+	}, ac.extendedOpts...)
+}
+
+func (ac *abiFunctionRequestBuilder) CallRawResult() (res CallResult, err error) {
 	if ac.tx.Data == nil {
 		if err := ac.BuildCallData(); err != nil {
-			return nil, err
+			return res, err
 		}
 	}
-	resData, err := ac.ec.CallContract(ac.ctx, ac.fromStr, &ac.tx, ac.block, ac.abi)
-	if err != nil {
-		return nil, err
+	return ac.ec.CallContract(ac.ctx, ac.fromStr, &ac.tx, ac.block, ac.callOps()...)
+}
+
+func (ac *abiFunctionRequestBuilder) EstimateGas() (res EstimateGasResult, err error) {
+	if ac.tx.Data == nil {
+		if err := ac.BuildCallData(); err != nil {
+			return res, err
+		}
 	}
-	cv, err := ac.outputs.DecodeABIDataCtx(ac.ctx, resData, 0)
-	if err == nil {
-		jsonData, err = tktypes.StandardABISerializer().SerializeJSONCtx(ac.ctx, cv)
-	}
-	return jsonData, err
+	return ac.ec.EstimateGas(ac.ctx, ac.fromStr, &ac.tx, ac.callOps()...)
 }
 
 func (ac *abiFunctionRequestBuilder) RawTransaction() (rawTX tktypes.HexBytes, err error) {
@@ -393,7 +413,7 @@ func (ac *abiFunctionRequestBuilder) RawTransaction() (rawTX tktypes.HexBytes, e
 	if ac.fromStr == nil {
 		return nil, i18n.NewError(ac.ctx, msgs.MsgEthClientMissingFrom)
 	}
-	return ac.ec.BuildRawTransaction(ac.ctx, ac.txVersion, *ac.fromStr, &ac.tx, ac.abi)
+	return ac.ec.BuildRawTransaction(ac.ctx, ac.txVersion, *ac.fromStr, &ac.tx, ac.callOps()...)
 }
 
 func (ac *abiFunctionRequestBuilder) SignAndSend() (txHash *tktypes.Bytes32, err error) {

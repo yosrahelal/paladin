@@ -284,7 +284,7 @@ func testCallGetWidgetsOk(t *testing.T, withFrom, withBlock, withBlockRef bool) 
 	} else if withBlockRef {
 		getWidgetsReq.BlockRef(PENDING)
 	}
-	jsonRes, err := getWidgetsReq.CallJSON()
+	res, err := getWidgetsReq.CallRawResult()
 	require.NoError(t, err)
 	assert.JSONEq(t, `{
 		"0": [
@@ -294,7 +294,7 @@ func testCallGetWidgetsOk(t *testing.T, withFrom, withBlock, withBlockRef bool) 
 				"features": ["shiny", "spinny"]
 			}
 		]
-	}`, string(jsonRes))
+	}`, res.JSON())
 
 	var getWidgetsRes getWidgetsOutput
 	err = getWidgetsReq.
@@ -423,7 +423,7 @@ func TestCallFunctionFail(t *testing.T) {
 
 	to := ethtypes.MustNewAddress("0xD9E54Ba3F1419e6AC71A795d819fdBAE883A6575")
 
-	_, err := getWidgets.R(ctx).Input(`{"sku":12345}`).To(to).CallJSON()
+	_, err := getWidgets.R(ctx).Input(`{"sku":12345}`).To(to).CallRawResult()
 	assert.Regexp(t, "pop", err)
 }
 
@@ -459,6 +459,9 @@ func TestMissingInputs(t *testing.T) {
 	assert.Regexp(t, "PD011504", err)
 
 	err = getWidgets.R(ctx).To(to).Output("supplied").Call()
+	assert.Regexp(t, "PD011503", err)
+
+	_, err = getWidgets.R(ctx).To(to).Output("supplied").EstimateGas()
 	assert.Regexp(t, "PD011503", err)
 
 	err = getWidgets.R(ctx).Output("supplied").Input("supplied").Call()
@@ -620,10 +623,13 @@ func TestInvokeNewWidgetCustomError(t *testing.T) {
 		Input(&newWidgetInput{
 			Widget: *widgetA,
 		})
-	_, err = req.CallJSON()
+	_, err = req.CallRawResult()
+	assert.EqualError(t, err, `PD011513: Reverted: WidgetError("1122334455","not widgety enough")`)
+	_, err = req.EstimateGas()
 	assert.EqualError(t, err, `PD011513: Reverted: WidgetError("1122334455","not widgety enough")`)
 
-	_, err = ecf.HTTPClient().CallContract(ctx, nil, &ethsigner.Transaction{}, "latest", nil)
+	// Check we can override the options if we wish, disabling ability to decode the errors
+	_, err = req.CallOptions(WithErrorsFrom(abi.ABI{})).CallRawResult()
 	assert.EqualError(t, err, `PD011513: Reverted: 0xf852c6da0000000000000000000000000000000000000000000000000000000042e576f7000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000126e6f74207769646765747920656e6f7567680000000000000000000000000000`)
 
 }

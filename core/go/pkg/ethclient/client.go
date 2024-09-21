@@ -54,12 +54,63 @@ type EthClient interface {
 	// Below are raw functions that the ABI() above provides wrappers for
 	GasPrice(ctx context.Context) (gasPrice *ethtypes.HexInteger, err error)
 	GetBalance(ctx context.Context, address string, block string) (balance *ethtypes.HexInteger, err error)
-	GasEstimate(ctx context.Context, tx *ethsigner.Transaction, a abi.ABI) (gasLimit *ethtypes.HexInteger, err error)
-	GetTransactionCount(ctx context.Context, fromAddr string) (transactionCount *ethtypes.HexUint64, err error)
+	EstimateGas(ctx context.Context, from *string, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error)
+	GetTransactionCount(ctx context.Context, fromAddr tktypes.EthAddress) (transactionCount *ethtypes.HexUint64, err error)
 	GetTransactionReceipt(ctx context.Context, txHash string) (*TransactionReceiptResponse, error)
-	CallContract(ctx context.Context, from *string, tx *ethsigner.Transaction, block string, a abi.ABI) (data tktypes.HexBytes, err error)
-	BuildRawTransaction(ctx context.Context, txVersion EthTXVersion, from string, tx *ethsigner.Transaction, a abi.ABI) (tktypes.HexBytes, error)
+	CallContract(ctx context.Context, from *string, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error)
+	BuildRawTransaction(ctx context.Context, txVersion EthTXVersion, from string, tx *ethsigner.Transaction, opts ...CallOption) (tktypes.HexBytes, error)
 	SendRawTransaction(ctx context.Context, rawTX tktypes.HexBytes) (*tktypes.Bytes32, error)
+}
+
+// Call options affect the behavior of gas estimate and call functions, such as by allowing you to supply
+// an ABI for the client to use to decode the error data.
+type CallOption interface {
+	co() *callOptions
+}
+
+type callOptions struct {
+	errABI  abi.ABI
+	outputs abi.TypeComponent
+}
+
+func (co *callOptions) co() *callOptions {
+	return co
+}
+
+// The supplied ABI will be used when attempting to process revert data (if available)
+func WithErrorsFrom(a abi.ABI) CallOption {
+	return &callOptions{
+		errABI: a,
+	}
+}
+
+// The supplied function definition will be used to decode return data
+func WithOutputs(outputs abi.TypeComponent) CallOption {
+	return &callOptions{
+		outputs: outputs,
+	}
+}
+
+type EstimateGasResult struct {
+	GasLimit   *tktypes.HexUint256
+	RevertData tktypes.HexBytes
+}
+
+type CallResult struct {
+	Data          tktypes.HexBytes
+	DecodedResult *abi.ComponentValue
+	RevertData    tktypes.HexBytes
+}
+
+// Convenience func that uses our standard serializer to serialize to JSON, and bypasses errors
+func (cr CallResult) JSON() (s string) {
+	if cr.DecodedResult != nil {
+		b, _ := tktypes.StandardABISerializer().SerializeJSON(cr.DecodedResult)
+		if b != nil {
+			s = string(b)
+		}
+	}
+	return s
 }
 
 type KeyManager interface {
@@ -81,7 +132,7 @@ func WrapRPCClient(ctx context.Context, keymgr KeyManager, rpc rpcclient.Client,
 	ec := &ethClient{
 		keymgr:            keymgr,
 		rpc:               rpc,
-		gasEstimateFactor: confutil.Float64Min(conf.GasEstimateFactor, 1.0, *Defaults.GasEstimateFactor),
+		gasEstimateFactor: confutil.Float64Min(conf.EstimateGasFactor, 1.0, *Defaults.EstimateGasFactor),
 	}
 	if err := ec.setupChainID(ctx); err != nil {
 		return nil, err
@@ -110,44 +161,65 @@ func (ec *ethClient) setupChainID(ctx context.Context) error {
 	return nil
 }
 
-func (ec *ethClient) CallContract(ctx context.Context, from *string, tx *ethsigner.Transaction, block string, a abi.ABI) (data tktypes.HexBytes, err error) {
-
-	if from != nil {
-		_, fromAddr, err := ec.keymgr.ResolveKey(ctx, *from, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+func (ec *ethClient) resolveFrom(ctx context.Context, from *string, tx *ethsigner.Transaction) (string, *tktypes.EthAddress, error) {
+	if from != nil && *from != "" {
+		var fromAddr *tktypes.EthAddress
+		keyHandle, fromVerifier, err := ec.keymgr.ResolveKey(ctx, *from, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+		if err == nil {
+			fromAddr, err = tktypes.ParseEthAddress(fromVerifier)
+		}
 		if err != nil {
-			return nil, err
+			return "", nil, err
 		}
 		tx.From = json.RawMessage(tktypes.JSONString(fromAddr))
+		return keyHandle, fromAddr, nil
 	}
-
-	return ec.callContract(ctx, tx, block, a)
+	return "", nil, nil
 }
 
-func (ec *ethClient) callContract(ctx context.Context, tx *ethsigner.Transaction, block string, a abi.ABI) (data tktypes.HexBytes, err error) {
+func (ec *ethClient) CallContract(ctx context.Context, from *string, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error) {
+	if _, _, err := ec.resolveFrom(ctx, from, tx); err != nil {
+		return res, err
+	}
+	return ec.callContract(ctx, tx, block, opts...)
+}
 
-	if err := ec.rpc.CallRPC(ctx, &data, "eth_call", tx, block); err != nil {
+func (ec *ethClient) callContract(ctx context.Context, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error) {
+
+	var outputs abi.TypeComponent
+	errABI := abi.ABI{}
+	for _, o := range opts {
+		co := o.co()
+		if co.errABI != nil {
+			errABI = co.errABI
+		}
+		if co.outputs != nil {
+			outputs = co.outputs
+		}
+	}
+	if err := ec.rpc.CallRPC(ctx, &res.Data, "eth_call", tx, block); err != nil {
 		rpcErr := err.RPCError()
 		log.L(ctx).Errorf("eth_call failed: %+v", rpcErr)
 		if rpcErr.Data != "" {
 			log.L(ctx).Debugf("Received error data in revert: %s", rpcErr.Data)
-			var revertData ethtypes.HexBytes0xPrefix
-			_ = json.Unmarshal(rpcErr.Data.Bytes(), &revertData)
-			if a == nil {
-				a = abi.ABI{}
-			}
-			if len(revertData) > 0 {
-				errString, _ := a.ErrorStringCtx(ctx, revertData)
+			_ = json.Unmarshal(rpcErr.Data.Bytes(), &res.RevertData)
+			if len(res.RevertData) > 0 {
+				errString, _ := errABI.ErrorStringCtx(ctx, res.RevertData)
 				if errString == "" {
-					errString = tktypes.HexBytes(revertData).String()
+					errString = tktypes.HexBytes(res.RevertData).String()
 				}
-				return nil, i18n.NewError(ctx, msgs.MsgEthClientCallReverted, errString)
+				return res, i18n.NewError(ctx, msgs.MsgEthClientCallReverted, errString)
 			}
 		}
 		// Or fallback to whatever the error we got was
-		return nil, rpcErr.Error()
+		return res, rpcErr.Error()
 	}
 
-	return data, err
+	// See if we can decode the result
+	if outputs != nil {
+		res.DecodedResult, err = outputs.DecodeABIDataCtx(ctx, res.Data, 0)
+	}
+	return res, err
 
 }
 
@@ -226,20 +298,28 @@ func (ec *ethClient) GetTransactionReceipt(ctx context.Context, txHash string) (
 	return receiptResponse, nil
 }
 
-func (ec *ethClient) GasEstimate(ctx context.Context, tx *ethsigner.Transaction, a abi.ABI) (_ *ethtypes.HexInteger, err error) {
-	var gasEstimate ethtypes.HexInteger
-	if err = ec.rpc.CallRPC(ctx, &gasEstimate, "eth_estimateGas", tx); err != nil {
-		log.L(ctx).Errorf("eth_estimateGas failed: %+v", err)
-		// Fall back to a call, to see if we can get an error
-		if _, callErr := ec.callContract(ctx, tx, "latest", a); callErr != nil {
-			err = callErr
-		}
-		return nil, err
+func (ec *ethClient) EstimateGas(ctx context.Context, from *string, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error) {
+	if _, _, err := ec.resolveFrom(ctx, from, tx); err != nil {
+		return res, err
 	}
-	return &gasEstimate, nil
+	return ec.gasEstimate(ctx, tx, opts...)
 }
 
-func (ec *ethClient) GetTransactionCount(ctx context.Context, fromAddr string) (*ethtypes.HexUint64, error) {
+func (ec *ethClient) gasEstimate(ctx context.Context, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error) {
+	if err = ec.rpc.CallRPC(ctx, &res.GasLimit, "eth_estimateGas", tx); err != nil {
+		log.L(ctx).Errorf("eth_estimateGas failed: %+v", err)
+		// Fall back to a call, to see if we can get an error
+		callRes, callErr := ec.callContract(ctx, tx, "latest", opts...)
+		if callErr != nil {
+			err = callErr
+		}
+		res.RevertData = callRes.RevertData
+		return res, err
+	}
+	return res, nil
+}
+
+func (ec *ethClient) GetTransactionCount(ctx context.Context, fromAddr tktypes.EthAddress) (*ethtypes.HexUint64, error) {
 	var transactionCount ethtypes.HexUint64
 	if rpcErr := ec.rpc.CallRPC(ctx, &transactionCount, "eth_getTransactionCount", fromAddr, "latest"); rpcErr != nil {
 		log.L(ctx).Errorf("eth_getTransactionCount(%s) failed: %+v", fromAddr, rpcErr)
@@ -248,17 +328,15 @@ func (ec *ethClient) GetTransactionCount(ctx context.Context, fromAddr string) (
 	return &transactionCount, nil
 }
 
-func (ec *ethClient) BuildRawTransaction(ctx context.Context, txVersion EthTXVersion, from string, tx *ethsigner.Transaction, a abi.ABI) (tktypes.HexBytes, error) {
-	// Resolve the key (directly with the signer - we have no key manager here in the teseced)
-	keyHandle, fromAddr, err := ec.keymgr.ResolveKey(ctx, from, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+func (ec *ethClient) BuildRawTransaction(ctx context.Context, txVersion EthTXVersion, from string, tx *ethsigner.Transaction, opts ...CallOption) (tktypes.HexBytes, error) {
+	keyHandle, fromAddr, err := ec.resolveFrom(ctx, &from, tx)
 	if err != nil {
 		return nil, err
 	}
-	tx.From = json.RawMessage(tktypes.JSONString(fromAddr))
 
 	// Trivial nonce management in the client - just get the current nonce for this key, from the local node mempool, for each TX
 	if tx.Nonce == nil {
-		txNonce, err := ec.GetTransactionCount(ctx, fromAddr)
+		txNonce, err := ec.GetTransactionCount(ctx, *fromAddr)
 		if err != nil {
 			log.L(ctx).Errorf("eth_getTransactionCount(%s) failed: %+v", fromAddr, err)
 			return nil, err
@@ -268,13 +346,13 @@ func (ec *ethClient) BuildRawTransaction(ctx context.Context, txVersion EthTXVer
 
 	if tx.GasLimit == nil {
 		// Estimate gas before submission
-		gasEstimate, err := ec.GasEstimate(ctx, tx, a)
+		gasEstimate, err := ec.gasEstimate(ctx, tx, opts...)
 		if err != nil {
 			log.L(ctx).Errorf("eth_estimateGas failed: %+v", err)
 			return nil, err
 		}
 		// If that went well, so submission with a bump on the estimation
-		gasLimitFactored := new(big.Float).SetInt(gasEstimate.BigInt())
+		gasLimitFactored := new(big.Float).SetInt(gasEstimate.GasLimit.Int())
 		gasLimitFactored = gasLimitFactored.Mul(gasLimitFactored, big.NewFloat(ec.gasEstimateFactor))
 		gasLimit, _ := gasLimitFactored.Int(nil)
 		tx.GasLimit = ethtypes.NewHexInteger(gasLimit)
