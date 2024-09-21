@@ -52,7 +52,7 @@ var DefaultTransactionEngineConfig = &TransactionEngineConfig{
 	MaxInFlightOrchestrators: confutil.P(50),
 	Interval:                 confutil.P("5s"),
 	MaxStaleTime:             confutil.P("1m"),
-	MaxIdleTim:               confutil.P("10s"),
+	MaxIdleTime:              confutil.P("10s"),
 	Retry: retry.Config{
 		InitialDelay: confutil.P("250ms"),
 		MaxDelay:     confutil.P("30s"),
@@ -236,56 +236,4 @@ func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourc
 		tx = txs[0]
 	}
 	return tx, nil
-}
-
-func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, tx *ptxapi.PublicTx) (completed bool) {
-	// no need for locking here as outdated information is OK given we do frequent retires
-	log.L(ctx).Debugf("CheckTransactionCompleted checking state for transaction %s.", tx.ID)
-	completedTxNonce, exists := ble.completedTxNoncePerAddress[string(tx.From)]
-	if !exists {
-		// need to query the database to check the status of managed transaction
-		tf := &components.PubTransactionQueries{
-			InStatus: []string{string(PubTxStatusSucceeded), string(PubTxStatusFailed)},
-			From:     confutil.P(string(tx.From)),
-			Sort:     confutil.P("-nonce"),
-			Limit:    confutil.P(1),
-		}
-
-		txs, err := ble.txStore.ListTransactions(ctx, tf)
-		if err != nil {
-			// can not read from the database, treat transaction as incomplete
-			return false
-		}
-		if len(txs) > 0 {
-			ble.updateCompletedTxNonce(txs[0])
-			completedTxNonce = *txs[0].Nonce.BigInt()
-			// found completed fueling transaction, do the comparison
-			completed = completedTxNonce.Cmp(tx.Nonce.BigInt()) >= 0
-		}
-		// if no completed fueling transaction is found, the value of "completed" stays false (still pending)
-	} else {
-		// in memory tracked highest nonce available, do the comparison
-		completed = completedTxNonce.Cmp(tx.Nonce.BigInt()) >= 0
-	}
-	log.L(ctx).Debugf("CheckTransactionCompleted checking against completed nonce of %s, from: %s, to: %s, value: %s. Completed nonce: %d, current tx nonce: %d.", tx.ID, tx.From, tx.To, tx.Value.String(), completedTxNonce.Uint64(), tx.Nonce.Uint64())
-
-	return completed
-
-}
-
-func (ble *pubTxManager) updateCompletedTxNonce(tx *ptxapi.PublicTx) (updated bool) {
-	updated = false
-	// no need for locking here as outdated information is OK given we do frequent retires
-	ble.completedTxNoncePerAddressMutex.Lock()
-	defer ble.completedTxNoncePerAddressMutex.Unlock()
-	if tx.Status != PubTxStatusSucceeded && tx.Status != PubTxStatusFailed {
-		// not a completed tx, no op
-		return updated
-	}
-	currentNonce, exists := ble.completedTxNoncePerAddress[string(tx.From)]
-	if !exists || currentNonce.Cmp(tx.Nonce.BigInt()) == -1 {
-		ble.completedTxNoncePerAddress[string(tx.From)] = *tx.Nonce.BigInt()
-		updated = true
-	}
-	return updated
 }

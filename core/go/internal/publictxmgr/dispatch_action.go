@@ -46,8 +46,6 @@ func (pte *pubTxManager) persistSuspendedFlag(ctx context.Context, txID *ptxapi.
 func (pte *pubTxManager) dispatchAction(ctx context.Context, tx *ptxapi.PublicTx, action APIRequestType) error {
 	response := make(chan error, 1)
 	startTime := time.Now()
-	var err error
-
 	go func() {
 		pte.InFlightOrchestratorMux.Lock()
 		defer pte.InFlightOrchestratorMux.Unlock()

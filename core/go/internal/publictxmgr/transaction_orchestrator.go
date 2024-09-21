@@ -22,13 +22,11 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -39,13 +37,14 @@ const (
 )
 
 type OrchestratorConfig struct {
-	MaxInFlight          *int                `yaml:"maxInFlight"`
-	Interval             *string             `yaml:"interval"`
-	ResubmitInterval     *string             `yaml:"resubmitInterval"`
-	StaleTimeout         *string             `yaml:"staleTimeout"`
-	StageRetryTime       *string             `yaml:"stageRetryTime"`
-	PersistenceRetryTime *string             `yaml:"persistenceRetryTime"`
-	SubmissionRetry      retry.ConfigWithMax `yaml:"submissionRetry"`
+	MaxInFlight               *int                `yaml:"maxInFlight"`
+	Interval                  *string             `yaml:"interval"`
+	ResubmitInterval          *string             `yaml:"resubmitInterval"`
+	StaleTimeout              *string             `yaml:"staleTimeout"`
+	StageRetryTime            *string             `yaml:"stageRetryTime"`
+	PersistenceRetryTime      *string             `yaml:"persistenceRetryTime"`
+	UnavailableBalanceHandler *string             `yaml:"unavailableBalanceHandler"`
+	SubmissionRetry           retry.ConfigWithMax `yaml:"submissionRetry"`
 }
 
 var DefaultOrchestratorConfig = &OrchestratorConfig{
@@ -139,10 +138,8 @@ type orchestrator struct {
 	persistenceRetryTimeout time.Duration
 	ethClient               ethclient.EthClient
 	bIndexer                blockindexer.BlockIndexer
-	turnOffHistory          bool
 
-	transactionSubmissionRetry      *retry.Retry
-	transactionSubmissionRetryCount int
+	transactionSubmissionRetry *retry.Retry
 
 	// each transaction orchestrator has its own go routine
 	orchestratorBirthTime       time.Time          // when transaction orchestrator is created
@@ -154,13 +151,11 @@ type orchestrator struct {
 	unavailableBalanceHandlingStrategy OrchestratorBalanceCheckUnavailableBalanceHandlingStrategy
 
 	// in flight txs array
-	maxInFlightTxs               int
-	InFlightTxs                  []*InFlightTransactionStageController // a queue of all the in flight transactions
-	processedTxIDs               map[string]bool                       // an internal record of completed transactions to handle persistence delays that causes reprocessing
-	InFlightTxsMux               sync.Mutex
-	orchestratorLoopDone         chan struct{}
-	InFlightTxsStale             chan bool
-	transactionIDsInStatusUpdate []string // a list of transaction IDs of which status are being updated
+	maxInFlightTxs       int
+	InFlightTxs          []*InFlightTransactionStageController // a queue of all the in flight transactions
+	InFlightTxsMux       sync.Mutex
+	orchestratorLoopDone chan struct{}
+	InFlightTxsStale     chan bool
 
 	// input channels
 	stopProcess chan bool // a channel to tell the current transaction orchestrator to stop processing all events and mark itself as to be deleted
@@ -172,7 +167,12 @@ type orchestrator struct {
 
 	staleTimeout    time.Duration
 	lastQueueUpdate time.Time
+
+	completedNonceLock    sync.Mutex
+	highestCompletedNonce *uint64
 }
+
+const veryShortMinimum = 50 * time.Millisecond
 
 func NewOrchestrator(
 	ble *pubTxManager,
@@ -182,36 +182,29 @@ func NewOrchestrator(
 	ctx := ble.ctx
 
 	newOrchestrator := &orchestrator{
-		pubTxManager:                       ble,
-		orchestratorBirthTime:              time.Now(),
-		orchestratorPollingInterval:        conf.GetDuration(OrchestratorIntervalDurationString),
-		maxInFlightTxs:                     conf.GetInt(OrchestratorMaxInFlightTransactionsInt),
-		turnOffHistory:                     conf.GetBool(OrchestratorTurnOffHistory),
-		signingAddress:                     signingAddress,
-		state:                              OrchestratorStateNew,
-		stateEntryTime:                     time.Now(),
-		unavailableBalanceHandlingStrategy: OrchestratorBalanceCheckUnavailableBalanceHandlingStrategy(conf.GetString(OrchestratorUnavailableBalanceHandlerString)),
+		pubTxManager:                ble,
+		orchestratorBirthTime:       time.Now(),
+		orchestratorPollingInterval: confutil.DurationMin(conf.Orchestrator.Interval, veryShortMinimum, *DefaultConfig.Orchestrator.Interval),
+		maxInFlightTxs:              confutil.IntMin(conf.Orchestrator.MaxInFlight, 1, *DefaultConfig.Orchestrator.MaxInFlight),
+		signingAddress:              signingAddress,
+		state:                       OrchestratorStateNew,
+		stateEntryTime:              time.Now(),
+		unavailableBalanceHandlingStrategy: OrchestratorBalanceCheckUnavailableBalanceHandlingStrategy(
+			confutil.StringNotEmpty(conf.Orchestrator.UnavailableBalanceHandler, string(OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyWait))),
 
 		// in-flight transaction configs
-		resubmitInterval:        conf.GetDuration(OrchestratorResubmitIntervalDurationString),
-		stageRetryTimeout:       conf.GetDuration(OrchestratorStageRetryDurationString),
-		persistenceRetryTimeout: conf.GetDuration(OrchestratorPersistenceRetryDurationString),
+		resubmitInterval:        confutil.DurationMin(conf.Orchestrator.ResubmitInterval, veryShortMinimum, *DefaultConfig.Orchestrator.ResubmitInterval),
+		stageRetryTimeout:       confutil.DurationMin(conf.Orchestrator.StageRetryTime, veryShortMinimum, *DefaultConfig.Orchestrator.StageRetryTime),
+		persistenceRetryTimeout: confutil.DurationMin(conf.Orchestrator.PersistenceRetryTime, veryShortMinimum, *DefaultConfig.Orchestrator.PersistenceRetryTime),
 
 		// submission retry
-		transactionSubmissionRetry: &retry.Retry{
-			InitialDelay: conf.GetDuration(OrchestratorSubmissionRetryInitDelayDurationString),
-			MaximumDelay: conf.GetDuration(OrchestratorSubmissionRetryMaxDelayDurationString),
-			Factor:       conf.GetFloat64(OrchestratorSubmissionRetryFactorFloat),
-		},
-		transactionSubmissionRetryCount: conf.GetInt(OrchestratorSubmissionRetryCountInt),
-		staleTimeout:                    conf.GetDuration(OrchestratorStaleTimeoutDurationString),
-		hasZeroGasPrice:                 ble.gasPriceClient.HasZeroGasPrice(ctx),
-		processedTxIDs:                  make(map[string]bool),
-		transactionIDsInStatusUpdate:    make([]string, 0),
-		InFlightTxsStale:                make(chan bool, 1),
-		stopProcess:                     make(chan bool, 1),
-		ethClient:                       ble.ethClient,
-		bIndexer:                        ble.bIndexer,
+		transactionSubmissionRetry: retry.NewRetryLimited(&conf.Orchestrator.SubmissionRetry),
+		staleTimeout:               confutil.DurationMin(conf.Orchestrator.StaleTimeout, 0, *DefaultConfig.Orchestrator.StaleTimeout),
+		hasZeroGasPrice:            ble.gasPriceClient.HasZeroGasPrice(ctx),
+		InFlightTxsStale:           make(chan bool, 1),
+		stopProcess:                make(chan bool, 1),
+		ethClient:                  ble.ethClient,
+		bIndexer:                   ble.bIndexer,
 	}
 
 	log.L(ctx).Debugf("NewOrchestrator for signing address %s created: %+v", newOrchestrator.signingAddress, newOrchestrator)
@@ -262,18 +255,19 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 		stageCounts[stageName] = 0
 	}
 
-	var latestCompleted *ptxapi.PublicTx
-	startFromNonce, hasCompletedNonce := oc.completedTxNoncePerAddress[oc.signingAddress]
+	var latestCompletedNonce *uint64
+	highestConfirmedNonce, hasCompletedNonce := oc.getHighestCompletedNonce()
+	startFromNonce := highestConfirmedNonce
 	// Run through copying across from the old InFlight list to the new one, those that aren't ready to be deleted
 	for _, p := range oldInFlight {
-		if !hasCompletedNonce || p.stateManager.GetNonce().Uint64()-startFromNonce.Uint64() <= 1 {
-			startFromNonce = *p.stateManager.GetNonce()
+		if !hasCompletedNonce || p.stateManager.GetNonce()-startFromNonce <= 1 {
+			startFromNonce = startFromNonce
 			hasCompletedNonce = true
 		}
-		oc.processedTxIDs[p.stateManager.GetTxID().String()] = true
 		if p.stateManager.CanBeRemoved(ctx) {
 			oc.totalCompleted = oc.totalCompleted + 1
-			latestCompleted = p.stateManager.GetTx()
+			txNonce := p.stateManager.GetNonce()
+			latestCompletedNonce = &txNonce
 			queueUpdated = true
 			log.L(ctx).Debugf("Orchestrator poll and process, marking %s as complete after: %s", p.stateManager.GetTxID(), time.Since(p.stateManager.GetCreatedTime().Time()))
 		} else if p.stateManager.IsSuspended() {
@@ -291,8 +285,8 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 
 	log.L(ctx).Debugf("Orchestrator poll and process, stage counts: %+v", stageCounts)
 
-	if latestCompleted != nil {
-		oc.updateCompletedTxNonce(latestCompleted)
+	if latestCompletedNonce != nil {
+		oc.notifyCompletedNonce(*latestCompletedNonce)
 	}
 	oldLen := len(oc.InFlightTxs)
 	total = oldLen
@@ -300,28 +294,26 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 	// If we are not at maximum, then query if there are more candidates now
 	spaces := oc.maxInFlightTxs - oldLen
 	if spaces > 0 {
-		completedTxIDsStillBeingPersisted := make(map[string]bool)
-		tf := &components.PubTransactionQueries{
-			InStatus:   []string{string(PubTxStatusPending)},
-			From:       confutil.P(oc.signingAddress),
-			Sort:       confutil.P("nonce"),
-			Limit:      confutil.P(spaces),
-			HasTxValue: true, // NB: we assume if a transaction has value then it's a fueling transaction
-		}
-
-		if len(oc.transactionIDsInStatusUpdate) > 0 {
-			tf.NotInIDs = oc.transactionIDsInStatusUpdate
-		}
-		var after string
-		if len(oc.InFlightTxs) > 0 {
-			tf.AfterNonce = &startFromNonce
-		}
-
-		var additional []*ptxapi.PublicTx
 		// We retry the get from persistence indefinitely (until the context cancels)
-		err := oc.retry.Do(ctx, "get pending transactions", func(attempt int) (retry bool, err error) {
-
-			additional, err = oc.txStore.ListTransactions(ctx, tf)
+		var additional []*persistedPubTx
+		err := oc.retry.Do(ctx, func(attempt int) (retry bool, err error) {
+			q := oc.p.DB().
+				WithContext(ctx).
+				Table("public_txns").
+				Where("completed IS FALSE").
+				Where("suspended IS FALSE").
+				Where("from = ?", oc.signingAddress).
+				Order("nonce").
+				Limit(spaces)
+			if len(oc.InFlightTxs) > 0 {
+				q = q.Where("nonce > ?", startFromNonce)
+			}
+			// Note we do not use an explicit DB transaction to coordinate the read of the
+			// transactions table with the read of the submissions table,
+			// as we are the only thread that writes to the submissions table, for
+			// inflight transactions we have in memory that would not be overwritten
+			// by this query.
+			additional, err = oc.runTransactionQuery(ctx, oc.p.DB(), q)
 			return true, err
 		})
 		if err != nil {
@@ -331,26 +323,19 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 
 		log.L(ctx).Debugf("Orchestrator poll and process: polled %d items, space: %d", len(additional), spaces)
 		for _, mtx := range additional {
-			if oc.processedTxIDs[mtx.ID.String()] {
-				// already processed, still being persisted
-				completedTxIDsStillBeingPersisted[mtx.ID.String()] = true
-				log.L(ctx).Debugf("Orchestrator polled transaction with ID: %s but it's already being processed before, ignoring it", mtx.ID)
-			} else if mtx.Status == PubTxStatusPending {
-				queueUpdated = true
-				it := NewInFlightTransactionStageController(oc.pubTxManager, oc, mtx)
-				if it.getConfirmedTxNonce(oc.signingAddress) != nil && it.getConfirmedTxNonce(oc.signingAddress).Cmp(mtx.Nonce.BigInt()) != -1 /* an confirmed tx is missed*/ {
-					it.stateManager.AddConfirmationsOutput(ctx, nil) // trigger confirmation stage
-				}
-				oc.InFlightTxs = append(oc.InFlightTxs, it)
-				txStage := it.stateManager.GetStage(ctx)
-				if string(txStage) == "" {
-					txStage = InFlightTxStageQueued
-				}
-				stageCounts[string(txStage)] = stageCounts[string(txStage)] + 1
-				log.L(ctx).Debugf("Orchestrator added transaction with ID: %s", mtx.ID)
+			queueUpdated = true
+			it := NewInFlightTransactionStageController(oc.pubTxManager, oc, mtx)
+			if hasCompletedNonce && highestConfirmedNonce < mtx.Nonce /* an confirmed tx is missed*/ {
+				it.stateManager.AddConfirmationsOutput(ctx, nil) // trigger confirmation stage
 			}
+			oc.InFlightTxs = append(oc.InFlightTxs, it)
+			txStage := it.stateManager.GetStage(ctx)
+			if string(txStage) == "" {
+				txStage = InFlightTxStageQueued
+			}
+			stageCounts[string(txStage)] = stageCounts[string(txStage)] + 1
+			log.L(ctx).Debugf("Orchestrator added transaction with ID: %s", mtx.ID)
 		}
-		oc.processedTxIDs = completedTxIDsStillBeingPersisted
 		total = len(oc.InFlightTxs)
 		polled = total - oldLen
 		if polled > 0 {
@@ -464,7 +449,7 @@ func (oc *orchestrator) Start(c context.Context) (done <-chan struct{}, err erro
 // currently, the submission queue and tracking queue are the same queue, which means the logic should not miss
 // confirmations for a pending transaction.
 // If the two queues needs to split in the future to allow optimistic submission & delayed confirmation, this logic will need to be updated.
-func (oc *orchestrator) HandleConfirmedTransactions(ctx context.Context, confirmedTransactions map[string]*blockindexer.IndexedTransaction, maxNonce *big.Int) error {
+func (oc *orchestrator) HandleConfirmedTransactions(ctx context.Context, confirmedTransactions map[uint64]*blockindexer.IndexedTransaction, maxNonce uint64) error {
 	recordStart := time.Now()
 	oc.InFlightTxsMux.Lock()
 	defer oc.InFlightTxsMux.Unlock()
@@ -513,7 +498,7 @@ func (oc *orchestrator) HandleConfirmedTransactions(ctx context.Context, confirm
 	}
 
 	// we've processed all confirmed nonce in this batch, update the confirmed nonce so any gaps will be filled in
-	oc.updateConfirmedTxNonce(oc.signingAddress, maxNonce)
+	oc.notifyCompletedNonce(maxNonce)
 	return nil
 }
 
@@ -534,4 +519,21 @@ func (oc *orchestrator) MarkInFlightTxStale() {
 	case oc.InFlightTxsStale <- true:
 	default:
 	}
+}
+
+func (oc *orchestrator) notifyCompletedNonce(nonce uint64) {
+	oc.completedNonceLock.Lock()
+	defer oc.completedNonceLock.Unlock()
+	if oc.highestCompletedNonce == nil || nonce > *oc.highestCompletedNonce {
+		oc.highestCompletedNonce = &nonce
+	}
+}
+
+func (oc *orchestrator) getHighestCompletedNonce() (uint64, bool) {
+	oc.completedNonceLock.Lock()
+	defer oc.completedNonceLock.Unlock()
+	if oc.highestCompletedNonce == nil {
+		return 0, false
+	}
+	return *oc.highestCompletedNonce, true
 }

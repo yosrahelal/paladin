@@ -17,7 +17,6 @@ package publictxmgr
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
@@ -27,11 +26,8 @@ import (
 )
 
 type managedTx struct {
-	// immutable parts of the transaction as it was loaded from the DB
+	// persisted parts of the transaction, and the list of flushed DB submissions
 	ptx *persistedPubTx
-
-	// the list of submissions that are individually immutable, but this list can grow
-	flushedSubmissions []*persistedTxSubmission
 
 	// We can have exactly one submission waiting to be flushed to the DB
 	unflushedSubmission *persistedTxSubmission
@@ -57,14 +53,24 @@ type inMemoryTxState struct {
 }
 
 func NewInMemoryTxStateManager(ctx context.Context, ptx *persistedPubTx, submissions []*persistedTxSubmission) InMemoryTxStateManager {
-
-	return &inMemoryTxState{
+	imtxs := &inMemoryTxState{
 		mtx: &managedTx{
 			ptx: ptx,
 			// When we load in a transaction this is the state we assume
 			Status: BaseTxStatusPending,
 		},
 	}
+	// Initialize the ephemeral state from the most recent persisted submission if one exists
+	if len(ptx.Submissions) > 0 {
+		lastSub := ptx.Submissions[0]
+		lastGasPricing := recoverGasPriceOptions(lastSub.GasPricing)
+		imtxs.mtx.GasPricing = &lastGasPricing
+		imtxs.mtx.TransactionHash = &lastSub.TransactionHash
+		imtxs.mtx.LastSubmit = &lastSub.Created
+		firstSub := ptx.Submissions[len(ptx.Submissions)-1]
+		imtxs.mtx.FirstSubmit = &firstSub.Created
+	}
+	return imtxs
 }
 
 func (imtxs *inMemoryTxState) SetConfirmedTransaction(ctx context.Context, iTX *blockindexer.IndexedTransaction) {
@@ -98,14 +104,16 @@ func (imtxs *inMemoryTxState) ApplyInMemoryUpdates(ctx context.Context, txUpdate
 		// We're being notified some of the unflushed submissions have been flushed to persistence
 		// We clear the flushing list and merge in these new ones
 		dup := false
-		for _, existing := range mtx.flushedSubmissions {
-			if existing.TransactionHash.Equals(txUpdates.FlushedSubmission.TransactionHash) {
+		for _, existing := range mtx.ptx.Submissions {
+			if existing.TransactionHash == txUpdates.FlushedSubmission.TransactionHash {
 				dup = true
 				break
 			}
 		}
 		if !dup {
-			mtx.flushedSubmissions = append(mtx.flushedSubmissions, txUpdates.FlushedSubmission)
+			// newest first in this list as when we read from the DB (although it doesn't matter for our processing,
+			// because we keep separate in memory copies of all the things we change while we're running our orchestrator)
+			mtx.ptx.Submissions = append([]*persistedTxSubmission{txUpdates.FlushedSubmission}, mtx.ptx.Submissions...)
 		}
 	}
 
@@ -124,9 +132,7 @@ func (imtxs *inMemoryTxState) ApplyInMemoryUpdates(ctx context.Context, txUpdate
 
 func (imtxs *inMemoryTxState) GetTxID() string {
 	if imtxs.idString == "" {
-		imtxs.idString = fmt.Sprintf("%s:%d[%s:%d]",
-			imtxs.mtx.ptx.Transaction, imtxs.mtx.ptx.ResubmitIndex,
-			imtxs.mtx.ptx.From, imtxs.mtx.ptx.Nonce)
+		imtxs.idString = imtxs.mtx.ptx.getIDString()
 	}
 	return imtxs.idString
 }

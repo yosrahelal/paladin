@@ -86,14 +86,6 @@ type pubTxManager struct {
 	InFlightOrchestratorMux     sync.Mutex
 	InFlightOrchestratorStale   chan bool
 
-	// a map of signing addresses and the highest nonce of their completed transactions
-	completedTxNoncePerAddress      map[tktypes.EthAddress]big.Int
-	completedTxNoncePerAddressMutex sync.Mutex
-
-	// a map of signing addresses and the highest nonce of their confirmed transactions seen from the block indexer
-	confirmedTxNoncePerAddress        map[tktypes.EthAddress]*big.Int
-	confirmedTxNoncePerAddressRWMutex sync.RWMutex
-
 	// inbound concurrency control TBD
 
 	// engine config
@@ -135,8 +127,6 @@ func NewPublicTransactionManager(ctx context.Context, conf *Config) components.P
 		maxOrchestratorIdle:         confutil.DurationMin(conf.TransactionEngine.MaxIdleTime, 0, *DefaultConfig.TransactionEngine.MaxIdleTime),
 		enginePollingInterval:       confutil.DurationMin(conf.TransactionEngine.Interval, 50*time.Millisecond, *conf.TransactionEngine.Interval),
 		retry:                       retry.NewRetryIndefinite(&conf.TransactionEngine.Retry),
-		completedTxNoncePerAddress:  make(map[tktypes.EthAddress]big.Int),
-		confirmedTxNoncePerAddress:  make(map[tktypes.EthAddress]*big.Int),
 		gasPriceIncreaseMax:         gasPriceIncreaseMax,
 		gasPriceIncreasePercent:     confutil.Int(conf.GasPrice.IncreasePercentage, *DefaultConfig.GasPrice.IncreasePercentage),
 	}
@@ -406,17 +396,16 @@ func (ble *pubTxManager) HandleConfirmedTransactions(ctx context.Context, confir
 	// firstly, we group the confirmed transactions by from address
 	// note: filter out transactions that are before the recorded nonce in confirmedTXNonce map requires multiple reads to a single address (as the loop keep switching between addresses)
 	// so we delegate the logic to the orchestrator as it will have a list of records for a single address
-	itMap := make(map[tktypes.EthAddress]map[string]*blockindexer.IndexedTransaction)
-	itMaxNonce := make(map[tktypes.EthAddress]*big.Int)
+	itMap := make(map[tktypes.EthAddress]map[uint64]*blockindexer.IndexedTransaction)
+	itMaxNonce := make(map[tktypes.EthAddress]uint64)
 	for _, it := range confirmedTransactions {
-		itNonce := new(big.Int).SetUint64(it.Nonce)
 		if itMap[*it.From] == nil {
-			itMap[*it.From] = map[string]*blockindexer.IndexedTransaction{itNonce.String(): it}
+			itMap[*it.From] = map[uint64]*blockindexer.IndexedTransaction{it.Nonce: it}
 		} else {
-			itMap[*it.From][itNonce.String()] = it
+			itMap[*it.From][it.Nonce] = it
 		}
-		if itMaxNonce[*it.From] == nil || itMaxNonce[*it.From].Cmp(itNonce) == -1 {
-			itMaxNonce[*it.From] = itNonce
+		if itMaxNonce[*it.From] < it.Nonce {
+			itMaxNonce[*it.From] = it.Nonce
 		}
 	}
 	if len(itMap) > 0 {
@@ -490,34 +479,48 @@ func recoverGasPriceOptions(gpoJSON tktypes.RawJSON) (ptgp ptxapi.PublicTxGasPri
 	return
 }
 
-func (ble *pubTxManager) GetTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON, submissions bool) ([]*ptxapi.PublicTx, error) {
-	var ptxs []*persistedPubTx
+func (ble *pubTxManager) GetTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTx, error) {
 	q := filters.BuildGORM(ctx, jq, dbTX.Table("public_txns").WithContext(ctx), components.PublicTxFilterFields)
+	ptxs, err := ble.runTransactionQuery(ctx, dbTX, q)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]*ptxapi.PublicTx, len(ptxs))
+	for iTx, ptx := range ptxs {
+		tx := mapPersistedTransaction(ptx)
+		tx.Submissions = make([]*ptxapi.PublicTxSubmissionData, len(ptx.Submissions))
+		for iSub, pSub := range ptx.Submissions {
+			tx.Submissions[iSub] = mapPersistedSubmissionData(pSub)
+		}
+		results[iTx] = tx
+	}
+	return results, nil
+}
+
+func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB, q *gorm.DB) ([]*persistedPubTx, error) {
+	var ptxs []*persistedPubTx
 	err := q.Find(&ptxs).Error
 	if err != nil {
 		return nil, err
 	}
-
-	results := make([]*ptxapi.PublicTx, len(ptxs))
 	signerNonceRefs := make([]string, len(ptxs))
 	for i, ptx := range ptxs {
 		signerNonceRefs[i] = fmt.Sprintf("%s:%s", ptx.From, ptx.Nonce)
-		results[i] = mapPersistedTransaction(ptx)
 	}
-	if len(signerNonceRefs) > 0 && submissions {
+	if len(signerNonceRefs) > 0 {
 		allSubs, err := ble.getTransactionSubmissions(ctx, dbTX, signerNonceRefs)
 		if err != nil {
 			return nil, err
 		}
 		for _, sub := range allSubs {
-			for _, tx := range results {
+			for _, tx := range ptxs {
 				if sub.SignerNonceRef == fmt.Sprintf("%s:%s", tx.From, tx.Nonce) {
-					tx.Submissions = append(tx.Submissions, mapPersistedSubmissionData(sub))
+					tx.Submissions = append(tx.Submissions, sub)
 				}
 			}
 		}
 	}
-	return results, nil
+	return ptxs, nil
 }
 
 func mapPersistedTransaction(ptx *persistedPubTx) *ptxapi.PublicTx {
@@ -561,7 +564,7 @@ func (ble *pubTxManager) getTransactionSubmissions(ctx context.Context, dbTX *go
 }
 
 func (ble *pubTxManager) SuspendTransactionsForID(ctx context.Context, txID uuid.UUID) error {
-	txns, err := ble.GetTransactions(ctx, ble.p.DB(), query.NewQueryBuilder().Equal("transaction", txID).Query(), false)
+	txns, err := ble.GetTransactions(ctx, ble.p.DB(), query.NewQueryBuilder().Equal("transaction", txID).Query())
 	if err != nil {
 		return err
 	}
@@ -574,7 +577,7 @@ func (ble *pubTxManager) SuspendTransactionsForID(ctx context.Context, txID uuid
 }
 
 func (ble *pubTxManager) ResumeTransactionsForID(ctx context.Context, txID uuid.UUID) error {
-	txns, err := ble.GetTransactions(ctx, ble.p.DB(), query.NewQueryBuilder().Equal("transaction", txID).Query(), false)
+	txns, err := ble.GetTransactions(ctx, ble.p.DB(), query.NewQueryBuilder().Equal("transaction", txID).Query())
 	if err != nil {
 		return err
 	}
@@ -587,17 +590,11 @@ func (ble *pubTxManager) ResumeTransactionsForID(ctx context.Context, txID uuid.
 	return nil
 }
 
-func (ble *pubTxManager) getConfirmedTxNonce(addr tktypes.EthAddress) (nonce *big.Int) {
-	ble.confirmedTxNoncePerAddressRWMutex.RLock()
-	nonce = ble.confirmedTxNoncePerAddress[addr]
-	defer ble.confirmedTxNoncePerAddressRWMutex.RUnlock()
-	return
-}
-
-func (ble *pubTxManager) updateConfirmedTxNonce(addr tktypes.EthAddress, nonce *big.Int) {
-	ble.confirmedTxNoncePerAddressRWMutex.Lock()
-	defer ble.confirmedTxNoncePerAddressRWMutex.Unlock()
-	if ble.confirmedTxNoncePerAddress[addr] == nil || ble.confirmedTxNoncePerAddress[addr].Cmp(nonce) != 1 {
-		ble.confirmedTxNoncePerAddress[addr] = nonce
+func (pte *pubTxManager) notifyConfirmedTxNonce(addr tktypes.EthAddress, nonce uint64) {
+	pte.InFlightOrchestratorMux.Lock()
+	defer pte.InFlightOrchestratorMux.Unlock()
+	orchestrator := pte.InFlightOrchestrators[addr]
+	if orchestrator != nil {
+		orchestrator.notifyConfirmedTxNonce(nonce)
 	}
 }

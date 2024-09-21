@@ -101,7 +101,6 @@ func NewInFlightTransactionStageController(
 	enth *pubTxManager,
 	oc *orchestrator,
 	ptx *persistedPubTx,
-	psubs []*persistedTxSubmission,
 ) *InFlightTransactionStageController {
 
 	ift := &InFlightTransactionStageController{
@@ -118,7 +117,7 @@ func NewInFlightTransactionStageController(
 	}
 
 	ift.MarkTime("wait_in_inflight_queue")
-	imtxs := NewInMemoryTxStateManager(enth.ctx, ptx, psubs)
+	imtxs := NewInMemoryTxStateManager(enth.ctx, ptx)
 	ift.stateManager = NewInFlightTransactionStateManager(enth.thMetrics, enth.balanceManager, enth.bIndexer, ift, imtxs, oc.retry, oc.turnOffHistory, ift.testOnlyNoEventMode)
 	return ift
 }
