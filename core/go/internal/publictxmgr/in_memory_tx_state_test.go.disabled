@@ -68,7 +68,7 @@ func NewTestInMemoryTxState(t *testing.T) baseTypes.InMemoryTxStateManager {
 		ErrorMessage: &oldErrorMessage,
 	}
 
-	return NewInMemoryTxStateMananger(context.Background(), testManagedTx)
+	return NewInMemoryTxStateManager(context.Background(), testManagedTx)
 
 }
 
@@ -108,7 +108,7 @@ func TestSettersAndGetters(t *testing.T) {
 		ErrorMessage: &oldErrorMessage,
 	}
 
-	inMemoryTxState := NewInMemoryTxStateMananger(context.Background(), testManagedTx)
+	inMemoryTxState := NewInMemoryTxStateManager(context.Background(), testManagedTx)
 
 	inMemoryTx := inMemoryTxState.GetTx()
 

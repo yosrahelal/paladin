@@ -17,29 +17,53 @@ package publictxmgr
 
 import (
 	"context"
-	"math/big"
+	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
-	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 )
 
+type managedTx struct {
+	// immutable parts of the transaction as it was loaded from the DB
+	ptx *persistedPubTx
+
+	// the list of submissions that are individually immutable, but this list can grow
+	flushedSubmissions []*persistedTxSubmission
+
+	// We can have exactly one submission waiting to be flushed to the DB
+	unflushedSubmission *persistedTxSubmission
+
+	// In-memory state that we update as we process the transaction in an active orchestrator
+	// TODO: Validate that all of these fields are actively used
+	GasPricing      *ptxapi.PublicTxGasPricing // the most recently used gas pricing information
+	Status          BaseTxStatus               `json:"status"`                    // high level lifecycle status for the transaction
+	TransactionHash *tktypes.Bytes32           `json:"transactionHash,omitempty"` // the most recently submitted transaction hash (not guaranteed to be the one mined)
+	FirstSubmit     *tktypes.Timestamp         `json:"firstSubmit,omitempty"`     // the time this runtime instance first did a submit JSON/RPC call (for success or failure)
+	LastSubmit      *tktypes.Timestamp         `json:"lastSubmit,omitempty"`      // the last time runtime instance first did a submit JSON/RPC call (for success or failure)
+	ErrorMessage    *string                    `json:"errorMessage,omitempty"`    // ???
+}
+
 type inMemoryTxState struct {
+	idString string // generated ID that uniquely represents this transaction in in-memory processing
 	// managed transaction in the only input for creating an inflight transaction
-	mtx *ptxapi.PublicTx
+	mtx *managedTx
 
 	// the value of the following properties are populated during transaction processing but not during initialization
 	//  the process logic will determine whether confirmed transaction requires to be fetched
 	ConfirmedTransaction *blockindexer.IndexedTransaction
 }
 
-func NewInMemoryTxStateMananger(ctx context.Context, mtx *ptxapi.PublicTx) baseTypes.InMemoryTxStateManager {
+func NewInMemoryTxStateManager(ctx context.Context, ptx *persistedPubTx, submissions []*persistedTxSubmission) InMemoryTxStateManager {
+
 	return &inMemoryTxState{
-		mtx: mtx,
+		mtx: &managedTx{
+			ptx: ptx,
+			// When we load in a transaction this is the state we assume
+			Status: BaseTxStatusPending,
+		},
 	}
 }
 
@@ -47,7 +71,7 @@ func (imtxs *inMemoryTxState) SetConfirmedTransaction(ctx context.Context, iTX *
 	imtxs.ConfirmedTransaction = iTX
 }
 
-func (imtxs *inMemoryTxState) ApplyTxUpdates(ctx context.Context, txUpdates *BaseTXUpdates) {
+func (imtxs *inMemoryTxState) ApplyInMemoryUpdates(ctx context.Context, txUpdates *BaseTXUpdates) {
 	mtx := imtxs.mtx
 	if txUpdates.ErrorMessage != nil {
 		mtx.ErrorMessage = txUpdates.ErrorMessage
@@ -58,31 +82,31 @@ func (imtxs *inMemoryTxState) ApplyTxUpdates(ctx context.Context, txUpdates *Bas
 	}
 
 	if txUpdates.GasLimit != nil {
-		mtx.GasLimit = txUpdates.GasLimit
+		// TODO: Can this really be updated per submit? If so, this challenges the fact we store it in the
+		//       transaction object (rather than the submission object)
+		panic("attempt to modify gas limit")
 	}
 
-	if txUpdates.GasPrice != nil {
-		mtx.GasPrice = txUpdates.GasPrice
-		mtx.MaxFeePerGas = nil
-		mtx.MaxPriorityFeePerGas = nil
-	} else {
-		switchedGasPrice := false
-		if txUpdates.MaxFeePerGas != nil {
-			switchedGasPrice = true
-			mtx.MaxFeePerGas = txUpdates.MaxFeePerGas
-		}
-
-		if txUpdates.MaxPriorityFeePerGas != nil {
-			switchedGasPrice = true
-			mtx.MaxPriorityFeePerGas = txUpdates.MaxPriorityFeePerGas
-		}
-		if switchedGasPrice {
-			mtx.GasPrice = nil
-		}
+	if txUpdates.GasPricing != nil {
+		mtx.GasPricing = txUpdates.GasPricing
 	}
 
-	if txUpdates.NewSubmittedHashes != nil {
-		mtx.SubmittedHashes = txUpdates.NewSubmittedHashes
+	if txUpdates.NewSubmission != nil {
+		imtxs.mtx.unflushedSubmission = txUpdates.NewSubmission
+	}
+	if txUpdates.FlushedSubmission != nil {
+		// We're being notified some of the unflushed submissions have been flushed to persistence
+		// We clear the flushing list and merge in these new ones
+		dup := false
+		for _, existing := range mtx.flushedSubmissions {
+			if existing.TransactionHash.Equals(txUpdates.FlushedSubmission.TransactionHash) {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			mtx.flushedSubmissions = append(mtx.flushedSubmissions, txUpdates.FlushedSubmission)
+		}
 	}
 
 	if txUpdates.LastSubmit != nil {
@@ -98,62 +122,54 @@ func (imtxs *inMemoryTxState) ApplyTxUpdates(ctx context.Context, txUpdates *Bas
 	}
 }
 
-func (imtxs *inMemoryTxState) GetTx() *ptxapi.PublicTx {
-	return imtxs.mtx
-}
-
-func (imtxs *inMemoryTxState) GetTxID() uuid.UUID {
-	return imtxs.mtx.ID
+func (imtxs *inMemoryTxState) GetTxID() string {
+	if imtxs.idString == "" {
+		imtxs.idString = fmt.Sprintf("%s:%d[%s:%d]",
+			imtxs.mtx.ptx.Transaction, imtxs.mtx.ptx.ResubmitIndex,
+			imtxs.mtx.ptx.From, imtxs.mtx.ptx.Nonce)
+	}
+	return imtxs.idString
 }
 
 func (imtxs *inMemoryTxState) GetCreatedTime() *tktypes.Timestamp {
-	return &imtxs.mtx.Created
+	return &imtxs.mtx.ptx.Created
 }
 
 func (imtxs *inMemoryTxState) GetTransactionHash() *tktypes.Bytes32 {
 	return imtxs.mtx.TransactionHash
 }
-func (imtxs *inMemoryTxState) GetStatus() PubTxStatus {
+
+func (imtxs *inMemoryTxState) GetStatus() BaseTxStatus {
 	return imtxs.mtx.Status
 }
 
-func (imtxs *inMemoryTxState) GetNonce() *big.Int {
-	return imtxs.mtx.Nonce.BigInt()
+func (imtxs *inMemoryTxState) GetNonce() uint64 {
+	return imtxs.mtx.ptx.Nonce
 }
-func (imtxs *inMemoryTxState) GetFrom() string {
-	return string(imtxs.mtx.From)
+
+func (imtxs *inMemoryTxState) GetFrom() tktypes.EthAddress {
+	return imtxs.mtx.ptx.From
 }
 
 func (imtxs *inMemoryTxState) GetFirstSubmit() *tktypes.Timestamp {
 	return imtxs.mtx.FirstSubmit
 }
 
-func (imtxs *inMemoryTxState) GetGasPriceObject() *baseTypes.GasPriceObject {
-	if imtxs.mtx.GasPrice == nil && imtxs.mtx.MaxFeePerGas == nil && imtxs.mtx.MaxPriorityFeePerGas == nil {
-		// no gas price set yet, return nil, down stream logic relies on `nil` to know a transaction has never been assigned any gas price.
-		return nil
-	}
-	gpo := &baseTypes.GasPriceObject{}
-	if imtxs.mtx.GasPrice != nil {
-		gpo.GasPrice = big.NewInt(imtxs.mtx.GasPrice.BigInt().Int64())
-	}
-	if imtxs.mtx.MaxPriorityFeePerGas != nil {
-		gpo.MaxPriorityFeePerGas = big.NewInt(imtxs.mtx.MaxPriorityFeePerGas.BigInt().Int64())
-	}
-	if imtxs.mtx.MaxFeePerGas != nil {
-		gpo.MaxFeePerGas = big.NewInt(imtxs.mtx.MaxFeePerGas.BigInt().Int64())
-	}
-	return gpo
+func (imtxs *inMemoryTxState) GetGasPriceObject() *ptxapi.PublicTxGasPricing {
+	// no gas price set yet, return nil, down stream logic relies on `nil` to know a transaction has never been assigned any gas price.
+	return imtxs.mtx.GasPricing
 }
+
 func (imtxs *inMemoryTxState) GetLastSubmitTime() *tktypes.Timestamp {
 	return imtxs.mtx.LastSubmit
 }
 
-func (imtxs *inMemoryTxState) GetSubmittedHashes() []string {
-	return imtxs.mtx.SubmittedHashes
+func (imtxs *inMemoryTxState) GetUnflushedSubmission() *persistedTxSubmission {
+	return imtxs.mtx.unflushedSubmission
 }
-func (imtxs *inMemoryTxState) GetGasLimit() *big.Int {
-	return imtxs.mtx.GasLimit.BigInt()
+
+func (imtxs *inMemoryTxState) GetGasLimit() uint64 {
+	return imtxs.mtx.ptx.Gas
 }
 
 func (imtxs *inMemoryTxState) GetConfirmedTransaction() *blockindexer.IndexedTransaction {
@@ -161,18 +177,18 @@ func (imtxs *inMemoryTxState) GetConfirmedTransaction() *blockindexer.IndexedTra
 }
 
 func (imtxs *inMemoryTxState) IsComplete() bool {
-	return imtxs.mtx.Status == PubTxStatusFailed || imtxs.mtx.Status == PubTxStatusSucceeded
+	return imtxs.mtx.Status == BaseTxStatusFailed || imtxs.mtx.Status == BaseTxStatusSucceeded
 }
 
 func (imtxs *inMemoryTxState) IsSuspended() bool {
-	return imtxs.mtx.Status == PubTxStatusSuspended
+	return imtxs.mtx.Status == BaseTxStatusSuspended
 }
 
-func NewRunningStageContext(ctx context.Context, stage baseTypes.InFlightTxStage, substatus PubTxSubStatus, imtxs baseTypes.InMemoryTxStateManager) *baseTypes.RunningStageContext {
-	return &baseTypes.RunningStageContext{
+func NewRunningStageContext(ctx context.Context, stage InFlightTxStage, substatus BaseTxSubStatus, imtxs InMemoryTxStateManager) *RunningStageContext {
+	return &RunningStageContext{
 		Stage:          stage,
 		SubStatus:      substatus,
-		StageOutput:    &baseTypes.StageOutput{},
+		StageOutput:    &StageOutput{},
 		Context:        ctx,
 		StageStartTime: time.Now(),
 		InMemoryTx:     imtxs,

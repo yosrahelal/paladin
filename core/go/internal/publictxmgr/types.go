@@ -17,49 +17,18 @@ package publictxmgr
 
 import (
 	"context"
+	"math/big"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-)
 
-// PublicTransactionEventType is a enum type that contains all types of transaction process events
-// that a transaction handler emits.
-type PublicTransactionEventType int
-
-const (
-	PublicTXProcessSucceeded PublicTransactionEventType = iota
-	PublicTXProcessFailed
-)
-
-// PubTxStatus is the current status of a transaction
-type PubTxStatus string
-
-func (ro *RequestOptions) Validate(ctx context.Context) error {
-	if ro.ID == nil {
-		return i18n.NewError(ctx, msgs.MsgMissingTransactionID)
-	}
-
-	if ro.SignerID == "" {
-		return i18n.NewError(ctx, msgs.MsgErrorMissingSignerID)
-	}
-	return nil
-}
-
-const (
-	// PubTxStatusPending indicates the operation has been submitted, but is not yet confirmed as successful or failed
-	PubTxStatusPending PubTxStatus = "Pending"
-	// PubTxStatusSucceeded the infrastructure runtime has returned success for the operation
-	PubTxStatusSucceeded PubTxStatus = "Succeeded"
-	// PubTxStatusFailed happens when an error is reported by the infrastructure runtime
-	PubTxStatusFailed PubTxStatus = "Failed"
-	// BaseTxStatusFailed happens when the indexed transaction hash doesn't match any of the submitted hashes
-	PubTxStatusConflict PubTxStatus = "Conflict"
-	// PubTxStatusSuspended indicates we are not actively doing any work with this transaction right now, until it's resumed to pending again
-	PubTxStatusSuspended PubTxStatus = "Suspended"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
 )
 
 // TXUpdates specifies a set of updates that are possible on the base structure.
@@ -75,45 +44,42 @@ const (
 // There are separate setter functions for fields that depending on the persistence
 // mechanism might be in separate tables - including History, Receipt, and Confirmations
 type BaseTXUpdates struct {
-	Status               *PubTxStatus         `json:"status"`
-	SubStatus            *PubTxSubStatus      `json:"subStatus"`
-	GasPrice             *ethtypes.HexInteger `json:"gasPrice,omitempty"`
-	MaxPriorityFeePerGas *ethtypes.HexInteger `json:"maxPriorityFeePerGas,omitempty"`
-	MaxFeePerGas         *ethtypes.HexInteger `json:"maxFeePerGas,omitempty"`
-	GasLimit             *ethtypes.HexInteger `json:"gas,omitempty"` // note this is required for some methods (eth_estimateGas)
-	TransactionHash      *tktypes.Bytes32     `json:"transactionHash,omitempty"`
-	FirstSubmit          *tktypes.Timestamp   `json:"firstSubmit,omitempty"`
-	LastSubmit           *tktypes.Timestamp   `json:"lastSubmit,omitempty"`
-	ErrorMessage         *string              `json:"errorMessage,omitempty"`
-	NewSubmittedHashes   []string             `json:"submittedHashes,omitempty"`
+	Status            *BaseTxStatus
+	SubStatus         *BaseTxSubStatus
+	GasPricing        *ptxapi.PublicTxGasPricing
+	GasLimit          *ethtypes.HexInteger // note this is required for some methods (eth_estimateGas)
+	TransactionHash   *tktypes.Bytes32
+	FirstSubmit       *tktypes.Timestamp
+	LastSubmit        *tktypes.Timestamp
+	ErrorMessage      *string
+	NewSubmission     *persistedTxSubmission
+	FlushedSubmission *persistedTxSubmission
 }
 
-type PublicTX struct {
-	ID         uuid.UUID         `json:"id"`
-	Created    tktypes.Timestamp `json:"created"`
-	Updated    tktypes.Timestamp `json:"updated"`
-	Status     PubTxStatus       `json:"status"`
-	SubStatus  PubTxSubStatus    `json:"subStatus"`
-	SequenceID string            `json:"sequenceId,omitempty"`
-	*ethsigner.Transaction
-	TransactionHash *tktypes.Bytes32   `json:"transactionHash,omitempty"`
-	FirstSubmit     *tktypes.Timestamp `json:"firstSubmit,omitempty"`
-	LastSubmit      *tktypes.Timestamp `json:"lastSubmit,omitempty"`
-	ErrorMessage    *string            `json:"errorMessage,omitempty"`
-	// submitted transaction hashes are in a separate DB table, we load and manage it in memory in the same object for code convenience
-	SubmittedHashes []string `json:"submittedHashes,omitempty"`
-}
+// BaseTxStatus is the current status of a transaction
+type BaseTxStatus string
 
-type PublicTransactionEvent struct {
-	Type PublicTransactionEventType
-	Tx   *PublicTX
-}
+const (
+	// BaseTxStatusPending indicates the operation has been submitted, but is not yet confirmed as successful or failed
+	BaseTxStatusPending BaseTxStatus = "Pending"
+	// BaseTxStatusSucceeded the infrastructure runtime has returned success for the operation
+	BaseTxStatusSucceeded BaseTxStatus = "Succeeded"
+	// BaseTxStatusFailed happens when an error is reported by the infrastructure runtime
+	BaseTxStatusFailed BaseTxStatus = "Failed"
+	// BaseTxStatusFailed happens when the indexed transaction hash doesn't match any of the submitted hashes
+	BaseTxSStatusConflict BaseTxStatus = "Conflict"
+	// BaseTxStatusSuspended indicates we are not actively doing any work with this transaction right now, until it's resumed to pending again
+	BaseTxStatusSuspended BaseTxStatus = "Suspended"
+)
 
-// Handler checks received transaction process events and dispatch them to an event
-// manager accordingly.
-type PublicTxEventNotifier interface {
-	Notify(ctx context.Context, e PublicTransactionEvent) error
-}
+// PublicTransactionEventType is a enum type that contains all types of transaction process events
+// that a transaction handler emits.
+type PublicTransactionEventType int
+
+const (
+	PublicTXProcessSucceeded PublicTransactionEventType = iota
+	PublicTXProcessFailed
+)
 
 type RequestOptions struct {
 	ID       *uuid.UUID
@@ -121,18 +87,18 @@ type RequestOptions struct {
 	GasLimit *ethtypes.HexInteger
 }
 
-// PubTxSubStatus is an intermediate status a transaction may go through
-type PubTxSubStatus string
+// BaseTxSubStatus is an intermediate status a transaction may go through
+type BaseTxSubStatus string
 
 const (
-	// PubTxSubStatusReceived indicates the transaction has been received by the connector
-	PubTxSubStatusReceived PubTxSubStatus = "Received"
-	// PubTxSubStatusStale indicates the transaction is now in stale
-	PubTxSubStatusStale PubTxSubStatus = "Stale"
-	// PubTxSubStatusTracking indicates we are tracking progress of the transaction
-	PubTxSubStatusTracking PubTxSubStatus = "Tracking"
-	// PubTxSubStatusConfirmed indicates we have confirmed that the transaction has been fully processed
-	PubTxSubStatusConfirmed PubTxSubStatus = "Confirmed"
+	// BaseTxSubStatusReceived indicates the transaction has been received by the connector
+	BaseTxSubStatusReceived BaseTxSubStatus = "Received"
+	// BaseTxSubStatusStale indicates the transaction is now in stale
+	BaseTxSubStatusStale BaseTxSubStatus = "Stale"
+	// BaseTxSubStatusTracking indicates we are tracking progress of the transaction
+	BaseTxSubStatusTracking BaseTxSubStatus = "Tracking"
+	// BaseTxSubStatusConfirmed indicates we have confirmed that the transaction has been fully processed
+	BaseTxSubStatusConfirmed BaseTxSubStatus = "Confirmed"
 )
 
 type BaseTxAction string
@@ -154,3 +120,343 @@ const (
 	// BaseTxActionConfirmTransaction indicates that the transaction has been confirmed
 	BaseTxActionConfirmTransaction BaseTxAction = "Confirm"
 )
+
+type TransactionHeaders struct {
+	From  string            `json:"from,omitempty"`
+	To    string            `json:"to,omitempty"`
+	Nonce *fftypes.FFBigInt `json:"nonce,omitempty"`
+	Gas   *fftypes.FFBigInt `json:"gas,omitempty"`
+	Value *fftypes.FFBigInt `json:"value,omitempty"`
+}
+
+type BalanceManager interface {
+	TopUpAccount(ctx context.Context, addAccount *AddressAccount) (mtx *ptxapi.PublicTx, err error)
+	IsAutoFuelingEnabled(ctx context.Context) bool
+	GetAddressBalance(ctx context.Context, address tktypes.EthAddress) (*AddressAccount, error)
+	NotifyAddressBalanceChanged(ctx context.Context, address tktypes.EthAddress)
+}
+
+type AutoFuelTransactionHandler interface {
+}
+
+// AddressAccount provides the following feature:
+// - record a snapshot of the current balance of a signing address
+// - record the total spent of a series of transaction emitted by this signing address
+// - provide an interface to top up the signing address when spent is higher than the balance
+type AddressAccount struct {
+	Address               string
+	Balance               *big.Int
+	SpentTransactionCount int
+	MinCost               *big.Int
+	MaxCost               *big.Int
+	Spent                 *big.Int
+}
+
+func (ab *AddressAccount) Spend(ctx context.Context, cost *big.Int) (availableToSpend *big.Int) {
+
+	if cost.Sign() == 1 {
+		ab.Spent = ab.Spent.Add(ab.Spent, cost)
+		if ab.MinCost.Sign() == 0 || ab.MinCost.Cmp(cost) > 0 {
+			ab.MinCost = cost
+		}
+
+		if ab.MaxCost.Sign() == 0 || ab.MaxCost.Cmp(cost) < 0 {
+			ab.MaxCost = cost
+		}
+		// only increase the transaction count if there is a positive cost number
+		ab.SpentTransactionCount = ab.SpentTransactionCount + 1
+	} else if cost.Sign() == -1 {
+		// cost cannot be a negative value...
+		log.L(ctx).Errorf("Received a negative number for transaction cost: %s, ignore the cost and keep address balance unchanged.", cost.String())
+	}
+	availableToSpend = ab.GetAvailableToSpend(ctx)
+	return availableToSpend
+}
+
+func (ab *AddressAccount) GetAvailableToSpend(ctx context.Context) *big.Int {
+	balanceCopy := new(big.Int).Set(ab.Balance)
+	return balanceCopy.Sub(balanceCopy, ab.Spent)
+}
+
+type Confirmation struct {
+	BlockNumber fftypes.FFuint64 `json:"blockNumber"`
+	BlockHash   string           `json:"blockHash"`
+	ParentHash  string           `json:"parentHash"`
+}
+
+type ConfirmationsNotification struct {
+	// Confirmed marks we've reached the confirmation threshold
+	Confirmed bool
+	// NewFork is true when NewConfirmations is a complete list of confirmations.
+	// Otherwise, Confirmations is an additive delta on top of a previous list of confirmations.
+	NewFork bool
+	// Confirmations is the list of confirmations being notified - assured to be non-nil, but might be empty.
+	Confirmations []*Confirmation
+}
+
+// in flight tx stages are calculated based on a snapshot of a persisted managed transaction
+//
+//	an in flight stage can contain 1 or more sub-status updates
+type InFlightTxStage string
+
+const (
+	// managed transaction criteria for entering each stage:
+	//   entry criteria:
+	//     transaction in a state that requires status update
+	//   emitted async actions (in parallel):
+	//     status update
+	//   completion criteria
+	//     status update completed
+	InFlightTxStageStatusUpdate InFlightTxStage = "statusUpdate"
+
+	//   entry criteria (OR):
+	//     no gas price substatus since the most recent expired "submit" / "receipt" substatus or the beginning of substatus array
+	//     no gas limit since the most recent expired "submit" / "receipt" substatus or the beginning of substatus array
+	//   emitted async actions (in parallel):
+	//     - retrieve gas price
+	//     - get gas limit (TBD, current the gas estimation only happens before transaction process, need to fix this)
+	//   completion criteria -> sign
+	//     valid gas price and gas limit substatus since the most recent expired "submit" / "receipt" substatus or the beginning of substatus array
+	InFlightTxStageRetrieveGasPrice InFlightTxStage = "retrieveGasPrice"
+	//   entry criteria (AND):
+	//     valid gas price and gas limit substatus since the most recent expired "submit" / "receipt" substatus or the beginning of substatus array
+	//     no completed "sign" substatus with signed message value since above criteria
+	//   emitted async actions:
+	//     - signing request
+	//   completion criteria -> submit
+	//     the last sub-status is a completed (success) "sign" substatus
+	InFlightTxStageSigning InFlightTxStage = "sign"
+	//   entry criteria (OR):
+	//     the last sub-status is a completed "sign" substatus
+	//     the last sub-status is an incomplete "submit" substatus
+	//   emitted async actions:
+	//     - transaction submission
+	//          wait condition when balance check turned on:
+	//            - in-sufficient balance
+	//            - cost of transaction with previous nonce unknown
+	//   completion criteria -> receipt / prepare
+	//     the last sub-status is a completed (success/expired) "submit" substatus
+	InFlightTxStageSubmitting InFlightTxStage = "submit"
+	//   entry criteria:
+	//     there is a completed "receipt" substatus (!!!second high priority)
+	//   completion criteria -> complete
+	//      the last sub-status is a completed "confirmed" substatus
+	InFlightTxStageConfirming InFlightTxStage = "confirm"
+	//   entry criteria(OR):
+	//     the last sub-status is a completed "confirmed" substatus
+	//   end of lifecycle, rely on transaction engine to remove the item from the queue
+	InFlightTxStageComplete InFlightTxStage = "complete"
+
+	//   entry criteria:
+	//     not in other state
+	//   completion criteria
+	//      evaluated into other state
+	InFlightTxStageQueued InFlightTxStage = "queued"
+)
+
+var AllInFlightStages = []string{
+	string(InFlightTxStageRetrieveGasPrice),
+	string(InFlightTxStageSigning),
+	string(InFlightTxStageSubmitting),
+	string(InFlightTxStageConfirming),
+	string(InFlightTxStageComplete),
+	string(InFlightTxStageQueued),
+}
+
+type SubmissionOutcome string
+
+const (
+	// continue cases
+	SubmissionOutcomeSubmittedNew SubmissionOutcome = "submittedNew"
+	SubmissionOutcomeNonceTooLow  SubmissionOutcome = "nonceTooLow"
+	SubmissionOutcomeAlreadyKnown SubmissionOutcome = "alreadyKnown"
+
+	// error cases
+	SubmissionOutcomeFailedRequiresRetry SubmissionOutcome = "errRequiresRetry"
+)
+
+type InMemoryTxStateReadOnly interface {
+	GetCreatedTime() *tktypes.Timestamp
+	// get the transaction receipt from the in-memory state (note: the returned value should not be modified)
+	GetConfirmedTransaction() *blockindexer.IndexedTransaction
+	GetTransactionHash() *tktypes.Bytes32
+	GetNonce() uint64
+	GetFrom() tktypes.EthAddress
+	GetStatus() BaseTxStatus
+	GetGasPriceObject() *ptxapi.PublicTxGasPricing
+	GetFirstSubmit() *tktypes.Timestamp
+	GetLastSubmitTime() *tktypes.Timestamp
+	GetUnflushedSubmission() *persistedTxSubmission
+
+	// Returns a generated string from the transaction that can be used as a unique identifier for in-memory processing.
+	// Note it CANNOT be used to retrieve the transaction from the DB
+	GetTxID() string
+
+	GetGasLimit() uint64
+	IsComplete() bool
+	IsSuspended() bool
+}
+type InMemoryTxStateManager interface {
+	InMemoryTxStateReadOnly
+	InMemoryTxStateSetters
+}
+
+type InMemoryTxStateSetters interface {
+	SetConfirmedTransaction(ctx context.Context, iTX *blockindexer.IndexedTransaction)
+	ApplyInMemoryUpdates(ctx context.Context, txUpdates *BaseTXUpdates)
+}
+
+type StageOutput struct {
+	Stage InFlightTxStage
+
+	PersistenceOutput *PersistenceOutput
+
+	SubmitOutput *SubmitOutputs
+
+	SignOutput *SignOutputs
+
+	GasPriceOutput *GasPriceOutput
+
+	ConfirmationOutput *ConfirmationOutputs
+}
+
+type SubmitOutputs struct {
+	TxHash            *tktypes.Bytes32
+	SubmissionTime    *tktypes.Timestamp
+	SubmissionOutcome SubmissionOutcome
+	ErrorReason       string
+	Err               error
+}
+type SignOutputs struct {
+	SignedMessage []byte
+	TxHash        string
+	Err           error
+}
+
+type GasPriceOutput struct {
+	GasPriceObject *ptxapi.PublicTxGasPricing
+	Err            error
+}
+
+type ConfirmationOutputs struct {
+	ConfirmedTransaction *blockindexer.IndexedTransaction
+	Err                  error
+}
+
+type PersistenceOutput struct {
+	PersistenceError error
+	Time             time.Time
+}
+
+type InFlightStageActionTriggers interface {
+	TriggerRetrieveGasPrice(ctx context.Context) error
+	TriggerSignTx(ctx context.Context) error
+	TriggerSubmitTx(ctx context.Context, signedMessage []byte) error
+	TriggerStatusUpdate(ctx context.Context) error
+}
+
+// RunningStageContext is the context for an individual run of the transaction process
+type RunningStageContext struct {
+	InMemoryTx InMemoryTxStateReadOnly
+	context.Context
+	Stage          InFlightTxStage
+	SubStatus      BaseTxSubStatus
+	StageStartTime time.Time
+	StageErrored   bool
+
+	// for some stages, it requires inputs from multiple async request
+	// this object is used to accumulate all the request result
+	// the stage processing logic can decide whether there is a need to use this
+	StageOutput *StageOutput
+
+	StageOutputsToBePersisted *RunningStageContextPersistenceOutput
+}
+
+func (ctx *RunningStageContext) SetSubStatus(subStatus BaseTxSubStatus) {
+	ctx.SubStatus = subStatus
+}
+
+func (ctx *RunningStageContext) SetNewPersistenceUpdateOutput() {
+	if ctx.StageOutputsToBePersisted == nil {
+		ctx.StageOutputsToBePersisted = &RunningStageContextPersistenceOutput{
+			UpdateType: PersistenceUpdateUpdate,
+			InMemoryTx: ctx.InMemoryTx,
+			SubStatus:  ctx.SubStatus,
+			Ctx:        ctx,
+		}
+	}
+}
+
+type StatusUpdater interface {
+	UpdateSubStatus(ctx context.Context, txIDStr string, subStatus BaseTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error
+}
+
+type RunningStageContextPersistenceOutput struct {
+	UpdateType              PersistenceUpdateType
+	InMemoryTx              InMemoryTxStateReadOnly
+	SubStatus               BaseTxSubStatus
+	Ctx                     context.Context
+	TxUpdates               *BaseTXUpdates
+	StatusUpdates           []func(p StatusUpdater) error
+	ConfirmedTransaction    *blockindexer.IndexedTransaction
+	MissedConfirmationEvent bool
+}
+
+func (sOut *RunningStageContextPersistenceOutput) UpdateSubStatus(action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny) {
+	actionOccurred := tktypes.TimestampNow()
+	sOut.StatusUpdates = append(sOut.StatusUpdates, func(p StatusUpdater) error {
+		return p.UpdateSubStatus(sOut.Ctx, sOut.InMemoryTx.GetTxID(), sOut.SubStatus, action, info, err, &actionOccurred)
+	})
+}
+
+// UpdateType informs FFTM whether the transaction needs an update to be persisted after this execution of the policy engine
+type PersistenceUpdateType int
+
+const (
+	PersistenceUpdateUpdate PersistenceUpdateType = iota // Instructs that the transaction should be updated in persistence
+	// persistenceUpdateDelete                              // Instructs that the transaction should be removed completely from persistence - not sure it's safe to do so
+)
+
+type OrchestratorContext struct {
+	// input from transaction engine
+	AvailableToSpend         *big.Int
+	PreviousNonceCostUnknown bool
+	CurrentConfirmedNonce    *big.Int
+}
+
+// output of some stages doesn't get written into the database
+// so it needs to be carried over to next stages
+type TransientPreviousStageOutputs struct {
+	SignedMessage []byte // NB: if the value is nil when triggering submitTx , node signer will be used to sign the transaction instead, don't use this to judge whether a transaction can be submitted or not.
+}
+
+type InFlightTransactionStateManager interface {
+	// tx state management
+	InMemoryTxStateReadOnly
+	CanSubmit(ctx context.Context, cost *big.Int) bool
+	CanBeRemoved(ctx context.Context) bool
+
+	// stage management
+	StartNewStageContext(ctx context.Context, stage InFlightTxStage, substatus BaseTxSubStatus)
+	GetStage(ctx context.Context) InFlightTxStage
+	SetOrchestratorContext(ctx context.Context, tec *OrchestratorContext)
+	SetTransientPreviousStageOutputs(tpso *TransientPreviousStageOutputs)
+	GetRunningStageContext(ctx context.Context) *RunningStageContext
+	GetStageTriggerError(ctx context.Context) error
+	ClearRunningStageContext(ctx context.Context)
+	GetStageStartTime(ctx context.Context) time.Time
+	SetValidatedTransactionHashMatchState(ctx context.Context, validatedTransactionHashMatchState bool)
+	ValidatedTransactionHashMatchState(ctx context.Context) bool
+
+	// stage outputs management
+	AddStageOutputs(ctx context.Context, stageOutput *StageOutput)
+	ProcessStageOutputs(ctx context.Context, processFunction func(stageOutputs []*StageOutput) (unprocessedStageOutputs []*StageOutput))
+	AddPersistenceOutput(ctx context.Context, stage InFlightTxStage, persistenceTime time.Time, err error)
+	AddSubmitOutput(ctx context.Context, txHash *tktypes.Bytes32, submissionTime *tktypes.Timestamp, submissionOutcome SubmissionOutcome, errorReason ethclient.ErrorReason, err error)
+	AddSignOutput(ctx context.Context, signedMessage []byte, txHash string, err error)
+	AddGasPriceOutput(ctx context.Context, gasPriceObject *ptxapi.PublicTxGasPricing, err error)
+	AddConfirmationsOutput(ctx context.Context, indexedTx *blockindexer.IndexedTransaction)
+	AddPanicOutput(ctx context.Context, stage InFlightTxStage)
+
+	PersistTxState(ctx context.Context) (stage InFlightTxStage, persistenceTime time.Time, err error)
+}

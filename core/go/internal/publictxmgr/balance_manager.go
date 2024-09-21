@@ -25,7 +25,6 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -85,7 +84,7 @@ type BalanceManagerWithInMemoryTracking struct {
 	ethClient ethclient.EthClient
 
 	// transaction handler is used to submit and fetch autofueling transaction status
-	pubTxMgr *publicTxMgr
+	pubTxMgr *pubTxManager
 
 	// balance cache is used to store cached balances of any address
 	balanceCache cache.Cache[string, *big.Int]
@@ -127,7 +126,7 @@ type BalanceManagerWithInMemoryTracking struct {
 	addressBalanceChangedMapMux sync.Mutex
 }
 
-func (af *BalanceManagerWithInMemoryTracking) TopUpAccount(ctx context.Context, addAccount *baseTypes.AddressAccount) (mtx *ptxapi.PublicTx, err error) {
+func (af *BalanceManagerWithInMemoryTracking) TopUpAccount(ctx context.Context, addAccount *AddressAccount) (mtx *ptxapi.PublicTx, err error) {
 	if af.sourceAddress == "" {
 		log.L(ctx).Debugf("Skip top up transaction as no fueling source configured")
 		// No-op
@@ -210,7 +209,7 @@ func (af *BalanceManagerWithInMemoryTracking) IsAutoFuelingEnabled(ctx context.C
 	return af.sourceAddress != ""
 }
 
-func (af *BalanceManagerWithInMemoryTracking) GetAddressBalance(ctx context.Context, address string) (*baseTypes.AddressAccount, error) {
+func (af *BalanceManagerWithInMemoryTracking) GetAddressBalance(ctx context.Context, address string) (*AddressAccount, error) {
 	af.addressBalanceChangedMapMux.Lock()
 	defer af.addressBalanceChangedMapMux.Unlock()
 	log.L(ctx).Debugf("Retrieving balance for address %s ", address)
@@ -237,7 +236,7 @@ func (af *BalanceManagerWithInMemoryTracking) GetAddressBalance(ctx context.Cont
 	}
 	log.L(ctx).Debugf("Retrieved balance for address %s: %s", address, addressBalance.String())
 
-	return &baseTypes.AddressAccount{
+	return &AddressAccount{
 		Address: address,
 		Balance: &addressBalance,
 		Spent:   big.NewInt(0),
@@ -330,7 +329,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 	return mtx, nil
 }
 
-func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf *Config, ethClient ethclient.EthClient, publicTxMgr *pubTxManager) (baseTypes.BalanceManager, error) {
+func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf *Config, ethClient ethclient.EthClient, publicTxMgr *pubTxManager) (BalanceManager, error) {
 	cm, _ := cache.NewCacheManager(ctx, true).GetCache(ctx, "balance-manager", "balance", conf.GetByteSize(BalanceManagerCacheSizeByteString), conf.GetDuration(BalanceManagerCacheTTLDurationString), conf.GetBool(BalanceManagerCacheEnabled), cache.StrictExpiry, cache.TTLFromInitialAdd)
 	log.L(ctx).Debugf("Balance manager cache setting. Enabled: %t , size: %d , ttl: %s", conf.GetBool(BalanceManagerCacheEnabled), conf.GetByteSize(BalanceManagerCacheSizeByteString), conf.GetDuration(BalanceManagerCacheTTLDurationString))
 	afConfig := conf.SubSection(BalanceManagerAutoFuelingSection)

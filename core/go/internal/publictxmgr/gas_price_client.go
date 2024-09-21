@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"math/big"
 
-	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
-
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
@@ -48,6 +46,7 @@ var DefaultGasPriceConfig = &GasPriceConfig{
 	Cache: cache.Config{
 		Capacity: confutil.P(100),
 		// TODO: Enable a KB based cache with TTL in Paladin
+		//       Until then the gas price cache will not expire (which is problematic)
 		// Enabled: confutil.P(true),
 		// Size:    confutil.P("1kb"),
 		// TTL:     confutil.P("1s"),
@@ -55,12 +54,12 @@ var DefaultGasPriceConfig = &GasPriceConfig{
 }
 
 type GasPriceClient interface {
-	DeleteCache(ctx context.Context) bool
+	DeleteCache(ctx context.Context)
 	HasZeroGasPrice(ctx context.Context) bool
 	SetFixedGasPriceIfConfigured(ctx context.Context, ethTx *ethsigner.Transaction)
 	GetFixedGasPriceJSON(ctx context.Context) (gasPrice *fftypes.JSONAny)
-	ParseGasPriceJSON(ctx context.Context, input *fftypes.JSONAny) (gpo *baseTypes.GasPriceObject, err error)
-	GetGasPriceObject(ctx context.Context) (gasPrice *baseTypes.GasPriceObject, err error)
+	ParseGasPriceJSON(ctx context.Context, input *fftypes.JSONAny) (gpo *GasPriceObject, err error)
+	GetGasPriceObject(ctx context.Context) (gasPrice *GasPriceObject, err error)
 	Init(ctx context.Context, cAPI ethclient.EthClient)
 }
 
@@ -73,7 +72,7 @@ type HybridGasPriceClient struct {
 	hasZeroGasPrice bool
 	fixedGasPrice   *fftypes.JSONAny
 	cAPI            ethclient.EthClient
-	gasPriceCache   cache.CInterface
+	gasPriceCache   cache.Cache[string, *fftypes.JSONAny]
 }
 
 func (hGpc *HybridGasPriceClient) HasZeroGasPrice(ctx context.Context) bool {
@@ -100,7 +99,7 @@ func (hGpc *HybridGasPriceClient) SetFixedGasPriceIfConfigured(ctx context.Conte
 	}
 }
 
-func (hGpc *HybridGasPriceClient) GetGasPriceObject(ctx context.Context) (gasPrice *baseTypes.GasPriceObject, err error) {
+func (hGpc *HybridGasPriceClient) GetGasPriceObject(ctx context.Context) (gasPrice *GasPriceObject, err error) {
 
 	gasPriceJSON, err := hGpc.getGasPriceJSON(ctx)
 	if err != nil {
@@ -120,9 +119,9 @@ func (hGpc *HybridGasPriceClient) getGasPriceJSON(ctx context.Context) (gasPrice
 	}
 
 	// use the cache gas price first
-	cachedGasPrice := hGpc.gasPriceCache.Get("gasPrice")
+	cachedGasPrice, _ := hGpc.gasPriceCache.Get("gasPrice")
 	if cachedGasPrice != nil {
-		return cachedGasPrice.(*fftypes.JSONAny), nil
+		return cachedGasPrice, nil
 	}
 
 	// then try to use the node eth call
@@ -158,24 +157,26 @@ func (hGpc *HybridGasPriceClient) Init(ctx context.Context, cAPI ethclient.EthCl
 	}
 }
 
-func (hGpc *HybridGasPriceClient) DeleteCache(ctx context.Context) bool {
-	return hGpc.gasPriceCache.Delete("gasPrice")
+func (hGpc *HybridGasPriceClient) DeleteCache(ctx context.Context) {
+	hGpc.gasPriceCache.Delete("gasPrice")
 }
 
 func NewGasPriceClient(ctx context.Context, conf *Config) GasPriceClient {
-	gasPriceCache := cache.NewCache[string, *big.Int](&conf.GasPrice.Cache, &DefaultConfig.GasPrice.Cache)
+	gasPriceCache := cache.NewCache[string, *fftypes.JSONAny](&conf.GasPrice.Cache, &DefaultConfig.GasPrice.Cache)
 	log.L(ctx).Debugf("Gas price cache size: %d", gasPriceCache.Capacity())
 	gasPriceClient := &HybridGasPriceClient{}
 	// initialize gas oracle
 	// set fixed gas price
-	gasPriceClient.fixedGasPrice = fftypes.JSONAnyPtr(conf.GetString(GasPriceFixedJSONString))
+	b, _ := json.Marshal(conf.GasPrice.FixedGasPrice)
+	if b != nil && string(b) != `null` {
+		gasPriceClient.fixedGasPrice = fftypes.JSONAnyPtrBytes(b)
+	}
 	gasPriceClient.gasPriceCache = gasPriceCache
-
 	return gasPriceClient
 }
 
-func (hGpc *HybridGasPriceClient) ParseGasPriceJSON(ctx context.Context, input *fftypes.JSONAny) (gpo *baseTypes.GasPriceObject, err error) {
-	gpo = &baseTypes.GasPriceObject{}
+func (hGpc *HybridGasPriceClient) ParseGasPriceJSON(ctx context.Context, input *fftypes.JSONAny) (gpo *GasPriceObject, err error) {
+	gpo = &GasPriceObject{}
 	if input == nil {
 		gpo.GasPrice = big.NewInt(0)
 		log.L(ctx).Tracef("Gas price object generated using empty input, gasPrice=%+v", gpo)
@@ -186,7 +187,7 @@ func (hGpc *HybridGasPriceClient) ParseGasPriceJSON(ctx context.Context, input *
 	maxPriorityFeePerGas := gasPriceObject.GetInteger("maxPriorityFeePerGas")
 	maxFeePerGas := gasPriceObject.GetInteger("maxFeePerGas")
 	if maxPriorityFeePerGas.Sign() > 0 || maxFeePerGas.Sign() > 0 {
-		gpo = &baseTypes.GasPriceObject{
+		gpo = &GasPriceObject{
 			MaxPriorityFeePerGas: maxPriorityFeePerGas,
 			MaxFeePerGas:         maxFeePerGas,
 		}

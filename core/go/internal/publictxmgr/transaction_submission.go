@@ -18,11 +18,9 @@ package publictxmgr
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -42,7 +40,7 @@ func calculateTransactionHash(rawTxnData []byte) *tktypes.Bytes32 {
 	return &hashBytes
 }
 
-func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx *ptxapi.PublicTx, signedMessage []byte) (*tktypes.Bytes32, *tktypes.Timestamp, ethclient.ErrorReason, baseTypes.SubmissionOutcome, error) {
+func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx *ptxapi.PublicTx, signedMessage []byte) (*tktypes.Bytes32, *tktypes.Timestamp, ethclient.ErrorReason, SubmissionOutcome, error) {
 	var txHash *tktypes.Bytes32
 	sendStart := time.Now()
 	calculatedTxHash := calculateTransactionHash(signedMessage)
@@ -50,10 +48,10 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 
 	submissionTime := confutil.P(tktypes.TimestampNow())
 	var submissionErrorReason ethclient.ErrorReason // TODO: fix reason parsing
-	var submissionOutcome baseTypes.SubmissionOutcome
+	var submissionOutcome SubmissionOutcome
 	var submissionError error
 
-	retryError := it.transactionSubmissionRetry.Do(ctx, fmt.Sprintf("tx submission  %s/%s", mtx.ID, calculatedTxHash), func(attempt int) ( /*retry*/ bool, error) {
+	retryError := it.transactionSubmissionRetry.Do(ctx, func(attempt int) ( /*retry*/ bool, error) {
 		txHash, submissionError = it.ethClient.SendRawTransaction(ctx, tktypes.HexBytes(tktypes.MustParseHexBytes(string(signedMessage)).HexString0xPrefix()))
 		if submissionError == nil {
 			it.thMetrics.RecordOperationMetrics(ctx, string(InFlightTxOperationTransactionSend), string(GenericStatusSuccess), time.Since(sendStart).Seconds())
@@ -67,7 +65,7 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 					if attempt <= it.transactionSubmissionRetryCount {
 						return true, submissionError
 					} else {
-						submissionOutcome = baseTypes.SubmissionOutcomeFailedRequiresRetry
+						submissionOutcome = SubmissionOutcomeFailedRequiresRetry
 						return false, nil
 					}
 				} else {
@@ -78,7 +76,7 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 				log.L(ctx).Warnf("Received response for transaction %s, no transaction hash from the response, using the calculated transaction hash %s instead.", mtx.ID, txHash)
 			}
 			log.L(ctx).Infof("Transaction %s at nonce %s / %d submitted. Hash: %s", mtx.ID, mtx.From, mtx.Nonce.Int64(), mtx.TransactionHash)
-			submissionOutcome = baseTypes.SubmissionOutcomeSubmittedNew
+			submissionOutcome = SubmissionOutcomeSubmittedNew
 			return false, nil
 		} else {
 			if calculatedTxHash != nil {
@@ -95,19 +93,19 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 				// but a gas oracle typically come up the value based on the data collected from all nodes
 				_ = it.gasPriceClient.DeleteCache(ctx)
 				log.L(ctx).Debug("Underpriced, removed gas price cache")
-				submissionOutcome = baseTypes.SubmissionOutcomeFailedRequiresRetry
+				submissionOutcome = SubmissionOutcomeFailedRequiresRetry
 			case ethclient.ErrorReasonTransactionReverted:
 				// transaction could be reverted due to gas estimate too low, clear the cache before try again
 				_ = it.gasPriceClient.DeleteCache(ctx)
 				log.L(ctx).Debug("Transaction reverted, removed gas price cache")
-				submissionOutcome = baseTypes.SubmissionOutcomeFailedRequiresRetry
+				submissionOutcome = SubmissionOutcomeFailedRequiresRetry
 			case ethclient.ErrorKnownTransaction:
 				// check mined transaction also returns this error code
 				// KnownTransaction means it's in the mempool
 				log.L(ctx).Debugf("Transaction %s at nonce %s / %d known with hash: %s (previous=%s)", mtx.ID, mtx.From, mtx.Nonce.Int64(), txHash, submissionError)
 				submissionError = nil
 				submissionErrorReason = ""
-				submissionOutcome = baseTypes.SubmissionOutcomeAlreadyKnown
+				submissionOutcome = SubmissionOutcomeAlreadyKnown
 			case ethclient.ErrorReasonNonceTooLow:
 				// NonceTooLow means a transaction with same nonce is already mined, this could mean:
 				//   1. we have a nonce conflict
@@ -116,9 +114,9 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 				// otherwise, we revert back to track the old hash
 				submissionError = nil
 				submissionErrorReason = ""
-				submissionOutcome = baseTypes.SubmissionOutcomeNonceTooLow
+				submissionOutcome = SubmissionOutcomeNonceTooLow
 			default:
-				submissionOutcome = baseTypes.SubmissionOutcomeFailedRequiresRetry
+				submissionOutcome = SubmissionOutcomeFailedRequiresRetry
 				if attempt <= it.transactionSubmissionRetryCount {
 					return true, submissionError
 				}
@@ -128,7 +126,7 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 	})
 
 	if retryError != nil {
-		return nil, nil, ethclient.ErrorReason(retryError.Error()), baseTypes.SubmissionOutcomeFailedRequiresRetry, retryError
+		return nil, nil, ethclient.ErrorReason(retryError.Error()), SubmissionOutcomeFailedRequiresRetry, retryError
 	}
 
 	return txHash, submissionTime, submissionErrorReason, submissionOutcome, submissionError

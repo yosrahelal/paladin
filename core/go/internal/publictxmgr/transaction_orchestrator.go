@@ -21,10 +21,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
@@ -32,6 +30,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 const (
@@ -138,9 +137,7 @@ type orchestrator struct {
 	resubmitInterval        time.Duration
 	stageRetryTimeout       time.Duration
 	persistenceRetryTimeout time.Duration
-	txStore                 components.PublicTransactionStore
 	ethClient               ethclient.EthClient
-	publicTXEventNotifier   components.PublicTxEventNotifier
 	bIndexer                blockindexer.BlockIndexer
 	turnOffHistory          bool
 
@@ -148,9 +145,9 @@ type orchestrator struct {
 	transactionSubmissionRetryCount int
 
 	// each transaction orchestrator has its own go routine
-	orchestratorBirthTime       time.Time     // when transaction orchestrator is created
-	orchestratorPollingInterval time.Duration // between how long the transaction orchestrator will do a poll and trigger none-event driven transaction process actions
-	signingAddress              string        // the signing address of the transaction managed by the current transaction orchestrator
+	orchestratorBirthTime       time.Time          // when transaction orchestrator is created
+	orchestratorPollingInterval time.Duration      // between how long the transaction orchestrator will do a poll and trigger none-event driven transaction process actions
+	signingAddress              tktypes.EthAddress // the signing address of the transaction managed by the current transaction orchestrator
 
 	// balance check settings
 	hasZeroGasPrice                    bool
@@ -179,8 +176,8 @@ type orchestrator struct {
 
 func NewOrchestrator(
 	ble *pubTxManager,
-	signingAddress string,
-	conf config.Section,
+	signingAddress tktypes.EthAddress,
+	conf *Config,
 ) *orchestrator {
 	ctx := ble.ctx
 
@@ -213,9 +210,7 @@ func NewOrchestrator(
 		transactionIDsInStatusUpdate:    make([]string, 0),
 		InFlightTxsStale:                make(chan bool, 1),
 		stopProcess:                     make(chan bool, 1),
-		txStore:                         ble.txStore,
 		ethClient:                       ble.ethClient,
-		publicTXEventNotifier:           ble.publicTXEventNotifier,
 		bIndexer:                        ble.bIndexer,
 	}
 
@@ -262,7 +257,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 	oc.InFlightTxs = make([]*InFlightTransactionStageController, 0, len(oldInFlight))
 
 	stageCounts := make(map[string]int)
-	for _, stageName := range baseTypes.AllInFlightStages {
+	for _, stageName := range AllInFlightStages {
 		// map for saving number of in flight transaction per stage
 		stageCounts[stageName] = 0
 	}
@@ -288,7 +283,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			oc.InFlightTxs = append(oc.InFlightTxs, p)
 			txStage := p.stateManager.GetStage(ctx)
 			if string(txStage) == "" {
-				txStage = baseTypes.InFlightTxStageQueued
+				txStage = InFlightTxStageQueued
 			}
 			stageCounts[string(txStage)] = stageCounts[string(txStage)] + 1
 		}
@@ -349,7 +344,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 				oc.InFlightTxs = append(oc.InFlightTxs, it)
 				txStage := it.stateManager.GetStage(ctx)
 				if string(txStage) == "" {
-					txStage = baseTypes.InFlightTxStageQueued
+					txStage = InFlightTxStageQueued
 				}
 				stageCounts[string(txStage)] = stageCounts[string(txStage)] + 1
 				log.L(ctx).Debugf("Orchestrator added transaction with ID: %s", mtx.ID)
@@ -394,7 +389,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 func (oc *orchestrator) ProcessInFlightTransaction(ctx context.Context, its []*InFlightTransactionStageController) (waitingForBalance bool, err error) {
 	processStart := time.Now()
 	waitingForBalance = false
-	var addressAccount *baseTypes.AddressAccount
+	var addressAccount *AddressAccount
 	skipBalanceCheck := oc.hasZeroGasPrice
 	now := time.Now()
 	log.L(ctx).Debugf("%s ProcessInFlightTransaction entry for signing address %s", now.String(), oc.signingAddress)
@@ -427,7 +422,7 @@ func (oc *orchestrator) ProcessInFlightTransaction(ctx context.Context, its []*I
 		if !skipBalanceCheck {
 			availableToSpend = addressAccount.GetAvailableToSpend(ctx)
 		}
-		triggerNextStageOutput := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+		triggerNextStageOutput := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 			AvailableToSpend:         availableToSpend,
 			PreviousNonceCostUnknown: previousNonceCostUnknown,
 			CurrentConfirmedNonce:    currentConfirmedNonce,
