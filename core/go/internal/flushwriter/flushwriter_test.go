@@ -32,7 +32,6 @@ import (
 )
 
 type testWritable struct {
-	key   string
 	input string
 }
 
@@ -41,7 +40,7 @@ type testResult struct {
 }
 
 func (tw *testWritable) WriteKey() string {
-	return tw.key
+	return tw.input
 }
 
 var testDefaults = &Config{
@@ -155,6 +154,17 @@ func TestBadResult(t *testing.T) {
 		_, err := op.WaitFlushed(ctx)
 		assert.Regexp(t, "PD012301", err)
 	}
+}
+
+func TestBadOp(t *testing.T) {
+	ctx, w, _, done := newTestWriter(t, &Config{
+		BatchMaxSize: confutil.P(1000),
+	}, nil)
+	defer done()
+
+	op := w.Queue(ctx, &testWritable{})
+	_, err := op.WaitFlushed(ctx)
+	require.Regexp(t, "PD012302", err)
 }
 
 func TestIndividualError(t *testing.T) {

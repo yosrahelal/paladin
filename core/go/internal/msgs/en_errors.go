@@ -71,7 +71,6 @@ var (
 	MsgStateInvalidABIParam           = ffe("PD010102", "Invalid ABI parameter")
 	MsgStateInvalidSchemaType         = ffe("PD010103", "Invalid state schema type: %s")
 	MsgStateManagerQuiescing          = ffe("PD010104", "State store shutting down")
-	MsgStateOpInvalid                 = ffe("PD010105", "State operation invalid")
 	MsgStateSchemaNotFound            = ffe("PD010106", "Schema not found with hash %s")
 	MsgStateLabelFieldNotElementary   = ffe("PD010107", "Label field %s is not elementary type (%s)")
 	MsgStateLabelFieldNotNamed        = ffe("PD010108", "Label field with index %d is not named")
@@ -335,4 +334,5 @@ var (
 	// FlushWriter module PD0123XX
 	MsgFlushWriterQuiescing      = ffe("PD012300", "Writer shutting down")
 	MsgFlushWriterInvalidResults = ffe("PD012301", "Error in handler produced invalid write results")
+	MsgFlushWriterOpInvalid      = ffe("PD012302", "Write operation missing key")
 )

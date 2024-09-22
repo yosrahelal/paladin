@@ -164,6 +164,10 @@ func (w *writer[T, R]) queue(ctx context.Context, value T, flush bool) *op[T, R]
 		flush:    flush,
 		done:     make(chan Result[R], 1), // 1 slot to ensure we don't block the writer
 	}
+	if op.writeKey == "" {
+		op.done <- Result[R]{Err: i18n.NewError(ctx, msgs.MsgFlushWriterOpInvalid)}
+		return op
+	}
 
 	// All requests on the same key go to the same worker.
 	// This allows assertions to be made between threads writing schemas,
