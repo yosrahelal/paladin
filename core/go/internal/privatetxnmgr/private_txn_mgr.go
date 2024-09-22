@@ -23,7 +23,6 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 
@@ -43,6 +42,7 @@ import (
 type privateTxManager struct {
 	ctx                  context.Context
 	ctxCancel            func()
+	config               *Config
 	orchestrators        map[string]*Orchestrator
 	endorsementGatherers map[string]ptmgrtypes.EndorsementGatherer
 	components           components.AllComponents
@@ -59,12 +59,11 @@ func (p *privateTxManager) PreInit(c components.PreInitComponents) (*components.
 
 func (p *privateTxManager) PostInit(c components.AllComponents) error {
 	p.components = c
-	p.store = privatetxnstore.NewStore(p.ctx, &flushwriter.Config{}, c.Persistence())
+	p.store = privatetxnstore.NewStore(p.ctx, &p.config.Writer, c.Persistence())
 	return nil
 }
 
 func (p *privateTxManager) Start() error {
-	p.ctx, p.ctxCancel = context.WithCancel(context.Background())
 	return nil
 }
 
@@ -72,12 +71,15 @@ func (p *privateTxManager) Stop() {
 }
 
 func NewPrivateTransactionMgr(ctx context.Context, nodeID string, config *Config) components.PrivateTxManager {
-	return &privateTxManager{
+	p := &privateTxManager{
+		config:               config,
 		orchestrators:        make(map[string]*Orchestrator),
 		endorsementGatherers: make(map[string]ptmgrtypes.EndorsementGatherer),
 		nodeID:               nodeID,
 		subscribers:          make([]components.PrivateTxEventSubscriber, 0),
 	}
+	p.ctx, p.ctxCancel = context.WithCancel(context.Background())
+	return p
 }
 
 func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contractAddr tktypes.EthAddress, domainAPI components.DomainSmartContract) (oc *Orchestrator, err error) {

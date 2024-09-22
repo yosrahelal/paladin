@@ -146,6 +146,22 @@ func WrapRPCClient(ctx context.Context, keymgr KeyManager, rpc rpcclient.Client,
 	return ec, nil
 }
 
+// This is useful in cases where the RPC client is used only for ABI formatting.
+// All JSON/RPC requests will fail, and there is no chain ID available
+func NewUnconnectedRPCClient(ctx context.Context, keymgr KeyManager, conf *Config) EthClient {
+	return &ethClient{
+		keymgr:            keymgr,
+		rpc:               &unconnectedRPC{},
+		gasEstimateFactor: confutil.Float64Min(conf.EstimateGasFactor, 1.0, *Defaults.EstimateGasFactor),
+	}
+}
+
+type unconnectedRPC struct{}
+
+func (u *unconnectedRPC) CallRPC(ctx context.Context, result interface{}, method string, params ...interface{}) rpcclient.ErrorRPC {
+	return rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, i18n.NewError(ctx, msgs.MsgEthClientNoConnection))
+}
+
 func (ec *ethClient) Close() {
 	wsRPC, isWS := ec.rpc.(rpcclient.WSClient)
 	if isWS {

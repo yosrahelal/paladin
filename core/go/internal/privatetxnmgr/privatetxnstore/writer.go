@@ -120,7 +120,8 @@ func (s *store) runBatch(ctx context.Context, dbTX *gorm.DB, values []*dispatchS
 				Clauses(clause.OnConflict{
 					Columns: []clause.Column{
 						{Name: "private_transaction_id"},
-						{Name: "public_transaction_id"},
+						{Name: "public_transaction_address"},
+						{Name: "public_transaction_nonce"},
 					},
 					DoNothing: true, // immutable
 				}).

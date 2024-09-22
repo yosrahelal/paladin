@@ -102,14 +102,6 @@ type Orchestrator struct {
 	store privatetxnstore.Store
 }
 
-var orchestratorConfigDefault = OrchestratorConfig{
-	MaxConcurrentProcess:    confutil.P(500),
-	EvaluationInterval:      confutil.P("5m"),
-	PersistenceRetryTimeout: confutil.P("5s"),
-	StaleTimeout:            confutil.P("10m"),
-	MaxPendingEvents:        confutil.P(500),
-}
-
 func NewOrchestrator(
 	ctx context.Context,
 	nodeID string,
@@ -310,8 +302,8 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 	dispatchBatch := &privatetxnstore.DispatchBatch{
 		DispatchSequences: make([]*privatetxnstore.DispatchSequence, 0, len(dispatchableTransactions)),
 	}
-	var finalize func(context.Context)
 
+	completed := false // and include whether we committed the DB transaction or not
 	for _, transactionIDs := range dispatchableTransactions {
 
 		preparedTransactions := make([]*components.PrivateTransaction, len(transactionIDs))
@@ -368,10 +360,10 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 				},
 			}
 			var req ethclient.ABIFunctionRequestBuilder
-			abiFn, err := ec.ABIFunction(ctx, pt.Inputs.Function)
+			abiFn, err := ec.ABIFunction(ctx, pt.PreparedTransaction.FunctionABI)
 			if err == nil {
 				req = abiFn.R(ctx)
-				err = req.Input(pt.Inputs.Inputs).BuildCallData()
+				err = req.Input(pt.PreparedTransaction.Inputs).BuildCallData()
 			}
 			if err != nil {
 				return err
@@ -384,7 +376,6 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		}
 		// Must make sure from this point we return the nonces
 		sequence.PublicTxBatch = pubBatch
-		completed := false // and include whether we committed the DB transaction or not
 		defer func() {
 			pubBatch.Completed(ctx, completed)
 		}()
@@ -401,9 +392,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		log.L(ctx).Errorf("Error persisting batch: %s", err)
 		return err
 	}
-	if finalize != nil {
-		finalize(ctx)
-	}
+	completed = true
 	for signingAddress, sequence := range dispatchableTransactions {
 		for _, privateTransactionID := range sequence {
 			err := oc.publisher.PublishTransactionDispatchedEvent(ctx, privateTransactionID, uint64(0) /*TODO*/, signingAddress)

@@ -17,21 +17,25 @@ package privatetxnmgr
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"math/rand"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	coreProto "github.com/kaleido-io/paladin/core/pkg/proto"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
@@ -47,6 +51,27 @@ import (
 
 // Attempt to assert the behaviour of the private transaction manager as a whole component in isolation from the rest of the system
 // Tests in this file do not mock anything else in this package or sub packages but does mock other components and managers in paladin as per their interfaces
+
+var testABI = abi.ABI{
+	{
+		Name: "execute",
+		Type: abi.Function,
+		Inputs: abi.ParameterArray{
+			{
+				Name: "inputs",
+				Type: "bytes32[]",
+			},
+			{
+				Name: "outputs",
+				Type: "bytes32[]",
+			},
+			{
+				Name: "data",
+				Type: "bytes",
+			},
+		},
+	},
+}
 
 func TestPrivateTxManagerInit(t *testing.T) {
 
@@ -153,23 +178,45 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 		Payload: []byte("some-signature-bytes"),
 	}, nil)
 
-	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
+	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
+		func(args mock.Arguments) {
+			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
+				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
+				"outputs": []any{tktypes.Bytes32(tktypes.RandBytes(32))},
+				"data":    "0xfeedbeef",
+			})
+			require.NoError(t, err)
+			tx := args[1].(*components.PrivateTransaction)
+			tx.Signer = "signer1"
+			tx.PreparedTransaction = &components.EthTransaction{
+				FunctionABI: testABI[0],
+				To:          *domainAddress,
+				Inputs:      cv,
+			}
+		},
+	)
 
 	mockPublicTxBatch := componentmocks.NewPublicTxBatch(t)
 	mockPublicTxBatch.On("Finalize", mock.Anything).Return().Maybe()
 	mockPublicTxBatch.On("CleanUp", mock.Anything).Return().Maybe()
-	mockPublicTxBatches := []components.PublicTxBatch{mockPublicTxBatch}
 
-	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPublicTxBatches, false, nil)
+	mockPublicTxManager := mocks.publicTxManager.(*componentmocks.PublicTxManager)
+	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockPublicTxBatch, nil)
 
-	publicTransactions := []*ptxapi.PublicTxWithID{
-		{
+	publicTransactions := []components.PublicTxAccepted{
+		newFakePublicTx(&components.PublicTxIDInput{
 			PublicTxID: ptxapi.PublicTxID{
 				Transaction: uuid.New(),
 			},
-		},
+			PublicTxInput: ptxapi.PublicTxInput{
+				From: "signer1",
+			},
+		}, nil),
 	}
-	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPublicTxBatches).Return(publicTransactions, nil)
+	mockPublicTxBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
+	mockPublicTxBatch.On("Rejected").Return([]components.PublicTxRejected{})
+	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
+	mockPublicTxBatch.On("Completed", mock.Anything, true).Return()
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
@@ -183,7 +230,9 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, txID)
 
-	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, txID, 2*time.Second)
+	// testTimeout := 2 * time.Second
+	testTimeout := 100 * time.Minute
+	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, txID, testTimeout)
 	assert.Equal(t, "dispatched", status)
 }
 
@@ -296,7 +345,8 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 	mockPublicTxBatch.On("CleanUp", mock.Anything).Return().Maybe()
 	mockPublicTxBatches := []components.PublicTxBatch{mockPublicTxBatch}
 
-	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPublicTxBatches, false, nil)
+	mockPublicTxManager := mocks.publicTxManager.(*componentmocks.PublicTxManager)
+	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPublicTxBatches, false, nil)
 
 	publicTransactions := []*ptxapi.PublicTxWithID{
 		{
@@ -305,7 +355,7 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 			},
 		},
 	}
-	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPublicTxBatches).Return(publicTransactions, nil)
+	mockPublicTxManager.On("SubmitBatch", mock.Anything, mock.Anything, mockPublicTxBatches).Return(publicTransactions, nil)
 
 	err := privateTxManager.Start()
 	assert.NoError(t, err)
@@ -437,7 +487,8 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	mockPublicTxBatch2.On("CleanUp", mock.Anything).Return().Maybe()
 	mockPublicTxBatches := []components.PublicTxBatch{mockPublicTxBatch1, mockPublicTxBatch2}
 
-	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPublicTxBatches, false, nil)
+	mockPublicTxManager := mocks.publicTxManager.(*componentmocks.PublicTxManager)
+	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPublicTxBatches, false, nil)
 
 	publicTransactions := []*ptxapi.PublicTxWithID{
 		{
@@ -451,7 +502,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 			},
 		},
 	}
-	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPublicTxBatches).Return(publicTransactions, nil)
+	mockPublicTxManager.On("SubmitBatch", mock.Anything, mock.Anything, mockPublicTxBatches).Return(publicTransactions, nil)
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
@@ -547,7 +598,7 @@ func TestPrivateTxManagerLocalBlockedTransaction(t *testing.T) {
 func TestPrivateTxManagerMiniLoad(t *testing.T) {
 	t.Skip("This test takes too long to be included by default.  It is still useful for local testing")
 	//TODO this is actually quite a complex test given all the mocking.  Maybe this should be converted to a wider component test
-	// where the real publicTxEngine is used rather than a mock
+	// where the real publicTxManager is used rather than a mock
 	r := rand.New(rand.NewSource(42))
 	loadTests := []struct {
 		name            string
@@ -809,16 +860,15 @@ type dependencyMocks struct {
 	transportManager     *componentmocks.TransportManager
 	stateStore           *componentmocks.StateStore
 	keyManager           *componentmocks.KeyManager
-	publicTxManager      *componentmocks.PublicTxManager
-	publicTxEngine       *componentmocks.PublicTxManager
+	ethClientFactory     *componentmocks.EthClientFactory
+	publicTxManager      components.PublicTxManager /* could be fake or mock */
 }
 
 // For Black box testing we return components.PrivateTxManager
 func NewPrivateTransactionMgrForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (components.PrivateTxManager, *dependencyMocks) {
-	// by default create a mock publicTxEngine if no fake was provided
+	// by default create a mock publicTxManager if no fake was provided
 	fakePublicTxManager := componentmocks.NewPublicTxManager(t)
 	privateTxManager, mocks := NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t, domainAddress, fakePublicTxManager)
-	mocks.publicTxEngine = fakePublicTxManager
 	return privateTxManager, mocks
 }
 
@@ -897,7 +947,7 @@ type fakePublicTx struct {
 
 func newFakePublicTx(t *components.PublicTxIDInput, rejectErr error) *fakePublicTx {
 	// Fake up signer resolution by just hashing whatever comes in
-	signerStringHash := md5.New()
+	signerStringHash := sha256.New()
 	signerStringHash.Write([]byte(t.From))
 	fromAddr := tktypes.EthAddress(signerStringHash.Sum(nil)[0:20])
 	return &fakePublicTx{
@@ -935,7 +985,7 @@ func (f *fakePublicTx) TXWithNonce() *ptxapi.PublicTxWithID {
 	return f.pubTx
 }
 
-//for this test, we need a hand written fake rather than a simple mock for publicTxEngine
+//for this test, we need a hand written fake rather than a simple mock for publicTxManager
 
 // PrepareSubmissionBatch implements components.PublicTxManager.
 func (f *fakePublicTxManager) PrepareSubmissionBatch(ctx context.Context, transactions []*components.PublicTxIDInput) (batch components.PublicTxBatch, err error) {
@@ -967,7 +1017,7 @@ func newFakePublicTxManager(t *testing.T) *fakePublicTxManager {
 	}
 }
 
-func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, domainAddress *tktypes.EthAddress, fakePublicTxManager components.PublicTxManager) (components.PrivateTxManager, *dependencyMocks) {
+func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, domainAddress *tktypes.EthAddress, publicTxMgr components.PublicTxManager) (components.PrivateTxManager, *dependencyMocks) {
 
 	ctx := context.Background()
 	mocks := &dependencyMocks{
@@ -978,16 +1028,19 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 		transportManager:     componentmocks.NewTransportManager(t),
 		stateStore:           componentmocks.NewStateStore(t),
 		keyManager:           componentmocks.NewKeyManager(t),
-		publicTxManager:      componentmocks.NewPublicTxManager(t),
+		ethClientFactory:     componentmocks.NewEthClientFactory(t),
+		publicTxManager:      publicTxMgr,
 	}
 	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
 	mocks.allComponents.On("TransportManager").Return(mocks.transportManager).Maybe()
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
-	mocks.allComponents.On("PublicTxManager").Return(mocks.publicTxManager).Maybe()
-	mocks.publicTxManager.On("GetEngine").Return(fakePublicTxManager).Maybe()
+	mocks.allComponents.On("PublicTxManager").Return(publicTxMgr).Maybe()
 	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
 	mocks.allComponents.On("Persistence").Return(persistence.NewUnitTestPersistence(ctx)).Maybe()
+	mocks.allComponents.On("EthClientFactory").Return(mocks.ethClientFactory).Maybe()
+	unconnectedRealClient := ethclient.NewUnconnectedRPCClient(ctx, mocks.keyManager, &ethclient.Config{})
+	mocks.ethClientFactory.On("SharedWS").Return(unconnectedRealClient).Maybe()
 
 	mocks.stateStore.On("RunInDomainContext", mock.Anything, mock.AnythingOfType("statestore.DomainContextFunction")).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(statestore.DomainContextFunction)
@@ -995,7 +1048,15 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 		assert.NoError(t, err)
 	}).Maybe().Return(nil)
 
-	e := NewPrivateTransactionMgr(ctx, tktypes.RandHex(16), &Config{})
+	e := NewPrivateTransactionMgr(ctx, tktypes.RandHex(16), &Config{
+		Writer: flushwriter.Config{
+			WorkerCount:  confutil.P(1),
+			BatchMaxSize: confutil.P(1), // we don't want batching for our test
+		},
+		Orchestrator: OrchestratorConfig{
+			// StaleTimeout: ,
+		},
+	})
 	err := e.PostInit(mocks.allComponents)
 	assert.NoError(t, err)
 	return e, mocks

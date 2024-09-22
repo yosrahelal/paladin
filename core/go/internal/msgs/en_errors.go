@@ -209,6 +209,7 @@ var (
 	MsgEthClientReceiptNotAvailable     = ffe("PD011514", "Receipt not available for transaction '%s'")
 	MsgEthClientReturnValueNotDecoded   = ffe("PD011515", "Error return value for custom error: %s")
 	MsgEthClientReturnValueNotAvailable = ffe("PD011516", "Error return value unavailable")
+	MsgEthClientNoConnection            = ffe("PD011517", "No JSON/RPC connection is available to this client")
 
 	// DomainManager module PD0116XX
 	MsgDomainNotFound                         = ffe("PD011600", "Domain %q not found")

@@ -390,3 +390,12 @@ func TestProtocolIDForReceipt(t *testing.T) {
 	assert.Equal(t, "000000012345/000042", ProtocolIDForReceipt(fftypes.NewFFBigInt(12345), fftypes.NewFFBigInt(42)))
 	assert.Equal(t, "", ProtocolIDForReceipt(nil, nil))
 }
+
+func TestUnconnectedRPCClient(t *testing.T) {
+	ctx := context.Background()
+	keymgr, kmDone := newTestHDWalletKeyManager(t)
+	defer kmDone()
+	ec := NewUnconnectedRPCClient(ctx, keymgr, &Config{})
+	_, err := ec.GetTransactionReceipt(ctx, testTxHash)
+	assert.Regexp(t, "PD011517", err)
+}

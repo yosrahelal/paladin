@@ -46,7 +46,7 @@ type store struct {
 
 func NewStore(ctx context.Context, conf *flushwriter.Config, p persistence.Persistence) Store {
 	s := &store{}
-	s.writer = flushwriter.NewWriter[*dispatchSequenceOperation, *noResult](ctx, s.runBatch, p, conf, &WriterConfigDefaults)
+	s.writer = flushwriter.NewWriter(ctx, s.runBatch, p, conf, &WriterConfigDefaults)
 	return s
 }
 

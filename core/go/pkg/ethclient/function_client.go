@@ -305,12 +305,16 @@ func (ac *abiFunctionRequestBuilder) TX() *ethsigner.Transaction {
 	return &ac.tx
 }
 
-func (ac *abiFunctionRequestBuilder) BuildCallData() (err error) {
+func (ac *abiFunctionRequestBuilder) validateTo() error {
 	if ac.tx.To != nil && ac.selector == nil {
 		return i18n.NewError(ac.ctx, msgs.MsgEthClientToWithConstructor)
 	} else if ac.tx.To == nil && ac.selector != nil {
 		return i18n.NewError(ac.ctx, msgs.MsgEthClientMissingTo)
 	}
+	return nil
+}
+
+func (ac *abiFunctionRequestBuilder) BuildCallData() (err error) {
 	// Encode the call data
 	inputDataRLP := []byte{}
 	if ac.inputCount > 0 {
@@ -387,28 +391,34 @@ func (ac *abiFunctionRequestBuilder) callOps() []CallOption {
 }
 
 func (ac *abiFunctionRequestBuilder) CallResult() (res CallResult, err error) {
-	if ac.tx.Data == nil {
-		if err := ac.BuildCallData(); err != nil {
-			return res, err
-		}
+	err = ac.validateTo()
+	if err == nil && ac.tx.Data == nil {
+		err = ac.BuildCallData()
+	}
+	if err != nil {
+		return res, err
 	}
 	return ac.ec.CallContract(ac.ctx, ac.fromStr, &ac.tx, ac.block, ac.callOps()...)
 }
 
 func (ac *abiFunctionRequestBuilder) EstimateGas() (res EstimateGasResult, err error) {
-	if ac.tx.Data == nil {
-		if err := ac.BuildCallData(); err != nil {
-			return res, err
-		}
+	err = ac.validateTo()
+	if err == nil && ac.tx.Data == nil {
+		err = ac.BuildCallData()
+	}
+	if err != nil {
+		return res, err
 	}
 	return ac.ec.EstimateGas(ac.ctx, ac.fromStr, &ac.tx, ac.callOps()...)
 }
 
 func (ac *abiFunctionRequestBuilder) RawTransaction() (rawTX tktypes.HexBytes, err error) {
-	if ac.tx.Data == nil {
-		if err := ac.BuildCallData(); err != nil {
-			return nil, err
-		}
+	err = ac.validateTo()
+	if err == nil && ac.tx.Data == nil {
+		err = ac.BuildCallData()
+	}
+	if err != nil {
+		return nil, err
 	}
 	if ac.fromStr == nil {
 		return nil, i18n.NewError(ac.ctx, msgs.MsgEthClientMissingFrom)

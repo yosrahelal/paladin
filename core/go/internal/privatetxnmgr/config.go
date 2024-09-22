@@ -14,7 +14,10 @@
  */
 package privatetxnmgr
 
-import "github.com/kaleido-io/paladin/core/internal/flushwriter"
+import (
+	"github.com/kaleido-io/paladin/core/internal/flushwriter"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+)
 
 type Config struct {
 	Writer       flushwriter.Config `yaml:"writer"`
@@ -27,4 +30,12 @@ type OrchestratorConfig struct {
 	EvaluationInterval      *string `yaml:"evalInterval,omitempty"`
 	PersistenceRetryTimeout *string `yaml:"persistenceRetryTimeout,omitempty"`
 	StaleTimeout            *string `yaml:"staleTimeout,omitempty"`
+}
+
+var orchestratorConfigDefault = OrchestratorConfig{
+	MaxConcurrentProcess:    confutil.P(500),
+	EvaluationInterval:      confutil.P("5m"),
+	PersistenceRetryTimeout: confutil.P("5s"),
+	StaleTimeout:            confutil.P("10m"),
+	MaxPendingEvents:        confutil.P(500),
 }
