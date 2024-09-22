@@ -27,8 +27,9 @@ import (
 
 // public_transactions
 type persistedPubTx struct {
-	From            tktypes.EthAddress       `gorm:"column:from;primaryKey"`
-	Nonce           uint64                   `gorm:"column:nonce;primaryKey"`
+	SignerNonce     string                   `gorm:"column:signer_nonce;primaryKey"`
+	From            tktypes.EthAddress       `gorm:"column:from"`
+	Nonce           uint64                   `gorm:"column:nonce"`
 	Created         tktypes.Timestamp        `gorm:"column:created;autoCreateTime:nano"`
 	Transaction     uuid.UUID                `gorm:"column:transaction"`  // only unique when combined with ResubmitIndex
 	ResubmitIndex   int                      `gorm:"column:resubmit_idx"` // can have multiple public TX under a single paladin TX for resubmits
@@ -38,9 +39,9 @@ type persistedPubTx struct {
 	FixedGasPricing tktypes.RawJSON          `gorm:"column:fixed_gas_pricing"`
 	Value           *tktypes.HexUint256      `gorm:"column:value"`
 	Data            tktypes.HexBytes         `gorm:"column:data"`
-	Completed       bool                     `gorm:"column:completed"` // excluded from processing because it's done (set in DB TX passed into us by receipt processor)
-	Suspended       bool                     `gorm:"column:suspended"` // excluded from processing because it's suspended by user
-	Submissions     []*persistedTxSubmission `gorm:"-"`                // we do the aggregation, not GORM
+	Suspended       bool                     `gorm:"column:suspended"`                                 // excluded from processing because it's suspended by user
+	Completed       *publicCompletion        `gorm:"foreignKey:signer_nonce;references:signer_nonce;"` // excluded from processing because it's done
+	Submissions     []*persistedTxSubmission `gorm:"-"`                                                // we do the aggregation, not GORM
 }
 
 func (ptx *persistedPubTx) getIDString() string {
@@ -50,18 +51,30 @@ func (ptx *persistedPubTx) getIDString() string {
 		ptx.From, ptx.Nonce)
 }
 
-func (ptx *persistedPubTx) buildSignerNonceRef() string {
-	return fmt.Sprintf("%s:%d", ptx.From, ptx.Nonce)
-}
-
 type persistedTxSubmission struct {
-	SignerNonceRef  string            `gorm:"column:signer_nonce_ref;primaryKey"`  // simplifies lookups for us to do the compound key, rather than having two columns
+	SignerNonce     string            `gorm:"column:signer_nonce;primaryKey"`
 	Created         tktypes.Timestamp `gorm:"column:created:autoCreateTime:false"` // we set this as we track the record in memory too
 	TransactionHash tktypes.Bytes32   `gorm:"column:tx_hash"`
 	GasPricing      tktypes.RawJSON   `gorm:"column:gas_pricing"` // no filtering allowed on this field as it's complex JSON gasPrice/maxFeePerGas/maxPriorityFeePerGas calculation
 }
 
+type publicCompletion struct {
+	SignerNonce     string          `gorm:"column:signer_nonce;primaryKey"`
+	TransactionHash tktypes.Bytes32 `gorm:"column:tx_hash"`
+}
+
 func (s *persistedTxSubmission) WriteKey() string {
 	// Just use the from address as the write key, so all submissions on the same signing address get batched together
-	return strings.Split(s.SignerNonceRef, ":")[0]
+	return strings.Split(s.SignerNonce, ":")[0]
+}
+
+type persistedPubTxIDOnly struct {
+	Transaction   uuid.UUID `gorm:"column:transaction"`
+	ResubmitIndex int       `gorm:"column:resubmit_idx"`
+}
+
+type submissionTxReverseLookup struct {
+	TransactionHash tktypes.Bytes32       `gorm:"column:tx_hash"`
+	SignerNonce     string                `gorm:"column:signer_nonce_ref;primaryKey"`
+	PublicTx        *persistedPubTxIDOnly `gorm:"foreignKey:signer_nonce;references:signer_nonce;"`
 }

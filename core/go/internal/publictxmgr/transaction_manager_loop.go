@@ -155,7 +155,8 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 			q := ble.p.DB().
 				WithContext(ctx).
 				Distinct("from").
-				Where("completed IS FALSE").
+				Joins("Completed").
+				Where("Completed__tx_hash IS NULL").
 				Limit(spaces)
 			if len(inFlightSigningAddresses) > 0 {
 				q = q.Where("from NOT IN (?)", inFlightSigningAddresses)

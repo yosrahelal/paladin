@@ -140,8 +140,8 @@ func (imtxs *inMemoryTxState) GetTxID() string {
 	return imtxs.idString
 }
 
-func (imtxs *inMemoryTxState) GetSignerNonceRef() string {
-	return imtxs.mtx.ptx.buildSignerNonceRef()
+func (imtxs *inMemoryTxState) GetSignerNonce() string {
+	return imtxs.mtx.ptx.SignerNonce
 }
 
 func (imtxs *inMemoryTxState) GetParentTransactionID() uuid.UUID {

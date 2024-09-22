@@ -297,7 +297,7 @@ type InMemoryTxStateReadOnly interface {
 	// Note it CANNOT be used to retrieve the transaction from the DB
 	GetTxID() string
 
-	GetSignerNonceRef() string
+	GetSignerNonce() string
 
 	// Return the Paladin transaction this public TX is a child of (might not be unique as resubmits happen)
 	GetParentTransactionID() uuid.UUID

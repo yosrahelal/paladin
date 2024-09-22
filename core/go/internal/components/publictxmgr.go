@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/kaleido-io/paladin/core/internal/filters"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -55,10 +56,16 @@ type PublicTxIDInput struct {
 	ptxapi.PublicTxInput
 }
 
+type PublicTxMatch struct {
+	ptxapi.PublicTxID
+	*blockindexer.IndexedTransaction
+}
+
 type PublicTxManager interface {
 	ManagerLifecycle
 
 	// Synchronous functions that are executed on the callers thread
 	GetTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithID, error)
 	PrepareSubmissionBatch(ctx context.Context, transactions []*PublicTxIDInput) (batch PublicTxBatch, err error)
+	MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransaction) ([]*PublicTxMatch, error)
 }

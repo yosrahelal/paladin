@@ -18,6 +18,7 @@ package publictxmgr
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"sync"
 	"time"
@@ -43,6 +44,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // configurations
@@ -423,9 +425,10 @@ func (ble *pubTxManager) finalizeNonceForPersistedTX(ctx context.Context, ptx *p
 	log.L(ctx).Infof("Creating a new public transaction %s [%d] from=%s nonce=%d (%s)", tx.Transaction, tx.ResubmitIndex, tx.From, tx.Nonce /* number */, tx.Nonce /* hex */)
 	log.L(ctx).Tracef("payload: %+v", tx)
 	return &persistedPubTx{
+		SignerNonce:   fmt.Sprintf("%s:%d", tx.From, tx.Nonce), // having a single key rather than compound key helps us simplify cross-table correlation, particularly for batch lookup
 		From:          tx.From,
-		KeyHandle:     ptx.keyHandle, // TODO: Consider once we have reverse mapping in key manager whether we still need this
 		Nonce:         tx.Nonce.Uint64(),
+		KeyHandle:     ptx.keyHandle, // TODO: Consider once we have reverse mapping in key manager whether we still need this
 		Transaction:   tx.Transaction,
 		ResubmitIndex: tx.ResubmitIndex,
 		To:            tx.To,
@@ -549,14 +552,15 @@ func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, id *ptxa
 		WithContext(ctx).
 		Where("transaction = ?", id.Transaction).
 		Where("resubmit_idx = ?", id.ResubmitIndex).
-		Select("completed").
+		Joins("Completed").
+		Select("Completed__tx_hash").
 		Limit(1).
 		Find(&ptxs).
 		Error
 	if err != nil {
 		return false, err
 	}
-	if len(ptxs) > 0 && ptxs[0].Completed {
+	if len(ptxs) > 0 && ptxs[0].Completed != nil {
 		log.L(ctx).Debugf("CheckTransactionCompleted returned true for %s", ptxs[0].getIDString())
 		return true, nil
 	}
@@ -570,7 +574,8 @@ func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourc
 		WithContext(ctx).
 		Where("from = ?", sourceAddress).
 		Where("to = ?", destinationAddress).
-		Where("completed IS FALSE").
+		Joins("Completed").
+		Where("Completed__tx_hash IS NULL").
 		Where("data IS NULL").
 		Limit(1).
 		Find(&ptxs).
@@ -593,7 +598,7 @@ func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB,
 	}
 	signerNonceRefs := make([]string, len(ptxs))
 	for i, ptx := range ptxs {
-		signerNonceRefs[i] = ptx.buildSignerNonceRef()
+		signerNonceRefs[i] = ptx.SignerNonce
 	}
 	if len(signerNonceRefs) > 0 {
 		allSubs, err := ble.getTransactionSubmissions(ctx, dbTX, signerNonceRefs)
@@ -602,7 +607,7 @@ func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB,
 		}
 		for _, sub := range allSubs {
 			for _, ptx := range ptxs {
-				if sub.SignerNonceRef == ptx.buildSignerNonceRef() {
+				if sub.SignerNonce == ptx.SignerNonce {
 					ptx.Submissions = append(ptx.Submissions, sub)
 				}
 			}
@@ -716,4 +721,66 @@ func (pte *pubTxManager) UpdateSubStatus(ctx context.Context, imtx InMemoryTxSta
 	}
 
 	return nil
+}
+
+func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransaction) ([]*components.PublicTxMatch, error) {
+
+	// Do a DB query in the TX to reverse lookup the TX details we need to match/update the completed status
+	// and return the list that matched (which is very possibly none as we only track transactions submitted
+	// via our node to the network).
+	txiByHash := make(map[tktypes.Bytes32]*blockindexer.IndexedTransaction)
+	txHashes := make([]tktypes.Bytes32, len(itxs))
+	for i, itx := range itxs {
+		txHashes[i] = itx.Hash
+		txiByHash[itx.Hash] = itx
+	}
+	var lookups []*submissionTxReverseLookup
+	err := dbTX.
+		Table("public_submissions").
+		Where("tx_hash IN (?)", txHashes).
+		Joins("PublicTx").
+		Where("PublicTx__transaction IS NOT NULL").
+		Find(&lookups).
+		Error
+	if err != nil {
+		return nil, err
+	}
+
+	// Correlate our results with the inputs to build:
+	// - the result to return so the Paladin tx manager knows the linkage
+	// - the insert we will do in this DB transaction of all the completion records
+	results := make([]*components.PublicTxMatch, len(lookups))
+	completions := make([]*publicCompletion, len(lookups))
+	for i, match := range lookups {
+		txi := txiByHash[match.TransactionHash]
+		results[i] = &components.PublicTxMatch{
+			PublicTxID: ptxapi.PublicTxID{
+				Transaction:   match.PublicTx.Transaction,
+				ResubmitIndex: match.PublicTx.ResubmitIndex,
+			},
+			IndexedTransaction: txi,
+		}
+		completions[i] = &publicCompletion{
+			SignerNonce:     match.SignerNonce,
+			TransactionHash: match.TransactionHash,
+		}
+	}
+
+	if len(completions) > 0 {
+		// We have some contracts to persist
+		err := dbTX.
+			Table("public_completions").
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "signer_nonce"}},
+				DoNothing: true, // immutable
+			}).
+			Create(completions).
+			Error
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return results, nil
+
 }

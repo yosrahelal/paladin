@@ -305,7 +305,8 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			q := oc.p.DB().
 				WithContext(ctx).
 				Table("public_txns").
-				Where("completed IS FALSE").
+				Joins("Completed").
+				Where("Completed__tx_hash IS NULL").
 				Where("suspended IS FALSE").
 				Where("from = ?", oc.signingAddress).
 				Order("nonce").
