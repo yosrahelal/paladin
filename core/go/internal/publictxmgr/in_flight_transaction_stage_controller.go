@@ -340,14 +340,14 @@ func (it *InFlightTransactionStageController) ProduceLatestInFlightStageContext(
 										rsc.StageOutputsToBePersisted.TxUpdates = &BaseTXUpdates{
 											LastSubmit: rsIn.SubmitOutput.SubmissionTime,
 										}
-										log.L(ctx).Debugf("Transaction submitted for tx %s (update=%d,status=%s,hash=%s)", rsc.InMemoryTx.GetTxID(), rsc.StageOutputsToBePersisted.UpdateType, rsc.InMemoryTx.GetStatus(), rsc.InMemoryTx.GetTransactionHash())
+										log.L(ctx).Debugf("Transaction submitted for tx %s (status=%s,hash=%s)", rsc.InMemoryTx.GetTxID(), rsc.InMemoryTx.GetStatus(), rsc.InMemoryTx.GetTransactionHash())
 										rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash = rsc.StageOutput.SubmitOutput.TxHash
 									} else if rsIn.SubmitOutput.SubmissionOutcome == SubmissionOutcomeNonceTooLow {
-										log.L(ctx).Debugf("Nonce too low for tx %s (update=%d,status=%s,hash=%s)", rsc.InMemoryTx.GetTxID(), rsc.StageOutputsToBePersisted.UpdateType, rsc.InMemoryTx.GetStatus(), rsc.InMemoryTx.GetTransactionHash())
+										log.L(ctx).Debugf("Nonce too low for tx %s (status=%s,hash=%s)", rsc.InMemoryTx.GetTxID(), rsc.InMemoryTx.GetStatus(), rsc.InMemoryTx.GetTransactionHash())
 										rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"txHash":"`+rsIn.SubmitOutput.TxHash.String()+`"}`), nil)
 									} else if rsIn.SubmitOutput.SubmissionOutcome == SubmissionOutcomeAlreadyKnown {
 										// nothing to add for persistence, go to the tracking stage
-										log.L(ctx).Debugf("Transaction already known for tx %s (update=%d,status=%s,hash=%s)", rsc.InMemoryTx.GetTxID(), rsc.StageOutputsToBePersisted.UpdateType, rsc.InMemoryTx.GetStatus(), rsc.InMemoryTx.GetTransactionHash())
+										log.L(ctx).Debugf("Transaction already known for tx %s (status=%s,hash=%s)", rsc.InMemoryTx.GetTxID(), rsc.InMemoryTx.GetStatus(), rsc.InMemoryTx.GetTransactionHash())
 									}
 									// did the first submit
 									if rsc.InMemoryTx.GetFirstSubmit() == nil {

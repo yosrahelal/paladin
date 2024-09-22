@@ -283,6 +283,8 @@ type InMemoryTxStateReadOnly interface {
 	GetTransactionHash() *tktypes.Bytes32
 	GetNonce() uint64
 	GetFrom() tktypes.EthAddress
+	GetTo() *tktypes.EthAddress
+	GetValue() *tktypes.HexUint256
 	GetResolvedSigner() *ethclient.ResolvedSigner
 	BuildEthTX() *ethsigner.Transaction
 	GetStatus() BaseTxStatus
@@ -294,6 +296,8 @@ type InMemoryTxStateReadOnly interface {
 	// Returns a generated string from the transaction that can be used as a unique identifier for in-memory processing.
 	// Note it CANNOT be used to retrieve the transaction from the DB
 	GetTxID() string
+
+	GetSignerNonceRef() string
 
 	// Return the Paladin transaction this public TX is a child of (might not be unique as resubmits happen)
 	GetParentTransactionID() uuid.UUID
@@ -382,10 +386,11 @@ func (ctx *RunningStageContext) SetSubStatus(subStatus BaseTxSubStatus) {
 	ctx.SubStatus = subStatus
 }
 
+// This function records that there's updates (in-memory and/or persistence) that are coming from
+// a stage and need the primary routine to flush it into the in-memory model.
 func (ctx *RunningStageContext) SetNewPersistenceUpdateOutput() {
 	if ctx.StageOutputsToBePersisted == nil {
 		ctx.StageOutputsToBePersisted = &RunningStageContextPersistenceOutput{
-			UpdateType: PersistenceUpdateUpdate,
 			InMemoryTx: ctx.InMemoryTx,
 			SubStatus:  ctx.SubStatus,
 			Ctx:        ctx,
@@ -398,7 +403,6 @@ type StatusUpdater interface {
 }
 
 type RunningStageContextPersistenceOutput struct {
-	UpdateType              PersistenceUpdateType
 	InMemoryTx              InMemoryTxStateReadOnly
 	SubStatus               BaseTxSubStatus
 	Ctx                     context.Context
@@ -414,14 +418,6 @@ func (sOut *RunningStageContextPersistenceOutput) UpdateSubStatus(action BaseTxA
 		return p.UpdateSubStatus(sOut.Ctx, sOut.InMemoryTx, sOut.SubStatus, action, info, err, &actionOccurred)
 	})
 }
-
-// UpdateType informs FFTM whether the transaction needs an update to be persisted after this execution of the policy engine
-type PersistenceUpdateType int
-
-const (
-	PersistenceUpdateUpdate PersistenceUpdateType = iota // Instructs that the transaction should be updated in persistence
-	// persistenceUpdateDelete                              // Instructs that the transaction should be removed completely from persistence - not sure it's safe to do so
-)
 
 type OrchestratorContext struct {
 	// input from transaction engine

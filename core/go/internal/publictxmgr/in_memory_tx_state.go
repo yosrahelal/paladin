@@ -140,6 +140,10 @@ func (imtxs *inMemoryTxState) GetTxID() string {
 	return imtxs.idString
 }
 
+func (imtxs *inMemoryTxState) GetSignerNonceRef() string {
+	return imtxs.mtx.ptx.buildSignerNonceRef()
+}
+
 func (imtxs *inMemoryTxState) GetParentTransactionID() uuid.UUID {
 	return imtxs.mtx.ptx.Transaction
 }
@@ -162,6 +166,14 @@ func (imtxs *inMemoryTxState) GetNonce() uint64 {
 
 func (imtxs *inMemoryTxState) GetFrom() tktypes.EthAddress {
 	return imtxs.mtx.ptx.From
+}
+
+func (imtxs *inMemoryTxState) GetTo() *tktypes.EthAddress {
+	return imtxs.mtx.ptx.To
+}
+
+func (imtxs *inMemoryTxState) GetValue() *tktypes.HexUint256 {
+	return imtxs.mtx.ptx.Value
 }
 
 func (imtxs *inMemoryTxState) GetResolvedSigner() *ethclient.ResolvedSigner {

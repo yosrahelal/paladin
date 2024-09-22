@@ -49,9 +49,13 @@ func (ptx *persistedPubTx) getIDString() string {
 		ptx.From, ptx.Nonce)
 }
 
+func (ptx *persistedPubTx) buildSignerNonceRef() string {
+	return fmt.Sprintf("%s:%s", ptx.From, ptx.Nonce)
+}
+
 type persistedTxSubmission struct {
-	SignerNonceRef  string            `gorm:"column:signer_nonce_ref;primaryKey"` // simplifies lookups for us to do the compound key, rather than having two columns
-	Created         tktypes.Timestamp `gorm:"column:created;autoCreateTime:nano"`
+	SignerNonceRef  string            `gorm:"column:signer_nonce_ref;primaryKey"`  // simplifies lookups for us to do the compound key, rather than having two columns
+	Created         tktypes.Timestamp `gorm:"column:created:autoCreateTime:false"` // we set this as we track the record in memory too
 	TransactionHash tktypes.Bytes32   `gorm:"column:tx_hash"`
 	GasPricing      tktypes.RawJSON   `gorm:"column:gas_pricing"` // no filtering allowed on this field as it's complex JSON gasPrice/maxFeePerGas/maxPriorityFeePerGas calculation
 }

@@ -18,7 +18,6 @@ package publictxmgr
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"sync"
 	"time"
@@ -587,7 +586,7 @@ func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB,
 	}
 	signerNonceRefs := make([]string, len(ptxs))
 	for i, ptx := range ptxs {
-		signerNonceRefs[i] = fmt.Sprintf("%s:%s", ptx.From, ptx.Nonce)
+		signerNonceRefs[i] = ptx.buildSignerNonceRef()
 	}
 	if len(signerNonceRefs) > 0 {
 		allSubs, err := ble.getTransactionSubmissions(ctx, dbTX, signerNonceRefs)
@@ -595,9 +594,9 @@ func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB,
 			return nil, err
 		}
 		for _, sub := range allSubs {
-			for _, tx := range ptxs {
-				if sub.SignerNonceRef == fmt.Sprintf("%s:%s", tx.From, tx.Nonce) {
-					tx.Submissions = append(tx.Submissions, sub)
+			for _, ptx := range ptxs {
+				if sub.SignerNonceRef == ptx.buildSignerNonceRef() {
+					ptx.Submissions = append(ptx.Submissions, sub)
 				}
 			}
 		}

@@ -17,6 +17,7 @@ package publictxmgr
 
 import (
 	"context"
+	"encoding/json"
 	"math/big"
 	"sync"
 	"time"
@@ -280,93 +281,95 @@ func (iftxs *inFlightTransactionState) AddPanicOutput(ctx context.Context, stage
 
 func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stage InFlightTxStage, persistenceTime time.Time, err error) {
 	rsc := iftxs.runningStageContext
-	mtx := iftxs.GetTx()
+	mtx := iftxs.InMemoryTxStateManager
 	if rsc == nil || rsc.StageOutputsToBePersisted == nil {
 		log.L(ctx).Error("Cannot persist transaction state, no running context or stageOutputsToBePersisted")
 		return iftxs.stage, time.Now(), i18n.NewError(ctx, msgs.MsgPersistError)
 	}
-	switch rsc.StageOutputsToBePersisted.UpdateType {
-	case PersistenceUpdateUpdate:
-		it := rsc.StageOutputsToBePersisted.ConfirmedTransaction
-		trackedHashes := iftxs.GetSubmittedHashes()
-		var updateConfirmedTx *blockindexer.IndexedTransaction
-		hashAlreadyTracked := false
-		matchFound := false
-		if rsc.StageOutputsToBePersisted.TxUpdates != nil && rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash != nil {
-			newTxHash := *rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash
-			for _, h := range trackedHashes {
-				if h == newTxHash.String() {
-					hashAlreadyTracked = true
-				}
-				if it != nil && h == it.Hash.String() {
-					matchFound = true
-				}
-			}
-			if !hashAlreadyTracked {
-				matchFound = matchFound || newTxHash == it.Hash
-				rsc.StageOutputsToBePersisted.TxUpdates.NewSubmittedHashes = append(trackedHashes[:], newTxHash.String())
-			}
-		}
-		if it != nil || rsc.StageOutputsToBePersisted.MissedConfirmationEvent {
-			if it == nil {
-				err = iftxs.retry.Do(ctx, func(attempt int) (retry bool, err error) {
-					retrievedTx, retryErr := iftxs.bIndexer.GetIndexedTransactionByNonce(ctx, *tktypes.MustEthAddress(string(mtx.From)), mtx.Nonce.Uint64())
-					if retryErr == nil && retrievedTx == nil {
-						// panic("block indexer missed a nonce")
-						// the logic is in a confirmation loop until block indexer indexed the missing transaction
-						return false, i18n.NewError(ctx, msgs.MsgMissingConfirmedTransaction, mtx.ID)
-					}
-					it = retrievedTx
-					return true, retryErr
-				})
-				if err != nil {
-					return rsc.Stage, time.Now(), err
-				}
-			}
-			iftxs.NotifyAddressBalanceChanged(ctx, string(mtx.From))
-			if mtx.Value != nil && mtx.To != nil {
-				iftxs.NotifyAddressBalanceChanged(ctx, mtx.To.String())
-			}
 
-			if matchFound {
-				*rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash = it.Hash
-				updateConfirmedTx = it
-				if it.Result == blockindexer.TXResult_SUCCESS.Enum() {
-					mtx.Status = PubTxStatusSucceeded
-					rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
-					iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusSuccess))
-				} else {
-					mtx.Status = PubTxStatusFailed
-					rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
-					iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusFail))
+	it := rsc.StageOutputsToBePersisted.ConfirmedTransaction
+	if rsc.StageOutputsToBePersisted.TxUpdates != nil && rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash != nil {
+		b, _ := json.Marshal(mtx.GetGasPriceObject())
+		rsc.StageOutputsToBePersisted.TxUpdates.NewSubmission = &persistedTxSubmission{
+			SignerNonceRef:  mtx.GetSignerNonceRef(),
+			Created:         tktypes.TimestampNow(),
+			TransactionHash: *rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash,
+			GasPricing:      b,
+		}
+	}
+	if it != nil || rsc.StageOutputsToBePersisted.MissedConfirmationEvent {
+		if it == nil {
+			err = iftxs.retry.Do(ctx, func(attempt int) (retry bool, err error) {
+				retrievedTx, retryErr := iftxs.bIndexer.GetIndexedTransactionByNonce(ctx, *tktypes.MustEthAddress(string(mtx.From)), mtx.Nonce.Uint64())
+				if retryErr == nil && retrievedTx == nil {
+					// panic("block indexer missed a nonce")
+					// the logic is in a confirmation loop until block indexer indexed the missing transaction
+					return false, i18n.NewError(ctx, msgs.MsgMissingConfirmedTransaction, mtx.GetTxID())
 				}
-			} else {
-				mtx.Status = PubTxStatusConflict
-				rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
-				iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusConflict))
-			}
-			if rsc.SubStatus != BaseTxSubStatusConfirmed {
-				rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionConfirmTransaction, nil, nil)
-				rsc.SetSubStatus(BaseTxSubStatusConfirmed)
-			}
-		}
-		// flush any sub-status changes
-		for _, subStatusUpdate := range rsc.StageOutputsToBePersisted.StatusUpdates {
-			if err := subStatusUpdate(iftxs.statusUpdater); err != nil {
-				return rsc.Stage, time.Now(), err
-			}
-		}
-		if rsc.StageOutputsToBePersisted.TxUpdates != nil {
-			err := iftxs.txStore.UpdateTransaction(ctx, mtx.ID.String(), rsc.StageOutputsToBePersisted.TxUpdates)
+				it = retrievedTx
+				return true, retryErr
+			})
 			if err != nil {
-				log.L(ctx).Errorf("Failed to update transaction %s (status=%s): %+v", mtx.ID, mtx.Status, err)
 				return rsc.Stage, time.Now(), err
 			}
-			// update the in memory state
-			iftxs.ApplyInMemoryUpdates(ctx, rsc.StageOutputsToBePersisted.TxUpdates)
-			if updateConfirmedTx != nil {
-				iftxs.SetConfirmedTransaction(ctx, it)
-			}
+		}
+		iftxs.NotifyAddressBalanceChanged(ctx, mtx.GetFrom())
+		if !mtx.GetValue().NilOrZero() && mtx.GetTo() != nil {
+			iftxs.NotifyAddressBalanceChanged(ctx, *mtx.GetTo())
+		}
+
+		// TODO: These metrics and process should move to where TX completion is being recorded to the DB
+		//    which is the code that will trigger this code with (it != nil).
+		//
+		// if matchFound {
+		// 	*rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash = it.Hash
+		// 	updateConfirmedTx = it
+		// 	if it.Result == blockindexer.TXResult_SUCCESS.Enum() {
+		// 		mtx.Status = PubTxStatusSucceeded
+		// 		rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
+		// 		iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusSuccess))
+		// 	} else {
+		// 		mtx.Status = PubTxStatusFailed
+		// 		rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
+		// 		iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusFail))
+		// 	}
+		// } else {
+		// 	mtx.Status = PubTxStatusConflict
+		// 	rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
+		// 	iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusConflict))
+		// }
+
+		if rsc.SubStatus != BaseTxSubStatusConfirmed {
+			rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionConfirmTransaction, nil, nil)
+			rsc.SetSubStatus(BaseTxSubStatusConfirmed)
+		}
+	}
+	// flush any sub-status changes
+	for _, subStatusUpdate := range rsc.StageOutputsToBePersisted.StatusUpdates {
+		if err := subStatusUpdate(iftxs.statusUpdater); err != nil {
+			return rsc.Stage, time.Now(), err
+		}
+	}
+
+	if rsc.StageOutputsToBePersisted.TxUpdates != nil {
+
+		newSubmission := rsc.StageOutputsToBePersisted.TxUpdates.NewSubmission
+		if newSubmission != nil {
+			// This is the critical point where we must flush to persistence before we go any further - we have a new
+			// transaction record we've signed, and we want to move on to submit it to the blockchain.
+			// But if we do that without first recording the transaction hash, we cannot be sure we will be able
+			// to correlate back and complete the transaction when requested by the blockchain indexer.
+			//
+			// This can be happening on lots of threads at the same time for different transactions,
+			// so we don't want to create an excessive number of DB transactions.
+			// Instead we use a pool of flush-writers that do the insertion in batches.
+			iftxs.TODO
+		}
+
+		// update the in memory state
+		iftxs.ApplyInMemoryUpdates(ctx, rsc.StageOutputsToBePersisted.TxUpdates)
+		if it != nil {
+			iftxs.SetConfirmedTransaction(ctx, it)
 		}
 	}
 	return rsc.Stage, time.Now(), nil
