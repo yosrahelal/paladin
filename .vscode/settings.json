@@ -3,6 +3,7 @@
     "go.lintTool": "golangci-lint",
     "cSpell.words": [],
     "go.testTimeout": "30s",
-    "java.configuration.updateBuildConfiguration": "interactive"
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "go.testTags": "testdbpostgres"
   }
   

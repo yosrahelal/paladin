@@ -1,6 +1,7 @@
 CREATE TABLE abis (
   "hash"                      TEXT            NOT NULL,
   "abi"                       TEXT            NOT NULL,
+  "created"                   BIGINT          NOT NULL,
   PRIMARY KEY ("hash")
 );
 CREATE INDEX abis_created ON abis("created");

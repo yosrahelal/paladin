@@ -308,7 +308,7 @@ func (tm *txManager) queryTransactions(ctx context.Context, jq *query.QueryJSON,
 			// TODO: Join public and private transaction strings
 			if pending {
 				q = q.Joins("TransactionReceipt").
-					Where("TransactionReceipt__transaction IS NULL")
+					Where(`"TransactionReceipt"."transaction" IS NULL`)
 			}
 			return q
 		},
@@ -332,7 +332,7 @@ func (tm *txManager) queryTransactionsFull(ctx context.Context, jq *query.QueryJ
 				Preload("TransactionDeps").
 				Joins("TransactionReceipt")
 			if pending {
-				q = q.Where("TransactionReceipt__transaction IS NULL")
+				q = q.Where(`"TransactionReceipt"."transaction" IS NULL`)
 			}
 			return q
 		},

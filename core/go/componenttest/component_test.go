@@ -24,7 +24,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
@@ -32,13 +31,10 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	pb "github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
 )
@@ -157,26 +153,4 @@ signer:
 	event2 := <-eventStreamEvents
 	assert.JSONEq(t, `{"x":"99887766"}`, string(event2.Data))
 
-}
-
-func newClientForTesting(ctx context.Context, t *testing.T, socketAddress string) (pb.KataMessageServiceClient, func()) {
-	// Create a gRPC client connection
-	conn, err := grpc.NewClient("unix:"+socketAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	require.NoError(t, err)
-	// Create a new instance of the gRPC client
-	client := pb.NewKataMessageServiceClient(conn)
-	status, err := client.Status(ctx, &pb.StatusRequest{})
-
-	delay := 0
-	for !status.GetOk() {
-		time.Sleep(time.Second)
-		delay++
-		status, err = client.Status(ctx, &pb.StatusRequest{})
-		require.Less(t, delay, 5, "Server did not start in expected time")
-	}
-	require.NoError(t, err)
-	assert.True(t, status.GetOk())
-	return client, func() {
-		conn.Close()
-	}
 }

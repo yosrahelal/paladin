@@ -43,6 +43,7 @@ var DefaultTransactionEngineConfig = &TransactionEngineConfig{
 	Interval:                 confutil.P("5s"),
 	MaxStaleTime:             confutil.P("1m"),
 	MaxIdleTime:              confutil.P("10s"),
+	MaxOverloadProcessTime:   confutil.P("10m"),
 	Retry: retry.Config{
 		InitialDelay: confutil.P("250ms"),
 		MaxDelay:     confutil.P("30s"),

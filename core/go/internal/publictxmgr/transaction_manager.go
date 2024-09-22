@@ -122,6 +122,7 @@ func NewPublicTransactionManager(ctx context.Context, conf *Config) components.P
 	return &pubTxManager{
 		ctx:                         ptmCtx,
 		ctxCancel:                   ptmCtxCancel,
+		conf:                        conf,
 		gasPriceClient:              gasPriceClient,
 		InFlightOrchestratorStale:   make(chan bool, 1),
 		SigningAddressesPausedUntil: make(map[tktypes.EthAddress]time.Time),
@@ -129,7 +130,7 @@ func NewPublicTransactionManager(ctx context.Context, conf *Config) components.P
 		maxOverloadProcessTime:      confutil.DurationMin(conf.TransactionEngine.MaxOverloadProcessTime, 0, *DefaultConfig.TransactionEngine.MaxOverloadProcessTime),
 		maxOrchestratorStale:        confutil.DurationMin(conf.TransactionEngine.MaxStaleTime, 0, *DefaultConfig.TransactionEngine.MaxStaleTime),
 		maxOrchestratorIdle:         confutil.DurationMin(conf.TransactionEngine.MaxIdleTime, 0, *DefaultConfig.TransactionEngine.MaxIdleTime),
-		enginePollingInterval:       confutil.DurationMin(conf.TransactionEngine.Interval, 50*time.Millisecond, *conf.TransactionEngine.Interval),
+		enginePollingInterval:       confutil.DurationMin(conf.TransactionEngine.Interval, 50*time.Millisecond, *DefaultConfig.TransactionEngine.Interval),
 		retry:                       retry.NewRetryIndefinite(&conf.TransactionEngine.Retry),
 		gasPriceIncreaseMax:         gasPriceIncreaseMax,
 		gasPriceIncreasePercent:     confutil.Int(conf.GasPrice.IncreasePercentage, *DefaultConfig.GasPrice.IncreasePercentage),

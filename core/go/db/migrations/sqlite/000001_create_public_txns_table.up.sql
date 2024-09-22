@@ -1,22 +1,19 @@
 CREATE TABLE public_txns (
-  created_at                TIMESTAMP       NOT NULL,
-  updated_at                TIMESTAMP       NOT NULL,
-  deleted_at                TIMESTAMP,
-  id                        UUID            NOT NULL, -- TODO: This will become the primay key and not be a UUID
-  contract                  VARCHAR         NOT NULL,
-  "from"                    VARCHAR         NOT NULL,
-  sequence_id               UUID,
-  domain_id                 VARCHAR,
-  schema_id                 VARCHAR,
-  payload_json              VARCHAR,
-  payload_rlp               VARCHAR,
-  assembled_round           BIGINT,
-  attestation_plan          VARCHAR,
-  attestation_results       VARCHAR,
-  pre_req_txs               VARCHAR,
-  dispatch_node             VARCHAR,
-  dispatch_address          VARCHAR,
-  dispatch_tx_id            VARCHAR,
-  dispatch_tx_payload       VARCHAR,
-  confirmed_tx_hash         VARCHAR
+  "signer_nonce"              VARCHAR         NOT NULL,
+  "from"                      VARCHAR         NOT NULL,
+  "nonce"                     BIGINT          NOT NULL,
+  "created_at"                TIMESTAMP       NOT NULL,
+  "transaction"               UUID            NOT NULL,
+  "resubmit_idx"              BIGINT          NOT NULL,
+  "key_handle"                VARCHAR         NOT NULL,
+  "to"                        VARCHAR,
+  "gas"                       BIGINT          NOT NULL,
+  "fixed_gas_pricing"         VARCHAR,
+  "value"                     VARCHAR         NOT NULL,
+  "data"                      VARCHAR,
+  "suspended"                 BOOLEAN         NOT NULL,
+  PRIMARY KEY("signer_nonce")
 );
+
+CREATE UNIQUE INDEX public_txns_from_nonce ON public_txns("from", "nonce");
+CREATE UNIQUE INDEX public_txns_tx_resubmit ON public_txns("transaction", "resubmit_idx");

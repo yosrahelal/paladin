@@ -42,7 +42,6 @@ require (
 require (
 	github.com/aidarkhanov/nanoid v1.0.8 // indirect
 	github.com/alecthomas/repr v0.2.0 // indirect
-	github.com/karlseguin/ccache v2.0.3+incompatible // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 )
 

@@ -103,6 +103,8 @@ func TestInitOK(t *testing.T) {
 	assert.NotNil(t, cm.TransportManager())
 	assert.NotNil(t, cm.RegistryManager())
 	assert.NotNil(t, cm.PluginManager())
+	assert.NotNil(t, cm.PrivateTxManager())
+	assert.NotNil(t, cm.PublicTxManager())
 	assert.NotNil(t, cm.Engine())
 
 	cm.Stop()

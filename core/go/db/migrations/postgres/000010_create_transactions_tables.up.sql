@@ -3,6 +3,7 @@ BEGIN;
 CREATE TABLE abis (
   "hash"                      VARCHAR         NOT NULL,
   "abi"                       VARCHAR         NOT NULL,
+  "created"                   BIGINT          NOT NULL,
   PRIMARY KEY ("hash")
 );
 CREATE INDEX abis_created ON abis("created");
@@ -44,7 +45,7 @@ CREATE INDEX transaction_deps_depends_on ON transaction_deps("depends_on");
 
 CREATE TABLE transaction_receipts (
   "transaction"               UUID            NOT NULL,
-  "indexed_at"                BIGINT          NOT NULL,
+  "indexed"                   BIGINT          NOT NULL,
   "success"                   BOOLEAN         NOT NULL,
   "failure_message"           VARCHAR,
   "revert_data"               VARCHAR,

@@ -32,8 +32,9 @@ import (
 )
 
 type PersistedABI struct {
-	Hash tktypes.Bytes32 `gorm:"column:hash"`
-	ABI  tktypes.RawJSON `gorm:"column:abi"`
+	Hash    tktypes.Bytes32   `gorm:"column:hash"`
+	ABI     tktypes.RawJSON   `gorm:"column:abi"`
+	Created tktypes.Timestamp `gorm:"column:created;autoCreateTime:nano"`
 }
 
 type PersistedABIError struct {
