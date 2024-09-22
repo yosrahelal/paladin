@@ -19,24 +19,23 @@ import (
 	"context"
 	"time"
 
+	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func (it *InFlightTransactionStageController) signTx(ctx context.Context, mtx *ptxapi.PublicTx) ([]byte, string, error) {
-
+func (it *InFlightTransactionStageController) signTx(ctx context.Context, signer *ethclient.ResolvedSigner, ethTx *ethsigner.Transaction) ([]byte, *tktypes.Bytes32, error) {
 	log.L(ctx).Debugf("signTx entry")
 	signStart := time.Now()
-	signedMessage, err := it.ethClient.BuildRawTransaction(ctx, ethclient.EIP1559, string(mtx.From), mtx.Transaction, nil) // TODO: move the logic inside to here as BuildRawTransaction seems to not be a function that should be used.
+	signedMessage, err := it.ethClient.BuildRawTransactionNoResolve(ctx, ethclient.EIP1559, signer, ethTx, nil) // TODO: move the logic inside to here as BuildRawTransaction seems to not be a function that should be used.
 
 	if err != nil {
 		it.thMetrics.RecordOperationMetrics(ctx, string(InFlightTxOperationSign), string(GenericStatusFail), time.Since(signStart).Seconds())
-		return nil, "", err
+		return nil, nil, err
 	}
 	calculatedHash := calculateTransactionHash(signedMessage)
-	log.L(ctx).Debugf("Calculated Hash %s of transaction %s", calculatedHash, mtx.ID)
-	log.L(ctx).Debugf("Successfully signed message Hash %s of transaction %s", calculatedHash, mtx.ID)
+	log.L(ctx).Debugf("Calculated Hash %s of transaction %s:%d", calculatedHash, ethTx.From, ethTx.Nonce.Uint64())
 	it.thMetrics.RecordOperationMetrics(ctx, string(InFlightTxOperationSign), string(GenericStatusSuccess), time.Since(signStart).Seconds())
-	return signedMessage, calculatedHash.String(), err
+	return signedMessage, calculatedHash, err
 }

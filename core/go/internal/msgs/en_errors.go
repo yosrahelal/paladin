@@ -291,6 +291,8 @@ var (
 	MsgErrorMissingSignerID            = ffe("PD011928", "Signer Identifier must be provided")
 	MsgInvalidTransactionType          = ffe("PD011929", "Transaction type invalid")
 	MsgMissingConfirmedTransaction     = ffe("PD011930", "Transaction %s with nonce smaller than the recorded confirmed nonce does not have an indexed transaction.")
+	MsgPublicTxHistoryInfo             = ffe("PD011931", "PubTx[INFO] from=%s nonce=%s subStatus=%s action=%s info=%s")
+	MsgPublicTxHistoryError            = ffe("PD011932", "PubTx[ERROR] from=%s nonce=%s subStatus=%s action=%s error=%s")
 
 	// TransportManager module PD0120XX
 	MsgTransportInvalidMessage                = ffe("PD012000", "Invalid message")

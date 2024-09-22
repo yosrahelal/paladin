@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
@@ -130,7 +131,7 @@ type TransactionHeaders struct {
 }
 
 type BalanceManager interface {
-	TopUpAccount(ctx context.Context, addAccount *AddressAccount) (mtx *ptxapi.PublicTx, err error)
+	TopUpAccount(ctx context.Context, addAccount *AddressAccount) (mtx *ptxapi.PublicTxWithID, err error)
 	IsAutoFuelingEnabled(ctx context.Context) bool
 	GetAddressBalance(ctx context.Context, address tktypes.EthAddress) (*AddressAccount, error)
 	NotifyAddressBalanceChanged(ctx context.Context, address tktypes.EthAddress)
@@ -282,6 +283,8 @@ type InMemoryTxStateReadOnly interface {
 	GetTransactionHash() *tktypes.Bytes32
 	GetNonce() uint64
 	GetFrom() tktypes.EthAddress
+	GetResolvedSigner() *ethclient.ResolvedSigner
+	BuildEthTX() *ethsigner.Transaction
 	GetStatus() BaseTxStatus
 	GetGasPriceObject() *ptxapi.PublicTxGasPricing
 	GetFirstSubmit() *tktypes.Timestamp
@@ -291,6 +294,9 @@ type InMemoryTxStateReadOnly interface {
 	// Returns a generated string from the transaction that can be used as a unique identifier for in-memory processing.
 	// Note it CANNOT be used to retrieve the transaction from the DB
 	GetTxID() string
+
+	// Return the Paladin transaction this public TX is a child of (might not be unique as resubmits happen)
+	GetParentTransactionID() uuid.UUID
 
 	GetGasLimit() uint64
 	IsComplete() bool
@@ -329,7 +335,7 @@ type SubmitOutputs struct {
 }
 type SignOutputs struct {
 	SignedMessage []byte
-	TxHash        string
+	TxHash        *tktypes.Bytes32
 	Err           error
 }
 
@@ -388,7 +394,7 @@ func (ctx *RunningStageContext) SetNewPersistenceUpdateOutput() {
 }
 
 type StatusUpdater interface {
-	UpdateSubStatus(ctx context.Context, txIDStr string, subStatus BaseTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error
+	UpdateSubStatus(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error
 }
 
 type RunningStageContextPersistenceOutput struct {
@@ -405,7 +411,7 @@ type RunningStageContextPersistenceOutput struct {
 func (sOut *RunningStageContextPersistenceOutput) UpdateSubStatus(action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny) {
 	actionOccurred := tktypes.TimestampNow()
 	sOut.StatusUpdates = append(sOut.StatusUpdates, func(p StatusUpdater) error {
-		return p.UpdateSubStatus(sOut.Ctx, sOut.InMemoryTx.GetTxID(), sOut.SubStatus, action, info, err, &actionOccurred)
+		return p.UpdateSubStatus(sOut.Ctx, sOut.InMemoryTx, sOut.SubStatus, action, info, err, &actionOccurred)
 	})
 }
 
@@ -453,7 +459,7 @@ type InFlightTransactionStateManager interface {
 	ProcessStageOutputs(ctx context.Context, processFunction func(stageOutputs []*StageOutput) (unprocessedStageOutputs []*StageOutput))
 	AddPersistenceOutput(ctx context.Context, stage InFlightTxStage, persistenceTime time.Time, err error)
 	AddSubmitOutput(ctx context.Context, txHash *tktypes.Bytes32, submissionTime *tktypes.Timestamp, submissionOutcome SubmissionOutcome, errorReason ethclient.ErrorReason, err error)
-	AddSignOutput(ctx context.Context, signedMessage []byte, txHash string, err error)
+	AddSignOutput(ctx context.Context, signedMessage []byte, txHash *tktypes.Bytes32, err error)
 	AddGasPriceOutput(ctx context.Context, gasPriceObject *ptxapi.PublicTxGasPricing, err error)
 	AddConfirmationsOutput(ctx context.Context, indexedTx *blockindexer.IndexedTransaction)
 	AddPanicOutput(ctx context.Context, stage InFlightTxStage)

@@ -37,10 +37,10 @@ type PublicTxGasPricing struct {
 }
 
 type PublicTxInput struct {
-	From tktypes.EthAddress  `json:"from"`         // unresolved signing account locator (public TX manager will resolve)
-	To   *tktypes.EthAddress `json:"to,omitempty"` // target contract address, or nil for deploy
+	From string              `json:"from"`           // unresolved signing account locator (public TX manager will resolve)
+	To   *tktypes.EthAddress `json:"to,omitempty"`   // target contract address, or nil for deploy
+	Data tktypes.HexBytes    `json:"data,omitempty"` // the pre-encoded calldata
 	PublicTxOptions
-	Data tktypes.HexBytes `json:"data,omitempty"` // the pre-encoded calldata
 }
 
 type PublicTxID struct {
@@ -59,10 +59,17 @@ type PublicTxSubmissionData struct {
 	PublicTxGasPricing
 }
 
-type PublicTx struct {
+type PublicTxWithID struct {
 	PublicTxID
-	PublicTxInput
-	Nonce       tktypes.HexUint64         `json:"nonce"` // unresolved signing account locator (public TX manager will resolve)
+	PublicTx
+}
+
+type PublicTx struct {
+	To          *tktypes.EthAddress       `json:"to,omitempty"`
+	Data        tktypes.HexBytes          `json:"data,omitempty"`
+	From        tktypes.EthAddress        `json:"from"`
+	Nonce       tktypes.HexUint64         `json:"nonce"`
 	Created     tktypes.Timestamp         `json:"created"`
 	Submissions []*PublicTxSubmissionData `json:"submissions,omitempty"`
+	PublicTxOptions
 }

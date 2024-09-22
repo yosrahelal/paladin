@@ -19,10 +19,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 )
 
 type managedTx struct {
@@ -52,7 +55,7 @@ type inMemoryTxState struct {
 	ConfirmedTransaction *blockindexer.IndexedTransaction
 }
 
-func NewInMemoryTxStateManager(ctx context.Context, ptx *persistedPubTx, submissions []*persistedTxSubmission) InMemoryTxStateManager {
+func NewInMemoryTxStateManager(ctx context.Context, ptx *persistedPubTx) InMemoryTxStateManager {
 	imtxs := &inMemoryTxState{
 		mtx: &managedTx{
 			ptx: ptx,
@@ -137,6 +140,10 @@ func (imtxs *inMemoryTxState) GetTxID() string {
 	return imtxs.idString
 }
 
+func (imtxs *inMemoryTxState) GetParentTransactionID() uuid.UUID {
+	return imtxs.mtx.ptx.Transaction
+}
+
 func (imtxs *inMemoryTxState) GetCreatedTime() *tktypes.Timestamp {
 	return &imtxs.mtx.ptx.Created
 }
@@ -155,6 +162,29 @@ func (imtxs *inMemoryTxState) GetNonce() uint64 {
 
 func (imtxs *inMemoryTxState) GetFrom() tktypes.EthAddress {
 	return imtxs.mtx.ptx.From
+}
+
+func (imtxs *inMemoryTxState) GetResolvedSigner() *ethclient.ResolvedSigner {
+	return &ethclient.ResolvedSigner{
+		Address:   imtxs.mtx.ptx.From,
+		KeyHandle: imtxs.mtx.ptx.KeyHandle,
+	}
+}
+
+func (imtxs *inMemoryTxState) BuildEthTX() *ethsigner.Transaction {
+	// Builds the ethereum TX using the latest in-memory information that must have been resolved in previous stages
+	ptx := imtxs.mtx.ptx
+	return buildEthTX(
+		ptx.From,
+		&ptx.Nonce,
+		ptx.To,
+		ptx.Data,
+		&ptxapi.PublicTxOptions{
+			Gas:                (*tktypes.HexUint64)(&ptx.Gas), // fixed in persisted TX
+			Value:              ptx.Value,
+			PublicTxGasPricing: *imtxs.mtx.GasPricing, // variable and calculated in memory
+		},
+	)
 }
 
 func (imtxs *inMemoryTxState) GetFirstSubmit() *tktypes.Timestamp {

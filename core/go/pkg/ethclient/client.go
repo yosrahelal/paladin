@@ -61,7 +61,13 @@ type EthClient interface {
 	CallContractNoResolve(ctx context.Context, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error)
 	CallContract(ctx context.Context, from *string, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error)
 	BuildRawTransaction(ctx context.Context, txVersion EthTXVersion, from string, tx *ethsigner.Transaction, opts ...CallOption) (tktypes.HexBytes, error)
+	BuildRawTransactionNoResolve(ctx context.Context, txVersion EthTXVersion, from *ResolvedSigner, tx *ethsigner.Transaction, opts ...CallOption) (tktypes.HexBytes, error)
 	SendRawTransaction(ctx context.Context, rawTX tktypes.HexBytes) (*tktypes.Bytes32, error)
+}
+
+type ResolvedSigner struct {
+	Address   tktypes.EthAddress
+	KeyHandle string
 }
 
 // Call options affect the behavior of gas estimate and call functions, such as by allowing you to supply
@@ -335,12 +341,16 @@ func (ec *ethClient) BuildRawTransaction(ctx context.Context, txVersion EthTXVer
 	if err != nil {
 		return nil, err
 	}
+	return ec.BuildRawTransactionNoResolve(ctx, txVersion, &ResolvedSigner{Address: *fromAddr, KeyHandle: keyHandle}, tx, opts...)
+}
+
+func (ec *ethClient) BuildRawTransactionNoResolve(ctx context.Context, txVersion EthTXVersion, from *ResolvedSigner, tx *ethsigner.Transaction, opts ...CallOption) (tktypes.HexBytes, error) {
 
 	// Trivial nonce management in the client - just get the current nonce for this key, from the local node mempool, for each TX
 	if tx.Nonce == nil {
-		txNonce, err := ec.GetTransactionCount(ctx, *fromAddr)
+		txNonce, err := ec.GetTransactionCount(ctx, from.Address)
 		if err != nil {
-			log.L(ctx).Errorf("eth_getTransactionCount(%s) failed: %+v", fromAddr, err)
+			log.L(ctx).Errorf("eth_getTransactionCount(%s) failed: %+v", from.Address, err)
 			return nil, err
 		}
 		tx.Nonce = ethtypes.NewHexInteger(big.NewInt(int64(txNonce.Uint64())))
@@ -374,7 +384,7 @@ func (ec *ethClient) BuildRawTransaction(ctx context.Context, txVersion EthTXVer
 	_, _ = hash.Write(sigPayload.Bytes())
 	signature, err := ec.keymgr.Sign(ctx, &proto.SignRequest{
 		Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-		KeyHandle: keyHandle,
+		KeyHandle: from.KeyHandle,
 		Payload:   tktypes.HexBytes(hash.Sum(nil)),
 	})
 	var sig *secp256k1.SignatureData
@@ -393,7 +403,7 @@ func (ec *ethClient) BuildRawTransaction(ctx context.Context, txVersion EthTXVer
 		}
 	}
 	if err != nil {
-		log.L(ctx).Errorf("signing failed with keyHandle %s (addr=%s): %s", keyHandle, fromAddr, err)
+		log.L(ctx).Errorf("signing failed with keyHandle %s (addr=%s): %s", from.KeyHandle, from.Address, err)
 		return nil, err
 	}
 	return rawTX, nil

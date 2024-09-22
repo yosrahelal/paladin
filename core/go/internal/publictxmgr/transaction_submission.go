@@ -25,7 +25,6 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"golang.org/x/crypto/sha3"
 )
@@ -40,11 +39,11 @@ func calculateTransactionHash(rawTxnData []byte) *tktypes.Bytes32 {
 	return &hashBytes
 }
 
-func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx *ptxapi.PublicTx, signedMessage []byte) (*tktypes.Bytes32, *tktypes.Timestamp, ethclient.ErrorReason, SubmissionOutcome, error) {
+func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx InMemoryTxStateReadOnly, signedMessage []byte) (*tktypes.Bytes32, *tktypes.Timestamp, ethclient.ErrorReason, SubmissionOutcome, error) {
 	var txHash *tktypes.Bytes32
 	sendStart := time.Now()
-	calculatedTxHash := calculateTransactionHash(signedMessage)
-	log.L(ctx).Debugf("Sending raw transaction %s at nonce %s / %d (lastSubmit=%s), Hash= %s, Data=%s", mtx.ID, mtx.From, mtx.Nonce.Int64(), mtx.LastSubmit, txHash, mtx.Data)
+	calculatedTxHash := mtx.GetTransactionHash() // must have been persisted in previous stage
+	log.L(ctx).Debugf("Sending raw transaction %s (lastSubmit=%s), Hash=%s", mtx.GetTxID(), mtx.GetLastSubmitTime(), txHash)
 
 	submissionTime := confutil.P(tktypes.TimestampNow())
 	var submissionErrorReason ethclient.ErrorReason // TODO: fix reason parsing
@@ -54,28 +53,24 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 	retryError := it.transactionSubmissionRetry.Do(ctx, func(attempt int) ( /*retry*/ bool, error) {
 		txHash, submissionError = it.ethClient.SendRawTransaction(ctx, tktypes.HexBytes(tktypes.MustParseHexBytes(string(signedMessage)).HexString0xPrefix()))
 		if submissionError == nil {
+			submissionOutcome = SubmissionOutcomeFailedRequiresRetry
 			it.thMetrics.RecordOperationMetrics(ctx, string(InFlightTxOperationTransactionSend), string(GenericStatusSuccess), time.Since(sendStart).Seconds())
 			if txHash != nil {
 				if txHash != nil && calculatedTxHash != nil && txHash.String() != calculatedTxHash.String() {
 					// TODO: Investigate why under high concurrency load with Besu we are triggering this, and the returned hash is for
 					//       a DIFFERENT NONCE that is submitted at an extremely close time.
-					log.L(ctx).Warnf("Received response for transaction %s, but calculated transaction hash %s is different from the response %s.", mtx.ID, calculatedTxHash, txHash)
+					log.L(ctx).Warnf("Received response for transaction %s, but calculated transaction hash %s is different from the response %s.", mtx.GetTxID(), calculatedTxHash, txHash)
 					submissionError = i18n.NewError(ctx, msgs.MsgSubmitFailedWrongHashReturned, calculatedTxHash, txHash)
 					txHash = nil // clear the transaction hash as we are not certain it's correct
-					if attempt <= it.transactionSubmissionRetryCount {
-						return true, submissionError
-					} else {
-						submissionOutcome = SubmissionOutcomeFailedRequiresRetry
-						return false, nil
-					}
+					return true, submissionError
 				} else {
-					log.L(ctx).Debugf("Submitted %s successfully with hash=%s", mtx.ID, txHash)
+					log.L(ctx).Debugf("Submitted %s successfully with hash=%s", mtx.GetTxID(), txHash)
 				}
 			} else {
 				txHash = calculatedTxHash
-				log.L(ctx).Warnf("Received response for transaction %s, no transaction hash from the response, using the calculated transaction hash %s instead.", mtx.ID, txHash)
+				log.L(ctx).Warnf("Received response for transaction %s, no transaction hash from the response, using the calculated transaction hash %s instead.", mtx.GetTxID(), txHash)
 			}
-			log.L(ctx).Infof("Transaction %s at nonce %s / %d submitted. Hash: %s", mtx.ID, mtx.From, mtx.Nonce.Int64(), mtx.TransactionHash)
+			log.L(ctx).Infof("Transaction %s submitted. Hash: %s", mtx.GetTxID(), calculatedTxHash)
 			submissionOutcome = SubmissionOutcomeSubmittedNew
 			return false, nil
 		} else {
@@ -91,18 +86,18 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 				// retry the request without using the oracle immediately as the oracle sometimes set the price too low for the node to accept
 				// this is because each node can set the gas price limit in the config which is independent from other nodes
 				// but a gas oracle typically come up the value based on the data collected from all nodes
-				_ = it.gasPriceClient.DeleteCache(ctx)
+				it.gasPriceClient.DeleteCache(ctx)
 				log.L(ctx).Debug("Underpriced, removed gas price cache")
 				submissionOutcome = SubmissionOutcomeFailedRequiresRetry
 			case ethclient.ErrorReasonTransactionReverted:
 				// transaction could be reverted due to gas estimate too low, clear the cache before try again
-				_ = it.gasPriceClient.DeleteCache(ctx)
+				it.gasPriceClient.DeleteCache(ctx)
 				log.L(ctx).Debug("Transaction reverted, removed gas price cache")
 				submissionOutcome = SubmissionOutcomeFailedRequiresRetry
 			case ethclient.ErrorKnownTransaction:
 				// check mined transaction also returns this error code
 				// KnownTransaction means it's in the mempool
-				log.L(ctx).Debugf("Transaction %s at nonce %s / %d known with hash: %s (previous=%s)", mtx.ID, mtx.From, mtx.Nonce.Int64(), txHash, submissionError)
+				log.L(ctx).Debugf("Transaction %s at nonce %s / %d known with hash: %s (previous=%s)", mtx.GetTxID(), txHash, submissionError)
 				submissionError = nil
 				submissionErrorReason = ""
 				submissionOutcome = SubmissionOutcomeAlreadyKnown
@@ -110,7 +105,7 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 				// NonceTooLow means a transaction with same nonce is already mined, this could mean:
 				//   1. we have a nonce conflict
 				//   2. our transaction is completed and we are waiting for the confirmation
-				log.L(ctx).Debugf("Nonce too low for transaction ID: %s. new transaction hash: %s, recorded transaction hash: %s", mtx.ID, txHash, mtx.TransactionHash)
+				log.L(ctx).Debugf("Nonce too low for transaction ID: %s. new transaction hash: %s, recorded transaction hash: %s", mtx.GetTxID(), txHash, mtx.GetTransactionHash())
 				// otherwise, we revert back to track the old hash
 				submissionError = nil
 				submissionErrorReason = ""

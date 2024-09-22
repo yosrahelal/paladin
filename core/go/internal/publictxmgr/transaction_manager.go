@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
@@ -32,6 +33,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
@@ -74,6 +76,7 @@ type pubTxManager struct {
 	bIndexer  blockindexer.BlockIndexer
 	ethClient ethclient.EthClient
 	keymgr    ethclient.KeyManager
+	rootTxMgr components.TXManager
 	// gas price
 	gasPriceClient GasPriceClient
 
@@ -186,8 +189,8 @@ func (ble *pubTxManager) Stop() {
 
 type preparedTransaction struct {
 	ctx         context.Context
-	tx          *ptxapi.PublicTx
-	sender      *tktypes.EthAddress
+	tx          *ptxapi.PublicTxWithID
+	keyHandle   string
 	rejectError error                 // only if rejected
 	revertData  tktypes.HexBytes      // only if rejected, and was available
 	nsi         NonceAssignmentIntent // only if accepted
@@ -235,7 +238,11 @@ func (pb *preparedTransactionBatch) Completed(ctx context.Context, committed boo
 	}
 }
 
-func (pt *preparedTransaction) TX() *ptxapi.PublicTx {
+func (pt *preparedTransaction) TXID() *ptxapi.PublicTxID {
+	return &pt.tx.PublicTxID
+}
+
+func (pt *preparedTransaction) TXWithNonce() *ptxapi.PublicTxWithID {
 	return pt.tx
 }
 
@@ -247,7 +254,7 @@ func (pt *preparedTransaction) RevertData() tktypes.HexBytes {
 	return pt.revertData
 }
 
-func (ble *pubTxManager) PrepareSubmissionBatch(ctx context.Context, transactions []*ptxapi.PublicTx) (components.PublicTxBatch, error) {
+func (ble *pubTxManager) PrepareSubmissionBatch(ctx context.Context, transactions []*components.PublicTxIDInput) (components.PublicTxBatch, error) {
 	batch := &preparedTransactionBatch{
 		ble:      ble,
 		accepted: make([]components.PublicTxAccepted, 0, len(transactions)),
@@ -279,8 +286,8 @@ func (ble *pubTxManager) PrepareSubmissionBatch(ctx context.Context, transaction
 // A one-and-done submission of a single transaction, used internally by auto-fueling, and demonstrating use of the
 // public transaction interface for the special case of a single transaction that will succeed or fail.
 // Other callers have to handle the Accepted()/Rejected() list to decide what they do for a split result.
-func (ble *pubTxManager) SingleTransactionSubmit(ctx context.Context, transaction *ptxapi.PublicTx) (components.PublicTxAccepted, error) {
-	batch, err := ble.PrepareSubmissionBatch(ctx, []*ptxapi.PublicTx{transaction})
+func (ble *pubTxManager) SingleTransactionSubmit(ctx context.Context, transaction *components.PublicTxIDInput) (components.PublicTxAccepted, error) {
+	batch, err := ble.PrepareSubmissionBatch(ctx, []*components.PublicTxIDInput{transaction})
 	if err != nil {
 		return nil, err
 	}
@@ -302,40 +309,72 @@ func (ble *pubTxManager) SingleTransactionSubmit(ctx context.Context, transactio
 	return batch.Accepted()[0], nil
 }
 
-func (ble *pubTxManager) buildEthTX(tx *ptxapi.PublicTx) *ethsigner.Transaction {
+func buildEthTX(
+	from tktypes.EthAddress,
+	nonce *uint64,
+	to *tktypes.EthAddress,
+	data tktypes.HexBytes,
+	options *ptxapi.PublicTxOptions,
+) *ethsigner.Transaction {
 	ethTx := &ethsigner.Transaction{
-		From:                 json.RawMessage(tktypes.JSONString(tx.From)),
-		To:                   tx.To.Address0xHex(),
-		GasPrice:             (*ethtypes.HexInteger)(tx.GasPrice),
-		MaxPriorityFeePerGas: (*ethtypes.HexInteger)(tx.MaxPriorityFeePerGas),
-		MaxFeePerGas:         (*ethtypes.HexInteger)(tx.MaxFeePerGas),
-		Value:                (*ethtypes.HexInteger)(tx.Value),
-		Data:                 ethtypes.HexBytes0xPrefix(tx.Data),
-		Nonce:                ethtypes.NewHexIntegerU64(tx.Nonce.Uint64()),
+		From:                 json.RawMessage(tktypes.JSONString(from)),
+		To:                   to.Address0xHex(),
+		GasPrice:             (*ethtypes.HexInteger)(options.GasPrice),
+		MaxPriorityFeePerGas: (*ethtypes.HexInteger)(options.MaxPriorityFeePerGas),
+		MaxFeePerGas:         (*ethtypes.HexInteger)(options.MaxFeePerGas),
+		Value:                (*ethtypes.HexInteger)(options.Value),
+		Data:                 ethtypes.HexBytes0xPrefix(data),
 	}
-	if tx.Gas != nil {
-		ethTx.GasLimit = ethtypes.NewHexIntegerU64(tx.Gas.Uint64())
+	if nonce != nil {
+		ethTx.Nonce = ethtypes.NewHexIntegerU64(*nonce)
+	}
+	if options.Gas != nil {
+		ethTx.GasLimit = ethtypes.NewHexIntegerU64(options.Gas.Uint64())
 	}
 	return ethTx
 }
 
 // PrepareSubmission prepares and validates the transaction input data so that a later call to
 // Submit can be made in the middle of a wider database transaction with minimal risk of error
-func (ble *pubTxManager) prepareSubmission(ctx context.Context, tx *ptxapi.PublicTx) (preparedSubmission *preparedTransaction, err error) {
-	log.L(ctx).Tracef("PrepareSubmission transaction: %+v", tx)
+func (ble *pubTxManager) prepareSubmission(ctx context.Context, txi *components.PublicTxIDInput) (preparedSubmission *preparedTransaction, err error) {
+	log.L(ctx).Tracef("PrepareSubmission transaction: %+v", txi)
+
+	pt := &preparedTransaction{
+		tx: &ptxapi.PublicTxWithID{
+			PublicTxID: txi.PublicTxID,
+			PublicTx: ptxapi.PublicTx{
+				To:              txi.To,
+				Data:            txi.Data,
+				PublicTxOptions: txi.PublicTxOptions,
+			},
+		},
+	}
+
+	var fromAddr *tktypes.EthAddress
+	keyHandle, fromAddrString, err := ble.keymgr.ResolveKey(ctx, txi.From, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	if err == nil {
+		fromAddr, err = tktypes.ParseEthAddress(fromAddrString)
+	}
+	if err != nil {
+		return nil, err
+	}
+	pt.keyHandle = keyHandle
+	pt.tx.From = *fromAddr
 
 	prepareStart := time.Now()
 	var txType InFlightTxOperation
 
-	pt := &preparedTransaction{
-		tx: tx,
-	}
-
 	rejected := false
-	if tx.Gas == nil || *tx.Gas == 0 {
-		gasEstimateResult, err := ble.ethClient.EstimateGasNoResolve(ctx, ble.buildEthTX(tx))
+	if pt.tx.Gas == nil || *pt.tx.Gas == 0 {
+		gasEstimateResult, err := ble.ethClient.EstimateGasNoResolve(ctx, buildEthTX(
+			*fromAddr,
+			nil, /* nonce not assigned at this point */
+			pt.tx.To,
+			pt.tx.Data,
+			&pt.tx.PublicTxOptions,
+		))
 		if err != nil {
-			log.L(ctx).Errorf("HandleNewTx <%s> error estimating gas for transaction: %+v, request: (%+v)", txType, err, tx)
+			log.L(ctx).Errorf("HandleNewTx <%s> error estimating gas for transaction: %+v, request: (%+v)", txType, err, pt.tx)
 			ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusFail), time.Since(prepareStart).Seconds())
 			if ethclient.MapSubmissionRejected(err) {
 				// transaction is rejected, so no nonce will be assigned - but we have not failed in our task
@@ -348,23 +387,23 @@ func (ble *pubTxManager) prepareSubmission(ctx context.Context, tx *ptxapi.Publi
 			}
 			return nil, err
 		}
-		tx.Gas = &gasEstimateResult.GasLimit
-		log.L(ctx).Tracef("HandleNewTx <%s> using the estimated gas limit %s for transaction: %+v", txType, tx.Gas, tx)
+		pt.tx.Gas = &gasEstimateResult.GasLimit
+		log.L(ctx).Tracef("HandleNewTx <%s> using the estimated gas limit %s for transaction: %+v", txType, pt.tx.Gas, pt.tx)
 	} else {
-		log.L(ctx).Tracef("HandleNewTx <%s> using the provided gas limit %s for transaction: %+v", txType, tx.Gas, tx)
+		log.L(ctx).Tracef("HandleNewTx <%s> using the provided gas limit %s for transaction: %+v", txType, pt.tx.Gas, pt.tx)
 	}
 
 	if !rejected {
-		pt.nsi, err = ble.nonceManager.IntentToAssignNonce(ctx, tx.From)
+		pt.nsi, err = ble.nonceManager.IntentToAssignNonce(ctx, pt.tx.From)
 		if err != nil {
-			log.L(ctx).Errorf("HandleNewTx <%s> error assigning nonce for transaction: %+v, request: (%+v)", txType, err, tx)
+			log.L(ctx).Errorf("HandleNewTx <%s> error assigning nonce for transaction: %+v, request: (%+v)", txType, err, pt.tx)
 			ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusFail), time.Since(prepareStart).Seconds())
 			return nil, err
 		}
 	}
 
 	ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusSuccess), time.Since(prepareStart).Seconds())
-	log.L(ctx).Debugf("HandleNewTx <%s> transaction validated and nonce assignment intent created for %s", txType, tx.From)
+	log.L(ctx).Debugf("HandleNewTx <%s> transaction validated and nonce assignment intent created for %s", txType, pt.tx.From)
 	return pt, nil
 
 }
@@ -381,6 +420,7 @@ func (ble *pubTxManager) finalizeNonceForPersistedTX(ctx context.Context, ptx *p
 	log.L(ctx).Tracef("payload: %+v", tx)
 	return &persistedPubTx{
 		From:          tx.From,
+		KeyHandle:     ptx.keyHandle, // TODO: Consider once we have reverse mapping in key manager whether we still need this
 		Nonce:         tx.Nonce.Uint64(),
 		Transaction:   tx.Transaction,
 		ResubmitIndex: tx.ResubmitIndex,
@@ -479,13 +519,13 @@ func recoverGasPriceOptions(gpoJSON tktypes.RawJSON) (ptgp ptxapi.PublicTxGasPri
 	return
 }
 
-func (ble *pubTxManager) GetTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTx, error) {
+func (ble *pubTxManager) GetTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithID, error) {
 	q := filters.BuildGORM(ctx, jq, dbTX.Table("public_txns").WithContext(ctx), components.PublicTxFilterFields)
 	ptxs, err := ble.runTransactionQuery(ctx, dbTX, q)
 	if err != nil {
 		return nil, err
 	}
-	results := make([]*ptxapi.PublicTx, len(ptxs))
+	results := make([]*ptxapi.PublicTxWithID, len(ptxs))
 	for iTx, ptx := range ptxs {
 		tx := mapPersistedTransaction(ptx)
 		tx.Submissions = make([]*ptxapi.PublicTxSubmissionData, len(ptx.Submissions))
@@ -519,7 +559,7 @@ func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, id *ptxa
 }
 
 // the return does NOT include submissions (only the top level TX data)
-func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourceAddress tktypes.EthAddress, destinationAddress tktypes.EthAddress) (*ptxapi.PublicTx, error) {
+func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourceAddress tktypes.EthAddress, destinationAddress tktypes.EthAddress) (*ptxapi.PublicTxWithID, error) {
 	var ptxs []*persistedPubTx
 	err := ble.p.DB().
 		WithContext(ctx).
@@ -565,24 +605,24 @@ func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB,
 	return ptxs, nil
 }
 
-func mapPersistedTransaction(ptx *persistedPubTx) *ptxapi.PublicTx {
-	return &ptxapi.PublicTx{
+func mapPersistedTransaction(ptx *persistedPubTx) *ptxapi.PublicTxWithID {
+	return &ptxapi.PublicTxWithID{
 		PublicTxID: ptxapi.PublicTxID{
 			Transaction:   ptx.Transaction,
 			ResubmitIndex: ptx.ResubmitIndex,
 		},
-		PublicTxInput: ptxapi.PublicTxInput{
-			From: ptx.From,
-			To:   ptx.To,
+		PublicTx: ptxapi.PublicTx{
+			From:    ptx.From,
+			Nonce:   tktypes.HexUint64(ptx.Nonce),
+			Created: ptx.Created,
+			To:      ptx.To,
+			Data:    ptx.Data,
 			PublicTxOptions: ptxapi.PublicTxOptions{
 				Gas:                (*tktypes.HexUint64)(&ptx.Gas),
 				Value:              ptx.Value,
 				PublicTxGasPricing: recoverGasPriceOptions(ptx.FixedGasPricing),
 			},
-			Data: ptx.Data,
 		},
-		Nonce:   tktypes.HexUint64(ptx.Nonce),
-		Created: ptx.Created,
 	}
 }
 
@@ -606,7 +646,8 @@ func (ble *pubTxManager) getTransactionSubmissions(ctx context.Context, dbTX *go
 }
 
 func (ble *pubTxManager) SuspendTransactionsForID(ctx context.Context, txID uuid.UUID) error {
-	txns, err := ble.GetTransactions(ctx, ble.p.DB(), query.NewQueryBuilder().Equal("transaction", txID).Query())
+	db := ble.p.DB()
+	txns, err := ble.runTransactionQuery(ctx, db, db.Table("public_txns").Where(`"transaction" = ?`, txID))
 	if err != nil {
 		return err
 	}
@@ -619,7 +660,8 @@ func (ble *pubTxManager) SuspendTransactionsForID(ctx context.Context, txID uuid
 }
 
 func (ble *pubTxManager) ResumeTransactionsForID(ctx context.Context, txID uuid.UUID) error {
-	txns, err := ble.GetTransactions(ctx, ble.p.DB(), query.NewQueryBuilder().Equal("transaction", txID).Query())
+	db := ble.p.DB()
+	txns, err := ble.runTransactionQuery(ctx, db, db.Table("public_txns").Where(`"transaction" = ?`, txID))
 	if err != nil {
 		return err
 	}
@@ -639,4 +681,33 @@ func (pte *pubTxManager) notifyConfirmedTxNonce(addr tktypes.EthAddress, nonce u
 	if orchestrator != nil {
 		orchestrator.notifyConfirmedNonceOrchestrator(nonce)
 	}
+}
+
+func (pte *pubTxManager) UpdateSubStatus(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
+	// TODO: Choose after testing the right way to treat these records - if text is right or not
+	if err == nil {
+		pte.rootTxMgr.AddActivityRecord(imtx.GetParentTransactionID(),
+			i18n.ExpandWithCode(ctx,
+				i18n.MessageKey(msgs.MsgPublicTxHistoryInfo),
+				imtx.GetFrom(),
+				imtx.GetNonce(),
+				subStatus,
+				action,
+				info.String(),
+			),
+		)
+	} else {
+		pte.rootTxMgr.AddActivityRecord(imtx.GetParentTransactionID(),
+			i18n.ExpandWithCode(ctx,
+				i18n.MessageKey(msgs.MsgPublicTxHistoryError),
+				imtx.GetFrom(),
+				imtx.GetNonce(),
+				subStatus,
+				action,
+				err,
+			),
+		)
+	}
+
+	return nil
 }

@@ -20,11 +20,10 @@ import (
 	"time"
 
 	"github.com/kaleido-io/paladin/core/internal/cache"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 const (
@@ -110,9 +109,9 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 	defer ble.InFlightOrchestratorMux.Unlock()
 
 	oldInFlight := ble.InFlightOrchestrators
-	ble.InFlightOrchestrators = make(map[string]*orchestrator)
+	ble.InFlightOrchestrators = make(map[tktypes.EthAddress]*orchestrator)
 
-	InFlightSigningAddresses := make([]string, 0, len(oldInFlight))
+	inFlightSigningAddresses := make([]tktypes.EthAddress, 0, len(oldInFlight))
 
 	stateCounts := make(map[string]int)
 	for _, sName := range AllOrchestratorStates {
@@ -133,7 +132,7 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 			ble.InFlightOrchestrators[signingAddress] = oc
 			oc.MarkInFlightTxStale()
 			stateCounts[string(oc.state)] = stateCounts[string(oc.state)] + 1
-			InFlightSigningAddresses = append(InFlightSigningAddresses, signingAddress)
+			inFlightSigningAddresses = append(inFlightSigningAddresses, signingAddress)
 		} else {
 			log.L(ctx).Infof("Engine removed orchestrator for signing address %s", signingAddress)
 		}
@@ -149,40 +148,40 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 			if time.Now().Before(pausedUntil) {
 				log.L(ctx).Debugf("Engine excluded orchestrator for signing address %s from polling as it's paused util %s", signingAddress, pausedUntil.String())
 				stateCounts[string(OrchestratorStatePaused)] = stateCounts[string(OrchestratorStatePaused)] + 1
-				InFlightSigningAddresses = append(InFlightSigningAddresses, signingAddress)
+				inFlightSigningAddresses = append(inFlightSigningAddresses, signingAddress)
 			}
 		}
 
-		var additionalTxFromNonInFlightSigners []*ptxapi.PublicTx
+		var additionalNonInFlightSigners []tktypes.EthAddress
 		// We retry the get from persistence indefinitely (until the context cancels)
-		err := ble.retry.Do(ctx, "get pending transactions with non InFlight signing addresses", func(attempt int) (retry bool, err error) {
-			tf := &components.PubTransactionQueries{
-				InStatus: []string{string(PubTxStatusPending)},
-				Sort:     confutil.P("sequence"),
-				Limit:    &spaces,
+		err := ble.retry.Do(ctx, func(attempt int) (retry bool, err error) {
+			// TODO: Fairness algorithm for swapping out orchestrators when there is no space
+			q := ble.p.DB().
+				WithContext(ctx).
+				Distinct("from").
+				Where("completed IS FALSE").
+				Limit(spaces)
+			if len(inFlightSigningAddresses) > 0 {
+				q = q.Where("from NOT IN (?)", inFlightSigningAddresses)
 			}
-			if len(InFlightSigningAddresses) > 0 {
-				tf.NotFrom = InFlightSigningAddresses
-			}
-			additionalTxFromNonInFlightSigners, err = ble.txStore.ListTransactions(ctx, tf)
-			return true, err
+			return true, q.Pluck("from", additionalNonInFlightSigners).Error
 		})
 		if err != nil {
 			log.L(ctx).Infof("Engine polling context cancelled while retrying")
 			return -1, len(ble.InFlightOrchestrators)
 		}
 
-		log.L(ctx).Debugf("Engine polled %d items to fill in %d empty slots.", len(additionalTxFromNonInFlightSigners), spaces)
+		log.L(ctx).Debugf("Engine polled %d items to fill in %d empty slots.", len(additionalNonInFlightSigners), spaces)
 
-		for _, mtx := range additionalTxFromNonInFlightSigners {
-			if _, exist := ble.InFlightOrchestrators[string(mtx.From)]; !exist {
-				oc := NewOrchestrator(ble, string(mtx.From), ble.orchestratorConfig)
-				ble.InFlightOrchestrators[string(mtx.From)] = oc
+		for _, from := range additionalNonInFlightSigners {
+			if _, exist := ble.InFlightOrchestrators[from]; !exist {
+				oc := NewOrchestrator(ble, from, ble.conf)
+				ble.InFlightOrchestrators[from] = oc
 				stateCounts[string(oc.state)] = stateCounts[string(oc.state)] + 1
 				_, _ = oc.Start(ble.ctx)
-				log.L(ctx).Infof("Engine added orchestrator for signing address %s", mtx.From)
+				log.L(ctx).Infof("Engine added orchestrator for signing address %s", from)
 			} else {
-				log.L(ctx).Warnf("Engine fetched extra transactions from signing address %s", mtx.From)
+				log.L(ctx).Warnf("Engine fetched extra transactions from signing address %s", from)
 			}
 		}
 		total = len(ble.InFlightOrchestrators)

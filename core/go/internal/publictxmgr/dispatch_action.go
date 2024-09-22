@@ -17,13 +17,11 @@ package publictxmgr
 
 import (
 	"context"
-	"net/http"
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 )
 
 type APIRequestType int
@@ -33,17 +31,17 @@ const (
 	ActionResume
 )
 
-func (pte *pubTxManager) persistSuspendedFlag(ctx context.Context, txID *ptxapi.PublicTxID, suspended bool) error {
-	log.L(ctx).Infof("Setting suspend status to '%t' for transaction %s:%d", suspended, txID.Transaction, txID.ResubmitIndex)
+func (pte *pubTxManager) persistSuspendedFlag(ctx context.Context, ptx *persistedPubTx, suspended bool) error {
+	log.L(ctx).Infof("Setting suspend status to '%t' for transaction %s:%d", suspended, ptx.Transaction, ptx.ResubmitIndex)
 	return pte.p.DB().
 		WithContext(ctx).
 		UpdateColumn("suspended", suspended).
-		Where("transaction = ?", txID.Transaction).
-		Where("resubmit_idx = ?", txID.ResubmitIndex).
+		Where("transaction = ?", ptx.Transaction).
+		Where("resubmit_idx = ?", ptx.ResubmitIndex).
 		Error
 }
 
-func (pte *pubTxManager) dispatchAction(ctx context.Context, tx *ptxapi.PublicTx, action APIRequestType) error {
+func (pte *pubTxManager) dispatchAction(ctx context.Context, ptx *persistedPubTx, action APIRequestType) error {
 	response := make(chan error, 1)
 	startTime := time.Now()
 	go func() {
@@ -56,12 +54,13 @@ func (pte *pubTxManager) dispatchAction(ctx context.Context, tx *ptxapi.PublicTx
 				suspended = true
 			}
 			// Just update the DB directly, as we're not inflight right now.
-			inFlightOrchestrator, orchestratorInFlight := pte.InFlightOrchestrators[tx.From]
+			inFlightOrchestrator, orchestratorInFlight := pte.InFlightOrchestrators[ptx.From]
 			if !orchestratorInFlight {
 				// no in-flight orchestrator for the signing address, it's OK to update the DB directly
-				response <- pte.persistSuspendedFlag(ctx, &tx.PublicTxID, suspended)
+				response <- pte.persistSuspendedFlag(ctx, ptx, suspended)
 			} else {
-				inFlightOrchestrator.dispatchAction(ctx, tx, action, response)
+				// has to be done in the context of the orchestrator
+				inFlightOrchestrator.dispatchAction(ctx, ptx, action, response)
 			}
 		}
 	}()
@@ -74,61 +73,28 @@ func (pte *pubTxManager) dispatchAction(ctx context.Context, tx *ptxapi.PublicTx
 	}
 }
 
-func (oc *orchestrator) dispatchAction(ctx context.Context, mtx *ptxapi.PublicTx, action APIRequestType, response chan<- error) {
+func (oc *orchestrator) dispatchAction(ctx context.Context, ptx *persistedPubTx, action APIRequestType, response chan<- error) {
 	switch action {
 	case ActionSuspend, ActionResume:
 		oc.InFlightTxsMux.Lock()
 		defer oc.InFlightTxsMux.Unlock()
 		var pending *InFlightTransactionStageController
 		for _, inflight := range oc.InFlightTxs {
-			if inflight.stateManager.GetTxID() == mtx.ID {
+			if inflight.stateManager.GetTxID() == ptx.getIDString() {
 				pending = inflight
 				break
 			}
 		}
-		newStatus := PubTxStatusPending
-		if action == ActionSuspend {
-			newStatus = PubTxStatusSuspended
-		}
-		if pending == nil {
-			// transaction not in flight yet, update the DB directly and tell the engine to not pick up the transaction until we completed
-			oc.transactionIDsInStatusUpdate = append(oc.transactionIDsInStatusUpdate, mtx.ID.String())
-			go func() {
-				defer func() {
-					oc.InFlightTxsMux.Lock()
-					defer oc.InFlightTxsMux.Unlock()
-					newTransactionIDsInStatusUpdate := make([]string, 0, len(oc.transactionIDsInStatusUpdate)-1)
-					for _, txID := range oc.transactionIDsInStatusUpdate {
-						if txID != mtx.ID.String() {
-							newTransactionIDsInStatusUpdate = append(newTransactionIDsInStatusUpdate, txID)
-						}
-					}
-					oc.transactionIDsInStatusUpdate = newTransactionIDsInStatusUpdate
-				}()
-				log.L(ctx).Debugf("Setting status to '%s' for transaction %s", newStatus, mtx.ID)
-				err := oc.txStore.UpdateTransaction(ctx, mtx.ID.String(), &BaseTXUpdates{
-					Status: &newStatus,
-				})
-				if err != nil {
-					response <- APIResponse{err: err}
-					return
+		if pending != nil {
+			switch action {
+			case ActionSuspend, ActionResume:
+				pending.pauseRequested = false
+				if action == ActionSuspend {
+					pending.pauseRequested = false
 				}
-				mtx.Status = newStatus
-				response <- APIResponse{tx: mtx, status: http.StatusOK}
-			}()
-		} else {
-			asyncUpdateRequired, err := pending.NotifyStatusUpdate(ctx, &newStatus)
-			if err != nil {
-				response <- APIResponse{err: err}
-				return
+				// Ok we've now got the lock that means we can write to the DB
+				response <- oc.persistSuspendedFlag(ctx, ptx, pending.pauseRequested)
 			}
-			if asyncUpdateRequired {
-				response <- APIResponse{tx: mtx, status: http.StatusAccepted}
-				return
-			}
-			response <- APIResponse{tx: mtx, status: http.StatusOK}
 		}
-
 	}
-
 }

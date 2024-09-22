@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -57,13 +58,14 @@ type inFlightTransactionState struct {
 	validatedTransactionHashMatchState bool
 
 	// the current stage of this inflight transaction
-	turnOffHistory        bool
 	stage                 InFlightTxStage
 	txLevelStageStartTime time.Time
 	stageTriggerError     error
 
 	bufferedStageOutputsMux sync.Mutex
 	bufferedStageOutputs    []*StageOutput
+
+	statusUpdater StatusUpdater
 }
 
 func (iftxs *inFlightTransactionState) CanSubmit(ctx context.Context, cost *big.Int) bool {
@@ -182,7 +184,7 @@ func NewInFlightTransactionStateManager(thm PublicTxManagerMetricsManager,
 	ifsat InFlightStageActionTriggers,
 	imtxs InMemoryTxStateManager,
 	retry *retry.Retry,
-	turnOffHistory bool,
+	statusUpdater StatusUpdater,
 	noEventMode bool,
 ) InFlightTransactionStateManager {
 	return &inFlightTransactionState{
@@ -195,7 +197,6 @@ func NewInFlightTransactionStateManager(thm PublicTxManagerMetricsManager,
 		bufferedStageOutputs:          make([]*StageOutput, 0),
 		txLevelStageStartTime:         time.Now(),
 		InMemoryTxStateManager:        imtxs,
-		turnOffHistory:                turnOffHistory,
 	}
 }
 
@@ -217,11 +218,10 @@ func (iftxs *inFlightTransactionState) CanBeRemoved(ctx context.Context) bool {
 
 func (iftxs *inFlightTransactionState) AddSubmitOutput(ctx context.Context, txHash *tktypes.Bytes32, submissionTime *tktypes.Timestamp, submissionOutcome SubmissionOutcome, errorReason ethclient.ErrorReason, err error) {
 	start := time.Now()
-	log.L(ctx).Debugf("%s Setting submit output, hash %s, submissionOutcome: %s, errReason: %s, err %+v", iftxs.InMemoryTxStateManager.GetTxID(), txHash, submissionOutcome, errorReason, err)
+	log.L(ctx).Debugf("%s Setting submit output, submissionOutcome: %s, errReason: %s, err %+v", iftxs.InMemoryTxStateManager.GetTxID(), submissionOutcome, errorReason, err)
 	iftxs.AddStageOutputs(ctx, &StageOutput{
 		Stage: InFlightTxStageSubmitting,
 		SubmitOutput: &SubmitOutputs{
-			TxHash:            txHash,
 			SubmissionTime:    submissionTime,
 			SubmissionOutcome: submissionOutcome,
 			ErrorReason:       string(errorReason),
@@ -231,7 +231,7 @@ func (iftxs *inFlightTransactionState) AddSubmitOutput(ctx context.Context, txHa
 	log.L(ctx).Debugf("%s AddSubmitOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetTxID(), time.Since(start))
 }
 
-func (iftxs *inFlightTransactionState) AddSignOutput(ctx context.Context, signedMessage []byte, txHash string, err error) {
+func (iftxs *inFlightTransactionState) AddSignOutput(ctx context.Context, signedMessage []byte, txHash *tktypes.Bytes32, err error) {
 	start := time.Now()
 	log.L(ctx).Debugf("%s Setting signed message, hash %s, signed message not nil %t, err %+v", iftxs.InMemoryTxStateManager.GetTxID(), txHash, signedMessage != nil, err)
 	iftxs.AddStageOutputs(ctx, &StageOutput{
@@ -244,7 +244,8 @@ func (iftxs *inFlightTransactionState) AddSignOutput(ctx context.Context, signed
 	})
 	log.L(ctx).Debugf("%s AddSignOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetTxID(), time.Since(start))
 }
-func (iftxs *inFlightTransactionState) AddGasPriceOutput(ctx context.Context, gasPriceObject *GasPriceObject, err error) {
+
+func (iftxs *inFlightTransactionState) AddGasPriceOutput(ctx context.Context, gasPriceObject *ptxapi.PublicTxGasPricing, err error) {
 	start := time.Now()
 	iftxs.AddStageOutputs(ctx, &StageOutput{
 		Stage: InFlightTxStageRetrieveGasPrice,
@@ -349,12 +350,10 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 				rsc.SetSubStatus(BaseTxSubStatusConfirmed)
 			}
 		}
-		if !iftxs.turnOffHistory {
-			// flush any sub-status changes
-			for _, historyUpdate := range rsc.StageOutputsToBePersisted.HistoryUpdates {
-				if err := historyUpdate(iftxs.txStore); err != nil {
-					return rsc.Stage, time.Now(), err
-				}
+		// flush any sub-status changes
+		for _, subStatusUpdate := range rsc.StageOutputsToBePersisted.StatusUpdates {
+			if err := subStatusUpdate(iftxs.statusUpdater); err != nil {
+				return rsc.Stage, time.Now(), err
 			}
 		}
 		if rsc.StageOutputsToBePersisted.TxUpdates != nil {

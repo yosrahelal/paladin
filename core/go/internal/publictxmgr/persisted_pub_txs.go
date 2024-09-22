@@ -31,6 +31,7 @@ type persistedPubTx struct {
 	Created         tktypes.Timestamp        `gorm:"column:created;autoCreateTime:nano"`
 	Transaction     uuid.UUID                `gorm:"column:transaction"`  // only unique when combined with ResubmitIndex
 	ResubmitIndex   int                      `gorm:"column:resubmit_idx"` // can have multiple public TX under a single paladin TX for resubmits
+	KeyHandle       string                   `gorm:"column:key_handle"`   // TODO: might need to revisit storing this once we have reverse lookup in the keymanager by address
 	To              *tktypes.EthAddress      `gorm:"column:to"`
 	Gas             uint64                   `gorm:"column:gas"`
 	FixedGasPricing tktypes.RawJSON          `gorm:"column:fixed_gas_pricing"`

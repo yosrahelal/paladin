@@ -61,7 +61,7 @@ type GasPriceClient interface {
 	SetFixedGasPriceIfConfigured(ctx context.Context, ethTx *ethsigner.Transaction)
 	GetFixedGasPriceJSON(ctx context.Context) (gasPrice *fftypes.JSONAny)
 	ParseGasPriceJSON(ctx context.Context, input *fftypes.JSONAny) (gpo *ptxapi.PublicTxGasPricing, err error)
-	GasPriceObject(ctx context.Context) (gasPrice *ptxapi.PublicTxGasPricing, err error)
+	GetGasPriceObject(ctx context.Context) (gasPrice *ptxapi.PublicTxGasPricing, err error)
 	Init(ctx context.Context, cAPI ethclient.EthClient)
 }
 
@@ -101,7 +101,7 @@ func (hGpc *HybridGasPriceClient) SetFixedGasPriceIfConfigured(ctx context.Conte
 	}
 }
 
-func (hGpc *HybridGasPriceClient) GasPriceObject(ctx context.Context) (gasPrice *ptxapi.PublicTxGasPricing, err error) {
+func (hGpc *HybridGasPriceClient) GetGasPriceObject(ctx context.Context) (gasPrice *ptxapi.PublicTxGasPricing, err error) {
 
 	gasPriceJSON, err := hGpc.getGasPriceJSON(ctx)
 	if err != nil {
@@ -134,7 +134,7 @@ func (hGpc *HybridGasPriceClient) getGasPriceJSON(ctx context.Context) (gasPrice
 		log.L(ctx).Errorf("Failed to retrieve gas price from the node")
 		return nil, err
 	} else {
-		gasPriceJSON = fftypes.JSONAnyPtr(fmt.Sprintf(`"%s"`, gasPriceHexInt.BigInt().String()))
+		gasPriceJSON = fftypes.JSONAnyPtr(fmt.Sprintf(`"%s"`, gasPriceHexInt))
 	}
 
 	hGpc.gasPriceCache.Set("gasPrice", gasPriceJSON)

@@ -26,11 +26,11 @@ import (
 )
 
 type PublicTxAccepted interface {
-	TX() *ptxapi.PublicTx // the nonce can only be read after Submit() on the batch succeeds
+	TXWithNonce() *ptxapi.PublicTxWithID // the nonce can only be read after Submit() on the batch succeeds
 }
 
 type PublicTxRejected interface {
-	TX() *ptxapi.PublicTx
+	TXID() *ptxapi.PublicTxID
 	RejectedError() error         // non-nil if the transaction was rejected during prepare (estimate gas error), so cannot be submitted
 	RevertData() tktypes.HexBytes // if revert data is available for error decoding
 }
@@ -50,10 +50,15 @@ var PublicTxFilterFields filters.FieldSet = filters.FieldMap{
 	"created":       filters.Int64Field("created"),
 }
 
+type PublicTxIDInput struct {
+	ptxapi.PublicTxID
+	ptxapi.PublicTxInput
+}
+
 type PublicTxManager interface {
 	ManagerLifecycle
 
 	// Synchronous functions that are executed on the callers thread
-	GetTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTx, error)
-	PrepareSubmissionBatch(ctx context.Context, transactions []*ptxapi.PublicTx /* nonce is ignored on input */) (batch PublicTxBatch, err error)
+	GetTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithID, error)
+	PrepareSubmissionBatch(ctx context.Context, transactions []*PublicTxIDInput) (batch PublicTxBatch, err error)
 }

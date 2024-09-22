@@ -25,11 +25,11 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/sirupsen/logrus"
 )
@@ -40,10 +40,11 @@ type InFlightTransactionStageController struct {
 
 	// a reference to the transaction orchestrator
 	*orchestrator
-	txInflightTime         time.Time
-	txInDBTime             time.Time
-	txTimeline             []PointOfTime
-	timeLineLoggingEnabled bool
+	txInflightTime                  time.Time
+	txInDBTime                      time.Time
+	txTimeline                      []PointOfTime
+	timeLineLoggingEnabled          bool
+	transactionSubmissionRetryCount int
 
 	// this transaction mutex is used for transaction inflight stage context control
 	transactionMux sync.Mutex
@@ -52,9 +53,8 @@ type InFlightTransactionStageController struct {
 
 	stateManager InFlightTransactionStateManager
 
-	confirmed bool
-
-	// pauseRequested bool
+	confirmed      bool
+	pauseRequested bool
 	// deleteRequested bool // figure out what's the reliable approach for deletion
 }
 
@@ -118,7 +118,7 @@ func NewInFlightTransactionStageController(
 
 	ift.MarkTime("wait_in_inflight_queue")
 	imtxs := NewInMemoryTxStateManager(enth.ctx, ptx)
-	ift.stateManager = NewInFlightTransactionStateManager(enth.thMetrics, enth.balanceManager, enth.bIndexer, ift, imtxs, oc.retry, oc.turnOffHistory, ift.testOnlyNoEventMode)
+	ift.stateManager = NewInFlightTransactionStateManager(enth.thMetrics, enth.balanceManager, enth.bIndexer, ift, imtxs, oc.retry, oc, ift.testOnlyNoEventMode)
 	return ift
 }
 
@@ -235,11 +235,7 @@ func (it *InFlightTransactionStageController) ProduceLatestInFlightStageContext(
 								} else {
 									gpo := it.calculateNewGasPrice(ctx, rsc.InMemoryTx.GetGasPriceObject(), rsIn.GasPriceOutput.GasPriceObject)
 									gpoJSON, _ := json.Marshal(gpo)
-									rsc.StageOutputsToBePersisted.TxUpdates = &BaseTXUpdates{
-										GasPrice:             (*ethtypes.HexInteger)(gpo.GasPrice),
-										MaxFeePerGas:         (*ethtypes.HexInteger)(gpo.MaxFeePerGas),
-										MaxPriorityFeePerGas: (*ethtypes.HexInteger)(gpo.MaxPriorityFeePerGas),
-									}
+									rsc.StageOutputsToBePersisted.TxUpdates = &BaseTXUpdates{GasPricing: gpo}
 									rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr(string(gpoJSON)), nil)
 								}
 								_ = it.TriggerPersistTxState(ctx)
@@ -286,7 +282,7 @@ func (it *InFlightTransactionStageController) ProduceLatestInFlightStageContext(
 									// signed data received
 									if rsIn.SignOutput.SignedMessage != nil {
 										// signed message can be nil when no signer is configured
-										rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionSign, fftypes.JSONAnyPtr(`{"hash":"`+rsIn.SignOutput.TxHash+`"}`), nil)
+										rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionSign, fftypes.JSONAnyPtr(fmt.Sprintf(`{"hash":"%s"}`, rsIn.SignOutput.TxHash)), nil)
 									}
 								}
 								_ = it.TriggerPersistTxState(ctx)
@@ -340,7 +336,7 @@ func (it *InFlightTransactionStageController) ProduceLatestInFlightStageContext(
 								} else {
 									if rsIn.SubmitOutput.SubmissionOutcome == SubmissionOutcomeSubmittedNew {
 										// new transaction submitted successfully
-										rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(`{"txHash":"`+rsIn.SubmitOutput.TxHash.String()+`"}`), nil)
+										rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionSubmitTransaction, fftypes.JSONAnyPtr(fmt.Sprintf(`{"hash":"%s"}`, rsIn.SubmitOutput.TxHash)), nil)
 										rsc.StageOutputsToBePersisted.TxUpdates = &BaseTXUpdates{
 											LastSubmit: rsIn.SubmitOutput.SubmissionTime,
 										}
@@ -420,7 +416,7 @@ func (it *InFlightTransactionStageController) ProduceLatestInFlightStageContext(
 							} else {
 								if !it.confirmed {
 									// new transaction confirmed received
-									log.L(ctx).Debugf("Confirmed transaction %s at nonce %s / %d - hash: %s", rsc.InMemoryTx.GetTxID(), rsc.InMemoryTx.GetFrom(), rsc.InMemoryTx.GetNonce().Int64(), rsc.InMemoryTx.GetTransactionHash())
+									log.L(ctx).Debugf("Confirmed transaction %s at nonce %s / %d - hash: %s", rsc.InMemoryTx.GetTxID(), rsc.InMemoryTx.GetFrom(), rsc.InMemoryTx.GetNonce(), rsc.InMemoryTx.GetTransactionHash())
 									rsc.SetNewPersistenceUpdateOutput()
 									rsc.StageOutputsToBePersisted.ConfirmedTransaction = rsIn.ConfirmationOutput.ConfirmedTransaction
 									rsc.StageOutputsToBePersisted.MissedConfirmationEvent = rsIn.ConfirmationOutput.ConfirmedTransaction == nil // this is an edge case when block indexer has missed a transaction
@@ -499,7 +495,7 @@ func (it *InFlightTransactionStageController) ProduceLatestInFlightStageContext(
 	if it.stateManager.GetRunningStageContext(ctx) == nil {
 		// no running context in flight
 		// first check whether the current transaction is before the confirmed nonce
-		if tIn.CurrentConfirmedNonce != nil && it.stateManager.GetNonce().Cmp(tIn.CurrentConfirmedNonce) != 1 && !it.confirmed {
+		if tIn.CurrentConfirmedNonce != nil && it.stateManager.GetNonce() < *tIn.CurrentConfirmedNonce && !it.confirmed {
 			// check and track the existing transaction hash
 			log.L(ctx).Debugf("Transaction with ID %s has gone past confirmed nonce, entering confirmation stage", it.stateManager.GetTxID())
 			it.stateManager.AddConfirmationsOutput(ctx, nil)
@@ -555,29 +551,29 @@ func (it *InFlightTransactionStageController) ProduceLatestInFlightStageContext(
 	return tOut
 }
 
-func (it *InFlightTransactionStageController) calculateNewGasPrice(ctx context.Context, existingGpo *GasPriceObject, newGpo *GasPriceObject) *GasPriceObject {
+func (it *InFlightTransactionStageController) calculateNewGasPrice(ctx context.Context, existingGpo *ptxapi.PublicTxGasPricing, newGpo *ptxapi.PublicTxGasPricing) *ptxapi.PublicTxGasPricing {
 	if existingGpo == nil {
 		log.L(ctx).Debugf("First time assigning gas price to transaction with ID: %s, gas price object: %+v.", it.stateManager.GetTxID(), newGpo)
 		return newGpo
 	}
-	if newGpo.GasPrice != nil && existingGpo.GasPrice != nil && existingGpo.GasPrice.Cmp(newGpo.GasPrice) == 1 {
+	if newGpo.GasPrice != nil && existingGpo.GasPrice != nil && existingGpo.GasPrice.Int().Cmp(newGpo.GasPrice.Int()) == 1 {
 		// existing gas price already above the new gas price, increase using percentage
 		newPercentage := big.NewInt(100)
 		newPercentage = newPercentage.Add(newPercentage, big.NewInt(int64(it.gasPriceIncreasePercent)))
-		existingGpo.GasPrice = existingGpo.GasPrice.Mul(existingGpo.GasPrice, newPercentage)
-		existingGpo.GasPrice = existingGpo.GasPrice.Div(existingGpo.GasPrice, big.NewInt(100))
-		if it.gasPriceIncreaseMax != nil && existingGpo.GasPrice.Cmp(it.gasPriceIncreaseMax) == 1 {
-			existingGpo.GasPrice = it.gasPriceIncreaseMax
+		existingGpo.GasPrice = (*tktypes.HexUint256)(existingGpo.GasPrice.Int().Mul(existingGpo.GasPrice.Int(), newPercentage))
+		existingGpo.GasPrice = (*tktypes.HexUint256)(existingGpo.GasPrice.Int().Div(existingGpo.GasPrice.Int(), big.NewInt(100)))
+		if it.gasPriceIncreaseMax != nil && existingGpo.GasPrice.Int().Cmp(it.gasPriceIncreaseMax) == 1 {
+			existingGpo.GasPrice = (*tktypes.HexUint256)(it.gasPriceIncreaseMax)
 		}
-	} else if newGpo.MaxFeePerGas != nil && existingGpo.MaxFeePerGas != nil && existingGpo.MaxFeePerGas.Cmp(newGpo.MaxFeePerGas) == 1 {
+	} else if newGpo.MaxFeePerGas != nil && existingGpo.MaxFeePerGas != nil && existingGpo.MaxFeePerGas.Int().Cmp(newGpo.MaxFeePerGas.Int()) == 1 {
 		// existing MaxFeePerGas already above the new MaxFeePerGas, increase using percentage
 		newPercentage := big.NewInt(100)
 
 		newPercentage = newPercentage.Add(newPercentage, big.NewInt(int64(it.gasPriceIncreasePercent)))
-		existingGpo.MaxFeePerGas = existingGpo.MaxFeePerGas.Mul(existingGpo.MaxFeePerGas, newPercentage)
-		existingGpo.MaxFeePerGas = existingGpo.MaxFeePerGas.Div(existingGpo.MaxFeePerGas, big.NewInt(100))
-		if it.gasPriceIncreaseMax != nil && existingGpo.MaxFeePerGas.Cmp(it.gasPriceIncreaseMax) == 1 {
-			existingGpo.MaxFeePerGas = it.gasPriceIncreaseMax
+		existingGpo.MaxFeePerGas = (*tktypes.HexUint256)(existingGpo.MaxFeePerGas.Int().Mul(existingGpo.MaxFeePerGas.Int(), newPercentage))
+		existingGpo.MaxFeePerGas = (*tktypes.HexUint256)(existingGpo.MaxFeePerGas.Int().Div(existingGpo.MaxFeePerGas.Int(), big.NewInt(100)))
+		if it.gasPriceIncreaseMax != nil && existingGpo.MaxFeePerGas.Int().Cmp(it.gasPriceIncreaseMax) == 1 {
+			existingGpo.MaxFeePerGas = (*tktypes.HexUint256)(it.gasPriceIncreaseMax)
 		}
 	} else {
 		return newGpo
@@ -586,22 +582,18 @@ func (it *InFlightTransactionStageController) calculateNewGasPrice(ctx context.C
 	return existingGpo
 }
 
-func calculateGasRequiredForTransaction(ctx context.Context, gpo *GasPriceObject, gasLimit *big.Int) (gasRequired *big.Int, err error) {
-	if gasLimit == nil || gasLimit.Sign() <= 0 {
-		return nil, i18n.NewError(ctx, msgs.MsgInvalidGasLimit)
-	}
+func calculateGasRequiredForTransaction(ctx context.Context, gpo *ptxapi.PublicTxGasPricing, gasLimit uint64) (gasRequired *big.Int, err error) {
 	if gpo.GasPrice != nil {
 		log.L(ctx).Debugf("gas calculation using GasPrice (%v)", gpo.GasPrice)
-		gasPriceCopy := big.NewInt(gpo.GasPrice.Int64())
-		gasRequired = gasPriceCopy.Mul(gasPriceCopy, gasLimit)
+		gasRequired = new(big.Int).Mul(gpo.GasPrice.Int(), new(big.Int).SetUint64(gasLimit))
 	} else if gpo.MaxFeePerGas != nil && gpo.MaxPriorityFeePerGas != nil {
 		// max-fee and max-priority-fee have been provided. We can only use
 		// max-fee to calculate how much this TX could cost, but we ultimately
 		// require both to be set (max-priority-fee will be needed when we send
 		// the TX asking for fuel)
 		log.L(ctx).Debugf("fuel gas calculation using MaxFeePerGas (%v)", gpo.MaxFeePerGas)
-		MaxFeePerGasCopy := big.NewInt(gpo.MaxFeePerGas.Int64())
-		gasRequired = MaxFeePerGasCopy.Mul(MaxFeePerGasCopy, gasLimit)
+		maxFeePerGasCopy := new(big.Int).Set(gpo.MaxFeePerGas.Int())
+		gasRequired = maxFeePerGasCopy.Mul(maxFeePerGasCopy, new(big.Int).SetUint64(gasLimit))
 	}
 	return gasRequired, nil
 
@@ -646,7 +638,7 @@ func (it *InFlightTransactionStageController) TriggerStatusUpdate(ctx context.Co
 }
 func (it *InFlightTransactionStageController) TriggerSignTx(ctx context.Context) error {
 	it.executeAsync(func() {
-		signedMessage, txHash, err := it.signTx(ctx, it.stateManager.GetTx())
+		signedMessage, txHash, err := it.signTx(ctx, it.stateManager.GetResolvedSigner(), it.stateManager.BuildEthTX())
 		log.L(ctx).Debugf("Adding signed message to output, hash %s, signedMessage not nil %t, err %+v", txHash, signedMessage != nil, err)
 		it.stateManager.AddSignOutput(ctx, signedMessage, txHash, err)
 	}, ctx, it.stateManager.GetStage(ctx), false)
@@ -655,7 +647,7 @@ func (it *InFlightTransactionStageController) TriggerSignTx(ctx context.Context)
 
 func (it *InFlightTransactionStageController) TriggerSubmitTx(ctx context.Context, signedMessage []byte) error {
 	it.executeAsync(func() {
-		txHash, submissionTime, errReason, submissionOutcome, err := it.submitTX(ctx, it.stateManager.GetTx(), signedMessage)
+		txHash, submissionTime, errReason, submissionOutcome, err := it.submitTX(ctx, it.stateManager, signedMessage)
 		it.stateManager.AddSubmitOutput(ctx, txHash, submissionTime, submissionOutcome, errReason, err)
 	}, ctx, it.stateManager.GetStage(ctx), false)
 	return nil

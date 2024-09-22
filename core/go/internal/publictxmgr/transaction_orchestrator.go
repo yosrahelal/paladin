@@ -275,7 +275,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			latestCompletedNonce = &txNonce
 			queueUpdated = true
 			log.L(ctx).Debugf("Orchestrator poll and process, marking %s as complete after: %s", p.stateManager.GetTxID(), time.Since(p.stateManager.GetCreatedTime().Time()))
-		} else if p.stateManager.IsSuspended() {
+		} else if p.stateManager.IsSuspended() || p.pauseRequested {
 			log.L(ctx).Debugf("Orchestrator poll and process, removed suspended tx %s after: %s", p.stateManager.GetTxID(), time.Since(p.stateManager.GetCreatedTime().Time()))
 		} else {
 			log.L(ctx).Debugf("Orchestrator poll and process, continuing tx %s after: %s", p.stateManager.GetTxID(), time.Since(p.stateManager.GetCreatedTime().Time()))
@@ -291,7 +291,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 	log.L(ctx).Debugf("Orchestrator poll and process, stage counts: %+v", stageCounts)
 
 	if latestCompletedNonce != nil {
-		oc.notifyCompletedNonce(*latestCompletedNonce)
+		oc.notifyConfirmedNonceOrchestrator(*latestCompletedNonce)
 	}
 	oldLen := len(oc.InFlightTxs)
 	total = oldLen
@@ -503,7 +503,7 @@ func (oc *orchestrator) HandleConfirmedTransactions(ctx context.Context, confirm
 	}
 
 	// we've processed all confirmed nonce in this batch, update the confirmed nonce so any gaps will be filled in
-	oc.notifyCompletedNonce(maxNonce)
+	oc.notifyConfirmedNonceOrchestrator(maxNonce)
 	return nil
 }
 
