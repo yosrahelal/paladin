@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -65,7 +66,8 @@ type stateWriterBatch struct {
 	timeoutCancel  func()
 }
 
-func newStateWriter(bgCtx context.Context, ss *stateStore, conf *DBWriterConfig) *stateWriter {
+// TODO: THIS NEEDS PORTING TO THE flushwriter.Writer STANDARD INTERFACE (should be small job)
+func newStateWriter(bgCtx context.Context, ss *stateStore, conf *flushwriter.Config) *stateWriter {
 	workerCount := confutil.IntMin(conf.WorkerCount, 1, *StateWriterConfigDefaults.WorkerCount)
 	batchMaxSize := confutil.IntMin(conf.BatchMaxSize, 1, *StateWriterConfigDefaults.BatchMaxSize)
 	batchTimeout := confutil.DurationMin(conf.BatchTimeout, 0, *StateWriterConfigDefaults.BatchTimeout)

@@ -331,4 +331,8 @@ var (
 	MsgTxMgrRevertedDecodedData          = ffe("PD012216", "Transaction reverted %s")
 	MsgTxMgrInvalidStoredData            = ffe("PD012217", "Stored data is invalid")
 	MsgTxMgrNoABIOrReference             = ffe("PD012218", "An ABI containing a function/constructor definition or an abiReference to an existing stored ABI must be supplied")
+
+	// FlushWriter module PD0123XX
+	MsgFlushWriterQuiescing      = ffe("PD012300", "Writer shutting down")
+	MsgFlushWriterInvalidResults = ffe("PD012301", "Error in handler produced invalid write results")
 )
