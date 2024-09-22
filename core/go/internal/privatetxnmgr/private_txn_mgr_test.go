@@ -338,24 +338,45 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 		Payload: []byte("some-signature-bytes"),
 	}, nil)
 
-	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
+	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
+		func(args mock.Arguments) {
+			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
+				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
+				"outputs": []any{tktypes.Bytes32(tktypes.RandBytes(32))},
+				"data":    "0xfeedbeef",
+			})
+			require.NoError(t, err)
+			tx := args[1].(*components.PrivateTransaction)
+			tx.Signer = "signer1"
+			tx.PreparedTransaction = &components.EthTransaction{
+				FunctionABI: testABI[0],
+				To:          *domainAddress,
+				Inputs:      cv,
+			}
+		},
+	)
 
 	mockPublicTxBatch := componentmocks.NewPublicTxBatch(t)
 	mockPublicTxBatch.On("Finalize", mock.Anything).Return().Maybe()
 	mockPublicTxBatch.On("CleanUp", mock.Anything).Return().Maybe()
-	mockPublicTxBatches := []components.PublicTxBatch{mockPublicTxBatch}
 
 	mockPublicTxManager := mocks.publicTxManager.(*componentmocks.PublicTxManager)
-	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPublicTxBatches, false, nil)
+	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockPublicTxBatch, nil)
 
-	publicTransactions := []*ptxapi.PublicTxWithID{
-		{
+	publicTransactions := []components.PublicTxAccepted{
+		newFakePublicTx(&components.PublicTxIDInput{
 			PublicTxID: ptxapi.PublicTxID{
 				Transaction: uuid.New(),
 			},
-		},
+			PublicTxInput: ptxapi.PublicTxInput{
+				From: "signer1",
+			},
+		}, nil),
 	}
-	mockPublicTxManager.On("SubmitBatch", mock.Anything, mock.Anything, mockPublicTxBatches).Return(publicTransactions, nil)
+	mockPublicTxBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
+	mockPublicTxBatch.On("Rejected").Return([]components.PublicTxRejected{})
+	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
+	mockPublicTxBatch.On("Completed", mock.Anything, true).Return()
 
 	err := privateTxManager.Start()
 	assert.NoError(t, err)
@@ -470,8 +491,23 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		sentEndorsementRequest <- struct{}{}
 	}).Return(nil).Maybe()
 
-	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
-
+	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
+		func(args mock.Arguments) {
+			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
+				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
+				"outputs": []any{tktypes.Bytes32(tktypes.RandBytes(32))},
+				"data":    "0xfeedbeef",
+			})
+			require.NoError(t, err)
+			tx := args[1].(*components.PrivateTransaction)
+			tx.Signer = "signer1"
+			tx.PreparedTransaction = &components.EthTransaction{
+				FunctionABI: testABI[0],
+				To:          *domainAddress,
+				Inputs:      cv,
+			}
+		},
+	)
 	signingAddress := tktypes.RandHex(32)
 
 	mocks.domainSmartContract.On("ResolveDispatch", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
@@ -482,27 +518,32 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	mockPublicTxBatch1 := componentmocks.NewPublicTxBatch(t)
 	mockPublicTxBatch1.On("Finalize", mock.Anything).Return().Maybe()
 	mockPublicTxBatch1.On("CleanUp", mock.Anything).Return().Maybe()
-	mockPublicTxBatch2 := componentmocks.NewPublicTxBatch(t)
-	mockPublicTxBatch2.On("Finalize", mock.Anything).Return().Maybe()
-	mockPublicTxBatch2.On("CleanUp", mock.Anything).Return().Maybe()
-	mockPublicTxBatches := []components.PublicTxBatch{mockPublicTxBatch1, mockPublicTxBatch2}
 
 	mockPublicTxManager := mocks.publicTxManager.(*componentmocks.PublicTxManager)
-	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPublicTxBatches, false, nil)
+	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPublicTxBatch1, nil).Once()
 
-	publicTransactions := []*ptxapi.PublicTxWithID{
-		{
+	publicTransactions := []components.PublicTxAccepted{
+		newFakePublicTx(&components.PublicTxIDInput{
 			PublicTxID: ptxapi.PublicTxID{
 				Transaction: uuid.New(),
 			},
-		},
-		{
+			PublicTxInput: ptxapi.PublicTxInput{
+				From: "signer1",
+			},
+		}, nil),
+		newFakePublicTx(&components.PublicTxIDInput{
 			PublicTxID: ptxapi.PublicTxID{
 				Transaction: uuid.New(),
 			},
-		},
+			PublicTxInput: ptxapi.PublicTxInput{
+				From: "signer1",
+			},
+		}, nil),
 	}
-	mockPublicTxManager.On("SubmitBatch", mock.Anything, mock.Anything, mockPublicTxBatches).Return(publicTransactions, nil)
+	mockPublicTxBatch1.On("Submit", mock.Anything, mock.Anything).Return(nil)
+	mockPublicTxBatch1.On("Rejected").Return([]components.PublicTxRejected{})
+	mockPublicTxBatch1.On("Accepted").Return(publicTransactions)
+	mockPublicTxBatch1.On("Completed", mock.Anything, true).Return()
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
