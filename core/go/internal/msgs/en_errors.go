@@ -253,7 +253,7 @@ var (
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownEngine = ffe("PD011700", "Unknown engine '%s'")
 
-	// PrivateTransactionManager PD0118XX
+	// PrivTxMgr PD0118XX
 	MsgDomainNotProvided              = ffe("PD011800", "Domain not found in the transaction input")
 	MsgPrivateTxManagerInternalError  = ffe("PD011801", "Unexpected error in engine %s")
 	MsgPrivateTxManagerAssembleError  = ffe("PD011802", "Error assembling transaction")
@@ -266,6 +266,7 @@ var (
 	MsgDeployPrepareIncomplete        = ffe("PD011809", "Prepare step did not return a transaction to invoke, or a transaction to deploy")
 	MsgBaseLedgerTransactionFailed    = ffe("PD011810", "Failed to submit base ledger transaction")
 	MsgContractAddressNotProvided     = ffe("PD011811", "Contract address (To) not found in the transaction input")
+	MsgPrivTxMgrPublicTxFail          = ffe("PD011812", "Public transaction rejected")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s ")

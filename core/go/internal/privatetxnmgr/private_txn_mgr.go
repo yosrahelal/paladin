@@ -23,6 +23,8 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/flushwriter"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
@@ -47,6 +49,7 @@ type privateTxManager struct {
 	nodeID               string
 	subscribers          []components.PrivateTxEventSubscriber
 	subscribersLock      sync.Mutex
+	store                privatetxnstore.Store
 }
 
 // Init implements Engine.
@@ -56,6 +59,7 @@ func (p *privateTxManager) PreInit(c components.PreInitComponents) (*components.
 
 func (p *privateTxManager) PostInit(c components.AllComponents) error {
 	p.components = c
+	p.store = privatetxnstore.NewStore(p.ctx, &flushwriter.Config{}, c.Persistence())
 	return nil
 }
 
@@ -94,13 +98,14 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 		p.orchestrators[contractAddr.String()] =
 			NewOrchestrator(
 				ctx, p.nodeID,
-				contractAddr.String(), /** TODO: fill in the real plug-ins*/
+				contractAddr, /** TODO: fill in the real plug-ins*/
 				&OrchestratorConfig{},
 				p.components,
 				domainAPI,
 				seq,
 				endorsementGatherer,
 				publisher,
+				p.store,
 			)
 		orchestratorDone, err := p.orchestrators[contractAddr.String()].Start(ctx)
 		if err != nil {

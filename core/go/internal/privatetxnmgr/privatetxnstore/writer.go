@@ -19,19 +19,17 @@ package privatetxnstore
 import (
 	"context"
 	"fmt"
-	"hash/fnv"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 /*
@@ -52,160 +50,17 @@ to atomically allocate and record the nonce under that same transaction.
 // that it can be co-ordinated with the user transaction submission
 // do we have any other checkpoints (e.g. on delegate?)
 type dispatchSequenceOperation struct {
-	dispatches               []*DispatchPersisted
-	publicTransactionsSubmit func(tx *gorm.DB) (publicTxID []string, err error)
+	contractAddress tktypes.EthAddress
+	dispatches      []*DispatchSequence
 }
 
-type writeOperation struct {
-	id                         string
-	contractAddress            string
-	done                       chan error
-	isShutdown                 bool
-	dispatchSequenceOperations []*dispatchSequenceOperation
+func (dso *dispatchSequenceOperation) WriteKey() string {
+	return dso.contractAddress.String()
 }
 
-type writer struct {
-	store        *store
-	bgCtx        context.Context
-	cancelCtx    context.CancelFunc
-	batchTimeout time.Duration
-	batchMaxSize int
-	workerCount  uint32
-	workQueues   []chan *writeOperation
-	workersDone  []chan struct{}
-}
+type noResult struct{}
 
-type writeOperationBatch struct {
-	id             string
-	opened         time.Time
-	ops            []*writeOperation
-	timeoutContext context.Context
-	timeoutCancel  func()
-}
-
-func newWriter(bgCtx context.Context, s *store, conf *WriterConfig) *writer {
-	workerCount := confutil.IntMin(conf.WorkerCount, 1, *WriterConfigDefaults.WorkerCount)
-	batchMaxSize := confutil.IntMin(conf.BatchMaxSize, 1, *WriterConfigDefaults.BatchMaxSize)
-	batchTimeout := confutil.DurationMin(conf.BatchTimeout, 0, *WriterConfigDefaults.BatchTimeout)
-	w := &writer{
-		store:        s,
-		workerCount:  (uint32)(workerCount),
-		batchTimeout: batchTimeout,
-		batchMaxSize: batchMaxSize,
-		workersDone:  make([]chan struct{}, workerCount),
-		workQueues:   make([]chan *writeOperation, workerCount),
-	}
-	w.bgCtx, w.cancelCtx = context.WithCancel(bgCtx)
-	for i := 0; i < workerCount; i++ {
-		w.workersDone[i] = make(chan struct{})
-		w.workQueues[i] = make(chan *writeOperation, batchMaxSize)
-		go w.worker(i)
-	}
-	return w
-}
-
-func (w *writer) newWriteOp(contractAddress string) *writeOperation {
-	return &writeOperation{
-		id:              tktypes.ShortID(),
-		contractAddress: contractAddress,
-		done:            make(chan error, 1), // 1 slot to ensure we don't block the writer
-	}
-}
-
-func (op *writeOperation) flush(ctx context.Context) error {
-	select {
-	case err := <-op.done:
-		log.L(ctx).Debugf("Flushed write operation %s (err=%v)", op.id, err)
-		return err
-	case <-ctx.Done():
-		return i18n.NewError(ctx, msgs.MsgContextCanceled)
-	}
-}
-
-func (w *writer) queue(ctx context.Context, op *writeOperation) {
-	// there can be several flush worker threads but significantly fewer than the number of
-	// private contracts (domain instances) we would expect to be running concurrently
-	// however we do need to maintain some affinity between any one domain instance and a worker thread
-	// changing the number of worker threads will require a config change and a restart so no
-	// need for dynamic balancing. A simple modulo of a hash will suffice.
-	if op.contractAddress == "" {
-		op.done <- i18n.NewError(ctx, msgs.MsgStateOpInvalid)
-		return
-	}
-	h := fnv.New32a() // simple non-cryptographic hash algo
-	_, _ = h.Write([]byte(op.contractAddress))
-	routine := h.Sum32() % w.workerCount
-	log.L(ctx).Debugf("Queuing write operation %s to worker state_writer_%.4d", op.id, routine)
-	select {
-	case w.workQueues[routine] <- op: // it's queued
-	case <-ctx.Done(): // timeout of caller context
-		// Just return, as they are giving up on the request so there's no need to queue it
-		// If they flush they will get an error
-	case <-w.bgCtx.Done(): // shutdown
-		// Push an error back to the operator before we return (note we allocate a slot to make this safe)
-		op.done <- i18n.NewError(ctx, msgs.MsgStateManagerQuiescing)
-	}
-}
-
-func (w *writer) worker(i int) {
-	defer close(w.workersDone[i])
-	workerID := fmt.Sprintf("writer_%.4d", i)
-	ctx := log.WithLogField(w.bgCtx, "job", workerID)
-	l := log.L(ctx)
-	var batch *writeOperationBatch
-	batchCount := 0
-	workQueue := w.workQueues[i]
-	var shutdownRequest *writeOperation
-	for shutdownRequest == nil {
-		var timeoutContext context.Context
-		var timedOut bool
-		if batch != nil {
-			timeoutContext = batch.timeoutContext
-		} else {
-			timeoutContext = ctx
-		}
-		select {
-		case op := <-workQueue:
-			if op.isShutdown {
-				// flush out the queue
-				shutdownRequest = op
-				timedOut = true
-				break
-			}
-			if batch == nil {
-				batch = &writeOperationBatch{
-					id:     fmt.Sprintf("%.4d_%.9d", i, batchCount),
-					opened: time.Now(),
-				}
-				batch.timeoutContext, batch.timeoutCancel = context.WithTimeout(ctx, w.batchTimeout)
-				batchCount++
-			}
-			batch.ops = append(batch.ops, op)
-			l.Debugf("Added write operation %s to batch %s (len=%d)", op.id, batch.id, len(batch.ops))
-		case <-timeoutContext.Done():
-			timedOut = true
-			select {
-			case <-ctx.Done():
-				l.Debugf("State writer ending")
-				return
-			default:
-			}
-		}
-
-		if batch != nil && (timedOut || (len(batch.ops) >= w.batchMaxSize)) {
-			batch.timeoutCancel()
-			l.Debugf("Running batch %s (len=%d,timeout=%t,age=%dms)", batch.id, len(batch.ops), timedOut, time.Since(batch.opened).Milliseconds())
-			w.runBatch(ctx, batch)
-			batch = nil
-		}
-
-		if shutdownRequest != nil {
-			close(shutdownRequest.done)
-		}
-	}
-}
-
-func (w *writer) runBatch(ctx context.Context, b *writeOperationBatch) {
+func (s *store) runBatch(ctx context.Context, dbTX *gorm.DB, values []*dispatchSequenceOperation) ([]flushwriter.Result[*noResult], error) {
 
 	/*To reliably allocate a nonce in a gapless sequence without locking out a bunch of threads for too long and without gitting deadlocks:
 	- Before we go into a database transaction, check that we have a fresh record of the latest nonce in memory for the given signing address - reading DB and/or calling out to the blockchain node if needed
@@ -226,86 +81,61 @@ func (w *writer) runBatch(ctx context.Context, b *writeOperationBatch) {
 	// However, this is
 	// Build lists of things to insert (we are insert only)
 
-	err := w.store.p.DB().Transaction(func(tx *gorm.DB) (err error) {
-		if len(b.ops) > 0 {
-			for _, op := range b.ops {
-				//for each batchSequence operation, call the public transaction manager to allocate a nonce
-				for _, dispatchSequenceOp := range op.dispatchSequenceOperations {
-					// Call the public transaction manager to allocate nonces for all transactions in the sequence
-					// and persist them to the database under the current transaction
-					publicTxIDs, err := dispatchSequenceOp.publicTransactionsSubmit(tx)
-					if err != nil {
-						log.L(ctx).Errorf("Error submitting public transaction: %s", err)
-						// TODO  this is a really bad situation because it will cause all dispatches in the flush to rollback
-						// Should we skip this dispatch ( or this mini batch of dispatches?)
-						return err
-					}
-					if len(publicTxIDs) != len(dispatchSequenceOp.dispatches) {
-						errorMessage := fmt.Sprintf("Expected %d public transaction IDs, got %d", len(dispatchSequenceOp.dispatches), len(publicTxIDs))
-						log.L(ctx).Error(errorMessage)
-						return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
-					}
+	for _, op := range values {
+		//for each batchSequence operation, call the public transaction manager to allocate a nonce
+		for _, dispatchSequenceOp := range op.dispatches {
+			// Call the public transaction manager to allocate nonces for all transactions in the sequence
+			// and persist them to the database under the current transaction
+			pubBatch := dispatchSequenceOp.PublicTxBatch
+			err := pubBatch.Submit(ctx, dbTX)
+			if err != nil {
+				log.L(ctx).Errorf("Error submitting public transaction: %s", err)
+				// TODO  this is a really bad situation because it will cause all dispatches in the flush to rollback
+				// Should we skip this dispatch ( or this mini batch of dispatches?)
+				return nil, err
+			}
+			publicTxIDs := pubBatch.Accepted()
+			if len(publicTxIDs) != len(dispatchSequenceOp.PrivateTransactionDispatches) {
+				errorMessage := fmt.Sprintf("Expected %d public transaction IDs, got %d", len(dispatchSequenceOp.PrivateTransactionDispatches), len(publicTxIDs))
+				log.L(ctx).Error(errorMessage)
+				return nil, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
+			}
 
-					//TODO this results in an `INSERT` for each dispatchSequence
-					//Would it be more efficient to pass an array for the whole flush?
-					// could get complicated on the public transaction manager side because
-					// it needs to allocate a nonce for each dispatch and that is specific to signing key
-					for dispatchIndex, dispatch := range dispatchSequenceOp.dispatches {
+			//TODO this results in an `INSERT` for each dispatchSequence
+			//Would it be more efficient to pass an array for the whole flush?
+			// could get complicated on the public transaction manager side because
+			// it needs to allocate a nonce for each dispatch and that is specific to signing key
+			for dispatchIndex, dispatch := range dispatchSequenceOp.PrivateTransactionDispatches {
 
-						//fill in the foreign key before persisting in our dispatch table
-						dispatch.PublicTransactionID = publicTxIDs[dispatchIndex]
+				//fill in the foreign key before persisting in our dispatch table
+				dispatch.PublicTransactionAddress = publicTxIDs[dispatchIndex].TXWithNonce().From
+				dispatch.PublicTransactionNonce = publicTxIDs[dispatchIndex].TXWithNonce().Nonce.Uint64()
 
-						dispatch.ID = uuid.New().String()
-					}
-					log.L(ctx).Debugf("Writing dispatch batch %d", len(dispatchSequenceOp.dispatches))
+				dispatch.ID = uuid.New().String()
+			}
+			log.L(ctx).Debugf("Writing dispatch batch %d", len(dispatchSequenceOp.PrivateTransactionDispatches))
 
-					err = tx.
-						Table("dispatches").
-						Clauses(clause.OnConflict{
-							Columns: []clause.Column{
-								{Name: "private_transaction_id"},
-								{Name: "public_transaction_id"},
-							},
-							DoNothing: true, // immutable
-						}).
-						Create(dispatchSequenceOp.dispatches).
-						Error
+			err = dbTX.
+				Table("dispatches").
+				Clauses(clause.OnConflict{
+					Columns: []clause.Column{
+						{Name: "private_transaction_id"},
+						{Name: "public_transaction_id"},
+					},
+					DoNothing: true, // immutable
+				}).
+				Create(dispatchSequenceOp.PrivateTransactionDispatches).
+				Error
 
-					if err != nil {
-						log.L(ctx).Errorf("Error persisting dispatches: %s", err)
-						return err
-					}
-
-				}
-
+			if err != nil {
+				log.L(ctx).Errorf("Error persisting dispatches: %s", err)
+				return nil, err
 			}
 
 		}
-
-		return err
-	})
-
-	// Mark all the ops complete - for good or bad
-	for _, op := range b.ops {
-		op.done <- err
 	}
-}
 
-func (w *writer) stop() {
-	for i, workerDone := range w.workersDone {
-		select {
-		case <-workerDone:
-		case <-w.bgCtx.Done():
-		default:
-			// Quiesce the worker
-			shutdownOp := &writeOperation{
-				isShutdown: true,
-				done:       make(chan error),
-			}
-			w.workQueues[i] <- shutdownOp
-			<-shutdownOp.done
-		}
-		<-workerDone
-	}
-	w.cancelCtx()
+	// We don't actually provide any result, so just build an array of nil results
+	return make([]flushwriter.Result[*noResult], len(values)), nil
+
 }

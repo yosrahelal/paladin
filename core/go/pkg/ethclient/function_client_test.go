@@ -284,7 +284,7 @@ func testCallGetWidgetsOk(t *testing.T, withFrom, withBlock, withBlockRef bool) 
 	} else if withBlockRef {
 		getWidgetsReq.BlockRef(PENDING)
 	}
-	res, err := getWidgetsReq.CallRawResult()
+	res, err := getWidgetsReq.CallResult()
 	require.NoError(t, err)
 	assert.JSONEq(t, `{
 		"0": [
@@ -423,7 +423,7 @@ func TestCallFunctionFail(t *testing.T) {
 
 	to := ethtypes.MustNewAddress("0xD9E54Ba3F1419e6AC71A795d819fdBAE883A6575")
 
-	_, err := getWidgets.R(ctx).Input(`{"sku":12345}`).To(to).CallRawResult()
+	_, err := getWidgets.R(ctx).Input(`{"sku":12345}`).To(to).CallResult()
 	assert.Regexp(t, "pop", err)
 }
 
@@ -623,13 +623,13 @@ func TestInvokeNewWidgetCustomError(t *testing.T) {
 		Input(&newWidgetInput{
 			Widget: *widgetA,
 		})
-	_, err = req.CallRawResult()
+	_, err = req.CallResult()
 	assert.EqualError(t, err, `PD011513: Reverted: WidgetError("1122334455","not widgety enough")`)
 	_, err = req.EstimateGas()
 	assert.EqualError(t, err, `PD011513: Reverted: WidgetError("1122334455","not widgety enough")`)
 
 	// Check we can override the options if we wish, disabling ability to decode the errors
-	_, err = req.CallOptions(WithErrorsFrom(abi.ABI{})).CallRawResult()
+	_, err = req.CallOptions(WithErrorsFrom(abi.ABI{})).CallResult()
 	assert.EqualError(t, err, `PD011513: Reverted: 0xf852c6da0000000000000000000000000000000000000000000000000000000042e576f7000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000126e6f74207769646765747920656e6f7567680000000000000000000000000000`)
 
 }

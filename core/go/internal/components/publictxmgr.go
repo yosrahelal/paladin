@@ -58,7 +58,7 @@ type PublicTxIDInput struct {
 
 type PublicTxMatch struct {
 	ptxapi.PublicTxID
-	*blockindexer.IndexedTransaction
+	*blockindexer.IndexedTransactionNotify
 }
 
 type PublicTxManager interface {
@@ -67,6 +67,6 @@ type PublicTxManager interface {
 	// Synchronous functions that are executed on the callers thread
 	GetTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithID, error)
 	PrepareSubmissionBatch(ctx context.Context, transactions []*PublicTxIDInput) (batch PublicTxBatch, err error)
-	MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransaction) ([]*PublicTxMatch, error)
+	MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransactionNotify) ([]*PublicTxMatch, error)
 	NotifyConfirmPersisted(ctx context.Context, confirms []*PublicTxMatch)
 }

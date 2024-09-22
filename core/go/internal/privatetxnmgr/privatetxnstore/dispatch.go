@@ -19,19 +19,21 @@ package privatetxnstore
 import (
 	"context"
 
-	"gorm.io/gorm"
+	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type DispatchPersisted struct {
-	ID                   string `json:"id"`
-	PrivateTransactionID string `json:"privateTransactionID"`
-	PublicTransactionID  string `json:"publicTransactionID"`
+	ID                       string             `json:"id"`
+	PrivateTransactionID     string             `json:"privateTransactionID"`
+	PublicTransactionAddress tktypes.EthAddress `json:"publicTransactionAddress"`
+	PublicTransactionNonce   uint64             `json:"publicTransactionNonce"`
 }
 
 // A dispatch sequence is a collection of private transactions that are submitted together for a given signing address in order
 type DispatchSequence struct {
+	PublicTxBatch                components.PublicTxBatch
 	PrivateTransactionDispatches []*DispatchPersisted
-	PublicTransactionsSubmit     func(tx *gorm.DB) (publicTxID []string, err error)
 }
 
 // a dispatch batch is a collection of dispatch sequences that are submitted together with no ordering requirements between sequences
@@ -42,21 +44,15 @@ type DispatchBatch struct {
 
 // PersistDispatches persists the dispatches to the store and coordinates with the public transaction manager
 // to submit public transactions.
-func (s *store) PersistDispatchBatch(ctx context.Context, contractAddress string, dispatchBatch *DispatchBatch) error {
-	op := s.writer.newWriteOp(contractAddress)
-	op.dispatchSequenceOperations = make([]*dispatchSequenceOperation, len(dispatchBatch.DispatchSequences))
-	for i, dispatchSequence := range dispatchBatch.DispatchSequences {
-		//TODO why are we copying to a different struct rather than just expose this struct type on the function signature?
-		dispatchSequenceOp := &dispatchSequenceOperation{
-			dispatches:               dispatchSequence.PrivateTransactionDispatches,
-			publicTransactionsSubmit: dispatchSequence.PublicTransactionsSubmit,
-		}
-		op.dispatchSequenceOperations[i] = dispatchSequenceOp
-	}
+func (s *store) PersistDispatchBatch(ctx context.Context, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch) error {
 
-	// Send the write operation with all of the batch sequence operations to the flush worker thread
-	s.writer.queue(ctx, op)
+	// Send the write operation with all of the batch sequence operations to the flush worker
+	op := s.writer.Queue(ctx, &dispatchSequenceOperation{
+		contractAddress: contractAddress,
+		dispatches:      dispatchBatch.DispatchSequences,
+	})
 
 	//wait for the flush to complete
-	return op.flush(ctx)
+	_, err := op.WaitFlushed(ctx)
+	return err
 }

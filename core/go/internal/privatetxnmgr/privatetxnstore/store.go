@@ -19,52 +19,37 @@ package privatetxnstore
 import (
 	"context"
 
-	"github.com/kaleido-io/paladin/core/internal/cache"
+	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"gorm.io/gorm"
 )
 
-type Config struct {
-	SchemaCache cache.Config `yaml:"schemaCache"`
-	Writer      WriterConfig `yaml:"stateWriter"`
-}
-
-type WriterConfig struct {
-	WorkerCount  *int    `yaml:"workerCount"`
-	BatchTimeout *string `yaml:"batchTimeout"`
-	BatchMaxSize *int    `yaml:"batchMaxSize"`
-}
-
-var WriterConfigDefaults = WriterConfig{
+var WriterConfigDefaults = flushwriter.Config{
 	WorkerCount:  confutil.P(10),
 	BatchTimeout: confutil.P("25ms"),
 	BatchMaxSize: confutil.P(100),
 }
 
+type PublicTransactionsSubmit func(tx *gorm.DB) (publicTxID []string, err error)
+
 type Store interface {
 	//We persist multiple sequences in a single call, one for each signing address
-	PersistDispatchBatch(ctx context.Context, contractAddress string, dispatchBatch *DispatchBatch) error
+	PersistDispatchBatch(ctx context.Context, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch) error
 	Close()
 }
 
 type store struct {
-	p         persistence.Persistence
-	bgCtx     context.Context
-	cancelCtx context.CancelFunc
-	writer    *writer
+	writer flushwriter.Writer[*dispatchSequenceOperation, *noResult]
 }
 
-func NewStore(ctx context.Context, conf *Config, p persistence.Persistence) Store {
-	s := &store{
-		p: p,
-	}
-	s.bgCtx, s.cancelCtx = context.WithCancel(ctx)
-	s.writer = newWriter(ctx, s, &conf.Writer)
-	// TODO add RPC modules.initRPC()
+func NewStore(ctx context.Context, conf *flushwriter.Config, p persistence.Persistence) Store {
+	s := &store{}
+	s.writer = flushwriter.NewWriter[*dispatchSequenceOperation, *noResult](ctx, s.runBatch, p, conf, &WriterConfigDefaults)
 	return s
 }
 
 func (s *store) Close() {
-	s.writer.stop()
-	s.cancelCtx()
+	s.writer.Shutdown()
 }

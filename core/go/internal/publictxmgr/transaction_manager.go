@@ -707,12 +707,12 @@ func (pte *pubTxManager) UpdateSubStatus(ctx context.Context, imtx InMemoryTxSta
 	return nil
 }
 
-func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransaction) ([]*components.PublicTxMatch, error) {
+func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransactionNotify) ([]*components.PublicTxMatch, error) {
 
 	// Do a DB query in the TX to reverse lookup the TX details we need to match/update the completed status
 	// and return the list that matched (which is very possibly none as we only track transactions submitted
 	// via our node to the network).
-	txiByHash := make(map[tktypes.Bytes32]*blockindexer.IndexedTransaction)
+	txiByHash := make(map[tktypes.Bytes32]*blockindexer.IndexedTransactionNotify)
 	txHashes := make([]tktypes.Bytes32, len(itxs))
 	for i, itx := range itxs {
 		txHashes[i] = itx.Hash
@@ -742,11 +742,13 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 				Transaction:   match.PublicTx.Transaction,
 				ResubmitIndex: match.PublicTx.ResubmitIndex,
 			},
-			IndexedTransaction: txi,
+			IndexedTransactionNotify: txi,
 		}
 		completions[i] = &publicCompletion{
 			SignerNonce:     match.SignerNonce,
 			TransactionHash: match.TransactionHash,
+			Success:         txi.Result.V() == blockindexer.TXResult_SUCCESS,
+			RevertReasons:   txi.RevertReason,
 		}
 	}
 
@@ -772,7 +774,7 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 // We've got to be super careful not to block this thread, so we treat this just like a suspend/resume
 // on each of these transactions
 func (pte *pubTxManager) NotifyConfirmPersisted(ctx context.Context, confirms []*components.PublicTxMatch) {
-	// for _, conf := range confirms {
-	// 	pte.dispatchAction(ctx)
-	// }
+	for _, conf := range confirms {
+		_ = pte.dispatchAction(ctx, *conf.From, conf.Nonce, ActionCompleted)
+	}
 }

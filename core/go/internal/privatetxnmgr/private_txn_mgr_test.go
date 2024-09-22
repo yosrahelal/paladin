@@ -17,6 +17,7 @@ package privatetxnmgr
 
 import (
 	"context"
+	"crypto/md5"
 	"math/rand"
 	"sync"
 	"testing"
@@ -26,12 +27,15 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	coreProto "github.com/kaleido-io/paladin/core/pkg/proto"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -151,19 +155,21 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 
 	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
 
-	mockPreparedSubmission := componentmocks.NewPreparedSubmission(t)
-	mockPreparedSubmission.On("Finalize", mock.Anything).Return().Maybe()
-	mockPreparedSubmission.On("CleanUp", mock.Anything).Return().Maybe()
-	mockPreparedSubmissions := []components.PreparedSubmission{mockPreparedSubmission}
+	mockPublicTxBatch := componentmocks.NewPublicTxBatch(t)
+	mockPublicTxBatch.On("Finalize", mock.Anything).Return().Maybe()
+	mockPublicTxBatch.On("CleanUp", mock.Anything).Return().Maybe()
+	mockPublicTxBatches := []components.PublicTxBatch{mockPublicTxBatch}
 
-	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPreparedSubmissions, false, nil)
+	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPublicTxBatches, false, nil)
 
-	publicTransactions := []*ptxapi.PublicTx{
+	publicTransactions := []*ptxapi.PublicTxWithID{
 		{
-			ID: uuid.New(),
+			PublicTxID: ptxapi.PublicTxID{
+				Transaction: uuid.New(),
+			},
 		},
 	}
-	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
+	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPublicTxBatches).Return(publicTransactions, nil)
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
@@ -285,19 +291,21 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 
 	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
 
-	mockPreparedSubmission := componentmocks.NewPreparedSubmission(t)
-	mockPreparedSubmission.On("Finalize", mock.Anything).Return().Maybe()
-	mockPreparedSubmission.On("CleanUp", mock.Anything).Return().Maybe()
-	mockPreparedSubmissions := []components.PreparedSubmission{mockPreparedSubmission}
+	mockPublicTxBatch := componentmocks.NewPublicTxBatch(t)
+	mockPublicTxBatch.On("Finalize", mock.Anything).Return().Maybe()
+	mockPublicTxBatch.On("CleanUp", mock.Anything).Return().Maybe()
+	mockPublicTxBatches := []components.PublicTxBatch{mockPublicTxBatch}
 
-	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPreparedSubmissions, false, nil)
+	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPublicTxBatches, false, nil)
 
-	publicTransactions := []*ptxapi.PublicTx{
+	publicTransactions := []*ptxapi.PublicTxWithID{
 		{
-			ID: uuid.New(),
+			PublicTxID: ptxapi.PublicTxID{
+				Transaction: uuid.New(),
+			},
 		},
 	}
-	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
+	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPublicTxBatches).Return(publicTransactions, nil)
 
 	err := privateTxManager.Start()
 	assert.NoError(t, err)
@@ -421,25 +429,29 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		tx.Signer = signingAddress
 	}).Return(nil)
 
-	mockPreparedSubmission1 := componentmocks.NewPreparedSubmission(t)
-	mockPreparedSubmission1.On("Finalize", mock.Anything).Return().Maybe()
-	mockPreparedSubmission1.On("CleanUp", mock.Anything).Return().Maybe()
-	mockPreparedSubmission2 := componentmocks.NewPreparedSubmission(t)
-	mockPreparedSubmission2.On("Finalize", mock.Anything).Return().Maybe()
-	mockPreparedSubmission2.On("CleanUp", mock.Anything).Return().Maybe()
-	mockPreparedSubmissions := []components.PublicTxPreparedSubmission{mockPreparedSubmission1, mockPreparedSubmission2}
+	mockPublicTxBatch1 := componentmocks.NewPublicTxBatch(t)
+	mockPublicTxBatch1.On("Finalize", mock.Anything).Return().Maybe()
+	mockPublicTxBatch1.On("CleanUp", mock.Anything).Return().Maybe()
+	mockPublicTxBatch2 := componentmocks.NewPublicTxBatch(t)
+	mockPublicTxBatch2.On("Finalize", mock.Anything).Return().Maybe()
+	mockPublicTxBatch2.On("CleanUp", mock.Anything).Return().Maybe()
+	mockPublicTxBatches := []components.PublicTxBatch{mockPublicTxBatch1, mockPublicTxBatch2}
 
-	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPreparedSubmissions, false, nil)
+	mocks.publicTxEngine.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPublicTxBatches, false, nil)
 
-	publicTransactions := []*ptxapi.PublicTx{
+	publicTransactions := []*ptxapi.PublicTxWithID{
 		{
-			ID: uuid.NewString(),
+			PublicTxID: ptxapi.PublicTxID{
+				Transaction: uuid.New(),
+			},
 		},
 		{
-			ID: uuid.NewString(),
+			PublicTxID: ptxapi.PublicTxID{
+				Transaction: uuid.New(),
+			},
 		},
 	}
-	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPreparedSubmissions).Return(publicTransactions, nil)
+	mocks.publicTxEngine.On("SubmitBatch", mock.Anything, mock.Anything, mockPublicTxBatches).Return(publicTransactions, nil)
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
@@ -811,7 +823,24 @@ func NewPrivateTransactionMgrForTesting(t *testing.T, domainAddress *tktypes.Eth
 }
 
 type fakePublicTxManager struct {
-	t *testing.T
+	t          *testing.T
+	rejectErr  error
+	prepareErr error
+}
+
+// GetTransactions implements components.PublicTxManager.
+func (f *fakePublicTxManager) GetTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithID, error) {
+	panic("unimplemented")
+}
+
+// MatchUpdateConfirmedTransactions implements components.PublicTxManager.
+func (f *fakePublicTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransactionNotify) ([]*components.PublicTxMatch, error) {
+	panic("unimplemented")
+}
+
+// NotifyConfirmPersisted implements components.PublicTxManager.
+func (f *fakePublicTxManager) NotifyConfirmPersisted(ctx context.Context, confirms []*components.PublicTxMatch) {
+	panic("unimplemented")
 }
 
 // PostInit implements components.PublicTxManager.
@@ -834,33 +863,105 @@ func (f *fakePublicTxManager) Stop() {
 	panic("unimplemented")
 }
 
+type fakePublicTxBatch struct {
+	t              *testing.T
+	transactions   []*components.PublicTxIDInput
+	accepted       []components.PublicTxAccepted
+	rejected       []components.PublicTxRejected
+	completeCalled bool
+	committed      bool
+	submitErr      error
+}
+
+// Accepted implements components.PublicTxBatch.
+func (f *fakePublicTxBatch) Accepted() []components.PublicTxAccepted {
+	return f.accepted
+}
+
+// Completed implements components.PublicTxBatch.
+func (f *fakePublicTxBatch) Completed(ctx context.Context, committed bool) {
+	f.completeCalled = true
+	f.committed = committed
+}
+
+// Rejected implements components.PublicTxBatch.
+func (f *fakePublicTxBatch) Rejected() []components.PublicTxRejected {
+	return f.rejected
+}
+
+type fakePublicTx struct {
+	t         *components.PublicTxIDInput
+	rejectErr error
+	pubTx     *ptxapi.PublicTxWithID
+}
+
+func newFakePublicTx(t *components.PublicTxIDInput, rejectErr error) *fakePublicTx {
+	// Fake up signer resolution by just hashing whatever comes in
+	signerStringHash := md5.New()
+	signerStringHash.Write([]byte(t.From))
+	fromAddr := tktypes.EthAddress(signerStringHash.Sum(nil)[0:20])
+	return &fakePublicTx{
+		t:         t,
+		rejectErr: rejectErr,
+		pubTx: &ptxapi.PublicTxWithID{
+			PublicTxID: ptxapi.PublicTxID{
+				Transaction:   t.Transaction,
+				ResubmitIndex: t.ResubmitIndex,
+			},
+			PublicTx: ptxapi.PublicTx{
+				To:              t.To,
+				Data:            t.Data,
+				From:            fromAddr,
+				Created:         tktypes.TimestampNow(),
+				PublicTxOptions: t.PublicTxOptions,
+			},
+		},
+	}
+}
+
+func (f *fakePublicTx) RejectedError() error {
+	return f.rejectErr
+}
+
+func (f *fakePublicTx) RevertData() tktypes.HexBytes {
+	return []byte("some data")
+}
+
+func (f *fakePublicTx) TXID() *ptxapi.PublicTxID {
+	return &f.pubTx.PublicTxID
+}
+
+func (f *fakePublicTx) TXWithNonce() *ptxapi.PublicTxWithID {
+	return f.pubTx
+}
+
 //for this test, we need a hand written fake rather than a simple mock for publicTxEngine
 
 // PrepareSubmissionBatch implements components.PublicTxManager.
-func (f *fakePublicTxManager) PrepareSubmissionBatch(ctx context.Context, reqOptions *components.PublicTxRequestOptions, txPayloads []interface{}) (preparedSubmission []components.PublicTxPreparedSubmission, submissionRejected bool, err error) {
-	mockPreparedSubmissions := make([]components.PublicTxPreparedSubmission, 0, len(txPayloads))
-	for range txPayloads {
-		mockPreparedSubmission := componentmocks.NewPreparedSubmission(f.t)
-		mockPreparedSubmission.On("Finalize", mock.Anything).Return().Maybe()
-		mockPreparedSubmission.On("CleanUp", mock.Anything).Return().Maybe()
-		mockPreparedSubmissions = append(mockPreparedSubmissions, mockPreparedSubmission)
+func (f *fakePublicTxManager) PrepareSubmissionBatch(ctx context.Context, transactions []*components.PublicTxIDInput) (batch components.PublicTxBatch, err error) {
+	b := &fakePublicTxBatch{t: f.t, transactions: transactions}
+	if f.rejectErr != nil {
+		for _, t := range transactions {
+			b.rejected = append(b.rejected, newFakePublicTx(t, f.rejectErr))
+		}
+	} else {
+		for _, t := range transactions {
+			b.accepted = append(b.accepted, newFakePublicTx(t, nil))
+		}
 	}
-	return mockPreparedSubmissions, false, nil
+	return b, f.prepareErr
 }
 
 // SubmitBatch implements components.PublicTxManager.
-func (f *fakePublicTxManager) SubmitBatch(ctx context.Context, tx *gorm.DB, preparedSubmissions []components.PublicTxPreparedSubmission) ([]*ptxapi.PublicTx, error) {
-	publicTransactions := make([]*ptxapi.PublicTx, 0, len(preparedSubmissions))
-
-	for range preparedSubmissions {
-		publicTransactions = append(publicTransactions, &ptxapi.PublicTx{
-			ID: uuid.NewString(),
-		})
+func (f *fakePublicTxBatch) Submit(ctx context.Context, dbTX *gorm.DB) error {
+	nonceBase := 1000
+	for i, tx := range f.accepted {
+		tx.(*fakePublicTx).pubTx.Nonce = tktypes.HexUint64(nonceBase + i)
 	}
-	return publicTransactions, nil
+	return f.submitErr
 }
 
-func newFakePublicTxManager(t *testing.T) components.PublicTxManager {
+func newFakePublicTxManager(t *testing.T) *fakePublicTxManager {
 	return &fakePublicTxManager{
 		t: t,
 	}

@@ -137,9 +137,9 @@ signer:
 	require.NoError(t, err)
 	contractAddr := deployTX.ContractAddress.Address0xHex()
 
-	getX1, err := simpleStorage.MustFunction("get").R(ctx).To(contractAddr).CallJSON()
+	getX1, err := simpleStorage.MustFunction("get").R(ctx).To(contractAddr).CallResult()
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"x":"11223344"}`, string(getX1))
+	assert.JSONEq(t, `{"x":"11223344"}`, getX1.JSON())
 
 	txHash2, err := simpleStorage.MustFunction("set").R(ctx).
 		Signer("key1").To(contractAddr).Input(`{"_x":99887766}`).SignAndSend()
@@ -147,9 +147,9 @@ signer:
 	_, err = indexer.WaitForTransactionSuccess(ctx, *txHash2, simpleStorageBuild.ABI)
 	require.NoError(t, err)
 
-	getX2, err := simpleStorage.MustFunction("get").R(ctx).To(contractAddr).CallJSON()
+	getX2, err := simpleStorage.MustFunction("get").R(ctx).To(contractAddr).CallResult()
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"x":"99887766"}`, string(getX2))
+	assert.JSONEq(t, `{"x":"99887766"}`, getX2.JSON())
 
 	// Expect our event listener to be queued up with two Changed events
 	event1 := <-eventStreamEvents

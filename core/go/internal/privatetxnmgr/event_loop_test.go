@@ -23,6 +23,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/flushwriter"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
@@ -46,7 +48,7 @@ type orchestratorDepencyMocks struct {
 	publisher            *privatetxnmgrmocks.Publisher
 }
 
-func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress *tktypes.EthAddress) (*Orchestrator, *orchestratorDepencyMocks, <-chan struct{}) {
+func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress *tktypes.EthAddress) (*Orchestrator, *orchestratorDepencyMocks, func()) {
 	if domainAddress == nil {
 		domainAddress = tktypes.MustEthAddress(tktypes.RandHex(20))
 	}
@@ -69,13 +71,19 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
 	mocks.sequencer.On("SetDispatcher", mock.Anything).Maybe().Return()
-	mocks.allComponents.On("Persistence").Return(persistence.NewUnitTestPersistence(ctx)).Maybe()
+	p, persistenceDone, err := persistence.NewUnitTestPersistence(ctx)
+	require.NoError(t, err)
+	mocks.allComponents.On("Persistence").Return(p).Maybe()
 
-	o := NewOrchestrator(ctx, tktypes.RandHex(16), domainAddress.String(), &OrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher)
+	store := privatetxnstore.NewStore(ctx, &flushwriter.Config{}, p)
+	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &OrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher, store)
 	ocDone, err := o.Start(ctx)
 	require.NoError(t, err)
 
-	return o, mocks, ocDone
+	return o, mocks, func() {
+		<-ocDone
+		persistenceDone()
+	}
 
 }
 
@@ -207,16 +215,17 @@ func TestOrchestratorPollingLoopStop(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	testOc, _, ocDone := newOrchestratorForTesting(t, ctx, nil)
+	defer ocDone()
 	testOc.TriggerOrchestratorEvaluation()
 	testOc.Stop()
-	<-ocDone
+
 }
 
 func TestOrchestratorPollingLoopCancelContext(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	_, _, ocDone := newOrchestratorForTesting(t, ctx, nil)
+	defer ocDone()
 
 	cancel()
-	<-ocDone
 }

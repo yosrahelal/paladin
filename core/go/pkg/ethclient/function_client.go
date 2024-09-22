@@ -67,9 +67,9 @@ type ABIFunctionRequestBuilder interface {
 	TX() *ethsigner.Transaction
 
 	// Execution functions
-	BuildCallData() (err error)
-	Call() (err error)                          // unmarshals the output into the output struct supplied in the builder
-	CallRawResult() (res CallResult, err error) // returns the detailed result, without unmarshalling into your output struct
+	BuildCallData() (err error)              // finalizes the call data in the TX(), but does not perform any JSON/RPC calls
+	Call() (err error)                       // calls and processes the result back into the output struct supplied in the builder
+	CallResult() (res CallResult, err error) // returns the detailed result - parsing the response against the ABI, but not re-marshaling it into your object
 	EstimateGas() (res EstimateGasResult, err error)
 	RawTransaction() (rawTX tktypes.HexBytes, err error)
 	SignAndSend() (txHash *tktypes.Bytes32, err error)
@@ -366,7 +366,7 @@ func (ac *abiFunctionRequestBuilder) Call() (err error) {
 		return i18n.NewError(ac.ctx, msgs.MsgEthClientMissingOutput)
 	}
 	var jsonData []byte
-	res, err := ac.CallRawResult()
+	res, err := ac.CallResult()
 	if err == nil {
 		jsonData, err = res.DecodedResult.JSON()
 	}
@@ -386,7 +386,7 @@ func (ac *abiFunctionRequestBuilder) callOps() []CallOption {
 	}, ac.extendedOpts...)
 }
 
-func (ac *abiFunctionRequestBuilder) CallRawResult() (res CallResult, err error) {
+func (ac *abiFunctionRequestBuilder) CallResult() (res CallResult, err error) {
 	if ac.tx.Data == nil {
 		if err := ac.BuildCallData(); err != nil {
 			return res, err

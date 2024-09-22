@@ -26,10 +26,12 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
+	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"gorm.io/gorm"
 )
 
 type OrchestratorState string
@@ -89,7 +91,7 @@ type Orchestrator struct {
 
 	pendingEvents chan ptmgrtypes.PrivateTransactionEvent
 
-	contractAddress     string // the contract address managed by the current orchestrator
+	contractAddress     tktypes.EthAddress // the contract address managed by the current orchestrator
 	nodeID              string
 	domainAPI           components.DomainSmartContract
 	sequencer           ptmgrtypes.Sequencer
@@ -108,7 +110,18 @@ var orchestratorConfigDefault = OrchestratorConfig{
 	MaxPendingEvents:        confutil.P(500),
 }
 
-func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string, oc *OrchestratorConfig, allComponents components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, endorsementGatherer ptmgrtypes.EndorsementGatherer, publisher ptmgrtypes.Publisher) *Orchestrator {
+func NewOrchestrator(
+	ctx context.Context,
+	nodeID string,
+	contractAddress tktypes.EthAddress,
+	oc *OrchestratorConfig,
+	allComponents components.PreInitComponentsAndManagers,
+	domainAPI components.DomainSmartContract,
+	sequencer ptmgrtypes.Sequencer,
+	endorsementGatherer ptmgrtypes.EndorsementGatherer,
+	publisher ptmgrtypes.Publisher,
+	store privatetxnstore.Store,
+) *Orchestrator {
 
 	newOrchestrator := &Orchestrator{
 		ctx:                  log.WithLogField(ctx, "role", fmt.Sprintf("orchestrator-%s", contractAddress)),
@@ -133,12 +146,12 @@ func NewOrchestrator(ctx context.Context, nodeID string, contractAddress string,
 		components:                   allComponents,
 		endorsementGatherer:          endorsementGatherer,
 		publisher:                    publisher,
+		store:                        store,
 	}
 
 	newOrchestrator.sequencer = sequencer
 	sequencer.SetDispatcher(newOrchestrator)
 
-	newOrchestrator.store = privatetxnstore.NewStore(ctx, &privatetxnstore.Config{}, allComponents.Persistence())
 	log.L(ctx).Debugf("NewOrchestrator for contract address %s created: %+v", newOrchestrator.contractAddress, newOrchestrator)
 
 	return newOrchestrator
@@ -299,7 +312,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 	}
 	var finalize func(context.Context)
 
-	for signingAddress, transactionIDs := range dispatchableTransactions {
+	for _, transactionIDs := range dispatchableTransactions {
 
 		preparedTransactions := make([]*components.PrivateTransaction, len(transactionIDs))
 
@@ -338,50 +351,46 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		}
 
 		//Now we have the payloads, we can prepare the submission
+		ec := oc.components.EthClientFactory().SharedWS()
 		publicTransactionEngine := oc.components.PublicTxManager()
 
-		convertToInterfaceSlice := func(slice []*components.EthTransaction) []interface{} {
-			converted := make([]interface{}, len(slice))
-			for i, v := range slice {
-				converted[i] = v
+		publicTXs := make([]*components.PublicTxIDInput, len(preparedTransactions))
+		for i, pt := range preparedTransactions {
+			publicTXs[i] = &components.PublicTxIDInput{
+				PublicTxID: ptxapi.PublicTxID{
+					Transaction:   pt.ID, // TODO: These need reconciling with the parent transaction manager
+					ResubmitIndex: 0,     // TODO: resubmit
+				},
+				PublicTxInput: ptxapi.PublicTxInput{
+					From:            pt.Signer,
+					To:              &oc.contractAddress,
+					PublicTxOptions: ptxapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
+				},
 			}
-			return converted
-		}
-		preparedSubmissions, rejected, err := publicTransactionEngine.PrepareSubmissionBatch(ctx,
-			&ptxapi.PublicTxRequestOptions{
-				SignerID: signingAddress,
-			},
-			convertToInterfaceSlice(preparedTransactionPayloads),
-		)
-		if rejected {
-			log.L(ctx).Errorf("Submission rejected")
-			return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "Submission rejected")
-		}
-		if err != nil {
-			log.L(ctx).Errorf("Error preparing submission batch: %s", err)
-			return err
-		}
-
-		if len(preparedSubmissions) > 0 {
-			defer preparedSubmissions[0].CleanUp(ctx)
-			finalize = preparedSubmissions[0].Finalize
-		}
-
-		// create a function to perform the actual submit
-		// this function will be called ini the context of the DB transaction
-		sequence.PublicTransactionsSubmit = func(tx *gorm.DB) (publicTxIDs []string, err error) {
-			// submit the public transactions
-			publicTransactions, err := publicTransactionEngine.SubmitBatch(ctx, tx, preparedSubmissions)
+			var req ethclient.ABIFunctionRequestBuilder
+			abiFn, err := ec.ABIFunction(ctx, pt.Inputs.Function)
+			if err == nil {
+				req = abiFn.R(ctx)
+				err = req.Input(pt.Inputs.Inputs).BuildCallData()
+			}
 			if err != nil {
-				log.L(ctx).Errorf("Error submitting batch: %s", err)
-				return nil, err
+				return err
 			}
-			publicTxIDs = make([]string, len(publicTransactions))
-			for i, publicTransaction := range publicTransactions {
-				publicTxIDs[i] = publicTransaction.ID.String()
-			}
-
-			return publicTxIDs, nil
+			publicTXs[i].Data = tktypes.HexBytes(req.TX().Data)
+		}
+		pubBatch, err := publicTransactionEngine.PrepareSubmissionBatch(ctx, publicTXs)
+		if err != nil {
+			return i18n.WrapError(ctx, err, msgs.MsgPrivTxMgrPublicTxFail)
+		}
+		// Must make sure from this point we return the nonces
+		sequence.PublicTxBatch = pubBatch
+		completed := false // and include whether we committed the DB transaction or not
+		defer func() {
+			pubBatch.Completed(ctx, completed)
+		}()
+		if len(pubBatch.Rejected()) > 0 {
+			// We do not handle partial success - roll everything back
+			return i18n.WrapError(ctx, pubBatch.Rejected()[0].RejectedError(), msgs.MsgPrivTxMgrPublicTxFail)
 		}
 
 		dispatchBatch.DispatchSequences = append(dispatchBatch.DispatchSequences, sequence)

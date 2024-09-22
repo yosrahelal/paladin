@@ -59,8 +59,11 @@ type persistedTxSubmission struct {
 }
 
 type publicCompletion struct {
-	SignerNonce     string          `gorm:"column:signer_nonce;primaryKey"`
-	TransactionHash tktypes.Bytes32 `gorm:"column:tx_hash"`
+	SignerNonce     string            `gorm:"column:signer_nonce;primaryKey"`
+	Created         tktypes.Timestamp `gorm:"column:created:autoCreateTime:nano"`
+	TransactionHash tktypes.Bytes32   `gorm:"column:tx_hash"`
+	Success         bool              `gorm:"column:success"`
+	RevertReasons   tktypes.HexBytes  `gorm:"column:revert_reason"` // block indexer does not keep this for all TXs
 }
 
 func (s *persistedTxSubmission) WriteKey() string {

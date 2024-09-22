@@ -170,10 +170,10 @@ task makeMocks(type: Mockery, dependsOn: [tasks.installTools, tasks.protoc, task
         outputDir 'mocks/rpcclientmocks'
     }
     mock {
-        inputDir 'internal/engine'
-        includeAll true
-        outputPackage 'enginemocks'
-        outputDir 'mocks/enginemocks'
+        inputDir 'internal/publictxmgr'
+        name 'InFlightStageActionTriggers'
+        outputPackage 'publictxmocks'
+        outputDir 'mocks/publictxmocks'
     }
     mock {
         inputDir 'internal/privatetxnmgr/ptmgrtypes'
@@ -225,7 +225,7 @@ task makeMocks(type: Mockery, dependsOn: [tasks.installTools, tasks.protoc, task
     }
     mock {
         inputDir 'internal/components'
-        name 'PreparedSubmission'
+        name 'PublicTxBatch'
         outputPackage 'componentmocks'
         outputDir 'mocks/componentmocks'
     }

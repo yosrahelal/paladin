@@ -14,11 +14,11 @@
  */
 package privatetxnmgr
 
-import "github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
+import "github.com/kaleido-io/paladin/core/internal/flushwriter"
 
 type Config struct {
-	Writer       privatetxnstore.WriterConfig `yaml:"writer"`
-	Orchestrator OrchestratorConfig           `yaml:"orchestrator"`
+	Writer       flushwriter.Config `yaml:"writer"`
+	Orchestrator OrchestratorConfig `yaml:"orchestrator"`
 }
 
 type OrchestratorConfig struct {
