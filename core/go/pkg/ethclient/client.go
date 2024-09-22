@@ -73,7 +73,7 @@ type ResolvedSigner struct {
 // Call options affect the behavior of gas estimate and call functions, such as by allowing you to supply
 // an ABI for the client to use to decode the error data.
 type CallOption interface {
-	co() *callOptions
+	isCallOptions()
 }
 
 type callOptions struct {
@@ -81,9 +81,7 @@ type callOptions struct {
 	outputs abi.TypeComponent
 }
 
-func (co *callOptions) co() *callOptions {
-	return co
-}
+func (co *callOptions) isCallOptions() {}
 
 // The supplied ABI will be used when attempting to process revert data (if available)
 func WithErrorsFrom(a abi.ABI) CallOption {
@@ -197,7 +195,7 @@ func (ec *ethClient) CallContractNoResolve(ctx context.Context, tx *ethsigner.Tr
 	var outputs abi.TypeComponent
 	errABI := abi.ABI{}
 	for _, o := range opts {
-		co := o.co()
+		co := o.(*callOptions)
 		if co.errABI != nil {
 			errABI = co.errABI
 		}
