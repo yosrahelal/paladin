@@ -77,7 +77,8 @@ type pubTxManager struct {
 	keymgr    ethclient.KeyManager
 	rootTxMgr components.TXManager
 	// gas price
-	gasPriceClient GasPriceClient
+	gasPriceClient   GasPriceClient
+	submissionWriter *submissionWriter
 
 	// nonce manager
 	nonceManager NonceCache
@@ -164,6 +165,7 @@ func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *comp
 	}
 	log.L(ctx).Debugf("Initialized enterprise transaction handler")
 	ble.balanceManager = balanceManager
+	ble.submissionWriter = newSubmissionWriter(ctx, ble.p, ble.conf)
 	return &components.ManagerInitResult{}, nil
 }
 
@@ -182,12 +184,13 @@ func (ble *pubTxManager) Start() error {
 }
 
 func (ble *pubTxManager) Stop() {
+	ble.submissionWriter.Shutdown()
+	ble.nonceManager.Stop()
 	ble.ctxCancel()
 	<-ble.engineLoopDone
 }
 
 type preparedTransaction struct {
-	ctx         context.Context
 	tx          *ptxapi.PublicTxWithID
 	keyHandle   string
 	rejectError error                 // only if rejected
@@ -292,7 +295,9 @@ func (ble *pubTxManager) SingleTransactionSubmit(ctx context.Context, transactio
 	}
 	// Must call completed and tell it whether the allocation of the nonces committed or rolled back
 	committed := false
-	defer batch.Completed(ctx, committed)
+	defer func() {
+		batch.Completed(ctx, committed)
+	}()
 	// Try to submit
 	if len(batch.Rejected()) > 0 {
 		return nil, batch.Rejected()[0].RejectedError()
@@ -415,7 +420,7 @@ func (ble *pubTxManager) finalizeNonceForPersistedTX(ctx context.Context, ptx *p
 	}
 	tx := ptx.tx
 	tx.Nonce = tktypes.HexUint64(nonce)
-	log.L(ctx).Infof("Creating a new public transaction %s [%s] from=%s nonce=%d (%s)", tx.Transaction, tx.ResubmitIndex, tx.From /* number */, tx.From /* hex */)
+	log.L(ctx).Infof("Creating a new public transaction %s [%d] from=%s nonce=%d (%s)", tx.Transaction, tx.ResubmitIndex, tx.From, tx.Nonce /* number */, tx.Nonce /* hex */)
 	log.L(ctx).Tracef("payload: %+v", tx)
 	return &persistedPubTx{
 		From:          tx.From,
@@ -546,6 +551,7 @@ func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, id *ptxa
 		Where("resubmit_idx = ?", id.ResubmitIndex).
 		Select("completed").
 		Limit(1).
+		Find(&ptxs).
 		Error
 	if err != nil {
 		return false, err
@@ -567,6 +573,7 @@ func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourc
 		Where("completed IS FALSE").
 		Where("data IS NULL").
 		Limit(1).
+		Find(&ptxs).
 		Error
 	if err != nil {
 		return nil, err

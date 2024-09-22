@@ -35,6 +35,7 @@ type NonceAssignmentIntent interface {
 
 type NonceCache interface {
 	IntentToAssignNonce(ctx context.Context, signer tktypes.EthAddress) (NonceAssignmentIntent, error)
+	Stop()
 }
 
 type nonceCacheStruct struct {
@@ -47,7 +48,7 @@ type nonceCacheStruct struct {
 	stopChannel       chan struct{}
 }
 
-func (nc *nonceCacheStruct) stop() {
+func (nc *nonceCacheStruct) Stop() {
 	close(nc.stopChannel)
 }
 

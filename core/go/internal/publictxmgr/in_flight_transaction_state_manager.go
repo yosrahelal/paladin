@@ -66,7 +66,8 @@ type inFlightTransactionState struct {
 	bufferedStageOutputsMux sync.Mutex
 	bufferedStageOutputs    []*StageOutput
 
-	statusUpdater StatusUpdater
+	submissionWriter *submissionWriter
+	statusUpdater    StatusUpdater
 }
 
 func (iftxs *inFlightTransactionState) CanSubmit(ctx context.Context, cost *big.Int) bool {
@@ -186,6 +187,7 @@ func NewInFlightTransactionStateManager(thm PublicTxManagerMetricsManager,
 	imtxs InMemoryTxStateManager,
 	retry *retry.Retry,
 	statusUpdater StatusUpdater,
+	submissionWriter *submissionWriter,
 	noEventMode bool,
 ) InFlightTransactionStateManager {
 	return &inFlightTransactionState{
@@ -198,6 +200,8 @@ func NewInFlightTransactionStateManager(thm PublicTxManagerMetricsManager,
 		bufferedStageOutputs:          make([]*StageOutput, 0),
 		txLevelStageStartTime:         time.Now(),
 		InMemoryTxStateManager:        imtxs,
+		statusUpdater:                 statusUpdater,
+		submissionWriter:              submissionWriter,
 	}
 }
 
@@ -297,22 +301,7 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 			GasPricing:      b,
 		}
 	}
-	if it != nil || rsc.StageOutputsToBePersisted.MissedConfirmationEvent {
-		if it == nil {
-			err = iftxs.retry.Do(ctx, func(attempt int) (retry bool, err error) {
-				retrievedTx, retryErr := iftxs.bIndexer.GetIndexedTransactionByNonce(ctx, *tktypes.MustEthAddress(string(mtx.From)), mtx.Nonce.Uint64())
-				if retryErr == nil && retrievedTx == nil {
-					// panic("block indexer missed a nonce")
-					// the logic is in a confirmation loop until block indexer indexed the missing transaction
-					return false, i18n.NewError(ctx, msgs.MsgMissingConfirmedTransaction, mtx.GetTxID())
-				}
-				it = retrievedTx
-				return true, retryErr
-			})
-			if err != nil {
-				return rsc.Stage, time.Now(), err
-			}
-		}
+	if it != nil {
 		iftxs.NotifyAddressBalanceChanged(ctx, mtx.GetFrom())
 		if !mtx.GetValue().NilOrZero() && mtx.GetTo() != nil {
 			iftxs.NotifyAddressBalanceChanged(ctx, *mtx.GetTo())
@@ -363,7 +352,11 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 			// This can be happening on lots of threads at the same time for different transactions,
 			// so we don't want to create an excessive number of DB transactions.
 			// Instead we use a pool of flush-writers that do the insertion in batches.
-			iftxs.TODO
+			op := iftxs.submissionWriter.Queue(ctx, newSubmission)
+			_, err := op.WaitFlushed(ctx)
+			if err != nil {
+				return rsc.Stage, time.Now(), err
+			}
 		}
 
 		// update the in memory state

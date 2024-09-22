@@ -266,7 +266,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 	// Run through copying across from the old InFlight list to the new one, those that aren't ready to be deleted
 	for _, p := range oldInFlight {
 		if !hasCompletedNonce || p.stateManager.GetNonce()-startFromNonce <= 1 {
-			startFromNonce = startFromNonce
+			startFromNonce = p.stateManager.GetNonce()
 			hasCompletedNonce = true
 		}
 		if p.stateManager.CanBeRemoved(ctx) {

@@ -118,7 +118,7 @@ func NewInFlightTransactionStageController(
 
 	ift.MarkTime("wait_in_inflight_queue")
 	imtxs := NewInMemoryTxStateManager(enth.ctx, ptx)
-	ift.stateManager = NewInFlightTransactionStateManager(enth.thMetrics, enth.balanceManager, enth.bIndexer, ift, imtxs, oc.retry, oc, ift.testOnlyNoEventMode)
+	ift.stateManager = NewInFlightTransactionStateManager(enth.thMetrics, enth.balanceManager, enth.bIndexer, ift, imtxs, oc.retry, oc, oc.submissionWriter, ift.testOnlyNoEventMode)
 	return ift
 }
 

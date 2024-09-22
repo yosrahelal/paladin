@@ -18,6 +18,7 @@ package publictxmgr
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -50,7 +51,7 @@ func (ptx *persistedPubTx) getIDString() string {
 }
 
 func (ptx *persistedPubTx) buildSignerNonceRef() string {
-	return fmt.Sprintf("%s:%s", ptx.From, ptx.Nonce)
+	return fmt.Sprintf("%s:%d", ptx.From, ptx.Nonce)
 }
 
 type persistedTxSubmission struct {
@@ -58,4 +59,9 @@ type persistedTxSubmission struct {
 	Created         tktypes.Timestamp `gorm:"column:created:autoCreateTime:false"` // we set this as we track the record in memory too
 	TransactionHash tktypes.Bytes32   `gorm:"column:tx_hash"`
 	GasPricing      tktypes.RawJSON   `gorm:"column:gas_pricing"` // no filtering allowed on this field as it's complex JSON gasPrice/maxFeePerGas/maxPriorityFeePerGas calculation
+}
+
+func (s *persistedTxSubmission) WriteKey() string {
+	// Just use the from address as the write key, so all submissions on the same signing address get batched together
+	return strings.Split(s.SignerNonceRef, ":")[0]
 }

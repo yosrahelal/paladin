@@ -20,31 +20,22 @@ import (
 	"time"
 
 	"github.com/kaleido-io/paladin/core/internal/cache"
+	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-const (
-	defaultTransactionEngineMaxInFlightOrchestrators = 50
-	defaultTransactionEngineInterval                 = "5s"
-	defaultTransactionEngineMaxStale                 = "1m"
-	defaultTransactionEngineMaxIdle                  = "10s"
-	defaultMaxOverloadProcessTime                    = "10m"
-	defaultTransactionEngineRetryInitDelay           = "250ms"
-	defaultTransactionEngineRetryMaxDelay            = "30s"
-	defaultTransactionEngineRetryFactor              = 2.0
-)
-
 type TransactionEngineConfig struct {
-	MaxInFlightOrchestrators *int         `yaml:"maxInFlightOrchestrators"`
-	Interval                 *string      `yaml:"interval"`
-	MaxStaleTime             *string      `yaml:"maxStaleTime"`
-	MaxIdleTime              *string      `yaml:"maxIdleTime"`
-	MaxOverloadProcessTime   *string      `yaml:"maxOverloadProcessTime"`
-	TransactionCache         cache.Config `yaml:"transactionCache"` // can be larger than number of orchestrators for hot swapping
-	Retry                    retry.Config `yaml:"retry"`
+	MaxInFlightOrchestrators *int               `yaml:"maxInFlightOrchestrators"`
+	Interval                 *string            `yaml:"interval"`
+	MaxStaleTime             *string            `yaml:"maxStaleTime"`
+	MaxIdleTime              *string            `yaml:"maxIdleTime"`
+	MaxOverloadProcessTime   *string            `yaml:"maxOverloadProcessTime"`
+	TransactionCache         cache.Config       `yaml:"transactionCache"` // can be larger than number of orchestrators for hot swapping
+	SubmissionWriter         flushwriter.Config `yaml:"submissionWriter"`
+	Retry                    retry.Config       `yaml:"retry"`
 }
 
 var DefaultTransactionEngineConfig = &TransactionEngineConfig{
@@ -56,6 +47,11 @@ var DefaultTransactionEngineConfig = &TransactionEngineConfig{
 		InitialDelay: confutil.P("250ms"),
 		MaxDelay:     confutil.P("30s"),
 		Factor:       confutil.P(2.0),
+	},
+	SubmissionWriter: flushwriter.Config{
+		WorkerCount:  confutil.P(5),
+		BatchTimeout: confutil.P("75ms"),
+		BatchMaxSize: confutil.P(50),
 	},
 	TransactionCache: cache.Config{
 		Capacity: confutil.P(1000),

@@ -97,7 +97,7 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 			case ethclient.ErrorKnownTransaction:
 				// check mined transaction also returns this error code
 				// KnownTransaction means it's in the mempool
-				log.L(ctx).Debugf("Transaction %s at nonce %s / %d known with hash: %s (previous=%s)", mtx.GetTxID(), txHash, submissionError)
+				log.L(ctx).Debugf("Transaction %s known with hash: %s (previous=%s)", mtx.GetTxID(), txHash, submissionError)
 				submissionError = nil
 				submissionErrorReason = ""
 				submissionOutcome = SubmissionOutcomeAlreadyKnown
