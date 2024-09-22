@@ -218,7 +218,7 @@ func (iftxs *inFlightTransactionState) AddPersistenceOutput(ctx context.Context,
 }
 
 func (iftxs *inFlightTransactionState) CanBeRemoved(ctx context.Context) bool {
-	return iftxs.IsComplete() && iftxs.runningStageContext == nil
+	return iftxs.IsReadyToExit() && iftxs.runningStageContext == nil
 }
 
 func (iftxs *inFlightTransactionState) AddSubmitOutput(ctx context.Context, txHash *tktypes.Bytes32, submissionTime *tktypes.Timestamp, submissionOutcome SubmissionOutcome, errorReason ethclient.ErrorReason, err error) {
@@ -265,10 +265,8 @@ func (iftxs *inFlightTransactionState) AddGasPriceOutput(ctx context.Context, ga
 func (iftxs *inFlightTransactionState) AddConfirmationsOutput(ctx context.Context, confirmedTx *blockindexer.IndexedTransaction) {
 	start := time.Now()
 	iftxs.AddStageOutputs(ctx, &StageOutput{
-		Stage: InFlightTxStageConfirming,
-		ConfirmationOutput: &ConfirmationOutputs{
-			ConfirmedTransaction: confirmedTx,
-		},
+		Stage:              InFlightTxStageConfirming,
+		ConfirmationOutput: &ConfirmationOutputs{},
 	})
 	log.L(ctx).Debugf("%s AddConfirmationsOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetTxID(), time.Since(start))
 }
@@ -291,7 +289,7 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 		return iftxs.stage, time.Now(), i18n.NewError(ctx, msgs.MsgPersistError)
 	}
 
-	it := rsc.StageOutputsToBePersisted.ConfirmedTransaction
+	confirmationReceived := rsc.StageOutputsToBePersisted.ConfirmationReceived
 	if rsc.StageOutputsToBePersisted.TxUpdates != nil && rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash != nil {
 		b, _ := json.Marshal(mtx.GetGasPriceObject())
 		rsc.StageOutputsToBePersisted.TxUpdates.NewSubmission = &persistedTxSubmission{
@@ -301,7 +299,7 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 			GasPricing:      b,
 		}
 	}
-	if it != nil {
+	if confirmationReceived {
 		iftxs.NotifyAddressBalanceChanged(ctx, mtx.GetFrom())
 		if !mtx.GetValue().NilOrZero() && mtx.GetTo() != nil {
 			iftxs.NotifyAddressBalanceChanged(ctx, *mtx.GetTo())
@@ -361,9 +359,6 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 
 		// update the in memory state
 		iftxs.ApplyInMemoryUpdates(ctx, rsc.StageOutputsToBePersisted.TxUpdates)
-		if it != nil {
-			iftxs.SetConfirmedTransaction(ctx, it)
-		}
 	}
 	return rsc.Stage, time.Now(), nil
 }

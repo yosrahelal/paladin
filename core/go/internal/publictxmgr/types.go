@@ -45,7 +45,7 @@ import (
 // There are separate setter functions for fields that depending on the persistence
 // mechanism might be in separate tables - including History, Receipt, and Confirmations
 type BaseTXUpdates struct {
-	Status            *BaseTxStatus
+	InFlightStatus    *InFlightStatus
 	SubStatus         *BaseTxSubStatus
 	GasPricing        *ptxapi.PublicTxGasPricing
 	GasLimit          *ethtypes.HexInteger // note this is required for some methods (eth_estimateGas)
@@ -56,22 +56,6 @@ type BaseTXUpdates struct {
 	NewSubmission     *persistedTxSubmission
 	FlushedSubmission *persistedTxSubmission
 }
-
-// BaseTxStatus is the current status of a transaction
-type BaseTxStatus string
-
-const (
-	// BaseTxStatusPending indicates the operation has been submitted, but is not yet confirmed as successful or failed
-	BaseTxStatusPending BaseTxStatus = "Pending"
-	// BaseTxStatusSucceeded the infrastructure runtime has returned success for the operation
-	BaseTxStatusSucceeded BaseTxStatus = "Succeeded"
-	// BaseTxStatusFailed happens when an error is reported by the infrastructure runtime
-	BaseTxStatusFailed BaseTxStatus = "Failed"
-	// BaseTxStatusFailed happens when the indexed transaction hash doesn't match any of the submitted hashes
-	BaseTxSStatusConflict BaseTxStatus = "Conflict"
-	// BaseTxStatusSuspended indicates we are not actively doing any work with this transaction right now, until it's resumed to pending again
-	BaseTxStatusSuspended BaseTxStatus = "Suspended"
-)
 
 // PublicTransactionEventType is a enum type that contains all types of transaction process events
 // that a transaction handler emits.
@@ -279,7 +263,6 @@ const (
 type InMemoryTxStateReadOnly interface {
 	GetCreatedTime() *tktypes.Timestamp
 	// get the transaction receipt from the in-memory state (note: the returned value should not be modified)
-	GetConfirmedTransaction() *blockindexer.IndexedTransaction
 	GetTransactionHash() *tktypes.Bytes32
 	GetNonce() uint64
 	GetFrom() tktypes.EthAddress
@@ -287,11 +270,11 @@ type InMemoryTxStateReadOnly interface {
 	GetValue() *tktypes.HexUint256
 	GetResolvedSigner() *ethclient.ResolvedSigner
 	BuildEthTX() *ethsigner.Transaction
-	GetStatus() BaseTxStatus
 	GetGasPriceObject() *ptxapi.PublicTxGasPricing
 	GetFirstSubmit() *tktypes.Timestamp
 	GetLastSubmitTime() *tktypes.Timestamp
 	GetUnflushedSubmission() *persistedTxSubmission
+	GetInFlightStatus() InFlightStatus
 
 	// Returns a generated string from the transaction that can be used as a unique identifier for in-memory processing.
 	// Note it CANNOT be used to retrieve the transaction from the DB
@@ -303,8 +286,7 @@ type InMemoryTxStateReadOnly interface {
 	GetParentTransactionID() uuid.UUID
 
 	GetGasLimit() uint64
-	IsComplete() bool
-	IsSuspended() bool
+	IsReadyToExit() bool
 }
 type InMemoryTxStateManager interface {
 	InMemoryTxStateReadOnly
@@ -312,7 +294,6 @@ type InMemoryTxStateManager interface {
 }
 
 type InMemoryTxStateSetters interface {
-	SetConfirmedTransaction(ctx context.Context, iTX *blockindexer.IndexedTransaction)
 	ApplyInMemoryUpdates(ctx context.Context, txUpdates *BaseTXUpdates)
 }
 
@@ -349,8 +330,7 @@ type GasPriceOutput struct {
 }
 
 type ConfirmationOutputs struct {
-	ConfirmedTransaction *blockindexer.IndexedTransaction
-	Err                  error
+	/* no outputs as we never exit this stage through stage processing */
 }
 
 type PersistenceOutput struct {
@@ -408,7 +388,7 @@ type RunningStageContextPersistenceOutput struct {
 	Ctx                     context.Context
 	TxUpdates               *BaseTXUpdates
 	StatusUpdates           []func(p StatusUpdater) error
-	ConfirmedTransaction    *blockindexer.IndexedTransaction
+	ConfirmationReceived    bool
 	MissedConfirmationEvent bool
 }
 
@@ -437,6 +417,7 @@ type InFlightTransactionStateManager interface {
 	InMemoryTxStateReadOnly
 	CanSubmit(ctx context.Context, cost *big.Int) bool
 	CanBeRemoved(ctx context.Context) bool
+	GetInFlightStatus() InFlightStatus
 
 	// stage management
 	StartNewStageContext(ctx context.Context, stage InFlightTxStage, substatus BaseTxSubStatus)

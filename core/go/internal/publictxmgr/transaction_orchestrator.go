@@ -275,8 +275,6 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			latestCompletedNonce = &txNonce
 			queueUpdated = true
 			log.L(ctx).Debugf("Orchestrator poll and process, marking %s as complete after: %s", p.stateManager.GetTxID(), time.Since(p.stateManager.GetCreatedTime().Time()))
-		} else if p.stateManager.IsSuspended() || p.pauseRequested {
-			log.L(ctx).Debugf("Orchestrator poll and process, removed suspended tx %s after: %s", p.stateManager.GetTxID(), time.Since(p.stateManager.GetCreatedTime().Time()))
 		} else {
 			log.L(ctx).Debugf("Orchestrator poll and process, continuing tx %s after: %s", p.stateManager.GetTxID(), time.Since(p.stateManager.GetCreatedTime().Time()))
 			oc.InFlightTxs = append(oc.InFlightTxs, p)

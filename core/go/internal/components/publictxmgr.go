@@ -68,4 +68,5 @@ type PublicTxManager interface {
 	GetTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithID, error)
 	PrepareSubmissionBatch(ctx context.Context, transactions []*PublicTxIDInput) (batch PublicTxBatch, err error)
 	MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransaction) ([]*PublicTxMatch, error)
+	NotifyConfirmPersisted(ctx context.Context, confirms []*PublicTxMatch)
 }

@@ -24,7 +24,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
-	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 )
 
@@ -37,31 +36,23 @@ type managedTx struct {
 
 	// In-memory state that we update as we process the transaction in an active orchestrator
 	// TODO: Validate that all of these fields are actively used
+	InFlightStatus  InFlightStatus             // moves to pending/confirmed to cause the inflight to exit
 	GasPricing      *ptxapi.PublicTxGasPricing // the most recently used gas pricing information
-	Status          BaseTxStatus               `json:"status"`                    // high level lifecycle status for the transaction
-	TransactionHash *tktypes.Bytes32           `json:"transactionHash,omitempty"` // the most recently submitted transaction hash (not guaranteed to be the one mined)
-	FirstSubmit     *tktypes.Timestamp         `json:"firstSubmit,omitempty"`     // the time this runtime instance first did a submit JSON/RPC call (for success or failure)
-	LastSubmit      *tktypes.Timestamp         `json:"lastSubmit,omitempty"`      // the last time runtime instance first did a submit JSON/RPC call (for success or failure)
-	ErrorMessage    *string                    `json:"errorMessage,omitempty"`    // ???
+	TransactionHash *tktypes.Bytes32           // the most recently submitted transaction hash (not guaranteed to be the one mined)
+	FirstSubmit     *tktypes.Timestamp         // the time this runtime instance first did a submit JSON/RPC call (for success or failure)
+	LastSubmit      *tktypes.Timestamp         // the last time runtime instance first did a submit JSON/RPC call (for success or failure)
+	ErrorMessage    *string                    // ???
 }
 
 type inMemoryTxState struct {
 	idString string // generated ID that uniquely represents this transaction in in-memory processing
 	// managed transaction in the only input for creating an inflight transaction
 	mtx *managedTx
-
-	// the value of the following properties are populated during transaction processing but not during initialization
-	//  the process logic will determine whether confirmed transaction requires to be fetched
-	ConfirmedTransaction *blockindexer.IndexedTransaction
 }
 
 func NewInMemoryTxStateManager(ctx context.Context, ptx *persistedPubTx) InMemoryTxStateManager {
 	imtxs := &inMemoryTxState{
-		mtx: &managedTx{
-			ptx: ptx,
-			// When we load in a transaction this is the state we assume
-			Status: BaseTxStatusPending,
-		},
+		mtx: &managedTx{ptx: ptx, InFlightStatus: InFlightStatusPending},
 	}
 	// Initialize the ephemeral state from the most recent persisted submission if one exists
 	if len(ptx.Submissions) > 0 {
@@ -74,10 +65,6 @@ func NewInMemoryTxStateManager(ctx context.Context, ptx *persistedPubTx) InMemor
 		imtxs.mtx.FirstSubmit = &firstSub.Created
 	}
 	return imtxs
-}
-
-func (imtxs *inMemoryTxState) SetConfirmedTransaction(ctx context.Context, iTX *blockindexer.IndexedTransaction) {
-	imtxs.ConfirmedTransaction = iTX
 }
 
 func (imtxs *inMemoryTxState) ApplyInMemoryUpdates(ctx context.Context, txUpdates *BaseTXUpdates) {
@@ -124,8 +111,8 @@ func (imtxs *inMemoryTxState) ApplyInMemoryUpdates(ctx context.Context, txUpdate
 		mtx.LastSubmit = txUpdates.LastSubmit
 	}
 
-	if txUpdates.Status != nil {
-		mtx.Status = *txUpdates.Status
+	if txUpdates.InFlightStatus != nil {
+		mtx.InFlightStatus = *txUpdates.InFlightStatus
 	}
 
 	if txUpdates.TransactionHash != nil {
@@ -154,10 +141,6 @@ func (imtxs *inMemoryTxState) GetCreatedTime() *tktypes.Timestamp {
 
 func (imtxs *inMemoryTxState) GetTransactionHash() *tktypes.Bytes32 {
 	return imtxs.mtx.TransactionHash
-}
-
-func (imtxs *inMemoryTxState) GetStatus() BaseTxStatus {
-	return imtxs.mtx.Status
 }
 
 func (imtxs *inMemoryTxState) GetNonce() uint64 {
@@ -220,16 +203,12 @@ func (imtxs *inMemoryTxState) GetGasLimit() uint64 {
 	return imtxs.mtx.ptx.Gas
 }
 
-func (imtxs *inMemoryTxState) GetConfirmedTransaction() *blockindexer.IndexedTransaction {
-	return imtxs.ConfirmedTransaction
+func (imtxs *inMemoryTxState) GetInFlightStatus() InFlightStatus {
+	return imtxs.mtx.InFlightStatus
 }
 
-func (imtxs *inMemoryTxState) IsComplete() bool {
-	return imtxs.mtx.Status == BaseTxStatusFailed || imtxs.mtx.Status == BaseTxStatusSucceeded
-}
-
-func (imtxs *inMemoryTxState) IsSuspended() bool {
-	return imtxs.mtx.Status == BaseTxStatusSuspended
+func (imtxs *inMemoryTxState) IsReadyToExit() bool {
+	return imtxs.mtx.InFlightStatus != InFlightStatusPending
 }
 
 func NewRunningStageContext(ctx context.Context, stage InFlightTxStage, substatus BaseTxSubStatus, imtxs InMemoryTxStateManager) *RunningStageContext {

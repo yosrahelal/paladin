@@ -23,7 +23,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
@@ -656,31 +655,16 @@ func (ble *pubTxManager) getTransactionSubmissions(ctx context.Context, dbTX *go
 	return ptxs, err
 }
 
-func (ble *pubTxManager) SuspendTransactionsForID(ctx context.Context, txID uuid.UUID) error {
-	db := ble.p.DB()
-	txns, err := ble.runTransactionQuery(ctx, db, db.Table("public_txns").Where(`"transaction" = ?`, txID))
-	if err != nil {
+func (ble *pubTxManager) SuspendTransaction(ctx context.Context, from tktypes.EthAddress, nonce uint64) error {
+	if err := ble.dispatchAction(ctx, from, nonce, ActionSuspend); err != nil {
 		return err
-	}
-	for _, tx := range txns {
-		if err := ble.dispatchAction(ctx, tx, ActionSuspend); err != nil {
-			return err
-		}
 	}
 	return nil
 }
 
-func (ble *pubTxManager) ResumeTransactionsForID(ctx context.Context, txID uuid.UUID) error {
-	db := ble.p.DB()
-	txns, err := ble.runTransactionQuery(ctx, db, db.Table("public_txns").Where(`"transaction" = ?`, txID))
-	if err != nil {
+func (ble *pubTxManager) ResumeTransaction(ctx context.Context, from tktypes.EthAddress, nonce uint64) error {
+	if err := ble.dispatchAction(ctx, from, nonce, ActionResume); err != nil {
 		return err
-	}
-	for _, tx := range txns {
-		if err := ble.dispatchAction(ctx, tx, ActionResume); err != nil {
-			return err
-		}
-
 	}
 	return nil
 }
@@ -783,4 +767,12 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 
 	return results, nil
 
+}
+
+// We've got to be super careful not to block this thread, so we treat this just like a suspend/resume
+// on each of these transactions
+func (pte *pubTxManager) NotifyConfirmPersisted(ctx context.Context, confirms []*components.PublicTxMatch) {
+	// for _, conf := range confirms {
+	// 	pte.dispatchAction(ctx)
+	// }
 }

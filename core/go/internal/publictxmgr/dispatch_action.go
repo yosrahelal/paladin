@@ -22,45 +22,51 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-type APIRequestType int
+type AsyncRequestType int
 
 const (
-	ActionSuspend APIRequestType = iota
+	ActionSuspend AsyncRequestType = iota
 	ActionResume
+	ActionCompleted
 )
 
-func (pte *pubTxManager) persistSuspendedFlag(ctx context.Context, ptx *persistedPubTx, suspended bool) error {
-	log.L(ctx).Infof("Setting suspend status to '%t' for transaction %s:%d", suspended, ptx.Transaction, ptx.ResubmitIndex)
+func (pte *pubTxManager) persistSuspendedFlag(ctx context.Context, from tktypes.EthAddress, nonce uint64, suspended bool) error {
+	log.L(ctx).Infof("Setting suspend status to '%t' for transaction %s:%d", suspended, from, nonce)
 	return pte.p.DB().
 		WithContext(ctx).
 		UpdateColumn("suspended", suspended).
-		Where("transaction = ?", ptx.Transaction).
-		Where("resubmit_idx = ?", ptx.ResubmitIndex).
+		Where("from = ?", from).
+		Where("nonce = ?", nonce).
 		Error
 }
 
-func (pte *pubTxManager) dispatchAction(ctx context.Context, ptx *persistedPubTx, action APIRequestType) error {
+func (pte *pubTxManager) dispatchAction(ctx context.Context, from tktypes.EthAddress, nonce uint64, action AsyncRequestType) error {
 	response := make(chan error, 1)
 	startTime := time.Now()
 	go func() {
 		pte.InFlightOrchestratorMux.Lock()
 		defer pte.InFlightOrchestratorMux.Unlock()
+		inFlightOrchestrator, orchestratorInFlight := pte.InFlightOrchestrators[from]
 		switch action {
+		case ActionCompleted:
+			// Only need to pass this on if there's an orchestrator in flight for this signing address
+			if orchestratorInFlight {
+				inFlightOrchestrator.dispatchAction(ctx, nonce, action, response)
+			}
 		case ActionSuspend, ActionResume:
 			suspended := false
 			if action == ActionSuspend {
 				suspended = true
 			}
-			// Just update the DB directly, as we're not inflight right now.
-			inFlightOrchestrator, orchestratorInFlight := pte.InFlightOrchestrators[ptx.From]
 			if !orchestratorInFlight {
 				// no in-flight orchestrator for the signing address, it's OK to update the DB directly
-				response <- pte.persistSuspendedFlag(ctx, ptx, suspended)
+				response <- pte.persistSuspendedFlag(ctx, from, nonce, suspended)
 			} else {
 				// has to be done in the context of the orchestrator
-				inFlightOrchestrator.dispatchAction(ctx, ptx, action, response)
+				inFlightOrchestrator.dispatchAction(ctx, nonce, action, response)
 			}
 		}
 	}()
@@ -73,28 +79,33 @@ func (pte *pubTxManager) dispatchAction(ctx context.Context, ptx *persistedPubTx
 	}
 }
 
-func (oc *orchestrator) dispatchAction(ctx context.Context, ptx *persistedPubTx, action APIRequestType, response chan<- error) {
-	switch action {
-	case ActionSuspend, ActionResume:
-		oc.InFlightTxsMux.Lock()
-		defer oc.InFlightTxsMux.Unlock()
-		var pending *InFlightTransactionStageController
-		for _, inflight := range oc.InFlightTxs {
-			if inflight.stateManager.GetTxID() == ptx.getIDString() {
-				pending = inflight
-				break
-			}
+func (oc *orchestrator) dispatchAction(ctx context.Context, nonce uint64, action AsyncRequestType, response chan<- error) {
+	oc.InFlightTxsMux.Lock()
+	defer oc.InFlightTxsMux.Unlock()
+	var pending *InFlightTransactionStageController
+	for _, inflight := range oc.InFlightTxs {
+		if inflight.stateManager.GetNonce() == nonce {
+			pending = inflight
+			break
 		}
-		if pending != nil {
-			switch action {
-			case ActionSuspend, ActionResume:
-				pending.pauseRequested = false
-				if action == ActionSuspend {
-					pending.pauseRequested = false
-				}
-				// Ok we've now got the lock that means we can write to the DB
-				response <- oc.persistSuspendedFlag(ctx, ptx, pending.pauseRequested)
+	}
+	if pending != nil {
+		switch action {
+		case ActionCompleted:
+			_, _ = pending.NotifyStatusUpdate(ctx, InFlightStatusConfirmReceived)
+		case ActionSuspend, ActionResume:
+			var suspendedFlag bool
+			if action == ActionSuspend {
+				suspendedFlag = true
+				_, _ = pending.NotifyStatusUpdate(ctx, InFlightStatusSuspending)
+			} else {
+				suspendedFlag = false
+				_, _ = pending.NotifyStatusUpdate(ctx, InFlightStatusPending)
 			}
+			// Ok we've now got the lock that means we can write to the DB
+			// No optimization of this write, as it's a user action from the side of normal processing
+			response <- oc.persistSuspendedFlag(ctx, oc.signingAddress, nonce, suspendedFlag)
 		}
+		oc.MarkInFlightTxStale()
 	}
 }
