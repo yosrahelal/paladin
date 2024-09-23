@@ -386,8 +386,8 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmed(t *testing.T) {
 		tktypes.Bytes32Keccak([]byte("0x00003")).String(),
 	}
 	newStatus := PubTxStatusSucceeded
-	newGas := ethtypes.NewHexInteger64(111)
-	newGasPrice := ethtypes.NewHexInteger64(111)
+	newGas := tktypes.Uint64ToUint256(111)
+	newGasPrice := tktypes.Uint64ToUint256(111)
 
 	testConfirmedTx := &blockindexer.IndexedTransaction{
 		BlockNumber:      int64(1233),
@@ -471,8 +471,8 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmedOnPreviousHash(t
 		tktypes.Bytes32Keccak([]byte("0x00002")).String(),
 	}
 	newStatus := PubTxStatusSucceeded
-	newGas := ethtypes.NewHexInteger64(111)
-	newGasPrice := ethtypes.NewHexInteger64(111)
+	newGas := tktypes.Uint64ToUint256(111)
+	newGasPrice := tktypes.Uint64ToUint256(111)
 
 	testConfirmedTx := &blockindexer.IndexedTransaction{
 		BlockNumber:      int64(1233),
@@ -548,8 +548,8 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmedRetrieveConfirme
 
 	newTime := confutil.P(tktypes.TimestampNow())
 	newStatus := PubTxStatusFailed
-	newGas := ethtypes.NewHexInteger64(111)
-	newGasPrice := ethtypes.NewHexInteger64(111)
+	newGas := tktypes.Uint64ToUint256(111)
+	newGasPrice := tktypes.Uint64ToUint256(111)
 	newTxHash := tktypes.Bytes32Keccak([]byte("0x00003"))
 	newSubmittedHashes := []string{
 		tktypes.Bytes32Keccak([]byte("0x00000")).String(),

@@ -36,7 +36,6 @@ import (
 )
 
 const testAutoFuelingSourceAddress = "0x4e598f6e918321dd47c86e7a077b4ab0e7414846"
-const testDestAddress = "0x6cee73cf4d5b0ac66ce2d1c0617bec4bedd09f39"
 const testSourceAddressBalance = 400
 const testSourceAddressBalanceString = "400"
 
@@ -156,9 +155,9 @@ func TestGetAddressBalance(t *testing.T) {
 	bm, mEthClient, _ := NewTestBalanceManager(ctx, t)
 	defer mEthClient.AssertExpectations(t)
 
-	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(ethtypes.NewHexInteger64(testSourceAddressBalance), nil).Once()
+	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(testSourceAddressBalance), nil).Once()
 
-	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(ethtypes.NewHexInteger64(testSourceAddressBalanceNew), nil).Once()
+	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(testSourceAddressBalanceNew), nil).Once()
 
 	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(nil, errors.New("pop")).Once()
 	addressAccount, err := bm.GetAddressBalance(ctx, testAutoFuelingSourceAddress)
@@ -188,7 +187,7 @@ func TestAddressAccountSpend(t *testing.T) {
 	bm, mEthClient, _ := NewTestBalanceManager(ctx, t)
 	defer mEthClient.AssertExpectations(t)
 
-	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(ethtypes.NewHexInteger64(testSourceAddressBalance), nil).Once()
+	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(testSourceAddressBalance), nil).Once()
 	addressAccount, err := bm.GetAddressBalance(ctx, testAutoFuelingSourceAddress)
 	require.NoError(t, err)
 	assert.NotNil(t, addressAccount)
@@ -330,7 +329,7 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 		MaxCost:               big.NewInt(150),
 	}
 	// source account balance retrieval
-	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(ethtypes.NewHexInteger64(testSourceAddressBalance), nil).Once()
+	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(testSourceAddressBalance), nil).Once()
 	// no existing pending transaction
 	mockAFTxEngine.On("GetPendingFuelingTransaction", mock.Anything, testAutoFuelingSourceAddress, testDestAddress).Return(nil, nil).Once()
 
@@ -388,7 +387,7 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 	expectedTopUpAmount3 := big.NewInt(50)
 	expectedFuelingTransaction3 := generateExpectedFuelingTransaction(expectedTopUpAmount3.Int64())
 	bm.NotifyAddressBalanceChanged(ctx, testAutoFuelingSourceAddress)
-	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(ethtypes.NewHexInteger64(50), nil).Once()
+	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(50), nil).Once()
 	mockAFTxEngine.On("CheckTransactionCompleted", mock.Anything, expectedFuelingTransaction2).Return(true).Once()
 	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *components.RequestOptions) bool {
 		return txOptions.SignerID == testAutoFuelingSourceAddress
@@ -424,7 +423,7 @@ func TestTopUpSuccessTopUpMinAheadUseMin(t *testing.T) {
 		MaxCost:               big.NewInt(150),
 	}
 	// source account balance retrieval
-	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(ethtypes.NewHexInteger64(testSourceAddressBalance), nil).Once()
+	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(testSourceAddressBalance), nil).Once()
 	// no existing pending transaction
 	mockAFTxEngine.On("GetPendingFuelingTransaction", mock.Anything, testAutoFuelingSourceAddress, testDestAddress).Return(nil, nil).Once()
 
@@ -462,7 +461,7 @@ func TestTopUpSuccessTopUpMinAheadUseMax(t *testing.T) {
 		MaxCost:               big.NewInt(150),
 	}
 	// source account balance retrieval
-	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(ethtypes.NewHexInteger64(testSourceAddressBalance), nil).Once()
+	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(testSourceAddressBalance), nil).Once()
 	// no existing pending transaction
 	mockAFTxEngine.On("GetPendingFuelingTransaction", mock.Anything, testAutoFuelingSourceAddress, testDestAddress).Return(nil, nil).Once()
 
@@ -500,7 +499,7 @@ func TestTopUpSuccessTopUpMinAheadUseAvg(t *testing.T) {
 		MaxCost:               big.NewInt(150),
 	}
 	// source account balance retrieval
-	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(ethtypes.NewHexInteger64(testSourceAddressBalance), nil).Once()
+	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(testSourceAddressBalance), nil).Once()
 	// no existing pending transaction
 	mockAFTxEngine.On("GetPendingFuelingTransaction", mock.Anything, testAutoFuelingSourceAddress, testDestAddress).Return(nil, nil).Once()
 
@@ -538,7 +537,7 @@ func TestTopUpSuccessUseMinDestBalance(t *testing.T) {
 		MaxCost:               big.NewInt(150),
 	}
 	// source account balance retrieval
-	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(ethtypes.NewHexInteger64(testSourceAddressBalance), nil).Once()
+	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(testSourceAddressBalance), nil).Once()
 	// no existing pending transaction
 	mockAFTxEngine.On("GetPendingFuelingTransaction", mock.Anything, testAutoFuelingSourceAddress, testDestAddress).Return(nil, nil).Once()
 
@@ -571,7 +570,7 @@ func TestTopUpSuccessUseMaxDestBalance(t *testing.T) {
 		MaxCost:               big.NewInt(150),
 	}
 	// source account balance retrieval
-	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(ethtypes.NewHexInteger64(testSourceAddressBalance), nil).Once()
+	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(testSourceAddressBalance), nil).Once()
 	// no existing pending transaction
 	mockAFTxEngine.On("GetPendingFuelingTransaction", mock.Anything, testAutoFuelingSourceAddress, testDestAddress).Return(nil, nil).Once()
 
@@ -649,7 +648,7 @@ func TestTopUpFailedDueToSourceBalanceBelowMin(t *testing.T) {
 		MaxCost:               big.NewInt(150),
 	}
 	// source account balance retrieval
-	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(ethtypes.NewHexInteger64(testSourceAddressBalance), nil).Once()
+	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(testSourceAddressBalance), nil).Once()
 	// no existing pending transaction
 	mockAFTxEngine.On("GetPendingFuelingTransaction", mock.Anything, testAutoFuelingSourceAddress, testDestAddress).Return(nil, nil).Once()
 
@@ -677,7 +676,7 @@ func TestTopUpFailedDueToSourceBalanceBelowRequestedAmount(t *testing.T) {
 		MaxCost:               big.NewInt(1500),
 	}
 	// source account balance retrieval
-	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(ethtypes.NewHexInteger64(testSourceAddressBalance), nil).Once()
+	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(testSourceAddressBalance), nil).Once()
 	// no existing pending transaction
 	mockAFTxEngine.On("GetPendingFuelingTransaction", mock.Anything, testAutoFuelingSourceAddress, testDestAddress).Return(nil, nil).Once()
 

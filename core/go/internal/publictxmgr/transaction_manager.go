@@ -164,7 +164,7 @@ func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *comp
 	balanceManager, err := NewBalanceManagerWithInMemoryTracking(ctx, ble.conf, ble.ethClient, ble)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to create balance manager for enterprise transaction handler due to %+v", err)
-		panic(err)
+		return nil, err
 	}
 	log.L(ctx).Debugf("Initialized enterprise transaction handler")
 	ble.balanceManager = balanceManager
@@ -187,10 +187,12 @@ func (ble *pubTxManager) Start() error {
 }
 
 func (ble *pubTxManager) Stop() {
+	ble.ctxCancel()
 	ble.submissionWriter.Shutdown()
 	ble.nonceManager.Stop()
-	ble.ctxCancel()
-	<-ble.engineLoopDone
+	if ble.engineLoopDone != nil {
+		<-ble.engineLoopDone
+	}
 }
 
 type preparedTransaction struct {

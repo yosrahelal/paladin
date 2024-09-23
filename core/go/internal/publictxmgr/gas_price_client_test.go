@@ -20,54 +20,52 @@ import (
 	"fmt"
 	"math/big"
 	"testing"
-	"time"
 
-	"github.com/hyperledger/firefly-common/pkg/cache"
-	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
+func longLivedGasPriceTestCache() cache.Cache[string, *fftypes.JSONAny] {
+	return cache.NewCache[string, *fftypes.JSONAny](&cache.Config{}, &DefaultConfig.GasPrice.Cache)
+}
+
 func NewTestFixedPriceGasPriceClient(t *testing.T) GasPriceClient {
-	ctx := context.Background()
 	hgc := &HybridGasPriceClient{}
 	hgc.fixedGasPrice = fftypes.JSONAnyPtr(`{"gasPrice": 10}`)
-	hgc.gasPriceCache = cache.NewUmanagedCache(ctx, 100, 1*time.Minute)
+	hgc.gasPriceCache = longLivedGasPriceTestCache()
 	return hgc
 }
 
 func NewTestZeroGasPriceChainClient(t *testing.T) GasPriceClient {
-	ctx := context.Background()
 	hgc := &HybridGasPriceClient{}
 	hgc.fixedGasPrice = fftypes.JSONAnyPtr(`0`)
 	hgc.hasZeroGasPrice = true
-	hgc.gasPriceCache = cache.NewUmanagedCache(ctx, 100, 1*time.Minute)
+	hgc.gasPriceCache = longLivedGasPriceTestCache()
 	return hgc
 }
 
 func NewTestFixedPriceGasPriceClientEIP1559(t *testing.T) GasPriceClient {
-	ctx := context.Background()
 	hgc := &HybridGasPriceClient{}
 	hgc.fixedGasPrice = fftypes.JSONAnyPtr(`{
 		"maxPriorityFeePerGas": 1,
 		"maxFeePerGas": 10
 	}`)
-	hgc.gasPriceCache = cache.NewUmanagedCache(ctx, 100, 1*time.Minute)
+	hgc.gasPriceCache = longLivedGasPriceTestCache()
 	return hgc
 }
 
 func NewTestNodeGasPriceClient(t *testing.T, connectorAPI ethclient.EthClient) GasPriceClient {
-	ctx := context.Background()
 	hgc := &HybridGasPriceClient{}
 	hgc.cAPI = connectorAPI
-	hgc.gasPriceCache = cache.NewUmanagedCache(ctx, 100, 1*time.Minute)
+	hgc.gasPriceCache = longLivedGasPriceTestCache()
 	return hgc
 }
 
@@ -81,7 +79,7 @@ func TestSetFixedGasPriceIfConfigured(t *testing.T) {
 	assert.Nil(t, testTx.MaxPriorityFeePerGas)
 	zeroGpo, err := zeroHgc.GetGasPriceObject(ctx)
 	assert.NoError(t, err)
-	assert.Equal(t, big.NewInt(0), zeroGpo.GasPrice)
+	assert.Equal(t, big.NewInt(0), zeroGpo.GasPrice.Int())
 	assert.Nil(t, zeroGpo.MaxFeePerGas)
 	assert.Nil(t, zeroGpo.MaxPriorityFeePerGas)
 
@@ -93,7 +91,7 @@ func TestSetFixedGasPriceIfConfigured(t *testing.T) {
 	assert.Nil(t, testTx.MaxPriorityFeePerGas)
 	tenGpo, err := tenHgc.GetGasPriceObject(ctx)
 	assert.NoError(t, err)
-	assert.Equal(t, big.NewInt(10), tenGpo.GasPrice)
+	assert.Equal(t, big.NewInt(10), tenGpo.GasPrice.Int())
 	assert.Nil(t, tenGpo.MaxFeePerGas)
 	assert.Nil(t, tenGpo.MaxPriorityFeePerGas)
 
@@ -106,15 +104,15 @@ func TestSetFixedGasPriceIfConfigured(t *testing.T) {
 	gpo, err := eip1559Hgc.GetGasPriceObject(ctx)
 	assert.NoError(t, err)
 	assert.Nil(t, gpo.GasPrice)
-	assert.Equal(t, big.NewInt(10), gpo.MaxFeePerGas)
-	assert.Equal(t, big.NewInt(1), gpo.MaxPriorityFeePerGas)
+	assert.Equal(t, big.NewInt(10), gpo.MaxFeePerGas.Int())
+	assert.Equal(t, big.NewInt(1), gpo.MaxPriorityFeePerGas.Int())
 }
 
 func TestGasPriceClientInit(t *testing.T) {
 	ctx := context.Background()
 	hgc := &HybridGasPriceClient{}
 	hgc.fixedGasPrice = fftypes.JSONAnyPtr(`invalid`)
-	hgc.gasPriceCache = cache.NewUmanagedCache(ctx, 100, 1*time.Minute)
+	hgc.gasPriceCache = longLivedGasPriceTestCache()
 	assert.False(t, hgc.hasZeroGasPrice)
 	hgc.Init(ctx, nil)
 	assert.False(t, hgc.hasZeroGasPrice)
@@ -123,24 +121,37 @@ func TestGasPriceClientInit(t *testing.T) {
 	assert.True(t, hgc.hasZeroGasPrice)
 }
 
+func TestFixedGasPrice(t *testing.T) {
+	ctx := context.Background()
+
+	gasPriceClient := NewGasPriceClient(ctx, &Config{
+		GasPrice: GasPriceConfig{
+			FixedGasPrice: "1020304050",
+		},
+	})
+	hgc := gasPriceClient.(*HybridGasPriceClient)
+
+	gpo, err := hgc.GetGasPriceObject(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, &ptxapi.PublicTxGasPricing{
+		GasPrice: tktypes.Int64ToInt256(1020304050),
+	}, gpo)
+}
+
 func TestGasPriceClient(t *testing.T) {
 	ctx := context.Background()
-	gasPriceCache := cache.NewUmanagedCache(ctx, 100, 1*time.Minute)
-	conf := config.RootSection("unittestgasprice")
-	InitGasPriceConfig(conf)
-	gasPriceConf := conf.SubSection(GasPriceSection)
 
-	gasPriceClient := NewGasPriceClient(ctx, gasPriceConf, gasPriceCache)
+	gasPriceClient := NewGasPriceClient(ctx, &Config{})
 	hgc := gasPriceClient.(*HybridGasPriceClient)
 
 	mEC := componentmocks.NewEthClient(t)
 	hgc.Init(ctx, mEC)
 	// check functions
-	assert.False(t, hgc.HasZeroGasPrice(ctx))
+	assert.True(t, hgc.HasZeroGasPrice(ctx))
 
-	testNodeGasPrice := `"1000"`
+	testNodeGasPrice := `"0x3e8"`
 	// fall back to connector when get call failed
-	mEC.On("GasPrice", ctx, mock.Anything).Return(ethtypes.NewHexInteger64(1000), nil).Once()
+	mEC.On("GasPrice", ctx, mock.Anything).Return(tktypes.Uint64ToUint256(1000), nil).Once()
 	gasPriceJSON, err := hgc.getGasPriceJSON(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, testNodeGasPrice, gasPriceJSON.String())
@@ -151,7 +162,7 @@ func TestGasPriceClient(t *testing.T) {
 	assert.Equal(t, testNodeGasPrice, gasPriceJSON.String())
 	fixedGpo, err := hgc.ParseGasPriceJSON(ctx, gasPriceJSON)
 	require.NoError(t, err)
-	assert.Equal(t, big.NewInt(1000), fixedGpo.GasPrice)
+	assert.Equal(t, big.NewInt(1000), fixedGpo.GasPrice.Int())
 	assert.Nil(t, fixedGpo.MaxFeePerGas)
 	assert.Nil(t, fixedGpo.MaxPriorityFeePerGas)
 

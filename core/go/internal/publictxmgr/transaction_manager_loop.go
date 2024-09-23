@@ -155,6 +155,7 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 			// TODO: Fairness algorithm for swapping out orchestrators when there is no space
 			q := ble.p.DB().
 				WithContext(ctx).
+				Table("public_txns").
 				Distinct("from").
 				Joins("Completed").
 				Where("Completed__tx_hash IS NULL").

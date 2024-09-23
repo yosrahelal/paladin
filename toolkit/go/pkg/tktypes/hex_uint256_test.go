@@ -27,6 +27,8 @@ import (
 
 func TestHexUint256(t *testing.T) {
 
+	assert.Equal(t, int64(10), Uint64ToUint256(10).Int().Int64())
+
 	v := MustParseHexUint256("9223372036854775807")
 	assert.Equal(t, uint64(9223372036854775807), v.Int().Uint64())
 	dbv, err := v.Value()

@@ -126,8 +126,8 @@ func TestProduceLatestInFlightStageContextCannotSubmit(t *testing.T) {
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
 	mtx := it.stateManager.GetTx()
 	mtx.GasPrice = nil
-	mtx.MaxFeePerGas = ethtypes.NewHexInteger64(32247127816)
-	mtx.MaxPriorityFeePerGas = ethtypes.NewHexInteger64(32146027800)
+	mtx.MaxFeePerGas = tktypes.Uint64ToUint256(32247127816)
+	mtx.MaxPriorityFeePerGas = tktypes.Uint64ToUint256(32146027800)
 
 	mtx.TransactionHash = nil
 	mtx.FirstSubmit = nil
@@ -145,7 +145,7 @@ func TestProduceLatestInFlightStageContextCannotSubmit(t *testing.T) {
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
 	mtx.TransactionHash = confutil.P(tktypes.Bytes32Keccak([]byte("test")))
 	mtx.SubmittedHashes = []string{}
-	mtx.GasLimit = ethtypes.NewHexInteger64(-1) // invalid limit
+	mtx.GasLimit = tktypes.Uint64ToUint256(-1) // invalid limit
 	it.stateManager.SetValidatedTransactionHashMatchState(ctx, false)
 	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
 		AvailableToSpend:         big.NewInt(0),

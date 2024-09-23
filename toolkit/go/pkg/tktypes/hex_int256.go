@@ -33,6 +33,10 @@ import (
 // HexInt256 is any integer (signed or unsigned) up to 256 bits in size, serialized to the DB using a 65 sortable string (a 0/1 sign character, followed by 32 hex bytes)
 type HexInt256 big.Int
 
+func Int64ToInt256(v int64) *HexUint256 {
+	return (*HexUint256)(new(big.Int).SetInt64(v))
+}
+
 // Parse a string
 func ParseHexInt256(ctx context.Context, s string) (*HexInt256, error) {
 	bi, ok := new(big.Int).SetString(s, 0)
