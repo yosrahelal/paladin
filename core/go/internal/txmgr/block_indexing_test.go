@@ -87,7 +87,7 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 	abiRef, err := txm.storeABI(ctx, testABI)
 	require.NoError(t, err)
 
-	txIDs, err := txm.insertTransactions(ctx, txm.p.DB(), []*ptxapi.TransactionInput{
+	insertInfo, err := txm.insertTransactions(ctx, txm.p.DB(), []*ptxapi.TransactionInput{
 		{
 			Transaction: ptxapi.Transaction{
 				Type:         ptxapi.TransactionTypePublic.Enum(),
@@ -97,7 +97,7 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	txID = &txIDs[0]
+	txID = &insertInfo[0].id
 
 	postCommit, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*blockindexer.IndexedBlock{},
 		[]*blockindexer.IndexedTransactionNotify{txi})

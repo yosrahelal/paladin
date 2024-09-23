@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -233,35 +234,81 @@ func (tm *txManager) parseInputs(
 }
 
 func (tm *txManager) sendTransaction(ctx context.Context, tx *ptxapi.TransactionInput) (*uuid.UUID, error) {
-	var txIDs []uuid.UUID
+	// TODO: Add flush writer for parallel performance on this form of insertion
+	txIDs, err := tm.sendTransactions(ctx, []*ptxapi.TransactionInput{tx})
+	if err != nil {
+		return nil, err
+	}
+	return &txIDs[0], nil
+}
+
+func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.TransactionInput) ([]uuid.UUID, error) {
+	var inserts []txInsertInfo
 	err := tm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
-		txIDs, err = tm.insertTransactions(ctx, dbTX, []*ptxapi.TransactionInput{tx})
+		inserts, err = tm.insertTransactions(ctx, dbTX, txs)
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &txIDs[0], err
+
+	// TODO: Integrate with private TX manager persistence when available
+	txIDs := make([]uuid.UUID, len(txs))
+	for i, tx := range txs {
+		txIDs[i] = inserts[i].id
+		if tx.Type.V() == ptxapi.TransactionTypePrivate {
+			if tx.To == nil {
+				err = tm.privateTxMgr.HandleDeployTx(ctx, &components.PrivateContractDeploy{
+					ID:     inserts[i].id,
+					Domain: tx.Domain,
+					Inputs: inserts[i].inputs,
+				})
+			} else {
+				err = tm.privateTxMgr.HandleNewTx(ctx, &components.PrivateTransaction{
+					ID: inserts[i].id,
+					Inputs: &components.TransactionInputs{
+						Domain:   tx.Domain,
+						From:     tx.From,
+						To:       *tx.To,
+						Function: inserts[i].fn.definition,
+						Inputs:   inserts[i].inputs,
+					},
+				})
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return txIDs, err
 }
 
-func (tm *txManager) insertTransactions(ctx context.Context, dbTX *gorm.DB, txs []*ptxapi.TransactionInput) ([]uuid.UUID, error) {
-	txIDs := make([]uuid.UUID, len(txs))
+type txInsertInfo struct {
+	id     uuid.UUID
+	fn     *resolvedFunction
+	inputs tktypes.RawJSON
+}
+
+func (tm *txManager) insertTransactions(ctx context.Context, dbTX *gorm.DB, txs []*ptxapi.TransactionInput) ([]txInsertInfo, error) {
+	info := make([]txInsertInfo, len(txs))
 	ptxs := make([]*persistedTransaction, len(txs))
 	var transactionDeps []*transactionDep
 	for i := range txs {
 		tx := txs[i]
 		txID := uuid.New()
-		txIDs[i] = txID
+		info[i].id = txID
 
 		fn, err := tm.resolveFunction(ctx, dbTX, tx.ABI, tx.ABIReference, tx.Function, tx.To)
 		if err != nil {
 			return nil, err
 		}
+		info[i].fn = fn
 
 		normalizedJSON, err := tm.parseInputs(ctx, fn.definition, tx.Type, tx.Data, tx.Bytecode)
 		if err != nil {
 			return nil, err
 		}
+		info[i].inputs = normalizedJSON
 
 		// TODO: Flush writer for singleton transactions vs batch
 		ptxs[i] = &persistedTransaction{
@@ -297,7 +344,7 @@ func (tm *txManager) insertTransactions(ctx context.Context, dbTX *gorm.DB, txs 
 	if err != nil {
 		return nil, err
 	}
-	return txIDs, nil
+	return info, nil
 }
 
 func (tm *txManager) queryTransactions(ctx context.Context, jq *query.QueryJSON, pending bool) ([]*ptxapi.Transaction, error) {

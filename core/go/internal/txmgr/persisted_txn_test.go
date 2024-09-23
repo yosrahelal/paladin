@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -179,6 +180,73 @@ func TestResolveFunctionPlainNameOK(t *testing.T) {
 		ABI: exampleABI,
 	})
 	assert.NoError(t, err)
+}
+
+func TestSendTransactionPrivateDeploy(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, func(conf *Config, mc *mockComponents) {
+		mc.privateTxMgr.On("HandleDeployTx", mock.Anything, mock.Anything).Return(nil)
+	})
+	defer done()
+
+	exampleABI := abi.ABI{{Type: abi.Constructor}}
+	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
+	require.NoError(t, err)
+
+	_, err = txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type:   ptxapi.TransactionTypePrivate.Enum(),
+			Domain: "domain1",
+			Data:   tktypes.JSONString(tktypes.HexBytes(callData)),
+		},
+		ABI: exampleABI,
+	})
+	assert.NoError(t, err)
+}
+
+func TestSendTransactionPrivateInvoke(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, func(conf *Config, mc *mockComponents) {
+		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
+	})
+	defer done()
+
+	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
+	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
+	require.NoError(t, err)
+
+	_, err = txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type:     ptxapi.TransactionTypePrivate.Enum(),
+			Domain:   "domain1",
+			Function: "doIt",
+			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data:     tktypes.JSONString(tktypes.HexBytes(callData)),
+		},
+		ABI: exampleABI,
+	})
+	assert.NoError(t, err)
+}
+
+func TestSendTransactionPrivateInvokeFail(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, func(conf *Config, mc *mockComponents) {
+		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
+	})
+	defer done()
+
+	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
+	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
+	require.NoError(t, err)
+
+	_, err = txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type:     ptxapi.TransactionTypePrivate.Enum(),
+			Domain:   "domain1",
+			Function: "doIt",
+			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data:     tktypes.JSONString(tktypes.HexBytes(callData)),
+		},
+		ABI: exampleABI,
+	})
+	assert.Regexp(t, "pop", err)
 }
 
 func TestResolveFunctionOnlyOneToMatch(t *testing.T) {

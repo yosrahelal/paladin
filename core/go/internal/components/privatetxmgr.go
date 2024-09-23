@@ -42,8 +42,8 @@ type PrivateTxManager interface {
 	ManagerLifecycle
 
 	//Synchronous functions to submit a new private transaction
-	HandleNewTx(ctx context.Context, tx *PrivateTransaction) (txID string, err error)
-	HandleDeployTx(ctx context.Context, tx *PrivateContractDeploy) (txID string, contractAddress string, err error)
+	HandleNewTx(ctx context.Context, tx *PrivateTransaction) error
+	HandleDeployTx(ctx context.Context, tx *PrivateContractDeploy) error
 	GetTxStatus(ctx context.Context, domainAddress string, txID string) (status PrivateTxStatus, err error)
 
 	//TODO this is just a placeholder until we figure out the external interface for events
