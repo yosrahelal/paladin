@@ -22,11 +22,14 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
@@ -108,6 +111,25 @@ const fakeCoinFactoryNewInstanceABI = `{
 	],
 	"outputs": null
 }`
+
+const fakeCoinEventsABI = `[{
+	"type": "event",
+    "name": "Transfer",
+	"inputs": [
+		{
+			"name": "inputs",
+			"type": "bytes32[]"
+		},
+		{
+			"name": "outputs",
+			"type": "bytes32[]"
+		},
+		{
+			"name": "data",
+			"type": "bytes"
+		}
+	]
+}]`
 
 type fakeState struct {
 	Salt   tktypes.Bytes32      `json:"salt"`
@@ -215,6 +237,25 @@ func TestDomainInitStates(t *testing.T) {
 
 }
 
+func TestDomainInitStatesWithEvents(t *testing.T) {
+
+	domainConf := goodDomainConf()
+	domainConf.AbiEventsJson = fakeCoinEventsABI
+	ctx, dm, tp, done := newTestDomain(t, true, domainConf, func(mc *mockComponents) {
+		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything).Return(nil, nil)
+	})
+	defer done()
+
+	assert.Nil(t, tp.d.initError.Load())
+	assert.True(t, tp.initialized.Load())
+	byAddr, err := dm.getDomainByAddress(ctx, tp.d.RegistryAddress())
+	require.NoError(t, err)
+	assert.Equal(t, tp.d, byAddr)
+	assert.True(t, tp.d.Initialized())
+	assert.NotNil(t, tp.d.Configuration().BaseLedgerSubmitConfig)
+
+}
+
 func TestDoubleRegisterReplaces(t *testing.T) {
 
 	domainConf := goodDomainConf()
@@ -249,6 +290,47 @@ func TestDomainInitBadSchemas(t *testing.T) {
 	})
 	defer done()
 	assert.Regexp(t, "PD011602", *tp.d.initError.Load())
+	assert.False(t, tp.initialized.Load())
+}
+
+func TestDomainInitBadEventsJSON(t *testing.T) {
+	_, _, tp, done := newTestDomain(t, false, &prototk.DomainConfig{
+		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
+		AbiStateSchemasJson:    []string{},
+		AbiEventsJson:          `!!! Wrong`,
+	})
+	defer done()
+	assert.Regexp(t, "PD011642", *tp.d.initError.Load())
+	assert.False(t, tp.initialized.Load())
+}
+
+func TestDomainInitBadEventsABI(t *testing.T) {
+	_, _, tp, done := newTestDomain(t, false, &prototk.DomainConfig{
+		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
+		AbiStateSchemasJson:    []string{},
+		AbiEventsJson: `[
+			{
+				"type": "badbadwrong",
+				"name": "bad",
+				"inputs": [{"type": "verywrong"}]
+			}
+		]`,
+	})
+	defer done()
+	assert.Regexp(t, "FF22025", *tp.d.initError.Load())
+	assert.False(t, tp.initialized.Load())
+}
+
+func TestDomainInitStreamFail(t *testing.T) {
+	_, _, tp, done := newTestDomain(t, false, &prototk.DomainConfig{
+		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
+		AbiStateSchemasJson:    []string{},
+		AbiEventsJson:          fakeCoinEventsABI,
+	}, func(mc *mockComponents) {
+		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+	})
+	defer done()
+	assert.EqualError(t, *tp.d.initError.Load(), "pop")
 	assert.False(t, tp.initialized.Load())
 }
 
@@ -796,4 +878,419 @@ func TestRecoverSignerFailCases(t *testing.T) {
 		Signature: ([]byte)("not a signature RSV"),
 	})
 	assert.Regexp(t, "PD011638", err)
+}
+
+func TestHandleEventBatch(t *testing.T) {
+	batchID := uuid.New()
+	txID := uuid.New()
+	txIDBytes32 := tktypes.Bytes32UUIDFirst16(txID)
+	contract1 := tktypes.RandAddress()
+	contract2 := tktypes.RandAddress()
+	stateSpent := tktypes.RandHex(32)
+	stateConfirmed := tktypes.RandHex(32)
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.domainStateInterface.On("MarkStatesSpent", txID, []string{stateSpent}).Return(nil)
+		mc.domainStateInterface.On("MarkStatesConfirmed", txID, []string{stateConfirmed}).Return(nil)
+		mc.domainStateInterface.On("UpsertStates", &txID, mock.Anything).Return(nil, nil)
+	})
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	// First contract is unrecognized, second is recognized
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{},
+	))
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{"address", "domain_address"},
+	).AddRow(contract2, d.registryAddress))
+
+	tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		assert.Equal(t, batchID.String(), req.BatchId)
+		var events []*blockindexer.EventWithData
+		err := json.Unmarshal([]byte(req.JsonEvents), &events)
+		require.NoError(t, err)
+		require.Len(t, events, 1)
+		assert.Equal(t, contract2.String(), events[0].Address.String())
+		return &prototk.HandleEventBatchResponse{
+			TransactionsComplete: []string{
+				txIDBytes32.String(),
+			},
+			SpentStates: []*prototk.StateUpdate{
+				{
+					Id:            stateSpent,
+					TransactionId: txIDBytes32.String(),
+				},
+			},
+			ConfirmedStates: []*prototk.StateUpdate{
+				{
+					Id:            stateConfirmed,
+					TransactionId: txIDBytes32.String(),
+				},
+			},
+			NewStates: []*prototk.NewLocalState{
+				{
+					StateDataJson: `{"color": "blue"}`,
+					TransactionId: txIDBytes32.String(),
+				},
+			},
+		}, nil
+	}
+
+	cb, err := d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				Address: *contract1,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+			{
+				Address: *contract2,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.NoError(t, err)
+
+	req := d.dm.transactionWaiter.AddInflight(ctx, txID)
+	cb()
+	_, err = req.Wait()
+	assert.NoError(t, err)
+}
+
+func TestHandleEventBatchContractLookupFail(t *testing.T) {
+	batchID := uuid.New()
+	contract1 := tktypes.RandAddress()
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnError(fmt.Errorf("pop"))
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				Address: *contract1,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.EqualError(t, err, "pop")
+}
+
+func TestHandleEventBatchDomainError(t *testing.T) {
+	batchID := uuid.New()
+	contract1 := tktypes.RandAddress()
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{"address", "domain_address"},
+	).AddRow(contract1, d.registryAddress))
+
+	tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return nil, fmt.Errorf("pop")
+	}
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				Address: *contract1,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.EqualError(t, err, "pop")
+}
+
+func TestHandleEventBatchSpentBadTransactionID(t *testing.T) {
+	batchID := uuid.New()
+	contract1 := tktypes.RandAddress()
+	stateSpent := tktypes.RandHex(32)
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{"address", "domain_address"},
+	).AddRow(contract1, d.registryAddress))
+
+	tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return &prototk.HandleEventBatchResponse{
+			SpentStates: []*prototk.StateUpdate{
+				{
+					Id:            stateSpent,
+					TransactionId: "badnotgood",
+				},
+			},
+		}, nil
+	}
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				Address: *contract1,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.ErrorContains(t, err, "PD020007")
+}
+
+func TestHandleEventBatchConfirmBadTransactionID(t *testing.T) {
+	batchID := uuid.New()
+	contract1 := tktypes.RandAddress()
+	stateSpent := tktypes.RandHex(32)
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{"address", "domain_address"},
+	).AddRow(contract1, d.registryAddress))
+
+	tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return &prototk.HandleEventBatchResponse{
+			ConfirmedStates: []*prototk.StateUpdate{
+				{
+					Id:            stateSpent,
+					TransactionId: "badnotgood",
+				},
+			},
+		}, nil
+	}
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				Address: *contract1,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.ErrorContains(t, err, "PD020007")
+}
+
+func TestHandleEventBatchNewBadTransactionID(t *testing.T) {
+	batchID := uuid.New()
+	contract1 := tktypes.RandAddress()
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{"address", "domain_address"},
+	).AddRow(contract1, d.registryAddress))
+
+	tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return &prototk.HandleEventBatchResponse{
+			NewStates: []*prototk.NewLocalState{
+				{
+					TransactionId: "badnotgood",
+				},
+			},
+		}, nil
+	}
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				Address: *contract1,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.ErrorContains(t, err, "PD020007")
+}
+
+func TestHandleEventBatchBadTransactionID(t *testing.T) {
+	batchID := uuid.New()
+	contract1 := tktypes.RandAddress()
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{"address", "domain_address"},
+	).AddRow(contract1, d.registryAddress))
+
+	tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return &prototk.HandleEventBatchResponse{
+			TransactionsComplete: []string{
+				"badnotgood",
+			},
+		}, nil
+	}
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				Address: *contract1,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.ErrorContains(t, err, "PD020007")
+}
+
+func TestHandleEventBatchMarkSpentFail(t *testing.T) {
+	batchID := uuid.New()
+	txID := uuid.New()
+	txIDBytes32 := tktypes.Bytes32UUIDFirst16(txID)
+	contract1 := tktypes.RandAddress()
+	stateSpent := tktypes.RandHex(32)
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.domainStateInterface.On("MarkStatesSpent", txID, []string{stateSpent}).Return(fmt.Errorf("pop"))
+	})
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{"address", "domain_address"},
+	).AddRow(contract1, d.registryAddress))
+
+	tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return &prototk.HandleEventBatchResponse{
+			SpentStates: []*prototk.StateUpdate{
+				{
+					Id:            stateSpent,
+					TransactionId: txIDBytes32.String(),
+				},
+			},
+		}, nil
+	}
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				Address: *contract1,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.EqualError(t, err, "pop")
+}
+
+func TestHandleEventBatchMarkConfirmedFail(t *testing.T) {
+	batchID := uuid.New()
+	txID := uuid.New()
+	txIDBytes32 := tktypes.Bytes32UUIDFirst16(txID)
+	contract1 := tktypes.RandAddress()
+	stateConfirmed := tktypes.RandHex(32)
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.domainStateInterface.On("MarkStatesConfirmed", txID, []string{stateConfirmed}).Return(fmt.Errorf("pop"))
+	})
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{"address", "domain_address"},
+	).AddRow(contract1, d.registryAddress))
+
+	tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return &prototk.HandleEventBatchResponse{
+			ConfirmedStates: []*prototk.StateUpdate{
+				{
+					Id:            stateConfirmed,
+					TransactionId: txIDBytes32.String(),
+				},
+			},
+		}, nil
+	}
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				Address: *contract1,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.EqualError(t, err, "pop")
+}
+
+func TestHandleEventBatchUpsertFail(t *testing.T) {
+	batchID := uuid.New()
+	txID := uuid.New()
+	txIDBytes32 := tktypes.Bytes32UUIDFirst16(txID)
+	contract1 := tktypes.RandAddress()
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.domainStateInterface.On("UpsertStates", &txID, mock.Anything).Return(nil, fmt.Errorf("pop"))
+	})
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{"address", "domain_address"},
+	).AddRow(contract1, d.registryAddress))
+
+	tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return &prototk.HandleEventBatchResponse{
+			NewStates: []*prototk.NewLocalState{
+				{
+					StateDataJson: `{"color": "blue"}`,
+					TransactionId: txIDBytes32.String(),
+				},
+			},
+		}, nil
+	}
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				Address: *contract1,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.EqualError(t, err, "pop")
 }

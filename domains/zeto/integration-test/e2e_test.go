@@ -178,9 +178,6 @@ type zetoDomainTestSuite struct {
 func (s *zetoDomainTestSuite) SetupSuite() {
 	domainContracts := deployZetoContracts(s.T())
 	s.deployedContracts = domainContracts
-}
-
-func (s *zetoDomainTestSuite) SetupTest() {
 	ctx := context.Background()
 	domainName := "zeto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
@@ -246,7 +243,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 			To:     controllerName,
 			Amount: ethtypes.NewHexInteger64(10),
 		}),
-	})
+	}, false)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -267,7 +264,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 			To:     controllerName,
 			Amount: ethtypes.NewHexInteger64(20),
 		}),
-	})
+	}, false)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -303,7 +300,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 			To:     recipient1Name,
 			Amount: ethtypes.NewHexInteger64(10),
 		}),
-	})
+	}, false)
 	require.NotNil(t, rpcerr)
 	assert.Regexp(t, "failed to send base ledger transaction: PD011516: Reverted: 0x118cdaa.*", rpcerr.Error())
 	assert.True(t, boolResult)
@@ -317,7 +314,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 			To:     recipient1Name,
 			Amount: ethtypes.NewHexInteger64(25),
 		}),
-	})
+	}, false)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}

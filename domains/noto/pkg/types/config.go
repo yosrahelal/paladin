@@ -48,6 +48,8 @@ var NotoConfigOutputABI_V0 = &abi.ParameterArray{
 	{Name: "variant", Type: "bytes32"},
 }
 
+var NotoTransactionData_V0 = ethtypes.MustNewHexBytes0xPrefix("0x00010000")
+
 type DomainHandler = domain.DomainHandler[NotoConfigOutput_V0]
 type ParsedTransaction = domain.ParsedTransaction[NotoConfigOutput_V0]
 

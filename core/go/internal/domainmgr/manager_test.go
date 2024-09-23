@@ -285,3 +285,19 @@ func TestWaitForDeployTimeout(t *testing.T) {
 	_, err := dm.waitAndEnrich(cancelled, dm.contractWaiter.AddInflight(cancelled, uuid.New()))
 	assert.Regexp(t, "PD020100", err)
 }
+
+func TestWaitForTransactionTimeout(t *testing.T) {
+	ctx, dm, _, done := newTestDomainManager(t, false, &DomainManagerConfig{
+		Domains: map[string]*DomainConfig{
+			"domain1": {
+				RegistryAddress: tktypes.RandHex(20),
+			},
+		},
+	})
+	defer done()
+
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	err := dm.WaitForTransaction(cancelled, uuid.New())
+	assert.Regexp(t, "PD020100", err)
+}

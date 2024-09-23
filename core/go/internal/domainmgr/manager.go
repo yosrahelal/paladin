@@ -56,12 +56,13 @@ func NewDomainManager(bgCtx context.Context, conf *DomainManagerConfig) componen
 	}
 	log.L(bgCtx).Infof("Domains configured: %v", allDomains)
 	return &domainManager{
-		bgCtx:            bgCtx,
-		conf:             conf,
-		domainsByName:    make(map[string]*domain),
-		domainsByAddress: make(map[tktypes.EthAddress]*domain),
-		contractWaiter:   inflight.NewInflightManager[uuid.UUID, *PrivateSmartContract](uuid.Parse),
-		contractCache:    cache.NewCache[tktypes.EthAddress, *domainContract](&conf.DomainManager.ContractCache, ContractCacheDefaults),
+		bgCtx:             bgCtx,
+		conf:              conf,
+		domainsByName:     make(map[string]*domain),
+		domainsByAddress:  make(map[tktypes.EthAddress]*domain),
+		contractWaiter:    inflight.NewInflightManager[uuid.UUID, *PrivateSmartContract](uuid.Parse),
+		transactionWaiter: inflight.NewInflightManager[uuid.UUID, any](uuid.Parse),
+		contractCache:     cache.NewCache[tktypes.EthAddress, *domainContract](&conf.DomainManager.ContractCache, ContractCacheDefaults),
 	}
 }
 
@@ -78,8 +79,9 @@ type domainManager struct {
 	domainsByName    map[string]*domain
 	domainsByAddress map[tktypes.EthAddress]*domain
 
-	contractWaiter *inflight.InflightManager[uuid.UUID, *PrivateSmartContract]
-	contractCache  cache.Cache[tktypes.EthAddress, *domainContract]
+	contractWaiter    *inflight.InflightManager[uuid.UUID, *PrivateSmartContract]
+	transactionWaiter *inflight.InflightManager[uuid.UUID, any]
+	contractCache     cache.Cache[tktypes.EthAddress, *domainContract]
 }
 
 type event_PaladinRegisterSmartContract_V0 struct {
@@ -190,7 +192,7 @@ func (dm *domainManager) WaitForDeploy(ctx context.Context, txID uuid.UUID) (com
 	req := dm.contractWaiter.AddInflight(ctx, txID)
 	defer req.Cancel()
 
-	dc, err := dm.dbGetSmartContract(ctx, func(db *gorm.DB) *gorm.DB { return db.Where("deploy_tx = ?", txID) })
+	dc, err := dm.dbGetSmartContract(ctx, dm.persistence.DB(), func(db *gorm.DB) *gorm.DB { return db.Where("deploy_tx = ?", txID) })
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +210,15 @@ func (dm *domainManager) waitAndEnrich(ctx context.Context, req *inflight.Inflig
 		return nil, err
 	}
 	return dm.enrichContractWithDomain(ctx, def)
+}
 
+func (dm *domainManager) WaitForTransaction(ctx context.Context, txID uuid.UUID) error {
+	// Waits for the event that confirms a transaction has been processed (or a context timeout)
+	// using the ID of the transaction
+	req := dm.transactionWaiter.AddInflight(ctx, txID)
+	defer req.Cancel()
+	_, err := req.Wait()
+	return err
 }
 
 func (dm *domainManager) setDomainAddress(d *domain) {
@@ -230,24 +240,25 @@ func (dm *domainManager) getDomainByAddress(ctx context.Context, addr *tktypes.E
 }
 
 func (dm *domainManager) GetSmartContractByAddress(ctx context.Context, addr tktypes.EthAddress) (components.DomainSmartContract, error) {
+	dc, err := dm.getSmartContractCached(ctx, dm.persistence.DB(), addr)
+	if dc != nil || err != nil {
+		return dc, err
+	}
+	return nil, i18n.NewError(ctx, msgs.MsgDomainContractNotFoundByAddr, addr)
+}
+
+func (dm *domainManager) getSmartContractCached(ctx context.Context, tx *gorm.DB, addr tktypes.EthAddress) (*domainContract, error) {
 	dc, isCached := dm.contractCache.Get(addr)
 	if isCached {
 		return dc, nil
 	}
 	// Updating the cache deferred down to newSmartContract (under enrichContractWithDomain)
-	dc, err := dm.dbGetSmartContract(ctx, func(db *gorm.DB) *gorm.DB { return db.Where("address = ?", addr) })
-	if err != nil {
-		return nil, err
-	}
-	if dc == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgDomainContractNotFoundByAddr, addr)
-	}
-	return dc, nil
+	return dm.dbGetSmartContract(ctx, tx, func(db *gorm.DB) *gorm.DB { return db.Where("address = ?", addr) })
 }
 
-func (dm *domainManager) dbGetSmartContract(ctx context.Context, setWhere func(db *gorm.DB) *gorm.DB) (*domainContract, error) {
+func (dm *domainManager) dbGetSmartContract(ctx context.Context, tx *gorm.DB, setWhere func(db *gorm.DB) *gorm.DB) (*domainContract, error) {
 	var contracts []*PrivateSmartContract
-	query := dm.persistence.DB().Table("private_smart_contracts")
+	query := tx.Table("private_smart_contracts")
 	query = setWhere(query)
 	err := query.
 		WithContext(ctx).

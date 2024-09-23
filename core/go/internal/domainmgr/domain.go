@@ -18,9 +18,11 @@ package domainmgr
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
@@ -30,6 +32,8 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -55,6 +59,7 @@ type domain struct {
 	config             *prototk.DomainConfig
 	schemasBySignature map[string]statestore.Schema
 	schemasByID        map[string]statestore.Schema
+	eventStream        *blockindexer.EventStream
 
 	initError atomic.Pointer[error]
 	initDone  chan struct{}
@@ -95,14 +100,16 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 	}
 
 	// Ensure all the schemas are recorded to the DB
-	// This is a special case where we need a synchronous flush to ensure they're all established
 	var schemas []statestore.Schema
-	schemas, err := d.dm.stateStore.EnsureABISchemas(d.ctx, d.name, abiSchemas)
-	if err != nil {
-		return nil, err
+	if len(abiSchemas) > 0 {
+		var err error
+		schemas, err = d.dm.stateStore.EnsureABISchemas(d.ctx, d.name, abiSchemas)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	// Build the request to the init
+	// Build the schema IDs to send back in the init
 	schemasProto := make([]*prototk.StateSchema, len(schemas))
 	for i, s := range schemas {
 		schemaID := s.IDString()
@@ -113,6 +120,36 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 			Signature: s.Signature(),
 		}
 	}
+
+	if d.config.AbiEventsJson != "" {
+		// Parse the events ABI
+		var eventsABI abi.ABI
+		if err := json.Unmarshal([]byte(d.config.AbiEventsJson), &eventsABI); err != nil {
+			return nil, i18n.WrapError(d.ctx, err, msgs.MsgDomainInvalidEvents)
+		}
+
+		// We build a stream name in a way assured to result in a new stream if the ABI changes,
+		// TODO... and in the future with a logical way to clean up defunct streams
+		streamHash, err := tktypes.ABISolDefinitionHash(d.ctx, eventsABI)
+		if err != nil {
+			return nil, err
+		}
+		streamName := fmt.Sprintf("domain_%s_%s", d.name, streamHash)
+
+		// Create the event stream
+		d.eventStream, err = d.dm.blockIndexer.AddEventStream(d.ctx, &blockindexer.InternalEventStream{
+			Definition: &blockindexer.EventStream{
+				Name: streamName,
+				Type: blockindexer.EventStreamTypeInternal.Enum(),
+				ABI:  eventsABI,
+			},
+			Handler: d.handleEventBatch,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &prototk.InitDomainRequest{
 		AbiStateSchemas: schemasProto,
 	}, nil
@@ -407,4 +444,118 @@ func emptyJSONIfBlank(js string) []byte {
 func (d *domain) close() {
 	d.cancelCtx()
 	<-d.initDone
+}
+
+func (d *domain) handleEventBatch(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
+	eventsByAddress := make(map[tktypes.EthAddress][]*blockindexer.EventWithData)
+	for _, ev := range batch.Events {
+		// Note: hits will be cached, but events from unrecognized contracts will always
+		// result in a cache miss and a database lookup
+		// TODO: revisit if we should optimize this
+		psc, err := d.dm.getSmartContractCached(ctx, tx, ev.Address)
+		if err != nil {
+			return nil, err
+		}
+		if psc != nil && psc.Domain().Name() == d.name {
+			eventsByAddress[ev.Address] = append(eventsByAddress[ev.Address], ev)
+		}
+	}
+
+	transactionsComplete := make([]uuid.UUID, 0, len(batch.Events))
+	for addr, events := range eventsByAddress {
+		res, err := d.handleEventBatchForContract(ctx, batch.BatchID, addr, events)
+		if err != nil {
+			return nil, err
+		}
+		for _, txIDStr := range res.TransactionsComplete {
+			txID, err := d.recoverTransactionID(ctx, txIDStr)
+			if err != nil {
+				return nil, err
+			}
+			transactionsComplete = append(transactionsComplete, *txID)
+		}
+	}
+
+	return func() {
+		for _, c := range transactionsComplete {
+			inflight := d.dm.transactionWaiter.GetInflight(c)
+			if inflight != nil {
+				inflight.Complete(nil)
+			}
+		}
+	}, nil
+}
+
+func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*uuid.UUID, error) {
+	txIDBytes, err := tktypes.ParseBytes32Ctx(ctx, txIDString)
+	if err != nil {
+		return nil, err
+	}
+	txUUID := txIDBytes.UUIDFirst16()
+	return &txUUID, nil
+}
+
+func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.UUID, contractAddress tktypes.EthAddress, events []*blockindexer.EventWithData) (*prototk.HandleEventBatchResponse, error) {
+	var res *prototk.HandleEventBatchResponse
+	eventsJSON, err := json.Marshal(events)
+	if err == nil {
+		res, err = d.api.HandleEventBatch(ctx, &prototk.HandleEventBatchRequest{
+			BatchId:    batchID.String(),
+			JsonEvents: string(eventsJSON),
+		})
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	spentStates := make(map[uuid.UUID][]string)
+	for _, state := range res.SpentStates {
+		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
+		if err != nil {
+			return nil, err
+		}
+		spentStates[*txUUID] = append(spentStates[*txUUID], state.Id)
+	}
+
+	confirmedStates := make(map[uuid.UUID][]string)
+	for _, state := range res.ConfirmedStates {
+		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
+		if err != nil {
+			return nil, err
+		}
+		confirmedStates[*txUUID] = append(confirmedStates[*txUUID], state.Id)
+	}
+
+	newStates := make(map[uuid.UUID][]*statestore.StateUpsert)
+	for _, state := range res.NewStates {
+		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
+		if err != nil {
+			return nil, err
+		}
+		newStates[*txUUID] = append(newStates[*txUUID], &statestore.StateUpsert{
+			SchemaID: state.SchemaId,
+			Data:     tktypes.RawJSON(state.StateDataJson),
+			Creating: true,
+		})
+	}
+
+	err = d.dm.stateStore.RunInDomainContext(d.name, contractAddress, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
+		for txID, states := range newStates {
+			if _, err = dsi.UpsertStates(&txID, states); err != nil {
+				return err
+			}
+		}
+		for txID, states := range spentStates {
+			if err = dsi.MarkStatesSpent(txID, states); err != nil {
+				return err
+			}
+		}
+		for txID, states := range confirmedStates {
+			if err = dsi.MarkStatesConfirmed(txID, states); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return res, err
 }

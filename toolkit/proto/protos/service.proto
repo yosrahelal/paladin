@@ -52,6 +52,7 @@ message DomainMessage {
     AssembleTransactionRequest  assemble_transaction =      1060;
     EndorseTransactionRequest   endorse_transaction =       1070;
     PrepareTransactionRequest   prepare_transaction =       1080;
+    HandleEventBatchRequest     handle_event_batch =        1090;
   }
 
   oneof response_from_domain {
@@ -63,6 +64,7 @@ message DomainMessage {
     AssembleTransactionResponse assemble_transaction_res =  1061;
     EndorseTransactionResponse  endorse_transaction_res =   1071;
     PrepareTransactionResponse  prepare_transaction_res =   1081;
+    HandleEventBatchResponse    handle_event_batch_res =    1091;
   }
 
   // Request/reply exchanges initiated by the domain, to the paladin node

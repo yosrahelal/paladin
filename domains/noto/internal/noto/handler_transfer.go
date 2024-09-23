@@ -26,7 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
-	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
 type transferHandler struct {
@@ -47,11 +47,11 @@ func (h *transferHandler) ValidateParams(ctx context.Context, params string) (in
 	return &transferParams, nil
 }
 
-func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *pb.InitTransactionRequest) (*pb.InitTransactionResponse, error) {
+func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	params := tx.Params.(*types.TransferParams)
 
-	return &pb.InitTransactionResponse{
-		RequiredVerifiers: []*pb.ResolveVerifierRequest{
+	return &prototk.InitTransactionResponse{
+		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
 				Lookup:    tx.DomainConfig.NotaryLookup,
 				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
@@ -68,7 +68,7 @@ func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction,
 	}, nil
 }
 
-func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
+func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.TransferParams)
 
 	notary := domain.FindVerifier(tx.DomainConfig.NotaryLookup, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
@@ -110,18 +110,18 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 		outputStates = append(outputStates, returnedStates...)
 	}
 
-	var attestation []*pb.AttestationRequest
+	var attestation []*prototk.AttestationRequest
 	switch tx.DomainConfig.Variant.String() {
 	case types.NotoVariantDefault:
 		encodedTransfer, err := h.noto.encodeTransferUnmasked(ctx, tx.ContractAddress, inputCoins, outputCoins)
 		if err != nil {
 			return nil, err
 		}
-		attestation = []*pb.AttestationRequest{
+		attestation = []*prototk.AttestationRequest{
 			// Sender confirms the initial request with a signature
 			{
 				Name:            "sender",
-				AttestationType: pb.AttestationType_SIGN,
+				AttestationType: prototk.AttestationType_SIGN,
 				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
 				Payload:         encodedTransfer,
 				Parties:         []string{req.Transaction.From},
@@ -129,24 +129,24 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 			// Notary will endorse the assembled transaction (by submitting to the ledger)
 			{
 				Name:            "notary",
-				AttestationType: pb.AttestationType_ENDORSE,
+				AttestationType: prototk.AttestationType_ENDORSE,
 				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
 				Parties:         []string{tx.DomainConfig.NotaryLookup},
 			},
 		}
 	case types.NotoVariantSelfSubmit:
-		attestation = []*pb.AttestationRequest{
+		attestation = []*prototk.AttestationRequest{
 			// Notary will endorse the assembled transaction (by providing a signature)
 			{
 				Name:            "notary",
-				AttestationType: pb.AttestationType_ENDORSE,
+				AttestationType: prototk.AttestationType_ENDORSE,
 				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
 				Parties:         []string{tx.DomainConfig.NotaryLookup},
 			},
 			// Sender will endorse the assembled transaction (by submitting to the ledger)
 			{
 				Name:            "sender",
-				AttestationType: pb.AttestationType_ENDORSE,
+				AttestationType: prototk.AttestationType_ENDORSE,
 				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
 				Parties:         []string{req.Transaction.From},
 			},
@@ -155,9 +155,9 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
 	}
 
-	return &pb.AssembleTransactionResponse{
-		AssemblyResult: pb.AssembleTransactionResponse_OK,
-		AssembledTransaction: &pb.AssembledTransaction{
+	return &prototk.AssembleTransactionResponse{
+		AssemblyResult: prototk.AssembleTransactionResponse_OK,
+		AssembledTransaction: &prototk.AssembledTransaction{
 			InputStates:  inputStates,
 			OutputStates: outputStates,
 		},
@@ -172,7 +172,7 @@ func (h *transferHandler) validateAmounts(ctx context.Context, coins *gatheredCo
 	return nil
 }
 
-func (h *transferHandler) validateSenderSignature(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest, coins *gatheredCoins) error {
+func (h *transferHandler) validateSenderSignature(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest, coins *gatheredCoins) error {
 	signature := domain.FindAttestation("sender", req.Signatures)
 	if signature == nil {
 		return i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
@@ -194,7 +194,7 @@ func (h *transferHandler) validateSenderSignature(ctx context.Context, tx *types
 	return nil
 }
 
-func (h *transferHandler) validateOwners(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest, coins *gatheredCoins) error {
+func (h *transferHandler) validateOwners(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest, coins *gatheredCoins) error {
 	from := domain.FindVerifier(tx.Transaction.From, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
 	if from == nil {
 		return i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "from")
@@ -212,7 +212,7 @@ func (h *transferHandler) validateOwners(ctx context.Context, tx *types.ParsedTr
 	return nil
 }
 
-func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
+func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
 	coins, err := h.noto.gatherCoins(ctx, req.Inputs, req.Outputs)
 	if err != nil {
 		return nil, err
@@ -231,8 +231,8 @@ func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransacti
 			if err := h.validateSenderSignature(ctx, tx, req, coins); err != nil {
 				return nil, err
 			}
-			return &pb.EndorseTransactionResponse{
-				EndorsementResult: pb.EndorseTransactionResponse_ENDORSER_SUBMIT,
+			return &prototk.EndorseTransactionResponse{
+				EndorsementResult: prototk.EndorseTransactionResponse_ENDORSER_SUBMIT,
 			}, nil
 		}
 	case types.NotoVariantSelfSubmit:
@@ -246,20 +246,23 @@ func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransacti
 			for i, state := range req.Outputs {
 				outputIDs[i] = state.Id
 			}
-			data := ethtypes.HexBytes0xPrefix("")
-			encodedTransfer, err := h.noto.encodeTransferMasked(ctx, tx.ContractAddress, inputIDs, outputIDs, data)
+			data, err := h.noto.encodeTransactionData(ctx, req.Transaction)
 			if err != nil {
 				return nil, err
 			}
-			return &pb.EndorseTransactionResponse{
-				EndorsementResult: pb.EndorseTransactionResponse_SIGN,
+			encodedTransfer, err := h.noto.encodeTransferMasked(ctx, tx.ContractAddress, inputIDs, outputIDs, ethtypes.HexBytes0xPrefix(data))
+			if err != nil {
+				return nil, err
+			}
+			return &prototk.EndorseTransactionResponse{
+				EndorsementResult: prototk.EndorseTransactionResponse_SIGN,
 				Payload:           encodedTransfer,
 			}, nil
 		} else if req.EndorsementRequest.Name == "sender" {
 			if req.EndorsementVerifier.Lookup == tx.Transaction.From {
 				// Sender submits the transaction
-				return &pb.EndorseTransactionResponse{
-					EndorsementResult: pb.EndorseTransactionResponse_ENDORSER_SUBMIT,
+				return &prototk.EndorseTransactionResponse{
+					EndorsementResult: prototk.EndorseTransactionResponse_ENDORSER_SUBMIT,
 				}, nil
 			}
 		}
@@ -270,7 +273,7 @@ func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransacti
 	return nil, i18n.NewError(ctx, msgs.MsgUnrecognizedEndorsement, req.EndorsementRequest.Name)
 }
 
-func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
+func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
 	inputs := make([]string, len(req.InputStates))
 	for i, state := range req.InputStates {
 		inputs[i] = state.Id
@@ -280,7 +283,7 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		outputs[i] = state.Id
 	}
 
-	var signature *pb.AttestationResult
+	var signature *prototk.AttestationResult
 	switch tx.DomainConfig.Variant.String() {
 	case types.NotoVariantDefault:
 		// Include the signature from the sender
@@ -299,11 +302,15 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
 	}
 
+	data, err := h.noto.encodeTransactionData(ctx, req.Transaction)
+	if err != nil {
+		return nil, err
+	}
 	params := map[string]interface{}{
 		"inputs":    inputs,
 		"outputs":   outputs,
 		"signature": ethtypes.HexBytes0xPrefix(signature.Payload),
-		"data":      ethtypes.HexBytes0xPrefix(""),
+		"data":      data,
 	}
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
@@ -314,8 +321,8 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		return nil, err
 	}
 
-	return &pb.PrepareTransactionResponse{
-		Transaction: &pb.BaseLedgerTransaction{
+	return &prototk.PrepareTransactionResponse{
+		Transaction: &prototk.BaseLedgerTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
 		},
