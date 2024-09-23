@@ -25,8 +25,9 @@ import (
 type TransactionType string
 
 const (
-	TransactionTypePrivate TransactionType = "private"
-	TransactionTypePublic  TransactionType = "public"
+	TransactionTypePrivate  TransactionType = "private"
+	TransactionTypePublic   TransactionType = "public"
+	TransactionTypeAutoFuel TransactionType = "autofuel"
 )
 
 func (tt TransactionType) Enum() tktypes.Enum[TransactionType] {

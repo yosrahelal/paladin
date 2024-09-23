@@ -192,9 +192,6 @@ func (tm *txManager) parseInputs(
 	bytecode tktypes.HexBytes,
 ) (jsonData tktypes.RawJSON, err error) {
 
-	if _, err := txType.MapToString(); err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidTXType)
-	}
 	if (e.Type != abi.Constructor || txType.V() != ptxapi.TransactionTypePublic) && len(bytecode) != 0 {
 		return nil, i18n.NewError(ctx, msgs.MsgTxMgrBytecodeNonPublicConstructor, txType.V(), e.String())
 	} else if e.Type == abi.Constructor && len(bytecode) == 0 && txType == ptxapi.TransactionTypePublic.Enum() {
@@ -247,7 +244,7 @@ func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.Transac
 
 	// Public transactions need a signing address resolution and nonce allocation trackers
 	// before we open the database transaction
-	var publicTxs []*components.PublicTxIDInput
+	var publicTxs []*components.PublicTxSubmission
 	txis := make([]*txInsertInfo, len(txs))
 	txIDs = make([]uuid.UUID, len(txs))
 	for i, tx := range txs {
@@ -257,12 +254,9 @@ func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.Transac
 		}
 		txIDs[i] = tx.ID
 		if tx.Type.V() == ptxapi.TransactionTypePublic {
-			publicTxs = append(publicTxs, &components.PublicTxIDInput{
-				PublicTxID: ptxapi.PublicTxID{
-					Transaction:   tx.ID,
-					ResubmitIndex: 0,
-					ParentType:    string(ptxapi.TransactionTypePublic),
-				},
+			publicTxs = append(publicTxs, &components.PublicTxSubmission{
+				// Public transaction bound 1:1 with our parent transaction
+				Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: ptxapi.TransactionTypePublic.Enum()}},
 				PublicTxInput: ptxapi.PublicTxInput{
 					From: tx.From,
 					To:   tx.To,
@@ -343,6 +337,13 @@ type txInsertInfo struct {
 
 func (tm *txManager) resolveNewTransaction(ctx context.Context, tx *ptxapi.TransactionInput) (*txInsertInfo, error) {
 	tx.ID = uuid.New()
+
+	switch tx.Transaction.Type.V() {
+	case ptxapi.TransactionTypePrivate, ptxapi.TransactionTypePublic:
+	default:
+		// Note autofuel transactions can only be created internally within the public TX manager
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrInvalidTXType)
+	}
 
 	// We resolve the function outside of a DB transaction, because it's idempotent processing
 	// and needs to happen before we open the DB transaction that is used by the public TX manager.

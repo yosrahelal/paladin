@@ -3,9 +3,6 @@ CREATE TABLE public_txns (
   "from"                      VARCHAR         NOT NULL,
   "nonce"                     BIGINT          NOT NULL,
   "created_at"                TIMESTAMP       NOT NULL,
-  "transaction"               UUID            NOT NULL,
-  "resubmit_idx"              BIGINT          NOT NULL,
-  "parent_type"               VARCHAR         NOT NULL,
   "key_handle"                VARCHAR         NOT NULL,
   "to"                        VARCHAR,
   "gas"                       BIGINT          NOT NULL,
@@ -17,4 +14,3 @@ CREATE TABLE public_txns (
 );
 
 CREATE UNIQUE INDEX public_txns_from_nonce ON public_txns("from", "nonce");
-CREATE UNIQUE INDEX public_txns_tx_resubmit ON public_txns("transaction", "resubmit_idx");

@@ -53,8 +53,8 @@ type BaseTXUpdates struct {
 	FirstSubmit       *tktypes.Timestamp
 	LastSubmit        *tktypes.Timestamp
 	ErrorMessage      *string
-	NewSubmission     *persistedTxSubmission
-	FlushedSubmission *persistedTxSubmission
+	NewSubmission     *publicSubmission
+	FlushedSubmission *publicSubmission
 }
 
 // PublicTransactionEventType is a enum type that contains all types of transaction process events
@@ -115,7 +115,7 @@ type TransactionHeaders struct {
 }
 
 type BalanceManager interface {
-	TopUpAccount(ctx context.Context, addAccount *AddressAccount) (mtx *ptxapi.PublicTxWithID, err error)
+	TopUpAccount(ctx context.Context, addAccount *AddressAccount) (mtx *ptxapi.PublicTx, err error)
 	IsAutoFuelingEnabled(ctx context.Context) bool
 	GetAddressBalance(ctx context.Context, address tktypes.EthAddress) (*AddressAccount, error)
 	NotifyAddressBalanceChanged(ctx context.Context, address tktypes.EthAddress)
@@ -273,7 +273,7 @@ type InMemoryTxStateReadOnly interface {
 	GetGasPriceObject() *ptxapi.PublicTxGasPricing
 	GetFirstSubmit() *tktypes.Timestamp
 	GetLastSubmitTime() *tktypes.Timestamp
-	GetUnflushedSubmission() *persistedTxSubmission
+	GetUnflushedSubmission() *publicSubmission
 	GetInFlightStatus() InFlightStatus
 
 	// Returns a generated string from the transaction that can be used as a unique identifier for in-memory processing.

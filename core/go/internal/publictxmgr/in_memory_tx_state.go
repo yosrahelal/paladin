@@ -32,7 +32,7 @@ type managedTx struct {
 	ptx *persistedPubTx
 
 	// We can have exactly one submission waiting to be flushed to the DB
-	unflushedSubmission *persistedTxSubmission
+	unflushedSubmission *publicSubmission
 
 	// In-memory state that we update as we process the transaction in an active orchestrator
 	// TODO: Validate that all of these fields are actively used
@@ -103,7 +103,7 @@ func (imtxs *inMemoryTxState) ApplyInMemoryUpdates(ctx context.Context, txUpdate
 		if !dup {
 			// newest first in this list as when we read from the DB (although it doesn't matter for our processing,
 			// because we keep separate in memory copies of all the things we change while we're running our orchestrator)
-			mtx.ptx.Submissions = append([]*persistedTxSubmission{txUpdates.FlushedSubmission}, mtx.ptx.Submissions...)
+			mtx.ptx.Submissions = append([]*publicSubmission{txUpdates.FlushedSubmission}, mtx.ptx.Submissions...)
 		}
 	}
 
@@ -195,7 +195,7 @@ func (imtxs *inMemoryTxState) GetLastSubmitTime() *tktypes.Timestamp {
 	return imtxs.mtx.LastSubmit
 }
 
-func (imtxs *inMemoryTxState) GetUnflushedSubmission() *persistedTxSubmission {
+func (imtxs *inMemoryTxState) GetUnflushedSubmission() *publicSubmission {
 	return imtxs.mtx.unflushedSubmission
 }
 

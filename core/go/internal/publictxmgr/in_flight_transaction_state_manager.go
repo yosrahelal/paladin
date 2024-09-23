@@ -292,7 +292,7 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 	confirmationReceived := rsc.StageOutputsToBePersisted.ConfirmationReceived
 	if rsc.StageOutputsToBePersisted.TxUpdates != nil && rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash != nil {
 		b, _ := json.Marshal(mtx.GetGasPriceObject())
-		rsc.StageOutputsToBePersisted.TxUpdates.NewSubmission = &persistedTxSubmission{
+		rsc.StageOutputsToBePersisted.TxUpdates.NewSubmission = &publicSubmission{
 			SignerNonce:     mtx.GetSignerNonce(),
 			Created:         tktypes.TimestampNow(),
 			TransactionHash: *rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash,

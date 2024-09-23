@@ -317,7 +317,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			// as we are the only thread that writes to the submissions table, for
 			// inflight transactions we have in memory that would not be overwritten
 			// by this query.
-			additional, err = oc.runTransactionQuery(ctx, oc.p.DB(), q)
+			additional, err = oc.runTransactionQuery(ctx, oc.p.DB(), nil, q)
 			return true, err
 		})
 		if err != nil {

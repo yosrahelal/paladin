@@ -346,13 +346,10 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		ec := oc.components.EthClientFactory().SharedWS()
 		publicTransactionEngine := oc.components.PublicTxManager()
 
-		publicTXs := make([]*components.PublicTxIDInput, len(preparedTransactions))
+		publicTXs := make([]*components.PublicTxSubmission, len(preparedTransactions))
 		for i, pt := range preparedTransactions {
-			publicTXs[i] = &components.PublicTxIDInput{
-				PublicTxID: ptxapi.PublicTxID{
-					Transaction:   pt.ID, // TODO: These need reconciling with the parent transaction manager
-					ResubmitIndex: 0,     // TODO: resubmit
-				},
+			publicTXs[i] = &components.PublicTxSubmission{
+				Bindings: []*components.PaladinTXReference{{TransactionID: pt.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
 				PublicTxInput: ptxapi.PublicTxInput{
 					From:            pt.Signer,
 					To:              &oc.contractAddress,

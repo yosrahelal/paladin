@@ -46,7 +46,7 @@ func (tm *txManager) blockIndexerPreCommit(
 	// Work out which we need to write public receipts for, and which we need to ask the private TX mgr about
 	privateNotifications := make([]*components.PublicTxMatch, 0, len(publicTxMatches))
 	for _, pubTx := range publicTxMatches {
-		if pubTx.ParentType == string(ptxapi.TransactionTypePrivate) {
+		if pubTx.TransactionType.V() == ptxapi.TransactionTypePrivate {
 			privateNotifications = append(privateNotifications, pubTx)
 		}
 	}
@@ -63,10 +63,10 @@ func (tm *txManager) blockIndexerPreCommit(
 	// Ok now we can finally determine which receipts we need - in the ORIGINAL order
 	receipts := make([]*transactionReceipt, 0, len(publicTxMatches))
 	for _, pubTx := range publicTxMatches {
-		if pubTx.ParentType == string(ptxapi.TransactionTypePublic) || // it's public
-			finalizedPrivate[pubTx.Transaction] { // or it's a finalized private
+		if pubTx.TransactionType.V() == ptxapi.TransactionTypePublic || // it's public
+			finalizedPrivate[pubTx.TransactionID] { // or it's a finalized private
 			log.L(ctx).Infof("Writing receipt for %s transaction hash=%s block=%d result=%s",
-				pubTx.Transaction, pubTx.Hash, pubTx.BlockNumber, pubTx.Result)
+				pubTx.TransactionID, pubTx.Hash, pubTx.BlockNumber, pubTx.Result)
 			receipts = append(receipts, tm.buildReceipt(ctx, pubTx, dbTX))
 		}
 	}
@@ -97,7 +97,7 @@ func (tm *txManager) blockIndexerPreCommit(
 
 func (tm *txManager) buildReceipt(ctx context.Context, pubTx *components.PublicTxMatch, dbTX *gorm.DB) *transactionReceipt {
 	receipt := &transactionReceipt{
-		TransactionID:   pubTx.Transaction,
+		TransactionID:   pubTx.TransactionID,
 		Indexed:         tktypes.TimestampNow(),
 		Success:         pubTx.Result.V() == blockindexer.TXResult_SUCCESS,
 		TransactionHash: &pubTx.Hash,

@@ -38,6 +38,7 @@ func TestResolveFunctionABIAndDef(t *testing.T) {
 
 	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
 		Transaction: ptxapi.Transaction{
+			Type:         ptxapi.TransactionTypePublic.Enum(),
 			ABIReference: confutil.P(tktypes.Bytes32(tktypes.RandBytes(32))),
 		},
 		ABI: abi.ABI{},
@@ -51,7 +52,8 @@ func TestResolveFunctionNoABI(t *testing.T) {
 
 	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
 		Transaction: ptxapi.Transaction{
-			To: tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Type: ptxapi.TransactionTypePublic.Enum(),
+			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 		},
 		ABI: abi.ABI{},
 	})
@@ -64,7 +66,8 @@ func TestResolveFunctionBadABI(t *testing.T) {
 
 	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
 		Transaction: ptxapi.Transaction{
-			To: tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Type: ptxapi.TransactionTypePublic.Enum(),
+			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 		},
 		ABI: abi.ABI{{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "wrong"}}}},
 	})
@@ -84,6 +87,7 @@ func TestResolveFunctionNamedWithNoTarget(t *testing.T) {
 
 	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
 		Transaction: ptxapi.Transaction{
+			Type:     ptxapi.TransactionTypePublic.Enum(),
 			Function: "doIt",
 		},
 		ABI: abi.ABI{{Type: abi.Function, Name: "doIt"}},
@@ -318,7 +322,7 @@ func TestResolveFunctionNoMatch(t *testing.T) {
 }
 
 func TestParseInputsBadTxType(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
 	exampleABI := abi.ABI{

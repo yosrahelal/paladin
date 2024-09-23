@@ -195,6 +195,14 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 		},
 	)
 
+	tx := &components.PrivateTransaction{
+		ID: uuid.New(),
+		Inputs: &components.TransactionInputs{
+			Domain: "domain1",
+			To:     *domainAddress,
+		},
+	}
+
 	mockPublicTxBatch := componentmocks.NewPublicTxBatch(t)
 	mockPublicTxBatch.On("Finalize", mock.Anything).Return().Maybe()
 	mockPublicTxBatch.On("CleanUp", mock.Anything).Return().Maybe()
@@ -203,10 +211,8 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockPublicTxBatch, nil)
 
 	publicTransactions := []components.PublicTxAccepted{
-		newFakePublicTx(&components.PublicTxIDInput{
-			PublicTxID: ptxapi.PublicTxID{
-				Transaction: uuid.New(),
-			},
+		newFakePublicTx(&components.PublicTxSubmission{
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
 			PublicTxInput: ptxapi.PublicTxInput{
 				From: "signer1",
 			},
@@ -219,13 +225,6 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
-	tx := &components.PrivateTransaction{
-		ID: uuid.New(),
-		Inputs: &components.TransactionInputs{
-			Domain: "domain1",
-			To:     *domainAddress,
-		},
-	}
 	err = privateTxManager.HandleNewTx(ctx, tx)
 	require.NoError(t, err)
 
@@ -355,6 +354,14 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 		},
 	)
 
+	tx := &components.PrivateTransaction{
+		ID: uuid.New(),
+		Inputs: &components.TransactionInputs{
+			Domain: "domain1",
+			To:     *domainAddress,
+		},
+	}
+
 	mockPublicTxBatch := componentmocks.NewPublicTxBatch(t)
 	mockPublicTxBatch.On("Finalize", mock.Anything).Return().Maybe()
 	mockPublicTxBatch.On("CleanUp", mock.Anything).Return().Maybe()
@@ -363,10 +370,8 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockPublicTxBatch, nil)
 
 	publicTransactions := []components.PublicTxAccepted{
-		newFakePublicTx(&components.PublicTxIDInput{
-			PublicTxID: ptxapi.PublicTxID{
-				Transaction: uuid.New(),
-			},
+		newFakePublicTx(&components.PublicTxSubmission{
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
 			PublicTxInput: ptxapi.PublicTxInput{
 				From: "signer1",
 			},
@@ -380,13 +385,6 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 	err := privateTxManager.Start()
 	assert.NoError(t, err)
 
-	tx := &components.PrivateTransaction{
-		ID: uuid.New(),
-		Inputs: &components.TransactionInputs{
-			Domain: "domain1",
-			To:     *domainAddress,
-		},
-	}
 	err = privateTxManager.HandleNewTx(ctx, tx)
 	assert.NoError(t, err)
 
@@ -522,18 +520,14 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPublicTxBatch1, nil).Once()
 
 	publicTransactions := []components.PublicTxAccepted{
-		newFakePublicTx(&components.PublicTxIDInput{
-			PublicTxID: ptxapi.PublicTxID{
-				Transaction: uuid.New(),
-			},
+		newFakePublicTx(&components.PublicTxSubmission{
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx1.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
 			PublicTxInput: ptxapi.PublicTxInput{
 				From: "signer1",
 			},
 		}, nil),
-		newFakePublicTx(&components.PublicTxIDInput{
-			PublicTxID: ptxapi.PublicTxID{
-				Transaction: uuid.New(),
-			},
+		newFakePublicTx(&components.PublicTxSubmission{
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx2.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
 			PublicTxInput: ptxapi.PublicTxInput{
 				From: "signer1",
 			},
@@ -916,7 +910,7 @@ type fakePublicTxManager struct {
 }
 
 // GetTransactions implements components.PublicTxManager.
-func (f *fakePublicTxManager) GetTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithID, error) {
+func (f *fakePublicTxManager) QueryTransactions(ctx context.Context, dbTX *gorm.DB, scopeToTxn *uuid.UUID, jq *query.QueryJSON) ([]*ptxapi.PublicTx, error) {
 	panic("unimplemented")
 }
 
@@ -952,7 +946,7 @@ func (f *fakePublicTxManager) Stop() {
 
 type fakePublicTxBatch struct {
 	t              *testing.T
-	transactions   []*components.PublicTxIDInput
+	transactions   []*components.PublicTxSubmission
 	accepted       []components.PublicTxAccepted
 	rejected       []components.PublicTxRejected
 	completeCalled bool
@@ -960,29 +954,26 @@ type fakePublicTxBatch struct {
 	submitErr      error
 }
 
-// Accepted implements components.PublicTxBatch.
 func (f *fakePublicTxBatch) Accepted() []components.PublicTxAccepted {
 	return f.accepted
 }
 
-// Completed implements components.PublicTxBatch.
 func (f *fakePublicTxBatch) Completed(ctx context.Context, committed bool) {
 	f.completeCalled = true
 	f.committed = committed
 }
 
-// Rejected implements components.PublicTxBatch.
 func (f *fakePublicTxBatch) Rejected() []components.PublicTxRejected {
 	return f.rejected
 }
 
 type fakePublicTx struct {
-	t         *components.PublicTxIDInput
+	t         *components.PublicTxSubmission
 	rejectErr error
-	pubTx     *ptxapi.PublicTxWithID
+	pubTx     *ptxapi.PublicTx
 }
 
-func newFakePublicTx(t *components.PublicTxIDInput, rejectErr error) *fakePublicTx {
+func newFakePublicTx(t *components.PublicTxSubmission, rejectErr error) *fakePublicTx {
 	// Fake up signer resolution by just hashing whatever comes in
 	signerStringHash := sha256.New()
 	signerStringHash.Write([]byte(t.From))
@@ -990,18 +981,12 @@ func newFakePublicTx(t *components.PublicTxIDInput, rejectErr error) *fakePublic
 	return &fakePublicTx{
 		t:         t,
 		rejectErr: rejectErr,
-		pubTx: &ptxapi.PublicTxWithID{
-			PublicTxID: ptxapi.PublicTxID{
-				Transaction:   t.Transaction,
-				ResubmitIndex: t.ResubmitIndex,
-			},
-			PublicTx: ptxapi.PublicTx{
-				To:              t.To,
-				Data:            t.Data,
-				From:            fromAddr,
-				Created:         tktypes.TimestampNow(),
-				PublicTxOptions: t.PublicTxOptions,
-			},
+		pubTx: &ptxapi.PublicTx{
+			To:              t.To,
+			Data:            t.Data,
+			From:            fromAddr,
+			Created:         tktypes.TimestampNow(),
+			PublicTxOptions: t.PublicTxOptions,
 		},
 	}
 }
@@ -1014,18 +999,18 @@ func (f *fakePublicTx) RevertData() tktypes.HexBytes {
 	return []byte("some data")
 }
 
-func (f *fakePublicTx) TXID() *ptxapi.PublicTxID {
-	return &f.pubTx.PublicTxID
+func (f *fakePublicTx) Bindings() []*components.PaladinTXReference {
+	return f.t.Bindings
 }
 
-func (f *fakePublicTx) TXWithNonce() *ptxapi.PublicTxWithID {
+func (f *fakePublicTx) PublicTx() *ptxapi.PublicTx {
 	return f.pubTx
 }
 
 //for this test, we need a hand written fake rather than a simple mock for publicTxManager
 
 // PrepareSubmissionBatch implements components.PublicTxManager.
-func (f *fakePublicTxManager) PrepareSubmissionBatch(ctx context.Context, transactions []*components.PublicTxIDInput) (batch components.PublicTxBatch, err error) {
+func (f *fakePublicTxManager) PrepareSubmissionBatch(ctx context.Context, transactions []*components.PublicTxSubmission) (batch components.PublicTxBatch, err error) {
 	b := &fakePublicTxBatch{t: f.t, transactions: transactions}
 	if f.rejectErr != nil {
 		for _, t := range transactions {

@@ -116,7 +116,7 @@ type BalanceManagerWithInMemoryTracking struct {
 	// fueling transactions by search for the latest transfer type transaction to the destination address. (this involves
 	//  read from database and is necessary to recover balance manager from crashes)
 	destinationAddressesFuelingTracked    map[tktypes.EthAddress]*sync.Mutex
-	trackedFuelingTransactions            map[tktypes.EthAddress]*ptxapi.PublicTxWithID
+	trackedFuelingTransactions            map[tktypes.EthAddress]*ptxapi.PublicTx
 	destinationAddressesFuelingTrackedMux sync.Mutex
 
 	// a map of signing addresses and a boolean to indicate whether balance manager should fetch
@@ -125,7 +125,7 @@ type BalanceManagerWithInMemoryTracking struct {
 	addressBalanceChangedMapMux sync.Mutex
 }
 
-func (af *BalanceManagerWithInMemoryTracking) TopUpAccount(ctx context.Context, addAccount *AddressAccount) (mtx *ptxapi.PublicTxWithID, err error) {
+func (af *BalanceManagerWithInMemoryTracking) TopUpAccount(ctx context.Context, addAccount *AddressAccount) (mtx *ptxapi.PublicTx, err error) {
 	if af.sourceAddress == nil {
 		log.L(ctx).Debugf("Skip top up transaction as no fueling source configured")
 		// No-op
@@ -244,12 +244,12 @@ func (af *BalanceManagerWithInMemoryTracking) GetAddressBalance(ctx context.Cont
 	}, nil
 }
 
-func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(ctx context.Context, destAddress tktypes.EthAddress, value *big.Int) (mtx *ptxapi.PublicTxWithID, err error) {
+func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(ctx context.Context, destAddress tktypes.EthAddress, value *big.Int) (mtx *ptxapi.PublicTx, err error) {
 	// check whether there is a pending fueling transaction already
 	// check whether the current balance manager already tracking the existing in-flight fueling transactions
 	log.L(ctx).Tracef("TransferGasFromAutoFuelingSource entry, source address: %s, destination address: %s, amount: %s", af.sourceAddress, destAddress, value.String())
 
-	var fuelingTx *ptxapi.PublicTxWithID
+	var fuelingTx *ptxapi.PublicTx
 	af.destinationAddressesFuelingTrackedMux.Lock()
 	perAddressMux, ok := af.destinationAddressesFuelingTracked[destAddress] // there is no lock here as the map of tracked transactions is the one that is critical to get right
 	if !ok {
@@ -273,12 +273,12 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 		af.trackedFuelingTransactions[destAddress] = fuelingTx
 	}
 	if fuelingTx != nil {
-		completed, err := af.pubTxMgr.CheckTransactionCompleted(ctx, &fuelingTx.PublicTxID)
+		completed, err := af.pubTxMgr.CheckTransactionCompleted(ctx, fuelingTx.From, fuelingTx.Nonce.Uint64())
 		if err != nil {
 			return nil, err
 		}
 		if !completed {
-			log.L(ctx).Debugf("TransferGasFromAutoFuelingSource fueling request with ID: %s for destination address: %s still not complete", fuelingTx.Transaction, destAddress)
+			log.L(ctx).Debugf("TransferGasFromAutoFuelingSource fueling request from=%s nonce=%d for destination address: %s still not complete", fuelingTx.From, fuelingTx.Nonce, destAddress)
 			// transaction is tracked and is still pending, return the transaction as it is
 			return fuelingTx, nil
 		}
@@ -315,13 +315,8 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 	// 2) Perform transaction to transfer value to the dest address
 
 	log.L(ctx).Debugf("TransferGasFromAutoFuelingSource submitting a fueling tx for  destination address: %s ", destAddress)
-	txID := uuid.New()
-	_, err = af.pubTxMgr.SingleTransactionSubmit(ctx, &components.PublicTxIDInput{
-		PublicTxID: ptxapi.PublicTxID{
-			Transaction:   txID, // this means these public TXs will not be visible outside of the public TX manager
-			ResubmitIndex: 0,
-			ParentType:    "autofuel",
-		},
+	submission, err := af.pubTxMgr.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
+		Bindings: []*components.PaladinTXReference{{TransactionID: uuid.New(), TransactionType: ptxapi.TransactionTypeAutoFuel.Enum()}},
 		PublicTxInput: ptxapi.PublicTxInput{
 			From: af.sourceAddress.String(),
 			To:   &destAddress,
@@ -335,9 +330,10 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 		log.L(ctx).Errorf("TransferGasFromAutoFuelingSource fueling tx submission for destination address: %s failed due to: %+v", destAddress, err)
 		return nil, err
 	}
-	log.L(ctx).Debugf("TransferGasFromAutoFuelingSource tracking fueling tx with ID %s, for destination address: %s ", mtx.Transaction, destAddress)
+	fuelingTx = submission.PublicTx()
+	log.L(ctx).Debugf("TransferGasFromAutoFuelingSource tracking fueling tx with from=%s nonce=%d, for destination address: %s ", fuelingTx.From, fuelingTx.Nonce, destAddress)
 	// start tracking the new transactions
-	af.trackedFuelingTransactions[destAddress] = mtx
+	af.trackedFuelingTransactions[destAddress] = fuelingTx
 	return mtx, nil
 }
 
@@ -383,7 +379,7 @@ func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf *Config, et
 		maxDestBalance:                     maxDestBalance,
 		minThreshold:                       minThreshold,
 		destinationAddressesFuelingTracked: make(map[tktypes.EthAddress]*sync.Mutex),
-		trackedFuelingTransactions:         make(map[tktypes.EthAddress]*ptxapi.PublicTxWithID),
+		trackedFuelingTransactions:         make(map[tktypes.EthAddress]*ptxapi.PublicTx),
 		addressBalanceChangedMap:           make(map[tktypes.EthAddress]bool),
 	}
 	return bm, nil
