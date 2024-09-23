@@ -38,6 +38,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 var testEventABIJSON = ([]byte)(`[
@@ -300,6 +301,12 @@ func checkIndexedBlockEqual(t *testing.T, expected *BlockInfoJSONRPC, indexed *I
 	assert.Equal(t, expected.Number.Uint64(), uint64(indexed.Number))
 }
 
+func addBlockPostCommit(bi *blockIndexer, postCommit func([]*IndexedBlock)) {
+	bi.preCommitHandlers = append(bi.preCommitHandlers, func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error) {
+		return func() { postCommit(blocks) }, nil
+	})
+}
+
 func TestBlockIndexerCatchUpToHeadFromZeroNoConfirmations(t *testing.T) {
 	_, bi, mRPC, blDone := newTestBlockIndexer(t)
 	defer blDone()
@@ -310,9 +317,7 @@ func TestBlockIndexerCatchUpToHeadFromZeroNoConfirmations(t *testing.T) {
 	bi.requiredConfirmations = 0
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
-		utBatchNotify <- blocks
-	})
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -336,9 +341,7 @@ func TestBlockIndexerBatchTimeoutOne(t *testing.T) {
 	bi.requiredConfirmations = 0
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
-		utBatchNotify <- blocks
-	})
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -359,9 +362,7 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 	bi.requiredConfirmations = 5
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
-		utBatchNotify <- blocks
-	})
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -467,9 +468,7 @@ func TestBlockIndexerListenFromCurrentBlock(t *testing.T) {
 	assert.Regexp(t, "PD011308", err)
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
-		utBatchNotify <- blocks
-	})
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
 
 	// do not start block listener
 	bi.startOrReset()
@@ -525,9 +524,7 @@ func TestBatching(t *testing.T) {
 	bi.batchSize = 5
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
-		utBatchNotify <- blocks
-	})
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -675,9 +672,7 @@ func testBlockIndexerHandleReorgInConfirmationWindow(t *testing.T, blockLenBefor
 	})
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
-		utBatchNotify <- blocks
-	})
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -723,9 +718,7 @@ func TestBlockIndexerHandleRandomConflictingBlockNotification(t *testing.T) {
 	})
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
-		utBatchNotify <- blocks
-	})
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -755,9 +748,7 @@ func TestBlockIndexerResetsAfterHashLookupFail(t *testing.T) {
 	})
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
-		utBatchNotify <- blocks
-	})
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -780,9 +771,7 @@ func TestBlockIndexerDispatcherFallsBehindHead(t *testing.T) {
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
-		utBatchNotify <- blocks
-	})
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -922,9 +911,7 @@ func TestBlockIndexerWaitForTransactionSuccess(t *testing.T) {
 	}
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
-		utBatchNotify <- blocks
-	})
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -974,9 +961,7 @@ func TestBlockIndexerWaitForTransactionRevert(t *testing.T) {
 	}
 
 	utBatchNotify := make(chan []*IndexedBlock)
-	bi.postCommitHandlers = append(bi.postCommitHandlers, func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
-		utBatchNotify <- blocks
-	})
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -1046,5 +1031,17 @@ func TestWaitForTransactionSuccessGetReceiptFallback(t *testing.T) {
 
 	err := bi.getReceiptRevertError(ctx, tktypes.Bytes32(tktypes.RandBytes(32)), nil)
 	assert.Regexp(t, "PD011309", err)
+
+}
+
+func TestGetIndexedTransactionByNonceFail(t *testing.T) {
+
+	ctx, bi, _, mdb, done := newMockBlockIndexer(t, &Config{})
+	defer done()
+
+	mdb.Mock.ExpectQuery("SELECT.*indexed_transactions").WillReturnError(fmt.Errorf("pop"))
+
+	_, err := bi.GetIndexedTransactionByNonce(ctx, tktypes.EthAddress(tktypes.RandBytes(20)), 12345)
+	assert.Regexp(t, "pop", err)
 
 }

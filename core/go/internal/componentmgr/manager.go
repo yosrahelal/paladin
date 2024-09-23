@@ -340,9 +340,8 @@ func (cm *componentManager) buildInternalEventStreams() ([]*blockindexer.Interna
 				})
 			default:
 				streams = append(streams, &blockindexer.InternalEventStream{
-					Type:              initStream.Type,
-					PreCommitHandler:  initStream.PreCommitHandler,
-					PostCommitHandler: initStream.PostCommitHandler,
+					Type:             initStream.Type,
+					PreCommitHandler: initStream.PreCommitHandler,
 				})
 			}
 		}

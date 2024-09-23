@@ -431,6 +431,7 @@ func (ble *pubTxManager) finalizeNonceForPersistedTX(ctx context.Context, ptx *p
 		KeyHandle:     ptx.keyHandle, // TODO: Consider once we have reverse mapping in key manager whether we still need this
 		Transaction:   tx.Transaction,
 		ResubmitIndex: tx.ResubmitIndex,
+		ParentType:    tx.ParentType,
 		To:            tx.To,
 		Gas:           tx.Gas.Uint64(),
 	}, nil
@@ -621,6 +622,7 @@ func mapPersistedTransaction(ptx *persistedPubTx) *ptxapi.PublicTxWithID {
 		PublicTxID: ptxapi.PublicTxID{
 			Transaction:   ptx.Transaction,
 			ResubmitIndex: ptx.ResubmitIndex,
+			ParentType:    ptx.ParentType,
 		},
 		PublicTx: ptxapi.PublicTx{
 			From:    ptx.From,
@@ -742,6 +744,7 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 			PublicTxID: ptxapi.PublicTxID{
 				Transaction:   match.PublicTx.Transaction,
 				ResubmitIndex: match.PublicTx.ResubmitIndex,
+				ParentType:    match.PublicTx.ParentType,
 			},
 			IndexedTransactionNotify: txi,
 		}

@@ -228,19 +228,16 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 	utBatchNotify := make(chan []*IndexedBlock)
 	preCommitCount := 0
 	err := bi.Start(&InternalEventStream{
-		Type: IESTypePostCommitHandler,
-		PostCommitHandler: func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
-			utBatchNotify <- blocks
-		},
-	}, &InternalEventStream{
 		Type: IESTypePreCommitHandler,
-		PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) error {
+		PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error) {
 			// Return an error once to drive a retry
 			preCommitCount++
 			if preCommitCount == 0 {
-				return fmt.Errorf("pop")
+				return nil, fmt.Errorf("pop")
 			}
-			return nil
+			return func() {
+				utBatchNotify <- blocks
+			}, nil
 		},
 	})
 	require.NoError(t, err)
@@ -338,9 +335,11 @@ func TestNoMatchingEvents(t *testing.T) {
 	// Do a full start now with an internal event listener
 	utBatchNotify := make(chan []*IndexedBlock)
 	err := bi.Start(&InternalEventStream{
-		Type: IESTypePostCommitHandler,
-		PostCommitHandler: func(ctx context.Context, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) {
-			utBatchNotify <- blocks
+		Type: IESTypePreCommitHandler,
+		PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error) {
+			return func() {
+				utBatchNotify <- blocks
+			}, nil
 		},
 	}, &InternalEventStream{
 		Handler: func(ctx context.Context, tx *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error) {

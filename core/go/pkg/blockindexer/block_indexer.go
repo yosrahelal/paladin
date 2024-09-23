@@ -85,7 +85,6 @@ type blockIndexer struct {
 	batchTimeout               time.Duration
 	txWaiters                  *inflight.InflightManager[tktypes.Bytes32, *IndexedTransaction]
 	preCommitHandlers          []PreCommitHandler
-	postCommitHandlers         []PostCommitHandler
 	eventStreams               map[uuid.UUID]*eventStream
 	eventStreamsHeadSet        map[uuid.UUID]*eventStream
 	eventStreamsLock           sync.Mutex
@@ -144,8 +143,6 @@ func (bi *blockIndexer) Start(internalStreams ...*InternalEventStream) error {
 			}
 		case IESTypePreCommitHandler:
 			bi.preCommitHandlers = append(bi.preCommitHandlers, ies.PreCommitHandler)
-		case IESTypePostCommitHandler:
-			bi.postCommitHandlers = append(bi.postCommitHandlers, ies.PostCommitHandler)
 		}
 	}
 	bi.blockListener.start()
@@ -539,10 +536,16 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 		}
 	}
 
+	var postCommits []PostCommit
 	err := bi.retry.Do(ctx, func(attempt int) (retryable bool, err error) {
+		postCommits = nil
 		err = bi.persistence.DB().Transaction(func(dbTX *gorm.DB) (err error) {
 			for _, preCommitHandler := range bi.preCommitHandlers {
-				err = preCommitHandler(ctx, dbTX, blocks, notifyTransactions)
+				var postCommit PostCommit
+				postCommit, err = preCommitHandler(ctx, dbTX, blocks, notifyTransactions)
+				if err == nil {
+					postCommits = append(postCommits, postCommit)
+				}
 			}
 			if err == nil && len(blocks) > 0 {
 				err = dbTX.
@@ -579,8 +582,8 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 		bi.highestConfirmedBlock.Store(newHighestBlock)
 	}
 	if err == nil {
-		for _, postCommitHandler := range bi.postCommitHandlers {
-			postCommitHandler(ctx, blocks, notifyTransactions)
+		for _, postCommitHandler := range postCommits {
+			postCommitHandler()
 		}
 		for _, t := range transactions {
 			if inflight := bi.txWaiters.GetInflight(t.Hash); inflight != nil {

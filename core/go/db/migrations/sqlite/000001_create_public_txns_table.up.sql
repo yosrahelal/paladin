@@ -5,6 +5,7 @@ CREATE TABLE public_txns (
   "created_at"                TIMESTAMP       NOT NULL,
   "transaction"               UUID            NOT NULL,
   "resubmit_idx"              BIGINT          NOT NULL,
+  "parent_type"               VARCHAR         NOT NULL,
   "key_handle"                VARCHAR         NOT NULL,
   "to"                        VARCHAR,
   "gas"                       BIGINT          NOT NULL,

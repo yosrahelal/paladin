@@ -17,6 +17,8 @@ package components
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 type PrivateTxEventSubscriber func(event PrivateTxEvent)
@@ -49,4 +51,6 @@ type PrivateTxManager interface {
 	Subscribe(ctx context.Context, subscriber PrivateTxEventSubscriber)
 
 	ReceiveTransportMessage(context.Context, *TransportMessage)
+
+	NotifyConfirmed(ctx context.Context, confirms []*PublicTxMatch) (completed map[uuid.UUID]bool, err error)
 }

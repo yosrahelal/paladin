@@ -320,6 +320,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 		PublicTxID: ptxapi.PublicTxID{
 			Transaction:   txID, // this means these public TXs will not be visible outside of the public TX manager
 			ResubmitIndex: 0,
+			ParentType:    "autofuel",
 		},
 		PublicTxInput: ptxapi.PublicTxInput{
 			From: af.sourceAddress.String(),

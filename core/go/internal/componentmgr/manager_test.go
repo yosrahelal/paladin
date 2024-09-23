@@ -219,10 +219,8 @@ func TestBuildInternalEventStreamsPreCommitPostCommit(t *testing.T) {
 	cm.initResults = map[string]*components.ManagerInitResult{
 		"utengine": {
 			EventStreams: []*components.ManagerEventStream{
-				{Type: blockindexer.IESTypePreCommitHandler, PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*blockindexer.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) error {
-					return nil
-				}},
-				{Type: blockindexer.IESTypePostCommitHandler, PostCommitHandler: func(ctx context.Context, blocks []*blockindexer.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) {
+				{Type: blockindexer.IESTypePreCommitHandler, PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*blockindexer.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
+					return nil, nil
 				}},
 			},
 		},
@@ -230,11 +228,9 @@ func TestBuildInternalEventStreamsPreCommitPostCommit(t *testing.T) {
 
 	streams, err := cm.buildInternalEventStreams()
 	assert.NoError(t, err)
-	assert.Len(t, streams, 2)
+	assert.Len(t, streams, 1)
 	assert.Equal(t, blockindexer.IESTypePreCommitHandler, streams[0].Type)
 	assert.NotNil(t, streams[0].PreCommitHandler)
-	assert.Equal(t, blockindexer.IESTypePostCommitHandler, streams[1].Type)
-	assert.NotNil(t, streams[1].PostCommitHandler)
 
 }
 

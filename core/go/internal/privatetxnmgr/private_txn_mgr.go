@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -530,4 +531,14 @@ func (p *privateTxManager) publishToSubscribers(ctx context.Context, event compo
 	for _, subscriber := range p.subscribers {
 		subscriber(event)
 	}
+}
+
+func (p *privateTxManager) NotifyConfirmed(ctx context.Context, confirms []*components.PublicTxMatch) (completed map[uuid.UUID]bool, err error) {
+	// TODO: We have processing we need to do here, particularly for failures
+	// For now, we just ack everything as "done" driving a receipt to be recorded
+	completed = make(map[uuid.UUID]bool)
+	for _, confirm := range confirms {
+		completed[confirm.Transaction] = true
+	}
+	return completed, nil
 }

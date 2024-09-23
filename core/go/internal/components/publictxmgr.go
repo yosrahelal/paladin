@@ -57,6 +57,7 @@ type PublicTxIDInput struct {
 }
 
 type PublicTxMatch struct {
+	ptxapi.TransactionType
 	ptxapi.PublicTxID
 	*blockindexer.IndexedTransactionNotify
 }
