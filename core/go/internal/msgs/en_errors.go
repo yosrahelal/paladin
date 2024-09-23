@@ -324,7 +324,6 @@ var (
 	MsgTxMgrFunctionNoMatch              = ffe("PD012206", "Supplied function selector did not match any function in the ABI")
 	MsgTxMgrBytecodeNonPublicConstructor = ffe("PD012207", "Bytecode can only be supplied with a public constructor. Selected %s function %s")
 	MsgTxMgrInvalidInputData             = ffe("PD012208", "Invalid input data for function %s")
-	MsgTxMgrInvalidInputDataBytes        = ffe("PD012209", "A string was supplied for data that could not be parsed as encoded call data for function %s")
 	MsgTxMgrBytecodeAndHexData           = ffe("PD012210", "When deploying a smart contract the bytecode must be supplied separately to the input data")
 	MsgTxMgrInvalidTXType                = ffe("PD012211", "Invalid transaction type")
 	MsgTxMgrInvalidInputDataType         = ffe("PD012212", "Invalid input data type: %T")

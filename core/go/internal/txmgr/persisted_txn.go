@@ -171,6 +171,18 @@ func (tm *txManager) resolveFunction(ctx context.Context, dbTX *gorm.DB, inputAB
 	}, nil
 }
 
+func (tm *txManager) parseDataBytes(ctx context.Context, e *abi.Entry, dataBytes []byte) (cv *abi.ComponentValue, err error) {
+	// We might have the function selector
+	selector := e.FunctionSelectorBytes()
+	if len(dataBytes) >= len(selector) && len(dataBytes)%32 == 4 && bytes.Equal(selector, dataBytes[0:4]) {
+		cv, err = e.Inputs.DecodeABIDataCtx(ctx, selector, 4) // we will run out of data if this is not right, so safe to do first
+	}
+	if cv == nil || err != nil {
+		cv, err = e.Inputs.DecodeABIDataCtx(ctx, dataBytes, 0)
+	}
+	return cv, err
+}
+
 func (tm *txManager) parseInputs(
 	ctx context.Context,
 	e *abi.Entry,
@@ -200,32 +212,23 @@ func (tm *txManager) parseInputs(
 	}
 	var cv *abi.ComponentValue
 	switch decoded := iDecoded.(type) {
+	case nil:
+		cv, err = tm.parseDataBytes(ctx, e, []byte{})
 	case string:
 		// Must be a byte array pre-encoded
-		dataBytes, err := tktypes.ParseHexBytes(ctx, decoded)
-		if err != nil {
-			return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidInputDataBytes, e.String())
-		}
-		// We might have the function selector
-		selector := e.FunctionSelectorBytes()
-		if len(dataBytes) >= len(selector) && len(dataBytes)%32 == 4 && bytes.Equal(selector, dataBytes[0:4]) {
-			cv, err = e.Inputs.DecodeABIDataCtx(ctx, selector, 4) // we will run out of data if this is not right, so safe to do first
-		}
-		if cv == nil || err != nil {
-			cv, err = e.Inputs.DecodeABIDataCtx(ctx, dataBytes, 0)
-		}
-		if err != nil {
-			return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidInputDataBytes, e.String())
+		var dataBytes []byte
+		dataBytes, err = tktypes.ParseHexBytes(ctx, decoded)
+		if err == nil {
+			cv, err = tm.parseDataBytes(ctx, e, dataBytes)
 		}
 	case map[string]interface{}, []interface{}:
 		cv, err = e.Inputs.ParseExternalDataCtx(ctx, decoded)
-		if err != nil {
-			return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidInputData, e.String())
-		}
 	default:
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidInputDataType, iDecoded)
 	}
-
+	if err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidInputData, e.String())
+	}
 	return tktypes.StandardABISerializer().SerializeJSONCtx(ctx, cv)
 }
 

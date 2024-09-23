@@ -32,6 +32,8 @@ type mockComponents struct {
 	db            sqlmock.Sqlmock
 	domainManager *componentmocks.DomainManager
 	blockIndexer  *componentmocks.BlockIndexer
+	publicTxMgr   *componentmocks.PublicTxManager
+	privateTxMgr  *componentmocks.PrivateTxManager
 }
 
 func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *Config, mc *mockComponents)) (context.Context, *txManager, func()) {
@@ -43,11 +45,15 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *Con
 	mc := &mockComponents{
 		blockIndexer:  componentmocks.NewBlockIndexer(t),
 		domainManager: componentmocks.NewDomainManager(t),
+		publicTxMgr:   componentmocks.NewPublicTxManager(t),
+		privateTxMgr:  componentmocks.NewPrivateTxManager(t),
 	}
 
 	componentMocks := componentmocks.NewAllComponents(t)
 	componentMocks.On("BlockIndexer").Return(mc.blockIndexer).Maybe()
 	componentMocks.On("DomainManager").Return(mc.domainManager).Maybe()
+	componentMocks.On("PublicTxManager").Return(mc.publicTxMgr).Maybe()
+	componentMocks.On("PrivateTxManager").Return(mc.privateTxMgr).Maybe()
 
 	var p persistence.Persistence
 	var err error

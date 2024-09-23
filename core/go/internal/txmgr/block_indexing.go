@@ -63,7 +63,7 @@ func (tm *txManager) blockIndexerPreCommit(
 	// Ok now we can finally determine which receipts we need - in the ORIGINAL order
 	receipts := make([]*transactionReceipt, 0, len(publicTxMatches))
 	for _, pubTx := range publicTxMatches {
-		if pubTx.ParentType == string(ptxapi.TransactionTypePrivate) || // it's public
+		if pubTx.ParentType == string(ptxapi.TransactionTypePublic) || // it's public
 			finalizedPrivate[pubTx.Transaction] { // or it's a finalized private
 			log.L(ctx).Infof("Writing receipt for %s transaction hash=%s block=%d result=%s",
 				pubTx.Transaction, pubTx.Hash, pubTx.BlockNumber, pubTx.Result)

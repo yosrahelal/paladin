@@ -140,7 +140,7 @@ func TestResolveFunctionHexInputFail(t *testing.T) {
 		},
 		ABI: exampleABI,
 	})
-	assert.Regexp(t, "PD012209", err)
+	assert.Regexp(t, "PD012208", err)
 }
 
 func TestResolveFunctionUnsupportedInput(t *testing.T) {
@@ -360,7 +360,7 @@ func TestParseInputsBadByteString(t *testing.T) {
 		},
 		ABI: exampleABI,
 	})
-	assert.Regexp(t, "PD012209", err)
+	assert.Regexp(t, "PD012208", err)
 }
 
 func TestInsertTransactionFail(t *testing.T) {
