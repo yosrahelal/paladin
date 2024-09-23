@@ -54,12 +54,34 @@ func toJSONString(t *testing.T, v interface{}) string {
 	return string(b)
 }
 
+type UTXOTransfer_Event struct {
+	TX        tktypes.Bytes32   `json:"txId"`
+	Inputs    []tktypes.Bytes32 `json:"inputs"`
+	Outputs   []tktypes.Bytes32 `json:"outputs"`
+	Signature tktypes.HexBytes  `json:"signature"`
+}
+
+func parseStatesFromEvent(txID tktypes.Bytes32, states []tktypes.Bytes32) []*prototk.StateUpdate {
+	refs := make([]*prototk.StateUpdate, len(states))
+	for i, state := range states {
+		refs[i] = &prototk.StateUpdate{
+			Id:            state.String(),
+			TransactionId: txID.String(),
+		}
+	}
+	return refs
+}
+
 // Example of how someone might use this testbed externally
 func TestDemoNotarizedCoinSelection(t *testing.T) {
 
 	ctx := context.Background()
 	simDomainABI := mustParseBuildABI(simDomainBuild)
 	simTokenABI := mustParseBuildABI(simTokenBuild)
+
+	transferABI := simTokenABI.Events()["UTXOTransfer"]
+	require.NotEmpty(t, transferABI)
+	transferSignature := transferABI.SolString()
 
 	fakeCoinStateSchema := `{
 		"type": "tuple",
@@ -289,12 +311,18 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 				assert.Equal(t, int64(1337), req.ChainId) // from tools/besu_bootstrap
 				chainID = req.ChainId
 
+				var eventsABI abi.ABI
+				eventsABI = append(eventsABI, transferABI)
+				eventsJSON, err := json.Marshal(eventsABI)
+				require.NoError(t, err)
+
 				return &prototk.ConfigureDomainResponse{
 					DomainConfig: &prototk.DomainConfig{
 						BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
 							SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
 						},
 						AbiStateSchemasJson: []string{fakeCoinStateSchema},
+						AbiEventsJson:       string(eventsJSON),
 					},
 				}, nil
 			},
@@ -541,6 +569,27 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 					},
 				}, nil
 			},
+
+			HandleEventBatch: func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+				var events []*blockindexer.EventWithData
+				if err := json.Unmarshal([]byte(req.JsonEvents), &events); err != nil {
+					return nil, err
+				}
+
+				var res prototk.HandleEventBatchResponse
+				for _, ev := range events {
+					switch ev.SoliditySignature {
+					case transferSignature:
+						var transfer UTXOTransfer_Event
+						if err := json.Unmarshal(ev.Data, &transfer); err == nil {
+							res.TransactionsComplete = append(res.TransactionsComplete, transfer.TX.String())
+							res.SpentStates = append(res.SpentStates, parseStatesFromEvent(transfer.TX, transfer.Inputs)...)
+							res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(transfer.TX, transfer.Outputs)...)
+						}
+					}
+				}
+				return &res, nil
+			},
 		}}
 	})
 
@@ -576,7 +625,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 			"to": "wallets.org1.aaaaaa",
 			"amount": "123000000000000000000"
 		}`),
-	})
+	}, true)
 	assert.Nil(t, rpcErr)
 
 	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &tktypes.PrivateContractInvoke{
@@ -588,7 +637,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 			"to": "wallets.org2.bbbbbb",
 			"amount": "23000000000000000000"
 		}`),
-	})
+	}, true)
 	assert.Nil(t, rpcErr)
 
 	// Check we can also use the utility function externally to resolve verifiers

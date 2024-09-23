@@ -260,14 +260,11 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 			testABI[2],
 		},
 	}
-	es, err := bi.upsertInternalEventStream(ctx, &InternalEventStream{
+	_, err = bi.AddEventStream(ctx, &InternalEventStream{
 		Definition: internalESConfig,
 		Handler:    handler,
 	})
 	require.NoError(t, err)
-
-	// And start it
-	es.start()
 
 	// Expect to get 15 * 2 events (1 TX x 3 Events per block, but we only listen to two)
 	for i := 0; i < len(blocks)*2; i++ {
@@ -304,7 +301,7 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check it's back to the checkpoint we expect
-	es = bi.eventStreams[uuid.MustParse(esID)]
+	es := bi.eventStreams[uuid.MustParse(esID)]
 	cp, err := es.processCheckpoint()
 	require.NoError(t, err)
 	assert.Equal(t, int64(14), cp)

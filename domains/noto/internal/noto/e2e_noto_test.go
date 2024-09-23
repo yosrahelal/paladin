@@ -22,6 +22,8 @@ import (
 
 	"github.com/go-resty/resty/v2"
 
+	_ "embed"
+
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
@@ -37,6 +39,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+//go:embed abis/Noto.json
+var notoJSON []byte
+
+//go:embed abis/NotoSelfSubmit.json
+var notoSelfSubmitJSON []byte
 
 var (
 	notaryName     = "notary"
@@ -142,6 +150,8 @@ func TestNoto(t *testing.T) {
 	require.NoError(t, err)
 	_, recipient1Key, err := tb.Components().KeyManager().ResolveKey(ctx, recipient1Name, algorithms.ECDSA_SECP256K1_PLAINBYTES)
 	require.NoError(t, err)
+	_, recipient2Key, err := tb.Components().KeyManager().ResolveKey(ctx, recipient2Name, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	require.NoError(t, err)
 
 	log.L(ctx).Infof("Deploying an instance of Noto")
 	var notoAddress ethtypes.Address0xHex
@@ -164,7 +174,7 @@ func TestNoto(t *testing.T) {
 			To:     notaryName,
 			Amount: ethtypes.NewHexInteger64(100),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -185,7 +195,7 @@ func TestNoto(t *testing.T) {
 			To:     recipient1Name,
 			Amount: ethtypes.NewHexInteger64(100),
 		}),
-	})
+	}, true)
 	require.NotNil(t, rpcerr)
 	assert.ErrorContains(t, rpcerr.Error(), "PD200009")
 	assert.True(t, boolResult)
@@ -203,7 +213,7 @@ func TestNoto(t *testing.T) {
 			To:     recipient1Name,
 			Amount: ethtypes.NewHexInteger64(150),
 		}),
-	})
+	}, true)
 	require.NotNil(t, rpcerr)
 	assert.ErrorContains(t, rpcerr.Error(), "PD200005")
 
@@ -220,25 +230,19 @@ func TestNoto(t *testing.T) {
 			To:     recipient1Name,
 			Amount: ethtypes.NewHexInteger64(50),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
 
 	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
-	require.Len(t, coins, 3)
+	require.Len(t, coins, 2)
 
-	// This should have been spent
-	// TODO: why does it still exist?
-	assert.Equal(t, int64(100), coins[0].Amount.Int64())
-	assert.Equal(t, notaryKey, coins[0].Owner.String())
-
-	// These are the expected coins after the transfer
+	assert.Equal(t, int64(50), coins[0].Amount.Int64())
+	assert.Equal(t, recipient1Key, coins[0].Owner.String())
 	assert.Equal(t, int64(50), coins[1].Amount.Int64())
-	assert.Equal(t, recipient1Key, coins[1].Owner.String())
-	assert.Equal(t, int64(50), coins[2].Amount.Int64())
-	assert.Equal(t, notaryKey, coins[2].Owner.String())
+	assert.Equal(t, notaryKey, coins[1].Owner.String())
 
 	log.L(ctx).Infof("Transfer 50 from recipient1 to recipient2")
 	rpcerr = rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
@@ -249,14 +253,19 @@ func TestNoto(t *testing.T) {
 			To:     recipient2Name,
 			Amount: ethtypes.NewHexInteger64(50),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
 
 	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
-	require.Len(t, coins, 4) // TODO: verify coins
+	require.Len(t, coins, 2)
+
+	assert.Equal(t, int64(50), coins[0].Amount.Int64())
+	assert.Equal(t, notaryKey, coins[0].Owner.String())
+	assert.Equal(t, int64(50), coins[1].Amount.Int64())
+	assert.Equal(t, recipient2Key, coins[1].Owner.String())
 }
 
 func TestNotoApprove(t *testing.T) {
@@ -306,7 +315,7 @@ func TestNotoApprove(t *testing.T) {
 			To:     notaryName,
 			Amount: ethtypes.NewHexInteger64(100),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -334,7 +343,7 @@ func TestNotoApprove(t *testing.T) {
 			Delegate: *ethtypes.MustNewAddress(recipient1Key),
 			Call:     prepared.EncodedCall,
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -369,6 +378,10 @@ func TestNotoSelfSubmit(t *testing.T) {
 	defer done()
 
 	_, notaryKey, err := tb.Components().KeyManager().ResolveKey(ctx, notaryName, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	require.NoError(t, err)
+	_, recipient1Key, err := tb.Components().KeyManager().ResolveKey(ctx, recipient1Name, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	require.NoError(t, err)
+	_, recipient2Key, err := tb.Components().KeyManager().ResolveKey(ctx, recipient2Name, algorithms.ECDSA_SECP256K1_PLAINBYTES)
 	require.NoError(t, err)
 
 	eth := tb.Components().EthClientFactory().HTTPClient()
@@ -407,7 +420,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 			To:     notaryName,
 			Amount: ethtypes.NewHexInteger64(100),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -428,14 +441,19 @@ func TestNotoSelfSubmit(t *testing.T) {
 			To:     recipient1Name,
 			Amount: ethtypes.NewHexInteger64(50),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
 
 	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
-	assert.Len(t, coins, 3) // TODO: verify coins
+	require.Len(t, coins, 2)
+
+	assert.Equal(t, int64(50), coins[0].Amount.Int64())
+	assert.Equal(t, recipient1Key, coins[0].Owner.String())
+	assert.Equal(t, int64(50), coins[1].Amount.Int64())
+	assert.Equal(t, notaryKey, coins[1].Owner.String())
 
 	log.L(ctx).Infof("Transfer 50 from recipient1 to recipient2")
 	rpcerr = rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
@@ -446,12 +464,17 @@ func TestNotoSelfSubmit(t *testing.T) {
 			To:     recipient2Name,
 			Amount: ethtypes.NewHexInteger64(50),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
 
 	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
 	require.NoError(t, err)
-	assert.Len(t, coins, 4) // TODO: verify coins
+	require.Len(t, coins, 2)
+
+	assert.Equal(t, int64(50), coins[0].Amount.Int64())
+	assert.Equal(t, notaryKey, coins[0].Owner.String())
+	assert.Equal(t, int64(50), coins[1].Amount.Int64())
+	assert.Equal(t, recipient2Key, coins[1].Owner.String())
 }

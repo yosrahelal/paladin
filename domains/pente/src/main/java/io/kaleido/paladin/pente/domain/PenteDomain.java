@@ -15,6 +15,10 @@
 
 package io.kaleido.paladin.pente.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.ByteString;
 import github.com.kaleido_io.paladin.toolkit.FromDomain;
@@ -24,6 +28,7 @@ import io.kaleido.paladin.pente.evmstate.DynamicLoadWorldState;
 import io.kaleido.paladin.pente.evmstate.PersistedAccount;
 import io.kaleido.paladin.toolkit.*;
 import io.kaleido.paladin.toolkit.JsonHex.Address;
+import io.kaleido.paladin.toolkit.JsonHex.Bytes;
 import io.kaleido.paladin.toolkit.JsonHex.Bytes32;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -55,6 +60,7 @@ public class PenteDomain extends DomainInstance {
                 .setBaseLedgerSubmitConfig(ToDomain.BaseLedgerSubmitConfig.newBuilder()
                         .setSubmitMode(ToDomain.BaseLedgerSubmitConfig.Mode.ONE_TIME_USE_KEYS)
                         .build())
+                .setAbiEventsJson(config.getInterfaceABI().toString())
                 .build();
         return CompletableFuture.completedFuture(ToDomain.ConfigureDomainResponse.newBuilder()
                 .setDomainConfig(domainConfig)
@@ -353,6 +359,57 @@ public class PenteDomain extends DomainInstance {
             return CompletableFuture.failedFuture(e);
         }
     }
+
+    @Override
+    protected CompletableFuture<ToDomain.HandleEventBatchResponse> handleEventBatch(ToDomain.HandleEventBatchRequest request) {
+        try {
+            var mapper = new ObjectMapper();
+            List<EventWithData> events = mapper.readerForListOf(EventWithData.class).readValue(request.getJsonEvents());
+            for (var event : events) {
+                if (config.getTransferSignature().equals(event.soliditySignature)) {
+                    var transfer = mapper.convertValue(event.data, UTXOTransferJSON.class);
+                    var inputs = Arrays.stream(transfer.inputs).map(id -> ToDomain.StateUpdate.newBuilder()
+                            .setId(id.to0xHex())
+                            .setTransactionId(transfer.txId.to0xHex())
+                            .build()).toList();
+                    var outputs = Arrays.stream(transfer.outputs).map(id -> ToDomain.StateUpdate.newBuilder()
+                            .setId(id.to0xHex())
+                            .setTransactionId(transfer.txId.to0xHex())
+                            .build()).toList();
+                    var result = ToDomain.HandleEventBatchResponse.newBuilder()
+                            .addTransactionsComplete(transfer.txId.to0xHex())
+                            .addAllSpentStates(inputs)
+                            .addAllConfirmedStates(outputs);
+                    return CompletableFuture.completedFuture(result.build());
+                } else {
+                    throw new Exception("Unknown signature: " + event.soliditySignature);
+                }
+            }
+            return CompletableFuture.completedFuture(null);
+        } catch(Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record EventWithData(
+            @JsonProperty
+            String soliditySignature,
+            @JsonProperty
+            JsonNode data
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record UTXOTransferJSON(
+            @JsonProperty
+            Bytes32 txId,
+            @JsonProperty
+            Bytes32[] inputs,
+            @JsonProperty
+            Bytes32[] outputs,
+            @JsonProperty
+            Bytes data
+    ) {}
 
     /** during assembly we load available states from the Paladin state store */
     class AssemblyAccountLoader implements AccountLoader {

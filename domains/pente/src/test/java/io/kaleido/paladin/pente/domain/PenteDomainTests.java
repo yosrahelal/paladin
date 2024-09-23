@@ -122,7 +122,7 @@ public class PenteDomainTests {
                             JsonHex.addressFrom(contractAddr),
                             simpleStorageDeployABI,
                             deployValues
-                    ));
+                    ), true);
             assertFalse(contractAddr.isBlank());
 
             // TODO: This is a hack because we need to define a way for domain transactions to
@@ -148,8 +148,23 @@ public class PenteDomainTests {
                             JsonHex.addressFrom(contractAddr),
                             simpleStorageSetABI,
                             setValues
-                    ));
-            assertFalse(contractAddr.isBlank());
+                    ), true);
+
+            // Set again
+            setValues = new HashMap<>() {{
+                put("group", groupInfo);
+                put("to", expectedContractAddress.toString());
+                put("inputs", new HashMap<>() {{
+                    put("x", "12345");
+                }});
+            }};
+            testbed.getRpcClient().request("testbed_invoke",
+                    new PrivateContractInvoke(
+                            "simpleStorageDeployer",
+                            JsonHex.addressFrom(contractAddr),
+                            simpleStorageSetABI,
+                            setValues
+                    ), true);
 
         }
     }

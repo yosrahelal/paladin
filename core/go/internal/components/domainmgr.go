@@ -37,6 +37,7 @@ type DomainManager interface {
 	GetDomainByName(ctx context.Context, name string) (Domain, error)
 	GetSmartContractByAddress(ctx context.Context, addr tktypes.EthAddress) (DomainSmartContract, error)
 	WaitForDeploy(ctx context.Context, txID uuid.UUID) (DomainSmartContract, error)
+	WaitForTransaction(ctx context.Context, txID uuid.UUID) error
 }
 
 // External interface for other components (engine, testbed) to call against a domain

@@ -49,6 +49,10 @@ public class PenteConfiguration {
 
     private final JsonABI privacyGroupABI;
 
+    private final JsonABI interfaceABI;
+
+    private final String transferSignature = "event UTXOTransfer(bytes32 txId, bytes32[] inputs, bytes32[] outputs, bytes data)";
+
     private long chainId;
 
     private String schemaId_AccountState_v24_9_0;
@@ -64,6 +68,9 @@ public class PenteConfiguration {
                     "abi");
             privacyGroupABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
                     "contracts/domains/pente/PentePrivacyGroup.sol/PentePrivacyGroup.json",
+                    "abi");
+            interfaceABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
+                    "contracts/domains/interfaces/IPente.sol/IPente.json",
                     "abi");
         } catch (Exception t) {
             LOGGER.error("failed to initialize configuration", t);
@@ -213,6 +220,10 @@ public class PenteConfiguration {
     synchronized JsonABI getPrivacyGroupABI() {
         return privacyGroupABI;
     }
+
+    synchronized JsonABI getInterfaceABI() { return interfaceABI; }
+
+    synchronized String getTransferSignature() { return transferSignature; }
 
     synchronized long getChainId() {
         return chainId;

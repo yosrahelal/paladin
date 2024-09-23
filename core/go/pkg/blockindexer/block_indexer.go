@@ -45,6 +45,7 @@ import (
 type BlockIndexer interface {
 	Start(...*InternalEventStream) error
 	Stop()
+	AddEventStream(ctx context.Context, stream *InternalEventStream) (*EventStream, error)
 	GetIndexedBlockByNumber(ctx context.Context, number uint64) (*IndexedBlock, error)
 	GetIndexedTransactionByHash(ctx context.Context, hash tktypes.Bytes32) (*IndexedTransaction, error)
 	GetIndexedTransactionByNonce(ctx context.Context, from tktypes.EthAddress, nonce uint64) (*IndexedTransaction, error)
@@ -149,6 +150,14 @@ func (bi *blockIndexer) Start(internalStreams ...*InternalEventStream) error {
 	bi.startOrReset()
 	bi.startEventStreams()
 	return nil
+}
+
+func (bi *blockIndexer) AddEventStream(ctx context.Context, stream *InternalEventStream) (*EventStream, error) {
+	es, err := bi.upsertInternalEventStream(ctx, stream)
+	if err == nil {
+		bi.startEventStream(es)
+	}
+	return es.definition, err
 }
 
 func (bi *blockIndexer) startOrReset() {
