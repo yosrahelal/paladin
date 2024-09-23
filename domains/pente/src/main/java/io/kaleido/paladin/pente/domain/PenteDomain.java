@@ -378,11 +378,8 @@ public class PenteDomain extends DomainInstance {
                             .build()).toList();
                     var result = ToDomain.HandleEventBatchResponse.newBuilder()
                             .addTransactionsComplete(transfer.txId.to0xHex())
-                            .addAllSpentStates(inputs);
-                    // TODO: Pente currently has a bug in which it sometimes tries to spend a state and then
-                    //       immediately re-confirm the same state. While the Solidity does not prevent this,
-                    //       it's not an allowed behavior for Paladin (every state can be confirmed only once).
-                    //        .addAllConfirmedStates(outputs);
+                            .addAllSpentStates(inputs)
+                            .addAllConfirmedStates(outputs);
                     return CompletableFuture.completedFuture(result.build());
                 } else {
                     throw new Exception("Unknown signature: " + event.soliditySignature);

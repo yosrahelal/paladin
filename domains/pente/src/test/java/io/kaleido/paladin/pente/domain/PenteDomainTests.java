@@ -149,7 +149,22 @@ public class PenteDomainTests {
                             simpleStorageSetABI,
                             setValues
                     ), true);
-            assertFalse(contractAddr.isBlank());
+
+            // Set again
+            setValues = new HashMap<>() {{
+                put("group", groupInfo);
+                put("to", expectedContractAddress.toString());
+                put("inputs", new HashMap<>() {{
+                    put("x", "12345");
+                }});
+            }};
+            testbed.getRpcClient().request("testbed_invoke",
+                    new PrivateContractInvoke(
+                            "simpleStorageDeployer",
+                            JsonHex.addressFrom(contractAddr),
+                            simpleStorageSetABI,
+                            setValues
+                    ), true);
 
         }
     }

@@ -444,6 +444,7 @@ class PenteTransaction {
         }
         // Note we only increment the nonce after successful executions
         sender.setNonce(nonce+1);
+        evm.getWorld().getUpdater().commit();
         var txPayload = getEncodedTransaction(nonce, calldata);
         return new EVMExecutionResult(
                 evm,
