@@ -32,16 +32,16 @@ import (
 )
 
 //go:embed abis/NotoFactory.json
-var notoFactoryJSON []byte // From "gradle copySolidity"
+var notoFactoryJSON []byte
 
 //go:embed abis/AtomFactory.json
-var atomFactoryJSON []byte // From "gradle copySolidity"
+var atomFactoryJSON []byte
 
 //go:embed abis/Atom.json
-var atomJSON []byte // From "gradle copySolidity"
+var atomJSON []byte
 
 //go:embed abis/Swap.json
-var swapJSON []byte // From "gradle copySolidity"
+var swapJSON []byte
 
 var (
 	notary = "notary"

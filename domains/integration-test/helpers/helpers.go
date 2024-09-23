@@ -77,8 +77,26 @@ func (th *TransactionHelper) Prepare() ethtypes.HexBytes0xPrefix {
 	return th.builder.TX().Data
 }
 
-func (st *SentTransaction) Wait() {
-	waitFor(st.ctx, st.t, st.tb, st.tx, nil)
+func (st *SentTransaction) Wait() *blockindexer.IndexedTransaction {
+	tx, err := st.tb.Components().BlockIndexer().WaitForTransactionSuccess(st.ctx, *st.tx, nil)
+	assert.NoError(st.t, err)
+	return tx
+}
+
+func (st *SentTransaction) FindEvent(abi abi.ABI, eventName string, eventParams any) *blockindexer.EventWithData {
+	targetEvent := abi.Events()[eventName]
+	assert.NotNil(st.t, targetEvent)
+	assert.NotEmpty(st.t, targetEvent.SolString())
+	events, err := st.tb.Components().BlockIndexer().DecodeTransactionEvents(st.ctx, *st.tx, abi)
+	assert.NoError(st.t, err)
+	for _, event := range events {
+		if event.SoliditySignature == targetEvent.SolString() {
+			err = json.Unmarshal(event.Data, eventParams)
+			assert.NoError(st.t, err)
+			return event
+		}
+	}
+	return nil
 }
 
 func NewDomainTransactionHelper(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, to tktypes.EthAddress, fn *abi.Entry, inputs tktypes.RawJSON) *DomainTransactionHelper {
@@ -150,27 +168,4 @@ func functionBuilder(ctx context.Context, t *testing.T, eth ethclient.EthClient,
 	fn, err := abiClient.Function(ctx, functionName)
 	assert.NoError(t, err)
 	return fn.R(ctx)
-}
-
-func waitFor(ctx context.Context, t *testing.T, tb testbed.Testbed, txHash *tktypes.Bytes32, err error) *blockindexer.IndexedTransaction {
-	require.NoError(t, err)
-	tx, err := tb.Components().BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
-	assert.NoError(t, err)
-	return tx
-}
-
-func findEvent(ctx context.Context, t *testing.T, tb testbed.Testbed, txHash tktypes.Bytes32, abi abi.ABI, eventName string, eventParams interface{}) *blockindexer.EventWithData {
-	targetEvent := abi.Events()[eventName]
-	assert.NotNil(t, targetEvent)
-	assert.NotEmpty(t, targetEvent.SolString())
-	events, err := tb.Components().BlockIndexer().DecodeTransactionEvents(ctx, txHash, abi)
-	assert.NoError(t, err)
-	for _, event := range events {
-		if event.SoliditySignature == targetEvent.SolString() {
-			err = json.Unmarshal(event.Data, eventParams)
-			assert.NoError(t, err)
-			return event
-		}
-	}
-	return nil
 }

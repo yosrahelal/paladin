@@ -61,13 +61,9 @@ func DeploySwap(
 	input *TradeRequestInput,
 ) *SwapHelper {
 	eth := tb.Components().EthClientFactory().HTTPClient()
-	txHash, err := deployBuilder(ctx, t, eth, build.ABI, build.Bytecode).
-		Signer(signer).
-		Input(toJSON(t, map[string]any{
-			"inputData": input,
-		})).
-		SignAndSend()
-	bondDeploy := waitFor(ctx, t, tb, txHash, err)
+	builder := deployBuilder(ctx, t, eth, build.ABI, build.Bytecode).
+		Input(toJSON(t, map[string]any{"inputData": input}))
+	bondDeploy := NewTransactionHelper(ctx, t, tb, builder).SignAndSend(signer).Wait()
 	address := ethtypes.Address0xHex(*bondDeploy.ContractAddress)
 	assert.NotNil(t, address)
 	return &SwapHelper{

@@ -74,15 +74,14 @@ func InitAtom(
 }
 
 func (a *AtomFactoryHelper) Create(ctx context.Context, signer string, operations []*AtomOperation) *AtomHelper {
-	txHash, err := functionBuilder(ctx, a.t, a.eth, a.FactoryABI, "create").
-		Signer(signer).
+	builder := functionBuilder(ctx, a.t, a.eth, a.FactoryABI, "create").
 		To(&a.Address).
-		Input(toJSON(a.t, map[string]any{"operations": operations})).
-		SignAndSend()
-	waitFor(ctx, a.t, a.tb, txHash, err)
+		Input(toJSON(a.t, map[string]any{"operations": operations}))
+	tx := NewTransactionHelper(ctx, a.t, a.tb, builder).SignAndSend(signer)
+	tx.Wait()
 
 	var atomDeployed AtomDeployed
-	findEvent(ctx, a.t, a.tb, *txHash, a.FactoryABI, "AtomDeployed", &atomDeployed)
+	tx.FindEvent(a.FactoryABI, "AtomDeployed", &atomDeployed)
 	assert.NotEmpty(a.t, atomDeployed.Address)
 	return &AtomHelper{
 		t:           a.t,
