@@ -167,6 +167,7 @@ func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *comp
 	}
 	log.L(ctx).Debugf("Initialized enterprise transaction handler")
 	ble.balanceManager = balanceManager
+	ble.p = pic.Persistence()
 	ble.submissionWriter = newSubmissionWriter(ctx, ble.p, ble.conf)
 	return &components.ManagerInitResult{}, nil
 }
@@ -174,8 +175,7 @@ func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *comp
 func (ble *pubTxManager) Start() error {
 	ctx := ble.ctx
 	log.L(ctx).Debugf("Starting enterprise transaction handler")
-	if ble.ctx == nil { // only start once
-		ble.ctx = ctx // set the context for policy loop
+	if ble.engineLoopDone == nil { // only start once
 		ble.engineLoopDone = make(chan struct{})
 		log.L(ctx).Debugf("Kicking off  enterprise handler engine loop")
 		go ble.engineLoop()

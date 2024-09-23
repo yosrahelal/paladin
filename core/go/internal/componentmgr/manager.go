@@ -155,13 +155,13 @@ func (cm *componentManager) Init() (err error) {
 	if err == nil {
 		cm.publicTxManager = publictxmgr.NewPublicTransactionManager(cm.bgCtx, &cm.conf.PublicTxManager)
 		cm.initResults["public_tx_mgr"], err = cm.publicTxManager.PreInit(cm)
-		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPublicTxnManagerInitError)
 	}
 
 	if err == nil {
 		cm.privateTxManager = privatetxnmgr.NewPrivateTransactionMgr(cm.bgCtx, cm.instanceUUID.String(), &cm.conf.PrivateTxManager)
 		cm.initResults["private_tx_mgr"], err = cm.privateTxManager.PreInit(cm)
-		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPrivateTxManagerInitError)
 	}
 
 	// init engine
@@ -193,12 +193,12 @@ func (cm *componentManager) Init() (err error) {
 
 	if err == nil {
 		err = cm.publicTxManager.PostInit(cm)
-		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPublicTxnManagerInitError)
 	}
 
 	if err == nil {
 		err = cm.privateTxManager.PostInit(cm)
-		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPrivateTxManagerInitError)
 	}
 
 	return err
@@ -249,10 +249,15 @@ func (cm *componentManager) StartManagers() (err error) {
 		err = cm.addIfStarted("plugin_manager", cm.pluginManager, err, msgs.MsgComponentPluginStartError)
 	}
 
-	// if err == nil {
-	// 	err = cm.publicTxManager.Start()
-	// 	err = cm.addIfStarted("public_tx_manager", cm.publicTxManager, err, msgs.MsgComponentPluginStartError)
-	// }
+	if err == nil {
+		err = cm.publicTxManager.Start()
+		err = cm.addIfStarted("public_tx_manager", cm.publicTxManager, err, msgs.MsgComponentPublicTxManagerStartError)
+	}
+
+	if err == nil {
+		err = cm.privateTxManager.Start()
+		err = cm.addIfStarted("private_tx_manager", cm.privateTxManager, err, msgs.MsgComponentPrivateTxManagerStartError)
+	}
 	return err
 }
 
