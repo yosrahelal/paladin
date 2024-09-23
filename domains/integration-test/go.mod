@@ -1,4 +1,4 @@
-module github.com/kaleido-io/paladin/domains/test
+module github.com/kaleido-io/paladin/domains/integration-test
 
 go 1.22.5
 

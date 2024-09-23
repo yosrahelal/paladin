@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package test
+package integrationtest
 
 import (
 	"context"
@@ -53,9 +53,9 @@ var atomJSON []byte // From "gradle copySolidity"
 var swapJSON []byte // From "gradle copySolidity"
 
 var (
-	notaryName     = "notary1"
-	recipient1Name = "recipient1"
-	recipient2Name = "recipient2"
+	notary = "notary"
+	alice  = "alice"
+	bob    = "bob"
 )
 
 type AtomOperation struct {
@@ -109,7 +109,7 @@ func deployContracts(ctx context.Context, t *testing.T, contracts map[string][]b
 		build := domain.LoadBuild(contract)
 		var addr string
 		rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deployBytecode",
-			notaryName, build.ABI, build.Bytecode.String(), `{}`)
+			notary, build.ABI, build.Bytecode.String(), `{}`)
 		if rpcerr != nil {
 			assert.NoError(t, rpcerr.Error())
 		}
@@ -265,9 +265,9 @@ func TestPvP(t *testing.T) {
 	atomAddress, err := ethtypes.NewAddress(contracts["atom"])
 	assert.NoError(t, err)
 
-	_, recipient1Key, err := tb.Components().KeyManager().ResolveKey(ctx, recipient1Name, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	_, aliceKey, err := tb.Components().KeyManager().ResolveKey(ctx, alice, algorithms.ECDSA_SECP256K1_PLAINBYTES)
 	require.NoError(t, err)
-	_, recipient2Key, err := tb.Components().KeyManager().ResolveKey(ctx, recipient2Name, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	_, bobKey, err := tb.Components().KeyManager().ResolveKey(ctx, bob, algorithms.ECDSA_SECP256K1_PLAINBYTES)
 	require.NoError(t, err)
 
 	eth := tb.Components().EthClientFactory().HTTPClient()
@@ -276,27 +276,27 @@ func TestPvP(t *testing.T) {
 	swap := domain.LoadBuild(swapJSON)
 
 	log.L(ctx).Infof("Deploying 2 instances of Noto")
-	notoGoldAddress := notoDeploy(ctx, t, rpc, domainName, notaryName)
-	notoSilverAddress := notoDeploy(ctx, t, rpc, domainName, notaryName)
+	notoGoldAddress := notoDeploy(ctx, t, rpc, domainName, notary)
+	notoSilverAddress := notoDeploy(ctx, t, rpc, domainName, notary)
 	log.L(ctx).Infof("Noto gold deployed to %s", notoGoldAddress)
 	log.L(ctx).Infof("Noto silver deployed to %s", notoSilverAddress)
 
-	log.L(ctx).Infof("Mint 10 gold to recipient 1")
-	notoMint(ctx, t, rpc, notoGoldAddress, notaryName, recipient1Name, 10)
-	log.L(ctx).Infof("Mint 100 silver to recipient 2")
-	notoMint(ctx, t, rpc, notoSilverAddress, notaryName, recipient2Name, 100)
+	log.L(ctx).Infof("Mint 10 gold to Alice")
+	notoMint(ctx, t, rpc, notoGoldAddress, notary, alice, 10)
+	log.L(ctx).Infof("Mint 100 silver to Bob")
+	notoMint(ctx, t, rpc, notoSilverAddress, notary, bob, 100)
 
 	// TODO: this should be a Pente private contract, instead of a base ledger contract
 	log.L(ctx).Infof("Propose a trade of 1 gold for 10 silver")
 	txHash, err := deployBuilder(ctx, t, eth, swap.ABI, swap.Bytecode).
-		Signer(recipient1Name).
+		Signer(alice).
 		Input(toJSON(t, map[string]any{
 			"inputData": TradeRequestInput{
-				Holder1:       recipient1Key,
+				Holder1:       aliceKey,
 				TokenAddress1: notoGoldAddress,
 				TokenValue1:   ethtypes.NewHexInteger64(1),
 
-				Holder2:       recipient2Key,
+				Holder2:       bobKey,
 				TokenAddress2: notoSilverAddress,
 				TokenValue2:   ethtypes.NewHexInteger64(10),
 			},
@@ -306,23 +306,23 @@ func TestPvP(t *testing.T) {
 	swapAddress := ethtypes.Address0xHex(*swapDeploy.ContractAddress)
 
 	log.L(ctx).Infof("Prepare the transfers")
-	transferGold := notoPrepareTransfer(ctx, t, rpc, notoGoldAddress, recipient1Name, recipient2Name, 1)
-	transferSilver := notoPrepareTransfer(ctx, t, rpc, notoSilverAddress, recipient2Name, recipient1Name, 10)
+	transferGold := notoPrepareTransfer(ctx, t, rpc, notoGoldAddress, alice, bob, 1)
+	transferSilver := notoPrepareTransfer(ctx, t, rpc, notoSilverAddress, bob, alice, 10)
 
 	// TODO: this should actually be a Pente state transition
 	log.L(ctx).Infof("Prepare the trade execute")
 	executeBuilder := functionBuilder(ctx, t, eth, swap.ABI, "execute").
-		Signer(recipient1Name).
+		Signer(alice).
 		To(&swapAddress)
 	err = executeBuilder.BuildCallData()
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Record the prepared transfers")
 	txHash1, err1 := functionBuilder(ctx, t, eth, swap.ABI, "prepare").
-		Signer(recipient1Name).
+		Signer(alice).
 		To(&swapAddress).
 		Input(toJSON(t, map[string]any{
-			"holder": recipient1Name,
+			"holder": alice,
 			"states": StateData{
 				Inputs:  transferGold.InputStates,
 				Outputs: transferGold.OutputStates,
@@ -330,10 +330,10 @@ func TestPvP(t *testing.T) {
 		})).
 		SignAndSend()
 	txHash2, err2 := functionBuilder(ctx, t, eth, swap.ABI, "prepare").
-		Signer(recipient2Name).
+		Signer(bob).
 		To(&swapAddress).
 		Input(toJSON(t, map[string]any{
-			"holder": recipient2Name,
+			"holder": bob,
 			"states": &StateData{
 				Inputs:  transferSilver.InputStates,
 				Outputs: transferSilver.OutputStates,
@@ -345,7 +345,7 @@ func TestPvP(t *testing.T) {
 
 	log.L(ctx).Infof("Create Atom instance")
 	txHash, err = functionBuilder(ctx, t, eth, atomFactory.ABI, "create").
-		Signer(recipient1Name).
+		Signer(alice).
 		To(atomAddress).
 		Input(toJSON(t, map[string]any{
 			"operations": []*AtomOperation{
@@ -374,12 +374,12 @@ func TestPvP(t *testing.T) {
 	// If any party found a discrepancy at this point, they could cancel the swap (last chance to back out)
 
 	log.L(ctx).Infof("Approve both Noto transactions")
-	notoApprove(ctx, t, rpc, notoGoldAddress, recipient1Name, atomDeployed.Address, transferGold.EncodedCall)
-	notoApprove(ctx, t, rpc, notoSilverAddress, recipient2Name, atomDeployed.Address, transferSilver.EncodedCall)
+	notoApprove(ctx, t, rpc, notoGoldAddress, alice, atomDeployed.Address, transferGold.EncodedCall)
+	notoApprove(ctx, t, rpc, notoSilverAddress, bob, atomDeployed.Address, transferSilver.EncodedCall)
 
 	log.L(ctx).Infof("Execute the atomic operation")
 	txHash, err = functionBuilder(ctx, t, eth, atom.ABI, "execute").
-		Signer(recipient1Name).
+		Signer(alice).
 		To(&atomDeployed.Address).
 		SignAndSend()
 	waitFor(ctx, t, tb, txHash, err)
