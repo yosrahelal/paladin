@@ -22,13 +22,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -145,37 +143,37 @@ func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context
 //
 // We are currently proving out this pattern on the boundary of the private transaction manager and the public transaction manager and once that has settled, we will implement the same pattern here.
 // In the meantime, we a single function to submit a transaction and there is currently no persistence of the submission record.  It is all held in memory only
-func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.PrivateTransaction) (txID string, err error) {
+func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.PrivateTransaction) error {
 	log.L(ctx).Debugf("Handling new transaction: %v", tx)
 	if tx.Inputs == nil || tx.Inputs.Domain == "" {
-		return "", i18n.NewError(ctx, msgs.MsgDomainNotProvided)
+		return i18n.NewError(ctx, msgs.MsgDomainNotProvided)
 	}
 
 	emptyAddress := tktypes.EthAddress{}
 	if tx.Inputs.To == emptyAddress {
-		return "", i18n.NewError(ctx, msgs.MsgContractAddressNotProvided)
+		return i18n.NewError(ctx, msgs.MsgContractAddressNotProvided)
 	}
 
 	contractAddr := tx.Inputs.To
 	domainAPI, err := p.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
 	if err != nil {
-		return "", err
+		return err
 	}
 	err = domainAPI.InitTransaction(ctx, tx)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	//Resolve keys synchronously so that we can return an error if any key resolution fails
 	keyMgr := p.components.KeyManager()
 	if tx.PreAssembly == nil {
-		return "", i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "PreAssembly is nil")
+		return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "PreAssembly is nil")
 	}
 	tx.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.PreAssembly.RequiredVerifiers))
 	for i, v := range tx.PreAssembly.RequiredVerifiers {
 		_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm)
 		if err != nil {
-			return "", i18n.WrapError(ctx, err, msgs.MsgKeyResolutionFailed, v.Lookup, v.Algorithm)
+			return i18n.WrapError(ctx, err, msgs.MsgKeyResolutionFailed, v.Lookup, v.Algorithm)
 		}
 		tx.PreAssembly.Verifiers[i] = &prototk.ResolvedVerifier{
 			Lookup:    v.Lookup,
@@ -186,31 +184,33 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.Priva
 
 	oc, err := p.getOrchestratorForContract(ctx, contractAddr, domainAPI)
 	if err != nil {
-		return "", err
+		return err
 	}
 	queued := oc.ProcessNewTransaction(ctx, tx)
 	if queued {
 		log.L(ctx).Debugf("Transaction with ID %s queued in database", tx.ID)
 	}
-	return tx.ID.String(), nil
+	return nil
 }
 
 // Synchronous function to deploy a domain smart contract
-// TODO should this be async?  If async, do we have a chicken and egg problem given that all async event handling relies on a threading model of one thread per contract instance?  What thread would be responsible for deploying a new contract instance?
-func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.PrivateContractDeploy) (txID string, contractAddress string, err error) {
+// TODO This is async.
+// Private transaction manager will receive a notification when the public transaction is confirmed
+// (same as for invokes)
+func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.PrivateContractDeploy) error {
 	log.L(ctx).Debugf("Handling new private contract deploy transaction: %v", tx)
 	if tx.Domain == "" {
-		return "", "", i18n.NewError(ctx, msgs.MsgDomainNotProvided)
+		return i18n.NewError(ctx, msgs.MsgDomainNotProvided)
 	}
 
 	domain, err := p.components.DomainManager().GetDomainByName(ctx, tx.Domain)
 	if err != nil {
-		return "", "", i18n.WrapError(ctx, err, msgs.MsgDomainNotFound, tx.Domain)
+		return i18n.WrapError(ctx, err, msgs.MsgDomainNotFound, tx.Domain)
 	}
 
 	err = domain.InitDeploy(ctx, tx)
 	if err != nil {
-		return "", "", i18n.WrapError(ctx, err, msgs.MsgDeployInitFailed)
+		return i18n.WrapError(ctx, err, msgs.MsgDeployInitFailed)
 	}
 
 	//Resolve keys synchronously (rather than having an orchestrator stage for it) so that we can return an error if any key resolution fails
@@ -219,7 +219,7 @@ func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.Pr
 	for i, v := range tx.RequiredVerifiers {
 		_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm)
 		if err != nil {
-			return "", "", i18n.WrapError(ctx, err, msgs.MsgKeyResolutionFailed, v.Lookup, v.Algorithm)
+			return i18n.WrapError(ctx, err, msgs.MsgKeyResolutionFailed, v.Lookup, v.Algorithm)
 		}
 		tx.Verifiers[i] = &prototk.ResolvedVerifier{
 			Lookup:    v.Lookup,
@@ -228,84 +228,88 @@ func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.Pr
 		}
 	}
 
-	//TODO should the following be done asyncronously?
-
-	err = domain.PrepareDeploy(ctx, tx)
-	if err != nil {
-		return "", "", i18n.WrapError(ctx, err, msgs.MsgDeployPrepareFailed)
-	}
-
-	//Placeholder for integration with public transaction manager
-	if tx.DeployTransaction != nil && tx.InvokeTransaction == nil {
-		err = p.execBaseLedgerDeployTransaction(ctx, tx.Signer, tx.DeployTransaction)
-	} else if tx.InvokeTransaction != nil && tx.DeployTransaction == nil {
-		err = p.execBaseLedgerTransaction(ctx, tx.Signer, tx.InvokeTransaction)
-	} else {
-		return "", "", i18n.NewError(ctx, msgs.MsgDeployPrepareIncomplete)
-	}
-	if err != nil {
-		return "", "", i18n.WrapError(ctx, err, msgs.MsgBaseLedgerTransactionFailed)
-	}
-
-	psc, err := p.components.DomainManager().WaitForDeploy(ctx, tx.ID)
-	if err != nil {
-		return "", "", i18n.WrapError(ctx, err, msgs.MsgBaseLedgerTransactionFailed)
-	}
-	addr := psc.Address()
-
-	return tx.ID.String(), addr.String(), nil
-
-}
-
-// TODO this is a temporary function to execute a base ledger transaction.  It should be replaced with a call to the public transaction manager
-func (p *privateTxManager) execBaseLedgerDeployTransaction(ctx context.Context, signer string, txInstruction *components.EthDeployTransaction) error {
-
-	var abiFunc ethclient.ABIFunctionClient
-	ec := p.components.EthClientFactory().HTTPClient()
-	abiFunc, err := ec.ABIConstructor(ctx, txInstruction.ConstructorABI, tktypes.HexBytes(txInstruction.Bytecode))
-	if err != nil {
-		return err
-	}
-
-	// Send the transaction
-	txHash, err := abiFunc.R(ctx).
-		Signer(signer).
-		Input(txInstruction.Inputs).
-		SignAndSend()
-	if err == nil {
-		_, err = p.components.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
-	}
-	if err != nil {
-		return fmt.Errorf("failed to send base deploy ledger transaction: %s", err)
-	}
+	// TODO this is a transaction that will confirm just like invoke transactions
 	return nil
 }
 
-// TODO this is a temporary function to execute a base ledger transaction.  It should be replaced with a call to the public transaction manager
-func (p *privateTxManager) execBaseLedgerTransaction(ctx context.Context, signer string, txInstruction *components.EthTransaction) error {
+// func (p *privateTxManager) placeholderDeployment(ctx context.Context, domain components.Domain, tx *components.PrivateContractDeploy) (*tktypes.EthAddress, error) {
 
-	var abiFunc ethclient.ABIFunctionClient
-	ec := p.components.EthClientFactory().HTTPClient()
-	abiFunc, err := ec.ABIFunction(ctx, txInstruction.FunctionABI)
-	if err != nil {
-		return err
-	}
+// 	err := domain.PrepareDeploy(ctx, tx)
+// 	if err != nil {
+// 		return nil, i18n.WrapError(ctx, err, msgs.MsgDeployPrepareFailed)
+// 	}
 
-	// Send the transaction
-	addr := ethtypes.Address0xHex(txInstruction.To)
-	txHash, err := abiFunc.R(ctx).
-		Signer(signer).
-		To(&addr).
-		Input(txInstruction.Inputs).
-		SignAndSend()
-	if err == nil {
-		_, err = p.components.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
-	}
-	if err != nil {
-		return fmt.Errorf("failed to send base ledger transaction: %s", err)
-	}
-	return nil
-}
+// 	//Placeholder for integration with public transaction manager
+// 	if tx.DeployTransaction != nil && tx.InvokeTransaction == nil {
+// 		err = p.execBaseLedgerDeployTransaction(ctx, tx.Signer, tx.DeployTransaction)
+// 	} else if tx.InvokeTransaction != nil && tx.DeployTransaction == nil {
+// 		err = p.execBaseLedgerTransaction(ctx, tx.Signer, tx.InvokeTransaction)
+// 	} else {
+// 		return nil, i18n.NewError(ctx, msgs.MsgDeployPrepareIncomplete)
+// 	}
+// 	if err != nil {
+// 		return nil, i18n.WrapError(ctx, err, msgs.MsgBaseLedgerTransactionFailed)
+// 	}
+
+// 	psc, err := p.components.DomainManager().WaitForDeploy(ctx, tx.ID)
+// 	if err != nil {
+// 		return nil, i18n.WrapError(ctx, err, msgs.MsgBaseLedgerTransactionFailed)
+// 	}
+
+// 	addr := psc.Address()
+// 	return &addr, nil
+
+// }
+
+// // TODO this is a temporary function to execute a base ledger transaction.  It should be replaced with a call to the public transaction manager
+// func (p *privateTxManager) execBaseLedgerDeployTransaction(ctx context.Context, signer string, txInstruction *components.EthDeployTransaction) error {
+
+// 	var abiFunc ethclient.ABIFunctionClient
+// 	ec := p.components.EthClientFactory().HTTPClient()
+// 	abiFunc, err := ec.ABIConstructor(ctx, txInstruction.ConstructorABI, tktypes.HexBytes(txInstruction.Bytecode))
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	// Send the transaction
+// 	txHash, err := abiFunc.R(ctx).
+// 		Signer(signer).
+// 		Input(txInstruction.Inputs).
+// 		SignAndSend()
+// 	if err == nil {
+// 		_, err = p.components.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
+// 	}
+// 	if err != nil {
+// 		return fmt.Errorf("failed to send base deploy ledger transaction: %s", err)
+// 	}
+// 	return nil
+// }
+
+// // TODO this is a temporary function to execute a base ledger transaction.  It should be replaced with a call to the public transaction manager
+// func (p *privateTxManager) execBaseLedgerTransaction(ctx context.Context, signer string, txInstruction *components.EthTransaction) error {
+
+// 	var abiFunc ethclient.ABIFunctionClient
+// 	ec := p.components.EthClientFactory().HTTPClient()
+// 	abiFunc, err := ec.ABIFunction(ctx, txInstruction.FunctionABI)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	// Send the transaction
+// 	addr := ethtypes.Address0xHex(txInstruction.To)
+// 	txHash, err := abiFunc.R(ctx).
+// 		Signer(signer).
+// 		To(&addr).
+// 		Input(txInstruction.Inputs).
+// 		SignAndSend()
+// 	if err == nil {
+// 		_, err = p.components.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
+// 	}
+// 	if err != nil {
+// 		return fmt.Errorf("failed to send base ledger transaction: %s", err)
+// 	}
+// 	return nil
+// }
 
 func (p *privateTxManager) GetTxStatus(ctx context.Context, domainAddress string, txID string) (status components.PrivateTxStatus, err error) {
 	//TODO This is primarily here to help with testing for now

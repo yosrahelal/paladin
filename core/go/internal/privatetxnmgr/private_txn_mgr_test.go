@@ -90,10 +90,9 @@ func TestPrivateTxManagerInvalidTransaction(t *testing.T) {
 	err = privateTxManager.Start()
 	require.NoError(t, err)
 
-	txID, err := privateTxManager.HandleNewTx(ctx, &components.PrivateTransaction{})
+	err = privateTxManager.HandleNewTx(ctx, &components.PrivateTransaction{})
 	// no input domain should err
 	assert.Regexp(t, "PD011800", err)
-	assert.Empty(t, txID)
 }
 
 func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
@@ -220,19 +219,19 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
-	txID, err := privateTxManager.HandleNewTx(ctx, &components.PrivateTransaction{
+	tx := &components.PrivateTransaction{
 		ID: uuid.New(),
 		Inputs: &components.TransactionInputs{
 			Domain: "domain1",
 			To:     *domainAddress,
 		},
-	})
+	}
+	err = privateTxManager.HandleNewTx(ctx, tx)
 	require.NoError(t, err)
-	require.NotNil(t, txID)
 
 	// testTimeout := 2 * time.Second
 	testTimeout := 100 * time.Minute
-	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, txID, testTimeout)
+	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx.ID.String(), testTimeout)
 	assert.Equal(t, "dispatched", status)
 }
 
@@ -381,17 +380,17 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 	err := privateTxManager.Start()
 	assert.NoError(t, err)
 
-	txID, err := privateTxManager.HandleNewTx(ctx, &components.PrivateTransaction{
+	tx := &components.PrivateTransaction{
 		ID: uuid.New(),
 		Inputs: &components.TransactionInputs{
 			Domain: "domain1",
 			To:     *domainAddress,
 		},
-	})
+	}
+	err = privateTxManager.HandleNewTx(ctx, tx)
 	assert.NoError(t, err)
-	require.NotNil(t, txID)
 
-	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, txID, 200*time.Second)
+	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx.ID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
 }
@@ -548,20 +547,18 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	err := privateTxManager.Start()
 	require.NoError(t, err)
 
-	tx1ID, err := privateTxManager.HandleNewTx(ctx, tx1)
+	err = privateTxManager.HandleNewTx(ctx, tx1)
 	require.NoError(t, err)
-	require.NotNil(t, tx1ID)
 
-	tx2ID, err := privateTxManager.HandleNewTx(ctx, tx2)
+	err = privateTxManager.HandleNewTx(ctx, tx2)
 	require.NoError(t, err)
-	require.NotNil(t, tx2ID)
 
 	// Neither transaction should be dispatched yet
-	s, err := privateTxManager.GetTxStatus(ctx, domainAddressString, tx1ID)
+	s, err := privateTxManager.GetTxStatus(ctx, domainAddressString, tx1.ID.String())
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
-	s, err = privateTxManager.GetTxStatus(ctx, domainAddressString, tx2ID)
+	s, err = privateTxManager.GetTxStatus(ctx, domainAddressString, tx2.ID.String())
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
@@ -581,7 +578,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	// endorse transaction 2 before 1 and check that 2 is not dispatched before 1
 	endorsementResponse2 := &pbEngine.EndorsementResponse{
 		ContractAddress: domainAddressString,
-		TransactionId:   tx2ID,
+		TransactionId:   tx2.ID.String(),
 		Endorsement:     attestationResultAny,
 	}
 	endorsementResponse2Bytes, err := proto.Marshal(endorsementResponse2)
@@ -597,18 +594,18 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	if !testing.Short() {
 		time.Sleep(1 * time.Second)
 	}
-	s, err = privateTxManager.GetTxStatus(ctx, domainAddressString, tx1ID)
+	s, err = privateTxManager.GetTxStatus(ctx, domainAddressString, tx1.ID.String())
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
-	s, err = privateTxManager.GetTxStatus(ctx, domainAddressString, tx2ID)
+	s, err = privateTxManager.GetTxStatus(ctx, domainAddressString, tx2.ID.String())
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
 	// endorse transaction 1 and check that both it and 2 are dispatched
 	endorsementResponse1 := &pbEngine.EndorsementResponse{
 		ContractAddress: domainAddressString,
-		TransactionId:   tx1ID,
+		TransactionId:   tx1.ID.String(),
 		Endorsement:     attestationResultAny,
 	}
 	endorsementResponse1Bytes, err := proto.Marshal(endorsementResponse1)
@@ -620,10 +617,10 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		Payload:     endorsementResponse1Bytes,
 	})
 
-	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx1ID, 200*time.Second)
+	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx1.ID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
-	status = pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx2ID, 200*time.Second)
+	status = pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx2.ID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
 	//TODO assert that transaction 1 got dispatched before 2
@@ -835,9 +832,8 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 						From:   "Alice",
 					},
 				}
-				txID, err := privateTxManager.HandleNewTx(ctx, tx)
+				err = privateTxManager.HandleNewTx(ctx, tx)
 				require.NoError(t, err)
-				require.NotNil(t, txID)
 			}
 
 			haveAllDispatched := false
