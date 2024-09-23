@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -64,6 +65,12 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 	var txID *uuid.UUID
 
 	ctx, txm, done := newTestTransactionManager(t, true, func(conf *Config, mc *mockComponents) {
+		mockSubmissionBatch := componentmocks.NewPublicTxBatch(t)
+		mockSubmissionBatch.On("Rejected").Return([]components.PublicTxRejected{})
+		mockSubmissionBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
+		mockSubmissionBatch.On("Completed", mock.Anything, true).Return(nil)
+		mc.publicTxMgr.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockSubmissionBatch, nil)
+
 		mut := mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi})
 		mut.Run(func(args mock.Arguments) {
 			mut.Return([]*components.PublicTxMatch{
@@ -87,17 +94,14 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 	abiRef, err := txm.storeABI(ctx, testABI)
 	require.NoError(t, err)
 
-	insertInfo, err := txm.insertTransactions(ctx, txm.p.DB(), []*ptxapi.TransactionInput{
-		{
-			Transaction: ptxapi.Transaction{
-				Type:         ptxapi.TransactionTypePublic.Enum(),
-				ABIReference: abiRef,
-				To:           tktypes.MustEthAddress(tktypes.RandHex(20)),
-			},
+	txID, err = txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type:         ptxapi.TransactionTypePublic.Enum(),
+			ABIReference: abiRef,
+			To:           tktypes.MustEthAddress(tktypes.RandHex(20)),
 		},
 	})
 	require.NoError(t, err)
-	txID = &insertInfo[0].id
 
 	postCommit, err := txm.blockIndexerPreCommit(ctx, txm.p.DB(), []*blockindexer.IndexedBlock{},
 		[]*blockindexer.IndexedTransactionNotify{txi})

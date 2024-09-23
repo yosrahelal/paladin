@@ -22,6 +22,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -31,10 +33,7 @@ import (
 )
 
 func TestResolveFunctionABIAndDef(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
-		mc.db.ExpectBegin()
-		mc.db.ExpectRollback()
-	})
+	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
 	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
@@ -47,10 +46,7 @@ func TestResolveFunctionABIAndDef(t *testing.T) {
 }
 
 func TestResolveFunctionNoABI(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
-		mc.db.ExpectBegin()
-		mc.db.ExpectRollback()
-	})
+	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
 	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
@@ -63,10 +59,7 @@ func TestResolveFunctionNoABI(t *testing.T) {
 }
 
 func TestResolveFunctionBadABI(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
-		mc.db.ExpectBegin()
-		mc.db.ExpectRollback()
-	})
+	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
 	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
@@ -78,15 +71,15 @@ func TestResolveFunctionBadABI(t *testing.T) {
 	assert.Regexp(t, "PD012203.*FF22025", err)
 }
 
-func mockInsertABIRollback(conf *Config, mc *mockComponents) {
+func mockInsertABI(conf *Config, mc *mockComponents) {
 	mc.db.ExpectBegin()
 	mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 	mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
-	mc.db.ExpectRollback()
+	mc.db.ExpectCommit()
 }
 
 func TestResolveFunctionNamedWithNoTarget(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
 	defer done()
 
 	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
@@ -102,12 +95,24 @@ func mockInsertABIAndTransactionOK(conf *Config, mc *mockComponents) {
 	mc.db.ExpectBegin()
 	mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 	mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
+	mc.db.ExpectCommit()
+	mc.db.ExpectBegin()
 	mc.db.ExpectExec("INSERT.*transactions").WillReturnResult(driver.ResultNoRows)
 	mc.db.ExpectCommit()
 }
 
+func mockPublicSubmitTxOk(t *testing.T) func(conf *Config, mc *mockComponents) {
+	return func(conf *Config, mc *mockComponents) {
+		mockSubmissionBatch := componentmocks.NewPublicTxBatch(t)
+		mockSubmissionBatch.On("Rejected").Return([]components.PublicTxRejected{})
+		mockSubmissionBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
+		mockSubmissionBatch.On("Completed", mock.Anything, true).Return(nil)
+		mc.publicTxMgr.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockSubmissionBatch, nil)
+	}
+}
+
 func TestResolveFunctionHexInputOK(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitTxOk(t))
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
@@ -127,7 +132,7 @@ func TestResolveFunctionHexInputOK(t *testing.T) {
 }
 
 func TestResolveFunctionHexInputFail(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}}}
@@ -145,7 +150,7 @@ func TestResolveFunctionHexInputFail(t *testing.T) {
 }
 
 func TestResolveFunctionUnsupportedInput(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}}}
@@ -163,7 +168,7 @@ func TestResolveFunctionUnsupportedInput(t *testing.T) {
 }
 
 func TestResolveFunctionPlainNameOK(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitTxOk(t))
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
@@ -250,7 +255,7 @@ func TestSendTransactionPrivateInvokeFail(t *testing.T) {
 }
 
 func TestResolveFunctionOnlyOneToMatch(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitTxOk(t))
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
@@ -269,7 +274,7 @@ func TestResolveFunctionOnlyOneToMatch(t *testing.T) {
 }
 
 func TestResolveFunctionOnlyDuplicateMatch(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -291,7 +296,7 @@ func TestResolveFunctionOnlyDuplicateMatch(t *testing.T) {
 }
 
 func TestResolveFunctionNoMatch(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -313,7 +318,7 @@ func TestResolveFunctionNoMatch(t *testing.T) {
 }
 
 func TestParseInputsBadTxType(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -333,7 +338,7 @@ func TestParseInputsBadTxType(t *testing.T) {
 }
 
 func TestParseInputsBytecodeNonConstructor(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -355,7 +360,7 @@ func TestParseInputsBytecodeNonConstructor(t *testing.T) {
 }
 
 func TestParseInputsBytecodeMissingConstructor(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -375,7 +380,7 @@ func TestParseInputsBytecodeMissingConstructor(t *testing.T) {
 }
 
 func TestParseInputsBadDataJSON(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -394,7 +399,7 @@ func TestParseInputsBadDataJSON(t *testing.T) {
 }
 
 func TestParseInputsBadDataForFunction(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -413,7 +418,7 @@ func TestParseInputsBadDataForFunction(t *testing.T) {
 }
 
 func TestParseInputsBadByteString(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIRollback)
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
 	defer done()
 
 	exampleABI := abi.ABI{
@@ -431,13 +436,70 @@ func TestParseInputsBadByteString(t *testing.T) {
 	assert.Regexp(t, "PD012208", err)
 }
 
+func mockPublicSubmitTxRollback(t *testing.T) func(conf *Config, mc *mockComponents) {
+	return func(conf *Config, mc *mockComponents) {
+		mockSubmissionBatch := componentmocks.NewPublicTxBatch(t)
+		mockSubmissionBatch.On("Rejected").Return([]components.PublicTxRejected{})
+		mockSubmissionBatch.On("Completed", mock.Anything, false).Return(nil)
+		mc.publicTxMgr.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockSubmissionBatch, nil)
+	}
+}
 func TestInsertTransactionFail(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
 		mc.db.ExpectBegin()
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
+		mc.db.ExpectCommit()
+		mc.db.ExpectBegin()
 		mc.db.ExpectExec("INSERT.*transactions").WillReturnError(fmt.Errorf("pop"))
 		mc.db.ExpectRollback()
+	}, mockPublicSubmitTxRollback(t))
+	defer done()
+
+	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
+
+	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type:     ptxapi.TransactionTypePublic.Enum(),
+			Function: exampleABI[0].FunctionSelectorBytes().String(),
+			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data:     tktypes.RawJSON(`[]`),
+		},
+		ABI: exampleABI,
+	})
+	assert.Regexp(t, "pop", err)
+}
+
+func TestInsertTransactionPublicTxPrepareFail(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *Config, mc *mockComponents) {
+		mockSubmissionBatch := componentmocks.NewPublicTxBatch(t)
+		rejectedSubmission := componentmocks.NewPublicTxRejected(t)
+		rejectedSubmission.On("RejectedError").Return(fmt.Errorf("pop"))
+		mockSubmissionBatch.On("Rejected").Return([]components.PublicTxRejected{
+			rejectedSubmission,
+		})
+		mockSubmissionBatch.On("Completed", mock.Anything, false).Return(nil)
+		mc.publicTxMgr.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockSubmissionBatch, nil)
+	})
+	defer done()
+
+	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
+
+	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type:     ptxapi.TransactionTypePublic.Enum(),
+			Function: exampleABI[0].FunctionSelectorBytes().String(),
+			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Data:     tktypes.RawJSON(`[]`),
+		},
+		ABI: exampleABI,
+	})
+	assert.Regexp(t, "pop", err)
+}
+
+func TestInsertTransactionPublicTxPrepareReject(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *Config, mc *mockComponents) {
+		mc.publicTxMgr.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
 

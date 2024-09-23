@@ -105,7 +105,7 @@ type resolvedFunction struct {
 	signature    string
 }
 
-func (tm *txManager) resolveFunction(ctx context.Context, dbTX *gorm.DB, inputABI abi.ABI, inputABIRef *tktypes.Bytes32, requiredFunction string, to *tktypes.EthAddress) (_ *resolvedFunction, err error) {
+func (tm *txManager) resolveFunction(ctx context.Context, inputABI abi.ABI, inputABIRef *tktypes.Bytes32, requiredFunction string, to *tktypes.EthAddress) (_ *resolvedFunction, err error) {
 
 	// Lookup the ABI we're working with.
 	// Only needs to contain the function definition we're calling, but can be the whole ABI of the contract.
@@ -117,7 +117,7 @@ func (tm *txManager) resolveFunction(ctx context.Context, dbTX *gorm.DB, inputAB
 		}
 		pa, err = tm.getABIByHash(ctx, *inputABIRef)
 	} else if len(inputABI) > 0 {
-		pa, err = tm.upsertABI(ctx, dbTX, inputABI)
+		pa, err = tm.upsertABI(ctx, inputABI)
 	} else {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrNoABIOrReference)
 	}
@@ -234,7 +234,8 @@ func (tm *txManager) parseInputs(
 }
 
 func (tm *txManager) sendTransaction(ctx context.Context, tx *ptxapi.TransactionInput) (*uuid.UUID, error) {
-	// TODO: Add flush writer for parallel performance on this form of insertion
+	// TODO: Add flush writer for parallel performance here, that calls sendTransactions
+	// in the flush writer on the batch (rather than doing a DB commit per TX)
 	txIDs, err := tm.sendTransactions(ctx, []*ptxapi.TransactionInput{tx})
 	if err != nil {
 		return nil, err
@@ -242,36 +243,87 @@ func (tm *txManager) sendTransaction(ctx context.Context, tx *ptxapi.Transaction
 	return &txIDs[0], nil
 }
 
-func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.TransactionInput) ([]uuid.UUID, error) {
-	var inserts []txInsertInfo
-	err := tm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
-		inserts, err = tm.insertTransactions(ctx, dbTX, txs)
+func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.TransactionInput) (txIDs []uuid.UUID, err error) {
+
+	// Public transactions need a signing address resolution and nonce allocation trackers
+	// before we open the database transaction
+	var publicTxs []*components.PublicTxIDInput
+	txis := make([]*txInsertInfo, len(txs))
+	txIDs = make([]uuid.UUID, len(txs))
+	for i, tx := range txs {
+		txis[i], err = tm.resolveNewTransaction(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		txIDs[i] = tx.ID
+		if tx.Type.V() == ptxapi.TransactionTypePublic {
+			publicTxs = append(publicTxs, &components.PublicTxIDInput{
+				PublicTxID: ptxapi.PublicTxID{
+					Transaction:   tx.ID,
+					ResubmitIndex: 0,
+					ParentType:    string(ptxapi.TransactionTypePublic),
+				},
+				PublicTxInput: ptxapi.PublicTxInput{
+					From: tx.From,
+					To:   tx.To,
+				},
+			})
+		}
+	}
+
+	// Perform pre-transaction processing in the public TX manager as required
+	var committed = false
+	var publicBatch components.PublicTxBatch
+	if len(publicTxs) > 0 {
+		publicBatch, err = tm.publicTxMgr.PrepareSubmissionBatch(ctx, publicTxs)
+		if err != nil {
+			return nil, err
+		}
+		// Must ensure we close the batch, now it's open (for good or bad)
+		defer func() {
+			publicBatch.Completed(ctx, committed)
+		}()
+		// TODO: don't support partial rejection currently - will be important when we introduce the flush writer
+		if len(publicBatch.Rejected()) > 0 {
+			return nil, publicBatch.Rejected()[0].RejectedError()
+		}
+	}
+
+	// Do in-transaction processing for our tables, and the public tables
+	err = tm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+		err = tm.insertTransactions(ctx, dbTX, txis)
+		if err == nil && publicBatch != nil {
+			err = publicBatch.Submit(ctx, dbTX)
+		}
+		// TODO: private insertion too
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
+	// From this point on we're committed, and need to tell the public tx manager as such
+	committed = true
 
-	// TODO: Integrate with private TX manager persistence when available
-	txIDs := make([]uuid.UUID, len(txs))
-	for i, tx := range txs {
-		txIDs[i] = inserts[i].id
+	// TODO: Integrate with private TX manager persistence when available, as it will follow the
+	// same pattern as public transactions above
+	for _, txi := range txis {
+		tx := txi.tx
 		if tx.Type.V() == ptxapi.TransactionTypePrivate {
 			if tx.To == nil {
 				err = tm.privateTxMgr.HandleDeployTx(ctx, &components.PrivateContractDeploy{
-					ID:     inserts[i].id,
+					ID:     tx.ID,
 					Domain: tx.Domain,
-					Inputs: inserts[i].inputs,
+					Inputs: txi.inputs,
 				})
 			} else {
 				err = tm.privateTxMgr.HandleNewTx(ctx, &components.PrivateTransaction{
-					ID: inserts[i].id,
+					ID: tx.ID,
 					Inputs: &components.TransactionInputs{
 						Domain:   tx.Domain,
 						From:     tx.From,
 						To:       *tx.To,
-						Function: inserts[i].fn.definition,
-						Inputs:   inserts[i].inputs,
+						Function: txi.fn.definition,
+						Inputs:   txi.inputs,
 					},
 				})
 			}
@@ -284,53 +336,63 @@ func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.Transac
 }
 
 type txInsertInfo struct {
-	id     uuid.UUID
+	tx     *ptxapi.TransactionInput
 	fn     *resolvedFunction
 	inputs tktypes.RawJSON
 }
 
-func (tm *txManager) insertTransactions(ctx context.Context, dbTX *gorm.DB, txs []*ptxapi.TransactionInput) ([]txInsertInfo, error) {
-	info := make([]txInsertInfo, len(txs))
-	ptxs := make([]*persistedTransaction, len(txs))
+func (tm *txManager) resolveNewTransaction(ctx context.Context, tx *ptxapi.TransactionInput) (*txInsertInfo, error) {
+	tx.ID = uuid.New()
+
+	// We resolve the function outside of a DB transaction, because it's idempotent processing
+	// and needs to happen before we open the DB transaction that is used by the public TX manager.
+	// Note there is only a DB cost for read if we haven't cached the function, and there
+	// is only a DB cost for write, if it's the first time we've invoked the function.
+	fn, err := tm.resolveFunction(ctx, tx.ABI, tx.ABIReference, tx.Function, tx.To)
+	if err != nil {
+		return nil, err
+	}
+
+	normalizedJSON, err := tm.parseInputs(ctx, fn.definition, tx.Type, tx.Data, tx.Bytecode)
+	if err != nil {
+		return nil, err
+	}
+
+	return &txInsertInfo{
+		tx:     tx,
+		fn:     fn,
+		inputs: normalizedJSON,
+	}, nil
+}
+
+func (tm *txManager) insertTransactions(ctx context.Context, dbTX *gorm.DB, txis []*txInsertInfo) error {
+	ptxs := make([]*persistedTransaction, len(txis))
 	var transactionDeps []*transactionDep
-	for i := range txs {
-		tx := txs[i]
-		txID := uuid.New()
-		info[i].id = txID
-
-		fn, err := tm.resolveFunction(ctx, dbTX, tx.ABI, tx.ABIReference, tx.Function, tx.To)
-		if err != nil {
-			return nil, err
-		}
-		info[i].fn = fn
-
-		normalizedJSON, err := tm.parseInputs(ctx, fn.definition, tx.Type, tx.Data, tx.Bytecode)
-		if err != nil {
-			return nil, err
-		}
-		info[i].inputs = normalizedJSON
+	for i, txi := range txis {
+		tx := txi.tx
 
 		// TODO: Flush writer for singleton transactions vs batch
 		ptxs[i] = &persistedTransaction{
-			ID:             txID,
+			ID:             tx.ID,
 			IdempotencyKey: notEmptyOrNull(tx.IdempotencyKey),
 			Type:           tx.Type,
-			ABIReference:   fn.abiReference,
-			Function:       notEmptyOrNull(fn.signature),
+			ABIReference:   txi.fn.abiReference,
+			Function:       notEmptyOrNull(txi.fn.signature),
 			Domain:         notEmptyOrNull(tx.Domain),
 			From:           tx.From,
 			To:             tx.To,
-			Data:           normalizedJSON,
+			Data:           txi.inputs,
 		}
 		for _, d := range tx.DependsOn {
 			transactionDeps = append(transactionDeps, &transactionDep{
-				Transaction: txID,
+				Transaction: tx.ID,
 				DependsOn:   d,
 			})
 		}
 	}
 
 	err := dbTX.
+		WithContext(ctx).
 		Table("transactions").
 		Create(ptxs).
 		Omit("TransactionDeps").
@@ -342,9 +404,9 @@ func (tm *txManager) insertTransactions(ctx context.Context, dbTX *gorm.DB, txs 
 			Error
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return info, nil
+	return nil
 }
 
 func (tm *txManager) queryTransactions(ctx context.Context, jq *query.QueryJSON, pending bool) ([]*ptxapi.Transaction, error) {

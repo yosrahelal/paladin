@@ -63,7 +63,7 @@ func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*Config, *mockC
 
 func TestPublicTransactionLifecycle(t *testing.T) {
 
-	ctx, url, tmr, done := newTestTransactionManagerWithRPC(t)
+	ctx, url, tmr, done := newTestTransactionManagerWithRPC(t, mockPublicSubmitTxOk(t))
 	defer done()
 
 	rpcClient, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{URL: url})

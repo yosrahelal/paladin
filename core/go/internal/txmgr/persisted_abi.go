@@ -73,18 +73,14 @@ func (tm *txManager) getABIByHash(ctx context.Context, hash tktypes.Bytes32) (*p
 }
 
 func (tm *txManager) storeABI(ctx context.Context, a abi.ABI) (*tktypes.Bytes32, error) {
-	var pa *ptxapi.StoredABI
-	err := tm.p.DB().Transaction(func(tx *gorm.DB) (err error) {
-		pa, err = tm.upsertABI(ctx, tx, a)
-		return err
-	})
+	pa, err := tm.upsertABI(ctx, a)
 	if err != nil {
 		return nil, err
 	}
 	return &pa.Hash, err
 }
 
-func (tm *txManager) upsertABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (*ptxapi.StoredABI, error) {
+func (tm *txManager) upsertABI(ctx context.Context, a abi.ABI) (*ptxapi.StoredABI, error) {
 	hash, err := tktypes.ABISolDefinitionHash(ctx, a)
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidABI)
@@ -113,35 +109,38 @@ func (tm *txManager) upsertABI(ctx context.Context, dbTX *gorm.DB, a abi.ABI) (*
 	}
 
 	// Otherwise ask the DB to store
-	abiBytes, err := json.Marshal(a)
-	if err == nil {
-		err = dbTX.
-			Table("abis").
-			Clauses(clause.OnConflict{
-				Columns: []clause.Column{
-					{Name: "hash"},
-				},
-				DoNothing: true, // immutable
-			}).
-			Create(&PersistedABI{
-				Hash: *hash,
-				ABI:  abiBytes,
-			}).
-			Error
-	}
-	if err == nil && len(errorDefs) > 0 {
-		err = dbTX.
-			Table("abi_errors").
-			Clauses(clause.OnConflict{
-				Columns: []clause.Column{
-					{Name: "abi_hash"},
-					{Name: "selector"},
-				},
-				DoNothing: true, // immutable
-			}).
-			Create(errorDefs).
-			Error
-	}
+	err = tm.p.DB().Transaction(func(dbTX *gorm.DB) error {
+		abiBytes, err := json.Marshal(a)
+		if err == nil {
+			err = dbTX.
+				Table("abis").
+				Clauses(clause.OnConflict{
+					Columns: []clause.Column{
+						{Name: "hash"},
+					},
+					DoNothing: true, // immutable
+				}).
+				Create(&PersistedABI{
+					Hash: *hash,
+					ABI:  abiBytes,
+				}).
+				Error
+		}
+		if err == nil && len(errorDefs) > 0 {
+			err = dbTX.
+				Table("abi_errors").
+				Clauses(clause.OnConflict{
+					Columns: []clause.Column{
+						{Name: "abi_hash"},
+						{Name: "selector"},
+					},
+					DoNothing: true, // immutable
+				}).
+				Create(errorDefs).
+				Error
+		}
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
