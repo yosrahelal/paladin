@@ -114,6 +114,7 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 
 	params := map[string]interface{}{
 		"utxos": outputs,
+		"data":  "0x",
 	}
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {

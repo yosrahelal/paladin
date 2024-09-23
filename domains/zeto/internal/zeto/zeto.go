@@ -23,6 +23,7 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -34,6 +35,10 @@ import (
 
 //go:embed abis/ZetoFactory.json
 var factoryJSONBytes []byte // From "gradle copySolidity"
+//go:embed abis/IZetoFungibleInitializable.json
+var zetoFungibleInitializableABIBytes []byte // From "gradle copySolidity"
+//go:embed abis/IZetoNonFungibleInitializable.json
+var zetoNonFungibleInitializableABIBytes []byte // From "gradle copySolidity"
 
 type Zeto struct {
 	Callbacks plugintk.DomainCallbacks
@@ -69,7 +74,13 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 
 	schemaJSON, err := json.Marshal(types.ZetoCoinABI)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal Zeto Coin schema abi. %s", err)
+	}
+
+	events := getAllZetoEventAbis()
+	eventsJSON, err := json.Marshal(events)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal Zeto event abis. %s", err)
 	}
 
 	return &prototk.ConfigureDomainResponse{
@@ -78,6 +89,7 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 			BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
 				SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
 			},
+			AbiEventsJson: string(eventsJSON),
 		},
 	}, nil
 }
@@ -259,6 +271,54 @@ func (z *Zeto) FindCoins(ctx context.Context, contractAddress ethtypes.Address0x
 	return coins, err
 }
 
-func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
-	return nil, nil
+func (n *Zeto) encodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {
+	txID, err := tktypes.ParseHexBytes(ctx, transaction.TransactionId)
+	if err != nil {
+		return nil, err
+	}
+
+	var data []byte
+	data = append(data, types.ZetoTransactionData_V0...)
+	data = append(data, txID...)
+	return data, nil
+}
+
+func (n *Zeto) decodeTransactionData(data tktypes.HexBytes) (txID tktypes.HexBytes) {
+	if len(data) < 4 {
+		return nil
+	}
+	dataPrefix := data[0:4]
+	if dataPrefix.String() != types.ZetoTransactionData_V0.String() {
+		return nil
+	}
+	return data[4:]
+}
+
+func (n *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+	var events []*blockindexer.EventWithData
+	if err := json.Unmarshal([]byte(req.JsonEvents), &events); err != nil {
+		return nil, err
+	}
+
+	var res prototk.HandleEventBatchResponse
+	for _, ev := range events {
+		switch ev.SoliditySignature {
+		case n.transferSignature:
+			var transfer NotoTransfer_Event
+			if err := json.Unmarshal(ev.Data, &transfer); err == nil {
+				txID := n.decodeTransactionData(transfer.Data)
+				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
+				res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(txID, transfer.Inputs)...)
+				res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(txID, transfer.Outputs)...)
+			}
+
+		case n.approvedSignature:
+			var approved NotoApproved_Event
+			if err := json.Unmarshal(ev.Data, &approved); err == nil {
+				txID := n.decodeTransactionData(approved.Data)
+				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
+			}
+		}
+	}
+	return &res, nil
 }

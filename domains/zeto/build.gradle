@@ -24,7 +24,7 @@ ext {
         include "integration-test/**/*.go"
     }
     zetoVersion = "v0.0.4"
-    zetoHost = "jimthematrix"
+    zetoHost = "kaleido-io"
     zkpOut = "${projectDir}/zkp"
     toolsOut = "${projectDir}/tools"
 }
@@ -115,11 +115,18 @@ task extractZetoArtifacts(type: Copy, dependsOn: [downloadZetoProver, downloadZe
     into zkpOut
 }
 
-task copySolidity(type: Copy) {
+task copySolidity(type: Copy, dependsOn: extractZetoArtifacts) {
     inputs.files(configurations.contractCompile)
+    inputs.files(fileTree("${zkpOut}/artifacts/contracts"))
     outputs.dir('internal/zeto/abis')
     from fileTree(configurations.contractCompile.asPath) {
         include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
+    }
+    from fileTree("${zkpOut}/artifacts/contracts") {
+        include 'lib/interfaces/izeto.sol/IZeto.json'
+        include 'lib/interfaces/izeto_encrypted.sol/IZetoEncrypted.json'
+        include 'lib/interfaces/zeto_fungible_initializable.sol/IZetoFungibleInitializable.json'
+        include 'lib/interfaces/zeto_nf_initializable.sol/IZetoNonFungibleInitializable.json'
     }
     into 'internal/zeto/abis'
 
