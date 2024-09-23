@@ -67,6 +67,8 @@ var (
 	MsgComponentPublicTxManagerStartError  = ffe("PD010024", "Error starting public transaction manager ")
 	MsgComponentPrivateTxManagerInitError  = ffe("PD010025", "Error initializing private transaction manager")
 	MsgComponentPrivateTxManagerStartError = ffe("PD010026", "Error starting private transaction manager ")
+	MsgComponentTxManagerInitError         = ffe("PD010027", "Error initializing transaction manager")
+	MsgComponentTxManagerStartError        = ffe("PD010028", "Error starting transaction manager ")
 
 	// States PD0101XX
 	MsgStateInvalidLength             = ffe("PD010101", "Invalid hash len expected=%d actual=%d")

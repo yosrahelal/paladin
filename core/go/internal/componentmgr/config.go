@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/internal/transportmgr"
+	"github.com/kaleido-io/paladin/core/internal/txmgr"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
@@ -50,6 +51,7 @@ type Config struct {
 	BlockIndexer                        blockindexer.Config  `yaml:"blockIndexer"`
 	Signer                              api.Config           `yaml:"signer"`
 	TempDir                             *string              `yaml:"tempDir"`
+	TxManager                           txmgr.Config         `yaml:"txManager"`
 	PrivateTxManager                    privatetxnmgr.Config `yaml:"privateTxManager"`
 	PublicTxManager                     publictxmgr.Config   `yaml:"publicTxManager"`
 }

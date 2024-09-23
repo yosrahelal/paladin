@@ -139,17 +139,14 @@ func NewPublicTransactionManager(ctx context.Context, conf *Config) components.P
 }
 
 // Post-init allows the manager to cross-bind to other components, or the Engine
-func (ble *pubTxManager) PostInit(components.AllComponents) error {
-	return nil
-}
-
-func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *components.ManagerInitResult, err error) {
+func (ble *pubTxManager) PostInit(pic components.AllComponents) error {
 	ctx := ble.ctx
 	log.L(ctx).Debugf("Initializing enterprise transaction handler")
 	ble.ethClient = pic.EthClientFactory().SharedWS()
 	ble.keymgr = pic.KeyManager()
 	ble.gasPriceClient.Init(ctx, ble.ethClient)
 	ble.bIndexer = pic.BlockIndexer()
+	ble.rootTxMgr = pic.TxManager()
 	ble.nonceManager = newNonceCache(1*time.Hour, func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
 		log.L(ctx).Tracef("NonceFromChain getting next nonce for signing address ID %s", signer)
 		nextNonce, err := ble.ethClient.GetTransactionCount(ctx, signer)
@@ -164,12 +161,16 @@ func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *comp
 	balanceManager, err := NewBalanceManagerWithInMemoryTracking(ctx, ble.conf, ble.ethClient, ble)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to create balance manager for enterprise transaction handler due to %+v", err)
-		return nil, err
+		return err
 	}
 	log.L(ctx).Debugf("Initialized enterprise transaction handler")
 	ble.balanceManager = balanceManager
 	ble.p = pic.Persistence()
 	ble.submissionWriter = newSubmissionWriter(ctx, ble.p, ble.conf)
+	return nil
+}
+
+func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *components.ManagerInitResult, err error) {
 	return &components.ManagerInitResult{}, nil
 }
 
@@ -404,10 +405,12 @@ func (ble *pubTxManager) prepareSubmission(ctx context.Context, txi *components.
 			if ethclient.MapSubmissionRejected(err) {
 				// transaction is rejected, so no nonce will be assigned - but we have not failed in our task
 				pt.rejectError = err
-				// TODO: we pass the revert data back currently, but we probably should use the dictionary service
-				// in the transaction manager to resolve this error to something friendly.
-				// Or we need to explicitly decide we are pushing that back to our caller.
-				pt.revertData = gasEstimateResult.RevertData
+				if len(gasEstimateResult.RevertData) > 0 {
+					// we can use the error dictionary callback to TXManager to look up the ABI
+					// Note: The ABI is already persisted before TXManager calls down into us.
+					pt.rejectError = ble.rootTxMgr.CalculateRevertError(ctx, ble.p.DB(), gasEstimateResult.RevertData)
+					log.L(ctx).Warnf("Estimate gas reverted (%s): %s", err, pt.rejectError)
+				}
 				return pt, nil
 			}
 			return nil, err

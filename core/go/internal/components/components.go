@@ -54,6 +54,7 @@ type Managers interface {
 	PluginManager() PluginManager
 	PrivateTxManager() PrivateTxManager
 	PublicTxManager() PublicTxManager
+	TxManager() TXManager
 }
 
 // All managers conform to a standard lifecycle

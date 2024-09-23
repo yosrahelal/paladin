@@ -187,7 +187,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 			TransactionHash: &txHash1,
 			BlockNumber:     &blockNumber1,
 		},
-	})
+	}, false)
 	require.NoError(t, err)
 
 	// We should get that back with full
@@ -224,7 +224,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 			BlockNumber:     &blockNumber2,
 			RevertData:      revertData,
 		},
-	})
+	}, false)
 	require.NoError(t, err)
 
 	// Ask for the receipt directly

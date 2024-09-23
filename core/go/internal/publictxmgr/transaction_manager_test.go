@@ -17,15 +17,22 @@ package publictxmgr
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,11 +43,12 @@ type dependencyMocks struct {
 	ethClientFactory *componentmocks.EthClientFactory
 	ethClient        *componentmocks.EthClient
 	blockIndexer     *componentmocks.BlockIndexer
+	txManager        *componentmocks.TXManager
 }
 
-const testDestAddress = "0x6cee73cf4d5b0ac66ce2d1c0617bec4bedd09f39"
+// const testDestAddress = "0x6cee73cf4d5b0ac66ce2d1c0617bec4bedd09f39"
 
-const testMainSigningAddress = testDestAddress
+// const testMainSigningAddress = testDestAddress
 
 func baseMocks(t *testing.T) *dependencyMocks {
 	mocks := &dependencyMocks{
@@ -49,11 +57,13 @@ func baseMocks(t *testing.T) *dependencyMocks {
 		ethClientFactory: componentmocks.NewEthClientFactory(t),
 		ethClient:        componentmocks.NewEthClient(t),
 		blockIndexer:     componentmocks.NewBlockIndexer(t),
+		txManager:        componentmocks.NewTXManager(t),
 	}
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.allComponents.On("EthClientFactory").Return(mocks.ethClientFactory).Maybe()
 	mocks.ethClientFactory.On("SharedWS").Return(mocks.ethClient).Maybe()
 	mocks.allComponents.On("BlockIndexer").Return(mocks.blockIndexer).Maybe()
+	mocks.allComponents.On("TxManager").Return(mocks.txManager).Maybe()
 	return mocks
 }
 
@@ -119,7 +129,7 @@ func TestNewEngineErrors(t *testing.T) {
 			},
 		},
 	})
-	_, err := pmgr.PreInit(mocks.allComponents)
+	err := pmgr.PostInit(mocks.allComponents)
 	assert.Regexp(t, "bad address", err)
 }
 
@@ -128,95 +138,80 @@ func TestInit(t *testing.T) {
 	defer done()
 }
 
-// func TestHandleNewTransactionForTransferOnly(t *testing.T) {
-// 	ctx, ble, _, done := NewTestPublicTxManager(t, false)
-// 	defer done()
+func TestSingleTransactionSubmitRealDB(t *testing.T) {
+	ctx, ble, m, done := NewTestPublicTxManager(t, true)
+	defer done()
 
-// 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-// 	mTS := componentmocks.NewPublicTransactionStore(t)
-// 	mBI := componentmocks.NewBlockIndexer(t)
-// 	mEN := componentmocks.NewPublicTxEventNotifier(t)
-// 	mEC := componentmocks.NewEthClient(t)
-// 	mKM := componentmocks.NewKeyManager(t)
-// 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
-// 	testEthTxInput := &ethsigner.Transaction{
-// 		From:  []byte(testAutoFuelingSourceAddress),
-// 		To:    ethtypes.MustNewAddress(testDestAddress),
-// 		Value: tktypes.Uint64ToUint256(100),
-// 	}
-// 	txID := uuid.New()
+	err := ble.Start()
+	require.NoError(t, err)
 
-// 	// resolve key failure
-// 	mKM.On("ResolveKey", ctx, testAutoFuelingSourceAddress, algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", "", fmt.Errorf("pop")).Once()
-// 	_, submissionRejected, err := ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 	}, &components.EthTransfer{
-// 		To:    *tktypes.MustEthAddress(testEthTxInput.To.String()),
-// 		Value: testEthTxInput.Value,
-// 	})
-// 	assert.NotNil(t, err)
-// 	assert.False(t, submissionRejected)
-// 	assert.Regexp(t, "pop", err)
+	// resolve key failure
+	m.keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", "", fmt.Errorf("resolve err")).Once()
+	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
+		PublicTxInput: ptxapi.PublicTxInput{
+			From: "signer1",
+		},
+	})
+	assert.Regexp(t, "resolve err", err)
 
-// 	mKM.On("ResolveKey", ctx, testAutoFuelingSourceAddress, algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", testAutoFuelingSourceAddress, nil)
-// 	// estimation failure - for non-revert
-// 	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(nil, fmt.Errorf("GasEstimate error")).Once()
-// 	_, submissionRejected, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 	}, &components.EthTransfer{
-// 		To:    *tktypes.MustEthAddress(testEthTxInput.To.String()),
-// 		Value: testEthTxInput.Value,
-// 	})
-// 	assert.NotNil(t, err)
-// 	assert.False(t, submissionRejected)
-// 	assert.Regexp(t, "GasEstimate error", err)
+	resolvedKey := tktypes.EthAddress(tktypes.RandBytes(20))
+	m.keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("keyhandle1", resolvedKey.String(), nil)
 
-// 	// estimation failure - for revert
-// 	txID = uuid.New()
-// 	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(nil, fmt.Errorf("execution reverted")).Once()
-// 	_, submissionRejected, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 	}, &components.EthTransfer{
-// 		To:    *tktypes.MustEthAddress(testEthTxInput.To.String()),
-// 		Value: testEthTxInput.Value,
-// 	})
-// 	assert.NotNil(t, err)
-// 	assert.True(t, submissionRejected)
-// 	assert.Regexp(t, "execution reverted", err)
-// 	// insert transaction next nonce error
-// 	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(ethtypes.NewHexInteger(big.NewInt(10)), nil)
-// 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
-// 		Return(nil, fmt.Errorf("pop")).Once().Once()
-// 	_, submissionRejected, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 	}, &components.EthTransfer{
-// 		To:    *tktypes.MustEthAddress(testEthTxInput.To.String()),
-// 		Value: testEthTxInput.Value,
-// 	})
-// 	assert.NotNil(t, err)
-// 	assert.Regexp(t, "pop", err)
-// 	assert.False(t, submissionRejected)
-// 	// create transaction succeeded
-// 	// gas estimate should be cached
-// 	mTS.On("InsertTransaction", ctx, mock.Anything, mock.Anything).Return(nil).Once()
-// 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
-// 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
-// 	mTS.On("UpdateSubStatus", ctx, txID.String(), PubTxSubStatusReceived, BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	// estimation failure - for non-revert
+	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
+		Return(ethclient.EstimateGasResult{}, fmt.Errorf("GasEstimate error")).Once()
+	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
+		PublicTxInput: ptxapi.PublicTxInput{
+			From: "signer1",
+		},
+	})
+	assert.Regexp(t, "GasEstimate error", err)
 
-// 	_, _, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 	}, &components.EthTransfer{
-// 		To:    *tktypes.MustEthAddress(testEthTxInput.To.String()),
-// 		Value: testEthTxInput.Value,
-// 	})
-// 	require.NoError(t, err)
-// 	mEC.AssertNotCalled(t, "GasEstimate")
-// }
+	// estimation failure - for revert
+	sampleRevertData := tktypes.HexBytes("some data")
+	m.txManager.On("CalculateRevertError", mock.Anything, mock.Anything, sampleRevertData).Return(fmt.Errorf("mapped revert error"))
+	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
+		Return(ethclient.EstimateGasResult{
+			RevertData: sampleRevertData,
+		}, fmt.Errorf("execution reverted")).Once()
+	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
+		PublicTxInput: ptxapi.PublicTxInput{
+			From: "signer1",
+		},
+	})
+	assert.Regexp(t, "mapped revert error", err)
+
+	// // insert transaction next nonce error
+	// mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(ethtypes.NewHexInteger(big.NewInt(10)), nil)
+	// mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
+	// 	Return(nil, fmt.Errorf("pop")).Once().Once()
+	// _, submissionRejected, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
+	// 	ID:       &txID,
+	// 	SignerID: string(testEthTxInput.From),
+	// }, &components.EthTransfer{
+	// 	To:    *tktypes.MustEthAddress(testEthTxInput.To.String()),
+	// 	Value: testEthTxInput.Value,
+	// })
+	// assert.NotNil(t, err)
+	// assert.Regexp(t, "pop", err)
+	// assert.False(t, submissionRejected)
+	// // create transaction succeeded
+	// // gas estimate should be cached
+	// mTS.On("InsertTransaction", ctx, mock.Anything, mock.Anything).Return(nil).Once()
+	// mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
+	// 	Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
+	// mTS.On("UpdateSubStatus", ctx, txID.String(), PubTxSubStatusReceived, BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	// _, _, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
+	// 	ID:       &txID,
+	// 	SignerID: string(testEthTxInput.From),
+	// }, &components.EthTransfer{
+	// 	To:    *tktypes.MustEthAddress(testEthTxInput.To.String()),
+	// 	Value: testEthTxInput.Value,
+	// })
+	// require.NoError(t, err)
+	// mEC.AssertNotCalled(t, "GasEstimate")
+}
 
 // func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 // 	ctx := context.Background()

@@ -23,9 +23,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 func (tm *txManager) blockIndexerPreCommit(
@@ -61,30 +59,21 @@ func (tm *txManager) blockIndexerPreCommit(
 	}
 
 	// Ok now we can finally determine which receipts we need - in the ORIGINAL order
-	receipts := make([]*transactionReceipt, 0, len(publicTxMatches))
+	finalizeInfo := make([]*components.ReceiptInput, 0, len(publicTxMatches))
 	for _, pubTx := range publicTxMatches {
 		if pubTx.TransactionType.V() == ptxapi.TransactionTypePublic || // it's public
 			finalizedPrivate[pubTx.TransactionID] { // or it's a finalized private
 			log.L(ctx).Infof("Writing receipt for %s transaction hash=%s block=%d result=%s",
 				pubTx.TransactionID, pubTx.Hash, pubTx.BlockNumber, pubTx.Result)
-			receipts = append(receipts, tm.buildReceipt(ctx, pubTx, dbTX))
+			// Map to the common format for finalizing transactions whether the make it on chain or not
+			finalizeInfo = append(finalizeInfo, tm.mapBlockchainReceipt(pubTx))
 		}
 	}
 
 	// Write the receipts themselves - only way of duplicates should be a rewind of
 	// the block explorer, so we simply OnConflict ignore
-	if len(receipts) > 0 {
-		err := dbTX.
-			Table("transaction_receipts").
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "transaction"}},
-				DoNothing: true, // immutable
-			}).
-			Create(receipts).
-			Error
-		if err != nil {
-			return nil, err
-		}
+	if err := tm.FinalizeTransactions(ctx, dbTX, finalizeInfo, true /* already checked existence */); err != nil {
+		return nil, err
 	}
 
 	return func() {
@@ -95,18 +84,18 @@ func (tm *txManager) blockIndexerPreCommit(
 	}, nil
 }
 
-func (tm *txManager) buildReceipt(ctx context.Context, pubTx *components.PublicTxMatch, dbTX *gorm.DB) *transactionReceipt {
-	receipt := &transactionReceipt{
+func (tm *txManager) mapBlockchainReceipt(pubTx *components.PublicTxMatch) *components.ReceiptInput {
+	receipt := &components.ReceiptInput{
 		TransactionID:   pubTx.TransactionID,
-		Indexed:         tktypes.TimestampNow(),
-		Success:         pubTx.Result.V() == blockindexer.TXResult_SUCCESS,
 		TransactionHash: &pubTx.Hash,
 		BlockNumber:     &pubTx.BlockNumber,
 		RevertData:      pubTx.RevertReason,
 	}
-	if len(pubTx.RevertReason) > 0 {
-		revertErrString := tm.calculateRevertError(ctx, dbTX, pubTx.RevertReason).Error()
-		receipt.FailureMessage = &revertErrString
+	if pubTx.Result.V() == blockindexer.TXResult_SUCCESS {
+		receipt.ReceiptType = components.RT_Success
+	} else {
+		receipt.ReceiptType = components.RT_FailedOnChainWithRevertData
+		receipt.RevertData = pubTx.RevertReason
 	}
 	return receipt
 }
