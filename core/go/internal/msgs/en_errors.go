@@ -84,6 +84,8 @@ var (
 	MsgStateInvalidQualifier          = ffe("PD010117", "Status must be one of 'available','confirmed','unconfirmed','spent','locked','all' or the UUID of a transaction")
 	MsgStateLockConflictUnexpected    = ffe("PD010118", "Pending lock for transaction %s found when attempting to lock to transaction %s")
 	MsgStateFlushFailedDomainReset    = ffe("PD010119", "Flush of state for domain %s has failed, and the domain has been reset")
+	MsgStateSpendConflictUnexpected   = ffe("PD010120", "Pending spend for transaction %s found when attempting to spend from transaction %s")
+	MsgStateConfirmConflictUnexpected = ffe("PD010121", "Pending confirmation for transaction %s found when attempting to confirm from transaction %s")
 
 	// Persistence PD0102XX
 	MsgPersistenceInvalidType         = ffe("PD010200", "Invalid persistence type: %s")
@@ -246,6 +248,7 @@ var (
 	MsgDomainABIEncodingTypedDataInvalid      = ffe("PD011639", "EIP-712 typed data V4 encoding request invalid")
 	MsgDomainABIEncodingTypedDataFail         = ffe("PD011640", "EIP-712 typed data V4 encoding request failed")
 	MsgDomainErrorParsingAddress              = ffe("PD011641", "Error parsing address")
+	MsgDomainInvalidEvents                    = ffe("PD011642", "Events ABI is invalid")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownEngine = ffe("PD011700", "Unknown engine '%s'")

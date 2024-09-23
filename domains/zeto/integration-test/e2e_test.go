@@ -199,7 +199,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 			To:     controllerName,
 			Amount: ethtypes.NewHexInteger64(10),
 		}),
-	})
+	}, false)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -220,7 +220,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 			To:     controllerName,
 			Amount: ethtypes.NewHexInteger64(20),
 		}),
-	})
+	}, false)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -243,7 +243,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 			To:     recipient1Name,
 			Amount: ethtypes.NewHexInteger64(10),
 		}),
-	})
+	}, false)
 	require.NotNil(t, rpcerr)
 	assert.Regexp(t, "failed to send base ledger transaction: PD011516: Reverted: 0x118cdaa.*", rpcerr.Error())
 	assert.True(t, boolResult)
@@ -257,7 +257,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 			To:     recipient1Name,
 			Amount: ethtypes.NewHexInteger64(25),
 		}),
-	})
+	}, false)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}

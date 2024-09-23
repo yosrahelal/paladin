@@ -26,7 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -72,21 +72,21 @@ func (n *Noto) unmarshalCoin(stateData string) (*types.NotoCoin, error) {
 	return &coin, err
 }
 
-func (n *Noto) makeNewState(coin *types.NotoCoin) (*pb.NewState, error) {
+func (n *Noto) makeNewState(coin *types.NotoCoin) (*prototk.NewState, error) {
 	coinJSON, err := json.Marshal(coin)
 	if err != nil {
 		return nil, err
 	}
-	return &pb.NewState{
+	return &prototk.NewState{
 		SchemaId:      n.coinSchema.Id,
 		StateDataJson: string(coinJSON),
 	}, nil
 }
 
-func (n *Noto) prepareInputs(ctx context.Context, contractAddress string, owner ethtypes.Address0xHex, amount *ethtypes.HexInteger) ([]*types.NotoCoin, []*pb.StateRef, *big.Int, error) {
+func (n *Noto) prepareInputs(ctx context.Context, contractAddress string, owner ethtypes.Address0xHex, amount *ethtypes.HexInteger) ([]*types.NotoCoin, []*prototk.StateRef, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
-	stateRefs := []*pb.StateRef{}
+	stateRefs := []*prototk.StateRef{}
 	coins := []*types.NotoCoin{}
 	for {
 		// TODO: make this configurable
@@ -115,7 +115,7 @@ func (n *Noto) prepareInputs(ctx context.Context, contractAddress string, owner 
 				return nil, nil, nil, i18n.NewError(ctx, msgs.MsgInvalidStateData, state.Id, err)
 			}
 			total = total.Add(total, coin.Amount.BigInt())
-			stateRefs = append(stateRefs, &pb.StateRef{
+			stateRefs = append(stateRefs, &prototk.StateRef{
 				SchemaId: state.SchemaId,
 				Id:       state.Id,
 			})
@@ -128,7 +128,7 @@ func (n *Noto) prepareInputs(ctx context.Context, contractAddress string, owner 
 	}
 }
 
-func (n *Noto) prepareOutputs(owner ethtypes.Address0xHex, amount *ethtypes.HexInteger) ([]*types.NotoCoin, []*pb.NewState, error) {
+func (n *Noto) prepareOutputs(owner ethtypes.Address0xHex, amount *ethtypes.HexInteger) ([]*types.NotoCoin, []*prototk.NewState, error) {
 	// Always produce a single coin for the entire output amount
 	// TODO: make this configurable
 	newCoin := &types.NotoCoin{
@@ -137,11 +137,11 @@ func (n *Noto) prepareOutputs(owner ethtypes.Address0xHex, amount *ethtypes.HexI
 		Amount: amount,
 	}
 	newState, err := n.makeNewState(newCoin)
-	return []*types.NotoCoin{newCoin}, []*pb.NewState{newState}, err
+	return []*types.NotoCoin{newCoin}, []*prototk.NewState{newState}, err
 }
 
-func (n *Noto) findAvailableStates(ctx context.Context, contractAddress, query string) ([]*pb.StoredState, error) {
-	req := &pb.FindAvailableStatesRequest{
+func (n *Noto) findAvailableStates(ctx context.Context, contractAddress, query string) ([]*prototk.StoredState, error) {
+	req := &prototk.FindAvailableStatesRequest{
 		ContractAddress: contractAddress,
 		SchemaId:        n.coinSchema.Id,
 		QueryJson:       query,

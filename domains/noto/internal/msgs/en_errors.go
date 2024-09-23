@@ -60,4 +60,5 @@ var (
 	MsgStateWrongOwner             = ffe("PD200018", "State '%s' is not owned by '%s'")
 	MsgUnrecognizedEndorsement     = ffe("PD200019", "Unrecognized endorsement request: %s")
 	MsgDuplicateStateInList        = ffe("PD200020", "Duplicate state in list %s[%d] (%s)")
+	MsgUnknownEvent                = ffe("PD200021", "Unknown event: %s")
 )

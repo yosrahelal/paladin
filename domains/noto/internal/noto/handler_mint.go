@@ -25,7 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
-	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
 type mintHandler struct {
@@ -46,14 +46,14 @@ func (h *mintHandler) ValidateParams(ctx context.Context, params string) (interf
 	return &mintParams, nil
 }
 
-func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *pb.InitTransactionRequest) (*pb.InitTransactionResponse, error) {
+func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	params := tx.Params.(*types.MintParams)
 
 	if req.Transaction.From != tx.DomainConfig.NotaryLookup {
 		return nil, i18n.NewError(ctx, msgs.MsgMintOnlyNotary)
 	}
-	return &pb.InitTransactionResponse{
-		RequiredVerifiers: []*pb.ResolveVerifierRequest{
+	return &prototk.InitTransactionResponse{
+		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
 				Lookup:    tx.DomainConfig.NotaryLookup,
 				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
@@ -66,7 +66,7 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 	}, nil
 }
 
-func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
+func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.MintParams)
 
 	notary := domain.FindVerifier(tx.DomainConfig.NotaryLookup, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
@@ -90,17 +90,17 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 		return nil, err
 	}
 
-	return &pb.AssembleTransactionResponse{
-		AssemblyResult: pb.AssembleTransactionResponse_OK,
-		AssembledTransaction: &pb.AssembledTransaction{
+	return &prototk.AssembleTransactionResponse{
+		AssemblyResult: prototk.AssembleTransactionResponse_OK,
+		AssembledTransaction: &prototk.AssembledTransaction{
 			OutputStates: outputStates,
 		},
-		AttestationPlan: []*pb.AttestationRequest{
+		AttestationPlan: []*prototk.AttestationRequest{
 			// Notary will endorse the assembled transaction (by submitting to the ledger)
 			// Note no  additional attestation using req.Transaction.From, because it is guaranteed to be the notary
 			{
 				Name:            "notary",
-				AttestationType: pb.AttestationType_ENDORSE,
+				AttestationType: prototk.AttestationType_ENDORSE,
 				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
 				Parties:         []string{tx.DomainConfig.NotaryLookup},
 			},
@@ -118,7 +118,7 @@ func (h *mintHandler) validateAmounts(ctx context.Context, params *types.MintPar
 	return nil
 }
 
-func (h *mintHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
+func (h *mintHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
 	params := tx.Params.(*types.MintParams)
 	coins, err := h.noto.gatherCoins(ctx, req.Inputs, req.Outputs)
 	if err != nil {
@@ -127,21 +127,25 @@ func (h *mintHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, 
 	if err := h.validateAmounts(ctx, params, coins); err != nil {
 		return nil, err
 	}
-	return &pb.EndorseTransactionResponse{
-		EndorsementResult: pb.EndorseTransactionResponse_ENDORSER_SUBMIT,
+	return &prototk.EndorseTransactionResponse{
+		EndorsementResult: prototk.EndorseTransactionResponse_ENDORSER_SUBMIT,
 	}, nil
 }
 
-func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
+func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
 	outputs := make([]string, len(req.OutputStates))
 	for i, state := range req.OutputStates {
 		outputs[i] = state.Id
 	}
 
+	data, err := h.noto.encodeTransactionData(ctx, req.Transaction)
+	if err != nil {
+		return nil, err
+	}
 	params := map[string]interface{}{
 		"outputs":   outputs,
 		"signature": "0x", // no signature, because requester AND submitter are always the notary
-		"data":      req.Transaction.TransactionId,
+		"data":      data,
 	}
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
@@ -152,8 +156,8 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		return nil, err
 	}
 
-	return &pb.PrepareTransactionResponse{
-		Transaction: &pb.BaseLedgerTransaction{
+	return &prototk.PrepareTransactionResponse{
+		Transaction: &prototk.BaseLedgerTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
 		},

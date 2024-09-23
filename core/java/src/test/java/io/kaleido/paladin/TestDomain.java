@@ -73,4 +73,9 @@ public class TestDomain extends DomainInstance {
     protected CompletableFuture<ToDomain.PrepareTransactionResponse> prepareTransaction(ToDomain.PrepareTransactionRequest request) {
         return CompletableFuture.failedFuture(new UnsupportedOperationException());
     }
+
+    @Override
+    protected CompletableFuture<ToDomain.HandleEventBatchResponse> handleEventBatch(ToDomain.HandleEventBatchRequest request) {
+        return CompletableFuture.failedFuture(new UnsupportedOperationException());
+    }
 }

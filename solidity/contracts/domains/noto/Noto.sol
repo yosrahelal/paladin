@@ -137,15 +137,16 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
      * @param delegate the address that is authorized to submit the transaction
      * @param txhash the pre-calculated hash of the transaction that is delegated
      *
-     * Emits a {UTXOApproved} event.
+     * Emits a {NotoApproved} event.
      */
     function _approve(
         address delegate,
         bytes32 txhash,
-        bytes calldata signature
+        bytes calldata signature,
+        bytes calldata data
     ) internal {
         _approvals[txhash].delegate = delegate;
-        emit UTXOApproved(delegate, txhash, signature);
+        emit NotoApproved(delegate, txhash, signature, data);
     }
 
     /**
@@ -155,7 +156,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
      * @param outputs as per transfer()
      * @param data as per transfer()
      *
-     * Emits a {UTXOTransfer} event.
+     * Emits a {NotoTransfer} event.
      */
     function approvedTransfer(
         bytes32[] calldata inputs,
@@ -203,7 +204,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
      * @param outputs Array of zero or more new outputs to generate, for future transactions to spend.
      * @param data Any additional transaction data (opaque to the blockchain)
      *
-     * Emits a {UTXOTransfer} event.
+     * Emits a {NotoTransfer} event.
      */
     function _transfer(
         bytes32[] memory inputs,
@@ -227,7 +228,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
             _unspent[outputs[i]] = true;
         }
 
-        emit UTXOTransfer(inputs, outputs, signature, data);
+        emit NotoTransfer(inputs, outputs, signature, data);
     }
 
     function mint(
@@ -251,8 +252,9 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     function approve(
         address delegate,
         bytes32 txhash,
-        bytes calldata signature
+        bytes calldata signature,
+        bytes calldata data
     ) external virtual onlyNotary {
-        _approve(delegate, txhash, signature);
+        _approve(delegate, txhash, signature, data);
     }
 }

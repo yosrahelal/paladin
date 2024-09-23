@@ -263,8 +263,9 @@ func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.Pr
 }
 
 func (tb *testbed) rpcTestbedInvoke() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod1(func(ctx context.Context,
+	return rpcserver.RPCMethod2(func(ctx context.Context,
 		invocation tktypes.PrivateContractInvoke,
+		waitForCompletion bool,
 	) (bool, error) {
 
 		tx, err := tb.prepareTransaction(ctx, invocation)
@@ -277,7 +278,13 @@ func (tb *testbed) rpcTestbedInvoke() rpcserver.RPCHandler {
 			return false, err
 		}
 
-		// TODO: state confirmation by TXID
+		// Wait for the domain to index the transaction events
+		if waitForCompletion {
+			err = tb.c.DomainManager().WaitForTransaction(ctx, tx.ID)
+			if err != nil {
+				return false, err
+			}
+		}
 		return true, nil
 	})
 }
