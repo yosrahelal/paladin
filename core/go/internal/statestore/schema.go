@@ -72,7 +72,7 @@ type Schema interface {
 	IDString() string
 	Signature() string
 	Persisted() *SchemaPersisted
-	ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON) (*StateWithLabels, error)
+	ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, dataHash tktypes.HexBytes) (*StateWithLabels, error)
 	RecoverLabels(ctx context.Context, s *State) (*StateWithLabels, error)
 }
 

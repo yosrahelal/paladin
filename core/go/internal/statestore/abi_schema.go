@@ -323,7 +323,7 @@ func (as *abiSchema) parseStateData(ctx context.Context, data tktypes.RawJSON) (
 
 // Take the state, parse the value into the type tree of this schema, and from that
 // build the label values to store in the DB for comparison appropriate to the type.
-func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON) (*StateWithLabels, error) {
+func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, dataHash tktypes.HexBytes) (*StateWithLabels, error) {
 
 	psd, err := as.parseStateData(ctx, data)
 	if err != nil {
@@ -352,6 +352,10 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 	for i := range psd.int64Labels {
 		psd.int64Labels[i].State = hashID
 	}
+	if dataHash == nil {
+		dataHash = hashID[:]
+	}
+
 	now := tktypes.TimestampNow()
 	return &StateWithLabels{
 		State: &State{
@@ -361,6 +365,7 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 			Schema:          as.ID,
 			ContractAddress: contractAddress,
 			Data:            jsonData,
+			DataHash:        dataHash,
 			Labels:          psd.labels,
 			Int64Labels:     psd.int64Labels,
 		},

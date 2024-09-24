@@ -88,7 +88,7 @@ func TestRPC(t *testing.T) {
 		"size": 10,
 		"color": "blue",
 		"price": "1230000000000000000"
-	}`))
+	}`), nil)
 	jsonTestLog(t, "pstate_storeState", state)
 	assert.Nil(t, rpcErr)
 	assert.Equal(t, schemas[0].ID, state.Schema)
