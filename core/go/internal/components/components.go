@@ -52,6 +52,9 @@ type Managers interface {
 	TransportManager() TransportManager
 	RegistryManager() RegistryManager
 	PluginManager() PluginManager
+	PrivateTxManager() PrivateTxManager
+	PublicTxManager() PublicTxManager
+	TxManager() TXManager
 }
 
 // All managers conform to a standard lifecycle
@@ -67,8 +70,11 @@ type ManagerLifecycle interface {
 // Managers get limited influence over the event streams created for them,
 // to ensure consistent naming and lifecycle management semantics
 type ManagerEventStream struct {
-	ABI     abi.ABI
+	Type             blockindexer.IESType
+	PreCommitHandler blockindexer.PreCommitHandler
+	// Specific to IESTypeEventStream
 	Handler blockindexer.InternalStreamCallback
+	ABI     abi.ABI
 	Source  *tktypes.EthAddress
 }
 

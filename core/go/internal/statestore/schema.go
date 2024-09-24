@@ -48,7 +48,7 @@ const (
 
 type SchemaPersisted struct {
 	ID         tktypes.Bytes32   `json:"id"          gorm:"primaryKey"`
-	CreatedAt  tktypes.Timestamp `json:"created"     gorm:"autoCreateTime:false"` // we calculate the created time ourselves due to complex in-memory caching
+	Created    tktypes.Timestamp `json:"created"     gorm:"autoCreateTime:false"` // we calculate the created time ourselves due to complex in-memory caching
 	DomainName string            `json:"domain"`
 	Type       SchemaType        `json:"type"`
 	Signature  string            `json:"signature"`

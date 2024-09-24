@@ -29,16 +29,20 @@ type Cache[K comparable, V any] interface {
 	Get(key K) (V, bool)
 	Set(key K, val V)
 	Delete(key K)
+	Capacity() int
 }
 
 type cache[K comparable, V any] struct {
-	cache *lru.Cache[K, V]
+	cache    *lru.Cache[K, V]
+	capacity int
 }
 
 func NewCache[K comparable, V any](conf *Config, defs *Config) Cache[K, V] {
+	capacity := confutil.Int(conf.Capacity, *defs.Capacity)
 	c := &cache[K, V]{
+		capacity: capacity,
 		cache: lru.NewCache[K, V](
-			lru.WithCapacity(confutil.Int(conf.Capacity, *defs.Capacity)),
+			lru.WithCapacity(capacity),
 		),
 	}
 	return c
@@ -54,4 +58,8 @@ func (c *cache[K, V]) Set(key K, val V) {
 
 func (c *cache[K, V]) Delete(key K) {
 	c.cache.Delete(key)
+}
+
+func (c *cache[K, V]) Capacity() int {
+	return c.capacity
 }

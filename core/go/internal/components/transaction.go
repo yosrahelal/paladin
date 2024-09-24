@@ -18,7 +18,6 @@ package components
 import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -41,11 +40,6 @@ type FullState struct {
 	ID     tktypes.Bytes32
 	Schema tktypes.Bytes32
 	Data   tktypes.RawJSON
-}
-
-type EthTransfer struct {
-	To    tktypes.EthAddress
-	Value *ethtypes.HexInteger
 }
 
 type EthTransaction struct {
@@ -75,7 +69,7 @@ type TransactionPostAssembly struct {
 // as it hops between the states in the state machine (on multiple paladin nodes) to reach
 // a state that it can successfully (and anonymously) submitted it to the blockchain.
 type PrivateTransaction struct {
-	ID uuid.UUID // TODO: == idempotency key?
+	ID uuid.UUID
 
 	// INPUTS: Items that come in from the submitter of the transaction
 	Inputs *TransactionInputs
@@ -96,7 +90,7 @@ type PrivateTransaction struct {
 type PrivateContractDeploy struct {
 
 	// INPUTS: Items that come in from the submitter of the transaction to send to the constructor
-	ID     uuid.UUID // TODO: == idempotency key?
+	ID     uuid.UUID
 	Domain string
 	Inputs tktypes.RawJSON
 

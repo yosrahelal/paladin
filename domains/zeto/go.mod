@@ -5,13 +5,15 @@ go 1.22.5
 require (
 	github.com/go-resty/resty/v2 v2.14.0
 	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240923130959-544659ea388d
-	github.com/hyperledger/firefly-signer v1.1.18-0.20240916233856-eb284ced6841
+	github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1
 	github.com/iden3/go-iden3-crypto v0.0.17
 	github.com/kaleido-io/paladin/core v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.9.0
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v3 v3.0.1
+	gorm.io/driver/sqlite v1.5.6
+	gorm.io/gorm v1.25.12
 )
 
 require (
@@ -77,6 +79,7 @@ require (
 	github.com/sagikazarmark/locafero v0.6.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 // indirect
+	github.com/serialx/hashring v0.0.0-20200727003509-22c0c7ab6b1b // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.11.0 // indirect
@@ -104,8 +107,6 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gorm.io/driver/postgres v1.5.9 // indirect
-	gorm.io/driver/sqlite v1.5.6 // indirect
-	gorm.io/gorm v1.25.12 // indirect
 )
 
 replace github.com/kaleido-io/paladin/core => ../../core/go

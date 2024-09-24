@@ -43,6 +43,16 @@ func TestFloat64(t *testing.T) {
 	assert.Equal(t, float64(5), Float64Min(P(float64(5)), 1, 10))
 }
 
+func TestBigInt(t *testing.T) {
+	assert.Equal(t, int64(10), BigInt(P("10"), "5").Int64())
+	assert.Equal(t, int64(5), BigInt(nil, "5").Int64())
+}
+
+func TestBigIntOrNil(t *testing.T) {
+	assert.Equal(t, int64(10), BigIntOrNil(P("10")).Int64())
+	assert.Nil(t, BigIntOrNil(nil))
+}
+
 func TestUnixFilePerm(t *testing.T) {
 	assert.Equal(t, fs.FileMode(0644), UnixFileMode(nil, "0644"))
 	assert.Equal(t, fs.FileMode(0644), UnixFileMode(P(""), "0644"))

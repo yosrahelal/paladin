@@ -40,6 +40,7 @@ func TestRawJSON(t *testing.T) {
 	}`), &s1)
 	require.NoError(t, err)
 	assert.JSONEq(t, `[ { "things": "and" }, "stuff" ]`, s1.F1.String())
+	assert.JSONEq(t, `[ { "things": "and" }, "stuff" ]`, string(s1.F1.Bytes()))
 	assert.Equal(t, `null`, s1.F2.String())
 	assert.Equal(t, `null`, s1.F3.String())
 	assert.Equal(t, `[ { "things": "and" }, "stuff" ]`, s1.F1.Value())

@@ -19,7 +19,6 @@ package filters
 import (
 	"context"
 	"database/sql/driver"
-	"math/big"
 
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -43,17 +42,5 @@ func (sf Int256Field) SQLValue(ctx context.Context, jsonValue tktypes.RawJSON) (
 	if err != nil {
 		return "", err
 	}
-	return Int256ToFilterString(ctx, bi), nil
-}
-
-func Int256ToFilterString(ctx context.Context, bi *big.Int) string {
-	sign := bi.Sign()
-	signPlusZeroPaddedInt256 := PadHexBigIntTwosComplement(bi, make([]byte, 65))
-	if sign < 0 {
-		signPlusZeroPaddedInt256[0] = '0'
-	} else {
-		// Zero or positive get a "1" in the first string position, which makes them
-		signPlusZeroPaddedInt256[0] = '1'
-	}
-	return (string)(signPlusZeroPaddedInt256)
+	return tktypes.Int256To65CharDBSafeSortableString(bi), nil
 }

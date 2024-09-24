@@ -2,7 +2,7 @@ module github.com/kaleido-io/paladin/testinfra
 
 go 1.22.5
 
-require github.com/hyperledger/firefly-signer v1.1.18-0.20240916233856-eb284ced6841
+require github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1
 
 require (
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2 // indirect

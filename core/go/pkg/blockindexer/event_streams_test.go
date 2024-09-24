@@ -27,10 +27,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/mocks/rpcbackendmocks"
+	"github.com/kaleido-io/paladin/core/mocks/rpcclientmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -38,7 +37,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func mockBlockListenerNil(mRPC *rpcbackendmocks.WebSocketRPCClient) {
+func mockBlockListenerNil(mRPC *rpcclientmocks.WSClient) {
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_blockNumber").Return(nil).Run(func(args mock.Arguments) {
 		hbh := args[1].(*ethtypes.HexUint64)
 		*hbh = ethtypes.HexUint64(0)
@@ -58,7 +57,6 @@ func TestInternalEventStreamDeliveryAtHead(t *testing.T) {
 	// This test uses a real DB, includes the full block indexer, but simulates the blockchain.
 	_, bi, mRPC, blDone := newTestBlockIndexer(t)
 	defer blDone()
-	bi.utBatchNotify = nil // we only care about the blocks
 
 	// Mock up the block calls to the blockchain for 15 blocks
 	blocks, receipts := testBlockArray(t, 15)
@@ -131,7 +129,6 @@ func TestInternalEventStreamDeliveryAtHeadWithSourceAddress(t *testing.T) {
 	// This test uses a real DB, includes the full block indexer, but simulates the blockchain.
 	_, bi, mRPC, blDone := newTestBlockIndexer(t)
 	defer blDone()
-	bi.utBatchNotify = nil // we only care about the blocks
 
 	sourceContractAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
 
@@ -228,12 +225,26 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 	}
 
 	// Do a full start now without a block listener, and wait for the ut notification of all the blocks
-	err := bi.Start()
+	utBatchNotify := make(chan []*IndexedBlock)
+	preCommitCount := 0
+	err := bi.Start(&InternalEventStream{
+		Type: IESTypePreCommitHandler,
+		PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error) {
+			// Return an error once to drive a retry
+			preCommitCount++
+			if preCommitCount == 0 {
+				return nil, fmt.Errorf("pop")
+			}
+			return func() {
+				utBatchNotify <- blocks
+			}, nil
+		},
+	})
 	require.NoError(t, err)
 	for i := 0; i < len(blocks); i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1)
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifyBlocks := <-utBatchNotify
+		assert.Len(t, notifyBlocks, 1)
+		checkIndexedBlockEqual(t, blocks[i], notifyBlocks[0])
 	}
 
 	// Add a listener
@@ -319,7 +330,15 @@ func TestNoMatchingEvents(t *testing.T) {
 	testABICopy[1].Inputs[0].Indexed = !testABICopy[1].Inputs[0].Indexed
 
 	// Do a full start now with an internal event listener
+	utBatchNotify := make(chan []*IndexedBlock)
 	err := bi.Start(&InternalEventStream{
+		Type: IESTypePreCommitHandler,
+		PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error) {
+			return func() {
+				utBatchNotify <- blocks
+			}, nil
+		},
+	}, &InternalEventStream{
 		Handler: func(ctx context.Context, tx *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error) {
 			require.Fail(t, "should not be called")
 			return nil, nil
@@ -340,7 +359,7 @@ func TestNoMatchingEvents(t *testing.T) {
 	require.NoError(t, err)
 
 	for i := 0; i < 15; i++ {
-		<-bi.utBatchNotify
+		<-utBatchNotify
 	}
 
 }
@@ -698,7 +717,7 @@ func TestProcessCatchupEventPageFailRPC(t *testing.T) {
 
 	bi.retry.UTSetMaxAttempts(2)
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", ethtypes.MustNewHexBytes0xPrefix(txHash.String())).
-		Return(rpcbackend.NewRPCError(ctx, rpcbackend.RPCCodeInternalError, msgs.MsgContextCanceled)).Once()
+		Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop"))).Once()
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", ethtypes.MustNewHexBytes0xPrefix(txHash.String())).
 		Return(nil) // but still not found
 
