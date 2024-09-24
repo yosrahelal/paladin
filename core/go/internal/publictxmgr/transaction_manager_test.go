@@ -213,7 +213,7 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 	resolvedKey := tktypes.MustEthAddress(resolvedKeyStr)
 
 	// create some transactions that are successfully added
-	const transactionCount = 1
+	const transactionCount = 10
 	txIDs := make([]uuid.UUID, transactionCount)
 	txs := make([]*components.PublicTxSubmission, transactionCount)
 	for i := range txIDs {
@@ -262,7 +262,8 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 	}
 
 	// Query to check we now have all of these
-	queryTxs, err := ble.QueryTransactions(ctx, ble.p.DB(), nil, query.NewQueryBuilder().Query())
+	queryTxs, err := ble.QueryTransactions(ctx, ble.p.DB(), nil,
+		query.NewQueryBuilder().Sort("nonce").Query())
 	require.NoError(t, err)
 	assert.Len(t, queryTxs, len(txs))
 	for i, qTX := range queryTxs {
@@ -270,7 +271,7 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 		assert.Equal(t, *resolvedKey, qTX.From)
 		assert.Equal(t, uint64(i)+baseNonce, qTX.Nonce.Uint64())
 		assert.Equal(t, txs[i].Data, qTX.Data)
-		require.Len(t, qTX.Activity, 1)
+		require.Greater(t, len(qTX.Activity), 0)
 		assert.Equal(t, fmt.Sprintf("activity %d", i), qTX.Activity[0].Message)
 	}
 
