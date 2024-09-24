@@ -17,6 +17,7 @@ package helpers
 
 import (
 	"context"
+	_ "embed"
 	"testing"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -27,6 +28,9 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
+
+//go:embed abis/Swap.json
+var SwapJSON []byte
 
 type SwapHelper struct {
 	t       *testing.T
@@ -56,10 +60,10 @@ func DeploySwap(
 	ctx context.Context,
 	t *testing.T,
 	tb testbed.Testbed,
-	build *domain.SolidityBuild,
 	signer string,
 	input *TradeRequestInput,
 ) *SwapHelper {
+	build := domain.LoadBuild(SwapJSON)
 	eth := tb.Components().EthClientFactory().HTTPClient()
 	builder := deployBuilder(ctx, t, eth, build.ABI, build.Bytecode).
 		Input(toJSON(t, map[string]any{"inputData": input}))

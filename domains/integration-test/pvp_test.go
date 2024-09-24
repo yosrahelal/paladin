@@ -17,7 +17,6 @@ package integrationtest
 
 import (
 	"context"
-	_ "embed"
 	"testing"
 
 	"github.com/hyperledger/firefly-common/pkg/log"
@@ -26,22 +25,9 @@ import (
 	"github.com/kaleido-io/paladin/domains/integration-test/helpers"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/require"
 )
-
-//go:embed abis/NotoFactory.json
-var notoFactoryJSON []byte
-
-//go:embed abis/AtomFactory.json
-var atomFactoryJSON []byte
-
-//go:embed abis/Atom.json
-var atomJSON []byte
-
-//go:embed abis/Swap.json
-var swapJSON []byte
 
 var (
 	notary = "notary"
@@ -57,8 +43,8 @@ func TestPvP(t *testing.T) {
 
 	log.L(ctx).Infof("Deploying factories")
 	contractSource := map[string][]byte{
-		"noto": notoFactoryJSON,
-		"atom": atomFactoryJSON,
+		"noto": helpers.NotoFactoryJSON,
+		"atom": helpers.AtomFactoryJSON,
 	}
 	contracts := deployContracts(ctx, t, notary, contractSource)
 	for name, address := range contracts {
@@ -78,7 +64,7 @@ func TestPvP(t *testing.T) {
 	_, bobKey, err := tb.Components().KeyManager().ResolveKey(ctx, bob, algorithms.ECDSA_SECP256K1_PLAINBYTES)
 	require.NoError(t, err)
 
-	atomFactory := helpers.InitAtom(t, tb, rpc, contracts["atom"], domain.LoadBuild(atomFactoryJSON).ABI, domain.LoadBuild(atomJSON).ABI)
+	atomFactory := helpers.InitAtom(t, tb, rpc, contracts["atom"])
 
 	log.L(ctx).Infof("Deploying 2 instances of Noto")
 	notoGold := helpers.DeployNoto(ctx, t, rpc, domainName, notary)
@@ -93,7 +79,7 @@ func TestPvP(t *testing.T) {
 
 	// TODO: this should be a Pente private contract, instead of a base ledger contract
 	log.L(ctx).Infof("Propose a trade of 1 gold for 10 silver")
-	swap := helpers.DeploySwap(ctx, t, tb, domain.LoadBuild(swapJSON), alice, &helpers.TradeRequestInput{
+	swap := helpers.DeploySwap(ctx, t, tb, alice, &helpers.TradeRequestInput{
 		Holder1:       aliceKey,
 		TokenAddress1: notoGold.Address,
 		TokenValue1:   ethtypes.NewHexInteger64(1),

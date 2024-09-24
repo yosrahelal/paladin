@@ -17,6 +17,7 @@ package helpers
 
 import (
 	"context"
+	_ "embed"
 	"testing"
 
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
@@ -25,6 +26,9 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
+
+//go:embed abis/NotoFactory.json
+var NotoFactoryJSON []byte
 
 type NotoHelper struct {
 	t       *testing.T

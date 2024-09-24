@@ -17,6 +17,7 @@ package helpers
 
 import (
 	"context"
+	_ "embed"
 	"testing"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -24,8 +25,15 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
+	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/stretchr/testify/assert"
 )
+
+//go:embed abis/AtomFactory.json
+var AtomFactoryJSON []byte
+
+//go:embed abis/Atom.json
+var AtomJSON []byte
 
 type AtomFactoryHelper struct {
 	t           *testing.T
@@ -59,8 +67,6 @@ func InitAtom(
 	tb testbed.Testbed,
 	rpc rpcbackend.Backend,
 	address string,
-	factoryABI abi.ABI,
-	instanceABI abi.ABI,
 ) *AtomFactoryHelper {
 	return &AtomFactoryHelper{
 		t:           t,
@@ -68,8 +74,8 @@ func InitAtom(
 		rpc:         rpc,
 		eth:         tb.Components().EthClientFactory().HTTPClient(),
 		Address:     *ethtypes.MustNewAddress(address),
-		FactoryABI:  factoryABI,
-		InstanceABI: instanceABI,
+		FactoryABI:  domain.LoadBuild(AtomFactoryJSON).ABI,
+		InstanceABI: domain.LoadBuild(AtomJSON).ABI,
 	}
 }
 
