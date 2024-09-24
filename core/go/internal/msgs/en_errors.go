@@ -19,6 +19,7 @@ package msgs
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"golang.org/x/text/language"
@@ -26,12 +27,11 @@ import (
 
 const paladinCoreGoPrefix = "PD01"
 
-var registered = false
+var registered sync.Once
 var ffe = func(key, translation string, statusHint ...int) i18n.ErrorMessageKey {
-	if !registered {
+	registered.Do(func() {
 		i18n.RegisterPrefix(paladinCoreGoPrefix, "Paladin Transaction Manager")
-		registered = true
-	}
+	})
 	if !strings.HasPrefix(key, paladinCoreGoPrefix) {
 		panic(fmt.Errorf("must have prefix '%s': %s", paladinCoreGoPrefix, key))
 	}
@@ -84,6 +84,8 @@ var (
 	MsgStateInvalidQualifier          = ffe("PD010117", "Status must be one of 'available','confirmed','unconfirmed','spent','locked','all' or the UUID of a transaction")
 	MsgStateLockConflictUnexpected    = ffe("PD010118", "Pending lock for transaction %s found when attempting to lock to transaction %s")
 	MsgStateFlushFailedDomainReset    = ffe("PD010119", "Flush of state for domain %s has failed, and the domain has been reset")
+	MsgStateSpendConflictUnexpected   = ffe("PD010120", "Pending spend for transaction %s found when attempting to spend from transaction %s")
+	MsgStateConfirmConflictUnexpected = ffe("PD010121", "Pending confirmation for transaction %s found when attempting to confirm from transaction %s")
 
 	// Persistence PD0102XX
 	MsgPersistenceInvalidType         = ffe("PD010200", "Invalid persistence type: %s")
@@ -158,12 +160,13 @@ var (
 
 	// BlockIndexer PD0113XX
 	MsgBlockIndexerInvalidFromBlock         = ffe("PD011300", "Invalid from block '%s' (must be 'latest' or number)")
+	MsgBlockIndexerESSourceError            = ffe("PD011302", "Event stream source must not be changed after creation")
 	MsgBlockIndexerESInitFail               = ffe("PD011303", "Event stream initialization failed")
 	MsgBlockIndexerESAlreadyInit            = ffe("PD011304", "Event stream already initialized")
-	MsgBlockIndexerConfirmedReceiptNotFound = ffe("PD011305", "Expected received for confirmed transaction %s not found")
+	MsgBlockIndexerConfirmedReceiptNotFound = ffe("PD011305", "Receipt for confirmed transaction %s not found")
 	MsgBlockIndexerInvalidEventStreamType   = ffe("PD011306", "Unsupported event stream type: %s")
-	MsgBlockMissingHandler                  = ffe("PD011307", "Handler not registered for stream")
 	MsgBlockIndexerNoBlocksIndexed          = ffe("PD011308", "No confirmed blocks have yet been indexed")
+	MsgBlockIndexerTransactionReverted      = ffe("PD011309", "Transaction reverted: %s")
 
 	// Signing module PD0114XX
 	MsgSigningModuleBadPathError                = ffe("PD011400", "Path '%s' does not exist, or it is not a directory")
@@ -204,19 +207,17 @@ var (
 	MsgEthClientChainIDMismatch     = ffe("PD011512", "ChainID mismatch between HTTP and WebSocket JSON/RPC connections http=%d ws=%d")
 	MsgEthClientInvalidWebSocketURL = ffe("PD011513", "Invalid WebSocket URL: %s")
 	MsgEthClientInvalidHTTPURL      = ffe("PD011514", "Invalid HTTP URL: %s")
+	MsgEthClientCallReverted        = ffe("PD011516", "Reverted: %s")
 
 	// DomainManager module PD0116XX
 	MsgDomainNotFound                         = ffe("PD011600", "Domain %q not found")
 	MsgDomainNotInitialized                   = ffe("PD011601", "Domain not initialized")
 	MsgDomainInvalidSchema                    = ffe("PD011602", "Domain schema %d is invalid")
-	MsgDomainConstructorAbiJsonInvalid        = ffe("PD011603", "Constructor ABI function definition invalid")
-	MsgDomainConstructorABITypeWrong          = ffe("PD011604", "Constructor ABI function definition has wrong type: %s")
 	MsgDomainFactoryAbiJsonInvalid            = ffe("PD011605", "Factory contract ABI invalid")
-	MsgDomainFactoryAddressInvalid            = ffe("PD011606", "Factory contract address invalid")
+	MsgDomainRegistryAddressInvalid           = ffe("PD011606", "Registry address '%s' invalid for domain '%s'")
 	MsgDomainPrivateAbiJsonInvalid            = ffe("PD011607", "Private contract ABI invalid")
 	MsgDomainInvalidQueryJSON                 = ffe("PD011608", "Invalid query JSON")
 	MsgDomainContractNotFoundByAddr           = ffe("PD011609", "A smart contract with address %s has not yet been indexed")
-	MsgDomainInvalidConstructorParams         = ffe("PD011610", "Invalid constructor parameters for %s")
 	MsgDomainInvalidPrepareDeployResult       = ffe("PD011611", "Prepare deploy did not result in exactly one of a invoke transaction or a deploy transaction")
 	MsgDomainInvalidFunctionParams            = ffe("PD011612", "Invalid function parameters for %s")
 	MsgDomainUnknownSchema                    = ffe("PD011613", "Unknown schema %s")
@@ -224,7 +225,6 @@ var (
 	MsgDomainInputStateNotFound               = ffe("PD011615", "Input state %d [%s] not found")
 	MsgDomainMissingStates                    = ffe("PD011616", "Missing in-memory states")
 	MsgDomainEndorsementReverted              = ffe("PD011617", "Endorsement from '%s' reverted: %s")
-	MsgDomainFunctionNotFound                 = ffe("PD011618", "Function with name '%s' not found on ABI")
 	MsgDomainBaseLedgerSubmitInvalid          = ffe("PD011619", "Base ledger submission config is invalid")
 	MsgDomainTXIncompleteInitDeploy           = ffe("PD011620", "Transaction is incomplete for phase InitDeploy")
 	MsgDomainTXIncompletePrepareDeploy        = ffe("PD011621", "Transaction is incomplete for phase PrepareDeploy")
@@ -236,9 +236,19 @@ var (
 	MsgDomainTXIncompleteAssembleTransaction  = ffe("PD011627", "Transaction is incomplete for phase AssembleTransaction")
 	MsgDomainTXIncompleteWritePotentialStates = ffe("PD011628", "Transaction is incomplete for phase WritePotentialStates")
 	MsgDomainTXIncompleteLockStates           = ffe("PD011629", "Transaction is incomplete for phase LockStates")
-	MsgDomainTXIncompleteEndorseTransaction   = ffe("PD011630", "Transaction is incomplete for phase EndorseTransaction")
+	MsgDomainReqIncompleteEndorseTransaction  = ffe("PD011630", "Request is incomplete for phase EndorseTransaction")
 	MsgDomainTXIncompleteResolveDispatch      = ffe("PD011631", "Transaction is incomplete for phase ResolveDispatch")
 	MsgDomainTXIncompletePrepareTransaction   = ffe("PD011632", "Transaction is incomplete for phase PrepareTransaction")
+	MsgDomainABIEncodingRequestEntryInvalid   = ffe("PD011633", "ABI encoding request could not be completed as ABI entry is invalid")
+	MsgDomainABIEncodingRequestEncodingFail   = ffe("PD011634", "ABI encoding request failed")
+	MsgDomainABIEncodingRequestInvalidType    = ffe("PD011635", "ABI encoding request is of invalid type '%s'")
+	MsgDomainABIEncodingRequestInvalidTX      = ffe("PD011636", "Transaction encoding request is invalid")
+	MsgDomainABIRecoverRequestAlgorithm       = ffe("PD011637", "Algorithm not supported for recover signer '%s'")
+	MsgDomainABIRecoverRequestSignature       = ffe("PD011638", "Invalid signature")
+	MsgDomainABIEncodingTypedDataInvalid      = ffe("PD011639", "EIP-712 typed data V4 encoding request invalid")
+	MsgDomainABIEncodingTypedDataFail         = ffe("PD011640", "EIP-712 typed data V4 encoding request failed")
+	MsgDomainErrorParsingAddress              = ffe("PD011641", "Error parsing address")
+	MsgDomainInvalidEvents                    = ffe("PD011642", "Events ABI is invalid")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownEngine = ffe("PD011700", "Unknown engine '%s'")

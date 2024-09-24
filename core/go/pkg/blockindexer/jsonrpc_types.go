@@ -21,11 +21,17 @@ import (
 )
 
 type BlockInfoJSONRPC struct {
-	Number       ethtypes.HexUint64          `json:"number"`
-	Hash         ethtypes.HexBytes0xPrefix   `json:"hash"`
-	ParentHash   ethtypes.HexBytes0xPrefix   `json:"parentHash"`
-	Timestamp    ethtypes.HexUint64          `json:"timestamp"`
-	Transactions []ethtypes.HexBytes0xPrefix `json:"transactions"`
+	Number       ethtypes.HexUint64        `json:"number"`
+	Hash         ethtypes.HexBytes0xPrefix `json:"hash"`
+	ParentHash   ethtypes.HexBytes0xPrefix `json:"parentHash"`
+	Timestamp    ethtypes.HexUint64        `json:"timestamp"`
+	Transactions []*PartialTransactionInfo `json:"transactions"`
+}
+
+// For memory efficiency we only retain in memory some of the fields returned in the JSON from the node
+type PartialTransactionInfo struct {
+	Hash  ethtypes.HexBytes0xPrefix `json:"hash"`
+	Nonce ethtypes.HexUint64        `json:"nonce"`
 }
 
 type TXReceiptJSONRPC struct {
@@ -40,6 +46,7 @@ type TXReceiptJSONRPC struct {
 	To                *ethtypes.Address0xHex    `json:"to"`
 	TransactionHash   ethtypes.HexBytes0xPrefix `json:"transactionHash"`
 	TransactionIndex  *ethtypes.HexInteger      `json:"transactionIndex"`
+	RevertReason      ethtypes.HexBytes0xPrefix `json:"revertReason"`
 }
 
 type LogJSONRPC struct {

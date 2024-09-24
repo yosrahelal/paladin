@@ -21,20 +21,21 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type PrivateSmartContract struct {
-	DeployTX      uuid.UUID          `json:"deployTransaction"   gorm:"column:deploy_tx"`
-	DomainAddress tktypes.EthAddress `json:"domainAddress"       gorm:"column:domain_address"`
-	Address       tktypes.EthAddress `json:"address"             gorm:"column:address"`
-	ConfigBytes   tktypes.HexBytes   `json:"configBytes"         gorm:"column:config_bytes"`
+	DeployTX        uuid.UUID          `json:"deployTransaction"   gorm:"column:deploy_tx"`
+	RegistryAddress tktypes.EthAddress `json:"domainAddress"       gorm:"column:domain_address"`
+	Address         tktypes.EthAddress `json:"address"             gorm:"column:address"`
+	ConfigBytes     tktypes.HexBytes   `json:"configBytes"         gorm:"column:config_bytes"`
 }
 
 type domainContract struct {
@@ -188,7 +189,7 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 
 	var states []*statestore.State
 	if len(newStatesToWrite) > 0 {
-		err := dc.dm.stateStore.RunInDomainContext(domain.name, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
+		err := dc.dm.stateStore.RunInDomainContext(domain.name, dc.info.Address, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
 			states, err = dsi.UpsertStates(&tx.ID, newStatesToWrite)
 			return err
 		})
@@ -253,7 +254,7 @@ func (dc *domainContract) LockStates(ctx context.Context, tx *components.Private
 		})
 	}
 
-	return dc.dm.stateStore.RunInDomainContext(dc.d.name, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
+	return dc.dm.stateStore.RunInDomainContext(dc.d.name, dc.info.Address, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
 		// Heavy lifting is all done for us by the state store
 		_, err := dsi.UpsertStates(&tx.ID, txLockedStateUpserts)
 		if err == nil && len(readStateUpserts) > 0 {
@@ -265,17 +266,18 @@ func (dc *domainContract) LockStates(ctx context.Context, tx *components.Private
 }
 
 // Endorse is a little special, because it returns a payload rather than updating the transaction.
-func (dc *domainContract) EndorseTransaction(
-	ctx context.Context,
-	transactionSpecification *prototk.TransactionSpecification,
-	verifiers []*prototk.ResolvedVerifier,
-	signatures []*prototk.AttestationResult,
-	inputStates []*prototk.EndorsableState,
-	outputStates []*prototk.EndorsableState,
-	endorsement *prototk.AttestationRequest,
-	endorser *prototk.ResolvedVerifier) (*components.EndorsementResult, error) {
-	if transactionSpecification == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgDomainTXIncompleteEndorseTransaction)
+func (dc *domainContract) EndorseTransaction(ctx context.Context, req *components.PrivateTransactionEndorseRequest) (*components.EndorsementResult, error) {
+
+	if req == nil ||
+		req.TransactionSpecification == nil ||
+		req.Verifiers == nil ||
+		req.Signatures == nil ||
+		req.InputStates == nil ||
+		req.ReadStates == nil ||
+		req.OutputStates == nil ||
+		req.Endorsement == nil ||
+		req.Endorser == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgDomainReqIncompleteEndorseTransaction)
 	}
 
 	// This function does NOT FLUSH before or after doing endorse. The assumption is that this
@@ -288,13 +290,14 @@ func (dc *domainContract) EndorseTransaction(
 
 	// Run the endorsement
 	res, err := dc.api.EndorseTransaction(ctx, &prototk.EndorseTransactionRequest{
-		Transaction:         transactionSpecification,
-		ResolvedVerifiers:   verifiers,
-		Inputs:              inputStates,
-		Outputs:             outputStates,
-		Signatures:          signatures,
-		EndorsementRequest:  endorsement,
-		EndorsementVerifier: endorser,
+		Transaction:         req.TransactionSpecification,
+		ResolvedVerifiers:   req.Verifiers,
+		Inputs:              req.InputStates,
+		Reads:               req.ReadStates,
+		Outputs:             req.OutputStates,
+		Signatures:          req.Signatures,
+		EndorsementRequest:  req.Endorsement,
+		EndorsementVerifier: req.Endorser,
 	})
 	// We don't do any processing - as the result is not directly processable by us.
 	// It is an instruction to the engine - such as an authority to sign an endorsement,
@@ -303,7 +306,7 @@ func (dc *domainContract) EndorseTransaction(
 		return nil, err
 	}
 	return &components.EndorsementResult{
-		Endorser:     endorser,
+		Endorser:     req.Endorser,
 		Result:       res.EndorsementResult,
 		Payload:      res.Payload,
 		RevertReason: res.RevertReason,
@@ -358,6 +361,7 @@ func (dc *domainContract) PrepareTransaction(ctx context.Context, tx *components
 	res, err := dc.api.PrepareTransaction(ctx, &prototk.PrepareTransactionRequest{
 		Transaction:       preAssembly.TransactionSpecification,
 		InputStates:       dc.toEndorsableList(postAssembly.InputStates),
+		ReadStates:        dc.toEndorsableList(postAssembly.ReadStates),
 		OutputStates:      dc.toEndorsableList(postAssembly.OutputStates),
 		AttestationResult: dc.allAttestations(tx),
 	})
@@ -365,16 +369,17 @@ func (dc *domainContract) PrepareTransaction(ctx context.Context, tx *components
 		return err
 	}
 
-	functionABI := dc.d.privateContractABI.Functions()[res.Transaction.FunctionName]
-	if functionABI == nil {
-		return i18n.NewError(ctx, msgs.MsgDomainFunctionNotFound, res.Transaction.FunctionName)
+	var functionABI abi.Entry
+	if err := json.Unmarshal(([]byte)(res.Transaction.FunctionAbiJson), &functionABI); err != nil {
+		return i18n.WrapError(ctx, err, msgs.MsgDomainPrivateAbiJsonInvalid)
 	}
+
 	inputs, err := functionABI.Inputs.ParseJSONCtx(ctx, emptyJSONIfBlank(res.Transaction.ParamsJson))
 	if err != nil {
 		return err
 	}
 	tx.PreparedTransaction = &components.EthTransaction{
-		FunctionABI: functionABI,
+		FunctionABI: &functionABI,
 		To:          dc.Address(),
 		Inputs:      inputs,
 	}
@@ -411,13 +416,13 @@ func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateR
 		stateIDs[i] = stateID
 	}
 	statesByID := make(map[tktypes.Bytes32]*statestore.State)
-	err := dc.dm.stateStore.RunInDomainContext(dc.d.name, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
+	err := dc.dm.stateStore.RunInDomainContext(dc.d.name, dc.info.Address, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
 		for schemaID, stateIDs := range rawIDsBySchema {
-			statesForSchema, err := dsi.FindAvailableStates(schemaID, &filters.QueryJSON{
-				Statements: filters.Statements{
-					Ops: filters.Ops{
-						In: []*filters.OpMultiVal{
-							{Op: filters.Op{Field: ".id"}, Values: stateIDs},
+			statesForSchema, err := dsi.FindAvailableStates(schemaID, &query.QueryJSON{
+				Statements: query.Statements{
+					Ops: query.Ops{
+						In: []*query.OpMultiVal{
+							{Op: query.Op{Field: ".id"}, Values: stateIDs},
 						},
 					},
 				},

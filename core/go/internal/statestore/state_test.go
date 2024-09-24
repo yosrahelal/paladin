@@ -23,7 +23,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/kaleido-io/paladin/core/internal/filters"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
@@ -34,7 +34,8 @@ func TestPersistStateMissingSchema(t *testing.T) {
 
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
-	_, err := ss.PersistState(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("test")).String(), nil)
+	contractAddress := tktypes.RandAddress()
+	_, err := ss.PersistState(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("test")).String(), nil)
 	assert.Regexp(t, "PD010106", err)
 }
 
@@ -48,7 +49,8 @@ func TestPersistStateInvalidState(t *testing.T) {
 		definition: &abi.Parameter{},
 	})
 
-	_, err := ss.PersistState(ctx, "domain1", schemaID.String(), nil)
+	contractAddress := tktypes.RandAddress()
+	_, err := ss.PersistState(ctx, "domain1", *contractAddress, schemaID.String(), nil)
 	assert.Regexp(t, "PD010116", err)
 }
 
@@ -58,7 +60,8 @@ func TestGetStateMissing(t *testing.T) {
 
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
-	_, err := ss.GetState(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("state1")).String(), true, false)
+	contractAddress := tktypes.RandAddress()
+	_, err := ss.GetState(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("state1")).String(), true, false)
 	assert.Regexp(t, "PD010112", err)
 }
 
@@ -66,7 +69,8 @@ func TestGetStateBadID(t *testing.T) {
 	ctx, ss, _, done := newDBMockStateStore(t)
 	defer done()
 
-	_, err := ss.GetState(ctx, "domain1", "bad id", true, false)
+	contractAddress := tktypes.RandAddress()
+	_, err := ss.GetState(ctx, "domain1", *contractAddress, "bad id", true, false)
 	assert.Regexp(t, "PD020007", err)
 }
 
@@ -74,7 +78,8 @@ func TestMarkConfirmedBadID(t *testing.T) {
 	ctx, ss, _, done := newDBMockStateStore(t)
 	defer done()
 
-	err := ss.MarkConfirmed(ctx, "domain1", "bad id", uuid.New())
+	contractAddress := tktypes.RandAddress()
+	err := ss.MarkConfirmed(ctx, "domain1", *contractAddress, "bad id", uuid.New())
 	assert.Regexp(t, "PD020007", err)
 }
 
@@ -82,7 +87,8 @@ func TestMarkSpentBadID(t *testing.T) {
 	ctx, ss, _, done := newDBMockStateStore(t)
 	defer done()
 
-	err := ss.MarkSpent(ctx, "domain1", "bad id", uuid.New())
+	contractAddress := tktypes.RandAddress()
+	err := ss.MarkSpent(ctx, "domain1", *contractAddress, "bad id", uuid.New())
 	assert.Regexp(t, "PD020007", err)
 }
 
@@ -90,7 +96,8 @@ func TestMarkLockedBadID(t *testing.T) {
 	ctx, ss, _, done := newDBMockStateStore(t)
 	defer done()
 
-	err := ss.MarkLocked(ctx, "domain1", "bad id", uuid.New(), false, false)
+	contractAddress := tktypes.RandAddress()
+	err := ss.MarkLocked(ctx, "domain1", *contractAddress, "bad id", uuid.New(), false, false)
 	assert.Regexp(t, "PD020007", err)
 }
 
@@ -100,7 +107,8 @@ func TestFindStatesMissingSchema(t *testing.T) {
 
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
-	_, err := ss.FindStates(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("schema1")).String(), &filters.QueryJSON{}, "all")
+	contractAddress := tktypes.RandAddress()
+	_, err := ss.FindStates(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("schema1")).String(), &query.QueryJSON{}, "all")
 	assert.Regexp(t, "PD010106", err)
 }
 
@@ -114,11 +122,12 @@ func TestFindStatesBadQuery(t *testing.T) {
 		definition: &abi.Parameter{},
 	})
 
-	_, err := ss.FindStates(ctx, "domain1", schemaID.String(), &filters.QueryJSON{
-		Statements: filters.Statements{
-			Ops: filters.Ops{
-				Equal: []*filters.OpSingleVal{
-					{Op: filters.Op{Field: "wrong"}},
+	contractAddress := tktypes.RandAddress()
+	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID.String(), &query.QueryJSON{
+		Statements: query.Statements{
+			Ops: query.Ops{
+				Equal: []*query.OpSingleVal{
+					{Op: query.Op{Field: "wrong"}},
 				},
 			},
 		},
@@ -140,11 +149,12 @@ func TestFindStatesFail(t *testing.T) {
 
 	db.ExpectQuery("SELECT.*created_at").WillReturnError(fmt.Errorf("pop"))
 
-	_, err := ss.FindStates(ctx, "domain1", schemaID.String(), &filters.QueryJSON{
-		Statements: filters.Statements{
-			Ops: filters.Ops{
-				GreaterThan: []*filters.OpSingleVal{
-					{Op: filters.Op{
+	contractAddress := tktypes.RandAddress()
+	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID.String(), &query.QueryJSON{
+		Statements: query.Statements{
+			Ops: query.Ops{
+				GreaterThan: []*query.OpSingleVal{
+					{Op: query.Op{
 						Field: ".created",
 					}, Value: tktypes.RawJSON(fmt.Sprintf("%d", time.Now().UnixNano()))},
 				},

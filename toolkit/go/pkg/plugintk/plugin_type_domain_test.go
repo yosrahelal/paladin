@@ -75,6 +75,32 @@ func TestDomainCallback_FindAvailableStates(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestDomainCallback_EncodeData(t *testing.T) {
+	ctx, _, _, callbacks, inOutMap, done := setupDomainTests(t)
+	defer done()
+
+	inOutMap[fmt.Sprintf("%T", &prototk.DomainMessage_EncodeData{})] = func(dm *prototk.DomainMessage) {
+		dm.ResponseToDomain = &prototk.DomainMessage_EncodeDataRes{
+			EncodeDataRes: &prototk.EncodeDataResponse{},
+		}
+	}
+	_, err := callbacks.EncodeData(ctx, &prototk.EncodeDataRequest{})
+	require.NoError(t, err)
+}
+
+func TestDomainCallback_RecoverSigner(t *testing.T) {
+	ctx, _, _, callbacks, inOutMap, done := setupDomainTests(t)
+	defer done()
+
+	inOutMap[fmt.Sprintf("%T", &prototk.DomainMessage_RecoverSigner{})] = func(dm *prototk.DomainMessage) {
+		dm.ResponseToDomain = &prototk.DomainMessage_RecoverSignerRes{
+			RecoverSignerRes: &prototk.RecoverSignerResponse{},
+		}
+	}
+	_, err := callbacks.RecoverSigner(ctx, &prototk.RecoverSignerRequest{})
+	require.NoError(t, err)
+}
+
 func TestDomainFunction_ConfigureDomain(t *testing.T) {
 	_, exerciser, funcs, _, _, done := setupDomainTests(t)
 	defer done()
@@ -208,6 +234,23 @@ func TestDomainFunction_PrepareTransaction(t *testing.T) {
 		}
 	}, func(res *prototk.DomainMessage) {
 		assert.IsType(t, &prototk.DomainMessage_PrepareTransactionRes{}, res.ResponseFromDomain)
+	})
+}
+
+func TestDomainFunction_HandleEventBatch(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// HandleEventBatch - paladin to domain
+	funcs.HandleEventBatch = func(ctx context.Context, cdr *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return &prototk.HandleEventBatchResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_HandleEventBatch{
+			HandleEventBatch: &prototk.HandleEventBatchRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_HandleEventBatchRes{}, res.ResponseFromDomain)
 	})
 }
 

@@ -45,7 +45,8 @@ type blockListener struct {
 	newHeadsTap                chan struct{}
 	newHeadsSub                rpcbackend.Subscription
 	highestBlock               uint64
-	mux                        sync.Mutex
+	highestBlockMux            sync.RWMutex
+	wsMux                      sync.Mutex
 	blockPollingInterval       time.Duration
 	unstableHeadLength         int
 	canonicalChain             *list.List
@@ -75,11 +76,18 @@ func newBlockListener(ctx context.Context, conf *Config, wsConfig *rpcclient.WSC
 }
 
 func (bl *blockListener) start() {
-	bl.mux.Lock()
-	defer bl.mux.Unlock()
+
 	if bl.listenLoopDone == nil {
 		bl.listenLoopDone = make(chan struct{})
-		go bl.listenLoop()
+		listenerInitiated := make(chan struct{}, 1)
+
+		go bl.listenLoop(&listenerInitiated)
+
+		// Wait for the listener to be initiated
+		select {
+		case <-listenerInitiated:
+		case <-bl.ctx.Done():
+		}
 	}
 }
 
@@ -104,6 +112,9 @@ func (bl *blockListener) tapNewHeads() {
 
 // getBlockHeightWithRetry keeps retrying attempting to get the initial block height until successful
 func (bl *blockListener) establishBlockHeightWithRetry() error {
+	bl.wsMux.Lock()
+	defer bl.wsMux.Unlock()
+
 	wsConnected := false
 	return bl.retry.Do(bl.ctx, func(attempt int) (retry bool, err error) {
 
@@ -133,9 +144,11 @@ func (bl *blockListener) establishBlockHeightWithRetry() error {
 			log.L(bl.ctx).Warnf("Block height could not be obtained: %s", rpcErr.Message)
 			return true, rpcErr.Error()
 		}
-		bl.mux.Lock()
+
+		bl.highestBlockMux.Lock()
 		bl.highestBlock = hexBlockHeight.Uint64()
-		bl.mux.Unlock()
+		bl.highestBlockMux.Unlock()
+
 		return false, nil
 	})
 }
@@ -153,7 +166,7 @@ func isNotFound(err *rpcbackend.RPCError) bool {
 func (bl *blockListener) getBlockInfoByHash(ctx context.Context, blockHash string) (*BlockInfoJSONRPC, error) {
 	var info *BlockInfoJSONRPC
 	log.L(ctx).Debugf("Fetching block by hash %s", blockHash)
-	err := bl.wsConn.CallRPC(ctx, &info, "eth_getBlockByHash", blockHash, false)
+	err := bl.wsConn.CallRPC(ctx, &info, "eth_getBlockByHash", blockHash, true)
 	if err != nil {
 		if isNotFound(err) {
 			return nil, nil
@@ -166,7 +179,7 @@ func (bl *blockListener) getBlockInfoByHash(ctx context.Context, blockHash strin
 func (bl *blockListener) getBlockInfoByNumber(ctx context.Context, blockNumber ethtypes.HexUint64) (*BlockInfoJSONRPC, error) {
 	var info *BlockInfoJSONRPC
 	log.L(ctx).Debugf("Fetching block by number %d", blockNumber)
-	err := bl.wsConn.CallRPC(ctx, &info, "eth_getBlockByNumber", blockNumber, false)
+	err := bl.wsConn.CallRPC(ctx, &info, "eth_getBlockByNumber", blockNumber, true)
 	if err != nil {
 		if isNotFound(err) {
 			return nil, nil
@@ -176,11 +189,12 @@ func (bl *blockListener) getBlockInfoByNumber(ctx context.Context, blockNumber e
 	return info, nil
 }
 
-func (bl *blockListener) listenLoop() {
+func (bl *blockListener) listenLoop(listenerInitiated *chan struct{}) {
 	defer close(bl.listenLoopDone)
 
 	err := bl.establishBlockHeightWithRetry()
 	close(bl.initialBlockHeightObtained)
+
 	if err != nil {
 		log.L(bl.ctx).Warnf("Block listener exiting before establishing initial block height: %s", err)
 		return
@@ -188,73 +202,89 @@ func (bl *blockListener) listenLoop() {
 
 	var filter string
 	failCount := 0
-	for {
-		if failCount > 0 {
-			if err := bl.retry.WaitDelay(bl.ctx, failCount); err != nil {
-				log.L(bl.ctx).Debugf("Block listener loop exiting: %s", err)
-				return
-			}
-		} else {
+	blockPollingInterval := time.Duration(0) // Start with no delay
+	notifyStarted := sync.Once{}
+	iterate := true
+	for iterate {
+
+		// wrap the iteration in a function to allow the use of defer
+		iterate = func() bool {
+
+			// notify start of the listener after iteration is done
+			defer notifyStarted.Do(func() {
+				close(*listenerInitiated)
+			})
+
 			// Sleep for the polling interval, or until we're shoulder tapped by the newHeads listener
 			select {
-			case <-time.After(bl.blockPollingInterval):
+			case <-time.After(blockPollingInterval):
 			case <-bl.newHeadsTap:
 			case <-bl.ctx.Done():
-				log.L(bl.ctx).Debugf("Block listener loop stopping")
-				return
+				return false // context cancelled, exit loop
 			}
-		}
 
-		if filter == "" {
-			err := bl.wsConn.CallRPC(bl.ctx, &filter, "eth_newBlockFilter")
-			if err != nil {
-				log.L(bl.ctx).Errorf("Failed to establish new block filter: %s", err.Message)
-				failCount++
-				continue
-			}
-		}
+			// Reset the polling interval to the configured value
+			// This is to ensure we don't get stuck in a fast polling loop if we're shoulder tapped
+			blockPollingInterval = bl.blockPollingInterval
 
-		var blockHashes []ethtypes.HexBytes0xPrefix
-		rpcErr := bl.wsConn.CallRPC(bl.ctx, &blockHashes, "eth_getFilterChanges", filter)
-		if rpcErr != nil {
-			if isNotFound(rpcErr) {
-				log.L(bl.ctx).Warnf("Block filter '%v' no longer valid. Recreating filter: %s", filter, rpcErr.Message)
-				filter = ""
-			}
-			log.L(bl.ctx).Errorf("Failed to query block filter changes: %s", rpcErr.Message)
-			failCount++
-			continue
-		}
-
-		var notifyPos *list.Element
-		for _, h := range blockHashes {
-			// Do a lookup of the block (which will then go into our cache).
-			bi, err := bl.getBlockInfoByHash(bl.ctx, h.String())
-			switch {
-			case err != nil:
-				log.L(bl.ctx).Debugf("Failed to query block '%s': %s", h, err)
-			case bi == nil:
-				log.L(bl.ctx).Debugf("Block '%s' no longer available after notification (assuming due to re-org)", h)
-			default:
-				candidate := bl.reconcileCanonicalChain(bi)
-				// Check this is the lowest position to notify from
-				if candidate != nil && (notifyPos == nil || candidate.Value.(*BlockInfoJSONRPC).Number < notifyPos.Value.(*BlockInfoJSONRPC).Number) {
-					notifyPos = candidate
+			if filter == "" {
+				err := bl.wsConn.CallRPC(bl.ctx, &filter, "eth_newBlockFilter")
+				if err != nil {
+					log.L(bl.ctx).Errorf("Failed to establish new block filter: %s", err.Message)
+					failCount++
+					return true
 				}
 			}
-		}
-		if notifyPos != nil {
-			// We notify for all hashes from the point of change in the chain onwards
-			for notifyPos != nil {
-				bl.notifyBlock(notifyPos.Value.(*BlockInfoJSONRPC))
-				notifyPos = notifyPos.Next()
-			}
-		}
 
-		// Reset retry count when we have a full successful loop
-		failCount = 0
+			var blockHashes []ethtypes.HexBytes0xPrefix
+			rpcErr := bl.wsConn.CallRPC(bl.ctx, &blockHashes, "eth_getFilterChanges", filter)
+			if rpcErr != nil {
+				if isNotFound(rpcErr) {
+					log.L(bl.ctx).Warnf("Block filter '%v' no longer valid. Recreating filter: %s", filter, rpcErr.Message)
+					filter = ""
+				}
+				log.L(bl.ctx).Errorf("Failed to query block filter changes: %s", rpcErr.Message)
+				failCount++
+				return true
+			}
+
+			var notifyPos *list.Element
+			for _, h := range blockHashes {
+				// Do a lookup of the block (which will then go into our cache).
+				bi, err := bl.getBlockInfoByHash(bl.ctx, h.String())
+				switch {
+				case err != nil:
+					log.L(bl.ctx).Debugf("Failed to query block '%s': %s", h, err)
+				case bi == nil:
+					log.L(bl.ctx).Debugf("Block '%s' no longer available after notification (assuming due to re-org)", h)
+				default:
+					candidate := bl.reconcileCanonicalChain(bi)
+					// Check this is the lowest position to notify from
+					if candidate != nil && (notifyPos == nil || candidate.Value.(*BlockInfoJSONRPC).Number <= notifyPos.Value.(*BlockInfoJSONRPC).Number) {
+						notifyPos = candidate
+					}
+				}
+			}
+			if notifyPos != nil {
+				// We notify for all hashes from the point of change in the chain onwards
+				for notifyPos != nil {
+					bl.notifyBlock(notifyPos.Value.(*BlockInfoJSONRPC))
+					notifyPos = notifyPos.Next()
+				}
+			}
+
+			// Reset retry count when we have a full successful loop
+			failCount = 0
+			return true
+		}()
+
+		// wait before retrying, the delay is the number of failures
+		if err := bl.retry.WaitDelay(bl.ctx, failCount); err != nil {
+			break // retry delay failed, exit loop
+		}
 
 	}
+	log.L(bl.ctx).Debugf("Block listener loop stopping")
 }
 
 func (bl *blockListener) notifyBlock(bi *BlockInfoJSONRPC) {
@@ -270,11 +300,11 @@ func (bl *blockListener) notifyBlock(bi *BlockInfoJSONRPC) {
 // work backwards building a new view and notify about all blocks that are changed in that process.
 func (bl *blockListener) reconcileCanonicalChain(bi *BlockInfoJSONRPC) *list.Element {
 
-	bl.mux.Lock()
+	bl.highestBlockMux.Lock()
 	if bi.Number.Uint64() > bl.highestBlock {
 		bl.highestBlock = bi.Number.Uint64()
 	}
-	bl.mux.Unlock()
+	bl.highestBlockMux.Unlock()
 
 	// Find the position of this block in the block sequence
 	pos := bl.canonicalChain.Back()
@@ -399,11 +429,11 @@ func (bl *blockListener) rebuildCanonicalChain() *list.Element {
 			notifyPos = newElem
 		}
 
-		bl.mux.Lock()
+		bl.highestBlockMux.Lock()
 		if bi.Number.Uint64() > bl.highestBlock {
 			bl.highestBlock = bi.Number.Uint64()
 		}
-		bl.mux.Unlock()
+		bl.highestBlockMux.Unlock()
 
 	}
 	return notifyPos
@@ -452,22 +482,23 @@ func (bl *blockListener) getHighestBlock(ctx context.Context) (uint64, error) {
 	case <-bl.ctx.Done(): // Inform caller we timed out, or were closed
 		return 0, i18n.NewError(bl.ctx, msgs.MsgContextCanceled)
 	}
-	bl.mux.Lock()
+
+	bl.highestBlockMux.RLock()
 	highestBlock := bl.highestBlock
-	bl.mux.Unlock()
+	bl.highestBlockMux.RUnlock()
+
 	log.L(bl.ctx).Debugf("ChainHead=%d", highestBlock)
 	return highestBlock, nil
 }
-
 func (bl *blockListener) waitClosed() {
-	bl.mux.Lock()
+	bl.wsMux.Lock()
 	listenLoopDone := bl.listenLoopDone
 	var wsConnToClose rpcbackend.WebSocketRPCClient
 	if bl.wsConn != nil && !bl.wsConnClosed {
 		wsConnToClose = bl.wsConn
 		bl.wsConnClosed = true
 	}
-	bl.mux.Unlock()
+	bl.wsMux.Unlock()
 	if wsConnToClose != nil {
 		_ = wsConnToClose.UnsubscribeAll(bl.ctx)
 		wsConnToClose.Close()

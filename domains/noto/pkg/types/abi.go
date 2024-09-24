@@ -22,12 +22,6 @@ import (
 
 var NotoABI = abi.ABI{
 	{
-		Type: abi.Constructor,
-		Inputs: abi.ParameterArray{
-			{Name: "notary", Type: "string"},
-		},
-	},
-	{
 		Name: "mint",
 		Type: abi.Function,
 		Inputs: abi.ParameterArray{
@@ -62,7 +56,8 @@ var NotoABI = abi.ABI{
 }
 
 type ConstructorParams struct {
-	Notary string `json:"notary"`
+	Notary         string `json:"notary"`
+	Implementation string `json:"implementation"`
 }
 
 type MintParams struct {

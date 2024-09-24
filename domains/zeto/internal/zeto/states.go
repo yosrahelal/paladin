@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"strconv"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
@@ -28,6 +27,7 @@ import (
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 )
 
 var INPUT_COUNT = 2
@@ -50,35 +50,21 @@ func (z *Zeto) makeNewState(coin *types.ZetoCoin) (*pb.NewState, error) {
 	}, nil
 }
 
-func (z *Zeto) prepareInputs(ctx context.Context, owner string, amount *ethtypes.HexInteger) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, error) {
+func (z *Zeto) prepareInputs(ctx context.Context, contractAddress, owner string, amount *ethtypes.HexInteger) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
 	stateRefs := []*pb.StateRef{}
 	coins := []*types.ZetoCoin{}
 	for {
-		// Simple oldest coin first algorithm
-		// TODO: make this configurable
-		// TODO: why is filters.QueryJSON not a public interface?
-		query := map[string]interface{}{
-			"limit": 10,
-			"sort":  []string{".created"},
-			"eq": []map[string]string{{
-				"field": "owner",
-				"value": owner,
-			}},
-		}
-		if lastStateTimestamp > 0 {
-			query["gt"] = []map[string]string{{
-				"field": ".created",
-				"value": strconv.FormatInt(lastStateTimestamp, 10),
-			}}
-		}
-		queryJSON, err := json.Marshal(query)
-		if err != nil {
-			return nil, nil, nil, err
-		}
+		queryBuilder := query.NewQueryBuilder().
+			Limit(10).
+			Sort(".created").
+			Equal("owner", owner)
 
-		states, err := z.findAvailableStates(ctx, string(queryJSON))
+		if lastStateTimestamp > 0 {
+			queryBuilder.GreaterThan(".created", lastStateTimestamp)
+		}
+		states, err := z.findAvailableStates(ctx, contractAddress, queryBuilder.Query().String())
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -140,10 +126,11 @@ func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount 
 	return []*types.ZetoCoin{newCoin}, []*pb.NewState{newState}, err
 }
 
-func (z *Zeto) findAvailableStates(ctx context.Context, query string) ([]*pb.StoredState, error) {
+func (z *Zeto) findAvailableStates(ctx context.Context, contractAddress, query string) ([]*pb.StoredState, error) {
 	req := &pb.FindAvailableStatesRequest{
-		SchemaId:  z.coinSchema.Id,
-		QueryJson: query,
+		ContractAddress: contractAddress,
+		SchemaId:        z.coinSchema.Id,
+		QueryJson:       query,
 	}
 	res, err := z.Callbacks.FindAvailableStates(ctx, req)
 	if err != nil {

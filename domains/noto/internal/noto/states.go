@@ -18,14 +18,16 @@ package noto
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/big"
-	"strconv"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
-	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -39,7 +41,7 @@ var NotoTransferUnmaskedTypeSet = eip712.TypeSet{
 	},
 	"Coin": {
 		{Name: "salt", Type: "bytes32"},
-		{Name: "owner", Type: "string"},
+		{Name: "owner", Type: "address"},
 		{Name: "amount", Type: "uint256"},
 	},
 	eip712.EIP712Domain: {
@@ -64,70 +66,61 @@ var NotoTransferMaskedTypeSet = eip712.TypeSet{
 	},
 }
 
-func (n *Noto) makeCoin(stateData string) (*types.NotoCoin, error) {
-	coin := &types.NotoCoin{}
+func (n *Noto) unmarshalCoin(stateData string) (*types.NotoCoin, error) {
+	var coin types.NotoCoin
 	err := json.Unmarshal([]byte(stateData), &coin)
-	return coin, err
+	return &coin, err
 }
 
-func (n *Noto) makeNewState(coin *types.NotoCoin) (*pb.NewState, error) {
+func (n *Noto) makeNewState(coin *types.NotoCoin) (*prototk.NewState, error) {
 	coinJSON, err := json.Marshal(coin)
 	if err != nil {
 		return nil, err
 	}
-	return &pb.NewState{
+	return &prototk.NewState{
 		SchemaId:      n.coinSchema.Id,
 		StateDataJson: string(coinJSON),
 	}, nil
 }
 
-func (n *Noto) prepareInputs(ctx context.Context, owner string, amount *ethtypes.HexInteger) ([]*types.NotoCoin, []*pb.StateRef, *big.Int, error) {
+func (n *Noto) prepareInputs(ctx context.Context, contractAddress string, owner ethtypes.Address0xHex, amount *ethtypes.HexInteger) ([]*types.NotoCoin, []*prototk.StateRef, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
-	stateRefs := []*pb.StateRef{}
+	stateRefs := []*prototk.StateRef{}
 	coins := []*types.NotoCoin{}
 	for {
-		// Simple oldest coin first algorithm
 		// TODO: make this configurable
-		// TODO: why is filters.QueryJSON not a public interface?
-		query := map[string]interface{}{
-			"limit": 10,
-			"sort":  []string{".created"},
-			"eq": []map[string]string{{
-				"field": "owner",
-				"value": owner,
-			}},
-		}
+		queryBuilder := query.NewQueryBuilder().
+			Limit(10).
+			Sort(".created").
+			Equal("owner", owner.String())
+
 		if lastStateTimestamp > 0 {
-			query["gt"] = []map[string]string{{
-				"field": ".created",
-				"value": strconv.FormatInt(lastStateTimestamp, 10),
-			}}
-		}
-		queryJSON, err := json.Marshal(query)
-		if err != nil {
-			return nil, nil, nil, err
+			queryBuilder.GreaterThan(".created", lastStateTimestamp)
 		}
 
-		states, err := n.findAvailableStates(ctx, string(queryJSON))
+		log.L(ctx).Debugf("State query: %s", queryBuilder.Query())
+		states, err := n.findAvailableStates(ctx, contractAddress, queryBuilder.Query().String())
+
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		if len(states) == 0 {
-			return nil, nil, nil, fmt.Errorf("insufficient funds (available=%s)", total.Text(10))
+			return nil, nil, nil, i18n.NewError(ctx, msgs.MsgInsufficientFunds, total.Text(10))
 		}
 		for _, state := range states {
 			lastStateTimestamp = state.StoredAt
-			coin, err := n.makeCoin(state.DataJson)
+			coin, err := n.unmarshalCoin(state.DataJson)
 			if err != nil {
-				return nil, nil, nil, fmt.Errorf("coin %s is invalid: %s", state.Id, err)
+				return nil, nil, nil, i18n.NewError(ctx, msgs.MsgInvalidStateData, state.Id, err)
 			}
 			total = total.Add(total, coin.Amount.BigInt())
-			stateRefs = append(stateRefs, &pb.StateRef{
+			stateRefs = append(stateRefs, &prototk.StateRef{
 				SchemaId: state.SchemaId,
 				Id:       state.Id,
 			})
 			coins = append(coins, coin)
+			log.L(ctx).Debugf("Selecting coin %s value=%s total=%s required=%s)", state.Id, coin.Amount.BigInt().Text(10), total.Text(10), amount.BigInt().Text(10))
 			if total.Cmp(amount.BigInt()) >= 0 {
 				return coins, stateRefs, total, nil
 			}
@@ -135,7 +128,7 @@ func (n *Noto) prepareInputs(ctx context.Context, owner string, amount *ethtypes
 	}
 }
 
-func (n *Noto) prepareOutputs(owner string, amount *ethtypes.HexInteger) ([]*types.NotoCoin, []*pb.NewState, error) {
+func (n *Noto) prepareOutputs(owner ethtypes.Address0xHex, amount *ethtypes.HexInteger) ([]*types.NotoCoin, []*prototk.NewState, error) {
 	// Always produce a single coin for the entire output amount
 	// TODO: make this configurable
 	newCoin := &types.NotoCoin{
@@ -144,19 +137,29 @@ func (n *Noto) prepareOutputs(owner string, amount *ethtypes.HexInteger) ([]*typ
 		Amount: amount,
 	}
 	newState, err := n.makeNewState(newCoin)
-	return []*types.NotoCoin{newCoin}, []*pb.NewState{newState}, err
+	return []*types.NotoCoin{newCoin}, []*prototk.NewState{newState}, err
 }
 
-func (n *Noto) findAvailableStates(ctx context.Context, query string) ([]*pb.StoredState, error) {
-	req := &pb.FindAvailableStatesRequest{
-		SchemaId:  n.coinSchema.Id,
-		QueryJson: query,
+func (n *Noto) findAvailableStates(ctx context.Context, contractAddress, query string) ([]*prototk.StoredState, error) {
+	req := &prototk.FindAvailableStatesRequest{
+		ContractAddress: contractAddress,
+		SchemaId:        n.coinSchema.Id,
+		QueryJson:       query,
 	}
 	res, err := n.Callbacks.FindAvailableStates(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 	return res.States, nil
+}
+
+func (n *Noto) eip712Domain(contract *ethtypes.Address0xHex) map[string]interface{} {
+	return map[string]interface{}{
+		"name":              EIP712DomainName,
+		"version":           EIP712DomainVersion,
+		"chainId":           n.chainID,
+		"verifyingContract": contract,
+	}
 }
 
 func (n *Noto) encodeTransferUnmasked(ctx context.Context, contract *ethtypes.Address0xHex, inputs, outputs []*types.NotoCoin) (ethtypes.HexBytes0xPrefix, error) {
@@ -179,12 +182,7 @@ func (n *Noto) encodeTransferUnmasked(ctx context.Context, contract *ethtypes.Ad
 	return eip712.EncodeTypedDataV4(ctx, &eip712.TypedData{
 		Types:       NotoTransferUnmaskedTypeSet,
 		PrimaryType: "Transfer",
-		Domain: map[string]interface{}{
-			"name":              EIP712DomainName,
-			"version":           EIP712DomainVersion,
-			"chainId":           n.chainID,
-			"verifyingContract": contract,
-		},
+		Domain:      n.eip712Domain(contract),
 		Message: map[string]interface{}{
 			"inputs":  messageInputs,
 			"outputs": messageOutputs,
@@ -196,12 +194,7 @@ func (n *Noto) encodeTransferMasked(ctx context.Context, contract *ethtypes.Addr
 	return eip712.EncodeTypedDataV4(ctx, &eip712.TypedData{
 		Types:       NotoTransferMaskedTypeSet,
 		PrimaryType: "Transfer",
-		Domain: map[string]interface{}{
-			"name":              EIP712DomainName,
-			"version":           EIP712DomainVersion,
-			"chainId":           n.chainID,
-			"verifyingContract": contract,
-		},
+		Domain:      n.eip712Domain(contract),
 		Message: map[string]interface{}{
 			"inputs":  inputs,
 			"outputs": outputs,

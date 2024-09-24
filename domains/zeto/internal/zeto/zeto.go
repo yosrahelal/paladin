@@ -24,49 +24,33 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
-	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-//go:embed abis/Commonlib.json
-var commonLibJSON []byte // From "gradle copySolidity"
-
-//go:embed abis/Groth16Verifier_Anon.json
-var Groth16Verifier_Anon []byte // From "gradle copySolidity"
-
-//go:embed abis/Groth16Verifier_CheckHashesValue.json
-var Groth16Verifier_CheckHashesValue []byte // From "gradle copySolidity"
-
-//go:embed abis/Groth16Verifier_CheckInputsOutputsValue.json
-var Groth16Verifier_CheckInputsOutputsValue []byte // From "gradle copySolidity"
-
-//go:embed abis/ZetoSampleFactory.json
-var zetoFactoryJSON []byte // From "gradle copySolidity"
-
-//go:embed abis/ZetoSample.json
-var zetoJSON []byte // From "gradle copySolidity"
+//go:embed abis/ZetoFactory.json
+var factoryJSONBytes []byte // From "gradle copySolidity"
 
 type Zeto struct {
 	Callbacks plugintk.DomainCallbacks
 
-	config     *types.Config
+	config     *types.DomainFactoryConfig
 	chainID    int64
-	domainID   string
-	coinSchema *pb.StateSchema
+	coinSchema *prototk.StateSchema
+	factoryABI abi.ABI
 }
 
-type ZetoDeployParams struct {
-	TransactionID    string                    `json:"transactionId"`
-	Data             ethtypes.HexBytes0xPrefix `json:"data"`
-	Verifier         string                    `json:"_verifier"`
-	DepositVerifier  string                    `json:"_depositVerifier"`
-	WithdrawVerifier string                    `json:"_withdrawVerifier"`
+func New(callbacks plugintk.DomainCallbacks) *Zeto {
+	return &Zeto{
+		Callbacks: callbacks,
+	}
 }
 
-func (z *Zeto) ConfigureDomain(ctx context.Context, req *pb.ConfigureDomainRequest) (*pb.ConfigureDomainResponse, error) {
-	var config types.Config
+func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
+	var config types.DomainFactoryConfig
 	err := json.Unmarshal([]byte(req.ConfigJson), &config)
 	if err != nil {
 		return nil, err
@@ -75,85 +59,91 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *pb.ConfigureDomainReque
 	z.config = &config
 	z.chainID = req.ChainId
 
-	factory := domain.LoadBuildLinked(zetoFactoryJSON, config.Libraries)
-	contract := domain.LoadBuildLinked(zetoJSON, config.Libraries)
+	factory := domain.LoadBuildLinked(factoryJSONBytes, config.Libraries)
+	z.factoryABI = factory.ABI
 
-	factoryJSON, err := json.Marshal(factory.ABI)
-	if err != nil {
-		return nil, err
-	}
-	zetoJSON, err := json.Marshal(contract.ABI)
-	if err != nil {
-		return nil, err
-	}
-	constructorJSON, err := json.Marshal(types.ZetoABI.Constructor())
-	if err != nil {
-		return nil, err
-	}
 	schemaJSON, err := json.Marshal(types.ZetoCoinABI)
 	if err != nil {
 		return nil, err
 	}
 
-	return &pb.ConfigureDomainResponse{
-		DomainConfig: &pb.DomainConfig{
-			FactoryContractAddress: config.FactoryAddress,
-			FactoryContractAbiJson: string(factoryJSON),
-			PrivateContractAbiJson: string(zetoJSON),
-			ConstructorAbiJson:     string(constructorJSON),
-			AbiStateSchemasJson:    []string{string(schemaJSON)},
-			BaseLedgerSubmitConfig: &pb.BaseLedgerSubmitConfig{
-				SubmitMode: pb.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
+	return &prototk.ConfigureDomainResponse{
+		DomainConfig: &prototk.DomainConfig{
+			AbiStateSchemasJson: []string{string(schemaJSON)},
+			BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
+				SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
 			},
 		},
 	}, nil
 }
 
-func (z *Zeto) InitDomain(ctx context.Context, req *pb.InitDomainRequest) (*pb.InitDomainResponse, error) {
-	z.domainID = req.DomainUuid
+func (z *Zeto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (*prototk.InitDomainResponse, error) {
 	z.coinSchema = req.AbiStateSchemas[0]
-	return &pb.InitDomainResponse{}, nil
+	return &prototk.InitDomainResponse{}, nil
 }
 
-func (z *Zeto) InitDeploy(ctx context.Context, req *pb.InitDeployRequest) (*pb.InitDeployResponse, error) {
-	_, err := z.validateDeploy(req.Transaction)
+func (z *Zeto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error) {
+	initParams, err := z.validateDeploy(req.Transaction)
 	if err != nil {
 		return nil, err
 	}
-	return &pb.InitDeployResponse{
-		RequiredVerifiers: []*pb.ResolveVerifierRequest{
-			// TODO: should we resolve anything?
+	return &prototk.InitDeployResponse{
+		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
+			{
+				Lookup:    initParams.From,
+				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+			},
 		},
 	}, nil
 }
 
-func (z *Zeto) PrepareDeploy(ctx context.Context, req *pb.PrepareDeployRequest) (*pb.PrepareDeployResponse, error) {
-	params, err := z.validateDeploy(req.Transaction)
+func (z *Zeto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
+	initParams, err := z.validateDeploy(req.Transaction)
 	if err != nil {
 		return nil, err
 	}
-	deployParams := &ZetoDeployParams{
-		TransactionID:    req.Transaction.TransactionId,
-		Data:             ethtypes.HexBytes0xPrefix(""),
-		DepositVerifier:  params.DepositVerifier,
-		WithdrawVerifier: params.WithdrawVerifier,
-		Verifier:         params.Verifier,
+	circuitId, err := z.config.GetCircuitId(initParams.TokenName)
+	if err != nil {
+		return nil, err
+	}
+	config := &types.DomainInstanceConfig{
+		CircuitId: circuitId,
+		TokenName: initParams.TokenName,
+	}
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return nil, err
+	}
+	encoded, err := types.DomainInstanceConfigABI.EncodeABIDataJSONCtx(ctx, configJSON)
+	if err != nil {
+		return nil, err
+	}
+
+	deployParams := &types.DeployParams{
+		TransactionID: req.Transaction.TransactionId,
+		Data:          ethtypes.HexBytes0xPrefix(encoded),
+		TokenName:     initParams.TokenName,
+		InitialOwner:  req.ResolvedVerifiers[0].Verifier, // TODO: allow the initial owner to be specified by the deploy request
 	}
 	paramsJSON, err := json.Marshal(deployParams)
 	if err != nil {
 		return nil, err
 	}
+	functionJSON, err := json.Marshal(z.factoryABI.Functions()["deploy"])
+	if err != nil {
+		return nil, err
+	}
 
-	return &pb.PrepareDeployResponse{
-		Transaction: &pb.BaseLedgerTransaction{
-			FunctionName: "deploy",
-			ParamsJson:   string(paramsJSON),
+	return &prototk.PrepareDeployResponse{
+		Transaction: &prototk.BaseLedgerTransaction{
+			FunctionAbiJson: string(functionJSON),
+			ParamsJson:      string(paramsJSON),
 		},
-		Signer: &params.From,
+		Signer: &initParams.From,
 	}, nil
 }
 
-func (z *Zeto) InitTransaction(ctx context.Context, req *pb.InitTransactionRequest) (*pb.InitTransactionResponse, error) {
+func (z *Zeto) InitTransaction(ctx context.Context, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
@@ -161,7 +151,7 @@ func (z *Zeto) InitTransaction(ctx context.Context, req *pb.InitTransactionReque
 	return handler.Init(ctx, tx, req)
 }
 
-func (z *Zeto) AssembleTransaction(ctx context.Context, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
+func (z *Zeto) AssembleTransaction(ctx context.Context, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
@@ -169,7 +159,7 @@ func (z *Zeto) AssembleTransaction(ctx context.Context, req *pb.AssembleTransact
 	return handler.Assemble(ctx, tx, req)
 }
 
-func (z *Zeto) EndorseTransaction(ctx context.Context, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
+func (z *Zeto) EndorseTransaction(ctx context.Context, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
@@ -177,7 +167,7 @@ func (z *Zeto) EndorseTransaction(ctx context.Context, req *pb.EndorseTransactio
 	return handler.Endorse(ctx, tx, req)
 }
 
-func (z *Zeto) PrepareTransaction(ctx context.Context, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
+func (z *Zeto) PrepareTransaction(ctx context.Context, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
@@ -185,8 +175,8 @@ func (z *Zeto) PrepareTransaction(ctx context.Context, req *pb.PrepareTransactio
 	return handler.Prepare(ctx, tx, req)
 }
 
-func (z *Zeto) decodeDomainConfig(ctx context.Context, domainConfig []byte) (*types.DomainConfig, error) {
-	configValues, err := types.DomainConfigABI.DecodeABIDataCtx(ctx, domainConfig, 0)
+func (z *Zeto) decodeDomainConfig(ctx context.Context, domainConfig []byte) (*types.DomainInstanceConfig, error) {
+	configValues, err := types.DomainInstanceConfigABI.DecodeABIDataCtx(ctx, domainConfig, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -194,18 +184,18 @@ func (z *Zeto) decodeDomainConfig(ctx context.Context, domainConfig []byte) (*ty
 	if err != nil {
 		return nil, err
 	}
-	var config types.DomainConfig
+	var config types.DomainInstanceConfig
 	err = json.Unmarshal(configJSON, &config)
 	return &config, err
 }
 
-func (z *Zeto) validateDeploy(tx *pb.DeployTransactionSpecification) (*types.ConstructorParams, error) {
-	var params types.ConstructorParams
+func (z *Zeto) validateDeploy(tx *prototk.DeployTransactionSpecification) (*types.InitializerParams, error) {
+	var params types.InitializerParams
 	err := json.Unmarshal([]byte(tx.ConstructorParamsJson), &params)
 	return &params, err
 }
 
-func (z *Zeto) validateTransaction(ctx context.Context, tx *pb.TransactionSpecification) (*types.ParsedTransaction, types.DomainHandler, error) {
+func (z *Zeto) validateTransaction(ctx context.Context, tx *prototk.TransactionSpecification) (*types.ParsedTransaction, types.DomainHandler, error) {
 	var functionABI abi.Entry
 	err := json.Unmarshal([]byte(tx.FunctionAbiJson), &functionABI)
 	if err != nil {
@@ -249,11 +239,12 @@ func (z *Zeto) validateTransaction(ctx context.Context, tx *pb.TransactionSpecif
 	}, handler, nil
 }
 
-func (z *Zeto) FindCoins(ctx context.Context, query string) ([]*types.ZetoCoin, error) {
-	states, err := z.findAvailableStates(ctx, query)
+func (z *Zeto) FindCoins(ctx context.Context, contractAddress ethtypes.Address0xHex, query string) ([]*types.ZetoCoin, error) {
+	states, err := z.findAvailableStates(ctx, contractAddress.String(), query)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("states: %+v\n", states)
 
 	coins := make([]*types.ZetoCoin, len(states))
 	for i, state := range states {
@@ -262,4 +253,8 @@ func (z *Zeto) FindCoins(ctx context.Context, query string) ([]*types.ZetoCoin, 
 		}
 	}
 	return coins, err
+}
+
+func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+	return nil, nil
 }

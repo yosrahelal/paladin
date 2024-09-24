@@ -51,9 +51,9 @@ dependencies {
 task copySolidity(type: Copy) {
     inputs.files(configurations.contractCompile)
     from fileTree(configurations.contractCompile.asPath) {
+        include 'contracts/domains/interfaces/INoto.sol/INoto.json'
         include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
         include 'contracts/domains/noto/Noto.sol/Noto.json'
-        include 'contracts/domains/noto/NotoSelfSubmitFactory.sol/NotoSelfSubmitFactory.json'
         include 'contracts/domains/noto/NotoSelfSubmit.sol/NotoSelfSubmit.json'
     }
     into 'internal/noto/abis'
@@ -77,6 +77,9 @@ task test(type: Exec) {
     args '-cover'
     args '-covermode=atomic'
     args '-timeout=30s'
+    if (project.findProperty('verboseTests') == 'true') {
+        args '-v'
+    }
     args "-test.gocoverdir=${projectDir}/coverage"
 
     dependsOn copySolidity

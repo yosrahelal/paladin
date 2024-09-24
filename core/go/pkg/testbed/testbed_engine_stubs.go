@@ -46,7 +46,7 @@ func (tb *testbed) execBaseLedgerDeployTransaction(ctx context.Context, signer s
 		Input(txInstruction.Inputs).
 		SignAndSend()
 	if err == nil {
-		_, err = tb.c.BlockIndexer().WaitForTransaction(ctx, *txHash)
+		_, err = tb.c.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to send base deploy ledger transaction: %s", err)
@@ -71,7 +71,7 @@ func (tb *testbed) execBaseLedgerTransaction(ctx context.Context, signer string,
 		Input(txInstruction.Inputs).
 		SignAndSend()
 	if err == nil {
-		_, err = tb.c.BlockIndexer().WaitForTransaction(ctx, *txHash)
+		_, err = tb.c.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to send base ledger transaction: %s", err)
@@ -137,17 +137,20 @@ func (tb *testbed) gatherEndorsements(ctx context.Context, psc components.Domain
 					return fmt.Errorf("failed to resolve (local in testbed case) endorser for %s (algorithm=%s): %s", partyName, ar.Algorithm, err)
 				}
 				// Invoke the domain
-				endorseRes, err := psc.EndorseTransaction(ctx,
-					tx.PreAssembly.TransactionSpecification,
-					tx.PreAssembly.Verifiers,
-					tx.PostAssembly.Signatures,
-					toEndorsableList(tx.PostAssembly.InputStates),
-					toEndorsableList(tx.PostAssembly.OutputStates),
-					ar, &prototk.ResolvedVerifier{
+				endorseRes, err := psc.EndorseTransaction(ctx, &components.PrivateTransactionEndorseRequest{
+					TransactionSpecification: tx.PreAssembly.TransactionSpecification,
+					Verifiers:                tx.PreAssembly.Verifiers,
+					Signatures:               tx.PostAssembly.Signatures,
+					InputStates:              toEndorsableList(tx.PostAssembly.InputStates),
+					ReadStates:               toEndorsableList(tx.PostAssembly.ReadStates),
+					OutputStates:             toEndorsableList(tx.PostAssembly.OutputStates),
+					Endorsement:              ar,
+					Endorser: &prototk.ResolvedVerifier{
 						Lookup:    partyName,
 						Algorithm: ar.Algorithm,
 						Verifier:  verifier,
-					})
+					},
+				})
 				if err != nil {
 					return err
 				}

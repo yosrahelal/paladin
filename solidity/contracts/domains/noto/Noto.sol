@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {EIP712Upgradeable} from "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {INoto} from "../interfaces/INoto.sol";
-import {IPaladinContract_V0} from "../interfaces/IPaladinContract.sol";
 
 /// @title A sample on-chain implementation of a Confidential UTXO (C-UTXO) pattern,
 ///        with participant confidentiality and anonymity based on notary submission and
@@ -23,7 +22,7 @@ import {IPaladinContract_V0} from "../interfaces/IPaladinContract.sol";
 ///         This allows coordination of DVP with other smart contracts, which could
 ///         be using any model programmable via EVM (not just C-UTXO)
 ///
-contract Noto is EIP712, INoto, IPaladinContract_V0 {
+contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto {
     mapping(bytes32 => bool) private _unspent;
     mapping(bytes32 => ApprovalRecord) private _approvals;
     address _notary;
@@ -33,6 +32,19 @@ contract Noto is EIP712, INoto, IPaladinContract_V0 {
     error NotoInvalidOutput(bytes32 id);
     error NotoNotNotary(address sender);
     error NotoInvalidDelegate(bytes32 txhash, address delegate, address sender);
+    error NotoUnsupportedConfigType(bytes4 configSelector);
+
+    // Config follows the convention of a 4 byte type selector, followed by ABI encoded bytes
+    bytes4 public constant NotoConfigID_V0 = 0x00010000;
+
+    struct NotoConfig_V0 {
+        string notaryLookup;
+        address notaryAddress;
+        bytes32 variant;
+    }
+
+    bytes32 public constant NotoVariantDefault =
+        0x0000000000000000000000000000000000000000000000000000000000000000;
 
     bytes32 private constant TRANSFER_TYPEHASH =
         keccak256("Transfer(bytes32[] inputs,bytes32[] outputs,bytes data)");
@@ -52,15 +64,49 @@ contract Noto is EIP712, INoto, IPaladinContract_V0 {
         _;
     }
 
-    constructor(
-        bytes32 transactionId,
-        address domain,
-        address notary,
-        bytes memory data
-    ) EIP712("noto", "0.0.1") {
-        _notary = notary;
-        emit PaladinNewSmartContract_V0(transactionId, domain, data);
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
     }
+
+    function initialize(
+        address notary,
+        bytes calldata config
+    ) public virtual initializer returns (bytes memory) {
+        __EIP712_init("noto", "0.0.1");
+        _notary = notary;
+
+        NotoConfig_V0 memory configOut = _decodeConfig(config);
+        configOut.notaryAddress = notary;
+        configOut.variant = NotoVariantDefault;
+
+        return _encodeConfig(configOut);
+    }
+
+    function _decodeConfig(
+        bytes calldata config
+    ) internal pure returns (NotoConfig_V0 memory) {
+        bytes4 configSelector = bytes4(config[0:4]);
+        if (configSelector == NotoConfigID_V0) {
+            NotoConfig_V0 memory configOut;
+            (configOut.notaryLookup) = abi.decode(config[4:], (string));
+            return configOut;
+        }
+        revert NotoUnsupportedConfigType(configSelector);
+    }
+
+    function _encodeConfig(
+        NotoConfig_V0 memory config
+    ) internal pure returns (bytes memory) {
+        bytes memory configOut = abi.encode(
+            config.notaryLookup,
+            config.notaryAddress,
+            config.variant
+        );
+        return bytes.concat(NotoConfigID_V0, configOut);
+    }
+
+    function _authorizeUpgrade(address) internal override onlyNotary {}
 
     /// @dev query whether a TXO is currently in the unspent list
     /// @param id the UTXO identifier
@@ -91,15 +137,16 @@ contract Noto is EIP712, INoto, IPaladinContract_V0 {
      * @param delegate the address that is authorized to submit the transaction
      * @param txhash the pre-calculated hash of the transaction that is delegated
      *
-     * Emits a {UTXOApproved} event.
+     * Emits a {NotoApproved} event.
      */
     function _approve(
         address delegate,
         bytes32 txhash,
-        bytes memory signature
+        bytes calldata signature,
+        bytes calldata data
     ) internal {
         _approvals[txhash].delegate = delegate;
-        emit UTXOApproved(delegate, txhash, signature);
+        emit NotoApproved(delegate, txhash, signature, data);
     }
 
     /**
@@ -109,13 +156,13 @@ contract Noto is EIP712, INoto, IPaladinContract_V0 {
      * @param outputs as per transfer()
      * @param data as per transfer()
      *
-     * Emits a {UTXOTransfer} event.
+     * Emits a {NotoTransfer} event.
      */
     function approvedTransfer(
-        bytes32[] memory inputs,
-        bytes32[] memory outputs,
-        bytes memory signature,
-        bytes memory data
+        bytes32[] calldata inputs,
+        bytes32[] calldata outputs,
+        bytes calldata signature,
+        bytes calldata data
     ) public {
         bytes32 txhash = _buildTXHash(inputs, outputs, data);
         if (_approvals[txhash].delegate != msg.sender) {
@@ -132,9 +179,9 @@ contract Noto is EIP712, INoto, IPaladinContract_V0 {
     }
 
     function _buildTXHash(
-        bytes32[] memory inputs,
-        bytes32[] memory outputs,
-        bytes memory data
+        bytes32[] calldata inputs,
+        bytes32[] calldata outputs,
+        bytes calldata data
     ) internal view returns (bytes32) {
         bytes32 structHash = keccak256(
             abi.encode(
@@ -157,7 +204,7 @@ contract Noto is EIP712, INoto, IPaladinContract_V0 {
      * @param outputs Array of zero or more new outputs to generate, for future transactions to spend.
      * @param data Any additional transaction data (opaque to the blockchain)
      *
-     * Emits a {UTXOTransfer} event.
+     * Emits a {NotoTransfer} event.
      */
     function _transfer(
         bytes32[] memory inputs,
@@ -181,23 +228,23 @@ contract Noto is EIP712, INoto, IPaladinContract_V0 {
             _unspent[outputs[i]] = true;
         }
 
-        emit UTXOTransfer(inputs, outputs, signature, data);
+        emit NotoTransfer(inputs, outputs, signature, data);
     }
 
     function mint(
-        bytes32[] memory outputs,
-        bytes memory signature,
-        bytes memory data
+        bytes32[] calldata outputs,
+        bytes calldata signature,
+        bytes calldata data
     ) external virtual onlyNotary {
         bytes32[] memory inputs;
-        _transfer(inputs, outputs, "", data);
+        _transfer(inputs, outputs, signature, data);
     }
 
     function transfer(
-        bytes32[] memory inputs,
-        bytes32[] memory outputs,
-        bytes memory signature,
-        bytes memory data
+        bytes32[] calldata inputs,
+        bytes32[] calldata outputs,
+        bytes calldata signature,
+        bytes calldata data
     ) external virtual onlyNotary {
         _transfer(inputs, outputs, signature, data);
     }
@@ -205,8 +252,9 @@ contract Noto is EIP712, INoto, IPaladinContract_V0 {
     function approve(
         address delegate,
         bytes32 txhash,
-        bytes memory signature
+        bytes calldata signature,
+        bytes calldata data
     ) external virtual onlyNotary {
-        _approve(delegate, txhash, signature);
+        _approve(delegate, txhash, signature, data);
     }
 }

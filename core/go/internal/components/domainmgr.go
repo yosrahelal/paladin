@@ -33,17 +33,18 @@ type DomainManagerToDomain interface {
 type DomainManager interface {
 	ManagerLifecycle
 	ConfiguredDomains() map[string]*PluginConfig
-	DomainRegistered(name string, id uuid.UUID, toDomain DomainManagerToDomain) (fromDomain plugintk.DomainCallbacks, err error)
+	DomainRegistered(name string, toDomain DomainManagerToDomain) (fromDomain plugintk.DomainCallbacks, err error)
 	GetDomainByName(ctx context.Context, name string) (Domain, error)
 	GetSmartContractByAddress(ctx context.Context, addr tktypes.EthAddress) (DomainSmartContract, error)
 	WaitForDeploy(ctx context.Context, txID uuid.UUID) (DomainSmartContract, error)
+	WaitForTransaction(ctx context.Context, txID uuid.UUID) error
 }
 
 // External interface for other components (engine, testbed) to call against a domain
 type Domain interface {
 	Initialized() bool
 	Name() string
-	Address() *tktypes.EthAddress
+	RegistryAddress() *tktypes.EthAddress
 	Configuration() *prototk.DomainConfig
 
 	InitDeploy(ctx context.Context, tx *PrivateContractDeploy) error
@@ -60,7 +61,7 @@ type DomainSmartContract interface {
 	AssembleTransaction(ctx context.Context, tx *PrivateTransaction) error
 	WritePotentialStates(ctx context.Context, tx *PrivateTransaction) error
 	LockStates(ctx context.Context, tx *PrivateTransaction) error
-	EndorseTransaction(ctx context.Context, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, endorsement *prototk.AttestationRequest, endorser *prototk.ResolvedVerifier) (*EndorsementResult, error)
+	EndorseTransaction(ctx context.Context, req *PrivateTransactionEndorseRequest) (*EndorsementResult, error)
 	ResolveDispatch(ctx context.Context, tx *PrivateTransaction) error
 	PrepareTransaction(ctx context.Context, tx *PrivateTransaction) error
 }

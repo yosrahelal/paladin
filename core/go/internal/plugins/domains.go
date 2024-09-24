@@ -35,7 +35,7 @@ func (pm *pluginManager) ConnectDomain(stream prototk.PluginController_ConnectDo
 				pluginId:   plugin.id.String(),
 				toPlugin:   toPlugin,
 			}
-			br.manager, err = pm.domainManager.DomainRegistered(plugin.name, plugin.id, br)
+			br.manager, err = pm.domainManager.DomainRegistered(plugin.name, br)
 			if err != nil {
 				return nil, err
 			}
@@ -68,6 +68,24 @@ func (br *domainBridge) RequestReply(ctx context.Context, reqMsg plugintk.Plugin
 			func(resMsg *prototk.DomainMessage, res *prototk.FindAvailableStatesResponse) {
 				resMsg.ResponseToDomain = &prototk.DomainMessage_FindAvailableStatesRes{
 					FindAvailableStatesRes: res,
+				}
+			},
+		)
+	case *prototk.DomainMessage_EncodeData:
+		return callManagerImpl(ctx, req.EncodeData,
+			br.manager.EncodeData,
+			func(resMsg *prototk.DomainMessage, res *prototk.EncodeDataResponse) {
+				resMsg.ResponseToDomain = &prototk.DomainMessage_EncodeDataRes{
+					EncodeDataRes: res,
+				}
+			},
+		)
+	case *prototk.DomainMessage_RecoverSigner:
+		return callManagerImpl(ctx, req.RecoverSigner,
+			br.manager.RecoverSigner,
+			func(resMsg *prototk.DomainMessage, res *prototk.RecoverSignerResponse) {
+				resMsg.ResponseToDomain = &prototk.DomainMessage_RecoverSignerRes{
+					RecoverSignerRes: res,
 				}
 			},
 		)
@@ -189,6 +207,21 @@ func (br *domainBridge) PrepareTransaction(ctx context.Context, req *prototk.Pre
 		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
 			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_PrepareTransactionRes); ok {
 				res = r.PrepareTransactionRes
+			}
+			return res != nil
+		},
+	)
+	return
+}
+
+func (br *domainBridge) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (res *prototk.HandleEventBatchResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_HandleEventBatch{HandleEventBatch: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_HandleEventBatchRes); ok {
+				res = r.HandleEventBatchRes
 			}
 			return res != nil
 		},

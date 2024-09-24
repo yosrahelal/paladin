@@ -37,14 +37,34 @@ public abstract class DomainInstance extends PluginInstance<Service.DomainMessag
     protected abstract CompletableFuture<ToDomain.AssembleTransactionResponse> assembleTransaction(ToDomain.AssembleTransactionRequest request);
     protected abstract CompletableFuture<ToDomain.EndorseTransactionResponse> endorseTransaction(ToDomain.EndorseTransactionRequest request);
     protected abstract CompletableFuture<ToDomain.PrepareTransactionResponse> prepareTransaction(ToDomain.PrepareTransactionRequest request);
+    protected abstract CompletableFuture<ToDomain.HandleEventBatchResponse> handleEventBatch(ToDomain.HandleEventBatchRequest request);
 
     protected DomainInstance(String grpcTarget, String instanceId) {
         super(grpcTarget, instanceId);
     }
 
-    protected CompletableFuture<FromDomain.FindAvailableStatesResponse> findAvailableStates(FromDomain.FindAvailableStatesRequest request) {
-        Service.DomainMessage message = Service.DomainMessage.newBuilder().setHeader(newRequestHeader()).build();
+    public CompletableFuture<FromDomain.FindAvailableStatesResponse> findAvailableStates(FromDomain.FindAvailableStatesRequest request) {
+        Service.DomainMessage message = Service.DomainMessage.newBuilder().
+                setHeader(newRequestHeader()).
+                setFindAvailableStates(request).
+                build();
         return requestReply(message).thenApply(Service.DomainMessage::getFindAvailableStatesRes);
+    }
+
+    public CompletableFuture<FromDomain.EncodeDataResponse> encodeData(FromDomain.EncodeDataRequest request) {
+        Service.DomainMessage message = Service.DomainMessage.newBuilder().
+                setHeader(newRequestHeader()).
+                setEncodeData(request).
+                build();
+        return requestReply(message).thenApply(Service.DomainMessage::getEncodeDataRes);
+    }
+
+    public CompletableFuture<FromDomain.RecoverSignerResponse> recoverSigner(FromDomain.RecoverSignerRequest request) {
+        Service.DomainMessage message = Service.DomainMessage.newBuilder().
+                setHeader(newRequestHeader()).
+                setRecoverSigner(request).
+                build();
+        return requestReply(message).thenApply(Service.DomainMessage::getRecoverSignerRes);
     }
 
     @Override
@@ -66,7 +86,7 @@ public abstract class DomainInstance extends PluginInstance<Service.DomainMessag
     final CompletableFuture<Service.DomainMessage> handleRequest(Service.DomainMessage request) {
         Service.DomainMessage.Builder response = Service.DomainMessage.newBuilder();
         try {
-            switch (request.getRequestToDomainCase()) {
+            CompletableFuture<?> resultApplied = switch (request.getRequestToDomainCase()) {
                 case CONFIGURE_DOMAIN -> configureDomain(request.getConfigureDomain()).thenApply(response::setConfigureDomainRes);
                 case INIT_DOMAIN -> initDomain(request.getInitDomain()).thenApply(response::setInitDomainRes);
                 case INIT_DEPLOY -> initDeploy(request.getInitDeploy()).thenApply(response::setInitDeployRes);
@@ -74,12 +94,14 @@ public abstract class DomainInstance extends PluginInstance<Service.DomainMessag
                 case INIT_TRANSACTION -> initTransaction(request.getInitTransaction()).thenApply(response::setInitTransactionRes);
                 case ASSEMBLE_TRANSACTION -> assembleTransaction(request.getAssembleTransaction()).thenApply(response::setAssembleTransactionRes);
                 case ENDORSE_TRANSACTION -> endorseTransaction(request.getEndorseTransaction()).thenApply(response::setEndorseTransactionRes);
-                case PREPARE_TRANSACTION ->
-                        prepareTransaction(request.getPrepareTransaction()).thenApply(response::setPrepareTransactionRes);
+                case PREPARE_TRANSACTION -> prepareTransaction(request.getPrepareTransaction()).thenApply(response::setPrepareTransactionRes);
+                case HANDLE_EVENT_BATCH -> handleEventBatch(request.getHandleEventBatch()).thenApply(response::setHandleEventBatchRes);
                 default -> throw new IllegalArgumentException("unknown request: %s".formatted(request.getRequestToDomainCase()));
             };
-            response.setHeader(getReplyHeader(request));
-            return CompletableFuture.completedFuture(response.build());
+            return resultApplied.thenApply((ra) -> {
+                response.setHeader(getReplyHeader(request));
+                return response.build();
+            });
         } catch(Exception e) {
             LOGGER.error(new FormattedMessage("unable to process {} {}", request.getRequestToDomainCase(), request.getHeader().getMessageId()), e);
             return CompletableFuture.failedFuture(e);

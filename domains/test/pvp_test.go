@@ -89,7 +89,7 @@ func toJSON(t *testing.T, v any) []byte {
 	return result
 }
 
-func mapConfig(t *testing.T, config *types.Config) (m map[string]any) {
+func mapConfig(t *testing.T, config *types.DomainConfig) (m map[string]any) {
 	configJSON, err := json.Marshal(&config)
 	assert.NoError(t, err)
 	err = json.Unmarshal(configJSON, &m)
@@ -118,7 +118,7 @@ func deployContracts(ctx context.Context, t *testing.T, contracts map[string][]b
 	return deployed
 }
 
-func newNotoDomain(t *testing.T, config *types.Config) (*noto.Noto, *testbed.TestbedDomain) {
+func newNotoDomain(t *testing.T, config *types.DomainConfig) (*noto.Noto, *testbed.TestbedDomain) {
 	var domain noto.Noto
 	return &domain, &testbed.TestbedDomain{
 		Config: mapConfig(t, config),
@@ -126,6 +126,7 @@ func newNotoDomain(t *testing.T, config *types.Config) (*noto.Noto, *testbed.Tes
 			domain = noto.New(callbacks)
 			return domain
 		}),
+		RegistryAddress: tktypes.MustEthAddress(config.FactoryAddress),
 	}
 }
 
@@ -149,7 +150,7 @@ func notoMint(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, notoAdd
 			To:     to,
 			Amount: ethtypes.NewHexInteger64(amount),
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -183,7 +184,7 @@ func notoApprove(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, noto
 			Delegate: delegate,
 			Call:     call,
 		}),
-	})
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -208,7 +209,7 @@ func functionBuilder(ctx context.Context, t *testing.T, eth ethclient.EthClient,
 
 func waitFor(ctx context.Context, t *testing.T, tb testbed.Testbed, txHash *tktypes.Bytes32, err error) *blockindexer.IndexedTransaction {
 	require.NoError(t, err)
-	tx, err := tb.Components().BlockIndexer().WaitForTransaction(ctx, *txHash)
+	tx, err := tb.Components().BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
 	assert.NoError(t, err)
 	return tx
 }
@@ -253,7 +254,7 @@ func TestPvP(t *testing.T) {
 		log.L(ctx).Infof("%s deployed to %s", name, address)
 	}
 
-	_, notoTestbed := newNotoDomain(t, &types.Config{
+	_, notoTestbed := newNotoDomain(t, &types.DomainConfig{
 		FactoryAddress: contracts["noto"],
 	})
 	done, tb, rpc := newTestbed(t, map[string]*testbed.TestbedDomain{

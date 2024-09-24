@@ -18,6 +18,8 @@ blockchain:
   ws:
     url: ws://localhost:8546
     initialConnectAttempts: 25
+log:
+  level: debug
 signer:
   keyDerivation:
     type: "bip32"

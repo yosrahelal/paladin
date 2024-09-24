@@ -18,14 +18,15 @@ package noto
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
-	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -51,9 +52,9 @@ func (h *approveHandler) ValidateParams(ctx context.Context, params string) (int
 	return &approveParams, nil
 }
 
-func (h *approveHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *pb.InitTransactionRequest) (*pb.InitTransactionResponse, error) {
-	return &pb.InitTransactionResponse{
-		RequiredVerifiers: []*pb.ResolveVerifierRequest{
+func (h *approveHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
+	return &prototk.InitTransactionResponse{
+		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
 				Lookup:    tx.Transaction.From,
 				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
@@ -63,9 +64,9 @@ func (h *approveHandler) Init(ctx context.Context, tx *types.ParsedTransaction, 
 }
 
 func (h *approveHandler) decodeTransferCall(ctx context.Context, encodedCall []byte) (*ApprovedTransferParams, error) {
-	approvedTransfer := h.noto.contract.ABI.Functions()["approvedTransfer"]
+	approvedTransfer := h.noto.contractABI.Functions()["approvedTransfer"]
 	if approvedTransfer == nil {
-		return nil, fmt.Errorf("could not find approvedTransfer method")
+		return nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, "approvedTransfer")
 	}
 	paramsJSON, err := decodeParams(ctx, approvedTransfer, encodedCall)
 	if err != nil {
@@ -88,24 +89,24 @@ func (h *approveHandler) encodeTransfer(ctx context.Context, tx *types.ParsedTra
 		transferParams.Data)
 }
 
-func (h *approveHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
+func (h *approveHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.ApproveParams)
 	encodedTransfer, err := h.encodeTransfer(ctx, tx, params)
 	if err != nil {
 		return nil, err
 	}
 
-	return &pb.AssembleTransactionResponse{
-		AssemblyResult: pb.AssembleTransactionResponse_OK,
-		AssembledTransaction: &pb.AssembledTransaction{
-			InputStates:  []*pb.StateRef{},
-			OutputStates: []*pb.NewState{},
+	return &prototk.AssembleTransactionResponse{
+		AssemblyResult: prototk.AssembleTransactionResponse_OK,
+		AssembledTransaction: &prototk.AssembledTransaction{
+			InputStates:  []*prototk.StateRef{},
+			OutputStates: []*prototk.NewState{},
 		},
-		AttestationPlan: []*pb.AttestationRequest{
+		AttestationPlan: []*prototk.AttestationRequest{
 			// Sender confirms the initial request with a signature
 			{
 				Name:            "sender",
-				AttestationType: pb.AttestationType_SIGN,
+				AttestationType: prototk.AttestationType_SIGN,
 				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
 				Payload:         encodedTransfer,
 				Parties:         []string{req.Transaction.From},
@@ -113,7 +114,7 @@ func (h *approveHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 			// Notary will endorse the assembled transaction (by submitting to the ledger)
 			{
 				Name:            "notary",
-				AttestationType: pb.AttestationType_ENDORSE,
+				AttestationType: prototk.AttestationType_ENDORSE,
 				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
 				Parties:         []string{tx.DomainConfig.NotaryLookup},
 			},
@@ -121,7 +122,7 @@ func (h *approveHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 	}, nil
 }
 
-func (h *approveHandler) validateSenderSignature(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest) error {
+func (h *approveHandler) validateSenderSignature(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest) error {
 	params := tx.Params.(*types.ApproveParams)
 	encodedTransfer, err := h.encodeTransfer(ctx, tx, params)
 	if err != nil {
@@ -129,24 +130,24 @@ func (h *approveHandler) validateSenderSignature(ctx context.Context, tx *types.
 	}
 	signature := domain.FindAttestation("sender", req.Signatures)
 	if signature == nil {
-		return fmt.Errorf("did not find 'sender' attestation")
+		return i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
 	}
-	signingAddress, err := h.noto.recoverSignature(ctx, encodedTransfer, signature.Payload)
+	recoveredSignature, err := h.noto.recoverSignature(ctx, encodedTransfer, signature.Payload)
 	if err != nil {
 		return err
 	}
-	if signingAddress.String() != signature.Verifier.Verifier {
-		return fmt.Errorf("sender signature does not match")
+	if recoveredSignature.String() != signature.Verifier.Verifier {
+		return i18n.NewError(ctx, msgs.MsgSignatureDoesNotMatch, "sender", signature.Verifier.Verifier, recoveredSignature.String())
 	}
 	return nil
 }
 
-func (h *approveHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
+func (h *approveHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
 	if err := h.validateSenderSignature(ctx, tx, req); err != nil {
 		return nil, err
 	}
-	return &pb.EndorseTransactionResponse{
-		EndorsementResult: pb.EndorseTransactionResponse_ENDORSER_SUBMIT,
+	return &prototk.EndorseTransactionResponse{
+		EndorsementResult: prototk.EndorseTransactionResponse_ENDORSER_SUBMIT,
 	}, nil
 }
 
@@ -158,7 +159,7 @@ func decodeParams(ctx context.Context, abi *abi.Entry, encodedCall []byte) ([]by
 	return tktypes.StandardABISerializer().SerializeJSON(callData)
 }
 
-func (h *approveHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
+func (h *approveHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
 	params := tx.Params.(*types.ApproveParams)
 	encodedTransfer, err := h.encodeTransfer(ctx, tx, params)
 	if err != nil {
@@ -166,23 +167,32 @@ func (h *approveHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 	}
 	signature := domain.FindAttestation("sender", req.AttestationResult)
 	if signature == nil {
-		return nil, fmt.Errorf("did not find 'sender' attestation")
+		return nil, i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
 	}
 
+	data, err := h.noto.encodeTransactionData(ctx, req.Transaction)
+	if err != nil {
+		return nil, err
+	}
 	approveParams := map[string]interface{}{
 		"delegate":  params.Delegate,
 		"txhash":    encodedTransfer,
 		"signature": ethtypes.HexBytes0xPrefix(signature.Payload),
+		"data":      data,
 	}
 	paramsJSON, err := json.Marshal(approveParams)
 	if err != nil {
 		return nil, err
 	}
+	functionJSON, err := json.Marshal(h.noto.contractABI.Functions()["approve"])
+	if err != nil {
+		return nil, err
+	}
 
-	return &pb.PrepareTransactionResponse{
-		Transaction: &pb.BaseLedgerTransaction{
-			FunctionName: "approve",
-			ParamsJson:   string(paramsJSON),
+	return &prototk.PrepareTransactionResponse{
+		Transaction: &prototk.BaseLedgerTransaction{
+			FunctionAbiJson: string(functionJSON),
+			ParamsJson:      string(paramsJSON),
 		},
 	}, nil
 }

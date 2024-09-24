@@ -21,7 +21,8 @@ package github.com.kaleido_io.paladin.toolkit;
 message ConfigureDomainRequest {
   string name = 1; // The name
   string config_json= 2; // The block of config supplied in the configuration for the domain by the Paladin administrator (converted from YAML to JSON for domain)
-  int64 chain_id = 3; // The chain_id of the underlying base ledger on which all smart contracts are deployed
+  string registry_contract_address = 3;  // The address of the registry smart contract
+  int64 chain_id = 4; // The chain_id of the underlying base ledger on which all smart contracts are deployed
 }
 
 message ConfigureDomainResponse {
@@ -30,8 +31,7 @@ message ConfigureDomainResponse {
 
 // **INIT** happens once when the domain is loaded into Paladin, after the result of ConfigureDomain has been processed
 message InitDomainRequest {
-  string domain_uuid = 1; // A runtime instance UUID of this domain, that it must supply on all requests
-  repeated StateSchema abi_state_schemas = 2; // The deterministically hashed identifiers of the same array of schemas provied to Paladin in the DomainConfig
+  repeated StateSchema abi_state_schemas = 1; // The deterministically hashed identifiers of the same array of schemas provied to Paladin in the DomainConfig
 }
 
 message InitDomainResponse {    
@@ -54,7 +54,7 @@ message PrepareDeployRequest {
 
 message PrepareDeployResponse {
   optional string signer = 1; // The identifier of a signing address to use to submit the transaction to the chain. Default behavior if not supplied defined by domain config. Uses standard Paladin resolution of signing addresses (including dynamic allocation, if for example the transaction_id is supplied as part of the string to require a different key for each TX)
-  optional BaseLedgerTransaction transaction = 2; // The instruction for a tranaction to submit to the base ledger
+  optional BaseLedgerTransaction transaction = 2; // The instruction for a transaction to submit to the base ledger
   optional BaseLedgerDeployTransaction deploy = 3; // The instruction for deploy request to submit to the base ledger
 }
 
@@ -92,8 +92,9 @@ message EndorseTransactionRequest {
   TransactionSpecification transaction = 3; // The transaction specified by the user
   repeated ResolvedVerifier resolved_verifiers = 4; // The list of resovled verifiers
   repeated EndorsableState inputs = 5; // Input states for the transaction
-  repeated EndorsableState outputs = 6; // Output states for the transaction
-  repeated AttestationResult signatures = 7; // All SIGN attestation results (required from submitting node before endorsement)
+  repeated EndorsableState reads = 6; // States relied upon by the transaction, that are not actually consumed
+  repeated EndorsableState outputs = 7; // Output states for the transaction
+  repeated AttestationResult signatures = 8; // All SIGN attestation results (required from submitting node before endorsement)
 }
 
 message EndorseTransactionResponse {
@@ -111,21 +112,33 @@ message EndorseTransactionResponse {
 message PrepareTransactionRequest {
   TransactionSpecification transaction = 1; // The transaction specified by the user
   repeated EndorsableState input_states = 2; // The list of input states
-  repeated EndorsableState output_states = 3; // The list of output states
-  repeated AttestationResult attestation_result = 4; // The results of any proofs/attestations that came out of the endorsement phase
+  repeated EndorsableState read_states = 3; // The list of read states
+  repeated EndorsableState output_states = 4; // The list of output states
+  repeated AttestationResult attestation_result = 5; // The results of any proofs/attestations that came out of the endorsement phase
 }
 
 message PrepareTransactionResponse {
   BaseLedgerTransaction transaction = 2; // The instruction for submission to the base ledger
 }
 
+// **EVENTS** handler called with batches of blockchain events that match an event signature and contract address registered by this domain
+
+message HandleEventBatchRequest {
+  string batch_id = 1; // A unique identifier for this batch
+  string json_events = 2; // The list of events from the block indexer
+}
+
+message HandleEventBatchResponse {
+  repeated string transactions_complete = 1; // A list of Paladin transaction IDs that may be considered complete
+  repeated StateUpdate spent_states = 2; // A list of states that are now spent
+  repeated StateUpdate confirmed_states = 3; // A list of states that are now confirmed (and unspent)
+  repeated NewLocalState new_states = 4; // A list of new states to store (only for events that contain full state data)
+}
+
 message DomainConfig {
-  string constructor_abi_json = 1; // Each domain can have a single constructor signature, that all deploy requests from callers must adhere to
-  string factory_contract_address = 2;  // The address of the factory smart contract to invoke when the user requests deployment of a new private smart contract in this domain
-  string factory_contract_abi_json = 3; // The ABI of the factory function the domain will translate the constructor_abi_json inputs into (the function MUST emit the Paladin defined event)
-  string private_contract_abi_json = 4; // The ABI of the base ledger private smart contract that is deployed for each instance (via the factory, or via direct bytecode deployment)
-  repeated string abi_state_schemas_json = 5; // A list of Schema definitions (in ABI parameter format) the domain requires for all state types it interacts with
-  BaseLedgerSubmitConfig base_ledger_submit_config = 6; // Describe the requirements of this domain for how submission happens
+  repeated string abi_state_schemas_json = 1; // A list of Schema definitions (in ABI parameter format) the domain requires for all state types it interacts with
+  BaseLedgerSubmitConfig base_ledger_submit_config = 2; // Describe the requirements of this domain for how submission happens
+  string abi_events_json = 3; // ABI events that the domain will process for state updates
 }
 
 message BaseLedgerSubmitConfig {
@@ -145,8 +158,7 @@ message StateSchema {
 
 message DeployTransactionSpecification {
   string transaction_id = 1; // A UUID for the transaction generated by the Paladin node when accepting the request from the caller
-  string constructor_abi = 2; // This is the ABI the domain returned during ConfigureDomain
-  string constructor_params_json = 3; // The parameters supplied in the invocation in normalized JSON format, after validation against the ABI the caller supplied
+  string constructor_params_json = 2; // The parameters supplied in the invocation in normalized JSON format, after validation against the ABI the caller supplied
 }
 
 message TransactionSpecification {
@@ -169,14 +181,25 @@ message AssembledTransaction {
 }
 
 message StateRef {
-  string id = 1;
-  string schema_id = 3;
+  string id = 1; // The hash id calculated by the local node for this state
+  string schema_id = 2; // The id from the schema, which must be one of the ones established during the ConfigDomain+InitDomain phase
+}
+
+message StateUpdate {
+  string id = 1; // The hash id calculated by the local node for this state
+  string transaction_id = 2; // The UUID for the transaction generated by the Paladin node
 }
 
 message NewState {
   string schema_id = 1; // The id from the schema, which must be one of the ones established during the ConfigDomain+InitDomain phase
   string state_data_json = 2; // The data for this state that will be recorded by Paladin, and uniquely identified by Paladin using a hash (which might be additional to any hashing done in a unique way by the domain)
   repeated string distibution_list = 3; // A list of Paladin recipients that should receive a copy of this state in parallel to transaction submission, once it has been successfully prepared
+}
+
+message NewLocalState {
+  string schema_id = 1; // The id from the schema, which must be one of the ones established during the ConfigDomain+InitDomain phase
+  string state_data_json = 2; // The data for this state that will be recorded by Paladin, and uniquely identified by Paladin using a hash (which might be additional to any hashing done in a unique way by the domain)
+  string transaction_id = 3; // The UUID for the transaction generated by the Paladin node
 }
 
 message EndorsableState {
@@ -225,13 +248,14 @@ message AttestationResult {
 }
 
 message BaseLedgerTransaction {
-  string function_name = 1; // The name of the function to invoke on the base smart contract, based on processing the user's constructor parameters in the private smart contract layer
-  string params_json = 2; // The parameters to pass to the base smart contract function, in JSON format. Paladin will submit this tranaction to the base blockchain
+  string function_abi_json = 1; // The ABI of the function to invoke on the base smart contract, based on processing the user's parameters in the private smart contract layer
+  string params_json = 2; // The parameters to pass to the base smart contract function, in JSON format. Paladin will submit this transaction to the base blockchain
 }
 
 message BaseLedgerDeployTransaction {
-  bytes bytecode = 1; // The contract bytecode
-  string params_json = 2; // The parameters to pass to the base smart contract constructor, in JSON format. Paladin will submit this tranaction to the base blockchain
+  string constructor_abi_json = 1; // The ABI of the smart contract constructor
+  bytes bytecode = 2; // The contract bytecode
+  string params_json = 3; // The parameters to pass to the base smart contract constructor, in JSON format. Paladin will submit this transaction to the base blockchain
 }
 
 message DomainAPIError {

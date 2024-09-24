@@ -33,10 +33,13 @@ type DomainAPI interface {
 	AssembleTransaction(context.Context, *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error)
 	EndorseTransaction(context.Context, *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error)
 	PrepareTransaction(context.Context, *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error)
+	HandleEventBatch(context.Context, *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error)
 }
 
 type DomainCallbacks interface {
 	FindAvailableStates(context.Context, *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error)
+	EncodeData(context.Context, *prototk.EncodeDataRequest) (*prototk.EncodeDataResponse, error)
+	RecoverSigner(ctx context.Context, req *prototk.RecoverSignerRequest) (*prototk.RecoverSignerResponse, error)
 }
 
 type DomainFactory func(callbacks DomainCallbacks) DomainAPI
@@ -152,6 +155,10 @@ func (dp *domainHandler) RequestToPlugin(ctx context.Context, iReq PluginMessage
 		resMsg := &prototk.DomainMessage_PrepareTransactionRes{}
 		resMsg.PrepareTransactionRes, err = dp.api.PrepareTransaction(ctx, input.PrepareTransaction)
 		res.ResponseFromDomain = resMsg
+	case *prototk.DomainMessage_HandleEventBatch:
+		resMsg := &prototk.DomainMessage_HandleEventBatchRes{}
+		resMsg.HandleEventBatchRes, err = dp.api.HandleEventBatch(ctx, input.HandleEventBatch)
+		res.ResponseFromDomain = resMsg
 	default:
 		err = i18n.NewError(ctx, tkmsgs.MsgPluginUnsupportedRequest, input)
 	}
@@ -169,6 +176,28 @@ func (dp *domainHandler) FindAvailableStates(ctx context.Context, req *prototk.F
 	})
 }
 
+func (dp *domainHandler) EncodeData(ctx context.Context, req *prototk.EncodeDataRequest) (*prototk.EncodeDataResponse, error) {
+	res, err := dp.proxy.RequestFromPlugin(ctx, dp.Wrap(&prototk.DomainMessage{
+		RequestFromDomain: &prototk.DomainMessage_EncodeData{
+			EncodeData: req,
+		},
+	}))
+	return responseToPluginAs(ctx, res, err, func(msg *prototk.DomainMessage_EncodeDataRes) *prototk.EncodeDataResponse {
+		return msg.EncodeDataRes
+	})
+}
+
+func (dp *domainHandler) RecoverSigner(ctx context.Context, req *prototk.RecoverSignerRequest) (*prototk.RecoverSignerResponse, error) {
+	res, err := dp.proxy.RequestFromPlugin(ctx, dp.Wrap(&prototk.DomainMessage{
+		RequestFromDomain: &prototk.DomainMessage_RecoverSigner{
+			RecoverSigner: req,
+		},
+	}))
+	return responseToPluginAs(ctx, res, err, func(msg *prototk.DomainMessage_RecoverSignerRes) *prototk.RecoverSignerResponse {
+		return msg.RecoverSignerRes
+	})
+}
+
 type DomainAPIFunctions struct {
 	ConfigureDomain     func(context.Context, *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error)
 	InitDomain          func(context.Context, *prototk.InitDomainRequest) (*prototk.InitDomainResponse, error)
@@ -178,6 +207,7 @@ type DomainAPIFunctions struct {
 	AssembleTransaction func(context.Context, *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error)
 	EndorseTransaction  func(context.Context, *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error)
 	PrepareTransaction  func(context.Context, *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error)
+	HandleEventBatch    func(context.Context, *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error)
 }
 
 type DomainAPIBase struct {
@@ -214,4 +244,8 @@ func (db *DomainAPIBase) EndorseTransaction(ctx context.Context, req *prototk.En
 
 func (db *DomainAPIBase) PrepareTransaction(ctx context.Context, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
 	return callPluginImpl(ctx, req, db.Functions.PrepareTransaction)
+}
+
+func (db *DomainAPIBase) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+	return callPluginImpl(ctx, req, db.Functions.HandleEventBatch)
 }

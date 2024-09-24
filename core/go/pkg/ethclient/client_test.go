@@ -43,10 +43,10 @@ func TestResolveKeyFail(t *testing.T) {
 		},
 	}
 
-	_, err := ec.CallContract(ctx, confutil.P("wrong"), &ethsigner.Transaction{}, "latest")
+	_, err := ec.CallContract(ctx, confutil.P("wrong"), &ethsigner.Transaction{}, "latest", nil)
 	assert.Regexp(t, "pop", err)
 
-	_, err = ec.BuildRawTransaction(ctx, EIP1559, "wrong", &ethsigner.Transaction{})
+	_, err = ec.BuildRawTransaction(ctx, EIP1559, "wrong", &ethsigner.Transaction{}, nil)
 	assert.Regexp(t, "pop", err)
 
 }
@@ -59,7 +59,7 @@ func TestCallFail(t *testing.T) {
 	})
 	defer done()
 
-	_, err := ec.HTTPClient().CallContract(ctx, confutil.P("wrong"), &ethsigner.Transaction{}, "latest")
+	_, err := ec.HTTPClient().CallContract(ctx, confutil.P("wrong"), &ethsigner.Transaction{}, "latest", nil)
 	assert.Regexp(t, "pop", err)
 
 }
@@ -72,7 +72,7 @@ func TestGetTransactionCountFailForBuildRawTx(t *testing.T) {
 	})
 	defer done()
 
-	_, err := ec.HTTPClient().BuildRawTransaction(ctx, EIP1559, "key1", &ethsigner.Transaction{})
+	_, err := ec.HTTPClient().BuildRawTransaction(ctx, EIP1559, "key1", &ethsigner.Transaction{}, nil)
 	assert.Regexp(t, "pop", err)
 
 }
@@ -142,7 +142,7 @@ func TestGasEstimate(t *testing.T) {
 	})
 	defer done()
 
-	gasLimit, err := ec.HTTPClient().GasEstimate(ctx, &ethsigner.Transaction{})
+	gasLimit, err := ec.HTTPClient().GasEstimate(ctx, &ethsigner.Transaction{}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, gasEstimateHexInt, gasLimit)
 
@@ -151,13 +151,16 @@ func TestGasEstimate(t *testing.T) {
 func TestGasEstimateFail(t *testing.T) {
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
 		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (ethtypes.HexInteger, error) {
-			return ethtypes.HexInteger{}, fmt.Errorf("pop")
+			return ethtypes.HexInteger{}, fmt.Errorf("pop1")
+		},
+		eth_call: func(ctx context.Context, t ethsigner.Transaction, s string) (tktypes.HexBytes, error) {
+			return nil, fmt.Errorf("pop2")
 		},
 	})
 	defer done()
 
-	_, err := ec.HTTPClient().GasEstimate(ctx, &ethsigner.Transaction{})
-	assert.Regexp(t, "pop", err)
+	_, err := ec.HTTPClient().GasEstimate(ctx, &ethsigner.Transaction{}, nil)
+	assert.Regexp(t, "pop2", err)
 }
 
 func TestGetTransactionCount(t *testing.T) {
@@ -193,12 +196,15 @@ func TestEstimateGasFail(t *testing.T) {
 			return 0, nil
 		},
 		eth_estimateGas: func(ctx context.Context, t ethsigner.Transaction) (ethtypes.HexInteger, error) {
-			return *ethtypes.NewHexInteger64(0), fmt.Errorf("pop")
+			return *ethtypes.NewHexInteger64(0), fmt.Errorf("pop1")
+		},
+		eth_call: func(ctx context.Context, t ethsigner.Transaction, s string) (tktypes.HexBytes, error) {
+			return nil, fmt.Errorf("pop2")
 		},
 	})
 	defer done()
 
-	_, err := ec.HTTPClient().BuildRawTransaction(ctx, EIP1559, "key1", &ethsigner.Transaction{})
+	_, err := ec.HTTPClient().BuildRawTransaction(ctx, EIP1559, "key1", &ethsigner.Transaction{}, nil)
 	assert.Regexp(t, "pop", err)
 
 }
@@ -210,7 +216,7 @@ func TestBadTXVersion(t *testing.T) {
 	_, err := ec.HTTPClient().BuildRawTransaction(ctx, EthTXVersion("wrong"), "key1", &ethsigner.Transaction{
 		Nonce:    ethtypes.NewHexInteger64(0),
 		GasLimit: ethtypes.NewHexInteger64(100000),
-	})
+	}, nil)
 	assert.Regexp(t, "PD011505.*wrong", err)
 
 }
@@ -232,7 +238,7 @@ func TestSignFail(t *testing.T) {
 	_, err := ec.BuildRawTransaction(ctx, EIP1559, "key1", &ethsigner.Transaction{
 		Nonce:    ethtypes.NewHexInteger64(0),
 		GasLimit: ethtypes.NewHexInteger64(100000),
-	})
+	}, nil)
 	assert.Regexp(t, "pop", err)
 
 }
@@ -248,7 +254,7 @@ func TestSendRawFail(t *testing.T) {
 	rawTx, err := ec.HTTPClient().BuildRawTransaction(ctx, EIP1559, "key1", &ethsigner.Transaction{
 		Nonce:    ethtypes.NewHexInteger64(0),
 		GasLimit: ethtypes.NewHexInteger64(100000),
-	})
+	}, nil)
 	require.NoError(t, err)
 
 	_, err = ec.HTTPClient().SendRawTransaction(ctx, rawTx)
