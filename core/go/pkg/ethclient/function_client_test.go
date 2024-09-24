@@ -25,8 +25,8 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -140,14 +140,14 @@ func testInvokeNewWidgetOk(t *testing.T, isWS bool, txVersion EthTXVersion, gasL
 	var testABI ABIClient
 	var key1 string
 	ctx, ecf, done := newTestClientAndServer(t, &mockEth{
-		eth_getTransactionCount: func(ctx context.Context, a ethtypes.Address0xHex, block string) (ethtypes.HexUint64, error) {
+		eth_getTransactionCount: func(ctx context.Context, a tktypes.EthAddress, block string) (tktypes.HexUint64, error) {
 			assert.Equal(t, key1, a.String())
 			assert.Equal(t, "latest", block)
 			return 10, nil
 		},
-		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (ethtypes.HexInteger, error) {
+		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (tktypes.HexUint64, error) {
 			assert.False(t, gasLimit)
-			return *ethtypes.NewHexInteger64(100000), nil
+			return 100000, nil
 		},
 		eth_sendRawTransaction: func(ctx context.Context, rawTX tktypes.HexBytes) (tktypes.HexBytes, error) {
 			addr, tx, err := ethsigner.RecoverRawTransaction(ctx, ethtypes.HexBytes0xPrefix(rawTX), 12345)
@@ -284,7 +284,7 @@ func testCallGetWidgetsOk(t *testing.T, withFrom, withBlock, withBlockRef bool) 
 	} else if withBlockRef {
 		getWidgetsReq.BlockRef(PENDING)
 	}
-	jsonRes, err := getWidgetsReq.CallJSON()
+	res, err := getWidgetsReq.CallResult()
 	require.NoError(t, err)
 	assert.JSONEq(t, `{
 		"0": [
@@ -294,7 +294,7 @@ func testCallGetWidgetsOk(t *testing.T, withFrom, withBlock, withBlockRef bool) 
 				"features": ["shiny", "spinny"]
 			}
 		]
-	}`, string(jsonRes))
+	}`, res.JSON())
 
 	var getWidgetsRes getWidgetsOutput
 	err = getWidgetsReq.
@@ -423,7 +423,7 @@ func TestCallFunctionFail(t *testing.T) {
 
 	to := ethtypes.MustNewAddress("0xD9E54Ba3F1419e6AC71A795d819fdBAE883A6575")
 
-	_, err := getWidgets.R(ctx).Input(`{"sku":12345}`).To(to).CallJSON()
+	_, err := getWidgets.R(ctx).Input(`{"sku":12345}`).To(to).CallResult()
 	assert.Regexp(t, "pop", err)
 }
 
@@ -459,6 +459,9 @@ func TestMissingInputs(t *testing.T) {
 	assert.Regexp(t, "PD011504", err)
 
 	err = getWidgets.R(ctx).To(to).Output("supplied").Call()
+	assert.Regexp(t, "PD011503", err)
+
+	_, err = getWidgets.R(ctx).To(to).Output("supplied").EstimateGas()
 	assert.Regexp(t, "PD011503", err)
 
 	err = getWidgets.R(ctx).Output("supplied").Input("supplied").Call()
@@ -538,13 +541,13 @@ func TestInvokeConstructor(t *testing.T) {
 	var testABI ABIClient
 	var key1 string
 	ctx, ec, done := newTestClientAndServer(t, &mockEth{
-		eth_getTransactionCount: func(ctx context.Context, a ethtypes.Address0xHex, block string) (ethtypes.HexUint64, error) {
+		eth_getTransactionCount: func(ctx context.Context, a tktypes.EthAddress, block string) (tktypes.HexUint64, error) {
 			assert.Equal(t, key1, a.String())
 			assert.Equal(t, "latest", block)
 			return 10, nil
 		},
-		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (ethtypes.HexInteger, error) {
-			return *ethtypes.NewHexInteger64(100000), nil
+		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (tktypes.HexUint64, error) {
+			return 100000, nil
 		},
 		eth_sendRawTransaction: func(ctx context.Context, rawTX tktypes.HexBytes) (tktypes.HexBytes, error) {
 			addr, tx, err := ethsigner.RecoverRawTransaction(ctx, ethtypes.HexBytes0xPrefix(rawTX), 12345)
@@ -591,15 +594,15 @@ func TestInvokeNewWidgetCustomError(t *testing.T) {
 	assert.NoError(t, err)
 
 	ctx, ecf, done := newTestClientAndServer(t, &mockEth{
-		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (ethtypes.HexInteger, error) {
-			return *ethtypes.NewHexInteger64(0), fmt.Errorf("pop")
+		eth_estimateGas: func(ctx context.Context, tx ethsigner.Transaction) (tktypes.HexUint64, error) {
+			return 0, fmt.Errorf("pop")
 		},
-		eth_callErr: func(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse {
-			return &rpcbackend.RPCResponse{
+		eth_callErr: func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse {
+			return &rpcclient.RPCResponse{
 				JSONRpc: "2.0",
 				ID:      req.ID,
-				Error: &rpcbackend.RPCError{
-					Code:    int64(rpcbackend.RPCCodeInternalError),
+				Error: &rpcclient.RPCError{
+					Code:    int64(rpcclient.RPCCodeInternalError),
 					Message: "reverted",
 					Data:    *fftypes.JSONAnyPtr(fmt.Sprintf(`"%s"`, tktypes.HexBytes(errData))),
 				},
@@ -620,10 +623,13 @@ func TestInvokeNewWidgetCustomError(t *testing.T) {
 		Input(&newWidgetInput{
 			Widget: *widgetA,
 		})
-	_, err = req.CallJSON()
-	assert.EqualError(t, err, `PD011516: Reverted: WidgetError("1122334455","not widgety enough")`)
+	_, err = req.CallResult()
+	assert.EqualError(t, err, `PD011513: Reverted: WidgetError("1122334455","not widgety enough")`)
+	_, err = req.EstimateGas()
+	assert.EqualError(t, err, `PD011513: Reverted: WidgetError("1122334455","not widgety enough")`)
 
-	_, err = ecf.HTTPClient().CallContract(ctx, nil, &ethsigner.Transaction{}, "latest", nil)
-	assert.EqualError(t, err, `PD011516: Reverted: 0xf852c6da0000000000000000000000000000000000000000000000000000000042e576f7000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000126e6f74207769646765747920656e6f7567680000000000000000000000000000`)
+	// Check we can override the options if we wish, disabling ability to decode the errors
+	_, err = req.CallOptions(WithErrorsFrom(abi.ABI{})).CallResult()
+	assert.EqualError(t, err, `PD011513: Reverted: 0xf852c6da0000000000000000000000000000000000000000000000000000000042e576f7000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000126e6f74207769646765747920656e6f7567680000000000000000000000000000`)
 
 }

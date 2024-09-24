@@ -22,7 +22,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -323,7 +323,7 @@ func TestRCPMethodInvalidValue(t *testing.T) {
 		return "", nil
 	}))
 
-	var errResponse rpcbackend.RPCResponse
+	var errResponse rpcclient.RPCResponse
 	res, err := resty.New().R().
 		SetBody(`{
 		  "jsonrpc": "2.0",
@@ -335,7 +335,7 @@ func TestRCPMethodInvalidValue(t *testing.T) {
 		Post(url)
 	require.NoError(t, err)
 	assert.False(t, res.IsSuccess())
-	assert.Equal(t, int64(rpcbackend.RPCCodeInvalidRequest), errResponse.Error.Code)
+	assert.Equal(t, int64(rpcclient.RPCCodeInvalidRequest), errResponse.Error.Code)
 	assert.Regexp(t, "PD011004", errResponse.Error.Message)
 
 }
@@ -350,7 +350,7 @@ func TestRCPMethodWrongParamCount(t *testing.T) {
 		return "", nil
 	}))
 
-	var errResponse rpcbackend.RPCResponse
+	var errResponse rpcclient.RPCResponse
 	res, err := resty.New().R().
 		SetBody(`{
 		  "jsonrpc": "2.0",
@@ -362,7 +362,7 @@ func TestRCPMethodWrongParamCount(t *testing.T) {
 		Post(url)
 	require.NoError(t, err)
 	assert.False(t, res.IsSuccess())
-	assert.Equal(t, int64(rpcbackend.RPCCodeInvalidRequest), errResponse.Error.Code)
+	assert.Equal(t, int64(rpcclient.RPCCodeInvalidRequest), errResponse.Error.Code)
 	assert.Regexp(t, "PD011003", errResponse.Error.Message)
 
 }
@@ -376,7 +376,7 @@ func TestRCPMethodBadResult(t *testing.T) {
 		return map[bool]bool{false: true} /* good luck JSON */, nil
 	}))
 
-	var errResponse rpcbackend.RPCResponse
+	var errResponse rpcclient.RPCResponse
 	res, err := resty.New().R().
 		SetBody(`{
 		  "jsonrpc": "2.0",
@@ -388,7 +388,7 @@ func TestRCPMethodBadResult(t *testing.T) {
 		Post(url)
 	require.NoError(t, err)
 	assert.False(t, res.IsSuccess())
-	assert.Equal(t, int64(rpcbackend.RPCCodeInternalError), errResponse.Error.Code)
+	assert.Equal(t, int64(rpcclient.RPCCodeInternalError), errResponse.Error.Code)
 	assert.Regexp(t, "PD011005", errResponse.Error.Message)
 
 }

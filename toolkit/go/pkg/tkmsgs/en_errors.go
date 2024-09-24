@@ -42,6 +42,11 @@ var (
 	MsgTypesPrivateIdentityLocatorInvalid = ffe("PD020006", "Locator string %s is invalid")
 	MsgTypesInvalidHex                    = ffe("PD020007", "Invalid hex: %s")
 	MsgTypesValueInvalidHexBytes32        = ffe("PD020008", "Failed to parse value as 32 byte hex string (parsedBytes=%d)")
+	MsgTypesInvalidHexInteger             = ffe("PD020009", "Invalid integer: %s")
+	MsgTypesInvalidUint64                 = ffe("PD020010", "Integer cannot be converted to uint64 without losing precision: %s")
+	MsgTypesInvalidDBInt64                = ffe("PD020011", "Integer too large for storage in a signed int64 database column: %s")
+	MsgTypesInvalidDBInt256               = ffe("PD020012", "Integer incorrectly serialized to the database for a int256: %s")
+	MsgTypesInvalidDBUint256              = ffe("PD020013", "Integer incorrectly serialized to the database for a uint256: %s")
 
 	// Inflight PD0201XX
 	MsgInflightRequestCancelled = ffe("PD020100", "Request cancelled after %s")
@@ -65,4 +70,8 @@ var (
 	MsgTLSInvalidTLSDnMatcherRegexp = ffe("PD020404", "Invalid regexp '%s' for requiredDNAttributes[%s]: %s")
 	MsgTLSInvalidTLSDnChain         = ffe("PD020405", "Cannot match subject distinguished name as cert chain is not verified")
 	MsgTLSInvalidTLSDnMismatch      = ffe("PD020406", "Certificate subject does not meet requirements")
+
+	// RPCClient PD0205XX
+	MsgRPCClientInvalidWebSocketURL = ffe("PD020500", "Invalid WebSocket URL: %s")
+	MsgRPCClientInvalidHTTPURL      = ffe("PD020501", "Invalid HTTP URL: %s")
 )

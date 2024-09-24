@@ -25,12 +25,11 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 )
 
 // blockListener has two functions:
@@ -38,12 +37,12 @@ import (
 // 2) To feed new block information to any registered consumers
 type blockListener struct {
 	ctx                        context.Context
-	wsConn                     rpcbackend.WebSocketRPCClient // if configured the getting the blockheight will not complete until WS connects, overrides backend once connected
+	wsConn                     rpcclient.WSClient // if configured the getting the blockheight will not complete until WS connects, overrides backend once connected
 	wsConnClosed               bool
 	listenLoopDone             chan struct{}
 	initialBlockHeightObtained chan struct{}
 	newHeadsTap                chan struct{}
-	newHeadsSub                rpcbackend.Subscription
+	newHeadsSub                rpcclient.Subscription
 	highestBlock               uint64
 	highestBlockMux            sync.RWMutex
 	wsMux                      sync.Mutex
@@ -69,7 +68,7 @@ func newBlockListener(ctx context.Context, conf *Config, wsConfig *rpcclient.WSC
 		canonicalChain:             list.New(),
 		unstableHeadLength:         chainHeadCacheLen,
 		retry:                      retry.NewRetryIndefinite(&conf.Retry),
-		wsConn:                     rpcbackend.NewWSRPCClient(wscConf),
+		wsConn:                     rpcclient.WrapWSConfig(wscConf),
 		newBlocks:                  make(chan *BlockInfoJSONRPC, chainHeadCacheLen),
 	}
 	return bl, nil
@@ -131,7 +130,7 @@ func (bl *blockListener) establishBlockHeightWithRetry() error {
 			// Once subscribed the backend will keep us subscribed over reconnect
 			sub, rpcErr := bl.wsConn.Subscribe(bl.ctx, "newHeads")
 			if rpcErr != nil {
-				return true, rpcErr.Error()
+				return true, rpcErr
 			}
 			bl.newHeadsSub = sub
 			go bl.newHeadsSubListener()
@@ -141,8 +140,8 @@ func (bl *blockListener) establishBlockHeightWithRetry() error {
 		var hexBlockHeight ethtypes.HexUint64
 		rpcErr := bl.wsConn.CallRPC(bl.ctx, &hexBlockHeight, "eth_blockNumber")
 		if rpcErr != nil {
-			log.L(bl.ctx).Warnf("Block height could not be obtained: %s", rpcErr.Message)
-			return true, rpcErr.Error()
+			log.L(bl.ctx).Warnf("Block height could not be obtained: %s", rpcErr)
+			return true, rpcErr
 		}
 
 		bl.highestBlockMux.Lock()
@@ -153,9 +152,9 @@ func (bl *blockListener) establishBlockHeightWithRetry() error {
 	})
 }
 
-func isNotFound(err *rpcbackend.RPCError) bool {
-	if err != nil && err.Error() != nil {
-		lowerCaseErr := strings.ToLower(err.Error().Error())
+func isNotFound(err error) bool {
+	if err != nil {
+		lowerCaseErr := strings.ToLower(err.Error())
 		if strings.Contains(lowerCaseErr, "not found") {
 			return true
 		}
@@ -171,7 +170,7 @@ func (bl *blockListener) getBlockInfoByHash(ctx context.Context, blockHash strin
 		if isNotFound(err) {
 			return nil, nil
 		}
-		return nil, err.Error()
+		return nil, err
 	}
 	return info, nil
 }
@@ -184,7 +183,7 @@ func (bl *blockListener) getBlockInfoByNumber(ctx context.Context, blockNumber e
 		if isNotFound(err) {
 			return nil, nil
 		}
-		return nil, err.Error()
+		return nil, err
 	}
 	return info, nil
 }
@@ -202,7 +201,7 @@ func (bl *blockListener) listenLoop(listenerInitiated *chan struct{}) {
 
 	var filter string
 	failCount := 0
-	blockPollingInterval := time.Duration(0) // Start with no delay
+	bl.tapNewHeads() // poll once to start
 	notifyStarted := sync.Once{}
 	iterate := true
 	for iterate {
@@ -217,20 +216,16 @@ func (bl *blockListener) listenLoop(listenerInitiated *chan struct{}) {
 
 			// Sleep for the polling interval, or until we're shoulder tapped by the newHeads listener
 			select {
-			case <-time.After(blockPollingInterval):
+			case <-time.After(bl.blockPollingInterval):
 			case <-bl.newHeadsTap:
 			case <-bl.ctx.Done():
 				return false // context cancelled, exit loop
 			}
 
-			// Reset the polling interval to the configured value
-			// This is to ensure we don't get stuck in a fast polling loop if we're shoulder tapped
-			blockPollingInterval = bl.blockPollingInterval
-
 			if filter == "" {
 				err := bl.wsConn.CallRPC(bl.ctx, &filter, "eth_newBlockFilter")
 				if err != nil {
-					log.L(bl.ctx).Errorf("Failed to establish new block filter: %s", err.Message)
+					log.L(bl.ctx).Errorf("Failed to establish new block filter: %s", err)
 					failCount++
 					return true
 				}
@@ -240,10 +235,10 @@ func (bl *blockListener) listenLoop(listenerInitiated *chan struct{}) {
 			rpcErr := bl.wsConn.CallRPC(bl.ctx, &blockHashes, "eth_getFilterChanges", filter)
 			if rpcErr != nil {
 				if isNotFound(rpcErr) {
-					log.L(bl.ctx).Warnf("Block filter '%v' no longer valid. Recreating filter: %s", filter, rpcErr.Message)
+					log.L(bl.ctx).Warnf("Block filter '%v' no longer valid. Recreating filter: %s", filter, rpcErr)
 					filter = ""
 				}
-				log.L(bl.ctx).Errorf("Failed to query block filter changes: %s", rpcErr.Message)
+				log.L(bl.ctx).Errorf("Failed to query block filter changes: %s", rpcErr)
 				failCount++
 				return true
 			}
@@ -493,7 +488,7 @@ func (bl *blockListener) getHighestBlock(ctx context.Context) (uint64, error) {
 func (bl *blockListener) waitClosed() {
 	bl.wsMux.Lock()
 	listenLoopDone := bl.listenLoopDone
-	var wsConnToClose rpcbackend.WebSocketRPCClient
+	var wsConnToClose rpcclient.WSClient
 	if bl.wsConn != nil && !bl.wsConnClosed {
 		wsConnToClose = bl.wsConn
 		bl.wsConnClosed = true

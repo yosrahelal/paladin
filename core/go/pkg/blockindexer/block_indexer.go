@@ -30,10 +30,9 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/rpcclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/inflight"
@@ -44,11 +43,12 @@ import (
 )
 
 type BlockIndexer interface {
-	Start(internalStreams ...*InternalEventStream) error
+	Start(...*InternalEventStream) error
 	Stop()
 	AddEventStream(ctx context.Context, stream *InternalEventStream) (*EventStream, error)
 	GetIndexedBlockByNumber(ctx context.Context, number uint64) (*IndexedBlock, error)
 	GetIndexedTransactionByHash(ctx context.Context, hash tktypes.Bytes32) (*IndexedTransaction, error)
+	GetIndexedTransactionByNonce(ctx context.Context, from tktypes.EthAddress, nonce uint64) (*IndexedTransaction, error)
 	GetBlockTransactionsByNumber(ctx context.Context, blockNumber int64) ([]*IndexedTransaction, error)
 	GetTransactionEventsByHash(ctx context.Context, hash tktypes.Bytes32) ([]*IndexedEvent, error)
 	ListTransactionEvents(ctx context.Context, lastBlock int64, lastIndex, limit int, withTransaction, withBlock bool) ([]*IndexedEvent, error)
@@ -73,7 +73,7 @@ type blockIndexer struct {
 	cancelFunc                 func()
 	persistence                persistence.Persistence
 	blockListener              *blockListener
-	wsConn                     rpcbackend.WebSocketRPCClient
+	wsConn                     rpcclient.WSClient
 	stateLock                  sync.Mutex
 	fromBlock                  *ethtypes.HexUint64
 	nextBlock                  *ethtypes.HexUint64 // nil in the special case of "latest" and no block received yet
@@ -85,6 +85,7 @@ type blockIndexer struct {
 	batchSize                  int
 	batchTimeout               time.Duration
 	txWaiters                  *inflight.InflightManager[tktypes.Bytes32, *IndexedTransaction]
+	preCommitHandlers          []PreCommitHandler
 	eventStreams               map[uuid.UUID]*eventStream
 	eventStreamsHeadSet        map[uuid.UUID]*eventStream
 	eventStreamsLock           sync.Mutex
@@ -93,7 +94,6 @@ type blockIndexer struct {
 	dispatcherTap              chan struct{}
 	processorDone              chan struct{}
 	dispatcherDone             chan struct{}
-	utBatchNotify              chan *blockWriterBatch
 }
 
 func NewBlockIndexer(ctx context.Context, config *Config, wsConfig *rpcclient.WSConfig, persistence persistence.Persistence) (_ BlockIndexer, err error) {
@@ -137,8 +137,13 @@ func (bi *blockIndexer) Start(internalStreams ...*InternalEventStream) error {
 	// Internal event streams can be instated before we start the listener itself
 	// (so even on first startup they function as if they were there before the indexer loads)
 	for _, ies := range internalStreams {
-		if _, err := bi.upsertInternalEventStream(bi.parentCtxForReset, ies); err != nil {
-			return err
+		switch ies.Type {
+		case IESTypeEventStream:
+			if _, err := bi.upsertInternalEventStream(bi.parentCtxForReset, ies); err != nil {
+				return err
+			}
+		case IESTypePreCommitHandler:
+			bi.preCommitHandlers = append(bi.preCommitHandlers, ies.PreCommitHandler)
 		}
 	}
 	bi.blockListener.start()
@@ -480,7 +485,7 @@ func (bi *blockIndexer) hydrateBlock(ctx context.Context, batch *blockWriterBatc
 			// but there's no point in continuing to retry as a confirmed block should be available
 			// on our connection.
 			// This nil entry in batch.receipts[blockIndex] triggers a reset.
-			return !isNotFound(rpcErr), rpcErr.Error()
+			return !isNotFound(rpcErr), rpcErr
 		}
 		return false, nil
 	})
@@ -503,6 +508,7 @@ func (bi *blockIndexer) logToIndexedEvent(l *LogJSONRPC) *IndexedEvent {
 func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch) {
 
 	var blocks []*IndexedBlock
+	var notifyTransactions []*IndexedTransactionNotify
 	var transactions []*IndexedTransaction
 	var events []*IndexedEvent
 	newHighestBlock := int64(-1)
@@ -518,38 +524,55 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 			if r.Status.BigInt().Int64() == 1 {
 				result = TXResult_SUCCESS.Enum()
 			}
-			transactions = append(transactions, &IndexedTransaction{
-				Hash:             tktypes.NewBytes32FromSlice(r.TransactionHash),
-				BlockNumber:      int64(r.BlockNumber),
-				TransactionIndex: int64(txIndex),
-				From:             (*tktypes.EthAddress)(r.From),
-				To:               (*tktypes.EthAddress)(r.To),
-				Nonce:            uint64(block.Transactions[txIndex].Nonce),
-				ContractAddress:  (*tktypes.EthAddress)(r.ContractAddress),
-				Result:           result,
-			})
+			txn := IndexedTransactionNotify{
+				IndexedTransaction: IndexedTransaction{
+					Hash:             tktypes.NewBytes32FromSlice(r.TransactionHash),
+					BlockNumber:      int64(r.BlockNumber),
+					TransactionIndex: int64(txIndex),
+					From:             (*tktypes.EthAddress)(r.From),
+					To:               (*tktypes.EthAddress)(r.To),
+					Nonce:            uint64(block.Transactions[txIndex].Nonce),
+					ContractAddress:  (*tktypes.EthAddress)(r.ContractAddress),
+					Result:           result,
+				},
+				RevertReason: tktypes.HexBytes(r.RevertReason),
+			}
+			notifyTransactions = append(notifyTransactions, &txn)
+			transactions = append(transactions, &txn.IndexedTransaction)
 			for _, l := range r.Logs {
 				events = append(events, bi.logToIndexedEvent(l))
 			}
 		}
 	}
 
+	var postCommits []PostCommit
 	err := bi.retry.Do(ctx, func(attempt int) (retryable bool, err error) {
-		err = bi.persistence.DB().Transaction(func(tx *gorm.DB) error {
-			if len(blocks) > 0 {
-				err = tx.
+		postCommits = nil
+		err = bi.persistence.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+			for _, preCommitHandler := range bi.preCommitHandlers {
+				var postCommit PostCommit
+				postCommit, err = preCommitHandler(ctx, dbTX, blocks, notifyTransactions)
+				if err == nil {
+					postCommits = append(postCommits, postCommit)
+				}
+			}
+			if err == nil && len(blocks) > 0 {
+				err = dbTX.
+					WithContext(ctx).
 					Table("indexed_blocks").
 					Create(blocks).
 					Error
 			}
 			if err == nil && len(transactions) > 0 {
-				err = tx.
+				err = dbTX.
+					WithContext(ctx).
 					Table("indexed_transactions").
 					Create(transactions).
 					Error
 			}
 			if err == nil && len(events) > 0 {
-				err = tx.
+				err = dbTX.
+					WithContext(ctx).
 					Table("indexed_events").
 					Omit("Transaction").
 					Omit("Event").
@@ -568,8 +591,8 @@ func (bi *blockIndexer) writeBatch(ctx context.Context, batch *blockWriterBatch)
 		bi.highestConfirmedBlock.Store(newHighestBlock)
 	}
 	if err == nil {
-		if bi.utBatchNotify != nil {
-			bi.utBatchNotify <- batch
+		for _, postCommitHandler := range postCommits {
+			postCommitHandler()
 		}
 		for _, t := range transactions {
 			if inflight := bi.txWaiters.GetInflight(t.Hash); inflight != nil {
@@ -776,6 +799,22 @@ func (bi *blockIndexer) getIndexedTransactionByHash(ctx context.Context, hashID 
 	return txns[0], nil
 }
 
+func (bi *blockIndexer) GetIndexedTransactionByNonce(ctx context.Context, from tktypes.EthAddress, nonce uint64) (*IndexedTransaction, error) {
+	var txns []*IndexedTransaction
+	db := bi.persistence.DB()
+	err := db.
+		WithContext(ctx).
+		Table("indexed_transactions").
+		Where(`"from" = ?`, from).
+		Where("nonce = ?", nonce).
+		Find(&txns).
+		Error
+	if err != nil || len(txns) < 1 {
+		return nil, err
+	}
+	return txns[0], nil
+}
+
 func (bi *blockIndexer) GetBlockTransactionsByNumber(ctx context.Context, blockNumber int64) ([]*IndexedTransaction, error) {
 	var txns []*IndexedTransaction
 	db := bi.persistence.DB()
@@ -842,7 +881,7 @@ func (bi *blockIndexer) getConfirmedTransactionReceipt(ctx context.Context, tx e
 	var receipt *TXReceiptJSONRPC
 	rpcErr := bi.wsConn.CallRPC(ctx, &receipt, "eth_getTransactionReceipt", tx)
 	if rpcErr != nil {
-		return nil, rpcErr.Error()
+		return nil, rpcErr
 	}
 	if receipt == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgBlockIndexerConfirmedReceiptNotFound, tx)

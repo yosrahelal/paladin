@@ -82,13 +82,6 @@ func TestTimestampJSONUnmarshalNumber(t *testing.T) {
 	assert.Equal(t, "2001-02-03T04:05:06Z", utTimeTest.T1.String())
 }
 
-func TestNilTimeConversion(t *testing.T) {
-	var ts *Timestamp
-	var epoch time.Time
-	conversion := ts.Time()
-	assert.Equal(t, epoch, conversion)
-}
-
 func TestTimestampDatabaseSerialization(t *testing.T) {
 	now := TimestampNow()
 	zero := Timestamp(0)
