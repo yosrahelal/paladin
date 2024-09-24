@@ -334,7 +334,6 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
 				res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
 				res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
-				fmt.Printf("\nspent states: %+v\nconfirmed states: %+v\n", res.SpentStates, res.ConfirmedStates)
 			} else {
 				log.L(ctx).Errorf("Failed to unmarshal transfer event: %s", err)
 			}
@@ -358,7 +357,6 @@ func encodeTransactionData(ctx context.Context, transaction *prototk.Transaction
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("\nencoded transaction id: %s\n", txID.String())
 	var data []byte
 	data = append(data, types.ZetoTransactionData_V0...)
 	data = append(data, txID...)
@@ -373,7 +371,6 @@ func decodeTransactionData(data tktypes.HexBytes) (txID tktypes.HexBytes) {
 	if dataPrefix.String() != types.ZetoTransactionData_V0.String() {
 		return nil
 	}
-	fmt.Printf("\ndecoded transaction id: %s\n", data[4:].String())
 	return data[4:]
 }
 
@@ -381,7 +378,7 @@ func parseStatesFromEvent(txID tktypes.HexBytes, states []tktypes.HexInteger) []
 	refs := make([]*prototk.StateUpdate, len(states))
 	for i, state := range states {
 		refs[i] = &prototk.StateUpdate{
-			Id:            state.String(),
+			DataHash:      state.String(),
 			TransactionId: txID.String(),
 		}
 	}

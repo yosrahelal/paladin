@@ -22,7 +22,6 @@ import (
 	"math/big"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
@@ -208,9 +207,9 @@ func (s *zetoDomainTestSuite) TestZeto_Anon() {
 	s.testZetoFungible(s.T(), "Zeto_Anon")
 }
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
-// 	s.testZetoFungible(s.T(), "Zeto_AnonEnc")
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
+	s.testZetoFungible(s.T(), "Zeto_AnonEnc")
+}
 
 // func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
 // 	s.testZetoFungible(s.T(), "Zeto_AnonNullifier")
@@ -321,17 +320,19 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	time.Sleep(1 * time.Second)
-
 	// check that we now only have one unspent coin, of value 5
 	coins, err = s.domain.FindCoins(ctx, zetoAddress, "{}")
 	require.NoError(t, err)
-	for _, coin := range coins {
-		log.L(ctx).Infof("Coin: %+v", coin)
-	}
-	require.Len(t, coins, 1)
-	assert.Equal(t, int64(5), coins[0].Amount.Int64())
-	assert.Equal(t, controllerName, coins[0].Owner)
+	// one for the controller from the failed transaction
+	// one for the controller from the successful transaction as change (value=5)
+	// one for the recipient (value=25)
+	require.Len(t, coins, 3)
+	assert.Equal(t, int64(10), coins[0].Amount.Int64())
+	assert.Equal(t, recipient1Name, coins[0].Owner)
+	assert.Equal(t, int64(25), coins[1].Amount.Int64())
+	assert.Equal(t, recipient1Name, coins[1].Owner)
+	assert.Equal(t, int64(5), coins[2].Amount.Int64())
+	assert.Equal(t, controllerName, coins[2].Owner)
 }
 
 func TestZetoDomainTestSuite(t *testing.T) {

@@ -181,7 +181,11 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 		}
 		var dataHash tktypes.HexBytes
 		if s.DataHash != nil {
-			dataHash = tktypes.HexBytes(*s.DataHash)
+			hash, err := tktypes.ParseHexBytes(ctx, *s.DataHash)
+			if err != nil {
+				return err
+			}
+			dataHash = hash
 		}
 		newStatesToWrite[i] = &statestore.StateUpsert{
 			SchemaID: schema.IDString(),

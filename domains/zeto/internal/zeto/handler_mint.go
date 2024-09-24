@@ -79,7 +79,6 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 	if err != nil {
 		return nil, err
 	}
-
 	return &pb.AssembleTransactionResponse{
 		AssemblyResult: pb.AssembleTransactionResponse_OK,
 		AssembledTransaction: &pb.AssembledTransaction{

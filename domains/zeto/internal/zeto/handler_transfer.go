@@ -304,7 +304,6 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		} else {
 			inputs[i] = "0"
 		}
-		fmt.Printf("\ninput %d: %s\n", i, inputs[i])
 	}
 	outputs := make([]string, OUTPUT_COUNT)
 	for i := 0; i < OUTPUT_COUNT; i++ {
@@ -318,7 +317,6 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		} else {
 			outputs[i] = "0"
 		}
-		fmt.Printf("\noutput %d: %s\n", i, outputs[i])
 	}
 
 	data, err := encodeTransactionData(ctx, req.Transaction)
