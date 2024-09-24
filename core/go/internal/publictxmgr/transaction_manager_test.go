@@ -70,7 +70,7 @@ func baseMocks(t *testing.T) *dependencyMocks {
 func NewTestPublicTxManager(t *testing.T, realDB bool, extraSetup ...func(mocks *dependencyMocks, conf *Config)) (context.Context, *pubTxManager, *dependencyMocks, func()) {
 	ctx := context.Background()
 	conf := &Config{
-		TransactionEngine: TransactionEngineConfig{
+		Manager: ManagerConfig{
 			Interval:                 confutil.P("1h"),
 			MaxInFlightOrchestrators: confutil.P(1),
 		},
@@ -181,36 +181,61 @@ func TestSingleTransactionSubmitRealDB(t *testing.T) {
 	})
 	assert.Regexp(t, "mapped revert error", err)
 
-	// // insert transaction next nonce error
-	// mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(ethtypes.NewHexInteger(big.NewInt(10)), nil)
-	// mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
-	// 	Return(nil, fmt.Errorf("pop")).Once().Once()
-	// _, submissionRejected, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
-	// 	ID:       &txID,
-	// 	SignerID: string(testEthTxInput.From),
-	// }, &components.EthTransfer{
-	// 	To:    *tktypes.MustEthAddress(testEthTxInput.To.String()),
-	// 	Value: testEthTxInput.Value,
-	// })
-	// assert.NotNil(t, err)
-	// assert.Regexp(t, "pop", err)
-	// assert.False(t, submissionRejected)
-	// // create transaction succeeded
-	// // gas estimate should be cached
-	// mTS.On("InsertTransaction", ctx, mock.Anything, mock.Anything).Return(nil).Once()
-	// mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
-	// 	Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
-	// mTS.On("UpdateSubStatus", ctx, txID.String(), PubTxSubStatusReceived, BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	// insert transaction next nonce error
+	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
+		Return(ethclient.EstimateGasResult{GasLimit: tktypes.HexUint64(10)}, nil)
+	m.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
+		Return(nil, fmt.Errorf("pop")).Once()
+	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
+		PublicTxInput: ptxapi.PublicTxInput{
+			From: "signer1",
+		},
+	})
+	assert.NotNil(t, err)
+	assert.Regexp(t, "pop", err)
 
-	// _, _, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
-	// 	ID:       &txID,
-	// 	SignerID: string(testEthTxInput.From),
-	// }, &components.EthTransfer{
-	// 	To:    *tktypes.MustEthAddress(testEthTxInput.To.String()),
-	// 	Value: testEthTxInput.Value,
-	// })
-	// require.NoError(t, err)
-	// mEC.AssertNotCalled(t, "GasEstimate")
+	// create transaction succeeded
+	// gas estimate should be cached
+	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
+		Return(ethclient.EstimateGasResult{GasLimit: tktypes.HexUint64(10)}, nil)
+	m.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
+		Return(confutil.P(tktypes.HexUint64(1)), nil).Once()
+	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
+		PublicTxInput: ptxapi.PublicTxInput{
+			From: "signer1",
+		},
+	})
+	assert.NoError(t, err)
+
+	// TODO: Query status
+
+}
+
+func TestAddActivityDisabled(t *testing.T) {
+	_, ble, _, done := NewTestPublicTxManager(t, false, func(mocks *dependencyMocks, conf *Config) {
+		conf.Manager.ActivityRecords.RecordsPerTransaction = confutil.P(0)
+	})
+	defer done()
+
+	ble.addActivityRecord("signer1:nonce", "message")
+
+	assert.Empty(t, ble.getActivityRecords("signer1:nonce"))
+}
+
+func TestAddActivityWrap(t *testing.T) {
+	_, ble, _, done := NewTestPublicTxManager(t, false)
+	defer done()
+
+	signerNonce := "signer1:nonce"
+	for i := 0; i < 100; i++ {
+		ble.addActivityRecord(signerNonce, fmt.Sprintf("message %.2d", i))
+	}
+
+	activityRecords := ble.getActivityRecords(signerNonce)
+	assert.Equal(t, "message 99", activityRecords[0].Message)
+	assert.Equal(t, "message 98", activityRecords[1].Message)
+	assert.Len(t, activityRecords, ble.maxActivityRecordsPerTx)
+
 }
 
 // func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {

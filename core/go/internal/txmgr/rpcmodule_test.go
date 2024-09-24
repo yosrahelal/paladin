@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -97,11 +96,6 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, uuid.UUID{}, tx1ID)
 
-	// Set some activity
-	tmr.AddActivityRecord(tx1ID, "did a thing")
-	time.Sleep(1 * time.Microsecond)
-	tmr.AddActivityRecord(tx1ID, "did another thing")
-
 	// Query it back
 	var txns []*ptxapi.TransactionFull
 	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
@@ -111,17 +105,12 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	assert.Equal(t, tx0ID, txns[0].DependsOn[0])
 	assert.Equal(t, `{"0":"12345"}`, txns[0].Data.String())
 	assert.Equal(t, "(uint256)", txns[0].Function)
-	assert.Len(t, txns[0].Activity, 2)
-	assert.Equal(t, "did another thing", txns[0].Activity[0].Message)
-	assert.Equal(t, "did a thing", txns[0].Activity[1].Message)
-	assert.Greater(t, txns[0].Activity[0].Time, txns[0].Activity[1].Time)
 
 	// Check full=false
 	txns = nil
 	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), false)
 	require.NoError(t, err)
 	assert.Len(t, txns, 1)
-	assert.Nil(t, txns[0].Activity)
 
 	// Get the stored ABIs to check we found it
 	var abis []*ptxapi.StoredABI

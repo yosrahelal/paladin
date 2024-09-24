@@ -374,7 +374,7 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmed(t *testing.T) {
 
 	inMemoryTxState := testStateManagerWithMocks.inMemoryTxState
 
-	assert.Equal(t, stateManager.GetTxID(), inMemoryTxState.GetTxID())
+	assert.Equal(t, stateManager.GetSignerNonce(), inMemoryTxState.GetSignerNonce())
 	assert.False(t, inMemoryTxState.IsComplete())
 
 	newTime := confutil.P(tktypes.TimestampNow())
@@ -406,12 +406,12 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmed(t *testing.T) {
 		GasLimit:        newGas,
 	}
 	mTS := testStateManagerWithMocks.mTS
-	txIDStr := stateManager.GetTxID().String()
+	txIDStr := stateManager.GetSignerNonce().String()
 	mTS.On("UpdateSubStatus", mock.Anything, txIDStr, PubTxSubStatusTracking, BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
 	mTS.On("UpdateTransaction", mock.Anything, txIDStr, rsc.StageOutputsToBePersisted.TxUpdates).Return(nil).Once()
 	_, _, err = stateManager.PersistTxState(ctx)
 	assert.Nil(t, err)
-	assert.Equal(t, stateManager.GetTxID(), inMemoryTxState.GetTxID())
+	assert.Equal(t, stateManager.GetSignerNonce(), inMemoryTxState.GetSignerNonce())
 
 	assert.Equal(t, testConfirmedTx, inMemoryTxState.GetConfirmedTransaction())
 	assert.Equal(t, &newTxHash, inMemoryTxState.GetTransactionHash())
@@ -460,7 +460,7 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmedOnPreviousHash(t
 
 	inMemoryTxState := testStateManagerWithMocks.inMemoryTxState
 
-	assert.Equal(t, stateManager.GetTxID(), inMemoryTxState.GetTxID())
+	assert.Equal(t, stateManager.GetSignerNonce(), inMemoryTxState.GetSignerNonce())
 	assert.False(t, inMemoryTxState.IsComplete())
 
 	newTime := confutil.P(tktypes.TimestampNow())
@@ -491,12 +491,12 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmedOnPreviousHash(t
 		GasLimit:        newGas,
 	}
 	mTS := testStateManagerWithMocks.mTS
-	txIDStr := stateManager.GetTxID().String()
+	txIDStr := stateManager.GetSignerNonce().String()
 	mTS.On("UpdateSubStatus", mock.Anything, txIDStr, PubTxSubStatusTracking, BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
 	mTS.On("UpdateTransaction", mock.Anything, txIDStr, rsc.StageOutputsToBePersisted.TxUpdates).Return(nil).Once()
 	_, _, err = stateManager.PersistTxState(ctx)
 	assert.Nil(t, err)
-	assert.Equal(t, stateManager.GetTxID(), inMemoryTxState.GetTxID())
+	assert.Equal(t, stateManager.GetSignerNonce(), inMemoryTxState.GetSignerNonce())
 
 	assert.Equal(t, testConfirmedTx, inMemoryTxState.GetConfirmedTransaction())
 	assert.Equal(t, &newTxHash, inMemoryTxState.GetTransactionHash())
@@ -543,7 +543,7 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmedRetrieveConfirme
 
 	inMemoryTxState := testStateManagerWithMocks.inMemoryTxState
 
-	assert.Equal(t, stateManager.GetTxID(), inMemoryTxState.GetTxID())
+	assert.Equal(t, stateManager.GetSignerNonce(), inMemoryTxState.GetSignerNonce())
 	assert.False(t, inMemoryTxState.IsComplete())
 
 	newTime := confutil.P(tktypes.TimestampNow())
@@ -575,12 +575,12 @@ func TestStateManagerTxPersistenceManagementTransactionConfirmedRetrieveConfirme
 	}
 
 	mTS := testStateManagerWithMocks.mTS
-	txIDStr := stateManager.GetTxID().String()
+	txIDStr := stateManager.GetSignerNonce().String()
 	mTS.On("UpdateSubStatus", mock.Anything, txIDStr, PubTxSubStatusTracking, BaseTxActionConfirmTransaction, (*fftypes.JSONAny)(nil), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Once()
 	mTS.On("UpdateTransaction", mock.Anything, txIDStr, rsc.StageOutputsToBePersisted.TxUpdates).Return(nil).Once()
 	_, _, err = stateManager.PersistTxState(ctx)
 	assert.Nil(t, err)
-	assert.Equal(t, stateManager.GetTxID(), inMemoryTxState.GetTxID())
+	assert.Equal(t, stateManager.GetSignerNonce(), inMemoryTxState.GetSignerNonce())
 
 	assert.Equal(t, testConfirmedTx, inMemoryTxState.GetConfirmedTransaction())
 	assert.Equal(t, &newTxHash, inMemoryTxState.GetTransactionHash())
@@ -620,7 +620,7 @@ func TestStateManagerTxPersistenceManagementUpdateErrors(t *testing.T) {
 
 	inMemoryTxState := testStateManagerWithMocks.inMemoryTxState
 
-	assert.Equal(t, stateManager.GetTxID(), inMemoryTxState.GetTxID())
+	assert.Equal(t, stateManager.GetSignerNonce(), inMemoryTxState.GetSignerNonce())
 	assert.False(t, inMemoryTxState.IsComplete())
 
 	newTxHash := tktypes.Bytes32Keccak([]byte("0x00003")).String()
@@ -643,7 +643,7 @@ func TestStateManagerTxPersistenceManagementUpdateErrors(t *testing.T) {
 	}
 
 	mTS := testStateManagerWithMocks.mTS
-	txIDStr := stateManager.GetTxID().String()
+	txIDStr := stateManager.GetSignerNonce().String()
 
 	mBI := testStateManagerWithMocks.mBI
 

@@ -275,16 +275,7 @@ type InMemoryTxStateReadOnly interface {
 	GetLastSubmitTime() *tktypes.Timestamp
 	GetUnflushedSubmission() *publicSubmission
 	GetInFlightStatus() InFlightStatus
-
-	// Returns a generated string from the transaction that can be used as a unique identifier for in-memory processing.
-	// Note it CANNOT be used to retrieve the transaction from the DB
-	GetTxID() string
-
 	GetSignerNonce() string
-
-	// Return the Paladin transaction this public TX is a child of (might not be unique as resubmits happen)
-	GetParentTransactionID() uuid.UUID
-
 	GetGasLimit() uint64
 	IsReadyToExit() bool
 }

@@ -13,25 +13,4 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package txmgr
-
-import (
-	"github.com/kaleido-io/paladin/core/internal/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-)
-
-type Config struct {
-	ABI ABIConfig `yaml:"abi"`
-}
-
-type ABIConfig struct {
-	Cache cache.Config `yaml:"cache"`
-}
-
-var DefaultConfig = &Config{
-	ABI: ABIConfig{
-		Cache: cache.Config{
-			Capacity: confutil.P(100),
-		},
-	},
-}
+package publictxmgr

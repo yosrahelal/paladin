@@ -117,6 +117,9 @@ func (hi *HexInt256) HexString() string {
 }
 
 func (hi *HexInt256) Value() (driver.Value, error) {
+	if hi == nil {
+		return nil, nil
+	}
 	return Int256To65CharDBSafeSortableString((*big.Int)(hi)), nil
 }
 

@@ -20,7 +20,6 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -316,7 +315,6 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 
 	log.L(ctx).Debugf("TransferGasFromAutoFuelingSource submitting a fueling tx for  destination address: %s ", destAddress)
 	submission, err := af.pubTxMgr.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
-		Bindings: []*components.PaladinTXReference{{TransactionID: uuid.New(), TransactionType: ptxapi.TransactionTypeAutoFuel.Enum()}},
 		PublicTxInput: ptxapi.PublicTxInput{
 			From: af.sourceAddress.String(),
 			To:   &destAddress,

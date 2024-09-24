@@ -28,6 +28,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
@@ -87,9 +88,9 @@ type pubTxManager struct {
 
 	// a map of signing addresses and transaction engines
 	InFlightOrchestrators       map[tktypes.EthAddress]*orchestrator
-	SigningAddressesPausedUntil map[tktypes.EthAddress]time.Time
+	signingAddressesPausedUntil map[tktypes.EthAddress]time.Time
 	InFlightOrchestratorMux     sync.Mutex
-	InFlightOrchestratorStale   chan bool
+	inFlightOrchestratorStale   chan bool
 
 	// inbound concurrency control TBD
 
@@ -102,12 +103,20 @@ type pubTxManager struct {
 	enginePollingInterval    time.Duration
 	engineLoopDone           chan struct{}
 
+	activityRecordCache     cache.Cache[string, *txActivityRecords]
+	maxActivityRecordsPerTx int
+
 	// balance manager
 	balanceManager BalanceManager
 
 	// orchestrator config
 	gasPriceIncreaseMax     *big.Int
 	gasPriceIncreasePercent int
+}
+
+type txActivityRecords struct {
+	lock    sync.Mutex
+	records []ptxapi.TransactionActivityRecord
 }
 
 func NewPublicTransactionManager(ctx context.Context, conf *Config) components.PublicTxManager {
@@ -125,16 +134,18 @@ func NewPublicTransactionManager(ctx context.Context, conf *Config) components.P
 		ctxCancel:                   ptmCtxCancel,
 		conf:                        conf,
 		gasPriceClient:              gasPriceClient,
-		InFlightOrchestratorStale:   make(chan bool, 1),
-		SigningAddressesPausedUntil: make(map[tktypes.EthAddress]time.Time),
+		inFlightOrchestratorStale:   make(chan bool, 1),
+		signingAddressesPausedUntil: make(map[tktypes.EthAddress]time.Time),
 		maxInFlightOrchestrators:    confutil.IntMin(conf.Orchestrator.MaxInFlight, 1, *DefaultConfig.Orchestrator.MaxInFlight),
-		maxOverloadProcessTime:      confutil.DurationMin(conf.TransactionEngine.MaxOverloadProcessTime, 0, *DefaultConfig.TransactionEngine.MaxOverloadProcessTime),
-		maxOrchestratorStale:        confutil.DurationMin(conf.TransactionEngine.MaxStaleTime, 0, *DefaultConfig.TransactionEngine.MaxStaleTime),
-		maxOrchestratorIdle:         confutil.DurationMin(conf.TransactionEngine.MaxIdleTime, 0, *DefaultConfig.TransactionEngine.MaxIdleTime),
-		enginePollingInterval:       confutil.DurationMin(conf.TransactionEngine.Interval, 50*time.Millisecond, *DefaultConfig.TransactionEngine.Interval),
-		retry:                       retry.NewRetryIndefinite(&conf.TransactionEngine.Retry),
+		maxOverloadProcessTime:      confutil.DurationMin(conf.Manager.MaxOverloadProcessTime, 0, *DefaultConfig.Manager.MaxOverloadProcessTime),
+		maxOrchestratorStale:        confutil.DurationMin(conf.Manager.MaxStaleTime, 0, *DefaultConfig.Manager.MaxStaleTime),
+		maxOrchestratorIdle:         confutil.DurationMin(conf.Manager.MaxIdleTime, 0, *DefaultConfig.Manager.MaxIdleTime),
+		enginePollingInterval:       confutil.DurationMin(conf.Manager.Interval, 50*time.Millisecond, *DefaultConfig.Manager.Interval),
+		retry:                       retry.NewRetryIndefinite(&conf.Manager.Retry),
 		gasPriceIncreaseMax:         gasPriceIncreaseMax,
 		gasPriceIncreasePercent:     confutil.Int(conf.GasPrice.IncreasePercentage, *DefaultConfig.GasPrice.IncreasePercentage),
+		activityRecordCache:         cache.NewCache[string, *txActivityRecords](&conf.Manager.ActivityRecords.Config, &DefaultConfig.Manager.ActivityRecords.Config),
+		maxActivityRecordsPerTx:     confutil.Int(conf.Manager.ActivityRecords.RecordsPerTransaction, *DefaultConfig.Manager.ActivityRecords.RecordsPerTransaction),
 	}
 }
 
@@ -236,7 +247,7 @@ func (pb *preparedTransactionBatch) Submit(ctx context.Context, dbTX *gorm.DB) (
 	if len(persistedTransactions) > 0 {
 		err = dbTX.
 			WithContext(ctx).
-			Table("public_txn").
+			Table("public_txns").
 			Create(persistedTransactions).
 			Error
 	}
@@ -369,6 +380,7 @@ func (ble *pubTxManager) prepareSubmission(ctx context.Context, txi *components.
 	log.L(ctx).Tracef("PrepareSubmission transaction: %+v", txi)
 
 	pt := &preparedTransaction{
+		bindings: txi.Bindings,
 		tx: &ptxapi.PublicTx{
 			To:              txi.To,
 			Data:            txi.Data,
@@ -382,7 +394,9 @@ func (ble *pubTxManager) prepareSubmission(ctx context.Context, txi *components.
 		fromAddr, err = tktypes.ParseEthAddress(fromAddrString)
 	}
 	if err != nil {
-		return nil, err
+		// Treat a failure to resolve as a rejected error for this individual transaction, rather than a system error
+		pt.rejectError = err
+		return pt, nil
 	}
 	pt.keyHandle = keyHandle
 	pt.tx.From = *fromAddr
@@ -581,7 +595,7 @@ func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, from tkt
 		return false, err
 	}
 	if len(ptxs) > 0 && ptxs[0].Completed != nil {
-		log.L(ctx).Debugf("CheckTransactionCompleted returned true for %s", ptxs[0].getIDString())
+		log.L(ctx).Debugf("CheckTransactionCompleted returned true for %s", ptxs[0].SignerNonce)
 		return true, nil
 	}
 	return false, nil
@@ -604,7 +618,7 @@ func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourc
 		return nil, err
 	}
 	if len(ptxs) > 0 {
-		log.L(ctx).Debugf("GetPendingFuelingTransaction returned %s", ptxs[0].getIDString())
+		log.L(ctx).Debugf("GetPendingFuelingTransaction returned %s", ptxs[0].SignerNonce)
 		return mapPersistedTransaction(ptxs[0]), nil
 	}
 	return nil, nil
@@ -707,7 +721,7 @@ func (pte *pubTxManager) notifyConfirmedTxNonce(addr tktypes.EthAddress, nonce u
 func (pte *pubTxManager) UpdateSubStatus(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
 	// TODO: Choose after testing the right way to treat these records - if text is right or not
 	if err == nil {
-		pte.rootTxMgr.AddActivityRecord(imtx.GetParentTransactionID(),
+		pte.addActivityRecord(imtx.GetSignerNonce(),
 			i18n.ExpandWithCode(ctx,
 				i18n.MessageKey(msgs.MsgPublicTxHistoryInfo),
 				imtx.GetFrom(),
@@ -718,7 +732,7 @@ func (pte *pubTxManager) UpdateSubStatus(ctx context.Context, imtx InMemoryTxSta
 			),
 		)
 	} else {
-		pte.rootTxMgr.AddActivityRecord(imtx.GetParentTransactionID(),
+		pte.addActivityRecord(imtx.GetSignerNonce(),
 			i18n.ExpandWithCode(ctx,
 				i18n.MessageKey(msgs.MsgPublicTxHistoryError),
 				imtx.GetFrom(),
@@ -731,6 +745,45 @@ func (pte *pubTxManager) UpdateSubStatus(ctx context.Context, imtx InMemoryTxSta
 	}
 
 	return nil
+}
+
+// add an activity record - this function assumes caller will not add multiple
+func (pte *pubTxManager) addActivityRecord(signerNonce string, msg string) {
+	if pte.maxActivityRecordsPerTx == 0 {
+		return
+	}
+	txr, _ := pte.activityRecordCache.Get(signerNonce)
+	if txr == nil {
+		txr = &txActivityRecords{}
+		pte.activityRecordCache.Set(signerNonce, txr)
+	}
+	// We add to the front of the list (newest record first) and cap the size
+	txr.lock.Lock()
+	defer txr.lock.Unlock()
+	record := &ptxapi.TransactionActivityRecord{
+		Time:    tktypes.TimestampNow(),
+		Message: msg,
+	}
+	copyLen := len(txr.records)
+	if copyLen >= pte.maxActivityRecordsPerTx {
+		copyLen = pte.maxActivityRecordsPerTx - 1
+	}
+	newActivity := make([]ptxapi.TransactionActivityRecord, copyLen+1)
+	copy(newActivity[1:], txr.records[0:copyLen])
+	newActivity[0] = *record
+	txr.records = newActivity
+}
+
+func (pte *pubTxManager) getActivityRecords(signerNonce string) []ptxapi.TransactionActivityRecord {
+	txr, _ := pte.activityRecordCache.Get(signerNonce)
+	if txr != nil {
+		// Snap the current activity array pointer in the lock and return it directly
+		// (it does not get modified, only re-allocated on each update)
+		txr.lock.Lock()
+		defer txr.lock.Unlock()
+		return txr.records
+	}
+	return []ptxapi.TransactionActivityRecord{}
 }
 
 func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransactionNotify) ([]*components.PublicTxMatch, error) {
@@ -763,14 +816,17 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 	for i, match := range lookups {
 		txi := txiByHash[match.Submission.TransactionHash]
 		results[i] = &components.PublicTxMatch{
-			PaladinTXReference:       match.PaladinTXReference,
+			PaladinTXReference: components.PaladinTXReference{
+				TransactionID:   match.Transaction,
+				TransactionType: match.TransactionType,
+			},
 			IndexedTransactionNotify: txi,
 		}
 		completions[i] = &publicCompletion{
 			SignerNonce:     match.Submission.SignerNonce,
 			TransactionHash: match.Submission.TransactionHash,
 			Success:         txi.Result.V() == blockindexer.TXResult_SUCCESS,
-			RevertReasons:   txi.RevertReason,
+			RevertData:      txi.RevertReason,
 		}
 	}
 

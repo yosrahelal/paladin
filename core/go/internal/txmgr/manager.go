@@ -18,33 +18,27 @@ package txmgr
 import (
 	"context"
 
-	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 func NewTXManager(ctx context.Context, conf *Config) components.TXManager {
 	return &txManager{
-		txCache:              cache.NewCache[uuid.UUID, *txStatusRecord](&conf.TransactionActivity.Cache, &DefaultConfig.TransactionActivity.Cache),
-		abiCache:             cache.NewCache[tktypes.Bytes32, *ptxapi.StoredABI](&conf.ABI.Cache, &DefaultConfig.ABI.Cache),
-		activityRecordsPerTX: confutil.IntMin(conf.TransactionActivity.RecordsPerTransaction, 0, *DefaultConfig.TransactionActivity.RecordsPerTransaction),
+		abiCache: cache.NewCache[tktypes.Bytes32, *ptxapi.StoredABI](&conf.ABI.Cache, &DefaultConfig.ABI.Cache),
 	}
 }
 
 type txManager struct {
-	p                    persistence.Persistence
-	publicTxMgr          components.PublicTxManager
-	privateTxMgr         components.PrivateTxManager
-	txCache              cache.Cache[uuid.UUID, *txStatusRecord]
-	abiCache             cache.Cache[tktypes.Bytes32, *ptxapi.StoredABI]
-	activityRecordsPerTX int
-	rpcModule            *rpcserver.RPCModule
+	p            persistence.Persistence
+	publicTxMgr  components.PublicTxManager
+	privateTxMgr components.PrivateTxManager
+	abiCache     cache.Cache[tktypes.Bytes32, *ptxapi.StoredABI]
+	rpcModule    *rpcserver.RPCModule
 }
 
 func (tm *txManager) PostInit(c components.AllComponents) error {

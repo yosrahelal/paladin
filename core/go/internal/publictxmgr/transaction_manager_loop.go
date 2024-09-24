@@ -27,18 +27,18 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-type TransactionEngineConfig struct {
-	MaxInFlightOrchestrators *int               `yaml:"maxInFlightOrchestrators"`
-	Interval                 *string            `yaml:"interval"`
-	MaxStaleTime             *string            `yaml:"maxStaleTime"`
-	MaxIdleTime              *string            `yaml:"maxIdleTime"`
-	MaxOverloadProcessTime   *string            `yaml:"maxOverloadProcessTime"`
-	TransactionCache         cache.Config       `yaml:"transactionCache"` // can be larger than number of orchestrators for hot swapping
-	SubmissionWriter         flushwriter.Config `yaml:"submissionWriter"`
-	Retry                    retry.Config       `yaml:"retry"`
+type ManagerConfig struct {
+	MaxInFlightOrchestrators *int                  `yaml:"maxInFlightOrchestrators"`
+	Interval                 *string               `yaml:"interval"`
+	MaxStaleTime             *string               `yaml:"maxStaleTime"`
+	MaxIdleTime              *string               `yaml:"maxIdleTime"`
+	MaxOverloadProcessTime   *string               `yaml:"maxOverloadProcessTime"`
+	ActivityRecords          ActivityRecordsConfig `yaml:"activityRecords"`
+	SubmissionWriter         flushwriter.Config    `yaml:"submissionWriter"`
+	Retry                    retry.Config          `yaml:"retry"`
 }
 
-var DefaultTransactionEngineConfig = &TransactionEngineConfig{
+var DefaultManagerConfig = &ManagerConfig{
 	MaxInFlightOrchestrators: confutil.P(50),
 	Interval:                 confutil.P("5s"),
 	MaxStaleTime:             confutil.P("1m"),
@@ -54,9 +54,19 @@ var DefaultTransactionEngineConfig = &TransactionEngineConfig{
 		BatchTimeout: confutil.P("75ms"),
 		BatchMaxSize: confutil.P(50),
 	},
-	TransactionCache: cache.Config{
-		Capacity: confutil.P(1000),
+	ActivityRecords: ActivityRecordsConfig{
+		Config: cache.Config{
+			// Status cache can be is shared across orchestrators, allowing status to live beyond TX completion
+			// while still only being in memory
+			Capacity: confutil.P(1000),
+		},
+		RecordsPerTransaction: confutil.P(25),
 	},
+}
+
+type ActivityRecordsConfig struct {
+	cache.Config
+	RecordsPerTransaction *int `yaml:"entriesPerTransaction"`
 }
 
 // role of transaction engine:
@@ -88,7 +98,7 @@ func (ble *pubTxManager) engineLoop() {
 		// Wait to be notified, or timeout to run
 		select {
 		case <-ticker.C:
-		case <-ble.InFlightOrchestratorStale:
+		case <-ble.inFlightOrchestratorStale:
 		case <-ctx.Done():
 			ticker.Stop()
 			log.L(ctx).Infof("Engine poller exiting")
@@ -141,7 +151,7 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 	if spaces > 0 {
 
 		// Run through the paused orchestrators for fairness control
-		for signingAddress, pausedUntil := range ble.SigningAddressesPausedUntil {
+		for signingAddress, pausedUntil := range ble.signingAddressesPausedUntil {
 			if time.Now().Before(pausedUntil) {
 				log.L(ctx).Debugf("Engine excluded orchestrator for signing address %s from polling as it's paused util %s", signingAddress, pausedUntil.String())
 				stateCounts[string(OrchestratorStatePaused)] = stateCounts[string(OrchestratorStatePaused)] + 1
@@ -153,17 +163,19 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 		// We retry the get from persistence indefinitely (until the context cancels)
 		err := ble.retry.Do(ctx, func(attempt int) (retry bool, err error) {
 			// TODO: Fairness algorithm for swapping out orchestrators when there is no space
-			q := ble.p.DB().
+			db := ble.p.DB()
+			q := db.
 				WithContext(ctx).
+				Model(&persistedPubTx{}).
 				Table("public_txns").
-				Distinct("from").
-				Joins("Completed").
-				Where("Completed__tx_hash IS NULL").
+				Distinct(`"from"`).
+				Joins("Completed", db.Select("tx_hash")).
+				Where(`"Completed"."tx_hash" IS NULL`).
 				Limit(spaces)
 			if len(inFlightSigningAddresses) > 0 {
-				q = q.Where("from NOT IN (?)", inFlightSigningAddresses)
+				q = q.Where(`"from" NOT IN (?)`, inFlightSigningAddresses)
 			}
-			return true, q.Pluck("from", additionalNonInFlightSigners).Error
+			return true, q.Pluck(`"from"`, &additionalNonInFlightSigners).Error
 		})
 		if err != nil {
 			log.L(ctx).Infof("Engine polling context cancelled while retrying")
@@ -197,7 +209,7 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 			if time.Since(oc.orchestratorBirthTime) > ble.maxOverloadProcessTime {
 				log.L(ctx).Infof("Engine pause, attempt to stop orchestrator for signing address %s", signingAddress)
 				oc.Stop()
-				ble.SigningAddressesPausedUntil[signingAddress] = time.Now().Add(ble.maxOverloadProcessTime)
+				ble.signingAddressesPausedUntil[signingAddress] = time.Now().Add(ble.maxOverloadProcessTime)
 			}
 		}
 	}
@@ -211,7 +223,7 @@ func (ble *pubTxManager) MarkInFlightOrchestratorsStale() {
 	// to trigger a polling event to update the in flight transaction orchestrators
 	// if it already has an item in the channel, this function does nothing
 	select {
-	case ble.InFlightOrchestratorStale <- true:
+	case ble.inFlightOrchestratorStale <- true:
 	default:
 	}
 }

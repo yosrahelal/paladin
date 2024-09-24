@@ -356,7 +356,7 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 	return &StateWithLabels{
 		State: &State{
 			ID:              hashID,
-			CreatedAt:       now,
+			Created:         now,
 			DomainName:      as.DomainName,
 			Schema:          as.ID,
 			ContractAddress: contractAddress,
@@ -375,6 +375,6 @@ func (as *abiSchema) RecoverLabels(ctx context.Context, s *State) (*StateWithLab
 	}
 	return &StateWithLabels{
 		State:       s,
-		LabelValues: addStateBaseLabels(psd.labelValues, s.ID, s.CreatedAt),
+		LabelValues: addStateBaseLabels(psd.labelValues, s.ID, s.Created),
 	}, nil
 }

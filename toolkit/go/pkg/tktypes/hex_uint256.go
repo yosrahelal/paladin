@@ -111,6 +111,9 @@ func (hi *HexUint256) HexString() string {
 }
 
 func (hi *HexUint256) Value() (driver.Value, error) {
+	if hi == nil {
+		return nil, nil
+	}
 	return string(PadHexBigUint((*big.Int)(hi), make([]byte, 64))), nil
 }
 

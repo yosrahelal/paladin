@@ -19,7 +19,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -45,8 +44,6 @@ type managedTx struct {
 }
 
 type inMemoryTxState struct {
-	idString string // generated ID that uniquely represents this transaction in in-memory processing
-	// managed transaction in the only input for creating an inflight transaction
 	mtx *managedTx
 }
 
@@ -120,19 +117,8 @@ func (imtxs *inMemoryTxState) ApplyInMemoryUpdates(ctx context.Context, txUpdate
 	}
 }
 
-func (imtxs *inMemoryTxState) GetTxID() string {
-	if imtxs.idString == "" {
-		imtxs.idString = imtxs.mtx.ptx.getIDString()
-	}
-	return imtxs.idString
-}
-
 func (imtxs *inMemoryTxState) GetSignerNonce() string {
 	return imtxs.mtx.ptx.SignerNonce
-}
-
-func (imtxs *inMemoryTxState) GetParentTransactionID() uuid.UUID {
-	return imtxs.mtx.ptx.Transaction
 }
 
 func (imtxs *inMemoryTxState) GetCreatedTime() *tktypes.Timestamp {

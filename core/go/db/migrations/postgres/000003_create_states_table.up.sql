@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE TABLE states (
     "id"               TEXT    NOT NULL,
-    "created_at"       BIGINT  NOT NULL,
+    "created"          BIGINT  NOT NULL,
     "domain_name"      TEXT,
     "schema"           TEXT,
     "contract_address" TEXT,

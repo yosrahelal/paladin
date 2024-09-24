@@ -94,7 +94,6 @@ func (tm *txManager) mapPersistedTXFull(pt *persistedTransaction) *ptxapi.Transa
 	for _, dep := range pt.TransactionDeps {
 		res.DependsOn = append(res.DependsOn, dep.DependsOn)
 	}
-	res.Activity = tm.getActivityRecords(res.ID)
 	return res
 }
 

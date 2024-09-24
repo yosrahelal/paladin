@@ -45,7 +45,6 @@ type ReceiptInput struct {
 
 type TXManager interface {
 	ManagerLifecycle
-	AddActivityRecord(tx uuid.UUID, msg string)
 	FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*ReceiptInput, existenceConfirmed bool) error
 	CalculateRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes) error
 }

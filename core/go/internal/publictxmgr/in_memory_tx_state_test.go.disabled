@@ -112,7 +112,7 @@ func TestSettersAndGetters(t *testing.T) {
 
 	inMemoryTx := inMemoryTxState.GetTx()
 
-	assert.Equal(t, testManagedTx.ID, inMemoryTxState.GetTxID())
+	assert.Equal(t, testManagedTx.ID, inMemoryTxState.GetSignerNonce())
 
 	assert.Equal(t, oldTime, *inMemoryTxState.GetCreatedTime())
 	assert.Nil(t, inMemoryTxState.GetConfirmedTransaction())
@@ -162,7 +162,7 @@ func TestSettersAndGetters(t *testing.T) {
 		GasLimit:     newGasLimit,
 	})
 
-	assert.Equal(t, testManagedTx.ID, inMemoryTxState.GetTxID())
+	assert.Equal(t, testManagedTx.ID, inMemoryTxState.GetSignerNonce())
 
 	assert.Equal(t, oldTime, *inMemoryTxState.GetCreatedTime())
 	assert.Equal(t, newTime, inMemoryTxState.GetLastSubmitTime())

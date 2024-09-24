@@ -248,7 +248,7 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 		pbStates[i] = &prototk.StoredState{
 			Id:       s.ID.String(),
 			SchemaId: s.Schema.String(),
-			StoredAt: s.CreatedAt.UnixNano(),
+			StoredAt: s.Created.UnixNano(),
 			DataJson: string(s.Data),
 		}
 		if s.Locked != nil {

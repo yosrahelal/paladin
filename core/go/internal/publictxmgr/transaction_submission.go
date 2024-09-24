@@ -43,7 +43,7 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 	var txHash *tktypes.Bytes32
 	sendStart := time.Now()
 	calculatedTxHash := mtx.GetTransactionHash() // must have been persisted in previous stage
-	log.L(ctx).Debugf("Sending raw transaction %s (lastSubmit=%s), Hash=%s", mtx.GetTxID(), mtx.GetLastSubmitTime(), txHash)
+	log.L(ctx).Debugf("Sending raw transaction %s (lastSubmit=%s), Hash=%s", mtx.GetSignerNonce(), mtx.GetLastSubmitTime(), txHash)
 
 	submissionTime := confutil.P(tktypes.TimestampNow())
 	var submissionErrorReason ethclient.ErrorReason // TODO: fix reason parsing
@@ -59,18 +59,18 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 				if txHash != nil && calculatedTxHash != nil && txHash.String() != calculatedTxHash.String() {
 					// TODO: Investigate why under high concurrency load with Besu we are triggering this, and the returned hash is for
 					//       a DIFFERENT NONCE that is submitted at an extremely close time.
-					log.L(ctx).Warnf("Received response for transaction %s, but calculated transaction hash %s is different from the response %s.", mtx.GetTxID(), calculatedTxHash, txHash)
+					log.L(ctx).Warnf("Received response for transaction %s, but calculated transaction hash %s is different from the response %s.", mtx.GetSignerNonce(), calculatedTxHash, txHash)
 					submissionError = i18n.NewError(ctx, msgs.MsgSubmitFailedWrongHashReturned, calculatedTxHash, txHash)
 					txHash = nil // clear the transaction hash as we are not certain it's correct
 					return true, submissionError
 				} else {
-					log.L(ctx).Debugf("Submitted %s successfully with hash=%s", mtx.GetTxID(), txHash)
+					log.L(ctx).Debugf("Submitted %s successfully with hash=%s", mtx.GetSignerNonce(), txHash)
 				}
 			} else {
 				txHash = calculatedTxHash
-				log.L(ctx).Warnf("Received response for transaction %s, no transaction hash from the response, using the calculated transaction hash %s instead.", mtx.GetTxID(), txHash)
+				log.L(ctx).Warnf("Received response for transaction %s, no transaction hash from the response, using the calculated transaction hash %s instead.", mtx.GetSignerNonce(), txHash)
 			}
-			log.L(ctx).Infof("Transaction %s submitted. Hash: %s", mtx.GetTxID(), calculatedTxHash)
+			log.L(ctx).Infof("Transaction %s submitted. Hash: %s", mtx.GetSignerNonce(), calculatedTxHash)
 			submissionOutcome = SubmissionOutcomeSubmittedNew
 			return false, nil
 		} else {
@@ -97,7 +97,7 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 			case ethclient.ErrorKnownTransaction:
 				// check mined transaction also returns this error code
 				// KnownTransaction means it's in the mempool
-				log.L(ctx).Debugf("Transaction %s known with hash: %s (previous=%s)", mtx.GetTxID(), txHash, submissionError)
+				log.L(ctx).Debugf("Transaction %s known with hash: %s (previous=%s)", mtx.GetSignerNonce(), txHash, submissionError)
 				submissionError = nil
 				submissionErrorReason = ""
 				submissionOutcome = SubmissionOutcomeAlreadyKnown
@@ -105,7 +105,7 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 				// NonceTooLow means a transaction with same nonce is already mined, this could mean:
 				//   1. we have a nonce conflict
 				//   2. our transaction is completed and we are waiting for the confirmation
-				log.L(ctx).Debugf("Nonce too low for transaction ID: %s. new transaction hash: %s, recorded transaction hash: %s", mtx.GetTxID(), txHash, mtx.GetTransactionHash())
+				log.L(ctx).Debugf("Nonce too low for transaction ID: %s. new transaction hash: %s, recorded transaction hash: %s", mtx.GetSignerNonce(), txHash, mtx.GetTransactionHash())
 				// otherwise, we revert back to track the old hash
 				submissionError = nil
 				submissionErrorReason = ""

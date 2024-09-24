@@ -25,9 +25,8 @@ import (
 type TransactionType string
 
 const (
-	TransactionTypePrivate  TransactionType = "private"
-	TransactionTypePublic   TransactionType = "public"
-	TransactionTypeAutoFuel TransactionType = "autofuel"
+	TransactionTypePrivate TransactionType = "private"
+	TransactionTypePublic  TransactionType = "public"
 )
 
 func (tt TransactionType) Enum() tktypes.Enum[TransactionType] {
@@ -67,9 +66,8 @@ type TransactionInput struct {
 // Additional fields returned on output when "full" specified
 type TransactionFull struct {
 	*Transaction
-	DependsOn []uuid.UUID                 `json:"dependsOn,omitempty"` // transactions registered as dependencies when the transaction was created
-	Receipt   *TransactionReceiptData     `json:"receipt"`             // available if the transaction has reached a final state
-	Activity  []TransactionActivityRecord `json:"activity"`            // if active processing is being performed on this transaction this provides a rolling buffer of updates
+	DependsOn []uuid.UUID             `json:"dependsOn,omitempty"` // transactions registered as dependencies when the transaction was created
+	Receipt   *TransactionReceiptData `json:"receipt"`             // available if the transaction has reached a final state
 	// TODO: PrivateTransactions object list
 	// TODO: PublicTransactions object list
 }
@@ -89,7 +87,7 @@ type TransactionReceiptData struct {
 
 type TransactionActivityRecord struct {
 	Time    tktypes.Timestamp `json:"time"`    // time the record occurred
-	Message string            `json:"message"` //
+	Message string            `json:"message"` // a message
 }
 
 type TransactionDependencies struct {

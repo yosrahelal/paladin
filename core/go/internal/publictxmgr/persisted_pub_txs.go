@@ -17,10 +17,7 @@
 package publictxmgr
 
 import (
-	"fmt"
 	"strings"
-
-	"github.com/google/uuid"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -32,40 +29,30 @@ type persistedPubTx struct {
 	From            tktypes.EthAddress  `gorm:"column:from"`
 	Nonce           uint64              `gorm:"column:nonce"`
 	Created         tktypes.Timestamp   `gorm:"column:created;autoCreateTime:nano"`
-	Transaction     uuid.UUID           `gorm:"column:transaction"`  // only unique when combined with ResubmitIndex
-	ResubmitIndex   int                 `gorm:"column:resubmit_idx"` // can have multiple public TX under a single paladin TX for resubmits
-	ParentType      string              `gorm:"column:parent_type"`  // avoids a whole query to correlate on receipts, and allows "autofuel" string on API
-	KeyHandle       string              `gorm:"column:key_handle"`   // TODO: might need to revisit storing this once we have reverse lookup in the keymanager by address
+	KeyHandle       string              `gorm:"column:key_handle"` // TODO: might need to revisit storing this once we have reverse lookup in the keymanager by address
 	To              *tktypes.EthAddress `gorm:"column:to"`
 	Gas             uint64              `gorm:"column:gas"`
 	FixedGasPricing tktypes.RawJSON     `gorm:"column:fixed_gas_pricing"`
 	Value           *tktypes.HexUint256 `gorm:"column:value"`
 	Data            tktypes.HexBytes    `gorm:"column:data"`
-	Suspended       bool                `gorm:"column:suspended"`                                 // excluded from processing because it's suspended by user
-	Completed       *publicCompletion   `gorm:"foreignKey:signer_nonce;references:signer_nonce;"` // excluded from processing because it's done
-	Submissions     []*publicSubmission `gorm:"-"`                                                // we do the aggregation, not GORM
-}
-
-func (ptx *persistedPubTx) getIDString() string {
-	// Use as a single string to identify this transaction in in-memory maps, and helpful too for logging
-	return fmt.Sprintf("%s:%d[%s:%d]",
-		ptx.Transaction, ptx.ResubmitIndex,
-		ptx.From, ptx.Nonce)
+	Suspended       bool                `gorm:"column:suspended"`                                // excluded from processing because it's suspended by user
+	Completed       *publicCompletion   `gorm:"foreignKey:signer_nonce;references:signer_nonce"` // excluded from processing because it's done
+	Submissions     []*publicSubmission `gorm:"-"`                                               // we do the aggregation, not GORM
 }
 
 type publicSubmission struct {
 	SignerNonce     string            `gorm:"column:signer_nonce;primaryKey"`
-	Created         tktypes.Timestamp `gorm:"column:created:autoCreateTime:false"` // we set this as we track the record in memory too
+	Created         tktypes.Timestamp `gorm:"column:created;autoCreateTime:false"` // we set this as we track the record in memory too
 	TransactionHash tktypes.Bytes32   `gorm:"column:tx_hash"`
 	GasPricing      tktypes.RawJSON   `gorm:"column:gas_pricing"` // no filtering allowed on this field as it's complex JSON gasPrice/maxFeePerGas/maxPriorityFeePerGas calculation
 }
 
 type publicCompletion struct {
 	SignerNonce     string            `gorm:"column:signer_nonce;primaryKey"`
-	Created         tktypes.Timestamp `gorm:"column:created:autoCreateTime:nano"`
+	Created         tktypes.Timestamp `gorm:"column:created;autoCreateTime:nano"`
 	TransactionHash tktypes.Bytes32   `gorm:"column:tx_hash"`
 	Success         bool              `gorm:"column:success"`
-	RevertReasons   tktypes.HexBytes  `gorm:"column:revert_reason"` // block indexer does not keep this for all TXs
+	RevertData      tktypes.HexBytes  `gorm:"column:revert_data"` // block indexer does not keep this for all TXs
 }
 
 func (s *publicSubmission) WriteKey() string {
@@ -74,8 +61,8 @@ func (s *publicSubmission) WriteKey() string {
 }
 
 type transactionsMatchingSubmission struct {
-	components.PaladinTXReference `gorm:"embedded"`
-	Submission                    *publicSubmission `gorm:"foreignKey:signer_nonce;references:signer_nonce;"`
+	components.PublicTxnBinding `gorm:"embedded"`
+	Submission                  *publicSubmission `gorm:"foreignKey:signer_nonce;references:signer_nonce;"`
 }
 
 type publicTxnsMatchingTransaction struct {

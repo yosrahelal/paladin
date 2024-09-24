@@ -91,34 +91,34 @@ func (iftxs *inFlightTransactionState) StartNewStageContext(ctx context.Context,
 			// record metrics for the previous stage
 			iftxs.RecordStageChangeMetrics(ctx, string(iftxs.stage), float64(nowTime.Sub(iftxs.txLevelStageStartTime).Seconds()))
 		}
-		log.L(ctx).Tracef("Transaction with ID %s, switching from %s to %s after %s", rsc.InMemoryTx.GetTxID(), iftxs.stage, rsc.Stage, time.Since(iftxs.txLevelStageStartTime))
+		log.L(ctx).Tracef("Transaction with ID %s, switching from %s to %s after %s", rsc.InMemoryTx.GetSignerNonce(), iftxs.stage, rsc.Stage, time.Since(iftxs.txLevelStageStartTime))
 		// set to the new stage
 		iftxs.stage = rsc.Stage
 		iftxs.txLevelStageStartTime = nowTime
 	} else {
-		log.L(ctx).Tracef("Transaction with ID %s, already on stage %s for %s", rsc.InMemoryTx.GetTxID(), stage, time.Since(iftxs.txLevelStageStartTime))
+		log.L(ctx).Tracef("Transaction with ID %s, already on stage %s for %s", rsc.InMemoryTx.GetSignerNonce(), stage, time.Since(iftxs.txLevelStageStartTime))
 	}
 	iftxs.stageTriggerError = nil
 	iftxs.runningStageContext = rsc
 	switch stage {
 	case InFlightTxStageRetrieveGasPrice:
-		log.L(ctx).Tracef("Transaction with ID %s, triggering retrieve gas price", rsc.InMemoryTx.GetTxID())
+		log.L(ctx).Tracef("Transaction with ID %s, triggering retrieve gas price", rsc.InMemoryTx.GetSignerNonce())
 		iftxs.stageTriggerError = iftxs.TriggerRetrieveGasPrice(ctx)
 	case InFlightTxStageSigning:
-		log.L(ctx).Tracef("Transaction with ID %s, triggering sign tx", rsc.InMemoryTx.GetTxID())
+		log.L(ctx).Tracef("Transaction with ID %s, triggering sign tx", rsc.InMemoryTx.GetSignerNonce())
 		iftxs.stageTriggerError = iftxs.TriggerSignTx(ctx)
 	case InFlightTxStageSubmitting:
-		log.L(ctx).Tracef("Transaction with ID %s, triggering submission, signed message not nil: %t", rsc.InMemoryTx.GetTxID(), iftxs.TransientPreviousStageOutputs != nil && iftxs.TransientPreviousStageOutputs.SignedMessage != nil)
+		log.L(ctx).Tracef("Transaction with ID %s, triggering submission, signed message not nil: %t", rsc.InMemoryTx.GetSignerNonce(), iftxs.TransientPreviousStageOutputs != nil && iftxs.TransientPreviousStageOutputs.SignedMessage != nil)
 		var signedMessage []byte
 		if iftxs.TransientPreviousStageOutputs != nil {
 			signedMessage = iftxs.TransientPreviousStageOutputs.SignedMessage
 		}
 		iftxs.stageTriggerError = iftxs.TriggerSubmitTx(ctx, signedMessage)
 	case InFlightTxStageStatusUpdate:
-		log.L(ctx).Tracef("Transaction with ID %s, triggering status update", rsc.InMemoryTx.GetTxID())
+		log.L(ctx).Tracef("Transaction with ID %s, triggering status update", rsc.InMemoryTx.GetSignerNonce())
 		iftxs.stageTriggerError = iftxs.TriggerStatusUpdate(ctx)
 	default:
-		log.L(ctx).Tracef("Transaction with ID %s, didn't trigger any action for new stage: %s", rsc.InMemoryTx.GetTxID(), stage)
+		log.L(ctx).Tracef("Transaction with ID %s, didn't trigger any action for new stage: %s", rsc.InMemoryTx.GetSignerNonce(), stage)
 	}
 }
 
@@ -157,9 +157,9 @@ func (iftxs *inFlightTransactionState) GetStageTriggerError(ctx context.Context)
 func (iftxs *inFlightTransactionState) ClearRunningStageContext(ctx context.Context) {
 	if iftxs.runningStageContext != nil {
 		rsc := iftxs.runningStageContext
-		log.L(ctx).Debugf("Transaction with ID %s clearing stage context for stage: %s after %s, total time spent on this stage so far: %s, txHash: %s", rsc.InMemoryTx.GetTxID(), rsc.Stage, time.Since(rsc.StageStartTime), time.Since(iftxs.txLevelStageStartTime), rsc.InMemoryTx.GetTransactionHash())
+		log.L(ctx).Debugf("Transaction with ID %s clearing stage context for stage: %s after %s, total time spent on this stage so far: %s, txHash: %s", rsc.InMemoryTx.GetSignerNonce(), rsc.Stage, time.Since(rsc.StageStartTime), time.Since(iftxs.txLevelStageStartTime), rsc.InMemoryTx.GetTransactionHash())
 	} else {
-		log.L(ctx).Warnf("Transaction with ID %s  has no running stage context to clear", iftxs.InMemoryTxStateManager.GetTxID())
+		log.L(ctx).Warnf("Transaction with ID %s  has no running stage context to clear", iftxs.InMemoryTxStateManager.GetSignerNonce())
 	}
 	iftxs.runningStageContext = nil
 	iftxs.stageTriggerError = nil
@@ -214,7 +214,7 @@ func (iftxs *inFlightTransactionState) AddPersistenceOutput(ctx context.Context,
 			Time:             persistenceTime,
 		},
 	})
-	log.L(ctx).Debugf("%s AddPersistenceOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetTxID(), time.Since(start))
+	log.L(ctx).Debugf("%s AddPersistenceOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetSignerNonce(), time.Since(start))
 }
 
 func (iftxs *inFlightTransactionState) CanBeRemoved(ctx context.Context) bool {
@@ -223,7 +223,7 @@ func (iftxs *inFlightTransactionState) CanBeRemoved(ctx context.Context) bool {
 
 func (iftxs *inFlightTransactionState) AddSubmitOutput(ctx context.Context, txHash *tktypes.Bytes32, submissionTime *tktypes.Timestamp, submissionOutcome SubmissionOutcome, errorReason ethclient.ErrorReason, err error) {
 	start := time.Now()
-	log.L(ctx).Debugf("%s Setting submit output, submissionOutcome: %s, errReason: %s, err %+v", iftxs.InMemoryTxStateManager.GetTxID(), submissionOutcome, errorReason, err)
+	log.L(ctx).Debugf("%s Setting submit output, submissionOutcome: %s, errReason: %s, err %+v", iftxs.InMemoryTxStateManager.GetSignerNonce(), submissionOutcome, errorReason, err)
 	iftxs.AddStageOutputs(ctx, &StageOutput{
 		Stage: InFlightTxStageSubmitting,
 		SubmitOutput: &SubmitOutputs{
@@ -233,12 +233,12 @@ func (iftxs *inFlightTransactionState) AddSubmitOutput(ctx context.Context, txHa
 			Err:               err,
 		},
 	})
-	log.L(ctx).Debugf("%s AddSubmitOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetTxID(), time.Since(start))
+	log.L(ctx).Debugf("%s AddSubmitOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetSignerNonce(), time.Since(start))
 }
 
 func (iftxs *inFlightTransactionState) AddSignOutput(ctx context.Context, signedMessage []byte, txHash *tktypes.Bytes32, err error) {
 	start := time.Now()
-	log.L(ctx).Debugf("%s Setting signed message, hash %s, signed message not nil %t, err %+v", iftxs.InMemoryTxStateManager.GetTxID(), txHash, signedMessage != nil, err)
+	log.L(ctx).Debugf("%s Setting signed message, hash %s, signed message not nil %t, err %+v", iftxs.InMemoryTxStateManager.GetSignerNonce(), txHash, signedMessage != nil, err)
 	iftxs.AddStageOutputs(ctx, &StageOutput{
 		Stage: InFlightTxStageSigning,
 		SignOutput: &SignOutputs{
@@ -247,7 +247,7 @@ func (iftxs *inFlightTransactionState) AddSignOutput(ctx context.Context, signed
 			Err:           err,
 		},
 	})
-	log.L(ctx).Debugf("%s AddSignOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetTxID(), time.Since(start))
+	log.L(ctx).Debugf("%s AddSignOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetSignerNonce(), time.Since(start))
 }
 
 func (iftxs *inFlightTransactionState) AddGasPriceOutput(ctx context.Context, gasPriceObject *ptxapi.PublicTxGasPricing, err error) {
@@ -259,7 +259,7 @@ func (iftxs *inFlightTransactionState) AddGasPriceOutput(ctx context.Context, ga
 			Err:            err,
 		},
 	})
-	log.L(ctx).Debugf("%s AddGasPriceOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetTxID(), time.Since(start))
+	log.L(ctx).Debugf("%s AddGasPriceOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetSignerNonce(), time.Since(start))
 }
 
 func (iftxs *inFlightTransactionState) AddConfirmationsOutput(ctx context.Context, confirmedTx *blockindexer.IndexedTransaction) {
@@ -268,7 +268,7 @@ func (iftxs *inFlightTransactionState) AddConfirmationsOutput(ctx context.Contex
 		Stage:              InFlightTxStageConfirming,
 		ConfirmationOutput: &ConfirmationOutputs{},
 	})
-	log.L(ctx).Debugf("%s AddConfirmationsOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetTxID(), time.Since(start))
+	log.L(ctx).Debugf("%s AddConfirmationsOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetSignerNonce(), time.Since(start))
 }
 
 func (iftxs *inFlightTransactionState) AddPanicOutput(ctx context.Context, stage InFlightTxStage) {
@@ -278,7 +278,7 @@ func (iftxs *inFlightTransactionState) AddPanicOutput(ctx context.Context, stage
 	iftxs.AddStageOutputs(ctx, &StageOutput{
 		Stage: stage,
 	})
-	log.L(ctx).Debugf("%s AddPanicOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetTxID(), time.Since(start))
+	log.L(ctx).Debugf("%s AddPanicOutput took %s to write the result", iftxs.InMemoryTxStateManager.GetSignerNonce(), time.Since(start))
 }
 
 func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stage InFlightTxStage, persistenceTime time.Time, err error) {

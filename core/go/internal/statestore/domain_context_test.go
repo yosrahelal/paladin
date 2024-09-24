@@ -719,11 +719,11 @@ func TestCheckEvalGTTimestamp(t *testing.T) {
 	labelSet := dc.ss.labelSetFor(schema)
 
 	s := &State{
-		ID:        tktypes.MustParseBytes32("2eaf4727b7c7e9b3728b1344ac38ea6d8698603dc3b41d9458d7c011c20ce672"),
-		CreatedAt: tktypes.TimestampFromUnix(1726545933211347000),
+		ID:      tktypes.MustParseBytes32("2eaf4727b7c7e9b3728b1344ac38ea6d8698603dc3b41d9458d7c011c20ce672"),
+		Created: tktypes.TimestampFromUnix(1726545933211347000),
 	}
 	ls := filters.PassthroughValueSet{}
-	addStateBaseLabels(ls, s.ID, s.CreatedAt)
+	addStateBaseLabels(ls, s.ID, s.Created)
 	labelSet.labels[".created"] = nil
 
 	match, err := filters.EvalQuery(dc.ctx, &jq, labelSet, ls)

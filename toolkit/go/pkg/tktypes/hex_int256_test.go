@@ -109,4 +109,8 @@ func TestHexInt256(t *testing.T) {
 
 	assert.True(t, ((*HexInt256)(nil)).NilOrZero())
 
+	dbv, err = ((*HexInt256)(nil)).Value()
+	assert.NoError(t, err)
+	assert.Nil(t, dbv)
+
 }

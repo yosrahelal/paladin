@@ -33,7 +33,7 @@ type submissionWriter struct {
 
 func newSubmissionWriter(bgCtx context.Context, p persistence.Persistence, conf *Config) *submissionWriter {
 	sw := &submissionWriter{}
-	sw.Writer = flushwriter.NewWriter(bgCtx, sw.runBatch, p, &conf.TransactionEngine.SubmissionWriter, &DefaultConfig.TransactionEngine.SubmissionWriter)
+	sw.Writer = flushwriter.NewWriter(bgCtx, sw.runBatch, p, &conf.Manager.SubmissionWriter, &DefaultConfig.Manager.SubmissionWriter)
 	return sw
 }
 
