@@ -326,7 +326,7 @@ func TestNotoApprove(t *testing.T) {
 	rpcerr = rpc.CallRPC(ctx, &prepared, "testbed_prepare", &tktypes.PrivateContractInvoke{
 		From:     notaryName,
 		To:       tktypes.EthAddress(notoAddress),
-		Function: *types.NotoABI.Functions()["approvedTransfer"],
+		Function: *types.NotoABI.Functions()["transferWithApproval"],
 		Inputs: toJSON(t, &types.TransferParams{
 			To:     recipient1Name,
 			Amount: ethtypes.NewHexInteger64(50),
@@ -338,7 +338,7 @@ func TestNotoApprove(t *testing.T) {
 	rpcerr = rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     notaryName,
 		To:       tktypes.EthAddress(notoAddress),
-		Function: *types.NotoABI.Functions()["approve"],
+		Function: *types.NotoABI.Functions()["approveTransfer"],
 		Inputs: toJSON(t, &types.ApproveParams{
 			Delegate: *ethtypes.MustNewAddress(recipient1Key),
 			Call:     prepared.EncodedCall,
