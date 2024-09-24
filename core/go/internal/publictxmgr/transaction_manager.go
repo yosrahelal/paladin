@@ -480,6 +480,7 @@ func (ble *pubTxManager) finalizeNonceForPersistedTX(ctx context.Context, ptx *p
 		KeyHandle:   ptx.keyHandle, // TODO: Consider once we have reverse mapping in key manager whether we still need this
 		To:          tx.To,
 		Gas:         tx.Gas.Uint64(),
+		Data:        tx.Data,
 	}, nil
 }
 
@@ -574,7 +575,12 @@ func recoverGasPriceOptions(gpoJSON tktypes.RawJSON) (ptgp ptxapi.PublicTxGasPri
 }
 
 func (ble *pubTxManager) QueryTransactions(ctx context.Context, dbTX *gorm.DB, scopeToTxn *uuid.UUID, jq *query.QueryJSON) ([]*ptxapi.PublicTx, error) {
-	q := filters.BuildGORM(ctx, jq, dbTX.Table("public_txns").WithContext(ctx), components.PublicTxFilterFields)
+	q := dbTX.Table("public_txns").
+		WithContext(ctx).
+		Joins("Completed")
+	if jq != nil {
+		q = filters.BuildGORM(ctx, jq, q, components.PublicTxFilterFields)
+	}
 	ptxs, err := ble.runTransactionQuery(ctx, dbTX, scopeToTxn, q)
 	if err != nil {
 		return nil, err
@@ -640,18 +646,9 @@ func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourc
 
 func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB, scopeToTxn *uuid.UUID, q *gorm.DB) (ptxs []*persistedPubTx, err error) {
 	if scopeToTxn != nil {
-		var matchingPtxs []*publicTxnsMatchingTransaction
-		q = q.Joins("PublicTxnBinding").Where(`"PublicTxnBinding"."transaction" = ?`, *scopeToTxn)
-		err = q.Find(&matchingPtxs).Error
-		if err == nil {
-			ptxs = make([]*persistedPubTx, len(ptxs))
-			for i, mptx := range matchingPtxs {
-				ptxs[i] = &mptx.persistedPubTx
-			}
-		}
-	} else {
-		err = q.Find(&ptxs).Error
+		q = q.Joins("Binding").Where(`"Binding"."transaction" = ?`, *scopeToTxn)
 	}
+	err = q.Find(&ptxs).Error
 	if err != nil {
 		return nil, err
 	}
@@ -676,7 +673,7 @@ func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB,
 }
 
 func mapPersistedTransaction(ptx *persistedPubTx) *ptxapi.PublicTx {
-	return &ptxapi.PublicTx{
+	tx := &ptxapi.PublicTx{
 		From:    ptx.From,
 		Nonce:   tktypes.HexUint64(ptx.Nonce),
 		Created: ptx.Created,
@@ -688,6 +685,18 @@ func mapPersistedTransaction(ptx *persistedPubTx) *ptxapi.PublicTx {
 			PublicTxGasPricing: recoverGasPriceOptions(ptx.FixedGasPricing),
 		},
 	}
+	// We use a separate table in the DB for the completion data, but
+	// we allow a single query and return interface for users.
+	if ptx.Completed != nil {
+		completed := ptx.Completed
+		tx.CompletedAt = &completed.Created
+		tx.TransactionHash = &completed.TransactionHash
+		tx.Success = &completed.Success
+		tx.RevertData = completed.RevertData
+	}
+	// Note: Submissions (sent to the mempool of the chain, but not yet complete) are separate.
+	// See mapPersistedSubmissionData()
+	return tx
 }
 
 func mapPersistedSubmissionData(pSub *publicSubmission) *ptxapi.PublicTxSubmissionData {
@@ -814,6 +823,7 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 	var lookups []*transactionsMatchingSubmission
 	err := dbTX.
 		Table("public_txn_bindings").
+		Select(`"transaction"`, `"tx_type"`, `"Submission"."signer_nonce"`, `"Submission"."tx_hash"`).
 		Joins("Submission").
 		Where(`"Submission"."tx_hash" IN (?)`, txHashes).
 		Find(&lookups).

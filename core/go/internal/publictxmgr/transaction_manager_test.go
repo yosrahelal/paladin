@@ -22,15 +22,20 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
+	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
+	"github.com/kaleido-io/paladin/core/pkg/signer/api"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +47,7 @@ import (
 type dependencyMocks struct {
 	allComponents    *componentmocks.AllComponents
 	db               sqlmock.Sqlmock // unless realDB
-	keyManager       *componentmocks.KeyManager
+	keyManager       ethclient.KeyManager
 	ethClientFactory *componentmocks.EthClientFactory
 	ethClient        *componentmocks.EthClient
 	blockIndexer     *componentmocks.BlockIndexer
@@ -56,13 +61,11 @@ type dependencyMocks struct {
 func baseMocks(t *testing.T) *dependencyMocks {
 	mocks := &dependencyMocks{
 		allComponents:    componentmocks.NewAllComponents(t),
-		keyManager:       componentmocks.NewKeyManager(t),
 		ethClientFactory: componentmocks.NewEthClientFactory(t),
 		ethClient:        componentmocks.NewEthClient(t),
 		blockIndexer:     componentmocks.NewBlockIndexer(t),
 		txManager:        componentmocks.NewTXManager(t),
 	}
-	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.allComponents.On("EthClientFactory").Return(mocks.ethClientFactory).Maybe()
 	mocks.ethClientFactory.On("SharedWS").Return(mocks.ethClient).Maybe()
 	mocks.allComponents.On("BlockIndexer").Return(mocks.blockIndexer).Maybe()
@@ -70,7 +73,7 @@ func baseMocks(t *testing.T) *dependencyMocks {
 	return mocks
 }
 
-func NewTestPublicTxManager(t *testing.T, realDB bool, extraSetup ...func(mocks *dependencyMocks, conf *Config)) (context.Context, *pubTxManager, *dependencyMocks, func()) {
+func NewTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...func(mocks *dependencyMocks, conf *Config)) (context.Context, *pubTxManager, *dependencyMocks, func()) {
 	log.SetLevel("debug")
 	ctx := context.Background()
 	conf := &Config{
@@ -91,9 +94,27 @@ func NewTestPublicTxManager(t *testing.T, realDB bool, extraSetup ...func(mocks 
 
 	var dbClose func()
 	var p persistence.Persistence
-	if realDB {
+	if realDBAndSigner {
 		var err error
 		p, dbClose, err = persistence.NewUnitTestPersistence(ctx)
+		require.NoError(t, err)
+
+		mocks.keyManager, err = ethclient.NewSimpleTestKeyManager(ctx, &api.Config{
+			KeyStore: api.StoreConfig{
+				Type: api.KeyStoreTypeStatic,
+				Static: api.StaticKeyStorageConfig{
+					Keys: map[string]api.StaticKeyEntryConfig{
+						"seed": {
+							Encoding: "hex",
+							Inline:   tktypes.Bytes32(tktypes.RandBytes(32)).String(),
+						},
+					},
+				},
+			},
+			KeyDerivation: api.KeyDerivationConfig{
+				Type: api.KeyDerivationTypeBIP32,
+			},
+		})
 		require.NoError(t, err)
 	} else {
 		mp, err := mockpersistence.NewSQLMockProvider()
@@ -101,8 +122,10 @@ func NewTestPublicTxManager(t *testing.T, realDB bool, extraSetup ...func(mocks 
 		p = mp.P
 		mocks.db = mp.Mock
 		dbClose = func() {}
+		mocks.keyManager = componentmocks.NewKeyManager(t)
 	}
 	mocks.allComponents.On("Persistence").Return(p).Maybe()
+	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 
 	// Run any extra functions before we create the manager
 	for _, setup := range extraSetup {
@@ -142,24 +165,20 @@ func TestInit(t *testing.T) {
 	defer done()
 }
 
-func TestSingleTransactionSubmitRealDB(t *testing.T) {
-	ctx, ble, m, done := NewTestPublicTxManager(t, true)
+func TestSingleTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
+	ctx, ble, m, done := NewTestPublicTxManager(t, true, func(mocks *dependencyMocks, conf *Config) {
+		conf.Manager.Interval = confutil.P("10ms")
+		conf.Orchestrator.Interval = confutil.P("10ms")
+	})
 	defer done()
 
 	err := ble.Start()
 	require.NoError(t, err)
 
-	// resolve key failure
-	m.keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", "", fmt.Errorf("resolve err")).Once()
-	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
-		PublicTxInput: ptxapi.PublicTxInput{
-			From: "signer1",
-		},
-	})
-	assert.Regexp(t, "resolve err", err)
-
-	resolvedKey := tktypes.EthAddress(tktypes.RandBytes(20))
-	m.keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("keyhandle1", resolvedKey.String(), nil)
+	// Resolve the key ourselves for comparison
+	_, resolvedKeyStr, err := m.keyManager.ResolveKey(ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	require.NoError(t, err)
+	resolvedKey := tktypes.MustEthAddress(resolvedKeyStr)
 
 	// estimation failure - for non-revert
 	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
@@ -213,6 +232,7 @@ func TestSingleTransactionSubmitRealDB(t *testing.T) {
 			},
 			PublicTxInput: ptxapi.PublicTxInput{
 				From: "signer1",
+				Data: []byte(fmt.Sprintf("data %d", i)),
 			},
 		}
 
@@ -221,8 +241,9 @@ func TestSingleTransactionSubmitRealDB(t *testing.T) {
 	// gas estimate and nonce should be cached - so are once'd
 	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
 		Return(ethclient.EstimateGasResult{GasLimit: tktypes.HexUint64(10)}, nil)
+	baseNonce := uint64(11223000)
 	m.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
-		Return(confutil.P(tktypes.HexUint64(1)), nil).Once()
+		Return(confutil.P(tktypes.HexUint64(baseNonce)), nil).Once()
 
 	// For the first one we do a one-off
 	_, err = ble.SingleTransactionSubmit(ctx, txs[0])
@@ -239,6 +260,72 @@ func TestSingleTransactionSubmitRealDB(t *testing.T) {
 	require.NoError(t, err)
 	batch.Completed(ctx, true) // would normally be in a defer
 
+	// Record activity on one TX
+	for i := range txs {
+		ble.addActivityRecord(fmt.Sprintf("%s:%d", resolvedKey, int(baseNonce)+i), fmt.Sprintf("activity %d", i))
+	}
+
+	// Query to check we now have all of these
+	queryTxs, err := ble.QueryTransactions(ctx, ble.p.DB(), nil, query.NewQueryBuilder().Query())
+	require.NoError(t, err)
+	assert.Len(t, queryTxs, len(txs))
+	for i, qTX := range queryTxs {
+		// We don't include the bindings on these queries
+		assert.Equal(t, resolvedKey, qTX.From)
+		assert.Equal(t, uint64(i)+baseNonce, qTX.Nonce.Uint64())
+		assert.Equal(t, txs[i].Data, qTX.Data)
+		require.Len(t, qTX.Activity, 1)
+		assert.Equal(t, fmt.Sprintf("activity %d", i), qTX.Activity[0].Message)
+	}
+
+	// Query scoped to one TX
+	queryTxs, err = ble.QueryTransactions(ctx, ble.p.DB(), &txIDs[0], nil)
+	require.NoError(t, err)
+	require.Len(t, queryTxs, 1)
+	assert.Equal(t, baseNonce, queryTxs[0].Nonce.Uint64())
+
+	// Check we can select to just see confirmed (which this isn't yet)
+	queryTxs, err = ble.QueryTransactions(ctx, ble.p.DB(), &txIDs[0],
+		query.NewQueryBuilder().NotNull("transactionHash").Query())
+	require.NoError(t, err)
+	require.Empty(t, queryTxs, 1)
+
+	// Wait for a submission to happen
+	calculatedConfirmations := make(chan *blockindexer.IndexedTransactionNotify, len(txIDs))
+	srtx := m.ethClient.On("SendRawTransaction", mock.Anything, mock.Anything)
+	srtx.Run(func(args mock.Arguments) {
+		signedMessage := args[1].(tktypes.HexBytes)
+
+		signer, ethTx, err := ethsigner.RecoverRawTransaction(ctx, ethtypes.HexBytes0xPrefix(signedMessage), m.ethClient.ChainID())
+		require.NoError(t, err)
+		assert.Equal(t, resolvedKey, signer)
+
+		// We need to decode the TX to find the nonce
+		txHash := calculateTransactionHash(signedMessage)
+		confirmation := &blockindexer.IndexedTransactionNotify{
+			IndexedTransaction: blockindexer.IndexedTransaction{
+				Hash:             *txHash,
+				BlockNumber:      11223344,
+				TransactionIndex: 10,
+				From:             resolvedKey,
+				To:               (*tktypes.EthAddress)(ethTx.To),
+				Nonce:            ethTx.Nonce.Uint64(),
+				Result:           blockindexer.TXResult_SUCCESS.Enum(),
+			},
+		}
+		calculatedConfirmations <- confirmation
+
+		srtx.Return(&confirmation.Hash, nil)
+	})
+	// Wait for all the confirmations to be calculated
+	for i := 0; i < len(txIDs); i++ {
+		<-calculatedConfirmations
+	}
+
+	// matches, err := ble.MatchUpdateConfirmedTransactions(ctx, ble.p.DB(), []*blockindexer.IndexedTransactionNotify{confirmation})
+	// require.NoError(t, err)
+	// assert.Len(t, matches, 1)
+
 }
 
 func fakeTxManagerInsert(t *testing.T, db *gorm.DB, txID uuid.UUID, fromStr string) {
@@ -254,6 +341,25 @@ func fakeTxManagerInsert(t *testing.T, db *gorm.DB, txID uuid.UUID, fromStr stri
 		txID, tktypes.TimestampNow(), ptxapi.TransactionTypePrivate.Enum(), fakeABI, fromStr).
 		Error
 	require.NoError(t, err)
+}
+
+func TestResolveFail(t *testing.T) {
+	ctx, ble, m, done := NewTestPublicTxManager(t, false)
+	defer done()
+
+	keyManager := m.keyManager.(*componentmocks.KeyManager)
+
+	// resolve key failure
+	keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", "", fmt.Errorf("resolve err")).Once()
+	_, err := ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
+		PublicTxInput: ptxapi.PublicTxInput{
+			From: "signer1",
+		},
+	})
+	assert.Regexp(t, "resolve err", err)
+
+	resolvedKey := tktypes.EthAddress(tktypes.RandBytes(20))
+	keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("keyhandle1", resolvedKey.String(), nil)
 }
 
 func TestAddActivityDisabled(t *testing.T) {

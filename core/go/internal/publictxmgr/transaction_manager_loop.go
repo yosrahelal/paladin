@@ -164,13 +164,17 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 		err := ble.retry.Do(ctx, func(attempt int) (retry bool, err error) {
 			// TODO: Fairness algorithm for swapping out orchestrators when there is no space
 			// (raw SQL as couldn't convince gORM to build this)
-			q := ble.p.DB().Raw(`SELECT DISTINCT "from" FROM "transactions" `+
-				`LEFT JOIN "public_completions" AS c ON "signer_nonce" = c."signer_nonce" `+
-				`WHERE c."signer_nonce" IS NULL `+
-				`AND "from" NOT IN (?)`, inFlightSigningAddresses).
-				Scan(&additionalNonInFlightSigners)
-			// Note gORM plug doesn't work with Join
-			return true, q.Error
+
+			const dbQueryBase = `SELECT DISTINCT t."from" FROM "public_txns" AS t ` +
+				`LEFT JOIN "public_completions" AS c ON t."signer_nonce" = c."signer_nonce" `
+
+			const dbQueryNothingInFlight = dbQueryBase + `LIMIT ?`
+			if len(inFlightSigningAddresses) == 0 {
+				return true, ble.p.DB().Raw(dbQueryNothingInFlight, spaces).Scan(&additionalNonInFlightSigners).Error
+			}
+
+			const dbQueryInFlight = dbQueryBase + `AND t."from" NOT IN (?) LIMIT ?`
+			return true, ble.p.DB().Raw(dbQueryInFlight, inFlightSigningAddresses, spaces).Scan(&additionalNonInFlightSigners).Error
 		})
 		if err != nil {
 			log.L(ctx).Infof("Engine polling context cancelled while retrying")

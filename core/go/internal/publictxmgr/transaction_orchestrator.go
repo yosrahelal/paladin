@@ -306,7 +306,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 				Joins("Completed").
 				Where("Completed__tx_hash IS NULL").
 				Where("suspended IS FALSE").
-				Where("from = ?", oc.signingAddress).
+				Where(`"from" = ?`, oc.signingAddress).
 				Order("nonce").
 				Limit(spaces)
 			if len(oc.InFlightTxs) > 0 {
