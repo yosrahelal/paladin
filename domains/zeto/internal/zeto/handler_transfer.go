@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -226,7 +227,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	}
 	if total.Cmp(params.Amount.BigInt()) == 1 {
 		remainder := big.NewInt(0).Sub(total, params.Amount.BigInt())
-		returnedCoins, returnedStates, err := h.zeto.prepareOutputs(tx.Transaction.From, senderKey, ethtypes.NewHexInteger(remainder))
+		returnedCoins, returnedStates, err := h.zeto.prepareOutputs(tx.Transaction.From, senderKey, tktypes.NewHexInteger(remainder))
 		if err != nil {
 			return nil, fmt.Errorf("failed to prepare outputs for change coins. %s", err)
 		}
@@ -303,6 +304,7 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		} else {
 			inputs[i] = "0"
 		}
+		fmt.Printf("\ninput %d: %s\n", i, inputs[i])
 	}
 	outputs := make([]string, OUTPUT_COUNT)
 	for i := 0; i < OUTPUT_COUNT; i++ {
@@ -316,13 +318,18 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		} else {
 			outputs[i] = "0"
 		}
+		fmt.Printf("\noutput %d: %s\n", i, outputs[i])
 	}
 
+	data, err := encodeTransactionData(ctx, req.Transaction)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode transaction data. %s", err)
+	}
 	params := map[string]any{
 		"inputs":  inputs,
 		"outputs": outputs,
 		"proof":   h.encodeProof(proofRes.Proof),
-		"data":    "0x",
+		"data":    data,
 	}
 	if tx.DomainConfig.TokenName == "Zeto_AnonEnc" {
 		params["encryptionNonce"] = proofRes.PublicInputs["encryptionNonce"]

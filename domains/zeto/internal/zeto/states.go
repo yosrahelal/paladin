@@ -22,12 +22,12 @@ import (
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 var INPUT_COUNT = 2
@@ -50,7 +50,7 @@ func (z *Zeto) makeNewState(coin *types.ZetoCoin) (*pb.NewState, error) {
 	}, nil
 }
 
-func (z *Zeto) prepareInputs(ctx context.Context, contractAddress, owner string, amount *ethtypes.HexInteger) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, error) {
+func (z *Zeto) prepareInputs(ctx context.Context, contractAddress, owner string, amount *tktypes.HexInteger) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
 	stateRefs := []*pb.StateRef{}
@@ -103,16 +103,16 @@ func (z *Zeto) addHash(newCoin *types.ZetoCoin, ownerKey *babyjub.PublicKey) err
 	if err != nil {
 		return err
 	}
-	newCoin.Hash = (*ethtypes.HexInteger)(commitment)
+	newCoin.Hash = tktypes.NewHexInteger(commitment)
 	return nil
 }
 
-func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount *ethtypes.HexInteger) ([]*types.ZetoCoin, []*pb.NewState, error) {
+func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount *tktypes.HexInteger) ([]*types.ZetoCoin, []*pb.NewState, error) {
 	// Always produce a single coin for the entire output amount
 	// TODO: make this configurable
 	salt := crypto.NewSalt()
 	newCoin := &types.ZetoCoin{
-		Salt:     (*ethtypes.HexInteger)(salt),
+		Salt:     tktypes.NewHexInteger(salt),
 		Owner:    owner,
 		OwnerKey: ownerKey.Compress(),
 		Amount:   amount,

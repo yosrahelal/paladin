@@ -20,6 +20,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
@@ -28,6 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -43,14 +45,36 @@ var zetoNonFungibleInitializableABIBytes []byte // From "gradle copySolidity"
 type Zeto struct {
 	Callbacks plugintk.DomainCallbacks
 
-	config     *types.DomainFactoryConfig
-	chainID    int64
-	coinSchema *prototk.StateSchema
-	factoryABI abi.ABI
+	config                   *types.DomainFactoryConfig
+	chainID                  int64
+	coinSchema               *prototk.StateSchema
+	factoryABI               abi.ABI
+	mintSignature            string
+	transferSignature        string
+	transferWithEncSignature string
 
 	// temporary until we have an interface to the state DB
 	// that supports inserts
 	SmtStorage persistence.Persistence
+}
+
+type MintEvent struct {
+	Outputs []tktypes.HexInteger `json:"outputs"`
+	Data    tktypes.HexBytes     `json:"data"`
+}
+
+type TransferEvent struct {
+	Inputs  []tktypes.HexInteger `json:"inputs"`
+	Outputs []tktypes.HexInteger `json:"outputs"`
+	Data    tktypes.HexBytes     `json:"data"`
+}
+
+type TransferWithEncryptedValuesEvent struct {
+	Inputs          []tktypes.HexInteger `json:"inputs"`
+	Outputs         []tktypes.HexInteger `json:"outputs"`
+	Data            tktypes.HexBytes     `json:"data"`
+	EncryptionNonce tktypes.HexInteger   `json:"encryptionNonce"`
+	EncryptedValues []tktypes.HexInteger `json:"encryptedValues"`
 }
 
 func New(callbacks plugintk.DomainCallbacks) *Zeto {
@@ -82,6 +106,8 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal Zeto event abis. %s", err)
 	}
+
+	z.registerEventSignatures(events)
 
 	return &prototk.ConfigureDomainResponse{
 		DomainConfig: &prototk.DomainConfig{
@@ -271,30 +297,20 @@ func (z *Zeto) FindCoins(ctx context.Context, contractAddress ethtypes.Address0x
 	return coins, err
 }
 
-func (n *Zeto) encodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {
-	txID, err := tktypes.ParseHexBytes(ctx, transaction.TransactionId)
-	if err != nil {
-		return nil, err
+func (z *Zeto) registerEventSignatures(eventAbis abi.ABI) {
+	for _, event := range eventAbis.Events() {
+		switch event.Name {
+		case "UTXOMint":
+			z.mintSignature = event.SolString()
+		case "UTXOTransfer":
+			z.transferSignature = event.SolString()
+		case "UTXOTransferWithEncryptedValues":
+			z.transferWithEncSignature = event.SolString()
+		}
 	}
-
-	var data []byte
-	data = append(data, types.ZetoTransactionData_V0...)
-	data = append(data, txID...)
-	return data, nil
 }
 
-func (n *Zeto) decodeTransactionData(data tktypes.HexBytes) (txID tktypes.HexBytes) {
-	if len(data) < 4 {
-		return nil
-	}
-	dataPrefix := data[0:4]
-	if dataPrefix.String() != types.ZetoTransactionData_V0.String() {
-		return nil
-	}
-	return data[4:]
-}
-
-func (n *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
 	var events []*blockindexer.EventWithData
 	if err := json.Unmarshal([]byte(req.JsonEvents), &events); err != nil {
 		return nil, err
@@ -303,22 +319,81 @@ func (n *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 	var res prototk.HandleEventBatchResponse
 	for _, ev := range events {
 		switch ev.SoliditySignature {
-		case n.transferSignature:
-			var transfer NotoTransfer_Event
-			if err := json.Unmarshal(ev.Data, &transfer); err == nil {
-				txID := n.decodeTransactionData(transfer.Data)
+		case z.mintSignature:
+			var mint MintEvent
+			if err := json.Unmarshal(ev.Data, &mint); err == nil {
+				txID := decodeTransactionData(mint.Data)
 				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
-				res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(txID, transfer.Inputs)...)
-				res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(txID, transfer.Outputs)...)
+				res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, mint.Outputs)...)
+			} else {
+				log.L(ctx).Errorf("Failed to unmarshal mint event: %s", err)
 			}
-
-		case n.approvedSignature:
-			var approved NotoApproved_Event
-			if err := json.Unmarshal(ev.Data, &approved); err == nil {
-				txID := n.decodeTransactionData(approved.Data)
+		case z.transferSignature:
+			var transfer TransferEvent
+			if err := json.Unmarshal(ev.Data, &transfer); err == nil {
+				txID := decodeTransactionData(transfer.Data)
 				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
+				res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
+				res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
+				fmt.Printf("\nspent states: %+v\nconfirmed states: %+v\n", res.SpentStates, res.ConfirmedStates)
+			} else {
+				log.L(ctx).Errorf("Failed to unmarshal transfer event: %s", err)
+			}
+		case z.transferWithEncSignature:
+			var transfer TransferWithEncryptedValuesEvent
+			if err := json.Unmarshal(ev.Data, &transfer); err == nil {
+				txID := decodeTransactionData(transfer.Data)
+				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
+				res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
+				res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
+			} else {
+				log.L(ctx).Errorf("Failed to unmarshal transfer with encrypted values event: %s", err)
 			}
 		}
 	}
 	return &res, nil
+}
+
+func encodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {
+	txID, err := tktypes.ParseHexBytes(ctx, transaction.TransactionId)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("\nencoded transaction id: %s\n", txID.String())
+	var data []byte
+	data = append(data, types.ZetoTransactionData_V0...)
+	data = append(data, txID...)
+	return data, nil
+}
+
+func decodeTransactionData(data tktypes.HexBytes) (txID tktypes.HexBytes) {
+	if len(data) < 4 {
+		return nil
+	}
+	dataPrefix := data[0:4]
+	if dataPrefix.String() != types.ZetoTransactionData_V0.String() {
+		return nil
+	}
+	fmt.Printf("\ndecoded transaction id: %s\n", data[4:].String())
+	return data[4:]
+}
+
+func parseStatesFromEvent(txID tktypes.HexBytes, states []tktypes.HexInteger) []*prototk.StateUpdate {
+	refs := make([]*prototk.StateUpdate, len(states))
+	for i, state := range states {
+		refs[i] = &prototk.StateUpdate{
+			Id:            padTo32Bytes(state.String()),
+			TransactionId: txID.String(),
+		}
+	}
+	return refs
+}
+
+func padTo32Bytes(data string) string {
+	trimmed := strings.TrimPrefix(data, "0x")
+	if len(trimmed) > 64 {
+		return data
+	}
+	padded := fmt.Sprintf("%064s", trimmed)
+	return "0x" + padded
 }

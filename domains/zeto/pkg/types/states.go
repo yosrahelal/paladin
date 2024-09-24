@@ -17,16 +17,16 @@ package types
 
 import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/iden3/go-iden3-crypto/babyjub"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type ZetoCoin struct {
-	Salt     *ethtypes.HexInteger  `json:"salt"`
+	Salt     *tktypes.HexInteger   `json:"salt"`
 	Owner    string                `json:"owner"`
 	OwnerKey babyjub.PublicKeyComp `json:"ownerKey"`
-	Amount   *ethtypes.HexInteger  `json:"amount"`
-	Hash     *ethtypes.HexInteger  `json:"hash"`
+	Amount   *tktypes.HexInteger   `json:"amount"`
+	Hash     *tktypes.HexInteger   `json:"hash"`
 }
 
 var ZetoCoinABI = &abi.Parameter{

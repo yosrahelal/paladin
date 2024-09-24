@@ -110,11 +110,16 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 			return nil, err
 		}
 		outputs[i] = coin.Hash.String()
+		fmt.Printf("\noutput %d: %s\n", i, outputs[i])
 	}
 
+	data, err := encodeTransactionData(ctx, req.Transaction)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode transaction data. %s", err)
+	}
 	params := map[string]interface{}{
 		"utxos": outputs,
-		"data":  "0x",
+		"data":  data,
 	}
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {

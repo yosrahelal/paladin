@@ -17,7 +17,6 @@ package zeto
 
 import (
 	_ "embed"
-	"fmt"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
@@ -44,7 +43,6 @@ func buildEvents(events abi.ABI, contract *domain.SolidityBuild) abi.ABI {
 		}
 	}
 	events = dedup(events)
-	fmt.Printf("Events: %v\n", events)
 	return events
 }
 
