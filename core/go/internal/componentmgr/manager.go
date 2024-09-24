@@ -25,10 +25,13 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/domainmgr"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr"
+	"github.com/kaleido-io/paladin/core/internal/publictxmgr"
 	"github.com/kaleido-io/paladin/core/internal/registrymgr"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/internal/transportmgr"
+	"github.com/kaleido-io/paladin/core/internal/txmgr"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
@@ -63,6 +66,9 @@ type componentManager struct {
 	transportManager components.TransportManager
 	registryManager  components.RegistryManager
 	pluginManager    components.PluginManager
+	publicTxManager  components.PublicTxManager
+	privateTxManager components.PrivateTxManager
+	txManager        components.TXManager
 	// engine
 	engine components.Engine
 	// init to start tracking
@@ -113,6 +119,7 @@ func (cm *componentManager) Init() (err error) {
 		cm.stateStore = statestore.NewStateStore(cm.bgCtx, &cm.conf.StateStore, cm.persistence)
 		err = cm.addIfOpened("state_store", cm.stateStore, err, msgs.MsgComponentStateStoreInitError)
 	}
+
 	if err == nil {
 		cm.blockIndexer, err = blockindexer.NewBlockIndexer(cm.bgCtx, &cm.conf.BlockIndexer, &cm.conf.Blockchain.WS, cm.persistence)
 		err = cm.wrapIfErr(err, msgs.MsgComponentBlockIndexerInitError)
@@ -125,26 +132,44 @@ func (cm *componentManager) Init() (err error) {
 	// pre-init managers
 	if err == nil {
 		cm.domainManager = domainmgr.NewDomainManager(cm.bgCtx, &cm.conf.DomainManagerConfig)
-		cm.initResults["domain_mgr"], err = cm.domainManager.PreInit(cm)
+		cm.initResults["domain_manager"], err = cm.domainManager.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentDomainInitError)
 	}
 
 	if err == nil {
 		cm.transportManager = transportmgr.NewTransportManager(cm.bgCtx, &cm.conf.TransportManagerConfig)
-		cm.initResults["transports_mgr"], err = cm.transportManager.PreInit(cm)
+		cm.initResults["transports_manager"], err = cm.transportManager.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentTransportInitError)
 	}
 
 	if err == nil {
 		cm.registryManager = registrymgr.NewRegistryManager(cm.bgCtx, &cm.conf.RegistryManagerConfig)
-		cm.initResults["registry_mgr"], err = cm.registryManager.PreInit(cm)
+		cm.initResults["registry_manager"], err = cm.registryManager.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentRegistryInitError)
 	}
 
 	if err == nil {
 		cm.pluginManager = plugins.NewPluginManager(cm.bgCtx, cm.grpcTarget, cm.instanceUUID, &cm.conf.PluginManagerConfig)
-		cm.initResults["plugin_mgr"], err = cm.pluginManager.PreInit(cm)
+		cm.initResults["plugin_manager"], err = cm.pluginManager.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
+	}
+
+	if err == nil {
+		cm.publicTxManager = publictxmgr.NewPublicTransactionManager(cm.bgCtx, &cm.conf.PublicTxManager)
+		cm.initResults["public_tx_manager"], err = cm.publicTxManager.PreInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPublicTxnManagerInitError)
+	}
+
+	if err == nil {
+		cm.privateTxManager = privatetxnmgr.NewPrivateTransactionMgr(cm.bgCtx, cm.instanceUUID.String(), &cm.conf.PrivateTxManager)
+		cm.initResults["private_tx_manager"], err = cm.privateTxManager.PreInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPrivateTxManagerInitError)
+	}
+
+	if err == nil {
+		cm.txManager = txmgr.NewTXManager(cm.bgCtx, &cm.conf.TxManager)
+		cm.initResults["tx_manager"], err = cm.txManager.PreInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentTxManagerInitError)
 	}
 
 	// init engine
@@ -172,6 +197,21 @@ func (cm *componentManager) Init() (err error) {
 	if err == nil {
 		err = cm.pluginManager.PostInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
+	}
+
+	if err == nil {
+		err = cm.publicTxManager.PostInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPublicTxnManagerInitError)
+	}
+
+	if err == nil {
+		err = cm.privateTxManager.PostInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentPrivateTxManagerInitError)
+	}
+
+	if err == nil {
+		err = cm.txManager.PostInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentTxManagerInitError)
 	}
 
 	return err
@@ -221,6 +261,22 @@ func (cm *componentManager) StartManagers() (err error) {
 		err = cm.pluginManager.Start()
 		err = cm.addIfStarted("plugin_manager", cm.pluginManager, err, msgs.MsgComponentPluginStartError)
 	}
+
+	if err == nil {
+		err = cm.publicTxManager.Start()
+		err = cm.addIfStarted("public_tx_manager", cm.publicTxManager, err, msgs.MsgComponentPublicTxManagerStartError)
+	}
+
+	if err == nil {
+		err = cm.privateTxManager.Start()
+		err = cm.addIfStarted("private_tx_manager", cm.privateTxManager, err, msgs.MsgComponentPrivateTxManagerStartError)
+	}
+
+	if err == nil {
+		err = cm.txManager.Start()
+		err = cm.addIfStarted("tx_manager", cm.txManager, err, msgs.MsgComponentTxManagerStartError)
+	}
+
 	return err
 }
 
@@ -283,22 +339,30 @@ func (cm *componentManager) buildInternalEventStreams() ([]*blockindexer.Interna
 	var streams []*blockindexer.InternalEventStream
 	for shortName, initResult := range cm.initResults {
 		for _, initStream := range initResult.EventStreams {
-			// We build a stream name in a way assured to result in a new stream if the ABI changes,
-			// TODO... and in the future with a logical way to clean up defunct streams
-			streamHash, err := tktypes.ABISolDefinitionHash(cm.bgCtx, initStream.ABI)
-			if err != nil {
-				return nil, err
+			switch initStream.Type {
+			case blockindexer.IESTypeEventStream:
+				// We build a stream name in a way assured to result in a new stream if the ABI changes,
+				// TODO... and in the future with a logical way to clean up defunct streams
+				streamHash, err := tktypes.ABISolDefinitionHash(cm.bgCtx, initStream.ABI)
+				if err != nil {
+					return nil, err
+				}
+				streamName := fmt.Sprintf("i_%s_%s", shortName, streamHash)
+				streams = append(streams, &blockindexer.InternalEventStream{
+					Definition: &blockindexer.EventStream{
+						Name:   streamName,
+						Type:   blockindexer.EventStreamTypeInternal.Enum(),
+						ABI:    initStream.ABI,
+						Source: initStream.Source,
+					},
+					Handler: initStream.Handler,
+				})
+			default:
+				streams = append(streams, &blockindexer.InternalEventStream{
+					Type:             initStream.Type,
+					PreCommitHandler: initStream.PreCommitHandler,
+				})
 			}
-			streamName := fmt.Sprintf("i_%s_%s", shortName, streamHash)
-			streams = append(streams, &blockindexer.InternalEventStream{
-				Definition: &blockindexer.EventStream{
-					Name:   streamName,
-					Type:   blockindexer.EventStreamTypeInternal.Enum(),
-					ABI:    initStream.ABI,
-					Source: initStream.Source,
-				},
-				Handler: initStream.Handler,
-			})
 		}
 
 	}
@@ -371,6 +435,18 @@ func (cm *componentManager) RegistryManager() components.RegistryManager {
 
 func (cm *componentManager) PluginManager() components.PluginManager {
 	return cm.pluginManager
+}
+
+func (cm *componentManager) PublicTxManager() components.PublicTxManager {
+	return cm.publicTxManager
+}
+
+func (cm *componentManager) PrivateTxManager() components.PrivateTxManager {
+	return cm.privateTxManager
+}
+
+func (cm *componentManager) TxManager() components.TXManager {
+	return cm.txManager
 }
 
 func (cm *componentManager) Engine() components.Engine {

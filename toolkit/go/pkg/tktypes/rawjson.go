@@ -46,6 +46,10 @@ func (m RawJSON) String() string {
 	return (string)(b)
 }
 
+func (m RawJSON) Bytes() []byte {
+	return m
+}
+
 func (m RawJSON) StringValue() string {
 	if m == nil {
 		return ""
@@ -97,10 +101,14 @@ func (m RawJSON) YAML() string {
 }
 
 func (m RawJSON) MarshalJSON() ([]byte, error) {
-	if m == nil {
-		return []byte("null"), nil
+	return m.BytesOrNull(), nil
+}
+
+func (m RawJSON) BytesOrNull() []byte {
+	if len(m) == 0 {
+		return []byte("null")
 	}
-	return m, nil
+	return m
 }
 
 func (m *RawJSON) UnmarshalJSON(data []byte) error {

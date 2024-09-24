@@ -5,6 +5,7 @@ go 1.22.5
 require (
 	github.com/Code-Hex/go-generics-cache v1.5.1
 	github.com/DATA-DOG/go-sqlmock v1.5.2
+	github.com/alecthomas/assert/v2 v2.2.2
 	github.com/btcsuite/btcd v0.23.5-0.20231215221805-96c9fd8078fd
 	github.com/btcsuite/btcd/btcutil v1.1.5
 	github.com/go-resty/resty/v2 v2.14.0
@@ -14,7 +15,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240905213624-43a614759076
 	github.com/hyperledger/firefly-common v1.4.11
-	github.com/hyperledger/firefly-signer v1.1.18-0.20240916233856-eb284ced6841
+	github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1
 	github.com/iden3/go-iden3-crypto v0.0.16
 	github.com/iden3/go-rapidsnark/witness/v2 v2.0.0
 	github.com/iden3/go-rapidsnark/witness/wasmer v0.0.0-20240621085734-9323fbec34a3
@@ -39,11 +40,8 @@ require (
 )
 
 require (
-	github.com/Masterminds/squirrel v1.5.4 // indirect
 	github.com/aidarkhanov/nanoid v1.0.8 // indirect
-	github.com/karlseguin/ccache v2.0.3+incompatible // indirect
-	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
-	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
+	github.com/alecthomas/repr v0.2.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 )
 

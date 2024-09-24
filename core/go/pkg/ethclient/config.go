@@ -16,16 +16,16 @@
 package ethclient
 
 import (
-	"github.com/kaleido-io/paladin/core/internal/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 )
 
 type Config struct {
 	WS                rpcclient.WSConfig   `yaml:"ws"`
 	HTTP              rpcclient.HTTPConfig `yaml:"http"`
-	GasEstimateFactor *float64             `yaml:"gasEstimateFactor"`
+	EstimateGasFactor *float64             `yaml:"gasEstimateFactor"`
 }
 
 var Defaults = &Config{
-	GasEstimateFactor: confutil.P(2.0),
+	EstimateGasFactor: confutil.P(2.0),
 }

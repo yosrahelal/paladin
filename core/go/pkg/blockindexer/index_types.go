@@ -54,6 +54,13 @@ type IndexedTransaction struct {
 	Result           tktypes.Enum[EthTransactionResult] `json:"result,omitempty"`
 }
 
+// Contains additional data that the block indexer does not persist, but allows other code to process
+// and persist during PreCommitHandlers and PostCommitHandlers (no JSON serialization for these)
+type IndexedTransactionNotify struct {
+	IndexedTransaction
+	RevertReason tktypes.HexBytes
+}
+
 type IndexedEvent struct {
 	BlockNumber      int64               `json:"blockNumber"             gorm:"primaryKey"`
 	TransactionIndex int64               `json:"transactionIndex"        gorm:"primaryKey"`

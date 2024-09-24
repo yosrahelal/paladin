@@ -70,11 +70,8 @@ func ParseTimeString(str string) (Timestamp, error) {
 	return Timestamp(t.UnixNano()), nil
 }
 
-func (ts *Timestamp) Time() time.Time {
-	if ts == nil {
-		return time.Time{}
-	}
-	return time.Unix(0, (int64)(*ts))
+func (ts Timestamp) Time() time.Time {
+	return time.Unix(0, (int64)(ts))
 }
 
 func (ts Timestamp) UnixNano() int64 {
@@ -122,6 +119,9 @@ func (ts *Timestamp) Scan(src interface{}) error {
 
 // Value implements sql.Valuer
 func (ts Timestamp) Value() (driver.Value, error) {
+	if ts == 0 {
+		return int64(0), nil
+	}
 	return ts.UnixNano(), nil
 }
 

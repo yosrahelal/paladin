@@ -28,9 +28,8 @@ import (
 
 // The serializer we should use in all places that go from ABI validated data,
 // back down to JSON that might be:
-// 1) Stored in the state store
-// 2) Passed to end-users over a JSON/RPC API
-// 3) Passed to domain plugins over a gRPC API
+// 1) Passed to end-users over a JSON/RPC API
+// 2) Passed to domain plugins over a gRPC API
 func StandardABISerializer() *abi.Serializer {
 	return abi.NewSerializer().
 		SetFormattingMode(abi.FormatAsObjects).

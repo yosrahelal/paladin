@@ -26,17 +26,19 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/rpcclient"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/internal/transportmgr"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/signer/api"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestInitOK(t *testing.T) {
@@ -101,6 +103,9 @@ func TestInitOK(t *testing.T) {
 	assert.NotNil(t, cm.TransportManager())
 	assert.NotNil(t, cm.RegistryManager())
 	assert.NotNil(t, cm.PluginManager())
+	assert.NotNil(t, cm.PrivateTxManager())
+	assert.NotNil(t, cm.PublicTxManager())
+	assert.NotNil(t, cm.TxManager())
 	assert.NotNil(t, cm.Engine())
 
 	cm.Stop()
@@ -153,6 +158,18 @@ func TestStartOK(t *testing.T) {
 	mockRegistryManager.On("Start").Return(nil)
 	mockRegistryManager.On("Stop").Return()
 
+	mockPublicTxManager := componentmocks.NewPublicTxManager(t)
+	mockPublicTxManager.On("Start").Return(nil)
+	mockPublicTxManager.On("Stop").Return()
+
+	mockPrivateTxManager := componentmocks.NewPrivateTxManager(t)
+	mockPrivateTxManager.On("Start").Return(nil)
+	mockPrivateTxManager.On("Stop").Return()
+
+	mockTxManager := componentmocks.NewTXManager(t)
+	mockTxManager.On("Start").Return(nil)
+	mockTxManager.On("Stop").Return()
+
 	mockStateStore := componentmocks.NewStateStore(t)
 	mockStateStore.On("RPCModule").Return(rpcserver.NewRPCModule("utss"))
 
@@ -187,6 +204,9 @@ func TestStartOK(t *testing.T) {
 	cm.registryManager = mockRegistryManager
 	cm.stateStore = mockStateStore
 	cm.rpcServer = mockRPCServer
+	cm.publicTxManager = mockPublicTxManager
+	cm.privateTxManager = mockPrivateTxManager
+	cm.txManager = mockTxManager
 	cm.engine = mockEngine
 
 	err := cm.StartComponents()
@@ -198,6 +218,26 @@ func TestStartOK(t *testing.T) {
 
 	cm.Stop()
 	require.NoError(t, err)
+}
+
+func TestBuildInternalEventStreamsPreCommitPostCommit(t *testing.T) {
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &Config{}, nil).(*componentManager)
+	cm.initResults = map[string]*components.ManagerInitResult{
+		"utengine": {
+			EventStreams: []*components.ManagerEventStream{
+				{Type: blockindexer.IESTypePreCommitHandler, PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*blockindexer.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
+					return nil, nil
+				}},
+			},
+		},
+	}
+
+	streams, err := cm.buildInternalEventStreams()
+	assert.NoError(t, err)
+	assert.Len(t, streams, 1)
+	assert.Equal(t, blockindexer.IESTypePreCommitHandler, streams[0].Type)
+	assert.NotNil(t, streams[0].PreCommitHandler)
+
 }
 
 func TestBuildInternalEventStreamsError(t *testing.T) {

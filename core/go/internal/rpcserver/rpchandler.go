@@ -22,11 +22,11 @@ import (
 	"io"
 	"unicode"
 
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 func (s *rpcServer) rpcHandler(ctx context.Context, r io.Reader, wsc *webSocketConnection) (interface{}, bool) {
@@ -39,7 +39,7 @@ func (s *rpcServer) rpcHandler(ctx context.Context, r io.Reader, wsc *webSocketC
 	log.L(ctx).Tracef("RPC --> %s", b)
 
 	if s.sniffFirstByte(b) == '[' {
-		var rpcArray []*rpcbackend.RPCRequest
+		var rpcArray []*rpcclient.RPCRequest
 		err := json.Unmarshal(b, &rpcArray)
 		if err != nil || len(rpcArray) == 0 {
 			log.L(ctx).Errorf("Bad RPC array received %s", b)
@@ -48,7 +48,7 @@ func (s *rpcServer) rpcHandler(ctx context.Context, r io.Reader, wsc *webSocketC
 		return s.handleRPCBatch(ctx, rpcArray)
 	}
 
-	var rpcRequest rpcbackend.RPCRequest
+	var rpcRequest rpcclient.RPCRequest
 	err = json.Unmarshal(b, &rpcRequest)
 	if err != nil {
 		return s.replyRPCParseError(ctx, b, err)
@@ -64,12 +64,12 @@ func (s *rpcServer) rpcHandler(ctx context.Context, r io.Reader, wsc *webSocketC
 
 }
 
-func (s *rpcServer) replyRPCParseError(ctx context.Context, b []byte, err error) (*rpcbackend.RPCResponse, bool) {
+func (s *rpcServer) replyRPCParseError(ctx context.Context, b []byte, err error) (*rpcclient.RPCResponse, bool) {
 	log.L(ctx).Errorf("Request could not be parsed (err=%v): %s", err, b)
-	return rpcbackend.RPCErrorResponse(
+	return rpcclient.NewRPCErrorResponse(
 		i18n.NewError(ctx, msgs.MsgJSONRPCInvalidRequest),
-		fftypes.JSONAnyPtr("1"), // we couldn't parse the request ID
-		rpcbackend.RPCCodeInvalidRequest,
+		tktypes.RawJSON(`"1"`),
+		rpcclient.RPCCodeInvalidRequest,
 	), false
 }
 
@@ -86,10 +86,10 @@ func (s *rpcServer) sniffFirstByte(data []byte) byte {
 	return 0x00
 }
 
-func (s *rpcServer) handleRPCBatch(ctx context.Context, rpcArray []*rpcbackend.RPCRequest) ([]*rpcbackend.RPCResponse, bool) {
+func (s *rpcServer) handleRPCBatch(ctx context.Context, rpcArray []*rpcclient.RPCRequest) ([]*rpcclient.RPCResponse, bool) {
 
 	// Kick off a routine to fill in each
-	rpcResponses := make([]*rpcbackend.RPCResponse, len(rpcArray))
+	rpcResponses := make([]*rpcclient.RPCResponse, len(rpcArray))
 	results := make(chan bool)
 	for i, r := range rpcArray {
 		responseNumber := i
