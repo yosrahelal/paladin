@@ -14,9 +14,8 @@ services:
     command:
       - /var/besu
   besu:
-    image: 604386504253.dkr.ecr.us-east-2.amazonaws.com/kaleido-node-besu:24.1.0-kaleido-dev-20240918-293
+    image: hyperledger/besu:latest
     user: 0:0
-    entrypoint: besu
     volumes:
       - besu_data:/var/besu:rw
     ports:

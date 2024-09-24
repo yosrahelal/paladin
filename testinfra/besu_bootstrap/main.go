@@ -67,6 +67,7 @@ func main() {
 			CancunTime:  0,
 			ZeroBaseFee: true,
 			QBFT: QBFTConfig{
+				BlockPeriodSeconds:      1, // this is overwritten by the BlockPeriodMilliseconds
 				EpochLength:             30000,
 				RequestTimeoutSeconds:   10,
 				EmptyBlockPeriodSeconds: 10,
