@@ -110,7 +110,6 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 			return nil, err
 		}
 		outputs[i] = coin.Hash.String()
-		fmt.Printf("\noutput %d: %s\n", i, outputs[i])
 	}
 
 	data, err := encodeTransactionData(ctx, req.Transaction)

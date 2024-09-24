@@ -20,7 +20,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
@@ -382,18 +381,9 @@ func parseStatesFromEvent(txID tktypes.HexBytes, states []tktypes.HexInteger) []
 	refs := make([]*prototk.StateUpdate, len(states))
 	for i, state := range states {
 		refs[i] = &prototk.StateUpdate{
-			Id:            padTo32Bytes(state.String()),
+			Id:            state.String(),
 			TransactionId: txID.String(),
 		}
 	}
 	return refs
-}
-
-func padTo32Bytes(data string) string {
-	trimmed := strings.TrimPrefix(data, "0x")
-	if len(trimmed) > 64 {
-		return data
-	}
-	padded := fmt.Sprintf("%064s", trimmed)
-	return "0x" + padded
 }
