@@ -55,7 +55,7 @@ CREATE INDEX transaction_deps_depends_on ON transaction_deps("depends_on");
 CREATE TABLE transaction_receipts (
   "transaction"               UUID            NOT NULL,
   "indexed"                   BIGINT          NOT NULL,
-  "status"                    VARCHAR         NOT NULL,
+  "success"                   BOOLEAN         NOT NULL,
   "failure_message"           TEXT,
   "revert_data"               TEXT,
   "tx_hash"                   TEXT,

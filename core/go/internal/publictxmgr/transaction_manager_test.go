@@ -17,8 +17,11 @@ package publictxmgr
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
@@ -68,6 +71,7 @@ func baseMocks(t *testing.T) *dependencyMocks {
 	}
 	mocks.allComponents.On("EthClientFactory").Return(mocks.ethClientFactory).Maybe()
 	mocks.ethClientFactory.On("SharedWS").Return(mocks.ethClient).Maybe()
+	mocks.ethClientFactory.On("HTTPClient").Return(mocks.ethClient).Maybe()
 	mocks.allComponents.On("BlockIndexer").Return(mocks.blockIndexer).Maybe()
 	mocks.allComponents.On("TxManager").Return(mocks.txManager).Maybe()
 	return mocks
@@ -82,8 +86,7 @@ func NewTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 			MaxInFlightOrchestrators: confutil.P(1),
 		},
 		Orchestrator: OrchestratorConfig{
-			Interval:    confutil.P("1h"),
-			MaxInFlight: confutil.P(0),
+			Interval: confutil.P("1h"),
 			SubmissionRetry: retry.ConfigWithMax{
 				MaxAttempts: confutil.P(0),
 			},
@@ -146,9 +149,29 @@ func NewTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 	}
 }
 
+func passthroughBuildRawTransactionNoResolve(m *dependencyMocks, chainID int64) {
+	mbt := m.ethClient.On("BuildRawTransactionNoResolve", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	mbt.Run(func(args mock.Arguments) {
+		var callOpts []ethclient.CallOption
+		for _, a := range args[4:] {
+			callOpts = append(callOpts, a.(ethclient.CallOption))
+		}
+		r, err := ethclient.NewUnconnectedRPCClient(context.Background(), m.keyManager, &ethclient.Config{}, chainID).BuildRawTransactionNoResolve(
+			args[0].(context.Context),
+			args[1].(ethclient.EthTXVersion),
+			args[2].(*ethclient.ResolvedSigner),
+			args[3].(*ethsigner.Transaction),
+			callOpts...,
+		)
+		mbt.Return(r, err)
+	})
+}
+
 func TestNewEngineErrors(t *testing.T) {
 	mocks := baseMocks(t)
 
+	mocks.keyManager = componentmocks.NewKeyManager(t)
+	mocks.allComponents.On("KeyManager").Return(mocks.keyManager)
 	pmgr := NewPublicTransactionManager(context.Background(), &Config{
 		BalanceManager: BalanceManagerConfig{
 			AutoFueling: AutoFuelingConfig{
@@ -165,61 +188,34 @@ func TestInit(t *testing.T) {
 	defer done()
 }
 
-func TestSingleTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
+func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 	ctx, ble, m, done := NewTestPublicTxManager(t, true, func(mocks *dependencyMocks, conf *Config) {
-		conf.Manager.Interval = confutil.P("10ms")
-		conf.Orchestrator.Interval = confutil.P("10ms")
+		conf.Manager.Interval = confutil.P("50ms")
+		conf.Orchestrator.Interval = confutil.P("50ms")
+		conf.Manager.OrchestratorIdleTimeout = confutil.P("1ms")
 	})
 	defer done()
 
 	err := ble.Start()
 	require.NoError(t, err)
 
+	// Mock a gas price
+	chainID, _ := rand.Int(rand.Reader, big.NewInt(100000000000000))
+	m.ethClient.On("GasPrice", mock.Anything).Return(tktypes.MustParseHexUint256("1000000000000000"), nil)
+	m.ethClient.On("ChainID").Return(chainID.Int64())
+
+	// When we create the transaction, it will be a real one
+	passthroughBuildRawTransactionNoResolve(m, chainID.Int64())
+
 	// Resolve the key ourselves for comparison
 	_, resolvedKeyStr, err := m.keyManager.ResolveKey(ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES)
 	require.NoError(t, err)
 	resolvedKey := tktypes.MustEthAddress(resolvedKeyStr)
 
-	// estimation failure - for non-revert
-	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
-		Return(ethclient.EstimateGasResult{}, fmt.Errorf("GasEstimate error")).Once()
-	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
-		PublicTxInput: ptxapi.PublicTxInput{
-			From: "signer1",
-		},
-	})
-	assert.Regexp(t, "GasEstimate error", err)
-
-	// estimation failure - for revert
-	sampleRevertData := tktypes.HexBytes("some data")
-	m.txManager.On("CalculateRevertError", mock.Anything, mock.Anything, sampleRevertData).Return(fmt.Errorf("mapped revert error"))
-	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
-		Return(ethclient.EstimateGasResult{
-			RevertData: sampleRevertData,
-		}, fmt.Errorf("execution reverted")).Once()
-	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
-		PublicTxInput: ptxapi.PublicTxInput{
-			From: "signer1",
-		},
-	})
-	assert.Regexp(t, "mapped revert error", err)
-
-	// insert transaction next nonce error
-	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
-		Return(ethclient.EstimateGasResult{GasLimit: tktypes.HexUint64(10)}, nil)
-	m.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
-		Return(nil, fmt.Errorf("pop")).Once()
-	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
-		PublicTxInput: ptxapi.PublicTxInput{
-			From: "signer1",
-		},
-	})
-	assert.NotNil(t, err)
-	assert.Regexp(t, "pop", err)
-
 	// create some transactions that are successfully added
-	txIDs := make([]uuid.UUID, 10)
-	txs := make([]*components.PublicTxSubmission, 10)
+	const transactionCount = 1
+	txIDs := make([]uuid.UUID, transactionCount)
+	txs := make([]*components.PublicTxSubmission, transactionCount)
 	for i := range txIDs {
 		txIDs[i] = uuid.New()
 
@@ -271,7 +267,7 @@ func TestSingleTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 	assert.Len(t, queryTxs, len(txs))
 	for i, qTX := range queryTxs {
 		// We don't include the bindings on these queries
-		assert.Equal(t, resolvedKey, qTX.From)
+		assert.Equal(t, *resolvedKey, qTX.From)
 		assert.Equal(t, uint64(i)+baseNonce, qTX.Nonce.Uint64())
 		assert.Equal(t, txs[i].Data, qTX.Data)
 		require.Len(t, qTX.Activity, 1)
@@ -298,7 +294,7 @@ func TestSingleTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 
 		signer, ethTx, err := ethsigner.RecoverRawTransaction(ctx, ethtypes.HexBytes0xPrefix(signedMessage), m.ethClient.ChainID())
 		require.NoError(t, err)
-		assert.Equal(t, resolvedKey, signer)
+		assert.Equal(t, *resolvedKey, tktypes.EthAddress(*signer))
 
 		// We need to decode the TX to find the nonce
 		txHash := calculateTransactionHash(signedMessage)
@@ -317,14 +313,52 @@ func TestSingleTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 
 		srtx.Return(&confirmation.Hash, nil)
 	})
+
 	// Wait for all the confirmations to be calculated
-	for i := 0; i < len(txIDs); i++ {
-		<-calculatedConfirmations
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	gatheredConfirmations := []*blockindexer.IndexedTransactionNotify{}
+	for len(gatheredConfirmations) < len(txs) {
+		select {
+		case confirmation := <-calculatedConfirmations:
+			gatheredConfirmations = append(gatheredConfirmations, confirmation)
+		case <-ticker.C:
+			if t.Failed() {
+				return
+			}
+		}
 	}
 
-	// matches, err := ble.MatchUpdateConfirmedTransactions(ctx, ble.p.DB(), []*blockindexer.IndexedTransactionNotify{confirmation})
-	// require.NoError(t, err)
-	// assert.Len(t, matches, 1)
+	// Simulate detection of the receipt by the blockexplorer - phase 1 in the DB Transaction
+	var allMatches []*components.PublicTxMatch
+	confirmationsMatched := make(map[uuid.UUID]*components.PublicTxMatch)
+	for _, confirmation := range gatheredConfirmations {
+		matches, err := ble.MatchUpdateConfirmedTransactions(ctx, ble.p.DB(), []*blockindexer.IndexedTransactionNotify{confirmation})
+		require.NoError(t, err)
+		// NOTE: This is a good test that we definitely persist _before_ we submit as
+		// otherwise we could miss notifying users of their transactions completing.
+		// Either because we crashed without finishing our DB commit, or because (like this
+		// test simulates) the blockchain confirms to us before we submit.
+		allMatches = append(allMatches, matches...)
+		assert.Len(t, matches, 1)
+		confirmationsMatched[matches[0].TransactionID] = matches[0]
+	}
+	for _, tx := range txs {
+		assert.NotNil(t, confirmationsMatched[tx.Bindings[0].TransactionID])
+	}
+
+	// phase 2 of the update, happens after the DB TX commits, so we can wake up the
+	// orchestrators to remove the in-flight TXns
+	ble.NotifyConfirmPersisted(ctx, allMatches)
+
+	// Now the inflights should all exit, so we wait for the orchestrator to exit
+	for ble.getOrchestratorCount() > 0 {
+		<-ticker.C
+		if t.Failed() {
+			return
+		}
+	}
+	ticker.Stop()
 
 }
 
@@ -360,6 +394,52 @@ func TestResolveFail(t *testing.T) {
 
 	resolvedKey := tktypes.EthAddress(tktypes.RandBytes(20))
 	keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("keyhandle1", resolvedKey.String(), nil)
+}
+
+func TestSubmitFailures(t *testing.T) {
+	ctx, ble, m, done := NewTestPublicTxManager(t, false)
+	defer done()
+
+	resolvedKey := tktypes.EthAddress(tktypes.RandBytes(20))
+	keyManager := m.keyManager.(*componentmocks.KeyManager)
+	keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", resolvedKey.String(), nil)
+
+	// estimation failure - for non-revert
+	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
+		Return(ethclient.EstimateGasResult{}, fmt.Errorf("GasEstimate error")).Once()
+	_, err := ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
+		PublicTxInput: ptxapi.PublicTxInput{
+			From: "signer1",
+		},
+	})
+	assert.Regexp(t, "GasEstimate error", err)
+
+	// estimation failure - for revert
+	sampleRevertData := tktypes.HexBytes("some data")
+	m.txManager.On("CalculateRevertError", mock.Anything, mock.Anything, sampleRevertData).Return(fmt.Errorf("mapped revert error"))
+	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
+		Return(ethclient.EstimateGasResult{
+			RevertData: sampleRevertData,
+		}, fmt.Errorf("execution reverted")).Once()
+	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
+		PublicTxInput: ptxapi.PublicTxInput{
+			From: "signer1",
+		},
+	})
+	assert.Regexp(t, "mapped revert error", err)
+
+	// insert transaction next nonce error
+	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
+		Return(ethclient.EstimateGasResult{GasLimit: tktypes.HexUint64(10)}, nil)
+	m.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
+		Return(nil, fmt.Errorf("pop")).Once()
+	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
+		PublicTxInput: ptxapi.PublicTxInput{
+			From: "signer1",
+		},
+	})
+	assert.NotNil(t, err)
+	assert.Regexp(t, "pop", err)
 }
 
 func TestAddActivityDisabled(t *testing.T) {
