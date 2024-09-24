@@ -69,3 +69,7 @@ type publicTxnsMatchingTransaction struct {
 	persistedPubTx   `gorm:"embedded"`
 	PublicTxnBinding *components.PublicTxnBinding `gorm:"foreignKey:signer_nonce;references:signer_nonce;"`
 }
+
+type txFromOnly struct {
+	From tktypes.EthAddress
+}

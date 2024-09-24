@@ -30,6 +30,7 @@ type NextNonceCallback func(ctx context.Context, signer tktypes.EthAddress) (uin
 type NonceAssignmentIntent interface {
 	Complete(ctx context.Context)
 	AssignNextNonce(ctx context.Context) (uint64, error)
+	Address() tktypes.EthAddress
 	Rollback(ctx context.Context)
 }
 
@@ -147,6 +148,7 @@ func (nc *nonceCacheStruct) IntentToAssignNonce(ctx context.Context, signer tkty
 
 	}
 	return &nonceAssignmentIntent{
+		addr:        signer,
 		locked:      false,
 		completed:   false,
 		cachedNonce: cachedNonceRecord,
@@ -154,7 +156,12 @@ func (nc *nonceCacheStruct) IntentToAssignNonce(ctx context.Context, signer tkty
 	}, nil
 }
 
+func (i *nonceAssignmentIntent) Address() tktypes.EthAddress {
+	return i.addr
+}
+
 type nonceAssignmentIntent struct {
+	addr         tktypes.EthAddress
 	locked       bool
 	completed    bool
 	cachedNonce  *cachedNonce

@@ -258,6 +258,7 @@ func (pb *preparedTransactionBatch) Submit(ctx context.Context, dbTX *gorm.DB) (
 			Create(publicTxBindings).
 			Error
 	}
+
 	return err
 }
 
@@ -266,7 +267,9 @@ func (pb *preparedTransactionBatch) Rejected() []components.PublicTxRejected { r
 
 func (pb *preparedTransactionBatch) Completed(ctx context.Context, committed bool) {
 	for _, pt := range pb.accepted {
-		if !committed {
+		if committed {
+			pt.(*preparedTransaction).nsi.Complete(ctx)
+		} else {
 			pt.(*preparedTransaction).nsi.Rollback(ctx)
 		}
 	}
@@ -306,14 +309,16 @@ func (ble *pubTxManager) PrepareSubmissionBatch(ctx context.Context, transaction
 			batch.Completed(ctx, false)
 		}
 	}()
+	nonceAssigned := make([]*preparedTransaction, 0, len(transactions))
 	for _, tx := range transactions {
-		preparedSubmission, err := ble.prepareSubmission(ctx, tx)
+		preparedSubmission, err := ble.prepareSubmission(ctx, nonceAssigned, tx)
 		if err != nil {
 			return nil, err
 		}
 		if preparedSubmission.rejectError != nil {
 			batch.rejected = append(batch.rejected, preparedSubmission)
 		} else {
+			nonceAssigned = append(nonceAssigned, preparedSubmission)
 			batch.accepted = append(batch.accepted, preparedSubmission)
 		}
 	}
@@ -376,7 +381,7 @@ func buildEthTX(
 
 // PrepareSubmission prepares and validates the transaction input data so that a later call to
 // Submit can be made in the middle of a wider database transaction with minimal risk of error
-func (ble *pubTxManager) prepareSubmission(ctx context.Context, txi *components.PublicTxSubmission) (preparedSubmission *preparedTransaction, err error) {
+func (ble *pubTxManager) prepareSubmission(ctx context.Context, batchSoFar []*preparedTransaction, txi *components.PublicTxSubmission) (preparedSubmission *preparedTransaction, err error) {
 	log.L(ctx).Tracef("PrepareSubmission transaction: %+v", txi)
 
 	pt := &preparedTransaction{
@@ -436,7 +441,15 @@ func (ble *pubTxManager) prepareSubmission(ctx context.Context, txi *components.
 	}
 
 	if !rejected {
-		pt.nsi, err = ble.nonceManager.IntentToAssignNonce(ctx, pt.tx.From)
+		// Need to check for an existing NSI for the address in the batch
+		for _, alreadyInBatch := range batchSoFar {
+			if alreadyInBatch.nsi != nil && alreadyInBatch.nsi.Address() == pt.tx.From {
+				pt.nsi = alreadyInBatch.nsi
+			}
+		}
+		if pt.nsi == nil {
+			pt.nsi, err = ble.nonceManager.IntentToAssignNonce(ctx, pt.tx.From)
+		}
 		if err != nil {
 			log.L(ctx).Errorf("HandleNewTx <%s> error assigning nonce for transaction: %+v, request: (%+v)", txType, err, pt.tx)
 			ble.thMetrics.RecordOperationMetrics(ctx, string(txType), string(GenericStatusFail), time.Since(prepareStart).Seconds())
@@ -573,6 +586,7 @@ func (ble *pubTxManager) QueryTransactions(ctx context.Context, dbTX *gorm.DB, s
 		for iSub, pSub := range ptx.Submissions {
 			tx.Submissions[iSub] = mapPersistedSubmissionData(pSub)
 		}
+		tx.Activity = ble.getActivityRecords(ptx.SignerNonce)
 		results[iTx] = tx
 	}
 	return results, nil

@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
@@ -28,12 +29,14 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 type dependencyMocks struct {
@@ -68,6 +71,7 @@ func baseMocks(t *testing.T) *dependencyMocks {
 }
 
 func NewTestPublicTxManager(t *testing.T, realDB bool, extraSetup ...func(mocks *dependencyMocks, conf *Config)) (context.Context, *pubTxManager, *dependencyMocks, func()) {
+	log.SetLevel("debug")
 	ctx := context.Background()
 	conf := &Config{
 		Manager: ManagerConfig{
@@ -194,21 +198,62 @@ func TestSingleTransactionSubmitRealDB(t *testing.T) {
 	assert.NotNil(t, err)
 	assert.Regexp(t, "pop", err)
 
-	// create transaction succeeded
-	// gas estimate should be cached
+	// create some transactions that are successfully added
+	txIDs := make([]uuid.UUID, 10)
+	txs := make([]*components.PublicTxSubmission, 10)
+	for i := range txIDs {
+		txIDs[i] = uuid.New()
+
+		// We do the public TX manager's job for it in this test
+		fakeTxManagerInsert(t, ble.p.DB(), txIDs[i], "signer1")
+
+		txs[i] = &components.PublicTxSubmission{
+			Bindings: []*components.PaladinTXReference{
+				{TransactionID: txIDs[i], TransactionType: ptxapi.TransactionTypePrivate.Enum()},
+			},
+			PublicTxInput: ptxapi.PublicTxInput{
+				From: "signer1",
+			},
+		}
+
+	}
+
+	// gas estimate and nonce should be cached - so are once'd
 	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
 		Return(ethclient.EstimateGasResult{GasLimit: tktypes.HexUint64(10)}, nil)
 	m.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(tktypes.HexUint64(1)), nil).Once()
-	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
-		PublicTxInput: ptxapi.PublicTxInput{
-			From: "signer1",
-		},
+
+	// For the first one we do a one-off
+	_, err = ble.SingleTransactionSubmit(ctx, txs[0])
+	require.NoError(t, err)
+
+	// The rest we submit as as batch
+	batch, err := ble.PrepareSubmissionBatch(ctx, txs[1:])
+	require.NoError(t, err)
+	assert.Empty(t, batch.Rejected())
+	assert.Len(t, batch.Accepted(), len(txs)-1)
+	err = ble.p.DB().Transaction(func(dbTX *gorm.DB) error {
+		return batch.Submit(ctx, dbTX)
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	batch.Completed(ctx, true) // would normally be in a defer
 
-	// TODO: Query status
+}
 
+func fakeTxManagerInsert(t *testing.T, db *gorm.DB, txID uuid.UUID, fromStr string) {
+	// Yes, there is a slight smell of un-partitioned DB responsibilities between components
+	// here. But the saving is critical path avoidance of one extra DB query for every block
+	// that is mined. So it's currently considered worth this limited quirk.
+	fakeABI := tktypes.Bytes32(tktypes.RandBytes(32))
+	err := db.Exec(`INSERT INTO "abis" ("hash","abi","created") VALUES (?, ?, ?)`,
+		fakeABI, `[]`, tktypes.TimestampNow()).
+		Error
+	require.NoError(t, err)
+	err = db.Exec(`INSERT INTO "transactions" ("id", "created", "type", "abi_ref", "from") VALUES (?, ?, ?, ?, ?)`,
+		txID, tktypes.TimestampNow(), ptxapi.TransactionTypePrivate.Enum(), fakeABI, fromStr).
+		Error
+	require.NoError(t, err)
 }
 
 func TestAddActivityDisabled(t *testing.T) {
