@@ -179,9 +179,14 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 		if schema == nil {
 			return i18n.NewError(ctx, msgs.MsgDomainUnknownSchema, s.SchemaId)
 		}
+		var dataHash tktypes.HexBytes
+		if s.DataHash != nil {
+			dataHash = tktypes.HexBytes(*s.DataHash)
+		}
 		newStatesToWrite[i] = &statestore.StateUpsert{
 			SchemaID: schema.IDString(),
 			Data:     tktypes.RawJSON(s.StateDataJson),
+			DataHash: dataHash,
 			// These are marked as locked and creating in the transaction
 			Creating: true,
 		}
@@ -202,9 +207,10 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 	postAssembly.OutputStates = make([]*components.FullState, len(states))
 	for i, s := range states {
 		postAssembly.OutputStates[i] = &components.FullState{
-			ID:     s.ID,
-			Schema: s.Schema,
-			Data:   s.Data,
+			ID:       s.ID,
+			Schema:   s.Schema,
+			Data:     s.Data,
+			DataHash: s.DataHash,
 		}
 	}
 	return nil
@@ -234,6 +240,7 @@ func (dc *domainContract) LockStates(ctx context.Context, tx *components.Private
 		txLockedStateUpserts = append(txLockedStateUpserts, &statestore.StateUpsert{
 			SchemaID: s.Schema.String(),
 			Data:     s.Data,
+			DataHash: s.DataHash,
 			Spending: true,
 		})
 	}
@@ -241,6 +248,7 @@ func (dc *domainContract) LockStates(ctx context.Context, tx *components.Private
 		txLockedStateUpserts = append(txLockedStateUpserts, &statestore.StateUpsert{
 			SchemaID: s.Schema.String(),
 			Data:     s.Data,
+			DataHash: s.DataHash,
 			Creating: true,
 		})
 	}
@@ -251,6 +259,7 @@ func (dc *domainContract) LockStates(ctx context.Context, tx *components.Private
 		readStateUpserts = append(readStateUpserts, &statestore.StateUpsert{
 			SchemaID: s.Schema.String(),
 			Data:     s.Data,
+			DataHash: s.DataHash,
 		})
 	}
 
@@ -448,9 +457,10 @@ func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateR
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInputStateNotFound, i, id)
 		}
 		states[i] = &components.FullState{
-			ID:     s.ID,
-			Schema: s.Schema,
-			Data:   s.Data,
+			ID:       s.ID,
+			Schema:   s.Schema,
+			Data:     s.Data,
+			DataHash: s.DataHash,
 		}
 	}
 	return states, nil

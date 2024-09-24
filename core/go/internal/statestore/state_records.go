@@ -26,23 +26,23 @@ import (
 // from the base ledger, for which we will never receive the private state itself.
 // Immutable once written
 type StateConfirm struct {
-	State       tktypes.Bytes32 `json:"-"            gorm:"primaryKey"`
-	Transaction uuid.UUID       `json:"transaction"`
+	State       tktypes.HexBytes `json:"-"            gorm:"primaryKey"`
+	Transaction uuid.UUID        `json:"transaction"`
 }
 
 // State record can be updated before, during and after spend records are written
 // Immutable once written
 type StateSpend struct {
-	State       tktypes.Bytes32 `json:"-"            gorm:"primaryKey"`
-	Transaction uuid.UUID       `json:"transaction"`
+	State       tktypes.HexBytes `json:"-"            gorm:"primaryKey"`
+	Transaction uuid.UUID        `json:"transaction"`
 }
 
 // State locks record which transaction a state is being locked to, either
 // spending a previously confirmed state, or an optimistic record of creating
 // (and maybe later spending) a state that is yet to be confirmed.
 type StateLock struct {
-	State       tktypes.Bytes32 `json:"-"                gorm:"primaryKey"`
-	Transaction uuid.UUID       `json:"transaction"`
-	Creating    bool            `json:"creating"`
-	Spending    bool            `json:"spending"`
+	State       tktypes.HexBytes `json:"-"                gorm:"primaryKey"`
+	Transaction uuid.UUID        `json:"transaction"`
+	Creating    bool             `json:"creating"`
+	Spending    bool             `json:"spending"`
 }

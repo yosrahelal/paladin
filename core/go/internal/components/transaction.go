@@ -37,9 +37,10 @@ type TransactionPreAssembly struct {
 }
 
 type FullState struct {
-	ID     tktypes.Bytes32
-	Schema tktypes.Bytes32
-	Data   tktypes.RawJSON
+	ID       tktypes.Bytes32
+	Schema   tktypes.Bytes32
+	Data     tktypes.RawJSON
+	DataHash tktypes.HexBytes
 }
 
 type EthTransaction struct {
