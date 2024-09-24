@@ -16,15 +16,15 @@
 package publictxmgr
 
 type Config struct {
-	TransactionEngine TransactionEngineConfig `yaml:"transactionEngine"`
-	Orchestrator      OrchestratorConfig      `yaml:"orchestrator"`
-	GasPrice          GasPriceConfig          `yaml:"gasPrice"`
-	BalanceManager    BalanceManagerConfig    `yaml:"balanceManager"`
+	Manager        ManagerConfig        `yaml:"manager"`
+	Orchestrator   OrchestratorConfig   `yaml:"orchestrator"`
+	GasPrice       GasPriceConfig       `yaml:"gasPrice"`
+	BalanceManager BalanceManagerConfig `yaml:"balanceManager"`
 }
 
 var DefaultConfig = &Config{
-	TransactionEngine: *DefaultTransactionEngineConfig,
-	Orchestrator:      *DefaultOrchestratorConfig,
-	GasPrice:          *DefaultGasPriceConfig,
-	BalanceManager:    *DefaultBalanceManagerConfig,
+	Manager:        *DefaultManagerConfig,
+	Orchestrator:   *DefaultOrchestratorConfig,
+	GasPrice:       *DefaultGasPriceConfig,
+	BalanceManager: *DefaultBalanceManagerConfig,
 }

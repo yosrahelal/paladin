@@ -105,6 +105,7 @@ func TestInitOK(t *testing.T) {
 	assert.NotNil(t, cm.PluginManager())
 	assert.NotNil(t, cm.PrivateTxManager())
 	assert.NotNil(t, cm.PublicTxManager())
+	assert.NotNil(t, cm.TxManager())
 	assert.NotNil(t, cm.Engine())
 
 	cm.Stop()
@@ -165,6 +166,10 @@ func TestStartOK(t *testing.T) {
 	mockPrivateTxManager.On("Start").Return(nil)
 	mockPrivateTxManager.On("Stop").Return()
 
+	mockTxManager := componentmocks.NewTXManager(t)
+	mockTxManager.On("Start").Return(nil)
+	mockTxManager.On("Stop").Return()
+
 	mockStateStore := componentmocks.NewStateStore(t)
 	mockStateStore.On("RPCModule").Return(rpcserver.NewRPCModule("utss"))
 
@@ -201,6 +206,7 @@ func TestStartOK(t *testing.T) {
 	cm.rpcServer = mockRPCServer
 	cm.publicTxManager = mockPublicTxManager
 	cm.privateTxManager = mockPrivateTxManager
+	cm.txManager = mockTxManager
 	cm.engine = mockEngine
 
 	err := cm.StartComponents()

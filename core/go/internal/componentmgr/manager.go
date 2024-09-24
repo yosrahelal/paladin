@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/internal/transportmgr"
+	"github.com/kaleido-io/paladin/core/internal/txmgr"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
@@ -67,6 +68,7 @@ type componentManager struct {
 	pluginManager    components.PluginManager
 	publicTxManager  components.PublicTxManager
 	privateTxManager components.PrivateTxManager
+	txManager        components.TXManager
 	// engine
 	engine components.Engine
 	// init to start tracking
@@ -130,38 +132,44 @@ func (cm *componentManager) Init() (err error) {
 	// pre-init managers
 	if err == nil {
 		cm.domainManager = domainmgr.NewDomainManager(cm.bgCtx, &cm.conf.DomainManagerConfig)
-		cm.initResults["domain_mgr"], err = cm.domainManager.PreInit(cm)
+		cm.initResults["domain_manager"], err = cm.domainManager.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentDomainInitError)
 	}
 
 	if err == nil {
 		cm.transportManager = transportmgr.NewTransportManager(cm.bgCtx, &cm.conf.TransportManagerConfig)
-		cm.initResults["transports_mgr"], err = cm.transportManager.PreInit(cm)
+		cm.initResults["transports_manager"], err = cm.transportManager.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentTransportInitError)
 	}
 
 	if err == nil {
 		cm.registryManager = registrymgr.NewRegistryManager(cm.bgCtx, &cm.conf.RegistryManagerConfig)
-		cm.initResults["registry_mgr"], err = cm.registryManager.PreInit(cm)
+		cm.initResults["registry_manager"], err = cm.registryManager.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentRegistryInitError)
 	}
 
 	if err == nil {
 		cm.pluginManager = plugins.NewPluginManager(cm.bgCtx, cm.grpcTarget, cm.instanceUUID, &cm.conf.PluginManagerConfig)
-		cm.initResults["plugin_mgr"], err = cm.pluginManager.PreInit(cm)
+		cm.initResults["plugin_manager"], err = cm.pluginManager.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentPluginInitError)
 	}
 
 	if err == nil {
 		cm.publicTxManager = publictxmgr.NewPublicTransactionManager(cm.bgCtx, &cm.conf.PublicTxManager)
-		cm.initResults["public_tx_mgr"], err = cm.publicTxManager.PreInit(cm)
+		cm.initResults["public_tx_manager"], err = cm.publicTxManager.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentPublicTxnManagerInitError)
 	}
 
 	if err == nil {
 		cm.privateTxManager = privatetxnmgr.NewPrivateTransactionMgr(cm.bgCtx, cm.instanceUUID.String(), &cm.conf.PrivateTxManager)
-		cm.initResults["private_tx_mgr"], err = cm.privateTxManager.PreInit(cm)
+		cm.initResults["private_tx_manager"], err = cm.privateTxManager.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentPrivateTxManagerInitError)
+	}
+
+	if err == nil {
+		cm.txManager = txmgr.NewTXManager(cm.bgCtx, &cm.conf.TxManager)
+		cm.initResults["tx_manager"], err = cm.txManager.PreInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentTxManagerInitError)
 	}
 
 	// init engine
@@ -199,6 +207,11 @@ func (cm *componentManager) Init() (err error) {
 	if err == nil {
 		err = cm.privateTxManager.PostInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentPrivateTxManagerInitError)
+	}
+
+	if err == nil {
+		err = cm.txManager.PostInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentTxManagerInitError)
 	}
 
 	return err
@@ -258,6 +271,12 @@ func (cm *componentManager) StartManagers() (err error) {
 		err = cm.privateTxManager.Start()
 		err = cm.addIfStarted("private_tx_manager", cm.privateTxManager, err, msgs.MsgComponentPrivateTxManagerStartError)
 	}
+
+	if err == nil {
+		err = cm.txManager.Start()
+		err = cm.addIfStarted("tx_manager", cm.txManager, err, msgs.MsgComponentTxManagerStartError)
+	}
+
 	return err
 }
 
@@ -424,6 +443,10 @@ func (cm *componentManager) PublicTxManager() components.PublicTxManager {
 
 func (cm *componentManager) PrivateTxManager() components.PrivateTxManager {
 	return cm.privateTxManager
+}
+
+func (cm *componentManager) TxManager() components.TXManager {
+	return cm.txManager
 }
 
 func (cm *componentManager) Engine() components.Engine {

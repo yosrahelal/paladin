@@ -108,8 +108,8 @@ func (s *store) runBatch(ctx context.Context, dbTX *gorm.DB, values []*dispatchS
 			for dispatchIndex, dispatch := range dispatchSequenceOp.PrivateTransactionDispatches {
 
 				//fill in the foreign key before persisting in our dispatch table
-				dispatch.PublicTransactionAddress = publicTxIDs[dispatchIndex].TXWithNonce().From
-				dispatch.PublicTransactionNonce = publicTxIDs[dispatchIndex].TXWithNonce().Nonce.Uint64()
+				dispatch.PublicTransactionAddress = publicTxIDs[dispatchIndex].PublicTx().From
+				dispatch.PublicTransactionNonce = publicTxIDs[dispatchIndex].PublicTx().Nonce.Uint64()
 
 				dispatch.ID = uuid.New().String()
 			}

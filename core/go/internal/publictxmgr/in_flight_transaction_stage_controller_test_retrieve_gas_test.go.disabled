@@ -367,8 +367,8 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559HigherExis
 	}
 	it.gasPriceIncreaseMax = nil
 	// the highest gas price used is higher than the retrieved gas price
-	mtx.MaxFeePerGas = ethtypes.NewHexInteger64(20)
-	mtx.MaxPriorityFeePerGas = ethtypes.NewHexInteger64(1)
+	mtx.MaxFeePerGas = tktypes.Uint64ToUint256(20)
+	mtx.MaxPriorityFeePerGas = tktypes.Uint64ToUint256(1)
 
 	it.gasPriceClient = NewTestFixedPriceGasPriceClientEIP1559(t)
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
@@ -420,8 +420,8 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559MismatchFo
 	}
 	it.gasPriceIncreasePercent = big.NewInt(50) // increase 50 percent
 	// when the old format doesn't match the new format, return the new gas price
-	mtx.MaxFeePerGas = ethtypes.NewHexInteger64(20)
-	mtx.MaxPriorityFeePerGas = ethtypes.NewHexInteger64(1)
+	mtx.MaxFeePerGas = tktypes.Uint64ToUint256(20)
+	mtx.MaxPriorityFeePerGas = tktypes.Uint64ToUint256(1)
 
 	it.gasPriceIncreaseMax = big.NewInt(26)
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
@@ -476,8 +476,8 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559ReachedCap
 	it.gasPriceClient = NewTestFixedPriceGasPriceClientEIP1559(t)
 	it.gasPriceIncreasePercent = big.NewInt(50) // increase 50 percent
 	// when the old format doesn't match the new format, return the new gas price
-	mtx.MaxFeePerGas = ethtypes.NewHexInteger64(20)
-	mtx.MaxPriorityFeePerGas = ethtypes.NewHexInteger64(1)
+	mtx.MaxFeePerGas = tktypes.Uint64ToUint256(20)
+	mtx.MaxPriorityFeePerGas = tktypes.Uint64ToUint256(1)
 
 	it.gasPriceIncreaseMax = big.NewInt(26)
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
@@ -503,8 +503,8 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559ReachedCap
 	<-called
 
 	// when reached the cap
-	mtx.MaxFeePerGas = ethtypes.NewHexInteger64(20)
-	mtx.MaxPriorityFeePerGas = ethtypes.NewHexInteger64(1)
+	mtx.MaxFeePerGas = tktypes.Uint64ToUint256(20)
+	mtx.MaxPriorityFeePerGas = tktypes.Uint64ToUint256(1)
 
 	it.gasPriceIncreaseMax = big.NewInt(26)
 	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)

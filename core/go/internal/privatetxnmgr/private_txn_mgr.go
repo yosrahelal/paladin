@@ -542,7 +542,7 @@ func (p *privateTxManager) NotifyConfirmed(ctx context.Context, confirms []*comp
 	// For now, we just ack everything as "done" driving a receipt to be recorded
 	completed = make(map[uuid.UUID]bool)
 	for _, confirm := range confirms {
-		completed[confirm.Transaction] = true
+		completed[confirm.TransactionID] = true
 	}
 	return completed, nil
 }

@@ -35,6 +35,17 @@ CREATE INDEX transactions_created ON transactions("created");
 CREATE INDEX transactions_domain ON transactions("domain");
 CREATE INDEX transactions_idempotency_key ON transactions("idempotency_key");
 
+CREATE TABLE public_txn_bindings (
+  "sequence"                  BIGSERIAL       PRIMARY KEY, -- allows us to use insertion order to order lists
+  "signer_nonce"              VARCHAR         NOT NULL,
+  "transaction"               UUID            NOT NULL,
+  "tx_type"                   VARCHAR         NOT NULL,
+  FOREIGN KEY ("transaction") REFERENCES transactions ("id") ON DELETE CASCADE,
+  FOREIGN KEY ("signer_nonce") REFERENCES public_txns ("signer_nonce") ON DELETE CASCADE
+);
+CREATE INDEX public_txn_bindings_transaction ON public_txn_bindings("transaction");
+CREATE INDEX public_txn_bindings_signer_nonce ON public_txn_bindings("signer_nonce");
+
 CREATE TABLE transaction_deps (
   "transaction"               UUID            NOT NULL,
   "depends_on"                UUID            NOT NULL,

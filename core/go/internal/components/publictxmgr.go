@@ -18,6 +18,7 @@ package components
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
@@ -27,11 +28,12 @@ import (
 )
 
 type PublicTxAccepted interface {
-	TXWithNonce() *ptxapi.PublicTxWithID // the nonce can only be read after Submit() on the batch succeeds
+	Bindings() []*PaladinTXReference
+	PublicTx() *ptxapi.PublicTx // the nonce can only be read after Submit() on the batch succeeds
 }
 
 type PublicTxRejected interface {
-	TXID() *ptxapi.PublicTxID
+	Bindings() []*PaladinTXReference
 	RejectedError() error         // non-nil if the transaction was rejected during prepare (estimate gas error), so cannot be submitted
 	RevertData() tktypes.HexBytes // if revert data is available for error decoding
 }
@@ -51,22 +53,36 @@ var PublicTxFilterFields filters.FieldSet = filters.FieldMap{
 	"created":       filters.Int64Field("created"),
 }
 
-type PublicTxIDInput struct {
-	ptxapi.PublicTxID
-	ptxapi.PublicTxInput
+type PublicTxSubmission struct {
+	Bindings             []*PaladinTXReference
+	ptxapi.PublicTxInput // the request to create the transaction
+}
+
+type PaladinTXReference struct {
+	TransactionID   uuid.UUID
+	TransactionType tktypes.Enum[ptxapi.TransactionType]
 }
 
 type PublicTxMatch struct {
-	ptxapi.PublicTxID
+	PaladinTXReference
 	*blockindexer.IndexedTransactionNotify
+}
+
+// Database record used for efficiency in both public and Paladin transaction managers as part of a JOIN
+// PublicTxMgr owns insertion of these records at creation time of the public Txn (inside the batch)
+type PublicTxnBinding struct {
+	Sequence        uint64                               `gorm:"column:sequence;autoIncrement"` // unique identifier for this record
+	SignerNonce     string                               `gorm:"column:signer_nonce"`
+	Transaction     uuid.UUID                            `gorm:"column:transaction"`
+	TransactionType tktypes.Enum[ptxapi.TransactionType] `gorm:"column:tx_type"`
 }
 
 type PublicTxManager interface {
 	ManagerLifecycle
 
 	// Synchronous functions that are executed on the callers thread
-	GetTransactions(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithID, error)
-	PrepareSubmissionBatch(ctx context.Context, transactions []*PublicTxIDInput) (batch PublicTxBatch, err error)
+	QueryTransactions(ctx context.Context, dbTX *gorm.DB, scopeToTxn *uuid.UUID, jq *query.QueryJSON) ([]*ptxapi.PublicTx, error)
+	PrepareSubmissionBatch(ctx context.Context, transactions []*PublicTxSubmission) (batch PublicTxBatch, err error)
 	MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransactionNotify) ([]*PublicTxMatch, error)
 	NotifyConfirmPersisted(ctx context.Context, confirms []*PublicTxMatch)
 }

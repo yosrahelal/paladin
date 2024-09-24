@@ -28,16 +28,16 @@ import (
 type noResult struct{}
 
 type submissionWriter struct {
-	flushwriter.Writer[*persistedTxSubmission, *noResult]
+	flushwriter.Writer[*publicSubmission, *noResult]
 }
 
 func newSubmissionWriter(bgCtx context.Context, p persistence.Persistence, conf *Config) *submissionWriter {
 	sw := &submissionWriter{}
-	sw.Writer = flushwriter.NewWriter(bgCtx, sw.runBatch, p, &conf.TransactionEngine.SubmissionWriter, &DefaultConfig.TransactionEngine.SubmissionWriter)
+	sw.Writer = flushwriter.NewWriter(bgCtx, sw.runBatch, p, &conf.Manager.SubmissionWriter, &DefaultConfig.Manager.SubmissionWriter)
 	return sw
 }
 
-func (sw *submissionWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*persistedTxSubmission) ([]flushwriter.Result[*noResult], error) {
+func (sw *submissionWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*publicSubmission) ([]flushwriter.Result[*noResult], error) {
 	err := tx.
 		Table("public_submissions").
 		Clauses(clause.OnConflict{

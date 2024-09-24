@@ -282,12 +282,12 @@ func TestBuildQueryJSONEqual(t *testing.T) {
 			"sequence": Int64Field("sequence"),
 			"masked":   Int64BoolField("masked"),
 			"cid":      Int256Field("correl_id"),
-			"created":  TimestampField("created_at"),
+			"created":  TimestampField("created"),
 		}).Count(&count)
 		require.NoError(t, db.Error)
 		return db
 	})
-	assert.Equal(t, "SELECT count(*) FROM `test` WHERE created_at = 981173106000000000 AND tag != 'abc' AND LOWER(tag) = LOWER('ABC') AND LOWER(tag) != LOWER('abc') AND correl_id IS NOT NULL LIMIT 10", generatedSQL)
+	assert.Equal(t, "SELECT count(*) FROM `test` WHERE created = 981173106000000000 AND tag != 'abc' AND LOWER(tag) = LOWER('ABC') AND LOWER(tag) != LOWER('abc') AND correl_id IS NOT NULL LIMIT 10", generatedSQL)
 }
 
 func TestBuildQueryJSONLike(t *testing.T) {
@@ -330,7 +330,7 @@ func TestBuildQueryJSONLike(t *testing.T) {
 			"sequence": Int64Field("sequence"),
 			"masked":   Int64BoolField("masked"),
 			"cid":      Int256Field("correl_id"),
-			"created":  Int64Field("created_at"),
+			"created":  Int64Field("created"),
 		}).Count(&count)
 		require.NoError(t, db.Error)
 		return db

@@ -27,6 +27,8 @@ import (
 
 func TestHexInt256(t *testing.T) {
 
+	assert.Equal(t, int64(-10), Int64ToInt256(-10).Int().Int64())
+
 	v := MustParseHexInt256("9223372036854775807")
 	assert.Equal(t, uint64(9223372036854775807), v.Int().Uint64())
 	dbv, err := v.Value()
@@ -106,5 +108,9 @@ func TestHexInt256(t *testing.T) {
 	assert.Regexp(t, "PD020012", err)
 
 	assert.True(t, ((*HexInt256)(nil)).NilOrZero())
+
+	dbv, err = ((*HexInt256)(nil)).Value()
+	assert.NoError(t, err)
+	assert.Nil(t, dbv)
 
 }

@@ -42,7 +42,7 @@ type testInFlightTransactionWithMocksAndConf struct {
 func NewTestInFlightTransactionWithMocks(t *testing.T) *testInFlightTransactionWithMocksAndConf {
 	ctx := context.Background()
 	imtxs := NewTestInMemoryTxState(t)
-	ble, conf := NewTestTransactionEngine(t)
+	ble, conf := NewTestPublicTxManager(t)
 	mockBalanceManager, mEC, _ := NewTestBalanceManager(context.Background(), t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)

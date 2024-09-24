@@ -42,7 +42,7 @@ func TestNewOrchestratorPolling(t *testing.T) {
 		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(1),
+			Nonce: tktypes.Uint64ToUint256(1),
 		},
 		Created: tktypes.TimestampNow(),
 	}
@@ -51,12 +51,12 @@ func TestNewOrchestratorPolling(t *testing.T) {
 		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(2),
+			Nonce: tktypes.Uint64ToUint256(2),
 		},
 		Created: tktypes.TimestampNow(),
 	}
 
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
@@ -85,7 +85,7 @@ func TestNewOrchestratorPolling(t *testing.T) {
 	oc.InFlightTxs = []*InFlightTransactionStageController{
 		mockIT}
 	addressBalanceChecked := make(chan bool)
-	mEC.On("GetBalance", mock.Anything, testMainSigningAddress, "latest").Return(ethtypes.NewHexInteger64(100), nil).Run(func(args mock.Arguments) {
+	mEC.On("GetBalance", mock.Anything, testMainSigningAddress, "latest").Return(tktypes.Uint64ToUint256(100), nil).Run(func(args mock.Arguments) {
 		close(addressBalanceChecked)
 	}).Once()
 	oc.orchestratorPollingInterval = 1 * time.Hour
@@ -98,11 +98,11 @@ func TestNewOrchestratorPollingContextCancelled(t *testing.T) {
 	mockManagedTx1 := &ptxapi.PublicTx{
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(1),
+			Nonce: tktypes.Uint64ToUint256(1),
 		},
 	}
 
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
@@ -132,7 +132,7 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 		Status: PubTxStatusFailed,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(1),
+			Nonce: tktypes.Uint64ToUint256(1),
 		},
 		Created: tktypes.TimestampNow(),
 	}
@@ -141,12 +141,12 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(2),
+			Nonce: tktypes.Uint64ToUint256(2),
 		},
 		Created: tktypes.TimestampNow(),
 	}
 
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
@@ -183,7 +183,7 @@ func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 		Status: PubTxStatusSuspended,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(1),
+			Nonce: tktypes.Uint64ToUint256(1),
 		},
 		Created: tktypes.TimestampNow(),
 	}
@@ -192,12 +192,12 @@ func TestNewOrchestratorPollingRemoveSuspended(t *testing.T) {
 		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(2),
+			Nonce: tktypes.Uint64ToUint256(2),
 		},
 		Created: tktypes.TimestampNow(),
 	}
 
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
@@ -236,12 +236,12 @@ func TestNewOrchestratorPollingMarkStale(t *testing.T) {
 		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(1),
+			Nonce: tktypes.Uint64ToUint256(1),
 		},
 		Created: tktypes.TimestampNow(),
 	}
 
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
@@ -281,7 +281,7 @@ func TestOrchestratorStop(t *testing.T) {
 		Status: PubTxStatusSuspended,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(1),
+			Nonce: tktypes.Uint64ToUint256(1),
 		},
 		Created: tktypes.TimestampNow(),
 	}
@@ -290,12 +290,12 @@ func TestOrchestratorStop(t *testing.T) {
 		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(2),
+			Nonce: tktypes.Uint64ToUint256(2),
 		},
 		Created: tktypes.TimestampNow(),
 	}
 
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 
 	mTS := componentmocks.NewPublicTransactionStore(t)
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{mockManagedTx1, mockManagedTx2}, nil).Maybe()
@@ -328,12 +328,12 @@ func TestOrchestratorStopWhenBalanceUnavailable(t *testing.T) {
 		Status: PubTxStatusSucceeded,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(1),
+			Nonce: tktypes.Uint64ToUint256(1),
 		},
 		Created: tktypes.TimestampNow(),
 	}
 
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
@@ -384,14 +384,14 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 		Status: PubTxStatusSucceeded,
 		Transaction: &ethsigner.Transaction{
 			From:     json.RawMessage(testMainSigningAddress),
-			Nonce:    ethtypes.NewHexInteger64(1),
-			GasPrice: ethtypes.NewHexInteger64(1000),
-			GasLimit: ethtypes.NewHexInteger64(100),
+			Nonce:    tktypes.Uint64ToUint256(1),
+			GasPrice: tktypes.Uint64ToUint256(1000),
+			GasLimit: tktypes.Uint64ToUint256(100),
 		},
 		Created: tktypes.TimestampNow(),
 	}
 
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 	mockBM, mEC, mockAFTxEngine := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
@@ -410,7 +410,7 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 
 	// trigger top up if cost is known
 	mockAFTxEngine.On("GetPendingFuelingTransaction", mock.Anything, "0x4e598f6e918321dd47c86e7a077b4ab0e7414846", testMainSigningAddress).Return(nil, fmt.Errorf("cannot get tx")).Once()
-	mEC.On("GetBalance", mock.Anything, testMainSigningAddress, "latest").Return(ethtypes.NewHexInteger64(100), nil).Once()
+	mEC.On("GetBalance", mock.Anything, testMainSigningAddress, "latest").Return(tktypes.Uint64ToUint256(100), nil).Once()
 	oc.unavailableBalanceHandlingStrategy = OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyContinue
 	waitingForBalance, err := oc.ProcessInFlightTransaction(ctx, []*InFlightTransactionStageController{mockIT})
 	require.NoError(t, err)
@@ -433,7 +433,7 @@ func TestOrchestratorHandleConfirmedTransactions(t *testing.T) {
 		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(0),
+			Nonce: tktypes.Uint64ToUint256(0),
 		},
 		Created: tktypes.TimestampNow(),
 	}
@@ -442,7 +442,7 @@ func TestOrchestratorHandleConfirmedTransactions(t *testing.T) {
 		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(1),
+			Nonce: tktypes.Uint64ToUint256(1),
 		},
 		Created: tktypes.TimestampNow(),
 	}
@@ -451,7 +451,7 @@ func TestOrchestratorHandleConfirmedTransactions(t *testing.T) {
 		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(2),
+			Nonce: tktypes.Uint64ToUint256(2),
 		},
 		Created: tktypes.TimestampNow(),
 	}
@@ -460,11 +460,11 @@ func TestOrchestratorHandleConfirmedTransactions(t *testing.T) {
 		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(3),
+			Nonce: tktypes.Uint64ToUint256(3),
 		},
 		Created: tktypes.TimestampNow(),
 	}
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)
@@ -516,11 +516,11 @@ func TestOrchestratorHandleConfirmedTransactionsNoInflightNotHang(t *testing.T) 
 		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(1),
+			Nonce: tktypes.Uint64ToUint256(1),
 		},
 		Created: tktypes.TimestampNow(),
 	}
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 	mockBM, mEC, _ := NewTestBalanceManager(ctx, t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mBI := componentmocks.NewBlockIndexer(t)

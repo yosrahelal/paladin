@@ -31,7 +31,7 @@ func TestFinalizeTransactionsNoOp(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
-	err := txm.FinalizeTransactions(ctx, txm.p.DB(), nil)
+	err := txm.FinalizeTransactions(ctx, txm.p.DB(), nil, false)
 	assert.NoError(t, err)
 
 }
@@ -46,7 +46,7 @@ func TestFinalizeTransactionsLookupFail(t *testing.T) {
 	txID := uuid.New()
 	err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
 		{TransactionID: txID, ReceiptType: components.RT_Success},
-	})
+	}, false)
 	assert.Regexp(t, "pop", err)
 
 }
@@ -62,7 +62,7 @@ func TestFinalizeTransactionsSuccessWithFailure(t *testing.T) {
 	err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
 		{TransactionID: txID, ReceiptType: components.RT_Success,
 			FailureMessage: "not empty"},
-	})
+	}, false)
 	assert.Regexp(t, "PD012213", err)
 }
 
@@ -76,7 +76,7 @@ func TestFinalizeTransactionsBadType(t *testing.T) {
 
 	err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
 		{TransactionID: txID, ReceiptType: components.ReceiptType(42)},
-	})
+	}, false)
 	assert.Regexp(t, "PD012213", err)
 
 }
@@ -91,7 +91,7 @@ func TestFinalizeTransactionsFailedWithMessageNoMessage(t *testing.T) {
 
 	err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
 		{TransactionID: txID, ReceiptType: components.RT_FailedWithMessage},
-	})
+	}, false)
 	assert.Regexp(t, "PD012213", err)
 
 }
@@ -107,7 +107,7 @@ func TestFinalizeTransactionsFailedWithRevertDataWithMessage(t *testing.T) {
 	err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
 		{TransactionID: txID, ReceiptType: components.RT_FailedOnChainWithRevertData,
 			FailureMessage: "not empty"},
-	})
+	}, false)
 	assert.Regexp(t, "PD012213", err)
 
 }
@@ -126,7 +126,7 @@ func TestFinalizeTransactionsInsertFail(t *testing.T) {
 		return txm.FinalizeTransactions(ctx, tx, []*components.ReceiptInput{
 			{TransactionID: txID, ReceiptType: components.RT_FailedWithMessage,
 				FailureMessage: "something went wrong"},
-		})
+		}, false)
 	})
 	assert.Regexp(t, "pop", err)
 
@@ -142,7 +142,7 @@ func TestFinalizeTransactionsIgnoreUnknown(t *testing.T) {
 	err := txm.FinalizeTransactions(ctx, txm.p.DB(), []*components.ReceiptInput{
 		{TransactionID: uuid.New(), ReceiptType: components.RT_FailedOnChainWithRevertData,
 			FailureMessage: "will be ignored"},
-	})
+	}, false)
 	assert.NoError(t, err)
 
 }
@@ -152,7 +152,7 @@ func TestCalculateRevertErrorNoData(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
-	err := txm.calculateRevertError(ctx, nil, nil)
+	err := txm.CalculateRevertError(ctx, nil, nil)
 	assert.Regexp(t, "PD012214", err)
 
 }
@@ -164,7 +164,7 @@ func TestCalculateRevertErrorQueryFail(t *testing.T) {
 	})
 	defer done()
 
-	err := txm.calculateRevertError(ctx, txm.p.DB(), []byte("any data"))
+	err := txm.CalculateRevertError(ctx, txm.p.DB(), []byte("any data"))
 	assert.Regexp(t, "PD012215.*pop", err)
 
 }
@@ -176,7 +176,7 @@ func TestCalculateRevertErrorDecodeFail(t *testing.T) {
 	})
 	defer done()
 
-	err := txm.calculateRevertError(ctx, txm.p.DB(), []byte("any data"))
+	err := txm.CalculateRevertError(ctx, txm.p.DB(), []byte("any data"))
 	assert.Regexp(t, "PD012215", err)
 
 }

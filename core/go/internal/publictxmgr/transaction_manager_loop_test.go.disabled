@@ -34,7 +34,7 @@ import (
 
 func TestNewEngineNoNewOrchestrator(t *testing.T) {
 	ctx := context.Background()
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
@@ -56,7 +56,7 @@ func TestNewEngineNoNewOrchestrator(t *testing.T) {
 func TestNewEnginePollingCancelledContext(t *testing.T) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewPublicTransactionStore(t)
@@ -83,18 +83,18 @@ func TestNewEnginePollingReAddStoppedOrchestrator(t *testing.T) {
 		ID: uuid.New(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(1),
+			Nonce: tktypes.Uint64ToUint256(1),
 		},
 	}
 	mockManagedTx2 := &ptxapi.PublicTx{
 		ID: uuid.New(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(2),
+			Nonce: tktypes.Uint64ToUint256(2),
 		},
 	}
 
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewPublicTransactionStore(t)
@@ -135,17 +135,17 @@ func TestNewEnginePollingStoppingAnOrchestratorAndSelf(t *testing.T) {
 		ID: uuid.New(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(1),
+			Nonce: tktypes.Uint64ToUint256(1),
 		},
 	}
 	mockManagedTx2 := &ptxapi.PublicTx{
 		ID: uuid.New(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(2),
+			Nonce: tktypes.Uint64ToUint256(2),
 		},
 	}
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewPublicTransactionStore(t)
@@ -195,18 +195,18 @@ func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) 
 		ID: uuid.New(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(1),
+			Nonce: tktypes.Uint64ToUint256(1),
 		},
 	}
 	mockManagedTx2 := &ptxapi.PublicTx{
 		ID: uuid.New(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(2),
+			Nonce: tktypes.Uint64ToUint256(2),
 		},
 	}
 
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewPublicTransactionStore(t)
@@ -250,7 +250,7 @@ func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) 
 
 func TestNewEnginePollingExcludePausedOrchestrator(t *testing.T) {
 	ctx := context.Background()
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewPublicTransactionStore(t)
@@ -282,10 +282,10 @@ func TestNewEngineGetPendingFuelingTxs(t *testing.T) {
 		ID: uuid.New(),
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(1),
+			Nonce: tktypes.Uint64ToUint256(1),
 		},
 	}
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
@@ -316,11 +316,11 @@ func TestNewEngineCheckTxCompleteness(t *testing.T) {
 		Status: PubTxStatusSucceeded,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(0),
+			Nonce: tktypes.Uint64ToUint256(0),
 		},
 	}
 
-	ble, _ := NewTestTransactionEngine(t)
+	ble, _ := NewTestPublicTxManager(t)
 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
 	mTS := componentmocks.NewPublicTransactionStore(t)
 	mBI := componentmocks.NewBlockIndexer(t)
@@ -339,7 +339,7 @@ func TestNewEngineCheckTxCompleteness(t *testing.T) {
 		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(0),
+			Nonce: tktypes.Uint64ToUint256(0),
 		},
 	}
 	mTS.On("ListTransactions", mock.Anything, mock.Anything).Return([]*ptxapi.PublicTx{}, nil).Once()
@@ -350,7 +350,7 @@ func TestNewEngineCheckTxCompleteness(t *testing.T) {
 		Status: PubTxStatusPending,
 		Transaction: &ethsigner.Transaction{
 			From:  json.RawMessage(testMainSigningAddress),
-			Nonce: ethtypes.NewHexInteger64(1),
+			Nonce: tktypes.Uint64ToUint256(1),
 		},
 	}
 	// return false when retrieve transactions failed

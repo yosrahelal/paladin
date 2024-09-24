@@ -17,7 +17,6 @@
 package ptxapi
 
 import (
-	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -43,14 +42,9 @@ type PublicTxInput struct {
 	PublicTxOptions
 }
 
-type PublicTxID struct {
-	Transaction   uuid.UUID `json:"transaction"`             // the paladin transaction containing this public transaction
-	ResubmitIndex int       `json:"resubmitIndex,omitempty"` // resubmission of the public transaction can occur for private transactions, meaning more than one public TX
-	ParentType    string    `json:"parentType"`              // public, private or autofuel
-}
-
 type PublicTxSubmission struct {
-	PublicTxID
+	From  tktypes.EthAddress `json:"from"`
+	Nonce tktypes.HexUint64  `json:"nonce"`
 	PublicTxSubmissionData
 }
 
@@ -58,11 +52,6 @@ type PublicTxSubmissionData struct {
 	Time            tktypes.Timestamp `json:"time"`
 	TransactionHash tktypes.Bytes32   `json:"transactionHash"`
 	PublicTxGasPricing
-}
-
-type PublicTxWithID struct {
-	PublicTxID
-	PublicTx
 }
 
 type PublicTx struct {

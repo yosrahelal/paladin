@@ -274,9 +274,9 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			txNonce := p.stateManager.GetNonce()
 			latestCompletedNonce = &txNonce
 			queueUpdated = true
-			log.L(ctx).Debugf("Orchestrator poll and process, marking %s as complete after: %s", p.stateManager.GetTxID(), time.Since(p.stateManager.GetCreatedTime().Time()))
+			log.L(ctx).Debugf("Orchestrator poll and process, marking %s as complete after: %s", p.stateManager.GetSignerNonce(), time.Since(p.stateManager.GetCreatedTime().Time()))
 		} else {
-			log.L(ctx).Debugf("Orchestrator poll and process, continuing tx %s after: %s", p.stateManager.GetTxID(), time.Since(p.stateManager.GetCreatedTime().Time()))
+			log.L(ctx).Debugf("Orchestrator poll and process, continuing tx %s after: %s", p.stateManager.GetSignerNonce(), time.Since(p.stateManager.GetCreatedTime().Time()))
 			oc.InFlightTxs = append(oc.InFlightTxs, p)
 			txStage := p.stateManager.GetStage(ctx)
 			if string(txStage) == "" {
@@ -317,7 +317,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			// as we are the only thread that writes to the submissions table, for
 			// inflight transactions we have in memory that would not be overwritten
 			// by this query.
-			additional, err = oc.runTransactionQuery(ctx, oc.p.DB(), q)
+			additional, err = oc.runTransactionQuery(ctx, oc.p.DB(), nil, q)
 			return true, err
 		})
 		if err != nil {
@@ -326,10 +326,10 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 		}
 
 		log.L(ctx).Debugf("Orchestrator poll and process: polled %d items, space: %d", len(additional), spaces)
-		for _, mtx := range additional {
+		for _, ptx := range additional {
 			queueUpdated = true
-			it := NewInFlightTransactionStageController(oc.pubTxManager, oc, mtx)
-			if highestConfirmedNonce != nil && *highestConfirmedNonce < mtx.Nonce /* an confirmed tx is missed*/ {
+			it := NewInFlightTransactionStageController(oc.pubTxManager, oc, ptx)
+			if highestConfirmedNonce != nil && *highestConfirmedNonce < ptx.Nonce /* an confirmed tx is missed*/ {
 				it.stateManager.AddConfirmationsOutput(ctx, nil) // trigger confirmation stage
 			}
 			oc.InFlightTxs = append(oc.InFlightTxs, it)
@@ -338,7 +338,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 				txStage = InFlightTxStageQueued
 			}
 			stageCounts[string(txStage)] = stageCounts[string(txStage)] + 1
-			log.L(ctx).Debugf("Orchestrator added transaction with ID: %s", mtx.getIDString())
+			log.L(ctx).Debugf("Orchestrator added transaction with ID: %s", ptx.SignerNonce)
 		}
 		total = len(oc.InFlightTxs)
 		polled = total - oldLen
@@ -406,7 +406,7 @@ func (oc *orchestrator) ProcessInFlightTransactions(ctx context.Context, its []*
 	previousNonceCostUnknown := false
 	currentConfirmedNonce := oc.getHighestCompletedNonce()
 	for i, it := range its {
-		log.L(ctx).Debugf("%s ProcessInFlightTransaction for signing address %s processing transaction with ID: %s, index: %d", now.String(), oc.signingAddress, it.stateManager.GetTxID(), i)
+		log.L(ctx).Debugf("%s ProcessInFlightTransaction for signing address %s processing transaction with ID: %s, index: %d", now.String(), oc.signingAddress, it.stateManager.GetSignerNonce(), i)
 		var availableToSpend *big.Int
 		if !skipBalanceCheck {
 			availableToSpend = addressAccount.GetAvailableToSpend(ctx)

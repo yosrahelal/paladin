@@ -75,10 +75,9 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 		mut.Run(func(args mock.Arguments) {
 			mut.Return([]*components.PublicTxMatch{
 				{
-					PublicTxID: ptxapi.PublicTxID{
-						Transaction:   *txID, // Transaction ID resolved by this point
-						ResubmitIndex: 0,
-						ParentType:    "public",
+					PaladinTXReference: components.PaladinTXReference{
+						TransactionID:   *txID, // Transaction ID resolved by this point
+						TransactionType: ptxapi.TransactionTypePublic.Enum(),
 					},
 					IndexedTransactionNotify: txi,
 				},
@@ -86,7 +85,7 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 		})
 
 		mc.publicTxMgr.On("NotifyConfirmPersisted", mock.Anything, mock.MatchedBy(func(matches []*components.PublicTxMatch) bool {
-			return len(matches) == 1 && matches[0].Transaction == *txID
+			return len(matches) == 1 && matches[0].TransactionID == *txID
 		}))
 	})
 	defer done()
@@ -124,10 +123,9 @@ func TestPublicConfirmMatch(t *testing.T) {
 		mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi}).
 			Return([]*components.PublicTxMatch{
 				{
-					PublicTxID: ptxapi.PublicTxID{
-						Transaction:   txID,
-						ResubmitIndex: 0,
-						ParentType:    "public",
+					PaladinTXReference: components.PaladinTXReference{
+						TransactionID:   txID,
+						TransactionType: ptxapi.TransactionTypePublic.Enum(),
 					},
 					IndexedTransactionNotify: txi,
 				},
@@ -138,7 +136,7 @@ func TestPublicConfirmMatch(t *testing.T) {
 		mc.db.ExpectCommit()
 
 		mc.publicTxMgr.On("NotifyConfirmPersisted", mock.Anything, mock.MatchedBy(func(matches []*components.PublicTxMatch) bool {
-			return len(matches) == 1 && matches[0].Transaction == txID
+			return len(matches) == 1 && matches[0].TransactionID == txID
 		}))
 	})
 	defer done()
@@ -158,10 +156,9 @@ func TestPrivateConfirmMatch(t *testing.T) {
 		mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi}).
 			Return([]*components.PublicTxMatch{
 				{
-					PublicTxID: ptxapi.PublicTxID{
-						Transaction:   txID,
-						ResubmitIndex: 0,
-						ParentType:    "private",
+					PaladinTXReference: components.PaladinTXReference{
+						TransactionID:   txID,
+						TransactionType: ptxapi.TransactionTypePrivate.Enum(),
 					},
 					IndexedTransactionNotify: txi,
 				},
@@ -176,13 +173,13 @@ func TestPrivateConfirmMatch(t *testing.T) {
 			completed := make(map[uuid.UUID]bool)
 			confirms := args[1].([]*components.PublicTxMatch)
 			for _, c := range confirms {
-				completed[c.Transaction] = true
+				completed[c.TransactionID] = true
 			}
 			mnc.Return(completed, nil)
 		})
 
 		mc.publicTxMgr.On("NotifyConfirmPersisted", mock.Anything, mock.MatchedBy(func(matches []*components.PublicTxMatch) bool {
-			return len(matches) == 1 && matches[0].Transaction == txID
+			return len(matches) == 1 && matches[0].TransactionID == txID
 		}))
 	})
 	defer done()
@@ -233,10 +230,9 @@ func TestPrivateConfirmError(t *testing.T) {
 		mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi}).
 			Return([]*components.PublicTxMatch{
 				{
-					PublicTxID: ptxapi.PublicTxID{
-						Transaction:   txID,
-						ResubmitIndex: 0,
-						ParentType:    "private",
+					PaladinTXReference: components.PaladinTXReference{
+						TransactionID:   txID,
+						TransactionType: ptxapi.TransactionTypePrivate.Enum(),
 					},
 					IndexedTransactionNotify: txi,
 				},
@@ -259,10 +255,9 @@ func TestConfirmInsertError(t *testing.T) {
 		mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi}).
 			Return([]*components.PublicTxMatch{
 				{
-					PublicTxID: ptxapi.PublicTxID{
-						Transaction:   txID,
-						ResubmitIndex: 0,
-						ParentType:    "public",
+					PaladinTXReference: components.PaladinTXReference{
+						TransactionID:   txID,
+						TransactionType: ptxapi.TransactionTypePublic.Enum(),
 					},
 					IndexedTransactionNotify: txi,
 				},

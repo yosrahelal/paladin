@@ -38,10 +38,10 @@ func NewTestInMemoryTxState(t *testing.T) baseTypes.InMemoryTxStateManager {
 	oldTxHash := tktypes.Bytes32Keccak([]byte("0x00000"))
 	oldStatus := PubTxStatusPending
 	oldTo := "0x6cee73cf4d5b0ac66ce2d1c0617bec4bedd09f39"
-	oldNonce := ethtypes.NewHexInteger64(1)
-	oldGasLimit := ethtypes.NewHexInteger64(2000)
-	oldValue := ethtypes.NewHexInteger64(200)
-	oldGasPrice := ethtypes.NewHexInteger64(10)
+	oldNonce := tktypes.Uint64ToUint256(1)
+	oldGasLimit := tktypes.Uint64ToUint256(2000)
+	oldValue := tktypes.Uint64ToUint256(200)
+	oldGasPrice := tktypes.Uint64ToUint256(10)
 	oldErrorMessage := "old message"
 	oldTransactionData := ethtypes.MustNewHexBytes0xPrefix(testTransactionData)
 	testManagedTx := &ptxapi.PublicTx{
@@ -77,10 +77,10 @@ func TestSettersAndGetters(t *testing.T) {
 	oldFrom := "0xb3d9cf8e163bbc840195a97e81f8a34e295b8f39"
 	oldTxHash := tktypes.Bytes32Keccak([]byte("0x00000"))
 	oldTo := "0x1f9090aae28b8a3dceadf281b0f12828e676c326"
-	oldNonce := ethtypes.NewHexInteger64(1)
-	oldGasLimit := ethtypes.NewHexInteger64(2000)
-	oldValue := ethtypes.NewHexInteger64(200)
-	oldGasPrice := ethtypes.NewHexInteger64(10)
+	oldNonce := tktypes.Uint64ToUint256(1)
+	oldGasLimit := tktypes.Uint64ToUint256(2000)
+	oldValue := tktypes.Uint64ToUint256(200)
+	oldGasPrice := tktypes.Uint64ToUint256(10)
 	oldErrorMessage := "old message"
 	oldTransactionData := ethtypes.MustNewHexBytes0xPrefix(testTransactionData)
 
@@ -112,7 +112,7 @@ func TestSettersAndGetters(t *testing.T) {
 
 	inMemoryTx := inMemoryTxState.GetTx()
 
-	assert.Equal(t, testManagedTx.ID, inMemoryTxState.GetTxID())
+	assert.Equal(t, testManagedTx.ID, inMemoryTxState.GetSignerNonce())
 
 	assert.Equal(t, oldTime, *inMemoryTxState.GetCreatedTime())
 	assert.Nil(t, inMemoryTxState.GetConfirmedTransaction())
@@ -142,8 +142,8 @@ func TestSettersAndGetters(t *testing.T) {
 	successStatus := PubTxStatusSucceeded
 	newTime := confutil.P(tktypes.TimestampNow())
 	newTxHash := tktypes.Bytes32Keccak([]byte("0x000031"))
-	newGasLimit := ethtypes.NewHexInteger64(111)
-	newGasPrice := ethtypes.NewHexInteger64(111)
+	newGasLimit := tktypes.Uint64ToUint256(111)
+	newGasPrice := tktypes.Uint64ToUint256(111)
 	newErrorMessage := "new message"
 
 	inMemoryTxState.ApplyTxUpdates(context.Background(), &BaseTXUpdates{
@@ -162,7 +162,7 @@ func TestSettersAndGetters(t *testing.T) {
 		GasLimit:     newGasLimit,
 	})
 
-	assert.Equal(t, testManagedTx.ID, inMemoryTxState.GetTxID())
+	assert.Equal(t, testManagedTx.ID, inMemoryTxState.GetSignerNonce())
 
 	assert.Equal(t, oldTime, *inMemoryTxState.GetCreatedTime())
 	assert.Equal(t, newTime, inMemoryTxState.GetLastSubmitTime())
@@ -190,8 +190,8 @@ func TestSettersAndGetters(t *testing.T) {
 	assert.Equal(t, oldValue, inMemoryTx.Value)
 	assert.Equal(t, oldTransactionData, inMemoryTx.Data)
 
-	maxPriorityFeePerGas := ethtypes.NewHexInteger64(2)
-	maxFeePerGas := ethtypes.NewHexInteger64(123)
+	maxPriorityFeePerGas := tktypes.Uint64ToUint256(2)
+	maxFeePerGas := tktypes.Uint64ToUint256(123)
 
 	// test switch gas price format
 	inMemoryTxState.ApplyTxUpdates(context.Background(), &BaseTXUpdates{
@@ -205,9 +205,9 @@ func TestSettersAndGetters(t *testing.T) {
 
 	// test switch back and prefer legacy gas price
 
-	maxPF := ethtypes.NewHexInteger64(3)
-	maxF := ethtypes.NewHexInteger64(234)
-	maxP := ethtypes.NewHexInteger64(10000)
+	maxPF := tktypes.Uint64ToUint256(3)
+	maxF := tktypes.Uint64ToUint256(234)
+	maxP := tktypes.Uint64ToUint256(10000)
 	inMemoryTxState.ApplyTxUpdates(context.Background(), &BaseTXUpdates{
 		MaxPriorityFeePerGas: maxPF,
 		MaxFeePerGas:         maxF,
