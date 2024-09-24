@@ -5,10 +5,12 @@ CREATE TABLE states (
     "schema"           VARCHAR,
     "contract_address" VARCHAR,
     "data"             VARCHAR,
+    "data_hash"        VARCHAR,
     PRIMARY KEY ("id"),
     FOREIGN KEY ("domain_name", "schema") REFERENCES schemas ("domain_name", "id") ON DELETE CASCADE
 );
 CREATE INDEX states_by_domain ON states("domain_name", "schema", "contract_address");
+CREATE UNIQUE INDEX states_by_hash ON states("data_hash");
 
 CREATE TABLE state_labels (
     "state"       VARCHAR NOT NULL,

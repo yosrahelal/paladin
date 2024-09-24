@@ -921,13 +921,13 @@ func TestHandleEventBatch(t *testing.T) {
 			},
 			SpentStates: []*prototk.StateUpdate{
 				{
-					Id:            stateSpent,
+					DataHash:      stateSpent,
 					TransactionId: txIDBytes32.String(),
 				},
 			},
 			ConfirmedStates: []*prototk.StateUpdate{
 				{
-					Id:            stateConfirmed,
+					DataHash:      stateConfirmed,
 					TransactionId: txIDBytes32.String(),
 				},
 			},
@@ -1037,7 +1037,7 @@ func TestHandleEventBatchSpentBadTransactionID(t *testing.T) {
 		return &prototk.HandleEventBatchResponse{
 			SpentStates: []*prototk.StateUpdate{
 				{
-					Id:            stateSpent,
+					DataHash:      stateSpent,
 					TransactionId: "badnotgood",
 				},
 			},
@@ -1076,7 +1076,7 @@ func TestHandleEventBatchConfirmBadTransactionID(t *testing.T) {
 		return &prototk.HandleEventBatchResponse{
 			ConfirmedStates: []*prototk.StateUpdate{
 				{
-					Id:            stateSpent,
+					DataHash:      stateSpent,
 					TransactionId: "badnotgood",
 				},
 			},
@@ -1191,7 +1191,7 @@ func TestHandleEventBatchMarkSpentFail(t *testing.T) {
 		return &prototk.HandleEventBatchResponse{
 			SpentStates: []*prototk.StateUpdate{
 				{
-					Id:            stateSpent,
+					DataHash:      stateSpent,
 					TransactionId: txIDBytes32.String(),
 				},
 			},
@@ -1234,7 +1234,7 @@ func TestHandleEventBatchMarkConfirmedFail(t *testing.T) {
 		return &prototk.HandleEventBatchResponse{
 			ConfirmedStates: []*prototk.StateUpdate{
 				{
-					Id:            stateConfirmed,
+					DataHash:      stateConfirmed,
 					TransactionId: txIDBytes32.String(),
 				},
 			},

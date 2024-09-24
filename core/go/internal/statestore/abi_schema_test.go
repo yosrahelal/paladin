@@ -118,7 +118,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		"field8": 12345,
 		"field9": "things and stuff",
 		"cruft": "to remove"
-	}`))
+	}`), nil)
 	require.NoError(t, err)
 	assert.Equal(t, []*StateLabel{
 		// uint256 written as zero padded string
@@ -430,7 +430,7 @@ func TestABISchemaProcessStateInvalidType(t *testing.T) {
 	var err error
 	as.tc, err = as.definition.TypeComponentTreeCtx(ctx)
 	require.NoError(t, err)
-	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{"field1": 12345}`))
+	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{"field1": 12345}`), nil)
 	assert.Regexp(t, "PD010103", err)
 }
 
@@ -462,7 +462,7 @@ func TestABISchemaProcessStateLabelMissing(t *testing.T) {
 	var err error
 	as.tc, err = as.definition.TypeComponentTreeCtx(ctx)
 	require.NoError(t, err)
-	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{"field1": 12345}`))
+	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{"field1": 12345}`), nil)
 	assert.Regexp(t, "PD010110", err)
 }
 
@@ -498,7 +498,7 @@ func TestABISchemaProcessStateBadValue(t *testing.T) {
 	var err error
 	as.tc, err = as.definition.TypeComponentTreeCtx(ctx)
 	require.NoError(t, err)
-	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{!!! wrong`))
+	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{!!! wrong`), nil)
 	assert.Regexp(t, "PD010116", err)
 }
 
@@ -523,7 +523,7 @@ func TestABISchemaProcessStateMismatchValue(t *testing.T) {
 	var err error
 	as.tc, err = as.definition.TypeComponentTreeCtx(ctx)
 	require.NoError(t, err)
-	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{"field1":{}}`))
+	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{"field1":{}}`), nil)
 	assert.Regexp(t, "FF22030", err)
 }
 
@@ -548,7 +548,7 @@ func TestABISchemaProcessStateEIP712Failure(t *testing.T) {
 	var err error
 	as.tc, err = as.definition.TypeComponentTreeCtx(ctx)
 	require.NoError(t, err)
-	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{"field1":"0x753A7decf94E48a05Fa1B342D8984acA9bFaf6B2"}`))
+	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{"field1":"0x753A7decf94E48a05Fa1B342D8984acA9bFaf6B2"}`), nil)
 	assert.Regexp(t, "FF22073", err)
 }
 
@@ -573,7 +573,7 @@ func TestABISchemaProcessStateDataFailure(t *testing.T) {
 	var err error
 	as.tc, err = as.definition.TypeComponentTreeCtx(ctx)
 	require.NoError(t, err)
-	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{"field1":"0x753A7decf94E48a05Fa1B342D8984acA9bFaf6B2"}`))
+	_, err = as.ProcessState(ctx, *tktypes.RandAddress(), tktypes.RawJSON(`{"field1":"0x753A7decf94E48a05Fa1B342D8984acA9bFaf6B2"}`), nil)
 	assert.Regexp(t, "FF22073", err)
 }
 

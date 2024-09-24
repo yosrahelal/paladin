@@ -429,15 +429,15 @@ func TestDSIMergedUnFlushedWhileFlushing(t *testing.T) {
 
 	s1, err := schema.ProcessState(ctx, *contractAddress, tktypes.RawJSON(fmt.Sprintf(
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
-		tktypes.RandHex(32))))
+		tktypes.RandHex(32))), nil)
 	require.NoError(t, err)
-	s1.Locked = &StateLock{State: s1.ID, Transaction: uuid.New(), Creating: true}
+	s1.Locked = &StateLock{State: s1.DataHash, Transaction: uuid.New(), Creating: true}
 
 	dc.flushing = &writeOperation{
 		states: []*StateWithLabels{s1},
 		stateLocks: []*StateLock{
 			s1.Locked,
-			{State: tktypes.Bytes32Keccak(([]byte)("another")), Spending: true},
+			{State: []byte("another"), Spending: true},
 		},
 	}
 
@@ -466,19 +466,19 @@ func TestDSIMergedUnFlushedSpend(t *testing.T) {
 
 	s1, err := schema.ProcessState(ctx, *contractAddress, tktypes.RawJSON(fmt.Sprintf(
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
-		tktypes.RandHex(32))))
+		tktypes.RandHex(32))), nil)
 	require.NoError(t, err)
-	s1.Locked = &StateLock{State: s1.ID, Transaction: uuid.New(), Creating: true}
+	s1.Locked = &StateLock{State: s1.DataHash, Transaction: uuid.New(), Creating: true}
 
 	dc.flushing = &writeOperation{
 		states: []*StateWithLabels{s1},
 		stateSpends: []*StateSpend{
-			{State: s1.ID},
+			{State: s1.DataHash},
 		},
 	}
 	dc.unFlushed = &writeOperation{
 		stateSpends: []*StateSpend{
-			{State: tktypes.Bytes32(tktypes.RandBytes(32))},
+			{State: tktypes.RandBytes(32)},
 		},
 	}
 
@@ -505,15 +505,15 @@ func TestDSIMergedUnFlushedWhileFlushingDedup(t *testing.T) {
 
 	s1, err := schema.ProcessState(ctx, *contractAddress, tktypes.RawJSON(fmt.Sprintf(
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
-		tktypes.RandHex(32))))
+		tktypes.RandHex(32))), nil)
 	require.NoError(t, err)
-	s1.Locked = &StateLock{State: s1.ID, Transaction: uuid.New(), Creating: true}
+	s1.Locked = &StateLock{State: s1.DataHash, Transaction: uuid.New(), Creating: true}
 
 	dc.flushing = &writeOperation{
 		states: []*StateWithLabels{s1},
 		stateLocks: []*StateLock{
 			s1.Locked,
-			{State: tktypes.Bytes32Keccak(([]byte)("another")), Spending: true},
+			{State: []byte("another"), Spending: true},
 		},
 	}
 
@@ -548,7 +548,7 @@ func TestDSIMergedUnFlushedEvalError(t *testing.T) {
 
 	s1, err := schema.ProcessState(ctx, *contractAddress, tktypes.RawJSON(fmt.Sprintf(
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
-		tktypes.RandHex(32))))
+		tktypes.RandHex(32))), nil)
 	require.NoError(t, err)
 
 	dc.flushing = &writeOperation{
@@ -575,7 +575,7 @@ func TestDSIMergedInMemoryMatchesRecoverLabelsFail(t *testing.T) {
 
 	s1, err := schema.ProcessState(ctx, *contractAddress, tktypes.RawJSON(fmt.Sprintf(
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
-		tktypes.RandHex(32))))
+		tktypes.RandHex(32))), nil)
 	require.NoError(t, err)
 	s1.Data = tktypes.RawJSON(`! wrong `)
 
@@ -603,7 +603,7 @@ func TestDSIMergedInMemoryMatchesSortFail(t *testing.T) {
 
 	s1, err := schema.ProcessState(ctx, *contractAddress, tktypes.RawJSON(fmt.Sprintf(
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
-		tktypes.RandHex(32))))
+		tktypes.RandHex(32))), nil)
 	require.NoError(t, err)
 
 	dc.flushing = &writeOperation{
@@ -697,7 +697,7 @@ func TestDSIResetWithMixed(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Len(t, dc.unFlushed.stateLocks, 1)
-	assert.Equal(t, dc.unFlushed.stateLocks[0].State, state2)
+	assert.Equal(t, dc.unFlushed.stateLocks[0].State, tktypes.HexBytes(state2[:]))
 
 }
 
