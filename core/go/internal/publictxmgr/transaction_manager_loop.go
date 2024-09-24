@@ -159,23 +159,18 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 			}
 		}
 
-		var additionalNonInFlightSigners []tktypes.EthAddress
+		var additionalNonInFlightSigners []*txFromOnly
 		// We retry the get from persistence indefinitely (until the context cancels)
 		err := ble.retry.Do(ctx, func(attempt int) (retry bool, err error) {
 			// TODO: Fairness algorithm for swapping out orchestrators when there is no space
-			db := ble.p.DB()
-			q := db.
-				WithContext(ctx).
-				Model(&persistedPubTx{}).
-				Table("public_txns").
-				Distinct(`"from"`).
-				Joins("Completed", db.Select("tx_hash")).
-				Where(`"Completed"."tx_hash" IS NULL`).
-				Limit(spaces)
-			if len(inFlightSigningAddresses) > 0 {
-				q = q.Where(`"from" NOT IN (?)`, inFlightSigningAddresses)
-			}
-			return true, q.Pluck(`"from"`, &additionalNonInFlightSigners).Error
+			// (raw SQL as couldn't convince gORM to build this)
+			q := ble.p.DB().Raw(`SELECT DISTINCT "from" FROM "transactions" `+
+				`LEFT JOIN "public_completions" AS c ON "signer_nonce" = c."signer_nonce" `+
+				`WHERE c."signer_nonce" IS NULL `+
+				`AND "from" NOT IN (?)`, inFlightSigningAddresses).
+				Scan(&additionalNonInFlightSigners)
+			// Note gORM plug doesn't work with Join
+			return true, q.Error
 		})
 		if err != nil {
 			log.L(ctx).Infof("Engine polling context cancelled while retrying")
@@ -184,15 +179,15 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 
 		log.L(ctx).Debugf("Engine polled %d items to fill in %d empty slots.", len(additionalNonInFlightSigners), spaces)
 
-		for _, from := range additionalNonInFlightSigners {
-			if _, exist := ble.InFlightOrchestrators[from]; !exist {
-				oc := NewOrchestrator(ble, from, ble.conf)
-				ble.InFlightOrchestrators[from] = oc
+		for _, r := range additionalNonInFlightSigners {
+			if _, exist := ble.InFlightOrchestrators[r.From]; !exist {
+				oc := NewOrchestrator(ble, r.From, ble.conf)
+				ble.InFlightOrchestrators[r.From] = oc
 				stateCounts[string(oc.state)] = stateCounts[string(oc.state)] + 1
 				_, _ = oc.Start(ble.ctx)
-				log.L(ctx).Infof("Engine added orchestrator for signing address %s", from)
+				log.L(ctx).Infof("Engine added orchestrator for signing address %s", r.From)
 			} else {
-				log.L(ctx).Warnf("Engine fetched extra transactions from signing address %s", from)
+				log.L(ctx).Warnf("Engine fetched extra transactions from signing address %s", r.From)
 			}
 		}
 		total = len(ble.InFlightOrchestrators)
