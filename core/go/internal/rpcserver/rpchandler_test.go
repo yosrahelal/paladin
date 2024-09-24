@@ -24,7 +24,7 @@ import (
 	"testing/iotest"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -218,7 +218,7 @@ func TestRPCHandleBadDataEmptySpace(t *testing.T) {
 	url, _, done := newTestServerHTTP(t, &Config{})
 	defer done()
 
-	var jsonResponse rpcbackend.RPCResponse
+	var jsonResponse rpcclient.RPCResponse
 	res, err := resty.New().R().
 		SetBody(`     `).
 		SetResult(&jsonResponse).
@@ -226,7 +226,7 @@ func TestRPCHandleBadDataEmptySpace(t *testing.T) {
 		Post(url)
 	require.NoError(t, err)
 	assert.False(t, res.IsSuccess())
-	assert.Equal(t, int64(rpcbackend.RPCCodeInvalidRequest), jsonResponse.Error.Code)
+	assert.Equal(t, int64(rpcclient.RPCCodeInvalidRequest), jsonResponse.Error.Code)
 	assert.Regexp(t, "PD011000", jsonResponse.Error.Message)
 
 }
@@ -238,8 +238,8 @@ func TestRPCHandleIOError(t *testing.T) {
 
 	iRPCResponse, ok := s.rpcHandler(context.Background(), iotest.ErrReader(fmt.Errorf("pop")), nil)
 	assert.False(t, ok)
-	jsonResponse := iRPCResponse.(*rpcbackend.RPCResponse)
-	assert.Equal(t, int64(rpcbackend.RPCCodeInvalidRequest), jsonResponse.Error.Code)
+	jsonResponse := iRPCResponse.(*rpcclient.RPCResponse)
+	assert.Equal(t, int64(rpcclient.RPCCodeInvalidRequest), jsonResponse.Error.Code)
 	assert.Regexp(t, "PD011000", jsonResponse.Error.Message)
 
 }
@@ -251,8 +251,8 @@ func TestRPCBadArrayError(t *testing.T) {
 
 	iRPCResponse, ok := s.rpcHandler(context.Background(), strings.NewReader("[... this is not an array"), nil)
 	assert.False(t, ok)
-	jsonResponse := iRPCResponse.(*rpcbackend.RPCResponse)
-	assert.Equal(t, int64(rpcbackend.RPCCodeInvalidRequest), jsonResponse.Error.Code)
+	jsonResponse := iRPCResponse.(*rpcclient.RPCResponse)
+	assert.Equal(t, int64(rpcclient.RPCCodeInvalidRequest), jsonResponse.Error.Code)
 	assert.Regexp(t, "PD011000", jsonResponse.Error.Message)
 
 }

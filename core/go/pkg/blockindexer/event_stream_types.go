@@ -96,9 +96,25 @@ type EventDeliveryBatch struct {
 // Post commit callback is invoked after the DB transaction completes (only on success)
 type PostCommit func()
 
-type InternalStreamCallback func(ctx context.Context, tx *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error)
+type PreCommitHandler func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error)
+
+type InternalStreamCallback func(ctx context.Context, dbTX *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error)
+
+type IESType int
+
+const (
+	// An event stream with its own checkpoint, and goroutine with its own DB transactions for checkpoint update, that can fall behind the head if necessary
+	IESTypeEventStream IESType = iota
+	// An in-line callback that is fired with the raw block information, WITHIN the database transaction the block indexer uses to commit that information.
+	// Slowdowns here slow down the whole block indexer, so this is for critical DB coordinated commit processing by other components only (receipt writing).
+	// Errors from this function rollback the DB transaction, and hence stall the block indexer.
+	// Can return a post-commit handler to be run after the DB transaction commits
+	IESTypePreCommitHandler
+)
 
 type InternalEventStream struct {
-	Definition *EventStream
-	Handler    InternalStreamCallback
+	Type             IESType
+	Definition       *EventStream
+	Handler          InternalStreamCallback
+	PreCommitHandler PreCommitHandler
 }

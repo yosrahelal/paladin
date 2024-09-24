@@ -211,7 +211,7 @@ func (as *abiSchema) mapValueToLabel(ctx context.Context, fieldName string, labe
 			return nil, nil, i18n.NewError(ctx, msgs.MsgStateLabelFieldUnexpectedValue, fieldName, f.Value, new(big.Int))
 		}
 		// Otherwise we fall back to encoding as a fixed-width hex string - with a leading sign character
-		filterString := filters.Int256ToFilterString(ctx, bigIntVal)
+		filterString := tktypes.Int256To65CharDBSafeSortableString(bigIntVal)
 		return &StateLabel{Label: fieldName, Value: filterString}, nil, nil
 	case labelTypeUint256:
 		bigIntVal, ok := f.Value.(*big.Int)
@@ -356,7 +356,7 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 	return &StateWithLabels{
 		State: &State{
 			ID:              hashID,
-			CreatedAt:       now,
+			Created:         now,
 			DomainName:      as.DomainName,
 			Schema:          as.ID,
 			ContractAddress: contractAddress,
@@ -375,6 +375,6 @@ func (as *abiSchema) RecoverLabels(ctx context.Context, s *State) (*StateWithLab
 	}
 	return &StateWithLabels{
 		State:       s,
-		LabelValues: addStateBaseLabels(psd.labelValues, s.ID, s.CreatedAt),
+		LabelValues: addStateBaseLabels(psd.labelValues, s.ID, s.Created),
 	}, nil
 }

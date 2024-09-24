@@ -22,29 +22,27 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/internal/httpserver"
-	"github.com/kaleido-io/paladin/core/internal/rpcclient"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/pkg/signer/api"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 type mockEth struct {
-	eth_getBalance            func(context.Context, ethtypes.Address0xHex, string) (ethtypes.HexInteger, error)
-	eth_gasPrice              func(context.Context) (ethtypes.HexInteger, error)
-	eth_gasLimit              func(context.Context, ethsigner.Transaction) (ethtypes.HexInteger, error)
-	eth_chainId               func(context.Context) (ethtypes.HexUint64, error)
-	eth_getTransactionCount   func(context.Context, ethtypes.Address0xHex, string) (ethtypes.HexUint64, error)
-	eth_getTransactionReceipt func(context.Context, ethtypes.HexBytes0xPrefix) (*txReceiptJSONRPC, error)
-	eth_estimateGas           func(context.Context, ethsigner.Transaction) (ethtypes.HexInteger, error)
+	eth_getBalance            func(context.Context, tktypes.EthAddress, string) (*tktypes.HexUint256, error)
+	eth_gasPrice              func(context.Context) (*tktypes.HexUint256, error)
+	eth_gasLimit              func(context.Context, ethsigner.Transaction) (*tktypes.HexUint256, error)
+	eth_chainId               func(context.Context) (tktypes.HexUint64, error)
+	eth_getTransactionCount   func(context.Context, tktypes.EthAddress, string) (tktypes.HexUint64, error)
+	eth_getTransactionReceipt func(context.Context, tktypes.Bytes32) (*txReceiptJSONRPC, error)
+	eth_estimateGas           func(context.Context, ethsigner.Transaction) (tktypes.HexUint64, error)
 	eth_sendRawTransaction    func(context.Context, tktypes.HexBytes) (tktypes.HexBytes, error)
 	eth_call                  func(context.Context, ethsigner.Transaction, string) (tktypes.HexBytes, error)
-	eth_callErr               func(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse
+	eth_callErr               func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse
 }
 
 func newTestServer(t *testing.T, ctx context.Context, isWS bool, mEth *mockEth) (rpcServer rpcserver.RPCServer, done func()) {
@@ -77,7 +75,7 @@ func newTestServer(t *testing.T, ctx context.Context, isWS bool, mEth *mockEth) 
 	require.NoError(t, err)
 
 	if mEth.eth_chainId == nil {
-		mEth.eth_chainId = func(ctx context.Context) (ethtypes.HexUint64, error) {
+		mEth.eth_chainId = func(ctx context.Context) (tktypes.HexUint64, error) {
 			return 12345, nil
 		}
 	}
@@ -102,7 +100,7 @@ func newTestServer(t *testing.T, ctx context.Context, isWS bool, mEth *mockEth) 
 	}
 }
 
-func primarySecondary(a func(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse, b rpcserver.RPCHandler) rpcserver.RPCHandler {
+func primarySecondary(a func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse, b rpcserver.RPCHandler) rpcserver.RPCHandler {
 	if a != nil {
 		return rpcserver.HandlerFunc(a)
 	}
@@ -113,12 +111,12 @@ func checkNil[T any](v T, fn func(T) rpcserver.RPCHandler) rpcserver.RPCHandler 
 	if !reflect.ValueOf(v).IsNil() {
 		return fn(v)
 	}
-	return rpcserver.HandlerFunc(func(ctx context.Context, req *rpcbackend.RPCRequest) *rpcbackend.RPCResponse {
-		return &rpcbackend.RPCResponse{
+	return rpcserver.HandlerFunc(func(ctx context.Context, req *rpcclient.RPCRequest) *rpcclient.RPCResponse {
+		return &rpcclient.RPCResponse{
 			JSONRpc: "2.0",
 			ID:      req.ID,
-			Error: &rpcbackend.RPCError{
-				Code:    int64(rpcbackend.RPCCodeInvalidRequest),
+			Error: &rpcclient.RPCError{
+				Code:    int64(rpcclient.RPCCodeInvalidRequest),
 				Message: "not implemented by test",
 			},
 		}
@@ -175,7 +173,7 @@ func TestNewEthClientFactoryBadConfig(t *testing.T) {
 			},
 		},
 	})
-	assert.Regexp(t, "PD011513", err)
+	assert.Regexp(t, "PD020500", err)
 }
 
 func TestNewEthClientFactoryMissingURL(t *testing.T) {
@@ -193,13 +191,13 @@ func TestNewEthClientFactoryBadURL(t *testing.T) {
 			URL: "wrong://type",
 		},
 	})
-	assert.Regexp(t, "PD011514", err)
+	assert.Regexp(t, "PD020501", err)
 }
 
 func TestNewEthClientFactoryChainIDFail(t *testing.T) {
 	ctx := context.Background()
 	rpcServer, done := newTestServer(t, ctx, false, &mockEth{
-		eth_chainId: func(ctx context.Context) (ethtypes.HexUint64, error) { return 0, fmt.Errorf("pop") },
+		eth_chainId: func(ctx context.Context) (tktypes.HexUint64, error) { return 0, fmt.Errorf("pop") },
 	})
 	defer done()
 
@@ -219,10 +217,10 @@ func TestNewEthClientFactoryChainIDFail(t *testing.T) {
 func TestMismatchedChainID(t *testing.T) {
 	ctx := context.Background()
 	mEthHTTP := &mockEth{
-		eth_chainId: func(ctx context.Context) (ethtypes.HexUint64, error) { return 22222, nil },
+		eth_chainId: func(ctx context.Context) (tktypes.HexUint64, error) { return 22222, nil },
 	}
 	mEthWS := &mockEth{
-		eth_chainId: func(ctx context.Context) (ethtypes.HexUint64, error) { return 11111, nil },
+		eth_chainId: func(ctx context.Context) (tktypes.HexUint64, error) { return 11111, nil },
 	}
 
 	httpRPCServer, httpServerDone := newTestServer(t, ctx, false, mEthHTTP)

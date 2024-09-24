@@ -25,21 +25,20 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
-	"github.com/kaleido-io/paladin/core/internal/rpcclient"
-	"github.com/kaleido-io/paladin/core/mocks/rpcbackendmocks"
+	"github.com/kaleido-io/paladin/core/mocks/rpcclientmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tlsconf"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 var testEventABIJSON = ([]byte)(`[
@@ -102,14 +101,14 @@ func testParseABI(abiJSON []byte) abi.ABI {
 	return a
 }
 
-func newTestBlockIndexer(t *testing.T) (context.Context, *blockIndexer, *rpcbackendmocks.WebSocketRPCClient, func()) {
+func newTestBlockIndexer(t *testing.T) (context.Context, *blockIndexer, *rpcclientmocks.WSClient, func()) {
 	return newTestBlockIndexerConf(t, &Config{
 		CommitBatchSize: confutil.P(1), // makes testing simpler
 		FromBlock:       tktypes.RawJSON(`0`),
 	})
 }
 
-func newTestBlockIndexerConf(t *testing.T, config *Config) (context.Context, *blockIndexer, *rpcbackendmocks.WebSocketRPCClient, func()) {
+func newTestBlockIndexerConf(t *testing.T, config *Config) (context.Context, *blockIndexer, *rpcclientmocks.WSClient, func()) {
 	logrus.SetLevel(logrus.DebugLevel)
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
@@ -120,7 +119,6 @@ func newTestBlockIndexerConf(t *testing.T, config *Config) (context.Context, *bl
 	blockListener, mRPC := newTestBlockListenerConf(t, ctx, config)
 	bi, err := newBlockIndexer(ctx, config, p, blockListener)
 	require.NoError(t, err)
-	bi.utBatchNotify = make(chan *blockWriterBatch)
 	return ctx, bi, mRPC, func() {
 		r := recover()
 		if r != nil {
@@ -132,7 +130,7 @@ func newTestBlockIndexerConf(t *testing.T, config *Config) (context.Context, *bl
 	}
 }
 
-func newMockBlockIndexer(t *testing.T, config *Config) (context.Context, *blockIndexer, *rpcbackendmocks.WebSocketRPCClient, *mockpersistence.SQLMockProvider, func()) {
+func newMockBlockIndexer(t *testing.T, config *Config) (context.Context, *blockIndexer, *rpcclientmocks.WSClient, *mockpersistence.SQLMockProvider, func()) {
 	ctx, bl, mRPC, done := newTestBlockListener(t)
 
 	p, err := mockpersistence.NewSQLMockProvider()
@@ -211,20 +209,20 @@ func testBlockArray(t *testing.T, l int, knownAddress ...ethtypes.Address0xHex) 
 	return blocks, receipts
 }
 
-func mockBlocksRPCCalls(mRPC *rpcbackendmocks.WebSocketRPCClient, blocks []*BlockInfoJSONRPC, receipts map[string][]*TXReceiptJSONRPC) {
+func mockBlocksRPCCalls(mRPC *rpcclientmocks.WSClient, blocks []*BlockInfoJSONRPC, receipts map[string][]*TXReceiptJSONRPC) {
 	mockBlocksRPCCallsDynamic(mRPC, func(args mock.Arguments) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC) {
 		return blocks, receipts
 	})
 }
 
-func mockBlocksRPCCallsDynamic(mRPC *rpcbackendmocks.WebSocketRPCClient, dynamic func(args mock.Arguments) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC)) {
+func mockBlocksRPCCallsDynamic(mRPC *rpcclientmocks.WSClient, dynamic func(args mock.Arguments) ([]*BlockInfoJSONRPC, map[string][]*TXReceiptJSONRPC)) {
 	byBlock := mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getBlockByNumber", mock.Anything, true).Maybe()
 	byBlock.Run(func(args mock.Arguments) {
 		blocks, _ := dynamic(args)
 		blockReturn := args[1].(**BlockInfoJSONRPC)
 		blockNumber := int(args[3].(ethtypes.HexUint64))
 		if blockNumber >= len(blocks) {
-			byBlock.Return(&rpcbackend.RPCError{Message: "not found"})
+			byBlock.Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
 		} else {
 			*blockReturn = blocks[blockNumber]
 			byBlock.Return(nil)
@@ -238,7 +236,7 @@ func mockBlocksRPCCallsDynamic(mRPC *rpcbackendmocks.WebSocketRPCClient, dynamic
 		blockHash := args[3].(ethtypes.HexBytes0xPrefix)
 		*blockReturn = receipts[blockHash.String()]
 		if *blockReturn == nil {
-			blockReceipts.Return(&rpcbackend.RPCError{Message: "not found"})
+			blockReceipts.Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
 		} else {
 			blockReceipts.Return(nil)
 		}
@@ -258,7 +256,7 @@ func mockBlocksRPCCallsDynamic(mRPC *rpcbackendmocks.WebSocketRPCClient, dynamic
 			}
 		}
 		if *blockReturn == nil {
-			txReceipt.Return(&rpcbackend.RPCError{Message: "not found"})
+			txReceipt.Return(rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("not found")))
 		} else {
 			txReceipt.Return(nil)
 		}
@@ -298,6 +296,17 @@ func TestNewBlockIndexerRestoreCheckpointFail(t *testing.T) {
 	require.NoError(t, p.Mock.ExpectationsWereMet())
 }
 
+func checkIndexedBlockEqual(t *testing.T, expected *BlockInfoJSONRPC, indexed *IndexedBlock) {
+	assert.Equal(t, expected.Hash.String(), indexed.Hash.String())
+	assert.Equal(t, expected.Number.Uint64(), uint64(indexed.Number))
+}
+
+func addBlockPostCommit(bi *blockIndexer, postCommit func([]*IndexedBlock)) {
+	bi.preCommitHandlers = append(bi.preCommitHandlers, func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error) {
+		return func() { postCommit(blocks) }, nil
+	})
+}
+
 func TestBlockIndexerCatchUpToHeadFromZeroNoConfirmations(t *testing.T) {
 	_, bi, mRPC, blDone := newTestBlockIndexer(t)
 	defer blDone()
@@ -306,12 +315,16 @@ func TestBlockIndexerCatchUpToHeadFromZeroNoConfirmations(t *testing.T) {
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 
 	bi.requiredConfirmations = 0
+
+	utBatchNotify := make(chan []*IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocks); i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 }
 
@@ -326,12 +339,16 @@ func TestBlockIndexerBatchTimeoutOne(t *testing.T) {
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 
 	bi.requiredConfirmations = 0
+
+	utBatchNotify := make(chan []*IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocks); i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 }
 
@@ -343,12 +360,16 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 
 	bi.requiredConfirmations = 5
+
+	utBatchNotify := make(chan []*IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocks)-bi.requiredConfirmations; i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 
 		// Get the block
 		indexedBlock, err := bi.GetIndexedBlockByNumber(ctx, blocks[i].Number.Uint64())
@@ -357,6 +378,11 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 
 		// Get the transaction
 		indexedTX, err := bi.GetIndexedTransactionByHash(ctx, tktypes.Bytes32(receipts[blocks[i].Hash.String()][0].TransactionHash))
+		require.NoError(t, err)
+		assert.Equal(t, receipts[blocks[i].Hash.String()][0].TransactionHash.String(), indexedTX.Hash.String())
+
+		// Get by nonce
+		indexedTX, err = bi.GetIndexedTransactionByNonce(ctx, *indexedTX.From, indexedTX.Nonce)
 		require.NoError(t, err)
 		assert.Equal(t, receipts[blocks[i].Hash.String()][0].TransactionHash.String(), indexedTX.Hash.String())
 
@@ -441,6 +467,9 @@ func TestBlockIndexerListenFromCurrentBlock(t *testing.T) {
 	_, err := bi.GetConfirmedBlockHeight(ctx)
 	assert.Regexp(t, "PD011308", err)
 
+	utBatchNotify := make(chan []*IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+
 	// do not start block listener
 	bi.startOrReset()
 
@@ -457,9 +486,9 @@ func TestBlockIndexerListenFromCurrentBlock(t *testing.T) {
 	bi.blockListener.notifyBlock(blocks[1])
 
 	for i := 5; i < len(blocks)-bi.requiredConfirmations; i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 
 	ch, err := bi.GetConfirmedBlockHeight(ctx)
@@ -494,6 +523,9 @@ func TestBatching(t *testing.T) {
 
 	bi.batchSize = 5
 
+	utBatchNotify := make(chan []*IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+
 	bi.startOrReset() // do not start block listener
 
 	// Notify starting at block 5
@@ -505,10 +537,10 @@ func TestBatching(t *testing.T) {
 	bi.blockListener.notifyBlock(blocks[1])
 
 	for i := 0; i < len(blocks)-bi.requiredConfirmations; i += 5 {
-		batch := <-bi.utBatchNotify
-		assert.Len(t, batch.blocks, 5)
-		for i2, b := range batch.blocks {
-			assert.Equal(t, blocks[i+i2], b)
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 5)
+		for i2, b := range notifiedBlocks {
+			checkIndexedBlockEqual(t, blocks[i+i2], b)
 		}
 	}
 }
@@ -639,19 +671,20 @@ func testBlockIndexerHandleReorgInConfirmationWindow(t *testing.T, blockLenBefor
 		}
 	})
 
+	utBatchNotify := make(chan []*IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocksAfterReorg)-bi.requiredConfirmations; i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
 		if i >= overlap && i < (dangerArea-reqConf) {
 			// This would be a bad situation in reality, where a reorg crossed the confirmations
 			// boundary. An indication someone incorrectly configured their confirmations
-			assert.Equal(t, b.blocks[0].Hash.String(), blocksBeforeReorg[i].Hash.String())
-			assert.Equal(t, b.blocks[0].Number, blocksBeforeReorg[i].Number)
+			checkIndexedBlockEqual(t, blocksBeforeReorg[i], notifiedBlocks[0])
 		} else {
-			assert.Equal(t, b.blocks[0].Hash.String(), blocksAfterReorg[i].Hash.String())
-			assert.Equal(t, b.blocks[0].Number, blocksAfterReorg[i].Number)
+			checkIndexedBlockEqual(t, blocksAfterReorg[i], notifiedBlocks[0])
 		}
 	}
 	// Wait for the notifications to go through
@@ -684,12 +717,15 @@ func TestBlockIndexerHandleRandomConflictingBlockNotification(t *testing.T) {
 		return blocks, receipts
 	})
 
+	utBatchNotify := make(chan []*IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocks)-bi.requiredConfirmations; i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 }
 
@@ -711,12 +747,15 @@ func TestBlockIndexerResetsAfterHashLookupFail(t *testing.T) {
 		return blocks, receipts
 	})
 
+	utBatchNotify := make(chan []*IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocks); i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 
 	assert.True(t, sentFail)
@@ -730,6 +769,9 @@ func TestBlockIndexerDispatcherFallsBehindHead(t *testing.T) {
 
 	blocks, receipts := testBlockArray(t, 30)
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
+
+	utBatchNotify := make(chan []*IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -746,9 +788,9 @@ func TestBlockIndexerDispatcherFallsBehindHead(t *testing.T) {
 	}
 
 	for i := 0; i < len(blocks)-bi.requiredConfirmations; i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 
 }
@@ -868,12 +910,15 @@ func TestBlockIndexerWaitForTransactionSuccess(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
+	utBatchNotify := make(chan []*IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocks); i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 
 	<-gotTX
@@ -915,12 +960,15 @@ func TestBlockIndexerWaitForTransactionRevert(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
+	utBatchNotify := make(chan []*IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+
 	bi.startOrReset() // do not start block listener
 
 	for i := 0; i < len(blocks); i++ {
-		b := <-bi.utBatchNotify
-		assert.Len(t, b.blocks, 1) // We should get one block per batch
-		assert.Equal(t, blocks[i], b.blocks[0])
+		notifiedBlocks := <-utBatchNotify
+		assert.Len(t, notifiedBlocks, 1) // We should get one block per batch
+		checkIndexedBlockEqual(t, blocks[i], notifiedBlocks[0])
 	}
 
 	<-gotTX
@@ -962,11 +1010,11 @@ func TestWaitForTransactionSuccessGetReceiptFail(t *testing.T) {
 	defer done()
 
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", mock.Anything).Return(
-		rpcbackend.NewRPCError(ctx, rpcbackend.RPCCodeInternalError, i18n.Msg404NotFound),
+		rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop")),
 	)
 
 	err := bi.getReceiptRevertError(ctx, tktypes.Bytes32(tktypes.RandBytes(32)), nil)
-	assert.Regexp(t, "FF00167", err)
+	assert.Regexp(t, "pop", err)
 
 }
 
@@ -983,5 +1031,17 @@ func TestWaitForTransactionSuccessGetReceiptFallback(t *testing.T) {
 
 	err := bi.getReceiptRevertError(ctx, tktypes.Bytes32(tktypes.RandBytes(32)), nil)
 	assert.Regexp(t, "PD011309", err)
+
+}
+
+func TestGetIndexedTransactionByNonceFail(t *testing.T) {
+
+	ctx, bi, _, mdb, done := newMockBlockIndexer(t, &Config{})
+	defer done()
+
+	mdb.Mock.ExpectQuery("SELECT.*indexed_transactions").WillReturnError(fmt.Errorf("pop"))
+
+	_, err := bi.GetIndexedTransactionByNonce(ctx, tktypes.EthAddress(tktypes.RandBytes(20)), 12345)
+	assert.Regexp(t, "pop", err)
 
 }

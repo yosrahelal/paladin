@@ -22,6 +22,7 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/cache"
+	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -29,17 +30,11 @@ import (
 )
 
 type Config struct {
-	SchemaCache cache.Config      `yaml:"schemaCache"`
-	StateWriter StateWriterConfig `yaml:"stateWriter"`
+	SchemaCache cache.Config       `yaml:"schemaCache"`
+	StateWriter flushwriter.Config `yaml:"stateWriter"`
 }
 
-type StateWriterConfig struct {
-	WorkerCount  *int    `yaml:"workerCount"`
-	BatchTimeout *string `yaml:"batchTimeout"`
-	BatchMaxSize *int    `yaml:"batchMaxSize"`
-}
-
-var StateWriterConfigDefaults = StateWriterConfig{
+var StateWriterConfigDefaults = flushwriter.Config{
 	WorkerCount:  confutil.P(10),
 	BatchTimeout: confutil.P("25ms"),
 	BatchMaxSize: confutil.P(100),

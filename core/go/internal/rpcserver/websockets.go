@@ -27,8 +27,8 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -70,7 +70,7 @@ func (s *rpcServer) ethSubList() []*ethSubscription {
 	return subs
 }
 
-func (s *rpcServer) processSubscribe(ctx context.Context, rpcReq *rpcbackend.RPCRequest, wsc *webSocketConnection) (*rpcbackend.RPCResponse, bool) {
+func (s *rpcServer) processSubscribe(ctx context.Context, rpcReq *rpcclient.RPCRequest, wsc *webSocketConnection) (*rpcclient.RPCResponse, bool) {
 	s.wsMux.Lock()
 	defer s.wsMux.Unlock()
 
@@ -79,8 +79,8 @@ func (s *rpcServer) processSubscribe(ctx context.Context, rpcReq *rpcbackend.RPC
 		eventType = rpcReq.Params[0].AsString()
 	}
 	if eventType == "" {
-		return rpcbackend.RPCErrorResponse(i18n.NewError(ctx, msgs.MsgJSONRPCInvalidParam, rpcReq.Method, 0, ""),
-			rpcReq.ID, rpcbackend.RPCCodeInvalidRequest), false
+		return rpcclient.NewRPCErrorResponse(i18n.NewError(ctx, msgs.MsgJSONRPCInvalidParam, rpcReq.Method, 0, ""),
+			rpcReq.ID, rpcclient.RPCCodeInvalidRequest), false
 	}
 	var params1 tktypes.RawJSON
 	if len(rpcReq.Params) > 1 {
@@ -94,14 +94,14 @@ func (s *rpcServer) processSubscribe(ctx context.Context, rpcReq *rpcbackend.RPC
 	}
 	wsc.subscriptions = append(wsc.subscriptions, sub)
 
-	return &rpcbackend.RPCResponse{
+	return &rpcclient.RPCResponse{
 		ID:      rpcReq.ID,
 		JSONRpc: "2.0",
 		Result:  fftypes.JSONAnyPtr(fmt.Sprintf(`"%s"`, sub.id)),
 	}, true
 }
 
-func (s *rpcServer) processUnsubscribe(ctx context.Context, rpcReq *rpcbackend.RPCRequest, wsc *webSocketConnection) (*rpcbackend.RPCResponse, bool) {
+func (s *rpcServer) processUnsubscribe(ctx context.Context, rpcReq *rpcclient.RPCRequest, wsc *webSocketConnection) (*rpcclient.RPCResponse, bool) {
 	s.wsMux.Lock()
 	defer s.wsMux.Unlock()
 
@@ -110,8 +110,8 @@ func (s *rpcServer) processUnsubscribe(ctx context.Context, rpcReq *rpcbackend.R
 		subID = rpcReq.Params[0].AsString()
 	}
 	if subID == "" {
-		return rpcbackend.RPCErrorResponse(i18n.NewError(ctx, msgs.MsgJSONRPCInvalidParam, rpcReq.Method, 0, ""),
-			rpcReq.ID, rpcbackend.RPCCodeInvalidRequest), false
+		return rpcclient.NewRPCErrorResponse(i18n.NewError(ctx, msgs.MsgJSONRPCInvalidParam, rpcReq.Method, 0, ""),
+			rpcReq.ID, rpcclient.RPCCodeInvalidRequest), false
 	}
 
 	// Trim the sub
@@ -126,7 +126,7 @@ func (s *rpcServer) processUnsubscribe(ctx context.Context, rpcReq *rpcbackend.R
 	}
 	wsc.subscriptions = newSubs
 
-	return &rpcbackend.RPCResponse{
+	return &rpcclient.RPCResponse{
 		ID:      rpcReq.ID,
 		JSONRpc: "2.0",
 		Result:  fftypes.JSONAnyPtr(fmt.Sprintf("%t", found)),

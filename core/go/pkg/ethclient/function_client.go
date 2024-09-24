@@ -61,14 +61,16 @@ type ABIFunctionRequestBuilder interface {
 	Block(uint64) ABIFunctionRequestBuilder
 	Input(any) ABIFunctionRequestBuilder
 	Output(any) ABIFunctionRequestBuilder
+	CallOptions(...CallOption) ABIFunctionRequestBuilder // adds extra call options (defaults are to use the ABI for errors and decoding)
 
 	// Query functions
 	TX() *ethsigner.Transaction
 
 	// Execution functions
-	BuildCallData() (err error)
-	Call() (err error)
-	CallJSON() (jsonData []byte, err error)
+	BuildCallData() (err error)              // finalizes the call data in the TX(), but does not perform any JSON/RPC calls
+	Call() (err error)                       // calls and processes the result back into the output struct supplied in the builder
+	CallResult() (res CallResult, err error) // returns the detailed result - parsing the response against the ABI, but not re-marshaling it into your object
+	EstimateGas() (res EstimateGasResult, err error)
 	RawTransaction() (rawTX tktypes.HexBytes, err error)
 	SignAndSend() (txHash *tktypes.Bytes32, err error)
 }
@@ -104,13 +106,14 @@ type abiFunctionClient struct {
 
 type abiFunctionRequestBuilder struct {
 	*abiFunctionClient
-	ctx       context.Context
-	txVersion EthTXVersion
-	tx        ethsigner.Transaction
-	block     string
-	fromStr   *string
-	input     any
-	output    any
+	ctx          context.Context
+	txVersion    EthTXVersion
+	tx           ethsigner.Transaction
+	block        string
+	fromStr      *string
+	input        any
+	output       any
+	extendedOpts []CallOption
 }
 
 func (ec *ethClient) ABIJSON(ctx context.Context, abiJson []byte) (ABIClient, error) {
@@ -293,16 +296,25 @@ func (ac *abiFunctionRequestBuilder) Output(output any) ABIFunctionRequestBuilde
 	return ac
 }
 
+func (ac *abiFunctionRequestBuilder) CallOptions(extendedOpts ...CallOption) ABIFunctionRequestBuilder {
+	ac.extendedOpts = append(ac.extendedOpts, extendedOpts...)
+	return ac
+}
+
 func (ac *abiFunctionRequestBuilder) TX() *ethsigner.Transaction {
 	return &ac.tx
 }
 
-func (ac *abiFunctionRequestBuilder) BuildCallData() (err error) {
+func (ac *abiFunctionRequestBuilder) validateTo() error {
 	if ac.tx.To != nil && ac.selector == nil {
 		return i18n.NewError(ac.ctx, msgs.MsgEthClientToWithConstructor)
 	} else if ac.tx.To == nil && ac.selector != nil {
 		return i18n.NewError(ac.ctx, msgs.MsgEthClientMissingTo)
 	}
+	return nil
+}
+
+func (ac *abiFunctionRequestBuilder) BuildCallData() (err error) {
 	// Encode the call data
 	inputDataRLP := []byte{}
 	if ac.inputCount > 0 {
@@ -357,7 +369,11 @@ func (ac *abiFunctionRequestBuilder) Call() (err error) {
 	if ac.output == nil {
 		return i18n.NewError(ac.ctx, msgs.MsgEthClientMissingOutput)
 	}
-	jsonData, err := ac.CallJSON()
+	var jsonData []byte
+	res, err := ac.CallResult()
+	if err == nil {
+		jsonData, err = res.DecodedResult.JSON()
+	}
 	if err == nil {
 		err = json.Unmarshal(jsonData, ac.output)
 	}
@@ -367,33 +383,47 @@ func (ac *abiFunctionRequestBuilder) Call() (err error) {
 	return nil
 }
 
-func (ac *abiFunctionRequestBuilder) CallJSON() (jsonData []byte, err error) {
-	if ac.tx.Data == nil {
-		if err := ac.BuildCallData(); err != nil {
-			return nil, err
-		}
+func (ac *abiFunctionRequestBuilder) callOps() []CallOption {
+	return append([]CallOption{
+		WithErrorsFrom(ac.abi),
+		WithOutputs(ac.outputs),
+	}, ac.extendedOpts...)
+}
+
+func (ac *abiFunctionRequestBuilder) CallResult() (res CallResult, err error) {
+	err = ac.validateTo()
+	if err == nil && ac.tx.Data == nil {
+		err = ac.BuildCallData()
 	}
-	resData, err := ac.ec.CallContract(ac.ctx, ac.fromStr, &ac.tx, ac.block, ac.abi)
 	if err != nil {
-		return nil, err
+		return res, err
 	}
-	cv, err := ac.outputs.DecodeABIDataCtx(ac.ctx, resData, 0)
-	if err == nil {
-		jsonData, err = tktypes.StandardABISerializer().SerializeJSONCtx(ac.ctx, cv)
+	return ac.ec.CallContract(ac.ctx, ac.fromStr, &ac.tx, ac.block, ac.callOps()...)
+}
+
+func (ac *abiFunctionRequestBuilder) EstimateGas() (res EstimateGasResult, err error) {
+	err = ac.validateTo()
+	if err == nil && ac.tx.Data == nil {
+		err = ac.BuildCallData()
 	}
-	return jsonData, err
+	if err != nil {
+		return res, err
+	}
+	return ac.ec.EstimateGas(ac.ctx, ac.fromStr, &ac.tx, ac.callOps()...)
 }
 
 func (ac *abiFunctionRequestBuilder) RawTransaction() (rawTX tktypes.HexBytes, err error) {
-	if ac.tx.Data == nil {
-		if err := ac.BuildCallData(); err != nil {
-			return nil, err
-		}
+	err = ac.validateTo()
+	if err == nil && ac.tx.Data == nil {
+		err = ac.BuildCallData()
+	}
+	if err != nil {
+		return nil, err
 	}
 	if ac.fromStr == nil {
 		return nil, i18n.NewError(ac.ctx, msgs.MsgEthClientMissingFrom)
 	}
-	return ac.ec.BuildRawTransaction(ac.ctx, ac.txVersion, *ac.fromStr, &ac.tx, ac.abi)
+	return ac.ec.BuildRawTransaction(ac.ctx, ac.txVersion, *ac.fromStr, &ac.tx, ac.callOps()...)
 }
 
 func (ac *abiFunctionRequestBuilder) SignAndSend() (txHash *tktypes.Bytes32, err error) {

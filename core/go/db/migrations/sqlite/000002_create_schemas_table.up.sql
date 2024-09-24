@@ -1,6 +1,6 @@
 CREATE TABLE schemas (
     "id"             VARCHAR NOT NULL,
-    "created_at"     BIGINT,
+    "created"        BIGINT,
     "domain_name"    VARCHAR,
     "type"           VARCHAR,
     "signature"      VARCHAR,

@@ -147,7 +147,7 @@ func TestFindStatesFail(t *testing.T) {
 		definition:      &abi.Parameter{},
 	})
 
-	db.ExpectQuery("SELECT.*created_at").WillReturnError(fmt.Errorf("pop"))
+	db.ExpectQuery("SELECT.*created").WillReturnError(fmt.Errorf("pop"))
 
 	contractAddress := tktypes.RandAddress()
 	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID.String(), &query.QueryJSON{

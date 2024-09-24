@@ -47,6 +47,6 @@ func (sf Uint256Field) SQLValue(ctx context.Context, jsonValue tktypes.RawJSON) 
 }
 
 func Uint256ToFilterString(ctx context.Context, bi *big.Int) string {
-	zeroPaddedUint256 := PadHexBigUint(bi, make([]byte, 64))
+	zeroPaddedUint256 := tktypes.PadHexBigUint(bi, make([]byte, 64))
 	return (string)(zeroPaddedUint256)
 }

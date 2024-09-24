@@ -31,7 +31,7 @@ import (
 
 type State struct {
 	ID              tktypes.Bytes32    `json:"id"                  gorm:"primaryKey"`
-	CreatedAt       tktypes.Timestamp  `json:"created"             gorm:"autoCreateTime:nano"`
+	Created         tktypes.Timestamp  `json:"created"             gorm:"autoCreateTime:nano"`
 	DomainName      string             `json:"domain"`
 	Schema          tktypes.Bytes32    `json:"schema"`
 	ContractAddress tktypes.EthAddress `json:"contractAddress"`
@@ -123,7 +123,7 @@ func (ss *stateStore) GetState(ctx context.Context, domainName string, contractA
 // clashing with variable names in ABI structs ($ and _ are valid leading chars there)
 var baseStateFields = map[string]filters.FieldResolver{
 	".id":      filters.Bytes32Field("id"),
-	".created": filters.TimestampField("created_at"),
+	".created": filters.TimestampField("created"),
 }
 
 func addStateBaseLabels(labelValues filters.PassthroughValueSet, id tktypes.Bytes32, createdAt tktypes.Timestamp) filters.PassthroughValueSet {

@@ -122,7 +122,18 @@ task goGet(type:Exec, dependsOn:tasks.protoc) {
     args './pkg/...'
 }
 
-task lint(type: Exec, dependsOn:tasks.protoc) {
+task makeMocks(type: Mockery, dependsOn: [tasks.installTools, tasks.protoc, tasks.goGet]) {
+    mockery 'bin/mockery'
+    args '--case', 'underscore'
+    mock {
+        inputDir "go list -f {{.Dir}} github.com/hyperledger/firefly-signer/pkg/rpcbackend".execute().text.trim()
+        includeAll true
+        outputPackage 'rpcbackendmocks'
+        outputDir 'mocks/rpcbackendmocks'
+    }
+}
+
+task lint(type: Exec, dependsOn:[tasks.protoc,tasks.makeMocks]) {
     workingDir '.'
 
     helpers.lockResource(it, "lint.lock")
@@ -136,7 +147,7 @@ task lint(type: Exec, dependsOn:tasks.protoc) {
     args '--timeout', '5m'
 }
 
-task test(type: Exec, dependsOn: [tasks.goGet]) {
+task test(type: Exec, dependsOn: [tasks.goGet,tasks.makeMocks]) {
     inputs.files(getProject().goFiles)
     outputs.dir('coverage')
 

@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
-	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,7 +35,7 @@ func TestWebSocketRPCRequestResponse(t *testing.T) {
 	url, s, done := newTestServerWebSockets(t, &Config{})
 	defer done()
 
-	client := rpcbackend.NewWSRPCClient(&wsclient.WSConfig{WebSocketURL: url, DisableReconnect: true})
+	client := rpcclient.WrapWSConfig(&wsclient.WSConfig{WebSocketURL: url, DisableReconnect: true})
 	defer client.Close()
 	err := client.Connect(ctx)
 	require.NoError(t, err)
@@ -57,7 +57,7 @@ func TestWebSocketConnectionFailureHandling(t *testing.T) {
 	url, s, done := newTestServerWebSockets(t, &Config{})
 	defer done()
 
-	client := rpcbackend.NewWSRPCClient(&wsclient.WSConfig{WebSocketURL: url, DisableReconnect: true})
+	client := rpcclient.WrapWSConfig(&wsclient.WSConfig{WebSocketURL: url, DisableReconnect: true})
 	defer client.Close()
 	err := client.Connect(context.Background())
 	require.NoError(t, err)
@@ -98,7 +98,7 @@ func TestWebSocketEthSubscribeUnsubscribe(t *testing.T) {
 	url, s, done := newTestServerWebSockets(t, &Config{})
 	defer done()
 
-	client := rpcbackend.NewWSRPCClient(&wsclient.WSConfig{WebSocketURL: url, DisableReconnect: true})
+	client := rpcclient.WrapWSConfig(&wsclient.WSConfig{WebSocketURL: url, DisableReconnect: true})
 	defer client.Close()
 	err := client.Connect(context.Background())
 	require.NoError(t, err)
@@ -115,9 +115,9 @@ func TestWebSocketEthSubscribeUnsubscribe(t *testing.T) {
 	}
 
 	rpcErr := client.CallRPC(context.Background(), &tktypes.RawJSON{}, "eth_subscribe")
-	assert.Regexp(t, "PD011004", rpcErr.Message)
+	assert.Regexp(t, "PD011004", rpcErr)
 	rpcErr = client.CallRPC(context.Background(), &tktypes.RawJSON{}, "eth_unsubscribe")
-	assert.Regexp(t, "PD011004", rpcErr.Message)
+	assert.Regexp(t, "PD011004", rpcErr)
 
 	sub1, rpcErr := client.Subscribe(context.Background(), "myEvents", map[string]interface{}{"extra": "params"})
 	assert.Nil(t, rpcErr)

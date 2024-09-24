@@ -93,7 +93,7 @@ func (a *EthAddress) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func (a *EthAddress) MarshalJSON() ([]byte, error) {
+func (a EthAddress) MarshalJSON() ([]byte, error) {
 	return json.Marshal(a.String())
 }
 

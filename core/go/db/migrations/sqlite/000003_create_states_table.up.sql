@@ -1,6 +1,6 @@
 CREATE TABLE states (
     "id"               VARCHAR NOT NULL,
-    "created_at"       BIGINT  NOT NULL,
+    "created"          BIGINT  NOT NULL,
     "domain_name"      VARCHAR,
     "schema"           VARCHAR,
     "contract_address" VARCHAR,
