@@ -15,9 +15,9 @@
 
 package io.kaleido.paladin.loader;
 
-import github.com.kaleido_io.paladin.toolkit.PluginControllerGrpc;
-import github.com.kaleido_io.paladin.toolkit.Service;
-import github.com.kaleido_io.paladin.toolkit.Service.PluginLoad;
+import io.kaleido.paladin.toolkit.PluginControllerGrpc;
+import io.kaleido.paladin.toolkit.Service;
+import io.kaleido.paladin.toolkit.Service.PluginLoad;
 import io.grpc.ManagedChannel;
 import io.grpc.stub.StreamObserver;
 import io.kaleido.paladin.toolkit.GRPCTargetConnector;
