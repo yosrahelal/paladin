@@ -85,7 +85,7 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 		return nil, err
 	}
 
-	outputCoins, outputStates, err := h.noto.prepareOutputs(*toAddress, params.Amount)
+	outputCoins, outputStates, err := h.noto.prepareOutputs(notary.Lookup, to.Lookup, *toAddress, params.Amount)
 	if err != nil {
 		return nil, err
 	}
