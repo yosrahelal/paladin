@@ -56,8 +56,7 @@ type DomainStateInterface interface {
 
 	// FindAvailableNullifiers is similar to FindAvailableStates, but for domains that leverage
 	// nullifiers to record spending.
-	// TODO: add query filter capability
-	FindAvailableNullifiers(schemaID string) (s []*StateNullifier, err error)
+	FindAvailableNullifiers(schemaID string, query *query.QueryJSON) (s []*StateNullifier, err error)
 
 	// MarkStatesSpending writes a lock record so the state is now locked for spending, and
 	// thus subsequent calls to FindAvailableStates will not return these states.
@@ -188,12 +187,12 @@ func (dc *domainContext) run(fn func(ctx context.Context, dsi DomainStateInterfa
 	return fn(dc.ctx, dc)
 }
 
-func (dc *domainContext) getUnFlushedSpending() (spending []tktypes.HexBytes, err error) {
+func (dc *domainContext) getUnFlushedStates() (spending []tktypes.HexBytes, withNullifiers []tktypes.HexBytes, err error) {
 	// Take lock and check flush state
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
-		return nil, flushErr
+		return nil, nil, flushErr
 	}
 
 	for _, l := range dc.unFlushed.stateLocks {
@@ -204,6 +203,9 @@ func (dc *domainContext) getUnFlushedSpending() (spending []tktypes.HexBytes, er
 	for _, s := range dc.unFlushed.stateSpends {
 		spending = append(spending, s.State)
 	}
+	for _, s := range dc.unFlushed.stateNullifiers {
+		withNullifiers = append(withNullifiers, s.State)
+	}
 	if dc.flushing != nil {
 		for _, l := range dc.flushing.stateLocks {
 			if l.Spending {
@@ -213,8 +215,11 @@ func (dc *domainContext) getUnFlushedSpending() (spending []tktypes.HexBytes, er
 		for _, s := range dc.flushing.stateSpends {
 			spending = append(spending, s.State)
 		}
+		for _, s := range dc.flushing.stateNullifiers {
+			withNullifiers = append(withNullifiers, s.State)
+		}
 	}
-	return spending, nil
+	return spending, withNullifiers, nil
 }
 
 func (dc *domainContext) mergedUnFlushedStates(schema Schema, dbStates []*State, query *query.QueryJSON) (_ []*State, err error) {
@@ -355,7 +360,7 @@ func (dc *domainContext) mergeInMemoryMatches(schema Schema, states []*State, ex
 func (dc *domainContext) FindAvailableStates(schemaID string, query *query.QueryJSON) (s []*State, err error) {
 
 	// Build a list of spending states
-	spending, err := dc.getUnFlushedSpending()
+	spending, _, err := dc.getUnFlushedStates()
 	if err != nil {
 		return nil, err
 	}
@@ -370,21 +375,26 @@ func (dc *domainContext) FindAvailableStates(schemaID string, query *query.Query
 	return dc.mergedUnFlushedStates(schema, states, query)
 }
 
-func (dc *domainContext) FindAvailableNullifiers(schemaID string) (s []*StateNullifier, err error) {
+func (dc *domainContext) FindAvailableNullifiers(schemaID string, query *query.QueryJSON) (s []*StateNullifier, err error) {
 
-	spending, err := dc.getUnFlushedSpending()
+	spending, withNullifiers, err := dc.getUnFlushedStates()
 	if err != nil {
 		return nil, err
 	}
 
 	// Run the query against the DB
-	_, states, err := dc.ss.findAvailableNullifiers(dc.ctx, dc.domainName, dc.contractAddress, schemaID, spending...)
+	_, states, err := dc.ss.findAvailableNullifiers(dc.ctx, dc.domainName, dc.contractAddress, schemaID, query, withNullifiers, spending)
 	if err != nil {
 		return nil, err
 	}
 
+	nullifiers := make([]*StateNullifier, len(states))
+	for i, s := range states {
+		nullifiers[i] = s.Nullifier
+	}
+
 	// Merge in un-flushed states to results
-	return dc.mergedUnFlushedNullifiers(states)
+	return dc.mergedUnFlushedNullifiers(nullifiers)
 }
 
 func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*StateUpsert) (states []*State, err error) {

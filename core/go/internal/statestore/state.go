@@ -223,31 +223,57 @@ func (ss *stateStore) findAvailableNullifiers(
 	domainName string,
 	contractAddress tktypes.EthAddress,
 	schemaID string,
-	excluded ...tktypes.HexBytes,
-) (schema Schema, s []*StateNullifier, err error) {
+	jq *query.QueryJSON,
+	statesWithNullifiers []tktypes.HexBytes,
+	spentNullifiers []tktypes.HexBytes,
+) (schema Schema, s []*State, err error) {
+	if len(jq.Sort) == 0 {
+		jq.Sort = []string{".created"}
+	}
+
 	schema, err = ss.GetSchema(ctx, domainName, schemaID, true)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	tracker := ss.labelSetFor(schema)
+
+	// Build the query
 	db := ss.p.DB()
-	q := filters.BuildGORM(ctx, &query.QueryJSON{}, db.Table("state_nullifiers"), filters.FieldMap{})
+	q := filters.BuildGORM(ctx, jq, db.Table("states"), tracker)
 	if q.Error != nil {
 		return nil, nil, q.Error
 	}
 
-	q = q.Joins("LEFT JOIN states ON state_nullifiers.state = states.id").
-		Joins("Spent", db.Select("transaction")).
+	// Add joins only for the fields actually used in the query
+	for _, fi := range tracker.used {
+		typeMod := ""
+		if fi.labelType == labelTypeInt64 || fi.labelType == labelTypeBool {
+			typeMod = "int64_"
+		}
+		q = q.Joins(fmt.Sprintf("INNER JOIN state_%[1]slabels AS %[2]s ON %[2]s.state = id AND %[2]s.label = ?", typeMod, fi.virtualColumn), fi.label)
+	}
+
+	hasNullifier := db.Where("nullifier IS NOT NULL")
+	if len(statesWithNullifiers) > 0 {
+		hasNullifier = hasNullifier.Or("id IN(?)", statesWithNullifiers)
+	}
+
+	q = q.Joins("Nullifier", db.Select("nullifier")).
+		Joins("Nullifier.Spent", db.Select("transaction")).
 		Where("domain_name = ?", domainName).
 		Where("contract_address = ?", contractAddress).
 		Where("schema = ?", schema.Persisted().ID).
-		Where(`"Spent"."transaction" IS NULL`)
+		Where(hasNullifier)
 
-	if len(excluded) > 0 {
-		q = q.Not("nullifier IN(?)", excluded)
+	if len(spentNullifiers) > 0 {
+		q = q.Not("nullifier IN(?)", spentNullifiers)
 	}
 
-	var nullifiers []*StateNullifier
+	// Scope to only unspent
+	q = q.Where(`"Nullifier__Spent"."transaction" IS NULL`)
+
+	var nullifiers []*State
 	q = q.Find(&nullifiers)
 	if q.Error != nil {
 		return nil, nil, q.Error

@@ -363,7 +363,7 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, states, 1)
 
-		nullifiers, err := dsi.FindAvailableNullifiers(schemaID)
+		nullifiers, err := dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 		require.NoError(t, err)
 		assert.Len(t, nullifiers, 0)
 
@@ -372,7 +372,7 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		nullifiers, err = dsi.FindAvailableNullifiers(schemaID)
+		nullifiers, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 		require.NoError(t, err)
 		assert.Len(t, nullifiers, 1)
 
@@ -382,14 +382,14 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 
 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
 
-		nullifiers, err := dsi.FindAvailableNullifiers(schemaID)
+		nullifiers, err := dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 		require.NoError(t, err)
 		assert.Len(t, nullifiers, 1)
 
 		err = dsi.MarkStatesSpent(transactionID, []string{nullifier.String()})
 		assert.NoError(t, err)
 
-		states, err := dsi.FindAvailableNullifiers(schemaID)
+		states, err := dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 		require.NoError(t, err)
 		assert.Len(t, states, 0)
 
@@ -399,7 +399,7 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 
 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
 
-		states, err := dsi.FindAvailableNullifiers(schemaID)
+		states, err := dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 		require.NoError(t, err)
 		assert.Len(t, states, 0)
 
@@ -523,7 +523,7 @@ func TestDSIMergedUnFlushedWhileFlushing(t *testing.T) {
 		},
 	}
 
-	spending, err := dc.getUnFlushedSpending()
+	spending, _, err := dc.getUnFlushedStates()
 	require.NoError(t, err)
 	assert.Len(t, spending, 1)
 
@@ -564,7 +564,7 @@ func TestDSIMergedUnFlushedSpend(t *testing.T) {
 		},
 	}
 
-	spending, err := dc.getUnFlushedSpending()
+	spending, _, err := dc.getUnFlushedStates()
 	require.NoError(t, err)
 	assert.Len(t, spending, 2)
 
@@ -599,7 +599,7 @@ func TestDSIMergedUnFlushedWhileFlushingDedup(t *testing.T) {
 		},
 	}
 
-	spending, err := dc.getUnFlushedSpending()
+	spending, _, err := dc.getUnFlushedStates()
 	require.NoError(t, err)
 	assert.Len(t, spending, 1)
 
