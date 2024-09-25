@@ -86,7 +86,7 @@ func (s *DBPubTxnSubmission) WriteKey() string {
 	return strings.Split(s.SignerNonce, ":")[0]
 }
 
-type transactionsMatchingSubmission struct {
+type bindingsMatchingSubmission struct {
 	DBPublicTxnBinding `gorm:"embedded"`
 	Submission         *DBPubTxnSubmission `gorm:"foreignKey:signer_nonce;references:signer_nonce;"`
 }
