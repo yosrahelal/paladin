@@ -2,8 +2,8 @@ go 1.22.5
 
 use (
 	./core/go
+	./domains/integration-test
 	./domains/noto
-	./domains/test
 	./domains/zeto
 	./registries/static
 	./testinfra

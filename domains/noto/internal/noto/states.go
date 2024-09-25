@@ -72,14 +72,15 @@ func (n *Noto) unmarshalCoin(stateData string) (*types.NotoCoin, error) {
 	return &coin, err
 }
 
-func (n *Noto) makeNewState(coin *types.NotoCoin) (*prototk.NewState, error) {
+func (n *Noto) makeNewState(coin *types.NotoCoin, distributionList []string) (*prototk.NewState, error) {
 	coinJSON, err := json.Marshal(coin)
 	if err != nil {
 		return nil, err
 	}
 	return &prototk.NewState{
-		SchemaId:      n.coinSchema.Id,
-		StateDataJson: string(coinJSON),
+		SchemaId:        n.coinSchema.Id,
+		StateDataJson:   string(coinJSON),
+		DistibutionList: distributionList,
 	}, nil
 }
 
@@ -128,15 +129,15 @@ func (n *Noto) prepareInputs(ctx context.Context, contractAddress string, owner 
 	}
 }
 
-func (n *Noto) prepareOutputs(owner ethtypes.Address0xHex, amount *ethtypes.HexInteger) ([]*types.NotoCoin, []*prototk.NewState, error) {
+func (n *Noto) prepareOutputs(notaryName, ownerName string, ownerAddress ethtypes.Address0xHex, amount *ethtypes.HexInteger) ([]*types.NotoCoin, []*prototk.NewState, error) {
 	// Always produce a single coin for the entire output amount
 	// TODO: make this configurable
 	newCoin := &types.NotoCoin{
 		Salt:   tktypes.RandHex(32),
-		Owner:  owner,
+		Owner:  ownerAddress,
 		Amount: amount,
 	}
-	newState, err := n.makeNewState(newCoin)
+	newState, err := n.makeNewState(newCoin, []string{notaryName, ownerName})
 	return []*types.NotoCoin{newCoin}, []*prototk.NewState{newState}, err
 }
 
