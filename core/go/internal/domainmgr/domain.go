@@ -532,20 +532,18 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		if err != nil {
 			return nil, err
 		}
-		var confirmID tktypes.HexBytes
-		if state.ConfirmId != nil {
-			confirmID = tktypes.HexBytes(*state.ConfirmId)
-		}
-		var spendID tktypes.HexBytes
-		if state.SpendId != nil {
-			spendID = tktypes.HexBytes(*state.SpendId)
+		var id tktypes.HexBytes
+		if state.Id != nil {
+			id, err = tktypes.ParseHexBytes(ctx, *state.Id)
+			if err != nil {
+				return nil, err
+			}
 		}
 		newStates[*txUUID] = append(newStates[*txUUID], &statestore.StateUpsert{
-			SchemaID:  state.SchemaId,
-			Data:      tktypes.RawJSON(state.StateDataJson),
-			ConfirmID: confirmID,
-			SpendID:   spendID,
-			Creating:  true,
+			ID:       id,
+			SchemaID: state.SchemaId,
+			Data:     tktypes.RawJSON(state.StateDataJson),
+			Creating: true,
 		})
 	}
 

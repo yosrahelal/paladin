@@ -109,8 +109,7 @@ func TestUpsertSchemaAndStates(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, schemas, 1)
 	schemaID := schemas[0].IDString()
-	fakeHash1 := tktypes.HexBytes(tktypes.RandBytes(32))
-	fakeHash2 := tktypes.HexBytes(tktypes.RandBytes(32))
+	fakeHash := tktypes.HexBytes(tktypes.RandBytes(32))
 
 	contractAddress := tktypes.RandAddress()
 	err = ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
@@ -120,18 +119,15 @@ func TestUpsertSchemaAndStates(t *testing.T) {
 				Data:     tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0x1eDfD974fE6828dE81a1a762df680111870B7cDD", "salt": "%s"}`, tktypes.RandHex(32))),
 			},
 			{
-				SchemaID:  schemaID,
-				Data:      tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0x1eDfD974fE6828dE81a1a762df680111870B7cDD", "salt": "%s"}`, tktypes.RandHex(32))),
-				ConfirmID: fakeHash1,
-				SpendID:   fakeHash2,
+				ID:       fakeHash,
+				SchemaID: schemaID,
+				Data:     tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0x1eDfD974fE6828dE81a1a762df680111870B7cDD", "salt": "%s"}`, tktypes.RandHex(32))),
 			},
 		})
 		require.NoError(t, err)
 		require.Len(t, states, 2)
-		assert.Equal(t, tktypes.HexBytes(states[0].ID[:]), states[0].ConfirmID)
-		assert.Equal(t, tktypes.HexBytes(states[0].ID[:]), states[0].SpendID)
-		assert.Equal(t, fakeHash1, states[1].ConfirmID)
-		assert.Equal(t, fakeHash2, states[1].SpendID)
+		assert.NotEmpty(t, states[0].ID)
+		assert.Equal(t, fakeHash, states[1].ID)
 		return nil
 	})
 	require.NoError(t, err)
@@ -449,7 +445,7 @@ func TestDSIMergedUnFlushedWhileFlushing(t *testing.T) {
 		states: []*StateWithLabels{s1},
 		stateLocks: []*StateLock{
 			s1.Locked,
-			{State: tktypes.Bytes32Keccak([]byte("another")), Spending: true},
+			{State: []byte("another"), Spending: true},
 		},
 	}
 
@@ -525,7 +521,7 @@ func TestDSIMergedUnFlushedWhileFlushingDedup(t *testing.T) {
 		states: []*StateWithLabels{s1},
 		stateLocks: []*StateLock{
 			s1.Locked,
-			{State: tktypes.Bytes32Keccak([]byte("another")), Spending: true},
+			{State: []byte("another"), Spending: true},
 		},
 	}
 
@@ -695,12 +691,12 @@ func TestDSIResetWithMixed(t *testing.T) {
 	contractAddress := tktypes.RandAddress()
 	dc := ss.getDomainContext("domain1", *contractAddress)
 
-	state1 := tktypes.Bytes32Keccak(([]byte)("state1"))
+	state1 := tktypes.HexBytes("state1")
 	transactionID1 := uuid.New()
 	err := dc.MarkStatesRead(transactionID1, []string{state1.String()})
 	require.NoError(t, err)
 
-	state2 := tktypes.Bytes32Keccak(([]byte)("state2"))
+	state2 := tktypes.HexBytes("state2")
 	transactionID2 := uuid.New()
 	err = dc.MarkStatesSpending(transactionID2, []string{state2.String()})
 	require.NoError(t, err)
@@ -731,7 +727,7 @@ func TestCheckEvalGTTimestamp(t *testing.T) {
 	labelSet := dc.ss.labelSetFor(schema)
 
 	s := &State{
-		ID:      tktypes.MustParseBytes32("2eaf4727b7c7e9b3728b1344ac38ea6d8698603dc3b41d9458d7c011c20ce672"),
+		ID:      tktypes.MustParseHexBytes("2eaf4727b7c7e9b3728b1344ac38ea6d8698603dc3b41d9458d7c011c20ce672"),
 		Created: tktypes.TimestampFromUnix(1726545933211347000),
 	}
 	ls := filters.PassthroughValueSet{}

@@ -138,9 +138,9 @@ type fakeState struct {
 }
 
 type fakeExecute struct {
-	Inputs  []tktypes.Bytes32 `json:"inputs"`
-	Outputs []tktypes.Bytes32 `json:"outputs"`
-	Data    tktypes.HexBytes  `json:"data"`
+	Inputs  []tktypes.HexBytes `json:"inputs"`
+	Outputs []tktypes.HexBytes `json:"outputs"`
+	Data    tktypes.HexBytes   `json:"data"`
 }
 
 type testPlugin struct {
@@ -888,8 +888,7 @@ func TestHandleEventBatch(t *testing.T) {
 	contract2 := tktypes.RandAddress()
 	stateSpent := tktypes.RandHex(32)
 	stateConfirmed := tktypes.RandHex(32)
-	fakeHash1 := tktypes.RandHex(32)
-	fakeHash2 := tktypes.RandHex(32)
+	fakeHash := tktypes.RandHex(32)
 
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
 		mc.domainStateInterface.On("MarkStatesSpent", txID, []string{stateSpent}).Return(nil)
@@ -935,10 +934,9 @@ func TestHandleEventBatch(t *testing.T) {
 			},
 			NewStates: []*prototk.NewLocalState{
 				{
+					Id:            &fakeHash,
 					StateDataJson: `{"color": "blue"}`,
 					TransactionId: txIDBytes32.String(),
-					ConfirmId:     &fakeHash1,
-					SpendId:       &fakeHash2,
 				},
 			},
 		}, nil
@@ -1119,6 +1117,45 @@ func TestHandleEventBatchNewBadTransactionID(t *testing.T) {
 			NewStates: []*prototk.NewLocalState{
 				{
 					TransactionId: "badnotgood",
+				},
+			},
+		}, nil
+	}
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				Address: *contract1,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.ErrorContains(t, err, "PD020007")
+}
+
+func TestHandleEventBatchNewBadStateID(t *testing.T) {
+	batchID := uuid.New()
+	contract1 := tktypes.RandAddress()
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{"address", "domain_address"},
+	).AddRow(contract1, d.registryAddress))
+
+	stateID := "badnotgood"
+	tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return &prototk.HandleEventBatchResponse{
+			NewStates: []*prototk.NewLocalState{
+				{
+					TransactionId: tktypes.RandHex(32),
+					Id:            &stateID,
 				},
 			},
 		}, nil

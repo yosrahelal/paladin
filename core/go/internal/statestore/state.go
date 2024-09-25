@@ -30,9 +30,7 @@ import (
 )
 
 type State struct {
-	ID              tktypes.Bytes32    `json:"id"                  gorm:"primaryKey"`
-	ConfirmID       tktypes.HexBytes   `json:"confirm_id"`
-	SpendID         tktypes.HexBytes   `json:"spend_id"`
+	ID              tktypes.HexBytes   `json:"id"                  gorm:"primaryKey"`
 	Created         tktypes.Timestamp  `json:"created"             gorm:"autoCreateTime:nano"`
 	DomainName      string             `json:"domain"`
 	Schema          tktypes.Bytes32    `json:"schema"`
@@ -40,18 +38,17 @@ type State struct {
 	Data            tktypes.RawJSON    `json:"data"`
 	Labels          []*StateLabel      `json:"-"                   gorm:"foreignKey:state;references:id;"`
 	Int64Labels     []*StateInt64Label `json:"-"                   gorm:"foreignKey:state;references:id;"`
-	Confirmed       *StateConfirm      `json:"confirmed,omitempty" gorm:"foreignKey:state;references:confirm_id;"`
-	Spent           *StateSpend        `json:"spent,omitempty"     gorm:"foreignKey:state;references:spend_id;"`
+	Confirmed       *StateConfirm      `json:"confirmed,omitempty" gorm:"foreignKey:state;references:id;"`
+	Spent           *StateSpend        `json:"spent,omitempty"     gorm:"foreignKey:state;references:id;"`
 	Locked          *StateLock         `json:"locked,omitempty"    gorm:"foreignKey:state;references:id;"`
 }
 
 type StateUpsert struct {
-	SchemaID  string
-	Data      tktypes.RawJSON
-	Creating  bool
-	Spending  bool
-	ConfirmID tktypes.HexBytes
-	SpendID   tktypes.HexBytes
+	ID       tktypes.HexBytes
+	SchemaID string
+	Data     tktypes.RawJSON
+	Creating bool
+	Spending bool
 }
 
 // StateWithLabels is a newly prepared state that has not yet been persisted
@@ -61,13 +58,13 @@ type StateWithLabels struct {
 }
 
 type StateLabel struct {
-	State tktypes.Bytes32 `gorm:"primaryKey"`
+	State tktypes.HexBytes `gorm:"primaryKey"`
 	Label string
 	Value string
 }
 
 type StateInt64Label struct {
-	State tktypes.Bytes32 `gorm:"primaryKey"`
+	State tktypes.HexBytes `gorm:"primaryKey"`
 	Label string
 	Value int64
 }
@@ -81,14 +78,14 @@ func (s *StateWithLabels) ValueSet() filters.ValueSet {
 	return s.LabelValues
 }
 
-func (ss *stateStore) PersistState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, data tktypes.RawJSON, extraIDs *ExtraIDs) (*StateWithLabels, error) {
+func (ss *stateStore) PersistState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, data tktypes.RawJSON, id tktypes.HexBytes) (*StateWithLabels, error) {
 
 	schema, err := ss.GetSchema(ctx, domainName, schemaID, true)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := schema.ProcessState(ctx, contractAddress, data, extraIDs)
+	s, err := schema.ProcessState(ctx, contractAddress, data, id)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +127,7 @@ var baseStateFields = map[string]filters.FieldResolver{
 	".created": filters.TimestampField("created"),
 }
 
-func addStateBaseLabels(labelValues filters.PassthroughValueSet, id tktypes.Bytes32, createdAt tktypes.Timestamp) filters.PassthroughValueSet {
+func addStateBaseLabels(labelValues filters.PassthroughValueSet, id tktypes.HexBytes, createdAt tktypes.Timestamp) filters.PassthroughValueSet {
 	labelValues[".id"] = id.HexString()
 	labelValues[".created"] = int64(createdAt)
 	return labelValues
@@ -167,7 +164,7 @@ func (ss *stateStore) FindStates(ctx context.Context, domainName string, contrac
 	return s, err
 }
 
-func (ss *stateStore) findStates(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, jq *query.QueryJSON, status StateStatusQualifier, excluded ...*allIDs) (schema Schema, s []*State, err error) {
+func (ss *stateStore) findStates(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, jq *query.QueryJSON, status StateStatusQualifier, excluded ...*idOnly) (schema Schema, s []*State, err error) {
 	if len(jq.Sort) == 0 {
 		jq.Sort = []string{".created"}
 	}
@@ -248,7 +245,7 @@ func (ss *stateStore) MarkSpent(ctx context.Context, domainName string, contract
 }
 
 func (ss *stateStore) MarkLocked(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID string, transactionID uuid.UUID, creating, spending bool) error {
-	id, err := tktypes.ParseBytes32Ctx(ctx, stateID)
+	id, err := tktypes.ParseHexBytes(ctx, stateID)
 	if err != nil {
 		return err
 	}

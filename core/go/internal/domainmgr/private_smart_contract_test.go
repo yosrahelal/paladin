@@ -597,7 +597,7 @@ func TestDomainWritePotentialStatesFail(t *testing.T) {
 	assert.Regexp(t, "pop", err)
 }
 
-func TestDomainWritePotentialStatesBadConfirm(t *testing.T) {
+func TestDomainWritePotentialStatesBadID(t *testing.T) {
 	schema := componentmocks.NewSchema(t)
 	schema.On("IDString").Return("schema1")
 	schema.On("Signature").Return("schema1_signature")
@@ -607,23 +607,7 @@ func TestDomainWritePotentialStatesBadConfirm(t *testing.T) {
 
 	psc, tx := doDomainInitAssembleTransactionOK(t, ctx, tp)
 	tx.PostAssembly.OutputStatesPotential = []*prototk.NewState{
-		{SchemaId: "schema1", ConfirmId: &badBytes},
-	}
-	err := psc.WritePotentialStates(ctx, tx)
-	assert.Regexp(t, "PD020007", err)
-}
-
-func TestDomainWritePotentialStatesBadSpend(t *testing.T) {
-	schema := componentmocks.NewSchema(t)
-	schema.On("IDString").Return("schema1")
-	schema.On("Signature").Return("schema1_signature")
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(schema), mockBlockHeight)
-	defer done()
-	badBytes := "0xnothex"
-
-	psc, tx := doDomainInitAssembleTransactionOK(t, ctx, tp)
-	tx.PostAssembly.OutputStatesPotential = []*prototk.NewState{
-		{SchemaId: "schema1", SpendId: &badBytes},
+		{SchemaId: "schema1", Id: &badBytes},
 	}
 	err := psc.WritePotentialStates(ctx, tx)
 	assert.Regexp(t, "PD020007", err)

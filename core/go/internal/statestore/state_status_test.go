@@ -104,7 +104,7 @@ func TestStateLockingQuery(t *testing.T) {
 		for _, wIndex := range expected {
 			found := false
 			for _, state := range states {
-				if state.ID == widgets[wIndex].ID {
+				if state.ID.Equals(widgets[wIndex].ID) {
 					assert.False(t, found)
 					found = true
 					break
