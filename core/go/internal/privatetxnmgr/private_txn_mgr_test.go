@@ -909,8 +909,13 @@ type fakePublicTxManager struct {
 	prepareErr error
 }
 
-// GetTransactions implements components.PublicTxManager.
-func (f *fakePublicTxManager) QueryTransactions(ctx context.Context, dbTX *gorm.DB, scopeToTxn *uuid.UUID, jq *query.QueryJSON) ([]*ptxapi.PublicTx, error) {
+// QueryPublicTxForTransactions implements components.PublicTxManager.
+func (f *fakePublicTxManager) QueryPublicTxForTransactions(ctx context.Context, dbTX *gorm.DB, boundToTxns []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error) {
+	panic("unimplemented")
+}
+
+// QueryPublicTxWithBindings implements components.PublicTxManager.
+func (f *fakePublicTxManager) QueryPublicTxWithBindings(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) {
 	panic("unimplemented")
 }
 
