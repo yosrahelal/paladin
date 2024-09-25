@@ -24,9 +24,7 @@ contract Atom is Initializable {
     function initialize(Operation[] memory operations) public initializer {
         _operationCount = operations.length;
         for (uint256 i = 0; i < _operationCount; i++) {
-            _operations.push(
-                Operation(operations[i].contractAddress, operations[i].callData)
-            );
+            _operations.push(operations[i]);
         }
     }
 
@@ -37,7 +35,9 @@ contract Atom is Initializable {
     }
 
     function _executeOperation(Operation storage op) internal {
-        (bool success, bytes memory result) = op.contractAddress.call(op.callData);
+        (bool success, bytes memory result) = op.contractAddress.call(
+            op.callData
+        );
         if (!success) {
             assembly {
                 // Forward the revert reason
@@ -59,8 +59,7 @@ contract AtomFactory {
     event AtomDeployed(address addr);
 
     // Must match the signature initialize(Atom.Operation[])
-    string private constant INIT_SIGNATURE =
-        "initialize((address,bytes)[])";
+    string private constant INIT_SIGNATURE = "initialize((address,bytes)[])";
 
     constructor() {
         logic = address(new Atom());

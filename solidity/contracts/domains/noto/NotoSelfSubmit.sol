@@ -39,7 +39,7 @@ contract NotoSelfSubmit is Noto {
         _transfer(inputs, outputs, signature, data);
     }
 
-    function approve(
+    function approveTransfer(
         address delegate,
         bytes32 txhash,
         bytes calldata signature,
@@ -47,6 +47,6 @@ contract NotoSelfSubmit is Noto {
     ) external override {
         address signer = ECDSA.recover(txhash, signature);
         requireNotary(signer);
-        _approve(delegate, txhash, signature, data);
+        _approveTransfer(delegate, txhash, signature, data);
     }
 }
