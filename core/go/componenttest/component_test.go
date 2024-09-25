@@ -256,7 +256,6 @@ func TestCoreGoComponent(t *testing.T) {
 	deadlineRemaining := time.Until(deadline) - (2 * time.Second)
 	timeoutChan := time.NewTimer(deadlineRemaining).C
 
-	// Create a 2 second polling
 	timer := time.NewTicker(1 * time.Second)
 	defer timer.Stop()
 	txFull := ptxapi.TransactionFull{}
