@@ -70,19 +70,6 @@ type PublicTxMatch struct {
 	*blockindexer.IndexedTransactionNotify
 }
 
-// Database record used for efficiency in both public and Paladin transaction managers as part of a JOIN
-// PublicTxMgr owns insertion of these records at creation time of the public Txn (inside the batch)
-type PublicTxnDBBinding struct {
-	Sequence        uint64                               `gorm:"column:sequence;autoIncrement"` // unique identifier for this record
-	SignerNonce     string                               `gorm:"column:signer_nonce"`
-	Transaction     uuid.UUID                            `gorm:"column:transaction"`
-	TransactionType tktypes.Enum[ptxapi.TransactionType] `gorm:"column:tx_type"`
-}
-
-func (PublicTxnDBBinding) TableName() string {
-	return "public_txn_bindings"
-}
-
 type PublicTxManager interface {
 	ManagerLifecycle
 

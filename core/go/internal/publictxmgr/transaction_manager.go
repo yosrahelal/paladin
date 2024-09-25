@@ -226,8 +226,8 @@ type preparedTransactionBatch struct {
 // This is expected to be a lightweight operation involving not much more than writing to the database, as the heavy lifting should have been done in PrepareSubmission
 // The database transaction will be coordinated by the caller
 func (pb *preparedTransactionBatch) Submit(ctx context.Context, dbTX *gorm.DB) (err error) {
-	persistedTransactions := make([]*persistedPubTx, len(pb.accepted))
-	publicTxBindings := make([]*components.PublicTxnDBBinding, 0, len(pb.accepted))
+	persistedTransactions := make([]*DBPublicTxn, len(pb.accepted))
+	publicTxBindings := make([]*DBPublicTxnBinding, 0, len(pb.accepted))
 	for i, accepted := range pb.accepted {
 		ptx := accepted.(*preparedTransaction)
 		persistedTransactions[i], err = pb.ble.finalizeNonceForPersistedTX(ctx, ptx)
@@ -235,7 +235,7 @@ func (pb *preparedTransactionBatch) Submit(ctx context.Context, dbTX *gorm.DB) (
 			return err
 		}
 		for _, bnd := range ptx.bindings {
-			publicTxBindings = append(publicTxBindings, &components.PublicTxnDBBinding{
+			publicTxBindings = append(publicTxBindings, &DBPublicTxnBinding{
 				Transaction:     bnd.TransactionID,
 				TransactionType: bnd.TransactionType,
 				SignerNonce:     persistedTransactions[i].SignerNonce,
@@ -463,7 +463,7 @@ func (ble *pubTxManager) prepareSubmission(ctx context.Context, batchSoFar []*pr
 
 }
 
-func (ble *pubTxManager) finalizeNonceForPersistedTX(ctx context.Context, ptx *preparedTransaction) (*persistedPubTx, error) {
+func (ble *pubTxManager) finalizeNonceForPersistedTX(ctx context.Context, ptx *preparedTransaction) (*DBPublicTxn, error) {
 	nonce, err := ptx.nsi.AssignNextNonce(ctx)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to assign nonce to public transaction %+v: %s", ptx, err)
@@ -473,7 +473,7 @@ func (ble *pubTxManager) finalizeNonceForPersistedTX(ctx context.Context, ptx *p
 	tx.Nonce = tktypes.HexUint64(nonce)
 	log.L(ctx).Infof("Creating a new public transaction from=%s nonce=%d (%s)", tx.From, tx.Nonce /* number */, tx.Nonce /* hex */)
 	log.L(ctx).Tracef("payload: %+v", tx)
-	return &persistedPubTx{
+	return &DBPublicTxn{
 		SignerNonce: fmt.Sprintf("%s:%d", tx.From, tx.Nonce), // having a single key rather than compound key helps us simplify cross-table correlation, particularly for batch lookup
 		From:        tx.From,
 		Nonce:       tx.Nonce.Uint64(),
@@ -556,7 +556,7 @@ func (ble *pubTxManager) queryPublicTxWithBinding(ctx context.Context, dbTX *gor
 func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, from tktypes.EthAddress, nonce uint64) (bool, error) {
 	// Runs a DB query to see if the transaction is marked completed (for good or bad)
 	// A non existent transaction results in false
-	var ptxs []*persistedPubTx
+	var ptxs []*DBPublicTxn
 	err := ble.p.DB().
 		WithContext(ctx).
 		Where("from = ?", from).
@@ -578,7 +578,7 @@ func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, from tkt
 
 // the return does NOT include submissions (only the top level TX data)
 func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourceAddress tktypes.EthAddress, destinationAddress tktypes.EthAddress) (*ptxapi.PublicTx, error) {
-	var ptxs []*persistedPubTx
+	var ptxs []*DBPublicTxn
 	err := ble.p.DB().
 		WithContext(ctx).
 		Where("from = ?", sourceAddress).
@@ -599,7 +599,7 @@ func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourc
 	return nil, nil
 }
 
-func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB, bindings bool, scopeToTxns []uuid.UUID, q *gorm.DB) (ptxs []*persistedPubTx, err error) {
+func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB, bindings bool, scopeToTxns []uuid.UUID, q *gorm.DB) (ptxs []*DBPublicTxn, err error) {
 	if bindings {
 		// We'll get one row per binding
 		q = q.Joins("Binding")
@@ -632,7 +632,7 @@ func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB,
 	return ptxs, nil
 }
 
-func mapPersistedTransaction(ptx *persistedPubTx) *ptxapi.PublicTx {
+func mapPersistedTransaction(ptx *DBPublicTxn) *ptxapi.PublicTx {
 	tx := &ptxapi.PublicTx{
 		From:    ptx.From,
 		Nonce:   tktypes.HexUint64(ptx.Nonce),
@@ -659,7 +659,7 @@ func mapPersistedTransaction(ptx *persistedPubTx) *ptxapi.PublicTx {
 	return tx
 }
 
-func mapPersistedSubmissionData(pSub *publicSubmission) *ptxapi.PublicTxSubmissionData {
+func mapPersistedSubmissionData(pSub *DBPubTxnSubmission) *ptxapi.PublicTxSubmissionData {
 	return &ptxapi.PublicTxSubmissionData{
 		Time:               pSub.Created,
 		TransactionHash:    tktypes.Bytes32(pSub.TransactionHash),
@@ -667,8 +667,8 @@ func mapPersistedSubmissionData(pSub *publicSubmission) *ptxapi.PublicTxSubmissi
 	}
 }
 
-func (ble *pubTxManager) getTransactionSubmissions(ctx context.Context, dbTX *gorm.DB, signerNonceRefs []string) ([]*publicSubmission, error) {
-	var ptxs []*publicSubmission
+func (ble *pubTxManager) getTransactionSubmissions(ctx context.Context, dbTX *gorm.DB, signerNonceRefs []string) ([]*DBPubTxnSubmission, error) {
+	var ptxs []*DBPubTxnSubmission
 	err := dbTX.
 		WithContext(ctx).
 		Table("public_submissions").
@@ -787,7 +787,7 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 	// - the result to return so the Paladin tx manager knows the linkage
 	// - the insert we will do in this DB transaction of all the completion records
 	results := make([]*components.PublicTxMatch, len(lookups))
-	completions := make([]*publicCompletion, len(lookups))
+	completions := make([]*DBPublicTxnCompletion, len(lookups))
 	for i, match := range lookups {
 		txi := txiByHash[match.Submission.TransactionHash]
 		results[i] = &components.PublicTxMatch{
@@ -797,7 +797,7 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 			},
 			IndexedTransactionNotify: txi,
 		}
-		completions[i] = &publicCompletion{
+		completions[i] = &DBPublicTxnCompletion{
 			SignerNonce:     match.Submission.SignerNonce,
 			TransactionHash: match.Submission.TransactionHash,
 			Success:         txi.Result.V() == blockindexer.TXResult_SUCCESS,

@@ -280,7 +280,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 	spaces := oc.maxInFlightTxs - oldLen
 	if spaces > 0 {
 		// We retry the get from persistence indefinitely (until the context cancels)
-		var additional []*persistedPubTx
+		var additional []*DBPublicTxn
 		err := oc.retry.Do(ctx, func(attempt int) (retry bool, err error) {
 			q := oc.p.DB().
 				WithContext(ctx).
