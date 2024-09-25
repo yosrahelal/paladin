@@ -41,8 +41,8 @@ type StateSpend struct {
 // spending a previously confirmed state, or an optimistic record of creating
 // (and maybe later spending) a state that is yet to be confirmed.
 type StateLock struct {
-	State       tktypes.HexBytes `json:"-"                gorm:"primaryKey"`
-	Transaction uuid.UUID        `json:"transaction"`
-	Creating    bool             `json:"creating"`
-	Spending    bool             `json:"spending"`
+	State       tktypes.Bytes32 `json:"-"                gorm:"primaryKey"`
+	Transaction uuid.UUID       `json:"transaction"`
+	Creating    bool            `json:"creating"`
+	Spending    bool            `json:"spending"`
 }

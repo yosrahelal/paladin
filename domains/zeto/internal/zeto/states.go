@@ -48,7 +48,8 @@ func (z *Zeto) makeNewState(coin *types.ZetoCoin) (*pb.NewState, error) {
 	return &pb.NewState{
 		SchemaId:      z.coinSchema.Id,
 		StateDataJson: string(coinJSON),
-		DataHash:      &hash,
+		ConfirmId:     &hash,
+		SpendId:       &hash,
 	}, nil
 }
 

@@ -37,8 +37,8 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
-	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240905213624-43a614759076 // indirect
-	github.com/iden3/go-iden3-crypto v0.0.16 // indirect
+	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240923130959-544659ea388d // indirect
+	github.com/iden3/go-iden3-crypto v0.0.17 // indirect
 	github.com/iden3/go-rapidsnark/prover v0.0.10 // indirect
 	github.com/iden3/go-rapidsnark/types v0.0.2 // indirect
 	github.com/iden3/go-rapidsnark/witness/v2 v2.0.0 // indirect
@@ -106,7 +106,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/postgres v1.5.9 // indirect
 	gorm.io/driver/sqlite v1.5.6 // indirect
-	gorm.io/gorm v1.25.11 // indirect
+	gorm.io/gorm v1.25.12 // indirect
 )
 
 replace github.com/kaleido-io/paladin/core => ../../core/go

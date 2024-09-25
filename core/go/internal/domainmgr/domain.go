@@ -514,7 +514,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		if err != nil {
 			return nil, err
 		}
-		spentStates[*txUUID] = append(spentStates[*txUUID], state.DataHash)
+		spentStates[*txUUID] = append(spentStates[*txUUID], state.Id)
 	}
 
 	confirmedStates := make(map[uuid.UUID][]string)
@@ -523,7 +523,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		if err != nil {
 			return nil, err
 		}
-		confirmedStates[*txUUID] = append(confirmedStates[*txUUID], state.DataHash)
+		confirmedStates[*txUUID] = append(confirmedStates[*txUUID], state.Id)
 	}
 
 	newStates := make(map[uuid.UUID][]*statestore.StateUpsert)
@@ -532,15 +532,20 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		if err != nil {
 			return nil, err
 		}
-		var dataHash tktypes.HexBytes
-		if state.DataHash != nil {
-			dataHash = tktypes.HexBytes(*state.DataHash)
+		var confirmID tktypes.HexBytes
+		if state.ConfirmId != nil {
+			confirmID = tktypes.HexBytes(*state.ConfirmId)
+		}
+		var spendID tktypes.HexBytes
+		if state.SpendId != nil {
+			spendID = tktypes.HexBytes(*state.SpendId)
 		}
 		newStates[*txUUID] = append(newStates[*txUUID], &statestore.StateUpsert{
-			SchemaID: state.SchemaId,
-			Data:     tktypes.RawJSON(state.StateDataJson),
-			DataHash: dataHash,
-			Creating: true,
+			SchemaID:  state.SchemaId,
+			Data:      tktypes.RawJSON(state.StateDataJson),
+			ConfirmID: confirmID,
+			SpendID:   spendID,
+			Creating:  true,
 		})
 	}
 

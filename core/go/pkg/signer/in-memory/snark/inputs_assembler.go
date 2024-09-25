@@ -6,7 +6,6 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
-	"github.com/iden3/go-iden3-crypto/poseidon"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
 )
 
@@ -53,9 +52,9 @@ func assembleInputs_anon_nullifier(inputs *commonWitnessInputs, extras *pb.Provi
 	// calculate the nullifiers for the input UTXOs
 	nullifiers := make([]*big.Int, len(inputs.inputCommitments))
 	for i := 0; i < len(inputs.inputCommitments); i++ {
-		nullifier, err := poseidon.Hash([]*big.Int{inputs.inputValues[i], inputs.inputSalts[i], keyEntry.PrivateKeyForZkp})
+		nullifier, err := CalculateNullifier(inputs.inputValues[i], inputs.inputSalts[i], keyEntry.PrivateKeyForZkp)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create the nullifier hash. %s", err)
+			return nil, fmt.Errorf("failed to calculate nullifier. %s", err)
 		}
 		nullifiers[i] = nullifier
 	}

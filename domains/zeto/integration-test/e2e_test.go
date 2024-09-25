@@ -211,9 +211,9 @@ func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
 	s.testZetoFungible(s.T(), "Zeto_AnonEnc")
 }
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
-// 	s.testZetoFungible(s.T(), "Zeto_AnonNullifier")
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
+	s.testZetoFungible(s.T(), "Zeto_AnonNullifier")
+}
 
 func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	ctx := context.Background()
