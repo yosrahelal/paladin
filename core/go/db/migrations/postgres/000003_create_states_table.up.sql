@@ -7,12 +7,14 @@ CREATE TABLE states (
     "schema"           TEXT,
     "contract_address" TEXT,
     "data"             TEXT,
-    "data_hash"        TEXT,
+    "confirm_id"       TEXT,
+    "spend_id"         TEXT,
     PRIMARY KEY ("id"),
     FOREIGN KEY ("domain_name", "schema") REFERENCES schemas ("domain_name", "id") ON DELETE CASCADE
 );
 CREATE INDEX states_by_domain ON states("domain_name", "schema", "contract_address");
-CREATE UNIQUE INDEX states_by_hash ON states("data_hash");
+CREATE UNIQUE INDEX states_by_confirm_id ON states("confirm_id");
+CREATE UNIQUE INDEX states_by_spend_id ON states("spend_id");
 
 CREATE TABLE state_labels (
     "state"       TEXT    NOT NULL,

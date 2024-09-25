@@ -44,15 +44,14 @@ func (ss *stateStore) rpcListSchema() rpcserver.RPCHandler {
 }
 
 func (ss *stateStore) rpcStoreState() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod5(func(ctx context.Context,
+	return rpcserver.RPCMethod4(func(ctx context.Context,
 		domain string,
 		contractAddress tktypes.EthAddress,
 		schema string,
 		data tktypes.RawJSON,
-		dataHash tktypes.HexBytes,
 	) (*State, error) {
 		var state *State
-		newState, err := ss.PersistState(ctx, domain, contractAddress, schema, data, dataHash)
+		newState, err := ss.PersistState(ctx, domain, contractAddress, schema, data, nil)
 		if err == nil {
 			state = newState.State
 		}

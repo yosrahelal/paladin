@@ -888,6 +888,8 @@ func TestHandleEventBatch(t *testing.T) {
 	contract2 := tktypes.RandAddress()
 	stateSpent := tktypes.RandHex(32)
 	stateConfirmed := tktypes.RandHex(32)
+	fakeHash1 := tktypes.RandHex(32)
+	fakeHash2 := tktypes.RandHex(32)
 
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
 		mc.domainStateInterface.On("MarkStatesSpent", txID, []string{stateSpent}).Return(nil)
@@ -921,13 +923,13 @@ func TestHandleEventBatch(t *testing.T) {
 			},
 			SpentStates: []*prototk.StateUpdate{
 				{
-					DataHash:      stateSpent,
+					Id:            stateSpent,
 					TransactionId: txIDBytes32.String(),
 				},
 			},
 			ConfirmedStates: []*prototk.StateUpdate{
 				{
-					DataHash:      stateConfirmed,
+					Id:            stateConfirmed,
 					TransactionId: txIDBytes32.String(),
 				},
 			},
@@ -935,6 +937,8 @@ func TestHandleEventBatch(t *testing.T) {
 				{
 					StateDataJson: `{"color": "blue"}`,
 					TransactionId: txIDBytes32.String(),
+					ConfirmId:     &fakeHash1,
+					SpendId:       &fakeHash2,
 				},
 			},
 		}, nil
@@ -1037,7 +1041,7 @@ func TestHandleEventBatchSpentBadTransactionID(t *testing.T) {
 		return &prototk.HandleEventBatchResponse{
 			SpentStates: []*prototk.StateUpdate{
 				{
-					DataHash:      stateSpent,
+					Id:            stateSpent,
 					TransactionId: "badnotgood",
 				},
 			},
@@ -1076,7 +1080,7 @@ func TestHandleEventBatchConfirmBadTransactionID(t *testing.T) {
 		return &prototk.HandleEventBatchResponse{
 			ConfirmedStates: []*prototk.StateUpdate{
 				{
-					DataHash:      stateSpent,
+					Id:            stateSpent,
 					TransactionId: "badnotgood",
 				},
 			},
@@ -1191,7 +1195,7 @@ func TestHandleEventBatchMarkSpentFail(t *testing.T) {
 		return &prototk.HandleEventBatchResponse{
 			SpentStates: []*prototk.StateUpdate{
 				{
-					DataHash:      stateSpent,
+					Id:            stateSpent,
 					TransactionId: txIDBytes32.String(),
 				},
 			},
@@ -1234,7 +1238,7 @@ func TestHandleEventBatchMarkConfirmedFail(t *testing.T) {
 		return &prototk.HandleEventBatchResponse{
 			ConfirmedStates: []*prototk.StateUpdate{
 				{
-					DataHash:      stateConfirmed,
+					Id:            stateConfirmed,
 					TransactionId: txIDBytes32.String(),
 				},
 			},

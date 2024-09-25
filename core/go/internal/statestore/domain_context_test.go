@@ -109,7 +109,8 @@ func TestUpsertSchemaAndStates(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, schemas, 1)
 	schemaID := schemas[0].IDString()
-	fakeHash := tktypes.HexBytes(tktypes.RandBytes(32))
+	fakeHash1 := tktypes.HexBytes(tktypes.RandBytes(32))
+	fakeHash2 := tktypes.HexBytes(tktypes.RandBytes(32))
 
 	contractAddress := tktypes.RandAddress()
 	err = ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
@@ -119,15 +120,18 @@ func TestUpsertSchemaAndStates(t *testing.T) {
 				Data:     tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0x1eDfD974fE6828dE81a1a762df680111870B7cDD", "salt": "%s"}`, tktypes.RandHex(32))),
 			},
 			{
-				SchemaID: schemaID,
-				Data:     tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0x1eDfD974fE6828dE81a1a762df680111870B7cDD", "salt": "%s"}`, tktypes.RandHex(32))),
-				DataHash: fakeHash,
+				SchemaID:  schemaID,
+				Data:      tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0x1eDfD974fE6828dE81a1a762df680111870B7cDD", "salt": "%s"}`, tktypes.RandHex(32))),
+				ConfirmID: fakeHash1,
+				SpendID:   fakeHash2,
 			},
 		})
 		require.NoError(t, err)
 		require.Len(t, states, 2)
-		assert.NotEmpty(t, states[0].DataHash)
-		assert.Equal(t, fakeHash, states[1].DataHash)
+		assert.Equal(t, tktypes.HexBytes(states[0].ID[:]), states[0].ConfirmID)
+		assert.Equal(t, tktypes.HexBytes(states[0].ID[:]), states[0].SpendID)
+		assert.Equal(t, fakeHash1, states[1].ConfirmID)
+		assert.Equal(t, fakeHash2, states[1].SpendID)
 		return nil
 	})
 	require.NoError(t, err)
@@ -439,13 +443,13 @@ func TestDSIMergedUnFlushedWhileFlushing(t *testing.T) {
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
 		tktypes.RandHex(32))), nil)
 	require.NoError(t, err)
-	s1.Locked = &StateLock{State: s1.DataHash, Transaction: uuid.New(), Creating: true}
+	s1.Locked = &StateLock{State: s1.ID, Transaction: uuid.New(), Creating: true}
 
 	dc.flushing = &writeOperation{
 		states: []*StateWithLabels{s1},
 		stateLocks: []*StateLock{
 			s1.Locked,
-			{State: []byte("another"), Spending: true},
+			{State: tktypes.Bytes32Keccak([]byte("another")), Spending: true},
 		},
 	}
 
@@ -476,12 +480,12 @@ func TestDSIMergedUnFlushedSpend(t *testing.T) {
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
 		tktypes.RandHex(32))), nil)
 	require.NoError(t, err)
-	s1.Locked = &StateLock{State: s1.DataHash, Transaction: uuid.New(), Creating: true}
+	s1.Locked = &StateLock{State: s1.ID, Transaction: uuid.New(), Creating: true}
 
 	dc.flushing = &writeOperation{
 		states: []*StateWithLabels{s1},
 		stateSpends: []*StateSpend{
-			{State: s1.DataHash},
+			{State: s1.ID[:]},
 		},
 	}
 	dc.unFlushed = &writeOperation{
@@ -515,13 +519,13 @@ func TestDSIMergedUnFlushedWhileFlushingDedup(t *testing.T) {
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
 		tktypes.RandHex(32))), nil)
 	require.NoError(t, err)
-	s1.Locked = &StateLock{State: s1.DataHash, Transaction: uuid.New(), Creating: true}
+	s1.Locked = &StateLock{State: s1.ID, Transaction: uuid.New(), Creating: true}
 
 	dc.flushing = &writeOperation{
 		states: []*StateWithLabels{s1},
 		stateLocks: []*StateLock{
 			s1.Locked,
-			{State: []byte("another"), Spending: true},
+			{State: tktypes.Bytes32Keccak([]byte("another")), Spending: true},
 		},
 	}
 
@@ -705,7 +709,7 @@ func TestDSIResetWithMixed(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Len(t, dc.unFlushed.stateLocks, 1)
-	assert.Equal(t, dc.unFlushed.stateLocks[0].State, tktypes.HexBytes(state2[:]))
+	assert.Equal(t, dc.unFlushed.stateLocks[0].State, state2)
 
 }
 

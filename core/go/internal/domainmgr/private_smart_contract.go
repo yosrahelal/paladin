@@ -155,7 +155,7 @@ func (dc *domainContract) AssembleTransaction(ctx context.Context, tx *component
 }
 
 // Happens only on the sequencing node
-func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *components.PrivateTransaction) error {
+func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *components.PrivateTransaction) (err error) {
 	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil || tx.PostAssembly == nil {
 		return i18n.NewError(ctx, msgs.MsgDomainTXIncompleteWritePotentialStates)
 	}
@@ -179,14 +179,25 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 		if schema == nil {
 			return i18n.NewError(ctx, msgs.MsgDomainUnknownSchema, s.SchemaId)
 		}
-		var dataHash tktypes.HexBytes
-		if s.DataHash != nil {
-			dataHash = tktypes.HexBytes(*s.DataHash)
+		var confirmID tktypes.HexBytes
+		if s.ConfirmId != nil {
+			confirmID, err = tktypes.ParseHexBytes(ctx, *s.ConfirmId)
+			if err != nil {
+				return err
+			}
+		}
+		var spendID tktypes.HexBytes
+		if s.SpendId != nil {
+			spendID, err = tktypes.ParseHexBytes(ctx, *s.SpendId)
+			if err != nil {
+				return err
+			}
 		}
 		newStatesToWrite[i] = &statestore.StateUpsert{
-			SchemaID: schema.IDString(),
-			Data:     tktypes.RawJSON(s.StateDataJson),
-			DataHash: dataHash,
+			SchemaID:  schema.IDString(),
+			Data:      tktypes.RawJSON(s.StateDataJson),
+			ConfirmID: confirmID,
+			SpendID:   spendID,
 			// These are marked as locked and creating in the transaction
 			Creating: true,
 		}
@@ -207,10 +218,9 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 	postAssembly.OutputStates = make([]*components.FullState, len(states))
 	for i, s := range states {
 		postAssembly.OutputStates[i] = &components.FullState{
-			ID:       s.ID,
-			Schema:   s.Schema,
-			Data:     s.Data,
-			DataHash: s.DataHash,
+			ID:     s.ID,
+			Schema: s.Schema,
+			Data:   s.Data,
 		}
 	}
 	return nil
@@ -240,7 +250,6 @@ func (dc *domainContract) LockStates(ctx context.Context, tx *components.Private
 		txLockedStateUpserts = append(txLockedStateUpserts, &statestore.StateUpsert{
 			SchemaID: s.Schema.String(),
 			Data:     s.Data,
-			DataHash: s.DataHash,
 			Spending: true,
 		})
 	}
@@ -248,7 +257,6 @@ func (dc *domainContract) LockStates(ctx context.Context, tx *components.Private
 		txLockedStateUpserts = append(txLockedStateUpserts, &statestore.StateUpsert{
 			SchemaID: s.Schema.String(),
 			Data:     s.Data,
-			DataHash: s.DataHash,
 			Creating: true,
 		})
 	}
@@ -259,7 +267,6 @@ func (dc *domainContract) LockStates(ctx context.Context, tx *components.Private
 		readStateUpserts = append(readStateUpserts, &statestore.StateUpsert{
 			SchemaID: s.Schema.String(),
 			Data:     s.Data,
-			DataHash: s.DataHash,
 		})
 	}
 
@@ -457,10 +464,9 @@ func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateR
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInputStateNotFound, i, id)
 		}
 		states[i] = &components.FullState{
-			ID:       s.ID,
-			Schema:   s.Schema,
-			Data:     s.Data,
-			DataHash: s.DataHash,
+			ID:     s.ID,
+			Schema: s.Schema,
+			Data:   s.Data,
 		}
 	}
 	return states, nil

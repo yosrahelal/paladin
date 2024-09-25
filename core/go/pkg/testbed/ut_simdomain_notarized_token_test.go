@@ -65,7 +65,7 @@ func parseStatesFromEvent(txID tktypes.Bytes32, states []tktypes.Bytes32) []*pro
 	refs := make([]*prototk.StateUpdate, len(states))
 	for i, state := range states {
 		refs[i] = &prototk.StateUpdate{
-			DataHash:      state.String(),
+			Id:            state.String(),
 			TransactionId: txID.String(),
 		}
 	}

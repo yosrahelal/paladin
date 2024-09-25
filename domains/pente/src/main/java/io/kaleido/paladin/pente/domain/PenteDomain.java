@@ -369,11 +369,11 @@ public class PenteDomain extends DomainInstance {
                 if (config.getTransferSignature().equals(event.soliditySignature)) {
                     var transfer = mapper.convertValue(event.data, UTXOTransferJSON.class);
                     var inputs = Arrays.stream(transfer.inputs).map(id -> ToDomain.StateUpdate.newBuilder()
-                            .setDataHash(id.to0xHex())
+                            .setId(id.to0xHex())
                             .setTransactionId(transfer.txId.to0xHex())
                             .build()).toList();
                     var outputs = Arrays.stream(transfer.outputs).map(id -> ToDomain.StateUpdate.newBuilder()
-                            .setDataHash(id.to0xHex())
+                            .setId(id.to0xHex())
                             .setTransactionId(transfer.txId.to0xHex())
                             .build()).toList();
                     var result = ToDomain.HandleEventBatchResponse.newBuilder()

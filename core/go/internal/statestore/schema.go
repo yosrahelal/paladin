@@ -67,12 +67,17 @@ type idOnly struct {
 	ID tktypes.Bytes32 `gorm:"primaryKey"`
 }
 
+type ExtraIDs struct {
+	SpendID   tktypes.HexBytes
+	ConfirmID tktypes.HexBytes
+}
+
 type Schema interface {
 	Type() SchemaType
 	IDString() string
 	Signature() string
 	Persisted() *SchemaPersisted
-	ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, dataHash tktypes.HexBytes) (*StateWithLabels, error)
+	ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, extraIDs *ExtraIDs) (*StateWithLabels, error)
 	RecoverLabels(ctx context.Context, s *State) (*StateWithLabels, error)
 }
 
