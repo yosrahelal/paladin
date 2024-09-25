@@ -168,7 +168,7 @@ func (ble *pubTxManager) PostInit(pic components.AllComponents) error {
 	log.L(ctx).Debugf("Initialized enterprise transaction handler")
 	ble.balanceManager = balanceManager
 	ble.p = pic.Persistence()
-	ble.submissionWriter = newSubmissionWriter(ctx, ble.p, ble.conf)
+
 	return nil
 }
 
@@ -197,6 +197,7 @@ func (ble *pubTxManager) Start() error {
 		go ble.engineLoop()
 	}
 	ble.MarkInFlightOrchestratorsStale()
+	ble.submissionWriter = newSubmissionWriter(ctx, ble.p, ble.conf)
 	log.L(ctx).Infof("Started enterprise transaction handler")
 	return nil
 }
