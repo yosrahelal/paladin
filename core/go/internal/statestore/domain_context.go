@@ -54,6 +54,11 @@ type DomainStateInterface interface {
 	//    be on the same transaction where those states are locked.
 	FindAvailableStates(schemaID string, query *query.QueryJSON) (s []*State, err error)
 
+	// FindAvailableNullifiers is similar to FindAvailableStates, but for domains that leverage
+	// nullifiers to record spending.
+	// TODO: add query filter capability
+	FindAvailableNullifiers(schemaID string) (s []*StateNullifier, err error)
+
 	// MarkStatesSpending writes a lock record so the state is now locked for spending, and
 	// thus subsequent calls to FindAvailableStates will not return these states.
 	MarkStatesSpending(transactionID uuid.UUID, stateIDs []string) error
@@ -183,7 +188,7 @@ func (dc *domainContext) run(fn func(ctx context.Context, dsi DomainStateInterfa
 	return fn(dc.ctx, dc)
 }
 
-func (dc *domainContext) getUnFlushedSpending() ([]*idOnly, error) {
+func (dc *domainContext) getUnFlushedSpending() (spending []tktypes.HexBytes, err error) {
 	// Take lock and check flush state
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
@@ -191,29 +196,28 @@ func (dc *domainContext) getUnFlushedSpending() ([]*idOnly, error) {
 		return nil, flushErr
 	}
 
-	var spendLocks []*idOnly
 	for _, l := range dc.unFlushed.stateLocks {
 		if l.Spending {
-			spendLocks = append(spendLocks, &idOnly{ID: l.State})
+			spending = append(spending, l.State)
 		}
 	}
 	for _, s := range dc.unFlushed.stateSpends {
-		spendLocks = append(spendLocks, &idOnly{ID: s.State})
+		spending = append(spending, s.State)
 	}
 	if dc.flushing != nil {
 		for _, l := range dc.flushing.stateLocks {
 			if l.Spending {
-				spendLocks = append(spendLocks, &idOnly{ID: l.State})
+				spending = append(spending, l.State)
 			}
 		}
 		for _, s := range dc.flushing.stateSpends {
-			spendLocks = append(spendLocks, &idOnly{ID: s.State})
+			spending = append(spending, s.State)
 		}
 	}
-	return spendLocks, nil
+	return spending, nil
 }
 
-func (dc *domainContext) mergedUnFlushed(schema Schema, dbStates []*State, query *query.QueryJSON) (_ []*State, err error) {
+func (dc *domainContext) mergedUnFlushedStates(schema Schema, dbStates []*State, query *query.QueryJSON) (_ []*State, err error) {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
@@ -221,14 +225,17 @@ func (dc *domainContext) mergedUnFlushed(schema Schema, dbStates []*State, query
 	}
 
 	// Get the list of new un-flushed states, which are not already locked for spend
-	allUnFlushedStates := dc.unFlushed.states
-	allUnFlushedStateLocks := dc.unFlushed.stateLocks
-	allUnFlushedStateSpends := dc.unFlushed.stateSpends
-	if dc.flushing != nil {
-		allUnFlushedStates = append(allUnFlushedStates, dc.flushing.states...)
-		allUnFlushedStateLocks = append(allUnFlushedStateLocks, dc.flushing.stateLocks...)
-		allUnFlushedStateSpends = append(allUnFlushedStateSpends, dc.flushing.stateSpends...)
+	var allUnFlushedStates []*StateWithLabels
+	var allUnFlushedStateSpends []*StateSpend
+	var allUnFlushedStateLocks []*StateLock
+	for _, ops := range []*writeOperation{dc.unFlushed, dc.flushing} {
+		if ops != nil {
+			allUnFlushedStates = append(allUnFlushedStates, ops.states...)
+			allUnFlushedStateLocks = append(allUnFlushedStateLocks, ops.stateLocks...)
+			allUnFlushedStateSpends = append(allUnFlushedStateSpends, ops.stateSpends...)
+		}
 	}
+
 	matches := make([]*StateWithLabels, 0, len(dc.unFlushed.states))
 	for _, state := range allUnFlushedStates {
 		spent := false
@@ -280,6 +287,30 @@ func (dc *domainContext) mergedUnFlushed(schema Schema, dbStates []*State, query
 	return dbStates, nil
 }
 
+func (dc *domainContext) mergedUnFlushedNullifiers(dbNullifiers []*StateNullifier) ([]*StateNullifier, error) {
+	dc.stateLock.Lock()
+	defer dc.stateLock.Unlock()
+	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
+		return nil, flushErr
+	}
+
+	var allUnFlushedNullifiers []*StateNullifier
+	for _, ops := range []*writeOperation{dc.unFlushed, dc.flushing} {
+		if ops != nil {
+			allUnFlushedNullifiers = append(allUnFlushedNullifiers, ops.stateNullifiers...)
+		}
+	}
+
+	if len(allUnFlushedNullifiers) > 0 {
+		fullList := make([]*StateNullifier, len(dbNullifiers), len(dbNullifiers)+len(allUnFlushedNullifiers))
+		copy(fullList, dbNullifiers)
+		fullList = append(fullList, allUnFlushedNullifiers...)
+		return fullList, nil
+	}
+
+	return dbNullifiers, nil
+}
+
 func (dc *domainContext) mergeInMemoryMatches(schema Schema, states []*State, extras []*StateWithLabels, query *query.QueryJSON) (_ []*State, err error) {
 
 	// Reconstitute the labels for all the loaded states into the front of an aggregate list
@@ -323,20 +354,37 @@ func (dc *domainContext) mergeInMemoryMatches(schema Schema, states []*State, ex
 
 func (dc *domainContext) FindAvailableStates(schemaID string, query *query.QueryJSON) (s []*State, err error) {
 
-	// Build a list of excluded states
-	excluded, err := dc.getUnFlushedSpending()
+	// Build a list of spending states
+	spending, err := dc.getUnFlushedSpending()
 	if err != nil {
 		return nil, err
 	}
 
 	// Run the query against the DB
-	schema, states, err := dc.ss.findStates(dc.ctx, dc.domainName, dc.contractAddress, schemaID, query, StateStatusAvailable, excluded...)
+	schema, states, err := dc.ss.findStates(dc.ctx, dc.domainName, dc.contractAddress, schemaID, query, StateStatusAvailable, spending...)
 	if err != nil {
 		return nil, err
 	}
 
 	// Merge in un-flushed states to results
-	return dc.mergedUnFlushed(schema, states, query)
+	return dc.mergedUnFlushedStates(schema, states, query)
+}
+
+func (dc *domainContext) FindAvailableNullifiers(schemaID string) (s []*StateNullifier, err error) {
+
+	spending, err := dc.getUnFlushedSpending()
+	if err != nil {
+		return nil, err
+	}
+
+	// Run the query against the DB
+	_, states, err := dc.ss.findAvailableNullifiers(dc.ctx, dc.domainName, dc.contractAddress, schemaID, spending...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Merge in un-flushed states to results
+	return dc.mergedUnFlushedNullifiers(states)
 }
 
 func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*StateUpsert) (states []*State, err error) {

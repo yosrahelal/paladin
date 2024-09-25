@@ -335,6 +335,80 @@ func TestStateContextMintSpendMint(t *testing.T) {
 
 }
 
+func TestStateContextMintSpendWithNullifier(t *testing.T) {
+
+	_, ss, done := newDBTestStateStore(t)
+	defer done()
+
+	transactionID := uuid.New()
+	var schemaID string
+
+	schemas, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
+	require.NoError(t, err)
+	assert.Len(t, schemas, 1)
+	schemaID = schemas[0].IDString()
+	stateID := tktypes.HexBytes(tktypes.RandBytes(32))
+	nullifier := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	contractAddress := tktypes.RandAddress()
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
+
+		tx1states, err := dsi.UpsertStates(&transactionID, []*StateUpsert{
+			{ID: stateID, SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
+		})
+		require.NoError(t, err)
+		assert.Len(t, tx1states, 1)
+
+		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{}`))
+		require.NoError(t, err)
+		assert.Len(t, states, 1)
+
+		nullifiers, err := dsi.FindAvailableNullifiers(schemaID)
+		require.NoError(t, err)
+		assert.Len(t, nullifiers, 0)
+
+		err = dsi.UpsertNullifiers([]*StateNullifier{
+			{State: stateID, Nullifier: nullifier},
+		})
+		require.NoError(t, err)
+
+		nullifiers, err = dsi.FindAvailableNullifiers(schemaID)
+		require.NoError(t, err)
+		assert.Len(t, nullifiers, 1)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
+
+		nullifiers, err := dsi.FindAvailableNullifiers(schemaID)
+		require.NoError(t, err)
+		assert.Len(t, nullifiers, 1)
+
+		err = dsi.MarkStatesSpent(transactionID, []string{nullifier.String()})
+		assert.NoError(t, err)
+
+		states, err := dsi.FindAvailableNullifiers(schemaID)
+		require.NoError(t, err)
+		assert.Len(t, states, 0)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
+
+		states, err := dsi.FindAvailableNullifiers(schemaID)
+		require.NoError(t, err)
+		assert.Len(t, states, 0)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+}
+
 func TestDSILatch(t *testing.T) {
 
 	_, ss, done := newDBTestStateStore(t)
@@ -386,7 +460,7 @@ func TestDSIFlushErrorCapture(t *testing.T) {
 		fakeFlushError(dc)
 		schema, err := ss.getSchemaByID(ctx, "domain1", tktypes.MustParseBytes32(schemas[0].IDString()), true)
 		require.NoError(t, err)
-		_, err = dc.mergedUnFlushed(schema, nil, nil)
+		_, err = dc.mergedUnFlushedStates(schema, nil, nil)
 		assert.Regexp(t, "pop", err)
 
 		fakeFlushError(dc)
@@ -453,7 +527,7 @@ func TestDSIMergedUnFlushedWhileFlushing(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, spending, 1)
 
-	states, err := dc.mergedUnFlushed(schema, []*State{}, &query.QueryJSON{
+	states, err := dc.mergedUnFlushedStates(schema, []*State{}, &query.QueryJSON{
 		Sort: []string{".created"},
 	})
 	require.NoError(t, err)
@@ -494,7 +568,7 @@ func TestDSIMergedUnFlushedSpend(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, spending, 2)
 
-	states, err := dc.mergedUnFlushed(schema, []*State{}, &query.QueryJSON{})
+	states, err := dc.mergedUnFlushedStates(schema, []*State{}, &query.QueryJSON{})
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 
@@ -533,7 +607,7 @@ func TestDSIMergedUnFlushedWhileFlushingDedup(t *testing.T) {
 	inTheFlush := dc.flushing.states[0]
 	dc.stateLock.Unlock()
 
-	states, err := dc.mergedUnFlushed(schema, []*State{
+	states, err := dc.mergedUnFlushedStates(schema, []*State{
 		inTheFlush.State,
 	}, &query.QueryJSON{
 		Sort: []string{".created"},
@@ -563,7 +637,7 @@ func TestDSIMergedUnFlushedEvalError(t *testing.T) {
 		states: []*StateWithLabels{s1},
 	}
 
-	_, err = dc.mergedUnFlushed(schema, []*State{}, toQuery(t,
+	_, err = dc.mergedUnFlushedStates(schema, []*State{}, toQuery(t,
 		`{"eq": [{ "field": "wrong", "value": "any" }]}`,
 	))
 	assert.Regexp(t, "PD010700", err)
