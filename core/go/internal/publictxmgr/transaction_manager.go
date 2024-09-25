@@ -229,8 +229,8 @@ type preparedTransactionBatch struct {
 // This is expected to be a lightweight operation involving not much more than writing to the database, as the heavy lifting should have been done in PrepareSubmission
 // The database transaction will be coordinated by the caller
 func (pb *preparedTransactionBatch) Submit(ctx context.Context, dbTX *gorm.DB) (err error) {
-	persistedTransactions := make([]*persistedPubTx, len(pb.accepted))
-	publicTxBindings := make([]*components.PublicTxnBinding, 0, len(pb.accepted))
+	persistedTransactions := make([]*DBPublicTxn, len(pb.accepted))
+	publicTxBindings := make([]*DBPublicTxnBinding, 0, len(pb.accepted))
 	for i, accepted := range pb.accepted {
 		ptx := accepted.(*preparedTransaction)
 		persistedTransactions[i], err = pb.ble.finalizeNonceForPersistedTX(ctx, ptx)
@@ -238,7 +238,7 @@ func (pb *preparedTransactionBatch) Submit(ctx context.Context, dbTX *gorm.DB) (
 			return err
 		}
 		for _, bnd := range ptx.bindings {
-			publicTxBindings = append(publicTxBindings, &components.PublicTxnBinding{
+			publicTxBindings = append(publicTxBindings, &DBPublicTxnBinding{
 				Transaction:     bnd.TransactionID,
 				TransactionType: bnd.TransactionType,
 				SignerNonce:     persistedTransactions[i].SignerNonce,
@@ -466,7 +466,7 @@ func (ble *pubTxManager) prepareSubmission(ctx context.Context, batchSoFar []*pr
 
 }
 
-func (ble *pubTxManager) finalizeNonceForPersistedTX(ctx context.Context, ptx *preparedTransaction) (*persistedPubTx, error) {
+func (ble *pubTxManager) finalizeNonceForPersistedTX(ctx context.Context, ptx *preparedTransaction) (*DBPublicTxn, error) {
 	nonce, err := ptx.nsi.AssignNextNonce(ctx)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to assign nonce to public transaction %+v: %s", ptx, err)
@@ -476,7 +476,7 @@ func (ble *pubTxManager) finalizeNonceForPersistedTX(ctx context.Context, ptx *p
 	tx.Nonce = tktypes.HexUint64(nonce)
 	log.L(ctx).Infof("Creating a new public transaction from=%s nonce=%d (%s)", tx.From, tx.Nonce /* number */, tx.Nonce /* hex */)
 	log.L(ctx).Tracef("payload: %+v", tx)
-	return &persistedPubTx{
+	return &DBPublicTxn{
 		SignerNonce: fmt.Sprintf("%s:%d", tx.From, tx.Nonce), // having a single key rather than compound key helps us simplify cross-table correlation, particularly for batch lookup
 		From:        tx.From,
 		Nonce:       tx.Nonce.Uint64(),
@@ -494,18 +494,47 @@ func recoverGasPriceOptions(gpoJSON tktypes.RawJSON) (ptgp ptxapi.PublicTxGasPri
 	return
 }
 
-func (ble *pubTxManager) QueryTransactions(ctx context.Context, dbTX *gorm.DB, scopeToTxn *uuid.UUID, jq *query.QueryJSON) ([]*ptxapi.PublicTx, error) {
+// Component interface: query public transactions, outside of the scope of a binding to a parent Paladin transaction.
+// Returns each public transaction a maximum of once
+func (ble *pubTxManager) QueryPublicTxWithBindings(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) {
+	return ble.queryPublicTxWithBinding(ctx, dbTX, nil, jq)
+}
+
+// Component interface: query the associated public transactions, for a set of parent Paladin transactions
+// Can return the same public transaction multiple times, if bound to multiple private transactions.
+// The results are grouped, so the caller can be assured to have exactly one entry in the map (even if an empty array) per supplied TX ID
+func (ble *pubTxManager) QueryPublicTxForTransactions(ctx context.Context, dbTX *gorm.DB, boundToTxns []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error) {
+	if boundToTxns == nil {
+		boundToTxns = []uuid.UUID{}
+	}
+	boundPublicTxns, err := ble.queryPublicTxWithBinding(ctx, dbTX, boundToTxns, jq)
+	if err != nil {
+		return nil, err
+	}
+	results := make(map[uuid.UUID][]*ptxapi.PublicTx)
+	for _, id := range boundToTxns {
+		results[id] = []*ptxapi.PublicTx{}
+		for _, pubTX := range boundPublicTxns {
+			if pubTX.Transaction == id {
+				results[id] = append(results[id], pubTX.PublicTx)
+			}
+		}
+	}
+	return results, nil
+}
+
+func (ble *pubTxManager) queryPublicTxWithBinding(ctx context.Context, dbTX *gorm.DB, scopeToTxns []uuid.UUID, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) {
 	q := dbTX.Table("public_txns").
 		WithContext(ctx).
 		Joins("Completed")
 	if jq != nil {
 		q = filters.BuildGORM(ctx, jq, q, components.PublicTxFilterFields)
 	}
-	ptxs, err := ble.runTransactionQuery(ctx, dbTX, scopeToTxn, q)
+	ptxs, err := ble.runTransactionQuery(ctx, dbTX, true /* one record per TX binding */, scopeToTxns, q)
 	if err != nil {
 		return nil, err
 	}
-	results := make([]*ptxapi.PublicTx, len(ptxs))
+	results := make([]*ptxapi.PublicTxWithBinding, len(ptxs))
 	for iTx, ptx := range ptxs {
 		tx := mapPersistedTransaction(ptx)
 		tx.Submissions = make([]*ptxapi.PublicTxSubmissionData, len(ptx.Submissions))
@@ -513,7 +542,16 @@ func (ble *pubTxManager) QueryTransactions(ctx context.Context, dbTX *gorm.DB, s
 			tx.Submissions[iSub] = mapPersistedSubmissionData(pSub)
 		}
 		tx.Activity = ble.getActivityRecords(ptx.SignerNonce)
-		results[iTx] = tx
+		results[iTx] = &ptxapi.PublicTxWithBinding{
+			PublicTx: tx,
+		}
+		// Binding will be null for autofueling transactions
+		if ptx.Binding != nil {
+			results[iTx].PublicTxBinding = ptxapi.PublicTxBinding{
+				Transaction:     ptx.Binding.Transaction,
+				TransactionType: ptx.Binding.TransactionType,
+			}
+		}
 	}
 	return results, nil
 }
@@ -521,7 +559,7 @@ func (ble *pubTxManager) QueryTransactions(ctx context.Context, dbTX *gorm.DB, s
 func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, from tktypes.EthAddress, nonce uint64) (bool, error) {
 	// Runs a DB query to see if the transaction is marked completed (for good or bad)
 	// A non existent transaction results in false
-	var ptxs []*persistedPubTx
+	var ptxs []*DBPublicTxn
 	err := ble.p.DB().
 		WithContext(ctx).
 		Where("from = ?", from).
@@ -543,7 +581,7 @@ func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, from tkt
 
 // the return does NOT include submissions (only the top level TX data)
 func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourceAddress tktypes.EthAddress, destinationAddress tktypes.EthAddress) (*ptxapi.PublicTx, error) {
-	var ptxs []*persistedPubTx
+	var ptxs []*DBPublicTxn
 	err := ble.p.DB().
 		WithContext(ctx).
 		Where("from = ?", sourceAddress).
@@ -564,9 +602,14 @@ func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourc
 	return nil, nil
 }
 
-func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB, scopeToTxn *uuid.UUID, q *gorm.DB) (ptxs []*persistedPubTx, err error) {
-	if scopeToTxn != nil {
-		q = q.Joins("Binding").Where(`"Binding"."transaction" = ?`, *scopeToTxn)
+func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB, bindings bool, scopeToTxns []uuid.UUID, q *gorm.DB) (ptxs []*DBPublicTxn, err error) {
+	if bindings {
+		// We'll get one row per binding
+		q = q.Joins("Binding")
+	}
+	if scopeToTxns != nil {
+		// which can be scoped to a set of transactions
+		q = q.Where(`"Binding"."transaction" IN (?)`, scopeToTxns)
 	}
 	err = q.Find(&ptxs).Error
 	if err != nil {
@@ -592,7 +635,7 @@ func (ble *pubTxManager) runTransactionQuery(ctx context.Context, dbTX *gorm.DB,
 	return ptxs, nil
 }
 
-func mapPersistedTransaction(ptx *persistedPubTx) *ptxapi.PublicTx {
+func mapPersistedTransaction(ptx *DBPublicTxn) *ptxapi.PublicTx {
 	tx := &ptxapi.PublicTx{
 		From:    ptx.From,
 		Nonce:   tktypes.HexUint64(ptx.Nonce),
@@ -619,7 +662,7 @@ func mapPersistedTransaction(ptx *persistedPubTx) *ptxapi.PublicTx {
 	return tx
 }
 
-func mapPersistedSubmissionData(pSub *publicSubmission) *ptxapi.PublicTxSubmissionData {
+func mapPersistedSubmissionData(pSub *DBPubTxnSubmission) *ptxapi.PublicTxSubmissionData {
 	return &ptxapi.PublicTxSubmissionData{
 		Time:               pSub.Created,
 		TransactionHash:    tktypes.Bytes32(pSub.TransactionHash),
@@ -627,8 +670,8 @@ func mapPersistedSubmissionData(pSub *publicSubmission) *ptxapi.PublicTxSubmissi
 	}
 }
 
-func (ble *pubTxManager) getTransactionSubmissions(ctx context.Context, dbTX *gorm.DB, signerNonceRefs []string) ([]*publicSubmission, error) {
-	var ptxs []*publicSubmission
+func (ble *pubTxManager) getTransactionSubmissions(ctx context.Context, dbTX *gorm.DB, signerNonceRefs []string) ([]*DBPubTxnSubmission, error) {
+	var ptxs []*DBPubTxnSubmission
 	err := dbTX.
 		WithContext(ctx).
 		Table("public_submissions").
@@ -747,7 +790,7 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 	// - the result to return so the Paladin tx manager knows the linkage
 	// - the insert we will do in this DB transaction of all the completion records
 	results := make([]*components.PublicTxMatch, len(lookups))
-	completions := make([]*publicCompletion, len(lookups))
+	completions := make([]*DBPublicTxnCompletion, len(lookups))
 	for i, match := range lookups {
 		txi := txiByHash[match.Submission.TransactionHash]
 		results[i] = &components.PublicTxMatch{
@@ -757,7 +800,7 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 			},
 			IndexedTransactionNotify: txi,
 		}
-		completions[i] = &publicCompletion{
+		completions[i] = &DBPublicTxnCompletion{
 			SignerNonce:     match.Submission.SignerNonce,
 			TransactionHash: match.Submission.TransactionHash,
 			Success:         txi.Result.V() == blockindexer.TXResult_SUCCESS,
