@@ -15,7 +15,7 @@
 
 syntax = "proto3";
 
-package github.com.kaleido_io.paladin.toolkit;
+package io.kaleido.paladin.toolkit;
 
 // **CONFIGURE** happens once when the domain is loaded into Paladin
 message ConfigureDomainRequest {

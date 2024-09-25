@@ -15,7 +15,7 @@
 
 syntax = "proto3";
 
-package github.com.kaleido_io.paladin.kata;
+package io.kaleido.paladin.kata;
 option go_package = "pkg/proto";
 
 message ResolveKeyRequest {
