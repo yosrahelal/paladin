@@ -15,7 +15,7 @@
 
 syntax = "proto3";
 
-package github.com.kaleido_io.paladin.kata.zeto;
+package io.kaleido.paladin.kata.zeto;
 option go_package = "pkg/proto";
 
 message ProvingRequest {

@@ -15,7 +15,7 @@
 
 syntax = "proto3";
 
-package github.com.kaleido_io.paladin.kata.transaction;
+package io.kaleido.paladin.kata.transaction;
 option go_package = "pkg/proto/transaction";
 
 message SubmitTransactionRequest {
