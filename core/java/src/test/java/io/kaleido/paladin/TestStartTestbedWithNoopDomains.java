@@ -15,7 +15,7 @@
 
 package io.kaleido.paladin;
 
-import io.kaleido.paladin.toolkit.Testbed;
+import io.kaleido.paladin.testbed.Testbed;
 import io.kaleido.paladin.toolkit.JsonHex;
 import org.junit.jupiter.api.Test;
 

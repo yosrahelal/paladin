@@ -15,7 +15,7 @@
 
 syntax = "proto3";
 
-package github.com.kaleido_io.paladin.toolkit;
+package io.kaleido.paladin.toolkit;
 
 message ConfigureTransportRequest {
   string name = 1; // The name

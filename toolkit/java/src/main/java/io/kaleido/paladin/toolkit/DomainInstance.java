@@ -15,9 +15,9 @@
 
 package io.kaleido.paladin.toolkit;
 
-import github.com.kaleido_io.paladin.toolkit.FromDomain;
-import github.com.kaleido_io.paladin.toolkit.Service;
-import github.com.kaleido_io.paladin.toolkit.ToDomain;
+import io.kaleido.paladin.toolkit.FromDomain;
+import io.kaleido.paladin.toolkit.Service;
+import io.kaleido.paladin.toolkit.ToDomain;
 import io.grpc.stub.StreamObserver;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
