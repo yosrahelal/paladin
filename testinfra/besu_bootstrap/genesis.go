@@ -42,9 +42,11 @@ type GenesisConfig struct {
 }
 
 type QBFTConfig struct {
-	BlockPeriodSeconds    int `json:"blockperiodseconds"`
-	EpochLength           int `json:"epochlength"`
-	RequestTimeoutSeconds int `json:"requesttimeoutseconds"`
+	BlockPeriodSeconds      int `json:"blockperiodseconds"`
+	EpochLength             int `json:"epochlength"`
+	RequestTimeoutSeconds   int `json:"requesttimeoutseconds"`
+	EmptyBlockPeriodSeconds int `json:"xemptyblockperiodseconds"`
+	BlockPeriodMilliseconds int `json:"xblockperiodmilliseconds"`
 }
 
 type AllocEntry struct {

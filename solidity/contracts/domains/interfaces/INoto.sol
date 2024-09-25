@@ -34,14 +34,14 @@ interface INoto {
         bytes memory data
     ) external;
 
-    function approve(
+    function approveTransfer(
         address delegate,
         bytes32 txhash,
         bytes memory signature,
         bytes memory data
     ) external;
 
-    function approvedTransfer(
+    function transferWithApproval(
         bytes32[] memory inputs,
         bytes32[] memory outputs,
         bytes memory signature,
