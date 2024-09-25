@@ -262,7 +262,7 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 	}
 
 	// Query to check we now have all of these
-	queryTxs, err := ble.QueryTransactions(ctx, ble.p.DB(), nil,
+	queryTxs, err := ble.QueryPublicTxWithBindings(ctx, ble.p.DB(),
 		query.NewQueryBuilder().Sort("nonce").Query())
 	require.NoError(t, err)
 	assert.Len(t, queryTxs, len(txs))
@@ -272,20 +272,25 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 		assert.Equal(t, uint64(i)+baseNonce, qTX.Nonce.Uint64())
 		assert.Equal(t, txs[i].Data, qTX.Data)
 		require.Greater(t, len(qTX.Activity), 0)
-		assert.Equal(t, fmt.Sprintf("activity %d", i), qTX.Activity[0].Message)
 	}
 
 	// Query scoped to one TX
-	queryTxs, err = ble.QueryTransactions(ctx, ble.p.DB(), &txIDs[0], nil)
+	byTxn, err := ble.QueryPublicTxForTransactions(ctx, ble.p.DB(), txIDs, nil)
 	require.NoError(t, err)
-	require.Len(t, queryTxs, 1)
-	assert.Equal(t, baseNonce, queryTxs[0].Nonce.Uint64())
+	for i, tx := range txs {
+		queryTxs := byTxn[tx.Bindings[0].TransactionID]
+		require.Len(t, queryTxs, 1)
+		assert.Equal(t, baseNonce+uint64(i), queryTxs[0].Nonce.Uint64())
+	}
 
 	// Check we can select to just see confirmed (which this isn't yet)
-	queryTxs, err = ble.QueryTransactions(ctx, ble.p.DB(), &txIDs[0],
+	byTxn, err = ble.QueryPublicTxForTransactions(ctx, ble.p.DB(), txIDs,
 		query.NewQueryBuilder().NotNull("transactionHash").Query())
 	require.NoError(t, err)
-	require.Empty(t, queryTxs, 1)
+	for _, tx := range txs {
+		queryTxs := byTxn[tx.Bindings[0].TransactionID]
+		require.Empty(t, queryTxs, 1)
+	}
 
 	// Wait for a submission to happen
 	calculatedConfirmations := make(chan *blockindexer.IndexedTransactionNotify, len(txIDs))

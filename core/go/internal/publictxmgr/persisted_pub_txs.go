@@ -39,7 +39,7 @@ type persistedPubTx struct {
 	Completed       *publicCompletion   `gorm:"foreignKey:signer_nonce;references:signer_nonce"` // excluded from processing because it's done
 	Submissions     []*publicSubmission `gorm:"-"`                                               // we do the aggregation, not GORM
 	// Binding is used only on queries by transaction (GORM doesn't seem to allow us to define a separate struct for this)
-	Binding *components.PublicTxnBinding `gorm:"foreignKey:signer_nonce;references:signer_nonce;"`
+	Binding *components.PublicTxnDBBinding `gorm:"foreignKey:signer_nonce;references:signer_nonce;"`
 }
 
 type publicSubmission struct {
@@ -63,8 +63,8 @@ func (s *publicSubmission) WriteKey() string {
 }
 
 type transactionsMatchingSubmission struct {
-	components.PublicTxnBinding `gorm:"embedded"`
-	Submission                  *publicSubmission `gorm:"foreignKey:signer_nonce;references:signer_nonce;"`
+	components.PublicTxnDBBinding `gorm:"embedded"`
+	Submission                    *publicSubmission `gorm:"foreignKey:signer_nonce;references:signer_nonce;"`
 }
 
 type txFromOnly struct {
