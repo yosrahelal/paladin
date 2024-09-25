@@ -79,6 +79,11 @@ type DomainStateInterface interface {
 	// locked for existence to avoid other transactions spending them.
 	UpsertStates(transactionID *uuid.UUID, states []*StateUpsert) (s []*State, err error)
 
+	// UpsertNullifiers creates nullifier records associated with states.
+	// Nullifiers are an alternate state identifier (separate from the state ID) that can be used
+	// when recording spent states.
+	UpsertNullifiers(nullifiers []*StateNullifier) error
+
 	// ResetTransaction queues up removal of all lock records for a given transaction
 	// Note that the private data of the states themselves are not removed
 	ResetTransaction(transactionID uuid.UUID) error
@@ -397,6 +402,18 @@ func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*
 	}
 
 	return states, nil
+}
+
+func (dc *domainContext) UpsertNullifiers(nullifiers []*StateNullifier) error {
+	// Take lock and check flush state
+	dc.stateLock.Lock()
+	defer dc.stateLock.Unlock()
+	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
+		return flushErr
+	}
+
+	dc.unFlushed.stateNullifiers = append(dc.unFlushed.stateNullifiers, nullifiers...)
+	return nil
 }
 
 func (dc *domainContext) lockStates(transactionID uuid.UUID, stateIDStrings []string, setLockState func(*StateLock)) (err error) {

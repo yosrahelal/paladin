@@ -195,6 +195,7 @@ message NewState {
   string state_data_json = 2; // The data for this state that will be recorded by Paladin, and uniquely identified by Paladin using a hash (which might be additional to any hashing done in a unique way by the domain)
   repeated string distibution_list = 3; // A list of Paladin recipients that should receive a copy of this state in parallel to transaction submission, once it has been successfully prepared
   optional string id = 4; // The hash id to uniquely identify this state (a default hashing algorithm will be used by Paladin if omitted)
+  optional string nullifier = 5; // The nullifier id that can be used to spend this state (if different from the state id)
 }
 
 message NewLocalState {

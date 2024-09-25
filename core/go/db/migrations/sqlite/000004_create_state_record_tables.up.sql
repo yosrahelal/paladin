@@ -20,3 +20,10 @@ CREATE TABLE state_locks (
     PRIMARY KEY ("state")
 );
 CREATE INDEX state_lock_transaction ON state_locks("transaction");
+
+CREATE TABLE state_nullifiers (
+    "nullifier"   VARCHAR NOT NULL,
+    "state"       VARCHAR NOT NULL,
+    PRIMARY KEY ("nullifier")
+);
+CREATE UNIQUE INDEX state_nullifiers_state ON state_nullifiers("state");

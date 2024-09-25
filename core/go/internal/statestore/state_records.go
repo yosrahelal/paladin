@@ -41,8 +41,20 @@ type StateSpend struct {
 // spending a previously confirmed state, or an optimistic record of creating
 // (and maybe later spending) a state that is yet to be confirmed.
 type StateLock struct {
-	State       tktypes.HexBytes `json:"-"                gorm:"primaryKey"`
+	State       tktypes.HexBytes `json:"-"            gorm:"primaryKey"`
 	Transaction uuid.UUID        `json:"transaction"`
 	Creating    bool             `json:"creating"`
 	Spending    bool             `json:"spending"`
+}
+
+// State nullifiers are used when a domain chooses to use a separate identifier
+// specifically for spending states (i.e. not the state ID).
+// Domains that choose to leverage this architecture will create nullifier
+// entries for all unspent states, and create a StateSpend entry for the
+// nullifier (not for the state) when it is spent.
+// Immutable once written
+type StateNullifier struct {
+	Nullifier tktypes.HexBytes `gorm:"primaryKey"`
+	State     tktypes.HexBytes
+	Spent     *StateSpend `gorm:"foreignKey:state;references:nullifier;"`
 }

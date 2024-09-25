@@ -41,6 +41,7 @@ type State struct {
 	Confirmed       *StateConfirm      `json:"confirmed,omitempty" gorm:"foreignKey:state;references:id;"`
 	Spent           *StateSpend        `json:"spent,omitempty"     gorm:"foreignKey:state;references:id;"`
 	Locked          *StateLock         `json:"locked,omitempty"    gorm:"foreignKey:state;references:id;"`
+	Nullifier       *StateNullifier    `json:"nullifier,omitempty" gorm:"foreignKey:state;references:id;"`
 }
 
 type StateUpsert struct {
@@ -67,11 +68,6 @@ type StateInt64Label struct {
 	State tktypes.HexBytes `gorm:"primaryKey"`
 	Label string
 	Value int64
-}
-
-type StateUpdate struct {
-	TXCreated *string
-	TXSpent   *string
 }
 
 func (s *StateWithLabels) ValueSet() filters.ValueSet {

@@ -37,6 +37,7 @@ type writeOperation struct {
 	stateConfirms          []*StateConfirm
 	stateSpends            []*StateSpend
 	stateLocks             []*StateLock
+	stateNullifiers        []*StateNullifier
 	transactionLockDeletes []uuid.UUID
 }
 
@@ -81,6 +82,7 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 	var stateConfirms []*StateConfirm
 	var stateSpends []*StateSpend
 	var stateLocks []*StateLock
+	var stateNullifiers []*StateNullifier
 	var transactionLockDeletes []uuid.UUID
 	for _, op := range values {
 		for _, s := range op.states {
@@ -97,12 +99,15 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 		if len(op.stateLocks) > 0 {
 			stateLocks = append(stateLocks, op.stateLocks...)
 		}
+		if len(op.stateNullifiers) > 0 {
+			stateNullifiers = append(stateNullifiers, op.stateNullifiers...)
+		}
 		if len(op.transactionLockDeletes) > 0 {
 			transactionLockDeletes = append(transactionLockDeletes, op.transactionLockDeletes...)
 		}
 	}
-	log.L(ctx).Debugf("Writing state batch states=%d confirms=%d spends=%d locks=%d seqLockDeletes=%d labels=%d int64Labels=%d",
-		len(states), len(stateConfirms), len(stateSpends), len(stateLocks), len(transactionLockDeletes), len(labels), len(int64Labels))
+	log.L(ctx).Debugf("Writing state batch states=%d confirms=%d spends=%d locks=%d nullifiers=%d seqLockDeletes=%d labels=%d int64Labels=%d",
+		len(states), len(stateConfirms), len(stateSpends), len(stateLocks), len(stateNullifiers), len(transactionLockDeletes), len(labels), len(int64Labels))
 
 	var err error
 	if len(states) > 0 {
@@ -169,6 +174,15 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 				}),
 			}).
 			Create(stateLocks).
+			Error
+	}
+	if err == nil && len(stateNullifiers) > 0 {
+		err = tx.
+			Table("state_nullifiers").
+			Clauses(clause.OnConflict{
+				DoNothing: true, // immutable
+			}).
+			Create(stateNullifiers).
 			Error
 	}
 	if err == nil && len(transactionLockDeletes) > 0 {
