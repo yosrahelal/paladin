@@ -23,9 +23,9 @@ func (n *Noto) GetHandler(method string) types.DomainHandler {
 	switch method {
 	case "mint":
 		return &mintHandler{noto: n}
-	case "transfer", "approvedTransfer":
+	case "transfer", "transferWithApproval":
 		return &transferHandler{noto: n}
-	case "approve":
+	case "approveTransfer":
 		return &approveHandler{noto: n}
 	default:
 		return nil

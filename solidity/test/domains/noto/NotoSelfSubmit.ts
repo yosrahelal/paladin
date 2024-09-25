@@ -52,7 +52,7 @@ describe("NotoSelfSubmit", function () {
     expect(deployEvent).to.exist;
     const noto = Noto.attach(deployEvent?.args.instance ?? "");
 
-    return { noto, notary, other };
+    return { noto: noto as NotoSelfSubmit, notary, other };
   }
 
   async function doTransfer(

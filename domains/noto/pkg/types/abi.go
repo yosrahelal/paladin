@@ -38,7 +38,7 @@ var NotoABI = abi.ABI{
 		},
 	},
 	{
-		Name: "approvedTransfer",
+		Name: "transferWithApproval",
 		Type: abi.Function,
 		Inputs: abi.ParameterArray{
 			{Name: "to", Type: "string"},
@@ -46,11 +46,11 @@ var NotoABI = abi.ABI{
 		},
 	},
 	{
-		Name: "approve",
+		Name: "approveTransfer",
 		Type: abi.Function,
 		Inputs: abi.ParameterArray{
 			{Name: "delegate", Type: "address"},
-			{Name: "call", Type: "bytes"}, // assumed to be an encoded "approvedTransfer"
+			{Name: "call", Type: "bytes"}, // assumed to be an encoded "transferWithApproval"
 		},
 	},
 }

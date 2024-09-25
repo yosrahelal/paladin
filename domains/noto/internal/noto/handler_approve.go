@@ -34,7 +34,7 @@ type approveHandler struct {
 	noto *Noto
 }
 
-type ApprovedTransferParams struct {
+type TransferWithApprovalParams struct {
 	Inputs  []interface{}             `json:"inputs"`
 	Outputs []interface{}             `json:"outputs"`
 	Data    ethtypes.HexBytes0xPrefix `json:"data"`
@@ -63,16 +63,16 @@ func (h *approveHandler) Init(ctx context.Context, tx *types.ParsedTransaction, 
 	}, nil
 }
 
-func (h *approveHandler) decodeTransferCall(ctx context.Context, encodedCall []byte) (*ApprovedTransferParams, error) {
-	approvedTransfer := h.noto.contractABI.Functions()["approvedTransfer"]
-	if approvedTransfer == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, "approvedTransfer")
+func (h *approveHandler) decodeTransferCall(ctx context.Context, encodedCall []byte) (*TransferWithApprovalParams, error) {
+	transferWithApproval := h.noto.contractABI.Functions()["transferWithApproval"]
+	if transferWithApproval == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, "transferWithApproval")
 	}
-	paramsJSON, err := decodeParams(ctx, approvedTransfer, encodedCall)
+	paramsJSON, err := decodeParams(ctx, transferWithApproval, encodedCall)
 	if err != nil {
 		return nil, err
 	}
-	var params ApprovedTransferParams
+	var params TransferWithApprovalParams
 	err = json.Unmarshal(paramsJSON, &params)
 	return &params, err
 }
@@ -184,7 +184,7 @@ func (h *approveHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 	if err != nil {
 		return nil, err
 	}
-	functionJSON, err := json.Marshal(h.noto.contractABI.Functions()["approve"])
+	functionJSON, err := json.Marshal(h.noto.contractABI.Functions()["approveTransfer"])
 	if err != nil {
 		return nil, err
 	}
