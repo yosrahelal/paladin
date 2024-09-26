@@ -1,10 +1,16 @@
 nodeName: node1
 db:
-  type: sqlite
-  sqlite:
-    uri: ':memory:'
+  # type: sqlite
+  # sqlite:
+  #   uri: ':memory:'
+  #   autoMigrate: true
+  #   migrationsDir: '../../../core/go/db/migrations/sqlite'
+  type: postgres
+  postgres:
+    uri: 'postgres://postgres:my-secret@localhost:5432/postgres?sslmode=disable'
     autoMigrate: true
-    migrationsDir: '../../../core/go/db/migrations/sqlite'
+    migrationsDir: '../../../core/go/db/migrations/postgres'
+    debugQueries: true
 rpcServer:
   http:
     port: 0

@@ -123,6 +123,8 @@ github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSo
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240923130959-544659ea388d h1:Pz8IohClyAvNzlqh6C7ey2rRU7Ks270MIgcXNkCnkvE=
 github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240923130959-544659ea388d/go.mod h1:WyUa1UIizlcBQnTEMK5tWWskFz2glSTm7S6HaJTarps=
+github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240924145436-713dcce49c5d h1:o1M0ZGs7fJ15405THK47agvk2vtXq1owihbG6ezuc3k=
+github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240924145436-713dcce49c5d/go.mod h1:WyUa1UIizlcBQnTEMK5tWWskFz2glSTm7S6HaJTarps=
 github.com/hyperledger/firefly-common v1.4.11 h1:WKv2hQuNpS7yP51THxzpzrqU3jkln23C9vq5iminzBk=
 github.com/hyperledger/firefly-common v1.4.11/go.mod h1:E7w/RxNtVnX52WXLQW9f2xVAgZnW70voZeE9sZrx/q0=
 github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1 h1:5t25yxdZoscLY/6MPFXXHUZmN0YfiqMT7uROLXNqBQo=
@@ -431,6 +433,7 @@ gorm.io/driver/postgres v1.5.9/go.mod h1:DX3GReXH+3FPWGrrgffdvCk3DQ1dwDPdmbenSkw
 gorm.io/driver/sqlite v1.5.6 h1:fO/X46qn5NUEEOZtnjJRWRzZMe8nqJiQ9E+0hi+hKQE=
 gorm.io/driver/sqlite v1.5.6/go.mod h1:U+J8craQU6Fzkcvu8oLeAQmi50TkwPEhHDEjQZXDah4=
 gorm.io/gorm v1.25.12 h1:I0u8i2hWQItBq1WfE0o2+WuL9+8L21K9e2HHSTE/0f8=
+gorm.io/gorm v1.25.12/go.mod h1:xh7N7RHfYlNc5EmcI/El95gXusucDrQnHXe0+CgWcLQ=
 gotest.tools v2.2.0+incompatible h1:VsBPFP1AI068pPrMxtb/S8Zkgf9xEmTLJjfM+P5UIEo=
 gotest.tools v2.2.0+incompatible/go.mod h1:DsYFclhRJ6vuDpmuTbkuFWG+y2sxOXAzmJt81HFBacw=
 gotest.tools/v3 v3.1.0 h1:rVV8Tcg/8jHUkPUorwjaMTtemIMVXfIPKiOqnhEhakk=

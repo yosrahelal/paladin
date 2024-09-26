@@ -220,6 +220,7 @@ func (d *domain) Configuration() *prototk.DomainConfig {
 
 // Domain callback to query the state store
 func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error) {
+	fmt.Printf("[domain] FindAvailableStates - 1\n")
 	if err := d.checkInit(ctx); err != nil {
 		return nil, err
 	}
@@ -229,10 +230,12 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidQueryJSON)
 	}
+	fmt.Printf("[domain] FindAvailableStates - 2\n")
 	addr, err := tktypes.ParseEthAddress(req.ContractAddress)
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainErrorParsingAddress)
 	}
+	fmt.Printf("[domain] FindAvailableStates - 3\n")
 
 	var states []*statestore.State
 	err = d.dm.stateStore.RunInDomainContext(d.name, *addr, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
@@ -242,6 +245,7 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("[domain] FindAvailableStates - 4\n")
 
 	pbStates := make([]*prototk.StoredState, len(states))
 	for i, s := range states {
@@ -448,6 +452,7 @@ func (d *domain) close() {
 
 func (d *domain) handleEventBatch(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
 	eventsByAddress := make(map[tktypes.EthAddress][]*blockindexer.EventWithData)
+	configBytesByAddress := make(map[tktypes.EthAddress]tktypes.HexBytes)
 	for _, ev := range batch.Events {
 		// Note: hits will be cached, but events from unrecognized contracts will always
 		// result in a cache miss and a database lookup
@@ -458,12 +463,13 @@ func (d *domain) handleEventBatch(ctx context.Context, tx *gorm.DB, batch *block
 		}
 		if psc != nil && psc.Domain().Name() == d.name {
 			eventsByAddress[ev.Address] = append(eventsByAddress[ev.Address], ev)
+			configBytesByAddress[ev.Address] = psc.info.ConfigBytes
 		}
 	}
 
 	transactionsComplete := make([]uuid.UUID, 0, len(batch.Events))
 	for addr, events := range eventsByAddress {
-		res, err := d.handleEventBatchForContract(ctx, batch.BatchID, addr, events)
+		res, err := d.handleEventBatchForContract(ctx, batch.BatchID, addr, events, configBytesByAddress[addr])
 		if err != nil {
 			return nil, err
 		}
@@ -495,13 +501,14 @@ func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*
 	return &txUUID, nil
 }
 
-func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.UUID, contractAddress tktypes.EthAddress, events []*blockindexer.EventWithData) (*prototk.HandleEventBatchResponse, error) {
+func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.UUID, contractAddress tktypes.EthAddress, events []*blockindexer.EventWithData, configBytes tktypes.HexBytes) (*prototk.HandleEventBatchResponse, error) {
 	var res *prototk.HandleEventBatchResponse
 	eventsJSON, err := json.Marshal(events)
 	if err == nil {
 		res, err = d.api.HandleEventBatch(ctx, &prototk.HandleEventBatchRequest{
-			BatchId:    batchID.String(),
-			JsonEvents: string(eventsJSON),
+			BatchId:     batchID.String(),
+			JsonEvents:  string(eventsJSON),
+			ConfigBytes: configBytes.HexString(),
 		})
 	}
 	if err != nil {

@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-iden3-crypto/poseidon"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -32,6 +33,29 @@ import (
 
 var INPUT_COUNT = 2
 var OUTPUT_COUNT = 2
+
+func getStateSchemas() ([]string, error) {
+	var schemas []string
+	coinJSON, err := json.Marshal(types.ZetoCoinABI)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal Zeto Coin schema abi. %s", err)
+	}
+	schemas = append(schemas, string(coinJSON))
+
+	smtRootJSON, err := json.Marshal(smt.MerkleTreeRootABI)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal Merkle Tree Root schema abi. %s", err)
+	}
+	schemas = append(schemas, string(smtRootJSON))
+
+	smtNodeJSON, err := json.Marshal(smt.MerkleTreeNodeABI)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal Merkle Tree Node schema abi. %s", err)
+	}
+	schemas = append(schemas, string(smtNodeJSON))
+
+	return schemas, nil
+}
 
 func (n *Zeto) makeCoin(stateData string) (*types.ZetoCoin, error) {
 	coin := &types.ZetoCoin{}

@@ -112,7 +112,7 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 	var extras []byte
 	if circuitId == "anon_nullifier" || circuitId == "anon_enc_nullifier" {
 		smtName := smt.MerkleTreeName(tokenName, contractAddress)
-		mt, err := smt.New(h.zeto.SmtStorage, smtName)
+		_, mt, err := smt.New(h.zeto.Callbacks, smtName, contractAddress, h.zeto.merkleTreeRootSchema.Id, h.zeto.merkleTreeNodeSchema.Id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create new smt object. %s", err)
 		}

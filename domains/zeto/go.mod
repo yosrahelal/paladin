@@ -4,7 +4,7 @@ go 1.22.5
 
 require (
 	github.com/go-resty/resty/v2 v2.14.0
-	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240923130959-544659ea388d
+	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240924145436-713dcce49c5d
 	github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1
 	github.com/iden3/go-iden3-crypto v0.0.17
 	github.com/kaleido-io/paladin/core v0.0.0-00010101000000-000000000000

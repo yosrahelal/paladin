@@ -18,10 +18,9 @@ package smt
 import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/smt"
-	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/storage"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
+	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 )
 
 const SMT_HEIGHT_UTXO = 64
@@ -38,12 +37,10 @@ func init() {
 	}
 }
 
-func New(p persistence.Persistence, name string) (core.SparseMerkleTree, error) {
-	strg, err := storage.NewSqlStorage(p, name)
-	if err != nil {
-		return nil, err
-	}
-	return smt.NewMerkleTree(strg, SMT_HEIGHT_UTXO)
+func New(callbacks plugintk.DomainCallbacks, name string, contractAddress *ethtypes.Address0xHex, rootSchemaId, nodeSchemaId string) (StatesStorage, core.SparseMerkleTree, error) {
+	storage := NewStatesStorage(callbacks, name, contractAddress, rootSchemaId, nodeSchemaId)
+	mt, err := smt.NewMerkleTree(storage, SMT_HEIGHT_UTXO)
+	return storage, mt, err
 }
 
 func MerkleTreeName(tokenName string, domainInstanceContract *ethtypes.Address0xHex) string {
