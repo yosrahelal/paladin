@@ -22,7 +22,7 @@ import (
 )
 
 func TestNewEnginePollingCancelledContext(t *testing.T) {
-	ctx, ble, _, done := NewTestPublicTxManager(t, false)
+	ctx, ble, _, done := newTestPublicTxManager(t, false)
 	done()
 
 	polled, _ := ble.poll(ctx)

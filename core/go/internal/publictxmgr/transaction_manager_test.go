@@ -79,7 +79,7 @@ func baseMocks(t *testing.T) *dependencyMocks {
 	return mocks
 }
 
-func NewTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...func(mocks *dependencyMocks, conf *Config)) (context.Context, *pubTxManager, *dependencyMocks, func()) {
+func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...func(mocks *dependencyMocks, conf *Config)) (context.Context, *pubTxManager, *dependencyMocks, func()) {
 	log.SetLevel("debug")
 	ctx := context.Background()
 	conf := &Config{
@@ -189,12 +189,12 @@ func TestNewEngineErrors(t *testing.T) {
 }
 
 func TestInit(t *testing.T) {
-	_, _, _, done := NewTestPublicTxManager(t, false)
+	_, _, _, done := newTestPublicTxManager(t, false)
 	defer done()
 }
 
 func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
-	ctx, ble, m, done := NewTestPublicTxManager(t, true, func(mocks *dependencyMocks, conf *Config) {
+	ctx, ble, m, done := newTestPublicTxManager(t, true, func(mocks *dependencyMocks, conf *Config) {
 		conf.Manager.Interval = confutil.P("50ms")
 		conf.Orchestrator.Interval = confutil.P("50ms")
 		conf.Manager.OrchestratorIdleTimeout = confutil.P("1ms")
@@ -405,7 +405,7 @@ func fakeTxManagerInsert(t *testing.T, db *gorm.DB, txID uuid.UUID, fromStr stri
 }
 
 func TestResolveFail(t *testing.T) {
-	ctx, ble, m, done := NewTestPublicTxManager(t, false)
+	ctx, ble, m, done := newTestPublicTxManager(t, false)
 	defer done()
 
 	keyManager := m.keyManager.(*componentmocks.KeyManager)
@@ -424,7 +424,7 @@ func TestResolveFail(t *testing.T) {
 }
 
 func TestSubmitFailures(t *testing.T) {
-	ctx, ble, m, done := NewTestPublicTxManager(t, false)
+	ctx, ble, m, done := newTestPublicTxManager(t, false)
 	defer done()
 
 	resolvedKey := tktypes.EthAddress(tktypes.RandBytes(20))
@@ -470,7 +470,7 @@ func TestSubmitFailures(t *testing.T) {
 }
 
 func TestAddActivityDisabled(t *testing.T) {
-	_, ble, _, done := NewTestPublicTxManager(t, false, func(mocks *dependencyMocks, conf *Config) {
+	_, ble, _, done := newTestPublicTxManager(t, false, func(mocks *dependencyMocks, conf *Config) {
 		conf.Manager.ActivityRecords.RecordsPerTransaction = confutil.P(0)
 	})
 	defer done()
@@ -481,7 +481,7 @@ func TestAddActivityDisabled(t *testing.T) {
 }
 
 func TestAddActivityWrap(t *testing.T) {
-	_, ble, _, done := NewTestPublicTxManager(t, false)
+	_, ble, _, done := newTestPublicTxManager(t, false)
 	defer done()
 
 	signerNonce := "signer1:nonce"
@@ -509,7 +509,7 @@ func mockForSubmitSuccess(mocks *dependencyMocks, conf *Config) {
 
 func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 	ctx := context.Background()
-	_, ble, _, done := NewTestPublicTxManager(t, false, mockForSubmitSuccess)
+	_, ble, _, done := newTestPublicTxManager(t, false, mockForSubmitSuccess)
 	defer done()
 
 	// create transaction succeeded
@@ -531,7 +531,7 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 
 func TestEngineSuspendResumeRealDB(t *testing.T) {
 
-	ctx, ble, m, done := NewTestPublicTxManager(t, true, func(mocks *dependencyMocks, conf *Config) {
+	ctx, ble, m, done := newTestPublicTxManager(t, true, func(mocks *dependencyMocks, conf *Config) {
 		conf.Manager.Interval = confutil.P("50ms")
 		conf.Orchestrator.Interval = confutil.P("50ms")
 		conf.Manager.OrchestratorIdleTimeout = confutil.P("1ms")

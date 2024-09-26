@@ -367,13 +367,11 @@ type StatusUpdater interface {
 }
 
 type RunningStageContextPersistenceOutput struct {
-	InMemoryTx              InMemoryTxStateReadOnly
-	SubStatus               BaseTxSubStatus
-	Ctx                     context.Context
-	TxUpdates               *BaseTXUpdates
-	StatusUpdates           []func(p StatusUpdater) error
-	ConfirmationReceived    bool
-	MissedConfirmationEvent bool
+	InMemoryTx    InMemoryTxStateReadOnly
+	SubStatus     BaseTxSubStatus
+	Ctx           context.Context
+	TxUpdates     *BaseTXUpdates
+	StatusUpdates []func(p StatusUpdater) error
 }
 
 func (sOut *RunningStageContextPersistenceOutput) UpdateSubStatus(action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny) {
