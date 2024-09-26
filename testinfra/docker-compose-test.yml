@@ -43,7 +43,9 @@ services:
       - --data-path=/var/besu/data
       - --node-private-key-file=/var/besu/key
       - --revert-reason-enabled
-      - --host-allowlist=localhost,besu
+      - --host-allowlist=localhost,besu,127.0.0.1
+      - --rpc-http-host=0.0.0.0
+      - --rpc-ws-host=0.0.0.0
 volumes:
   besu_data:
     driver: local

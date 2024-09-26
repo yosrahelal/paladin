@@ -96,13 +96,13 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	if err != nil {
 		return nil, err
 	}
-	outputCoins, outputStates, err := h.noto.prepareOutputs(*toAddress, params.Amount)
+	outputCoins, outputStates, err := h.noto.prepareOutputs(notary.Lookup, to.Lookup, *toAddress, params.Amount)
 	if err != nil {
 		return nil, err
 	}
 	if total.Cmp(params.Amount.BigInt()) == 1 {
 		remainder := big.NewInt(0).Sub(total, params.Amount.BigInt())
-		returnedCoins, returnedStates, err := h.noto.prepareOutputs(*fromAddress, ethtypes.NewHexInteger(remainder))
+		returnedCoins, returnedStates, err := h.noto.prepareOutputs(notary.Lookup, from.Lookup, *fromAddress, ethtypes.NewHexInteger(remainder))
 		if err != nil {
 			return nil, err
 		}

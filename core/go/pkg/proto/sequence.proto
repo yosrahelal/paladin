@@ -15,7 +15,7 @@
 
 syntax = "proto3";
 
-package github.com.kaleido_io.paladin.kata;
+package io.kaleido.paladin.kata;
 option go_package = "pkg/proto/sequence";
 
 // StateClaiomEvent is an event that is emitted when a node has pressumptively claimed a state that it believes to be available ( i.e. either in pending or confirmed metastate).

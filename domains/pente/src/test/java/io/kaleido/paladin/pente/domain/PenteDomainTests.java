@@ -16,6 +16,7 @@
 package io.kaleido.paladin.pente.domain;
 
 import io.kaleido.paladin.pente.evmrunner.EVMRunner;
+import io.kaleido.paladin.testbed.Testbed;
 import io.kaleido.paladin.toolkit.*;
 import org.hyperledger.besu.datatypes.Address;
 import org.junit.jupiter.api.Test;
