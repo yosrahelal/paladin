@@ -63,6 +63,11 @@ func (tm *txManager) mapPersistedTXFull(pt *persistedTransaction) *ptxapi.Transa
 	for _, dep := range pt.TransactionDeps {
 		res.DependsOn = append(res.DependsOn, dep.DependsOn)
 	}
+	deployment := pt.ContractDeployment
+	if deployment != nil && deployment.ContractAddress != nil {
+		// TODO should this really go into mapPersistedReceipt instead?
+		res.Receipt.ContractAddress = tktypes.MustEthAddress(*deployment.ContractAddress)
+	}
 	return res
 }
 
@@ -105,7 +110,9 @@ func (tm *txManager) queryTransactionsFullTx(ctx context.Context, jq *query.Quer
 		finalize: func(q *gorm.DB) *gorm.DB {
 			q = q.
 				Preload("TransactionDeps").
-				Joins("TransactionReceipt")
+				Joins("TransactionReceipt").
+				Joins("ContractDeployment")
+
 			if pending {
 				q = q.Where(`"TransactionReceipt"."transaction" IS NULL`)
 			}

@@ -43,6 +43,11 @@ type transactionReceipt struct {
 	RevertData      tktypes.HexBytes  `gorm:"column:revert_data"`
 }
 
+type contractDeployment struct {
+	TransactionID   uuid.UUID `gorm:"column:transaction"`
+	ContractAddress *string   `gorm:"column:contract_address"`
+}
+
 func mapPersistedReceipt(receipt *transactionReceipt) *ptxapi.TransactionReceiptData {
 	return &ptxapi.TransactionReceiptData{
 		Success:         receipt.Success,

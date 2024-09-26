@@ -38,6 +38,14 @@ type PrivateSmartContract struct {
 	ConfigBytes     tktypes.HexBytes   `json:"configBytes"         gorm:"column:config_bytes"`
 }
 
+// TODO not really sure who owns this table
+// domainmgr (who is responsible for listening for the deployment events and writing to the table)
+// or txmgr (who is responsible for reading from the table and joining with the transactions and transaction_receipts tables)
+type contractDeployment struct {
+	Transaction     uuid.UUID          `json:"trasnsaction"     gorm:"column:transaction"`
+	ContractAddress tktypes.EthAddress `json:"contractAddress"  gorm:"column:contract_address"`
+}
+
 type domainContract struct {
 	dm   *domainManager
 	d    *domain

@@ -64,6 +64,28 @@ func (dm *domainManager) eventIndexer(ctx context.Context, tx *gorm.DB, batch *b
 		if err != nil {
 			return nil, err
 		}
+		contractDeployments := make([]*contractDeployment, 0, len(contracts))
+		for _, c := range contracts {
+			contractDeployments = append(contractDeployments, &contractDeployment{
+				ContractAddress: c.Address,
+				Transaction:     c.DeployTX,
+			})
+		}
+		// Insert the contract deployments row so that it can be used to enrich the transaction receipts.
+		//  TODO this table is really owned by txmgr so should we just be sending an event to txmgr
+		// at this point and letting it handle the insert?
+		err = tx.
+			Table("contract_deployments").
+			WithContext(ctx).
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "contract_address"}},
+				DoNothing: true, // immutable
+			}).
+			Create(contractDeployments).
+			Error
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return func() {
