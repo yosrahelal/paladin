@@ -40,7 +40,7 @@ type transferHandler struct {
 	zeto *Zeto
 }
 
-func (h *transferHandler) ValidateParams(ctx context.Context, params string) (interface{}, error) {
+func (h *transferHandler) ValidateParams(ctx context.Context, config *types.DomainInstanceConfig, params string) (interface{}, error) {
 	var transferParams types.TransferParams
 	if err := json.Unmarshal([]byte(params), &transferParams); err != nil {
 		return nil, err
