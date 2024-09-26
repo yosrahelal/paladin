@@ -482,6 +482,21 @@ func TestDomainFindAvailableStatesOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Len(t, states.States, 0)
+
+	// Nullifier miss
+	useNullifiers := true
+	states, err = tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
+		ContractAddress: contractAddress.String(),
+		SchemaId:        tp.stateSchemas[0].Id,
+		QueryJson: `{
+		  "eq": [
+		    { "field": "owner", "value": "` + state1.Owner.String() + `" }
+		  ]
+		}`,
+		UseNullifiers: &useNullifiers,
+	})
+	require.NoError(t, err)
+	assert.Len(t, states.States, 0)
 }
 
 func TestDomainInitDeployOK(t *testing.T) {
@@ -888,12 +903,15 @@ func TestHandleEventBatch(t *testing.T) {
 	contract2 := tktypes.RandAddress()
 	stateSpent := tktypes.RandHex(32)
 	stateConfirmed := tktypes.RandHex(32)
-	fakeHash := tktypes.RandHex(32)
+	fakeHash1 := tktypes.RandHex(32)
+	fakeHash2 := tktypes.RandHex(32)
+	fakeNullifier := tktypes.RandHex(32)
 
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
 		mc.domainStateInterface.On("MarkStatesSpent", txID, []string{stateSpent}).Return(nil)
 		mc.domainStateInterface.On("MarkStatesConfirmed", txID, []string{stateConfirmed}).Return(nil)
 		mc.domainStateInterface.On("UpsertStates", &txID, mock.Anything).Return(nil, nil)
+		mc.domainStateInterface.On("UpsertNullifiers", mock.Anything).Return(nil)
 	})
 	defer done()
 	d := tp.d
@@ -934,9 +952,15 @@ func TestHandleEventBatch(t *testing.T) {
 			},
 			NewStates: []*prototk.NewLocalState{
 				{
-					Id:            &fakeHash,
+					Id:            &fakeHash1,
 					StateDataJson: `{"color": "blue"}`,
 					TransactionId: txIDBytes32.String(),
+				},
+				{
+					Id:            &fakeHash2,
+					StateDataJson: `{"color": "red"}`,
+					TransactionId: txIDBytes32.String(),
+					Nullifier:     &fakeNullifier,
 				},
 			},
 		}, nil
@@ -1173,6 +1197,47 @@ func TestHandleEventBatchNewBadStateID(t *testing.T) {
 	assert.ErrorContains(t, err, "PD020007")
 }
 
+func TestHandleEventBatchNewBadNullifier(t *testing.T) {
+	batchID := uuid.New()
+	contract1 := tktypes.RandAddress()
+	stateID := tktypes.RandHex(32)
+	fakeNullifier := "badnotgood"
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{"address", "domain_address"},
+	).AddRow(contract1, d.registryAddress))
+
+	tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return &prototk.HandleEventBatchResponse{
+			NewStates: []*prototk.NewLocalState{
+				{
+					TransactionId: tktypes.RandHex(32),
+					Id:            &stateID,
+					Nullifier:     &fakeNullifier,
+				},
+			},
+		}, nil
+	}
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				Address: *contract1,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.ErrorContains(t, err, "PD020007")
+}
+
 func TestHandleEventBatchBadTransactionID(t *testing.T) {
 	batchID := uuid.New()
 	contract1 := tktypes.RandAddress()
@@ -1294,7 +1359,7 @@ func TestHandleEventBatchMarkConfirmedFail(t *testing.T) {
 	assert.EqualError(t, err, "pop")
 }
 
-func TestHandleEventBatchUpsertFail(t *testing.T) {
+func TestHandleEventBatchUpsertStateFail(t *testing.T) {
 	batchID := uuid.New()
 	txID := uuid.New()
 	txIDBytes32 := tktypes.Bytes32UUIDFirst16(txID)
@@ -1319,6 +1384,51 @@ func TestHandleEventBatchUpsertFail(t *testing.T) {
 				{
 					StateDataJson: `{"color": "blue"}`,
 					TransactionId: txIDBytes32.String(),
+				},
+			},
+		}, nil
+	}
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				Address: *contract1,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.EqualError(t, err, "pop")
+}
+
+func TestHandleEventBatchUpsertNullifierFail(t *testing.T) {
+	batchID := uuid.New()
+	txID := uuid.New()
+	txIDBytes32 := tktypes.Bytes32UUIDFirst16(txID)
+	contract1 := tktypes.RandAddress()
+	fakeNullifier := tktypes.RandHex(32)
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.domainStateInterface.On("UpsertStates", &txID, mock.Anything).Return(nil, nil)
+		mc.domainStateInterface.On("UpsertNullifiers", mock.Anything).Return(fmt.Errorf("pop"))
+	})
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{"address", "domain_address"},
+	).AddRow(contract1, d.registryAddress))
+
+	tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return &prototk.HandleEventBatchResponse{
+			NewStates: []*prototk.NewLocalState{
+				{
+					StateDataJson: `{"color": "blue"}`,
+					TransactionId: txIDBytes32.String(),
+					Nullifier:     &fakeNullifier,
 				},
 			},
 		}, nil

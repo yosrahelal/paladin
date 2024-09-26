@@ -320,6 +320,8 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 		Owner:  tktypes.EthAddress(tktypes.RandBytes(20)),
 		Amount: ethtypes.NewHexInteger64(5555555),
 	}
+	nullifier := tktypes.RandHex(32)
+
 	tp.Functions.AssembleTransaction = func(ctx context.Context, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 		assert.Same(t, req.Transaction, tx.PreAssembly.TransactionSpecification)
 
@@ -357,7 +359,7 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 					{Id: stateRes.States[2].Id, SchemaId: stateRes.States[2].SchemaId},
 				},
 				OutputStates: []*prototk.NewState{
-					{SchemaId: tp.stateSchemas[0].Id, StateDataJson: string(newStateData)},
+					{SchemaId: tp.stateSchemas[0].Id, StateDataJson: string(newStateData), Nullifier: &nullifier},
 				},
 			},
 			AttestationPlan: []*prototk.AttestationRequest{

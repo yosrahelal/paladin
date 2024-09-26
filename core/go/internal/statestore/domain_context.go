@@ -394,6 +394,7 @@ func (dc *domainContext) FindAvailableNullifiers(schemaID string, query *query.Q
 		}
 	}
 
+	// Merge in un-flushed states to results
 	return dc.mergedUnFlushed(schema, states, query, true)
 }
 

@@ -350,6 +350,7 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
 	stateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
 	nullifier1 := tktypes.HexBytes(tktypes.RandBytes(32))
+	nullifier2 := tktypes.HexBytes(tktypes.RandBytes(32))
 
 	contractAddress := tktypes.RandAddress()
 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
@@ -418,6 +419,18 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, states, 0)
 
+		// Attach a nullifier to the second state
+		err = dsi.UpsertNullifiers([]*StateNullifier{
+			{State: stateID2, Nullifier: nullifier2},
+		})
+		require.NoError(t, err)
+
+		states, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+		require.NoError(t, err)
+		require.Len(t, states, 1)
+		require.NotNil(t, states[0].Nullifier)
+		assert.Equal(t, nullifier2, states[0].Nullifier.Nullifier)
+
 		return nil
 	})
 	require.NoError(t, err)
@@ -473,6 +486,10 @@ func TestDSIFlushErrorCapture(t *testing.T) {
 		assert.Regexp(t, "pop", err)
 
 		fakeFlushError(dc)
+		_, err = dsi.FindAvailableNullifiers("", nil)
+		assert.Regexp(t, "pop", err)
+
+		fakeFlushError(dc)
 		schema, err := ss.getSchemaByID(ctx, "domain1", tktypes.MustParseBytes32(schemas[0].IDString()), true)
 		require.NoError(t, err)
 		_, err = dc.mergedUnFlushed(schema, nil, nil, false)
@@ -480,6 +497,10 @@ func TestDSIFlushErrorCapture(t *testing.T) {
 
 		fakeFlushError(dc)
 		_, err = dsi.UpsertStates(nil, nil)
+		assert.Regexp(t, "pop", err)
+
+		fakeFlushError(dc)
+		err = dsi.UpsertNullifiers(nil)
 		assert.Regexp(t, "pop", err)
 
 		fakeFlushError(dc)
@@ -728,6 +749,10 @@ func TestDSIFindBadQueryAndInsert(t *testing.T) {
 	contractAddress := tktypes.RandAddress()
 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
 		_, err = dsi.FindAvailableStates(schemaID, toQuery(t,
+			`{"sort":["wrong"]}`))
+		assert.Regexp(t, "PD010700", err)
+
+		_, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t,
 			`{"sort":["wrong"]}`))
 		assert.Regexp(t, "PD010700", err)
 
