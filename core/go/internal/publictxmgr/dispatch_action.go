@@ -83,7 +83,7 @@ func (pte *pubTxManager) dispatchAction(ctx context.Context, from tktypes.EthAdd
 func (oc *orchestrator) dispatchAction(ctx context.Context, nonce uint64, action AsyncRequestType, response chan<- error) {
 	oc.inFlightTxsMux.Lock()
 	defer oc.inFlightTxsMux.Unlock()
-	var pending *InFlightTransactionStageController
+	var pending *inFlightTransactionStageController
 	for _, inflight := range oc.inFlightTxs {
 		if inflight.stateManager.GetNonce() == nonce {
 			pending = inflight

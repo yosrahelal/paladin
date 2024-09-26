@@ -150,7 +150,7 @@ type orchestrator struct {
 
 	// in flight txs array
 	maxInFlightTxs       int
-	inFlightTxs          []*InFlightTransactionStageController // a queue of all the in flight transactions
+	inFlightTxs          []*inFlightTransactionStageController // a queue of all the in flight transactions
 	inFlightTxsMux       sync.Mutex
 	orchestratorLoopDone chan struct{}
 	InFlightTxsStale     chan bool
@@ -237,7 +237,7 @@ func (oc *orchestrator) orchestratorLoop() {
 }
 
 // Used in unit tests
-func (oc *orchestrator) getFirstInFlight() (ift *InFlightTransactionStageController) {
+func (oc *orchestrator) getFirstInFlight() (ift *inFlightTransactionStageController) {
 	oc.inFlightTxsMux.Lock()
 	defer oc.inFlightTxsMux.Unlock()
 	if len(oc.inFlightTxs) > 0 {
@@ -253,7 +253,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 	queueUpdated := false
 
 	oldInFlight := oc.inFlightTxs
-	oc.inFlightTxs = make([]*InFlightTransactionStageController, 0, len(oldInFlight))
+	oc.inFlightTxs = make([]*inFlightTransactionStageController, 0, len(oldInFlight))
 
 	stageCounts := make(map[string]int)
 	for _, stageName := range AllInFlightStages {
@@ -367,7 +367,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 }
 
 // this function should only have one running instance at any given time
-func (oc *orchestrator) ProcessInFlightTransactions(ctx context.Context, its []*InFlightTransactionStageController) (waitingForBalance bool, err error) {
+func (oc *orchestrator) ProcessInFlightTransactions(ctx context.Context, its []*inFlightTransactionStageController) (waitingForBalance bool, err error) {
 	processStart := time.Now()
 	waitingForBalance = false
 	var addressAccount *AddressAccount

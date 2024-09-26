@@ -39,10 +39,13 @@ func calculateTransactionHash(rawTxnData []byte) *tktypes.Bytes32 {
 	return &hashBytes
 }
 
-func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx InMemoryTxStateReadOnly, signedMessage []byte) (*tktypes.Bytes32, *tktypes.Timestamp, ethclient.ErrorReason, SubmissionOutcome, error) {
+func (it *inFlightTransactionStageController) submitTX(ctx context.Context, mtx InMemoryTxStateReadOnly, signedMessage []byte) (*tktypes.Bytes32, *tktypes.Timestamp, ethclient.ErrorReason, SubmissionOutcome, error) {
 	var txHash *tktypes.Bytes32
 	sendStart := time.Now()
 	calculatedTxHash := mtx.GetTransactionHash() // must have been persisted in previous stage
+	if calculatedTxHash == nil {
+		return nil, nil, ethclient.ErrorReasonInvalidInputs, SubmissionOutcomeFailedRequiresRetry, i18n.NewError(ctx, msgs.MsgInvalidStateMissingTXHash)
+	}
 	log.L(ctx).Debugf("Sending raw transaction %s (lastSubmit=%s), Hash=%s", mtx.GetSignerNonce(), mtx.GetLastSubmitTime(), txHash)
 
 	submissionTime := confutil.P(tktypes.TimestampNow())
@@ -121,7 +124,7 @@ func (it *InFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 	})
 
 	if retryError != nil {
-		return nil, nil, ethclient.ErrorReason(retryError.Error()), SubmissionOutcomeFailedRequiresRetry, retryError
+		return nil, nil, submissionErrorReason, SubmissionOutcomeFailedRequiresRetry, retryError
 	}
 
 	return txHash, submissionTime, submissionErrorReason, submissionOutcome, submissionError

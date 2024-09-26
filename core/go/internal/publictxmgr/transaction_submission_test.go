@@ -21,9 +21,11 @@ import (
 	"testing"
 
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 const testHashedSignedMessage string = "0x307837333639363736653635363432303664363537333733363136373635"
@@ -34,22 +36,26 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 
 	textTxHashByte32 := tktypes.MustParseBytes32(testTxHash)
 	textWrongTxHashByte32 := tktypes.MustParseBytes32(testWrongTxHash)
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
-	mEC := testInFlightTransactionStateManagerWithMocks.mEC
-	mtx := it.stateManager.GetTx()
+
+	ctx, o, m, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *Config) {
+		conf.Orchestrator.SubmissionRetry.MaxAttempts = confutil.P(1)
+	})
+	defer done()
+	it, ifts := newInflightTransaction(o, 1)
+	ifts.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
+		TransactionHash: &textTxHashByte32,
+	})
 
 	// successful send with tx hash returned
-	txSendMock := mEC.On("SendRawTransaction", ctx, mock.Anything)
+	txSendMock := m.ethClient.On("SendRawTransaction", ctx, mock.Anything)
 	txSendMock.Run(func(args mock.Arguments) {
 		txRawMessage := args[1].(tktypes.HexBytes)
 		assert.Equal(t, tktypes.MustParseHexBytes(testHashedSignedMessage), txRawMessage)
 		txSendMock.Return(&textTxHashByte32, nil)
 	}).Once()
 
-	txHash, _, errReason, outCome, err := it.submitTX(ctx, mtx, []byte(testTransactionData))
-	assert.Nil(t, err)
+	txHash, _, errReason, outCome, err := it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
+	require.NoError(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, SubmissionOutcomeSubmittedNew, outCome)
 	assert.Equal(t, testTxHash, txHash.String())
@@ -61,8 +67,8 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 		txSendMock.Return(nil, nil)
 	}).Once()
 
-	txHash, _, errReason, outCome, err = it.submitTX(ctx, mtx, []byte(testTransactionData))
-	assert.Nil(t, err)
+	txHash, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
+	require.NoError(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, SubmissionOutcomeSubmittedNew, outCome)
 	assert.Equal(t, testTxHash, txHash.String()) // able to use the calculated hash
@@ -74,7 +80,7 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 		txSendMock.Return(&textWrongTxHashByte32, nil)
 	}).Once()
 
-	txHash, _, errReason, outCome, err = it.submitTX(ctx, mtx, []byte(testTransactionData))
+	txHash, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
 	assert.Regexp(t, "PD011905", err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, SubmissionOutcomeFailedRequiresRetry, outCome)
@@ -87,7 +93,7 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 		txSendMock.Return(nil, fmt.Errorf("transaction underpriced"))
 	}).Once()
 
-	txHash, _, errReason, outCome, err = it.submitTX(ctx, mtx, []byte(testTransactionData))
+	txHash, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
 	assert.Regexp(t, "transaction underpriced", err)
 	assert.Equal(t, ethclient.ErrorReasonTransactionUnderpriced, errReason)
 	assert.Equal(t, SubmissionOutcomeFailedRequiresRetry, outCome)
@@ -99,7 +105,7 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 		txSendMock.Return(nil, fmt.Errorf("execution reverted"))
 	}).Once()
 
-	txHash, _, errReason, outCome, err = it.submitTX(ctx, mtx, []byte(testTransactionData))
+	txHash, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
 	assert.Regexp(t, "execution reverted", err)
 	assert.Equal(t, ethclient.ErrorReasonTransactionReverted, errReason)
 	assert.Equal(t, SubmissionOutcomeFailedRequiresRetry, outCome)
@@ -111,8 +117,8 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 		txSendMock.Return(nil, fmt.Errorf("known transaction"))
 	}).Once()
 
-	txHash, _, errReason, outCome, err = it.submitTX(ctx, mtx, []byte(testTransactionData))
-	assert.Nil(t, err)
+	txHash, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
+	require.NoError(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, SubmissionOutcomeAlreadyKnown, outCome)
 	assert.Equal(t, testTxHash, txHash.String()) // able to use the calculated hash
@@ -123,8 +129,8 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 		txSendMock.Return(nil, fmt.Errorf("nonce too low"))
 	}).Once()
 
-	txHash, _, errReason, outCome, err = it.submitTX(ctx, mtx, []byte(testTransactionData))
-	assert.Nil(t, err)
+	txHash, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
+	require.NoError(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, SubmissionOutcomeNonceTooLow, outCome)
 	assert.Equal(t, testTxHash, txHash.String()) // able to use the calculated hash
@@ -136,7 +142,7 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 		txSendMock.Return(nil, fmt.Errorf("error submitting transaction"))
 	}).Once()
 
-	txHash, _, errReason, outCome, err = it.submitTX(ctx, mtx, []byte(testTransactionData))
+	txHash, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
 	assert.Regexp(t, "error submitting", err)
 	assert.Equal(t, ethclient.ErrorReason(""), errReason)
 	assert.Equal(t, SubmissionOutcomeFailedRequiresRetry, outCome)
@@ -147,89 +153,93 @@ func TestTxSubmissionWithSignedMessageWithRetry(t *testing.T) {
 
 	textTxHashByte32 := tktypes.MustParseBytes32(testTxHash)
 	textWrongTxHashByte32 := tktypes.MustParseBytes32(testWrongTxHash)
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
-	mEC := testInFlightTransactionStateManagerWithMocks.mEC
-	mtx := it.stateManager.GetTx()
+
+	ctx, o, m, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *Config) {
+		conf.Orchestrator.SubmissionRetry.MaxAttempts = confutil.P(2)
+	})
+	defer done()
+	it, ifts := newInflightTransaction(o, 1)
+	ifts.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
+		TransactionHash: &textTxHashByte32,
+	})
 
 	it.transactionSubmissionRetryCount = 1 // retry once
 
 	// successful send with tx hash returned
-	mEC.On("SendRawTransaction", ctx, mock.Anything).Return(&textTxHashByte32, nil).Once()
+	m.ethClient.On("SendRawTransaction", ctx, mock.Anything).Return(&textTxHashByte32, nil).Once()
 
-	txHash, _, errReason, outCome, err := it.submitTX(ctx, mtx, []byte(testTransactionData))
-	assert.Nil(t, err)
+	txHash, _, errReason, outCome, err := it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
+	require.NoError(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, SubmissionOutcomeSubmittedNew, outCome)
 	assert.Equal(t, testTxHash, txHash.String())
 
 	// successful send with tx hash missing
-	mEC.On("SendRawTransaction", ctx, mock.Anything).Return(
+	m.ethClient.On("SendRawTransaction", ctx, mock.Anything).Return(
 		nil,
 		nil,
 	).Once()
 
-	txHash, _, errReason, outCome, err = it.submitTX(ctx, mtx, []byte(testTransactionData))
-	assert.Nil(t, err)
+	txHash, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
+	require.NoError(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, SubmissionOutcomeSubmittedNew, outCome)
 	assert.Equal(t, testTxHash, txHash.String()) // able to use the calculated hash
 
 	// successful send but tx hash mismatch first time
-	mEC.On("SendRawTransaction", ctx, mock.Anything).Return(&textWrongTxHashByte32, nil).Once()
+	m.ethClient.On("SendRawTransaction", ctx, mock.Anything).Return(&textWrongTxHashByte32, nil).Once()
 	// but corrected in the retry
-	mEC.On("SendRawTransaction", ctx, mock.Anything).Return(&textTxHashByte32, nil).Once()
+	m.ethClient.On("SendRawTransaction", ctx, mock.Anything).Return(&textTxHashByte32, nil).Once()
 
-	txHash, _, errReason, outCome, err = it.submitTX(ctx, mtx, []byte(testTransactionData))
-	assert.Nil(t, err)
+	txHash, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
+	require.NoError(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, SubmissionOutcomeSubmittedNew, outCome)
 	assert.Equal(t, testTxHash, txHash.String())
 
 	// categorized errors should not be retried
 	// underpriced
-	mEC.On("SendRawTransaction", ctx, mock.Anything).Return(nil, fmt.Errorf("transaction underpriced")).Once()
+	m.ethClient.On("SendRawTransaction", ctx, mock.Anything).Return(nil, fmt.Errorf("transaction underpriced")).Once()
 
-	txHash, _, errReason, outCome, err = it.submitTX(ctx, mtx, []byte(testTransactionData))
+	txHash, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
 	assert.Regexp(t, "transaction underpriced", err)
 	assert.Equal(t, ethclient.ErrorReasonTransactionUnderpriced, errReason)
 	assert.Equal(t, SubmissionOutcomeFailedRequiresRetry, outCome)
 	assert.Equal(t, testTxHash, txHash.String())
 	// reverted
-	mEC.On("SendRawTransaction", ctx, mock.Anything).Return(nil, fmt.Errorf("execution reverted")).Once()
+	m.ethClient.On("SendRawTransaction", ctx, mock.Anything).Return(nil, fmt.Errorf("execution reverted")).Once()
 
-	txHash, _, errReason, outCome, err = it.submitTX(ctx, mtx, []byte(testTransactionData))
+	txHash, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
 	assert.Regexp(t, "execution reverted", err)
 	assert.Equal(t, ethclient.ErrorReasonTransactionReverted, errReason)
 	assert.Equal(t, SubmissionOutcomeFailedRequiresRetry, outCome)
 	assert.Equal(t, testTxHash, txHash.String())
 	// known transaction
-	mEC.On("SendRawTransaction", ctx, mock.Anything).Return(nil, fmt.Errorf("known transaction")).Once()
+	m.ethClient.On("SendRawTransaction", ctx, mock.Anything).Return(nil, fmt.Errorf("known transaction")).Once()
 
-	txHash, _, errReason, outCome, err = it.submitTX(ctx, mtx, []byte(testTransactionData))
-	assert.Nil(t, err)
+	txHash, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
+	require.NoError(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, SubmissionOutcomeAlreadyKnown, outCome)
 	assert.Equal(t, testTxHash, txHash.String()) // able to use the calculated hash
 	// nonce too low
-	mEC.On("SendRawTransaction", ctx, mock.Anything).Return(nil, fmt.Errorf("nonce too low")).Once()
+	m.ethClient.On("SendRawTransaction", ctx, mock.Anything).Return(nil, fmt.Errorf("nonce too low")).Once()
 
-	txHash, _, errReason, outCome, err = it.submitTX(ctx, mtx, []byte(testTransactionData))
-	assert.Nil(t, err)
+	txHash, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
+	require.NoError(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, SubmissionOutcomeNonceTooLow, outCome)
 	assert.Equal(t, testTxHash, txHash.String()) // able to use the calculated hash
 
 	// un-categorized errors should be retried
 	// successful send when first time returned un-categorized error
-	mEC.On("SendRawTransaction", ctx, mock.Anything).Return(nil, fmt.Errorf("error submitting transaction")).Once()
+	m.ethClient.On("SendRawTransaction", ctx, mock.Anything).Return(nil, fmt.Errorf("error submitting transaction")).Once()
 
 	// but the second time was successful
-	mEC.On("SendRawTransaction", ctx, mock.Anything).Return(&textTxHashByte32, nil).Once()
+	m.ethClient.On("SendRawTransaction", ctx, mock.Anything).Return(&textTxHashByte32, nil).Once()
 
-	txHash, _, errReason, outCome, err = it.submitTX(ctx, mtx, []byte(testTransactionData))
-	assert.Nil(t, err)
+	txHash, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
+	require.NoError(t, err)
 	assert.Empty(t, errReason)
 	assert.Equal(t, SubmissionOutcomeSubmittedNew, outCome)
 	assert.Equal(t, testTxHash, txHash.String())
@@ -237,10 +247,9 @@ func TestTxSubmissionWithSignedMessageWithRetry(t *testing.T) {
 	// retry error
 	canceledContext, cancel := context.WithCancel(ctx)
 	cancel()
-	mEC.On("SendRawTransaction", canceledContext, mock.Anything).Return(nil, fmt.Errorf("error submitting transaction")).Once()
-	txHash, _, errReason, outCome, err = it.submitTX(canceledContext, mtx, []byte(testHashedSignedMessage))
-	assert.Regexp(t, "FF00154", err)
-	assert.Regexp(t, "FF00154", errReason)
+	m.ethClient.On("SendRawTransaction", canceledContext, mock.Anything).Return(nil, fmt.Errorf("error submitting transaction")).Once()
+	txHash, _, _, outCome, err = it.submitTX(canceledContext, it.stateManager, []byte(testHashedSignedMessage))
+	assert.Regexp(t, "PD020000", err)
 	assert.Equal(t, SubmissionOutcomeFailedRequiresRetry, outCome)
 	assert.Nil(t, txHash)
 }

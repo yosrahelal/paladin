@@ -49,7 +49,7 @@ func newTestOrchestrator(t *testing.T, cbs ...func(mocks *mocksAndTestControl, c
 
 }
 
-func newInflightTransaction(o *orchestrator, nonce uint64, txMods ...func(tx *DBPublicTxn)) (*InFlightTransactionStageController, *inFlightTransactionState) {
+func newInflightTransaction(o *orchestrator, nonce uint64, txMods ...func(tx *DBPublicTxn)) (*inFlightTransactionStageController, *inFlightTransactionState) {
 	tx := &DBPublicTxn{
 		SignerNonce: fmt.Sprintf("%s:%d", o.signingAddress, 1),
 		From:        o.signingAddress,
@@ -73,7 +73,7 @@ func TestNewOrchestratorLoadsSecondTxAndQueuesBalanceCheck(t *testing.T) {
 	mockIT, _ := newInflightTransaction(o, 1)
 
 	// Fill first slot with a stage controller
-	o.inFlightTxs = []*InFlightTransactionStageController{mockIT}
+	o.inFlightTxs = []*inFlightTransactionStageController{mockIT}
 
 	// Return the next nonce - will fill up the orchestrator
 	m.db.ExpectQuery("SELECT.*public_txn").WillReturnRows(sqlmock.NewRows([]string{"from", "nonce"}).AddRow(
@@ -130,7 +130,7 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 	mockIT.hasZeroGasPrice = true
 	confirmed := InFlightStatusConfirmReceived
 	mockIT.newStatus = &confirmed
-	o.inFlightTxs = []*InFlightTransactionStageController{mockIT}
+	o.inFlightTxs = []*inFlightTransactionStageController{mockIT}
 	o.state = OrchestratorStateRunning
 
 	// Just keep returning empty rows and we should go idle once we've flushed through the status update above
@@ -176,7 +176,7 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 	})
 
 	// Fill first slot with a stage controller
-	o.inFlightTxs = []*InFlightTransactionStageController{mockIT}
+	o.inFlightTxs = []*inFlightTransactionStageController{mockIT}
 	o.state = OrchestratorStateRunning
 
 	// Mock no auto-fueling TX in flight

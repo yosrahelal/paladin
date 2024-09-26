@@ -589,9 +589,9 @@ func TestEngineSuspendResumeRealDB(t *testing.T) {
 	resolvedKey := *tktypes.MustEthAddress(resolvedKeyStr)
 
 	// Wait for the orchestrator to kick off and pick this TX up
-	getIFT := func() *InFlightTransactionStageController {
+	getIFT := func() *inFlightTransactionStageController {
 		var o *orchestrator
-		var ift *InFlightTransactionStageController
+		var ift *inFlightTransactionStageController
 		for ift == nil {
 			<-ticker.C
 			if t.Failed() {

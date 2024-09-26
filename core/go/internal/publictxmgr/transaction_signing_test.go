@@ -16,14 +16,11 @@
 package publictxmgr
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
-	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -32,40 +29,35 @@ import (
 )
 
 func TestInFlightTxSign(t *testing.T) {
-	ctx := context.Background()
-	config.RootConfigReset()
+	ctx, o, m, done := newTestOrchestrator(t)
+	defer done()
+	it, _ := newInflightTransaction(o, 1)
 
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	fromAddr := *tktypes.RandAddress()
+	ethTx := &ethsigner.Transaction{
+		Nonce: ethtypes.NewHexInteger64(12345),
+	}
+	rs := &ethclient.ResolvedSigner{
+		Address: fromAddr,
+	}
 
-	mEC := componentmocks.NewEthClient(t)
-	it.ethClient = mEC
-
-	// signing error
-	mtx := it.stateManager.GetTx()
-
-	buildRawTransactionMock := mEC.On("BuildRawTransaction", ctx, ethclient.EIP1559, string(mtx.From), mtx.Transaction, mock.Anything)
+	buildRawTransactionMock := m.ethClient.On("BuildRawTransactionNoResolve", ctx, ethclient.EIP1559, rs, ethTx, mock.Anything)
 	buildRawTransactionMock.Run(func(args mock.Arguments) {
-		from := args[2].(string)
-		txObj := args[3].(*ethsigner.Transaction)
-
-		assert.Equal(t, "0x4e598f6e918321dd47c86e7a077b4ab0e7414846", from)
-		assert.Equal(t, ethtypes.MustNewHexBytes0xPrefix(testTransactionData), txObj.Data)
+		signer := args[2].(*ethclient.ResolvedSigner)
+		assert.Equal(t, fromAddr, signer.Address)
 		buildRawTransactionMock.Return(nil, fmt.Errorf("pop"))
 	}).Once()
-	_, txHash, err := it.signTx(ctx, mtx)
+	_, txHash, err := it.signTx(ctx, rs, ethTx)
 	assert.Error(t, err)
-	assert.Equal(t, "", txHash)
+	assert.Nil(t, txHash)
 
 	// signing succeeded
+	testTxData := tktypes.HexBytes(tktypes.RandBytes(32))
 	buildRawTransactionMock.Run(func(args mock.Arguments) {
-		from := args[2].(string)
-		txObj := args[3].(*ethsigner.Transaction)
-
-		assert.Equal(t, "0x4e598f6e918321dd47c86e7a077b4ab0e7414846", from)
-		assert.Equal(t, ethtypes.MustNewHexBytes0xPrefix(testTransactionData), txObj.Data)
-	}).Return(tktypes.MustParseHexBytes(testHashedSignedMessage), nil).Once()
-	_, txHash, err = it.signTx(ctx, mtx)
+		signer := args[2].(*ethclient.ResolvedSigner)
+		assert.Equal(t, fromAddr, signer.Address)
+	}).Return(testTxData, nil).Once()
+	_, txHash, err = it.signTx(ctx, rs, ethTx)
 	require.NoError(t, err)
-	assert.Equal(t, testTxHash, txHash)
+	assert.Equal(t, *calculateTransactionHash(testTxData), *txHash)
 }
