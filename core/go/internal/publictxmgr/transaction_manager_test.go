@@ -331,6 +331,13 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 		select {
 		case confirmation := <-calculatedConfirmations:
 			gatheredConfirmations = append(gatheredConfirmations, confirmation)
+
+			// Check we can query the public txn by this submission (even before the confirm)
+			ptxQuery, err := ble.GetPublicTransactionForHash(ctx, ble.p.DB(), confirmation.Hash)
+			require.NoError(t, err)
+			require.NotNil(t, ptxQuery)
+			require.Len(t, ptxQuery.Submissions, 1)
+			require.Equal(t, ptxQuery.Nonce.Uint64(), confirmation.Nonce)
 		case <-ticker.C:
 			if t.Failed() {
 				return
@@ -354,6 +361,15 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 	}
 	for _, tx := range txs {
 		assert.NotNil(t, confirmationsMatched[tx.Bindings[0].TransactionID])
+	}
+
+	// Check we can select to just see just unconfirmed
+	byTxn, err = ble.QueryPublicTxForTransactions(ctx, ble.p.DB(), txIDs,
+		query.NewQueryBuilder().Null("transactionHash").Query())
+	require.NoError(t, err)
+	for _, tx := range txs {
+		queryTxs := byTxn[tx.Bindings[0].TransactionID]
+		require.Empty(t, queryTxs, 1)
 	}
 
 	// phase 2 of the update, happens after the DB TX commits, so we can wake up the

@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 	"sync"
 	"time"
 
@@ -676,8 +677,9 @@ func (ble *pubTxManager) getTransactionSubmissions(ctx context.Context, dbTX *go
 	err := dbTX.
 		WithContext(ctx).
 		Table("public_submissions").
-		Where("signer_nonce_ref IN (?)", signerNonceRefs).
+		Where("signer_nonce IN (?)", signerNonceRefs).
 		Order("created DESC").
+		Find(&ptxs).
 		Error
 	return ptxs, err
 }
@@ -764,6 +766,29 @@ func (pte *pubTxManager) getActivityRecords(signerNonce string) []ptxapi.Transac
 	return []ptxapi.TransactionActivityRecord{}
 }
 
+func (pte *pubTxManager) GetPublicTransactionForHash(ctx context.Context, dbTX *gorm.DB, hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error) {
+	var signerNonces []string
+	var txns []*ptxapi.PublicTxWithBinding
+	err := dbTX.
+		Table("public_submissions").
+		Model(DBPubTxnSubmission{}).
+		Where(`tx_hash = ?`, hash).
+		Pluck("signer_nonce", &signerNonces).
+		Error
+	if err == nil && len(signerNonces) > 0 {
+		signerNonceSplit := strings.Split(signerNonces[0], ":")
+		txns, err = pte.QueryPublicTxWithBindings(ctx, dbTX, query.NewQueryBuilder().
+			Equal("from", signerNonceSplit[0]).
+			Equal("nonce", signerNonceSplit[1]).
+			Query())
+	}
+	if err != nil || len(txns) == 0 {
+		return nil, err
+	}
+	return txns[0], nil
+
+}
+
 func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransactionNotify) ([]*components.PublicTxMatch, error) {
 
 	// Do a DB query in the TX to reverse lookup the TX details we need to match/update the completed status
@@ -775,7 +800,7 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 		txHashes[i] = itx.Hash
 		txiByHash[itx.Hash] = itx
 	}
-	var lookups []*transactionsMatchingSubmission
+	var lookups []*bindingsMatchingSubmission
 	err := dbTX.
 		Table("public_txn_bindings").
 		Select(`"transaction"`, `"tx_type"`, `"Submission"."signer_nonce"`, `"Submission"."tx_hash"`).

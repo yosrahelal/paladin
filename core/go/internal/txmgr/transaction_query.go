@@ -22,6 +22,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 )
 
@@ -177,4 +178,27 @@ func (tm *txManager) getTransactionDependencies(ctx context.Context, id uuid.UUI
 		}
 	}
 	return res, nil
+}
+
+func (tm *txManager) queryPublicTransactions(ctx context.Context, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) {
+	if err := checkLimitSet(ctx, jq); err != nil {
+		return nil, err
+	}
+	return tm.publicTxMgr.QueryPublicTxWithBindings(ctx, tm.p.DB(), jq)
+}
+
+func (tm *txManager) getPublicTransactionByNonce(ctx context.Context, from tktypes.EthAddress, nonce tktypes.HexUint64) (*ptxapi.PublicTxWithBinding, error) {
+	prs, err := tm.publicTxMgr.QueryPublicTxWithBindings(ctx, tm.p.DB(),
+		query.NewQueryBuilder().Limit(1).
+			Equal("from", from).
+			Equal("nonce", nonce).
+			Query())
+	if len(prs) == 0 || err != nil {
+		return nil, err
+	}
+	return prs[0], nil
+}
+
+func (tm *txManager) getPublicTransactionByHash(ctx context.Context, hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error) {
+	return tm.publicTxMgr.GetPublicTransactionForHash(ctx, tm.p.DB(), hash)
 }
