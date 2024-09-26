@@ -233,6 +233,12 @@ func TestNotoForZeto(t *testing.T) {
 		Outputs: transferZeto.OutputStates,
 	}).SignAndSend(bob).Wait()
 
+	prepared := swap.GetTrade(ctx)
+	aliceData := prepared["userTradeData1"].(map[string]any)
+	bobData := prepared["userTradeData2"].(map[string]any)
+	log.L(ctx).Infof("Alice proposes tokens: contract=%s value=%s states=%+v", aliceData["tokenAddress"], aliceData["tokenValue"], aliceData["states"])
+	log.L(ctx).Infof("Bob proposes tokens: contract=%s value=%s states=%+v", bobData["tokenAddress"], bobData["tokenValue"], bobData["states"])
+
 	log.L(ctx).Infof("Create Atom instance")
 	transferAtom := atomFactory.Create(ctx, alice, []*helpers.AtomOperation{
 		{
@@ -248,6 +254,11 @@ func TestNotoForZeto(t *testing.T) {
 			CallData:        encodedExecute,
 		},
 	})
+
+	atomOperations := transferAtom.GetOperations(ctx)
+	for i, op := range atomOperations {
+		log.L(ctx).Infof("Prepared operation %d: contract=%s calldata=%s", i, op["contractAddress"], op["callData"])
+	}
 
 	// TODO: all parties should verify the Atom against the original proposed trade
 	// If any party found a discrepancy at this point, they could cancel the swap (last chance to back out)
