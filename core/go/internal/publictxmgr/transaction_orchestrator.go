@@ -431,7 +431,7 @@ func (oc *orchestrator) ProcessInFlightTransactions(ctx context.Context, its []*
 	return waitingForBalance, nil
 }
 
-func (oc *orchestrator) Start(c context.Context) (done <-chan struct{}, err error) {
+func (oc *orchestrator) Start(ctx context.Context) (done <-chan struct{}, err error) {
 	oc.orchestratorLoopDone = make(chan struct{})
 	go oc.orchestratorLoop()
 	oc.MarkInFlightTxStale()

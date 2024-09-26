@@ -41,8 +41,8 @@ type testInFlightTransactionStateManagerWithMocks struct {
 	inMemoryTxState InMemoryTxStateManager
 }
 
-func newTestInFlightTransactionStateManager(t *testing.T) (*testInFlightTransactionStateManagerWithMocks, *dependencyMocks, func()) {
-	ctx, ble, m, done := newTestPublicTxManager(t, false, func(mocks *dependencyMocks, conf *Config) {
+func newTestInFlightTransactionStateManager(t *testing.T) (*testInFlightTransactionStateManagerWithMocks, *mocksAndTestControl, func()) {
+	ctx, ble, m, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *Config) {
 		conf.Manager.ActivityRecords.RecordsPerTransaction = confutil.P(0)
 	})
 

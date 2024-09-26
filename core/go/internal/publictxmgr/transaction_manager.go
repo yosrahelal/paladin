@@ -158,6 +158,7 @@ func (ble *pubTxManager) PostInit(pic components.AllComponents) error {
 	ctx := ble.ctx
 	log.L(ctx).Debugf("Initializing enterprise transaction handler")
 	ble.ethClientFactory = pic.EthClientFactory()
+	ble.ethClient = ble.ethClientFactory.SharedWS()
 	ble.keymgr = pic.KeyManager()
 
 	ble.bIndexer = pic.BlockIndexer()
@@ -207,8 +208,12 @@ func (ble *pubTxManager) Start() error {
 
 func (ble *pubTxManager) Stop() {
 	ble.ctxCancel()
-	ble.submissionWriter.Shutdown()
-	ble.nonceManager.Stop()
+	if ble.submissionWriter != nil {
+		ble.submissionWriter.Shutdown()
+	}
+	if ble.nonceManager != nil {
+		ble.nonceManager.Stop()
+	}
 	if ble.engineLoopDone != nil {
 		<-ble.engineLoopDone
 	}

@@ -49,22 +49,23 @@ import (
 	"gorm.io/gorm"
 )
 
-type dependencyMocks struct {
-	allComponents    *componentmocks.AllComponents
-	db               sqlmock.Sqlmock // unless realDB
-	keyManager       ethclient.KeyManager
-	ethClientFactory *componentmocks.EthClientFactory
-	ethClient        *componentmocks.EthClient
-	blockIndexer     *componentmocks.BlockIndexer
-	txManager        *componentmocks.TXManager
+type mocksAndTestControl struct {
+	disableManagerStart bool
+	allComponents       *componentmocks.AllComponents
+	db                  sqlmock.Sqlmock // unless realDB
+	keyManager          ethclient.KeyManager
+	ethClientFactory    *componentmocks.EthClientFactory
+	ethClient           *componentmocks.EthClient
+	blockIndexer        *componentmocks.BlockIndexer
+	txManager           *componentmocks.TXManager
 }
 
 // const testDestAddress = "0x6cee73cf4d5b0ac66ce2d1c0617bec4bedd09f39"
 
 // const testMainSigningAddress = testDestAddress
 
-func baseMocks(t *testing.T) *dependencyMocks {
-	mocks := &dependencyMocks{
+func baseMocks(t *testing.T) *mocksAndTestControl {
+	mocks := &mocksAndTestControl{
 		allComponents:    componentmocks.NewAllComponents(t),
 		ethClientFactory: componentmocks.NewEthClientFactory(t),
 		ethClient:        componentmocks.NewEthClient(t),
@@ -79,7 +80,7 @@ func baseMocks(t *testing.T) *dependencyMocks {
 	return mocks
 }
 
-func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...func(mocks *dependencyMocks, conf *Config)) (context.Context, *pubTxManager, *dependencyMocks, func()) {
+func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...func(mocks *mocksAndTestControl, conf *Config)) (context.Context, *pubTxManager, *mocksAndTestControl, func()) {
 	log.SetLevel("debug")
 	ctx := context.Background()
 	conf := &Config{
@@ -148,8 +149,10 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 	err = pmgr.PostInit(mocks.allComponents)
 	require.NoError(t, err)
 
-	err = pmgr.Start()
-	require.NoError(t, err)
+	if !mocks.disableManagerStart {
+		err = pmgr.Start()
+		require.NoError(t, err)
+	}
 
 	return pmgr.ctx, pmgr, mocks, func() {
 		pmgr.Stop()
@@ -157,7 +160,7 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 	}
 }
 
-func passthroughBuildRawTransactionNoResolve(m *dependencyMocks, chainID int64) {
+func passthroughBuildRawTransactionNoResolve(m *mocksAndTestControl, chainID int64) {
 	mbt := m.ethClient.On("BuildRawTransactionNoResolve", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	mbt.Run(func(args mock.Arguments) {
 		var callOpts []ethclient.CallOption
@@ -197,7 +200,7 @@ func TestInit(t *testing.T) {
 }
 
 func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
-	ctx, ble, m, done := newTestPublicTxManager(t, true, func(mocks *dependencyMocks, conf *Config) {
+	ctx, ble, m, done := newTestPublicTxManager(t, true, func(mocks *mocksAndTestControl, conf *Config) {
 		conf.Manager.Interval = confutil.P("50ms")
 		conf.Orchestrator.Interval = confutil.P("50ms")
 		conf.Manager.OrchestratorIdleTimeout = confutil.P("1ms")
@@ -473,7 +476,7 @@ func TestSubmitFailures(t *testing.T) {
 }
 
 func TestAddActivityDisabled(t *testing.T) {
-	_, ble, _, done := newTestPublicTxManager(t, false, func(mocks *dependencyMocks, conf *Config) {
+	_, ble, _, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *Config) {
 		conf.Manager.ActivityRecords.RecordsPerTransaction = confutil.P(0)
 	})
 	defer done()
@@ -499,7 +502,7 @@ func TestAddActivityWrap(t *testing.T) {
 
 }
 
-func mockForSubmitSuccess(mocks *dependencyMocks, conf *Config) {
+func mockForSubmitSuccess(mocks *mocksAndTestControl, conf *Config) {
 	signingKey := tktypes.EthAddress(tktypes.RandBytes(20))
 	mockKeyManager := mocks.keyManager.(*componentmocks.KeyManager)
 	mockKeyManager.On("ResolveKey", mock.Anything, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", signingKey.String(), nil)
@@ -534,7 +537,7 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 
 func TestEngineSuspendResumeRealDB(t *testing.T) {
 
-	ctx, ble, m, done := newTestPublicTxManager(t, true, func(mocks *dependencyMocks, conf *Config) {
+	ctx, ble, m, done := newTestPublicTxManager(t, true, func(mocks *mocksAndTestControl, conf *Config) {
 		conf.Manager.Interval = confutil.P("50ms")
 		conf.Orchestrator.Interval = confutil.P("50ms")
 		conf.Manager.OrchestratorIdleTimeout = confutil.P("1ms")

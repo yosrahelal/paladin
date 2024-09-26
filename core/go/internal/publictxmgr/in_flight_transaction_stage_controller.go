@@ -432,6 +432,8 @@ func (it *InFlightTransactionStageController) ProduceLatestInFlightStageContext(
 									}
 									it.stateManager.ClearRunningStageContext(ctx)
 								}
+								// Need to go back round again to clear this inflight out completely
+								it.MarkInFlightTxStale()
 							} else {
 								log.L(ctx).Errorf("persistenceOutput should not be nil for transaction with ID: %s, in the stage output object: %+v.", rsc.InMemoryTx.GetSignerNonce(), rsIn)
 								tOut.Error = i18n.NewError(ctx, msgs.MsgInvalidStageOutput, "persistenceOutput", rsIn)

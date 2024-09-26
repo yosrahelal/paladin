@@ -574,7 +574,7 @@ func newNonceCacheForTesting(cbFuncs ...NextNonceCallback) *nonceCacheStruct {
 }
 
 func TestBatchDoubleSubmit(t *testing.T) {
-	ctx, ble, mocks, done := newTestPublicTxManager(t, false, func(mocks *dependencyMocks, conf *Config) {
+	ctx, ble, mocks, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *Config) {
 		conf.Manager.NonceCacheTimeout = confutil.P("0")
 	})
 	defer done()
