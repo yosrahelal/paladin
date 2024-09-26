@@ -67,3 +67,11 @@ func (n *ZetoHelper) Transfer(ctx context.Context, to string, amount uint64) *Do
 		Amount: tktypes.Uint64ToUint256(amount),
 	}))
 }
+
+func (z *ZetoHelper) LockProof(ctx context.Context, delegate tktypes.EthAddress, call []byte) *DomainTransactionHelper {
+	fn := types.ZetoABI.Functions()["lockProof"]
+	return NewDomainTransactionHelper(ctx, z.t, z.rpc, tktypes.EthAddress(z.Address), fn, toJSON(z.t, &types.LockParams{
+		Delegate: delegate,
+		Call:     call,
+	}))
+}
