@@ -187,12 +187,12 @@ func (dc *domainContext) run(fn func(ctx context.Context, dsi DomainStateInterfa
 	return fn(dc.ctx, dc)
 }
 
-func (dc *domainContext) getUnFlushedStates() (spending []tktypes.HexBytes, nullifiers []*StateNullifier, err error) {
+func (dc *domainContext) getUnFlushedStates() (spending []tktypes.HexBytes, spent []tktypes.HexBytes, nullifiers []*StateNullifier, err error) {
 	// Take lock and check flush state
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
-		return nil, nil, flushErr
+		return nil, nil, nil, flushErr
 	}
 
 	for _, l := range dc.unFlushed.stateLocks {
@@ -201,7 +201,7 @@ func (dc *domainContext) getUnFlushedStates() (spending []tktypes.HexBytes, null
 		}
 	}
 	for _, s := range dc.unFlushed.stateSpends {
-		spending = append(spending, s.State)
+		spent = append(spent, s.State)
 	}
 	nullifiers = append(nullifiers, dc.unFlushed.stateNullifiers...)
 	if dc.flushing != nil {
@@ -211,11 +211,11 @@ func (dc *domainContext) getUnFlushedStates() (spending []tktypes.HexBytes, null
 			}
 		}
 		for _, s := range dc.flushing.stateSpends {
-			spending = append(spending, s.State)
+			spent = append(spent, s.State)
 		}
 		nullifiers = append(nullifiers, dc.flushing.stateNullifiers...)
 	}
-	return spending, nullifiers, nil
+	return spending, spent, nullifiers, nil
 }
 
 func (dc *domainContext) mergedUnFlushed(schema Schema, dbStates []*State, query *query.QueryJSON, requireNullifier bool) (_ []*State, err error) {
@@ -349,10 +349,11 @@ func (dc *domainContext) mergeInMemoryMatches(schema Schema, states []*State, ex
 func (dc *domainContext) FindAvailableStates(schemaID string, query *query.QueryJSON) (s []*State, err error) {
 
 	// Build a list of spending states
-	spending, _, err := dc.getUnFlushedStates()
+	spending, spent, _, err := dc.getUnFlushedStates()
 	if err != nil {
 		return nil, err
 	}
+	spending = append(spending, spent...)
 
 	// Run the query against the DB
 	schema, states, err := dc.ss.findStates(dc.ctx, dc.domainName, dc.contractAddress, schemaID, query, StateStatusAvailable, spending...)
@@ -367,7 +368,7 @@ func (dc *domainContext) FindAvailableStates(schemaID string, query *query.Query
 func (dc *domainContext) FindAvailableNullifiers(schemaID string, query *query.QueryJSON) (s []*State, err error) {
 
 	// Build a list of unflushed and spending nullifiers
-	spending, nullifiers, err := dc.getUnFlushedStates()
+	spending, spent, nullifiers, err := dc.getUnFlushedStates()
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +378,7 @@ func (dc *domainContext) FindAvailableNullifiers(schemaID string, query *query.Q
 	}
 
 	// Run the query against the DB
-	schema, states, err := dc.ss.findAvailableNullifiers(dc.ctx, dc.domainName, dc.contractAddress, schemaID, query, statesWithNullifiers, spending)
+	schema, states, err := dc.ss.findAvailableNullifiers(dc.ctx, dc.domainName, dc.contractAddress, schemaID, query, statesWithNullifiers, spending, spent)
 	if err != nil {
 		return nil, err
 	}
