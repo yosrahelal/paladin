@@ -201,13 +201,37 @@ func TestNotoForZeto(t *testing.T) {
 	assert.Equal(t, int64(10), zetoCoins[0].Amount.Int().Int64())
 	assert.Equal(t, bob, zetoCoins[0].Owner) // TODO: this should really be bob's key, not by name
 
-	// TODO: use Pente to coordinate the trade
+	// TODO: this should be a Pente private contract, instead of a base ledger contract
+	log.L(ctx).Infof("Propose a trade of 1 Noto for 1 Zeto")
+	swap := helpers.DeploySwap(ctx, t, tb, alice, &helpers.TradeRequestInput{
+		Holder1:       aliceKey,
+		TokenAddress1: noto.Address,
+		TokenValue1:   ethtypes.NewHexInteger64(1),
+
+		Holder2:       bobKey,
+		TokenAddress2: zeto.Address,
+		TokenValue2:   ethtypes.NewHexInteger64(1),
+	})
 
 	log.L(ctx).Infof("Prepare the transfers")
 	transferNoto := noto.TransferWithApproval(ctx, bob, 1).Prepare(alice)
 	transferZeto := zeto.Transfer(ctx, alice, 1).Prepare(bob)
 
 	// TODO: Bob should lock the proof
+
+	// TODO: this should actually be a Pente state transition
+	log.L(ctx).Infof("Prepare the trade execute")
+	encodedExecute := swap.Execute(ctx).Prepare()
+
+	log.L(ctx).Infof("Record the prepared transfers")
+	swap.Prepare(ctx, &helpers.StateData{
+		Inputs:  transferNoto.InputStates,
+		Outputs: transferNoto.OutputStates,
+	}).SignAndSend(alice).Wait()
+	swap.Prepare(ctx, &helpers.StateData{
+		Inputs:  transferZeto.InputStates,
+		Outputs: transferZeto.OutputStates,
+	}).SignAndSend(bob).Wait()
 
 	log.L(ctx).Infof("Create Atom instance")
 	transferAtom := atomFactory.Create(ctx, alice, []*helpers.AtomOperation{
@@ -218,6 +242,10 @@ func TestNotoForZeto(t *testing.T) {
 		{
 			ContractAddress: zeto.Address,
 			CallData:        transferZeto.EncodedCall,
+		},
+		{
+			ContractAddress: swap.Address,
+			CallData:        encodedExecute,
 		},
 	})
 
