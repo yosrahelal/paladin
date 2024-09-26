@@ -59,8 +59,12 @@ type EventStream struct {
 	Updated tktypes.Timestamp             `json:"updated"        gorm:"autoUpdateTime:nano"`
 	Type    tktypes.Enum[EventStreamType] `json:"type"`
 	Config  EventStreamConfig             `json:"config"         gorm:"type:bytes;serializer:json"`
-	Source  *tktypes.EthAddress           `json:"source"`
-	ABI     abi.ABI                       `json:"abi,omitempty"  gorm:"serializer:json"` // immutable (event delivery behavior would be too undefined with mutability)
+	Sources []EventStreamSource           `json:"sources"        gorm:"serializer:json"` // immutable (event delivery behavior would be too undefined with mutability)
+}
+
+type EventStreamSource struct {
+	ABI     abi.ABI             `json:"abi,omitempty"`
+	Address *tktypes.EthAddress `json:"address,omitempty"` // optional
 }
 
 type EventStreamCheckpoint struct {

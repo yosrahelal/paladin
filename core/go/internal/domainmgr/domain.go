@@ -128,8 +128,8 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 			return nil, i18n.WrapError(d.ctx, err, msgs.MsgDomainInvalidEvents)
 		}
 
-		// We build a stream name in a way assured to result in a new stream if the ABI changes,
-		// TODO... and in the future with a logical way to clean up defunct streams
+		// We build a stream name in a way assured to result in a new stream if the ABI changes
+		// TODO: clean up defunct streams
 		streamHash, err := tktypes.ABISolDefinitionHash(d.ctx, eventsABI)
 		if err != nil {
 			return nil, err
@@ -141,7 +141,9 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 			Definition: &blockindexer.EventStream{
 				Name: streamName,
 				Type: blockindexer.EventStreamTypeInternal.Enum(),
-				ABI:  eventsABI,
+				Sources: []blockindexer.EventStreamSource{{
+					ABI: eventsABI,
+				}},
 			},
 			Handler: d.handleEventBatch,
 		})

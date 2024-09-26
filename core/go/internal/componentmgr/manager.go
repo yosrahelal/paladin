@@ -341,19 +341,23 @@ func (cm *componentManager) buildInternalEventStreams() ([]*blockindexer.Interna
 		for _, initStream := range initResult.EventStreams {
 			switch initStream.Type {
 			case blockindexer.IESTypeEventStream:
-				// We build a stream name in a way assured to result in a new stream if the ABI changes,
-				// TODO... and in the future with a logical way to clean up defunct streams
-				streamHash, err := tktypes.ABISolDefinitionHash(cm.bgCtx, initStream.ABI)
-				if err != nil {
-					return nil, err
+				// We build a stream name in a way assured to result in a new stream if the ABI changes
+				// TODO: clean up defunct streams
+				var abiHashes []byte
+				for _, s := range initStream.Sources {
+					hash, err := tktypes.ABISolDefinitionHash(cm.bgCtx, s.ABI)
+					if err != nil {
+						return nil, err
+					}
+					abiHashes = append(abiHashes, hash[:]...)
 				}
+				streamHash := tktypes.Bytes32Keccak(abiHashes)
 				streamName := fmt.Sprintf("i_%s_%s", shortName, streamHash)
 				streams = append(streams, &blockindexer.InternalEventStream{
 					Definition: &blockindexer.EventStream{
-						Name:   streamName,
-						Type:   blockindexer.EventStreamTypeInternal.Enum(),
-						ABI:    initStream.ABI,
-						Source: initStream.Source,
+						Name:    streamName,
+						Type:    blockindexer.EventStreamTypeInternal.Enum(),
+						Sources: initStream.Sources,
 					},
 					Handler: initStream.Handler,
 				})

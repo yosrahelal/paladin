@@ -104,9 +104,11 @@ func (dm *domainManager) PreInit(pic components.PreInitComponents) (*components.
 			return nil, i18n.WrapError(dm.bgCtx, err, msgs.MsgDomainRegistryAddressInvalid, d.RegistryAddress, name)
 		}
 		eventStreams = append(eventStreams, &components.ManagerEventStream{
-			ABI:     iPaladinContractRegistryABI,
+			Sources: []blockindexer.EventStreamSource{{
+				ABI:     iPaladinContractRegistryABI,
+				Address: registryAddr,
+			}},
 			Handler: dm.eventIndexer,
-			Source:  registryAddr,
 		})
 	}
 	return &components.ManagerInitResult{

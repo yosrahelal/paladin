@@ -189,9 +189,11 @@ func TestStartOK(t *testing.T) {
 	cm.ethClientFactory = mockEthClientFactory
 	cm.initResults = map[string]*components.ManagerInitResult{
 		"utengine": {
-			EventStreams: []*components.ManagerEventStream{
-				{ABI: abi.ABI{}},
-			},
+			EventStreams: []*components.ManagerEventStream{{
+				Sources: []blockindexer.EventStreamSource{{
+					ABI: abi.ABI{},
+				}},
+			}},
 			RPCModules: []*rpcserver.RPCModule{
 				rpcserver.NewRPCModule("ut"),
 			},
@@ -244,10 +246,13 @@ func TestBuildInternalEventStreamsError(t *testing.T) {
 	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &Config{}, nil).(*componentManager)
 	cm.initResults = map[string]*components.ManagerInitResult{
 		"utengine": {
-			EventStreams: []*components.ManagerEventStream{
-				{ABI: abi.ABI{
-					{Type: "event", Inputs: abi.ParameterArray{{Type: "wrong"}}},
+			EventStreams: []*components.ManagerEventStream{{
+				Sources: []blockindexer.EventStreamSource{{
+					ABI: abi.ABI{
+						{Type: "event", Inputs: abi.ParameterArray{{Type: "wrong"}}},
+					},
 				}},
+			},
 			},
 		},
 	}
