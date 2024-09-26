@@ -508,7 +508,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		return nil, err
 	}
 
-	spentStates := make(map[uuid.UUID][]string)
+	spentStates := make(map[uuid.UUID][]string, len(res.SpentStates))
 	for _, state := range res.SpentStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
@@ -517,7 +517,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		spentStates[*txUUID] = append(spentStates[*txUUID], state.Id)
 	}
 
-	confirmedStates := make(map[uuid.UUID][]string)
+	confirmedStates := make(map[uuid.UUID][]string, len(res.ConfirmedStates))
 	for _, state := range res.ConfirmedStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
@@ -526,7 +526,8 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		confirmedStates[*txUUID] = append(confirmedStates[*txUUID], state.Id)
 	}
 
-	newStates := make(map[uuid.UUID][]*statestore.StateUpsert)
+	newStates := make(map[uuid.UUID][]*statestore.StateUpsert, len(res.NewStates))
+	newNullifiers := make([]*statestore.StateNullifier, 0, len(res.NewStates))
 	for _, state := range res.NewStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
@@ -545,6 +546,16 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 			Data:     tktypes.RawJSON(state.StateDataJson),
 			Creating: true,
 		})
+		if state.Nullifier != nil {
+			nullifier, err := tktypes.ParseHexBytes(ctx, *state.Nullifier)
+			if err != nil {
+				return nil, err
+			}
+			newNullifiers = append(newNullifiers, &statestore.StateNullifier{
+				State:     id,
+				Nullifier: nullifier,
+			})
+		}
 	}
 
 	err = d.dm.stateStore.RunInDomainContext(d.name, contractAddress, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
@@ -560,6 +571,11 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		}
 		for txID, states := range confirmedStates {
 			if err = dsi.MarkStatesConfirmed(txID, states); err != nil {
+				return err
+			}
+		}
+		if len(newNullifiers) > 0 {
+			if err = dsi.UpsertNullifiers(newNullifiers); err != nil {
 				return err
 			}
 		}

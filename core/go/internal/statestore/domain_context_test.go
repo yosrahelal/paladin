@@ -347,52 +347,67 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, schemas, 1)
 	schemaID = schemas[0].IDString()
-	stateID := tktypes.HexBytes(tktypes.RandBytes(32))
-	nullifier := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
+	nullifier1 := tktypes.HexBytes(tktypes.RandBytes(32))
 
 	contractAddress := tktypes.RandAddress()
 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
 
+		// Start with 2 states
 		tx1states, err := dsi.UpsertStates(&transactionID, []*StateUpsert{
-			{ID: stateID, SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
+			{ID: stateID1, SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
+			{ID: stateID2, SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 10,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
 		})
 		require.NoError(t, err)
-		assert.Len(t, tx1states, 1)
+		assert.Len(t, tx1states, 2)
 
 		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{}`))
 		require.NoError(t, err)
-		assert.Len(t, states, 1)
-
-		nullifiers, err := dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+		assert.Len(t, states, 2)
+		states, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 		require.NoError(t, err)
-		assert.Len(t, nullifiers, 0)
+		assert.Len(t, states, 0)
 
+		// Attach a nullifier to the first state
 		err = dsi.UpsertNullifiers([]*StateNullifier{
-			{State: stateID, Nullifier: nullifier},
+			{State: stateID1, Nullifier: nullifier1},
 		})
 		require.NoError(t, err)
 
-		nullifiers, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+		states, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 		require.NoError(t, err)
-		assert.Len(t, nullifiers, 1)
+		require.Len(t, states, 1)
+		require.NotNil(t, states[0].Nullifier)
+		assert.Equal(t, nullifier1, states[0].Nullifier.Nullifier)
 
+		// Flush the states to the database
 		return nil
 	})
 	require.NoError(t, err)
 
 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
 
-		nullifiers, err := dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+		// Confirm still 2 states and 1 nullifier
+		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{}`))
 		require.NoError(t, err)
-		assert.Len(t, nullifiers, 1)
+		assert.Len(t, states, 2)
+		states, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+		require.NoError(t, err)
+		assert.Len(t, states, 1)
+		require.NotNil(t, states[0].Nullifier)
+		assert.Equal(t, nullifier1, states[0].Nullifier.Nullifier)
 
-		err = dsi.MarkStatesSpent(transactionID, []string{nullifier.String()})
+		// Spend the nullifier
+		err = dsi.MarkStatesSpent(transactionID, []string{nullifier1.String()})
 		assert.NoError(t, err)
 
-		states, err := dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+		// Confirm no more nullifiers available
+		states, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 		require.NoError(t, err)
 		assert.Len(t, states, 0)
 
+		// Flush the states to the database
 		return nil
 	})
 	require.NoError(t, err)
