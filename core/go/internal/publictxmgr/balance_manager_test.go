@@ -17,378 +17,366 @@ package publictxmgr
 
 import (
 	"context"
+	"database/sql/driver"
+	"errors"
+	"fmt"
+	"math/big"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-
+	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-// var testAutoFuelingSourceAddress = "0x4e598f6e918321dd47c86e7a077b4ab0e7414846"
+func newTestBalanceManager(t *testing.T, autoFuel bool, cbs ...func(m *mocksAndTestControl, conf *Config)) (context.Context, *BalanceManagerWithInMemoryTracking, *pubTxManager, *mocksAndTestControl, func()) {
+	ctx, ble, m, done := newTestPublicTxManager(t, false, func(m *mocksAndTestControl, conf *Config) {
+		if autoFuel {
+			conf.BalanceManager.AutoFueling.Source = confutil.P("autofueler")
 
-// const testSourceAddressBalance = 400
-// const testSourceAddressBalanceString = "400"
+			autoFuelSourceAddr := tktypes.RandAddress()
+			m.keyManager.(*componentmocks.KeyManager).On("ResolveKey", mock.Anything, "autofueler", mock.Anything).
+				Return("", autoFuelSourceAddr.String(), nil)
+		}
+		for _, cb := range cbs {
+			cb(m, conf)
+		}
+	})
 
-// const testSourceAddressBalanceNew = 500
-// const testSourceAddressBalanceNewString = "500"
-
-func NewTestBalanceManager(ctx context.Context, t *testing.T, pubtxMgr *pubTxManager) (*BalanceManagerWithInMemoryTracking, *componentmocks.EthClient, *componentmocks.PublicTxManager) {
-	mEthClient := componentmocks.NewEthClient(t)
-
-	mockAFTxEngine := componentmocks.NewPublicTxManager(t)
-
-	testManagerWithMocks, err := NewBalanceManagerWithInMemoryTracking(ctx, &Config{}, mEthClient, pubtxMgr)
+	balanceManager, err := NewBalanceManagerWithInMemoryTracking(ctx, ble.conf, m.ethClient, ble)
 	require.NoError(t, err)
-
-	return testManagerWithMocks.(*BalanceManagerWithInMemoryTracking), mEthClient, mockAFTxEngine
+	return ctx, balanceManager.(*BalanceManagerWithInMemoryTracking), ble, m, done
 }
 
-// func TestNewBalanceManagerError(t *testing.T) {
-// 	ctx := context.Background()
-// 	conf := config.RootSection("unittest")
-// 	InitBalanceManagerConfig(conf)
-// 	ResetBalanceManagerConfig(conf)
-// 	bmConf := conf.SubSection(BalanceManagerSection)
+func TestNewBalanceManagerError(t *testing.T) {
+	ctx, ble, m, done := newTestPublicTxManager(t, false)
+	defer done()
 
-// 	mEthClient := componentmocks.NewEthClient(t)
+	ble.conf.BalanceManager.AutoFueling.MaxDestBalance = confutil.P("2")
+	ble.conf.BalanceManager.AutoFueling.MinDestBalance = confutil.P("3")
+	_, err := NewBalanceManagerWithInMemoryTracking(ctx, ble.conf, m.ethClient, ble)
+	assert.Regexp(t, "PD011903", err.Error())
 
-// 	mockAFTxEngine := componentmocks.NewPublicTxManager(t)
+	ble.conf.BalanceManager.AutoFueling.MaxDestBalance = confutil.P("4")
+	ble.conf.BalanceManager.AutoFueling.MinThreshold = confutil.P("10")
 
-// 	afConfig := conf.SubSection(fmt.Sprintf("%s.%s", BalanceManagerSection, BalanceManagerAutoFuelingSection))
+	_, err = NewBalanceManagerWithInMemoryTracking(ctx, ble.conf, m.ethClient, ble)
+	assert.Error(t, err)
+	assert.Regexp(t, "PD011904", err.Error())
+}
 
-// 	afConfig.Set(BalanceManagerAutoFuelingMinThresholdBigIntString, "not a big int string")
+func TestIsAutoFuelingEnabled(t *testing.T) {
+	ctx, bm, _, _, done := newTestBalanceManager(t, false)
+	assert.False(t, bm.IsAutoFuelingEnabled(ctx))
+	done()
 
-// 	_, err := NewBalanceManagerWithInMemoryTracking(ctx, bmConf, mEthClient, mockAFTxEngine)
-// 	assert.Error(t, err)
-// 	assert.Regexp(t, fmt.Sprintf("PD011902: Value of '%s'", BalanceManagerAutoFuelingMinThresholdBigIntString), err.Error())
+	ctx, bm, _, _, done = newTestBalanceManager(t, true)
+	assert.True(t, bm.IsAutoFuelingEnabled(ctx))
+	done()
+}
 
-// 	afConfig.Set(BalanceManagerAutoFuelingMaxDestBalanceBigIntString, "not a big int string")
+func TestNotifyAddressBalanceChanged(t *testing.T) {
+	ctx, bm, _, _, done := newTestBalanceManager(t, false)
+	defer done()
 
-// 	_, err = NewBalanceManagerWithInMemoryTracking(ctx, bmConf, mEthClient, mockAFTxEngine)
-// 	assert.Error(t, err)
-// 	assert.Regexp(t, fmt.Sprintf("PD011902: Value of '%s'", BalanceManagerAutoFuelingMaxDestBalanceBigIntString), err.Error())
+	exampleAddr := *tktypes.RandAddress()
+	assert.Equal(t, false, bm.addressBalanceChangedMap[exampleAddr])
+	bm.NotifyAddressBalanceChanged(ctx, exampleAddr)
+	assert.Equal(t, true, bm.addressBalanceChangedMap[exampleAddr])
+}
 
-// 	afConfig.Set(BalanceManagerAutoFuelingMinDestBalanceBigIntString, "not a big int string")
+func TestGetAddressBalance(t *testing.T) {
+	ctx, bm, _, m, done := newTestBalanceManager(t, false)
+	defer done()
 
-// 	_, err = NewBalanceManagerWithInMemoryTracking(ctx, bmConf, mEthClient, mockAFTxEngine)
-// 	assert.Error(t, err)
-// 	assert.Regexp(t, fmt.Sprintf("PD011902: Value of '%s'", BalanceManagerAutoFuelingMinDestBalanceBigIntString), err.Error())
+	const balanceOld = uint64(400)
+	const balanceNew = uint64(500)
 
-// 	afConfig.Set(BalanceManagerAutoFuelingSourceAddressMinimumBalanceBigIntString, "not a big int string")
+	exampleAddr := *tktypes.RandAddress()
 
-// 	_, err = NewBalanceManagerWithInMemoryTracking(ctx, bmConf, mEthClient, mockAFTxEngine)
-// 	assert.Error(t, err)
-// 	assert.Regexp(t, fmt.Sprintf("PD011902: Value of '%s'", BalanceManagerAutoFuelingSourceAddressMinimumBalanceBigIntString), err.Error())
+	m.ethClient.On("GetBalance", mock.Anything, exampleAddr, "latest").Return(tktypes.Uint64ToUint256(balanceOld), nil).Once()
 
-// 	// test min is greater than max value
-// 	afConfig.Set(BalanceManagerAutoFuelingMaxDestBalanceBigIntString, "2")
-// 	afConfig.Set(BalanceManagerAutoFuelingMinDestBalanceBigIntString, "3")
-// 	afConfig.Set(BalanceManagerAutoFuelingSourceAddressMinimumBalanceBigIntString, "")
-// 	afConfig.Set(BalanceManagerAutoFuelingMinThresholdBigIntString, "1")
+	m.ethClient.On("GetBalance", mock.Anything, exampleAddr, "latest").Return(tktypes.Uint64ToUint256(balanceNew), nil).Once()
 
-// 	_, err = NewBalanceManagerWithInMemoryTracking(ctx, bmConf, mEthClient, mockAFTxEngine)
-// 	assert.Error(t, err)
-// 	assert.Regexp(t, "PD011903", err.Error())
+	m.ethClient.On("GetBalance", mock.Anything, exampleAddr, "latest").Return(nil, errors.New("pop")).Once()
 
-// 	// test min threshold is greater than max value
-// 	afConfig.Set(BalanceManagerAutoFuelingMaxDestBalanceBigIntString, "4")
-// 	afConfig.Set(BalanceManagerAutoFuelingMinThresholdBigIntString, "10")
+	addressAccount, err := bm.GetAddressBalance(ctx, exampleAddr)
+	require.NoError(t, err)
+	assert.NotNil(t, addressAccount)
+	assert.Equal(t, balanceOld, addressAccount.Balance.Uint64())
 
-// 	_, err = NewBalanceManagerWithInMemoryTracking(ctx, bmConf, mEthClient, mockAFTxEngine)
-// 	assert.Error(t, err)
-// 	assert.Regexp(t, "PD011904", err.Error())
-// }
+	// next get should use the cache
+	addressAccount, err = bm.GetAddressBalance(ctx, exampleAddr)
+	require.NoError(t, err)
+	assert.Equal(t, balanceOld, addressAccount.Balance.Uint64())
 
-// func TestIsAutoFuelingEnabled(t *testing.T) {
-// 	ctx := context.Background()
-// 	conf := config.RootSection("unittest")
-// 	InitBalanceManagerConfig(conf)
-// 	ResetBalanceManagerConfig(conf)
-// 	bmConf := conf.SubSection(BalanceManagerSection)
+	// next get should retrieve the balance again
+	bm.NotifyAddressBalanceChanged(ctx, exampleAddr)
+	addressAccount, err = bm.GetAddressBalance(ctx, exampleAddr)
+	require.NoError(t, err)
+	assert.Equal(t, balanceNew, addressAccount.Balance.Uint64())
 
-// 	mEthClient := componentmocks.NewEthClient(t)
+	// test error
+	bm.NotifyAddressBalanceChanged(ctx, exampleAddr)
+	_, err = bm.GetAddressBalance(ctx, exampleAddr)
+	assert.Error(t, err)
+}
 
-// 	mockAFTxEngine := componentmocks.NewPublicTxManager(t)
+func TestAddressAccountSpend(t *testing.T) {
+	ctx, bm, _, m, done := newTestBalanceManager(t, true)
+	defer done()
 
-// 	afConfig := conf.SubSection(fmt.Sprintf("%s.%s", BalanceManagerSection, BalanceManagerAutoFuelingSection))
-// 	afConfig.Set(BalanceManagerAutoFuelingSourceAddressString, testAutoFuelingSourceAddress)
+	exampleAddr := *tktypes.RandAddress()
 
-// 	bm, err := NewBalanceManagerWithInMemoryTracking(ctx, bmConf, mEthClient, mockAFTxEngine)
-// 	require.NoError(t, err)
+	const balanceOld = uint64(400)
 
-// 	assert.True(t, bm.IsAutoFuelingEnabled(ctx))
+	m.ethClient.On("GetBalance", mock.Anything, exampleAddr, "latest").Return(tktypes.Uint64ToUint256(balanceOld), nil).Once()
+	addressAccount, err := bm.GetAddressBalance(ctx, exampleAddr)
+	require.NoError(t, err)
+	assert.NotNil(t, addressAccount)
+	assert.Equal(t, balanceOld, addressAccount.Balance.Uint64())
+	assert.Equal(t, "0", addressAccount.Spent.String())
+	assert.Equal(t, "0", addressAccount.MinCost.String())
+	assert.Equal(t, "0", addressAccount.MaxCost.String())
+	assert.Equal(t, 0, addressAccount.SpentTransactionCount)
 
-// 	afConfig.Set(BalanceManagerAutoFuelingSourceAddressString, "") // TODO: validate the address
-// 	bm, err = NewBalanceManagerWithInMemoryTracking(ctx, bmConf, mEthClient, mockAFTxEngine)
-// 	require.NoError(t, err)
-// 	assert.False(t, bm.IsAutoFuelingEnabled(ctx))
-// }
+	initialBalance := big.NewInt(int64(balanceOld))
+	spent1 := big.NewInt(10)
 
-// func TestNotifyAddressBalanceChanged(t *testing.T) {
-// 	ctx := context.Background()
-// 	bm, _, _ := NewTestBalanceManager(ctx, t)
-// 	assert.Equal(t, false, bm.addressBalanceChangedMap[testAutoFuelingSourceAddress])
-// 	bm.NotifyAddressBalanceChanged(ctx, testAutoFuelingSourceAddress)
-// 	assert.Equal(t, true, bm.addressBalanceChangedMap[testAutoFuelingSourceAddress])
-// }
+	ats := addressAccount.Spend(ctx, spent1)
+	expectedNewAvailableToSpend := initialBalance.Sub(initialBalance, spent1)
+	assert.Equal(t, expectedNewAvailableToSpend.String(), ats.String())
+	assert.Equal(t, spent1.String(), addressAccount.MinCost.String())
+	assert.Equal(t, spent1.String(), addressAccount.MaxCost.String())
+	assert.Equal(t, 1, addressAccount.SpentTransactionCount)
 
-// func TestGetAddressBalance(t *testing.T) {
-// 	ctx := context.Background()
-// 	bm, mEthClient, _ := NewTestBalanceManager(ctx, t)
-// 	defer mEthClient.AssertExpectations(t)
+	spent2 := big.NewInt(20)
+	ats = addressAccount.Spend(ctx, spent2)
+	expectedNewAvailableToSpend = expectedNewAvailableToSpend.Sub(expectedNewAvailableToSpend, spent2)
+	assert.Equal(t, expectedNewAvailableToSpend.String(), ats.String())
+	assert.Equal(t, spent1.String(), addressAccount.MinCost.String())
+	assert.Equal(t, spent2.String(), addressAccount.MaxCost.String())
+	assert.Equal(t, 2, addressAccount.SpentTransactionCount)
 
-// 	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(testSourceAddressBalance), nil).Once()
+	// negative number gets ignored
+	spent3 := big.NewInt(-30)
+	ats = addressAccount.Spend(ctx, spent3)
+	assert.Equal(t, expectedNewAvailableToSpend.String(), ats.String())
+	assert.Equal(t, spent1.String(), addressAccount.MinCost.String())
+	assert.Equal(t, spent2.String(), addressAccount.MaxCost.String())
+	assert.Equal(t, 2, addressAccount.SpentTransactionCount)
 
-// 	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(testSourceAddressBalanceNew), nil).Once()
+	// set new min cost
+	spent4 := big.NewInt(5)
+	ats = addressAccount.Spend(ctx, spent4)
+	expectedNewAvailableToSpend = expectedNewAvailableToSpend.Sub(expectedNewAvailableToSpend, spent4)
+	assert.Equal(t, expectedNewAvailableToSpend.String(), ats.String())
+	assert.Equal(t, spent4.String(), addressAccount.MinCost.String())
+	assert.Equal(t, spent2.String(), addressAccount.MaxCost.String())
+	assert.Equal(t, 3, addressAccount.SpentTransactionCount)
 
-// 	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(nil, errors.New("pop")).Once()
-// 	addressAccount, err := bm.GetAddressBalance(ctx, testAutoFuelingSourceAddress)
-// 	require.NoError(t, err)
-// 	assert.NotNil(t, addressAccount)
-// 	assert.Equal(t, testSourceAddressBalanceString, addressAccount.Balance.String())
+	// 0 gets ignored
+	ats = addressAccount.Spend(ctx, big.NewInt(0))
+	assert.Equal(t, expectedNewAvailableToSpend.String(), ats.String())
+	assert.Equal(t, spent4.String(), addressAccount.MinCost.String())
+	assert.Equal(t, spent2.String(), addressAccount.MaxCost.String())
+	assert.Equal(t, 3, addressAccount.SpentTransactionCount)
 
-// 	// next get should use the cache
-// 	addressAccount, err = bm.GetAddressBalance(ctx, testAutoFuelingSourceAddress)
-// 	require.NoError(t, err)
-// 	assert.Equal(t, testSourceAddressBalanceString, addressAccount.Balance.String())
+	balanceCopy := new(big.Int)
+	balanceCopy.Set(addressAccount.Balance)
+	amountToSpendAllBalance := balanceCopy.Sub(balanceCopy, addressAccount.Spent)
+	spent5 := amountToSpendAllBalance.Add(amountToSpendAllBalance, big.NewInt(1))
+	expectedNewAvailableToSpend = expectedNewAvailableToSpend.Sub(expectedNewAvailableToSpend, spent5)
+	ats = addressAccount.Spend(ctx, spent5)
+	assert.Equal(t, -1, ats.Sign())
+	assert.Equal(t, expectedNewAvailableToSpend.String(), ats.String())
+	assert.Equal(t, spent4.String(), addressAccount.MinCost.String())
+	assert.Equal(t, spent5.String(), addressAccount.MaxCost.String())
+	assert.Equal(t, 4, addressAccount.SpentTransactionCount)
 
-// 	// next get should retrieve the balance again
-// 	bm.NotifyAddressBalanceChanged(ctx, testAutoFuelingSourceAddress)
-// 	addressAccount, err = bm.GetAddressBalance(ctx, testAutoFuelingSourceAddress)
-// 	require.NoError(t, err)
-// 	assert.Equal(t, testSourceAddressBalanceNewString, addressAccount.Balance.String())
+	// do spent5 again
+	expectedNewAvailableToSpend = expectedNewAvailableToSpend.Sub(expectedNewAvailableToSpend, spent5)
+	ats = addressAccount.Spend(ctx, spent5)
+	assert.Equal(t, -1, ats.Sign())
+	assert.Equal(t, expectedNewAvailableToSpend.String(), ats.String())
+	assert.Equal(t, spent4.String(), addressAccount.MinCost.String())
+	assert.Equal(t, spent5.String(), addressAccount.MaxCost.String())
+	assert.Equal(t, 5, addressAccount.SpentTransactionCount)
+}
 
-// 	// test error
-// 	bm.NotifyAddressBalanceChanged(ctx, testAutoFuelingSourceAddress)
-// 	_, err = bm.GetAddressBalance(ctx, testAutoFuelingSourceAddress)
-// 	assert.Error(t, err)
-// }
+func TestTopUpAddressNoOpScenarios(t *testing.T) {
+	ctx, bm, _, _, done := newTestBalanceManager(t, true)
+	defer done()
 
-// func TestAddressAccountSpend(t *testing.T) {
-// 	ctx := context.Background()
-// 	bm, mEthClient, _ := NewTestBalanceManager(ctx, t)
-// 	defer mEthClient.AssertExpectations(t)
+	// no spent on the account
+	fuelingTx, err := bm.TopUpAccount(ctx, &AddressAccount{
+		Spent: big.NewInt(0),
+	})
+	require.NoError(t, err)
+	assert.Nil(t, fuelingTx)
 
-// 	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(testSourceAddressBalance), nil).Once()
-// 	addressAccount, err := bm.GetAddressBalance(ctx, testAutoFuelingSourceAddress)
-// 	require.NoError(t, err)
-// 	assert.NotNil(t, addressAccount)
-// 	assert.Equal(t, testSourceAddressBalanceString, addressAccount.Balance.String())
-// 	assert.Equal(t, "0", addressAccount.Spent.String())
-// 	assert.Equal(t, "0", addressAccount.MinCost.String())
-// 	assert.Equal(t, "0", addressAccount.MaxCost.String())
-// 	assert.Equal(t, 0, addressAccount.SpentTransactionCount)
+	// enough balance
+	fuelingTx, err = bm.TopUpAccount(ctx, &AddressAccount{
+		Spent:   big.NewInt(10),
+		Balance: big.NewInt(10),
+	})
+	require.NoError(t, err)
+	assert.Nil(t, fuelingTx)
 
-// 	initialBalance := big.NewInt(testSourceAddressBalance)
-// 	spent1 := big.NewInt(10)
+	// destination address already reached max amount
+	bm.maxDestBalance = big.NewInt(100)
+	fuelingTx, err = bm.TopUpAccount(ctx, &AddressAccount{
+		Spent:                 big.NewInt(10),
+		Balance:               big.NewInt(100),
+		SpentTransactionCount: 10,
+	})
+	require.NoError(t, err)
+	assert.Nil(t, fuelingTx)
 
-// 	ats := addressAccount.Spend(ctx, spent1)
-// 	expectedNewAvailableToSpend := initialBalance.Sub(initialBalance, spent1)
-// 	assert.Equal(t, expectedNewAvailableToSpend.String(), ats.String())
-// 	assert.Equal(t, spent1.String(), addressAccount.MinCost.String())
-// 	assert.Equal(t, spent1.String(), addressAccount.MaxCost.String())
-// 	assert.Equal(t, 1, addressAccount.SpentTransactionCount)
+	// no source address configured
+	bm.sourceAddress = nil
+	fuelingTx, err = bm.TopUpAccount(ctx, &AddressAccount{
+		Spent:                 big.NewInt(10),
+		Balance:               big.NewInt(0),
+		SpentTransactionCount: 10,
+	})
+	require.NoError(t, err)
+	assert.Nil(t, fuelingTx)
 
-// 	spent2 := big.NewInt(20)
-// 	ats = addressAccount.Spend(ctx, spent2)
-// 	expectedNewAvailableToSpend = expectedNewAvailableToSpend.Sub(expectedNewAvailableToSpend, spent2)
-// 	assert.Equal(t, expectedNewAvailableToSpend.String(), ats.String())
-// 	assert.Equal(t, spent1.String(), addressAccount.MinCost.String())
-// 	assert.Equal(t, spent2.String(), addressAccount.MaxCost.String())
-// 	assert.Equal(t, 2, addressAccount.SpentTransactionCount)
+}
 
-// 	// negative number gets ignored
-// 	spent3 := big.NewInt(-30)
-// 	ats = addressAccount.Spend(ctx, spent3)
-// 	assert.Equal(t, expectedNewAvailableToSpend.String(), ats.String())
-// 	assert.Equal(t, spent1.String(), addressAccount.MinCost.String())
-// 	assert.Equal(t, spent2.String(), addressAccount.MaxCost.String())
-// 	assert.Equal(t, 2, addressAccount.SpentTransactionCount)
+func generateExpectedFuelingTransaction(idx int, amountToTransfer uint64, from, to tktypes.EthAddress) *ptxapi.PublicTx {
+	gas := tktypes.HexUint64(10)
+	return &ptxapi.PublicTx{
+		From:  from,
+		To:    &to,
+		Nonce: tktypes.HexUint64(mockBaseNonce) + tktypes.HexUint64(idx), // fixed mock when disableManagerStart set
+		PublicTxOptions: ptxapi.PublicTxOptions{
+			Gas:   &gas,
+			Value: tktypes.Uint64ToUint256(amountToTransfer),
+		},
+	}
+}
 
-// 	// set new min cost
-// 	spent4 := big.NewInt(5)
-// 	ats = addressAccount.Spend(ctx, spent4)
-// 	expectedNewAvailableToSpend = expectedNewAvailableToSpend.Sub(expectedNewAvailableToSpend, spent4)
-// 	assert.Equal(t, expectedNewAvailableToSpend.String(), ats.String())
-// 	assert.Equal(t, spent4.String(), addressAccount.MinCost.String())
-// 	assert.Equal(t, spent2.String(), addressAccount.MaxCost.String())
-// 	assert.Equal(t, 3, addressAccount.SpentTransactionCount)
+func mockAutoFuelTransactionSubmit(m *mocksAndTestControl, bm *BalanceManagerWithInMemoryTracking, uncachedBalance bool) {
+	// Then insert of the auto-fueling transaction
+	m.db.ExpectBegin()
+	m.db.ExpectExec("INSERT.*public_txns").WillReturnResult(driver.ResultNoRows)
+	m.db.ExpectCommit()
 
-// 	// 0 gets ignored
-// 	ats = addressAccount.Spend(ctx, big.NewInt(0))
-// 	assert.Equal(t, expectedNewAvailableToSpend.String(), ats.String())
-// 	assert.Equal(t, spent4.String(), addressAccount.MinCost.String())
-// 	assert.Equal(t, spent2.String(), addressAccount.MaxCost.String())
-// 	assert.Equal(t, 3, addressAccount.SpentTransactionCount)
+	if uncachedBalance {
+		// Mock the sufficient balance on the auto-fueling source address, and the nonce assignment
+		m.ethClient.On("GetBalance", mock.Anything, *bm.sourceAddress, "latest").Return(tktypes.Uint64ToUint256(400), nil).Once()
+	}
 
-// 	balanceCopy := new(big.Int)
-// 	balanceCopy.Set(addressAccount.Balance)
-// 	amountToSpendAllBalance := balanceCopy.Sub(balanceCopy, addressAccount.Spent)
-// 	spent5 := amountToSpendAllBalance.Add(amountToSpendAllBalance, big.NewInt(1))
-// 	expectedNewAvailableToSpend = expectedNewAvailableToSpend.Sub(expectedNewAvailableToSpend, spent5)
-// 	ats = addressAccount.Spend(ctx, spent5)
-// 	assert.Equal(t, -1, ats.Sign())
-// 	assert.Equal(t, expectedNewAvailableToSpend.String(), ats.String())
-// 	assert.Equal(t, spent4.String(), addressAccount.MinCost.String())
-// 	assert.Equal(t, spent5.String(), addressAccount.MaxCost.String())
-// 	assert.Equal(t, 4, addressAccount.SpentTransactionCount)
+	// Gas estimate for the auto-fueling TX
+	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
+		Return(ethclient.EstimateGasResult{GasLimit: tktypes.HexUint64(10)}, nil).Once()
+}
 
-// 	// do spent5 again
-// 	expectedNewAvailableToSpend = expectedNewAvailableToSpend.Sub(expectedNewAvailableToSpend, spent5)
-// 	ats = addressAccount.Spend(ctx, spent5)
-// 	assert.Equal(t, -1, ats.Sign())
-// 	assert.Equal(t, expectedNewAvailableToSpend.String(), ats.String())
-// 	assert.Equal(t, spent4.String(), addressAccount.MinCost.String())
-// 	assert.Equal(t, spent5.String(), addressAccount.MaxCost.String())
-// 	assert.Equal(t, 5, addressAccount.SpentTransactionCount)
-// }
+func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
+	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *Config) {
+		m.disableManagerStart = true
+	})
+	defer done()
 
-// func TestTopUpAddressNoOpScenarios(t *testing.T) {
-// 	ctx := context.Background()
-// 	bm, _, _ := NewTestBalanceManager(ctx, t)
+	testDestAddress := *tktypes.RandAddress()
 
-// 	// no spent on the account
-// 	fuelingTx, err := bm.TopUpAccount(ctx, &AddressAccount{
-// 		Spent: big.NewInt(0),
-// 	})
-// 	require.NoError(t, err)
-// 	assert.Nil(t, fuelingTx)
+	accountToTopUp := &AddressAccount{
+		Balance:               big.NewInt(100),
+		Spent:                 big.NewInt(200),
+		Address:               testDestAddress,
+		SpentTransactionCount: 2,
+		MinCost:               big.NewInt(50),
+		MaxCost:               big.NewInt(150),
+	}
 
-// 	// enough balance
-// 	fuelingTx, err = bm.TopUpAccount(ctx, &AddressAccount{
-// 		Spent:   big.NewInt(10),
-// 		Balance: big.NewInt(10),
-// 	})
-// 	require.NoError(t, err)
-// 	assert.Nil(t, fuelingTx)
+	// Mock no auto-fueling TX in flight
+	m.db.ExpectQuery("SELECT.*public_txns.*data IS NULL").WillReturnRows(sqlmock.NewRows([]string{}))
 
-// 	// destination address already reached max amount
-// 	bm.maxDestBalance = big.NewInt(100)
-// 	fuelingTx, err = bm.TopUpAccount(ctx, &AddressAccount{
-// 		Spent:                 big.NewInt(10),
-// 		Balance:               big.NewInt(100),
-// 		SpentTransactionCount: 10,
-// 	})
-// 	require.NoError(t, err)
-// 	assert.Nil(t, fuelingTx)
+	mockAutoFuelTransactionSubmit(m, bm, true)
 
-// 	// no source address configured
-// 	bm.sourceAddress = ""
-// 	fuelingTx, err = bm.TopUpAccount(ctx, &AddressAccount{
-// 		Spent:                 big.NewInt(10),
-// 		Balance:               big.NewInt(0),
-// 		SpentTransactionCount: 10,
-// 	})
-// 	require.NoError(t, err)
-// 	assert.Nil(t, fuelingTx)
+	expectedTopUpAmount := big.NewInt(100)
+	expectedFuelingTransaction1 := generateExpectedFuelingTransaction(0, expectedTopUpAmount.Uint64(), *bm.sourceAddress, testDestAddress)
+	fuelingTx, err := bm.TopUpAccount(ctx, accountToTopUp)
+	require.NoError(t, err)
+	assert.Equal(t, expectedFuelingTransaction1, fuelingTx)
 
-// }
+	// Test no new fueling transaction when the current one is pending
+	accountToTopUp2 := &AddressAccount{
+		Balance:               big.NewInt(200),
+		Spent:                 big.NewInt(250),
+		Address:               testDestAddress,
+		SpentTransactionCount: 1,
+		MinCost:               big.NewInt(50),
+		MaxCost:               big.NewInt(50),
+	}
 
-// func generateExpectedFuelingTransaction(amountToTransfer int64) *ptxapi.PublicTx {
-// 	return &ptxapi.PublicTx{
-// 		Status: PubTxStatusPending,
-// 		Transaction: &ethsigner.Transaction{
+	// return not yet completed, so should return the existing pending transaction
+	m.db.ExpectQuery("SELECT.*public_txns").
+		WillReturnRows(sqlmock.NewRows([]string{"from", "nonce"}).AddRow(
+			expectedFuelingTransaction1.From, expectedFuelingTransaction1.Nonce,
+		))
 
-// 			From:  []byte(testAutoFuelingSourceAddress),
-// 			To:    ethtypes.MustNewAddress(testDestAddress),
-// 			Nonce: ethtypes.NewHexInteger(big.NewInt(0)),
-// 			Value: ethtypes.NewHexInteger(big.NewInt(amountToTransfer)),
-// 		},
-// 	}
-// }
-// func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
-// 	ctx := context.Background()
-// 	bm, mEthClient, mockAFTxEngine := NewTestBalanceManager(ctx, t)
-// 	defer mEthClient.AssertExpectations(t)
-// 	defer mockAFTxEngine.AssertExpectations(t)
+	newFuelingTx, err := bm.TopUpAccount(ctx, accountToTopUp2)
+	require.NoError(t, err)
+	assert.Equal(t, expectedFuelingTransaction1, newFuelingTx)
 
-// 	accountToTopUp := &AddressAccount{
-// 		Balance:               big.NewInt(100),
-// 		Spent:                 big.NewInt(200),
-// 		Address:               testDestAddress,
-// 		SpentTransactionCount: 2,
-// 		MinCost:               big.NewInt(50),
-// 		MaxCost:               big.NewInt(150),
-// 	}
-// 	// source account balance retrieval
-// 	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(testSourceAddressBalance), nil).Once()
-// 	// no existing pending transaction
-// 	mockAFTxEngine.On("GetPendingFuelingTransaction", mock.Anything, testAutoFuelingSourceAddress, testDestAddress).Return(nil, nil).Once()
+	// current transaction completed, replace with new transaction
+	expectedTopUpAmount2 := big.NewInt(50)
+	expectedFuelingTransaction2 := generateExpectedFuelingTransaction(1, expectedTopUpAmount2.Uint64(), *bm.sourceAddress, testDestAddress)
+	m.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{"from", "nonce", `Completed__tx_hash`}).
+		AddRow(expectedFuelingTransaction1.From, expectedFuelingTransaction1.Nonce, tktypes.Bytes32(tktypes.RandBytes(32))))
 
-// 	expectedTopUpAmount := big.NewInt(100)
+	mockAutoFuelTransactionSubmit(m, bm, false)
 
-// 	expectedFuelingTransaction1 := generateExpectedFuelingTransaction(expectedTopUpAmount.Int64())
-// 	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *components.RequestOptions) bool {
-// 		return txOptions.SignerID == testAutoFuelingSourceAddress
-// 	}), mock.MatchedBy(func(transfer *components.EthTransfer) bool {
-// 		return transfer.Value.BigInt().Cmp(expectedTopUpAmount) == 0 && transfer.To.String() == testDestAddress
-// 	})).Return(expectedFuelingTransaction1, false, nil).Once()
-// 	fuelingTx, err := bm.TopUpAccount(ctx, accountToTopUp)
-// 	require.NoError(t, err)
-// 	assert.Equal(t, expectedFuelingTransaction1, fuelingTx)
+	fuelingTx2, err := bm.TopUpAccount(ctx, accountToTopUp2)
+	require.NoError(t, err)
+	assert.Equal(t, expectedFuelingTransaction2, fuelingTx2)
 
-// 	// Test no new fueling transaction when the current one is pending
-// 	accountToTopUp2 := &AddressAccount{
-// 		Balance:               big.NewInt(200),
-// 		Spent:                 big.NewInt(250),
-// 		Address:               testDestAddress,
-// 		SpentTransactionCount: 1,
-// 		MinCost:               big.NewInt(50),
-// 		MaxCost:               big.NewInt(50),
-// 	}
-// 	// return not yet completed, so should return the existing pending transaction
-// 	mockAFTxEngine.On("CheckTransactionCompleted", mock.Anything, expectedFuelingTransaction1).Return(false).Once()
-// 	newFuelingTx, err := bm.TopUpAccount(ctx, accountToTopUp2)
-// 	require.NoError(t, err)
-// 	assert.Equal(t, expectedFuelingTransaction1, newFuelingTx)
+	// test when couldn't record the result of the submitted transaction
+	// also do a balance look up
+	accountToTopUp3 := &AddressAccount{
+		Balance:               big.NewInt(250),
+		Spent:                 big.NewInt(300),
+		Address:               testDestAddress,
+		SpentTransactionCount: 1,
+		MinCost:               big.NewInt(50),
+		MaxCost:               big.NewInt(50),
+	}
+	expectedTopUpAmount3 := big.NewInt(50)
+	expectedFuelingTransaction3 := generateExpectedFuelingTransaction(2, expectedTopUpAmount3.Uint64(), *bm.sourceAddress, testDestAddress)
+	bm.NotifyAddressBalanceChanged(ctx, *bm.sourceAddress)
+	m.ethClient.On("GetBalance", mock.Anything, *bm.sourceAddress, "latest").Return(tktypes.Uint64ToUint256(50), nil).Once()
 
-// 	// current transaction completed, replace with new transaction
-// 	expectedTopUpAmount2 := big.NewInt(50)
-// 	expectedFuelingTransaction2 := generateExpectedFuelingTransaction(expectedTopUpAmount2.Int64())
-// 	mockAFTxEngine.On("CheckTransactionCompleted", mock.Anything, expectedFuelingTransaction1).Return(true).Once()
-// 	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *components.RequestOptions) bool {
-// 		return txOptions.SignerID == testAutoFuelingSourceAddress
-// 	}), mock.MatchedBy(func(transfer *components.EthTransfer) bool {
-// 		fmt.Printf("%d - %d", transfer.Value.Int64(), expectedTopUpAmount2.Int64())
-// 		return transfer.Value.BigInt().Cmp(expectedTopUpAmount2) == 0 && transfer.To.String() == testDestAddress
-// 	})).Return(expectedFuelingTransaction2, false, nil).Once()
-// 	fuelingTx2, err := bm.TopUpAccount(ctx, accountToTopUp2)
-// 	require.NoError(t, err)
-// 	assert.Equal(t, expectedFuelingTransaction2, fuelingTx2)
+	m.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{"from", "nonce", `Completed__tx_hash`}).
+		AddRow(expectedFuelingTransaction2.From, expectedFuelingTransaction2.Nonce, tktypes.Bytes32(tktypes.RandBytes(32))))
 
-// 	// test when couldn't record the result of the submitted transaction
-// 	// also do a balance look up
-// 	accountToTopUp3 := &AddressAccount{
-// 		Balance:               big.NewInt(250),
-// 		Spent:                 big.NewInt(300),
-// 		Address:               testDestAddress,
-// 		SpentTransactionCount: 1,
-// 		MinCost:               big.NewInt(50),
-// 		MaxCost:               big.NewInt(50),
-// 	}
-// 	expectedTopUpAmount3 := big.NewInt(50)
-// 	expectedFuelingTransaction3 := generateExpectedFuelingTransaction(expectedTopUpAmount3.Int64())
-// 	bm.NotifyAddressBalanceChanged(ctx, testAutoFuelingSourceAddress)
-// 	mEthClient.On("GetBalance", mock.Anything, testAutoFuelingSourceAddress, "latest").Return(tktypes.Uint64ToUint256(50), nil).Once()
-// 	mockAFTxEngine.On("CheckTransactionCompleted", mock.Anything, expectedFuelingTransaction2).Return(true).Once()
-// 	mockAFTxEngine.On("HandleNewTransaction", mock.Anything, mock.MatchedBy(func(txOptions *components.RequestOptions) bool {
-// 		return txOptions.SignerID == testAutoFuelingSourceAddress
-// 	}), mock.MatchedBy(func(transfer *components.EthTransfer) bool {
-// 		return transfer.Value.BigInt().Cmp(expectedTopUpAmount3) == 0 && transfer.To.String() == testDestAddress
-// 	})).Return(nil, false, errors.New("pop")).Once()
-// 	newFuelingTx, err = bm.TopUpAccount(ctx, accountToTopUp3)
-// 	assert.Error(t, err)
-// 	assert.Equal(t, "pop", err.Error())
-// 	assert.Nil(t, newFuelingTx)
+	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
+		Return(ethclient.EstimateGasResult{}, fmt.Errorf("pop")).Once()
 
-// 	// test that we can recover if the transaction was actually registered in DB
-// 	// also do a address balance re-lookup
-// 	mockAFTxEngine.On("GetPendingFuelingTransaction", mock.Anything, testAutoFuelingSourceAddress, testDestAddress).Return(expectedFuelingTransaction3, nil).Once()
-// 	mockAFTxEngine.On("CheckTransactionCompleted", mock.Anything, expectedFuelingTransaction3).Return(false).Once()
-// 	fuelingTx3, err := bm.TopUpAccount(ctx, accountToTopUp3)
-// 	require.NoError(t, err)
-// 	assert.Equal(t, expectedFuelingTransaction3, fuelingTx3)
-// }
+	newFuelingTx, err = bm.TopUpAccount(ctx, accountToTopUp3)
+	assert.Error(t, err)
+	assert.Equal(t, "pop", err.Error())
+	assert.Nil(t, newFuelingTx)
+
+	// test that we can recover if the transaction was actually registered in DB
+	// also do a address balance re-lookup
+	m.db.ExpectQuery("SELECT.*public_txns").
+		WillReturnRows(sqlmock.NewRows([]string{"from", "nonce"}).AddRow(
+			expectedFuelingTransaction3.From, expectedFuelingTransaction3.Nonce,
+		))
+	m.db.ExpectQuery("SELECT.*public_txns").WillReturnRows(sqlmock.NewRows([]string{"from", "nonce", `Completed__tx_hash`}).
+		AddRow(expectedFuelingTransaction3.From, expectedFuelingTransaction3.Nonce, nil /* incomplete */))
+	fuelingTx3, err := bm.TopUpAccount(ctx, accountToTopUp3)
+	require.NoError(t, err)
+	assert.Equal(t, expectedFuelingTransaction3.Nonce, fuelingTx3.Nonce)
+}
 
 // func TestTopUpSuccessTopUpMinAheadUseMin(t *testing.T) {
 // 	ctx := context.Background()

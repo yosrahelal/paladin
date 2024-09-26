@@ -42,14 +42,11 @@ type testInFlightTransactionStateManagerWithMocks struct {
 }
 
 func newTestInFlightTransactionStateManager(t *testing.T) (*testInFlightTransactionStateManagerWithMocks, *mocksAndTestControl, func()) {
-	ctx, ble, m, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *Config) {
-		conf.Manager.ActivityRecords.RecordsPerTransaction = confutil.P(0)
-	})
+	_, balanceManager, ble, m, done := newTestBalanceManager(t, false)
 
-	mBM, mEC, _ := NewTestBalanceManager(ctx, t, ble)
 	mockInMemoryState := NewTestInMemoryTxState(t)
 	mockActionTriggers := publictxmocks.NewInFlightStageActionTriggers(t)
-	iftxs := NewInFlightTransactionStateManager(&publicTxEngineMetrics{}, mBM, m.blockIndexer, mockActionTriggers, mockInMemoryState,
+	iftxs := NewInFlightTransactionStateManager(&publicTxEngineMetrics{}, balanceManager, m.blockIndexer, mockActionTriggers, mockInMemoryState,
 		retry.NewRetryIndefinite(&retry.Config{
 			InitialDelay: confutil.P("1ms"),
 			MaxDelay:     confutil.P("100ms"),
@@ -57,9 +54,9 @@ func newTestInFlightTransactionStateManager(t *testing.T) (*testInFlightTransact
 		}), ble, ble.submissionWriter, false)
 	return &testInFlightTransactionStateManagerWithMocks{
 		iftxs,
-		mEC,
+		m.ethClient,
 		m.blockIndexer,
-		mBM,
+		balanceManager,
 		mockActionTriggers,
 		mockInMemoryState,
 	}, m, done

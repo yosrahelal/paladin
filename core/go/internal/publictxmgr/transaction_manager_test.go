@@ -60,6 +60,8 @@ type mocksAndTestControl struct {
 	txManager           *componentmocks.TXManager
 }
 
+const mockBaseNonce = 103342
+
 // const testDestAddress = "0x6cee73cf4d5b0ac66ce2d1c0617bec4bedd09f39"
 
 // const testMainSigningAddress = testDestAddress
@@ -151,7 +153,7 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 
 	if mocks.disableManagerStart {
 		pmgr.nonceManager = newNonceCache(1*time.Hour, func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
-			return 103342, nil
+			return mockBaseNonce, nil
 		})
 	} else {
 		err = pmgr.Start()

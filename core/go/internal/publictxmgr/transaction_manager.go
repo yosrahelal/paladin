@@ -583,7 +583,7 @@ func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, from tkt
 		return false, err
 	}
 	if len(ptxs) > 0 && ptxs[0].Completed != nil {
-		log.L(ctx).Debugf("CheckTransactionCompleted returned true for %s", ptxs[0].SignerNonce)
+		log.L(ctx).Debugf("CheckTransactionCompleted returned true for %s:%d", from, nonce)
 		return true, nil
 	}
 	return false, nil
