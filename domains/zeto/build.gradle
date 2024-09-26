@@ -43,6 +43,16 @@ configurations {
         canBeConsumed = false
         canBeResolved = true
     }
+
+    // Consumable configurations
+    zetoArtifacts {
+        canBeConsumed = true
+        canBeResolved = false
+    }
+    poseidonArtifacts {
+        canBeConsumed = true
+        canBeResolved = false
+    }
 }
 
 dependencies {
@@ -117,8 +127,6 @@ task extractZetoArtifacts(type: Copy, dependsOn: [downloadZetoProver, downloadZe
 
 task copySolidity(type: Copy, dependsOn: extractZetoArtifacts) {
     inputs.files(configurations.contractCompile)
-    inputs.files(fileTree("${zkpOut}/artifacts/contracts"))
-    outputs.dir('internal/zeto/abis')
     from fileTree(configurations.contractCompile.asPath) {
         include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
     }
@@ -135,11 +143,9 @@ task copySolidity(type: Copy, dependsOn: extractZetoArtifacts) {
     includeEmptyDirs = false
 }
 
-task copySolidityForTest(type: Copy, dependsOn: [extractZetoArtifacts, generatePoseidonArtifacts, ":solidity:compile"]) {
-    inputs.files(fileTree("${zkpOut}/artifacts/contracts"))
-    inputs.files(fileTree("${zkpOut}/artifacts/@iden3/contracts"))
-    outputs.dir('integration-test/abis')
-    from fileTree("${rootDir}/solidity/artifacts") {
+task copySolidityForTest(type: Copy, dependsOn: [extractZetoArtifacts, generatePoseidonArtifacts]) {
+    inputs.files(configurations.contractCompile)
+    from fileTree(configurations.contractCompile.asPath) {
         include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
     }
     from fileTree("${zkpOut}/artifacts/contracts") {
@@ -186,7 +192,6 @@ task testE2E(type: Exec, dependsOn: [copySolidity, copySolidityForTest, ':testin
 }
 
 task test(type: Exec, dependsOn: [":core:go:makeMocks"]) {
-
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
     inputs.files(goFiles)
@@ -235,4 +240,9 @@ task clean(type: Delete) {
 
 task assemble {
     dependsOn buildGo
+}
+
+dependencies {
+    zetoArtifacts files(extractZetoArtifacts)
+    poseidonArtifacts files(generatePoseidonArtifacts)
 }
