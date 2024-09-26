@@ -114,7 +114,7 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 		err = tx.
 			Table("states").
 			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "id"}},
+				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "id"}},
 				DoNothing: true, // immutable
 			}).
 			Omit("Labels", "Int64Labels", "Confirmed", "Spent", "Locked"). // we do this ourselves below
@@ -125,7 +125,7 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 		err = tx.
 			Table("state_confirms").
 			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "state"}},
+				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}},
 				DoNothing: true, // immutable
 			}).
 			Create(stateConfirms).
@@ -135,7 +135,7 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 		err = tx.
 			Table("state_labels").
 			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "state"}, {Name: "label"}},
+				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}, {Name: "label"}},
 				DoNothing: true, // immutable
 			}).
 			Create(labels).
@@ -145,7 +145,7 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 		err = tx.
 			Table("state_int64_labels").
 			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "state"}, {Name: "label"}},
+				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}, {Name: "label"}},
 				DoNothing: true, // immutable
 			}).
 			Create(int64Labels).
@@ -155,7 +155,7 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 		err = tx.
 			Table("state_spends").
 			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "state"}},
+				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}},
 				DoNothing: true, // immutable
 			}).
 			Create(stateSpends).
@@ -165,7 +165,7 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 		err = tx.
 			Table("state_locks").
 			Clauses(clause.OnConflict{
-				Columns: []clause.Column{{Name: "state"}},
+				Columns: []clause.Column{{Name: "domain_name"}, {Name: "state"}},
 				// locks can move to another transaction
 				DoUpdates: clause.AssignmentColumns([]string{
 					"transaction",

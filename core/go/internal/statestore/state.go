@@ -33,7 +33,7 @@ import (
 type State struct {
 	ID              tktypes.HexBytes   `json:"id"                  gorm:"primaryKey"`
 	Created         tktypes.Timestamp  `json:"created"             gorm:"autoCreateTime:nano"`
-	DomainName      string             `json:"domain"`
+	DomainName      string             `json:"domain"              gorm:"primaryKey"`
 	Schema          tktypes.Bytes32    `json:"schema"`
 	ContractAddress tktypes.EthAddress `json:"contractAddress"`
 	Data            tktypes.RawJSON    `json:"data"`
@@ -60,15 +60,17 @@ type StateWithLabels struct {
 }
 
 type StateLabel struct {
-	State tktypes.HexBytes `gorm:"primaryKey"`
-	Label string
-	Value string
+	DomainName string           `gorm:"primaryKey"`
+	State      tktypes.HexBytes `gorm:"primaryKey"`
+	Label      string
+	Value      string
 }
 
 type StateInt64Label struct {
-	State tktypes.HexBytes `gorm:"primaryKey"`
-	Label string
-	Value int64
+	DomainName string           `gorm:"primaryKey"`
+	State      tktypes.HexBytes `gorm:"primaryKey"`
+	Label      string
+	Value      int64
 }
 
 func (s *StateWithLabels) ValueSet() filters.ValueSet {
@@ -262,9 +264,9 @@ func (ss *stateStore) findStatesCommon(
 		q = q.Joins(fmt.Sprintf("INNER JOIN state_%[1]slabels AS %[2]s ON %[2]s.state = id AND %[2]s.label = ?", typeMod, fi.virtualColumn), fi.label)
 	}
 
-	q = q.Where("domain_name = ?", domainName).
-		Where("contract_address = ?", contractAddress).
-		Where("schema = ?", schema.Persisted().ID)
+	q = q.Where("states.domain_name = ?", domainName).
+		Where("states.contract_address = ?", contractAddress).
+		Where("states.schema = ?", schema.Persisted().ID)
 	q = addQuery(q)
 
 	var states []*State
@@ -283,7 +285,7 @@ func (ss *stateStore) MarkConfirmed(ctx context.Context, domainName string, cont
 
 	op := ss.writer.newWriteOp(domainName, contractAddress)
 	op.stateConfirms = []*StateConfirm{
-		{State: id, Transaction: transactionID},
+		{DomainName: domainName, State: id, Transaction: transactionID},
 	}
 
 	ss.writer.queue(ctx, op)
@@ -298,7 +300,7 @@ func (ss *stateStore) MarkSpent(ctx context.Context, domainName string, contract
 
 	op := ss.writer.newWriteOp(domainName, contractAddress)
 	op.stateSpends = []*StateSpend{
-		{State: id, Transaction: transactionID},
+		{DomainName: domainName, State: id, Transaction: transactionID},
 	}
 
 	ss.writer.queue(ctx, op)
@@ -313,7 +315,7 @@ func (ss *stateStore) MarkLocked(ctx context.Context, domainName string, contrac
 
 	op := ss.writer.newWriteOp(domainName, contractAddress)
 	op.stateLocks = []*StateLock{
-		{State: id, Transaction: transactionID, Creating: creating, Spending: spending},
+		{DomainName: domainName, State: id, Transaction: transactionID, Creating: creating, Spending: spending},
 	}
 
 	ss.writer.queue(ctx, op)

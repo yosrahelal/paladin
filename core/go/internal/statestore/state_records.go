@@ -26,6 +26,7 @@ import (
 // from the base ledger, for which we will never receive the private state itself.
 // Immutable once written
 type StateConfirm struct {
+	DomainName  string           `json:"domain"       gorm:"primaryKey"`
 	State       tktypes.HexBytes `json:"-"            gorm:"primaryKey"`
 	Transaction uuid.UUID        `json:"transaction"`
 }
@@ -33,6 +34,7 @@ type StateConfirm struct {
 // State record can be updated before, during and after spend records are written
 // Immutable once written
 type StateSpend struct {
+	DomainName  string           `json:"domain"       gorm:"primaryKey"`
 	State       tktypes.HexBytes `json:"-"            gorm:"primaryKey"`
 	Transaction uuid.UUID        `json:"transaction"`
 }
@@ -41,6 +43,7 @@ type StateSpend struct {
 // spending a previously confirmed state, or an optimistic record of creating
 // (and maybe later spending) a state that is yet to be confirmed.
 type StateLock struct {
+	DomainName  string           `json:"domain"       gorm:"primaryKey"`
 	State       tktypes.HexBytes `json:"-"            gorm:"primaryKey"`
 	Transaction uuid.UUID        `json:"transaction"`
 	Creating    bool             `json:"creating"`
@@ -54,7 +57,8 @@ type StateLock struct {
 // nullifier (not for the state) when it is spent.
 // Immutable once written
 type StateNullifier struct {
-	Nullifier tktypes.HexBytes `gorm:"primaryKey"`
-	State     tktypes.HexBytes
-	Spent     *StateSpend `gorm:"foreignKey:state;references:nullifier;"`
+	DomainName string           `json:"domain"          gorm:"primaryKey"`
+	Nullifier  tktypes.HexBytes `json:"nullifier"       gorm:"primaryKey"`
+	State      tktypes.HexBytes `json:"-"`
+	Spent      *StateSpend      `json:"spent,omitempty" gorm:"foreignKey:state;references:nullifier;"`
 }

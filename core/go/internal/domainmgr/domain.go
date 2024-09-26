@@ -556,8 +556,9 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 				return nil, err
 			}
 			newNullifiers = append(newNullifiers, &statestore.StateNullifier{
-				State:     id,
-				Nullifier: nullifier,
+				DomainName: d.name,
+				State:      id,
+				Nullifier:  nullifier,
 			})
 		}
 	}

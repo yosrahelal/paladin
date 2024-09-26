@@ -196,8 +196,9 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 		}
 		if s.Nullifier != nil {
 			newNullifiers = append(newNullifiers, &statestore.StateNullifier{
-				State:     id,
-				Nullifier: tktypes.HexBytes(*s.Nullifier),
+				DomainName: dc.d.name,
+				State:      id,
+				Nullifier:  tktypes.HexBytes(*s.Nullifier),
 			})
 		}
 	}
