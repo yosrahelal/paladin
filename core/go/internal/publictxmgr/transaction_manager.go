@@ -102,6 +102,7 @@ type pubTxManager struct {
 	orchestratorLifetime     time.Duration
 	retry                    *retry.Retry
 	enginePollingInterval    time.Duration
+	nonceCacheTimeout        time.Duration
 	engineLoopDone           chan struct{}
 
 	activityRecordCache     cache.Cache[string, *txActivityRecords]
@@ -142,6 +143,7 @@ func NewPublicTransactionManager(ctx context.Context, conf *Config) components.P
 		orchestratorStaleTimeout:    confutil.DurationMin(conf.Manager.OrchestratorStaleTimeout, 0, *DefaultConfig.Manager.OrchestratorStaleTimeout),
 		orchestratorIdleTimeout:     confutil.DurationMin(conf.Manager.OrchestratorIdleTimeout, 0, *DefaultConfig.Manager.OrchestratorIdleTimeout),
 		enginePollingInterval:       confutil.DurationMin(conf.Manager.Interval, 50*time.Millisecond, *DefaultConfig.Manager.Interval),
+		nonceCacheTimeout:           confutil.DurationMin(conf.Manager.NonceCacheTimeout, 0, *DefaultConfig.Manager.NonceCacheTimeout),
 		retry:                       retry.NewRetryIndefinite(&conf.Manager.Retry),
 		gasPriceIncreaseMax:         gasPriceIncreaseMax,
 		gasPriceIncreasePercent:     confutil.Int(conf.GasPrice.IncreasePercentage, *DefaultConfig.GasPrice.IncreasePercentage),
@@ -159,7 +161,7 @@ func (ble *pubTxManager) PostInit(pic components.AllComponents) error {
 	ble.gasPriceClient.Init(ctx, ble.ethClient)
 	ble.bIndexer = pic.BlockIndexer()
 	ble.rootTxMgr = pic.TxManager()
-	ble.nonceManager = newNonceCache(1*time.Hour, func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
+	ble.nonceManager = newNonceCache(ble.nonceCacheTimeout, func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
 		log.L(ctx).Tracef("NonceFromChain getting next nonce for signing address ID %s", signer)
 		nextNonce, err := ble.ethClient.GetTransactionCount(ctx, signer)
 		if err != nil {

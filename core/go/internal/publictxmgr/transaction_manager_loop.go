@@ -33,6 +33,7 @@ type ManagerConfig struct {
 	OrchestratorIdleTimeout  *string               `yaml:"orchestratorIdleTimeout"`  // idle orchestrators exit after this time
 	OrchestratorStaleTimeout *string               `yaml:"orchestratorStaleTimeout"` // stale orchestrators exit after this time - TODO: Define stale
 	OrchestratorLifetime     *string               `yaml:"orchestratorLifetime"`     // orchestrators are cycled out after this time, regardless of activity
+	NonceCacheTimeout        *string               `yaml:"nonceCacheTimeout"`
 	ActivityRecords          ActivityRecordsConfig `yaml:"activityRecords"`
 	SubmissionWriter         flushwriter.Config    `yaml:"submissionWriter"`
 	Retry                    retry.Config          `yaml:"retry"`
@@ -44,6 +45,7 @@ var DefaultManagerConfig = &ManagerConfig{
 	OrchestratorIdleTimeout:  confutil.P("1s"),
 	OrchestratorStaleTimeout: confutil.P("5m"),
 	OrchestratorLifetime:     confutil.P("10m"),
+	NonceCacheTimeout:        confutil.P("5m"),
 	Retry: retry.Config{
 		InitialDelay: confutil.P("250ms"),
 		MaxDelay:     confutil.P("30s"),

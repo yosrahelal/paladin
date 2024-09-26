@@ -17,10 +17,11 @@ package publictxmgr
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -60,7 +61,9 @@ func newNonceCache(nonceStateTimeout time.Duration, nextNonceCB NextNonceCallbac
 		stopChannel:       make(chan struct{}),
 		nextNonceCB:       nextNonceCB,
 	}
-	go n.reap()
+	if nonceStateTimeout > 0 {
+		go n.reapLoop()
+	}
 	return n
 }
 
@@ -71,8 +74,8 @@ type cachedNonce struct {
 	updatedTime time.Time
 }
 
-func (nc *nonceCacheStruct) reap() {
-	ctx := log.WithLogField(context.Background(), "role", "reaper")
+func (nc *nonceCacheStruct) reapLoop() {
+	ctx := log.WithLogField(context.Background(), "role", "nonce_cache_reaper")
 	ticker := time.NewTicker(nc.nonceStateTimeout)
 	for {
 		select {
@@ -80,17 +83,23 @@ func (nc *nonceCacheStruct) reap() {
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			nc.reaperLock.Lock()
-			defer nc.reaperLock.Unlock()
-			now := time.Now()
-			for signingAddress, cachedNonce := range nc.nextNonceBySigner {
-				if now.Sub(cachedNonce.updatedTime) > nc.nonceStateTimeout {
-					delete(nc.nextNonceBySigner, signingAddress)
-				}
-			}
-			log.L(ctx).Debug("nonce cache reaper completed on ticker")
+			nc.reap(ctx)
 		}
 	}
+}
+
+func (nc *nonceCacheStruct) reap(ctx context.Context) {
+	nc.reaperLock.Lock()
+	defer nc.reaperLock.Unlock()
+	now := time.Now()
+	reapCount := 0
+	for signingAddress, cachedNonce := range nc.nextNonceBySigner {
+		if now.Sub(cachedNonce.updatedTime) > nc.nonceStateTimeout {
+			reapCount++
+			delete(nc.nextNonceBySigner, signingAddress)
+		}
+	}
+	log.L(ctx).Debugf("nonce cache reaper completed on ticker - reap count %d", reapCount)
 }
 
 func (nc *nonceCacheStruct) getNextNonceBySigner(signer tktypes.EthAddress) (*cachedNonce, bool) {
@@ -148,6 +157,7 @@ func (nc *nonceCacheStruct) IntentToAssignNonce(ctx context.Context, signer tkty
 
 	}
 	return &nonceAssignmentIntent{
+		nc:          nc,
 		addr:        signer,
 		locked:      false,
 		completed:   false,
@@ -161,6 +171,7 @@ func (i *nonceAssignmentIntent) Address() tktypes.EthAddress {
 }
 
 type nonceAssignmentIntent struct {
+	nc           *nonceCacheStruct
 	addr         tktypes.EthAddress
 	locked       bool
 	completed    bool
@@ -179,7 +190,7 @@ type nonceAssignmentIntent struct {
 // It is invalid to call AssignNextNonce after calling Complete or Rollback
 func (i *nonceAssignmentIntent) AssignNextNonce(ctx context.Context) (uint64, error) {
 	if i.completed {
-		return 0, errors.New("nonceAssignmentIntent already completed") //TODO
+		return 0, i18n.NewError(ctx, msgs.MsgPublicBatchCompleted)
 	}
 	if !i.locked {
 		i.cachedNonce.nonceMux.Lock()
@@ -202,7 +213,10 @@ func (i *nonceAssignmentIntent) Complete(ctx context.Context) {
 		i.nonceCache.reaperLock.RUnlock()
 	}
 	i.completed = true
-
+	if i.nc.nonceStateTimeout == 0 {
+		// need to reap immediately
+		i.nc.reap(ctx)
+	}
 }
 
 // If Rollback is called after a Complete or another Rollback, it will be a no-op

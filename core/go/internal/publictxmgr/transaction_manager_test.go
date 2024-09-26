@@ -148,7 +148,7 @@ func NewTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 	err = pmgr.PostInit(mocks.allComponents)
 	require.NoError(t, err)
 
-	return ctx, pmgr, mocks, func() {
+	return pmgr.ctx, pmgr, mocks, func() {
 		pmgr.Stop()
 		dbClose()
 	}
