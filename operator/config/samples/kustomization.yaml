@@ -1,0 +1,5 @@
+## Append samples of your project ##
+resources:
+- core_v1alpha1_node.yaml
+- core_v1alpha1_smartcontract.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples

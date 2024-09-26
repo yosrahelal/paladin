@@ -1,0 +1,9 @@
+{
+    "paladin": {
+        "image": "paladin:test",
+        "labels": {
+            "app": "paladin"
+        }
+    }
+}
+  
