@@ -44,10 +44,10 @@ import (
 // There are separate setter functions for fields that depending on the persistence
 // mechanism might be in separate tables - including History, Receipt, and Confirmations
 type BaseTXUpdates struct {
-	InFlightStatus    *InFlightStatus
-	SubStatus         *BaseTxSubStatus
-	GasPricing        *ptxapi.PublicTxGasPricing
-	GasLimit          *ethtypes.HexInteger // note this is required for some methods (eth_estimateGas)
+	InFlightStatus *InFlightStatus
+	SubStatus      *BaseTxSubStatus
+	GasPricing     *ptxapi.PublicTxGasPricing
+	// GasLimit          *tktypes.HexUint64 // note this is required for some methods (eth_estimateGas)
 	TransactionHash   *tktypes.Bytes32
 	FirstSubmit       *tktypes.Timestamp
 	LastSubmit        *tktypes.Timestamp

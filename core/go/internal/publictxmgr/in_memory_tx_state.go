@@ -74,12 +74,6 @@ func (imtxs *inMemoryTxState) ApplyInMemoryUpdates(ctx context.Context, txUpdate
 		mtx.FirstSubmit = txUpdates.FirstSubmit
 	}
 
-	if txUpdates.GasLimit != nil {
-		// TODO: Can this really be updated per submit? If so, this challenges the fact we store it in the
-		//       transaction object (rather than the submission object)
-		panic("attempt to modify gas limit")
-	}
-
 	if txUpdates.GasPricing != nil {
 		mtx.GasPricing = txUpdates.GasPricing
 	}
