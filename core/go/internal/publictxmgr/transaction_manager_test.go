@@ -18,6 +18,7 @@ package publictxmgr
 import (
 	"context"
 	"crypto/rand"
+	"database/sql/driver"
 	"fmt"
 	"math/big"
 	"testing"
@@ -28,6 +29,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
@@ -84,6 +86,9 @@ func NewTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 		Manager: ManagerConfig{
 			Interval:                 confutil.P("1h"),
 			MaxInFlightOrchestrators: confutil.P(1),
+			SubmissionWriter: flushwriter.Config{
+				WorkerCount: confutil.P(1),
+			},
 		},
 		Orchestrator: OrchestratorConfig{
 			Interval: confutil.P("1h"),
@@ -491,460 +496,122 @@ func TestAddActivityWrap(t *testing.T) {
 
 }
 
-// func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
-// 	ctx := context.Background()
-// 	ble, _ := NewTestPublicTxManager(t)
-// 	mTS := componentmocks.NewPublicTransactionStore(t)
-// 	mBI := componentmocks.NewBlockIndexer(t)
-// 	mEN := componentmocks.NewPublicTxEventNotifier(t)
-// 	mEC := componentmocks.NewEthClient(t)
-// 	mKM := componentmocks.NewKeyManager(t)
-// 	mKM.On("ResolveKey", ctx, testAutoFuelingSourceAddress, algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", testAutoFuelingSourceAddress, nil)
-// 	// fall back to connector when get call failed
-// 	ble.gasPriceClient = NewTestNodeGasPriceClient(t, mEC)
-// 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
-// 	testEthTxInput := &ethsigner.Transaction{
-// 		From:     []byte(testAutoFuelingSourceAddress),
-// 		To:       ethtypes.MustNewAddress(testDestAddress),
-// 		GasLimit: tktypes.Uint64ToUint256(1223451),
-// 		Value:    tktypes.Uint64ToUint256(100),
-// 	}
-// 	// create transaction succeeded
-// 	// gas estimate should be cached
-// 	insertMock := mTS.On("InsertTransaction", ctx, mock.Anything, mock.Anything)
-// 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
-// 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
-// 	insertMock.Run(func(args mock.Arguments) {
-// 		mtx := args[2].(*ptxapi.PublicTx)
-// 		assert.Equal(t, "1223451", mtx.GasLimit.BigInt().String())
-// 		assert.Nil(t, mtx.GasPrice)
-// 		insertMock.Return(nil)
-// 	}).Once()
-// 	txID := uuid.New()
-// 	mTS.On("UpdateSubStatus", ctx, txID.String(), PubTxSubStatusReceived, BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+func mockForSubmitSuccess(mocks *dependencyMocks, conf *Config) {
+	signingKey := tktypes.EthAddress(tktypes.RandBytes(20))
+	mockKeyManager := mocks.keyManager.(*componentmocks.KeyManager)
+	mockKeyManager.On("ResolveKey", mock.Anything, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", signingKey.String(), nil)
+	mocks.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
+		Return(confutil.P(tktypes.HexUint64(1122334455)), nil).Once()
+	mocks.db.ExpectBegin()
+	mocks.db.ExpectExec("INSERT.*public_txns").WillReturnResult(driver.ResultNoRows)
+	mocks.db.ExpectCommit()
+}
 
-// 	_, _, err := ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 		GasLimit: testEthTxInput.GasLimit,
-// 	}, &components.EthTransfer{
-// 		To:    *tktypes.MustEthAddress(testEthTxInput.To.String()),
-// 		Value: testEthTxInput.Value,
-// 	})
-// 	require.NoError(t, err)
-// 	mEC.AssertNotCalled(t, "GasEstimate")
-// }
+func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
+	ctx := context.Background()
+	_, ble, _, done := NewTestPublicTxManager(t, false, mockForSubmitSuccess)
+	defer done()
 
-// func TestHandleNewTransactionTransferAndInvalidType(t *testing.T) {
-// 	ctx := context.Background()
-// 	ble, _ := NewTestPublicTxManager(t)
-// 	ble.gasPriceClient = NewTestZeroGasPriceChainClient(t)
-// 	mTS := componentmocks.NewPublicTransactionStore(t)
-// 	mBI := componentmocks.NewBlockIndexer(t)
-// 	mEN := componentmocks.NewPublicTxEventNotifier(t)
-// 	mEC := componentmocks.NewEthClient(t)
-// 	mKM := componentmocks.NewKeyManager(t)
-// 	mKM.On("ResolveKey", ctx, testAutoFuelingSourceAddress, algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", testAutoFuelingSourceAddress, nil)
-// 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
-// 	testEthTxInput := &ethsigner.Transaction{
-// 		From:     []byte(testAutoFuelingSourceAddress),
-// 		To:       ethtypes.MustNewAddress(testDestAddress),
-// 		GasLimit: tktypes.Uint64ToUint256(1223451),
-// 		Value:    tktypes.Uint64ToUint256(100),
-// 	}
-// 	// create transaction succeeded
-// 	// gas estimate should be cached
-// 	insertMock := mTS.On("InsertTransaction", ctx, mock.Anything, mock.Anything)
-// 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
-// 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
-// 	insertMock.Run(func(args mock.Arguments) {
-// 		mtx := args[2].(*ptxapi.PublicTx)
-// 		assert.Equal(t, "1223451", mtx.GasLimit.BigInt().String())
-// 		assert.Equal(t, "0", mtx.GasPrice.BigInt().String())
-// 		insertMock.Return(nil)
-// 	}).Once()
-// 	txID := uuid.New()
-// 	mTS.On("UpdateSubStatus", ctx, txID.String(), PubTxSubStatusReceived, BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	// create transaction succeeded
+	tx, err := ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
+		PublicTxInput: ptxapi.PublicTxInput{
+			From: "signer1",
+			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
+			PublicTxOptions: ptxapi.PublicTxOptions{
+				Gas:   confutil.P(tktypes.HexUint64(1223451)),
+				Value: tktypes.Uint64ToUint256(100),
+			},
+		},
+	})
+	assert.NoError(t, err)
+	assert.NotNil(t, tx.PublicTx().From)
+	assert.Equal(t, uint64(1223451), tx.PublicTx().Gas.Uint64())
 
-// 	_, _, err := ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 		GasLimit: testEthTxInput.GasLimit,
-// 	}, &components.EthTransfer{
-// 		To:    *tktypes.MustEthAddress(testEthTxInput.To.String()),
-// 		Value: testEthTxInput.Value,
-// 	})
-// 	require.NoError(t, err)
-// 	mEC.AssertNotCalled(t, "GasEstimate")
+}
 
-// 	_, submissionRejected, err := ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 		GasLimit: testEthTxInput.GasLimit,
-// 	}, "not a valid object")
-// 	assert.Regexp(t, "PD011929", err)
-// 	assert.True(t, submissionRejected)
-// 	mEC.AssertNotCalled(t, "GasEstimate")
-// }
+func TestEngineSuspendResumeRealDB(t *testing.T) {
 
-// func TestHandleNewTransaction(t *testing.T) {
-// 	ctx := context.Background()
-// 	ble, _ := NewTestPublicTxManager(t)
-// 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-// 	mTS := componentmocks.NewPublicTransactionStore(t)
-// 	mBI := componentmocks.NewBlockIndexer(t)
-// 	mEN := componentmocks.NewPublicTxEventNotifier(t)
-// 	mEC := componentmocks.NewEthClient(t)
-// 	mKM := componentmocks.NewKeyManager(t)
-// 	mKM.On("ResolveKey", ctx, testDestAddress, algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", testDestAddress, nil)
-// 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
-// 	testEthTxInput := &ethsigner.Transaction{
-// 		From:  []byte(testMainSigningAddress),
-// 		To:    ethtypes.MustNewAddress(testDestAddress),
-// 		Value: tktypes.Uint64ToUint256(100),
-// 		Data:  ethtypes.MustNewHexBytes0xPrefix(""),
-// 	}
-// 	// missing transaction ID
-// 	_, submissionRejected, err := ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		SignerID: string(testEthTxInput.From),
-// 		GasLimit: testEthTxInput.GasLimit,
-// 	}, &components.EthTransaction{
-// 		To:          *tktypes.MustEthAddress(testEthTxInput.To.String()),
-// 		FunctionABI: &abi.Entry{},
-// 		Inputs:      &abi.ComponentValue{},
-// 	})
-// 	assert.NotNil(t, err)
-// 	assert.True(t, submissionRejected)
-// 	assert.Regexp(t, "PD011910", err)
+	ctx, ble, m, done := NewTestPublicTxManager(t, true, func(mocks *dependencyMocks, conf *Config) {
+		conf.Manager.Interval = confutil.P("50ms")
+		conf.Orchestrator.Interval = confutil.P("50ms")
+		conf.Manager.OrchestratorIdleTimeout = confutil.P("1ms")
+	})
+	defer done()
 
-// 	txID := uuid.New()
-// 	// Parse API failure
-// 	mEC.On("ABIFunction", ctx, mock.Anything).Return(nil, fmt.Errorf("ABI function parsing error")).Once()
-// 	_, submissionRejected, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 		GasLimit: testEthTxInput.GasLimit,
-// 	}, &components.EthTransaction{
-// 		To:          *tktypes.MustEthAddress(testEthTxInput.To.String()),
-// 		FunctionABI: nil,
-// 		Inputs:      nil,
-// 	})
-// 	assert.NotNil(t, err)
-// 	assert.False(t, submissionRejected)
-// 	assert.Regexp(t, "ABI function parsing error", err)
+	err := ble.Start()
+	require.NoError(t, err)
 
-// 	// Build call data failure
-// 	mABIBuilder := componentmocks.NewABIFunctionRequestBuilder(t)
-// 	mABIBuilder.On("BuildCallData").Return(fmt.Errorf("Build data error")).Once()
-// 	mABIF := componentmocks.NewABIFunctionClient(t)
-// 	mABIF.On("R", ctx).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("To", ethtypes.MustNewAddress(testEthTxInput.To.String())).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("Input", mock.Anything).Return(mABIBuilder).Once()
-// 	mEC.On("ABIFunction", ctx, mock.Anything).Return(mABIF, nil).Once()
-// 	_, submissionRejected, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 		GasLimit: testEthTxInput.GasLimit,
-// 	}, &components.EthTransaction{
-// 		To:          *tktypes.MustEthAddress(testEthTxInput.To.String()),
-// 		FunctionABI: nil,
-// 		Inputs:      nil,
-// 	})
-// 	assert.NotNil(t, err)
-// 	assert.False(t, submissionRejected)
-// 	assert.Regexp(t, "Build data error", err)
+	// Mock a gas price
+	chainID, _ := rand.Int(rand.Reader, big.NewInt(100000000000000))
+	m.ethClient.On("GasPrice", mock.Anything).Return(tktypes.MustParseHexUint256("1000000000000000"), nil)
 
-// 	// Gas estimate failure - non-revert
-// 	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(nil, fmt.Errorf("something else")).Once()
-// 	mABIBuilder.On("BuildCallData").Return(nil).Once()
-// 	mABIF.On("R", ctx).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("To", ethtypes.MustNewAddress(testEthTxInput.To.String())).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("Input", mock.Anything).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("TX", mock.Anything).Return(testEthTxInput).Once()
-// 	mEC.On("ABIFunction", ctx, mock.Anything).Return(mABIF, nil).Once()
-// 	_, submissionRejected, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 		GasLimit: testEthTxInput.GasLimit,
-// 	}, &components.EthTransaction{
-// 		To:          *tktypes.MustEthAddress(testEthTxInput.To.String()),
-// 		FunctionABI: nil,
-// 		Inputs:      nil,
-// 	})
-// 	assert.NotNil(t, err)
-// 	assert.False(t, submissionRejected)
-// 	assert.Regexp(t, "something else", err)
+	// When we create the transaction, it will be a real one
+	passthroughBuildRawTransactionNoResolve(m, chainID.Int64())
 
-// 	// Gas estimate failure - revert
-// 	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(nil, fmt.Errorf("execution reverted")).Once()
-// 	mABIBuilder.On("BuildCallData").Return(nil).Once()
-// 	mABIF.On("R", ctx).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("To", ethtypes.MustNewAddress(testEthTxInput.To.String())).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("Input", mock.Anything).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("TX", mock.Anything).Return(testEthTxInput).Once()
-// 	mEC.On("ABIFunction", ctx, mock.Anything).Return(mABIF, nil).Once()
-// 	_, submissionRejected, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 		GasLimit: testEthTxInput.GasLimit,
-// 	}, &components.EthTransaction{
-// 		To:          *tktypes.MustEthAddress(testEthTxInput.To.String()),
-// 		FunctionABI: nil,
-// 		Inputs:      nil,
-// 	})
-// 	assert.NotNil(t, err)
-// 	assert.True(t, submissionRejected)
-// 	assert.Regexp(t, "execution reverted", err)
+	pubTx := &components.PublicTxSubmission{
+		PublicTxInput: ptxapi.PublicTxInput{
+			From: "signer1",
+			PublicTxOptions: ptxapi.PublicTxOptions{
+				Gas: confutil.P(tktypes.HexUint64(1223451)),
+			},
+		},
+	}
 
-// 	// create transaction succeeded
-// 	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(tktypes.Uint64ToUint256(200), nil).Once()
-// 	mABIBuilder.On("BuildCallData").Return(nil).Once()
-// 	mABIF.On("R", ctx).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("To", ethtypes.MustNewAddress(testEthTxInput.To.String())).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("Input", mock.Anything).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("TX", mock.Anything).Return(testEthTxInput).Once()
-// 	mEC.On("ABIFunction", ctx, mock.Anything).Return(mABIF, nil).Once()
-// 	insertMock := mTS.On("InsertTransaction", ctx, mock.Anything, mock.Anything)
-// 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
-// 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
-// 	insertMock.Run(func(args mock.Arguments) {
-// 		mtx := args[2].(*ptxapi.PublicTx)
-// 		assert.Equal(t, big.NewInt(200), mtx.GasLimit.BigInt())
-// 		insertMock.Return(nil)
-// 	}).Once()
-// 	mTS.On("UpdateSubStatus", ctx, txID.String(), PubTxSubStatusReceived, BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-// 	_, _, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 		GasLimit: testEthTxInput.GasLimit,
-// 	}, &components.EthTransaction{
-// 		To:          *tktypes.MustEthAddress(testEthTxInput.To.String()),
-// 		FunctionABI: nil,
-// 		Inputs:      nil,
-// 	})
-// 	require.NoError(t, err)
-// }
+	// We can get the nonce
+	m.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).Return(confutil.P(tktypes.HexUint64(1122334455)), nil)
+	// ... but attempting to get it onto the chain is going to block failing
+	m.ethClient.On("SendRawTransaction", mock.Anything, mock.Anything).Return(nil, nil)
 
-// func TestHandleNewDeployment(t *testing.T) {
-// 	ctx := context.Background()
-// 	ble, _ := NewTestPublicTxManager(t)
-// 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-// 	mTS := componentmocks.NewPublicTransactionStore(t)
-// 	mBI := componentmocks.NewBlockIndexer(t)
-// 	mEN := componentmocks.NewPublicTxEventNotifier(t)
-// 	mEC := componentmocks.NewEthClient(t)
-// 	mKM := componentmocks.NewKeyManager(t)
-// 	mKM.On("ResolveKey", ctx, testDestAddress, algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", testDestAddress, nil)
-// 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
-// 	testEthTxInput := &ethsigner.Transaction{
-// 		From: []byte(testMainSigningAddress),
-// 		Data: ethtypes.MustNewHexBytes0xPrefix(""),
-// 	}
-// 	txID := uuid.New()
-// 	// Parse API failure
-// 	mEC.On("ABIConstructor", ctx, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("ABI function parsing error")).Once()
-// 	_, submissionRejected, err := ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 		GasLimit: testEthTxInput.GasLimit,
-// 	}, &components.EthDeployTransaction{
-// 		ConstructorABI: nil,
-// 		Bytecode:       nil,
-// 		Inputs:         nil,
-// 	})
-// 	assert.NotNil(t, err)
-// 	assert.False(t, submissionRejected)
-// 	assert.Regexp(t, "ABI function parsing error", err)
+	_, err = ble.SingleTransactionSubmit(ctx, pubTx)
+	require.NoError(t, err)
 
-// 	// Build call data failure
-// 	mABIBuilder := componentmocks.NewABIFunctionRequestBuilder(t)
-// 	mABIBuilder.On("BuildCallData").Return(fmt.Errorf("Build data error")).Once()
-// 	mABIF := componentmocks.NewABIFunctionClient(t)
-// 	mABIF.On("R", ctx).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("Input", mock.Anything).Return(mABIBuilder).Once()
-// 	mEC.On("ABIConstructor", ctx, mock.Anything, mock.Anything).Return(mABIF, nil).Once()
-// 	_, submissionRejected, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 		GasLimit: testEthTxInput.GasLimit,
-// 	}, &components.EthDeployTransaction{
-// 		ConstructorABI: nil,
-// 		Bytecode:       tktypes.HexBytes(testTransactionData),
-// 		Inputs:         nil,
-// 	})
-// 	assert.NotNil(t, err)
-// 	assert.False(t, submissionRejected)
-// 	assert.Regexp(t, "Build data error", err)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
 
-// 	// Gas estimate failure - non-revert
-// 	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(nil, fmt.Errorf("something else")).Once()
-// 	mABIBuilder.On("BuildCallData").Return(nil).Once()
-// 	mABIF.On("R", ctx).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("Input", mock.Anything).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("TX", mock.Anything).Return(testEthTxInput).Once()
-// 	mEC.On("ABIConstructor", ctx, mock.Anything, mock.Anything).Return(mABIF, nil).Once()
-// 	_, submissionRejected, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 		GasLimit: testEthTxInput.GasLimit,
-// 	}, &components.EthDeployTransaction{
-// 		ConstructorABI: nil,
-// 		Bytecode:       tktypes.HexBytes(testTransactionData),
-// 		Inputs:         nil,
-// 	})
-// 	assert.NotNil(t, err)
-// 	assert.False(t, submissionRejected)
-// 	assert.Regexp(t, "something else", err)
+	// Resolve the key ourselves for comparison
+	_, resolvedKeyStr, err := m.keyManager.ResolveKey(ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	require.NoError(t, err)
+	resolvedKey := *tktypes.MustEthAddress(resolvedKeyStr)
 
-// 	// Gas estimate failure - revert
-// 	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(nil, fmt.Errorf("execution reverted")).Once()
-// 	mABIBuilder.On("BuildCallData").Return(nil).Once()
-// 	mABIF.On("R", ctx).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("Input", mock.Anything).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("TX", mock.Anything).Return(testEthTxInput).Once()
-// 	mEC.On("ABIConstructor", ctx, mock.Anything, mock.Anything).Return(mABIF, nil).Once()
-// 	_, submissionRejected, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 		GasLimit: testEthTxInput.GasLimit,
-// 	}, &components.EthDeployTransaction{
-// 		ConstructorABI: nil,
-// 		Bytecode:       tktypes.HexBytes(testTransactionData),
-// 		Inputs:         nil,
-// 	})
-// 	assert.NotNil(t, err)
-// 	assert.True(t, submissionRejected)
-// 	assert.Regexp(t, "execution reverted", err)
+	// Wait for the orchestrator to kick off and pick this TX up
+	getIFT := func() *InFlightTransactionStageController {
+		var o *orchestrator
+		var ift *InFlightTransactionStageController
+		for ift == nil {
+			<-ticker.C
+			if t.Failed() {
+				panic("test failed")
+			}
+			o = ble.getOrchestratorForAddress(resolvedKey)
+			if o != nil {
+				ift = o.getFirstInFlight()
+			}
+		}
+		return ift
+	}
+	txNonce := getIFT().stateManager.GetNonce()
 
-// 	// create transaction succeeded
-// 	mEC.On("GasEstimate", mock.Anything, testEthTxInput, mock.Anything).Return(tktypes.Uint64ToUint256(200), nil).Once()
-// 	mABIBuilder.On("BuildCallData").Return(nil).Once()
-// 	mABIF.On("R", ctx).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("Input", mock.Anything).Return(mABIBuilder).Once()
-// 	mABIBuilder.On("TX", mock.Anything).Return(testEthTxInput).Once()
-// 	mEC.On("ABIConstructor", ctx, mock.Anything, mock.Anything).Return(mABIF, nil).Once()
-// 	insertMock := mTS.On("InsertTransaction", ctx, mock.Anything, mock.Anything)
-// 	mEC.On("GetTransactionCount", mock.Anything, mock.Anything).
-// 		Return(confutil.P(ethtypes.HexUint64(1)), nil).Once()
-// 	insertMock.Run(func(args mock.Arguments) {
-// 		mtx := args[2].(*ptxapi.PublicTx)
-// 		assert.Equal(t, big.NewInt(200), mtx.GasLimit.BigInt())
-// 		insertMock.Return(nil)
-// 	}).Once()
-// 	mTS.On("UpdateSubStatus", ctx, txID.String(), PubTxSubStatusReceived, BaseTxActionAssignNonce, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-// 	_, _, err = ble.HandleNewTransaction(ctx, &components.RequestOptions{
-// 		ID:       &txID,
-// 		SignerID: string(testEthTxInput.From),
-// 		GasLimit: testEthTxInput.GasLimit,
-// 	}, &components.EthDeployTransaction{
-// 		ConstructorABI: nil,
-// 		Bytecode:       tktypes.HexBytes(testTransactionData),
-// 		Inputs:         nil,
-// 	})
-// 	require.NoError(t, err)
-// }
+	// suspend the TX
+	err = ble.SuspendTransaction(ctx, resolvedKey, txNonce)
+	require.NoError(t, err)
 
-// func TestEngineSuspend(t *testing.T) {
-// 	ctx := context.Background()
-// 	ble, _ := NewTestPublicTxManager(t)
-// 	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
+	// wait to flush out the whole orchestrator as this is the only thing in flight
+	for ble.getOrchestratorCount() > 0 {
+		<-ticker.C
+		if t.Failed() {
+			return
+		}
+	}
 
-// 	mTS := componentmocks.NewPublicTransactionStore(t)
-// 	mBI := componentmocks.NewBlockIndexer(t)
-// 	mEN := componentmocks.NewPublicTxEventNotifier(t)
+	// resume the txn
+	err = ble.ResumeTransaction(ctx, resolvedKey, txNonce)
+	require.NoError(t, err)
 
-// 	mEC := componentmocks.NewEthClient(t)
-// 	mKM := componentmocks.NewKeyManager(t)
-// 	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
+	// check the orchestrator comes back
+	newNonce := getIFT().stateManager.GetNonce()
+	assert.Equal(t, txNonce, newNonce)
 
-// 	imtxs := NewTestInMemoryTxState(t)
-// 	mtx := imtxs.GetTx()
-
-// 	// errored
-// 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(nil, fmt.Errorf("get error")).Once()
-// 	_, err := ble.HandleSuspendTransaction(ctx, mtx.ID.String())
-// 	assert.Regexp(t, "get error", err)
-
-// 	// engine update error
-// 	suspendedStatus := PubTxStatusSuspended
-// 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
-// 	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &BaseTXUpdates{
-// 		Status: &suspendedStatus,
-// 	}).Return(fmt.Errorf("update error")).Once()
-// 	_, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
-// 	assert.Regexp(t, "update error", err)
-
-// 	// engine update success
-// 	mtx.Status = PubTxStatusPending
-// 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
-// 	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &BaseTXUpdates{
-// 		Status: &suspendedStatus,
-// 	}).Return(nil).Once()
-// 	tx, err := ble.HandleSuspendTransaction(ctx, mtx.ID.String())
-// 	require.NoError(t, err)
-// 	assert.Equal(t, suspendedStatus, tx.Status)
-
-// 	// orchestrator handler tests
-// 	ble.InFlightOrchestrators = make(map[string]*orchestrator)
-// 	ble.InFlightOrchestrators[string(mtx.From)] = &orchestrator{
-// 		pubTxManager:                 ble,
-// 		orchestratorPollingInterval:  ble.enginePollingInterval,
-// 		state:                        OrchestratorStateIdle,
-// 		stateEntryTime:               time.Now().Add(-ble.maxOrchestratorIdle).Add(-1 * time.Minute),
-// 		InFlightTxsStale:             make(chan bool, 1),
-// 		stopProcess:                  make(chan bool, 1),
-// 		transactionIDsInStatusUpdate: []string{"randomID"},
-// 		txStore:                      mTS,
-// 		ethClient:                    mEC,
-// 		publicTXEventNotifier:        mEN,
-// 		bIndexer:                     mBI,
-// 	}
-// 	// orchestrator update error
-// 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
-// 	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &BaseTXUpdates{
-// 		Status: &suspendedStatus,
-// 	}).Return(fmt.Errorf("update error")).Once()
-// 	_, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
-// 	assert.Regexp(t, "update error", err)
-
-// 	// orchestrator update success
-// 	mtx.Status = PubTxStatusPending
-// 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
-// 	mTS.On("UpdateTransaction", ctx, mtx.ID.String(), &BaseTXUpdates{
-// 		Status: &suspendedStatus,
-// 	}).Return(nil).Once()
-// 	tx, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
-// 	require.NoError(t, err)
-// 	assert.Equal(t, suspendedStatus, tx.Status)
-
-// 	// in flight tx test
-// 	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-// 	it := testInFlightTransactionStateManagerWithMocks.it
-// 	mtx = it.stateManager.GetTx()
-// 	ble.InFlightOrchestrators[string(mtx.From)].InFlightTxs = []*InFlightTransactionStageController{
-// 		it,
-// 	}
-
-// 	// async status update queued
-// 	mtx.Status = PubTxStatusPending
-// 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
-// 	tx, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
-// 	require.NoError(t, err)
-// 	assert.Equal(t, PubTxStatusPending, tx.Status)
-
-// 	// already on the target status
-// 	mtx.Status = PubTxStatusSuspended
-// 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
-// 	tx, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
-// 	require.NoError(t, err)
-// 	assert.Equal(t, PubTxStatusSuspended, tx.Status)
-
-// 	// error when try to update the status of a completed tx
-// 	mtx.Status = PubTxStatusFailed
-// 	mTS.On("GetTransactionByID", ctx, mtx.ID.String()).Return(mtx, nil).Once()
-// 	_, err = ble.HandleSuspendTransaction(ctx, mtx.ID.String())
-// 	assert.Regexp(t, "PD011921", err)
-// }
+}
 
 // func TestEngineResume(t *testing.T) {
 // 	ctx := context.Background()

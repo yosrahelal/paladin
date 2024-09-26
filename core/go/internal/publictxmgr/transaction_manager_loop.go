@@ -116,6 +116,12 @@ func (pte *pubTxManager) getOrchestratorCount() int {
 	return len(pte.inFlightOrchestrators)
 }
 
+func (pte *pubTxManager) getOrchestratorForAddress(signer tktypes.EthAddress) *orchestrator {
+	pte.inFlightOrchestratorMux.Lock()
+	defer pte.inFlightOrchestratorMux.Unlock()
+	return pte.inFlightOrchestrators[signer]
+}
+
 func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 	pollStart := time.Now()
 	ble.inFlightOrchestratorMux.Lock()
@@ -134,7 +140,7 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 
 	// Run through copying across from the old InFlight list to the new one, those that aren't ready to be deleted
 	for signingAddress, oc := range oldInFlight {
-		log.L(ctx).Debugf("Engine checking orchestrator for %s: state: %s, state duration: %s, number of transactions: %d", oc.signingAddress, oc.state, time.Since(oc.stateEntryTime), len(oc.InFlightTxs))
+		log.L(ctx).Debugf("Engine checking orchestrator for %s: state: %s, state duration: %s, number of transactions: %d", oc.signingAddress, oc.state, time.Since(oc.stateEntryTime), len(oc.inFlightTxs))
 		if oc.state == OrchestratorStateIdle && time.Since(oc.stateEntryTime) > ble.orchestratorIdleTimeout ||
 			oc.state == OrchestratorStateStale && time.Since(oc.stateEntryTime) > ble.orchestratorStaleTimeout {
 			// tell transaction orchestrator to stop, there is a chance we later found new transaction for this address, but we got to make a call at some point
@@ -173,7 +179,7 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 
 			const dbQueryBase = `SELECT DISTINCT t."from" FROM "public_txns" AS t ` +
 				`LEFT JOIN "public_completions" AS c ON t."signer_nonce" = c."signer_nonce" ` +
-				`WHERE c."signer_nonce" IS NULL`
+				`WHERE c."signer_nonce" IS NULL AND "suspended" IS FALSE`
 
 			const dbQueryNothingInFlight = dbQueryBase + ` LIMIT ?`
 			if len(inFlightSigningAddresses) == 0 {

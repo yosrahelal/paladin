@@ -37,9 +37,10 @@ func (pte *pubTxManager) persistSuspendedFlag(ctx context.Context, from tktypes.
 	log.L(ctx).Infof("Setting suspend status to '%t' for transaction %s:%d", suspended, from, nonce)
 	return pte.p.DB().
 		WithContext(ctx).
-		UpdateColumn("suspended", suspended).
-		Where("from = ?", from).
+		Table("public_txns").
+		Where(`"from" = ?`, from).
 		Where("nonce = ?", nonce).
+		UpdateColumn("suspended", suspended).
 		Error
 }
 
@@ -80,10 +81,10 @@ func (pte *pubTxManager) dispatchAction(ctx context.Context, from tktypes.EthAdd
 }
 
 func (oc *orchestrator) dispatchAction(ctx context.Context, nonce uint64, action AsyncRequestType, response chan<- error) {
-	oc.InFlightTxsMux.Lock()
-	defer oc.InFlightTxsMux.Unlock()
+	oc.inFlightTxsMux.Lock()
+	defer oc.inFlightTxsMux.Unlock()
 	var pending *InFlightTransactionStageController
-	for _, inflight := range oc.InFlightTxs {
+	for _, inflight := range oc.inFlightTxs {
 		if inflight.stateManager.GetNonce() == nonce {
 			pending = inflight
 			break

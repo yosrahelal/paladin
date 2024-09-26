@@ -586,7 +586,9 @@ func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourc
 		Where("to = ?", destinationAddress).
 		Joins("Completed").
 		Where(`"Completed"."tx_hash" IS NULL`).
-		Where("data IS NULL").
+		Joins("Binding").
+		Where(`"Binding"."signer_nonce" IS NULL`). // no binding for auto fueling txns
+		Where("data IS NULL").                     // they are simple transfers
 		Limit(1).
 		Find(&ptxs).
 		Error
