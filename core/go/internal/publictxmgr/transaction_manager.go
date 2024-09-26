@@ -100,7 +100,7 @@ type pubTxManager struct {
 	maxInflight              int
 	orchestratorIdleTimeout  time.Duration
 	orchestratorStaleTimeout time.Duration
-	orchestratorLifetime     time.Duration
+	orchestratorSwapTimeout  time.Duration
 	retry                    *retry.Retry
 	enginePollingInterval    time.Duration
 	nonceCacheTimeout        time.Duration
@@ -139,8 +139,8 @@ func NewPublicTransactionManager(ctx context.Context, conf *Config) components.P
 		gasPriceClient:              gasPriceClient,
 		inFlightOrchestratorStale:   make(chan bool, 1),
 		signingAddressesPausedUntil: make(map[tktypes.EthAddress]time.Time),
-		maxInflight:                 confutil.IntMin(conf.Orchestrator.MaxInFlight, 1, *DefaultConfig.Orchestrator.MaxInFlight),
-		orchestratorLifetime:        confutil.DurationMin(conf.Manager.OrchestratorLifetime, 0, *DefaultConfig.Manager.OrchestratorLifetime),
+		maxInflight:                 confutil.IntMin(conf.Manager.MaxInFlightOrchestrators, 1, *DefaultConfig.Manager.MaxInFlightOrchestrators),
+		orchestratorSwapTimeout:     confutil.DurationMin(conf.Manager.OrchestratorSwapTimeout, 0, *DefaultConfig.Manager.OrchestratorSwapTimeout),
 		orchestratorStaleTimeout:    confutil.DurationMin(conf.Manager.OrchestratorStaleTimeout, 0, *DefaultConfig.Manager.OrchestratorStaleTimeout),
 		orchestratorIdleTimeout:     confutil.DurationMin(conf.Manager.OrchestratorIdleTimeout, 0, *DefaultConfig.Manager.OrchestratorIdleTimeout),
 		enginePollingInterval:       confutil.DurationMin(conf.Manager.Interval, 50*time.Millisecond, *DefaultConfig.Manager.Interval),

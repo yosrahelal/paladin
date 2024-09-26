@@ -209,7 +209,7 @@ func NewOrchestrator(
 
 func (oc *orchestrator) orchestratorLoop() {
 	ctx := log.WithLogField(oc.ctx, "role", "orchestrator-loop")
-	log.L(ctx).Infof("Orchestrator for signing address %s started pooling based on interval %s", oc.signingAddress, oc.orchestratorPollingInterval)
+	log.L(ctx).Infof("Orchestrator for signing address %s started polling based on interval %s", oc.signingAddress, oc.orchestratorPollingInterval)
 
 	defer close(oc.orchestratorLoopDone)
 
