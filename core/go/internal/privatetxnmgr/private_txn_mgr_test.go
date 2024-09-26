@@ -909,8 +909,13 @@ type fakePublicTxManager struct {
 	prepareErr error
 }
 
-// GetTransactions implements components.PublicTxManager.
-func (f *fakePublicTxManager) QueryTransactions(ctx context.Context, dbTX *gorm.DB, scopeToTxn *uuid.UUID, jq *query.QueryJSON) ([]*ptxapi.PublicTx, error) {
+// QueryPublicTxForTransactions implements components.PublicTxManager.
+func (f *fakePublicTxManager) QueryPublicTxForTransactions(ctx context.Context, dbTX *gorm.DB, boundToTxns []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error) {
+	panic("unimplemented")
+}
+
+// QueryPublicTxWithBindings implements components.PublicTxManager.
+func (f *fakePublicTxManager) QueryPublicTxWithBindings(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) {
 	panic("unimplemented")
 }
 
@@ -1061,7 +1066,7 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
 	mocks.allComponents.On("Persistence").Return(persistence.NewUnitTestPersistence(ctx)).Maybe()
 	mocks.allComponents.On("EthClientFactory").Return(mocks.ethClientFactory).Maybe()
-	unconnectedRealClient := ethclient.NewUnconnectedRPCClient(ctx, mocks.keyManager, &ethclient.Config{})
+	unconnectedRealClient := ethclient.NewUnconnectedRPCClient(ctx, mocks.keyManager, &ethclient.Config{}, 0)
 	mocks.ethClientFactory.On("SharedWS").Return(unconnectedRealClient).Maybe()
 
 	mocks.stateStore.On("RunInDomainContext", mock.Anything, mock.AnythingOfType("statestore.DomainContextFunction")).Run(func(args mock.Arguments) {

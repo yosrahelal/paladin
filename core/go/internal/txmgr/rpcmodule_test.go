@@ -62,7 +62,13 @@ func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*Config, *mockC
 
 func TestPublicTransactionLifecycle(t *testing.T) {
 
-	ctx, url, tmr, done := newTestTransactionManagerWithRPC(t, mockPublicSubmitTxOk(t))
+	var publicTxns map[uuid.UUID][]*ptxapi.PublicTx
+	ctx, url, tmr, done := newTestTransactionManagerWithRPC(t,
+		mockPublicSubmitTxOk(t),
+		mockPublicQueryTxBindings(func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error) {
+			return publicTxns, nil
+		}),
+	)
 	defer done()
 
 	rpcClient, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{URL: url})
@@ -96,7 +102,18 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, uuid.UUID{}, tx1ID)
 
-	// Query it back
+	// Mock up the existence of the public TXs
+	publicKey := tktypes.EthAddress(tktypes.RandBytes(20))
+	publicTxns = map[uuid.UUID][]*ptxapi.PublicTx{
+		tx1ID: {
+			{
+				From:  publicKey,
+				Nonce: 111222333,
+			},
+		},
+	}
+
+	// Query them back
 	var txns []*ptxapi.TransactionFull
 	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
 	require.NoError(t, err)
@@ -105,6 +122,8 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	assert.Equal(t, tx0ID, txns[0].DependsOn[0])
 	assert.Equal(t, `{"0":"12345"}`, txns[0].Data.String())
 	assert.Equal(t, "(uint256)", txns[0].Function)
+	assert.Equal(t, publicKey, txns[0].Public[0].From)
+	assert.Equal(t, uint64(111222333), txns[0].Public[0].Nonce.Uint64())
 
 	// Check full=false
 	txns = nil

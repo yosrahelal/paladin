@@ -17,6 +17,7 @@
 package ptxapi
 
 import (
+	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -55,12 +56,26 @@ type PublicTxSubmissionData struct {
 }
 
 type PublicTx struct {
-	To          *tktypes.EthAddress         `json:"to,omitempty"`
-	Data        tktypes.HexBytes            `json:"data,omitempty"`
-	From        tktypes.EthAddress          `json:"from"`
-	Nonce       tktypes.HexUint64           `json:"nonce"`
-	Created     tktypes.Timestamp           `json:"created"`
-	Submissions []*PublicTxSubmissionData   `json:"submissions,omitempty"`
-	Activity    []TransactionActivityRecord `json:"activity,omitempty"`
+	To              *tktypes.EthAddress         `json:"to,omitempty"`
+	Data            tktypes.HexBytes            `json:"data,omitempty"`
+	From            tktypes.EthAddress          `json:"from"`
+	Nonce           tktypes.HexUint64           `json:"nonce"`
+	Created         tktypes.Timestamp           `json:"created"`
+	CompletedAt     *tktypes.Timestamp          `json:"completedAt,omitempty"` // only once confirmed
+	TransactionHash *tktypes.Bytes32            `json:"transactionHash"`       // only once confirmed
+	Success         *bool                       `json:"success,omitempty"`     // only once confirmed
+	RevertData      tktypes.HexBytes            `json:"revertData,omitempty"`  // only once confirmed, if available
+	Submissions     []*PublicTxSubmissionData   `json:"submissions,omitempty"`
+	Activity        []TransactionActivityRecord `json:"activity,omitempty"`
 	PublicTxOptions
+}
+
+type PublicTxBinding struct {
+	Transaction     uuid.UUID                     `json:"transaction"`
+	TransactionType tktypes.Enum[TransactionType] `json:"transactionType"`
+}
+
+type PublicTxWithBinding struct {
+	*PublicTx
+	PublicTxBinding
 }

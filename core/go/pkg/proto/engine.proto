@@ -15,7 +15,7 @@
 
 syntax = "proto3";
 
-package github.com.kaleido_io.paladin.kata.engine;
+package io.kaleido.paladin.kata.engine;
 option go_package = "pkg/proto/engine";
 import "google/protobuf/any.proto";
 
