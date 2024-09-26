@@ -34,27 +34,34 @@ import (
 )
 
 type transactionReceipt struct {
-	TransactionID   uuid.UUID         `gorm:"column:transaction"`
-	Indexed         tktypes.Timestamp `gorm:"column:indexed"`
-	Success         bool              `gorm:"column:success"`
-	TransactionHash *tktypes.Bytes32  `gorm:"column:tx_hash"`
-	BlockNumber     *int64            `gorm:"column:block_number"`
-	FailureMessage  *string           `gorm:"column:failure_message"`
-	RevertData      tktypes.HexBytes  `gorm:"column:revert_data"`
+	TransactionID      uuid.UUID           `gorm:"column:transaction"`
+	Indexed            tktypes.Timestamp   `gorm:"column:indexed"`
+	Success            bool                `gorm:"column:success"`
+	TransactionHash    *tktypes.Bytes32    `gorm:"column:tx_hash"`
+	BlockNumber        *int64              `gorm:"column:block_number"`
+	FailureMessage     *string             `gorm:"column:failure_message"`
+	RevertData         tktypes.HexBytes    `gorm:"column:revert_data"`
+	ContractDeployment *contractDeployment `gorm:"foreignKey:deploy_transaction;references:transaction"`
 }
 
 type contractDeployment struct {
-	TransactionID   uuid.UUID `gorm:"column:transaction"`
-	ContractAddress *string   `gorm:"column:contract_address"`
+	DeployTransaction uuid.UUID `gorm:"column:deploy_transaction"`
+	ContractAddress   *string   `gorm:"column:contract_address"`
 }
 
 func mapPersistedReceipt(receipt *transactionReceipt) *ptxapi.TransactionReceiptData {
+	deployment := receipt.ContractDeployment
+	var contractAddress *tktypes.EthAddress
+	if deployment != nil && deployment.ContractAddress != nil {
+		contractAddress = tktypes.MustEthAddress(*deployment.ContractAddress)
+	}
 	return &ptxapi.TransactionReceiptData{
 		Success:         receipt.Success,
 		BlockNumber:     int64OrZero(receipt.BlockNumber),
 		TransactionHash: receipt.TransactionHash,
 		FailureMessage:  stringOrEmpty(receipt.FailureMessage),
 		RevertData:      receipt.RevertData,
+		ContractAddress: contractAddress,
 	}
 }
 
@@ -209,6 +216,11 @@ func (tm *txManager) queryTransactionReceipts(ctx context.Context, jq *query.Que
 		defaultSort: "-indexed",
 		filters:     transactionReceiptFilters,
 		query:       jq,
+		finalize: func(q *gorm.DB) *gorm.DB {
+			q = q.
+				Joins("ContractDeployment")
+			return q
+		},
 		mapResult: func(pt *transactionReceipt) (*ptxapi.TransactionReceipt, error) {
 			return &ptxapi.TransactionReceipt{
 				ID:                     pt.TransactionID,

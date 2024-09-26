@@ -58,16 +58,16 @@ func (tm *txManager) mapPersistedTXFull(pt *persistedTransaction) *ptxapi.Transa
 	}
 	receipt := pt.TransactionReceipt
 	if receipt != nil {
+		deployment := pt.ContractDeployment
+		if deployment != nil {
+			receipt.ContractDeployment = deployment
+		}
 		res.Receipt = mapPersistedReceipt(receipt)
 	}
 	for _, dep := range pt.TransactionDeps {
 		res.DependsOn = append(res.DependsOn, dep.DependsOn)
 	}
-	deployment := pt.ContractDeployment
-	if deployment != nil && deployment.ContractAddress != nil {
-		// TODO should this really go into mapPersistedReceipt instead?
-		res.Receipt.ContractAddress = tktypes.MustEthAddress(*deployment.ContractAddress)
-	}
+
 	return res
 }
 

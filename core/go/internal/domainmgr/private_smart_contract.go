@@ -42,8 +42,8 @@ type PrivateSmartContract struct {
 // domainmgr (who is responsible for listening for the deployment events and writing to the table)
 // or txmgr (who is responsible for reading from the table and joining with the transactions and transaction_receipts tables)
 type contractDeployment struct {
-	Transaction     uuid.UUID          `json:"trasnsaction"     gorm:"column:transaction"`
-	ContractAddress tktypes.EthAddress `json:"contractAddress"  gorm:"column:contract_address"`
+	DeployTransaction uuid.UUID          `json:"deployTransaction"     gorm:"column:deploy_transaction"`
+	ContractAddress   tktypes.EthAddress `json:"contractAddress"  gorm:"column:contract_address"`
 }
 
 type domainContract struct {

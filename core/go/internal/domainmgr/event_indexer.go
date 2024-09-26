@@ -67,8 +67,8 @@ func (dm *domainManager) eventIndexer(ctx context.Context, tx *gorm.DB, batch *b
 		contractDeployments := make([]*contractDeployment, 0, len(contracts))
 		for _, c := range contracts {
 			contractDeployments = append(contractDeployments, &contractDeployment{
-				ContractAddress: c.Address,
-				Transaction:     c.DeployTX,
+				ContractAddress:   c.Address,
+				DeployTransaction: c.DeployTX,
 			})
 		}
 		// Insert the contract deployments row so that it can be used to enrich the transaction receipts.

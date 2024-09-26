@@ -71,11 +71,11 @@ CREATE TABLE contract_deployments (
   -- Effectivtly this is an extension to the transaction_receipts table but the contract_address is written at a different
   -- time from the rest of the receipt (becuase the contract_address comes from an event stream and the rest of the receipt comes from block indexer)
   -- storing in separate tables allows an INSERT only model and avoids any worry about multiple concurent writes to the same row
-  "transaction"               UUID            NOT NULL,
-  "contract_address" .        VARCHAR         NOT NULL,
-  FOREIGN KEY ("transaction") REFERENCES transactions ("id") ON DELETE CASCADE,
+  "deploy_transaction"               UUID            NOT NULL,
+  "contract_address"                 VARCHAR         NOT NULL,
+  FOREIGN KEY ("deploy_transaction") REFERENCES transaction_receipts ("transaction") ON DELETE CASCADE,
   PRIMARY KEY ("contract_address")
 );
-CREATE INDEX contract_deployments_transaxction ON contract_deployments ("transaction");
+CREATE INDEX contract_deployments_transaction ON contract_deployments ("deploy_transaction");
 
 COMMIT;
