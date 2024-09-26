@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -39,25 +38,25 @@ func TestProduceLatestInFlightStageContextConfirming(t *testing.T) {
 
 	// set validated to enter tracking
 	it.stateManager.SetValidatedTransactionHashMatchState(ctx, true)
-	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
 	})
 	assert.NotEmpty(t, *tOut)
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.True(t, tOut.TransactionSubmitted)
-	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
+	assert.Equal(t, InFlightTxStageConfirming, inFlightStageMananger.stage)
 
 	// move to confirming
-	it.stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageConfirming, time.Now(), nil)
-	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	it.stateManager.AddPersistenceOutput(ctx, InFlightTxStageConfirming, time.Now(), nil)
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: true,
 	})
 	assert.NotEmpty(t, *tOut)
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.True(t, tOut.TransactionSubmitted)
-	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
+	assert.Equal(t, InFlightTxStageConfirming, inFlightStageMananger.stage)
 
 	mTS := testInFlightTransactionStateManagerWithMocks.mTS
 	defer mTS.AssertExpectations(t)
@@ -69,12 +68,12 @@ func TestProduceLatestInFlightStageContextConfirming(t *testing.T) {
 	}
 
 	// persist confirmation
-	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
+	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
 	rsc := it.stateManager.GetRunningStageContext(ctx)
 	rsc.SetNewPersistenceUpdateOutput()
 	it.stateManager.AddConfirmationsOutput(ctx, testConfirmedTx)
 	assert.GreaterOrEqual(t, len(inFlightStageMananger.bufferedStageOutputs), 1)
-	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
 	})
@@ -87,9 +86,9 @@ func TestProduceLatestInFlightStageContextConfirming(t *testing.T) {
 	// persisting error waiting for persistence retry timeout
 	rsc.StageErrored = false
 	it.persistenceRetryTimeout = 5 * time.Second
-	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
-	it.stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageConfirming, time.Now().Add(it.persistenceRetryTimeout*2), fmt.Errorf("persist confirmation error"))
-	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
+	it.stateManager.AddPersistenceOutput(ctx, InFlightTxStageConfirming, time.Now().Add(it.persistenceRetryTimeout*2), fmt.Errorf("persist confirmation error"))
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: true,
 	})
@@ -100,9 +99,9 @@ func TestProduceLatestInFlightStageContextConfirming(t *testing.T) {
 	// persisting error retrying
 	assert.False(t, rsc.StageErrored)
 	it.persistenceRetryTimeout = 0
-	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
-	it.stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageConfirming, time.Now(), fmt.Errorf("persist confirmation error"))
-	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
+	it.stateManager.AddPersistenceOutput(ctx, InFlightTxStageConfirming, time.Now(), fmt.Errorf("persist confirmation error"))
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: true,
 	})
@@ -112,11 +111,11 @@ func TestProduceLatestInFlightStageContextConfirming(t *testing.T) {
 	it.persistenceRetryTimeout = 5 * time.Second
 
 	// persisted stage success and wait for more confirmations
-	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
-	it.stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageConfirming, time.Now(), nil)
+	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
+	it.stateManager.AddPersistenceOutput(ctx, InFlightTxStageConfirming, time.Now(), nil)
 	rsc.StageErrored = false
 	it.stateManager.SetValidatedTransactionHashMatchState(ctx, true)
-	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: true,
 	})
@@ -136,25 +135,25 @@ func TestProduceLatestInFlightStageContextConfirmingTxFailed(t *testing.T) {
 
 	// set validated to enter tracking
 	it.stateManager.SetValidatedTransactionHashMatchState(ctx, true)
-	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
 	})
 	assert.NotEmpty(t, *tOut)
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.True(t, tOut.TransactionSubmitted)
-	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
+	assert.Equal(t, InFlightTxStageConfirming, inFlightStageMananger.stage)
 	mtx := it.stateManager.GetTx()
 	// move to confirming
-	it.stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageConfirming, time.Now(), nil)
-	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	it.stateManager.AddPersistenceOutput(ctx, InFlightTxStageConfirming, time.Now(), nil)
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: true,
 	})
 	assert.NotEmpty(t, *tOut)
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.True(t, tOut.TransactionSubmitted)
-	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
+	assert.Equal(t, InFlightTxStageConfirming, inFlightStageMananger.stage)
 	mEN := testInFlightTransactionStateManagerWithMocks.mEN
 
 	rsc := it.stateManager.GetRunningStageContext(ctx)
@@ -166,11 +165,11 @@ func TestProduceLatestInFlightStageContextConfirmingTxFailed(t *testing.T) {
 		assert.Equal(t, ptxapi.PublicTxProcessFailed, transactionEvent.Type)
 		notifyMock.Return(nil)
 	}).Once()
-	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
-	it.stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageConfirming, time.Now(), nil)
+	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
+	it.stateManager.AddPersistenceOutput(ctx, InFlightTxStageConfirming, time.Now(), nil)
 	mtx.Status = PubTxStatusFailed
 	it.stateManager.SetValidatedTransactionHashMatchState(ctx, true)
-	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: true,
 	})
@@ -191,25 +190,25 @@ func TestProduceLatestInFlightStageContextConfirmingTxSucceeded(t *testing.T) {
 	mEN := testInFlightTransactionStateManagerWithMocks.mEN
 	// set validated to enter tracking
 	it.stateManager.SetValidatedTransactionHashMatchState(ctx, true)
-	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
 	})
 	assert.NotEmpty(t, *tOut)
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.True(t, tOut.TransactionSubmitted)
-	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
+	assert.Equal(t, InFlightTxStageConfirming, inFlightStageMananger.stage)
 
 	// move to confirming
-	it.stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageConfirming, time.Now(), nil)
-	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	it.stateManager.AddPersistenceOutput(ctx, InFlightTxStageConfirming, time.Now(), nil)
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: true,
 	})
 	assert.NotEmpty(t, *tOut)
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.True(t, tOut.TransactionSubmitted)
-	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
+	assert.Equal(t, InFlightTxStageConfirming, inFlightStageMananger.stage)
 
 	rsc := it.stateManager.GetRunningStageContext(ctx)
 	// persisted stage success and transaction completed without error
@@ -220,12 +219,12 @@ func TestProduceLatestInFlightStageContextConfirmingTxSucceeded(t *testing.T) {
 		assert.Equal(t, ptxapi.PublicTxProcessSucceeded, transactionEvent.Type)
 		notifyMock.Return(nil)
 	}).Once()
-	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
-	it.stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageConfirming, time.Now(), nil)
+	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
+	it.stateManager.AddPersistenceOutput(ctx, InFlightTxStageConfirming, time.Now(), nil)
 	mtx.Status = PubTxStatusSucceeded
 	rsc.StageErrored = false
 	it.stateManager.SetValidatedTransactionHashMatchState(ctx, true)
-	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: true,
 	})
@@ -248,27 +247,27 @@ func TestProduceLatestInFlightStageContextTriggerResubmissionForStaledConfirmati
 	mtx := it.stateManager.GetTx()
 	// set validated to enter tracking
 	it.stateManager.SetValidatedTransactionHashMatchState(ctx, true)
-	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
 	})
 	assert.NotEmpty(t, *tOut)
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.True(t, tOut.TransactionSubmitted)
-	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
+	assert.Equal(t, InFlightTxStageConfirming, inFlightStageMananger.stage)
 
 	// set last submit to trigger resubmission
 	inThePast := tktypes.Timestamp(0)
 	mtx.LastSubmit = &inThePast
 	it.resubmitInterval = 0
-	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
 	})
 	assert.NotEmpty(t, *tOut)
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.True(t, tOut.TransactionSubmitted)
-	assert.Equal(t, baseTypes.InFlightTxStageRetrieveGasPrice, inFlightStageMananger.stage)
+	assert.Equal(t, InFlightTxStageRetrieveGasPrice, inFlightStageMananger.stage)
 
 }
 
@@ -282,9 +281,9 @@ func TestProduceLatestInFlightStageContextConfirmingTxThatMissedConfirmationEven
 	mTS := testInFlightTransactionStateManagerWithMocks.mTS
 	defer mTS.AssertExpectations(t)
 	// trigger confirmation due to missed event
-	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
+	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
 
-	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
 		CurrentConfirmedNonce:    new(big.Int).SetUint64(it.stateManager.GetNonce().Uint64() + 1),
@@ -297,7 +296,7 @@ func TestProduceLatestInFlightStageContextConfirmingTxThatMissedConfirmationEven
 	}
 	assert.NotNil(t, inFlightStageMananger.bufferedStageOutputs[0].ConfirmationOutput)
 	assert.Nil(t, inFlightStageMananger.bufferedStageOutputs[0].ConfirmationOutput.ConfirmedTransaction)
-	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
+	assert.Equal(t, InFlightTxStageConfirming, inFlightStageMananger.stage)
 }
 func TestProduceLatestInFlightStageContextConfirmingPanic(t *testing.T) {
 	ctx := context.Background()
@@ -308,33 +307,33 @@ func TestProduceLatestInFlightStageContextConfirmingPanic(t *testing.T) {
 
 	// set validated to enter tracking
 	it.stateManager.SetValidatedTransactionHashMatchState(ctx, true)
-	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
 	})
 	assert.NotEmpty(t, *tOut)
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.True(t, tOut.TransactionSubmitted)
-	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
+	assert.Equal(t, InFlightTxStageConfirming, inFlightStageMananger.stage)
 
 	// move to confirming
-	it.stateManager.AddPersistenceOutput(ctx, baseTypes.InFlightTxStageConfirming, time.Now(), nil)
-	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	it.stateManager.AddPersistenceOutput(ctx, InFlightTxStageConfirming, time.Now(), nil)
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: true,
 	})
 	assert.NotEmpty(t, *tOut)
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.True(t, tOut.TransactionSubmitted)
-	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
+	assert.Equal(t, InFlightTxStageConfirming, inFlightStageMananger.stage)
 
 	// mTS := testInFlightTransactionStateManagerWithMocks.mTS
 	// defer mTS.AssertExpectations(t)
 
 	// unexpected error
-	inFlightStageMananger.bufferedStageOutputs = make([]*baseTypes.StageOutput, 0)
-	it.stateManager.AddPanicOutput(ctx, baseTypes.InFlightTxStageConfirming)
-	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
+	it.stateManager.AddPanicOutput(ctx, InFlightTxStageConfirming)
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
 	})
@@ -343,7 +342,7 @@ func TestProduceLatestInFlightStageContextConfirmingPanic(t *testing.T) {
 	assert.True(t, tOut.TransactionSubmitted)
 	assert.Regexp(t, "PD011919", tOut.Error)
 	// re-enters tracking straight-away when panicked
-	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
+	assert.Equal(t, InFlightTxStageConfirming, inFlightStageMananger.stage)
 }
 
 func TestProduceLatestInFlightStageContextSanityChecksForCompletedTransactions(t *testing.T) {
@@ -364,7 +363,7 @@ func TestProduceLatestInFlightStageContextSanityChecksForCompletedTransactions(t
 	}
 
 	imtxs.ConfirmedTransaction = testConfirmedTx
-	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
 	})
@@ -381,7 +380,7 @@ func TestProduceLatestInFlightStageContextConfirmErroredAndExceededStageTimeout(
 
 	// set validated to enter tracking
 	it.stateManager.SetValidatedTransactionHashMatchState(ctx, true)
-	tOut := it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
 	})
@@ -389,14 +388,14 @@ func TestProduceLatestInFlightStageContextConfirmErroredAndExceededStageTimeout(
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.True(t, tOut.TransactionSubmitted)
 
-	assert.Equal(t, baseTypes.InFlightTxStageConfirming, inFlightStageMananger.stage)
+	assert.Equal(t, InFlightTxStageConfirming, inFlightStageMananger.stage)
 	// stage errored and reached stage retry timeout
 	it.stageRetryTimeout = 0
 	rsc := it.stateManager.GetRunningStageContext(ctx)
 	rsc.StageErrored = true
 	assert.NotNil(t, rsc)
-	assert.Equal(t, baseTypes.InFlightTxStageConfirming, rsc.Stage)
-	tOut = it.ProduceLatestInFlightStageContext(ctx, &baseTypes.OrchestratorContext{
+	assert.Equal(t, InFlightTxStageConfirming, rsc.Stage)
+	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
 	})
@@ -406,5 +405,5 @@ func TestProduceLatestInFlightStageContextConfirmErroredAndExceededStageTimeout(
 
 	assert.NotEqual(t, rsc, it.stateManager.GetRunningStageContext(ctx))
 	rsc = it.stateManager.GetRunningStageContext(ctx)
-	assert.Equal(t, baseTypes.InFlightTxStageConfirming, rsc.Stage)
+	assert.Equal(t, InFlightTxStageConfirming, rsc.Stage)
 }

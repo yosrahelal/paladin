@@ -26,7 +26,6 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 
@@ -266,14 +265,14 @@ func TestTopUpAddressNoOpScenarios(t *testing.T) {
 	bm, _, _ := NewTestBalanceManager(ctx, t)
 
 	// no spent on the account
-	fuelingTx, err := bm.TopUpAccount(ctx, &baseTypes.AddressAccount{
+	fuelingTx, err := bm.TopUpAccount(ctx, &AddressAccount{
 		Spent: big.NewInt(0),
 	})
 	require.NoError(t, err)
 	assert.Nil(t, fuelingTx)
 
 	// enough balance
-	fuelingTx, err = bm.TopUpAccount(ctx, &baseTypes.AddressAccount{
+	fuelingTx, err = bm.TopUpAccount(ctx, &AddressAccount{
 		Spent:   big.NewInt(10),
 		Balance: big.NewInt(10),
 	})
@@ -282,7 +281,7 @@ func TestTopUpAddressNoOpScenarios(t *testing.T) {
 
 	// destination address already reached max amount
 	bm.maxDestBalance = big.NewInt(100)
-	fuelingTx, err = bm.TopUpAccount(ctx, &baseTypes.AddressAccount{
+	fuelingTx, err = bm.TopUpAccount(ctx, &AddressAccount{
 		Spent:                 big.NewInt(10),
 		Balance:               big.NewInt(100),
 		SpentTransactionCount: 10,
@@ -292,7 +291,7 @@ func TestTopUpAddressNoOpScenarios(t *testing.T) {
 
 	// no source address configured
 	bm.sourceAddress = ""
-	fuelingTx, err = bm.TopUpAccount(ctx, &baseTypes.AddressAccount{
+	fuelingTx, err = bm.TopUpAccount(ctx, &AddressAccount{
 		Spent:                 big.NewInt(10),
 		Balance:               big.NewInt(0),
 		SpentTransactionCount: 10,
@@ -320,7 +319,7 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 	defer mEthClient.AssertExpectations(t)
 	defer mockAFTxEngine.AssertExpectations(t)
 
-	accountToTopUp := &baseTypes.AddressAccount{
+	accountToTopUp := &AddressAccount{
 		Balance:               big.NewInt(100),
 		Spent:                 big.NewInt(200),
 		Address:               testDestAddress,
@@ -346,7 +345,7 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 	assert.Equal(t, expectedFuelingTransaction1, fuelingTx)
 
 	// Test no new fueling transaction when the current one is pending
-	accountToTopUp2 := &baseTypes.AddressAccount{
+	accountToTopUp2 := &AddressAccount{
 		Balance:               big.NewInt(200),
 		Spent:                 big.NewInt(250),
 		Address:               testDestAddress,
@@ -376,7 +375,7 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 
 	// test when couldn't record the result of the submitted transaction
 	// also do a balance look up
-	accountToTopUp3 := &baseTypes.AddressAccount{
+	accountToTopUp3 := &AddressAccount{
 		Balance:               big.NewInt(250),
 		Spent:                 big.NewInt(300),
 		Address:               testDestAddress,
@@ -414,7 +413,7 @@ func TestTopUpSuccessTopUpMinAheadUseMin(t *testing.T) {
 	defer mEthClient.AssertExpectations(t)
 	defer mockAFTxEngine.AssertExpectations(t)
 
-	accountToTopUp := &baseTypes.AddressAccount{
+	accountToTopUp := &AddressAccount{
 		Balance:               big.NewInt(100),
 		Spent:                 big.NewInt(200),
 		Address:               testDestAddress,
@@ -452,7 +451,7 @@ func TestTopUpSuccessTopUpMinAheadUseMax(t *testing.T) {
 	defer mEthClient.AssertExpectations(t)
 	defer mockAFTxEngine.AssertExpectations(t)
 
-	accountToTopUp := &baseTypes.AddressAccount{
+	accountToTopUp := &AddressAccount{
 		Balance:               big.NewInt(100),
 		Spent:                 big.NewInt(200),
 		Address:               testDestAddress,
@@ -490,7 +489,7 @@ func TestTopUpSuccessTopUpMinAheadUseAvg(t *testing.T) {
 	defer mEthClient.AssertExpectations(t)
 	defer mockAFTxEngine.AssertExpectations(t)
 
-	accountToTopUp := &baseTypes.AddressAccount{
+	accountToTopUp := &AddressAccount{
 		Balance:               big.NewInt(100),
 		Spent:                 big.NewInt(200),
 		Address:               testDestAddress,
@@ -528,7 +527,7 @@ func TestTopUpSuccessUseMinDestBalance(t *testing.T) {
 	defer mEthClient.AssertExpectations(t)
 	defer mockAFTxEngine.AssertExpectations(t)
 
-	accountToTopUp := &baseTypes.AddressAccount{
+	accountToTopUp := &AddressAccount{
 		Balance:               big.NewInt(100),
 		Spent:                 big.NewInt(200),
 		Address:               testDestAddress,
@@ -561,7 +560,7 @@ func TestTopUpSuccessUseMaxDestBalance(t *testing.T) {
 	defer mEthClient.AssertExpectations(t)
 	defer mockAFTxEngine.AssertExpectations(t)
 
-	accountToTopUp := &baseTypes.AddressAccount{
+	accountToTopUp := &AddressAccount{
 		Balance:               big.NewInt(100),
 		Spent:                 big.NewInt(200),
 		Address:               testDestAddress,
@@ -595,7 +594,7 @@ func TestTopUpNoOpAlreadyAboveMaxDestBalance(t *testing.T) {
 	defer mEthClient.AssertExpectations(t)
 	defer mockAFTxEngine.AssertExpectations(t)
 
-	accountToTopUp := &baseTypes.AddressAccount{
+	accountToTopUp := &AddressAccount{
 		Balance:               big.NewInt(100),
 		Spent:                 big.NewInt(200),
 		Address:               testDestAddress,
@@ -617,7 +616,7 @@ func TestTopUpNoOpAmountBelowMinThreshold(t *testing.T) {
 	defer mEthClient.AssertExpectations(t)
 	defer mockAFTxEngine.AssertExpectations(t)
 
-	accountToTopUp := &baseTypes.AddressAccount{
+	accountToTopUp := &AddressAccount{
 		Balance:               big.NewInt(100),
 		Spent:                 big.NewInt(200),
 		Address:               testDestAddress,
@@ -639,7 +638,7 @@ func TestTopUpFailedDueToSourceBalanceBelowMin(t *testing.T) {
 	defer mEthClient.AssertExpectations(t)
 	defer mockAFTxEngine.AssertExpectations(t)
 
-	accountToTopUp := &baseTypes.AddressAccount{
+	accountToTopUp := &AddressAccount{
 		Balance:               big.NewInt(100),
 		Spent:                 big.NewInt(200),
 		Address:               testDestAddress,
@@ -667,7 +666,7 @@ func TestTopUpFailedDueToSourceBalanceBelowRequestedAmount(t *testing.T) {
 	defer mEthClient.AssertExpectations(t)
 	defer mockAFTxEngine.AssertExpectations(t)
 
-	accountToTopUp := &baseTypes.AddressAccount{
+	accountToTopUp := &AddressAccount{
 		Balance:               big.NewInt(100),
 		Spent:                 big.NewInt(2000),
 		Address:               testDestAddress,
@@ -692,7 +691,7 @@ func TestTopUpFailedDueToUnableToGetPendingFuelingTransaction(t *testing.T) {
 	defer mEthClient.AssertExpectations(t)
 	defer mockAFTxEngine.AssertExpectations(t)
 
-	accountToTopUp := &baseTypes.AddressAccount{
+	accountToTopUp := &AddressAccount{
 		Balance:               big.NewInt(100),
 		Spent:                 big.NewInt(200),
 		Address:               testDestAddress,
@@ -715,7 +714,7 @@ func TestTopUpFailedDueToUnableToGetSourceAddressBalance(t *testing.T) {
 	defer mEthClient.AssertExpectations(t)
 	defer mockAFTxEngine.AssertExpectations(t)
 
-	accountToTopUp := &baseTypes.AddressAccount{
+	accountToTopUp := &AddressAccount{
 		Balance:               big.NewInt(100),
 		Spent:                 big.NewInt(200),
 		Address:               testDestAddress,
