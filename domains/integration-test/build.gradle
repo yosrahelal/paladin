@@ -37,6 +37,14 @@ configurations {
         canBeConsumed = false
         canBeResolved = true
     }
+    zetoArtifacts {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+    poseidonArtifacts {
+        canBeConsumed = false
+        canBeResolved = true
+    }
 }
 
 dependencies {
@@ -44,16 +52,33 @@ dependencies {
     toolkitGo project(path: ":toolkit:go", configuration: "goSource")
     coreGo project(path: ":core:go", configuration: "goSource")
     notoGo project(path: ":domains:noto", configuration: "goSource")
+    zetoArtifacts project(path: ":domains:zeto", configuration: "zetoArtifacts")
+    poseidonArtifacts project(path: ":domains:zeto", configuration: "poseidonArtifacts")
 }
 
 task copySolidity(type: Copy) {
     inputs.files(configurations.contractCompile)
     from fileTree(configurations.contractCompile.asPath) {
         include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
+        include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
         include 'contracts/shared/atom/Atom.sol/Atom.json'
         include 'contracts/shared/atom/Atom.sol/AtomFactory.json'
         include 'contracts/private/Swap.sol/Swap.json'
     }
+
+    inputs.files(configurations.zetoArtifacts)
+    from fileTree(configurations.zetoArtifacts.asPath) {
+        include 'artifacts/contracts/**/*.json'
+        include 'artifacts/@iden3/contracts/**/*.json'
+        exclude '**/*.dbg.json'
+    }
+
+    inputs.files(configurations.poseidonArtifacts)
+    from fileTree(configurations.poseidonArtifacts.asPath) {
+        include 'Poseidon2.json'
+        include 'Poseidon3.json'
+    }
+
     into 'helpers/abis'
 
     // Flatten all paths into the destination folder
@@ -73,9 +98,10 @@ task test(type: Exec, dependsOn: [":core:go:makeMocks"]) {
     executable 'go'
     args 'test'
     args './...'
+    args '-v'
     args '-cover'
     args '-covermode=atomic'
-    args '-timeout=30s'
+    args '-timeout=60s'
     if (project.findProperty('verboseTests') == 'true') {
         args '-v'
     }
@@ -91,5 +117,5 @@ task build {
 
 task clean(type: Delete) {
     delete 'coverage'
-    delete 'abis'
+    delete 'helpers/abis'
 }

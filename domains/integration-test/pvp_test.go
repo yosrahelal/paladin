@@ -18,16 +18,18 @@ package integrationtest
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/log"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	"github.com/kaleido-io/paladin/domains/integration-test/helpers"
-	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
+	nototypes "github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/require"
+	"gotest.tools/assert"
 )
 
 var (
@@ -36,9 +38,9 @@ var (
 	bob    = "bob"
 )
 
-func TestPvP(t *testing.T) {
+func TestNotoForNoto(t *testing.T) {
 	ctx := context.Background()
-	log.L(ctx).Infof("TestPvP")
+	log.L(ctx).Infof("TestNotoForNoto")
 	domainName := "noto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
 
@@ -52,7 +54,8 @@ func TestPvP(t *testing.T) {
 		log.L(ctx).Infof("%s deployed to %s", name, address)
 	}
 
-	_, notoTestbed := newNotoDomain(t, &types.DomainConfig{
+	log.L(ctx).Infof("Initializing testbed")
+	_, notoTestbed := newNotoDomain(t, &nototypes.DomainConfig{
 		FactoryAddress: contracts["noto"],
 	})
 	done, tb, rpc := newTestbed(t, map[string]*testbed.TestbedDomain{
@@ -133,4 +136,116 @@ func TestPvP(t *testing.T) {
 
 	log.L(ctx).Infof("Execute the atomic operation")
 	transferAtom.Execute(ctx).SignAndSend(alice).Wait()
+}
+
+func TestNotoForZeto(t *testing.T) {
+	ctx := context.Background()
+	log.L(ctx).Infof("TestNotoForZeto")
+	notoDomainName := "noto_" + tktypes.RandHex(8)
+	zetoDomainName := "zeto_" + tktypes.RandHex(8)
+	log.L(ctx).Infof("Noto domain = %s", notoDomainName)
+	log.L(ctx).Infof("Zeto domain = %s", zetoDomainName)
+
+	log.L(ctx).Infof("Deploying factories")
+	contractSource := map[string][]byte{
+		"noto": helpers.NotoFactoryJSON,
+		"atom": helpers.AtomFactoryJSON,
+	}
+	contracts := deployContracts(ctx, t, notary, contractSource)
+	for name, address := range contracts {
+		log.L(ctx).Infof("%s deployed to %s", name, address)
+	}
+
+	log.L(ctx).Infof("Deploying Zeto dependencies")
+	zetoContracts := deployZetoContracts(t, notary)
+	zetoConfig := prepareZetoConfig(t, zetoContracts)
+
+	log.L(ctx).Infof("Initializing testbed")
+	notoDomain, notoTestbed := newNotoDomain(t, &nototypes.DomainConfig{
+		FactoryAddress: contracts["noto"],
+	})
+	zetoDomain, zetoTestbed := newZetoDomain(t, zetoConfig)
+	done, tb, rpc := newTestbed(t, map[string]*testbed.TestbedDomain{
+		notoDomainName: notoTestbed,
+		zetoDomainName: zetoTestbed,
+	})
+	defer done()
+
+	_, aliceKey, err := tb.Components().KeyManager().ResolveKey(ctx, alice, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	require.NoError(t, err)
+	_, bobKey, err := tb.Components().KeyManager().ResolveKey(ctx, bob, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	require.NoError(t, err)
+
+	atomFactory := helpers.InitAtom(t, tb, rpc, contracts["atom"])
+
+	log.L(ctx).Infof("Deploying Noto and Zeto")
+	noto := helpers.DeployNoto(ctx, t, rpc, notoDomainName, notary)
+	zeto := helpers.DeployZeto(ctx, t, rpc, zetoDomainName, notary, "Zeto_Anon")
+	log.L(ctx).Infof("Noto deployed to %s", noto.Address)
+	log.L(ctx).Infof("Zeto deployed to %s", zeto.Address)
+
+	log.L(ctx).Infof("Mint 10 Noto to Alice")
+	noto.Mint(ctx, alice, 10).SignAndSend(notary).Wait()
+	log.L(ctx).Infof("Mint 10 Zeto to Bob")
+	zeto.Mint(ctx, bob, 10).SignAndSend(notary).Wait()
+
+	notoCoins, err := (*notoDomain).FindCoins(ctx, noto.Address, "{}")
+	require.NoError(t, err)
+	require.Len(t, notoCoins, 1)
+	assert.Equal(t, int64(10), notoCoins[0].Amount.Int64())
+	assert.Equal(t, aliceKey, notoCoins[0].Owner.String())
+
+	zetoCoins, err := (*zetoDomain).FindCoins(ctx, zeto.Address, "{}")
+	require.NoError(t, err)
+	require.Len(t, zetoCoins, 1)
+	assert.Equal(t, int64(10), zetoCoins[0].Amount.Int().Int64())
+	assert.Equal(t, bob, zetoCoins[0].Owner) // TODO: this should really be bob's key, not by name
+
+	// TODO: use Pente to coordinate the trade
+
+	log.L(ctx).Infof("Prepare the transfers")
+	transferNoto := noto.TransferWithApproval(ctx, bob, 1).Prepare(alice)
+	transferZeto := zeto.Transfer(ctx, alice, 1).Prepare(bob)
+
+	// TODO: Bob should lock the proof
+
+	log.L(ctx).Infof("Create Atom instance")
+	transferAtom := atomFactory.Create(ctx, alice, []*helpers.AtomOperation{
+		{
+			ContractAddress: noto.Address,
+			CallData:        transferNoto.EncodedCall,
+		},
+		{
+			ContractAddress: zeto.Address,
+			CallData:        transferZeto.EncodedCall,
+		},
+	})
+
+	// TODO: all parties should verify the Atom against the original proposed trade
+	// If any party found a discrepancy at this point, they could cancel the swap (last chance to back out)
+
+	log.L(ctx).Infof("Approve both transfers")
+	noto.ApproveTransfer(ctx, transferAtom.Address, transferNoto.EncodedCall).SignAndSend(alice).Wait()
+
+	log.L(ctx).Infof("Execute the atomic operation")
+	transferAtom.Execute(ctx).SignAndSend(alice).Wait()
+
+	// TODO: better way to wait for events to be indexed after Atom execution
+	time.Sleep(3 * time.Second)
+
+	notoCoins, err = (*notoDomain).FindCoins(ctx, noto.Address, "{}")
+	require.NoError(t, err)
+	require.Len(t, notoCoins, 2)
+	assert.Equal(t, int64(1), notoCoins[0].Amount.Int64())
+	assert.Equal(t, bobKey, notoCoins[0].Owner.String())
+	assert.Equal(t, int64(9), notoCoins[1].Amount.Int64())
+	assert.Equal(t, aliceKey, notoCoins[1].Owner.String())
+
+	zetoCoins, err = (*zetoDomain).FindCoins(ctx, zeto.Address, "{}")
+	require.NoError(t, err)
+	require.Len(t, zetoCoins, 2)
+	assert.Equal(t, int64(1), zetoCoins[0].Amount.Int().Int64())
+	assert.Equal(t, alice, zetoCoins[0].Owner)
+	assert.Equal(t, int64(9), zetoCoins[1].Amount.Int().Int64())
+	assert.Equal(t, bob, zetoCoins[1].Owner)
 }
