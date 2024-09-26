@@ -87,6 +87,9 @@ COPY --from=builder /root/.wasmer/lib/libwasmer.so /app/.wasmer/lib/libwasmer.so
 # Copy the build artifacts from the builder stage
 COPY --from=builder /app/build /app
 
+# Copy the db migration files
+COPY --from=builder /app/core/go/db /app/db
+
 # Define the entry point for running the application
 ENTRYPOINT [                         \
     "java",                          \
@@ -94,3 +97,4 @@ ENTRYPOINT [                         \
     "-jar",                          \
     "/app/libs/paladin.jar"          \
 ]
+ 
