@@ -46,7 +46,7 @@ type PublicTxBatch interface {
 }
 
 var PublicTxFilterFields filters.FieldSet = filters.FieldMap{
-	"from":            filters.HexBytesField("from"),
+	"from":            filters.HexBytesField(`"from"`),
 	"nonce":           filters.Int64Field("nonce"),
 	"created":         filters.Int64Field("created"),
 	"completedAt":     filters.Int64Field(`"Completed"."created"`),
@@ -76,6 +76,7 @@ type PublicTxManager interface {
 	// Synchronous functions that are executed on the callers thread
 	QueryPublicTxForTransactions(ctx context.Context, dbTX *gorm.DB, boundToTxns []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error)
 	QueryPublicTxWithBindings(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error)
+	GetPublicTransactionForHash(ctx context.Context, dbTX *gorm.DB, hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error)
 	PrepareSubmissionBatch(ctx context.Context, transactions []*PublicTxSubmission) (batch PublicTxBatch, err error)
 	MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransactionNotify) ([]*PublicTxMatch, error)
 	NotifyConfirmPersisted(ctx context.Context, confirms []*PublicTxMatch)

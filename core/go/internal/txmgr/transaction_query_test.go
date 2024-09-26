@@ -44,7 +44,7 @@ func TestGetTransactionByIDFullPublicFail(t *testing.T) {
 		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(uuid.New()))
 		mc.db.ExpectQuery("SELECT.*transaction_deps").WillReturnRows(sqlmock.NewRows([]string{}))
 		mc.db.ExpectRollback()
-	}, mockPublicQueryTxBindings(func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error) {
+	}, mockQueryPublicTxForTransactions(func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error) {
 		return nil, fmt.Errorf("pop")
 	}))
 	defer done()
