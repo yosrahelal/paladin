@@ -236,7 +236,11 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 
 	var states []*statestore.State
 	err = d.dm.stateStore.RunInDomainContext(d.name, *addr, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
-		states, err = dsi.FindAvailableStates(req.SchemaId, &query)
+		if req.UseNullifiers != nil && *req.UseNullifiers {
+			states, err = dsi.FindAvailableNullifiers(req.SchemaId, &query)
+		} else {
+			states, err = dsi.FindAvailableStates(req.SchemaId, &query)
+		}
 		return err
 	})
 	if err != nil {
