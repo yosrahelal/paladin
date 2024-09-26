@@ -61,8 +61,8 @@ task copySolidity(type: Copy) {
     from fileTree(configurations.contractCompile.asPath) {
         include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
         include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
-        include 'contracts/shared/atom/Atom.sol/Atom.json'
-        include 'contracts/shared/atom/Atom.sol/AtomFactory.json'
+        include 'contracts/shared/Atom.sol/Atom.json'
+        include 'contracts/shared/Atom.sol/AtomFactory.json'
         include 'contracts/private/Swap.sol/Swap.json'
     }
 
