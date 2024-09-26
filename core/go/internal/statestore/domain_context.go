@@ -218,7 +218,7 @@ func (dc *domainContext) getUnFlushedStates() (spending []tktypes.HexBytes, null
 	return spending, nullifiers, nil
 }
 
-func (dc *domainContext) mergedUnFlushedStates(schema Schema, dbStates []*State, query *query.QueryJSON, requireNullifier bool) (_ []*State, err error) {
+func (dc *domainContext) mergedUnFlushed(schema Schema, dbStates []*State, query *query.QueryJSON, requireNullifier bool) (_ []*State, err error) {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
@@ -361,7 +361,7 @@ func (dc *domainContext) FindAvailableStates(schemaID string, query *query.Query
 	}
 
 	// Merge in un-flushed states to results
-	return dc.mergedUnFlushedStates(schema, states, query, false)
+	return dc.mergedUnFlushed(schema, states, query, false)
 }
 
 func (dc *domainContext) FindAvailableNullifiers(schemaID string, query *query.QueryJSON) (s []*State, err error) {
@@ -394,7 +394,7 @@ func (dc *domainContext) FindAvailableNullifiers(schemaID string, query *query.Q
 		}
 	}
 
-	return dc.mergedUnFlushedStates(schema, states, query, true)
+	return dc.mergedUnFlushed(schema, states, query, true)
 }
 
 func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*StateUpsert) (states []*State, err error) {

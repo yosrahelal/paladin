@@ -475,7 +475,7 @@ func TestDSIFlushErrorCapture(t *testing.T) {
 		fakeFlushError(dc)
 		schema, err := ss.getSchemaByID(ctx, "domain1", tktypes.MustParseBytes32(schemas[0].IDString()), true)
 		require.NoError(t, err)
-		_, err = dc.mergedUnFlushedStates(schema, nil, nil, false)
+		_, err = dc.mergedUnFlushed(schema, nil, nil, false)
 		assert.Regexp(t, "pop", err)
 
 		fakeFlushError(dc)
@@ -542,7 +542,7 @@ func TestDSIMergedUnFlushedWhileFlushing(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, spending, 1)
 
-	states, err := dc.mergedUnFlushedStates(schema, []*State{}, &query.QueryJSON{
+	states, err := dc.mergedUnFlushed(schema, []*State{}, &query.QueryJSON{
 		Sort: []string{".created"},
 	}, false)
 	require.NoError(t, err)
@@ -583,7 +583,7 @@ func TestDSIMergedUnFlushedSpend(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, spending, 2)
 
-	states, err := dc.mergedUnFlushedStates(schema, []*State{}, &query.QueryJSON{}, false)
+	states, err := dc.mergedUnFlushed(schema, []*State{}, &query.QueryJSON{}, false)
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 
@@ -622,7 +622,7 @@ func TestDSIMergedUnFlushedWhileFlushingDedup(t *testing.T) {
 	inTheFlush := dc.flushing.states[0]
 	dc.stateLock.Unlock()
 
-	states, err := dc.mergedUnFlushedStates(schema, []*State{
+	states, err := dc.mergedUnFlushed(schema, []*State{
 		inTheFlush.State,
 	}, &query.QueryJSON{
 		Sort: []string{".created"},
@@ -652,7 +652,7 @@ func TestDSIMergedUnFlushedEvalError(t *testing.T) {
 		states: []*StateWithLabels{s1},
 	}
 
-	_, err = dc.mergedUnFlushedStates(schema, []*State{}, toQuery(t,
+	_, err = dc.mergedUnFlushed(schema, []*State{}, toQuery(t,
 		`{"eq": [{ "field": "wrong", "value": "any" }]}`,
 	), false)
 	assert.Regexp(t, "PD010700", err)

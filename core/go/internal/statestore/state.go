@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -169,53 +170,20 @@ func (ss *stateStore) findStates(
 	status StateStatusQualifier,
 	excluded ...tktypes.HexBytes,
 ) (schema Schema, s []*State, err error) {
-	if len(jq.Sort) == 0 {
-		jq.Sort = []string{".created"}
-	}
+	return ss.findStatesCommon(ctx, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
+		db := ss.p.DB()
+		q = q.Joins("Confirmed", db.Select("transaction")).
+			Joins("Spent", db.Select("transaction")).
+			Joins("Locked", db.Select("transaction"))
 
-	schema, err = ss.GetSchema(ctx, domainName, schemaID, true)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	tracker := ss.labelSetFor(schema)
-
-	// Build the query
-	db := ss.p.DB()
-	q := filters.BuildGORM(ctx, jq, db.Table("states"), tracker)
-	if q.Error != nil {
-		return nil, nil, q.Error
-	}
-
-	// Add joins only for the fields actually used in the query
-	for _, fi := range tracker.used {
-		typeMod := ""
-		if fi.labelType == labelTypeInt64 || fi.labelType == labelTypeBool {
-			typeMod = "int64_"
+		if len(excluded) > 0 {
+			q = q.Not("id IN(?)", excluded)
 		}
-		q = q.Joins(fmt.Sprintf("INNER JOIN state_%[1]slabels AS %[2]s ON %[2]s.state = id AND %[2]s.label = ?", typeMod, fi.virtualColumn), fi.label)
-	}
 
-	q = q.Joins("Confirmed", db.Select("transaction")).
-		Joins("Spent", db.Select("transaction")).
-		Joins("Locked", db.Select("transaction")).
-		Where("domain_name = ?", domainName).
-		Where("contract_address = ?", contractAddress).
-		Where("schema = ?", schema.Persisted().ID)
-
-	if len(excluded) > 0 {
-		q = q.Not("id IN(?)", excluded)
-	}
-
-	// Scope the query based of the qualifier
-	q = q.Where(status.whereClause(db))
-
-	var states []*State
-	q = q.Find(&states)
-	if q.Error != nil {
-		return nil, nil, q.Error
-	}
-	return schema, states, nil
+		// Scope the query based on the status qualifier
+		q = q.Where(status.whereClause(db))
+		return q
+	})
 }
 
 func (ss *stateStore) findAvailableNullifiers(
@@ -226,6 +194,35 @@ func (ss *stateStore) findAvailableNullifiers(
 	jq *query.QueryJSON,
 	statesWithNullifiers []tktypes.HexBytes,
 	spentNullifiers []tktypes.HexBytes,
+) (schema Schema, s []*State, err error) {
+	return ss.findStatesCommon(ctx, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
+		db := ss.p.DB()
+		hasNullifier := db.Where("nullifier IS NOT NULL")
+		if len(statesWithNullifiers) > 0 {
+			hasNullifier = hasNullifier.Or("id IN(?)", statesWithNullifiers)
+		}
+
+		q = q.Joins("Nullifier", db.Select("nullifier")).
+			Joins("Nullifier.Spent", db.Select("transaction")).
+			Where(hasNullifier)
+
+		if len(spentNullifiers) > 0 {
+			q = q.Not("nullifier IN(?)", spentNullifiers)
+		}
+
+		// Scope to only unspent
+		q = q.Where(`"Nullifier__Spent"."transaction" IS NULL`)
+		return q
+	})
+}
+
+func (ss *stateStore) findStatesCommon(
+	ctx context.Context,
+	domainName string,
+	contractAddress tktypes.EthAddress,
+	schemaID string,
+	jq *query.QueryJSON,
+	addQuery func(q *gorm.DB) *gorm.DB,
 ) (schema Schema, s []*State, err error) {
 	if len(jq.Sort) == 0 {
 		jq.Sort = []string{".created"}
@@ -254,31 +251,17 @@ func (ss *stateStore) findAvailableNullifiers(
 		q = q.Joins(fmt.Sprintf("INNER JOIN state_%[1]slabels AS %[2]s ON %[2]s.state = id AND %[2]s.label = ?", typeMod, fi.virtualColumn), fi.label)
 	}
 
-	hasNullifier := db.Where("nullifier IS NOT NULL")
-	if len(statesWithNullifiers) > 0 {
-		hasNullifier = hasNullifier.Or("id IN(?)", statesWithNullifiers)
-	}
-
-	q = q.Joins("Nullifier", db.Select("nullifier")).
-		Joins("Nullifier.Spent", db.Select("transaction")).
-		Where("domain_name = ?", domainName).
+	q = q.Where("domain_name = ?", domainName).
 		Where("contract_address = ?", contractAddress).
-		Where("schema = ?", schema.Persisted().ID).
-		Where(hasNullifier)
+		Where("schema = ?", schema.Persisted().ID)
+	q = addQuery(q)
 
-	if len(spentNullifiers) > 0 {
-		q = q.Not("nullifier IN(?)", spentNullifiers)
-	}
-
-	// Scope to only unspent
-	q = q.Where(`"Nullifier__Spent"."transaction" IS NULL`)
-
-	var nullifiers []*State
-	q = q.Find(&nullifiers)
+	var states []*State
+	q = q.Find(&states)
 	if q.Error != nil {
 		return nil, nil, q.Error
 	}
-	return schema, nullifiers, nil
+	return schema, states, nil
 }
 
 func (ss *stateStore) MarkConfirmed(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID string, transactionID uuid.UUID) error {
