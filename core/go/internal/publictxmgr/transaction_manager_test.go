@@ -535,6 +535,7 @@ func TestEngineSuspendResumeRealDB(t *testing.T) {
 		conf.Manager.Interval = confutil.P("50ms")
 		conf.Orchestrator.Interval = confutil.P("50ms")
 		conf.Manager.OrchestratorIdleTimeout = confutil.P("1ms")
+		conf.Orchestrator.StageRetryTime = confutil.P("0ms") // without this we stick in the stage for 10s before we look to suspend
 	})
 	defer done()
 
@@ -560,7 +561,7 @@ func TestEngineSuspendResumeRealDB(t *testing.T) {
 	// We can get the nonce
 	m.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).Return(confutil.P(tktypes.HexUint64(1122334455)), nil)
 	// ... but attempting to get it onto the chain is going to block failing
-	m.ethClient.On("SendRawTransaction", mock.Anything, mock.Anything).Return(nil, nil)
+	m.ethClient.On("SendRawTransaction", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop")).Maybe()
 
 	_, err = ble.SingleTransactionSubmit(ctx, pubTx)
 	require.NoError(t, err)
