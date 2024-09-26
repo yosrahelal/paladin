@@ -94,4 +94,3 @@ ENTRYPOINT [                         \
     "-jar",                          \
     "/app/libs/paladin.jar"          \
 ]
-
