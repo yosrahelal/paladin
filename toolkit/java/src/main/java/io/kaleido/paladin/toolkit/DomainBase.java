@@ -15,7 +15,7 @@
 
 package io.kaleido.paladin.toolkit;
 
-import github.com.kaleido_io.paladin.toolkit.Service;
+import io.kaleido.paladin.toolkit.Service;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

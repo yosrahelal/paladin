@@ -16,7 +16,7 @@ package io.kaleido.paladin.loader;
 
 import com.sun.jna.Library;
 import com.sun.jna.Native;
-import github.com.kaleido_io.paladin.toolkit.Service;
+import io.kaleido.paladin.toolkit.Service;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

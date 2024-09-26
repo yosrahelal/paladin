@@ -19,8 +19,6 @@ import (
 	"context"
 	"encoding/json"
 
-	_ "embed"
-
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"

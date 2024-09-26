@@ -1,9 +1,6 @@
-import org.apache.tools.ant.taskdefs.condition.Os
-
 plugins {
     id 'java'
     id 'application'
-    id 'com.google.protobuf' version '0.9.4'
 }
 
 mainClassName = 'io.kaleido.Main'
@@ -46,40 +43,12 @@ configurations {
     }
 }
 
-tasks.register('collectProtocFiles', Copy) {
-    from configurations.toolkitProtoDefinitions.asFileTree
-    into "src/main/proto"
-}
-
-tasks.register('cleanProto', Delete) {
-    delete 'src/main/proto'
-}
-
-tasks.named('generateProto') {
-    dependsOn 'collectProtocFiles'
-}
-
-tasks.named('processResources') {
-    dependsOn 'generateProto'
-}
-
-tasks.named('processResources') {
-    dependsOn ':core:go:protoc'
-}
-
-tasks.named('clean') {
-    dependsOn tasks.cleanProto
-}
-
-tasks.register("protoc") {
-    dependsOn tasks.generateProto
-}
-
 def grpcVersion = '1.65+'
 def protobufVersion = '3.25+'
 def protocVersion = protobufVersion
 
 dependencies {
+
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-services:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
@@ -107,24 +76,5 @@ dependencies {
     testImplementation project(path: ':toolkit:go', configuration: 'libstarter')
     testImplementation 'org.skyscreamer:jsonassert:1.5.3'
 
-}
-
-protobuf {
-    protoc { artifact = "com.google.protobuf:protoc:${protocVersion}" }
-    plugins {
-        grpc { artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}" }
-    }
-    generateProtoTasks {
-        all()*.plugins { grpc {} }
-    }
-}
-
-sourceSets {
-    main {
-        java {
-            srcDirs 'build/generated/source/proto/main/grpc'
-            srcDirs 'build/generated/source/proto/main/java'
-        }
-    }
-}
-
+    implementation project(path: ":toolkit_java")
+} 

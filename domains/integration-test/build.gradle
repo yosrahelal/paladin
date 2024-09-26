@@ -54,7 +54,7 @@ task copySolidity(type: Copy) {
         include 'contracts/shared/atom/Atom.sol/AtomFactory.json'
         include 'contracts/private/Swap.sol/Swap.json'
     }
-    into 'abis'
+    into 'helpers/abis'
 
     // Flatten all paths into the destination folder
     eachFile { path = name }

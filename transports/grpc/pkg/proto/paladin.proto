@@ -14,7 +14,7 @@
  */
 
 syntax = "proto3";
-package github.com.kaleido_io.paladin.transports.grpc;
+package io.kaleido.paladin.transports.grpc;
 option go_package = "pkg/proto";
 
 service PaladinGRPCTransport {

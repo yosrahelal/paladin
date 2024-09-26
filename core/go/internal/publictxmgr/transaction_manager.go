@@ -73,13 +73,14 @@ type pubTxManager struct {
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 
-	conf      *Config
-	thMetrics *publicTxEngineMetrics
-	p         persistence.Persistence
-	bIndexer  blockindexer.BlockIndexer
-	ethClient ethclient.EthClient
-	keymgr    ethclient.KeyManager
-	rootTxMgr components.TXManager
+	conf             *Config
+	thMetrics        *publicTxEngineMetrics
+	p                persistence.Persistence
+	bIndexer         blockindexer.BlockIndexer
+	ethClient        ethclient.EthClient
+	keymgr           ethclient.KeyManager
+	rootTxMgr        components.TXManager
+	ethClientFactory ethclient.EthClientFactory
 	// gas price
 	gasPriceClient   GasPriceClient
 	submissionWriter *submissionWriter
@@ -156,21 +157,11 @@ func NewPublicTransactionManager(ctx context.Context, conf *Config) components.P
 func (ble *pubTxManager) PostInit(pic components.AllComponents) error {
 	ctx := ble.ctx
 	log.L(ctx).Debugf("Initializing enterprise transaction handler")
-	ble.ethClient = pic.EthClientFactory().SharedWS()
+	ble.ethClientFactory = pic.EthClientFactory()
 	ble.keymgr = pic.KeyManager()
-	ble.gasPriceClient.Init(ctx, ble.ethClient)
+
 	ble.bIndexer = pic.BlockIndexer()
 	ble.rootTxMgr = pic.TxManager()
-	ble.nonceManager = newNonceCache(ble.nonceCacheTimeout, func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
-		log.L(ctx).Tracef("NonceFromChain getting next nonce for signing address ID %s", signer)
-		nextNonce, err := ble.ethClient.GetTransactionCount(ctx, signer)
-		if err != nil {
-			log.L(ctx).Errorf("NonceFromChain getting next nonce for signer %s failed: %+v", signer, err)
-			return 0, err
-		}
-		log.L(ctx).Tracef("NonceFromChain getting next nonce for signer %s succeeded: %s, converting to uint: %d", signer, nextNonce.String(), nextNonce.Uint64())
-		return nextNonce.Uint64(), nil
-	})
 
 	balanceManager, err := NewBalanceManagerWithInMemoryTracking(ctx, ble.conf, ble.ethClient, ble)
 	if err != nil {
@@ -180,7 +171,7 @@ func (ble *pubTxManager) PostInit(pic components.AllComponents) error {
 	log.L(ctx).Debugf("Initialized enterprise transaction handler")
 	ble.balanceManager = balanceManager
 	ble.p = pic.Persistence()
-	ble.submissionWriter = newSubmissionWriter(ctx, ble.p, ble.conf)
+
 	return nil
 }
 
@@ -191,12 +182,25 @@ func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *comp
 func (ble *pubTxManager) Start() error {
 	ctx := ble.ctx
 	log.L(ctx).Debugf("Starting enterprise transaction handler")
+	ble.ethClient = ble.ethClientFactory.SharedWS()
+	ble.gasPriceClient.Init(ctx, ble.ethClient)
+	ble.nonceManager = newNonceCache(ble.nonceCacheTimeout, func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
+		log.L(ctx).Tracef("NonceFromChain getting next nonce for signing address ID %s", signer)
+		nextNonce, err := ble.ethClient.GetTransactionCount(ctx, signer)
+		if err != nil {
+			log.L(ctx).Errorf("NonceFromChain getting next nonce for signer %s failed: %+v", signer, err)
+			return 0, err
+		}
+		log.L(ctx).Tracef("NonceFromChain getting next nonce for signer %s succeeded: %s, converting to uint: %d", signer, nextNonce.String(), nextNonce.Uint64())
+		return nextNonce.Uint64(), nil
+	})
 	if ble.engineLoopDone == nil { // only start once
 		ble.engineLoopDone = make(chan struct{})
 		log.L(ctx).Debugf("Kicking off  enterprise handler engine loop")
 		go ble.engineLoop()
 	}
 	ble.MarkInFlightOrchestratorsStale()
+	ble.submissionWriter = newSubmissionWriter(ctx, ble.p, ble.conf)
 	log.L(ctx).Infof("Started enterprise transaction handler")
 	return nil
 }

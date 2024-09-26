@@ -13,7 +13,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package io.kaleido.paladin.toolkit;
+
+package io.kaleido.paladin.testbed;
+
+import io.kaleido.paladin.toolkit.JsonHex;
+import io.kaleido.paladin.toolkit.JsonRpcClient;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -211,3 +215,4 @@ public class Testbed implements Closeable {
         return rpcClient;
     }
 }
+

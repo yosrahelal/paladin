@@ -45,7 +45,7 @@ var DefaultManagerConfig = &ManagerConfig{
 	OrchestratorIdleTimeout:  confutil.P("1s"),
 	OrchestratorStaleTimeout: confutil.P("5m"),
 	OrchestratorLifetime:     confutil.P("10m"),
-	NonceCacheTimeout:        confutil.P("5m"),
+	NonceCacheTimeout:        confutil.P("1h"),
 	Retry: retry.Config{
 		InitialDelay: confutil.P("250ms"),
 		MaxDelay:     confutil.P("30s"),
