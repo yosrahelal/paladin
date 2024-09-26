@@ -302,6 +302,7 @@ var (
 	MsgPublicTxHistoryInfo             = ffe("PD011931", "PubTx[INFO] from=%s nonce=%s subStatus=%s action=%s info=%s")
 	MsgPublicTxHistoryError            = ffe("PD011932", "PubTx[ERROR] from=%s nonce=%s subStatus=%s action=%s error=%s")
 	MsgPublicBatchCompleted            = ffe("PD011933", "Batch already completed")
+	MsgInvalidAutoFuelSource           = ffe("PD011934", "Invalid auto-fueling source '%s'")
 
 	// TransportManager module PD0120XX
 	MsgTransportInvalidMessage                = ffe("PD012000", "Invalid message")

@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var testAutoFuelingSourceAddress = "0x4e598f6e918321dd47c86e7a077b4ab0e7414846"
+// var testAutoFuelingSourceAddress = "0x4e598f6e918321dd47c86e7a077b4ab0e7414846"
 
 // const testSourceAddressBalance = 400
 // const testSourceAddressBalanceString = "400"
@@ -37,13 +37,7 @@ func NewTestBalanceManager(ctx context.Context, t *testing.T, pubtxMgr *pubTxMan
 
 	mockAFTxEngine := componentmocks.NewPublicTxManager(t)
 
-	testManagerWithMocks, err := NewBalanceManagerWithInMemoryTracking(ctx, &Config{
-		BalanceManager: BalanceManagerConfig{
-			AutoFueling: AutoFuelingConfig{
-				SourceAddress: &testAutoFuelingSourceAddress,
-			},
-		},
-	}, mEthClient, pubtxMgr)
+	testManagerWithMocks, err := NewBalanceManagerWithInMemoryTracking(ctx, &Config{}, mEthClient, pubtxMgr)
 	require.NoError(t, err)
 
 	return testManagerWithMocks.(*BalanceManagerWithInMemoryTracking), mEthClient, mockAFTxEngine

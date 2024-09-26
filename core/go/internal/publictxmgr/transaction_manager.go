@@ -571,6 +571,7 @@ func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, from tkt
 	var ptxs []*DBPublicTxn
 	err := ble.p.DB().
 		WithContext(ctx).
+		Table("public_txns").
 		Where("from = ?", from).
 		Where("nonce = ?", nonce).
 		Joins("Completed").
@@ -593,6 +594,7 @@ func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourc
 	var ptxs []*DBPublicTxn
 	err := ble.p.DB().
 		WithContext(ctx).
+		Table("public_txns").
 		Where("from = ?", sourceAddress).
 		Where("to = ?", destinationAddress).
 		Joins("Completed").

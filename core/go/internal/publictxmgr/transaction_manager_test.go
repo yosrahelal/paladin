@@ -149,7 +149,11 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 	err = pmgr.PostInit(mocks.allComponents)
 	require.NoError(t, err)
 
-	if !mocks.disableManagerStart {
+	if mocks.disableManagerStart {
+		pmgr.nonceManager = newNonceCache(1*time.Hour, func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
+			return 103342, nil
+		})
+	} else {
 		err = pmgr.Start()
 		require.NoError(t, err)
 	}
@@ -181,17 +185,19 @@ func passthroughBuildRawTransactionNoResolve(m *mocksAndTestControl, chainID int
 func TestNewEngineErrors(t *testing.T) {
 	mocks := baseMocks(t)
 
-	mocks.keyManager = componentmocks.NewKeyManager(t)
+	mockKeyManager := componentmocks.NewKeyManager(t)
+	mocks.keyManager = mockKeyManager
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager)
 	pmgr := NewPublicTransactionManager(context.Background(), &Config{
 		BalanceManager: BalanceManagerConfig{
 			AutoFueling: AutoFuelingConfig{
-				SourceAddress: confutil.P("bad address"),
+				Source: confutil.P("bad address"),
 			},
 		},
 	})
+	mockKeyManager.On("ResolveKey", mock.Anything, "bad address", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", "", fmt.Errorf("lookup failed"))
 	err := pmgr.PostInit(mocks.allComponents)
-	assert.Regexp(t, "bad address", err)
+	assert.Regexp(t, "lookup failed", err)
 }
 
 func TestInit(t *testing.T) {
