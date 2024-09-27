@@ -23,7 +23,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/transportmgr"
@@ -137,7 +136,7 @@ func TestStartOK(t *testing.T) {
 	mockEthClientFactory.On("Stop").Return()
 
 	mockBlockIndexer := componentmocks.NewBlockIndexer(t)
-	mockBlockIndexer.On("Start", mock.AnythingOfType("*blockindexer.InternalEventStream")).Return(nil)
+	mockBlockIndexer.On("Start").Return(nil)
 	mockBlockIndexer.On("GetBlockListenerHeight", mock.Anything).Return(uint64(12345), nil)
 	mockBlockIndexer.On("Stop").Return()
 
@@ -189,11 +188,6 @@ func TestStartOK(t *testing.T) {
 	cm.ethClientFactory = mockEthClientFactory
 	cm.initResults = map[string]*components.ManagerInitResult{
 		"utengine": {
-			EventStreams: []*components.ManagerEventStream{{
-				Sources: []blockindexer.EventStreamSource{{
-					ABI: abi.ABI{},
-				}},
-			}},
 			RPCModules: []*rpcserver.RPCModule{
 				rpcserver.NewRPCModule("ut"),
 			},
@@ -224,13 +218,12 @@ func TestStartOK(t *testing.T) {
 
 func TestBuildInternalEventStreamsPreCommitPostCommit(t *testing.T) {
 	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &Config{}, nil).(*componentManager)
+	handler := func(ctx context.Context, dbTX *gorm.DB, blocks []*blockindexer.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
+		return nil, nil
+	}
 	cm.initResults = map[string]*components.ManagerInitResult{
 		"utengine": {
-			EventStreams: []*components.ManagerEventStream{
-				{Type: blockindexer.IESTypePreCommitHandler, PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*blockindexer.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
-					return nil, nil
-				}},
-			},
+			PreCommitHandler: handler,
 		},
 	}
 
@@ -239,26 +232,6 @@ func TestBuildInternalEventStreamsPreCommitPostCommit(t *testing.T) {
 	assert.Len(t, streams, 1)
 	assert.Equal(t, blockindexer.IESTypePreCommitHandler, streams[0].Type)
 	assert.NotNil(t, streams[0].PreCommitHandler)
-
-}
-
-func TestBuildInternalEventStreamsError(t *testing.T) {
-	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &Config{}, nil).(*componentManager)
-	cm.initResults = map[string]*components.ManagerInitResult{
-		"utengine": {
-			EventStreams: []*components.ManagerEventStream{{
-				Sources: []blockindexer.EventStreamSource{{
-					ABI: abi.ABI{
-						{Type: "event", Inputs: abi.ParameterArray{{Type: "wrong"}}},
-					},
-				}},
-			},
-			},
-		},
-	}
-
-	_, err := cm.buildInternalEventStreams()
-	assert.Regexp(t, "FF22025", err)
 
 }
 

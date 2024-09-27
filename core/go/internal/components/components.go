@@ -65,20 +65,10 @@ type ManagerLifecycle interface {
 	Stop()
 }
 
-// Managers get limited influence over the event streams created for them,
-// to ensure consistent naming and lifecycle management semantics
-type ManagerEventStream struct {
-	Type             blockindexer.IESType
-	PreCommitHandler blockindexer.PreCommitHandler
-	// Specific to IESTypeEventStream
-	Handler blockindexer.InternalStreamCallback
-	Sources []blockindexer.EventStreamSource
-}
-
 // Managers can instruct the init of some of the PostInitComponents in a generic way
 type ManagerInitResult struct {
-	EventStreams []*ManagerEventStream
-	RPCModules   []*rpcserver.RPCModule
+	PreCommitHandler blockindexer.PreCommitHandler
+	RPCModules       []*rpcserver.RPCModule
 }
 
 type PreInitComponentsAndManagers interface {

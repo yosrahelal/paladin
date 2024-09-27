@@ -164,7 +164,7 @@ func newTestPlugin(domainFuncs *plugintk.DomainAPIFunctions) *testPlugin {
 
 func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *domainManager, *testPlugin, func()) {
 
-	ctx, dm, _, done := newTestDomainManager(t, realDB, &DomainManagerConfig{
+	ctx, dm, mc, done := newTestDomainManager(t, realDB, &DomainManagerConfig{
 		Domains: map[string]*DomainConfig{
 			"test1": {
 				Config:          map[string]any{"some": "conf"},
@@ -172,6 +172,8 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 			},
 		},
 	}, extraSetup...)
+
+	mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 
 	tp := newTestPlugin(nil)
 	tp.Functions = &plugintk.DomainAPIFunctions{
@@ -241,9 +243,7 @@ func TestDomainInitStatesWithEvents(t *testing.T) {
 
 	domainConf := goodDomainConf()
 	domainConf.AbiEventsJson = fakeCoinEventsABI
-	ctx, dm, tp, done := newTestDomain(t, true, domainConf, func(mc *mockComponents) {
-		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything).Return(nil, nil)
-	})
+	ctx, dm, tp, done := newTestDomain(t, true, domainConf)
 	defer done()
 
 	assert.Nil(t, tp.d.initError.Load())
@@ -259,7 +259,7 @@ func TestDomainInitStatesWithEvents(t *testing.T) {
 func TestDoubleRegisterReplaces(t *testing.T) {
 
 	domainConf := goodDomainConf()
-	ctx, dm, tp0, done := newTestDomain(t, false, domainConf, mockSchemas())
+	ctx, dm, tp0, done := newTestDomain(t, true, domainConf)
 	defer done()
 	assert.Nil(t, tp0.d.initError.Load())
 	assert.True(t, tp0.initialized.Load())
@@ -980,6 +980,36 @@ func TestHandleEventBatchContractLookupFail(t *testing.T) {
 			{
 				Address: *contract1,
 				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.EqualError(t, err, "pop")
+}
+
+func TestHandleEventBatchRegistrationError(t *testing.T) {
+	batchID := uuid.New()
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectExec("INSERT.*private_smart_contracts").WillReturnError(fmt.Errorf("pop"))
+
+	registrationData := &event_PaladinRegisterSmartContract_V0{
+		TXId: tktypes.Bytes32(tktypes.RandBytes(32)),
+	}
+	registrationDataJSON, err := json.Marshal(registrationData)
+	require.NoError(t, err)
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				SoliditySignature: eventSolSig_PaladinRegisterSmartContract_V0,
+				Data:              registrationDataJSON,
 			},
 		},
 	})
