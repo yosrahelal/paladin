@@ -320,7 +320,6 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 		Owner:  tktypes.EthAddress(tktypes.RandBytes(20)),
 		Amount: ethtypes.NewHexInteger64(5555555),
 	}
-	nullifier := tktypes.RandHex(32)
 
 	tp.Functions.AssembleTransaction = func(ctx context.Context, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 		assert.Same(t, req.Transaction, tx.PreAssembly.TransactionSpecification)
@@ -359,7 +358,7 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 					{Id: stateRes.States[2].Id, SchemaId: stateRes.States[2].SchemaId},
 				},
 				OutputStates: []*prototk.NewState{
-					{SchemaId: tp.stateSchemas[0].Id, StateDataJson: string(newStateData), Nullifier: &nullifier},
+					{SchemaId: tp.stateSchemas[0].Id, StateDataJson: string(newStateData)},
 				},
 			},
 			AttestationPlan: []*prototk.AttestationRequest{
@@ -498,10 +497,6 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 				FunctionAbiJson: fakeCoinExecuteABI,
 				ParamsJson:      string(params),
 			},
-			NewNullifiers: []*prototk.NewStateNullifier{{
-				StateId:   tx.PostAssembly.OutputStates[0].ID.String(),
-				Nullifier: tktypes.RandHex(32),
-			}},
 		}, nil
 	}
 
@@ -511,7 +506,7 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	assert.NotNil(t, tx.PreparedTransaction.FunctionABI)
 	assert.NotNil(t, tx.PreparedTransaction.Inputs)
 
-	// Confirm the remaining unspent states and nullifiers
+	// Confirm the remaining unspent states
 	stillAvailable, err = domain.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
 		ContractAddress: psc.Address().String(),
 		SchemaId:        tx.PostAssembly.OutputStatesPotential[0].SchemaId,
@@ -522,17 +517,6 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	assert.Contains(t, stillAvailable.States[0].DataJson, state2.Salt.String())
 	assert.Contains(t, stillAvailable.States[1].DataJson, state4.Salt.String())
 	assert.Contains(t, stillAvailable.States[2].DataJson, state5.Salt.String())
-
-	useNullifiers := true
-	availableNullifiers, err := domain.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		ContractAddress: psc.Address().String(),
-		SchemaId:        tx.PostAssembly.OutputStatesPotential[0].SchemaId,
-		QueryJson:       `{}`,
-		UseNullifiers:   &useNullifiers,
-	})
-	require.NoError(t, err)
-	assert.Len(t, availableNullifiers.States, 1)
-	assert.Contains(t, availableNullifiers.States[0].DataJson, state5.Salt.String())
 }
 
 func TestDomainAssembleTransactionError(t *testing.T) {
@@ -774,56 +758,6 @@ func TestPrepareTransactionBadData(t *testing.T) {
 
 	err := psc.PrepareTransaction(ctx, tx)
 	assert.Regexp(t, "FF22040", err)
-}
-
-func TestPrepareTransactionBadNullifier(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
-	defer done()
-
-	psc, tx := doDomainInitAssembleTransactionOK(t, ctx, tp)
-	tx.Signer = "signer1"
-
-	tp.Functions.PrepareTransaction = func(ctx context.Context, ptr *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
-		return &prototk.PrepareTransactionResponse{
-			Transaction: &prototk.BaseLedgerTransaction{
-				FunctionAbiJson: fakeCoinExecuteABI,
-				ParamsJson:      `{"inputs": [], "outputs": [], "data": ""}`,
-			},
-			NewNullifiers: []*prototk.NewStateNullifier{{
-				StateId:   "!!bad",
-				Nullifier: "!!bad",
-			}},
-		}, nil
-	}
-
-	err := psc.PrepareTransaction(ctx, tx)
-	assert.Regexp(t, "PD020007", err)
-}
-
-func TestPrepareTransactionNullifierUpsertFail(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight, func(mc *mockComponents) {
-		mc.domainStateInterface.On("UpsertNullifiers", mock.Anything).Return(fmt.Errorf("pop"))
-	})
-	defer done()
-
-	psc, tx := doDomainInitAssembleTransactionOK(t, ctx, tp)
-	tx.Signer = "signer1"
-
-	tp.Functions.PrepareTransaction = func(ctx context.Context, ptr *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
-		return &prototk.PrepareTransactionResponse{
-			Transaction: &prototk.BaseLedgerTransaction{
-				FunctionAbiJson: fakeCoinExecuteABI,
-				ParamsJson:      `{"inputs": [], "outputs": [], "data": ""}`,
-			},
-			NewNullifiers: []*prototk.NewStateNullifier{{
-				StateId:   tktypes.RandHex(32),
-				Nullifier: tktypes.RandHex(32),
-			}},
-		}, nil
-	}
-
-	err := psc.PrepareTransaction(ctx, tx)
-	assert.EqualError(t, err, "pop")
 }
 
 func TestLoadStatesError(t *testing.T) {

@@ -170,7 +170,6 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 	postAssembly := tx.PostAssembly
 
 	newStatesToWrite := make([]*statestore.StateUpsert, len(postAssembly.OutputStatesPotential))
-	newNullifiers := make([]*statestore.StateNullifier, 0)
 	domain := dc.d
 	for i, s := range postAssembly.OutputStatesPotential {
 		schema := domain.schemasByID[s.SchemaId]
@@ -194,22 +193,12 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 			// These are marked as locked and creating in the transaction
 			Creating: true,
 		}
-		if s.Nullifier != nil {
-			newNullifiers = append(newNullifiers, &statestore.StateNullifier{
-				DomainName: dc.d.name,
-				State:      id,
-				Nullifier:  tktypes.HexBytes(*s.Nullifier),
-			})
-		}
 	}
 
 	var states []*statestore.State
 	if len(newStatesToWrite) > 0 {
 		err := dc.dm.stateStore.RunInDomainContext(domain.name, dc.info.Address, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
 			states, err = dsi.UpsertStates(&tx.ID, newStatesToWrite)
-			if err == nil && len(newNullifiers) > 0 {
-				err = dsi.UpsertNullifiers(newNullifiers)
-			}
 			return err
 		})
 		if err != nil {
@@ -395,32 +384,6 @@ func (dc *domainContract) PrepareTransaction(ctx context.Context, tx *components
 	inputs, err := functionABI.Inputs.ParseJSONCtx(ctx, emptyJSONIfBlank(res.Transaction.ParamsJson))
 	if err != nil {
 		return err
-	}
-
-	if len(res.NewNullifiers) > 0 {
-		newNullifiers := make([]*statestore.StateNullifier, len(res.NewNullifiers))
-		for i, nullifier := range res.NewNullifiers {
-			var stateBytes tktypes.HexBytes
-			var nullifierBytes tktypes.HexBytes
-			stateBytes, err = tktypes.ParseHexBytes(ctx, nullifier.StateId)
-			if err == nil {
-				nullifierBytes, err = tktypes.ParseHexBytes(ctx, nullifier.Nullifier)
-			}
-			if err != nil {
-				return err
-			}
-			newNullifiers[i] = &statestore.StateNullifier{
-				DomainName: dc.d.name,
-				State:      stateBytes,
-				Nullifier:  nullifierBytes,
-			}
-		}
-		err := dc.dm.stateStore.RunInDomainContext(dc.d.name, dc.info.Address, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
-			return dsi.UpsertNullifiers(newNullifiers)
-		})
-		if err != nil {
-			return err
-		}
 	}
 
 	tx.PreparedTransaction = &components.EthTransaction{
