@@ -115,9 +115,9 @@ func TestWebSocketEthSubscribeUnsubscribe(t *testing.T) {
 	}
 
 	rpcErr := client.CallRPC(context.Background(), &tktypes.RawJSON{}, "eth_subscribe")
-	assert.Regexp(t, "PD011004", rpcErr)
+	assert.Regexp(t, "PD020704", rpcErr)
 	rpcErr = client.CallRPC(context.Background(), &tktypes.RawJSON{}, "eth_unsubscribe")
-	assert.Regexp(t, "PD011004", rpcErr)
+	assert.Regexp(t, "PD020704", rpcErr)
 
 	sub1, rpcErr := client.Subscribe(context.Background(), "myEvents", map[string]interface{}{"extra": "params"})
 	assert.Nil(t, rpcErr)

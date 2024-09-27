@@ -38,7 +38,7 @@ func TestRCPMissingID(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, res.IsSuccess())
 	assert.Equal(t, int64(rpcclient.RPCCodeInvalidRequest), errResponse.Error.Code)
-	assert.Regexp(t, "PD011001", errResponse.Error.Message)
+	assert.Regexp(t, "PD020701", errResponse.Error.Message)
 
 }
 
@@ -58,6 +58,6 @@ func TestRCPUnknownMethod(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, res.IsSuccess())
 	assert.Equal(t, int64(rpcclient.RPCCodeInvalidRequest), errResponse.Error.Code)
-	assert.Regexp(t, "PD011002", errResponse.Error.Message)
+	assert.Regexp(t, "PD020702", errResponse.Error.Message)
 
 }

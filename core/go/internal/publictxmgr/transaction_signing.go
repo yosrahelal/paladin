@@ -25,7 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func (it *InFlightTransactionStageController) signTx(ctx context.Context, signer *ethclient.ResolvedSigner, ethTx *ethsigner.Transaction) ([]byte, *tktypes.Bytes32, error) {
+func (it *inFlightTransactionStageController) signTx(ctx context.Context, signer *ethclient.ResolvedSigner, ethTx *ethsigner.Transaction) ([]byte, *tktypes.Bytes32, error) {
 	log.L(ctx).Debugf("signTx entry")
 	signStart := time.Now()
 	signedMessage, err := it.ethClient.BuildRawTransactionNoResolve(ctx, ethclient.EIP1559, signer, ethTx)

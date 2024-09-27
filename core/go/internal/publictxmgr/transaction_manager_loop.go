@@ -32,7 +32,8 @@ type ManagerConfig struct {
 	Interval                 *string               `yaml:"interval"`
 	OrchestratorIdleTimeout  *string               `yaml:"orchestratorIdleTimeout"`  // idle orchestrators exit after this time
 	OrchestratorStaleTimeout *string               `yaml:"orchestratorStaleTimeout"` // stale orchestrators exit after this time - TODO: Define stale
-	OrchestratorLifetime     *string               `yaml:"orchestratorLifetime"`     // orchestrators are cycled out after this time, regardless of activity
+	OrchestratorSwapTimeout  *string               `yaml:"orchestratorSwapTimeout"`  // orchestrators are cycled out after this time, when all slots are full
+	NonceCacheTimeout        *string               `yaml:"nonceCacheTimeout"`
 	ActivityRecords          ActivityRecordsConfig `yaml:"activityRecords"`
 	SubmissionWriter         flushwriter.Config    `yaml:"submissionWriter"`
 	Retry                    retry.Config          `yaml:"retry"`
@@ -43,7 +44,8 @@ var DefaultManagerConfig = &ManagerConfig{
 	Interval:                 confutil.P("5s"),
 	OrchestratorIdleTimeout:  confutil.P("1s"),
 	OrchestratorStaleTimeout: confutil.P("5m"),
-	OrchestratorLifetime:     confutil.P("10m"),
+	OrchestratorSwapTimeout:  confutil.P("10m"),
+	NonceCacheTimeout:        confutil.P("1h"),
 	Retry: retry.Config{
 		InitialDelay: confutil.P("250ms"),
 		MaxDelay:     confutil.P("30s"),
@@ -116,6 +118,12 @@ func (pte *pubTxManager) getOrchestratorCount() int {
 	return len(pte.inFlightOrchestrators)
 }
 
+func (pte *pubTxManager) getOrchestratorForAddress(signer tktypes.EthAddress) *orchestrator {
+	pte.inFlightOrchestratorMux.Lock()
+	defer pte.inFlightOrchestratorMux.Unlock()
+	return pte.inFlightOrchestrators[signer]
+}
+
 func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 	pollStart := time.Now()
 	ble.inFlightOrchestratorMux.Lock()
@@ -134,7 +142,7 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 
 	// Run through copying across from the old InFlight list to the new one, those that aren't ready to be deleted
 	for signingAddress, oc := range oldInFlight {
-		log.L(ctx).Debugf("Engine checking orchestrator for %s: state: %s, state duration: %s, number of transactions: %d", oc.signingAddress, oc.state, time.Since(oc.stateEntryTime), len(oc.InFlightTxs))
+		log.L(ctx).Debugf("Engine checking orchestrator for %s: state: %s, state duration: %s, number of transactions: %d", oc.signingAddress, oc.state, time.Since(oc.stateEntryTime), len(oc.inFlightTxs))
 		if oc.state == OrchestratorStateIdle && time.Since(oc.stateEntryTime) > ble.orchestratorIdleTimeout ||
 			oc.state == OrchestratorStateStale && time.Since(oc.stateEntryTime) > ble.orchestratorStaleTimeout {
 			// tell transaction orchestrator to stop, there is a chance we later found new transaction for this address, but we got to make a call at some point
@@ -168,12 +176,10 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 		var additionalNonInFlightSigners []*txFromOnly
 		// We retry the get from persistence indefinitely (until the context cancels)
 		err := ble.retry.Do(ctx, func(attempt int) (retry bool, err error) {
-			// TODO: Fairness algorithm for swapping out orchestrators when there is no space
 			// (raw SQL as couldn't convince gORM to build this)
-
 			const dbQueryBase = `SELECT DISTINCT t."from" FROM "public_txns" AS t ` +
 				`LEFT JOIN "public_completions" AS c ON t."signer_nonce" = c."signer_nonce" ` +
-				`WHERE c."signer_nonce" IS NULL`
+				`WHERE c."signer_nonce" IS NULL AND "suspended" IS FALSE`
 
 			const dbQueryNothingInFlight = dbQueryBase + ` LIMIT ?`
 			if len(inFlightSigningAddresses) == 0 {
@@ -197,8 +203,6 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 				stateCounts[string(oc.state)] = stateCounts[string(oc.state)] + 1
 				_, _ = oc.Start(ble.ctx)
 				log.L(ctx).Infof("Engine added orchestrator for signing address %s", r.From)
-			} else {
-				log.L(ctx).Warnf("Engine fetched extra transactions from signing address %s", r.From)
 			}
 		}
 		total = len(ble.inFlightOrchestrators)
@@ -212,10 +216,10 @@ func (ble *pubTxManager) poll(ctx context.Context) (polled int, total int) {
 
 		// Run through the existing running orchestrators and stop the ones that exceeded the max process timeout
 		for signingAddress, oc := range ble.inFlightOrchestrators {
-			if time.Since(oc.orchestratorBirthTime) > ble.orchestratorLifetime {
+			if time.Since(oc.orchestratorBirthTime) > ble.orchestratorSwapTimeout {
 				log.L(ctx).Infof("Engine pause, attempt to stop orchestrator for signing address %s", signingAddress)
 				oc.Stop()
-				ble.signingAddressesPausedUntil[signingAddress] = time.Now().Add(ble.orchestratorLifetime)
+				ble.signingAddressesPausedUntil[signingAddress] = time.Now().Add(ble.orchestratorSwapTimeout)
 			}
 		}
 	}

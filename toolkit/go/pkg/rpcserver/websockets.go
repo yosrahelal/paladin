@@ -27,7 +27,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -79,7 +79,7 @@ func (s *rpcServer) processSubscribe(ctx context.Context, rpcReq *rpcclient.RPCR
 		eventType = rpcReq.Params[0].AsString()
 	}
 	if eventType == "" {
-		return rpcclient.NewRPCErrorResponse(i18n.NewError(ctx, msgs.MsgJSONRPCInvalidParam, rpcReq.Method, 0, ""),
+		return rpcclient.NewRPCErrorResponse(i18n.NewError(ctx, tkmsgs.MsgJSONRPCInvalidParam, rpcReq.Method, 0, ""),
 			rpcReq.ID, rpcclient.RPCCodeInvalidRequest), false
 	}
 	var params1 tktypes.RawJSON
@@ -110,7 +110,7 @@ func (s *rpcServer) processUnsubscribe(ctx context.Context, rpcReq *rpcclient.RP
 		subID = rpcReq.Params[0].AsString()
 	}
 	if subID == "" {
-		return rpcclient.NewRPCErrorResponse(i18n.NewError(ctx, msgs.MsgJSONRPCInvalidParam, rpcReq.Method, 0, ""),
+		return rpcclient.NewRPCErrorResponse(i18n.NewError(ctx, tkmsgs.MsgJSONRPCInvalidParam, rpcReq.Method, 0, ""),
 			rpcReq.ID, rpcclient.RPCCodeInvalidRequest), false
 	}
 

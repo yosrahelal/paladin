@@ -17,7 +17,7 @@
 package rpcserver
 
 import (
-	"github.com/kaleido-io/paladin/core/internal/httpserver"
+	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 )
 
