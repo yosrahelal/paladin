@@ -70,10 +70,9 @@ func (z *Zeto) makeNewState(coin *types.ZetoCoin) (*pb.NewState, error) {
 	}
 	hash := coin.Hash.String()
 	return &pb.NewState{
+		Id:            &hash,
 		SchemaId:      z.coinSchema.Id,
 		StateDataJson: string(coinJSON),
-		ConfirmId:     &hash,
-		SpendId:       &hash,
 	}, nil
 }
 

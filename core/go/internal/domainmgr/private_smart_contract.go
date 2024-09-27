@@ -170,6 +170,7 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 	postAssembly := tx.PostAssembly
 
 	newStatesToWrite := make([]*statestore.StateUpsert, len(postAssembly.OutputStatesPotential))
+	newNullifiers := make([]*statestore.StateNullifier, 0)
 	domain := dc.d
 	for i, s := range postAssembly.OutputStatesPotential {
 		schema := domain.schemasByID[s.SchemaId]
@@ -179,27 +180,26 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 		if schema == nil {
 			return i18n.NewError(ctx, msgs.MsgDomainUnknownSchema, s.SchemaId)
 		}
-		var confirmID tktypes.HexBytes
-		if s.ConfirmId != nil {
-			confirmID, err = tktypes.ParseHexBytes(ctx, *s.ConfirmId)
-			if err != nil {
-				return err
-			}
-		}
-		var spendID tktypes.HexBytes
-		if s.SpendId != nil {
-			spendID, err = tktypes.ParseHexBytes(ctx, *s.SpendId)
+		var id tktypes.HexBytes
+		if s.Id != nil {
+			id, err = tktypes.ParseHexBytes(ctx, *s.Id)
 			if err != nil {
 				return err
 			}
 		}
 		newStatesToWrite[i] = &statestore.StateUpsert{
-			SchemaID:  schema.IDString(),
-			Data:      tktypes.RawJSON(s.StateDataJson),
-			ConfirmID: confirmID,
-			SpendID:   spendID,
+			ID:       id,
+			SchemaID: schema.IDString(),
+			Data:     tktypes.RawJSON(s.StateDataJson),
 			// These are marked as locked and creating in the transaction
 			Creating: true,
+		}
+		if s.Nullifier != nil {
+			newNullifiers = append(newNullifiers, &statestore.StateNullifier{
+				DomainName: dc.d.name,
+				State:      id,
+				Nullifier:  tktypes.HexBytes(*s.Nullifier),
+			})
 		}
 	}
 
@@ -207,6 +207,9 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 	if len(newStatesToWrite) > 0 {
 		err := dc.dm.stateStore.RunInDomainContext(domain.name, dc.info.Address, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
 			states, err = dsi.UpsertStates(&tx.ID, newStatesToWrite)
+			if err == nil && len(newNullifiers) > 0 {
+				err = dsi.UpsertNullifiers(newNullifiers)
+			}
 			return err
 		})
 		if err != nil {
@@ -422,9 +425,9 @@ func (dc *domainContract) allAttestations(tx *components.PrivateTransaction) []*
 
 func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateRef) ([]*components.FullState, error) {
 	rawIDsBySchema := make(map[string][]tktypes.RawJSON)
-	stateIDs := make([]tktypes.Bytes32, len(refs))
+	stateIDs := make([]tktypes.HexBytes, len(refs))
 	for i, s := range refs {
-		stateID, err := tktypes.ParseBytes32Ctx(ctx, s.Id)
+		stateID, err := tktypes.ParseHexBytes(ctx, s.Id)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateIDFromDomain, s.Id, i)
 		}
@@ -447,7 +450,7 @@ func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateR
 				return err
 			}
 			for _, s := range statesForSchema {
-				statesByID[s.ID] = s
+				statesByID[tktypes.Bytes32Keccak(s.ID)] = s
 			}
 		}
 		return nil
@@ -459,7 +462,7 @@ func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateR
 	// Check we found all the states, and restore the original order
 	states := make([]*components.FullState, len(stateIDs))
 	for i, id := range stateIDs {
-		s := statesByID[id]
+		s := statesByID[tktypes.Bytes32Keccak(id)]
 		if s == nil {
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInputStateNotFound, i, id)
 		}

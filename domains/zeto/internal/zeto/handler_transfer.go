@@ -70,6 +70,156 @@ func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction,
 	}, nil
 }
 
+func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
+	params := tx.Params.(*types.TransferParams)
+
+	resolvedSender := domain.FindVerifier(tx.Transaction.From, algorithms.ZKP_BABYJUBJUB_PLAINBYTES, req.ResolvedVerifiers)
+	if resolvedSender == nil {
+		return nil, fmt.Errorf("failed to resolve: %s", tx.Transaction.From)
+	}
+	resolvedRecipient := domain.FindVerifier(params.To, algorithms.ZKP_BABYJUBJUB_PLAINBYTES, req.ResolvedVerifiers)
+	if resolvedRecipient == nil {
+		return nil, fmt.Errorf("failed to resolve: %s", params.To)
+	}
+
+	senderKey, err := h.loadBabyJubKey([]byte(resolvedSender.Verifier))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load sender public key. %s", err)
+	}
+	recipientKey, err := h.loadBabyJubKey([]byte(resolvedRecipient.Verifier))
+	if err != nil {
+		return nil, fmt.Errorf("failed load receiver public key. %s", err)
+	}
+
+	inputCoins, inputStates, total, err := h.zeto.prepareInputs(ctx, req.Transaction.ContractAddress, tx.Transaction.From, params.Amount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare inputs. %s", err)
+	}
+	outputCoins, outputStates, err := h.zeto.prepareOutputs(params.To, recipientKey, params.Amount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare outputs. %s", err)
+	}
+	if total.Cmp(params.Amount.BigInt()) == 1 {
+		remainder := big.NewInt(0).Sub(total, params.Amount.BigInt())
+		returnedCoins, returnedStates, err := h.zeto.prepareOutputs(tx.Transaction.From, senderKey, tktypes.NewHexInteger(remainder))
+		if err != nil {
+			return nil, fmt.Errorf("failed to prepare outputs for change coins. %s", err)
+		}
+		outputCoins = append(outputCoins, returnedCoins...)
+		outputStates = append(outputStates, returnedStates...)
+	}
+
+	payloadBytes, err := h.formatProvingRequest(inputCoins, outputCoins, tx.DomainConfig.CircuitId, tx.DomainConfig.TokenName, tx.ContractAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to format proving request. %s", err)
+	}
+
+	return &pb.AssembleTransactionResponse{
+		AssemblyResult: pb.AssembleTransactionResponse_OK,
+		AssembledTransaction: &pb.AssembledTransaction{
+			InputStates:  inputStates,
+			OutputStates: outputStates,
+		},
+		AttestationPlan: []*pb.AttestationRequest{
+			{
+				Name:            "sender",
+				AttestationType: pb.AttestationType_SIGN,
+				Algorithm:       algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+				Payload:         payloadBytes,
+				Parties:         []string{tx.Transaction.From},
+			},
+			{
+				Name:            "submitter",
+				AttestationType: pb.AttestationType_ENDORSE,
+				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+				Parties:         []string{tx.Transaction.From},
+			},
+		},
+	}, nil
+}
+
+func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
+	return &pb.EndorseTransactionResponse{
+		EndorsementResult: pb.EndorseTransactionResponse_ENDORSER_SUBMIT,
+	}, nil
+}
+
+func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
+	var proofRes corepb.ProvingResponse
+	result := domain.FindAttestation("sender", req.AttestationResult)
+	if result == nil {
+		return nil, fmt.Errorf("did not find 'sender' attestation")
+	}
+	if err := proto.Unmarshal(result.Payload, &proofRes); err != nil {
+		return nil, err
+	}
+
+	inputs := make([]string, INPUT_COUNT)
+	for i := 0; i < INPUT_COUNT; i++ {
+		if i < len(req.InputStates) {
+			state := req.InputStates[i]
+			coin, err := h.zeto.makeCoin(state.StateDataJson)
+			if err != nil {
+				return nil, err
+			}
+			inputs[i] = coin.Hash.String()
+		} else {
+			inputs[i] = "0"
+		}
+	}
+	outputs := make([]string, OUTPUT_COUNT)
+	for i := 0; i < OUTPUT_COUNT; i++ {
+		if i < len(req.OutputStates) {
+			state := req.OutputStates[i]
+			coin, err := h.zeto.makeCoin(state.StateDataJson)
+			if err != nil {
+				return nil, err
+			}
+			outputs[i] = coin.Hash.String()
+		} else {
+			outputs[i] = "0"
+		}
+	}
+
+	data, err := encodeTransactionData(ctx, req.Transaction)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode transaction data. %s", err)
+	}
+	params := map[string]any{
+		"inputs":  inputs,
+		"outputs": outputs,
+		"proof":   h.encodeProof(proofRes.Proof),
+		"data":    data,
+	}
+	if tx.DomainConfig.TokenName == "Zeto_AnonEnc" {
+		params["encryptionNonce"] = proofRes.PublicInputs["encryptionNonce"]
+		params["encryptedValues"] = strings.Split(proofRes.PublicInputs["encryptedValues"], ",")
+	} else if tx.DomainConfig.TokenName == "Zeto_AnonNullifier" {
+		delete(params, "inputs")
+		params["nullifiers"] = strings.Split(proofRes.PublicInputs["nullifiers"], ",")
+		params["root"] = proofRes.PublicInputs["root"]
+	}
+	paramsJSON, err := json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+	contractAbi, err := h.zeto.config.GetContractAbi(tx.DomainConfig.TokenName)
+	if err != nil {
+		return nil, err
+	}
+	functionJSON, err := json.Marshal(contractAbi.Functions()["transfer"])
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.PrepareTransactionResponse{
+		Transaction: &pb.BaseLedgerTransaction{
+			FunctionAbiJson: string(functionJSON),
+			ParamsJson:      string(paramsJSON),
+		},
+	}, nil
+}
+
 func (h *transferHandler) loadBabyJubKey(payload []byte) (*babyjub.PublicKey, error) {
 	var keyCompressed babyjub.PublicKeyComp
 	if err := keyCompressed.UnmarshalText(payload); err != nil {
@@ -196,80 +346,6 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 	return proto.Marshal(payload)
 }
 
-func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
-	params := tx.Params.(*types.TransferParams)
-
-	resolvedSender := domain.FindVerifier(tx.Transaction.From, algorithms.ZKP_BABYJUBJUB_PLAINBYTES, req.ResolvedVerifiers)
-	if resolvedSender == nil {
-		return nil, fmt.Errorf("failed to resolve: %s", tx.Transaction.From)
-	}
-	resolvedRecipient := domain.FindVerifier(params.To, algorithms.ZKP_BABYJUBJUB_PLAINBYTES, req.ResolvedVerifiers)
-	if resolvedRecipient == nil {
-		return nil, fmt.Errorf("failed to resolve: %s", params.To)
-	}
-
-	senderKey, err := h.loadBabyJubKey([]byte(resolvedSender.Verifier))
-	if err != nil {
-		return nil, fmt.Errorf("failed to load sender public key. %s", err)
-	}
-	recipientKey, err := h.loadBabyJubKey([]byte(resolvedRecipient.Verifier))
-	if err != nil {
-		return nil, fmt.Errorf("failed load receiver public key. %s", err)
-	}
-
-	inputCoins, inputStates, total, err := h.zeto.prepareInputs(ctx, req.Transaction.ContractAddress, tx.Transaction.From, params.Amount)
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare inputs. %s", err)
-	}
-	outputCoins, outputStates, err := h.zeto.prepareOutputs(params.To, recipientKey, params.Amount)
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare outputs. %s", err)
-	}
-	if total.Cmp(params.Amount.BigInt()) == 1 {
-		remainder := big.NewInt(0).Sub(total, params.Amount.BigInt())
-		returnedCoins, returnedStates, err := h.zeto.prepareOutputs(tx.Transaction.From, senderKey, tktypes.NewHexInteger(remainder))
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare outputs for change coins. %s", err)
-		}
-		outputCoins = append(outputCoins, returnedCoins...)
-		outputStates = append(outputStates, returnedStates...)
-	}
-
-	payloadBytes, err := h.formatProvingRequest(inputCoins, outputCoins, tx.DomainConfig.CircuitId, tx.DomainConfig.TokenName, tx.ContractAddress)
-	if err != nil {
-		return nil, fmt.Errorf("failed to format proving request. %s", err)
-	}
-
-	return &pb.AssembleTransactionResponse{
-		AssemblyResult: pb.AssembleTransactionResponse_OK,
-		AssembledTransaction: &pb.AssembledTransaction{
-			InputStates:  inputStates,
-			OutputStates: outputStates,
-		},
-		AttestationPlan: []*pb.AttestationRequest{
-			{
-				Name:            "sender",
-				AttestationType: pb.AttestationType_SIGN,
-				Algorithm:       algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
-				Payload:         payloadBytes,
-				Parties:         []string{tx.Transaction.From},
-			},
-			{
-				Name:            "submitter",
-				AttestationType: pb.AttestationType_ENDORSE,
-				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
-				Parties:         []string{tx.Transaction.From},
-			},
-		},
-	}, nil
-}
-
-func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *pb.EndorseTransactionRequest) (*pb.EndorseTransactionResponse, error) {
-	return &pb.EndorseTransactionResponse{
-		EndorsementResult: pb.EndorseTransactionResponse_ENDORSER_SUBMIT,
-	}, nil
-}
-
 func (h *transferHandler) encodeProof(proof *corepb.SnarkProof) map[string]interface{} {
 	// Convert the proof json to the format that the Solidity verifier expects
 	return map[string]interface{}{
@@ -280,80 +356,4 @@ func (h *transferHandler) encodeProof(proof *corepb.SnarkProof) map[string]inter
 		},
 		"pC": []string{proof.C[0], proof.C[1]},
 	}
-}
-
-func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *pb.PrepareTransactionRequest) (*pb.PrepareTransactionResponse, error) {
-	var proofRes corepb.ProvingResponse
-	result := domain.FindAttestation("sender", req.AttestationResult)
-	if result == nil {
-		return nil, fmt.Errorf("did not find 'sender' attestation")
-	}
-	if err := proto.Unmarshal(result.Payload, &proofRes); err != nil {
-		return nil, err
-	}
-
-	inputs := make([]string, INPUT_COUNT)
-	for i := 0; i < INPUT_COUNT; i++ {
-		if i < len(req.InputStates) {
-			state := req.InputStates[i]
-			coin, err := h.zeto.makeCoin(state.StateDataJson)
-			if err != nil {
-				return nil, err
-			}
-			inputs[i] = coin.Hash.String()
-		} else {
-			inputs[i] = "0"
-		}
-	}
-	outputs := make([]string, OUTPUT_COUNT)
-	for i := 0; i < OUTPUT_COUNT; i++ {
-		if i < len(req.OutputStates) {
-			state := req.OutputStates[i]
-			coin, err := h.zeto.makeCoin(state.StateDataJson)
-			if err != nil {
-				return nil, err
-			}
-			outputs[i] = coin.Hash.String()
-		} else {
-			outputs[i] = "0"
-		}
-	}
-
-	data, err := encodeTransactionData(ctx, req.Transaction)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode transaction data. %s", err)
-	}
-	params := map[string]any{
-		"inputs":  inputs,
-		"outputs": outputs,
-		"proof":   h.encodeProof(proofRes.Proof),
-		"data":    data,
-	}
-	if tx.DomainConfig.TokenName == "Zeto_AnonEnc" {
-		params["encryptionNonce"] = proofRes.PublicInputs["encryptionNonce"]
-		params["encryptedValues"] = strings.Split(proofRes.PublicInputs["encryptedValues"], ",")
-	} else if tx.DomainConfig.TokenName == "Zeto_AnonNullifier" {
-		delete(params, "inputs")
-		params["nullifiers"] = strings.Split(proofRes.PublicInputs["nullifiers"], ",")
-		params["root"] = proofRes.PublicInputs["root"]
-	}
-	paramsJSON, err := json.Marshal(params)
-	if err != nil {
-		return nil, err
-	}
-	contractAbi, err := h.zeto.config.GetContractAbi(tx.DomainConfig.TokenName)
-	if err != nil {
-		return nil, err
-	}
-	functionJSON, err := json.Marshal(contractAbi.Functions()["transfer"])
-	if err != nil {
-		return nil, err
-	}
-
-	return &pb.PrepareTransactionResponse{
-		Transaction: &pb.BaseLedgerTransaction{
-			FunctionAbiJson: string(functionJSON),
-			ParamsJson:      string(paramsJSON),
-		},
-	}, nil
 }

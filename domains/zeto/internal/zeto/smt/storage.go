@@ -104,11 +104,10 @@ func (s *statesStorage) UpsertRootNodeIndex(root core.NodeIndex) error {
 		return fmt.Errorf("failed to upsert root node. %s", err)
 	}
 	newRootState := &prototk.NewLocalState{
+		Id:            &newRoot.RootIndex,
 		SchemaId:      s.rootSchemaId,
 		StateDataJson: string(data),
 		TransactionId: s.transactionId,
-		ConfirmId:     &newRoot.RootIndex,
-		SpendId:       &newRoot.RootIndex,
 	}
 	s.newNodes = append(s.newNodes, newRootState)
 	s.rootNode = root
@@ -201,11 +200,10 @@ func (s *statesStorage) InsertNode(n core.Node) error {
 	}
 	refKey := newNode.RefKey.HexString()
 	newNodeState := &prototk.NewLocalState{
+		Id:            &refKey,
 		SchemaId:      s.nodeSchemaId,
 		StateDataJson: string(data),
 		TransactionId: s.transactionId,
-		ConfirmId:     &refKey,
-		SpendId:       &refKey,
 	}
 	s.newNodes = append(s.newNodes, newNodeState)
 	return err
