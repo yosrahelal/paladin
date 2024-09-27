@@ -74,4 +74,17 @@ var (
 	// RPCClient PD0205XX
 	MsgRPCClientInvalidWebSocketURL = ffe("PD020500", "Invalid WebSocket URL: %s")
 	MsgRPCClientInvalidHTTPURL      = ffe("PD020501", "Invalid HTTP URL: %s")
+
+	// HTTPServer PD0108XX
+	MsgHTTPServerStartFailed        = ffe("PD020600", "Failed to start server on '%s'")
+	MsgHTTPServerMissingPort        = ffe("PD020601", "HTTP server port must be specified for '%s'")
+	MsgHTTPServerNoWSUpgradeSupport = ffe("PD020602", "HTTP server does not support WebSocket upgrade (%T)")
+
+	// JSON/RPC PD0110XX
+	MsgJSONRPCInvalidRequest      = ffe("PD020700", "Invalid JSON/RPC request data")
+	MsgJSONRPCMissingRequestID    = ffe("PD020701", "Invalid JSON/RPC request. Must set request ID")
+	MsgJSONRPCUnsupportedMethod   = ffe("PD020702", "method not supported")
+	MsgJSONRPCIncorrectParamCount = ffe("PD020703", "method %s requires %d params (supplied=%d)")
+	MsgJSONRPCInvalidParam        = ffe("PD020704", "method %s parameter %d invalid: %s")
+	MsgJSONRPCResultSerialization = ffe("PD020705", "method %s result serialization failed: %s")
 )
