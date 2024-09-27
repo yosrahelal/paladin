@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -60,12 +60,12 @@ func NewServer(ctx context.Context, description string, conf *Config, handler ht
 	s.ctx, s.cancelCtx = context.WithCancel(ctx)
 
 	if conf.Port == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgHTTPServerMissingPort, description)
+		return nil, i18n.NewError(ctx, tkmsgs.MsgHTTPServerMissingPort, description)
 	}
 
 	listenAddr := fmt.Sprintf("%s:%d", confutil.StringNotEmpty(conf.Address, *HTTPDefaults.Address), *conf.Port)
 	if s.listener, err = net.Listen("tcp", listenAddr); err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgHTTPServerStartFailed, listenAddr)
+		return nil, i18n.WrapError(ctx, err, tkmsgs.MsgHTTPServerStartFailed, listenAddr)
 	}
 	log.L(ctx).Infof("%s server listening on %s", description, s.listener.Addr())
 
@@ -163,7 +163,7 @@ func (lc *logCapture) WriteHeader(statusCode int) {
 func (lc *logCapture) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	hj, ok := lc.res.(http.Hijacker)
 	if !ok {
-		return nil, nil, i18n.NewError(context.Background(), msgs.MsgHTTPServerNoWSUpgradeSupport, lc.res)
+		return nil, nil, i18n.NewError(context.Background(), tkmsgs.MsgHTTPServerNoWSUpgradeSupport, lc.res)
 	}
 	return hj.Hijack()
 }

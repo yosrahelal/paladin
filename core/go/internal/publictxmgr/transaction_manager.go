@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 	"sync"
 	"time"
 
@@ -99,9 +100,10 @@ type pubTxManager struct {
 	maxInflight              int
 	orchestratorIdleTimeout  time.Duration
 	orchestratorStaleTimeout time.Duration
-	orchestratorLifetime     time.Duration
+	orchestratorSwapTimeout  time.Duration
 	retry                    *retry.Retry
 	enginePollingInterval    time.Duration
+	nonceCacheTimeout        time.Duration
 	engineLoopDone           chan struct{}
 
 	activityRecordCache     cache.Cache[string, *txActivityRecords]
@@ -137,11 +139,12 @@ func NewPublicTransactionManager(ctx context.Context, conf *Config) components.P
 		gasPriceClient:              gasPriceClient,
 		inFlightOrchestratorStale:   make(chan bool, 1),
 		signingAddressesPausedUntil: make(map[tktypes.EthAddress]time.Time),
-		maxInflight:                 confutil.IntMin(conf.Orchestrator.MaxInFlight, 1, *DefaultConfig.Orchestrator.MaxInFlight),
-		orchestratorLifetime:        confutil.DurationMin(conf.Manager.OrchestratorLifetime, 0, *DefaultConfig.Manager.OrchestratorLifetime),
+		maxInflight:                 confutil.IntMin(conf.Manager.MaxInFlightOrchestrators, 1, *DefaultConfig.Manager.MaxInFlightOrchestrators),
+		orchestratorSwapTimeout:     confutil.DurationMin(conf.Manager.OrchestratorSwapTimeout, 0, *DefaultConfig.Manager.OrchestratorSwapTimeout),
 		orchestratorStaleTimeout:    confutil.DurationMin(conf.Manager.OrchestratorStaleTimeout, 0, *DefaultConfig.Manager.OrchestratorStaleTimeout),
 		orchestratorIdleTimeout:     confutil.DurationMin(conf.Manager.OrchestratorIdleTimeout, 0, *DefaultConfig.Manager.OrchestratorIdleTimeout),
 		enginePollingInterval:       confutil.DurationMin(conf.Manager.Interval, 50*time.Millisecond, *DefaultConfig.Manager.Interval),
+		nonceCacheTimeout:           confutil.DurationMin(conf.Manager.NonceCacheTimeout, 0, *DefaultConfig.Manager.NonceCacheTimeout),
 		retry:                       retry.NewRetryIndefinite(&conf.Manager.Retry),
 		gasPriceIncreaseMax:         gasPriceIncreaseMax,
 		gasPriceIncreasePercent:     confutil.Int(conf.GasPrice.IncreasePercentage, *DefaultConfig.GasPrice.IncreasePercentage),
@@ -155,6 +158,7 @@ func (ble *pubTxManager) PostInit(pic components.AllComponents) error {
 	ctx := ble.ctx
 	log.L(ctx).Debugf("Initializing enterprise transaction handler")
 	ble.ethClientFactory = pic.EthClientFactory()
+	ble.ethClient = ble.ethClientFactory.SharedWS()
 	ble.keymgr = pic.KeyManager()
 
 	ble.bIndexer = pic.BlockIndexer()
@@ -181,7 +185,7 @@ func (ble *pubTxManager) Start() error {
 	log.L(ctx).Debugf("Starting enterprise transaction handler")
 	ble.ethClient = ble.ethClientFactory.SharedWS()
 	ble.gasPriceClient.Init(ctx, ble.ethClient)
-	ble.nonceManager = newNonceCache(1*time.Hour, func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
+	ble.nonceManager = newNonceCache(ble.nonceCacheTimeout, func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
 		log.L(ctx).Tracef("NonceFromChain getting next nonce for signing address ID %s", signer)
 		nextNonce, err := ble.ethClient.GetTransactionCount(ctx, signer)
 		if err != nil {
@@ -204,8 +208,12 @@ func (ble *pubTxManager) Start() error {
 
 func (ble *pubTxManager) Stop() {
 	ble.ctxCancel()
-	ble.submissionWriter.Shutdown()
-	ble.nonceManager.Stop()
+	if ble.submissionWriter != nil {
+		ble.submissionWriter.Shutdown()
+	}
+	if ble.nonceManager != nil {
+		ble.nonceManager.Stop()
+	}
 	if ble.engineLoopDone != nil {
 		<-ble.engineLoopDone
 	}
@@ -563,6 +571,7 @@ func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, from tkt
 	var ptxs []*DBPublicTxn
 	err := ble.p.DB().
 		WithContext(ctx).
+		Table("public_txns").
 		Where("from = ?", from).
 		Where("nonce = ?", nonce).
 		Joins("Completed").
@@ -574,7 +583,7 @@ func (ble *pubTxManager) CheckTransactionCompleted(ctx context.Context, from tkt
 		return false, err
 	}
 	if len(ptxs) > 0 && ptxs[0].Completed != nil {
-		log.L(ctx).Debugf("CheckTransactionCompleted returned true for %s", ptxs[0].SignerNonce)
+		log.L(ctx).Debugf("CheckTransactionCompleted returned true for %s:%d", from, nonce)
 		return true, nil
 	}
 	return false, nil
@@ -585,11 +594,14 @@ func (ble *pubTxManager) GetPendingFuelingTransaction(ctx context.Context, sourc
 	var ptxs []*DBPublicTxn
 	err := ble.p.DB().
 		WithContext(ctx).
+		Table("public_txns").
 		Where("from = ?", sourceAddress).
 		Where("to = ?", destinationAddress).
 		Joins("Completed").
 		Where(`"Completed"."tx_hash" IS NULL`).
-		Where("data IS NULL").
+		Joins("Binding").
+		Where(`"Binding"."signer_nonce" IS NULL`). // no binding for auto fueling txns
+		Where("data IS NULL").                     // they are simple transfers
 		Limit(1).
 		Find(&ptxs).
 		Error
@@ -676,8 +688,9 @@ func (ble *pubTxManager) getTransactionSubmissions(ctx context.Context, dbTX *go
 	err := dbTX.
 		WithContext(ctx).
 		Table("public_submissions").
-		Where("signer_nonce_ref IN (?)", signerNonceRefs).
+		Where("signer_nonce IN (?)", signerNonceRefs).
 		Order("created DESC").
+		Find(&ptxs).
 		Error
 	return ptxs, err
 }
@@ -764,6 +777,29 @@ func (pte *pubTxManager) getActivityRecords(signerNonce string) []ptxapi.Transac
 	return []ptxapi.TransactionActivityRecord{}
 }
 
+func (pte *pubTxManager) GetPublicTransactionForHash(ctx context.Context, dbTX *gorm.DB, hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error) {
+	var signerNonces []string
+	var txns []*ptxapi.PublicTxWithBinding
+	err := dbTX.
+		Table("public_submissions").
+		Model(DBPubTxnSubmission{}).
+		Where(`tx_hash = ?`, hash).
+		Pluck("signer_nonce", &signerNonces).
+		Error
+	if err == nil && len(signerNonces) > 0 {
+		signerNonceSplit := strings.Split(signerNonces[0], ":")
+		txns, err = pte.QueryPublicTxWithBindings(ctx, dbTX, query.NewQueryBuilder().
+			Equal("from", signerNonceSplit[0]).
+			Equal("nonce", signerNonceSplit[1]).
+			Query())
+	}
+	if err != nil || len(txns) == 0 {
+		return nil, err
+	}
+	return txns[0], nil
+
+}
+
 func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransactionNotify) ([]*components.PublicTxMatch, error) {
 
 	// Do a DB query in the TX to reverse lookup the TX details we need to match/update the completed status
@@ -775,7 +811,7 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 		txHashes[i] = itx.Hash
 		txiByHash[itx.Hash] = itx
 	}
-	var lookups []*transactionsMatchingSubmission
+	var lookups []*bindingsMatchingSubmission
 	err := dbTX.
 		Table("public_txn_bindings").
 		Select(`"transaction"`, `"tx_type"`, `"Submission"."signer_nonce"`, `"Submission"."tx_hash"`).

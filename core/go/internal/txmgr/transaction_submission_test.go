@@ -116,11 +116,31 @@ func mockPublicSubmitTxOk(t *testing.T) func(conf *Config, mc *mockComponents) {
 	}
 }
 
-func mockPublicQueryTxBindings(cb func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error)) func(conf *Config, mc *mockComponents) {
+func mockQueryPublicTxForTransactions(cb func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error)) func(conf *Config, mc *mockComponents) {
 	return func(conf *Config, mc *mockComponents) {
 		mqb := mc.publicTxMgr.On("QueryPublicTxForTransactions", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 		mqb.Run(func(args mock.Arguments) {
 			result, err := cb(args[2].([]uuid.UUID), args[3].(*query.QueryJSON))
+			mqb.Return(result, err)
+		})
+	}
+}
+
+func mockQueryPublicTxWithBindings(cb func(jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error)) func(conf *Config, mc *mockComponents) {
+	return func(conf *Config, mc *mockComponents) {
+		mqb := mc.publicTxMgr.On("QueryPublicTxWithBindings", mock.Anything, mock.Anything, mock.Anything)
+		mqb.Run(func(args mock.Arguments) {
+			result, err := cb(args[2].(*query.QueryJSON))
+			mqb.Return(result, err)
+		})
+	}
+}
+
+func mockGetPublicTransactionForHash(cb func(hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error)) func(conf *Config, mc *mockComponents) {
+	return func(conf *Config, mc *mockComponents) {
+		mqb := mc.publicTxMgr.On("GetPublicTransactionForHash", mock.Anything, mock.Anything, mock.Anything)
+		mqb.Run(func(args mock.Arguments) {
+			result, err := cb(args[2].(tktypes.Bytes32))
 			mqb.Return(result, err)
 		})
 	}

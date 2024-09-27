@@ -48,8 +48,7 @@ func (DBPublicTxn) TableName() string {
 }
 
 type DBPublicTxnBinding struct {
-	Sequence        uint64                               `gorm:"column:sequence;autoIncrement"` // unique identifier for this record
-	SignerNonce     string                               `gorm:"column:signer_nonce"`
+	SignerNonce     string                               `gorm:"column:signer_nonce;primaryKey"`
 	Transaction     uuid.UUID                            `gorm:"column:transaction"`
 	TransactionType tktypes.Enum[ptxapi.TransactionType] `gorm:"column:tx_type"`
 }
@@ -86,7 +85,7 @@ func (s *DBPubTxnSubmission) WriteKey() string {
 	return strings.Split(s.SignerNonce, ":")[0]
 }
 
-type transactionsMatchingSubmission struct {
+type bindingsMatchingSubmission struct {
 	DBPublicTxnBinding `gorm:"embedded"`
 	Submission         *DBPubTxnSubmission `gorm:"foreignKey:signer_nonce;references:signer_nonce;"`
 }

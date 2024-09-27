@@ -17,18 +17,20 @@ package txmgr
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/httpserver"
-	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -65,7 +67,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	var publicTxns map[uuid.UUID][]*ptxapi.PublicTx
 	ctx, url, tmr, done := newTestTransactionManagerWithRPC(t,
 		mockPublicSubmitTxOk(t),
-		mockPublicQueryTxBindings(func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error) {
+		mockQueryPublicTxForTransactions(func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error) {
 			return publicTxns, nil
 		}),
 	)
@@ -260,4 +262,87 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	assert.Equal(t, []uuid.UUID{tx0ID}, tx1Deps.DependsOn)
 	assert.Equal(t, []uuid.UUID{tx2ID}, tx1Deps.PrereqOf)
 
+}
+
+func TestPublicTransactionPassthroughQueries(t *testing.T) {
+
+	nonce, _ := rand.Int(rand.Reader, big.NewInt(10000000))
+	tx := &ptxapi.PublicTxWithBinding{
+		PublicTx: &ptxapi.PublicTx{
+			From:  tktypes.EthAddress(tktypes.RandBytes(20)),
+			Nonce: tktypes.HexUint64(nonce.Uint64()),
+		},
+		PublicTxBinding: ptxapi.PublicTxBinding{Transaction: uuid.New(), TransactionType: ptxapi.TransactionTypePublic.Enum()},
+	}
+	var mockQuery func(jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error)
+	var mockGetByHash func(hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error)
+	ctx, url, _, done := newTestTransactionManagerWithRPC(t,
+		mockQueryPublicTxWithBindings(func(jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) { return mockQuery(jq) }),
+		mockGetPublicTransactionForHash(func(hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error) { return mockGetByHash(hash) }),
+	)
+	defer done()
+
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{URL: url})
+	require.NoError(t, err)
+
+	// Simple query
+	sampleTxns := []*ptxapi.PublicTxWithBinding{tx}
+	mockQuery = func(_ *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) { return sampleTxns, nil }
+	var txns []*ptxapi.PublicTxWithBinding
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryPublicTransactions", query.NewQueryBuilder().Limit(100).Query())
+	require.NoError(t, err)
+	require.Len(t, txns, 1)
+	assert.Equal(t, sampleTxns, txns)
+
+	// Query pending
+	mockQuery = func(jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) {
+		assert.JSONEq(t, `{
+			"limit": 100,
+			"eq": [{"field":"nonce","value":12345}],
+			"null":[{"field":"transactionHash"}]}`, string(tktypes.JSONString(jq)))
+		return sampleTxns, nil
+	}
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryPendingPublicTransactions", query.NewQueryBuilder().
+		Equal("nonce", 12345).
+		Limit(100).Query())
+	require.NoError(t, err)
+	require.Len(t, txns, 1)
+	assert.Equal(t, sampleTxns, txns)
+
+	// Query missing limit
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryPublicTransactions", query.NewQueryBuilder().Query())
+	require.Regexp(t, "PD012200", err)
+
+	// Query fail
+	mockQuery = func(_ *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) { return nil, fmt.Errorf("pop") }
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryPublicTransactions", query.NewQueryBuilder().Limit(100).Query())
+	require.Regexp(t, "pop", err)
+
+	// Query by nonce
+	mockQuery = func(jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) {
+		assert.JSONEq(t, `{
+			"limit": 1,
+			"eq": [{"field":"from","value":"`+tx.From.String()+`"},{"field":"nonce","value":"`+tx.Nonce.String()+`"}]
+		}`, string(tktypes.JSONString(jq)))
+		return sampleTxns, nil
+	}
+	var txn *ptxapi.PublicTxWithBinding
+	err = rpcClient.CallRPC(ctx, &txn, "ptx_getPublicTransactionByNonce", tx.From, tx.Nonce)
+	require.NoError(t, err)
+	assert.Equal(t, sampleTxns[0], txn)
+
+	// Query by nonce err
+	mockQuery = func(_ *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) { return nil, fmt.Errorf("pop") }
+	err = rpcClient.CallRPC(ctx, &txn, "ptx_getPublicTransactionByNonce", tx.From, tx.Nonce)
+	require.Regexp(t, "pop", err)
+
+	// Query by hash
+	txHash := tktypes.Bytes32(tktypes.RandBytes(32))
+	mockGetByHash = func(hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error) {
+		assert.Equal(t, txHash, hash)
+		return tx, nil
+	}
+	err = rpcClient.CallRPC(ctx, &txn, "ptx_getPublicTransactionByHash", txHash)
+	require.NoError(t, err)
+	assert.Equal(t, sampleTxns[0], txn)
 }

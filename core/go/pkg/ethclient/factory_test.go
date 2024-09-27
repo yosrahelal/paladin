@@ -22,8 +22,8 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
-	"github.com/kaleido-io/paladin/core/internal/httpserver"
-	"github.com/kaleido-io/paladin/core/internal/rpcserver"
+	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/core/pkg/signer/api"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"

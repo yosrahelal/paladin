@@ -284,45 +284,11 @@ func (iftxs *inFlightTransactionState) AddPanicOutput(ctx context.Context, stage
 
 func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stage InFlightTxStage, persistenceTime time.Time, err error) {
 	rsc := iftxs.runningStageContext
-	mtx := iftxs.InMemoryTxStateManager
 	if rsc == nil || rsc.StageOutputsToBePersisted == nil {
 		log.L(ctx).Error("Cannot persist transaction state, no running context or stageOutputsToBePersisted")
 		return iftxs.stage, time.Now(), i18n.NewError(ctx, msgs.MsgPersistError)
 	}
 
-	confirmationReceived := rsc.StageOutputsToBePersisted.ConfirmationReceived
-	if confirmationReceived {
-		iftxs.NotifyAddressBalanceChanged(ctx, mtx.GetFrom())
-		if !mtx.GetValue().NilOrZero() && mtx.GetTo() != nil {
-			iftxs.NotifyAddressBalanceChanged(ctx, *mtx.GetTo())
-		}
-
-		// TODO: These metrics and process should move to where TX completion is being recorded to the DB
-		//    which is the code that will trigger this code with (it != nil).
-		//
-		// if matchFound {
-		// 	*rsc.StageOutputsToBePersisted.TxUpdates.TransactionHash = it.Hash
-		// 	updateConfirmedTx = it
-		// 	if it.Result == blockindexer.TXResult_SUCCESS.Enum() {
-		// 		mtx.Status = PubTxStatusSucceeded
-		// 		rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
-		// 		iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusSuccess))
-		// 	} else {
-		// 		mtx.Status = PubTxStatusFailed
-		// 		rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
-		// 		iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusFail))
-		// 	}
-		// } else {
-		// 	mtx.Status = PubTxStatusConflict
-		// 	rsc.StageOutputsToBePersisted.TxUpdates.Status = &mtx.Status
-		// 	iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusConflict))
-		// }
-
-		if rsc.SubStatus != BaseTxSubStatusConfirmed {
-			rsc.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionConfirmTransaction, nil, nil)
-			rsc.SetSubStatus(BaseTxSubStatusConfirmed)
-		}
-	}
 	// flush any sub-status changes
 	for _, subStatusUpdate := range rsc.StageOutputsToBePersisted.StatusUpdates {
 		if err := subStatusUpdate(iftxs.statusUpdater); err != nil {
@@ -347,6 +313,11 @@ func (iftxs *inFlightTransactionState) PersistTxState(ctx context.Context) (stag
 			if err != nil {
 				return rsc.Stage, time.Now(), err
 			}
+		}
+
+		if rsc.StageOutputsToBePersisted.TxUpdates.InFlightStatus != nil &&
+			*rsc.StageOutputsToBePersisted.TxUpdates.InFlightStatus == InFlightStatusConfirmReceived {
+			iftxs.RecordCompletedTransactionCountMetrics(ctx, string(GenericStatusSuccess))
 		}
 
 		// update the in memory state
