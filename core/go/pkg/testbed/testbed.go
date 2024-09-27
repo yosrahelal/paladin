@@ -25,8 +25,8 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/domainmgr"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
-	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 

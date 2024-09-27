@@ -25,7 +25,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr"
 	"github.com/kaleido-io/paladin/core/internal/publictxmgr"
 	"github.com/kaleido-io/paladin/core/internal/registrymgr"
-	"github.com/kaleido-io/paladin/core/internal/rpcserver"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/internal/transportmgr"
 	"github.com/kaleido-io/paladin/core/internal/txmgr"
@@ -34,6 +33,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/signer/api"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"gopkg.in/yaml.v2"
 )

@@ -48,7 +48,7 @@ func newTestServer(t *testing.T, conf *Config, handler http.HandlerFunc) (string
 
 func TestMissingPort(t *testing.T) {
 	_, err := NewServer(context.Background(), "unittest", &Config{}, nil)
-	assert.Regexp(t, "PD010801", err)
+	assert.Regexp(t, "PD020601", err)
 }
 
 func TestBadTLSConfig(t *testing.T) {
@@ -68,7 +68,7 @@ func TestBadAddress(t *testing.T) {
 		Port:    confutil.P(0),
 		Address: confutil.P(":::::badness"),
 	}, nil)
-	assert.Regexp(t, "PD010800", err)
+	assert.Regexp(t, "PD020600", err)
 
 }
 
@@ -161,7 +161,7 @@ func (*mockResponseWriter) WriteHeader(statusCode int) {}
 
 func TestLogCaptureBadWSResponseWriter(t *testing.T) {
 	_, _, err := (&logCapture{res: &mockResponseWriter{}}).Hijack()
-	assert.Regexp(t, "PD010802", err)
+	assert.Regexp(t, "PD020602", err)
 }
 
 func TestWSUpgradeSupported(t *testing.T) {
