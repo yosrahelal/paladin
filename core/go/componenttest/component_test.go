@@ -23,8 +23,6 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"net"
-	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -34,15 +32,9 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/componenttest/domains"
 	"github.com/kaleido-io/paladin/core/internal/componentmgr"
-	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/domainmgr"
-	"github.com/kaleido-io/paladin/core/internal/plugins"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
@@ -53,9 +45,6 @@ import (
 	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
 )
-
-//go:embed abis/SimpleStorage.json
-var simpleStorageBuildJSON []byte // From "gradle copyTestSolidityBuild"
 
 func TestRunSimpleStorageEthTransaction(t *testing.T) {
 	ctx := context.Background()
@@ -170,18 +159,7 @@ signer:
 
 }
 
-func transactionReceiptCondition(t *testing.T, ctx context.Context, txID uuid.UUID, rpcClient rpcclient.Client, isDeploy bool) func() bool {
-	//for the given transaction ID, return a function that can be used in an assert.Eventually to check if the transaction has a receipt
-	return func() bool {
-		txFull := ptxapi.TransactionFull{}
-		err := rpcClient.CallRPC(ctx, &txFull, "ptx_getTransaction", txID, true)
-		require.NoError(t, err)
-		return txFull.Receipt != nil && (!isDeploy || txFull.Receipt.ContractAddress != nil)
-	}
-
-}
-
-func TestCoreGoComponent(t *testing.T) {
+func TestSimplePrivateContract(t *testing.T) {
 	// Coarse grained black box test of the core component manager
 	// no mocking although it does use a simple domain implementation that exists solely for testing
 	// and is loaded directly through go function calls via the unit test plugin loader
@@ -278,172 +256,4 @@ func TestCoreGoComponent(t *testing.T) {
 	require.NotNil(t, txFull.Receipt)
 	assert.True(t, txFull.Receipt.Success)
 
-}
-
-func timeTillDeadline(t *testing.T) time.Duration {
-	deadline, ok := t.Deadline()
-	if !ok {
-		//there was no -timeout flag, default to a long time becuase this is most likely a debug session
-		deadline = time.Now().Add(10 * time.Hour)
-	}
-	timeRemaining := time.Until(deadline)
-	//Need to leave some time to ensure that polling assertions fail before the test itself timesout
-	//otherwise we don't see diagnostic info for things like GoExit called by mocks etc
-	if timeRemaining < 100*time.Millisecond {
-		return 0
-	}
-	return timeRemaining - 100*time.Millisecond
-}
-
-type componentTestInstance struct {
-	grpcTarget string
-	engineName string
-	id         uuid.UUID
-	conf       *componentmgr.Config
-	ctx        context.Context
-	cancelCtx  context.CancelFunc
-}
-
-func newInstanceForComponentTesting(t *testing.T) (*componentTestInstance, componentmgr.ComponentManager) {
-	f, err := os.CreateTemp("", "component-test.*.sock")
-	require.NoError(t, err)
-
-	grpcTarget := f.Name()
-
-	err = f.Close()
-	require.NoError(t, err)
-
-	err = os.Remove(grpcTarget)
-	require.NoError(t, err)
-
-	//Little bit of a chicken and egg situation here.
-	// We need an engine so that we can deploy the base ledger contract for the domain
-	// and then we need the address of that contract for the config file we use to iniitialize the engine
-	//Actually in the first instance, we only need a bare bones engine that is capable of deploying the base ledger contracts
-	// could make do with assembling some core components like key manager, eth client factory, block indexer, persistence and any other dependencies they pull in
-	// but is easier to just create a throwaway component manager with no domains
-
-	i := &componentTestInstance{
-		grpcTarget: grpcTarget,
-		id:         uuid.New(),
-		conf:       testConfig(t),
-		engineName: "",
-	}
-	i.ctx, i.cancelCtx = context.WithCancel(log.WithLogField(context.Background(), "pid", strconv.Itoa(os.Getpid())))
-
-	tmpConf := testConfig(t)
-	cmTmp := componentmgr.NewComponentManager(i.ctx, i.grpcTarget, i.id, tmpConf, &componentTestEngine{})
-	err = cmTmp.Init()
-	require.NoError(t, err)
-	err = cmTmp.StartComponents()
-	require.NoError(t, err)
-	domainRegistryAddress := domains.DeploySmartContract(t, cmTmp.BlockIndexer(), cmTmp.EthClientFactory())
-
-	cmTmp.Stop()
-
-	i.conf.DomainManagerConfig.Domains = make(map[string]*domainmgr.DomainConfig, 1)
-	i.conf.DomainManagerConfig.Domains["domain1"] = &domainmgr.DomainConfig{
-		Plugin: components.PluginConfig{
-			Type:    components.LibraryTypeCShared.Enum(),
-			Library: "loaded/via/unit/test/loader",
-		},
-		Config:          map[string]any{"some": "config"},
-		RegistryAddress: domainRegistryAddress.String(),
-	}
-
-	var pl plugins.UnitTestPluginLoader
-
-	cm := componentmgr.NewComponentManager(i.ctx, i.grpcTarget, i.id, i.conf, &componentTestEngine{})
-	// Start it up
-	err = cm.Init()
-	require.NoError(t, err)
-
-	err = cm.StartComponents()
-	require.NoError(t, err)
-
-	err = cm.StartManagers()
-	require.NoError(t, err)
-
-	loaderMap := map[string]plugintk.Plugin{
-		"domain1": domains.FakeCoinDomain(t, i.ctx),
-	}
-	pc := cm.PluginManager()
-	pl, err = plugins.NewUnitTestPluginLoader(pc.GRPCTargetURL(), pc.LoaderID().String(), loaderMap)
-	require.NoError(t, err)
-	go pl.Run()
-
-	err = cm.CompleteStart()
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		pl.Stop()
-		cm.Stop()
-	})
-
-	return i, cm
-
-}
-
-// TODO should not need an engine at all. It is only in the component manager interface to enable the testbed to integrate with domain manager etc
-// need to make this optional in the component manager interface or re-write the testbed to integrate with components
-// in a different way
-type componentTestEngine struct {
-}
-
-// EngineName implements components.Engine.
-func (c *componentTestEngine) EngineName() string {
-	return "component-test-engine"
-}
-
-// Init implements components.Engine.
-func (c *componentTestEngine) Init(components.PreInitComponentsAndManagers) (*components.ManagerInitResult, error) {
-	return &components.ManagerInitResult{}, nil
-}
-
-// ReceiveTransportMessage implements components.Engine.
-func (c *componentTestEngine) ReceiveTransportMessage(context.Context, *components.TransportMessage) {
-	panic("unimplemented")
-}
-
-// Start implements components.Engine.
-func (c *componentTestEngine) Start() error {
-	return nil
-}
-
-// Stop implements components.Engine.
-func (c *componentTestEngine) Stop() {
-
-}
-
-func testConfig(t *testing.T) *componentmgr.Config {
-	ctx := context.Background()
-	log.SetLevel("debug")
-
-	var conf *componentmgr.Config
-	err := componentmgr.ReadAndParseYAMLFile(ctx, "../test/config/sqlite.memory.config.yaml", &conf)
-	assert.NoError(t, err)
-
-	// For running in this unit test the dirs are different to the sample config
-	conf.DB.SQLite.MigrationsDir = "../db/migrations/sqlite"
-	conf.DB.Postgres.MigrationsDir = "../db/migrations/postgres"
-
-	port, err := getFreePort()
-	require.NoError(t, err, "Error finding a free port")
-	conf.RPCServer.HTTP.Port = &port
-	conf.RPCServer.HTTP.Address = confutil.P("127.0.0.1")
-
-	return conf
-
-}
-
-// getFreePort finds an available TCP port and returns it.
-func getFreePort() (int, error) {
-	listener, err := net.Listen("tcp", ":0")
-	if err != nil {
-		return 0, err
-	}
-	defer listener.Close()
-
-	port := listener.Addr().(*net.TCPAddr).Port
-	return port, nil
 }
