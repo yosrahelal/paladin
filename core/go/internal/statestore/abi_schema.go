@@ -324,7 +324,6 @@ func (as *abiSchema) parseStateData(ctx context.Context, data tktypes.RawJSON) (
 // Take the state, parse the value into the type tree of this schema, and from that
 // build the label values to store in the DB for comparison appropriate to the type.
 func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, extraIDs *ExtraIDs) (*StateWithLabels, error) {
-
 	psd, err := as.parseStateData(ctx, data)
 	if err != nil {
 		return nil, err

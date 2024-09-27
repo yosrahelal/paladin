@@ -17,6 +17,7 @@ package smt
 
 import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type MerkleTreeRoot struct {
@@ -28,17 +29,17 @@ var MerkleTreeRootABI = &abi.Parameter{
 	Type:         "tuple",
 	InternalType: "struct MerkleTreeRoot",
 	Components: abi.ParameterArray{
-		{Name: "smtName", Type: "string"},
+		{Name: "smtName", Type: "string", Indexed: true},
 		{Name: "rootIndex", Type: "bytes32"},
 	},
 }
 
 type MerkleTreeNode struct {
-	RefKey     string  `json:"refKey"`
-	Index      *string `json:"index"`
-	Type       byte    `json:"type"`
-	LeftChild  *string `json:"leftChild"`
-	RightChild *string `json:"rightChild"`
+	RefKey     tktypes.Bytes32  `json:"refKey"`
+	Index      tktypes.Bytes32  `json:"index"`
+	Type       tktypes.HexBytes `json:"type"`
+	LeftChild  tktypes.Bytes32  `json:"leftChild"`
+	RightChild tktypes.Bytes32  `json:"rightChild"`
 }
 
 var MerkleTreeNodeABI = &abi.Parameter{

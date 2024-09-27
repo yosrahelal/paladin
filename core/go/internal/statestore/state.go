@@ -168,7 +168,6 @@ func (ss *stateStore) FindStates(ctx context.Context, domainName string, contrac
 }
 
 func (ss *stateStore) findStates(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, jq *query.QueryJSON, status StateStatusQualifier, excluded ...*allIDs) (schema Schema, s []*State, err error) {
-	fmt.Printf("[stateStore] findStates - 1. domain name: %s, schema id: %s\n", domainName, schemaID)
 	if len(jq.Sort) == 0 {
 		jq.Sort = []string{".created"}
 	}
@@ -177,7 +176,6 @@ func (ss *stateStore) findStates(ctx context.Context, domainName string, contrac
 	if err != nil {
 		return nil, nil, err
 	}
-	fmt.Printf("[stateStore] findStates - 2\n")
 
 	tracker := ss.labelSetFor(schema)
 
@@ -187,7 +185,6 @@ func (ss *stateStore) findStates(ctx context.Context, domainName string, contrac
 	if q.Error != nil {
 		return nil, nil, q.Error
 	}
-	fmt.Printf("[stateStore] findStates - 3\n")
 
 	// Add joins only for the fields actually used in the query
 	for _, fi := range tracker.used {
@@ -211,15 +208,12 @@ func (ss *stateStore) findStates(ctx context.Context, domainName string, contrac
 
 	// Scope the query based of the qualifier
 	q = q.Where(status.whereClause(db))
-	fmt.Printf("[stateStore] findStates - 4\n")
 
 	var states []*State
 	q = q.Find(&states)
 	if q.Error != nil {
-		fmt.Printf("[stateStore] findStates - 4.1. %s\n", q.Error)
 		return nil, nil, q.Error
 	}
-	fmt.Printf("[stateStore] findStates - 5\n")
 	return schema, states, nil
 }
 

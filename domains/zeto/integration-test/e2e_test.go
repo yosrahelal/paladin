@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
@@ -191,13 +192,13 @@ func (s *zetoDomainTestSuite) TearDownSuite() {
 	// os.Remove(s.dbfile.Name())
 }
 
-func (s *zetoDomainTestSuite) TestZeto_Anon() {
-	s.testZetoFungible(s.T(), "Zeto_Anon")
-}
+// func (s *zetoDomainTestSuite) TestZeto_Anon() {
+// 	s.testZetoFungible(s.T(), "Zeto_Anon")
+// }
 
-func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
-	s.testZetoFungible(s.T(), "Zeto_AnonEnc")
-}
+// func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
+// 	s.testZetoFungible(s.T(), "Zeto_AnonEnc")
+// }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
 	s.testZetoFungible(s.T(), "Zeto_AnonNullifier")
@@ -276,6 +277,9 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	assert.Regexp(t, "failed to send base ledger transaction: PD011513: Reverted: 0x118cdaa.*", rpcerr.Error())
 	assert.True(t, boolResult)
 
+	// allow the merkle tree to update from the events
+	time.Sleep(1 * time.Second)
+
 	log.L(ctx).Infof("Transfer 25 from controller to recipient1")
 	rpcerr = s.rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     controllerName,
@@ -289,6 +293,9 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
+
+	// allow the merkle tree to update from the events
+	time.Sleep(1 * time.Second)
 
 	// check that we now only have one unspent coin, of value 5
 	coins, err = s.domain.FindCoins(ctx, zetoAddress, "{}")

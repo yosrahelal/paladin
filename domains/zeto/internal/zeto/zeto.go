@@ -335,18 +335,14 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 		case z.mintSignature:
 			var mint MintEvent
 			if err := json.Unmarshal(ev.Data, &mint); err == nil {
-				fmt.Printf("mint event - 1\n")
 				txID := decodeTransactionData(mint.Data)
 				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
 				res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, mint.Outputs)...)
-				fmt.Printf("mint event - 2\n")
 				if domainConfig.TokenName == "Zeto_AnonNullifier" {
-					fmt.Printf("mint event - 3\n")
-					newStates, err := z.updateMerkleTree(domainConfig.TokenName, ev.Address, mint.Outputs)
+					newStates, err := z.updateMerkleTree(txID, domainConfig.TokenName, ev.Address, mint.Outputs)
 					if err != nil {
 						return nil, err
 					}
-					fmt.Printf("mint event - 4\n")
 					res.NewStates = append(res.NewStates, newStates...)
 				}
 			} else {
@@ -360,7 +356,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
 				res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
 				if domainConfig.TokenName == "Zeto_AnonNullifier" {
-					newStates, err := z.updateMerkleTree(domainConfig.TokenName, ev.Address, transfer.Outputs)
+					newStates, err := z.updateMerkleTree(txID, domainConfig.TokenName, ev.Address, transfer.Outputs)
 					if err != nil {
 						return nil, err
 					}
@@ -377,7 +373,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
 				res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
 				if domainConfig.TokenName == "Zeto_AnonNullifier" {
-					newStates, err := z.updateMerkleTree(domainConfig.TokenName, ev.Address, transfer.Outputs)
+					newStates, err := z.updateMerkleTree(txID, domainConfig.TokenName, ev.Address, transfer.Outputs)
 					if err != nil {
 						return nil, err
 					}
@@ -388,16 +384,13 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 			}
 		}
 	}
-	fmt.Printf("res Confirmed states: %v\n", res.ConfirmedStates)
-	fmt.Printf("res Spent states: %v\n", res.SpentStates)
-	fmt.Printf("res New states: %v\n", res.NewStates)
 	return &res, nil
 }
 
-func (z *Zeto) updateMerkleTree(tokenName string, address tktypes.EthAddress, output []tktypes.HexInteger) ([]*prototk.NewLocalState, error) {
+func (z *Zeto) updateMerkleTree(txID tktypes.HexBytes, tokenName string, address tktypes.EthAddress, output []tktypes.HexInteger) ([]*prototk.NewLocalState, error) {
 	var newStates []*prototk.NewLocalState
 	for _, out := range output {
-		states, err := z.addOutputToMerkleTree(tokenName, address, out)
+		states, err := z.addOutputToMerkleTree(txID, tokenName, address, out)
 		if err != nil {
 			return nil, err
 		}
@@ -406,14 +399,12 @@ func (z *Zeto) updateMerkleTree(tokenName string, address tktypes.EthAddress, ou
 	return newStates, nil
 }
 
-func (z *Zeto) addOutputToMerkleTree(tokenName string, address tktypes.EthAddress, output tktypes.HexInteger) ([]*prototk.NewLocalState, error) {
-	fmt.Printf("mint event - 5\n")
+func (z *Zeto) addOutputToMerkleTree(txID tktypes.HexBytes, tokenName string, address tktypes.EthAddress, output tktypes.HexInteger) ([]*prototk.NewLocalState, error) {
 	smtName := smt.MerkleTreeName(tokenName, address.Address0xHex())
 	storage, tree, err := smt.New(z.Callbacks, smtName, address.Address0xHex(), z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create Merkle tree for %s: %s", smtName, err)
 	}
-	fmt.Printf("mint event - 6\n")
 	idx, err := node.NewNodeIndexFromBigInt(output.BigInt())
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create node index for %s: %s", output.String(), err)
@@ -423,12 +414,15 @@ func (z *Zeto) addOutputToMerkleTree(tokenName string, address tktypes.EthAddres
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create leaf node for %s: %s", output.String(), err)
 	}
-	fmt.Printf("calling addLeaf %+v\n", leaf)
 	err = tree.AddLeaf(leaf)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to add leaf node for %s: %s", output.String(), err)
 	}
-	return storage.GetNewStates(), nil
+	newStates := storage.GetNewStates()
+	for _, state := range newStates {
+		state.TransactionId = txID.String()
+	}
+	return newStates, nil
 }
 
 func encodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {

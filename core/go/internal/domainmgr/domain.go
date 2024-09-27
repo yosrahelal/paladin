@@ -220,7 +220,6 @@ func (d *domain) Configuration() *prototk.DomainConfig {
 
 // Domain callback to query the state store
 func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error) {
-	fmt.Printf("[domain] FindAvailableStates - 1\n")
 	if err := d.checkInit(ctx); err != nil {
 		return nil, err
 	}
@@ -230,12 +229,10 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidQueryJSON)
 	}
-	fmt.Printf("[domain] FindAvailableStates - 2\n")
 	addr, err := tktypes.ParseEthAddress(req.ContractAddress)
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainErrorParsingAddress)
 	}
-	fmt.Printf("[domain] FindAvailableStates - 3\n")
 
 	var states []*statestore.State
 	err = d.dm.stateStore.RunInDomainContext(d.name, *addr, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
@@ -245,7 +242,6 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("[domain] FindAvailableStates - 4\n")
 
 	pbStates := make([]*prototk.StoredState, len(states))
 	for i, s := range states {
@@ -541,11 +537,17 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		}
 		var confirmID tktypes.HexBytes
 		if state.ConfirmId != nil {
-			confirmID = tktypes.HexBytes(*state.ConfirmId)
+			confirmID, err = tktypes.ParseHexBytes(ctx, *state.ConfirmId)
+			if err != nil {
+				return nil, err
+			}
 		}
 		var spendID tktypes.HexBytes
 		if state.SpendId != nil {
-			spendID = tktypes.HexBytes(*state.SpendId)
+			spendID, err = tktypes.ParseHexBytes(ctx, *state.SpendId)
+			if err != nil {
+				return nil, err
+			}
 		}
 		newStates[*txUUID] = append(newStates[*txUUID], &statestore.StateUpsert{
 			SchemaID:  state.SchemaId,

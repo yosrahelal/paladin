@@ -133,7 +133,7 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 			if err != nil {
 				// TODO: deal with when the node is not found in the DB tables for the tree
 				// e.g because the transaction event hasn't been processed yet
-				return nil, fmt.Errorf("failed to query the smt DB for leaf node. %s", err)
+				return nil, fmt.Errorf("failed to query the smt DB for leaf node (index=%s). %s", leaf.Index().Hex(), err)
 			}
 			if n.Index().BigInt().Cmp(coin.Hash.BigInt()) != 0 {
 				return nil, fmt.Errorf("coin %s has not been indexed", coin.Hash.String())

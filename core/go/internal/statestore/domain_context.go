@@ -231,7 +231,11 @@ func (dc *domainContext) mergedUnFlushed(schema Schema, dbStates []*State, query
 		allUnFlushedStateSpends = append(allUnFlushedStateSpends, dc.flushing.stateSpends...)
 	}
 	matches := make([]*StateWithLabels, 0, len(dc.unFlushed.states))
+	schemaId := tktypes.MustParseBytes32(schema.IDString())
 	for _, state := range allUnFlushedStates {
+		if !state.Schema.Equals(&schemaId) {
+			continue
+		}
 		spent := false
 		for _, spend := range allUnFlushedStateSpends {
 			if spend.State.Equals(state.SpendID) {
@@ -341,7 +345,6 @@ func (dc *domainContext) FindAvailableStates(schemaID string, query *query.Query
 }
 
 func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*StateUpsert) (states []*State, err error) {
-
 	states = make([]*State, len(stateUpserts))
 	withValues := make([]*StateWithLabels, len(stateUpserts))
 	for i, ns := range stateUpserts {

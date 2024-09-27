@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 )
 
@@ -41,6 +42,7 @@ type statesStorage struct {
 	contractAddress *ethtypes.Address0xHex
 	rootSchemaId    string
 	nodeSchemaId    string
+	rootNode        core.NodeIndex
 	newNodes        []*prototk.NewLocalState
 }
 
@@ -59,10 +61,13 @@ func (s *statesStorage) GetNewStates() []*prototk.NewLocalState {
 }
 
 func (s *statesStorage) GetRootNodeIndex() (core.NodeIndex, error) {
+	if s.rootNode != nil {
+		return s.rootNode, nil
+	}
 	queryBuilder := query.NewQueryBuilder().
 		Limit(1).
-		Sort(".created").
-		Equal("name", s.smtName)
+		Sort(".created DESC").
+		Equal("smtName", s.smtName)
 
 	res, err := s.CoreInterface.FindAvailableStates(context.Background(), &prototk.FindAvailableStatesRequest{
 		ContractAddress: s.contractAddress.String(),
@@ -73,6 +78,10 @@ func (s *statesStorage) GetRootNodeIndex() (core.NodeIndex, error) {
 		return nil, core.ErrNotFound
 	} else if err != nil {
 		return nil, err
+	}
+
+	if len(res.States) == 0 {
+		return nil, core.ErrNotFound
 	}
 
 	var root MerkleTreeRoot
@@ -88,7 +97,7 @@ func (s *statesStorage) GetRootNodeIndex() (core.NodeIndex, error) {
 func (s *statesStorage) UpsertRootNodeIndex(root core.NodeIndex) error {
 	newRoot := &MerkleTreeRoot{
 		SmtName:   s.smtName,
-		RootIndex: root.Hex(),
+		RootIndex: "0x" + root.Hex(),
 	}
 	data, err := json.Marshal(newRoot)
 	if err != nil {
@@ -98,8 +107,11 @@ func (s *statesStorage) UpsertRootNodeIndex(root core.NodeIndex) error {
 		SchemaId:      s.rootSchemaId,
 		StateDataJson: string(data),
 		TransactionId: s.transactionId,
+		ConfirmId:     &newRoot.RootIndex,
+		SpendId:       &newRoot.RootIndex,
 	}
 	s.newNodes = append(s.newNodes, newRootState)
+	s.rootNode = root
 	return err
 }
 
@@ -121,25 +133,28 @@ func (s *statesStorage) GetNode(ref core.NodeIndex) (core.Node, error) {
 	} else if err != nil {
 		return nil, err
 	}
+	if len(res.States) == 0 {
+		return nil, core.ErrNotFound
+	}
 	var n MerkleTreeNode
 	err = json.Unmarshal([]byte(res.States[0].DataJson), &n)
 
 	var newNode core.Node
-	nodeType := core.NodeTypeFromByte(n.Type)
+	nodeType := core.NodeTypeFromByte(n.Type[:][0])
 	switch nodeType {
 	case core.NodeTypeLeaf:
-		idx, err1 := node.NewNodeIndexFromHex(*n.Index)
+		idx, err1 := node.NewNodeIndexFromHex(n.Index.HexString())
 		if err1 != nil {
 			return nil, err1
 		}
 		v := node.NewIndexOnly(idx)
 		newNode, err = node.NewLeafNode(v)
 	case core.NodeTypeBranch:
-		leftChild, err1 := node.NewNodeIndexFromHex(*n.LeftChild)
+		leftChild, err1 := node.NewNodeIndexFromHex(n.LeftChild.HexString())
 		if err1 != nil {
 			return nil, err1
 		}
-		rightChild, err2 := node.NewNodeIndexFromHex(*n.RightChild)
+		rightChild, err2 := node.NewNodeIndexFromHex(n.RightChild.HexString())
 		if err2 != nil {
 			return nil, err2
 		}
@@ -150,28 +165,47 @@ func (s *statesStorage) GetNode(ref core.NodeIndex) (core.Node, error) {
 
 func (s *statesStorage) InsertNode(n core.Node) error {
 	// we clone the node so that the value properties are not saved
+	refKeyBytes, err := tktypes.ParseBytes32(n.Ref().Hex())
+	if err != nil {
+		return err
+	}
 	newNode := &MerkleTreeNode{
-		RefKey: n.Ref().Hex(),
-		Type:   n.Type().ToByte(),
+		RefKey: refKeyBytes,
+		Type:   tktypes.HexBytes([]byte{n.Type().ToByte()}),
 	}
 	if n.Type() == core.NodeTypeBranch {
 		left := n.LeftChild().Hex()
-		newNode.LeftChild = &left
+		leftBytes, err := tktypes.ParseBytes32(left)
+		if err != nil {
+			return err
+		}
+		newNode.LeftChild = leftBytes
 		right := n.RightChild().Hex()
-		newNode.RightChild = &right
+		rightBytes, err := tktypes.ParseBytes32(right)
+		if err != nil {
+			return err
+		}
+		newNode.RightChild = rightBytes
 	} else if n.Type() == core.NodeTypeLeaf {
 		idx := n.Index().Hex()
-		newNode.Index = &idx
+		idxBytes, err := tktypes.ParseBytes32(idx)
+		if err != nil {
+			return err
+		}
+		newNode.Index = idxBytes
 	}
 
 	data, err := json.Marshal(newNode)
 	if err != nil {
 		return fmt.Errorf("failed to insert node. %s", err)
 	}
+	refKey := newNode.RefKey.HexString()
 	newNodeState := &prototk.NewLocalState{
 		SchemaId:      s.nodeSchemaId,
 		StateDataJson: string(data),
 		TransactionId: s.transactionId,
+		ConfirmId:     &refKey,
+		SpendId:       &refKey,
 	}
 	s.newNodes = append(s.newNodes, newNodeState)
 	return err
