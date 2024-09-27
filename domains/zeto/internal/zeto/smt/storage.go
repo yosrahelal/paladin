@@ -77,7 +77,7 @@ func (s *statesStorage) GetRootNodeIndex() (core.NodeIndex, error) {
 	if err == gorm.ErrRecordNotFound {
 		return nil, core.ErrNotFound
 	} else if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to find available states. %s", err)
 	}
 
 	if len(res.States) == 0 {
@@ -87,7 +87,7 @@ func (s *statesStorage) GetRootNodeIndex() (core.NodeIndex, error) {
 	var root MerkleTreeRoot
 	err = json.Unmarshal([]byte(res.States[0].DataJson), &root)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal root node index. %s", err)
 	}
 
 	idx, err := node.NewNodeIndexFromHex(root.RootIndex)
@@ -130,7 +130,7 @@ func (s *statesStorage) GetNode(ref core.NodeIndex) (core.Node, error) {
 	if err == gorm.ErrRecordNotFound {
 		return nil, core.ErrNotFound
 	} else if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to find available states. %s", err)
 	}
 	if len(res.States) == 0 {
 		return nil, core.ErrNotFound
