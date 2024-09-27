@@ -170,7 +170,6 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 	postAssembly := tx.PostAssembly
 
 	newStatesToWrite := make([]*statestore.StateUpsert, len(postAssembly.OutputStatesPotential))
-	newNullifiers := make([]*statestore.StateNullifier, 0)
 	domain := dc.d
 	for i, s := range postAssembly.OutputStatesPotential {
 		schema := domain.schemasByID[s.SchemaId]
@@ -194,22 +193,12 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 			// These are marked as locked and creating in the transaction
 			Creating: true,
 		}
-		if s.Nullifier != nil {
-			newNullifiers = append(newNullifiers, &statestore.StateNullifier{
-				DomainName: dc.d.name,
-				State:      id,
-				Nullifier:  tktypes.HexBytes(*s.Nullifier),
-			})
-		}
 	}
 
 	var states []*statestore.State
 	if len(newStatesToWrite) > 0 {
 		err := dc.dm.stateStore.RunInDomainContext(domain.name, dc.info.Address, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
 			states, err = dsi.UpsertStates(&tx.ID, newStatesToWrite)
-			if err == nil && len(newNullifiers) > 0 {
-				err = dsi.UpsertNullifiers(newNullifiers)
-			}
 			return err
 		})
 		if err != nil {
@@ -392,11 +381,11 @@ func (dc *domainContract) PrepareTransaction(ctx context.Context, tx *components
 	if err := json.Unmarshal(([]byte)(res.Transaction.FunctionAbiJson), &functionABI); err != nil {
 		return i18n.WrapError(ctx, err, msgs.MsgDomainPrivateAbiJsonInvalid)
 	}
-
 	inputs, err := functionABI.Inputs.ParseJSONCtx(ctx, emptyJSONIfBlank(res.Transaction.ParamsJson))
 	if err != nil {
 		return err
 	}
+
 	tx.PreparedTransaction = &components.EthTransaction{
 		FunctionABI: &functionABI,
 		To:          dc.Address(),

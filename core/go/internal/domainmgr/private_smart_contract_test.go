@@ -320,7 +320,6 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 		Owner:  tktypes.EthAddress(tktypes.RandBytes(20)),
 		Amount: ethtypes.NewHexInteger64(5555555),
 	}
-	nullifier := tktypes.RandHex(32)
 
 	tp.Functions.AssembleTransaction = func(ctx context.Context, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 		assert.Same(t, req.Transaction, tx.PreAssembly.TransactionSpecification)
@@ -359,7 +358,7 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 					{Id: stateRes.States[2].Id, SchemaId: stateRes.States[2].SchemaId},
 				},
 				OutputStates: []*prototk.NewState{
-					{SchemaId: tp.stateSchemas[0].Id, StateDataJson: string(newStateData), Nullifier: &nullifier},
+					{SchemaId: tp.stateSchemas[0].Id, StateDataJson: string(newStateData)},
 				},
 			},
 			AttestationPlan: []*prototk.AttestationRequest{
@@ -506,6 +505,18 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, tx.PreparedTransaction.FunctionABI)
 	assert.NotNil(t, tx.PreparedTransaction.Inputs)
+
+	// Confirm the remaining unspent states
+	stillAvailable, err = domain.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
+		ContractAddress: psc.Address().String(),
+		SchemaId:        tx.PostAssembly.OutputStatesPotential[0].SchemaId,
+		QueryJson:       `{}`,
+	})
+	require.NoError(t, err)
+	assert.Len(t, stillAvailable.States, 3)
+	assert.Contains(t, stillAvailable.States[0].DataJson, state2.Salt.String())
+	assert.Contains(t, stillAvailable.States[1].DataJson, state4.Salt.String())
+	assert.Contains(t, stillAvailable.States[2].DataJson, state5.Salt.String())
 }
 
 func TestDomainAssembleTransactionError(t *testing.T) {
