@@ -115,16 +115,14 @@ func (it *inFlightTransactionStageController) submitTX(ctx context.Context, mtx 
 				submissionOutcome = SubmissionOutcomeNonceTooLow
 			default:
 				submissionOutcome = SubmissionOutcomeFailedRequiresRetry
-				if attempt <= it.transactionSubmissionRetryCount {
-					return true, submissionError
-				}
+				return true, submissionError
 			}
 			return false, nil
 		}
 	})
 
 	if retryError != nil {
-		return nil, nil, submissionErrorReason, SubmissionOutcomeFailedRequiresRetry, retryError
+		return nil, submissionTime, submissionErrorReason, SubmissionOutcomeFailedRequiresRetry, retryError
 	}
 
 	return txHash, submissionTime, submissionErrorReason, submissionOutcome, submissionError

@@ -22,23 +22,32 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
-	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 func TestProduceLatestInFlightStageContextSigning(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, mTS := newInflightTransaction(o, 1)
+	it.testOnlyNoActionMode = true
+	mTS.statusUpdater = &mockStatusUpdater{
+		updateSubStatus: func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
+			return nil
+		},
+	}
+
+	mTS.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
+		GasPricing: &ptxapi.PublicTxGasPricing{
+			GasPrice: tktypes.Uint64ToUint256(10),
+		},
+	})
 
 	// trigger signing
-	mtx := it.stateManager.GetTx()
-	mtx.TransactionHash = nil
-	mTS := testInFlightTransactionStateManagerWithMocks.mTS
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
@@ -52,12 +61,12 @@ func TestProduceLatestInFlightStageContextSigning(t *testing.T) {
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
 
 	signedMsg := []byte(testTransactionData)
-	txHash := testTxHash
+	txHash := tktypes.MustParseBytes32(testTxHash)
 	// succeed signing
 	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
 	// test panic error that doesn't belong to the current stage gets ignored
 	it.stateManager.AddPanicOutput(ctx, InFlightTxStageRetrieveGasPrice)
-	it.stateManager.AddSignOutput(ctx, signedMsg, txHash, nil)
+	it.stateManager.AddSignOutput(ctx, signedMsg, &txHash, nil)
 	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
@@ -68,11 +77,10 @@ func TestProduceLatestInFlightStageContextSigning(t *testing.T) {
 	assert.Equal(t, InFlightTxStageSigning, rsc.Stage)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), BaseTxSubStatusReceived, BaseTxActionSign, fftypes.JSONAnyPtr(`{"hash":"`+txHash+`"}`), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS.statusUpdater)
 	// failed signing
 	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
-	it.stateManager.AddSignOutput(ctx, nil, "", fmt.Errorf("sign error"))
+	it.stateManager.AddSignOutput(ctx, nil, nil, fmt.Errorf("sign error"))
 	rsc = it.stateManager.GetRunningStageContext(ctx)
 	assert.Equal(t, InFlightTxStageSigning, rsc.Stage)
 	rsc.StageOutputsToBePersisted = nil
@@ -84,7 +92,6 @@ func TestProduceLatestInFlightStageContextSigning(t *testing.T) {
 	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), BaseTxSubStatusReceived, BaseTxActionSign, (*fftypes.JSONAny)(nil), fftypes.JSONAnyPtr(`{"error":"sign error"}`), mock.Anything).Return(nil).Maybe()
 
 	// persisting error waiting for persistence retry timeout
 	assert.False(t, rsc.StageErrored)
@@ -115,13 +122,10 @@ func TestProduceLatestInFlightStageContextSigning(t *testing.T) {
 	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
 	it.stateManager.AddPersistenceOutput(ctx, InFlightTxStageSigning, time.Now(), nil)
 	assert.NotNil(t, rsc.StageOutput.SignOutput.Err)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), BaseTxSubStatusReceived, BaseTxActionSign, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
-	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
+	_ = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: false,
 	})
-	assert.NotEmpty(t, *tOut)
-	assert.Equal(t, "20000", tOut.Cost.String())
 	assert.True(t, rsc.StageErrored)
 
 	// persisted stage success and move on
@@ -145,13 +149,23 @@ func TestProduceLatestInFlightStageContextSigning(t *testing.T) {
 }
 
 func TestProduceLatestInFlightStageContextSigningPanic(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, mTS := newInflightTransaction(o, 1)
+	it.testOnlyNoActionMode = true
+	mTS.statusUpdater = &mockStatusUpdater{
+		updateSubStatus: func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
+			return nil
+		},
+	}
+
+	mTS.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
+		GasPricing: &ptxapi.PublicTxGasPricing{
+			GasPrice: tktypes.Uint64ToUint256(10),
+		},
+	})
 
 	// trigger signing
-	mtx := it.stateManager.GetTx()
-	mtx.TransactionHash = nil
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
@@ -180,33 +194,38 @@ func TestProduceLatestInFlightStageContextSigningPanic(t *testing.T) {
 }
 
 func TestProduceLatestInFlightStageContextTriggerSign(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	ctx, o, m, done := newTestOrchestrator(t)
+	defer done()
+	it, mTS := newInflightTransaction(o, 1)
+	it.testOnlyNoActionMode = true
+	mTS.statusUpdater = &mockStatusUpdater{
+		updateSubStatus: func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
+			return nil
+		},
+	}
+
+	mTS.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
+		GasPricing: &ptxapi.PublicTxGasPricing{
+			GasPrice: tktypes.Uint64ToUint256(10),
+		},
+	})
 	it.testOnlyNoActionMode = false
 	it.testOnlyNoEventMode = false
 	// trigger signing
-	mtx := it.stateManager.GetTx()
-	mtx.TransactionHash = nil
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
-	mEC := testInFlightTransactionStateManagerWithMocks.mEC
-	called := make(chan struct{})
-	buildRawTransactionMock := mEC.On("BuildRawTransaction", ctx, ethclient.EIP1559, string(mtx.From), mtx.Transaction, mock.Anything)
+	buildRawTransactionMock := m.ethClient.On("BuildRawTransactionNoResolve", ctx, ethclient.EIP1559, mock.Anything, mock.Anything, mock.Anything)
 	buildRawTransactionMock.Run(func(args mock.Arguments) {
-		from := args[2].(string)
-		txObj := args[3].(*ethsigner.Transaction)
-
-		assert.Equal(t, "0x4e598f6e918321dd47c86e7a077b4ab0e7414846", from)
-		assert.Equal(t, ethtypes.MustNewHexBytes0xPrefix(testTransactionData), txObj.Data)
+		from := args[2].(*ethclient.ResolvedSigner)
+		assert.Equal(t, o.signingAddress, from.Address)
 		buildRawTransactionMock.Return(nil, fmt.Errorf("pop"))
-		close(called)
 	}).Once()
 	err := it.TriggerSignTx(ctx)
 	require.NoError(t, err)
-	<-called
+	ticker := time.NewTicker(10 * time.Millisecond)
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
-	for len(inFlightStageMananger.bufferedStageOutputs) == 0 {
+	for !t.Failed() && len(inFlightStageMananger.bufferedStageOutputs) == 0 {
 		// wait for event
+		<-ticker.C
 	}
 	assert.Len(t, inFlightStageMananger.bufferedStageOutputs, 1)
 	assert.NotNil(t, inFlightStageMananger.bufferedStageOutputs[0].SignOutput)

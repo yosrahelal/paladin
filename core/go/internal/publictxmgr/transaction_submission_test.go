@@ -142,11 +142,10 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 		txSendMock.Return(nil, fmt.Errorf("error submitting transaction"))
 	}).Once()
 
-	txHash, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
+	_, _, errReason, outCome, err = it.submitTX(ctx, it.stateManager, []byte(testTransactionData))
 	assert.Regexp(t, "error submitting", err)
 	assert.Equal(t, ethclient.ErrorReason(""), errReason)
 	assert.Equal(t, SubmissionOutcomeFailedRequiresRetry, outCome)
-	assert.Equal(t, testTxHash, txHash.String()) // able to use the calculated hash
 }
 
 func TestTxSubmissionWithSignedMessageWithRetry(t *testing.T) {
@@ -162,8 +161,6 @@ func TestTxSubmissionWithSignedMessageWithRetry(t *testing.T) {
 	ifts.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
 		TransactionHash: &textTxHashByte32,
 	})
-
-	it.transactionSubmissionRetryCount = 1 // retry once
 
 	// successful send with tx hash returned
 	m.ethClient.On("SendRawTransaction", ctx, mock.Anything).Return(&textTxHashByte32, nil).Once()

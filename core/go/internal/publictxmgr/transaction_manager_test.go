@@ -96,7 +96,7 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 		Orchestrator: OrchestratorConfig{
 			Interval: confutil.P("1h"),
 			SubmissionRetry: retry.ConfigWithMax{
-				MaxAttempts: confutil.P(0),
+				MaxAttempts: confutil.P(1),
 			},
 		},
 	}

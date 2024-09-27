@@ -60,11 +60,10 @@ type inFlightTransactionStageController struct {
 
 	// a reference to the transaction orchestrator
 	*orchestrator
-	txInflightTime                  time.Time
-	txInDBTime                      time.Time
-	txTimeline                      []PointOfTime
-	timeLineLoggingEnabled          bool
-	transactionSubmissionRetryCount int
+	txInflightTime         time.Time
+	txInDBTime             time.Time
+	txTimeline             []PointOfTime
+	timeLineLoggingEnabled bool
 
 	// this transaction mutex is used for transaction inflight stage context control
 	transactionMux sync.Mutex
@@ -198,7 +197,6 @@ func (it *inFlightTransactionStageController) ProduceLatestInFlightStageContext(
 	defer it.transactionMux.Unlock()
 	// update the transaction orchestrator context
 	it.stateManager.SetOrchestratorContext(ctx, tIn)
-	stageErrored := false
 	if it.stateManager.GetRunningStageContext(ctx) != nil {
 		rsc := it.stateManager.GetRunningStageContext(ctx)
 		log.L(ctx).Debugf("ProduceLatestInFlightStageContext for tx %s, on stage: %s , current stage context lived: %s , stage lived: %s, last stage error: %+v", it.stateManager.GetSignerNonce(), it.stateManager.GetStage(ctx), time.Since(rsc.StageStartTime), time.Since(it.stateManager.GetStageStartTime(ctx)), it.stateManager.GetStageTriggerError(ctx))
@@ -458,10 +456,9 @@ func (it *inFlightTransactionStageController) ProduceLatestInFlightStageContext(
 				it.stateManager.ClearRunningStageContext(ctx)
 			}
 		}
-		stageErrored = rsc.StageErrored
 	}
 
-	if !stageErrored && it.stateManager.GetGasPriceObject() != nil {
+	if it.stateManager.GetGasPriceObject() != nil {
 		if it.stateManager.IsReadyToExit() {
 			// already has confirmed transaction so the cost to submit this transaction is zero
 			tOut.Cost = big.NewInt(0)
@@ -574,7 +571,7 @@ func (it *inFlightTransactionStageController) calculateNewGasPrice(ctx context.C
 
 func calculateGasRequiredForTransaction(ctx context.Context, gpo *ptxapi.PublicTxGasPricing, gasLimit uint64) (gasRequired *big.Int, err error) {
 	if gpo.GasPrice != nil {
-		log.L(ctx).Debugf("gas calculation using GasPrice (%v)", gpo.GasPrice)
+		log.L(ctx).Debugf("gas calculation using GasPrice (%+v)", gpo.GasPrice)
 		gasRequired = new(big.Int).Mul(gpo.GasPrice.Int(), new(big.Int).SetUint64(gasLimit))
 	} else if gpo.MaxFeePerGas != nil && gpo.MaxPriorityFeePerGas != nil {
 		// max-fee and max-priority-fee have been provided. We can only use
