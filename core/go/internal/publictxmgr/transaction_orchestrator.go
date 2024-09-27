@@ -150,8 +150,8 @@ type orchestrator struct {
 
 	// in flight txs array
 	maxInFlightTxs       int
-	InFlightTxs          []*InFlightTransactionStageController // a queue of all the in flight transactions
-	InFlightTxsMux       sync.Mutex
+	inFlightTxs          []*inFlightTransactionStageController // a queue of all the in flight transactions
+	inFlightTxsMux       sync.Mutex
 	orchestratorLoopDone chan struct{}
 	InFlightTxsStale     chan bool
 
@@ -209,7 +209,7 @@ func NewOrchestrator(
 
 func (oc *orchestrator) orchestratorLoop() {
 	ctx := log.WithLogField(oc.ctx, "role", "orchestrator-loop")
-	log.L(ctx).Infof("Orchestrator for signing address %s started pooling based on interval %s", oc.signingAddress, oc.orchestratorPollingInterval)
+	log.L(ctx).Infof("Orchestrator for signing address %s started polling based on interval %s", oc.signingAddress, oc.orchestratorPollingInterval)
 
 	defer close(oc.orchestratorLoopDone)
 
@@ -236,14 +236,24 @@ func (oc *orchestrator) orchestratorLoop() {
 
 }
 
+// Used in unit tests
+func (oc *orchestrator) getFirstInFlight() (ift *inFlightTransactionStageController) {
+	oc.inFlightTxsMux.Lock()
+	defer oc.inFlightTxsMux.Unlock()
+	if len(oc.inFlightTxs) > 0 {
+		ift = oc.inFlightTxs[0]
+	}
+	return
+}
+
 func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total int) {
 	pollStart := time.Now()
-	oc.InFlightTxsMux.Lock()
-	defer oc.InFlightTxsMux.Unlock()
+	oc.inFlightTxsMux.Lock()
+	defer oc.inFlightTxsMux.Unlock()
 	queueUpdated := false
 
-	oldInFlight := oc.InFlightTxs
-	oc.InFlightTxs = make([]*InFlightTransactionStageController, 0, len(oldInFlight))
+	oldInFlight := oc.inFlightTxs
+	oc.inFlightTxs = make([]*inFlightTransactionStageController, 0, len(oldInFlight))
 
 	stageCounts := make(map[string]int)
 	for _, stageName := range AllInFlightStages {
@@ -263,7 +273,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			log.L(ctx).Debugf("Orchestrator poll and process, marking %s as complete after: %s", p.stateManager.GetSignerNonce(), time.Since(p.stateManager.GetCreatedTime().Time()))
 		} else {
 			log.L(ctx).Debugf("Orchestrator poll and process, continuing tx %s after: %s", p.stateManager.GetSignerNonce(), time.Since(p.stateManager.GetCreatedTime().Time()))
-			oc.InFlightTxs = append(oc.InFlightTxs, p)
+			oc.inFlightTxs = append(oc.inFlightTxs, p)
 			txStage := p.stateManager.GetStage(ctx)
 			if string(txStage) == "" {
 				txStage = InFlightTxStageQueued
@@ -273,7 +283,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 	}
 
 	log.L(ctx).Debugf("Orchestrator poll and process, stage counts: %+v", stageCounts)
-	oldLen := len(oc.InFlightTxs)
+	oldLen := len(oc.inFlightTxs)
 	total = oldLen
 	// check and poll new transactions from the persistence if we can handle more
 	// If we are not at maximum, then query if there are more candidates now
@@ -291,7 +301,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 				Where(`"from" = ?`, oc.signingAddress).
 				Order("nonce").
 				Limit(spaces)
-			if len(oc.InFlightTxs) > 0 {
+			if len(oc.inFlightTxs) > 0 {
 				// We don't want to see any of the ones we already have in flight.
 				// The only way something leaves our in-flight list, is if we get a notification from the block indexer
 				// that it committed a DB transaction that removed it from our list.
@@ -307,14 +317,14 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 		})
 		if err != nil {
 			log.L(ctx).Infof("Orchestrator poll and process: context cancelled while retrying")
-			return -1, len(oc.InFlightTxs)
+			return -1, len(oc.inFlightTxs)
 		}
 
 		log.L(ctx).Debugf("Orchestrator poll and process: polled %d items, space: %d", len(additional), spaces)
 		for _, ptx := range additional {
 			queueUpdated = true
 			it := NewInFlightTransactionStageController(oc.pubTxManager, oc, ptx)
-			oc.InFlightTxs = append(oc.InFlightTxs, it)
+			oc.inFlightTxs = append(oc.inFlightTxs, it)
 			txStage := it.stateManager.GetStage(ctx)
 			if string(txStage) == "" {
 				txStage = InFlightTxStageQueued
@@ -322,18 +332,18 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 			stageCounts[string(txStage)] = stageCounts[string(txStage)] + 1
 			log.L(ctx).Debugf("Orchestrator added transaction with ID: %s", ptx.SignerNonce)
 		}
-		total = len(oc.InFlightTxs)
+		total = len(oc.inFlightTxs)
 		polled = total - oldLen
 		if polled > 0 {
-			log.L(ctx).Debugf("InFlight set updated len=%d head-nonce=%d tail-nonce=%d old-tail=%d", len(oc.InFlightTxs), oc.InFlightTxs[0].stateManager.GetNonce(), oc.InFlightTxs[total-1].stateManager.GetNonce(), highestInFlightNonce)
+			log.L(ctx).Debugf("InFlight set updated len=%d head-nonce=%d tail-nonce=%d old-tail=%d", len(oc.inFlightTxs), oc.inFlightTxs[0].stateManager.GetNonce(), oc.inFlightTxs[total-1].stateManager.GetNonce(), highestInFlightNonce)
 		}
-		oc.thMetrics.RecordInFlightTxQueueMetrics(ctx, stageCounts, oc.maxInFlightTxs-len(oc.InFlightTxs))
+		oc.thMetrics.RecordInFlightTxQueueMetrics(ctx, stageCounts, oc.maxInFlightTxs-len(oc.inFlightTxs))
 	}
 	log.L(ctx).Debugf("Orchestrator polling from DB took %s", time.Since(pollStart))
 	// now check and process each transaction
 
 	if total > 0 {
-		waitingForBalance, _ := oc.ProcessInFlightTransactions(ctx, oc.InFlightTxs)
+		waitingForBalance, _ := oc.ProcessInFlightTransactions(ctx, oc.inFlightTxs)
 		if queueUpdated {
 			oc.lastQueueUpdate = time.Now()
 		}
@@ -357,7 +367,7 @@ func (oc *orchestrator) pollAndProcess(ctx context.Context) (polled int, total i
 }
 
 // this function should only have one running instance at any given time
-func (oc *orchestrator) ProcessInFlightTransactions(ctx context.Context, its []*InFlightTransactionStageController) (waitingForBalance bool, err error) {
+func (oc *orchestrator) ProcessInFlightTransactions(ctx context.Context, its []*inFlightTransactionStageController) (waitingForBalance bool, err error) {
 	processStart := time.Now()
 	waitingForBalance = false
 	var addressAccount *AddressAccount
@@ -421,7 +431,7 @@ func (oc *orchestrator) ProcessInFlightTransactions(ctx context.Context, its []*
 	return waitingForBalance, nil
 }
 
-func (oc *orchestrator) Start(c context.Context) (done <-chan struct{}, err error) {
+func (oc *orchestrator) Start(ctx context.Context) (done <-chan struct{}, err error) {
 	oc.orchestratorLoopDone = make(chan struct{})
 	go oc.orchestratorLoop()
 	oc.MarkInFlightTxStale()

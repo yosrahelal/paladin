@@ -17,6 +17,7 @@ package publictxmgr
 
 import (
 	"context"
+	"database/sql/driver"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -24,20 +25,27 @@ import (
 	"time"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestIntentToAssignNonce(t *testing.T) {
 	ctx := context.Background()
 	callbackHasBeenCalled := false
-	nonceCache := newNonceCacheForTesting(t, func(ctx context.Context, signer string) (uint64, error) {
+	nonceCache := newNonceCacheForTesting(func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
 		callbackHasBeenCalled = true
 		return uint64(42), nil
 	})
-	defer nonceCache.stop()
-	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+	defer nonceCache.Stop()
+	signer := tktypes.EthAddress(tktypes.RandBytes(20))
+	intent, err := nonceCache.IntentToAssignNonce(ctx, signer)
 	require.NoError(t, err)
 	assert.True(t, callbackHasBeenCalled)
 	intent.Complete(ctx)
@@ -53,12 +61,13 @@ func TestIntentToAssignNonce(t *testing.T) {
 func TestAssignNonce(t *testing.T) {
 	ctx := context.Background()
 	callbackHasBeenCalled := false
-	nonceCache := newNonceCacheForTesting(t, func(ctx context.Context, signer string) (uint64, error) {
+	nonceCache := newNonceCacheForTesting(func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
 		callbackHasBeenCalled = true
 		return uint64(42), nil
 	})
-	defer nonceCache.stop()
-	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+	defer nonceCache.Stop()
+	signer := tktypes.EthAddress(tktypes.RandBytes(20))
+	intent, err := nonceCache.IntentToAssignNonce(ctx, signer)
 	require.NoError(t, err)
 	assert.True(t, callbackHasBeenCalled)
 
@@ -70,7 +79,7 @@ func TestAssignNonce(t *testing.T) {
 
 	callbackHasBeenCalled = false
 
-	intent, err = nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+	intent, err = nonceCache.IntentToAssignNonce(ctx, signer)
 	require.NoError(t, err)
 	assert.False(t, callbackHasBeenCalled)
 
@@ -91,19 +100,20 @@ func TestAssignNonce(t *testing.T) {
 func TestIntentToAssignNonceRollbackNoAssign(t *testing.T) {
 	ctx := context.Background()
 	callbackHasBeenCalled := false
-	nonceCache := newNonceCacheForTesting(t, func(ctx context.Context, signer string) (uint64, error) {
+	nonceCache := newNonceCacheForTesting(func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
 		callbackHasBeenCalled = true
 		return uint64(42), nil
 	})
-	defer nonceCache.stop()
-	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+	defer nonceCache.Stop()
+	signer := tktypes.EthAddress(tktypes.RandBytes(20))
+	intent, err := nonceCache.IntentToAssignNonce(ctx, signer)
 	require.NoError(t, err)
 	assert.True(t, callbackHasBeenCalled)
 	intent.Rollback(ctx)
 
 	//check that the nonce is still in memory and if assigned, we get the correct nonce
 	callbackHasBeenCalled = false
-	intent, err = nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+	intent, err = nonceCache.IntentToAssignNonce(ctx, signer)
 	require.NoError(t, err)
 	assert.False(t, callbackHasBeenCalled)
 
@@ -123,18 +133,19 @@ func TestIntentToAssignNonceRollbackNoAssign(t *testing.T) {
 func TestIntentToAssignNonceCompleteNoAssign(t *testing.T) {
 	ctx := context.Background()
 	callbackHasBeenCalled := false
-	nonceCache := newNonceCacheForTesting(t, func(ctx context.Context, signer string) (uint64, error) {
+	nonceCache := newNonceCacheForTesting(func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
 		callbackHasBeenCalled = true
 		return uint64(42), nil
 	})
-	defer nonceCache.stop()
-	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+	defer nonceCache.Stop()
+	signer := tktypes.EthAddress(tktypes.RandBytes(20))
+	intent, err := nonceCache.IntentToAssignNonce(ctx, signer)
 	require.NoError(t, err)
 	assert.True(t, callbackHasBeenCalled)
 	intent.Complete(ctx)
 
 	callbackHasBeenCalled = false
-	intent, err = nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+	intent, err = nonceCache.IntentToAssignNonce(ctx, signer)
 	require.NoError(t, err)
 	assert.False(t, callbackHasBeenCalled)
 
@@ -153,9 +164,10 @@ func TestIntentToAssignNonceCompleteNoAssign(t *testing.T) {
 
 func TestAssignNonceMultipleNonces(t *testing.T) {
 	ctx := context.Background()
-	nonceCache := newNonceCacheForTesting(t)
-	defer nonceCache.stop()
-	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+	nonceCache := newNonceCacheForTesting()
+	defer nonceCache.Stop()
+	signer := tktypes.EthAddress(tktypes.RandBytes(20))
+	intent, err := nonceCache.IntentToAssignNonce(ctx, signer)
 	require.NoError(t, err)
 
 	nextNonce, err := intent.AssignNextNonce(ctx)
@@ -171,7 +183,7 @@ func TestAssignNonceMultipleNonces(t *testing.T) {
 
 	intent.Complete(ctx)
 
-	intent, err = nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+	intent, err = nonceCache.IntentToAssignNonce(ctx, signer)
 	require.NoError(t, err)
 
 	nextNonce, err = intent.AssignNextNonce(ctx)
@@ -191,12 +203,13 @@ func TestAssignNonceMultipleNonces(t *testing.T) {
 func TestAssignNonceRollback(t *testing.T) {
 	ctx := context.Background()
 	callbackHasBeenCalled := false
-	nonceCache := newNonceCacheForTesting(t, func(ctx context.Context, signer string) (uint64, error) {
+	nonceCache := newNonceCacheForTesting(func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
 		callbackHasBeenCalled = true
 		return uint64(42), nil
 	})
-	defer nonceCache.stop()
-	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+	defer nonceCache.Stop()
+	signer := tktypes.EthAddress(tktypes.RandBytes(20))
+	intent, err := nonceCache.IntentToAssignNonce(ctx, signer)
 	require.NoError(t, err)
 	assert.True(t, callbackHasBeenCalled)
 
@@ -208,7 +221,7 @@ func TestAssignNonceRollback(t *testing.T) {
 
 	callbackHasBeenCalled = false
 
-	intent, err = nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+	intent, err = nonceCache.IntentToAssignNonce(ctx, signer)
 	require.NoError(t, err)
 	assert.False(t, callbackHasBeenCalled)
 
@@ -228,9 +241,10 @@ func TestAssignNonceRollback(t *testing.T) {
 
 func TestAssignNonceMultipleNoncesRollback(t *testing.T) {
 	ctx := context.Background()
-	nonceCache := newNonceCacheForTesting(t)
-	defer nonceCache.stop()
-	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+	nonceCache := newNonceCacheForTesting()
+	defer nonceCache.Stop()
+	signer := tktypes.EthAddress(tktypes.RandBytes(20))
+	intent, err := nonceCache.IntentToAssignNonce(ctx, signer)
 	require.NoError(t, err)
 
 	nextNonce, err := intent.AssignNextNonce(ctx)
@@ -246,7 +260,7 @@ func TestAssignNonceMultipleNoncesRollback(t *testing.T) {
 
 	intent.Rollback(ctx)
 
-	intent, err = nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+	intent, err = nonceCache.IntentToAssignNonce(ctx, signer)
 	require.NoError(t, err)
 
 	nextNonce, err = intent.AssignNextNonce(ctx)
@@ -265,9 +279,10 @@ func TestAssignNonceMultipleNoncesRollback(t *testing.T) {
 func TestAssignNonceAfterCompleteFail(t *testing.T) {
 	ctx := context.Background()
 
-	nonceCache := newNonceCacheForTesting(t)
-	defer nonceCache.stop()
-	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+	nonceCache := newNonceCacheForTesting()
+	defer nonceCache.Stop()
+	signer := tktypes.EthAddress(tktypes.RandBytes(20))
+	intent, err := nonceCache.IntentToAssignNonce(ctx, signer)
 	require.NoError(t, err)
 
 	nextNonce, err := intent.AssignNextNonce(ctx)
@@ -289,9 +304,10 @@ func TestAssignNonceAfterCompleteFail(t *testing.T) {
 
 func TestAssignNonceAfterRollbackFail(t *testing.T) {
 	ctx := context.Background()
-	nonceCache := newNonceCacheForTesting(t)
-	defer nonceCache.stop()
-	intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+	nonceCache := newNonceCacheForTesting()
+	defer nonceCache.Stop()
+	signer := tktypes.EthAddress(tktypes.RandBytes(20))
+	intent, err := nonceCache.IntentToAssignNonce(ctx, signer)
 	require.NoError(t, err)
 
 	nextNonce, err := intent.AssignNextNonce(ctx)
@@ -315,33 +331,34 @@ func TestAssignNonceMultiThreaded(t *testing.T) {
 	ctx := context.Background()
 	callbackCalled := 0
 	firstNonce := uint64(42)
-	nonceCache := newNonceCacheForTesting(t, func(ctx context.Context, signer string) (uint64, error) {
+	nonceCache := newNonceCacheForTesting(func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
 		callbackCalled++
 		return firstNonce, nil
 	})
-	itterations := 100
+	iterations := 100
 	threads := 100
 	rollbacks := 0
 	results := make([][]uint64, threads)
 	for i := 0; i < threads; i++ {
-		results[i] = make([]uint64, itterations)
+		results[i] = make([]uint64, iterations)
 	}
 
+	signer := tktypes.EthAddress(tktypes.RandBytes(20))
 	doneIt := make(chan struct{}, threads)
 	doIt := func(threadNumber int) {
-		for itteration := 0; itteration < itterations; itteration++ {
+		for iteration := 0; iteration < iterations; iteration++ {
 
-			intent, err := nonceCache.IntentToAssignNonce(ctx, "0xabcd")
+			intent, err := nonceCache.IntentToAssignNonce(ctx, signer)
 			require.NoError(t, err)
 			nextNonce, err := intent.AssignNextNonce(ctx)
 			require.NoError(t, err)
 			if rand.Intn(10) == 9 {
 				//rollback on average 10% of the time
-				results[threadNumber][itteration] = 1 // 1 is a special value meaning rolledback
+				results[threadNumber][iteration] = 1 // 1 is a special value meaning rolledback
 				rollbacks++
 				intent.Rollback(ctx)
 			} else {
-				results[threadNumber][itteration] = nextNonce
+				results[threadNumber][iteration] = nextNonce
 				intent.Complete(ctx)
 			}
 		}
@@ -360,23 +377,23 @@ func TestAssignNonceMultiThreaded(t *testing.T) {
 		}
 	}
 
-	highestNonce := firstNonce + (uint64(itterations) * uint64(threads)) - 1 - uint64(rollbacks)
+	highestNonce := firstNonce + (uint64(iterations) * uint64(threads)) - 1 - uint64(rollbacks)
 
 	//we should have a non gapless set of results and within a given thread, they should be in order
 	haveSeenFirstNonce := false
 	haveSeenHighestNonce := false
-	seen := make([]bool, itterations*threads)
+	seen := make([]bool, iterations*threads)
 	for threadNumber, threadResults := range results {
 		previousNonce := firstNonce - 1
-		for itterationNumber, itterationResult := range threadResults {
-			if itterationResult != 1 { //wasn't one of the random rollbacks
-				assert.Greater(t, itterationResult, previousNonce, "nonce %d out of order - not greater than %d on thread %d itteration %d ", itterationResult, previousNonce, threadNumber, itterationNumber)
-				assert.False(t, seen[itterationResult-firstNonce], "nonce %d used twice on thread %d itteration %d ", itterationResult, threadNumber, itterationNumber)
-				seen[itterationResult-firstNonce] = true
-				if itterationResult == firstNonce {
+		for iterationNumber, iterationResult := range threadResults {
+			if iterationResult != 1 { //wasn't one of the random rollbacks
+				assert.Greater(t, iterationResult, previousNonce, "nonce %d out of order - not greater than %d on thread %d iteration %d ", iterationResult, previousNonce, threadNumber, iterationNumber)
+				assert.False(t, seen[iterationResult-firstNonce], "nonce %d used twice on thread %d iteration %d ", iterationResult, threadNumber, iterationNumber)
+				seen[iterationResult-firstNonce] = true
+				if iterationResult == firstNonce {
 					haveSeenFirstNonce = true
 				}
-				if itterationResult == highestNonce {
+				if iterationResult == highestNonce {
 					haveSeenHighestNonce = true
 				}
 			}
@@ -404,19 +421,19 @@ func TestAssignNonceMultiThreadedMultiSigningAddresses(t *testing.T) {
 		numItterationsPerThread     int
 	}{
 		{
-			name:                        "10 signing addresses, 10 threads per signing address, 1000 itterations per thread",
+			name:                        "10 signing addresses, 10 threads per signing address, 1000 iterations per thread",
 			numSigningAddresses:         10,
 			numThreadsPerSigningAddress: 10,
 			numItterationsPerThread:     1000,
 		},
 		{
-			name:                        "2 signing addresses, 100 threads per signing address, 1000 itterations per thread",
+			name:                        "2 signing addresses, 100 threads per signing address, 1000 iterations per thread",
 			numSigningAddresses:         2,
 			numThreadsPerSigningAddress: 100,
 			numItterationsPerThread:     1000,
 		},
 		{
-			name:                        "100 signing addresses, 2 threads per signing address, 1000 itterations per thread",
+			name:                        "100 signing addresses, 2 threads per signing address, 1000 iterations per thread",
 			numSigningAddresses:         100,
 			numThreadsPerSigningAddress: 2,
 			numItterationsPerThread:     1000,
@@ -429,8 +446,8 @@ func TestAssignNonceMultiThreadedMultiSigningAddresses(t *testing.T) {
 			ctx := context.Background()
 			firstNonce := uint64(42)
 			//assert that that callback is only called once per signing address
-			callbackCalled := make(map[string]bool)
-			nonceCache := newNonceCacheForTesting(t, func(ctx context.Context, signer string) (uint64, error) {
+			callbackCalled := make(map[tktypes.EthAddress]bool)
+			nonceCache := newNonceCacheForTesting(func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
 				assert.False(t, callbackCalled[signer])
 				callbackCalled[signer] = true
 				return firstNonce, nil
@@ -441,9 +458,9 @@ func TestAssignNonceMultiThreadedMultiSigningAddresses(t *testing.T) {
 			numItterationsPerThread := tt.numItterationsPerThread
 
 			//generate a random hex string for each signing address
-			signingAddresses := make([]string, numSigningAddresses)
+			signingAddresses := make([]tktypes.EthAddress, numSigningAddresses)
 			for i := 0; i < numSigningAddresses; i++ {
-				signingAddresses[i] = tktypes.RandHex(32)
+				signingAddresses[i] = tktypes.EthAddress(tktypes.RandBytes(20))
 			}
 
 			// we are going to keep a count of how many rollbacks there were for each signing address
@@ -459,9 +476,9 @@ func TestAssignNonceMultiThreadedMultiSigningAddresses(t *testing.T) {
 				}
 			}
 
-			// inner function to run through a number of itterations on a single thread
-			runItterationsForThread := func(threadNumber int, signingAddressIndex int, signingAddress string) {
-				for itteration := 0; itteration < numItterationsPerThread; itteration++ {
+			// inner function to run through a number of iterations on a single thread
+			runItterationsForThread := func(threadNumber int, signingAddressIndex int, signingAddress tktypes.EthAddress) {
+				for iteration := 0; iteration < numItterationsPerThread; iteration++ {
 					intent, err := nonceCache.IntentToAssignNonce(ctx, signingAddress)
 					defer intent.Rollback(ctx)
 					require.NoError(t, err)
@@ -469,18 +486,18 @@ func TestAssignNonceMultiThreadedMultiSigningAddresses(t *testing.T) {
 					require.NoError(t, err)
 					if rand.Intn(10) == 9 {
 						//rollback on average 10% of the time
-						results[signingAddressIndex][threadNumber][itteration] = 1 // 1 is a special value meaning rolledback
+						results[signingAddressIndex][threadNumber][iteration] = 1 // 1 is a special value meaning rolledback
 						atomic.AddInt32(&rollbacks[signingAddressIndex], 1)
 						intent.Rollback(ctx)
 					} else {
-						results[signingAddressIndex][threadNumber][itteration] = nextNonce
+						results[signingAddressIndex][threadNumber][iteration] = nextNonce
 						intent.Complete(ctx)
 					}
 				}
 			}
 
 			//	function to start a number of threads for a given signing address and wait for each of them to complete
-			runThreadsForSigningAddress := func(signingAddressIndex int, signingAddress string) {
+			runThreadsForSigningAddress := func(signingAddressIndex int, signingAddress tktypes.EthAddress) {
 				var wg sync.WaitGroup
 				wg.Add(numThreadsPerSigningAddress)
 				for thread := 0; thread < numThreadsPerSigningAddress; thread++ {
@@ -514,18 +531,18 @@ func TestAssignNonceMultiThreadedMultiSigningAddresses(t *testing.T) {
 
 				for threadNumber, threadResults := range signingAddressResults {
 					previousNonce := firstNonce - 1
-					for itterationNumber, itterationResult := range threadResults {
-						if itterationResult != 1 { //wasn't one of the random rollbacks
-							assert.Greater(t, itterationResult, previousNonce, "nonce %d out of order - not greater than %d on signing address %d thread %d itteration %d ", itterationResult, signingAddressNumber, previousNonce, threadNumber, itterationNumber)
-							assert.False(t, seen[itterationResult-firstNonce], "nonce %d used twice on signing address %d thread %d itteration %d ", itterationResult, signingAddressNumber, threadNumber, itterationNumber)
-							seen[itterationResult-firstNonce] = true
-							if itterationResult == firstNonce {
+					for iterationNumber, iterationResult := range threadResults {
+						if iterationResult != 1 { //wasn't one of the random rollbacks
+							assert.Greater(t, iterationResult, previousNonce, "nonce %d out of order - not greater than %d on signing address %d thread %d iteration %d ", iterationResult, signingAddressNumber, previousNonce, threadNumber, iterationNumber)
+							assert.False(t, seen[iterationResult-firstNonce], "nonce %d used twice on signing address %d thread %d iteration %d ", iterationResult, signingAddressNumber, threadNumber, iterationNumber)
+							seen[iterationResult-firstNonce] = true
+							if iterationResult == firstNonce {
 								haveSeenFirstNonce = true
 							}
-							if itterationResult == highestNonce {
+							if iterationResult == highestNonce {
 								haveSeenHighestNonce = true
 							}
-							previousNonce = itterationResult
+							previousNonce = iterationResult
 						}
 					}
 				}
@@ -545,17 +562,87 @@ func TestAssignNonceMultiThreadedMultiSigningAddresses(t *testing.T) {
 	}
 }
 
-func newNonceCacheForTesting(t *testing.T, cbFuncs ...components.NextNonceCallback) *nonceCacheStruct {
-	cbFunc := func(ctx context.Context, signer string) (uint64, error) {
+func newNonceCacheForTesting(cbFuncs ...NextNonceCallback) *nonceCacheStruct {
+	cbFunc := func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
 		return uint64(42), nil
 	}
 	if len(cbFuncs) == 1 {
 		cbFunc = cbFuncs[0]
 	}
-	nonceCache := newNonceCache(100000*time.Millisecond, cbFunc)
+	nonceCache := newNonceCache(10*time.Second, cbFunc)
 	return nonceCache.(*nonceCacheStruct)
 }
 
-// func assertCacheCanBeReaped(t *testing.T, ctx context.Context, nonceCache *nonceCacheStruct) {
+func TestBatchDoubleSubmit(t *testing.T) {
+	ctx, ble, mocks, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *Config) {
+		conf.Manager.NonceCacheTimeout = confutil.P("0")
+	})
+	defer done()
 
-// }
+	signingKey := tktypes.EthAddress(tktypes.RandBytes(20))
+	mockKeyManager := mocks.keyManager.(*componentmocks.KeyManager)
+	mockKeyManager.On("ResolveKey", mock.Anything, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", signingKey.String(), nil)
+
+	mocks.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
+		Return(confutil.P(tktypes.HexUint64(1122334455)), nil).Once()
+
+	batch, err := ble.PrepareSubmissionBatch(ctx, []*components.PublicTxSubmission{
+		{
+			PublicTxInput: ptxapi.PublicTxInput{
+				From: "signer1",
+				PublicTxOptions: ptxapi.PublicTxOptions{
+					Gas:   confutil.P(tktypes.HexUint64(1223451)),
+					Value: tktypes.Uint64ToUint256(100),
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, batch.Rejected())
+	assert.Len(t, batch.Accepted(), 1)
+
+	mocks.db.ExpectBegin()
+	mocks.db.ExpectExec("INSERT.*public_txns").WillReturnResult(driver.ResultNoRows)
+	mocks.db.ExpectCommit()
+	mocks.db.ExpectBegin()
+	mocks.db.ExpectRollback()
+
+	err = ble.p.DB().Transaction(func(dbTX *gorm.DB) error {
+		return batch.Submit(ctx, dbTX)
+	})
+	require.NoError(t, err)
+	batch.Completed(ctx, true) // would normally be in a defer
+
+	err = ble.p.DB().Transaction(func(dbTX *gorm.DB) error {
+		return batch.Submit(ctx, dbTX)
+	})
+	assert.Regexp(t, "PD011933", err)
+
+	// Check that we reaped with nonce timeout zero
+	nc := ble.nonceManager.(*nonceCacheStruct)
+	nc.reaperLock.Lock()
+	defer nc.reaperLock.Unlock()
+	assert.Len(t, nc.nextNonceBySigner, 0)
+
+}
+
+func TestReapLoop(t *testing.T) {
+	nc := newNonceCache(10*time.Millisecond, func(ctx context.Context, signer tktypes.EthAddress) (uint64, error) {
+		return 0, nil
+	}).(*nonceCacheStruct)
+	defer nc.Stop()
+	ian, err := nc.IntentToAssignNonce(context.Background(), *tktypes.RandAddress())
+	require.NoError(t, err)
+	ian.Complete(context.Background())
+
+	for {
+		nc.reaperLock.Lock()
+		cacheLen := len(nc.nextNonceBySigner)
+		nc.reaperLock.Unlock()
+		if cacheLen == 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+}

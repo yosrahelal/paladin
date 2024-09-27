@@ -264,8 +264,8 @@ var (
 	MsgPrivTxMgrPublicTxFail          = ffe("PD011812", "Public transaction rejected")
 
 	// Public Transaction Manager PD0119XX
-	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s ")
-	MsgBalanceBelowMinimum             = ffe("PD011901", "Balance %s of fueling source address %s is below the configured minimum balance %s ")
+	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")
+	MsgBalanceBelowMinimum             = ffe("PD011901", "Balance %s of fueling source address %s is below the configured minimum balance %s")
 	MsgInvalidBigIntString             = ffe("PD011902", "Value of '%s' is not a valid bigInt string")
 	MsgMaxBelowMin                     = ffe("PD011903", "Value of '%s' is not a valid max, it is below the min value")
 	MsgMaxBelowMinThreshold            = ffe("PD011904", "Value of '%s' is not a valid max, it is below the min threshold")
@@ -288,6 +288,9 @@ var (
 	MsgMissingConfirmedTransaction     = ffe("PD011930", "Transaction %s with nonce smaller than the recorded confirmed nonce does not have an indexed transaction.")
 	MsgPublicTxHistoryInfo             = ffe("PD011931", "PubTx[INFO] from=%s nonce=%s subStatus=%s action=%s info=%s")
 	MsgPublicTxHistoryError            = ffe("PD011932", "PubTx[ERROR] from=%s nonce=%s subStatus=%s action=%s error=%s")
+	MsgPublicBatchCompleted            = ffe("PD011933", "Batch already completed")
+	MsgInvalidAutoFuelSource           = ffe("PD011934", "Invalid auto-fueling source '%s'")
+	MsgInvalidStateMissingTXHash       = ffe("PD011935", "Invalid state - missing transaction hash from previous sign stage")
 
 	// TransportManager module PD0120XX
 	MsgTransportInvalidMessage                = ffe("PD012000", "Invalid message")

@@ -20,28 +20,18 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
-	baseTypes "github.com/kaleido-io/paladin/core/internal/engine/enginespi"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 func TestRunningStageContext(t *testing.T) {
 	imtx := NewTestInMemoryTxState(t)
-	newSubStatus := PubTxSubStatusConfirmed
-	testRunningStageContext := NewRunningStageContext(context.Background(), baseTypes.InFlightTxStageConfirming, "", imtx)
+	newSubStatus := BaseTxSubStatusConfirmed
+	testRunningStageContext := NewRunningStageContext(context.Background(), InFlightTxStageSigning, "", imtx)
 	assert.Empty(t, testRunningStageContext.SubStatus)
 	assert.Nil(t, testRunningStageContext.StageOutputsToBePersisted)
 	testRunningStageContext.SetSubStatus(newSubStatus)
 	assert.Equal(t, newSubStatus, testRunningStageContext.SubStatus)
 	testRunningStageContext.SetNewPersistenceUpdateOutput()
 	assert.NotNil(t, testRunningStageContext.StageOutputsToBePersisted)
-
-	assert.Empty(t, testRunningStageContext.StageOutputsToBePersisted.HistoryUpdates)
 	testRunningStageContext.StageOutputsToBePersisted.UpdateSubStatus(BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr("info"), fftypes.JSONAnyPtr("error"))
-	assert.Equal(t, 1, len(testRunningStageContext.StageOutputsToBePersisted.HistoryUpdates))
-
-	mTS := componentmocks.NewPublicTransactionStore(t)
-	mTS.On("UpdateSubStatus", mock.Anything, mock.Anything, newSubStatus, BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr("info"), fftypes.JSONAnyPtr("error"), mock.Anything).Return(nil).Once()
-	_ = testRunningStageContext.StageOutputsToBePersisted.HistoryUpdates[0](mTS)
 }
