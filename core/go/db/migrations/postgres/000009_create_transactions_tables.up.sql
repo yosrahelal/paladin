@@ -73,7 +73,6 @@ CREATE TABLE contract_deployments (
   -- storing in separate tables allows an INSERT only model and avoids any worry about multiple concurent writes to the same row
   "deploy_transaction"               UUID            NOT NULL,
   "contract_address"                 VARCHAR         NOT NULL,
-  FOREIGN KEY ("deploy_transaction") REFERENCES transaction_receipts ("transaction") ON DELETE CASCADE,
   PRIMARY KEY ("contract_address")
 );
 CREATE INDEX contract_deployments_transaction ON contract_deployments ("deploy_transaction");
