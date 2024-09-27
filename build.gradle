@@ -130,6 +130,6 @@ task clean {
 task docker(type: Exec) {
     executable 'docker'
     args 'build'
-    args '-t', 'paladin'
+    args '-t', 'paladin:test'
     args '.'
 }
