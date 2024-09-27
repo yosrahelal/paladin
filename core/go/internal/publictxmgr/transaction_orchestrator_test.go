@@ -54,6 +54,7 @@ func newInflightTransaction(o *orchestrator, nonce uint64, txMods ...func(tx *DB
 		SignerNonce: fmt.Sprintf("%s:%d", o.signingAddress, 1),
 		From:        o.signingAddress,
 		Nonce:       nonce,
+		Gas:         2000,
 		Created:     tktypes.TimestampNow(),
 	}
 	for _, txMod := range txMods {

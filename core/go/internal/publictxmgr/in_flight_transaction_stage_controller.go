@@ -198,6 +198,7 @@ func (it *inFlightTransactionStageController) ProduceLatestInFlightStageContext(
 	defer it.transactionMux.Unlock()
 	// update the transaction orchestrator context
 	it.stateManager.SetOrchestratorContext(ctx, tIn)
+	stageErrored := false
 	if it.stateManager.GetRunningStageContext(ctx) != nil {
 		rsc := it.stateManager.GetRunningStageContext(ctx)
 		log.L(ctx).Debugf("ProduceLatestInFlightStageContext for tx %s, on stage: %s , current stage context lived: %s , stage lived: %s, last stage error: %+v", it.stateManager.GetSignerNonce(), it.stateManager.GetStage(ctx), time.Since(rsc.StageStartTime), time.Since(it.stateManager.GetStageStartTime(ctx)), it.stateManager.GetStageTriggerError(ctx))
@@ -457,9 +458,10 @@ func (it *inFlightTransactionStageController) ProduceLatestInFlightStageContext(
 				it.stateManager.ClearRunningStageContext(ctx)
 			}
 		}
+		stageErrored = rsc.StageErrored
 	}
 
-	if it.stateManager.GetGasPriceObject() != nil {
+	if !stageErrored && it.stateManager.GetGasPriceObject() != nil {
 		if it.stateManager.IsReadyToExit() {
 			// already has confirmed transaction so the cost to submit this transaction is zero
 			tOut.Cost = big.NewInt(0)
@@ -532,30 +534,42 @@ func (it *inFlightTransactionStageController) calculateNewGasPrice(ctx context.C
 		log.L(ctx).Debugf("First time assigning gas price to transaction with ID: %s, gas price object: %+v.", it.stateManager.GetSignerNonce(), newGpo)
 		return newGpo
 	}
+
+	// The change is not made here to InMemoryTx, but rather pushed to TxUpdates for persisting.
+	// So we need to make sure we don't edit the in-memory existing object by passing it to calculateNewGasPrice
+
 	if newGpo.GasPrice != nil && existingGpo.GasPrice != nil && existingGpo.GasPrice.Int().Cmp(newGpo.GasPrice.Int()) == 1 {
 		// existing gas price already above the new gas price, increase using percentage
 		newPercentage := big.NewInt(100)
 		newPercentage = newPercentage.Add(newPercentage, big.NewInt(int64(it.gasPriceIncreasePercent)))
-		existingGpo.GasPrice = (*tktypes.HexUint256)(existingGpo.GasPrice.Int().Mul(existingGpo.GasPrice.Int(), newPercentage))
-		existingGpo.GasPrice = (*tktypes.HexUint256)(existingGpo.GasPrice.Int().Div(existingGpo.GasPrice.Int(), big.NewInt(100)))
-		if it.gasPriceIncreaseMax != nil && existingGpo.GasPrice.Int().Cmp(it.gasPriceIncreaseMax) == 1 {
-			existingGpo.GasPrice = (*tktypes.HexUint256)(it.gasPriceIncreaseMax)
+		newGasPrice := new(big.Int).Mul(existingGpo.GasPrice.Int(), newPercentage)
+		newGasPrice = newGasPrice.Div(newGasPrice, big.NewInt(100))
+		if it.gasPriceIncreaseMax != nil && newGasPrice.Cmp(it.gasPriceIncreaseMax) == 1 {
+			newGasPrice.Set(it.gasPriceIncreaseMax)
+		}
+		newGpo = &ptxapi.PublicTxGasPricing{
+			GasPrice:             (*tktypes.HexUint256)(newGasPrice),
+			MaxFeePerGas:         existingGpo.MaxFeePerGas,         // copy over unchanged (although expected to be unset)
+			MaxPriorityFeePerGas: existingGpo.MaxPriorityFeePerGas, //   "
 		}
 	} else if newGpo.MaxFeePerGas != nil && existingGpo.MaxFeePerGas != nil && existingGpo.MaxFeePerGas.Int().Cmp(newGpo.MaxFeePerGas.Int()) == 1 {
 		// existing MaxFeePerGas already above the new MaxFeePerGas, increase using percentage
 		newPercentage := big.NewInt(100)
 
 		newPercentage = newPercentage.Add(newPercentage, big.NewInt(int64(it.gasPriceIncreasePercent)))
-		existingGpo.MaxFeePerGas = (*tktypes.HexUint256)(existingGpo.MaxFeePerGas.Int().Mul(existingGpo.MaxFeePerGas.Int(), newPercentage))
-		existingGpo.MaxFeePerGas = (*tktypes.HexUint256)(existingGpo.MaxFeePerGas.Int().Div(existingGpo.MaxFeePerGas.Int(), big.NewInt(100)))
-		if it.gasPriceIncreaseMax != nil && existingGpo.MaxFeePerGas.Int().Cmp(it.gasPriceIncreaseMax) == 1 {
-			existingGpo.MaxFeePerGas = (*tktypes.HexUint256)(it.gasPriceIncreaseMax)
+		newMaxFeePerGas := new(big.Int).Mul(existingGpo.MaxFeePerGas.Int(), newPercentage)
+		newMaxFeePerGas = newMaxFeePerGas.Div(newMaxFeePerGas, big.NewInt(100))
+		if it.gasPriceIncreaseMax != nil && newMaxFeePerGas.Cmp(it.gasPriceIncreaseMax) == 1 {
+			newMaxFeePerGas.Set(it.gasPriceIncreaseMax)
 		}
-	} else {
-		return newGpo
+		newGpo = &ptxapi.PublicTxGasPricing{
+			GasPrice:             existingGpo.GasPrice, // copy over unchanged (although expected to be unset)
+			MaxFeePerGas:         (*tktypes.HexUint256)(newMaxFeePerGas),
+			MaxPriorityFeePerGas: existingGpo.MaxPriorityFeePerGas,
+		}
 	}
 
-	return existingGpo
+	return newGpo
 }
 
 func calculateGasRequiredForTransaction(ctx context.Context, gpo *ptxapi.PublicTxGasPricing, gasLimit uint64) (gasRequired *big.Int, err error) {

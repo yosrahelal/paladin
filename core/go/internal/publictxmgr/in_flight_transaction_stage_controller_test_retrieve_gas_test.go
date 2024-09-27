@@ -17,28 +17,37 @@ package publictxmgr
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"testing"
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
+type mockStatusUpdater struct {
+	updateSubStatus func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error
+}
+
+func (msu *mockStatusUpdater) UpdateSubStatus(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info *fftypes.JSONAny, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
+	return msu.updateSubStatus(ctx, imtx, subStatus, action, info, err, actionOccurred)
+}
+
 func TestProduceLatestInFlightStageContextRetrieveGas(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, mTS := newInflightTransaction(o, 1)
+	it.testOnlyNoActionMode = true
+	mTS.statusUpdater = &mockStatusUpdater{
+		updateSubStatus: func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
+			return nil
+		},
+	}
 
 	// trigger retrieve gas price
-	mtx := it.stateManager.GetTx()
-	mtx.GasPrice = nil
-	mtx.TransactionHash = nil
-	mTS := testInFlightTransactionStateManagerWithMocks.mTS
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
@@ -53,10 +62,9 @@ func TestProduceLatestInFlightStageContextRetrieveGas(t *testing.T) {
 
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
 
-	retrievedGasPrice := &GasPriceObject{
-		GasPrice: big.NewInt(10),
+	retrievedGasPrice := &ptxapi.PublicTxGasPricing{
+		GasPrice: tktypes.Int64ToInt256(10),
 	}
-	retrievedGasPriceJSON, _ := json.Marshal(retrievedGasPrice)
 	// succeed retrieving gas price
 	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
 	it.stateManager.AddGasPriceOutput(ctx, retrievedGasPrice, nil)
@@ -67,12 +75,11 @@ func TestProduceLatestInFlightStageContextRetrieveGas(t *testing.T) {
 	assert.Empty(t, *tOut)
 	rsc = it.stateManager.GetRunningStageContext(ctx)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
-	assert.Equal(t, retrievedGasPrice.GasPrice, rsc.StageOutputsToBePersisted.TxUpdates.GasPrice.BigInt())
-	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.MaxFeePerGas)
-	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.MaxPriorityFeePerGas)
+	assert.Equal(t, retrievedGasPrice.GasPrice, rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.GasPrice)
+	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.MaxFeePerGas)
+	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.MaxPriorityFeePerGas)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), BaseTxSubStatusReceived, BaseTxActionRetrieveGasPrice, fftypes.JSONAnyPtr(string(retrievedGasPriceJSON)), (*fftypes.JSONAny)(nil), mock.Anything).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS.statusUpdater)
 	// failed retrieving gas price
 	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
 	it.stateManager.AddGasPriceOutput(ctx, nil, fmt.Errorf("gas retrieve error"))
@@ -86,7 +93,6 @@ func TestProduceLatestInFlightStageContextRetrieveGas(t *testing.T) {
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
 	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates)
 	assert.GreaterOrEqual(t, len(rsc.StageOutputsToBePersisted.StatusUpdates), 1)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), BaseTxSubStatusReceived, BaseTxActionRetrieveGasPrice, (*fftypes.JSONAny)(nil), fftypes.JSONAnyPtr(`{"error":"gas retrieve error"}`), mock.Anything).Return(nil).Maybe()
 
 	// persisting error waiting for persistence retry timeout
 	assert.False(t, rsc.StageErrored)
@@ -138,17 +144,22 @@ func TestProduceLatestInFlightStageContextRetrieveGas(t *testing.T) {
 }
 
 func TestProduceLatestInFlightStageContextRetrieveGasWithPersistence(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, mTS := newInflightTransaction(o, 1)
+	it.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
+	mSU := &mockStatusUpdater{
+		updateSubStatus: func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
+			return nil
+		},
+	}
+	mTS.statusUpdater = mSU
+
 	// succeed retrieving gas price
 	it.testOnlyNoActionMode = false
-	it.testOnlyNoEventMode = false
+	it.testOnlyNoEventMode = true
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
 	// trigger retrieve gas price
-	mtx := it.stateManager.GetTx()
-	mtx.GasPrice = nil
-	mtx.TransactionHash = nil
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
@@ -165,12 +176,11 @@ func TestProduceLatestInFlightStageContextRetrieveGasWithPersistence(t *testing.
 	assert.Equal(t, InFlightTxStageRetrieveGasPrice, rsc.Stage)
 
 	// persisted stage success and move on
-	mTS := testInFlightTransactionStateManagerWithMocks.mTS
-	called := make(chan bool)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), BaseTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
+	called := make(chan bool, 10)
+	mSU.updateSubStatus = func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
 		called <- true
-	}).Return(nil).Maybe()
-	mTS.On("UpdateTransaction", mock.Anything, mtx.ID.String(), mock.Anything).Return(nil).Once()
+		return nil
+	}
 	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
 		PreviousNonceCostUnknown: true,
@@ -182,15 +192,19 @@ func TestProduceLatestInFlightStageContextRetrieveGasWithPersistence(t *testing.
 }
 
 func TestProduceLatestInFlightStageContextRetrieveGasIncrements(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, mTS := newInflightTransaction(o, 1)
+	it.testOnlyNoActionMode = true
+	it.testOnlyNoEventMode = true
+	mSU := &mockStatusUpdater{
+		updateSubStatus: func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
+			return nil
+		},
+	}
+	mTS.statusUpdater = mSU
 
 	// trigger retrieve gas price
-	mtx := it.stateManager.GetTx()
-	mtx.GasPrice = nil
-	mtx.TransactionHash = nil
-	mTS := testInFlightTransactionStateManagerWithMocks.mTS
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
@@ -205,12 +219,18 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrements(t *testing.T) {
 
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
 
-	retrievedGasPrice := &GasPriceObject{
-		GasPrice: big.NewInt(10),
+	// Set old gas price in memory
+	mTS.InMemoryTxStateManager.(*inMemoryTxState).mtx.GasPricing = &ptxapi.PublicTxGasPricing{
+		GasPrice: tktypes.Int64ToInt256(20),
 	}
-	it.gasPriceIncreasePercent = big.NewInt(50) // increase 50 percent
 
-	mtx.GasPrice = ethtypes.NewHexInteger(big.NewInt(20))
+	// We will retrieve the new price of 10
+	retrievedGasPrice := &ptxapi.PublicTxGasPricing{
+		GasPrice: tktypes.Int64ToInt256(10),
+	}
+	it.gasPriceIncreasePercent = 50 // increase 50 percent
+
+	// Simulate the run of the stage
 	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
 	it.stateManager.AddGasPriceOutput(ctx, retrievedGasPrice, nil)
 	rsc.StageOutputsToBePersisted = nil
@@ -221,26 +241,26 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrements(t *testing.T) {
 	assert.Equal(t, "40000", tOut.Cost.String())
 	rsc = it.stateManager.GetRunningStageContext(ctx)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
-	assert.Equal(t, big.NewInt(30), rsc.StageOutputsToBePersisted.TxUpdates.GasPrice.BigInt())
+	assert.Equal(t, big.NewInt(30), rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.GasPrice.Int())
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
-	called := make(chan bool, 3)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), BaseTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
-		called <- true
-	}).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
-	<-called
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS.statusUpdater)
 }
 
 func TestProduceLatestInFlightStageContextRetrieveGasIncrementsReachedCap(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, mTS := newInflightTransaction(o, 1)
+	it.testOnlyNoActionMode = true
+	it.testOnlyNoEventMode = true
+	it.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
+	mSU := &mockStatusUpdater{
+		updateSubStatus: func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
+			return nil
+		},
+	}
+	mTS.statusUpdater = mSU
 
 	// trigger retrieve gas price
-	mtx := it.stateManager.GetTx()
-	mtx.GasPrice = nil
-	mtx.TransactionHash = nil
-	mTS := testInFlightTransactionStateManagerWithMocks.mTS
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
@@ -255,12 +275,16 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsReachedCap(t *tes
 
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
 
-	retrievedGasPrice := &GasPriceObject{
-		GasPrice: big.NewInt(10),
-	}
-	it.gasPriceIncreasePercent = big.NewInt(50) // increase 50 percent
+	mTS.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
+		GasPricing: &ptxapi.PublicTxGasPricing{
+			GasPrice: tktypes.Uint64ToUint256(20),
+		},
+	})
+	it.gasPriceIncreasePercent = 50 // increase 50 percent
 	// when reached the max gas price cap
-	mtx.GasPrice = ethtypes.NewHexInteger(big.NewInt(20))
+	retrievedGasPrice := &ptxapi.PublicTxGasPricing{
+		GasPrice: tktypes.Int64ToInt256(10),
+	}
 
 	it.gasPriceIncreaseMax = big.NewInt(26)
 	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
@@ -273,26 +297,26 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsReachedCap(t *tes
 	assert.Equal(t, "40000", tOut.Cost.String())
 	rsc = it.stateManager.GetRunningStageContext(ctx)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
-	assert.Equal(t, big.NewInt(26), rsc.StageOutputsToBePersisted.TxUpdates.GasPrice.BigInt())
+	assert.Equal(t, big.NewInt(26), rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.GasPrice.Int())
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
-	called := make(chan bool, 3)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), BaseTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
-		called <- true
-	}).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
-	<-called
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS.statusUpdater)
 }
 
 func TestProduceLatestInFlightStageContextRetrieveGasIncrementsRetrievedHigherPrice(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, mTS := newInflightTransaction(o, 1)
+	it.testOnlyNoActionMode = true
+	it.testOnlyNoEventMode = true
+	it.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
+	mSU := &mockStatusUpdater{
+		updateSubStatus: func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
+			return nil
+		},
+	}
+	mTS.statusUpdater = mSU
 
 	// trigger retrieve gas price
-	mtx := it.stateManager.GetTx()
-	mtx.GasPrice = nil
-	mtx.TransactionHash = nil
-	mTS := testInFlightTransactionStateManagerWithMocks.mTS
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
@@ -307,11 +331,15 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsRetrievedHigherPr
 
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
 
-	it.gasPriceIncreasePercent = big.NewInt(50) // increase 50 percent
+	it.gasPriceIncreasePercent = 50 // increase 50 percent
 	// retrieved price is higher
-	mtx.GasPrice = ethtypes.NewHexInteger(big.NewInt(20))
-	higherRetrievedPrice := &GasPriceObject{
-		GasPrice: big.NewInt(21),
+	mTS.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
+		GasPricing: &ptxapi.PublicTxGasPricing{
+			GasPrice: tktypes.Uint64ToUint256(20),
+		},
+	})
+	higherRetrievedPrice := &ptxapi.PublicTxGasPricing{
+		GasPrice: tktypes.Int64ToInt256(21),
 	}
 	it.gasPriceIncreaseMax = big.NewInt(26)
 	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
@@ -324,26 +352,26 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsRetrievedHigherPr
 	assert.Equal(t, "40000", tOut.Cost.String())
 	rsc = it.stateManager.GetRunningStageContext(ctx)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
-	assert.Equal(t, higherRetrievedPrice.GasPrice, rsc.StageOutputsToBePersisted.TxUpdates.GasPrice.BigInt())
+	assert.Equal(t, higherRetrievedPrice.GasPrice, rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.GasPrice)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
-	called := make(chan bool, 3)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), BaseTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
-		called <- true
-	}).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
-	<-called
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS.statusUpdater)
 }
 
 func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559HigherExistingPrice(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, mTS := newInflightTransaction(o, 1)
+	it.testOnlyNoActionMode = true
+	it.testOnlyNoEventMode = true
+	it.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
+	mSU := &mockStatusUpdater{
+		updateSubStatus: func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
+			return nil
+		},
+	}
+	mTS.statusUpdater = mSU
 
 	// trigger retrieve gas price
-	mtx := it.stateManager.GetTx()
-	mtx.GasPrice = nil
-	mtx.TransactionHash = nil
-	mTS := testInFlightTransactionStateManagerWithMocks.mTS
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
@@ -358,16 +386,20 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559HigherExis
 
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
 
-	it.gasPriceIncreasePercent = big.NewInt(50) // increase 50 percent
+	it.gasPriceIncreasePercent = 50 // increase 50 percent
 	// EIP-1559 gas price
-	retrievedGasPriceEIP1559 := &GasPriceObject{
-		MaxFeePerGas:         big.NewInt(10),
-		MaxPriorityFeePerGas: big.NewInt(1),
+	retrievedGasPriceEIP1559 := &ptxapi.PublicTxGasPricing{
+		MaxFeePerGas:         tktypes.Int64ToInt256(10),
+		MaxPriorityFeePerGas: tktypes.Int64ToInt256(1),
 	}
 	it.gasPriceIncreaseMax = nil
 	// the highest gas price used is higher than the retrieved gas price
-	mtx.MaxFeePerGas = tktypes.Uint64ToUint256(20)
-	mtx.MaxPriorityFeePerGas = tktypes.Uint64ToUint256(1)
+	mTS.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
+		GasPricing: &ptxapi.PublicTxGasPricing{
+			MaxFeePerGas:         tktypes.Uint64ToUint256(20),
+			MaxPriorityFeePerGas: tktypes.Uint64ToUint256(1),
+		},
+	})
 
 	it.gasPriceClient = NewTestFixedPriceGasPriceClientEIP1559(t)
 	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
@@ -380,26 +412,28 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559HigherExis
 	assert.Equal(t, "40000", tOut.Cost.String())
 	rsc = it.stateManager.GetRunningStageContext(ctx)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
-	assert.Equal(t, big.NewInt(30), rsc.StageOutputsToBePersisted.TxUpdates.MaxFeePerGas.BigInt())
-	assert.Equal(t, big.NewInt(1), rsc.StageOutputsToBePersisted.TxUpdates.MaxPriorityFeePerGas.BigInt())
-	assert.GreaterOrEqual(t, len(rsc.StageOutputsToBePersisted.StatusUpdates), 1)
-	called := make(chan bool, 3)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), BaseTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
-		called <- true
-	}).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
-	<-called
+	assert.Equal(t, big.NewInt(30), rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.MaxFeePerGas.Int())
+	assert.Equal(t, big.NewInt(1), rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.MaxPriorityFeePerGas.Int())
+	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS.statusUpdater)
+
 }
+
 func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559MismatchFormat(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, mTS := newInflightTransaction(o, 1)
+	it.testOnlyNoActionMode = true
+	it.testOnlyNoEventMode = true
+	it.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
+	mSU := &mockStatusUpdater{
+		updateSubStatus: func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
+			return nil
+		},
+	}
+	mTS.statusUpdater = mSU
 
 	// trigger retrieve gas price
-	mtx := it.stateManager.GetTx()
-	mtx.GasPrice = nil
-	mtx.TransactionHash = nil
-	mTS := testInFlightTransactionStateManagerWithMocks.mTS
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
@@ -414,13 +448,17 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559MismatchFo
 
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
 
-	retrievedGasPrice := &GasPriceObject{
-		GasPrice: big.NewInt(10),
+	retrievedGasPrice := &ptxapi.PublicTxGasPricing{
+		GasPrice: tktypes.Int64ToInt256(10),
 	}
-	it.gasPriceIncreasePercent = big.NewInt(50) // increase 50 percent
+	it.gasPriceIncreasePercent = 50 // increase 50 percent
 	// when the old format doesn't match the new format, return the new gas price
-	mtx.MaxFeePerGas = tktypes.Uint64ToUint256(20)
-	mtx.MaxPriorityFeePerGas = tktypes.Uint64ToUint256(1)
+	mTS.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
+		GasPricing: &ptxapi.PublicTxGasPricing{
+			MaxFeePerGas:         tktypes.Uint64ToUint256(20),
+			MaxPriorityFeePerGas: tktypes.Uint64ToUint256(1),
+		},
+	})
 
 	it.gasPriceIncreaseMax = big.NewInt(26)
 	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
@@ -433,25 +471,26 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559MismatchFo
 	assert.Equal(t, "40000", tOut.Cost.String())
 	rsc = it.stateManager.GetRunningStageContext(ctx)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
-	assert.Equal(t, retrievedGasPrice.GasPrice, rsc.StageOutputsToBePersisted.TxUpdates.GasPrice.BigInt())
+	assert.Equal(t, retrievedGasPrice.GasPrice, rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.GasPrice)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
-	called := make(chan bool, 3)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), BaseTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
-		called <- true
-	}).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
-	<-called
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS.statusUpdater)
 }
+
 func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559ReachedCap(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, mTS := newInflightTransaction(o, 1)
+	it.testOnlyNoActionMode = true
+	it.testOnlyNoEventMode = true
+	it.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
+	mSU := &mockStatusUpdater{
+		updateSubStatus: func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
+			return nil
+		},
+	}
+	mTS.statusUpdater = mSU
 
 	// trigger retrieve gas price
-	mtx := it.stateManager.GetTx()
-	mtx.GasPrice = nil
-	mtx.TransactionHash = nil
-	mTS := testInFlightTransactionStateManagerWithMocks.mTS
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
@@ -464,19 +503,23 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559ReachedCap
 	assert.Equal(t, InFlightTxStageRetrieveGasPrice, rsc.Stage)
 	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
 
-	retrievedGasPrice := &GasPriceObject{
-		GasPrice: big.NewInt(10),
+	retrievedGasPrice := &ptxapi.PublicTxGasPricing{
+		GasPrice: tktypes.Uint64ToUint256(10),
 	}
 
-	retrievedGasPriceEIP1559 := &GasPriceObject{
-		MaxFeePerGas:         big.NewInt(10),
-		MaxPriorityFeePerGas: big.NewInt(1),
+	retrievedGasPriceEIP1559 := &ptxapi.PublicTxGasPricing{
+		MaxFeePerGas:         tktypes.Uint64ToUint256(10),
+		MaxPriorityFeePerGas: tktypes.Uint64ToUint256(1),
 	}
 	it.gasPriceClient = NewTestFixedPriceGasPriceClientEIP1559(t)
-	it.gasPriceIncreasePercent = big.NewInt(50) // increase 50 percent
+	it.gasPriceIncreasePercent = 50 // increase 50 percent
 	// when the old format doesn't match the new format, return the new gas price
-	mtx.MaxFeePerGas = tktypes.Uint64ToUint256(20)
-	mtx.MaxPriorityFeePerGas = tktypes.Uint64ToUint256(1)
+	mTS.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
+		GasPricing: &ptxapi.PublicTxGasPricing{
+			MaxFeePerGas:         tktypes.Uint64ToUint256(20),
+			MaxPriorityFeePerGas: tktypes.Uint64ToUint256(1),
+		},
+	})
 
 	it.gasPriceIncreaseMax = big.NewInt(26)
 	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
@@ -489,21 +532,20 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559ReachedCap
 	assert.Equal(t, "40000", tOut.Cost.String())
 	rsc = it.stateManager.GetRunningStageContext(ctx)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
-	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.MaxFeePerGas)
-	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.MaxPriorityFeePerGas)
-	assert.Equal(t, retrievedGasPrice.GasPrice, rsc.StageOutputsToBePersisted.TxUpdates.GasPrice.BigInt())
+	assert.Equal(t, retrievedGasPrice.GasPrice, rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.GasPrice)
+	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.MaxFeePerGas)
+	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.MaxPriorityFeePerGas)
+	assert.Equal(t, retrievedGasPrice.GasPrice, rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.GasPrice)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
-
-	called := make(chan bool, 3)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), BaseTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
-		called <- true
-	}).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
-	<-called
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS.statusUpdater)
 
 	// when reached the cap
-	mtx.MaxFeePerGas = tktypes.Uint64ToUint256(20)
-	mtx.MaxPriorityFeePerGas = tktypes.Uint64ToUint256(1)
+	mTS.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
+		GasPricing: &ptxapi.PublicTxGasPricing{
+			MaxFeePerGas:         tktypes.Uint64ToUint256(20),
+			MaxPriorityFeePerGas: tktypes.Uint64ToUint256(1),
+		},
+	})
 
 	it.gasPriceIncreaseMax = big.NewInt(26)
 	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
@@ -517,27 +559,29 @@ func TestProduceLatestInFlightStageContextRetrieveGasIncrementsEIP1559ReachedCap
 	assert.Equal(t, "40000", tOut.Cost.String())
 	rsc = it.stateManager.GetRunningStageContext(ctx)
 	assert.NotNil(t, rsc.StageOutputsToBePersisted)
-	assert.Equal(t, big.NewInt(26), rsc.StageOutputsToBePersisted.TxUpdates.MaxFeePerGas.BigInt())
-	assert.Equal(t, big.NewInt(1), rsc.StageOutputsToBePersisted.TxUpdates.MaxPriorityFeePerGas.BigInt())
-	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.GasPrice)
+	assert.Equal(t, big.NewInt(26), rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.MaxFeePerGas.Int())
+	assert.Equal(t, big.NewInt(1), rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.MaxPriorityFeePerGas.Int())
+	assert.Nil(t, rsc.StageOutputsToBePersisted.TxUpdates.GasPricing.GasPrice)
 	assert.Equal(t, 1, len(rsc.StageOutputsToBePersisted.StatusUpdates))
-	called = make(chan bool, 3)
-	mTS.On("UpdateSubStatus", mock.Anything, mtx.ID.String(), BaseTxSubStatusReceived, BaseTxActionRetrieveGasPrice, mock.Anything, (*fftypes.JSONAny)(nil), mock.Anything).Run(func(args mock.Arguments) {
-		called <- true
-	}).Return(nil).Maybe()
-	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS)
-	<-called
+	_ = rsc.StageOutputsToBePersisted.StatusUpdates[0](mTS.statusUpdater)
+
 }
 
 func TestProduceLatestInFlightStageContextRetrieveGasPanic(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, mTS := newInflightTransaction(o, 1)
+	it.testOnlyNoActionMode = true
+	it.testOnlyNoEventMode = true
+	it.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
+	mSU := &mockStatusUpdater{
+		updateSubStatus: func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
+			return nil
+		},
+	}
+	mTS.statusUpdater = mSU
 
 	// trigger retrieve gas price
-	mtx := it.stateManager.GetTx()
-	mtx.GasPrice = nil
-	mtx.TransactionHash = nil
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,

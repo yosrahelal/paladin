@@ -16,66 +16,18 @@
 package publictxmgr
 
 import (
-	"context"
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/hyperledger/firefly-common/pkg/config"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type testInFlightTransactionWithMocksAndConf struct {
-	it   *InFlightTransactionStageController
-	mBI  *componentmocks.BlockIndexer
-	mEC  *componentmocks.EthClient
-	mEN  *componentmocks.PublicTxEventNotifier
-	mTS  *componentmocks.PublicTransactionStore
-	mKM  *componentmocks.KeyManager
-	mBM  BalanceManager
-	conf config.Section
-}
-
-func NewTestInFlightTransactionWithMocks(t *testing.T) *testInFlightTransactionWithMocksAndConf {
-	ctx := context.Background()
-	imtxs := NewTestInMemoryTxState(t)
-	ble, conf := NewTestPublicTxManager(t)
-	mockBalanceManager, mEC, _ := NewTestBalanceManager(context.Background(), t)
-	ble.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mBI := componentmocks.NewBlockIndexer(t)
-	mTS := componentmocks.NewPublicTransactionStore(t)
-	mEN := componentmocks.NewPublicTxEventNotifier(t)
-	mKM := componentmocks.NewKeyManager(t)
-	ble.Init(ctx, mEC, mKM, mTS, mEN, mBI)
-	ble.ctx = ctx
-	ble.balanceManager = mockBalanceManager
-	orchestratorConf := conf.SubSection(OrchestratorSection)
-	oc := NewOrchestrator(ble, imtxs.GetFrom(), orchestratorConf)
-	it := NewInFlightTransactionStageController(ble, oc, imtxs.GetTx())
-	it.timeLineLoggingEnabled = true
-	it.testOnlyNoActionMode = true
-	return &testInFlightTransactionWithMocksAndConf{
-		it:   it,
-		mBI:  mBI,
-		mEC:  mEC,
-		mEN:  mEN,
-		mTS:  mTS,
-		mKM:  mKM,
-		mBM:  mockBalanceManager,
-		conf: conf,
-	}
-}
-
 func TestProduceLatestInFlightStageContextTriggerStageError(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
-	// trigger retrieve gas price
-	mtx := it.stateManager.GetTx()
-	mtx.GasPrice = nil
-	mtx.TransactionHash = nil
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, _ := newInflightTransaction(o, 1)
 
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
@@ -101,16 +53,13 @@ func TestProduceLatestInFlightStageContextTriggerStageError(t *testing.T) {
 }
 
 func TestProduceLatestInFlightStageContextStatusChange(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, ifts := newInflightTransaction(o, 1)
 
 	// trigger status change
-	mtx := it.stateManager.GetTx()
-	mtx.GasPrice = nil
-	mtx.TransactionHash = nil
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
-	suspended := PubTxStatusSuspended
+	suspended := InFlightStatusSuspending
 	it.newStatus = &suspended
 	iftxms := it.stateManager.(*inFlightTransactionState)
 	iftxms.runningStageContext = NewRunningStageContext(ctx, InFlightTxStageStatusUpdate, BaseTxSubStatusReceived, iftxms)
@@ -143,7 +92,9 @@ func TestProduceLatestInFlightStageContextStatusChange(t *testing.T) {
 	it.persistenceRetryTimeout = 5 * time.Second
 
 	// persisted stage success and move on
-	mtx.Status = suspended
+	ifts.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
+		InFlightStatus: &suspended,
+	})
 	inFlightStageMananger.bufferedStageOutputs = make([]*StageOutput, 0)
 	it.stateManager.AddPersistenceOutput(ctx, InFlightTxStageStatusUpdate, time.Now(), nil)
 	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
@@ -157,14 +108,12 @@ func TestProduceLatestInFlightStageContextStatusChange(t *testing.T) {
 }
 
 func TestProduceLatestInFlightStageContextTriggerStatusUpdate(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, _ := newInflightTransaction(o, 1)
 	it.testOnlyNoActionMode = false
 	it.testOnlyNoEventMode = false
 	// trigger signing
-	mtx := it.stateManager.GetTx()
-	mtx.TransactionHash = nil
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
 	err := it.TriggerStatusUpdate(ctx)
 	require.NoError(t, err)
@@ -177,16 +126,13 @@ func TestProduceLatestInFlightStageContextTriggerStatusUpdate(t *testing.T) {
 }
 
 func TestProduceLatestInFlightStageContextStatusUpdatePanic(t *testing.T) {
-	ctx := context.Background()
-	testInFlightTransactionStateManagerWithMocks := NewTestInFlightTransactionWithMocks(t)
-	it := testInFlightTransactionStateManagerWithMocks.it
+	ctx, o, _, done := newTestOrchestrator(t)
+	defer done()
+	it, _ := newInflightTransaction(o, 1)
 
 	// trigger status change
-	mtx := it.stateManager.GetTx()
-	mtx.GasPrice = nil
-	mtx.TransactionHash = nil
 	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
-	suspend := PubTxStatusSuspended
+	suspend := InFlightStatusSuspending
 	it.newStatus = &suspend
 	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
 		AvailableToSpend:         nil,
