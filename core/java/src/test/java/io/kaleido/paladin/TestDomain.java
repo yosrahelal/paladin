@@ -15,7 +15,7 @@
 
 package io.kaleido.paladin;
 
-import github.com.kaleido_io.paladin.toolkit.ToDomain;
+import io.kaleido.paladin.toolkit.ToDomain;
 import io.kaleido.paladin.toolkit.DomainBase;
 import io.kaleido.paladin.toolkit.DomainInstance;
 

@@ -24,10 +24,8 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
-	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	internalZeto "github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
@@ -39,8 +37,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v3"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 var (
@@ -140,27 +136,6 @@ func newTestbed(t *testing.T, domains map[string]*testbed.TestbedDomain) (contex
 	return done, tb, rpc
 }
 
-type testSqlProvider struct {
-	db *gorm.DB
-}
-
-func (s *testSqlProvider) DB() *gorm.DB {
-	return s.db
-}
-
-func (s *testSqlProvider) Close() {}
-
-func newTestPersistence(t *testing.T) (persistence.Persistence, *gorm.DB) {
-	dsn := "host=localhost user=postgres password=my-secret dbname=postgres port=5432 sslmode=disable"
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	assert.NoError(t, err)
-	err = db.Table(core.TreeRootsTable).AutoMigrate(&core.SMTRoot{})
-	assert.NoError(t, err)
-
-	provider := &testSqlProvider{db: db}
-	return provider, db
-}
-
 type zetoDomainTestSuite struct {
 	suite.Suite
 	deployedContracts *zetoDomainContracts
@@ -189,16 +164,15 @@ func (s *zetoDomainTestSuite) SetupSuite() {
 
 func (s *zetoDomainTestSuite) TearDownSuite() {
 	s.done()
-	// os.Remove(s.dbfile.Name())
 }
 
-// func (s *zetoDomainTestSuite) TestZeto_Anon() {
-// 	s.testZetoFungible(s.T(), "Zeto_Anon")
-// }
+func (s *zetoDomainTestSuite) TestZeto_Anon() {
+	s.testZetoFungible(s.T(), "Zeto_Anon")
+}
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
-// 	s.testZetoFungible(s.T(), "Zeto_AnonEnc")
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
+	s.testZetoFungible(s.T(), "Zeto_AnonEnc")
+}
 
 func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
 	s.testZetoFungible(s.T(), "Zeto_AnonNullifier")

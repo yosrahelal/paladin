@@ -1,31 +1,33 @@
+BEGIN;
+
 CREATE TABLE abis (
-  "hash"                      TEXT            NOT NULL,
-  "abi"                       TEXT            NOT NULL,
+  "hash"                      VARCHAR         NOT NULL,
+  "abi"                       VARCHAR         NOT NULL,
   "created"                   BIGINT          NOT NULL,
   PRIMARY KEY ("hash")
 );
 CREATE INDEX abis_created ON abis("created");
 
 CREATE TABLE abi_errors (
-  "selector"                  TEXT            NOT NULL,
-  "abi_hash"                  TEXT            NOT NULL,
-  "full_hash"                 TEXT            NOT NULL,
-  "definition"                TEXT            NOT NULL,
+  "selector"                  VARCHAR         NOT NULL,
+  "full_hash"                 VARCHAR         NOT NULL,
+  "abi_hash"                  VARCHAR         NOT NULL,
+  "definition"                VARCHAR         NOT NULL,
   PRIMARY KEY ("abi_hash", "selector"),
   FOREIGN KEY ("abi_hash") REFERENCES abis ("hash") ON DELETE CASCADE
 );
 
 CREATE TABLE transactions (
   "id"                        UUID            NOT NULL,
-  "idempotency_key"           TEXT,   
+  "idempotency_key"           VARCHAR,
   "created"                   BIGINT          NOT NULL,
-  "type"                      TEXT            NOT NULL,
-  "abi_ref"                   TEXT            NOT NULL,
-  "function"                  TEXT,   
-  "domain"                    TEXT,   
-  "from"                      TEXT            NOT NULL,
-  "to"                        TEXT,   
-  "data"                      TEXT,   
+  "type"                      VARCHAR         NOT NULL,
+  "abi_ref"                   VARCHAR         NOT NULL,
+  "function"                  VARCHAR,
+  "domain"                    VARCHAR,
+  "from"                      VARCHAR         NOT NULL,
+  "to"                        VARCHAR,
+  "data"                      VARCHAR,
   PRIMARY KEY ("id"),
   FOREIGN KEY ("abi_ref") REFERENCES abis ("hash") ON DELETE CASCADE
 );
@@ -34,10 +36,10 @@ CREATE INDEX transactions_domain ON transactions("domain");
 CREATE INDEX transactions_idempotency_key ON transactions("idempotency_key");
 
 CREATE TABLE public_txn_bindings (
-  "sequence"                  INTEGER         PRIMARY KEY AUTOINCREMENT, -- allows us to use insertion order to order lists
-  "signer_nonce"              TEXT            NOT NULL,
+  "signer_nonce"              VARCHAR         NOT NULL,
   "transaction"               UUID            NOT NULL,
-  "tx_type"                   TEXT            NOT NULL,
+  "tx_type"                   VARCHAR         NOT NULL,
+  PRIMARY KEY ("signer_nonce"), -- a binding is not mandatory for a public TXN, but it is singular (see #210)
   FOREIGN KEY ("transaction") REFERENCES transactions ("id") ON DELETE CASCADE,
   FOREIGN KEY ("signer_nonce") REFERENCES public_txns ("signer_nonce") ON DELETE CASCADE
 );
@@ -56,11 +58,13 @@ CREATE TABLE transaction_receipts (
   "transaction"               UUID            NOT NULL,
   "indexed"                   BIGINT          NOT NULL,
   "success"                   BOOLEAN         NOT NULL,
-  "failure_message"           TEXT,
-  "revert_data"               TEXT,
-  "tx_hash"                   TEXT,
+  "failure_message"           VARCHAR,
+  "revert_data"               VARCHAR,
+  "tx_hash"                   VARCHAR,
   "block_number"              BIGINT,
   PRIMARY KEY ("transaction"),
-  FOREIGN KEY ("transaction") REFERENCES transaction_receipts ("id") ON DELETE CASCADE
+  FOREIGN KEY ("transaction") REFERENCES transactions ("id") ON DELETE CASCADE
 );
-CREATE INDEX transaction_receipts_tx_hash ON transactions("tx_hash");
+CREATE INDEX transaction_receipts_tx_hash ON transaction_receipts ("tx_hash");
+
+COMMIT;

@@ -55,8 +55,9 @@ dependencies {
     implementation 'io.netty:netty-all:4.1+'
     implementation 'org.apache.logging.log4j:log4j-core:2.23+'
 
-    testImplementation project(path: ":core:go", configuration: "libcore")
     testImplementation project(path: ":solidity", configuration: "compiledContracts")
+    testImplementation project(path: ":core:go", configuration: "libcore")
+    testImplementation project(path: ":core:java")
 
     testImplementation platform('org.junit:junit-bom:5.9+')
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -75,5 +76,5 @@ dependencies {
     implementation 'io.tmio:tuweni-bytes:2.4.2'
     implementation 'io.tmio:tuweni-units:2.4.2'
 
-    implementation project(path: ":core:java")
+    implementation project(path: ":toolkit_java")
 }

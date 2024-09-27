@@ -98,7 +98,7 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 
 		p.orchestrators[contractAddr.String()] =
 			NewOrchestrator(
-				ctx, p.nodeID,
+				p.ctx, p.nodeID,
 				contractAddr, /** TODO: fill in the real plug-ins*/
 				&OrchestratorConfig{},
 				p.components,

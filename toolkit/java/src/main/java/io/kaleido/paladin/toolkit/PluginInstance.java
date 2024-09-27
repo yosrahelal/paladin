@@ -15,8 +15,8 @@
 
 package io.kaleido.paladin.toolkit;
 
-import github.com.kaleido_io.paladin.toolkit.PluginControllerGrpc;
-import github.com.kaleido_io.paladin.toolkit.Service;
+import io.kaleido.paladin.toolkit.PluginControllerGrpc;
+import io.kaleido.paladin.toolkit.Service;
 import io.grpc.Context;
 import io.grpc.ManagedChannel;
 import io.grpc.stub.StreamObserver;

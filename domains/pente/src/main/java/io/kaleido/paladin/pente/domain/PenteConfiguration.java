@@ -18,7 +18,7 @@ package io.kaleido.paladin.pente.domain;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
-import github.com.kaleido_io.paladin.toolkit.ToDomain;
+import io.kaleido.paladin.toolkit.ToDomain;
 import io.kaleido.paladin.toolkit.JsonABI;
 import io.kaleido.paladin.toolkit.JsonHex;
 import io.kaleido.paladin.toolkit.JsonHex.Address;
