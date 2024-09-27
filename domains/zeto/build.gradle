@@ -118,7 +118,7 @@ task copySolidityForTest(type: Copy, dependsOn: [extractZetoArtifacts, ":solidit
     includeEmptyDirs = false
 }
 
-task testE2E(type: Exec) {
+task testE2E(type: Exec, dependsOn: [":core:go:makeMocks"]) {
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
     inputs.files(goFiles)
@@ -145,7 +145,7 @@ task testE2E(type: Exec) {
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
-task test(type: Exec) {
+task test(type: Exec, dependsOn: [":core:go:makeMocks"]) {
 
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)

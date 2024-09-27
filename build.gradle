@@ -126,3 +126,10 @@ defaultTasks 'build'
 task clean {
     delete "${buildDir}"
 }
+
+task docker(type: Exec) {
+    executable 'docker'
+    args 'build'
+    args '-t', 'paladin'
+    args '.'
+}
