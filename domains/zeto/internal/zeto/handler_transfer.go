@@ -22,6 +22,7 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/iden3/go-iden3-crypto/babyjub"
@@ -260,68 +261,16 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 	}
 
 	var extras []byte
-	if circuitId == "anon_nullifier" || circuitId == "anon_enc_nullifier" {
-		smtName := smt.MerkleTreeName(tokenName, contractAddress)
-		_, mt, err := smt.New(h.zeto.Callbacks, smtName, contractAddress, h.zeto.merkleTreeRootSchema.Id, h.zeto.merkleTreeNodeSchema.Id)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create new smt object. %s", err)
-		}
-		// verify that the input UTXOs have been indexed by the Merkle tree DB
-		// and generate a merkle proof for each
-		var indexes []*big.Int
-		for _, coin := range inputCoins {
-			pubKey, err := coin.OwnerKey.Decompress()
-			if err != nil {
-				return nil, fmt.Errorf("failed to decompress owner key. %s", err)
-			}
-			idx := node.NewFungible(coin.Amount.BigInt(), pubKey, coin.Salt.BigInt())
-			leaf, err := node.NewLeafNode(idx)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create new leaf node. %s", err)
-			}
-			n, err := mt.GetNode(leaf.Ref())
-			if err != nil {
-				// TODO: deal with when the node is not found in the DB tables for the tree
-				// e.g because the transaction event hasn't been processed yet
-				return nil, fmt.Errorf("failed to query the smt DB for leaf node (index=%s). %s", leaf.Index().Hex(), err)
-			}
-			if n.Index().BigInt().Cmp(coin.Hash.BigInt()) != 0 {
-				return nil, fmt.Errorf("coin %s has not been indexed", coin.Hash.String())
-			}
-			indexes = append(indexes, n.Index().BigInt())
-		}
-		mtRoot := mt.Root()
-		proofs, _, err := mt.GenerateProofs(indexes, mtRoot)
+	if useNullifiers(circuitId) {
+		proofs, extrasObj, err := h.generatMerkleProofs(tokenName, contractAddress, inputCoins)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate merkle proofs. %s", err)
-		}
-		var mps []*corepb.MerkleProof
-		var enabled []bool
-		for i, proof := range proofs {
-			cp, err := proof.ToCircomVerifierProof(indexes[i], indexes[i], mtRoot, smt.SMT_HEIGHT_UTXO)
-			if err != nil {
-				return nil, fmt.Errorf("failed to convert to circom verifier proof. %s", err)
-			}
-			proofSiblings := make([]string, len(cp.Siblings)-1)
-			for i, s := range cp.Siblings[0 : len(cp.Siblings)-1] {
-				proofSiblings[i] = s.BigInt().Text(16)
-			}
-			p := corepb.MerkleProof{
-				Nodes: proofSiblings,
-			}
-			mps = append(mps, &p)
-			enabled = append(enabled, true)
-		}
-		extrasObj := corepb.ProvingRequestExtras_Nullifiers{
-			Root:         mt.Root().BigInt().Text(16),
-			MerkleProofs: mps,
-			Enabled:      enabled,
 		}
 		for i := len(proofs); i < INPUT_COUNT; i++ {
 			extrasObj.MerkleProofs = append(extrasObj.MerkleProofs, &smt.Empty_Proof)
 			extrasObj.Enabled = append(extrasObj.Enabled, false)
 		}
-		protoExtras, err := proto.Marshal(&extrasObj)
+		protoExtras, err := proto.Marshal(extrasObj)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal the extras object in the proving request. %s", err)
 		}
@@ -356,4 +305,65 @@ func (h *transferHandler) encodeProof(proof *corepb.SnarkProof) map[string]inter
 		},
 		"pC": []string{proof.C[0], proof.C[1]},
 	}
+}
+
+func (h *transferHandler) generatMerkleProofs(tokenName string, contractAddress *ethtypes.Address0xHex, inputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.ProvingRequestExtras_Nullifiers, error) {
+	smtName := smt.MerkleTreeName(tokenName, contractAddress)
+	_, mt, err := smt.New(h.zeto.Callbacks, smtName, contractAddress, h.zeto.merkleTreeRootSchema.Id, h.zeto.merkleTreeNodeSchema.Id)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create new smt object. %s", err)
+	}
+	// verify that the input UTXOs have been indexed by the Merkle tree DB
+	// and generate a merkle proof for each
+	var indexes []*big.Int
+	for _, coin := range inputCoins {
+		pubKey, err := coin.OwnerKey.Decompress()
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to decompress owner key. %s", err)
+		}
+		idx := node.NewFungible(coin.Amount.BigInt(), pubKey, coin.Salt.BigInt())
+		leaf, err := node.NewLeafNode(idx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create new leaf node. %s", err)
+		}
+		n, err := mt.GetNode(leaf.Ref())
+		if err != nil {
+			// TODO: deal with when the node is not found in the DB tables for the tree
+			// e.g because the transaction event hasn't been processed yet
+			return nil, nil, fmt.Errorf("failed to query the smt DB for leaf node (index=%s). %s", leaf.Index().Hex(), err)
+		}
+		if n.Index().BigInt().Cmp(coin.Hash.BigInt()) != 0 {
+			return nil, nil, fmt.Errorf("coin %s has not been indexed", coin.Hash.String())
+		}
+		indexes = append(indexes, n.Index().BigInt())
+	}
+	mtRoot := mt.Root()
+	proofs, _, err := mt.GenerateProofs(indexes, mtRoot)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate merkle proofs. %s", err)
+	}
+	var mps []*corepb.MerkleProof
+	var enabled []bool
+	for i, proof := range proofs {
+		cp, err := proof.ToCircomVerifierProof(indexes[i], indexes[i], mtRoot, smt.SMT_HEIGHT_UTXO)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to convert to circom verifier proof. %s", err)
+		}
+		proofSiblings := make([]string, len(cp.Siblings)-1)
+		for i, s := range cp.Siblings[0 : len(cp.Siblings)-1] {
+			proofSiblings[i] = s.BigInt().Text(16)
+		}
+		p := corepb.MerkleProof{
+			Nodes: proofSiblings,
+		}
+		mps = append(mps, &p)
+		enabled = append(enabled, true)
+	}
+	extrasObj := corepb.ProvingRequestExtras_Nullifiers{
+		Root:         mt.Root().BigInt().Text(16),
+		MerkleProofs: mps,
+		Enabled:      enabled,
+	}
+
+	return proofs, &extrasObj, nil
 }
