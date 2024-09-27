@@ -222,6 +222,7 @@ func TestNotoForZeto(t *testing.T) {
 	log.L(ctx).Infof("Prepare the trade execute")
 	encodedExecute := swap.Execute(ctx).Prepare()
 
+	// TODO: should probably include the full encoded calls (including the zkp)
 	log.L(ctx).Infof("Record the prepared transfers")
 	swap.Prepare(ctx, &helpers.StateData{
 		Inputs:  transferNoto.InputStates,
@@ -234,9 +235,13 @@ func TestNotoForZeto(t *testing.T) {
 
 	prepared := swap.GetTrade(ctx)
 	aliceData := prepared["userTradeData1"].(map[string]any)
+	aliceStates := aliceData["states"].(map[string]any)
 	bobData := prepared["userTradeData2"].(map[string]any)
-	log.L(ctx).Infof("Alice proposes tokens: contract=%s value=%s states=%+v", aliceData["tokenAddress"], aliceData["tokenValue"], aliceData["states"])
-	log.L(ctx).Infof("Bob proposes tokens: contract=%s value=%s states=%+v", bobData["tokenAddress"], bobData["tokenValue"], bobData["states"])
+	bobStates := bobData["states"].(map[string]any)
+	log.L(ctx).Infof("Alice proposes tokens: contract=%s value=%s inputs=%+v outputs=%+v",
+		aliceData["tokenAddress"], aliceData["tokenValue"], aliceStates["inputs"], aliceStates["outputs"])
+	log.L(ctx).Infof("Bob proposes tokens: contract=%s value=%s inputs=%+v outputs=%+v",
+		bobData["tokenAddress"], bobData["tokenValue"], bobStates["inputs"], bobStates["outputs"])
 
 	log.L(ctx).Infof("Create Atom instance")
 	transferAtom := atomFactory.Create(ctx, alice, []*helpers.AtomOperation{
