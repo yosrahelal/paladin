@@ -33,23 +33,7 @@ dependencies {
     toolkitGo project(path: ":toolkit:go", configuration: "goSource")
 }
 
-task installTools(type: Exec) {
-    workingDir '.'
-    environment('GOBIN', "${projectDir}/bin")
-    executable 'go'
-    args 'install'
-    inputs.files('go.mod','go.sum')
-    outputs.files(
-        "bin/golangci-lint",
-        "bin/mockery",
-    )
-    // We use go.mod for dependency version management
-    // tools/tools.go tracks deps too - to avoid go mod tidy discarding them all
-    args 'github.com/golangci/golangci-lint/cmd/golangci-lint'
-    args 'github.com/vektra/mockery/v2'
-}
-
-task lint(type: Exec, dependsOn: installTools) {
+task lint(type: Exec, dependsOn: ":installGolangCILint") {
     workingDir '.'
 
     helpers.lockResource(it, "lint.lock")

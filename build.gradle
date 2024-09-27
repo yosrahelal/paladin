@@ -52,6 +52,26 @@ task jar {
     enabled = false
 }
 
+task installProtocGenGo(type: GoInstall) {
+    tool = "google.golang.org/protobuf/cmd/protoc-gen-go"
+    toolVersion = "v1.34.2"
+}
+
+task installProtocGenGoRPC(type: GoInstall) {
+    tool = "google.golang.org/grpc/cmd/protoc-gen-go-grpc"
+    toolVersion = "v1.5.1"
+}
+
+task installGolangCILint(type: GoInstall) {
+    tool = "github.com/golangci/golangci-lint/cmd/golangci-lint"
+    toolVersion = "v1.61.0"
+}
+
+task installMockery(type: GoInstall) {
+    tool = "github.com/vektra/mockery/v2"
+    toolVersion = "v2.46.0"
+}
+
 // Task to copy all executables and binaries to the root-level build/libs directory
 task copyLibraries(type: Copy) {
     def libsDir = file("${buildDir}/libs")

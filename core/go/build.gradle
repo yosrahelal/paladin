@@ -63,27 +63,6 @@ dependencies {
     toolkitProtoDefinitions project(path: ":toolkit:proto", configuration: "protoDefinitions")
 }
 
-task installTools(type: Exec) {
-    workingDir '.'
-    environment('GOBIN', "${projectDir}/bin")
-    executable 'go'
-    args 'install'
-    inputs.files('go.mod','go.sum')
-    outputs.files(
-        "bin/protoc-gen-go",
-        "bin/protoc-gen-go-grpc",
-        "bin/golangci-lint",
-        "bin/mockery",
-    )
-    // We use go.mod for dependency version management
-    // tools/tools.go tracks deps too - to avoid go mod tidy discarding them all
-    args 'google.golang.org/protobuf/cmd/protoc-gen-go'
-    args 'google.golang.org/grpc/cmd/protoc-gen-go-grpc'
-    args 'github.com/golangci/golangci-lint/cmd/golangci-lint'
-    args 'github.com/vektra/mockery/v2'
-}
-
-
 task copyTestContracts(type: Copy) {
     inputs.files(configurations.compiledContracts)
     from fileTree(configurations.compiledContracts.asPath) {
@@ -131,7 +110,8 @@ task copyContracts(dependsOn:[
 
 task protoc(type: ProtoCompile, dependsOn: [
         ":toolkit:go:protoc",
-        installTools,
+        ":installProtocGenGo",
+        ":installProtocGenGoRPC",
         copyTestContracts,
     ]) {
     protocPath "bin"
@@ -160,7 +140,7 @@ task goGet(type:Exec, dependsOn:[protoc, copyContracts, ":toolkit:go:goGet"]) {
     args 'get'
 }
 
-task makeMocks(type: Mockery, dependsOn: [installTools, protoc, goGet]) {
+task makeMocks(type: Mockery, dependsOn: [":installMockery", protoc, goGet]) {
     mockery 'bin/mockery'
     args '--case', 'underscore'
     mock {
@@ -271,7 +251,7 @@ task lint(type: Exec, dependsOn:[protoc, makeMocks, copyContracts]) {
     args '--timeout', '5m'
 }
 
-task buildSharedLibrary(type:Exec, dependsOn:[goGet, makeMocks]) {
+task buildSharedLibrary(type:Exec, dependsOn:[goGet]) {
     workingDir '.'
 
     def libName
@@ -402,6 +382,7 @@ task setupCoverage(dependsOn: [protoc, copyContracts, makeMocks]) {
 }
 
 task unitTestSQLite(type: UnitTests, dependsOn: [
+        makeMocks,
         ':testinfra:startTestInfra',
         setupCoverage,
         goGet,
@@ -409,6 +390,7 @@ task unitTestSQLite(type: UnitTests, dependsOn: [
 }
 
 task unitTestPostgres(type: UnitTests, dependsOn: [
+        makeMocks,
         ':testinfra:startTestInfra',
         setupCoverage,
         goGet,
@@ -418,6 +400,7 @@ task unitTestPostgres(type: UnitTests, dependsOn: [
 }
 
 task componentTestSQLite(type: ComponentTest, dependsOn: [
+        makeMocks,
         ':testinfra:startTestInfra',
         setupCoverage,
         goGet,
@@ -486,5 +469,5 @@ task assemble {
 
 dependencies {
     libcore files(buildSharedLibrary)
-    goSource files(goFiles, protoc, makeMocks, copyContracts)
+    goSource files(goFiles, protoc, copyContracts)
 }
