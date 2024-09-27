@@ -147,6 +147,29 @@ func FakeCoinTransferABI() *abi.ABI {
 	return &abi.ABI{mustParseABIEntry(fakeCoinTransferABI)}
 }
 
+const fakeCoinConstructorABI = `{
+		"type": "constructor",
+		"inputs": [
+		  {
+			"name": "notary",
+			"type": "string"
+		  },
+		  {
+			"name": "name",
+			"type": "string"
+		  },
+		  {
+			"name": "symbol",
+			"type": "string"
+		  }
+		],
+		"outputs": null
+	}`
+
+func FakeCoinConstructorABI() *abi.ABI {
+	return &abi.ABI{mustParseABIEntry(fakeCoinConstructorABI)}
+}
+
 func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 	simDomainABI := mustParseBuildABI(simDomainBuild)
 	simTokenABI := mustParseBuildABI(simTokenBuild)
@@ -349,8 +372,6 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 			})
 			return tktypes.HexBytes(tdv4), err
 		}
-
-		//---
 
 		return &plugintk.DomainAPIBase{Functions: &plugintk.DomainAPIFunctions{
 
