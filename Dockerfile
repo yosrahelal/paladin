@@ -31,8 +31,10 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     gcc \
     g++ \
+    gcc-multilib \
     libc6-dev \
     pkg-config \
+    musl-dev \
     libgomp1 \
     xz-utils \
     && apt-get clean
