@@ -25,6 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
@@ -49,7 +50,7 @@ type BalanceManagerConfig struct {
 }
 
 type AutoFuelingConfig struct {
-	SourceAddress                    *string `yaml:"sourceAddress"`
+	Source                           *string `yaml:"source"` // key resolution string
 	SourceAddressMinBalance          *string `yaml:"sourceAddressMinBalance"`
 	ProactiveFuelingTransactionTotal *int    `yaml:"proactiveFuelingTransactionTotal"`
 	ProactiveCostEstimationMethod    *string `yaml:"proactiveCostEstimationMethod"`
@@ -67,7 +68,7 @@ var DefaultBalanceManagerConfig = &BalanceManagerConfig{
 		// TTL:      confutil.P("30s"),
 	},
 	AutoFueling: AutoFuelingConfig{
-		SourceAddress:                    nil,
+		Source:                           nil,
 		SourceAddressMinBalance:          nil,
 		ProactiveFuelingTransactionTotal: confutil.P(1),
 		ProactiveCostEstimationMethod:    confutil.P(string(BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethodMax)),
@@ -86,6 +87,9 @@ type BalanceManagerWithInMemoryTracking struct {
 
 	// balance cache is used to store cached balances of any address
 	balanceCache cache.Cache[tktypes.EthAddress, *big.Int]
+
+	// the unresolved signer to use when submitting transactions
+	source string
 
 	// if set to a valid ethereum address, autofueling is turned on
 	sourceAddress *tktypes.EthAddress
@@ -243,12 +247,11 @@ func (af *BalanceManagerWithInMemoryTracking) GetAddressBalance(ctx context.Cont
 	}, nil
 }
 
-func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(ctx context.Context, destAddress tktypes.EthAddress, value *big.Int) (mtx *ptxapi.PublicTx, err error) {
+func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(ctx context.Context, destAddress tktypes.EthAddress, value *big.Int) (fuelingTx *ptxapi.PublicTx, err error) {
 	// check whether there is a pending fueling transaction already
 	// check whether the current balance manager already tracking the existing in-flight fueling transactions
 	log.L(ctx).Tracef("TransferGasFromAutoFuelingSource entry, source address: %s, destination address: %s, amount: %s", af.sourceAddress, destAddress, value.String())
 
-	var fuelingTx *ptxapi.PublicTx
 	af.destinationAddressesFuelingTrackedMux.Lock()
 	perAddressMux, ok := af.destinationAddressesFuelingTracked[destAddress] // there is no lock here as the map of tracked transactions is the one that is critical to get right
 	if !ok {
@@ -269,7 +272,9 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 			// we don't risk the chance of having duplicate fueling transactions when we cannot fetching all the in-flight transactions
 			return nil, err
 		}
-		af.trackedFuelingTransactions[destAddress] = fuelingTx
+		if fuelingTx != nil {
+			af.trackedFuelingTransactions[destAddress] = fuelingTx
+		}
 	}
 	if fuelingTx != nil {
 		completed, err := af.pubTxMgr.CheckTransactionCompleted(ctx, fuelingTx.From, fuelingTx.Nonce.Uint64())
@@ -286,7 +291,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 	// otherwise, new fueling tx is required
 
 	// clean up the existing tracked transaction
-	af.trackedFuelingTransactions[destAddress] = nil
+	delete(af.trackedFuelingTransactions, destAddress)
 
 	// 1) Check balance of source address to ensure we have enough to transfer
 	sourceAccount, err := af.GetAddressBalance(ctx, *af.sourceAddress)
@@ -316,7 +321,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 	log.L(ctx).Debugf("TransferGasFromAutoFuelingSource submitting a fueling tx for  destination address: %s ", destAddress)
 	submission, err := af.pubTxMgr.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
 		PublicTxInput: ptxapi.PublicTxInput{
-			From: af.sourceAddress.String(),
+			From: af.source, // must be the unresolved signer
 			To:   &destAddress,
 			PublicTxOptions: ptxapi.PublicTxOptions{
 				Value: (*tktypes.HexUint256)(value),
@@ -332,7 +337,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 	log.L(ctx).Debugf("TransferGasFromAutoFuelingSource tracking fueling tx with from=%s nonce=%d, for destination address: %s ", fuelingTx.From, fuelingTx.Nonce, destAddress)
 	// start tracking the new transactions
 	af.trackedFuelingTransactions[destAddress] = fuelingTx
-	return mtx, nil
+	return fuelingTx, nil
 }
 
 func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf *Config, ethClient ethclient.EthClient, publicTxMgr *pubTxManager) (_ BalanceManager, err error) {
@@ -355,18 +360,23 @@ func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf *Config, et
 			return nil, i18n.NewError(ctx, msgs.MsgMaxBelowMinThreshold, "maxDestBalance")
 		}
 	}
-	var sourceAddress *tktypes.EthAddress
-	sourceAddrString := confutil.StringOrEmpty(conf.BalanceManager.AutoFueling.SourceAddress, "")
-	if sourceAddrString != "" {
-		sourceAddress, err = tktypes.ParseEthAddress(sourceAddrString)
+	var autoFuelingSourceAddress *tktypes.EthAddress
+	autoFuelingSource := confutil.StringOrEmpty(conf.BalanceManager.AutoFueling.Source, "")
+	if autoFuelingSource != "" {
+		// We must be able to resolve the supplied auto fueling source at startup, so we can check its balance
+		_, sourceAddrStr, err := publicTxMgr.keymgr.ResolveKey(ctx, autoFuelingSource, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+		if err == nil {
+			autoFuelingSourceAddress, err = tktypes.ParseEthAddress(sourceAddrStr)
+		}
 		if err != nil {
-			return nil, err
+			return nil, i18n.WrapError(ctx, err, msgs.MsgInvalidAutoFuelSource, autoFuelingSource)
 		}
 	}
 	calcMethod := confutil.StringNotEmpty(conf.BalanceManager.AutoFueling.ProactiveCostEstimationMethod, string(BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethodMax))
 	log.L(ctx).Debugf("Balance manager calcMethod setting: %s", calcMethod)
 	bm := &BalanceManagerWithInMemoryTracking{
-		sourceAddress:                    sourceAddress,
+		source:                           autoFuelingSource,
+		sourceAddress:                    autoFuelingSourceAddress,
 		ethClient:                        ethClient,
 		pubTxMgr:                         publicTxMgr,
 		balanceCache:                     cache.NewCache[tktypes.EthAddress, *big.Int](&conf.BalanceManager.Cache, &DefaultConfig.BalanceManager.Cache),
