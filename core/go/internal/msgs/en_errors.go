@@ -141,19 +141,6 @@ var (
 	MsgFiltersValueInvalidHexBytes32      = ffe("PD010719", "Failed to parse value as 32 byte hex string (parsedBytes=%d)")
 	MsgFiltersValueInvalidUUID            = ffe("PD010720", "Failed to parse value as UUID: %v")
 
-	// HTTPServer PD0108XX
-	MsgHTTPServerStartFailed        = ffe("PD010800", "Failed to start server on '%s'")
-	MsgHTTPServerMissingPort        = ffe("PD010801", "HTTP server port must be specified for '%s'")
-	MsgHTTPServerNoWSUpgradeSupport = ffe("PD010802", "HTTP server does not support WebSocket upgrade (%T)")
-
-	// JSON/RPC PD0110XX
-	MsgJSONRPCInvalidRequest      = ffe("PD011000", "Invalid JSON/RPC request data")
-	MsgJSONRPCMissingRequestID    = ffe("PD011001", "Invalid JSON/RPC request. Must set request ID")
-	MsgJSONRPCUnsupportedMethod   = ffe("PD011002", "method not supported")
-	MsgJSONRPCIncorrectParamCount = ffe("PD011003", "method %s requires %d params (supplied=%d)")
-	MsgJSONRPCInvalidParam        = ffe("PD011004", "method %s parameter %d invalid: %s")
-	MsgJSONRPCResultSerialization = ffe("PD011005", "method %s result serialization failed: %s")
-
 	// Plugin controller PD0112XX
 	MsgPluginLoaderUUIDError   = ffe("PD011200", "Plugin loader UUID incorrect")
 	MsgPluginLoaderAlreadyInit = ffe("PD011201", "Plugin loader already initialized")

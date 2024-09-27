@@ -336,7 +336,7 @@ func TestRCPMethodInvalidValue(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, res.IsSuccess())
 	assert.Equal(t, int64(rpcclient.RPCCodeInvalidRequest), errResponse.Error.Code)
-	assert.Regexp(t, "PD011004", errResponse.Error.Message)
+	assert.Regexp(t, "PD020704", errResponse.Error.Message)
 
 }
 
@@ -363,7 +363,7 @@ func TestRCPMethodWrongParamCount(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, res.IsSuccess())
 	assert.Equal(t, int64(rpcclient.RPCCodeInvalidRequest), errResponse.Error.Code)
-	assert.Regexp(t, "PD011003", errResponse.Error.Message)
+	assert.Regexp(t, "PD020703", errResponse.Error.Message)
 
 }
 
@@ -389,6 +389,6 @@ func TestRCPMethodBadResult(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, res.IsSuccess())
 	assert.Equal(t, int64(rpcclient.RPCCodeInternalError), errResponse.Error.Code)
-	assert.Regexp(t, "PD011005", errResponse.Error.Message)
+	assert.Regexp(t, "PD020705", errResponse.Error.Message)
 
 }

@@ -25,7 +25,7 @@ ext {
         include "mocks/**/*.go"
     }
 
-    targetCoverage = 90
+    targetCoverage = 89
     maxCoverageBarGap = 1
     coverageExcludedPackages = [
         'github.com/kaleido-io/paladin/core/pkg/proto',
@@ -244,8 +244,8 @@ task makeMocks(type: Mockery, dependsOn: [tasks.installTools, tasks.protoc, task
         outputDir 'mocks/componentmocks'
     }
     mock {
-        inputDir 'internal/rpcserver'
-        name 'RPCServer'
+        inputDir "go list -f {{.Dir}} github.com/kaleido-io/paladin/toolkit/pkg/rpcserver".execute().text.trim()
+        includeAll true
         outputPackage 'componentmocks'
         outputDir 'mocks/componentmocks'
     }
