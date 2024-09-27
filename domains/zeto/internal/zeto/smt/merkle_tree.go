@@ -40,6 +40,9 @@ func init() {
 func New(callbacks plugintk.DomainCallbacks, name string, contractAddress *ethtypes.Address0xHex, rootSchemaId, nodeSchemaId string) (StatesStorage, core.SparseMerkleTree, error) {
 	storage := NewStatesStorage(callbacks, name, contractAddress, rootSchemaId, nodeSchemaId)
 	mt, err := smt.NewMerkleTree(storage, SMT_HEIGHT_UTXO)
+	if err == nil && mt != nil {
+		storage.(*statesStorage).rootNode = mt.Root()
+	}
 	return storage, mt, err
 }
 
