@@ -392,11 +392,37 @@ func (dc *domainContract) PrepareTransaction(ctx context.Context, tx *components
 	if err := json.Unmarshal(([]byte)(res.Transaction.FunctionAbiJson), &functionABI); err != nil {
 		return i18n.WrapError(ctx, err, msgs.MsgDomainPrivateAbiJsonInvalid)
 	}
-
 	inputs, err := functionABI.Inputs.ParseJSONCtx(ctx, emptyJSONIfBlank(res.Transaction.ParamsJson))
 	if err != nil {
 		return err
 	}
+
+	if len(res.NewNullifiers) > 0 {
+		newNullifiers := make([]*statestore.StateNullifier, len(res.NewNullifiers))
+		for i, nullifier := range res.NewNullifiers {
+			var stateBytes tktypes.HexBytes
+			var nullifierBytes tktypes.HexBytes
+			stateBytes, err = tktypes.ParseHexBytes(ctx, nullifier.StateId)
+			if err == nil {
+				nullifierBytes, err = tktypes.ParseHexBytes(ctx, nullifier.Nullifier)
+			}
+			if err != nil {
+				return err
+			}
+			newNullifiers[i] = &statestore.StateNullifier{
+				DomainName: dc.d.name,
+				State:      stateBytes,
+				Nullifier:  nullifierBytes,
+			}
+		}
+		err := dc.dm.stateStore.RunInDomainContext(dc.d.name, dc.info.Address, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
+			return dsi.UpsertNullifiers(newNullifiers)
+		})
+		if err != nil {
+			return err
+		}
+	}
+
 	tx.PreparedTransaction = &components.EthTransaction{
 		FunctionABI: &functionABI,
 		To:          dc.Address(),
