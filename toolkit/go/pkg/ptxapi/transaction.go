@@ -49,7 +49,7 @@ type Transaction struct {
 	Function       string                        `json:"function,omitempty"`       // inferred from definition if not supplied. Resolved to full signature and stored. Required with abiReference on input if not constructor
 	ABIReference   *tktypes.Bytes32              `json:"abiReference,omitempty"`   // calculated if not supplied (ABI will be stored for you)
 	From           string                        `json:"from,omitempty"`           // locator for a local signing identity to use for submission of this transaction
-	To             *tktypes.EthAddress           `json:"to,omitempty"`             // the target transaction, or null for a deploy
+	To             *tktypes.EthAddress           `json:"to,omitempty"`             // the target contract, or null for a deploy
 	Data           tktypes.RawJSON               `json:"data,omitempty"`           // pre-encoded array with/without function selector, array, or object input
 	// TODO: PrivateTransactions string list
 	// TODO: PublicTransactions string list
@@ -78,11 +78,12 @@ type TransactionReceipt struct {
 }
 
 type TransactionReceiptData struct {
-	Success         bool             `json:"success,omitempty"`         // true for success (note "status" is reserved for future use)
-	TransactionHash *tktypes.Bytes32 `json:"transactionHash,omitempty"` // if the result was finalized by the blockchain, this is the on-chain blockchain transaction hash
-	BlockNumber     int64            `json:"blockNumber,omitempty"`     // if the result was finalized by the blockchain
-	FailureMessage  string           `json:"failureMessage,omitempty"`  // always set to a non-empty string if the transaction reverted, with as much detail as could be extracted
-	RevertData      tktypes.HexBytes `json:"revertData,omitempty"`      // encoded revert data if available
+	Success         bool                `json:"success,omitempty"`         // true for success (note "status" is reserved for future use)
+	TransactionHash *tktypes.Bytes32    `json:"transactionHash,omitempty"` // if the result was finalized by the blockchain, this is the on-chain blockchain transaction hash
+	BlockNumber     int64               `json:"blockNumber,omitempty"`     // if the result was finalized by the blockchain
+	FailureMessage  string              `json:"failureMessage,omitempty"`  // always set to a non-empty string if the transaction reverted, with as much detail as could be extracted
+	RevertData      tktypes.HexBytes    `json:"revertData,omitempty"`      // encoded revert data if available
+	ContractAddress *tktypes.EthAddress `json:"contractAddress,omitempty"` // address of the new contract address, to be used in the `To` field for subsequent invoke transactions.  Nil if this transaction itself was an invoke
 }
 
 type TransactionActivityRecord struct {

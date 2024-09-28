@@ -129,7 +129,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 			AssemblyResult: prototk.AssembleTransactionResponse_OK,
 			InputStates: []*components.FullState{
 				{
-					ID:     tktypes.Bytes32(tktypes.RandBytes(32)),
+					ID:     tktypes.RandBytes(32),
 					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
 					Data:   tktypes.JSONString("foo"),
 				},
@@ -273,7 +273,7 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 			AssemblyResult: prototk.AssembleTransactionResponse_OK,
 			InputStates: []*components.FullState{
 				{
-					ID:     tktypes.Bytes32(tktypes.RandBytes(32)),
+					ID:     tktypes.RandBytes(32),
 					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
 					Data:   tktypes.JSONString("foo"),
 				},
@@ -421,7 +421,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 
 	states := []*components.FullState{
 		{
-			ID:     tktypes.Bytes32(tktypes.RandBytes(32)),
+			ID:     tktypes.RandBytes(32),
 			Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
 			Data:   tktypes.JSONString("foo"),
 		},
@@ -709,7 +709,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 					}
 					stateID := keys[stateIndex]
 					inputStates = append(inputStates, &components.FullState{
-						ID: stateID,
+						ID: stateID[:],
 					})
 
 					log.L(ctx).Infof("input state %s, numDependencies %d i %d", stateID, numDependencies, i)
@@ -723,7 +723,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 				for i := 0; i < numOutputStates; i++ {
 					stateID := tktypes.Bytes32(tktypes.RandBytes(32))
 					outputStates[i] = &components.FullState{
-						ID: stateID,
+						ID: stateID[:],
 					}
 					unclaimedPendingStatesToMintingTransaction[stateID] = tx.ID.String()
 				}

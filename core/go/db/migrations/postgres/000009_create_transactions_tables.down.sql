@@ -6,4 +6,5 @@ DROP TABLE IF EXISTS public_txn_bindings;
 DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS abi_errors;
 DROP TABLE IF EXISTS abis;
+DROP TABLE IF EXISTS contract_deployments;
 COMMIT;

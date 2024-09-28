@@ -63,7 +63,7 @@ func makeWidgets(t *testing.T, ctx context.Context, ss *stateStore, domainName s
 		ij["salt"] = tktypes.RandHex(32)
 		withSalt, err := json.Marshal(ij)
 		require.NoError(t, err)
-		states[i], err = ss.PersistState(ctx, domainName, contractAddress, schemaID, withSalt)
+		states[i], err = ss.PersistState(ctx, domainName, contractAddress, schemaID, withSalt, nil)
 		require.NoError(t, err)
 		fmt.Printf("widget[%d]: %s\n", i, states[i].Data)
 	}
@@ -104,7 +104,7 @@ func TestStateLockingQuery(t *testing.T) {
 		for _, wIndex := range expected {
 			found := false
 			for _, state := range states {
-				if state.ID == widgets[wIndex].ID {
+				if state.ID.Equals(widgets[wIndex].ID) {
 					assert.False(t, found)
 					found = true
 					break

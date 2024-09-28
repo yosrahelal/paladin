@@ -1,0 +1,14 @@
+**/coverage
+**/mocks
+**/node_modules
+**/build
+**/bin
+**/tools
+**/typechain-types
+**/artifacts
+**/*.so
+**/*.dylib
+**/*.dll
+**/*.pb.go
+.git
+.gradle
