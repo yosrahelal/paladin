@@ -27,6 +27,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
+	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
@@ -323,15 +324,19 @@ func (as *abiSchema) parseStateData(ctx context.Context, data tktypes.RawJSON) (
 
 // Take the state, parse the value into the type tree of this schema, and from that
 // build the label values to store in the DB for comparison appropriate to the type.
-func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON) (*StateWithLabels, error) {
+func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, id tktypes.HexBytes) (*StateWithLabels, error) {
 
 	psd, err := as.parseStateData(ctx, data)
 	if err != nil {
 		return nil, err
 	}
 
-	// Now do a typed data v4 hash of the struct value itself
-	hash, err := eip712.HashStruct(ctx, as.primaryType, psd.jsonTree, as.typeSet)
+	if id == nil {
+		// Now do a typed data v4 hash of the struct value itself
+		var hash ethtypes.HexBytes0xPrefix
+		hash, err = eip712.HashStruct(ctx, as.primaryType, psd.jsonTree, as.typeSet)
+		id = tktypes.HexBytes(hash)
+	}
 
 	// We need to re-serialize the data according to the ABI to:
 	// - Ensure it's valid
@@ -345,17 +350,19 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 		return nil, err
 	}
 
-	hashID := tktypes.NewBytes32FromSlice(hash)
 	for i := range psd.labels {
-		psd.labels[i].State = hashID
+		psd.labels[i].DomainName = as.SchemaPersisted.DomainName
+		psd.labels[i].State = id
 	}
 	for i := range psd.int64Labels {
-		psd.int64Labels[i].State = hashID
+		psd.int64Labels[i].DomainName = as.SchemaPersisted.DomainName
+		psd.int64Labels[i].State = id
 	}
+
 	now := tktypes.TimestampNow()
 	return &StateWithLabels{
 		State: &State{
-			ID:              hashID,
+			ID:              id,
 			Created:         now,
 			DomainName:      as.DomainName,
 			Schema:          as.ID,
@@ -364,7 +371,7 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 			Labels:          psd.labels,
 			Int64Labels:     psd.int64Labels,
 		},
-		LabelValues: addStateBaseLabels(psd.labelValues, hashID, now),
+		LabelValues: addStateBaseLabels(psd.labelValues, id, now),
 	}, nil
 }
 

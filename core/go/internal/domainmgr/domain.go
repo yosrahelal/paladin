@@ -121,33 +121,43 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 		}
 	}
 
+	stream := &blockindexer.EventStream{
+		Type: blockindexer.EventStreamTypeInternal.Enum(),
+		Sources: []blockindexer.EventStreamSource{
+			{ABI: iPaladinContractRegistryABI, Address: d.registryAddress},
+		},
+	}
+
 	if d.config.AbiEventsJson != "" {
 		// Parse the events ABI
 		var eventsABI abi.ABI
 		if err := json.Unmarshal([]byte(d.config.AbiEventsJson), &eventsABI); err != nil {
 			return nil, i18n.WrapError(d.ctx, err, msgs.MsgDomainInvalidEvents)
 		}
+		stream.Sources = append(stream.Sources, blockindexer.EventStreamSource{ABI: eventsABI})
+	}
 
-		// We build a stream name in a way assured to result in a new stream if the ABI changes,
-		// TODO... and in the future with a logical way to clean up defunct streams
-		streamHash, err := tktypes.ABISolDefinitionHash(d.ctx, eventsABI)
+	// We build a stream name in a way assured to result in a new stream if the ABI changes
+	// TODO: clean up defunct streams
+	var abiHashes []byte
+	for _, s := range stream.Sources {
+		hash, err := tktypes.ABISolDefinitionHash(d.ctx, s.ABI)
 		if err != nil {
 			return nil, err
 		}
-		streamName := fmt.Sprintf("domain_%s_%s", d.name, streamHash)
+		abiHashes = append(abiHashes, hash[:]...)
+	}
+	streamHash := tktypes.Bytes32Keccak(abiHashes)
+	stream.Name = fmt.Sprintf("domain_%s_%s", d.name, streamHash)
 
-		// Create the event stream
-		d.eventStream, err = d.dm.blockIndexer.AddEventStream(d.ctx, &blockindexer.InternalEventStream{
-			Definition: &blockindexer.EventStream{
-				Name: streamName,
-				Type: blockindexer.EventStreamTypeInternal.Enum(),
-				ABI:  eventsABI,
-			},
-			Handler: d.handleEventBatch,
-		})
-		if err != nil {
-			return nil, err
-		}
+	// Create the event stream
+	var err error
+	d.eventStream, err = d.dm.blockIndexer.AddEventStream(d.ctx, &blockindexer.InternalEventStream{
+		Definition: stream,
+		Handler:    d.handleEventBatch,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return &prototk.InitDomainRequest{
@@ -236,7 +246,11 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 
 	var states []*statestore.State
 	err = d.dm.stateStore.RunInDomainContext(d.name, *addr, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
-		states, err = dsi.FindAvailableStates(req.SchemaId, &query)
+		if req.UseNullifiers != nil && *req.UseNullifiers {
+			states, err = dsi.FindAvailableNullifiers(req.SchemaId, &query)
+		} else {
+			states, err = dsi.FindAvailableStates(req.SchemaId, &query)
+		}
 		return err
 	})
 	if err != nil {
@@ -446,9 +460,9 @@ func (d *domain) close() {
 	<-d.initDone
 }
 
-func (d *domain) handleEventBatch(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
+func (d *domain) groupEventsByAddress(ctx context.Context, tx *gorm.DB, events []*blockindexer.EventWithData) (map[tktypes.EthAddress][]*blockindexer.EventWithData, error) {
 	eventsByAddress := make(map[tktypes.EthAddress][]*blockindexer.EventWithData)
-	for _, ev := range batch.Events {
+	for _, ev := range events {
 		// Note: hits will be cached, but events from unrecognized contracts will always
 		// result in a cache miss and a database lookup
 		// TODO: revisit if we should optimize this
@@ -460,8 +474,22 @@ func (d *domain) handleEventBatch(ctx context.Context, tx *gorm.DB, batch *block
 			eventsByAddress[ev.Address] = append(eventsByAddress[ev.Address], ev)
 		}
 	}
+	return eventsByAddress, nil
+}
 
+func (d *domain) handleEventBatch(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
+	// First index any domain contract deployments
+	notifyTX, err := d.dm.registrationIndexer(ctx, tx, batch)
+	if err != nil {
+		return nil, err
+	}
+
+	// Then divide events by contract address and dispatch to the appropriate domain context
 	transactionsComplete := make([]uuid.UUID, 0, len(batch.Events))
+	eventsByAddress, err := d.groupEventsByAddress(ctx, tx, batch.Events)
+	if err != nil {
+		return nil, err
+	}
 	for addr, events := range eventsByAddress {
 		res, err := d.handleEventBatchForContract(ctx, batch.BatchID, addr, events)
 		if err != nil {
@@ -477,6 +505,7 @@ func (d *domain) handleEventBatch(ctx context.Context, tx *gorm.DB, batch *block
 	}
 
 	return func() {
+		notifyTX()
 		for _, c := range transactionsComplete {
 			inflight := d.dm.transactionWaiter.GetInflight(c)
 			if inflight != nil {
@@ -508,7 +537,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		return nil, err
 	}
 
-	spentStates := make(map[uuid.UUID][]string)
+	spentStates := make(map[uuid.UUID][]string, len(res.SpentStates))
 	for _, state := range res.SpentStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
@@ -517,7 +546,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		spentStates[*txUUID] = append(spentStates[*txUUID], state.Id)
 	}
 
-	confirmedStates := make(map[uuid.UUID][]string)
+	confirmedStates := make(map[uuid.UUID][]string, len(res.ConfirmedStates))
 	for _, state := range res.ConfirmedStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
@@ -526,13 +555,21 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		confirmedStates[*txUUID] = append(confirmedStates[*txUUID], state.Id)
 	}
 
-	newStates := make(map[uuid.UUID][]*statestore.StateUpsert)
+	newStates := make(map[uuid.UUID][]*statestore.StateUpsert, len(res.NewStates))
 	for _, state := range res.NewStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
 			return nil, err
 		}
+		var id tktypes.HexBytes
+		if state.Id != nil {
+			id, err = tktypes.ParseHexBytes(ctx, *state.Id)
+			if err != nil {
+				return nil, err
+			}
+		}
 		newStates[*txUUID] = append(newStates[*txUUID], &statestore.StateUpsert{
+			ID:       id,
 			SchemaID: state.SchemaId,
 			Data:     tktypes.RawJSON(state.StateDataJson),
 			Creating: true,

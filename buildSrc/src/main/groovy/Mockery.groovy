@@ -9,8 +9,6 @@ import org.gradle.process.ExecSpec
 
 class Mockery extends DefaultTask {
 
-    private String mockery = 'mockery'
-
     @Nested
     List<Mock> mocks = []
 
@@ -18,7 +16,6 @@ class Mockery extends DefaultTask {
     List<String> args = []
 
     void mockery(Object m) {
-        mockery = project.file(m)
         inputs.file(m)
     }
 
@@ -37,10 +34,9 @@ class Mockery extends DefaultTask {
     @TaskAction
     void exec() {
         List<String> commonArgs = args
-        String mockery = this.mockery
         mocks.each { m ->
             project.exec { spec ->
-                executable mockery
+                executable 'mockery'
                 args commonArgs
                 m.configure spec
             }

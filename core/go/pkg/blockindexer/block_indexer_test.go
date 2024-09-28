@@ -84,6 +84,10 @@ var testEventABIJSON = ([]byte)(`[
     }
 ]`)
 
+var testEventSourcesJSON = ([]byte)(`[{
+	"abi": ` + string(testEventABIJSON) + `
+}]`)
+
 var testABI = testParseABI(testEventABIJSON)
 
 var (
@@ -862,7 +866,7 @@ func TestBlockIndexerBadStream(t *testing.T) {
 	require.NoError(t, err)
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows([]string{
-		"id", "abi",
+		"id", "sources",
 	}).AddRow(
 		uuid.New().String(), `!!!bad JSON`,
 	))

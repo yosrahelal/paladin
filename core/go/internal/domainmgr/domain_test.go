@@ -138,9 +138,9 @@ type fakeState struct {
 }
 
 type fakeExecute struct {
-	Inputs  []tktypes.Bytes32 `json:"inputs"`
-	Outputs []tktypes.Bytes32 `json:"outputs"`
-	Data    tktypes.HexBytes  `json:"data"`
+	Inputs  []tktypes.HexBytes `json:"inputs"`
+	Outputs []tktypes.HexBytes `json:"outputs"`
+	Data    tktypes.HexBytes   `json:"data"`
 }
 
 type testPlugin struct {
@@ -164,7 +164,7 @@ func newTestPlugin(domainFuncs *plugintk.DomainAPIFunctions) *testPlugin {
 
 func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *domainManager, *testPlugin, func()) {
 
-	ctx, dm, _, done := newTestDomainManager(t, realDB, &DomainManagerConfig{
+	ctx, dm, mc, done := newTestDomainManager(t, realDB, &DomainManagerConfig{
 		Domains: map[string]*DomainConfig{
 			"test1": {
 				Config:          map[string]any{"some": "conf"},
@@ -172,6 +172,8 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 			},
 		},
 	}, extraSetup...)
+
+	mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything).Return(nil, nil).Maybe()
 
 	tp := newTestPlugin(nil)
 	tp.Functions = &plugintk.DomainAPIFunctions{
@@ -241,9 +243,7 @@ func TestDomainInitStatesWithEvents(t *testing.T) {
 
 	domainConf := goodDomainConf()
 	domainConf.AbiEventsJson = fakeCoinEventsABI
-	ctx, dm, tp, done := newTestDomain(t, true, domainConf, func(mc *mockComponents) {
-		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything).Return(nil, nil)
-	})
+	ctx, dm, tp, done := newTestDomain(t, true, domainConf)
 	defer done()
 
 	assert.Nil(t, tp.d.initError.Load())
@@ -259,7 +259,7 @@ func TestDomainInitStatesWithEvents(t *testing.T) {
 func TestDoubleRegisterReplaces(t *testing.T) {
 
 	domainConf := goodDomainConf()
-	ctx, dm, tp0, done := newTestDomain(t, false, domainConf, mockSchemas())
+	ctx, dm, tp0, done := newTestDomain(t, true, domainConf)
 	defer done()
 	assert.Nil(t, tp0.d.initError.Load())
 	assert.True(t, tp0.initialized.Load())
@@ -479,6 +479,21 @@ func TestDomainFindAvailableStatesOK(t *testing.T) {
 		    { "field": "owner", "value": "` + tktypes.EthAddress(tktypes.RandBytes(20)).String() + `" }
 		  ]
 		}`,
+	})
+	require.NoError(t, err)
+	assert.Len(t, states.States, 0)
+
+	// Nullifier miss
+	useNullifiers := true
+	states, err = tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
+		ContractAddress: contractAddress.String(),
+		SchemaId:        tp.stateSchemas[0].Id,
+		QueryJson: `{
+		  "eq": [
+		    { "field": "owner", "value": "` + state1.Owner.String() + `" }
+		  ]
+		}`,
+		UseNullifiers: &useNullifiers,
 	})
 	require.NoError(t, err)
 	assert.Len(t, states.States, 0)
@@ -888,6 +903,7 @@ func TestHandleEventBatch(t *testing.T) {
 	contract2 := tktypes.RandAddress()
 	stateSpent := tktypes.RandHex(32)
 	stateConfirmed := tktypes.RandHex(32)
+	fakeHash1 := tktypes.RandHex(32)
 
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
 		mc.domainStateInterface.On("MarkStatesSpent", txID, []string{stateSpent}).Return(nil)
@@ -933,6 +949,7 @@ func TestHandleEventBatch(t *testing.T) {
 			},
 			NewStates: []*prototk.NewLocalState{
 				{
+					Id:            &fakeHash1,
 					StateDataJson: `{"color": "blue"}`,
 					TransactionId: txIDBytes32.String(),
 				},
@@ -980,6 +997,36 @@ func TestHandleEventBatchContractLookupFail(t *testing.T) {
 			{
 				Address: *contract1,
 				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.EqualError(t, err, "pop")
+}
+
+func TestHandleEventBatchRegistrationError(t *testing.T) {
+	batchID := uuid.New()
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectExec("INSERT.*private_smart_contracts").WillReturnError(fmt.Errorf("pop"))
+
+	registrationData := &event_PaladinRegisterSmartContract_V0{
+		TXId: tktypes.Bytes32(tktypes.RandBytes(32)),
+	}
+	registrationDataJSON, err := json.Marshal(registrationData)
+	require.NoError(t, err)
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				SoliditySignature: eventSolSig_PaladinRegisterSmartContract_V0,
+				Data:              registrationDataJSON,
 			},
 		},
 	})
@@ -1132,6 +1179,45 @@ func TestHandleEventBatchNewBadTransactionID(t *testing.T) {
 	assert.ErrorContains(t, err, "PD020007")
 }
 
+func TestHandleEventBatchNewBadStateID(t *testing.T) {
+	batchID := uuid.New()
+	contract1 := tktypes.RandAddress()
+
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	d := tp.d
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{"address", "domain_address"},
+	).AddRow(contract1, d.registryAddress))
+
+	stateID := "badnotgood"
+	tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return &prototk.HandleEventBatchResponse{
+			NewStates: []*prototk.NewLocalState{
+				{
+					TransactionId: tktypes.RandHex(32),
+					Id:            &stateID,
+				},
+			},
+		}, nil
+	}
+
+	_, err = d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				Address: *contract1,
+				Data:    tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.ErrorContains(t, err, "PD020007")
+}
+
 func TestHandleEventBatchBadTransactionID(t *testing.T) {
 	batchID := uuid.New()
 	contract1 := tktypes.RandAddress()
@@ -1253,7 +1339,7 @@ func TestHandleEventBatchMarkConfirmedFail(t *testing.T) {
 	assert.EqualError(t, err, "pop")
 }
 
-func TestHandleEventBatchUpsertFail(t *testing.T) {
+func TestHandleEventBatchUpsertStateFail(t *testing.T) {
 	batchID := uuid.New()
 	txID := uuid.New()
 	txIDBytes32 := tktypes.Bytes32UUIDFirst16(txID)

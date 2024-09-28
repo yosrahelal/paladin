@@ -122,7 +122,9 @@ signer:
 		},
 		Definition: &blockindexer.EventStream{
 			Name: "unittest",
-			ABI:  abi.ABI{simpleStorageBuild.ABI.Events()["Changed"]},
+			Sources: []blockindexer.EventStreamSource{{
+				ABI: abi.ABI{simpleStorageBuild.ABI.Events()["Changed"]},
+			}},
 		},
 	})
 	require.NoError(t, err)

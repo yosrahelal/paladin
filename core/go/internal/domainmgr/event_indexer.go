@@ -26,15 +26,12 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-func (dm *domainManager) eventIndexer(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
+func (dm *domainManager) registrationIndexer(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
 
 	var contracts []*PrivateSmartContract
 
 	for _, ev := range batch.Events {
-		// We compare against the fully qualified string provided by the blockindexer at serialization time,
-		// which includes variables names and whether fields are indexed
-		switch ev.SoliditySignature {
-		case eventSolSig_PaladinRegisterSmartContract_V0:
+		if ev.SoliditySignature == eventSolSig_PaladinRegisterSmartContract_V0 {
 			var parsedEvent event_PaladinRegisterSmartContract_V0
 			parseErr := json.Unmarshal(ev.Data, &parsedEvent)
 			if parseErr != nil {
