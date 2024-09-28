@@ -23,7 +23,7 @@ import (
 	"unicode"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -67,7 +67,7 @@ func (s *rpcServer) rpcHandler(ctx context.Context, r io.Reader, wsc *webSocketC
 func (s *rpcServer) replyRPCParseError(ctx context.Context, b []byte, err error) (*rpcclient.RPCResponse, bool) {
 	log.L(ctx).Errorf("Request could not be parsed (err=%v): %s", err, b)
 	return rpcclient.NewRPCErrorResponse(
-		i18n.NewError(ctx, msgs.MsgJSONRPCInvalidRequest),
+		i18n.NewError(ctx, tkmsgs.MsgJSONRPCInvalidRequest),
 		tktypes.RawJSON(`"1"`),
 		rpcclient.RPCCodeInvalidRequest,
 	), false

@@ -7,8 +7,10 @@ require (
 	github.com/docker/go-units v0.5.0
 	github.com/go-resty/resty/v2 v2.14.0
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/hyperledger/firefly-common v1.4.11
 	github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1
+	github.com/rs/cors v1.11.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2
@@ -30,7 +32,6 @@ require (
 	github.com/go-openapi/jsonpointer v0.20.2 // indirect
 	github.com/go-openapi/swag v0.22.7 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/yaml v0.2.0 // indirect
@@ -53,7 +54,6 @@ require (
 	github.com/prometheus/common v0.55.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
-	github.com/rs/cors v1.11.0 // indirect
 	github.com/sagikazarmark/locafero v0.6.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 // indirect

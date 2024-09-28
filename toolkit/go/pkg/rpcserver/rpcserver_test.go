@@ -23,7 +23,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kaleido-io/paladin/core/internal/httpserver"
+	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -77,7 +77,7 @@ func TestBadHTTPConfig(t *testing.T) {
 		},
 		WS: WSEndpointConfig{Disabled: true},
 	})
-	assert.Regexp(t, "PD010801", err)
+	assert.Regexp(t, "PD020601", err)
 
 }
 
@@ -91,7 +91,7 @@ func TestBadWSConfig(t *testing.T) {
 		},
 		HTTP: HTTPEndpointConfig{Disabled: true},
 	})
-	assert.Regexp(t, "PD010801", err)
+	assert.Regexp(t, "PD020601", err)
 
 }
 

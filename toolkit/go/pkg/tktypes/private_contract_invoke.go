@@ -35,7 +35,7 @@ type PrivateContractPreparedTransaction struct {
 }
 
 type FullState struct {
-	ID     Bytes32  `json:"id"`
+	ID     HexBytes `json:"id"`
 	Schema Bytes32  `json:"schema"`
 	Data   HexBytes `json:"data"`
 }
