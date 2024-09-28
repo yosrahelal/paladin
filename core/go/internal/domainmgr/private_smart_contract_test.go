@@ -320,6 +320,7 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 		Owner:  tktypes.EthAddress(tktypes.RandBytes(20)),
 		Amount: ethtypes.NewHexInteger64(5555555),
 	}
+
 	tp.Functions.AssembleTransaction = func(ctx context.Context, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 		assert.Same(t, req.Transaction, tx.PreAssembly.TransactionSpecification)
 
@@ -504,6 +505,18 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, tx.PreparedTransaction.FunctionABI)
 	assert.NotNil(t, tx.PreparedTransaction.Inputs)
+
+	// Confirm the remaining unspent states
+	stillAvailable, err = domain.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
+		ContractAddress: psc.Address().String(),
+		SchemaId:        tx.PostAssembly.OutputStatesPotential[0].SchemaId,
+		QueryJson:       `{}`,
+	})
+	require.NoError(t, err)
+	assert.Len(t, stillAvailable.States, 3)
+	assert.Contains(t, stillAvailable.States[0].DataJson, state2.Salt.String())
+	assert.Contains(t, stillAvailable.States[1].DataJson, state4.Salt.String())
+	assert.Contains(t, stillAvailable.States[2].DataJson, state5.Salt.String())
 }
 
 func TestDomainAssembleTransactionError(t *testing.T) {
@@ -595,6 +608,22 @@ func TestDomainWritePotentialStatesFail(t *testing.T) {
 	}
 	err := psc.WritePotentialStates(ctx, tx)
 	assert.Regexp(t, "pop", err)
+}
+
+func TestDomainWritePotentialStatesBadID(t *testing.T) {
+	schema := componentmocks.NewSchema(t)
+	schema.On("IDString").Return("schema1")
+	schema.On("Signature").Return("schema1_signature")
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(schema), mockBlockHeight)
+	defer done()
+	badBytes := "0xnothex"
+
+	psc, tx := doDomainInitAssembleTransactionOK(t, ctx, tp)
+	tx.PostAssembly.OutputStatesPotential = []*prototk.NewState{
+		{SchemaId: "schema1", Id: &badBytes},
+	}
+	err := psc.WritePotentialStates(ctx, tx)
+	assert.Regexp(t, "PD020007", err)
 }
 
 func TestEndorseTransactionFail(t *testing.T) {

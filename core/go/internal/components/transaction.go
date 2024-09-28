@@ -37,7 +37,7 @@ type TransactionPreAssembly struct {
 }
 
 type FullState struct {
-	ID     tktypes.Bytes32
+	ID     tktypes.HexBytes
 	Schema tktypes.Bytes32
 	Data   tktypes.RawJSON
 }

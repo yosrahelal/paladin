@@ -21,6 +21,7 @@ message FindAvailableStatesRequest {
   string contract_address = 1; // The private smart contract address
   string schema_id = 2; // The ID of the schema
   string query_json = 3; // The query specification in JSON
+  optional bool use_nullifiers = 4; // Use nullifiers to check spending state (rather than state ID)
 }
 
 message FindAvailableStatesResponse {

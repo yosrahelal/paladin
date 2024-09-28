@@ -246,7 +246,11 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 
 	var states []*statestore.State
 	err = d.dm.stateStore.RunInDomainContext(d.name, *addr, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
-		states, err = dsi.FindAvailableStates(req.SchemaId, &query)
+		if req.UseNullifiers != nil && *req.UseNullifiers {
+			states, err = dsi.FindAvailableNullifiers(req.SchemaId, &query)
+		} else {
+			states, err = dsi.FindAvailableStates(req.SchemaId, &query)
+		}
 		return err
 	})
 	if err != nil {
@@ -533,7 +537,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		return nil, err
 	}
 
-	spentStates := make(map[uuid.UUID][]string)
+	spentStates := make(map[uuid.UUID][]string, len(res.SpentStates))
 	for _, state := range res.SpentStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
@@ -542,7 +546,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		spentStates[*txUUID] = append(spentStates[*txUUID], state.Id)
 	}
 
-	confirmedStates := make(map[uuid.UUID][]string)
+	confirmedStates := make(map[uuid.UUID][]string, len(res.ConfirmedStates))
 	for _, state := range res.ConfirmedStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
@@ -551,13 +555,21 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		confirmedStates[*txUUID] = append(confirmedStates[*txUUID], state.Id)
 	}
 
-	newStates := make(map[uuid.UUID][]*statestore.StateUpsert)
+	newStates := make(map[uuid.UUID][]*statestore.StateUpsert, len(res.NewStates))
 	for _, state := range res.NewStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
 			return nil, err
 		}
+		var id tktypes.HexBytes
+		if state.Id != nil {
+			id, err = tktypes.ParseHexBytes(ctx, *state.Id)
+			if err != nil {
+				return nil, err
+			}
+		}
 		newStates[*txUUID] = append(newStates[*txUUID], &statestore.StateUpsert{
+			ID:       id,
 			SchemaID: state.SchemaId,
 			Data:     tktypes.RawJSON(state.StateDataJson),
 			Creating: true,
