@@ -83,7 +83,7 @@ ENV PATH=$PATH:/root/.wasmer/bin
 # Set the working directory
 WORKDIR /app
 
-# Copy project files
+# Copy project files (check .dockerignore for details of what goes up)
 COPY . .
 
 # Set Go CGO environment variables

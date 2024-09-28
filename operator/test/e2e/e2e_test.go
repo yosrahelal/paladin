@@ -27,7 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/test/utils"
 )
 
-const namespace = "operator-go-system"
+const namespace = "paladin-e2e"
 
 var _ = Describe("controller", Ordered, func() {
 	BeforeAll(func() {
@@ -60,7 +60,7 @@ var _ = Describe("controller", Ordered, func() {
 			var err error
 
 			// projectimage stores the name of the image used in the example
-			var projectimage = "example.com/operator-go:v0.0.1"
+			var projectimage = "paladin-operator:latest"
 
 			By("building the manager(Operator) image")
 			cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectimage))
@@ -71,13 +71,11 @@ var _ = Describe("controller", Ordered, func() {
 			err = utils.LoadImageToKindClusterWithName(projectimage)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
-			By("installing CRDs")
-			cmd = exec.Command("make", "install")
-			_, err = utils.Run(cmd)
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
-
-			By("deploying the controller-manager")
-			cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectimage))
+			By("installing via Helm")
+			cmd = exec.Command("make", "helm-install",
+				fmt.Sprintf("IMG=%s", projectimage),
+				fmt.Sprintf("NAMESPACE=%s", namespace),
+			)
 			_, err = utils.Run(cmd)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
@@ -86,7 +84,7 @@ var _ = Describe("controller", Ordered, func() {
 				// Get pod name
 
 				cmd = exec.Command("kubectl", "get",
-					"pods", "-l", "control-plane=controller-manager",
+					"pods", "-l", "app.kubernetes.io/name=paladin-operator",
 					"-o", "go-template={{ range .items }}"+
 						"{{ if not .metadata.deletionTimestamp }}"+
 						"{{ .metadata.name }}"+
@@ -101,7 +99,7 @@ var _ = Describe("controller", Ordered, func() {
 					return fmt.Errorf("expect 1 controller pods running, but got %d", len(podNames))
 				}
 				controllerPodName = podNames[0]
-				ExpectWithOffset(2, controllerPodName).Should(ContainSubstring("controller-manager"))
+				ExpectWithOffset(2, controllerPodName).Should(ContainSubstring("paladin-operator"))
 
 				// Validate pod status
 				cmd = exec.Command("kubectl", "get",

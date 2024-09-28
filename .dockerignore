@@ -11,4 +11,11 @@
 **/*.dll
 **/*.pb.go
 .git
-.gradle
+**/.gradle
+
+# The operator has its own docker build, so we don't want to rebuild the whole
+# Paladin docker every time you're re-running the operator/test.
+# So we only install enough to keep the build happy.
+operator/**
+!operator/go.mod
+!operator/build.gradle

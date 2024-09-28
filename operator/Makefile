@@ -5,6 +5,8 @@
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
 VERSION ?= 0.0.1
 
+CLUSTER_NAME ?= kind
+
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
 # To re-generate a bundle for other specific channels without changing the standard setup, you can:
@@ -130,6 +132,18 @@ lint: golangci-lint ## Run golangci-lint linter & yamllint
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
 
+##@ Kind - the E2E tests expect a kind cluster called "kind"
+
+.PHONY: kind-start
+kind-start:	
+	if [ "$(shell kind get nodes --name "${CLUSTER_NAME}")" == "" ]; then kind create cluster --name "${CLUSTER_NAME}"; fi
+	kubectl version # fail the build if we can't connect to the cluster
+
+.PHONY: kind-promote
+kind-promote: kind-start
+	kind load docker-image paladin-operator:latest --name "${CLUSTER_NAME}"
+	kind load docker-image paladin:test --name "${CLUSTER_NAME}"
+
 ##@ Build
 
 .PHONY: build
@@ -145,7 +159,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build --platform linux/amd64 -t ${IMG} .
+	$(CONTAINER_TOOL) build -t ${IMG} .
 
 # Load the docker image into the kind cluster. This is useful when you want to test the image in a kind cluster.
 .PHONY: docker-load
@@ -182,11 +196,11 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 ##@ helm-chart - Deployment
 
 .PHONY: helm-install
-install: 
+helm-install: 
 	helm upgrade --install paladin deploy/paladin-operator -n ${NAMESPACE} --create-namespace --set operator.namespace=${NAMESPACE}
 
 .PHONY: helm-uninstall
-uninstall: 
+helm-uninstall: 
 	helm uninstall paladin -n ${NAMESPACE} || true
 	$(KUBECTL) delete namespace ${NAMESPACE} || true
 
