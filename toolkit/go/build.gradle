@@ -104,7 +104,7 @@ task goGet(type:Exec, dependsOn: protoc) {
 }
 
 task makeMocks(type: Mockery, dependsOn: [":installMockery", protoc, goGet]) {
-    mockery 'bin/mockery'
+    mockery 'mockery'
     args '--case', 'underscore'
     mock {
         inputDir "go list -f {{.Dir}} github.com/hyperledger/firefly-signer/pkg/rpcbackend".execute().text.trim()

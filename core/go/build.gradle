@@ -147,7 +147,7 @@ task goGet(type:Exec, dependsOn:[protoc, copyContracts, ":toolkit:go:goGet"]) {
 }
 
 task makeMocks(type: Mockery, dependsOn: [":installMockery", protoc, goGet]) {
-    mockery 'bin/mockery'
+    mockery 'mockery'
     args '--case', 'underscore'
     mock {
         inputDir "go list -f {{.Dir}} github.com/kaleido-io/paladin/toolkit/pkg/rpcclient".execute().text.trim()
