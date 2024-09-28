@@ -41,7 +41,7 @@ task lint(type: Exec, dependsOn: ":installGolangCILint") {
     inputs.files(goFiles);
     environment 'GOGC', '20'
 
-    executable "bin/golangci-lint"
+    executable "golangci-lint"
     args 'run'
     args '-v'
     args '--color=always'

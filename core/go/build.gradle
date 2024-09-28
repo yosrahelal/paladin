@@ -250,7 +250,7 @@ task lint(type: Exec, dependsOn:[protoc, makeMocks, copyContracts]) {
     inputs.files(goFiles)
     environment 'GOGC', '20'
 
-    executable "bin/golangci-lint"
+    executable "golangci-lint"
     args 'run'
     args '-v'
     args '--color=always'
