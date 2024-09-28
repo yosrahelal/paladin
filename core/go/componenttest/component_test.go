@@ -44,6 +44,7 @@ import (
 )
 
 func TestRunSimpleStorageEthTransaction(t *testing.T) {
+	//TODO refactor this to be more black box by using JSONRPC interface to invoke the public contract
 	ctx := context.Background()
 	logrus.SetLevel(logrus.DebugLevel)
 
@@ -156,7 +157,7 @@ signer:
 
 }
 
-func TestSimplePrivateContract(t *testing.T) {
+func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 	// Coarse grained black box test of the core component manager
 	// no mocking although it does use a simple domain implementation that exists solely for testing
 	// and is loaded directly through go function calls via the unit test plugin loader
@@ -166,18 +167,17 @@ func TestSimplePrivateContract(t *testing.T) {
 	// The bootstrap code that is the entry point to the java side is not tested here, we bootstrap the component manager by hand
 
 	ctx := context.Background()
-	rpcClient := newInstanceForComponentTesting(t, deplyDomainRegistry(t), "test-instance")
+	instance := newInstanceForComponentTesting(t, deplyDomainRegistry(t), "test-instance")
+	rpcClient := instance.client
 
 	// Check there are no transactions before we start
 	var txns []*ptxapi.TransactionFull
 	err := rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
 	require.NoError(t, err)
 	assert.Len(t, txns, 0)
-
 	var dplyTxID uuid.UUID
 	err = rpcClient.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &ptxapi.TransactionInput{
 		ABI: *domains.SimpleTokenConstructorABI(),
-		//Bytecode:  ...,
 		Transaction: ptxapi.Transaction{
 			IdempotencyKey: "deploy1",
 			Type:           ptxapi.TransactionTypePrivate.Enum(),
@@ -193,14 +193,15 @@ func TestSimplePrivateContract(t *testing.T) {
 	require.NoError(t, err)
 	assert.Eventually(t,
 		transactionReceiptCondition(t, ctx, dplyTxID, rpcClient, true),
-		timeTillDeadline(t),
-		1*time.Second,
+		transactionLatencyThreshold(t)+5*time.Second, //TODO deploy transaction seems to take longer than expected
+		100*time.Millisecond,
 		"Deploy transaction did not receive a receipt",
 	)
 
 	var dplyTxFull ptxapi.TransactionFull
 	err = rpcClient.CallRPC(ctx, &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
 	require.NoError(t, err)
+	require.NotNil(t, dplyTxFull.Receipt)
 	require.True(t, dplyTxFull.Receipt.Success)
 	require.NotNil(t, dplyTxFull.Receipt.ContractAddress)
 	contractAddress := dplyTxFull.Receipt.ContractAddress
@@ -233,8 +234,8 @@ func TestSimplePrivateContract(t *testing.T) {
 	assert.NotEqual(t, uuid.UUID{}, tx1ID)
 	assert.Eventually(t,
 		transactionReceiptCondition(t, ctx, tx1ID, rpcClient, false),
-		timeTillDeadline(t),
-		1*time.Second,
+		transactionLatencyThreshold(t),
+		100*time.Millisecond,
 		"Transaction did not receive a receipt",
 	)
 
@@ -248,5 +249,113 @@ func TestSimplePrivateContract(t *testing.T) {
 
 	require.NotNil(t, txFull.Receipt)
 	assert.True(t, txFull.Receipt.Success)
+}
+
+func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
+	// We use the simple token where there is no actual on chain checking of the notary
+	// so either node can assemble a transaction with an attestation plan for a local notary
+	// there is also no access control around minting so both nodes are able to mint tokens and we don't
+	// need the complexity of cross node transfers in this test
+	ctx := context.Background()
+
+	domainRegistryAddress := deplyDomainRegistry(t)
+
+	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, "alices-paladin")
+	client1 := instance1.client
+	aliceIdentity := "wallets.org1.alice"
+	aliceAddress := instance1.resolveEthereumAddress(aliceIdentity)
+	t.Logf("Alice address: %s", aliceAddress)
+
+	instance2 := newInstanceForComponentTesting(t, domainRegistryAddress, "bobs-paladin")
+	client2 := instance2.client
+	bobIdentity := "wallets.org2.bob"
+	bobAddress := instance2.resolveEthereumAddress(bobIdentity)
+	t.Logf("Bob address: %s", bobAddress)
+
+	//If this fails, it is most likely a bug in the test utils that configures each node with seed mnemonics
+	assert.NotEqual(t, aliceAddress, bobAddress)
+
+	// send JSON RPC message to node 1 to deploy a private contract, using alice's key
+	var dplyTxID uuid.UUID
+	err := client1.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+		ABI: *domains.SimpleTokenConstructorABI(),
+		Transaction: ptxapi.Transaction{
+			IdempotencyKey: "deploy1",
+			Type:           ptxapi.TransactionTypePrivate.Enum(),
+			Domain:         "domain1",
+			From:           aliceIdentity,
+			Data: tktypes.RawJSON(`{
+					"notary": "domain1.contract1.notary",
+					"name": "FakeToken1",
+					"symbol": "FT1"
+				}`),
+		},
+	})
+	require.NoError(t, err)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, dplyTxID, client1, true),
+		transactionLatencyThreshold(t)+5*time.Second, //TODO deploy transaction seems to take longer than expected
+		100*time.Millisecond,
+		"Deploy transaction did not receive a receipt",
+	)
+
+	var dplyTxFull ptxapi.TransactionFull
+	err = client1.CallRPC(ctx, &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
+	require.NoError(t, err)
+	contractAddress := dplyTxFull.Receipt.ContractAddress
+
+	// Start a private transaction on alices node
+	var aliceTxID uuid.UUID
+	err = client1.CallRPC(ctx, &aliceTxID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+		ABI: *domains.SimpleTokenTransferABI(),
+		Transaction: ptxapi.Transaction{
+			To:             contractAddress,
+			Domain:         "domain1",
+			IdempotencyKey: "tx1-alice",
+			Type:           ptxapi.TransactionTypePrivate.Enum(),
+			From:           aliceIdentity,
+			Data: tktypes.RawJSON(`{
+					"from": "",
+					"to": "` + aliceIdentity + `",
+					"amount": "123000000000000000000"
+				}`),
+		},
+	})
+
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.UUID{}, aliceTxID)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, aliceTxID, client1, false),
+		transactionLatencyThreshold(t),
+		100*time.Millisecond,
+		"Transaction did not receive a receipt",
+	)
+
+	// Start a private transaction on bobs node
+	var bobTx1ID uuid.UUID
+	err = client2.CallRPC(ctx, &bobTx1ID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+		ABI: *domains.SimpleTokenTransferABI(),
+		Transaction: ptxapi.Transaction{
+			To:             contractAddress,
+			Domain:         "domain1",
+			IdempotencyKey: "tx1-bob",
+			Type:           ptxapi.TransactionTypePrivate.Enum(),
+			From:           bobIdentity,
+			Data: tktypes.RawJSON(`{
+					"from": "",
+					"to": "` + bobIdentity + `",
+					"amount": "123000000000000000000"
+				}`),
+		},
+	})
+
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.UUID{}, bobTx1ID)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, bobTx1ID, client2, false),
+		transactionLatencyThreshold(t),
+		100*time.Millisecond,
+		"Transaction did not receive a receipt",
+	)
 
 }

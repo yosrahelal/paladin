@@ -31,6 +31,8 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/domainmgr"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
+	"github.com/kaleido-io/paladin/core/pkg/signer/api"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
@@ -39,6 +41,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tyler-smith/go-bip39"
 )
 
 //go:embed abis/SimpleStorage.json
@@ -55,28 +58,38 @@ func transactionReceiptCondition(t *testing.T, ctx context.Context, txID uuid.UU
 
 }
 
-func timeTillDeadline(t *testing.T) time.Duration {
+func transactionLatencyThreshold(t *testing.T) time.Duration {
+	// normally we would expect a transaction to be confirmed within a couple of seconds but
+	// if we are in a debug session, we want to give it much longer
+	threshold := 2 * time.Second
+
 	deadline, ok := t.Deadline()
 	if !ok {
 		//there was no -timeout flag, default to a long time becuase this is most likely a debug session
-		deadline = time.Now().Add(10 * time.Hour)
+		threshold = time.Hour
+	} else {
+		timeRemaining := time.Until(deadline)
+
+		//Need to leave some time to ensure that polling assertions fail before the test itself timesout
+		//otherwise we don't see diagnostic info for things like GoExit called by mocks etc
+		timeRemaining = timeRemaining - 100*time.Millisecond
+
+		if timeRemaining < threshold {
+			threshold = timeRemaining - 100*time.Millisecond
+		}
 	}
-	timeRemaining := time.Until(deadline)
-	//Need to leave some time to ensure that polling assertions fail before the test itself timesout
-	//otherwise we don't see diagnostic info for things like GoExit called by mocks etc
-	if timeRemaining < 100*time.Millisecond {
-		return 0
-	}
-	return timeRemaining - 100*time.Millisecond
+	t.Logf("Using transaction latency threshold of %v", threshold)
+
+	return threshold
 }
 
 type componentTestInstance struct {
-	grpcTarget string
-	//engineName string
-	id   uuid.UUID
-	conf *componentmgr.Config
-	ctx  context.Context
-	//cancelCtx  context.CancelFunc
+	grpcTarget             string
+	id                     uuid.UUID
+	conf                   *componentmgr.Config
+	ctx                    context.Context
+	client                 rpcclient.Client
+	resolveEthereumAddress func(identity string) string
 }
 
 func deplyDomainRegistry(t *testing.T) *tktypes.EthAddress {
@@ -109,7 +122,7 @@ func deplyDomainRegistry(t *testing.T) *tktypes.EthAddress {
 
 }
 
-func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes.EthAddress, instanceName string) rpcclient.Client {
+func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes.EthAddress, instanceName string) *componentTestInstance {
 	f, err := os.CreateTemp("", "component-test.*.sock")
 	require.NoError(t, err)
 
@@ -137,6 +150,15 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 		},
 		Config:          map[string]any{"some": "config"},
 		RegistryAddress: domainRegistryAddress.String(),
+	}
+	entropy, _ := bip39.NewEntropy(256)
+	mnemonic, _ := bip39.NewMnemonic(entropy)
+
+	i.conf.Signer.KeyStore.Static.Keys = map[string]api.StaticKeyEntryConfig{
+		"seed": {
+			Encoding: "none",
+			Inline:   mnemonic,
+		},
 	}
 
 	var pl plugins.UnitTestPluginLoader
@@ -170,8 +192,15 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 
 	client, err := rpcclient.NewHTTPClient(log.WithLogField(context.Background(), "client-for", instanceName), &rpcclient.HTTPConfig{URL: "http://localhost:" + strconv.Itoa(*i.conf.RPCServer.HTTP.Port)})
 	require.NoError(t, err)
+	i.client = client
 
-	return client
+	i.resolveEthereumAddress = func(identity string) string {
+		_, address, err := cm.KeyManager().ResolveKey(i.ctx, identity, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+		require.NoError(t, err)
+		return address
+	}
+
+	return i
 
 }
 
