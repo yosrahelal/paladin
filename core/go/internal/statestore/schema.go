@@ -64,7 +64,7 @@ type schemaLabelInfo struct {
 }
 
 type idOnly struct {
-	ID tktypes.Bytes32 `gorm:"primaryKey"`
+	ID tktypes.HexBytes `gorm:"primaryKey"`
 }
 
 type Schema interface {
@@ -72,7 +72,7 @@ type Schema interface {
 	IDString() string
 	Signature() string
 	Persisted() *SchemaPersisted
-	ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON) (*StateWithLabels, error)
+	ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, id tktypes.HexBytes) (*StateWithLabels, error)
 	RecoverLabels(ctx context.Context, s *State) (*StateWithLabels, error)
 }
 
@@ -156,7 +156,7 @@ func (ss *stateStore) ListSchemas(ctx context.Context, domainName string) (resul
 	}
 	results = make([]Schema, len(ids))
 	for i, id := range ids {
-		if results[i], err = ss.getSchemaByID(ctx, domainName, id.ID, true); err != nil {
+		if results[i], err = ss.getSchemaByID(ctx, domainName, tktypes.Bytes32(id.ID), true); err != nil {
 			return nil, err
 		}
 	}
