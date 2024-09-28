@@ -21,9 +21,7 @@ package componenttest
 
 import (
 	"context"
-	_ "embed"
 	"encoding/json"
-	"strconv"
 	"testing"
 	"time"
 
@@ -37,7 +35,6 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
-	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -169,21 +166,17 @@ func TestSimplePrivateContract(t *testing.T) {
 	// The bootstrap code that is the entry point to the java side is not tested here, we bootstrap the component manager by hand
 
 	ctx := context.Background()
-	instance, _ := newInstanceForComponentTesting(t)
-
-	// send JSON RPC message to check the status of the server
-	rpcClient, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{URL: "http://localhost:" + strconv.Itoa(*instance.conf.RPCServer.HTTP.Port)})
-	require.NoError(t, err)
+	rpcClient := newInstanceForComponentTesting(t, deplyDomainRegistry(t), "test-instance")
 
 	// Check there are no transactions before we start
 	var txns []*ptxapi.TransactionFull
-	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
+	err := rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
 	require.NoError(t, err)
 	assert.Len(t, txns, 0)
 
 	var dplyTxID uuid.UUID
 	err = rpcClient.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &ptxapi.TransactionInput{
-		ABI: *domains.FakeCoinConstructorABI(),
+		ABI: *domains.SimpleTokenConstructorABI(),
 		//Bytecode:  ...,
 		Transaction: ptxapi.Transaction{
 			IdempotencyKey: "deploy1",
@@ -221,7 +214,7 @@ func TestSimplePrivateContract(t *testing.T) {
 	// Start a private transaction
 	var tx1ID uuid.UUID
 	err = rpcClient.CallRPC(ctx, &tx1ID, "ptx_sendTransaction", &ptxapi.TransactionInput{
-		ABI: *domains.FakeCoinTransferABI(),
+		ABI: *domains.SimpleTokenTransferABI(),
 		Transaction: ptxapi.Transaction{
 			To:             contractAddress,
 			Domain:         "domain1", //TODO comments say that this is inferred from `to` for invoke

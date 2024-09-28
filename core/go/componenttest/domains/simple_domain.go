@@ -39,11 +39,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//go:embed abis/SIMDomain.json
-var simDomainBuild []byte // comes from Hardhat build
+//go:embed abis/SimpleDomain.json
+var simpleDomainBuild []byte // comes from Hardhat build
 
-//go:embed abis/SIMToken.json
-var simTokenBuild []byte // comes from Hardhat build
+//go:embed abis/SimpleToken.json
+var simpleTokenBuild []byte // comes from Hardhat build
 
 func toJSONString(t *testing.T, v interface{}) string {
 	b, err := json.Marshal(v)
@@ -98,13 +98,13 @@ func mustParseBuildBytecode(buildJSON []byte) tktypes.HexBytes {
 func DeploySmartContract(t *testing.T, bi blockindexer.BlockIndexer, ecf ethclient.EthClientFactory) *tktypes.EthAddress {
 	ctx := context.Background()
 
-	simDomainABI := mustParseBuildABI(simDomainBuild)
+	simpleDomainABI := mustParseBuildABI(simpleDomainBuild)
 
 	// In this test we deploy the factory in-line
-	ec, err := ecf.HTTPClient().ABI(ctx, simDomainABI)
+	ec, err := ecf.HTTPClient().ABI(ctx, simpleDomainABI)
 	require.NoError(t, err)
 
-	cc, err := ec.Constructor(ctx, mustParseBuildBytecode(simDomainBuild))
+	cc, err := ec.Constructor(ctx, mustParseBuildBytecode(simpleDomainBuild))
 	require.NoError(t, err)
 
 	deployTXHash, err := cc.R(ctx).
@@ -113,7 +113,7 @@ func DeploySmartContract(t *testing.T, bi blockindexer.BlockIndexer, ecf ethclie
 		SignAndSend()
 	require.NoError(t, err)
 
-	deployTx, err := bi.WaitForTransactionSuccess(ctx, *deployTXHash, simDomainABI)
+	deployTx, err := bi.WaitForTransactionSuccess(ctx, *deployTXHash, simpleDomainABI)
 	require.NoError(t, err)
 	require.Equal(t, deployTx.Result.V(), blockindexer.TXResult_SUCCESS)
 	return deployTx.ContractAddress
@@ -123,7 +123,7 @@ func DeploySmartContract(t *testing.T, bi blockindexer.BlockIndexer, ecf ethclie
 // with "string" types (rather than "address") for the from/to address and to ask Paladin to do
 // verifier resolution for these. The same domain could also support "address" type inputs/outputs
 // in the same ABI.
-const fakeCoinTransferABI = `{
+const simpleTokenTransferABI = `{
 		"type": "function",
 		"name": "transfer",
 		"inputs": [
@@ -143,11 +143,11 @@ const fakeCoinTransferABI = `{
 		"outputs": null
 	}`
 
-func FakeCoinTransferABI() *abi.ABI {
-	return &abi.ABI{mustParseABIEntry(fakeCoinTransferABI)}
+func SimpleTokenTransferABI() *abi.ABI {
+	return &abi.ABI{mustParseABIEntry(simpleTokenTransferABI)}
 }
 
-const fakeCoinConstructorABI = `{
+const simpleTokenConstructorABI = `{
 		"type": "constructor",
 		"inputs": [
 		  {
@@ -166,21 +166,21 @@ const fakeCoinConstructorABI = `{
 		"outputs": null
 	}`
 
-func FakeCoinConstructorABI() *abi.ABI {
-	return &abi.ABI{mustParseABIEntry(fakeCoinConstructorABI)}
+func SimpleTokenConstructorABI() *abi.ABI {
+	return &abi.ABI{mustParseABIEntry(simpleTokenConstructorABI)}
 }
 
-func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
-	simDomainABI := mustParseBuildABI(simDomainBuild)
-	simTokenABI := mustParseBuildABI(simTokenBuild)
+func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
+	simpleDomainABI := mustParseBuildABI(simpleDomainBuild)
+	simpleTokenABI := mustParseBuildABI(simpleTokenBuild)
 
-	transferABI := simTokenABI.Events()["UTXOTransfer"]
+	transferABI := simpleTokenABI.Events()["UTXOTransfer"]
 	require.NotEmpty(t, transferABI)
 	transferSignature := transferABI.SolString()
 
-	fakeCoinStateSchema := `{
+	simpleTokenStateSchema := `{
 		"type": "tuple",
-		"internalType": "struct FakeCoin",
+		"internalType": "struct SimpleToken",
 		"components": [
 			{
 				"name": "salt",
@@ -211,7 +211,7 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 		Amount *ethtypes.HexInteger `json:"amount"`
 	}
 
-	type fakeCoinParser struct {
+	type simpleTokenParser struct {
 		Salt   tktypes.HexBytes      `json:"salt"`
 		Owner  ethtypes.Address0xHex `json:"owner"`
 		Amount *ethtypes.HexInteger  `json:"amount"`
@@ -221,18 +221,18 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 		{Name: "notaryLocator", Type: "string"},
 	}
 
-	type fakeCoinConfigParser struct {
+	type simpleTokenConfigParser struct {
 		NotaryLocator string `json:"notaryLocator"`
 	}
 
 	return plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
 
-		var fakeCoinSchemaID string
+		var simpleTokenSchemaID string
 		var chainID int64
-		fakeCoinSelection := func(ctx context.Context, fromAddr *ethtypes.Address0xHex, contractAddr string, amount *big.Int) ([]*fakeCoinParser, []*prototk.StateRef, *big.Int, error) {
+		simpleTokenSelection := func(ctx context.Context, fromAddr *ethtypes.Address0xHex, contractAddr string, amount *big.Int) ([]*simpleTokenParser, []*prototk.StateRef, *big.Int, error) {
 			var lastStateTimestamp int64
 			total := big.NewInt(0)
-			coins := []*fakeCoinParser{}
+			coins := []*simpleTokenParser{}
 			stateRefs := []*prototk.StateRef{}
 			for {
 				// Simple oldest coin first algo
@@ -254,7 +254,7 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				}
 				res, err := callbacks.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
 					ContractAddress: contractAddr,
-					SchemaId:        fakeCoinSchemaID,
+					SchemaId:        simpleTokenSchemaID,
 					QueryJson:       tktypes.JSONString(jq).String(),
 				})
 				if err != nil {
@@ -267,7 +267,7 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				for _, state := range states {
 					lastStateTimestamp = state.StoredAt
 					// Note: More sophisticated coin selection might prefer states that aren't locked to a sequence
-					var coin fakeCoinParser
+					var coin simpleTokenParser
 					if err := json.Unmarshal([]byte(state.DataJson), &coin); err != nil {
 						return nil, nil, nil, fmt.Errorf("coin %s is invalid: %s", state.Id, err)
 					}
@@ -286,7 +286,7 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 		}
 
 		validateTransferTransactionInput := func(tx *prototk.TransactionSpecification) (*ethtypes.Address0xHex, string, *fakeTransferParser) {
-			assert.JSONEq(t, fakeCoinTransferABI, tx.FunctionAbiJson)
+			assert.JSONEq(t, simpleTokenTransferABI, tx.FunctionAbiJson)
 			assert.Equal(t, "function transfer(string memory from, string memory to, uint256 amount) external { }", tx.FunctionSignature)
 			var inputs fakeTransferParser
 			err := json.Unmarshal([]byte(tx.FunctionParamsJson), &inputs)
@@ -298,7 +298,7 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 			require.NoError(t, err)
 			configJSON, err := tktypes.StandardABISerializer().SerializeJSON(configValues)
 			require.NoError(t, err)
-			var config fakeCoinConfigParser
+			var config simpleTokenConfigParser
 			err = json.Unmarshal(configJSON, &config)
 			require.NoError(t, err)
 			assert.NotEmpty(t, config.NotaryLocator)
@@ -322,7 +322,7 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 			return
 		}
 
-		typedDataV4TransferWithSalts := func(contract *ethtypes.Address0xHex, inputs, outputs []*fakeCoinParser) (tktypes.HexBytes, error) {
+		typedDataV4TransferWithSalts := func(contract *ethtypes.Address0xHex, inputs, outputs []*simpleTokenParser) (tktypes.HexBytes, error) {
 			typeSet := eip712.TypeSet{
 				"FakeTransfer": {
 					{Name: "inputs", Type: "Coin[]"},
@@ -391,7 +391,7 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 						BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
 							SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
 						},
-						AbiStateSchemasJson: []string{fakeCoinStateSchema},
+						AbiStateSchemasJson: []string{simpleTokenStateSchema},
 						AbiEventsJson:       string(eventsJSON),
 					},
 				}, nil
@@ -399,8 +399,8 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 
 			InitDomain: func(ctx context.Context, req *prototk.InitDomainRequest) (*prototk.InitDomainResponse, error) {
 				assert.Len(t, req.AbiStateSchemas, 1)
-				fakeCoinSchemaID = req.AbiStateSchemas[0].Id
-				assert.Equal(t, "type=FakeCoin(bytes32 salt,address owner,uint256 amount),labels=[owner,amount]", req.AbiStateSchemas[0].Signature)
+				simpleTokenSchemaID = req.AbiStateSchemas[0].Id
+				assert.Equal(t, "type=SimpleToken(bytes32 salt,address owner,uint256 amount),labels=[owner,amount]", req.AbiStateSchemas[0].Signature)
 				return &prototk.InitDomainResponse{}, nil
 			},
 
@@ -429,7 +429,7 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				return &prototk.PrepareDeployResponse{
 					Signer: confutil.P(fmt.Sprintf("domain1/transactions/%s", req.Transaction.TransactionId)),
 					Transaction: &prototk.BaseLedgerTransaction{
-						FunctionAbiJson: toJSONString(t, simDomainABI.Functions()["newSIMTokenNotarized"]),
+						FunctionAbiJson: toJSONString(t, simpleDomainABI.Functions()["newSimpleTokenNotarized"]),
 						ParamsJson: fmt.Sprintf(`{
 							"txId": "%s",
 							"notary": "%s",
@@ -476,39 +476,39 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				_, fromAddr, toAddr := extractTransferVerifiers(req.Transaction, txInputs, req.ResolvedVerifiers)
 				amount := txInputs.Amount.BigInt()
 				toKeep := new(big.Int)
-				coinsToSpend := []*fakeCoinParser{}
+				coinsToSpend := []*simpleTokenParser{}
 				stateRefsToSpend := []*prototk.StateRef{}
 				if txInputs.From != "" {
-					coinsToSpend, stateRefsToSpend, toKeep, err = fakeCoinSelection(ctx, fromAddr, req.Transaction.ContractAddress, amount)
+					coinsToSpend, stateRefsToSpend, toKeep, err = simpleTokenSelection(ctx, fromAddr, req.Transaction.ContractAddress, amount)
 					if err != nil {
 						return nil, err
 					}
 				}
 				newStates := []*prototk.NewState{}
-				newCoins := []*fakeCoinParser{}
+				newCoins := []*simpleTokenParser{}
 				if fromAddr != nil && toKeep.Sign() > 0 {
 					// Generate a state to keep for ourselves
-					coin := fakeCoinParser{
+					coin := simpleTokenParser{
 						Salt:   tktypes.RandBytes(32),
 						Owner:  *fromAddr,
 						Amount: (*ethtypes.HexInteger)(toKeep),
 					}
 					newCoins = append(newCoins, &coin)
 					newStates = append(newStates, &prototk.NewState{
-						SchemaId:      fakeCoinSchemaID,
+						SchemaId:      simpleTokenSchemaID,
 						StateDataJson: toJSONString(t, &coin),
 					})
 				}
 				if toAddr != nil && amount.Sign() > 0 {
 					// Generate the coin to transfer
-					coin := fakeCoinParser{
+					coin := simpleTokenParser{
 						Salt:   tktypes.RandBytes(32),
 						Owner:  *toAddr,
 						Amount: (*ethtypes.HexInteger)(amount),
 					}
 					newCoins = append(newCoins, &coin)
 					newStates = append(newStates, &prototk.NewState{
-						SchemaId:      fakeCoinSchemaID,
+						SchemaId:      simpleTokenSchemaID,
 						StateDataJson: toJSONString(t, &coin),
 					})
 				}
@@ -549,16 +549,16 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				assert.Equal(t, req.EndorsementVerifier.Lookup, req.EndorsementRequest.Parties[0])
 				assert.Equal(t, req.EndorsementVerifier.Lookup, notaryLocator)
 
-				inCoins := make([]*fakeCoinParser, len(req.Inputs))
+				inCoins := make([]*simpleTokenParser, len(req.Inputs))
 				for i, input := range req.Inputs {
-					assert.Equal(t, fakeCoinSchemaID, input.SchemaId)
+					assert.Equal(t, simpleTokenSchemaID, input.SchemaId)
 					if err := json.Unmarshal([]byte(input.StateDataJson), &inCoins[i]); err != nil {
 						return nil, fmt.Errorf("invalid input[%d] (%s): %s", i, input.Id, err)
 					}
 				}
-				outCoins := make([]*fakeCoinParser, len(req.Outputs))
+				outCoins := make([]*simpleTokenParser, len(req.Outputs))
 				for i, output := range req.Outputs {
-					assert.Equal(t, fakeCoinSchemaID, output.SchemaId)
+					assert.Equal(t, simpleTokenSchemaID, output.SchemaId)
 					if err := json.Unmarshal([]byte(output.StateDataJson), &outCoins[i]); err != nil {
 						return nil, fmt.Errorf("invalid output[%d] (%s): %s", i, output.Id, err)
 					}
@@ -629,7 +629,7 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				}
 				return &prototk.PrepareTransactionResponse{
 					Transaction: &prototk.BaseLedgerTransaction{
-						FunctionAbiJson: toJSONString(t, simTokenABI.Functions()["executeNotarized"]),
+						FunctionAbiJson: toJSONString(t, simpleTokenABI.Functions()["executeNotarized"]),
 						ParamsJson: toJSONString(t, map[string]interface{}{
 							"txId":      req.Transaction.TransactionId,
 							"inputs":    spentStateIds,

@@ -16,6 +16,8 @@
 package componenttest
 
 import (
+	_ "embed"
+
 	"context"
 	"net"
 	"os"
@@ -34,6 +36,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,14 +72,20 @@ func timeTillDeadline(t *testing.T) time.Duration {
 
 type componentTestInstance struct {
 	grpcTarget string
-	engineName string
-	id         uuid.UUID
-	conf       *componentmgr.Config
-	ctx        context.Context
-	cancelCtx  context.CancelFunc
+	//engineName string
+	id   uuid.UUID
+	conf *componentmgr.Config
+	ctx  context.Context
+	//cancelCtx  context.CancelFunc
 }
 
-func newInstanceForComponentTesting(t *testing.T) (*componentTestInstance, componentmgr.ComponentManager) {
+func deplyDomainRegistry(t *testing.T) *tktypes.EthAddress {
+	// We need an engine so that we can deploy the base ledger contract for the domain
+	//Actually, we only need a bare bones engine that is capable of deploying the base ledger contracts
+	// could make do with assembling some core components like key manager, eth client factory, block indexer, persistence and any other dependencies they pull in
+	// but is easier to just create a throwaway component manager with no domains
+	tmpConf := testConfig(t)
+	// wouldn't need to do this if we just created the core coponents directly
 	f, err := os.CreateTemp("", "component-test.*.sock")
 	require.NoError(t, err)
 
@@ -88,23 +97,7 @@ func newInstanceForComponentTesting(t *testing.T) (*componentTestInstance, compo
 	err = os.Remove(grpcTarget)
 	require.NoError(t, err)
 
-	//Little bit of a chicken and egg situation here.
-	// We need an engine so that we can deploy the base ledger contract for the domain
-	// and then we need the address of that contract for the config file we use to iniitialize the engine
-	//Actually in the first instance, we only need a bare bones engine that is capable of deploying the base ledger contracts
-	// could make do with assembling some core components like key manager, eth client factory, block indexer, persistence and any other dependencies they pull in
-	// but is easier to just create a throwaway component manager with no domains
-
-	i := &componentTestInstance{
-		grpcTarget: grpcTarget,
-		id:         uuid.New(),
-		conf:       testConfig(t),
-		engineName: "",
-	}
-	i.ctx, i.cancelCtx = context.WithCancel(log.WithLogField(context.Background(), "pid", strconv.Itoa(os.Getpid())))
-
-	tmpConf := testConfig(t)
-	cmTmp := componentmgr.NewComponentManager(i.ctx, i.grpcTarget, i.id, tmpConf, &componentTestEngine{})
+	cmTmp := componentmgr.NewComponentManager(context.Background(), grpcTarget, uuid.New(), tmpConf, &componentTestEngine{})
 	err = cmTmp.Init()
 	require.NoError(t, err)
 	err = cmTmp.StartComponents()
@@ -112,7 +105,30 @@ func newInstanceForComponentTesting(t *testing.T) (*componentTestInstance, compo
 	domainRegistryAddress := domains.DeploySmartContract(t, cmTmp.BlockIndexer(), cmTmp.EthClientFactory())
 
 	cmTmp.Stop()
+	return domainRegistryAddress
 
+}
+
+func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes.EthAddress, instanceName string) rpcclient.Client {
+	f, err := os.CreateTemp("", "component-test.*.sock")
+	require.NoError(t, err)
+
+	grpcTarget := f.Name()
+
+	err = f.Close()
+	require.NoError(t, err)
+
+	err = os.Remove(grpcTarget)
+	require.NoError(t, err)
+
+	i := &componentTestInstance{
+		grpcTarget: grpcTarget,
+		id:         uuid.New(),
+		conf:       testConfig(t),
+	}
+	i.ctx = log.WithLogField(context.Background(), "instance", instanceName)
+
+	i.conf.Log.Level = confutil.P("trace")
 	i.conf.DomainManagerConfig.Domains = make(map[string]*domainmgr.DomainConfig, 1)
 	i.conf.DomainManagerConfig.Domains["domain1"] = &domainmgr.DomainConfig{
 		Plugin: components.PluginConfig{
@@ -137,7 +153,7 @@ func newInstanceForComponentTesting(t *testing.T) (*componentTestInstance, compo
 	require.NoError(t, err)
 
 	loaderMap := map[string]plugintk.Plugin{
-		"domain1": domains.FakeCoinDomain(t, i.ctx),
+		"domain1": domains.SimpleTokenDomain(t, i.ctx),
 	}
 	pc := cm.PluginManager()
 	pl, err = plugins.NewUnitTestPluginLoader(pc.GRPCTargetURL(), pc.LoaderID().String(), loaderMap)
@@ -152,7 +168,10 @@ func newInstanceForComponentTesting(t *testing.T) (*componentTestInstance, compo
 		cm.Stop()
 	})
 
-	return i, cm
+	client, err := rpcclient.NewHTTPClient(log.WithLogField(context.Background(), "client-for", instanceName), &rpcclient.HTTPConfig{URL: "http://localhost:" + strconv.Itoa(*i.conf.RPCServer.HTTP.Port)})
+	require.NoError(t, err)
+
+	return client
 
 }
 
