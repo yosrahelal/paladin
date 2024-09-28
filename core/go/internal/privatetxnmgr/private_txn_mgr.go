@@ -27,9 +27,11 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -193,8 +195,7 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.Priva
 	return nil
 }
 
-// Synchronous function to deploy a domain smart contract
-// TODO This is async.
+// Synchronous function to submit a deployment request which is asynchronously processed
 // Private transaction manager will receive a notification when the public transaction is confirmed
 // (same as for invokes)
 func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.PrivateContractDeploy) error {
@@ -213,7 +214,7 @@ func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.Pr
 		return i18n.WrapError(ctx, err, msgs.MsgDeployInitFailed)
 	}
 
-	//Resolve keys synchronously (rather than having an orchestrator stage for it) so that we can return an error if any key resolution fails
+	//Resolve keys synchronously so that we can return an error if any key resolution fails
 	keyMgr := p.components.KeyManager()
 	tx.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.RequiredVerifiers))
 	for i, v := range tx.RequiredVerifiers {
@@ -228,88 +229,124 @@ func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.Pr
 		}
 	}
 
-	// TODO this is a transaction that will confirm just like invoke transactions
+	// this is a transaction that will confirm just like invoke transactions
+	// unlike invoke transactions, we don't yet have the orchestrator thread to dispatch to so we start a new go routine for each deployment
+	// TODO - should have a pool of deployment threads? Maybe size of pool should be one? Or at least one per domain?
+	go p.deploymentLoop(log.WithLogField(p.ctx, "role", "deploy-loop"), domain, tx)
+
 	return nil
 }
+func (p *privateTxManager) deploymentLoop(ctx context.Context, domain components.Domain, tx *components.PrivateContractDeploy) {
+	log.L(ctx).Info("Starting deployment loop")
+	adddr, err := p.evaluateDeployment(ctx, domain, tx)
+	if err != nil {
+		log.L(ctx).Errorf("Error evaluating deployment: %s", err)
+		return
+	}
+	log.L(ctx).Infof("Deployment completed successfully. Contract address: %s", adddr.String())
+}
 
-// func (p *privateTxManager) placeholderDeployment(ctx context.Context, domain components.Domain, tx *components.PrivateContractDeploy) (*tktypes.EthAddress, error) {
+func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain components.Domain, tx *components.PrivateContractDeploy) (*tktypes.EthAddress, error) {
 
-// 	err := domain.PrepareDeploy(ctx, tx)
-// 	if err != nil {
-// 		return nil, i18n.WrapError(ctx, err, msgs.MsgDeployPrepareFailed)
-// 	}
+	// TODO there is a lot of common code between this and the Dispatch function in the orchestrator. shoud really move some of it into a common place
+	// and use that as an operatunity to refactor to be more readable
 
-// 	//Placeholder for integration with public transaction manager
-// 	if tx.DeployTransaction != nil && tx.InvokeTransaction == nil {
-// 		err = p.execBaseLedgerDeployTransaction(ctx, tx.Signer, tx.DeployTransaction)
-// 	} else if tx.InvokeTransaction != nil && tx.DeployTransaction == nil {
-// 		err = p.execBaseLedgerTransaction(ctx, tx.Signer, tx.InvokeTransaction)
-// 	} else {
-// 		return nil, i18n.NewError(ctx, msgs.MsgDeployPrepareIncomplete)
-// 	}
-// 	if err != nil {
-// 		return nil, i18n.WrapError(ctx, err, msgs.MsgBaseLedgerTransactionFailed)
-// 	}
+	err := domain.PrepareDeploy(ctx, tx)
+	if err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgDeployPrepareFailed)
+	}
 
-// 	psc, err := p.components.DomainManager().WaitForDeploy(ctx, tx.ID)
-// 	if err != nil {
-// 		return nil, i18n.WrapError(ctx, err, msgs.MsgBaseLedgerTransactionFailed)
-// 	}
+	ec := p.components.EthClientFactory().SharedWS()
+	publicTransactionEngine := p.components.PublicTxManager()
 
-// 	addr := psc.Address()
-// 	return &addr, nil
+	publicTXs := []*components.PublicTxSubmission{
+		{
 
-// }
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: ptxapi.PublicTxInput{
+				From:            tx.Signer,
+				To:              &tx.InvokeTransaction.To,
+				PublicTxOptions: ptxapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
+			},
+		},
+	}
 
-// // TODO this is a temporary function to execute a base ledger transaction.  It should be replaced with a call to the public transaction manager
-// func (p *privateTxManager) execBaseLedgerDeployTransaction(ctx context.Context, signer string, txInstruction *components.EthDeployTransaction) error {
+	var req ethclient.ABIFunctionRequestBuilder
+	if tx.InvokeTransaction != nil {
+		log.L(ctx).Debug("Deploying by invoking a base ledger contract")
 
-// 	var abiFunc ethclient.ABIFunctionClient
-// 	ec := p.components.EthClientFactory().HTTPClient()
-// 	abiFunc, err := ec.ABIConstructor(ctx, txInstruction.ConstructorABI, tktypes.HexBytes(txInstruction.Bytecode))
-// 	if err != nil {
-// 		return err
-// 	}
+		abiFn, err := ec.ABIFunction(ctx, tx.InvokeTransaction.FunctionABI)
+		if err == nil {
+			req = abiFn.R(ctx)
+			err = req.Input(tx.InvokeTransaction.Inputs).BuildCallData()
+		}
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgBaseLedgerTransactionFailed)
+		}
+		publicTXs[0].Data = tktypes.HexBytes(req.TX().Data)
+	} else if tx.DeployTransaction != nil {
+		//TODO
+		panic("Not implemented")
+	} else {
+		//TODO error message
+		return nil, i18n.NewError(ctx, msgs.MsgBaseLedgerTransactionFailed)
+	}
 
-// 	// Send the transaction
-// 	txHash, err := abiFunc.R(ctx).
-// 		Signer(signer).
-// 		Input(txInstruction.Inputs).
-// 		SignAndSend()
-// 	if err == nil {
-// 		_, err = p.components.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
-// 	}
-// 	if err != nil {
-// 		return fmt.Errorf("failed to send base deploy ledger transaction: %s", err)
-// 	}
-// 	return nil
-// }
+	pubBatch, err := publicTransactionEngine.PrepareSubmissionBatch(ctx, publicTXs)
+	if err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgPrivTxMgrPublicTxFail)
+	}
 
-// // TODO this is a temporary function to execute a base ledger transaction.  It should be replaced with a call to the public transaction manager
-// func (p *privateTxManager) execBaseLedgerTransaction(ctx context.Context, signer string, txInstruction *components.EthTransaction) error {
+	//transactions are always dispatched as a sequence, even if only a sequence of one
+	sequence := &privatetxnstore.DispatchSequence{
+		PrivateTransactionDispatches: []*privatetxnstore.DispatchPersisted{
+			{
+				PrivateTransactionID: tx.ID.String(),
+			},
+		},
+	}
 
-// 	var abiFunc ethclient.ABIFunctionClient
-// 	ec := p.components.EthClientFactory().HTTPClient()
-// 	abiFunc, err := ec.ABIFunction(ctx, txInstruction.FunctionABI)
-// 	if err != nil {
-// 		return err
-// 	}
+	// Must make sure from this point we return the nonces
+	completed := false // and include whether we committed the DB transaction or not
+	sequence.PublicTxBatch = pubBatch
+	defer func() {
+		pubBatch.Completed(ctx, completed)
+	}()
+	if len(pubBatch.Rejected()) > 0 {
+		// We do not handle partial success - roll everything back
+		return nil, i18n.WrapError(ctx, pubBatch.Rejected()[0].RejectedError(), msgs.MsgPrivTxMgrPublicTxFail)
+	}
 
-// 	// Send the transaction
-// 	addr := ethtypes.Address0xHex(txInstruction.To)
-// 	txHash, err := abiFunc.R(ctx).
-// 		Signer(signer).
-// 		To(&addr).
-// 		Input(txInstruction.Inputs).
-// 		SignAndSend()
-// 	if err == nil {
-// 		_, err = p.components.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, nil)
-// 	}
-// 	if err != nil {
-// 		return fmt.Errorf("failed to send base ledger transaction: %s", err)
-// 	}
-// 	return nil
-// }
+	dispatchBatch := &privatetxnstore.DispatchBatch{
+		DispatchSequences: []*privatetxnstore.DispatchSequence{
+			sequence,
+		},
+	}
+
+	// as this is a deploy we specify the null address
+	err = p.store.PersistDispatchBatch(ctx, tktypes.EthAddress{}, dispatchBatch)
+	if err != nil {
+		log.L(ctx).Errorf("Error persisting batch: %s", err)
+		return nil, err
+	}
+
+	completed = true
+
+	p.publishToSubscribers(ctx, &components.TransactionDispatchedEvent{
+		TransactionID:  tx.ID.String(),
+		Nonce:          uint64(0), /*TODO*/
+		SigningAddress: tx.Signer,
+	})
+
+	psc, err := p.components.DomainManager().WaitForDeploy(ctx, tx.ID)
+	if err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgBaseLedgerTransactionFailed)
+	}
+
+	addr := psc.Address()
+	return &addr, nil
+
+}
 
 func (p *privateTxManager) GetTxStatus(ctx context.Context, domainAddress string, txID string) (status components.PrivateTxStatus, err error) {
 	//TODO This is primarily here to help with testing for now
