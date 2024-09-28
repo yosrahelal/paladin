@@ -35,9 +35,9 @@ import (
 	"github.com/kaleido-io/paladin/core/componenttest/domains"
 	"github.com/kaleido-io/paladin/core/internal/componentmgr"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/domainmgr"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -50,8 +50,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
+	"sigs.k8s.io/yaml"
 )
 
 //go:embed abis/SimpleStorage.json
@@ -61,7 +61,7 @@ func TestRunSimpleStorageEthTransaction(t *testing.T) {
 	ctx := context.Background()
 	logrus.SetLevel(logrus.DebugLevel)
 
-	var testConfig componentmgr.Config
+	var testConfig config.PaladinConfig
 
 	err := yaml.Unmarshal([]byte(`
 db:
@@ -94,7 +94,7 @@ signer:
 	require.NoError(t, err)
 	defer p.Close()
 
-	indexer, err := blockindexer.NewBlockIndexer(ctx, &blockindexer.Config{
+	indexer, err := blockindexer.NewBlockIndexer(ctx, &config.BlockIndexerConfig{
 		FromBlock: tktypes.RawJSON(`"latest"`), // don't want earlier events
 	}, &testConfig.Blockchain.WS, p)
 	require.NoError(t, err)
@@ -301,7 +301,7 @@ type componentTestInstance struct {
 	grpcTarget string
 	engineName string
 	id         uuid.UUID
-	conf       *componentmgr.Config
+	conf       *config.PaladinConfig
 	ctx        context.Context
 	cancelCtx  context.CancelFunc
 }
@@ -343,10 +343,10 @@ func newInstanceForComponentTesting(t *testing.T) (*componentTestInstance, compo
 
 	cmTmp.Stop()
 
-	i.conf.DomainManagerConfig.Domains = make(map[string]*domainmgr.DomainConfig, 1)
-	i.conf.DomainManagerConfig.Domains["domain1"] = &domainmgr.DomainConfig{
-		Plugin: components.PluginConfig{
-			Type:    components.LibraryTypeCShared.Enum(),
+	i.conf.DomainManagerConfig.Domains = make(map[string]*config.DomainConfig, 1)
+	i.conf.DomainManagerConfig.Domains["domain1"] = &config.DomainConfig{
+		Plugin: config.PluginConfig{
+			Type:    config.LibraryTypeCShared.Enum(),
 			Library: "loaded/via/unit/test/loader",
 		},
 		Config:          map[string]any{"some": "config"},
@@ -417,12 +417,12 @@ func (c *componentTestEngine) Stop() {
 
 }
 
-func testConfig(t *testing.T) *componentmgr.Config {
+func testConfig(t *testing.T) *config.PaladinConfig {
 	ctx := context.Background()
 	log.SetLevel("debug")
 
-	var conf *componentmgr.Config
-	err := componentmgr.ReadAndParseYAMLFile(ctx, "../test/config/sqlite.memory.config.yaml", &conf)
+	var conf *config.PaladinConfig
+	err := config.ReadAndParseYAMLFile(ctx, "../test/config/sqlite.memory.config.yaml", &conf)
 	assert.NoError(t, err)
 
 	// For running in this unit test the dirs are different to the sample config
@@ -440,7 +440,7 @@ func testConfig(t *testing.T) *componentmgr.Config {
 
 // getFreePort finds an available TCP port and returns it.
 func getFreePort() (int, error) {
-	listener, err := net.Listen("tcp", ":0")
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return 0, err
 	}

@@ -12,26 +12,22 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
-package api
+package config
 
 import (
-	"github.com/kaleido-io/paladin/core/internal/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 )
 
-type FileSystemConfig struct {
-	Path     *string      `yaml:"path"`
-	Cache    cache.Config `yaml:"cache"`
-	FileMode *string      `yaml:"fileMode"`
-	DirMode  *string      `yaml:"dirMode"`
+type RegistryManagerConfig struct {
+	Registries map[string]*RegistryConfig `json:"registries"`
 }
 
-var FileSystemDefaults = &FileSystemConfig{
-	Path:     confutil.P("keystore"),
-	FileMode: confutil.P("0600"),
-	DirMode:  confutil.P("0700"),
-	Cache: cache.Config{
-		Capacity: confutil.P(100),
-	},
+type RegistryInitConfig struct {
+	Retry retry.Config `json:"retry"`
+}
+
+type RegistryConfig struct {
+	Init   RegistryInitConfig `json:"init"`
+	Plugin PluginConfig       `json:"plugin"`
+	Config map[string]any     `json:"config"`
 }

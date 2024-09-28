@@ -13,11 +13,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package api
+package config
 
-// StaticKeyEntryConfig is the configuration for a ZK prover
-// based on SNARK, which typically takes a circuit and proving key
-type SnarkProverConfig struct {
-	CircuitsDir    string `yaml:"circuitsDir"`    // directory for the circuits runtime (WASM currently supported)
-	ProvingKeysDir string `yaml:"provingKeysDir"` // public parameters for the prover, specific to each circuit
+import (
+	"github.com/kaleido-io/paladin/core/internal/cache"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+)
+
+type TxManagerConfig struct {
+	ABI ABIConfig `json:"abi"`
+}
+
+type ABIConfig struct {
+	Cache cache.Config `json:"cache"`
+}
+
+var TxManagerDefaults = &TxManagerConfig{
+	ABI: ABIConfig{
+		Cache: cache.Config{
+			Capacity: confutil.P(100),
+		},
+	},
 }

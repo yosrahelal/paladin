@@ -13,23 +13,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package api
+package signerapi
 
-type StaticKeyEntryEncoding string
-
-const (
-	StaticKeyEntryEncodingNONE   StaticKeyEntryEncoding = "none"
-	StaticKeyEntryEncodingHEX    StaticKeyEntryEncoding = "hex"
-	StaticKeyEntryEncodingBase64 StaticKeyEntryEncoding = "base64"
+import (
+	"github.com/kaleido-io/paladin/core/internal/cache"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 )
 
-type StaticKeyEntryConfig struct {
-	Encoding StaticKeyEntryEncoding `yaml:"encoding"`
-	Filename string                 `yaml:"filename"`
-	Trim     bool                   `yaml:"trim"`
-	Inline   string                 `yaml:"inline"`
+type FileSystemConfig struct {
+	Path     *string      `json:"path"`
+	Cache    cache.Config `json:"cache"`
+	FileMode *string      `json:"fileMode"`
+	DirMode  *string      `json:"dirMode"`
 }
 
-type StaticKeyStorageConfig struct {
-	Keys map[string]StaticKeyEntryConfig `yaml:"keys"`
+var FileSystemDefaults = &FileSystemConfig{
+	Path:     confutil.P("keystore"),
+	FileMode: confutil.P("0600"),
+	DirMode:  confutil.P("0700"),
+	Cache: cache.Config{
+		Capacity: confutil.P(100),
+	},
 }

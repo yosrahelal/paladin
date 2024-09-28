@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package componentmgr
+package config
 
 import (
 	"context"
@@ -29,9 +29,9 @@ func TestReadAndParseYAMLFileFlatStruct(t *testing.T) {
 	ctx := context.Background()
 
 	type testConfigType struct {
-		Foo *string `yaml:"foo"`
-		Bar *int    `yaml:"bar"`
-		Baz *int    `yaml:"baz"`
+		Foo *string `json:"foo"`
+		Bar *int    `json:"bar"`
+		Baz *int    `json:"baz"`
 	}
 	// Create a temporary test file
 	tempFile, err := os.CreateTemp("", "test_*.yaml")
@@ -69,13 +69,13 @@ func TestReadAndParseYAMLFileNestedStruct(t *testing.T) {
 	ctx := context.Background()
 
 	type testConfigChildType struct {
-		Foo *string `yaml:"foo"`
-		Bar *int    `yaml:"bar"`
-		Baz *int    `yaml:"baz"`
+		Foo *string `json:"foo"`
+		Bar *int    `json:"bar"`
+		Baz *int    `json:"baz"`
 	}
 	type testConfigType struct {
-		Child *testConfigChildType `yaml:"child"`
-		Baz   *int                 `yaml:"baz"`
+		Child *testConfigChildType `json:"child"`
+		Baz   *int                 `json:"baz"`
 	}
 	// Create a temporary test file
 	tempFile, err := os.CreateTemp("", "test_*.yaml")
@@ -119,18 +119,18 @@ func TestReadAndParseYAMLFileNestedInlineStruct(t *testing.T) {
 	ctx := context.Background()
 
 	type testConfigChildType struct {
-		Foo *string `yaml:"foo"`
-		Bar *int    `yaml:"bar"`
-		Baz *int    `yaml:"baz"`
+		Foo *string `json:"foo"`
+		Bar *int    `json:"bar"`
+		Baz *int    `json:"baz"`
 	}
 
 	type testConfigChildWrapperType struct {
-		testConfigChildType `yaml:",inline"`
+		testConfigChildType `json:",inline"`
 	}
 
 	type testConfigType struct {
-		Child *testConfigChildWrapperType `yaml:"child"`
-		Baz   *int                        `yaml:"baz"`
+		Child *testConfigChildWrapperType `json:"child"`
+		Baz   *int                        `json:"baz"`
 	}
 	// Create a temporary test file
 	tempFile, err := os.CreateTemp("", "test_*.yaml")
@@ -200,9 +200,9 @@ func TestReadAndParseYAMLFileFailedParse(t *testing.T) {
 	ctx := context.Background()
 
 	type testConfigType struct {
-		Foo *string `yaml:"foo"`
-		Bar *int    `yaml:"bar"`
-		Baz *int    `yaml:"baz"`
+		Foo *string `json:"foo"`
+		Bar *int    `json:"bar"`
+		Baz *int    `json:"baz"`
 	}
 	// Create a temporary test file
 	tempFile, err := os.CreateTemp("", "test_*.yaml")

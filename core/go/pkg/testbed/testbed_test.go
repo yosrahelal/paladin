@@ -21,19 +21,19 @@ import (
 	"path"
 	"testing"
 
-	"github.com/kaleido-io/paladin/core/internal/componentmgr"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
+	"sigs.k8s.io/yaml"
 )
 
 func writeTestConfig(t *testing.T) (configFile string) {
 	ctx := context.Background()
 	log.SetLevel("debug")
 
-	var conf *componentmgr.Config
-	err := componentmgr.ReadAndParseYAMLFile(ctx, "../../test/config/sqlite.memory.config.yaml", &conf)
+	var conf *config.PaladinConfig
+	err := config.ReadAndParseYAMLFile(ctx, "../../test/config/sqlite.memory.config.yaml", &conf)
 	require.NoError(t, err)
 	// For running in this unit test the dirs are different to the sample config
 	conf.DB.SQLite.MigrationsDir = "../../db/migrations/sqlite"
@@ -42,7 +42,9 @@ func writeTestConfig(t *testing.T) (configFile string) {
 	f, err := os.Create(configFile)
 	require.NoError(t, err)
 	defer f.Close()
-	err = yaml.NewEncoder(f).Encode(conf)
+	b, err := yaml.Marshal(conf)
+	require.NoError(t, err)
+	_, err = f.Write(b)
 	require.NoError(t, err)
 
 	return configFile
@@ -85,7 +87,7 @@ domains:
 log:
   level: debug	
 `
-	var conf componentmgr.Config
+	var conf config.PaladinConfig
 	err := yaml.Unmarshal([]byte(yamlConf), &conf)
 	require.NoError(t, err)
 

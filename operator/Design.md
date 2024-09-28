@@ -63,14 +63,14 @@ spec:
         migrationsDir: './db/migrations/postgres'
         debugQueries: true
     grpc:
-      shutdownTimeout: 0
+      shutdownTimeout: 0s
     rpcServer:
       http:
         port: 0
-        shutdownTimeout: 0
+        shutdownTimeout: 0s
       ws:
         disabled: true
-        shutdownTimeout: 0
+        shutdownTimeout: 0s
     blockchain:
       http:
         url: http://localhost:8545

@@ -13,13 +13,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package api
+package signerapi
 
-import (
-	"context"
+type StaticKeyEntryEncoding string
+
+const (
+	StaticKeyEntryEncodingNONE   StaticKeyEntryEncoding = "none"
+	StaticKeyEntryEncodingHEX    StaticKeyEntryEncoding = "hex"
+	StaticKeyEntryEncodingBase64 StaticKeyEntryEncoding = "base64"
 )
 
-type Extension interface {
-	// Return nil if keystore type is not known, or error if initialization fails
-	KeyStore(ctx context.Context, config *StoreConfig) (store KeyStore, err error)
+type StaticKeyEntryConfig struct {
+	Encoding StaticKeyEntryEncoding `json:"encoding"`
+	Filename string                 `json:"filename"`
+	Trim     bool                   `json:"trim"`
+	Inline   string                 `json:"inline"`
+}
+
+type StaticKeyStorageConfig struct {
+	Keys map[string]StaticKeyEntryConfig `json:"keys"`
 }

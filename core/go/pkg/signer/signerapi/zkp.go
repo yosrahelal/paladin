@@ -12,24 +12,12 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-package transportmgr
 
-import (
-	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
-)
+package signerapi
 
-type TransportManagerConfig struct {
-	NodeName   string                      `yaml:"nodeName"`
-	Transports map[string]*TransportConfig `yaml:"transports"`
-}
-
-type TransportInitConfig struct {
-	Retry retry.Config `yaml:"retry"`
-}
-
-type TransportConfig struct {
-	Init   TransportInitConfig     `yaml:"init"`
-	Plugin components.PluginConfig `yaml:"plugin"`
-	Config map[string]any          `yaml:"config"`
+// StaticKeyEntryConfig is the configuration for a ZK prover
+// based on SNARK, which typically takes a circuit and proving key
+type SnarkProverConfig struct {
+	CircuitsDir    string `json:"circuitsDir"`    // directory for the circuits runtime (WASM currently supported)
+	ProvingKeysDir string `json:"provingKeysDir"` // public parameters for the prover, specific to each circuit
 }

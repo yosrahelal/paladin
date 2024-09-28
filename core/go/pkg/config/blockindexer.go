@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package blockindexer
+package config
 
 import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -22,28 +22,28 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-type Config struct {
-	FromBlock             tktypes.RawJSON    `yaml:"fromBlock,omitempty"`
-	CommitBatchSize       *int               `yaml:"commitBatchSize"`
-	CommitBatchTimeout    *string            `yaml:"commitBatchTimeout"`
-	RequiredConfirmations *int               `yaml:"requiredConfirmations"`
-	ChainHeadCacheLen     *int               `yaml:"chainHeadCacheLen"`
-	BlockPollingInterval  *string            `yaml:"blockPollingInterval"`
-	EventStreams          EventStreamsConfig `yaml:"eventStreams"`
-	Retry                 retry.Config       `yaml:"retry"`
+type BlockIndexerConfig struct {
+	FromBlock             tktypes.RawJSON    `json:"fromBlock,omitempty"`
+	CommitBatchSize       *int               `json:"commitBatchSize"`
+	CommitBatchTimeout    *string            `json:"commitBatchTimeout"`
+	RequiredConfirmations *int               `json:"requiredConfirmations"`
+	ChainHeadCacheLen     *int               `json:"chainHeadCacheLen"`
+	BlockPollingInterval  *string            `json:"blockPollingInterval"`
+	EventStreams          EventStreamsConfig `json:"eventStreams"`
+	Retry                 retry.Config       `json:"retry"`
 }
 
 type EventStreamsConfig struct {
-	BlockDispatchQueueLength *int `yaml:"blockDispatchQueueLength"`
-	CatchUpQueryPageSize     *int `yaml:"catchupQueryPageSize"`
+	BlockDispatchQueueLength *int `json:"blockDispatchQueueLength"`
+	CatchUpQueryPageSize     *int `json:"catchupQueryPageSize"`
 }
 
-var DefaultEventStreamsConfig = &EventStreamsConfig{
+var EventStreamDefaults = &EventStreamsConfig{
 	BlockDispatchQueueLength: confutil.P(100),
 	CatchUpQueryPageSize:     confutil.P(100),
 }
 
-var DefaultConfig = &Config{
+var BlockIndexerDefaults = &BlockIndexerConfig{
 	FromBlock:             tktypes.RawJSON(`0`),
 	CommitBatchSize:       confutil.P(50),
 	CommitBatchTimeout:    confutil.P("100ms"),

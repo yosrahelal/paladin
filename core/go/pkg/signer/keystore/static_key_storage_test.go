@@ -24,16 +24,16 @@ import (
 	"testing"
 
 	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/api"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func newTestStaticStore(t *testing.T, keys map[string]api.StaticKeyEntryConfig) (context.Context, *staticStore) {
+func newTestStaticStore(t *testing.T, keys map[string]signerapi.StaticKeyEntryConfig) (context.Context, *staticStore) {
 	ctx := context.Background()
 
-	store, err := NewStaticKeyStore(ctx, api.StaticKeyStorageConfig{
+	store, err := NewStaticKeyStore(ctx, signerapi.StaticKeyStorageConfig{
 		Keys: keys,
 	})
 	require.NoError(t, err)
@@ -50,7 +50,7 @@ func TestStaticStoreFileFileWithTrim(t *testing.T) {
 	err := os.WriteFile(keyFile, []byte(keyData+"\n"), 0644)
 	require.NoError(t, err)
 
-	ctx, store := newTestStaticStore(t, map[string]api.StaticKeyEntryConfig{
+	ctx, store := newTestStaticStore(t, map[string]signerapi.StaticKeyEntryConfig{
 		"myKey": {
 			Encoding: "none",
 			Filename: keyFile,
@@ -71,7 +71,7 @@ func TestStaticStoreHexLoadFile(t *testing.T) {
 	err := os.WriteFile(keyFile, []byte(keyData), 0644)
 	require.NoError(t, err)
 
-	ctx, store := newTestStaticStore(t, map[string]api.StaticKeyEntryConfig{
+	ctx, store := newTestStaticStore(t, map[string]signerapi.StaticKeyEntryConfig{
 		"myKey": {
 			Encoding: "hex",
 			Filename: keyFile,
@@ -93,7 +93,7 @@ func TestStaticStoreBase64InConf(t *testing.T) {
 	require.NoError(t, err)
 	b64KeyData := base64.StdEncoding.EncodeToString(keyData)
 
-	ctx, store := newTestStaticStore(t, map[string]api.StaticKeyEntryConfig{
+	ctx, store := newTestStaticStore(t, map[string]signerapi.StaticKeyEntryConfig{
 		"myKey": {
 			Encoding: "base64",
 			Inline:   b64KeyData,
@@ -108,8 +108,8 @@ func TestStaticStoreBase64InConf(t *testing.T) {
 
 func TestStaticStoreLoadFileFail(t *testing.T) {
 
-	_, err := NewStaticKeyStore(context.Background(), api.StaticKeyStorageConfig{
-		Keys: map[string]api.StaticKeyEntryConfig{
+	_, err := NewStaticKeyStore(context.Background(), signerapi.StaticKeyStorageConfig{
+		Keys: map[string]signerapi.StaticKeyEntryConfig{
 			"myKey": {
 				Encoding: "none",
 				Filename: t.TempDir(),
@@ -123,8 +123,8 @@ func TestStaticStoreLoadFileFail(t *testing.T) {
 
 func TestStaticStoreBadHEX(t *testing.T) {
 
-	_, err := NewStaticKeyStore(context.Background(), api.StaticKeyStorageConfig{
-		Keys: map[string]api.StaticKeyEntryConfig{
+	_, err := NewStaticKeyStore(context.Background(), signerapi.StaticKeyStorageConfig{
+		Keys: map[string]signerapi.StaticKeyEntryConfig{
 			"myKey": {
 				Encoding: "hex",
 				Inline:   "not hex",
@@ -137,8 +137,8 @@ func TestStaticStoreBadHEX(t *testing.T) {
 
 func TestStaticStoreBadBase64(t *testing.T) {
 
-	_, err := NewStaticKeyStore(context.Background(), api.StaticKeyStorageConfig{
-		Keys: map[string]api.StaticKeyEntryConfig{
+	_, err := NewStaticKeyStore(context.Background(), signerapi.StaticKeyStorageConfig{
+		Keys: map[string]signerapi.StaticKeyEntryConfig{
 			"myKey": {
 				Encoding: "base64",
 				Inline:   "!$$**~~",
@@ -151,8 +151,8 @@ func TestStaticStoreBadBase64(t *testing.T) {
 
 func TestStaticStoreEmpty(t *testing.T) {
 
-	_, err := NewStaticKeyStore(context.Background(), api.StaticKeyStorageConfig{
-		Keys: map[string]api.StaticKeyEntryConfig{
+	_, err := NewStaticKeyStore(context.Background(), signerapi.StaticKeyStorageConfig{
+		Keys: map[string]signerapi.StaticKeyEntryConfig{
 			"myKey": {
 				Encoding: "none",
 				Trim:     true,
@@ -166,8 +166,8 @@ func TestStaticStoreEmpty(t *testing.T) {
 
 func TestStaticStoreBadEncType(t *testing.T) {
 
-	_, err := NewStaticKeyStore(context.Background(), api.StaticKeyStorageConfig{
-		Keys: map[string]api.StaticKeyEntryConfig{
+	_, err := NewStaticKeyStore(context.Background(), signerapi.StaticKeyStorageConfig{
+		Keys: map[string]signerapi.StaticKeyEntryConfig{
 			"myKey": {
 				Encoding: "",
 				Inline:   "anything",
@@ -180,7 +180,7 @@ func TestStaticStoreBadEncType(t *testing.T) {
 
 func TestStaticStoreResolveOK(t *testing.T) {
 
-	ctx, store := newTestStaticStore(t, map[string]api.StaticKeyEntryConfig{
+	ctx, store := newTestStaticStore(t, map[string]signerapi.StaticKeyEntryConfig{
 		"my/shiny/key%20ten": {
 			Encoding: "none",
 			Inline:   "my key",
@@ -202,7 +202,7 @@ func TestStaticStoreResolveOK(t *testing.T) {
 
 func TestStaticStoreResolveBadPath(t *testing.T) {
 
-	ctx, store := newTestStaticStore(t, map[string]api.StaticKeyEntryConfig{
+	ctx, store := newTestStaticStore(t, map[string]signerapi.StaticKeyEntryConfig{
 		"my/shiny/key%20ten": {
 			Encoding: "none",
 			Inline:   "my key",
@@ -224,7 +224,7 @@ func TestStaticStoreResolveBadPath(t *testing.T) {
 
 func TestStaticStoreResolveNotFound(t *testing.T) {
 
-	ctx, store := newTestStaticStore(t, map[string]api.StaticKeyEntryConfig{
+	ctx, store := newTestStaticStore(t, map[string]signerapi.StaticKeyEntryConfig{
 		"my/shiny/key%20ten": {
 			Encoding: "none",
 			Inline:   "my key",

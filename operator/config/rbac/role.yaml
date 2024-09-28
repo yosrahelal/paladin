@@ -8,31 +8,6 @@ rules:
   - core.paladin.io
   resources:
   - nodes
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - core.paladin.io
-  resources:
-  - nodes/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - core.paladin.io
-  resources:
-  - nodes/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - core.paladin.io
-  resources:
   - smartcontracts
   verbs:
   - create
@@ -45,12 +20,14 @@ rules:
 - apiGroups:
   - core.paladin.io
   resources:
+  - nodes/finalizers
   - smartcontracts/finalizers
   verbs:
   - update
 - apiGroups:
   - core.paladin.io
   resources:
+  - nodes/status
   - smartcontracts/status
   verbs:
   - get

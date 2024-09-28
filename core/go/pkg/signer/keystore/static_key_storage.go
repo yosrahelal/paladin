@@ -26,7 +26,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/api"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
@@ -47,7 +47,7 @@ type staticStore struct {
 // The keys themselves can be in files, so as well as very simple testing
 // with keys in-line in the config, this helps use a file based Kubernetes
 // secret for a mnemonic seed phrase for example at the root of a HD wallet.
-func NewStaticKeyStore(ctx context.Context, conf api.StaticKeyStorageConfig) (_ api.KeyStore, err error) {
+func NewStaticKeyStore(ctx context.Context, conf signerapi.StaticKeyStorageConfig) (_ signerapi.KeyStore, err error) {
 	ils := &staticStore{
 		keys: make(map[string][]byte),
 	}
@@ -69,12 +69,12 @@ func NewStaticKeyStore(ctx context.Context, conf api.StaticKeyStorageConfig) (_ 
 			return nil, i18n.NewError(ctx, msgs.MsgSigningStaticKeyInvalid, keyHandle)
 		}
 		switch keyEntry.Encoding {
-		case api.StaticKeyEntryEncodingNONE:
-		case api.StaticKeyEntryEncodingHEX:
+		case signerapi.StaticKeyEntryEncodingNONE:
+		case signerapi.StaticKeyEntryEncodingHEX:
 			if keyData, err = hex.DecodeString(strings.TrimPrefix(string(keyData), "0x")); err != nil {
 				return nil, i18n.NewError(ctx, msgs.MsgSigningStaticKeyInvalid, keyHandle)
 			}
-		case api.StaticKeyEntryEncodingBase64:
+		case signerapi.StaticKeyEntryEncodingBase64:
 			if keyData, err = base64.StdEncoding.DecodeString(string(keyData)); err != nil {
 				return nil, i18n.NewError(ctx, msgs.MsgSigningStaticKeyInvalid, keyHandle)
 			}

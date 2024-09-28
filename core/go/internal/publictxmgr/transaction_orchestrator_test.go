@@ -24,6 +24,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -34,8 +35,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestOrchestrator(t *testing.T, cbs ...func(mocks *mocksAndTestControl, conf *Config)) (context.Context, *orchestrator, *mocksAndTestControl, func()) {
-	ctx, ble, m, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *Config) {
+func newTestOrchestrator(t *testing.T, cbs ...func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig)) (context.Context, *orchestrator, *mocksAndTestControl, func()) {
+	ctx, ble, m, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
 		mocks.disableManagerStart = true // we don't want the manager running - this gives us a fake nonce manager too
 		for _, cb := range cbs {
 			cb(mocks, conf)
@@ -66,7 +67,7 @@ func newInflightTransaction(o *orchestrator, nonce uint64, txMods ...func(tx *DB
 
 func TestNewOrchestratorLoadsSecondTxAndQueuesBalanceCheck(t *testing.T) {
 
-	ctx, o, m, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *Config) {
+	ctx, o, m, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
 		conf.Orchestrator.MaxInFlight = confutil.P(2) // only poll once then we're full
 	})
 	defer done()
@@ -93,7 +94,7 @@ func TestNewOrchestratorLoadsSecondTxAndQueuesBalanceCheck(t *testing.T) {
 
 func TestNewOrchestratorPollingLoopContextCancelled(t *testing.T) {
 
-	_, o, _, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *Config) {
+	_, o, _, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
 		conf.Orchestrator.MaxInFlight = confutil.P(10)
 	})
 	done()
@@ -105,7 +106,7 @@ func TestNewOrchestratorPollingLoopContextCancelled(t *testing.T) {
 
 func TestNewOrchestratorPollingContextCancelledWhileRetrying(t *testing.T) {
 
-	ctx, o, m, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *Config) {
+	ctx, o, m, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
 		conf.Orchestrator.MaxInFlight = confutil.P(10)
 	})
 	defer done()
@@ -121,7 +122,7 @@ func TestNewOrchestratorPollingContextCancelledWhileRetrying(t *testing.T) {
 
 func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 
-	ctx, o, m, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *Config) {
+	ctx, o, m, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
 		conf.Orchestrator.MaxInFlight = confutil.P(1) // just one inflight, which will trigger poll only after it is done
 	})
 	defer done()
@@ -157,7 +158,7 @@ func TestNewOrchestratorPollingRemoveCompleted(t *testing.T) {
 func TestOrchestratorTriggerTopUp(t *testing.T) {
 
 	autoFuelingSourceAddr := *tktypes.RandAddress()
-	ctx, o, m, done := newTestOrchestrator(t, func(m *mocksAndTestControl, conf *Config) {
+	ctx, o, m, done := newTestOrchestrator(t, func(m *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
 		conf.Orchestrator.MaxInFlight = confutil.P(1) // just one inflight - which we inject in
 		conf.BalanceManager.AutoFueling.Source = confutil.P("autofueler")
 

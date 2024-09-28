@@ -19,7 +19,6 @@ package persistence
 import (
 	"context"
 	"database/sql"
-	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratedb "github.com/golang-migrate/migrate/v4/database"
@@ -47,22 +46,15 @@ type SQLDBProvider interface {
 }
 
 type SQLDBConfig struct {
-	URI             string  `yaml:"uri"`
-	MaxOpenConns    *int    `yaml:"maxOpenConns"`
-	MaxIdleConns    *int    `yaml:"maxIdleConns"`
-	ConnMaxIdleTime *string `yaml:"connMaxIdleTime"`
-	ConnMaxLifetime *string `yaml:"connMaxLifetime"`
-	AutoMigrate     *bool   `yaml:"autoMigrate"`
-	MigrationsDir   string  `yaml:"migrationsDir"`
-	DebugQueries    bool    `yaml:"debugQueries"`
-	StatementCache  *bool   `yaml:"statementCache"`
-}
-
-type SQLDBConfigDefaults struct {
-	MaxOpenConns    int
-	MaxIdleConns    int
-	ConnMaxIdleTime time.Duration
-	ConnMaxLifetime time.Duration
+	URI             string  `json:"uri"`
+	MaxOpenConns    *int    `json:"maxOpenConns"`
+	MaxIdleConns    *int    `json:"maxIdleConns"`
+	ConnMaxIdleTime *string `json:"connMaxIdleTime"`
+	ConnMaxLifetime *string `json:"connMaxLifetime"`
+	AutoMigrate     *bool   `json:"autoMigrate"`
+	MigrationsDir   string  `json:"migrationsDir"`
+	DebugQueries    bool    `json:"debugQueries"`
+	StatementCache  *bool   `json:"statementCache"`
 }
 
 func NewSQLProvider(ctx context.Context, p SQLDBProvider, conf *SQLDBConfig, defs *SQLDBConfig) (_ Persistence, err error) {

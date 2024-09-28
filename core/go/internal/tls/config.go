@@ -17,14 +17,14 @@
 package tlsconf
 
 type Config struct {
-	Enabled                bool              `yaml:"enabled"`
-	ClientAuth             bool              `yaml:"clientAuth,omitempty"`
-	CAFile                 string            `yaml:"caFile,omitempty"`
-	CA                     string            `yaml:"ca,omitempty"`
-	CertFile               string            `yaml:"certFile,omitempty"`
-	Cert                   string            `yaml:"cert,omitempty"`
-	KeyFile                string            `yaml:"keyFile,omitempty"`
-	Key                    string            `yaml:"key,omitempty"`
-	InsecureSkipHostVerify bool              `yaml:"insecureSkipHostVerify"`
-	RequiredDNAttributes   map[string]string `yaml:"requiredDNAttributes,omitempty"`
+	Enabled                bool              `json:"enabled"`
+	ClientAuth             bool              `json:"clientAuth,omitempty"`
+	CAFile                 string            `json:"caFile,omitempty"`
+	CA                     string            `json:"ca,omitempty"`
+	CertFile               string            `json:"certFile,omitempty"`
+	Cert                   string            `json:"cert,omitempty"`
+	KeyFile                string            `json:"keyFile,omitempty"`
+	Key                    string            `json:"key,omitempty"`
+	InsecureSkipHostVerify bool              `json:"insecureSkipHostVerify"`
+	RequiredDNAttributes   map[string]string `json:"requiredDNAttributes,omitempty"`
 }

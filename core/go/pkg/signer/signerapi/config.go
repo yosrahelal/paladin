@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package api
+package signerapi
 
 import (
 	"github.com/kaleido-io/paladin/core/pkg/proto"
@@ -26,17 +26,17 @@ const (
 )
 
 type Config struct {
-	KeyStore      StoreConfig         `yaml:"keyStore"`
-	KeyDerivation KeyDerivationConfig `yaml:"keyDerivation"`
+	KeyStore      StoreConfig         `json:"keyStore"`
+	KeyDerivation KeyDerivationConfig `json:"keyDerivation"`
 }
 
 type StoreConfig struct {
-	Type              string                 `yaml:"type"`
-	DisableKeyListing bool                   `yaml:"disableKeyListing"`
-	DisableKeyLoading bool                   `yaml:"disableKeyLoading"` // if HD Wallet or ZKP based signing is required, in-memory keys are required (so this needs to be false)
-	FileSystem        FileSystemConfig       `yaml:"filesystem"`
-	Static            StaticKeyStorageConfig `yaml:"static"`
-	SnarkProver       SnarkProverConfig      `yaml:"snarkProver"`
+	Type              string                 `json:"type"`
+	DisableKeyListing bool                   `json:"disableKeyListing"`
+	DisableKeyLoading bool                   `json:"disableKeyLoading"` // if HD Wallet or ZKP based signing is required, in-memory keys are required (so this needs to be false)
+	FileSystem        FileSystemConfig       `json:"filesystem"`
+	Static            StaticKeyStorageConfig `json:"static"`
+	SnarkProver       SnarkProverConfig      `json:"snarkProver"`
 }
 
 type KeyDerivationType string
@@ -49,23 +49,23 @@ const (
 )
 
 type ConfigKeyPathEntry struct {
-	Name  string `yaml:"name"`
-	Index uint64 `yaml:"index"`
+	Name  string `json:"name"`
+	Index uint64 `json:"index"`
 }
 
 type ConfigKeyEntry struct {
-	Name       string               `yaml:"name"`
-	Index      uint64               `yaml:"index"`
-	Attributes map[string]string    `yaml:"attributes"`
-	Path       []ConfigKeyPathEntry `yaml:"path"`
+	Name       string               `json:"name"`
+	Index      uint64               `json:"index"`
+	Attributes map[string]string    `json:"attributes"`
+	Path       []ConfigKeyPathEntry `json:"path"`
 }
 
 type KeyDerivationConfig struct {
-	Type                  KeyDerivationType `yaml:"type"`
-	SeedKeyPath           ConfigKeyEntry    `yaml:"seedKey"`
-	BIP44DirectResolution bool              `yaml:"bip44DirectResolution"`
-	BIP44Prefix           *string           `yaml:"bip44Prefix"`
-	BIP44HardenedSegments *int              `yaml:"bip44HardenedSegments"`
+	Type                  KeyDerivationType `json:"type"`
+	SeedKeyPath           ConfigKeyEntry    `json:"seedKey"`
+	BIP44DirectResolution bool              `json:"bip44DirectResolution"`
+	BIP44Prefix           *string           `json:"bip44Prefix"`
+	BIP44HardenedSegments *int              `json:"bip44HardenedSegments"`
 }
 
 var KeyDerivationDefaults = &KeyDerivationConfig{

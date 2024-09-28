@@ -30,7 +30,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/api"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -42,20 +42,20 @@ type filesystemStore struct {
 	dirMode  os.FileMode
 }
 
-func NewFilesystemStore(ctx context.Context, conf api.FileSystemConfig) (fss api.KeyStore, err error) {
+func NewFilesystemStore(ctx context.Context, conf signerapi.FileSystemConfig) (fss signerapi.KeyStore, err error) {
 	// Determine the path
 	var pathInfo fs.FileInfo
-	path, err := filepath.Abs(confutil.StringNotEmpty(conf.Path, *api.FileSystemDefaults.Path))
+	path, err := filepath.Abs(confutil.StringNotEmpty(conf.Path, *signerapi.FileSystemDefaults.Path))
 	if err == nil {
 		pathInfo, err = os.Stat(path)
 	}
 	if err != nil || !pathInfo.IsDir() {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgSigningModuleBadPathError, *api.FileSystemDefaults.Path)
+		return nil, i18n.WrapError(ctx, err, msgs.MsgSigningModuleBadPathError, *signerapi.FileSystemDefaults.Path)
 	}
 	return &filesystemStore{
-		cache:    cache.NewCache[string, keystorev3.WalletFile](&conf.Cache, &api.FileSystemDefaults.Cache),
-		fileMode: confutil.UnixFileMode(conf.FileMode, *api.FileSystemDefaults.FileMode),
-		dirMode:  confutil.UnixFileMode(conf.DirMode, *api.FileSystemDefaults.DirMode),
+		cache:    cache.NewCache[string, keystorev3.WalletFile](&conf.Cache, &signerapi.FileSystemDefaults.Cache),
+		fileMode: confutil.UnixFileMode(conf.FileMode, *signerapi.FileSystemDefaults.FileMode),
+		dirMode:  confutil.UnixFileMode(conf.DirMode, *signerapi.FileSystemDefaults.DirMode),
 		path:     path,
 	}, nil
 }

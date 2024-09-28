@@ -14,10 +14,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package flushwriter
+package config
 
-type Config struct {
-	WorkerCount  *int    `yaml:"workerCount"`
-	BatchTimeout *string `yaml:"batchTimeout"`
-	BatchMaxSize *int    `yaml:"batchMaxSize"`
+type FlushWriterConfig struct {
+	WorkerCount  *int    `json:"workerCount"`
+	BatchTimeout *string `json:"batchTimeout"`
+	BatchMaxSize *int    `json:"batchMaxSize"`
 }

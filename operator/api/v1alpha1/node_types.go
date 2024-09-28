@@ -28,10 +28,16 @@ type NodeSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// TODO: use the same config as componentmgr.Config
-	// Config map[string]interface{} `json:"config,omitempty"`
-	Config []byte `json:"config,omitempty"`
+	// Settings from this config will be loaded as YAML and used as the base of the configuration.
+	PaladinConfigYAML *string `json:"paladinConfigYAML,omitempty"`
 }
+
+// // Database configuration
+// type Database struct {
+// 	Type     string         `json:"type,omitempty"` // sqlite, postgres
+// 	SQLite   SQLiteConfig   `json:"sqlite,omitempty"`
+// 	Postgres PostgresConfig `json:"postgres,omitempty"`
+// }
 
 /*
 // Config is the top-level configuration for the node
@@ -48,13 +54,6 @@ type NodeStatus struct {
     State   string `json:"state,omitempty"`   // Pending, Running, Failed
     Ready   bool   `json:"ready,omitempty"`
     Message string `json:"message,omitempty"` // Detailed status or error message
-}
-
-// Database configuration
-type Database struct {
-    Type      string       `json:"type,omitempty"`  // sqlite, postgres
-    SQLite    SQLiteConfig `json:"sqlite,omitempty"`
-    Postgres  PostgresConfig `json:"postgres,omitempty"`
 }
 
 type SQLiteConfig struct {

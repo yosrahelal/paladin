@@ -12,20 +12,14 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-package plugins
+
+package signerapi
 
 import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"context"
 )
 
-type PluginManagerConfig struct {
-	GRPC GRPCConfig `yaml:"grpc"`
-}
-
-type GRPCConfig struct {
-	ShutdownTimeout *string `yaml:"shutdownTimeout"`
-}
-
-var DefaultGRPCConfig = &GRPCConfig{
-	ShutdownTimeout: confutil.P("10s"),
+type Extension interface {
+	// Return nil if keystore type is not known, or error if initialization fails
+	KeyStore(ctx context.Context, config *StoreConfig) (store KeyStore, err error)
 }

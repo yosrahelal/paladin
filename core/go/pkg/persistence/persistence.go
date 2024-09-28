@@ -36,17 +36,17 @@ const (
 )
 
 type Config struct {
-	Type     string         `yaml:"type"`
-	Postgres PostgresConfig `yaml:"postgres"`
-	SQLite   SQLiteConfig   `yaml:"sqlite"`
+	Type     string         `json:"type"`
+	Postgres PostgresConfig `json:"postgres"`
+	SQLite   SQLiteConfig   `json:"sqlite"`
 }
 
 type PostgresConfig struct {
-	SQLDBConfig `yaml:",inline"`
+	SQLDBConfig `json:",inline"`
 }
 
 type SQLiteConfig struct {
-	SQLDBConfig `yaml:",inline"`
+	SQLDBConfig `json:",inline"`
 }
 
 func NewPersistence(ctx context.Context, conf *Config) (Persistence, error) {

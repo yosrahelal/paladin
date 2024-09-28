@@ -13,25 +13,35 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package txmgr
+package config
 
 import (
 	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 )
 
-type Config struct {
-	ABI ABIConfig `yaml:"abi"`
+// Intended to be embedded at root level of paladin config
+type DomainManagerConfig struct {
+	Domains       map[string]*DomainConfig   `json:"domains"`
+	DomainManager DomainManagerManagerConfig `json:"domainManager"`
 }
 
-type ABIConfig struct {
-	Cache cache.Config `yaml:"cache"`
+type DomainManagerManagerConfig struct {
+	ContractCache cache.Config `json:"contractCache"`
 }
 
-var DefaultConfig = &Config{
-	ABI: ABIConfig{
-		Cache: cache.Config{
-			Capacity: confutil.P(100),
-		},
-	},
+type DomainConfig struct {
+	Init            DomainInitConfig `json:"init"`
+	Plugin          PluginConfig     `json:"plugin"`
+	Config          map[string]any   `json:"config"`
+	RegistryAddress string           `json:"registryAddress"`
+}
+
+var ContractCacheDefaults = &cache.Config{
+	Capacity: confutil.P(1000),
+}
+
+type DomainInitConfig struct {
+	Retry retry.Config `json:"retry"`
 }

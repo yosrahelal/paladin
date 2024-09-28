@@ -18,8 +18,10 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
+	pldconfig "github.com/kaleido-io/paladin/core/pkg/config"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -30,6 +32,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	yaml "sigs.k8s.io/yaml/goyaml.v3"
 
 	corev1alpha1 "github.com/kaleido-io/paladin/api/v1alpha1"
 	"github.com/kaleido-io/paladin/pkg/config"
@@ -195,7 +198,10 @@ func (r *NodeReconciler) generateStatefulSetTemplate(namespace, name string) *ap
 }
 
 func (r *NodeReconciler) createConfigMap(ctx context.Context, node *corev1alpha1.Node, namespace, name string) (*corev1.ConfigMap, error) {
-	configMap := r.generateConfigMapTemplate(node, namespace, name)
+	configMap, err := r.generateConfigMapTemplate(node, namespace, name)
+	if err != nil {
+		return nil, err
+	}
 
 	var foundConfigMap corev1.ConfigMap
 	if err := r.Get(ctx, types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, &foundConfigMap); err != nil && errors.IsNotFound(err) {
@@ -210,7 +216,11 @@ func (r *NodeReconciler) createConfigMap(ctx context.Context, node *corev1alpha1
 }
 
 // generatePaladinConfigMapTemplate generates a ConfigMap for the Paladin configuration
-func (r *NodeReconciler) generateConfigMapTemplate(node *corev1alpha1.Node, namespace, name string) *corev1.ConfigMap {
+func (r *NodeReconciler) generateConfigMapTemplate(node *corev1alpha1.Node, namespace, name string) (*corev1.ConfigMap, error) {
+	pldConfigYAML, err := generatePaladinConfig(node)
+	if err != nil {
+		return nil, err
+	}
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -218,14 +228,23 @@ func (r *NodeReconciler) generateConfigMapTemplate(node *corev1alpha1.Node, name
 			Labels:    r.getLabels(name),
 		},
 		Data: map[string]string{
-			"config.paladin.json": generatePaladinConfig(node),
+			"config.paladin.yaml": pldConfigYAML,
 		},
-	}
+	}, nil
 }
 
 // generatePaladinConfig converts the Node CR spec to a Paladin JSON configuration
-func generatePaladinConfig(node *corev1alpha1.Node) string {
-	return string(node.Spec.Config)
+func generatePaladinConfig(node *corev1alpha1.Node) (string, error) {
+	var pldConf pldconfig.PaladinConfig
+	if node.Spec.PaladinConfigYAML != nil {
+		err := yaml.Unmarshal([]byte(*node.Spec.PaladinConfigYAML), &pldConf)
+		if err != nil {
+			return "", fmt.Errorf("Paladin YAML config is invalid: %s", err)
+		}
+	}
+	// TODO: All the things you can ask the operator to help with to avoid you building the config from scratch
+	b, _ := json.Marshal(&pldConf)
+	return string(b), nil
 }
 
 func (r *NodeReconciler) createService(ctx context.Context, namespace, name string) (*corev1.Service, error) {

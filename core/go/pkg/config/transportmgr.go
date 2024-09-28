@@ -12,23 +12,23 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-package registrymgr
+package config
 
 import (
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 )
 
-type RegistryManagerConfig struct {
-	Registries map[string]*RegistryConfig `yaml:"registries"`
+type TransportManagerConfig struct {
+	NodeName   string                      `json:"nodeName"`
+	Transports map[string]*TransportConfig `json:"transports"`
 }
 
-type RegistryInitConfig struct {
-	Retry retry.Config `yaml:"retry"`
+type TransportInitConfig struct {
+	Retry retry.Config `json:"retry"`
 }
 
-type RegistryConfig struct {
-	Init   RegistryInitConfig      `yaml:"init"`
-	Plugin components.PluginConfig `yaml:"plugin"`
-	Config map[string]any          `yaml:"config"`
+type TransportConfig struct {
+	Init   TransportInitConfig `json:"init"`
+	Plugin PluginConfig        `json:"plugin"`
+	Config map[string]any      `json:"config"`
 }
