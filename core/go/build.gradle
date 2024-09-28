@@ -242,7 +242,12 @@ task clean(type: Delete, dependsOn: ':testinfra:stopTestInfra') {
     delete 'componenttest/abis'
 }
 
-task lint(type: Exec, dependsOn:[protoc, makeMocks, copyContracts]) {
+task lint(type: Exec, dependsOn:[
+        protoc,
+        makeMocks,
+        copyContracts,
+        ":installGolangCILint"
+    ]) {
     workingDir '.'
 
     helpers.lockResource(it, "lint.lock")
