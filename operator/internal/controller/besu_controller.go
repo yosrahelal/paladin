@@ -30,6 +30,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -101,12 +102,19 @@ func (r *BesuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}, err
 	}
 
-	_ /* configSum */, _, err = r.createConfigSecret(ctx, &node)
+	configSum, _, err := r.createConfigSecret(ctx, &node)
 	if err != nil {
 		log.Error(err, "Failed to create Besu config secret")
 		return ctrl.Result{}, err
 	}
 	log.Info("Created Besu config secret", "Name", name)
+
+	ss, err := r.createStatefulSet(ctx, &node, configSum)
+	if err != nil {
+		log.Error(err, "Failed to create Besu StatefulSet")
+		return ctrl.Result{}, err
+	}
+	log.Info("Created Besu StatefulSet", "Name", ss.Name, "Namespace", ss.Namespace)
 
 	return ctrl.Result{}, nil
 }
@@ -166,7 +174,7 @@ func (r *BesuReconciler) generateConfigSecret(ctx context.Context, node *corev1a
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      generateBesuName(node.Name),
 				Namespace: node.Namespace,
-				Labels:    r.getLabels(node.Name),
+				Labels:    r.getLabels(node),
 			},
 			StringData: map[string]string{
 				"config.besu.toml":  besuConfigTOML,
@@ -180,19 +188,41 @@ func (r *BesuReconciler) generateConfigSecret(ctx context.Context, node *corev1a
 func (r *BesuReconciler) generateBesuConfigTOML(node *corev1alpha1.Besu) (string, error) {
 	tomlConfig := map[string]any{}
 
+	setIfUnset := func(k string, v any) {
+		if _, isSet := tomlConfig[k]; !isSet {
+			tomlConfig[k] = v
+		}
+	}
+
 	if node.Spec.Config != nil {
 		if err := toml.Unmarshal([]byte(*node.Spec.Config), &tomlConfig); err != nil {
 			return "", fmt.Errorf("failed to parse supplied Besu config as TOML: %s", err)
 		}
 	}
 
+	// Setup from our mounts
+	tomlConfig["node-private-key-file"] = "/nodeid/key"
+	tomlConfig["data-path"] = "/data"
+	tomlConfig["genesis-file"] = "/genesis/genesis.json"
+
 	// Set up the networking, as that's always in our control (we wire it up to the service)
+	tomlConfig["rpc-http-enabled"] = true
 	tomlConfig["rpc-http-host"] = "0.0.0.0"
 	tomlConfig["rpc-http-port"] = "8545"
+	setIfUnset("rpc-http-api", []string{"ETH", "QBFT", "WEB3", "DEBUG"})
+	tomlConfig["rpc-ws-enabled"] = true
 	tomlConfig["rpc-ws-host"] = "0.0.0.0"
 	tomlConfig["rpc-ws-port"] = "8546"
+	setIfUnset("rpc-ws-api", []string{"ETH", "QBFT", "WEB3", "DEBUG"})
+	tomlConfig["graphql-http-enabled"] = true
+	tomlConfig["graphql-http-host"] = "0.0.0.0"
+	tomlConfig["graphql-http-port"] = "8547"
 	tomlConfig["p2p-host"] = "0.0.0.0"
 	tomlConfig["p2p-port"] = "30303"
+
+	setIfUnset("logging", "DEBUG")
+	setIfUnset("revert-reason-enabled", true)
+	setIfUnset("tx-pool", "SEQUENCED")
 
 	// To give a stable network through node restarts we use hostnames in static-nodes.json
 	// https://besu.hyperledger.org/24.1.0/public-networks/concepts/node-keys#enode-url
@@ -240,13 +270,17 @@ func generateBesuName(n string) string {
 	return fmt.Sprintf("besu-%s", n)
 }
 
+func generateBesuPVCName(n string) string {
+	return fmt.Sprintf("%s-data", generateBesuName(n))
+}
+
 func generateBesuIDSecretName(n string) string {
 	return fmt.Sprintf("besu-%s-id", n)
 }
 
-func (r *BesuReconciler) getLabels(name string, extraLabels ...map[string]string) map[string]string {
+func (r *BesuReconciler) getLabels(node *corev1alpha1.Besu, extraLabels ...map[string]string) map[string]string {
 	l := make(map[string]string, len(r.config.Besu.Labels))
-	l["app"] = generateBesuName(name)
+	l["app"] = generateBesuName(node.Name)
 
 	for k, v := range r.config.Besu.Labels {
 		l[k] = v
@@ -295,7 +329,7 @@ func (r *BesuReconciler) loadGenesis(ctx context.Context, node *corev1alpha1.Bes
 		// the IDs of any nodes declared in the InitialValidators set (including ours which we just wrote).
 		// We do this as we don't want to create the pod until this exits, although we don't use the result directly.
 		var cm corev1.ConfigMap
-		err = r.Get(ctx, types.NamespacedName{Name: generateBesuGenesisConfigMapName(node.Spec.Genesis), Namespace: node.Namespace}, &cm)
+		err = r.Get(ctx, types.NamespacedName{Name: generateBesuGenesisName(node.Spec.Genesis), Namespace: node.Namespace}, &cm)
 	}
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -311,7 +345,192 @@ func (r *BesuReconciler) generateSecretTemplate(node *corev1alpha1.Besu, name st
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: node.Namespace,
-			Labels:    r.getLabels(node.Name),
+			Labels:    r.getLabels(node),
+		},
+	}
+}
+
+func (r *BesuReconciler) createStatefulSet(ctx context.Context, node *corev1alpha1.Besu, configSum string) (*appsv1.StatefulSet, error) {
+	statefulSet := r.generateStatefulSetTemplate(node, configSum)
+
+	if err := r.createDataPVC(ctx, node); err != nil {
+		return nil, err
+	}
+
+	// Check if the StatefulSet already exists, create if not
+	var foundStatefulSet appsv1.StatefulSet
+	if err := r.Get(ctx, types.NamespacedName{Name: statefulSet.Name, Namespace: statefulSet.Namespace}, &foundStatefulSet); err != nil && errors.IsNotFound(err) {
+		err = r.Create(ctx, statefulSet)
+		if err != nil {
+			return statefulSet, err
+		}
+	} else if err != nil {
+		return statefulSet, err
+	} else {
+		// Only update safe things
+		foundStatefulSet.Spec.Template.Spec.Containers = statefulSet.Spec.Template.Spec.Containers
+		foundStatefulSet.Spec.Template.Spec.Volumes = statefulSet.Spec.Template.Spec.Volumes
+		foundStatefulSet.Spec.Template.Annotations = statefulSet.Spec.Template.Annotations
+		foundStatefulSet.Spec.Template.Labels = statefulSet.Spec.Template.Labels
+		// TODO: Other things that can be merged?
+		return &foundStatefulSet, r.Update(ctx, &foundStatefulSet)
+	}
+	return statefulSet, nil
+
+}
+
+func (r *BesuReconciler) createDataPVC(ctx context.Context, node *corev1alpha1.Besu) error {
+	pvc := corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      generateBesuPVCName(node.Name),
+			Namespace: node.Namespace,
+			Labels:    r.getLabels(node),
+		},
+		Spec: node.Spec.PVCTemplate,
+	}
+	pvc.Spec.AccessModes = []corev1.PersistentVolumeAccessMode{
+		corev1.ReadWriteOnce,
+	}
+	if pvc.Spec.Resources.Requests == nil {
+		pvc.Spec.Resources.Requests = corev1.ResourceList{}
+	}
+	if _, resourceSet := pvc.Spec.Resources.Requests[corev1.ResourceStorage]; !resourceSet {
+		pvc.Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("1Gi")
+	}
+
+	var foundPVC corev1.PersistentVolumeClaim
+	if err := r.Get(ctx, types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, &foundPVC); err != nil && errors.IsNotFound(err) {
+		err = r.Create(ctx, &pvc)
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *BesuReconciler) withStandardAnnotations(annotations map[string]string) map[string]string {
+	for k, v := range r.config.Besu.Annotations {
+		annotations[k] = v
+	}
+	return annotations
+}
+
+func (r *BesuReconciler) generateStatefulSetTemplate(node *corev1alpha1.Besu, configSum string) *appsv1.StatefulSet {
+	// Define the StatefulSet to run Besu using the ConfigMap
+	return &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      generateBesuName(node.Name),
+			Namespace: node.Namespace,
+			Annotations: r.withStandardAnnotations(map[string]string{
+				"kubectl.kubernetes.io/default-container": "besu",
+			}),
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: r.getLabels(node),
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: r.getLabels(node, map[string]string{
+						"config-sum": configSum,
+					}),
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:            "besu",
+							Image:           r.config.Besu.Image, // Use the image from the config
+							ImagePullPolicy: corev1.PullIfNotPresent,
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "config",
+									MountPath: "/config",
+									ReadOnly:  true,
+								},
+								{
+									Name:      "nodeid",
+									MountPath: "/nodeid",
+									ReadOnly:  true,
+								},
+								{
+									Name:      "genesis",
+									MountPath: "/genesis",
+									ReadOnly:  true,
+								},
+								{
+									Name:      "data",
+									MountPath: "/data",
+								},
+							},
+							Args: []string{
+								"--config-file",
+								"/config/config.besu.toml",
+							},
+							Ports: []corev1.ContainerPort{
+								{
+									Name:          "rpc-http",
+									ContainerPort: 8545,
+									Protocol:      corev1.ProtocolTCP,
+								},
+								{
+									Name:          "rpc-ws",
+									ContainerPort: 8546,
+									Protocol:      corev1.ProtocolTCP,
+								},
+								{
+									Name:          "p2p-tcp",
+									ContainerPort: 30303,
+									Protocol:      corev1.ProtocolTCP,
+								},
+								{
+									Name:          "p2p-udp",
+									ContainerPort: 30303,
+									Protocol:      corev1.ProtocolUDP,
+								},
+							},
+							Env: buildEnv(r.config.Besu.Envs),
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "config",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: generateBesuName(node.Name),
+								},
+							},
+						},
+						{
+							Name: "nodeid",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: generateBesuIDSecretName(node.Name),
+								},
+							},
+						},
+						{
+							Name: "genesis",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: generateBesuGenesisName(node.Spec.Genesis),
+									},
+								},
+							},
+						},
+						{
+							Name: "data",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: generateBesuPVCName(node.Name),
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 }

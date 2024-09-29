@@ -97,7 +97,7 @@ func (r *BesuGenesisReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *BesuGenesisReconciler) createConfigMap(ctx context.Context, genesis *corev1alpha1.BesuGenesis) (*corev1.ConfigMap, bool, error) {
 	var genesisMap corev1.ConfigMap
-	name := generateBesuGenesisConfigMapName(genesis.Name)
+	name := generateBesuGenesisName(genesis.Name)
 	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: genesis.Namespace}, &genesisMap); err != nil && errors.IsNotFound(err) {
 		// No existing map - create a new genesis map.
 		// Process should be deterministic - but as it's final we only do it when configmap does not exist
@@ -298,9 +298,6 @@ func nearestIntegerAboveZero(v float64) int {
 	return (int)(math.Max(1, math.Round(v)))
 }
 
-func generateBesuGenesisConfigMapName(n string) string {
-	return fmt.Sprintf("besu-genesis-%s", n)
-}
 func ptrTo[T any](v T) *T {
 	return &v
 }

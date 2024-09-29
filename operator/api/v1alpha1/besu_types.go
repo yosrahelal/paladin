@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -31,7 +32,8 @@ type BesuSpec struct {
 	// Settings from this config will be loaded as TOML and used as the base of the configuration.
 	Config *string `json:"config,omitempty"`
 	// The name of the genesis CR that these nodes will use to obtain their genesis file, and find bootnodes
-	Genesis string `json:"genesis"`
+	Genesis     string                           `json:"genesis"`
+	PVCTemplate corev1.PersistentVolumeClaimSpec `json:"pvcTemplate,omitempty"`
 }
 
 // BesuStatus defines the observed state of Besu
