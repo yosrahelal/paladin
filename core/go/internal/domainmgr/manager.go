@@ -97,21 +97,12 @@ func (dm *domainManager) PreInit(pic components.PreInitComponents) (*components.
 	dm.ethClientFactory = pic.EthClientFactory()
 	dm.blockIndexer = pic.BlockIndexer()
 
-	var eventStreams []*components.ManagerEventStream
 	for name, d := range dm.conf.Domains {
-		registryAddr, err := tktypes.ParseEthAddress(d.RegistryAddress)
-		if err != nil {
+		if _, err := tktypes.ParseEthAddress(d.RegistryAddress); err != nil {
 			return nil, i18n.WrapError(dm.bgCtx, err, msgs.MsgDomainRegistryAddressInvalid, d.RegistryAddress, name)
 		}
-		eventStreams = append(eventStreams, &components.ManagerEventStream{
-			ABI:     iPaladinContractRegistryABI,
-			Handler: dm.eventIndexer,
-			Source:  registryAddr,
-		})
 	}
-	return &components.ManagerInitResult{
-		EventStreams: eventStreams,
-	}, nil
+	return &components.ManagerInitResult{}, nil
 }
 
 func (dm *domainManager) PostInit(c components.AllComponents) error {
