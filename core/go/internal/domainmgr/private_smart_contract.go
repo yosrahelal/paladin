@@ -431,7 +431,7 @@ func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateR
 		rawIDsBySchema[s.SchemaId] = append(rawIDsBySchema[s.SchemaId], tktypes.JSONString(stateID.String()))
 		stateIDs[i] = stateID
 	}
-	statesByID := make(map[tktypes.Bytes32]*statestore.State)
+	statesByID := make(map[string]*statestore.State)
 	err := dc.dm.stateStore.RunInDomainContext(dc.d.name, dc.info.Address, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
 		for schemaID, stateIDs := range rawIDsBySchema {
 			statesForSchema, err := dsi.FindAvailableStates(schemaID, &query.QueryJSON{
@@ -447,7 +447,7 @@ func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateR
 				return err
 			}
 			for _, s := range statesForSchema {
-				statesByID[tktypes.Bytes32Keccak(s.ID)] = s
+				statesByID[s.ID.HexString()] = s
 			}
 		}
 		return nil
@@ -459,7 +459,7 @@ func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateR
 	// Check we found all the states, and restore the original order
 	states := make([]*components.FullState, len(stateIDs))
 	for i, id := range stateIDs {
-		s := statesByID[tktypes.Bytes32Keccak(id)]
+		s := statesByID[id.HexString()]
 		if s == nil {
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInputStateNotFound, i, id)
 		}
