@@ -30,14 +30,19 @@ type NodeSpec struct {
 
 	// Settings from this config will be loaded as YAML and used as the base of the configuration.
 	PaladinConfigYAML *string `json:"paladinConfigYAML,omitempty"`
+
+	Database *Database `json:"database,omitempty"`
 }
 
-// // Database configuration
-// type Database struct {
-// 	Type     string         `json:"type,omitempty"` // sqlite, postgres
-// 	SQLite   SQLiteConfig   `json:"sqlite,omitempty"`
-// 	Postgres PostgresConfig `json:"postgres,omitempty"`
-// }
+// Database configuration
+type Database struct {
+	// +kubebuilder:validation:Enum=external;sidecarPostgres;embeddedSQLite
+	// +kubebuilder:default=embeddedSQLite
+	DatabaseRuntime string `json:"databaseRuntime,omitempty"`
+	// +kubebuilder:validation:Enum=external;job;autoMigrate
+	// +kubebuilder:default=autoMigrate
+	MigrationMode string `json:"migrationMode,omitempty"`
+}
 
 /*
 // Config is the top-level configuration for the node

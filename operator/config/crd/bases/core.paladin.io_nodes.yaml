@@ -39,6 +39,24 @@ spec:
           spec:
             description: NodeSpec defines the desired state of Node
             properties:
+              database:
+                description: Database configuration
+                properties:
+                  databaseRuntime:
+                    default: embeddedSQLite
+                    enum:
+                    - external
+                    - sidecarPostgres
+                    - embeddedSQLite
+                    type: string
+                  migrationMode:
+                    default: autoMigrate
+                    enum:
+                    - external
+                    - job
+                    - autoMigrate
+                    type: string
+                type: object
               paladinConfigYAML:
                 description: Settings from this config will be loaded as YAML and
                   used as the base of the configuration.
