@@ -15,7 +15,9 @@
 
 // The operator uses the standard build experience for a Go based kubernetes operator.
 // The gradle wrapper is just to orchestrate it into the overall Paladin build system.
-task docker(type: Exec) {
+task docker(type: Exec, dependsOn: [
+    ":core:go:protoc"
+]) {
     executable 'make'
     args 'docker-build'
 }
