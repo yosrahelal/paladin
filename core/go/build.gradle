@@ -17,6 +17,12 @@ import org.apache.tools.ant.taskdefs.condition.Os
 import org.apache.tools.ant.filters.LineContains
 
 ext {
+    goFilesBuildOnly = fileTree(".") {
+        include "core.go"
+        include "internal/**/*.go"
+        include "pkg/**/*.go"
+    }
+
     goFiles = fileTree(".") {
         include "core.go"
         include "internal/**/*.go"
@@ -63,33 +69,25 @@ dependencies {
     toolkitProtoDefinitions project(path: ":toolkit:proto", configuration: "protoDefinitions")
 }
 
-task installTools(type: Exec) {
-    workingDir '.'
-    environment('GOBIN', "${projectDir}/bin")
-    executable 'go'
-    args 'install'
-    inputs.files('go.mod','go.sum')
-    outputs.files(
-        "bin/protoc-gen-go",
-        "bin/protoc-gen-go-grpc",
-        "bin/golangci-lint",
-        "bin/mockery",
-    )
-    // We use go.mod for dependency version management
-    // tools/tools.go tracks deps too - to avoid go mod tidy discarding them all
-    args 'google.golang.org/protobuf/cmd/protoc-gen-go'
-    args 'google.golang.org/grpc/cmd/protoc-gen-go-grpc'
-    args 'github.com/golangci/golangci-lint/cmd/golangci-lint'
-    args 'github.com/vektra/mockery/v2'
-}
-
-
 task copyTestContracts(type: Copy) {
     inputs.files(configurations.compiledContracts)
     from fileTree(configurations.compiledContracts.asPath) {
         include 'contracts/testcontracts/SimpleStorage.sol/SimpleStorage.json'
     }
     into 'componenttest/abis'
+
+    // Flatten all paths into the destination folder
+    eachFile { path = name }
+    includeEmptyDirs = false
+}
+
+task copyTestDomainContracts(type: Copy) {
+    inputs.files(configurations.compiledContracts)
+    from fileTree(configurations.compiledContracts.asPath) {
+        include 'contracts/domains/testbed_sim/SIMDomain.sol/SIMDomain.json'
+        include 'contracts/domains/testbed_sim/SIMToken.sol/SIMToken.json'
+    }
+    into 'componenttest/domains/abis'
 
     // Flatten all paths into the destination folder
     eachFile { path = name }
@@ -125,14 +123,16 @@ task copyDomainManagerContracts(type: Copy) {
 
 task copyContracts(dependsOn:[
     copyTestContracts,
+    copyTestDomainContracts,
     copyTestbedContracts,
     copyDomainManagerContracts,
 ])
 
 task protoc(type: ProtoCompile, dependsOn: [
         ":toolkit:go:protoc",
-        tasks.installTools,
-        tasks.copyTestContracts,
+        ":installProtocGenGo",
+        ":installProtocGenGoRPC",
+        copyTestContracts,
     ]) {
     protocPath "bin"
     protoPath projectDir
@@ -149,7 +149,7 @@ task protoc(type: ProtoCompile, dependsOn: [
     }
 }
 
-task goGet(type:Exec, dependsOn:[tasks.protoc,tasks.copyContracts,":toolkit:go:goGet"]) {
+task goGet(type:Exec, dependsOn:[protoc, copyContracts, ":toolkit:go:goGet"]) {
     workingDir '.'
 
     inputs.files('go.mod')
@@ -160,8 +160,7 @@ task goGet(type:Exec, dependsOn:[tasks.protoc,tasks.copyContracts,":toolkit:go:g
     args 'get'
 }
 
-task makeMocks(type: Mockery, dependsOn: [tasks.installTools, tasks.protoc, tasks.goGet]) {
-    mockery 'bin/mockery'
+task makeMocks(type: Mockery, dependsOn: [":installMockery", protoc, goGet]) {
     args '--case', 'underscore'
     mock {
         inputDir "go list -f {{.Dir}} github.com/kaleido-io/paladin/toolkit/pkg/rpcclient".execute().text.trim()
@@ -244,7 +243,7 @@ task makeMocks(type: Mockery, dependsOn: [tasks.installTools, tasks.protoc, task
 }
 
 task clean(type: Delete, dependsOn: ':testinfra:stopTestInfra') {
-    delete 'libcore.dylib', 'libcore.so', 'libcore.dll', 'libcore.h'
+    delete "${buildDir}"
     delete fileTree("bin") {
         exclude "README.md", ".gitignore"
     }
@@ -257,21 +256,26 @@ task clean(type: Delete, dependsOn: ':testinfra:stopTestInfra') {
     delete 'componenttest/abis'
 }
 
-task lint(type: Exec, dependsOn:[tasks.protoc,tasks.makeMocks,tasks.copyContracts]) {
+task lint(type: Exec, dependsOn:[
+        protoc,
+        makeMocks,
+        copyContracts,
+        ":installGolangCILint"
+    ]) {
     workingDir '.'
 
     helpers.lockResource(it, "lint.lock")
     inputs.files(goFiles)
     environment 'GOGC', '20'
 
-    executable "bin/golangci-lint"
+    executable "golangci-lint"
     args 'run'
     args '-v'
     args '--color=always'
     args '--timeout', '5m'
 }
 
-task buildSharedLibrary(type:Exec, dependsOn:[tasks.goGet, tasks.makeMocks]) {
+task buildSharedLibrary(type:Exec, dependsOn:[goGet]) {
     workingDir '.'
 
     def libName
@@ -283,19 +287,23 @@ task buildSharedLibrary(type:Exec, dependsOn:[tasks.goGet, tasks.makeMocks]) {
         libName = "libcore.so"
     }
 
-    inputs.files(goFiles)
-    outputs.files(libName, 'libcore.h')
+    def outputDir = "${buildDir}/libs"
+    def outputLib = "${outputDir}/${libName}"
+    def outputHeader = "${outputDir}/libcore.h"
+
+    inputs.files(goFilesBuildOnly)
+    outputs.files(outputLib, outputHeader)
 
     environment("CGO_ENABLED", "1")
 
     executable 'go'
     args 'build'
-    args '-o', libName
+    args '-o', outputLib
     args '-buildmode=c-shared'
     args 'core.go'
 }
 
-task buildTestbed(type:Exec, dependsOn: [tasks.goGet, tasks.makeMocks, tasks.copyContracts]) {
+task buildTestbed(type:Exec, dependsOn: [goGet, makeMocks, copyContracts]) {
     workingDir '.'
 
     inputs.files(goFiles)
@@ -338,7 +346,7 @@ task buildTestPluginsSharedLibraryGRPCTransport(type:Exec) {
 }
 
 task buildTestPluginsSharedLibraries {
-    dependsOn tasks.buildTestPluginsSharedLibraryGRPCTransport
+    dependsOn buildTestPluginsSharedLibraryGRPCTransport
 }
 
 abstract class UnitTests extends Exec {
@@ -385,7 +393,7 @@ abstract class ComponentTest extends Exec {
     }
 }
 
-task setupCoverage(dependsOn: [tasks.protoc, tasks.copyContracts, tasks.makeMocks]) {
+task setupCoverage(dependsOn: [protoc, copyContracts, makeMocks]) {
     inputs.files(goFiles)
     outputs.dir('coverage')
     doLast {
@@ -398,6 +406,7 @@ task setupCoverage(dependsOn: [tasks.protoc, tasks.copyContracts, tasks.makeMock
 }
 
 task unitTestSQLite(type: UnitTests, dependsOn: [
+        makeMocks,
         ':testinfra:startTestInfra',
         setupCoverage,
         goGet,
@@ -405,6 +414,7 @@ task unitTestSQLite(type: UnitTests, dependsOn: [
 }
 
 task unitTestPostgres(type: UnitTests, dependsOn: [
+        makeMocks,
         ':testinfra:startTestInfra',
         setupCoverage,
         goGet,
@@ -414,20 +424,21 @@ task unitTestPostgres(type: UnitTests, dependsOn: [
 }
 
 task componentTestSQLite(type: ComponentTest, dependsOn: [
+        makeMocks,
         ':testinfra:startTestInfra',
-        tasks.setupCoverage,
-        tasks.goGet,
-        tasks.copyContracts,
+        setupCoverage,
+        goGet,
+        copyContracts, // Ensure this task depends on copying the test contracts
     ]) {
     mustRunAfter 'unitTestPostgres' // these tests cannot run concurrently
 }
 
 task buildCoverageTxt(type: Exec, dependsOn: [
-        tasks.protoc,
-        tasks.unitTestSQLite,
-        tasks.unitTestPostgres,
-        tasks.componentTestSQLite,
-        // tasks.componentTestPostgres
+        protoc,
+        unitTestSQLite,
+        unitTestPostgres,
+        componentTestSQLite,
+        // componentTestPostgres
     ]) {
     inputs.files(fileTree(project.mkdir('coverage')) {
         include "covcounters.*"
@@ -470,13 +481,17 @@ task testcov(type: Exec, dependsOn: [test, aggregateCoverage]) {
 }
 
 task build {
-    dependsOn tasks.lint
-    dependsOn tasks.test
-    dependsOn tasks.aggregateCoverage
-    dependsOn tasks.checkCoverage
+    dependsOn lint
+    dependsOn test
+    dependsOn aggregateCoverage
+    dependsOn checkCoverage
+}
+
+task assemble {
+    dependsOn buildSharedLibrary
 }
 
 dependencies {
     libcore files(buildSharedLibrary)
-    goSource files(goFiles, protoc, makeMocks, copyContracts)
+    goSource files(goFiles, protoc, copyContracts)
 }

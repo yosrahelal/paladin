@@ -63,7 +63,7 @@ task copySolidity(type: Copy) {
     includeEmptyDirs = false
 }
 
-task test(type: Exec) {
+task test(type: Exec, dependsOn: [":core:go:makeMocks"]) {
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
     inputs.files(goFiles)
@@ -87,13 +87,25 @@ task test(type: Exec) {
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
+task buildGo{
+    // TODO: implement buildGo task
+    doFirst() {
+        println ":domain:noto buildGo task not implemented"
+    }
+}
+
 task build {
     dependsOn test
 }
 
 task clean(type: Delete) {
+    delete "${buildDir}"
     delete 'coverage'
     delete 'internal/noto/abis'
+}
+
+task assemble {
+    dependsOn buildGo
 }
 
 dependencies {

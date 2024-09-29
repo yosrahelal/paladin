@@ -99,11 +99,10 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *DomainManagerConfig, 
 	}
 
 	dm := NewDomainManager(ctx, conf)
-	initInstructions, err := dm.PreInit(componentMocks)
+	_, err = dm.PreInit(componentMocks)
 	require.NoError(t, err)
 	err = dm.PostInit(componentMocks)
 	require.NoError(t, err)
-	assert.Len(t, initInstructions.EventStreams, len(conf.Domains))
 
 	err = dm.Start()
 	require.NoError(t, err)

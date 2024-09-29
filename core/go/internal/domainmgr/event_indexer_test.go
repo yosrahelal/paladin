@@ -57,7 +57,7 @@ func TestEventIndexingWithDB(t *testing.T) {
 	// Index an event indicating deployment of a new smart contract instance
 	var pc blockindexer.PostCommit
 	err := dm.persistence.DB().Transaction(func(tx *gorm.DB) (err error) {
-		pc, err = dm.eventIndexer(ctx, tx, &blockindexer.EventDeliveryBatch{
+		pc, err = dm.registrationIndexer(ctx, tx, &blockindexer.EventDeliveryBatch{
 			StreamID:   uuid.New(),
 			StreamName: "name_given_by_component_mgr",
 			BatchID:    uuid.New(),
@@ -118,7 +118,7 @@ func TestEventIndexingBadEvent(t *testing.T) {
 	defer done()
 
 	err := dm.persistence.DB().Transaction(func(tx *gorm.DB) error {
-		_, err := dm.eventIndexer(ctx, tx, &blockindexer.EventDeliveryBatch{
+		_, err := dm.registrationIndexer(ctx, tx, &blockindexer.EventDeliveryBatch{
 			StreamID:   uuid.New(),
 			StreamName: "name_given_by_component_mgr",
 			BatchID:    uuid.New(),
@@ -150,7 +150,7 @@ func TestEventIndexingInsertError(t *testing.T) {
 	contractAddr := tktypes.EthAddress(tktypes.RandBytes(20))
 	deployTX := uuid.New()
 	err := dm.persistence.DB().Transaction(func(tx *gorm.DB) error {
-		_, err := dm.eventIndexer(ctx, tx, &blockindexer.EventDeliveryBatch{
+		_, err := dm.registrationIndexer(ctx, tx, &blockindexer.EventDeliveryBatch{
 			StreamID:   uuid.New(),
 			StreamName: "name_given_by_component_mgr",
 			BatchID:    uuid.New(),
