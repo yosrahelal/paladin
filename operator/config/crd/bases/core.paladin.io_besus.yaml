@@ -39,10 +39,16 @@ spec:
           spec:
             description: BesuSpec defines the desired state of Besu
             properties:
-              foo:
-                description: Foo is an example field of Besu. Edit besu_types.go to
-                  remove/update
+              config:
+                description: Settings from this config will be loaded as TOML and
+                  used as the base of the configuration.
                 type: string
+              genesis:
+                description: The name of the genesis CR that these nodes will use
+                  to obtain their genesis file, and find bootnodes
+                type: string
+            required:
+            - genesis
             type: object
           status:
             description: BesuStatus defines the observed state of Besu

@@ -4,6 +4,6 @@ metadata:
   labels:
     app.kubernetes.io/name: operator-go
     app.kubernetes.io/managed-by: kustomize
-  name: besu-sample
+  name: node1
 spec:
-  # TODO(user): Add fields here
+  genesis: testnet

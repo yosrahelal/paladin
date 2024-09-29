@@ -7,6 +7,7 @@ rules:
 - apiGroups:
   - core.paladin.io
   resources:
+  - besugeneses
   - besus
   - paladins
   - smartcontracts
@@ -21,6 +22,7 @@ rules:
 - apiGroups:
   - core.paladin.io
   resources:
+  - besugeneses/finalizers
   - besus/finalizers
   - paladins/finalizers
   - smartcontracts/finalizers
@@ -29,6 +31,7 @@ rules:
 - apiGroups:
   - core.paladin.io
   resources:
+  - besugeneses/status
   - besus/status
   - paladins/status
   - smartcontracts/status

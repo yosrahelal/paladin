@@ -8,6 +8,7 @@ require (
 	github.com/kaleido-io/paladin/core v0.0.0-00010101000000-000000000000
 	github.com/onsi/ginkgo/v2 v2.17.2
 	github.com/onsi/gomega v1.33.1
+	github.com/pelletier/go-toml/v2 v2.2.3
 	github.com/spf13/viper v1.19.0
 	github.com/tyler-smith/go-bip39 v1.1.0
 	k8s.io/api v0.29.2
@@ -89,7 +90,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect

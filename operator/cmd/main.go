@@ -143,6 +143,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Besu")
 		os.Exit(1)
 	}
+	if err = (&controller.BesuGenesisReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "BesuGenesis")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

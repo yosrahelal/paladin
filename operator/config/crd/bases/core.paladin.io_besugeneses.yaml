@@ -1,0 +1,92 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.3
+  name: besugeneses.core.paladin.io
+spec:
+  group: core.paladin.io
+  names:
+    kind: BesuGenesis
+    listKind: BesuGenesisList
+    plural: besugeneses
+    singular: besugenesis
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: BesuGenesis is the Schema for the besugeneses API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: BesuGenesisSpec defines the desired state of BesuGenesis
+            properties:
+              base:
+                description: |-
+                  Base JSON genesis file will be loaded in and then modified as appropriate.
+                  Note only modelled fields of the genesis are supported, so check besugenesis.GenesisJSON for support of the field you wish to modify
+                type: string
+              blockPeriod:
+                description: Block period can be in seconds (s) or milliseconds -
+                  cannot be changed once set (used in genesis generation)
+                type: string
+              chainId:
+                description: The chain ID - must not change after creation without
+                  chain reset
+                format: int64
+                type: integer
+              consensus:
+                enum:
+                - qbft
+                type: string
+              emptyBlockPeriod:
+                description: EmptyBlockPeriod period will be rounded to seconds regardless
+                  of units used
+                type: string
+              gasLimit:
+                description: The initial gas limit - must not change after creation
+                  without chain reset (node config be used to increase gas limit incrementally
+                  in new blocks)
+                format: int64
+                type: integer
+              initialValidators:
+                description: |-
+                  List of nodes that are included in the genesis block validators. These will also be the bootnodes of the network.
+                  The CRs for these must created for the genesis to form, as it requires the identity secrets of those nodes.
+                  Cannot be changed once set (used in genesis generation).
+                items:
+                  type: string
+                type: array
+            required:
+            - blockPeriod
+            - chainId
+            - consensus
+            - gasLimit
+            - initialValidators
+            type: object
+          status:
+            description: BesuGenesisStatus defines the observed state of BesuGenesis
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

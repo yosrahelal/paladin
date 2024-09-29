@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package main
+package besugenesis
 
 import (
 	"math/big"
@@ -35,25 +35,25 @@ type GenesisJSON struct {
 }
 
 type GenesisConfig struct {
-	ChainID     int64      `json:"chainId"`
-	CancunTime  int64      `json:"cancunTime"`
-	ZeroBaseFee bool       `json:"zeroBaseFee"`
-	QBFT        QBFTConfig `json:"qbft"`
+	ChainID     int64       `json:"chainId"`
+	CancunTime  int64       `json:"cancunTime"`
+	ZeroBaseFee *bool       `json:"zeroBaseFee"`
+	QBFT        *QBFTConfig `json:"qbft,omitempty"`
 }
 
 type QBFTConfig struct {
-	BlockPeriodSeconds      int `json:"blockperiodseconds"`
-	EpochLength             int `json:"epochlength"`
-	RequestTimeoutSeconds   int `json:"requesttimeoutseconds"`
-	EmptyBlockPeriodSeconds int `json:"xemptyblockperiodseconds"`
-	BlockPeriodMilliseconds int `json:"xblockperiodmilliseconds"`
+	BlockPeriodSeconds      *int `json:"blockperiodseconds"`
+	EpochLength             *int `json:"epochlength"`
+	RequestTimeoutSeconds   *int `json:"requesttimeoutseconds,omitempty"`
+	EmptyBlockPeriodSeconds *int `json:"xemptyblockperiodseconds,omitempty"`
+	BlockPeriodMilliseconds *int `json:"xblockperiodmilliseconds,omitempty"`
 }
 
 type AllocEntry struct {
 	Balance ethtypes.HexInteger `json:"balance"`
 }
 
-func qbftExtraData(validators ...ethtypes.Address0xHex) []byte {
+func BuildQBFTExtraData(validators ...ethtypes.Address0xHex) []byte {
 	vanity := make([]byte, 32)
 	copy(vanity, ([]byte)("paladin"))
 	var rlpValidators rlp.List
