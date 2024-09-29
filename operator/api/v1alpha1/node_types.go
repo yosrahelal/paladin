@@ -31,9 +31,13 @@ type NodeSpec struct {
 
 	// Settings from this config will be loaded as YAML and used as the base of the configuration.
 	Config *string `json:"config,omitempty"`
-	// Database settings allow operator governed convenience functions for setting up the database
+
+	// Database section k8s native functions for setting up the database
 	// with auto-generation/auto-edit of the DB related config sections
-	Database *Database `json:"database,omitempty"`
+	Database Database `json:"database,omitempty"`
+
+	// Adds signing modules that load their key materials from a k8s secret
+	SecretBackedSigners []SecretBackedSigner `json:"secretBackedSigners,omitempty"`
 }
 
 const DBMode_EmbeddedSQLite = "embeddedSQLite"
@@ -50,8 +54,21 @@ type Database struct {
 	MigrationMode string `json:"migrationMode,omitempty"`
 	// If set the URI in the config will be updated with the password in this secret.
 	// For sidecarPostgres a default password will be generated and stored for you, and this setting only modifies the secret name
-	PasswordSecret *string                           `json:"postgresPasswordSecret,omitempty"`
-	PVCTemplate    *corev1.PersistentVolumeClaimSpec `json:"pvcTemplate,omitempty"`
+	PasswordSecret *string                          `json:"passwordSecret,omitempty"`
+	PVCTemplate    corev1.PersistentVolumeClaimSpec `json:"pvcTemplate,omitempty"`
+}
+
+const SignerType_AutoHDWallet = "autoHDWallet"
+
+type SecretBackedSigner struct {
+	Secret string `json:"secret"`
+	// +kubebuilder:validation:Pattern=^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+	Name string `json:"name"` // TODO: Currently only one signer supported in Paladin until key manager in place
+	// +kubebuilder:validation:Enum=autoHDWallet;preConfigured
+	// +kubebuilder:default=autoHDWallet
+	// The operator supports generating the seed and base config for a simple seeded BIP32 HDWallet signer.
+	// If more other options are needed, these can be set directly in the YAML config for this signer.
+	Type string `json:"type"`
 }
 
 /*

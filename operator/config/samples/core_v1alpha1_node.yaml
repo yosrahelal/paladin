@@ -15,3 +15,7 @@ spec:
   database:
     mode: sidecarPostgres
     migrationMode: auto
+  secretBackedSigners:
+    - name: signer-1
+      secret: node1.keys
+      type: autoHDWallet

@@ -31,5 +31,6 @@ type StaticKeyEntryConfig struct {
 }
 
 type StaticKeyStorageConfig struct {
-	Keys map[string]StaticKeyEntryConfig `json:"keys"`
+	File string                          `json:"file,omitempty"` // whole file to use as a store
+	Keys map[string]StaticKeyEntryConfig `json:"keys"`           // individual key entries in the config
 }

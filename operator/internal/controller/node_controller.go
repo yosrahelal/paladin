@@ -18,14 +18,19 @@ package controller
 
 import (
 	"context"
+	"crypto/md5"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
 
 	pldconfig "github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
+	"github.com/tyler-smith/go-bip39"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -77,7 +82,8 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 
-	if _, err := r.createConfigSecret(ctx, &node, namespace, name); err != nil {
+	configSum, _, err := r.createConfigSecret(ctx, &node, namespace, name)
+	if err != nil {
 		log.Error(err, "Failed to create Paladin config secret")
 		return ctrl.Result{}, err
 	}
@@ -89,7 +95,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 	log.Info("Created Paladin Service", "Name", name)
 
-	ss, err := r.createStatefulSet(ctx, &node, namespace, name)
+	ss, err := r.createStatefulSet(ctx, &node, namespace, name, configSum)
 	if err != nil {
 		log.Error(err, "Failed to create Paladin Node")
 		return ctrl.Result{}, err
@@ -121,8 +127,8 @@ func (r *NodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *NodeReconciler) createStatefulSet(ctx context.Context, node *corev1alpha1.Node, namespace, name string) (*appsv1.StatefulSet, error) {
-	statefulSet := r.generateStatefulSetTemplate(namespace, name)
+func (r *NodeReconciler) createStatefulSet(ctx context.Context, node *corev1alpha1.Node, namespace, name, configSum string) (*appsv1.StatefulSet, error) {
+	statefulSet := r.generateStatefulSetTemplate(namespace, name, configSum)
 
 	if node.Spec.Database.Mode == corev1alpha1.DBMode_SidecarPostgres {
 		// Earlier processing responsible for ensuring this is non-nil
@@ -131,6 +137,8 @@ func (r *NodeReconciler) createStatefulSet(ctx context.Context, node *corev1alph
 			return nil, err
 		}
 	}
+
+	r.addKeystoreSecretMounts(statefulSet, node.Spec.SecretBackedSigners)
 
 	// Check if the StatefulSet already exists, create if not
 	var foundStatefulSet appsv1.StatefulSet
@@ -172,15 +180,15 @@ func buildEnv(envMaps ...map[string]string) []corev1.EnvVar {
 	return envVars
 }
 
-func (r *NodeReconciler) generateStatefulSetTemplate(namespace, name string) *appsv1.StatefulSet {
+func (r *NodeReconciler) generateStatefulSetTemplate(namespace, name, configSum string) *appsv1.StatefulSet {
 	// Define the StatefulSet to run Paladin using the ConfigMap
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
-			Labels:    r.getLabels(name),
 			Annotations: r.withStandardAnnotations(map[string]string{
 				"kubectl.kubernetes.io/default-container": "paladin",
+				"paladin.io/config-sum":                   configSum,
 			}),
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -287,9 +295,7 @@ func (r *NodeReconciler) createPostgresPVC(ctx context.Context, node *corev1alph
 			Namespace: namespace,
 			Labels:    r.getLabels(name),
 		},
-	}
-	if node.Spec.Database.PVCTemplate != nil {
-		pvc.Spec = *node.Spec.Database.PVCTemplate
+		Spec: node.Spec.Database.PVCTemplate,
 	}
 	pvc.Spec.AccessModes = []corev1.PersistentVolumeAccessMode{
 		corev1.ReadWriteOnce,
@@ -313,43 +319,66 @@ func (r *NodeReconciler) createPostgresPVC(ctx context.Context, node *corev1alph
 	return nil
 }
 
-func (r *NodeReconciler) createConfigSecret(ctx context.Context, node *corev1alpha1.Node, namespace, name string) (*corev1.Secret, error) {
-	configSecret, err := r.generateConfigSecret(ctx, node, namespace, name)
+func (r *NodeReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, signers []corev1alpha1.SecretBackedSigner) {
+	paladinContainer := ss.Spec.Template.Spec.Containers[0]
+	for _, s := range signers {
+		paladinContainer.VolumeMounts = append(paladinContainer.VolumeMounts, corev1.VolumeMount{
+			Name:      fmt.Sprintf("keystore-%s", s.Name),
+			MountPath: fmt.Sprintf("/keystores/%s", s.Name),
+		})
+		ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: fmt.Sprintf("keystore-%s", s.Name),
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: s.Secret,
+				},
+			},
+		})
+	}
+}
+
+func (r *NodeReconciler) createConfigSecret(ctx context.Context, node *corev1alpha1.Node, namespace, name string) (string, *corev1.Secret, error) {
+	configSum, configSecret, err := r.generateConfigSecret(ctx, node, namespace, name)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
 	var foundConfigSecret corev1.Secret
 	if err := r.Get(ctx, types.NamespacedName{Name: configSecret.Name, Namespace: configSecret.Namespace}, &foundConfigSecret); err != nil && errors.IsNotFound(err) {
 		err = r.Create(ctx, configSecret)
 		if err != nil {
-			return configSecret, err
+			return "", nil, err
 		}
 	} else if err != nil {
-		return configSecret, err
+		return "", nil, err
 	} else {
 		foundConfigSecret.StringData = configSecret.StringData
-		return &foundConfigSecret, r.Update(ctx, &foundConfigSecret)
+		return configSum, &foundConfigSecret, r.Update(ctx, &foundConfigSecret)
 	}
-	return configSecret, nil
+	return configSum, configSecret, nil
 }
 
 // generatePaladinConfigMapTemplate generates a ConfigMap for the Paladin configuration
-func (r *NodeReconciler) generateConfigSecret(ctx context.Context, node *corev1alpha1.Node, namespace, name string) (*corev1.Secret, error) {
+func (r *NodeReconciler) generateConfigSecret(ctx context.Context, node *corev1alpha1.Node, namespace, name string) (string, *corev1.Secret, error) {
 	pldConfigYAML, err := r.generatePaladinConfig(ctx, node, namespace, name)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    r.getLabels(name),
+	configSum := md5.New()
+	configSum.Write([]byte(pldConfigYAML))
+	configSumHex := hex.EncodeToString(configSum.Sum(nil))
+	return configSumHex,
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+				Labels:    r.getLabels(name),
+			},
+			StringData: map[string]string{
+				"config.paladin.yaml": pldConfigYAML,
+			},
 		},
-		StringData: map[string]string{
-			"config.paladin.yaml": pldConfigYAML,
-		},
-	}, nil
+		nil
 }
 
 // generatePaladinConfig converts the Node CR spec to a Paladin JSON configuration
@@ -364,16 +393,16 @@ func (r *NodeReconciler) generatePaladinConfig(ctx context.Context, node *corev1
 	if err := r.generatePaladinDBConfig(ctx, node, &pldConf, namespace, name); err != nil {
 		return "", err
 	}
+	if err := r.generatePaladinSigners(ctx, node, &pldConf, namespace); err != nil {
+		return "", err
+	}
 	sb := new(strings.Builder)
 	_ = yaml.NewEncoder(sb).Encode(&pldConf)
 	return sb.String(), nil
 }
 
 func (r *NodeReconciler) generatePaladinDBConfig(ctx context.Context, node *corev1alpha1.Node, pldConf *pldconfig.PaladinConfig, namespace, name string) error {
-	dbSpec := node.Spec.Database
-	if dbSpec == nil {
-		dbSpec = &corev1alpha1.Database{}
-	}
+	dbSpec := &node.Spec.Database
 
 	// If we're responsible for the runtime, we need to fill in the URI
 	switch dbSpec.Mode {
@@ -432,10 +461,80 @@ func (r *NodeReconciler) generatePaladinDBConfig(ctx context.Context, node *core
 }
 
 func (r *NodeReconciler) generateDBPasswordSecretIfNotExist(ctx context.Context, namespace, name string) error {
-	secret := r.generateRandomDBSecret(namespace, name)
+	secret := r.generateSecretTemplate(namespace, name)
 
 	var foundSecret corev1.Secret
 	if err := r.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, &foundSecret); err != nil && errors.IsNotFound(err) {
+		secret.StringData = map[string]string{
+			"username": "postgres",
+			"password": randURLSafeBase64(32),
+		}
+		err = r.Create(ctx, secret)
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *NodeReconciler) generatePaladinSigners(ctx context.Context, node *corev1alpha1.Node, pldConf *pldconfig.PaladinConfig, namespace string) error {
+
+	for i, s := range node.Spec.SecretBackedSigners {
+
+		// Temporary restriction in Paladin
+		if i > 0 {
+			return fmt.Errorf("only one signer currently supported")
+		}
+
+		// TODO: This should resolve the keystore by "name" once we have the full key store config in Paladin
+		pldSigner := &pldConf.Signer
+
+		// Upsert a secret if we've been asked to. We use a mnemonic in this case (rather than directly generating a 32byte seed)
+		if s.Type == corev1alpha1.SignerType_AutoHDWallet {
+			pldSigner.KeyDerivation.Type = signerapi.KeyDerivationTypeBIP32
+			pldSigner.KeyDerivation.SeedKeyPath = signerapi.ConfigKeyEntry{Name: "seed"}
+			if err := r.generateBIP39SeedSecretIfNotExist(ctx, namespace, s.Secret); err != nil {
+				return err
+			}
+		}
+
+		// Note we update the fields we are responsible for, rather than creating the whole object
+		// So detailed configuration can be provided in the config YAML
+		pldSigner.KeyStore.Type = signerapi.KeyStoreTypeStatic
+		pldSigner.KeyStore.Static.File = "/keystores/%s/keys.yaml"
+
+	}
+
+	return nil
+}
+
+func (r *NodeReconciler) generateBIP39SeedSecretIfNotExist(ctx context.Context, namespace, name string) error {
+	secret := r.generateSecretTemplate(namespace, name)
+
+	var foundSecret corev1.Secret
+	if err := r.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, &foundSecret); err != nil && errors.IsNotFound(err) {
+		var keyEntryJSON []byte
+		var mnemonic string
+		entropy, err := bip39.NewEntropy(256)
+		if err == nil {
+			mnemonic, err = bip39.NewMnemonic(entropy)
+		}
+		if err == nil {
+			keyEntryJSON, err = json.MarshalIndent(map[string]signerapi.StaticKeyEntryConfig{
+				"seed": {
+					Encoding: "none",
+					Inline:   mnemonic,
+				},
+			}, "", "  ")
+		}
+		if err != nil {
+			return fmt.Errorf("failed to generate mnemonic: %s", err)
+		}
+		secret.StringData = map[string]string{
+			"keys.yaml": string(keyEntryJSON),
+		}
 		err = r.Create(ctx, secret)
 		if err != nil {
 			return err
@@ -501,26 +600,27 @@ func randURLSafeBase64(count int) string {
 }
 
 // generateSecretTemplate generates a Secret for the Paladin configuration
-func (r *NodeReconciler) generateRandomDBSecret(namespace, name string) *corev1.Secret {
+func (r *NodeReconciler) generateSecretTemplate(namespace, name string) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 			Labels:    r.getLabels(name),
 		},
-		StringData: map[string]string{
-			"username": "postgres",
-			"password": randURLSafeBase64(32), // note will throw this away if secret already exists
-		},
 	}
 }
 
-func (r *NodeReconciler) getLabels(name string) map[string]string {
+func (r *NodeReconciler) getLabels(name string, extraLabels ...map[string]string) map[string]string {
 	l := make(map[string]string, len(r.config.Paladin.Labels))
 	l["app"] = generateName(name)
 
 	for k, v := range r.config.Paladin.Labels {
 		l[k] = v
+	}
+	for _, e := range extraLabels {
+		for k, v := range e {
+			l[k] = v
+		}
 	}
 	return l
 }

@@ -294,7 +294,7 @@ endef
 ##@ Dev helpers
 
 .PHONY: update-crds
-update-crds: manifests
+update-crds: manifests generate
 	$(KUBECTL) apply -k config/crd
 
 ##@ Node

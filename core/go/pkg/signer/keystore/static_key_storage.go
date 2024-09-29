@@ -23,6 +23,8 @@ import (
 	"os"
 	"strings"
 
+	"sigs.k8s.io/yaml"
+
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
@@ -48,10 +50,19 @@ type staticStore struct {
 // with keys in-line in the config, this helps use a file based Kubernetes
 // secret for a mnemonic seed phrase for example at the root of a HD wallet.
 func NewStaticKeyStore(ctx context.Context, conf signerapi.StaticKeyStorageConfig) (_ signerapi.KeyStore, err error) {
+	keyMap := conf.Keys
+	if keyMap == nil {
+		keyMap = make(map[string]signerapi.StaticKeyEntryConfig)
+	}
 	ils := &staticStore{
 		keys: make(map[string][]byte),
 	}
-	for keyHandle, keyEntry := range conf.Keys {
+	if conf.File != "" {
+		if err = ils.loadFileIntoKeyMap(ctx, conf.File, keyMap); err != nil {
+			return nil, err
+		}
+	}
+	for keyHandle, keyEntry := range keyMap {
 		var keyData []byte
 		if keyEntry.Filename != "" {
 			if keyData, err = os.ReadFile(string(keyEntry.Filename)); err != nil {
@@ -84,6 +95,21 @@ func NewStaticKeyStore(ctx context.Context, conf signerapi.StaticKeyStorageConfi
 		ils.keys[keyHandle] = keyData
 	}
 	return ils, nil
+}
+
+func (ils *staticStore) loadFileIntoKeyMap(ctx context.Context, filename string, keyMap map[string]signerapi.StaticKeyEntryConfig) error {
+	var fileKeyMap map[string]signerapi.StaticKeyEntryConfig
+	b, err := os.ReadFile(filename)
+	if err == nil {
+		err = yaml.Unmarshal(b, &fileKeyMap)
+	}
+	if err != nil {
+		return i18n.WrapError(ctx, err, msgs.MsgSigningFailedToLoadStaticKeyFile)
+	}
+	for k, v := range fileKeyMap {
+		keyMap[k] = v
+	}
+	return nil
 }
 
 func (ils *staticStore) FindOrCreateLoadableKey(ctx context.Context, req *proto.ResolveKeyRequest, newKeyMaterial func() ([]byte, error)) (keyMaterial []byte, keyHandle string, err error) {

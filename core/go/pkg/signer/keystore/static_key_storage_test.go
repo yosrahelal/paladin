@@ -38,7 +38,7 @@ func newTestStaticStore(t *testing.T, keys map[string]signerapi.StaticKeyEntryCo
 	})
 	require.NoError(t, err)
 
-	store.Close()
+	store.Close() // proving it's a no-op
 
 	return ctx, store.(*staticStore)
 }
@@ -239,5 +239,43 @@ func TestStaticStoreResolveNotFound(t *testing.T) {
 		},
 	}, nil)
 	assert.Regexp(t, "PD011418", err)
+
+}
+
+func TestStaticStoreWholeStoreInFile(t *testing.T) {
+
+	filePath := path.Join(t.TempDir(), "keystore.yaml")
+	err := os.WriteFile(filePath, []byte(`
+key1:
+  encoding: none
+  inline: my key
+`), 0644)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	store, err := NewStaticKeyStore(ctx, signerapi.StaticKeyStorageConfig{
+		File: filePath,
+	})
+	require.NoError(t, err)
+
+	key, _, err := store.FindOrCreateLoadableKey(ctx, &proto.ResolveKeyRequest{
+		Name: "key1",
+	}, nil)
+	require.NoError(t, err)
+	require.Equal(t, "my key", string(key))
+
+}
+
+func TestStaticStoreWholeStoreInFileFail(t *testing.T) {
+
+	filePath := path.Join(t.TempDir(), "keystore.yaml")
+	err := os.WriteFile(filePath, []byte(`{!!!! not good YAML`), 0644)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	_, err = NewStaticKeyStore(ctx, signerapi.StaticKeyStorageConfig{
+		File: filePath,
+	})
+	require.Regexp(t, "PD011421", err)
 
 }
