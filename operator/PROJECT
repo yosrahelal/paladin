@@ -18,7 +18,7 @@ resources:
   domain: paladin.io
   group: core
   kind: Paladin
-  path: github.com/kaleido-io/paladin/api/v1alpha1
+  path: github.com/kaleido-io/paladin/operator/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -27,7 +27,7 @@ resources:
   domain: paladin.io
   group: core
   kind: SmartContract
-  path: github.com/kaleido-io/paladin/api/v1alpha1
+  path: github.com/kaleido-io/paladin/operator/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -36,6 +36,6 @@ resources:
   domain: paladin.io
   group: core
   kind: Besu
-  path: github.com/kaleido-io/paladin/api/v1alpha1
+  path: github.com/kaleido-io/paladin/operator/api/v1alpha1
   version: v1alpha1
 version: "3"

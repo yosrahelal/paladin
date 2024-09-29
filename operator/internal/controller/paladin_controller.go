@@ -44,11 +44,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	yaml "sigs.k8s.io/yaml/goyaml.v3"
 
-	corev1alpha1 "github.com/kaleido-io/paladin/api/v1alpha1"
-	"github.com/kaleido-io/paladin/pkg/config"
+	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
+	"github.com/kaleido-io/paladin/operator/pkg/config"
 )
 
-// PaladinReconciler reconciles a Node object
+// PaladinReconciler reconciles a Paladin object
 type PaladinReconciler struct {
 	client.Client
 	config *config.Config
@@ -59,26 +59,26 @@ type PaladinReconciler struct {
 //+kubebuilder:rbac:groups=core.paladin.io,resources=paladins/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=core.paladin.io,resources=paladins/finalizers,verbs=update
 
-// Reconcile implements the logic when a Node resource is created, updated, or deleted
+// Reconcile implements the logic when a Paladin resource is created, updated, or deleted
 func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	// Generate a name for the Paladin resources
-	name := generateName(req.Name)
+	name := generatePaladinName(req.Name)
 	namespace := req.Namespace
 
-	// Fetch the Node instance
+	// Fetch the Paladin instance
 	var node corev1alpha1.Paladin
 	if err := r.Get(ctx, req.NamespacedName, &node); err != nil {
 		if errors.IsNotFound(err) {
-			log.Info("Node resource deleted, deleting related resources")
+			log.Info("Paladin resource deleted, deleting related resources")
 			r.deleteService(ctx, namespace, name)
 			r.deleteStatefulSet(ctx, namespace, name)
 			r.deleteConfigSecret(ctx, namespace, name)
 
 			return ctrl.Result{}, nil
 		}
-		log.Error(err, "Failed to get Node resource")
+		log.Error(err, "Failed to get Paladin resource")
 		return ctrl.Result{}, err
 	}
 
@@ -90,23 +90,23 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	log.Info("Created Paladin config secret", "Name", name)
 
 	if _, err := r.createService(ctx, namespace, name); err != nil {
-		log.Error(err, "Failed to create Paladin Node")
+		log.Error(err, "Failed to create Paladin Paladin")
 		return ctrl.Result{}, err
 	}
 	log.Info("Created Paladin Service", "Name", name)
 
 	ss, err := r.createStatefulSet(ctx, &node, namespace, name, configSum)
 	if err != nil {
-		log.Error(err, "Failed to create Paladin Node")
+		log.Error(err, "Failed to create Paladin Paladin")
 		return ctrl.Result{}, err
 	}
 	log.Info("Created Paladin StatefulSet", "Name", ss.Name, "Namespace", ss.Namespace)
 
-	// TODO: Update the Node status
+	// TODO: Update the Paladin status
 	// node.Status.Name = ss.GetName()
 	// node.Status.Namespace = ss.GetNamespace()
 	// if err := r.Status().Update(ctx, &node); err != nil {
-	// 	log.Error(err, "Failed to update Node status")
+	// 	log.Error(err, "Failed to update Paladin status")
 	// 	return ctrl.Result{}, err
 	// }
 
@@ -381,7 +381,7 @@ func (r *PaladinReconciler) generateConfigSecret(ctx context.Context, node *core
 		nil
 }
 
-// generatePaladinConfig converts the Node CR spec to a Paladin JSON configuration
+// generatePaladinConfig converts the Paladin CR spec to a Paladin YAML configuration
 func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *corev1alpha1.Paladin, namespace, name string) (string, error) {
 	var pldConf pldconfig.PaladinConfig
 	if node.Spec.Config != nil {
@@ -612,7 +612,7 @@ func (r *PaladinReconciler) generateSecretTemplate(namespace, name string) *core
 
 func (r *PaladinReconciler) getLabels(name string, extraLabels ...map[string]string) map[string]string {
 	l := make(map[string]string, len(r.config.Paladin.Labels))
-	l["app"] = generateName(name)
+	l["app"] = generatePaladinName(name)
 
 	for k, v := range r.config.Paladin.Labels {
 		l[k] = v
@@ -625,9 +625,9 @@ func (r *PaladinReconciler) getLabels(name string, extraLabels ...map[string]str
 	return l
 }
 
-// generateName generates a name for the Paladin resources based on the Node name.
+// generatePaladinName generates a name for the Paladin resources based on the Paladin name.
 // this is for generating unique names for the resources
-func generateName(n string) string {
+func generatePaladinName(n string) string {
 	return fmt.Sprintf("paladin-%s", n)
 }
 

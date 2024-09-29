@@ -24,7 +24,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/kaleido-io/paladin/test/utils"
+	"github.com/kaleido-io/paladin/operator/test/utils"
 )
 
 const namespace = "paladin-e2e"

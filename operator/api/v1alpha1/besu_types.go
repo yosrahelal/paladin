@@ -28,8 +28,10 @@ type BesuSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of Besu. Edit besu_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Settings from this config will be loaded as TOML and used as the base of the configuration.
+	Config *string `json:"config,omitempty"`
+	// The name of the genesis CR that these nodes will use to obtain their genesis file, and find bootnodes
+	Genesis string `json:"genesis"`
 }
 
 // BesuStatus defines the observed state of Besu

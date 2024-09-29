@@ -144,6 +144,7 @@ kind-promote: kind-start
 	kind load docker-image paladin-operator:latest --name "${CLUSTER_NAME}"
 	kind load docker-image paladin:test --name "${CLUSTER_NAME}"
 	kind load docker-image postgres:latest --name "${CLUSTER_NAME}"
+	kind load docker-image hyperledger/besu:latest --name "${CLUSTER_NAME}"	
 
 ##@ Build
 

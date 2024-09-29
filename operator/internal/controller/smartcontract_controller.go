@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	corev1alpha1 "github.com/kaleido-io/paladin/api/v1alpha1"
+	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
 )
 
 // SmartContractReconciler reconciles a SmartContract object
