@@ -320,7 +320,7 @@ func (r *NodeReconciler) createPostgresPVC(ctx context.Context, node *corev1alph
 }
 
 func (r *NodeReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, signers []corev1alpha1.SecretBackedSigner) {
-	paladinContainer := ss.Spec.Template.Spec.Containers[0]
+	paladinContainer := &ss.Spec.Template.Spec.Containers[0]
 	for _, s := range signers {
 		paladinContainer.VolumeMounts = append(paladinContainer.VolumeMounts, corev1.VolumeMount{
 			Name:      fmt.Sprintf("keystore-%s", s.Name),
@@ -503,7 +503,7 @@ func (r *NodeReconciler) generatePaladinSigners(ctx context.Context, node *corev
 		// Note we update the fields we are responsible for, rather than creating the whole object
 		// So detailed configuration can be provided in the config YAML
 		pldSigner.KeyStore.Type = signerapi.KeyStoreTypeStatic
-		pldSigner.KeyStore.Static.File = "/keystores/%s/keys.yaml"
+		pldSigner.KeyStore.Static.File = fmt.Sprintf("/keystores/%s/keys.yaml", s.Name)
 
 	}
 
