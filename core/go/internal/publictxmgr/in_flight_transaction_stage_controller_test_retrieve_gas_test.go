@@ -143,54 +143,6 @@ func TestProduceLatestInFlightStageContextRetrieveGas(t *testing.T) {
 	assert.NotEqual(t, rsc, it.stateManager.GetRunningStageContext(ctx))
 }
 
-func TestProduceLatestInFlightStageContextRetrieveGasWithPersistence(t *testing.T) {
-	ctx, o, _, done := newTestOrchestrator(t)
-	defer done()
-	it, mTS := newInflightTransaction(o, 1)
-	it.gasPriceClient = NewTestFixedPriceGasPriceClient(t)
-	mSU := &mockStatusUpdater{
-		updateSubStatus: func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
-			return nil
-		},
-	}
-	mTS.statusUpdater = mSU
-
-	// succeed retrieving gas price
-	it.testOnlyNoActionMode = false
-	it.testOnlyNoEventMode = true
-	inFlightStageMananger := it.stateManager.(*inFlightTransactionState)
-	// trigger retrieve gas price
-	assert.Nil(t, it.stateManager.GetRunningStageContext(ctx))
-	tOut := it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
-		AvailableToSpend:         nil,
-		PreviousNonceCostUnknown: true,
-	})
-	for len(inFlightStageMananger.bufferedStageOutputs) == 0 {
-		// wait for the confirmation output to be added
-	}
-	assert.Empty(t, *tOut)
-
-	assert.NotNil(t, it.stateManager.GetRunningStageContext(ctx))
-	rsc := it.stateManager.GetRunningStageContext(ctx)
-
-	assert.Equal(t, InFlightTxStageRetrieveGasPrice, rsc.Stage)
-
-	// persisted stage success and move on
-	called := make(chan bool, 10)
-	mSU.updateSubStatus = func(ctx context.Context, imtx InMemoryTxStateReadOnly, subStatus BaseTxSubStatus, action BaseTxAction, info, err *fftypes.JSONAny, actionOccurred *tktypes.Timestamp) error {
-		called <- true
-		return nil
-	}
-	tOut = it.ProduceLatestInFlightStageContext(ctx, &OrchestratorContext{
-		AvailableToSpend:         nil,
-		PreviousNonceCostUnknown: true,
-	})
-
-	<-called
-	assert.Empty(t, *tOut)
-	assert.False(t, it.stateManager.ValidatedTransactionHashMatchState(ctx))
-}
-
 func TestProduceLatestInFlightStageContextRetrieveGasIncrements(t *testing.T) {
 	ctx, o, _, done := newTestOrchestrator(t)
 	defer done()

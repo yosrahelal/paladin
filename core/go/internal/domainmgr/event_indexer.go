@@ -26,15 +26,12 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-func (dm *domainManager) eventIndexer(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
+func (dm *domainManager) registrationIndexer(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
 
 	var contracts []*PrivateSmartContract
 
 	for _, ev := range batch.Events {
-		// We compare against the fully qualified string provided by the blockindexer at serialization time,
-		// which includes variables names and whether fields are indexed
-		switch ev.SoliditySignature {
-		case eventSolSig_PaladinRegisterSmartContract_V0:
+		if ev.SoliditySignature == eventSolSig_PaladinRegisterSmartContract_V0 {
 			var parsedEvent event_PaladinRegisterSmartContract_V0
 			parseErr := json.Unmarshal(ev.Data, &parsedEvent)
 			if parseErr != nil {
@@ -60,6 +57,28 @@ func (dm *domainManager) eventIndexer(ctx context.Context, tx *gorm.DB, batch *b
 				DoNothing: true, // immutable
 			}).
 			Create(contracts).
+			Error
+		if err != nil {
+			return nil, err
+		}
+		contractDeployments := make([]*contractDeployment, 0, len(contracts))
+		for _, c := range contracts {
+			contractDeployments = append(contractDeployments, &contractDeployment{
+				ContractAddress:   c.Address,
+				DeployTransaction: c.DeployTX,
+			})
+		}
+		// Insert the contract deployments row so that it can be used to enrich the transaction receipts.
+		//  TODO this table is really owned by txmgr so should we just be sending an event to txmgr
+		// at this point and letting it handle the insert?
+		err = tx.
+			Table("contract_deployments").
+			WithContext(ctx).
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "contract_address"}},
+				DoNothing: true, // immutable
+			}).
+			Create(contractDeployments).
 			Error
 		if err != nil {
 			return nil, err

@@ -61,6 +61,16 @@ CREATE TABLE transaction_receipts (
   "tx_hash"                   TEXT,
   "block_number"              BIGINT,
   PRIMARY KEY ("transaction"),
-  FOREIGN KEY ("transaction") REFERENCES transaction_receipts ("id") ON DELETE CASCADE
+  FOREIGN KEY ("transaction") REFERENCES transactions ("id") ON DELETE CASCADE
 );
-CREATE INDEX transaction_receipts_tx_hash ON transactions("tx_hash");
+CREATE INDEX transaction_receipts_tx_hash ON transaction_receipts("tx_hash");
+
+CREATE TABLE contract_deployments (
+  -- Effectivtly this is an extension to the transaction_receipts table but the contract_address is written at a different
+  -- time from the rest of the receipt (becuase the contract_address comes from an event stream and the rest of the receipt comes from block indexer)
+  -- storing in separate tables allows an INSERT only model and avoids any worry about multiple concurent writes to the same row
+  "deploy_transaction"               UUID            NOT NULL,
+  "contract_address"                 VARCHAR         NOT NULL,
+  PRIMARY KEY ("contract_address")
+);
+CREATE INDEX contract_deployments_transaction ON contract_deployments ("deploy_transaction");
