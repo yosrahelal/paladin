@@ -339,7 +339,7 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 	// - The hash contains everything in the state that needs to be proved
 	// - The hash is deterministic and reproducible by anyone with access to the unmasked state data
 	if id == nil {
-		// When Paladin is designated to create that has, it uses a EIP-712 Typed Data V4 hash as this has
+		// When Paladin is designated to create that hash, it uses a EIP-712 Typed Data V4 hash as this has
 		// the characteristics of:
 		// - Well proven and Ethereum standardized algorithm for hashing a complex structure
 		// - Deterministic order and type formatting of values
