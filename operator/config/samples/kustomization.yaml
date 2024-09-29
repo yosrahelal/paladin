@@ -1,5 +1,6 @@
 ## Append samples of your project ##
 resources:
-- core_v1alpha1_node.yaml
+- core_v1alpha1_paladin.yaml
 - core_v1alpha1_smartcontract.yaml
+- core_v1alpha1_besu.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

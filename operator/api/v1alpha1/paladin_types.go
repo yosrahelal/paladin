@@ -24,8 +24,8 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// NodeSpec defines the desired state of Node
-type NodeSpec struct {
+// PaladinSpec defines the desired state of Paladin
+type PaladinSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
@@ -71,110 +71,14 @@ type SecretBackedSigner struct {
 	Type string `json:"type"`
 }
 
-/*
-// Config is the top-level configuration for the node
-type Config struct {
-    NodeName  string   `json:"nodeName,omitempty"`
-    DB        Database `json:"db,omitempty"`
-    GRPC      GRPCConfig `json:"grpc,omitempty"`
-    RPCServer RPCServerConfig `json:"rpcServer,omitempty"`
-    Blockchain BlockchainConfig `json:"blockchain,omitempty"`
-    Signer    SignerConfig `json:"signer,omitempty"`
-}
-
-type NodeStatus struct {
-    State   string `json:"state,omitempty"`   // Pending, Running, Failed
-    Ready   bool   `json:"ready,omitempty"`
-    Message string `json:"message,omitempty"` // Detailed status or error message
-}
-
-type SQLiteConfig struct {
-    URI           string `json:"uri,omitempty"`
-    AutoMigrate   bool   `json:"autoMigrate,omitempty"`
-    MigrationsDir string `json:"migrationsDir,omitempty"`
-    DebugQueries  bool   `json:"debugQueries,omitempty"`
-}
-
-type PostgresConfig struct {
-    URI           string `json:"uri,omitempty"`
-    AutoMigrate   bool   `json:"autoMigrate,omitempty"`
-    MigrationsDir string `json:"migrationsDir,omitempty"`
-    DebugQueries  bool   `json:"debugQueries,omitempty"`
-}
-
-// GRPC configuration
-type GRPCConfig struct {
-    ShutdownTimeout int `json:"shutdownTimeout,omitempty"`
-}
-
-// RPC Server configuration
-type RPCServerConfig struct {
-    HTTP HTTPServerConfig `json:"http,omitempty"`
-    WS   WSServerConfig   `json:"ws,omitempty"`
-}
-
-type HTTPServerConfig struct {
-    Port            int `json:"port,omitempty"`
-    ShutdownTimeout int `json:"shutdownTimeout,omitempty"`
-}
-
-type WSServerConfig struct {
-    Disabled        bool `json:"disabled,omitempty"`
-    ShutdownTimeout int `json:"shutdownTimeout,omitempty"`
-}
-
-// Blockchain configuration
-type BlockchainConfig struct {
-    HTTP BlockchainHTTPConfig `json:"http,omitempty"`
-    WS   BlockchainWSConfig   `json:"ws,omitempty"`
-}
-
-type BlockchainHTTPConfig struct {
-    URL string `json:"url,omitempty"`
-}
-
-type BlockchainWSConfig struct {
-    URL                   string `json:"url,omitempty"`
-    InitialConnectAttempts int    `json:"initialConnectAttempts,omitempty"`
-}
-
-// Signer configuration
-type SignerConfig struct {
-    KeyDerivation KeyDerivationConfig `json:"keyDerivation,omitempty"`
-    KeyStore      KeyStoreConfig      `json:"keyStore,omitempty"`
-}
-
-type KeyDerivationConfig struct {
-    Type string `json:"type,omitempty"`
-}
-
-type KeyStoreConfig struct {
-    Type   string         `json:"type,omitempty"`
-    Static StaticKeyStore `json:"static,omitempty"`
-}
-
-type StaticKeyStore struct {
-    Keys StaticKeys `json:"keys,omitempty"`
-}
-
-type StaticKeys struct {
-    Seed SeedConfig `json:"seed,omitempty"`
-}
-
-type SeedConfig struct {
-    Encoding string `json:"encoding,omitempty"`
-    Inline   string `json:"inline,omitempty"`
-}
-*/
-
 // StatusReason is an enumeration of possible failure causes.  Each StatusReason
 // must map to a single HTTP status code, but multiple reasons may map
 // to the same HTTP status code.
 // TODO: move to apiserver
 type StatusReason string
 
-// NodeStatus defines the observed state of Node
-type NodeStatus struct {
+// PaladinStatus defines the observed state of Paladin
+type PaladinStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 
 	// TODO: What fields should be here?
@@ -190,24 +94,24 @@ type NodeStatus struct {
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// Node is the Schema for the nodes API
-type Node struct {
+// Paladin is the Schema for the paladin API
+type Paladin struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   NodeSpec   `json:"spec,omitempty"`
-	Status NodeStatus `json:"status,omitempty"`
+	Spec   PaladinSpec   `json:"spec,omitempty"`
+	Status PaladinStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// NodeList contains a list of Node
-type NodeList struct {
+// PaladinList contains a list of Paladin
+type PaladinList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Node `json:"items"`
+	Items           []Paladin `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Node{}, &NodeList{})
+	SchemeBuilder.Register(&Paladin{}, &PaladinList{})
 }

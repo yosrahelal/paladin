@@ -20,7 +20,11 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the Project itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- besu_editor_role.yaml
+- besu_viewer_role.yaml
 - smartcontract_editor_role.yaml
 - smartcontract_viewer_role.yaml
-- node_editor_role.yaml
-- node_viewer_role.yaml
+- paladin_editor_role.yaml
+- paladin_viewer_role.yaml
+
+

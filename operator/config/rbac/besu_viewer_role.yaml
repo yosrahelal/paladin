@@ -1,16 +1,16 @@
-# permissions for end users to view nodes.
+# permissions for end users to view besus.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
     app.kubernetes.io/name: operator-go
     app.kubernetes.io/managed-by: kustomize
-  name: node-viewer-role
+  name: besu-viewer-role
 rules:
 - apiGroups:
   - core.paladin.io
   resources:
-  - nodes
+  - besus
   verbs:
   - get
   - list
@@ -18,6 +18,6 @@ rules:
 - apiGroups:
   - core.paladin.io
   resources:
-  - nodes/status
+  - besus/status
   verbs:
   - get

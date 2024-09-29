@@ -122,11 +122,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.NodeReconciler{
+	if err = (&controller.PaladinReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Node")
+		setupLog.Error(err, "unable to create controller", "controller", "Paladin")
 		os.Exit(1)
 	}
 	if err = (&controller.SmartContractReconciler{
@@ -134,6 +134,13 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SmartContract")
+		os.Exit(1)
+	}
+	if err = (&controller.BesuReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Besu")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

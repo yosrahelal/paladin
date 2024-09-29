@@ -48,19 +48,19 @@ import (
 	"github.com/kaleido-io/paladin/pkg/config"
 )
 
-// NodeReconciler reconciles a Node object
-type NodeReconciler struct {
+// PaladinReconciler reconciles a Node object
+type PaladinReconciler struct {
 	client.Client
 	config *config.Config
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=core.paladin.io,resources=nodes,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core.paladin.io,resources=nodes/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=core.paladin.io,resources=nodes/finalizers,verbs=update
+//+kubebuilder:rbac:groups=core.paladin.io,resources=paladins,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core.paladin.io,resources=paladins/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=core.paladin.io,resources=paladins/finalizers,verbs=update
 
 // Reconcile implements the logic when a Node resource is created, updated, or deleted
-func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	// Generate a name for the Paladin resources
@@ -68,7 +68,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	namespace := req.Namespace
 
 	// Fetch the Node instance
-	var node corev1alpha1.Node
+	var node corev1alpha1.Paladin
 	if err := r.Get(ctx, req.NamespacedName, &node); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Node resource deleted, deleting related resources")
@@ -114,7 +114,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *NodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *PaladinReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Load the controller configuration
 	config, err := config.LoadConfig() // Load the config from file
 	if err != nil {
@@ -123,11 +123,11 @@ func (r *NodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.config = config
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1alpha1.Node{}).
+		For(&corev1alpha1.Paladin{}).
 		Complete(r)
 }
 
-func (r *NodeReconciler) createStatefulSet(ctx context.Context, node *corev1alpha1.Node, namespace, name, configSum string) (*appsv1.StatefulSet, error) {
+func (r *PaladinReconciler) createStatefulSet(ctx context.Context, node *corev1alpha1.Paladin, namespace, name, configSum string) (*appsv1.StatefulSet, error) {
 	statefulSet := r.generateStatefulSetTemplate(namespace, name, configSum)
 
 	if node.Spec.Database.Mode == corev1alpha1.DBMode_SidecarPostgres {
@@ -160,7 +160,7 @@ func (r *NodeReconciler) createStatefulSet(ctx context.Context, node *corev1alph
 
 }
 
-func (r *NodeReconciler) withStandardAnnotations(annotations map[string]string) map[string]string {
+func (r *PaladinReconciler) withStandardAnnotations(annotations map[string]string) map[string]string {
 	for k, v := range r.config.Paladin.Annotations {
 		annotations[k] = v
 	}
@@ -180,7 +180,7 @@ func buildEnv(envMaps ...map[string]string) []corev1.EnvVar {
 	return envVars
 }
 
-func (r *NodeReconciler) generateStatefulSetTemplate(namespace, name, configSum string) *appsv1.StatefulSet {
+func (r *PaladinReconciler) generateStatefulSetTemplate(namespace, name, configSum string) *appsv1.StatefulSet {
 	// Define the StatefulSet to run Paladin using the ConfigMap
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -244,7 +244,7 @@ func (r *NodeReconciler) generateStatefulSetTemplate(namespace, name, configSum 
 	}
 }
 
-func (r *NodeReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordSecret string) {
+func (r *PaladinReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordSecret string) {
 	ss.Spec.Template.Spec.Containers = append(ss.Spec.Template.Spec.Containers, corev1.Container{
 		Name:            "postgres",
 		Image:           r.config.Postgres.Image, // Use the image from the config
@@ -288,7 +288,7 @@ func (r *NodeReconciler) addPostgresSidecar(ss *appsv1.StatefulSet, passwordSecr
 	})
 }
 
-func (r *NodeReconciler) createPostgresPVC(ctx context.Context, node *corev1alpha1.Node, namespace, name string) error {
+func (r *PaladinReconciler) createPostgresPVC(ctx context.Context, node *corev1alpha1.Paladin, namespace, name string) error {
 	pvc := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-pgdata", name),
@@ -319,7 +319,7 @@ func (r *NodeReconciler) createPostgresPVC(ctx context.Context, node *corev1alph
 	return nil
 }
 
-func (r *NodeReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, signers []corev1alpha1.SecretBackedSigner) {
+func (r *PaladinReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, signers []corev1alpha1.SecretBackedSigner) {
 	paladinContainer := &ss.Spec.Template.Spec.Containers[0]
 	for _, s := range signers {
 		paladinContainer.VolumeMounts = append(paladinContainer.VolumeMounts, corev1.VolumeMount{
@@ -337,7 +337,7 @@ func (r *NodeReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, signers
 	}
 }
 
-func (r *NodeReconciler) createConfigSecret(ctx context.Context, node *corev1alpha1.Node, namespace, name string) (string, *corev1.Secret, error) {
+func (r *PaladinReconciler) createConfigSecret(ctx context.Context, node *corev1alpha1.Paladin, namespace, name string) (string, *corev1.Secret, error) {
 	configSum, configSecret, err := r.generateConfigSecret(ctx, node, namespace, name)
 	if err != nil {
 		return "", nil, err
@@ -359,7 +359,7 @@ func (r *NodeReconciler) createConfigSecret(ctx context.Context, node *corev1alp
 }
 
 // generatePaladinConfigMapTemplate generates a ConfigMap for the Paladin configuration
-func (r *NodeReconciler) generateConfigSecret(ctx context.Context, node *corev1alpha1.Node, namespace, name string) (string, *corev1.Secret, error) {
+func (r *PaladinReconciler) generateConfigSecret(ctx context.Context, node *corev1alpha1.Paladin, namespace, name string) (string, *corev1.Secret, error) {
 	pldConfigYAML, err := r.generatePaladinConfig(ctx, node, namespace, name)
 	if err != nil {
 		return "", nil, err
@@ -382,7 +382,7 @@ func (r *NodeReconciler) generateConfigSecret(ctx context.Context, node *corev1a
 }
 
 // generatePaladinConfig converts the Node CR spec to a Paladin JSON configuration
-func (r *NodeReconciler) generatePaladinConfig(ctx context.Context, node *corev1alpha1.Node, namespace, name string) (string, error) {
+func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *corev1alpha1.Paladin, namespace, name string) (string, error) {
 	var pldConf pldconfig.PaladinConfig
 	if node.Spec.Config != nil {
 		err := yaml.Unmarshal([]byte(*node.Spec.Config), &pldConf)
@@ -401,7 +401,7 @@ func (r *NodeReconciler) generatePaladinConfig(ctx context.Context, node *corev1
 	return sb.String(), nil
 }
 
-func (r *NodeReconciler) generatePaladinDBConfig(ctx context.Context, node *corev1alpha1.Node, pldConf *pldconfig.PaladinConfig, namespace, name string) error {
+func (r *PaladinReconciler) generatePaladinDBConfig(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconfig.PaladinConfig, namespace, name string) error {
 	dbSpec := &node.Spec.Database
 
 	// If we're responsible for the runtime, we need to fill in the URI
@@ -460,7 +460,7 @@ func (r *NodeReconciler) generatePaladinDBConfig(ctx context.Context, node *core
 	return nil
 }
 
-func (r *NodeReconciler) generateDBPasswordSecretIfNotExist(ctx context.Context, namespace, name string) error {
+func (r *PaladinReconciler) generateDBPasswordSecretIfNotExist(ctx context.Context, namespace, name string) error {
 	secret := r.generateSecretTemplate(namespace, name)
 
 	var foundSecret corev1.Secret
@@ -479,7 +479,7 @@ func (r *NodeReconciler) generateDBPasswordSecretIfNotExist(ctx context.Context,
 	return nil
 }
 
-func (r *NodeReconciler) generatePaladinSigners(ctx context.Context, node *corev1alpha1.Node, pldConf *pldconfig.PaladinConfig, namespace string) error {
+func (r *PaladinReconciler) generatePaladinSigners(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconfig.PaladinConfig, namespace string) error {
 
 	for i, s := range node.Spec.SecretBackedSigners {
 
@@ -510,7 +510,7 @@ func (r *NodeReconciler) generatePaladinSigners(ctx context.Context, node *corev
 	return nil
 }
 
-func (r *NodeReconciler) generateBIP39SeedSecretIfNotExist(ctx context.Context, namespace, name string) error {
+func (r *PaladinReconciler) generateBIP39SeedSecretIfNotExist(ctx context.Context, namespace, name string) error {
 	secret := r.generateSecretTemplate(namespace, name)
 
 	var foundSecret corev1.Secret
@@ -545,7 +545,7 @@ func (r *NodeReconciler) generateBIP39SeedSecretIfNotExist(ctx context.Context, 
 	return nil
 }
 
-func (r *NodeReconciler) retrieveUsernamePasswordSecret(ctx context.Context, namespace, name string) (string, string, error) {
+func (r *PaladinReconciler) retrieveUsernamePasswordSecret(ctx context.Context, namespace, name string) (string, string, error) {
 	var foundSecret corev1.Secret
 	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &foundSecret); err != nil {
 		return "", "", err
@@ -553,7 +553,7 @@ func (r *NodeReconciler) retrieveUsernamePasswordSecret(ctx context.Context, nam
 	return string(foundSecret.Data["username"]), string(foundSecret.Data["password"]), nil
 }
 
-func (r *NodeReconciler) createService(ctx context.Context, namespace, name string) (*corev1.Service, error) {
+func (r *PaladinReconciler) createService(ctx context.Context, namespace, name string) (*corev1.Service, error) {
 	svc := r.generateServiceTemplate(namespace, name)
 
 	var foundSvc corev1.Service
@@ -569,7 +569,7 @@ func (r *NodeReconciler) createService(ctx context.Context, namespace, name stri
 }
 
 // generateServiceTemplate generates a ConfigMap for the Paladin configuration
-func (r *NodeReconciler) generateServiceTemplate(namespace, name string) *corev1.Service {
+func (r *PaladinReconciler) generateServiceTemplate(namespace, name string) *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -600,7 +600,7 @@ func randURLSafeBase64(count int) string {
 }
 
 // generateSecretTemplate generates a Secret for the Paladin configuration
-func (r *NodeReconciler) generateSecretTemplate(namespace, name string) *corev1.Secret {
+func (r *PaladinReconciler) generateSecretTemplate(namespace, name string) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -610,7 +610,7 @@ func (r *NodeReconciler) generateSecretTemplate(namespace, name string) *corev1.
 	}
 }
 
-func (r *NodeReconciler) getLabels(name string, extraLabels ...map[string]string) map[string]string {
+func (r *PaladinReconciler) getLabels(name string, extraLabels ...map[string]string) map[string]string {
 	l := make(map[string]string, len(r.config.Paladin.Labels))
 	l["app"] = generateName(name)
 
@@ -631,7 +631,7 @@ func generateName(n string) string {
 	return fmt.Sprintf("paladin-%s", n)
 }
 
-func (r *NodeReconciler) deleteStatefulSet(ctx context.Context, namespace, name string) error {
+func (r *PaladinReconciler) deleteStatefulSet(ctx context.Context, namespace, name string) error {
 	var foundStatefulSet appsv1.StatefulSet
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &foundStatefulSet)
 	if err == nil {
@@ -641,7 +641,7 @@ func (r *NodeReconciler) deleteStatefulSet(ctx context.Context, namespace, name 
 
 }
 
-func (r *NodeReconciler) deleteConfigSecret(ctx context.Context, namespace, name string) error {
+func (r *PaladinReconciler) deleteConfigSecret(ctx context.Context, namespace, name string) error {
 	var foundSecret corev1.Secret
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &foundSecret)
 	if err == nil {
@@ -650,7 +650,7 @@ func (r *NodeReconciler) deleteConfigSecret(ctx context.Context, namespace, name
 	return err
 }
 
-func (r *NodeReconciler) deleteService(ctx context.Context, namespace, name string) error {
+func (r *PaladinReconciler) deleteService(ctx context.Context, namespace, name string) error {
 
 	var foundSvc corev1.Service
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &foundSvc)

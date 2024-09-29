@@ -297,15 +297,15 @@ endef
 update-crds: manifests generate
 	$(KUBECTL) apply -k config/crd
 
-##@ Node
+##@ Paladin
 
 .PHONY: create-instance
 create-instance: ## Add a new instance of the paladin operator 
-	$(KUBECTL) apply -f config/samples/core_v1alpha1_node.yaml
+	$(KUBECTL) apply -f config/samples/core_v1alpha1_paladin.yaml
 
 .PHONY: delete-instance
 delete-instance: ## Delete an instance of the paladin operator 
-	$(KUBECTL) delete -f config/samples/core_v1alpha1_node.yaml || true
+	$(KUBECTL) delete -f config/samples/core_v1alpha1_paladin.yaml || true
 
 ## Cleanup
 

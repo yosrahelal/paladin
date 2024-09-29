@@ -1,15 +1,16 @@
----
+# permissions for end users to edit paladins.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: manager-role
+  labels:
+    app.kubernetes.io/name: operator-go
+    app.kubernetes.io/managed-by: kustomize
+  name: paladin-editor-role
 rules:
 - apiGroups:
   - core.paladin.io
   resources:
-  - besus
   - paladins
-  - smartcontracts
   verbs:
   - create
   - delete
@@ -21,18 +22,6 @@ rules:
 - apiGroups:
   - core.paladin.io
   resources:
-  - besus/finalizers
-  - paladins/finalizers
-  - smartcontracts/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - core.paladin.io
-  resources:
-  - besus/status
   - paladins/status
-  - smartcontracts/status
   verbs:
   - get
-  - patch
-  - update
