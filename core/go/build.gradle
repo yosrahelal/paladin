@@ -81,6 +81,19 @@ task copyTestContracts(type: Copy) {
     includeEmptyDirs = false
 }
 
+task copyTestDomainContracts(type: Copy) {
+    inputs.files(configurations.compiledContracts)
+    from fileTree(configurations.compiledContracts.asPath) {
+        include 'contracts/domains/testbed_sim/SIMDomain.sol/SIMDomain.json'
+        include 'contracts/domains/testbed_sim/SIMToken.sol/SIMToken.json'
+    }
+    into 'componenttest/domains/abis'
+
+    // Flatten all paths into the destination folder
+    eachFile { path = name }
+    includeEmptyDirs = false
+}
+
 task copyTestbedContracts(type: Copy) {
     inputs.files(configurations.compiledContracts)
     from fileTree(configurations.compiledContracts.asPath) {
@@ -110,6 +123,7 @@ task copyDomainManagerContracts(type: Copy) {
 
 task copyContracts(dependsOn:[
     copyTestContracts,
+    copyTestDomainContracts,
     copyTestbedContracts,
     copyDomainManagerContracts,
 ])

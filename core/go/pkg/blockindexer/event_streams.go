@@ -39,7 +39,6 @@ type eventStream struct {
 	definition     *EventStream
 	signatures     map[string]bool
 	signatureList  []tktypes.Bytes32
-	eventABIs      []*abi.Entry
 	batchSize      int
 	batchTimeout   time.Duration
 	blocks         chan *eventStreamBlock
@@ -122,11 +121,16 @@ func (bi *blockIndexer) upsertInternalEventStream(ctx context.Context, ies *Inte
 	if len(existing) > 0 {
 		// The event definitions in both events must be identical
 		// We do not support changing the ABI after creation
-		if err := tktypes.ABIsMustMatch(ctx, existing[0].ABI, def.ABI); err != nil {
-			return nil, err
-		}
-		if !existing[0].Source.Equals(def.Source) {
+		if len(existing[0].Sources) != len(def.Sources) {
 			return nil, i18n.NewError(ctx, msgs.MsgBlockIndexerESSourceError)
+		}
+		for i := range existing[0].Sources {
+			if err := tktypes.ABIsMustMatch(ctx, existing[0].Sources[i].ABI, def.Sources[i].ABI); err != nil {
+				return nil, err
+			}
+			if !existing[0].Sources[i].Address.Equals(def.Sources[i].Address) {
+				return nil, i18n.NewError(ctx, msgs.MsgBlockIndexerESSourceError)
+			}
 		}
 		def.ID = existing[0].ID
 		// Update in the DB so we store the latest config
@@ -177,7 +181,6 @@ func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventSt
 		es = &eventStream{
 			bi:         bi,
 			definition: definition,
-			eventABIs:  []*abi.Entry{},
 			signatures: make(map[string]bool),
 			blocks:     make(chan *eventStreamBlock, bi.esBlockDispatchQueueLength),
 			dispatch:   make(chan *eventDispatch, batchSize),
@@ -191,26 +194,28 @@ func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventSt
 	// Note the handler will be nil when this is first called on startup before we've been passed handlers.
 	es.handler = handler
 
-	location := "*"
-	if es.definition.Source != nil {
-		location = es.definition.Source.String()
-	}
-
 	// Calculate all the signatures we require
-	solStrings := []string{}
-	for _, abiEntry := range definition.ABI {
-		if abiEntry.Type == abi.Event {
-			sig := tktypes.NewBytes32FromSlice(abiEntry.SignatureHashBytes())
-			sigStr := sig.String()
-			es.eventABIs = append(es.eventABIs, abiEntry)
-			if _, dup := es.signatures[sigStr]; !dup {
-				es.signatures[sigStr] = true
-				solStrings = append(solStrings, abiEntry.SolString())
-				es.signatureList = append(es.signatureList, sig)
+	for _, source := range definition.Sources {
+		solStrings := []string{}
+		location := "*"
+		if source.Address != nil {
+			location = source.Address.String()
+		}
+
+		for _, abiEntry := range source.ABI {
+			if abiEntry.Type == abi.Event {
+				sig := tktypes.NewBytes32FromSlice(abiEntry.SignatureHashBytes())
+				sigStr := sig.String()
+				if _, dup := es.signatures[sigStr]; !dup {
+					es.signatures[sigStr] = true
+					solStrings = append(solStrings, abiEntry.SolString())
+					es.signatureList = append(es.signatureList, sig)
+				}
 			}
 		}
+
+		log.L(ctx).Infof("Event stream %s configured address=%s events=%s", es.definition.ID, location, solStrings)
 	}
-	log.L(ctx).Infof("Event stream %s configured matchSource=%s events: %s", es.definition.ID, location, solStrings)
 
 	// ok - all looks good, put ourselves in the blockindexer list
 	bi.eventStreams[definition.ID] = es
@@ -385,16 +390,18 @@ func (es *eventStream) detector() {
 }
 
 func (es *eventStream) processNotifiedBlock(block *eventStreamBlock, fullBlock bool) {
-	matchSource := es.definition.Source
 	for i, l := range block.events {
 		event := &EventWithData{
 			IndexedEvent: es.bi.logToIndexedEvent(l),
 		}
 		// Only dispatch events that were completed by the validation against our ABI
-		if es.bi.matchLog(es.ctx, es.eventABIs, l, event, matchSource) {
-			es.sendToDispatcher(event,
-				// Can only move checkpoint past this block once we know we've processed the last one
-				fullBlock && i == (len(block.events)-1))
+		for _, source := range es.definition.Sources {
+			if es.bi.matchLog(es.ctx, source.ABI, l, event, source.Address) {
+				es.sendToDispatcher(event,
+					// Can only move checkpoint past this block once we know we've processed the last one
+					fullBlock && i == (len(block.events)-1))
+				break
+			}
 		}
 	}
 }
@@ -557,15 +564,20 @@ func (es *eventStream) processCatchupEventPage(checkpointBlock int64, catchUpToB
 	for txStr, _events := range byTxID {
 		events := _events // not safe to pass loop pointer
 		tx := tktypes.MustParseBytes32(txStr)
-		go func() {
-			enrichments <- es.bi.enrichTransactionEvents(es.ctx, es.eventABIs, es.definition.Source, tx, events, true /* retry indefinitely */)
-		}()
+		for _, _source := range es.definition.Sources {
+			source := _source // not safe to pass loop pointer
+			go func() {
+				enrichments <- es.bi.enrichTransactionEvents(es.ctx, source.ABI, source.Address, tx, events, true /* retry indefinitely */)
+			}()
+		}
 	}
 	// Collect all the results
 	for range byTxID {
-		txErr := <-enrichments
-		if txErr != nil && err == nil {
-			err = txErr
+		for range es.definition.Sources {
+			txErr := <-enrichments
+			if txErr != nil && err == nil {
+				err = txErr
+			}
 		}
 	}
 	if err != nil {
