@@ -159,7 +159,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+	$(CONTAINER_TOOL) build -f Dockerfile -t ${IMG} ..
 
 # Load the docker image into the kind cluster. This is useful when you want to test the image in a kind cluster.
 .PHONY: docker-load

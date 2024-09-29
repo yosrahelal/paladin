@@ -239,7 +239,7 @@ func generatePaladinConfig(node *corev1alpha1.Node) (string, error) {
 	if node.Spec.PaladinConfigYAML != nil {
 		err := yaml.Unmarshal([]byte(*node.Spec.PaladinConfigYAML), &pldConf)
 		if err != nil {
-			return "", fmt.Errorf("Paladin YAML config is invalid: %s", err)
+			return "", fmt.Errorf("paladinConfigYAML is invalid: %s", err)
 		}
 	}
 	// TODO: All the things you can ask the operator to help with to avoid you building the config from scratch
