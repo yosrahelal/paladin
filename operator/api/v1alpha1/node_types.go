@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -29,19 +30,28 @@ type NodeSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Settings from this config will be loaded as YAML and used as the base of the configuration.
-	PaladinConfigYAML *string `json:"paladinConfigYAML,omitempty"`
-
+	Config *string `json:"config,omitempty"`
+	// Database settings allow operator governed convenience functions for setting up the database
+	// with auto-generation/auto-edit of the DB related config sections
 	Database *Database `json:"database,omitempty"`
 }
 
+const DBMode_EmbeddedSQLite = "embeddedSQLite"
+const DBMode_SidecarPostgres = "sidecarPostgres"
+const DBMigrationMode_Auto = "auto"
+
 // Database configuration
 type Database struct {
-	// +kubebuilder:validation:Enum=external;sidecarPostgres;embeddedSQLite
-	// +kubebuilder:default=embeddedSQLite
-	DatabaseRuntime string `json:"databaseRuntime,omitempty"`
-	// +kubebuilder:validation:Enum=external;job;autoMigrate
-	// +kubebuilder:default=autoMigrate
+	// +kubebuilder:validation:Enum=preConfigured;sidecarPostgres;embeddedSQLite
+	// +kubebuilder:default=preConfigured
+	Mode string `json:"mode,omitempty"`
+	// +kubebuilder:validation:Enum=preConfigured;auto
+	// +kubebuilder:default=preConfigured
 	MigrationMode string `json:"migrationMode,omitempty"`
+	// If set the URI in the config will be updated with the password in this secret.
+	// For sidecarPostgres a default password will be generated and stored for you, and this setting only modifies the secret name
+	PasswordSecret *string                           `json:"postgresPasswordSecret,omitempty"`
+	PVCTemplate    *corev1.PersistentVolumeClaimSpec `json:"pvcTemplate,omitempty"`
 }
 
 /*

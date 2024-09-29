@@ -4,6 +4,9 @@
         "labels": {
             "app": "paladin"
         }
+    },
+    "postgres": {
+        "image": "postgres:latest"
     }
 }
   

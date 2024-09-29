@@ -143,6 +143,7 @@ kind-start:
 kind-promote: kind-start
 	kind load docker-image paladin-operator:latest --name "${CLUSTER_NAME}"
 	kind load docker-image paladin:test --name "${CLUSTER_NAME}"
+	kind load docker-image postgres:latest --name "${CLUSTER_NAME}"
 
 ##@ Build
 
@@ -159,7 +160,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -f Dockerfile -t ${IMG} ..
+	$(CONTAINER_TOOL) build -f operator/Dockerfile -t ${IMG} ..
 
 # Load the docker image into the kind cluster. This is useful when you want to test the image in a kind cluster.
 .PHONY: docker-load
@@ -195,9 +196,22 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 
 ##@ helm-chart - Deployment
 
+.PHONY: helm-build
+helm-build: manifests
+	rm -f deploy/paladin-operator/crds/*
+	cd config/crd/bases; \
+		for crd in $$(ls *); do cp $$crd ../../../deploy/paladin-operator/crds/$$(echo $$crd | sed s/.yaml/.crd.yaml/); done
+
+# Note Helm will not update CRDs https://helm.sh/docs/chart_best_practices/custom_resource_definitions/#some-caveats-and-explanations
+# See update-crds
 .PHONY: helm-install
-helm-install: 
+helm-install: helm-build
 	helm upgrade --install paladin deploy/paladin-operator -n ${NAMESPACE} --create-namespace --set operator.namespace=${NAMESPACE}
+
+# If you want to run in VSCode, but you want the CRDs updated via helm
+.PHONY: helm-pause
+helm-pause: 
+	helm upgrade --install paladin deploy/paladin-operator -n ${NAMESPACE} --create-namespace --set operator.namespace=${NAMESPACE} --set replicaCount=0
 
 .PHONY: helm-uninstall
 helm-uninstall: 
@@ -277,6 +291,12 @@ mv "$$(echo "$(1)" | sed "s/-$(3)$$//")" $(1) ;\
 }
 endef
  
+##@ Dev helpers
+
+.PHONY: update-crds
+update-crds: manifests
+	$(KUBECTL) apply -k config/crd
+
 ##@ Node
 
 .PHONY: create-instance

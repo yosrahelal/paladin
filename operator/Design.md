@@ -26,7 +26,7 @@ The operator will perform the following tasks:
 
 ### 2. Node CR Lifecycle
 
-1. User creates a `Node` custom resource with the necessary configuration (matching `config.paladin.json`).
+1. User creates a `Node` custom resource with the necessary configuration (matching `config.paladin.yaml`).
 2. The operator generates a ConfigMap from the CR's configuration.
 3. The operator creates a StatefulSet that runs an instance of Paladin.
 4. The StatefulSet mounts the ConfigMap as a volume, and the Paladin instance uses the configuration file in its command line.
@@ -92,7 +92,7 @@ spec:
 ```
 
 - **Spec**:
-  - `paladinConfig`: The configuration used by the Paladin instance. It reflects the structure of `config.paladin.json`.
+  - `paladinConfig`: The configuration used by the Paladin instance. It reflects the structure of `config.paladin.yaml`.
   
 - **Status**:
     ???? Do we need a status? (maybe pod name) ????
