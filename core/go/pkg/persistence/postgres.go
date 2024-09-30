@@ -47,8 +47,8 @@ func (p *postgresProvider) DBName() string {
 	return "postgres"
 }
 
-func (p *postgresProvider) Open(uri string) gorm.Dialector {
-	return gormPostgres.Open(uri)
+func (p *postgresProvider) Open(dsn string) gorm.Dialector {
+	return gormPostgres.Open(dsn)
 }
 
 func (p *postgresProvider) GetMigrationDriver(db *sql.DB) (migratedb.Driver, error) {

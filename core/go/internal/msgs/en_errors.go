@@ -94,10 +94,13 @@ var (
 
 	// Persistence PD0102XX
 	MsgPersistenceInvalidType         = ffe("PD010200", "Invalid persistence type: %s")
-	MsgPersistenceMissingURI          = ffe("PD010201", "Missing database connection URI")
+	MsgPersistenceMissingDSN          = ffe("PD010201", "Missing database connection Data Source Name (DSN)")
 	MsgPersistenceInitFailed          = ffe("PD010202", "Database init failed")
 	MsgPersistenceMigrationFailed     = ffe("PD010203", "Database migration failed")
 	MsgPersistenceMissingMigrationDir = ffe("PD010204", "Missing database migration directory for autoMigrate")
+	MsgPersistenceInvalidDSNTemplate  = ffe("PD010205", "dsnParams were provided, but the DSN supplied is not a valid template")
+	MsgPersistenceDSNParamLoadFile    = ffe("PD010206", "Failed to load dsnParams[%s] from '%s'")
+	MsgPersistenceDSNTemplateFail     = ffe("PD010207", "Templated substitution into database connection DSN failed")
 
 	// Transaction Processor PD0103XX
 	MsgTransactionProcessorInvalidStage         = ffe("PD010300", "Invalid stage: %s")

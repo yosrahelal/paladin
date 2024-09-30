@@ -67,7 +67,7 @@ func TestRunSimpleStorageEthTransaction(t *testing.T) {
 db:
   type: sqlite
   sqlite:
-    uri:           ":memory:"
+    dsn:           ":memory:"
     autoMigrate:   true
     migrationsDir: ../db/migrations/sqlite
     debugQueries:  true

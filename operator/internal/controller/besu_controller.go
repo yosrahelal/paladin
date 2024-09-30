@@ -104,12 +104,12 @@ func (r *BesuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}, err
 	}
 
-	configSum, _, err := r.createConfigSecret(ctx, &node)
+	configSum, _, err := r.createConfigMap(ctx, &node)
 	if err != nil {
-		log.Error(err, "Failed to create Besu config secret")
+		log.Error(err, "Failed to create Besu config map")
 		return ctrl.Result{}, err
 	}
-	log.Info("Created Besu config secret", "Name", name)
+	log.Info("Created Besu config map", "Name", name)
 
 	if _, err := r.createService(ctx, &node, name); err != nil {
 		log.Error(err, "Failed to create Besu Service")
@@ -123,7 +123,7 @@ func (r *BesuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 	log.Info("Created Besu pod disruption budget", "Name", name)
 
-	ss, err := r.createStatefulSet(ctx, &node, configSum)
+	ss, err := r.createStatefulSet(ctx, &node, name, configSum)
 	if err != nil {
 		log.Error(err, "Failed to create Besu StatefulSet")
 		return ctrl.Result{}, err
@@ -147,28 +147,28 @@ func (r *BesuReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *BesuReconciler) createConfigSecret(ctx context.Context, node *corev1alpha1.Besu) (string, *corev1.Secret, error) {
-	configSum, configSecret, err := r.generateConfigSecret(ctx, node)
+func (r *BesuReconciler) createConfigMap(ctx context.Context, node *corev1alpha1.Besu) (string, *corev1.ConfigMap, error) {
+	configSum, configMap, err := r.generateConfigMap(ctx, node)
 	if err != nil {
 		return "", nil, err
 	}
 
-	var foundConfigSecret corev1.Secret
-	if err := r.Get(ctx, types.NamespacedName{Name: configSecret.Name, Namespace: configSecret.Namespace}, &foundConfigSecret); err != nil && errors.IsNotFound(err) {
-		err = r.Create(ctx, configSecret)
+	var foundConfigMap corev1.ConfigMap
+	if err := r.Get(ctx, types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, &foundConfigMap); err != nil && errors.IsNotFound(err) {
+		err = r.Create(ctx, configMap)
 		if err != nil {
 			return "", nil, err
 		}
 	} else if err != nil {
 		return "", nil, err
 	} else {
-		foundConfigSecret.StringData = configSecret.StringData
-		return configSum, &foundConfigSecret, r.Update(ctx, &foundConfigSecret)
+		foundConfigMap.Data = configMap.Data
+		return configSum, &foundConfigMap, r.Update(ctx, &foundConfigMap)
 	}
-	return configSum, configSecret, nil
+	return configSum, configMap, nil
 }
 
-func (r *BesuReconciler) generateConfigSecret(ctx context.Context, node *corev1alpha1.Besu) (string, *corev1.Secret, error) {
+func (r *BesuReconciler) generateConfigMap(ctx context.Context, node *corev1alpha1.Besu) (string, *corev1.ConfigMap, error) {
 	besuConfigTOML, err := r.generateBesuConfigTOML(node)
 	if err != nil {
 		return "", nil, err
@@ -184,13 +184,13 @@ func (r *BesuReconciler) generateConfigSecret(ctx context.Context, node *corev1a
 	configSum.Write([]byte(staticNodesJSON))
 	configSumHex := hex.EncodeToString(configSum.Sum(nil))
 	return configSumHex,
-		&corev1.Secret{
+		&corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      generateBesuName(node.Name),
 				Namespace: node.Namespace,
 				Labels:    r.getLabels(node),
 			},
-			StringData: map[string]string{
+			Data: map[string]string{
 				"config.besu.toml":  besuConfigTOML,
 				"static-nodes.json": staticNodesJSON,
 			},
@@ -370,8 +370,8 @@ func (r *BesuReconciler) generateSecretTemplate(node *corev1alpha1.Besu, name st
 	}
 }
 
-func (r *BesuReconciler) createStatefulSet(ctx context.Context, node *corev1alpha1.Besu, configSum string) (*appsv1.StatefulSet, error) {
-	statefulSet := r.generateStatefulSetTemplate(node, configSum)
+func (r *BesuReconciler) createStatefulSet(ctx context.Context, node *corev1alpha1.Besu, name, configSum string) (*appsv1.StatefulSet, error) {
+	statefulSet := r.generateStatefulSetTemplate(node, name, configSum)
 
 	if err := r.createDataPVC(ctx, node); err != nil {
 		return nil, err
@@ -468,11 +468,11 @@ func (r *BesuReconciler) createPDB(ctx context.Context, node *corev1alpha1.Besu,
 	return &foundPDB, nil
 }
 
-func (r *BesuReconciler) generateStatefulSetTemplate(node *corev1alpha1.Besu, configSum string) *appsv1.StatefulSet {
+func (r *BesuReconciler) generateStatefulSetTemplate(node *corev1alpha1.Besu, name, configSum string) *appsv1.StatefulSet {
 	// Define the StatefulSet to run Besu using the ConfigMap
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      generateBesuName(node.Name),
+			Name:      name,
 			Namespace: node.Namespace,
 			Annotations: r.withStandardAnnotations(map[string]string{
 				"kubectl.kubernetes.io/default-container": "besu",
@@ -553,8 +553,10 @@ func (r *BesuReconciler) generateStatefulSetTemplate(node *corev1alpha1.Besu, co
 						{
 							Name: "config",
 							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: generateBesuName(node.Name),
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: name,
+									},
 								},
 							},
 						},

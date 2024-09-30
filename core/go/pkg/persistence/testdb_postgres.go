@@ -32,14 +32,14 @@ import (
 // Used for unit tests throughout the project that want to test against a real DB
 // - This version uses PostgreSQL
 func NewUnitTestPersistence(ctx context.Context) (p Persistence, cleanup func(), err error) {
-	dbURL := func(dbname string) string {
+	dbDSN := func(dbname string) string {
 		return fmt.Sprintf("postgres://postgres:my-secret@localhost:5432/%s?sslmode=disable", dbname)
 	}
 	utdbName := "ut_" + uuid.New().String()
 	log.L(ctx).Infof("Unit test Postgres DB: %s", utdbName)
 
 	// First create the database - using the super user
-	adminDB, err := sql.Open("postgres", dbURL("postgres"))
+	adminDB, err := sql.Open("postgres", dbDSN("postgres"))
 	if err == nil {
 		_, err = adminDB.Exec(fmt.Sprintf(`CREATE DATABASE "%s";`, utdbName))
 	}
@@ -51,7 +51,7 @@ func NewUnitTestPersistence(ctx context.Context) (p Persistence, cleanup func(),
 			Type: "postgres",
 			Postgres: PostgresConfig{
 				SQLDBConfig: SQLDBConfig{
-					URI:           dbURL(utdbName),
+					URI:           dbDSN(utdbName),
 					MigrationsDir: "../../db/migrations/postgres",
 					AutoMigrate:   confutil.P(true),
 					DebugQueries:  true,
@@ -60,7 +60,7 @@ func NewUnitTestPersistence(ctx context.Context) (p Persistence, cleanup func(),
 		})
 	}
 	return p, func() {
-		adminDB, err := sql.Open("postgres", dbURL("postgres"))
+		adminDB, err := sql.Open("postgres", dbDSN("postgres"))
 		if err == nil {
 			_, _ = adminDB.Exec(fmt.Sprintf(`DROP DATABASE "%s" WITH(FORCE);`, utdbName))
 			adminDB.Close()

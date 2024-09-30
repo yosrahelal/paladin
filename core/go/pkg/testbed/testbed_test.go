@@ -55,7 +55,7 @@ func TestYAMLConfigWorks(t *testing.T) {
 db:
   type: sqlite
   sqlite:
-    uri:           ":memory:"
+    dsn:           ":memory:"
     autoMigrate:   true
     migrationsDir: any
     debugQueries:  true

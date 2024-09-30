@@ -56,8 +56,7 @@ type Database struct {
 	// +kubebuilder:validation:Enum=preConfigured;auto
 	// +kubebuilder:default=preConfigured
 	MigrationMode string `json:"migrationMode,omitempty"`
-	// If set the URI in the config will be updated with the password in this secret.
-	// For sidecarPostgres a default password will be generated and stored for you, and this setting only modifies the secret name
+	// If set then {{.username}} and {{.password}} variables will be available in your DSN
 	PasswordSecret *string                          `json:"passwordSecret,omitempty"`
 	PVCTemplate    corev1.PersistentVolumeClaimSpec `json:"pvcTemplate,omitempty"`
 }

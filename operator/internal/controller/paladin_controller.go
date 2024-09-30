@@ -24,7 +24,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net/url"
 
 	pldconfig "github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
@@ -82,12 +81,12 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	configSum, _, err := r.createConfigSecret(ctx, &node, name)
+	configSum, _, err := r.createConfigMap(ctx, &node, name)
 	if err != nil {
-		log.Error(err, "Failed to create Paladin config secret")
+		log.Error(err, "Failed to create Paladin config map")
 		return ctrl.Result{}, err
 	}
-	log.Info("Created Paladin config secret", "Name", name)
+	log.Info("Created Paladin config map", "Name", name)
 
 	if _, err := r.createService(ctx, &node, name); err != nil {
 		log.Error(err, "Failed to create Paladin Service")
@@ -140,6 +139,13 @@ func (r *PaladinReconciler) createStatefulSet(ctx context.Context, node *corev1a
 		// Earlier processing responsible for ensuring this is non-nil
 		r.addPostgresSidecar(statefulSet, *node.Spec.Database.PasswordSecret)
 		if err := r.createPostgresPVC(ctx, node, name); err != nil {
+			return nil, err
+		}
+	}
+
+	// Used by Postgres sidecar, but also custom DB creation - a DB secret needs wiring up to env vars for DSNParams
+	if node.Spec.Database.PasswordSecret != nil {
+		if err := r.addPaladinDBSecret(ctx, statefulSet, *node.Spec.Database.PasswordSecret); err != nil {
 			return nil, err
 		}
 	}
@@ -277,8 +283,10 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 						{
 							Name: "config",
 							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: name,
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: name,
+									},
 								},
 							},
 						},
@@ -382,29 +390,51 @@ func (r *PaladinReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, sign
 	}
 }
 
-func (r *PaladinReconciler) createConfigSecret(ctx context.Context, node *corev1alpha1.Paladin, name string) (string, *corev1.Secret, error) {
-	configSum, configSecret, err := r.generateConfigSecret(ctx, node, name)
+func (r *PaladinReconciler) addPaladinDBSecret(ctx context.Context, ss *appsv1.StatefulSet, secretName string) error {
+	_, _, err := r.retrieveUsernamePasswordSecret(ctx, ss.Namespace, secretName)
+	if err != nil {
+		return fmt.Errorf("failed to extract username/password from DB password secret '%s': %s", secretName, err)
+	}
+
+	paladinContainer := &ss.Spec.Template.Spec.Containers[0]
+	paladinContainer.VolumeMounts = append(paladinContainer.VolumeMounts, corev1.VolumeMount{
+		Name:      "db-creds",
+		MountPath: "/db-creds",
+	})
+	ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
+		Name: "db-creds",
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: secretName,
+			},
+		},
+	})
+	return nil
+}
+
+func (r *PaladinReconciler) createConfigMap(ctx context.Context, node *corev1alpha1.Paladin, name string) (string, *corev1.ConfigMap, error) {
+	configSum, configMap, err := r.generateConfigMap(ctx, node, name)
 	if err != nil {
 		return "", nil, err
 	}
 
-	var foundConfigSecret corev1.Secret
-	if err := r.Get(ctx, types.NamespacedName{Name: configSecret.Name, Namespace: configSecret.Namespace}, &foundConfigSecret); err != nil && errors.IsNotFound(err) {
-		err = r.Create(ctx, configSecret)
+	var foundConfigMap corev1.ConfigMap
+	if err := r.Get(ctx, types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, &foundConfigMap); err != nil && errors.IsNotFound(err) {
+		err = r.Create(ctx, configMap)
 		if err != nil {
 			return "", nil, err
 		}
 	} else if err != nil {
 		return "", nil, err
 	} else {
-		foundConfigSecret.StringData = configSecret.StringData
-		return configSum, &foundConfigSecret, r.Update(ctx, &foundConfigSecret)
+		foundConfigMap.Data = configMap.Data
+		return configSum, &foundConfigMap, r.Update(ctx, &foundConfigMap)
 	}
-	return configSum, configSecret, nil
+	return configSum, configMap, nil
 }
 
 // generatePaladinConfigMapTemplate generates a ConfigMap for the Paladin configuration
-func (r *PaladinReconciler) generateConfigSecret(ctx context.Context, node *corev1alpha1.Paladin, name string) (string, *corev1.Secret, error) {
+func (r *PaladinReconciler) generateConfigMap(ctx context.Context, node *corev1alpha1.Paladin, name string) (string, *corev1.ConfigMap, error) {
 	pldConfigYAML, err := r.generatePaladinConfig(ctx, node, name)
 	if err != nil {
 		return "", nil, err
@@ -413,13 +443,13 @@ func (r *PaladinReconciler) generateConfigSecret(ctx context.Context, node *core
 	configSum.Write([]byte(pldConfigYAML))
 	configSumHex := hex.EncodeToString(configSum.Sum(nil))
 	return configSumHex,
-		&corev1.Secret{
+		&corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
 				Namespace: node.Namespace,
 				Labels:    r.getLabels(node),
 			},
-			StringData: map[string]string{
+			Data: map[string]string{
 				"config.paladin.yaml": pldConfigYAML,
 			},
 		},
@@ -472,7 +502,7 @@ func (r *PaladinReconciler) generatePaladinDBConfig(ctx context.Context, node *c
 	case corev1alpha1.DBMode_EmbeddedSQLite:
 		pldConf.DB.Type = "sqlite"
 		// We mix in our URI with whatever additional config has already been provided via YAML
-		pldConf.DB.SQLite.SQLDBConfig.URI = "file:/db/db"
+		pldConf.DB.SQLite.SQLDBConfig.DSN = "file:/db/db"
 	case corev1alpha1.DBMode_SidecarPostgres:
 		pldConf.DB.Type = "postgres"
 		// Note password wrangling happens later
@@ -483,7 +513,7 @@ func (r *PaladinReconciler) generatePaladinDBConfig(ctx context.Context, node *c
 		if err := r.generateDBPasswordSecretIfNotExist(ctx, node, *dbSpec.PasswordSecret); err != nil {
 			return err
 		}
-		pldConf.DB.Postgres.SQLDBConfig.URI = "postgres://localhost:5432/postgres?sslmode=disable"
+		pldConf.DB.Postgres.SQLDBConfig.DSN = "postgres://{{.username}}:{{.password}}@localhost:5432/postgres?sslmode=disable"
 	}
 
 	// Get a handle to the DB config where we'll put password/migration info
@@ -499,17 +529,11 @@ func (r *PaladinReconciler) generatePaladinDBConfig(ctx context.Context, node *c
 
 	// If we're responsible for loading the password for the Postgres URL, then load it from the secret
 	if dbSpec.PasswordSecret != nil {
-		dbUsername, dbPassword, err := r.retrieveUsernamePasswordSecret(ctx, node.Namespace, *dbSpec.PasswordSecret)
-		if err != nil {
-			return fmt.Errorf("failed to extract Postgres password secret '%s': %s", *dbSpec.PasswordSecret, err)
+		if pldConf.DB.Postgres.SQLDBConfig.DSNParams == nil {
+			pldConf.DB.Postgres.SQLDBConfig.DSNParams = map[string]persistence.DSNParamLocation{}
 		}
-		u, err := url.Parse(sqlConfig.URI)
-		if err != nil {
-			return fmt.Errorf("invalid Postgres URL '%s' to configure password: %s", sqlConfig.URI, err)
-		}
-		u.User = url.UserPassword(dbUsername, dbPassword)
-		// Store back the updated URI
-		sqlConfig.URI = u.String()
+		pldConf.DB.Postgres.SQLDBConfig.DSNParams["username"] = persistence.DSNParamLocation{File: "/db-creds/username"}
+		pldConf.DB.Postgres.SQLDBConfig.DSNParams["password"] = persistence.DSNParamLocation{File: "/db-creds/password"}
 	}
 
 	// If we're responsible for migration settings, then do it

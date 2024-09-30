@@ -52,7 +52,7 @@ func TestInitOK(t *testing.T) {
 			Type: "sqlite",
 			SQLite: persistence.SQLiteConfig{
 				SQLDBConfig: persistence.SQLDBConfig{
-					URI:           ":memory:",
+					DSN:           ":memory:",
 					AutoMigrate:   confutil.P(true),
 					MigrationsDir: "../../db/migrations/sqlite",
 				},

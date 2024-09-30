@@ -48,7 +48,7 @@ func NewSQLMockProvider() (p *SQLMockProvider, err error) {
 	mp.DB, mp.Mock, err = sqlmock.New()
 	if err == nil {
 		mp.P, err = persistence.NewSQLProvider(context.Background(), mp, &persistence.SQLDBConfig{
-			URI: "mocked",
+			DSN: "mocked",
 		}, SQLMockDefaults)
 	}
 	return mp, err
