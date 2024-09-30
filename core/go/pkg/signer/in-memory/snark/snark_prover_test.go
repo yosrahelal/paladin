@@ -260,7 +260,7 @@ func TestConcurrentSnarkProofGeneration(t *testing.T) {
 		resCount++
 		if resCount == expectReqCount {
 			assert.Equal(t, expectReqCount, totalProvingRequestCount) // check all proving requests has been processed
-			assert.Equal(t, 50, circuitLoadedTotal)                   // check only 5 wasm instances was created and loaded into the cache
+			assert.Equal(t, 50, circuitLoadedTotal)                   // check cache works as expected, loaded circuit 50 times for 500 proving requests
 			break
 		}
 	}
