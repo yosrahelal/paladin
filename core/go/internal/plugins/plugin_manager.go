@@ -26,6 +26,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -65,14 +66,14 @@ type pluginManager struct {
 func NewPluginManager(bgCtx context.Context,
 	grpcTarget string, // default is a UDS path, can use tcp:127.0.0.1:12345 strings too (or tcp4:/tcp6:)
 	loaderID uuid.UUID,
-	conf *PluginManagerConfig) components.PluginManager {
+	conf *config.PluginManagerConfig) components.PluginManager {
 
 	pc := &pluginManager{
 		bgCtx: bgCtx,
 
 		grpcTarget:      grpcTarget,
 		loaderID:        loaderID,
-		shutdownTimeout: confutil.DurationMin(conf.GRPC.ShutdownTimeout, 0, *DefaultGRPCConfig.ShutdownTimeout),
+		shutdownTimeout: confutil.DurationMin(conf.GRPC.ShutdownTimeout, 0, *config.DefaultGRPCConfig.ShutdownTimeout),
 
 		domainPlugins:    make(map[uuid.UUID]*plugin[prototk.DomainMessage]),
 		transportPlugins: make(map[uuid.UUID]*plugin[prototk.TransportMessage]),
@@ -273,7 +274,7 @@ func (pm *pluginManager) LoadFailed(ctx context.Context, req *prototk.PluginLoad
 	return &prototk.EmptyResponse{}, nil
 }
 
-func initPlugin[CB any](ctx context.Context, pm *pluginManager, pluginMap map[uuid.UUID]*plugin[CB], name string, pType prototk.PluginInfo_PluginType, conf *components.PluginConfig) (err error) {
+func initPlugin[CB any](ctx context.Context, pm *pluginManager, pluginMap map[uuid.UUID]*plugin[CB], name string, pType prototk.PluginInfo_PluginType, conf *config.PluginConfig) (err error) {
 	pm.mux.Lock()
 	defer pm.mux.Unlock()
 	plugin := &plugin[CB]{pc: pm, id: uuid.New(), name: name}
@@ -289,7 +290,7 @@ func initPlugin[CB any](ctx context.Context, pm *pluginManager, pluginMap map[uu
 		LibLocation: conf.Library,
 		Class:       conf.Class,
 	}
-	plugin.def.LibType, err = components.MapLibraryTypeToProto(conf.Type)
+	plugin.def.LibType, err = config.MapLibraryTypeToProto(conf.Type)
 	pluginMap[plugin.id] = plugin
 	return err
 }

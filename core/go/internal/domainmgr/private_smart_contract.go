@@ -163,7 +163,7 @@ func (dc *domainContract) AssembleTransaction(ctx context.Context, tx *component
 }
 
 // Happens only on the sequencing node
-func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *components.PrivateTransaction) error {
+func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *components.PrivateTransaction) (err error) {
 	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil || tx.PostAssembly == nil {
 		return i18n.NewError(ctx, msgs.MsgDomainTXIncompleteWritePotentialStates)
 	}
@@ -187,7 +187,15 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 		if schema == nil {
 			return i18n.NewError(ctx, msgs.MsgDomainUnknownSchema, s.SchemaId)
 		}
+		var id tktypes.HexBytes
+		if s.Id != nil {
+			id, err = tktypes.ParseHexBytes(ctx, *s.Id)
+			if err != nil {
+				return err
+			}
+		}
 		newStatesToWrite[i] = &statestore.StateUpsert{
+			ID:       id,
 			SchemaID: schema.IDString(),
 			Data:     tktypes.RawJSON(s.StateDataJson),
 			// These are marked as locked and creating in the transaction
@@ -381,11 +389,11 @@ func (dc *domainContract) PrepareTransaction(ctx context.Context, tx *components
 	if err := json.Unmarshal(([]byte)(res.Transaction.FunctionAbiJson), &functionABI); err != nil {
 		return i18n.WrapError(ctx, err, msgs.MsgDomainPrivateAbiJsonInvalid)
 	}
-
 	inputs, err := functionABI.Inputs.ParseJSONCtx(ctx, emptyJSONIfBlank(res.Transaction.ParamsJson))
 	if err != nil {
 		return err
 	}
+
 	tx.PreparedTransaction = &components.EthTransaction{
 		FunctionABI: &functionABI,
 		To:          dc.Address(),
@@ -414,16 +422,16 @@ func (dc *domainContract) allAttestations(tx *components.PrivateTransaction) []*
 
 func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateRef) ([]*components.FullState, error) {
 	rawIDsBySchema := make(map[string][]tktypes.RawJSON)
-	stateIDs := make([]tktypes.Bytes32, len(refs))
+	stateIDs := make([]tktypes.HexBytes, len(refs))
 	for i, s := range refs {
-		stateID, err := tktypes.ParseBytes32Ctx(ctx, s.Id)
+		stateID, err := tktypes.ParseHexBytes(ctx, s.Id)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateIDFromDomain, s.Id, i)
 		}
 		rawIDsBySchema[s.SchemaId] = append(rawIDsBySchema[s.SchemaId], tktypes.JSONString(stateID.String()))
 		stateIDs[i] = stateID
 	}
-	statesByID := make(map[tktypes.Bytes32]*statestore.State)
+	statesByID := make(map[string]*statestore.State)
 	err := dc.dm.stateStore.RunInDomainContext(dc.d.name, dc.info.Address, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
 		for schemaID, stateIDs := range rawIDsBySchema {
 			statesForSchema, err := dsi.FindAvailableStates(schemaID, &query.QueryJSON{
@@ -439,7 +447,7 @@ func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateR
 				return err
 			}
 			for _, s := range statesForSchema {
-				statesByID[s.ID] = s
+				statesByID[s.ID.HexString()] = s
 			}
 		}
 		return nil
@@ -451,7 +459,7 @@ func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateR
 	// Check we found all the states, and restore the original order
 	states := make([]*components.FullState, len(stateIDs))
 	for i, id := range stateIDs {
-		s := statesByID[id]
+		s := statesByID[id.HexString()]
 		if s == nil {
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInputStateNotFound, i, id)
 		}

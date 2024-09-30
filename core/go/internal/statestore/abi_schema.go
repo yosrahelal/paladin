@@ -27,6 +27,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
+	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
@@ -323,15 +324,30 @@ func (as *abiSchema) parseStateData(ctx context.Context, data tktypes.RawJSON) (
 
 // Take the state, parse the value into the type tree of this schema, and from that
 // build the label values to store in the DB for comparison appropriate to the type.
-func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON) (*StateWithLabels, error) {
+func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, id tktypes.HexBytes) (*StateWithLabels, error) {
 
 	psd, err := as.parseStateData(ctx, data)
 	if err != nil {
 		return nil, err
 	}
 
-	// Now do a typed data v4 hash of the struct value itself
-	hash, err := eip712.HashStruct(ctx, as.primaryType, psd.jsonTree, as.typeSet)
+	// The ID must be unique, but domains can choose whether they calculate it or they defer to Paladin
+	// to calculate it. Domains (ZKP based domains in particular) that need specific algorithms to be used for
+	// hash calculation, or have other requirements of the derivation of the hash can pre-calculate the hash.
+	//
+	// Implementations MUST ensure:
+	// - The hash contains everything in the state that needs to be proved
+	// - The hash is deterministic and reproducible by anyone with access to the unmasked state data
+	if id == nil {
+		// When Paladin is designated to create that hash, it uses a EIP-712 Typed Data V4 hash as this has
+		// the characteristics of:
+		// - Well proven and Ethereum standardized algorithm for hashing a complex structure
+		// - Deterministic order and type formatting of values
+		// - Only containing the data that is described in the associated the ABI
+		var hash ethtypes.HexBytes0xPrefix
+		hash, err = eip712.HashStruct(ctx, as.primaryType, psd.jsonTree, as.typeSet)
+		id = tktypes.HexBytes(hash)
+	}
 
 	// We need to re-serialize the data according to the ABI to:
 	// - Ensure it's valid
@@ -345,17 +361,19 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 		return nil, err
 	}
 
-	hashID := tktypes.NewBytes32FromSlice(hash)
 	for i := range psd.labels {
-		psd.labels[i].State = hashID
+		psd.labels[i].DomainName = as.SchemaPersisted.DomainName
+		psd.labels[i].State = id
 	}
 	for i := range psd.int64Labels {
-		psd.int64Labels[i].State = hashID
+		psd.int64Labels[i].DomainName = as.SchemaPersisted.DomainName
+		psd.int64Labels[i].State = id
 	}
+
 	now := tktypes.TimestampNow()
 	return &StateWithLabels{
 		State: &State{
-			ID:              hashID,
+			ID:              id,
 			Created:         now,
 			DomainName:      as.DomainName,
 			Schema:          as.ID,
@@ -364,7 +382,7 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 			Labels:          psd.labels,
 			Int64Labels:     psd.int64Labels,
 		},
-		LabelValues: addStateBaseLabels(psd.labelValues, hashID, now),
+		LabelValues: addStateBaseLabels(psd.labelValues, id, now),
 	}, nil
 }
 

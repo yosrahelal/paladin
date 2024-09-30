@@ -21,8 +21,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	prototk "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -87,8 +87,8 @@ func (ts *testManagers) allPlugins() map[string]plugintk.Plugin {
 func newTestPluginManager(t *testing.T, setup *testManagers) *pluginManager {
 	udsString := tempUDS(t)
 	loaderId := uuid.New()
-	pc := NewPluginManager(context.Background(), udsString, loaderId, &PluginManagerConfig{
-		GRPC: GRPCConfig{
+	pc := NewPluginManager(context.Background(), udsString, loaderId, &config.PluginManagerConfig{
+		GRPC: config.GRPCConfig{
 			ShutdownTimeout: confutil.P("1ms"),
 		},
 	})
@@ -113,7 +113,7 @@ func TestInitPluginManagerBadPlugin(t *testing.T) {
 	tdm := &testDomainManager{domains: map[string]plugintk.Plugin{
 		"!badname": &mockPlugin[prototk.DomainMessage]{t: t},
 	}}
-	pc := NewPluginManager(context.Background(), tempUDS(t), uuid.New(), &PluginManagerConfig{})
+	pc := NewPluginManager(context.Background(), tempUDS(t), uuid.New(), &config.PluginManagerConfig{})
 	err := pc.PostInit((&testManagers{testDomainManager: tdm}).componentMocks(t))
 	assert.Regexp(t, "PD020005", err)
 }
@@ -121,7 +121,7 @@ func TestInitPluginManagerBadPlugin(t *testing.T) {
 func TestInitPluginManagerBadSocket(t *testing.T) {
 	pc := NewPluginManager(context.Background(),
 		t.TempDir(), /* can't use a dir as a socket */
-		uuid.New(), &PluginManagerConfig{},
+		uuid.New(), &config.PluginManagerConfig{},
 	)
 	err := pc.PostInit((&testManagers{}).componentMocks(t))
 	require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestInitPluginManagerUDSTooLong(t *testing.T) {
 
 	pc := NewPluginManager(context.Background(),
 		string(longerThanUDSSafelySupportsCrossPlatform), /* can't use a dir as a socket */
-		uuid.New(), &PluginManagerConfig{},
+		uuid.New(), &config.PluginManagerConfig{},
 	)
 
 	err := pc.PostInit((&testManagers{}).componentMocks(t))
@@ -153,7 +153,7 @@ func TestInitPluginManagerTCP4(t *testing.T) {
 
 	pc := NewPluginManager(context.Background(),
 		"tcp4:127.0.0.1:0",
-		uuid.New(), &PluginManagerConfig{},
+		uuid.New(), &config.PluginManagerConfig{},
 	)
 	err := pc.PostInit((&testManagers{}).componentMocks(t))
 	require.NoError(t, err)
@@ -171,7 +171,7 @@ func TestInitPluginManagerTCP6(t *testing.T) {
 
 	pc := NewPluginManager(context.Background(),
 		"tcp6:[::1]:0",
-		uuid.New(), &PluginManagerConfig{},
+		uuid.New(), &config.PluginManagerConfig{},
 	)
 	err := pc.PostInit((&testManagers{}).componentMocks(t))
 	require.NoError(t, err)
@@ -182,7 +182,7 @@ func TestInitPluginManagerTCP6(t *testing.T) {
 }
 
 func TestNotifyPluginUpdateNotStarted(t *testing.T) {
-	pc := NewPluginManager(context.Background(), tempUDS(t), uuid.New(), &PluginManagerConfig{})
+	pc := NewPluginManager(context.Background(), tempUDS(t), uuid.New(), &config.PluginManagerConfig{})
 	err := pc.PostInit((&testManagers{}).componentMocks(t))
 	require.NoError(t, err)
 
@@ -203,8 +203,8 @@ func TestLoaderErrors(t *testing.T) {
 				t:              t,
 				connectFactory: domainConnectFactory,
 				headerAccessor: domainHeaderAccessor,
-				conf: &components.PluginConfig{
-					Type:    components.LibraryTypeCShared.Enum(),
+				conf: &config.PluginConfig{
+					Type:    config.LibraryTypeCShared.Enum(),
 					Library: "some/where",
 				},
 			},
@@ -213,8 +213,8 @@ func TestLoaderErrors(t *testing.T) {
 	pc := NewPluginManager(ctx,
 		"tcp:127.0.0.1:0",
 		uuid.New(),
-		&PluginManagerConfig{
-			GRPC: GRPCConfig{
+		&config.PluginManagerConfig{
+			GRPC: config.GRPCConfig{
 				ShutdownTimeout: confutil.P("1ms"),
 			},
 		})
@@ -281,8 +281,8 @@ func TestLoaderErrors(t *testing.T) {
 			t:              t,
 			connectFactory: domainConnectFactory,
 			headerAccessor: domainHeaderAccessor,
-			conf: &components.PluginConfig{
-				Type:    components.LibraryTypeJar.Enum(),
+			conf: &config.PluginConfig{
+				Type:    config.LibraryTypeJar.Enum(),
 				Library: "some/where/else",
 			},
 		},

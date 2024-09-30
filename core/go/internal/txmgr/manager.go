@@ -20,16 +20,16 @@ import (
 
 	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func NewTXManager(ctx context.Context, conf *Config) components.TXManager {
+func NewTXManager(ctx context.Context, conf *config.TxManagerConfig) components.TXManager {
 	return &txManager{
-		abiCache: cache.NewCache[tktypes.Bytes32, *ptxapi.StoredABI](&conf.ABI.Cache, &DefaultConfig.ABI.Cache),
+		abiCache: cache.NewCache[tktypes.Bytes32, *ptxapi.StoredABI](&conf.ABI.Cache, &config.TxManagerDefaults.ABI.Cache),
 	}
 }
 
@@ -51,13 +51,8 @@ func (tm *txManager) PostInit(c components.AllComponents) error {
 func (tm *txManager) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
 	tm.buildRPCModule()
 	return &components.ManagerInitResult{
-		RPCModules: []*rpcserver.RPCModule{tm.rpcModule},
-		EventStreams: []*components.ManagerEventStream{
-			{
-				Type:             blockindexer.IESTypePreCommitHandler,
-				PreCommitHandler: tm.blockIndexerPreCommit,
-			},
-		},
+		RPCModules:       []*rpcserver.RPCModule{tm.rpcModule},
+		PreCommitHandler: tm.blockIndexerPreCommit,
 	}, nil
 }
 

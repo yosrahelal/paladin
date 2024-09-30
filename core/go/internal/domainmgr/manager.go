@@ -30,6 +30,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/inflight"
@@ -49,7 +50,7 @@ var eventSolSig_PaladinRegisterSmartContract_V0 = mustParseEventSoliditySignatur
 
 // var eventSig_PaladinPrivateTransaction_V0 = mustParseEventSignature(iPaladinContractABI, "PaladinPrivateTransaction_V0")
 
-func NewDomainManager(bgCtx context.Context, conf *DomainManagerConfig) components.DomainManager {
+func NewDomainManager(bgCtx context.Context, conf *config.DomainManagerConfig) components.DomainManager {
 	allDomains := []string{}
 	for name := range conf.Domains {
 		allDomains = append(allDomains, name)
@@ -62,7 +63,7 @@ func NewDomainManager(bgCtx context.Context, conf *DomainManagerConfig) componen
 		domainsByAddress:  make(map[tktypes.EthAddress]*domain),
 		contractWaiter:    inflight.NewInflightManager[uuid.UUID, *PrivateSmartContract](uuid.Parse),
 		transactionWaiter: inflight.NewInflightManager[uuid.UUID, any](uuid.Parse),
-		contractCache:     cache.NewCache[tktypes.EthAddress, *domainContract](&conf.DomainManager.ContractCache, ContractCacheDefaults),
+		contractCache:     cache.NewCache[tktypes.EthAddress, *domainContract](&conf.DomainManager.ContractCache, config.ContractCacheDefaults),
 	}
 }
 
@@ -70,7 +71,7 @@ type domainManager struct {
 	bgCtx context.Context
 	mux   sync.Mutex
 
-	conf             *DomainManagerConfig
+	conf             *config.DomainManagerConfig
 	persistence      persistence.Persistence
 	stateStore       statestore.StateStore
 	blockIndexer     blockindexer.BlockIndexer
@@ -97,21 +98,12 @@ func (dm *domainManager) PreInit(pic components.PreInitComponents) (*components.
 	dm.ethClientFactory = pic.EthClientFactory()
 	dm.blockIndexer = pic.BlockIndexer()
 
-	var eventStreams []*components.ManagerEventStream
 	for name, d := range dm.conf.Domains {
-		registryAddr, err := tktypes.ParseEthAddress(d.RegistryAddress)
-		if err != nil {
+		if _, err := tktypes.ParseEthAddress(d.RegistryAddress); err != nil {
 			return nil, i18n.WrapError(dm.bgCtx, err, msgs.MsgDomainRegistryAddressInvalid, d.RegistryAddress, name)
 		}
-		eventStreams = append(eventStreams, &components.ManagerEventStream{
-			ABI:     iPaladinContractRegistryABI,
-			Handler: dm.eventIndexer,
-			Source:  registryAddr,
-		})
 	}
-	return &components.ManagerInitResult{
-		EventStreams: eventStreams,
-	}, nil
+	return &components.ManagerInitResult{}, nil
 }
 
 func (dm *domainManager) PostInit(c components.AllComponents) error {
@@ -140,8 +132,8 @@ func (dm *domainManager) cleanupDomain(d *domain) {
 	delete(dm.domainsByAddress, *d.RegistryAddress())
 }
 
-func (dm *domainManager) ConfiguredDomains() map[string]*components.PluginConfig {
-	pluginConf := make(map[string]*components.PluginConfig)
+func (dm *domainManager) ConfiguredDomains() map[string]*config.PluginConfig {
+	pluginConf := make(map[string]*config.PluginConfig)
 	for name, conf := range dm.conf.Domains {
 		pluginConf[name] = &conf.Plugin
 	}

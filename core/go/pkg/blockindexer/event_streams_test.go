@@ -28,6 +28,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/mocks/rpcclientmocks"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -93,10 +94,12 @@ func TestInternalEventStreamDeliveryAtHead(t *testing.T) {
 				BatchTimeout: confutil.P("5ms"),
 			},
 			// Listen to two out of three event types
-			ABI: abi.ABI{
-				testABI[1],
-				testABI[2],
-			},
+			Sources: []EventStreamSource{{
+				ABI: abi.ABI{
+					testABI[1],
+					testABI[2],
+				},
+			}},
 		},
 	})
 	require.NoError(t, err)
@@ -146,11 +149,13 @@ func TestInternalEventStreamDeliveryAtHeadWithSourceAddress(t *testing.T) {
 			BatchTimeout: confutil.P("5ms"),
 		},
 		// Listen to two out of three event types
-		ABI: abi.ABI{
-			testABI[1],
-			testABI[2],
-		},
-		Source: sourceContractAddress,
+		Sources: []EventStreamSource{{
+			ABI: abi.ABI{
+				testABI[1],
+				testABI[2],
+			},
+			Address: sourceContractAddress,
+		}},
 	}
 
 	// Do a full start now with an internal event listener
@@ -255,10 +260,12 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 			BatchTimeout: confutil.P("5ms"),
 		},
 		// Listen to two out of three event types
-		ABI: abi.ABI{
-			testABI[1],
-			testABI[2],
-		},
+		Sources: []EventStreamSource{{
+			ABI: abi.ABI{
+				testABI[1],
+				testABI[2],
+			},
+		}},
 	}
 	_, err = bi.AddEventStream(ctx, &InternalEventStream{
 		Definition: internalESConfig,
@@ -289,7 +296,7 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 	// Stop and restart
 	bi.Stop()
 
-	bi, err = newBlockIndexer(ctx, &Config{
+	bi, err = newBlockIndexer(ctx, &config.BlockIndexerConfig{
 		CommitBatchSize: confutil.P(1),
 		FromBlock:       tktypes.RawJSON(`0`),
 	}, bi.persistence, bi.blockListener)
@@ -349,11 +356,12 @@ func TestNoMatchingEvents(t *testing.T) {
 				BatchSize:    confutil.P(1),
 				BatchTimeout: confutil.P("5ms"),
 			},
-			// Listen to two out of three event types
-			ABI: abi.ABI{
-				// Mismatched only on index
-				testABICopy[1],
-			},
+			Sources: []EventStreamSource{{
+				ABI: abi.ABI{
+					// Mismatched only on index
+					testABICopy[1],
+				},
+			}},
 		},
 	})
 	require.NoError(t, err)
@@ -417,7 +425,7 @@ func TestTestNotifyEventStreamDoesNotBlock(t *testing.T) {
 }
 
 func TestUpsertInternalEventQueryExistingStreamFail(t *testing.T) {
-	_, bi, _, p, done := newMockBlockIndexer(t, &Config{})
+	_, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnError(fmt.Errorf("pop"))
@@ -430,17 +438,18 @@ func TestUpsertInternalEventQueryExistingStreamFail(t *testing.T) {
 	assert.Regexp(t, "pop", err)
 }
 
-func TestUpsertInternalEventStreamMismatchExistingABI(t *testing.T) {
-	_, bi, _, p, done := newMockBlockIndexer(t, &Config{})
+func TestUpsertInternalEventStreamMismatchExistingSourceABI(t *testing.T) {
+	_, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows(
-		[]string{"id", "abi"},
-	).AddRow(uuid.New().String(), testEventABIJSON))
+		[]string{"id", "sources"},
+	).AddRow(uuid.New().String(), testEventSourcesJSON))
 
 	err := bi.Start(&InternalEventStream{
 		Definition: &EventStream{
-			Name: "testing",
+			Name:    "testing",
+			Sources: []EventStreamSource{{}},
 		},
 	})
 	assert.Regexp(t, "PD020004", err)
@@ -448,13 +457,13 @@ func TestUpsertInternalEventStreamMismatchExistingABI(t *testing.T) {
 	require.NoError(t, p.Mock.ExpectationsWereMet())
 }
 
-func TestUpsertInternalEventStreamMismatchExistingSource(t *testing.T) {
-	_, bi, _, p, done := newMockBlockIndexer(t, &Config{})
+func TestUpsertInternalEventStreamMismatchExistingSourceAddress(t *testing.T) {
+	_, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows(
-		[]string{"id", "abi"},
-	).AddRow(uuid.New().String(), testEventABIJSON))
+		[]string{"id", "sources"},
+	).AddRow(uuid.New().String(), testEventSourcesJSON))
 
 	var a abi.ABI
 	err := json.Unmarshal(testEventABIJSON, &a)
@@ -462,9 +471,34 @@ func TestUpsertInternalEventStreamMismatchExistingSource(t *testing.T) {
 
 	err = bi.Start(&InternalEventStream{
 		Definition: &EventStream{
-			Name:   "testing",
-			ABI:    a,
-			Source: tktypes.MustEthAddress(tktypes.RandHex(20)),
+			Name: "testing",
+			Sources: []EventStreamSource{{
+				ABI:     a,
+				Address: tktypes.MustEthAddress(tktypes.RandHex(20)),
+			}},
+		},
+	})
+	assert.Regexp(t, "PD011302", err)
+
+	require.NoError(t, p.Mock.ExpectationsWereMet())
+}
+
+func TestUpsertInternalEventStreamMismatchExistingSourceLength(t *testing.T) {
+	_, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	defer done()
+
+	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows(
+		[]string{"id", "sources"},
+	).AddRow(uuid.New().String(), testEventSourcesJSON))
+
+	var a abi.ABI
+	err := json.Unmarshal(testEventABIJSON, &a)
+	assert.NoError(t, err)
+
+	err = bi.Start(&InternalEventStream{
+		Definition: &EventStream{
+			Name:    "testing",
+			Sources: []EventStreamSource{},
 		},
 	})
 	assert.Regexp(t, "PD011302", err)
@@ -473,18 +507,20 @@ func TestUpsertInternalEventStreamMismatchExistingSource(t *testing.T) {
 }
 
 func TestUpsertInternalEventStreamUpdateFail(t *testing.T) {
-	_, bi, _, p, done := newMockBlockIndexer(t, &Config{})
+	_, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows(
-		[]string{"id", "abi"},
-	).AddRow(uuid.New().String(), testEventABIJSON))
+		[]string{"id", "sources"},
+	).AddRow(uuid.New().String(), testEventSourcesJSON))
 	p.Mock.ExpectExec("UPDATE.*config").WillReturnError(fmt.Errorf("pop"))
 
 	err := bi.Start(&InternalEventStream{
 		Definition: &EventStream{
 			Name: "testing",
-			ABI:  testParseABI(testEventABIJSON),
+			Sources: []EventStreamSource{{
+				ABI: testParseABI(testEventABIJSON),
+			}},
 			Config: EventStreamConfig{
 				BatchSize: confutil.P(12345),
 			},
@@ -496,7 +532,7 @@ func TestUpsertInternalEventStreamUpdateFail(t *testing.T) {
 }
 
 func TestUpsertInternalEventStreamCreateFail(t *testing.T) {
-	_, bi, _, p, done := newMockBlockIndexer(t, &Config{})
+	_, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows(
@@ -507,7 +543,9 @@ func TestUpsertInternalEventStreamCreateFail(t *testing.T) {
 	err := bi.Start(&InternalEventStream{
 		Definition: &EventStream{
 			Name: "testing",
-			ABI:  testParseABI(testEventABIJSON),
+			Sources: []EventStreamSource{{
+				ABI: testParseABI(testEventABIJSON),
+			}},
 		},
 	})
 	assert.Regexp(t, "pop", err)
@@ -516,7 +554,7 @@ func TestUpsertInternalEventStreamCreateFail(t *testing.T) {
 }
 
 func TestProcessCheckpointFail(t *testing.T) {
-	ctx, bi, _, p, done := newMockBlockIndexer(t, &Config{})
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
 	defer done()
 
 	bi.retry.UTSetMaxAttempts(1)
@@ -534,7 +572,7 @@ func TestProcessCheckpointFail(t *testing.T) {
 }
 
 func TestGetHighestIndexedBlockFail(t *testing.T) {
-	ctx, bi, _, p, done := newMockBlockIndexer(t, &Config{})
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
 	defer done()
 
 	bi.retry.UTSetMaxAttempts(1)
@@ -561,7 +599,7 @@ func TestReturnToCatchupAfterStartHeadBlock5(t *testing.T) {
 }
 
 func testReturnToCatchupAfterStart(t *testing.T, headBlock int64) {
-	ctx, bi, _, p, done := newMockBlockIndexer(t, &Config{})
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*event_stream_checkpoints").WillReturnRows(p.Mock.NewRows([]string{}))
@@ -581,10 +619,11 @@ func testReturnToCatchupAfterStart(t *testing.T, headBlock int64) {
 		bi:  bi,
 		ctx: cancellableCtx,
 		definition: &EventStream{
-			ID:  uuid.New(),
-			ABI: testABI,
+			ID: uuid.New(),
+			Sources: []EventStreamSource{{
+				ABI: testABI,
+			}},
 		},
-		eventABIs:    testABI,
 		blocks:       make(chan *eventStreamBlock),
 		dispatch:     make(chan *eventDispatch),
 		detectorDone: make(chan struct{}),
@@ -620,7 +659,7 @@ func testReturnToCatchupAfterStart(t *testing.T, headBlock int64) {
 }
 
 func TestExitInCatchupPhase(t *testing.T) {
-	ctx, bi, _, p, done := newMockBlockIndexer(t, &Config{})
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
 	defer done()
 
 	bi.retry.UTSetMaxAttempts(1)
@@ -633,10 +672,11 @@ func TestExitInCatchupPhase(t *testing.T) {
 		bi:  bi,
 		ctx: ctx,
 		definition: &EventStream{
-			ID:  uuid.New(),
-			ABI: testABI,
+			ID: uuid.New(),
+			Sources: []EventStreamSource{{
+				ABI: testABI,
+			}},
 		},
-		eventABIs:    testABI,
 		blocks:       make(chan *eventStreamBlock),
 		detectorDone: make(chan struct{}),
 	}
@@ -649,7 +689,7 @@ func TestExitInCatchupPhase(t *testing.T) {
 }
 
 func TestSendToDispatcherClosedNoBlock(t *testing.T) {
-	ctx, bi, _, _, done := newMockBlockIndexer(t, &Config{})
+	ctx, bi, _, _, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
 	done()
 
 	es := &eventStream{
@@ -663,7 +703,7 @@ func TestSendToDispatcherClosedNoBlock(t *testing.T) {
 }
 
 func TestDispatcherDispatchClosed(t *testing.T) {
-	ctx, bi, _, p, done := newMockBlockIndexer(t, &Config{})
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectBegin()
@@ -678,9 +718,10 @@ func TestDispatcherDispatchClosed(t *testing.T) {
 		definition: &EventStream{
 			ID:   uuid.New(),
 			Type: EventStreamTypeInternal.Enum(),
-			ABI:  testABI,
+			Sources: []EventStreamSource{{
+				ABI: testABI,
+			}},
 		},
-		eventABIs:      testABI,
 		batchSize:      2,                    // aim for two
 		batchTimeout:   1 * time.Microsecond, // but not going to wait
 		dispatch:       make(chan *eventDispatch),
@@ -706,7 +747,7 @@ func TestDispatcherDispatchClosed(t *testing.T) {
 }
 
 func TestProcessCatchupEventPageFailRPC(t *testing.T) {
-	ctx, bi, mRPC, p, done := newMockBlockIndexer(t, &Config{})
+	ctx, bi, mRPC, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
 	defer done()
 
 	txHash := tktypes.MustParseBytes32(tktypes.RandHex(32))
@@ -724,10 +765,14 @@ func TestProcessCatchupEventPageFailRPC(t *testing.T) {
 	)
 
 	es := &eventStream{
-		bi:         bi,
-		ctx:        ctx,
-		definition: &EventStream{ID: uuid.New(), ABI: testABI},
-		eventABIs:  testABI,
+		bi:  bi,
+		ctx: ctx,
+		definition: &EventStream{
+			ID: uuid.New(),
+			Sources: []EventStreamSource{{
+				ABI: testABI,
+			}},
+		},
 	}
 
 	_, err := es.processCatchupEventPage(0, 10000)

@@ -26,10 +26,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	coreProto "github.com/kaleido-io/paladin/core/pkg/proto"
@@ -129,7 +129,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 			AssemblyResult: prototk.AssembleTransactionResponse_OK,
 			InputStates: []*components.FullState{
 				{
-					ID:     tktypes.Bytes32(tktypes.RandBytes(32)),
+					ID:     tktypes.RandBytes(32),
 					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
 					Data:   tktypes.JSONString("foo"),
 				},
@@ -273,7 +273,7 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 			AssemblyResult: prototk.AssembleTransactionResponse_OK,
 			InputStates: []*components.FullState{
 				{
-					ID:     tktypes.Bytes32(tktypes.RandBytes(32)),
+					ID:     tktypes.RandBytes(32),
 					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
 					Data:   tktypes.JSONString("foo"),
 				},
@@ -421,7 +421,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 
 	states := []*components.FullState{
 		{
-			ID:     tktypes.Bytes32(tktypes.RandBytes(32)),
+			ID:     tktypes.RandBytes(32),
 			Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
 			Data:   tktypes.JSONString("foo"),
 		},
@@ -709,7 +709,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 					}
 					stateID := keys[stateIndex]
 					inputStates = append(inputStates, &components.FullState{
-						ID: stateID,
+						ID: stateID[:],
 					})
 
 					log.L(ctx).Infof("input state %s, numDependencies %d i %d", stateID, numDependencies, i)
@@ -723,7 +723,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 				for i := 0; i < numOutputStates; i++ {
 					stateID := tktypes.Bytes32(tktypes.RandBytes(32))
 					outputStates[i] = &components.FullState{
-						ID: stateID,
+						ID: stateID[:],
 					}
 					unclaimedPendingStatesToMintingTransaction[stateID] = tx.ID.String()
 				}
@@ -1080,12 +1080,12 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 		assert.NoError(t, err)
 	}).Maybe().Return(nil)
 
-	e := NewPrivateTransactionMgr(ctx, tktypes.RandHex(16), &Config{
-		Writer: flushwriter.Config{
+	e := NewPrivateTransactionMgr(ctx, tktypes.RandHex(16), &config.PrivateTxManagerConfig{
+		Writer: config.FlushWriterConfig{
 			WorkerCount:  confutil.P(1),
 			BatchMaxSize: confutil.P(1), // we don't want batching for our test
 		},
-		Orchestrator: OrchestratorConfig{
+		Orchestrator: config.PrivateTxManagerOrchestratorConfig{
 			// StaleTimeout: ,
 		},
 	})

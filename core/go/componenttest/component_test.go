@@ -29,8 +29,8 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/componenttest/domains"
-	"github.com/kaleido-io/paladin/core/internal/componentmgr"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
@@ -39,8 +39,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
+	"sigs.k8s.io/yaml"
 )
 
 func TestRunSimpleStorageEthTransaction(t *testing.T) {
@@ -48,13 +48,13 @@ func TestRunSimpleStorageEthTransaction(t *testing.T) {
 	ctx := context.Background()
 	logrus.SetLevel(logrus.DebugLevel)
 
-	var testConfig componentmgr.Config
+	var testConfig config.PaladinConfig
 
 	err := yaml.Unmarshal([]byte(`
 db:
   type: sqlite
   sqlite:
-    uri:           ":memory:"
+    dsn:           ":memory:"
     autoMigrate:   true
     migrationsDir: ../db/migrations/sqlite
     debugQueries:  true
@@ -81,7 +81,7 @@ signer:
 	require.NoError(t, err)
 	defer p.Close()
 
-	indexer, err := blockindexer.NewBlockIndexer(ctx, &blockindexer.Config{
+	indexer, err := blockindexer.NewBlockIndexer(ctx, &config.BlockIndexerConfig{
 		FromBlock: tktypes.RawJSON(`"latest"`), // don't want earlier events
 	}, &testConfig.Blockchain.WS, p)
 	require.NoError(t, err)
@@ -109,7 +109,9 @@ signer:
 		},
 		Definition: &blockindexer.EventStream{
 			Name: "unittest",
-			ABI:  abi.ABI{simpleStorageBuild.ABI.Events()["Changed"]},
+			Sources: []blockindexer.EventStreamSource{{
+				ABI: abi.ABI{simpleStorageBuild.ABI.Events()["Changed"]},
+			}},
 		},
 	})
 	require.NoError(t, err)

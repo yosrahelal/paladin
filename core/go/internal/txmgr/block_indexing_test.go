@@ -25,6 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -64,7 +65,7 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 	txi := newTestConfirm(revertData)
 	var txID *uuid.UUID
 
-	ctx, txm, done := newTestTransactionManager(t, true, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, true, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mockSubmissionBatch := componentmocks.NewPublicTxBatch(t)
 		mockSubmissionBatch.On("Rejected").Return([]components.PublicTxRejected{})
 		mockSubmissionBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
@@ -119,7 +120,7 @@ func TestPublicConfirmMatch(t *testing.T) {
 	txi := newTestConfirm()
 	txID := uuid.New()
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi}).
 			Return([]*components.PublicTxMatch{
 				{
@@ -150,7 +151,7 @@ func TestPrivateConfirmMatch(t *testing.T) {
 	txi := newTestConfirm()
 	txID := uuid.New()
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi}).
 			Return([]*components.PublicTxMatch{
 				{
@@ -190,7 +191,7 @@ func TestNoConfirmMatch(t *testing.T) {
 
 	txi := newTestConfirm()
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi}).
 			Return(nil, nil)
 	})
@@ -206,7 +207,7 @@ func TestConfirmMatchFAil(t *testing.T) {
 
 	txi := newTestConfirm()
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi}).
 			Return(nil, fmt.Errorf("pop"))
 	})
@@ -222,7 +223,7 @@ func TestPrivateConfirmError(t *testing.T) {
 	txi := newTestConfirm()
 	txID := uuid.New()
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi}).
 			Return([]*components.PublicTxMatch{
 				{
@@ -247,7 +248,7 @@ func TestConfirmInsertError(t *testing.T) {
 	txi := newTestConfirm()
 	txID := uuid.New()
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mc.publicTxMgr.On("MatchUpdateConfirmedTransactions", mock.Anything, mock.Anything, []*blockindexer.IndexedTransactionNotify{txi}).
 			Return([]*components.PublicTxMatch{
 				{

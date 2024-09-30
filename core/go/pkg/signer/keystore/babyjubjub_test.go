@@ -24,7 +24,7 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/key"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/api"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -84,7 +84,7 @@ func TestStaticStoreFileFileWithTrimForBJJ(t *testing.T) {
 	err := os.WriteFile(keyFile, []byte(keyData+"\n"), 0644)
 	require.NoError(t, err)
 
-	ctx, store := newTestStaticStore(t, map[string]api.StaticKeyEntryConfig{
+	ctx, store := newTestStaticStore(t, map[string]signerapi.StaticKeyEntryConfig{
 		"myKey": {
 			Encoding: "none",
 			Filename: keyFile,

@@ -17,7 +17,6 @@ package componentmgr
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -32,11 +31,11 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/transportmgr"
 	"github.com/kaleido-io/paladin/core/internal/txmgr"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type ComponentManager interface {
@@ -53,7 +52,7 @@ type componentManager struct {
 	instanceUUID uuid.UUID
 	bgCtx        context.Context
 	// config
-	conf *Config
+	conf *config.PaladinConfig
 	// pre-init
 	keyManager       ethclient.KeyManager
 	ethClientFactory ethclient.EthClientFactory
@@ -89,7 +88,7 @@ type closeable interface {
 	Close()
 }
 
-func NewComponentManager(bgCtx context.Context, grpcTarget string, instanceUUID uuid.UUID, conf *Config, engine components.Engine) ComponentManager {
+func NewComponentManager(bgCtx context.Context, grpcTarget string, instanceUUID uuid.UUID, conf *config.PaladinConfig, engine components.Engine) ComponentManager {
 	log.InitConfig(&conf.Log)
 	return &componentManager{
 		grpcTarget:   grpcTarget, // default is a UDS path, can use tcp:127.0.0.1:12345 strings too (or tcp4:/tcp6:)
@@ -337,34 +336,13 @@ func (cm *componentManager) addIfOpened(desc string, c closeable, err error, fai
 
 func (cm *componentManager) buildInternalEventStreams() ([]*blockindexer.InternalEventStream, error) {
 	var streams []*blockindexer.InternalEventStream
-	for shortName, initResult := range cm.initResults {
-		for _, initStream := range initResult.EventStreams {
-			switch initStream.Type {
-			case blockindexer.IESTypeEventStream:
-				// We build a stream name in a way assured to result in a new stream if the ABI changes,
-				// TODO... and in the future with a logical way to clean up defunct streams
-				streamHash, err := tktypes.ABISolDefinitionHash(cm.bgCtx, initStream.ABI)
-				if err != nil {
-					return nil, err
-				}
-				streamName := fmt.Sprintf("i_%s_%s", shortName, streamHash)
-				streams = append(streams, &blockindexer.InternalEventStream{
-					Definition: &blockindexer.EventStream{
-						Name:   streamName,
-						Type:   blockindexer.EventStreamTypeInternal.Enum(),
-						ABI:    initStream.ABI,
-						Source: initStream.Source,
-					},
-					Handler: initStream.Handler,
-				})
-			default:
-				streams = append(streams, &blockindexer.InternalEventStream{
-					Type:             initStream.Type,
-					PreCommitHandler: initStream.PreCommitHandler,
-				})
-			}
+	for _, initResult := range cm.initResults {
+		if initResult.PreCommitHandler != nil {
+			streams = append(streams, &blockindexer.InternalEventStream{
+				Type:             blockindexer.IESTypePreCommitHandler,
+				PreCommitHandler: initResult.PreCommitHandler,
+			})
 		}
-
 	}
 	return streams, nil
 }

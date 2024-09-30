@@ -94,10 +94,13 @@ var (
 
 	// Persistence PD0102XX
 	MsgPersistenceInvalidType         = ffe("PD010200", "Invalid persistence type: %s")
-	MsgPersistenceMissingURI          = ffe("PD010201", "Missing database connection URI")
+	MsgPersistenceMissingDSN          = ffe("PD010201", "Missing database connection Data Source Name (DSN)")
 	MsgPersistenceInitFailed          = ffe("PD010202", "Database init failed")
 	MsgPersistenceMigrationFailed     = ffe("PD010203", "Database migration failed")
 	MsgPersistenceMissingMigrationDir = ffe("PD010204", "Missing database migration directory for autoMigrate")
+	MsgPersistenceInvalidDSNTemplate  = ffe("PD010205", "dsnParams were provided, but the DSN supplied is not a valid template")
+	MsgPersistenceDSNParamLoadFile    = ffe("PD010206", "Failed to load dsnParams[%s] from '%s'")
+	MsgPersistenceDSNTemplateFail     = ffe("PD010207", "Templated substitution into database connection DSN failed")
 
 	// Transaction Processor PD0103XX
 	MsgTransactionProcessorInvalidStage         = ffe("PD010300", "Invalid stage: %s")
@@ -153,7 +156,7 @@ var (
 
 	// BlockIndexer PD0113XX
 	MsgBlockIndexerInvalidFromBlock         = ffe("PD011300", "Invalid from block '%s' (must be 'latest' or number)")
-	MsgBlockIndexerESSourceError            = ffe("PD011302", "Event stream source must not be changed after creation")
+	MsgBlockIndexerESSourceError            = ffe("PD011302", "Event stream sources must not be changed after creation")
 	MsgBlockIndexerESInitFail               = ffe("PD011303", "Event stream initialization failed")
 	MsgBlockIndexerESAlreadyInit            = ffe("PD011304", "Event stream already initialized")
 	MsgBlockIndexerConfirmedReceiptNotFound = ffe("PD011305", "Receipt for confirmed transaction %s not found")
@@ -183,6 +186,7 @@ var (
 	MsgSigningKeyCannotBeResolved               = ffe("PD011418", "No key exists that matches the request")
 	MsgSigningUnsupportedKeyDerivationType      = ffe("PD011419", "Unsupported key derivation type: '%s'")
 	MsgSigningKeyCannotBeEmpty                  = ffe("PD011420", "Cannot resolve a signing key for the empty string")
+	MsgSigningFailedToLoadStaticKeyFile         = ffe("PD011421", "Failed to load static key file")
 
 	// EthClient module PD0115XX
 	MsgEthClientInvalidInput            = ffe("PD011500", "Unable to convert to ABI function input (func=%s)")

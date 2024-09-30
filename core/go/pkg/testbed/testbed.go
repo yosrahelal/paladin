@@ -23,8 +23,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/componentmgr"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/domainmgr"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -102,7 +102,7 @@ func unitTestSocketFile() (fileName string, err error) {
 	return
 }
 
-func unitTestComponentManagerStart(ctx context.Context, conf *componentmgr.Config, engine components.Engine, callbacks ...*UTInitFunction) (cm componentmgr.ComponentManager, err error) {
+func unitTestComponentManagerStart(ctx context.Context, conf *config.PaladinConfig, engine components.Engine, callbacks ...*UTInitFunction) (cm componentmgr.ComponentManager, err error) {
 	socketFile, err := unitTestSocketFile()
 	if err == nil {
 		cm = componentmgr.NewComponentManager(ctx, socketFile, uuid.New(), conf, engine)
@@ -137,16 +137,16 @@ func (tb *testbed) ReceiveTransportMessage(context.Context, *components.Transpor
 func (tb *testbed) StartForTest(configFile string, domains map[string]*TestbedDomain, initFunctions ...*UTInitFunction) (url string, done func(), err error) {
 	ctx := context.Background()
 
-	var conf *componentmgr.Config
-	if err = componentmgr.ReadAndParseYAMLFile(ctx, configFile, &conf); err != nil {
+	var conf *config.PaladinConfig
+	if err = config.ReadAndParseYAMLFile(ctx, configFile, &conf); err != nil {
 		return "", nil, err
 	}
 
-	conf.DomainManagerConfig.Domains = make(map[string]*domainmgr.DomainConfig, len(domains))
+	conf.DomainManagerConfig.Domains = make(map[string]*config.DomainConfig, len(domains))
 	for name, domain := range domains {
-		conf.DomainManagerConfig.Domains[name] = &domainmgr.DomainConfig{
-			Plugin: components.PluginConfig{
-				Type:    components.LibraryTypeCShared.Enum(),
+		conf.DomainManagerConfig.Domains[name] = &config.DomainConfig{
+			Plugin: config.PluginConfig{
+				Type:    config.LibraryTypeCShared.Enum(),
 				Library: "loaded/via/unit/test/loader",
 			},
 			Config:          domain.Config,

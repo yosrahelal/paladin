@@ -26,7 +26,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/api"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,7 +35,7 @@ import (
 func newTestFilesystemStore(t *testing.T) (context.Context, *filesystemStore) {
 	ctx := context.Background()
 
-	store, err := NewFilesystemStore(ctx, api.FileSystemConfig{
+	store, err := NewFilesystemStore(ctx, signerapi.FileSystemConfig{
 		Path: confutil.P(t.TempDir()),
 	})
 	require.NoError(t, err)
@@ -49,7 +49,7 @@ func TestFileSystemStoreBadDir(t *testing.T) {
 
 	badPath := path.Join(t.TempDir(), "wrong")
 
-	_, err := NewFilesystemStore(context.Background(), api.FileSystemConfig{
+	_, err := NewFilesystemStore(context.Background(), signerapi.FileSystemConfig{
 		Path: confutil.P(badPath),
 	})
 	assert.Regexp(t, "PD011400", err)
@@ -57,7 +57,7 @@ func TestFileSystemStoreBadDir(t *testing.T) {
 	err = os.WriteFile(badPath, []byte{}, 0644)
 	require.NoError(t, err)
 
-	_, err = NewFilesystemStore(context.Background(), api.FileSystemConfig{
+	_, err = NewFilesystemStore(context.Background(), signerapi.FileSystemConfig{
 		Path: confutil.P(badPath),
 	})
 	assert.Regexp(t, "PD011400", err)

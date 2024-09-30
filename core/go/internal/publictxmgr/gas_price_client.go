@@ -27,33 +27,12 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
-
-type GasPriceConfig struct {
-	IncreaseMax        *string      `yaml:"increaseMax"`
-	IncreasePercentage *int         `yaml:"increasePercentage"`
-	FixedGasPrice      any          `yaml:"fixedGasPrice"` // number or object
-	Cache              cache.Config `yaml:"cache"`
-}
-
-var DefaultGasPriceConfig = &GasPriceConfig{
-	IncreaseMax:        nil,
-	IncreasePercentage: confutil.P(0),
-	FixedGasPrice:      nil,
-	Cache: cache.Config{
-		Capacity: confutil.P(100),
-		// TODO: Enable a KB based cache with TTL in Paladin
-		//       Until then the gas price cache will not expire (which is problematic)
-		// Enabled: confutil.P(true),
-		// Size:    confutil.P("1kb"),
-		// TTL:     confutil.P("1s"),
-	},
-}
 
 type GasPriceClient interface {
 	DeleteCache(ctx context.Context)
@@ -163,8 +142,8 @@ func (hGpc *HybridGasPriceClient) DeleteCache(ctx context.Context) {
 	hGpc.gasPriceCache.Delete("gasPrice")
 }
 
-func NewGasPriceClient(ctx context.Context, conf *Config) GasPriceClient {
-	gasPriceCache := cache.NewCache[string, *fftypes.JSONAny](&conf.GasPrice.Cache, &DefaultConfig.GasPrice.Cache)
+func NewGasPriceClient(ctx context.Context, conf *config.PublicTxManagerConfig) GasPriceClient {
+	gasPriceCache := cache.NewCache[string, *fftypes.JSONAny](&conf.GasPrice.Cache, &config.PublicTxManagerDefaults.GasPrice.Cache)
 	log.L(ctx).Debugf("Gas price cache size: %d", gasPriceCache.Capacity())
 	gasPriceClient := &HybridGasPriceClient{}
 	// initialize gas oracle

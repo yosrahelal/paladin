@@ -48,10 +48,10 @@ func (ss *stateStore) rpcStoreState() rpcserver.RPCHandler {
 		domain string,
 		contractAddress tktypes.EthAddress,
 		schema string,
-		value tktypes.RawJSON,
+		data tktypes.RawJSON,
 	) (*State, error) {
 		var state *State
-		newState, err := ss.PersistState(ctx, domain, contractAddress, schema, value)
+		newState, err := ss.PersistState(ctx, domain, contractAddress, schema, data, nil)
 		if err == nil {
 			state = newState.State
 		}

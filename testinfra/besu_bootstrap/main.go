@@ -26,6 +26,7 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
+	"github.com/kaleido-io/paladin/testinfra/pkg/besugenesis"
 )
 
 func main() {
@@ -61,17 +62,17 @@ func main() {
 
 	// Write the genesis
 	oneEth := new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
-	genesis := &GenesisJSON{
-		Config: GenesisConfig{
+	genesis := &besugenesis.GenesisJSON{
+		Config: besugenesis.GenesisConfig{
 			ChainID:     1337,
 			CancunTime:  0,
-			ZeroBaseFee: true,
-			QBFT: QBFTConfig{
-				BlockPeriodSeconds:      1, // this is overwritten by the BlockPeriodMilliseconds
-				EpochLength:             30000,
-				RequestTimeoutSeconds:   10,
-				EmptyBlockPeriodSeconds: 10,
-				BlockPeriodMilliseconds: 200,
+			ZeroBaseFee: ptrTo(true),
+			QBFT: &besugenesis.QBFTConfig{
+				BlockPeriodSeconds:      ptrTo(1), // this is overwritten by the BlockPeriodMilliseconds
+				EpochLength:             ptrTo(30000),
+				RequestTimeoutSeconds:   ptrTo(10),
+				EmptyBlockPeriodSeconds: ptrTo(10),
+				BlockPeriodMilliseconds: ptrTo(200),
 			},
 		},
 		Nonce:      0,
@@ -80,14 +81,14 @@ func main() {
 		Difficulty: 1,
 		MixHash:    randBytes(32),
 		Coinbase:   ethtypes.MustNewAddress("0x0000000000000000000000000000000000000000"),
-		Alloc: map[string]AllocEntry{
+		Alloc: map[string]besugenesis.AllocEntry{
 			kp.Address.String(): {
 				Balance: *ethtypes.NewHexInteger(
 					new(big.Int).Mul(oneEth, big.NewInt(1000000000)),
 				),
 			},
 		},
-		ExtraData: qbftExtraData(kp.Address),
+		ExtraData: besugenesis.BuildQBFTExtraData(kp.Address),
 	}
 	writeFileJSON(genesisFile, &genesis)
 
@@ -135,4 +136,8 @@ func randBytes(len int) []byte {
 	b := make([]byte, len)
 	_, _ = rand.Read(b)
 	return b
+}
+
+func ptrTo[T any](v T) *T {
+	return &v
 }

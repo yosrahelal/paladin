@@ -23,11 +23,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -75,8 +75,8 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	require.NoError(t, err)
 	mocks.allComponents.On("Persistence").Return(p).Maybe()
 
-	store := privatetxnstore.NewStore(ctx, &flushwriter.Config{}, p)
-	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &OrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher, store)
+	store := privatetxnstore.NewStore(ctx, &config.FlushWriterConfig{}, p)
+	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &config.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher, store)
 	ocDone, err := o.Start(ctx)
 	require.NoError(t, err)
 

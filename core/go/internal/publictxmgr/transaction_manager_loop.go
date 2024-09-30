@@ -19,57 +19,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/kaleido-io/paladin/core/internal/cache"
-	"github.com/kaleido-io/paladin/core/internal/flushwriter"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
-
-type ManagerConfig struct {
-	MaxInFlightOrchestrators *int                  `yaml:"maxInFlightOrchestrators"`
-	Interval                 *string               `yaml:"interval"`
-	OrchestratorIdleTimeout  *string               `yaml:"orchestratorIdleTimeout"`  // idle orchestrators exit after this time
-	OrchestratorStaleTimeout *string               `yaml:"orchestratorStaleTimeout"` // stale orchestrators exit after this time - TODO: Define stale
-	OrchestratorSwapTimeout  *string               `yaml:"orchestratorSwapTimeout"`  // orchestrators are cycled out after this time, when all slots are full
-	NonceCacheTimeout        *string               `yaml:"nonceCacheTimeout"`
-	ActivityRecords          ActivityRecordsConfig `yaml:"activityRecords"`
-	SubmissionWriter         flushwriter.Config    `yaml:"submissionWriter"`
-	Retry                    retry.Config          `yaml:"retry"`
-}
-
-var DefaultManagerConfig = &ManagerConfig{
-	MaxInFlightOrchestrators: confutil.P(50),
-	Interval:                 confutil.P("5s"),
-	OrchestratorIdleTimeout:  confutil.P("1s"),
-	OrchestratorStaleTimeout: confutil.P("5m"),
-	OrchestratorSwapTimeout:  confutil.P("10m"),
-	NonceCacheTimeout:        confutil.P("1h"),
-	Retry: retry.Config{
-		InitialDelay: confutil.P("250ms"),
-		MaxDelay:     confutil.P("30s"),
-		Factor:       confutil.P(2.0),
-	},
-	SubmissionWriter: flushwriter.Config{
-		WorkerCount:  confutil.P(5),
-		BatchTimeout: confutil.P("75ms"),
-		BatchMaxSize: confutil.P(50),
-	},
-	ActivityRecords: ActivityRecordsConfig{
-		Config: cache.Config{
-			// Status cache can be is shared across orchestrators, allowing status to live beyond TX completion
-			// while still only being in memory
-			Capacity: confutil.P(1000),
-		},
-		RecordsPerTransaction: confutil.P(25),
-	},
-}
-
-type ActivityRecordsConfig struct {
-	cache.Config
-	RecordsPerTransaction *int `yaml:"entriesPerTransaction"`
-}
 
 // role of transaction engine:
 // 1. owner and the only manipulator of the transaction orchestrators pool

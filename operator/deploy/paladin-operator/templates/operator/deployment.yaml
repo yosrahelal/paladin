@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.operator.name }}
+  namespace: {{ .Values.operator.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.operator.name }}
+    {{- with .Values.operator.labels }}
+    {{ toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    {{- with .Values.operator.annotations }}
+    {{ toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.operator.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.operator.name }}
+      {{- with .Values.operator.annotations }}
+      annotations:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ .Values.operator.name }}
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - name: {{ .Values.operator.name }}
+        image: "{{ .Values.operator.image.repository }}:{{ .Values.operator.image.tag }}"
+        imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
+        command:
+          - /manager
+        ports:
+          - containerPort: {{ .Values.operator.service.port }}
+            name: http
+            protocol: TCP
+        env:
+          {{- toYaml .Values.operator.env | nindent 12 }}
+        livenessProbe:
+          {{- toYaml .Values.operator.livenessProbe | nindent 10 }}
+        readinessProbe:
+          {{- toYaml .Values.operator.readinessProbe | nindent 10 }}
+        resources:
+          {{- toYaml .Values.operator.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+          {{- toYaml .Values.operator.volumeMounts | nindent 12 }}
+      volumes:
+        {{- toYaml .Values.operator.volumes | nindent 8 }}
+      {{- with .Values.operator.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -5,6 +5,7 @@ use (
 	./domains/integration-test
 	./domains/noto
 	./domains/zeto
+	./operator
 	./registries/static
 	./testinfra
 	./toolkit/go

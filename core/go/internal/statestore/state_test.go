@@ -35,7 +35,7 @@ func TestPersistStateMissingSchema(t *testing.T) {
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.PersistState(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("test")).String(), nil)
+	_, err := ss.PersistState(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("test")).String(), nil, nil)
 	assert.Regexp(t, "PD010106", err)
 }
 
@@ -50,7 +50,7 @@ func TestPersistStateInvalidState(t *testing.T) {
 	})
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.PersistState(ctx, "domain1", *contractAddress, schemaID.String(), nil)
+	_, err := ss.PersistState(ctx, "domain1", *contractAddress, schemaID.String(), nil, nil)
 	assert.Regexp(t, "PD010116", err)
 }
 

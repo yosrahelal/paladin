@@ -1,0 +1,22 @@
+**/Dockerfile*
+**/coverage
+**/mocks
+**/node_modules
+**/build
+**/bin
+**/tools
+**/typechain-types
+**/artifacts
+**/*.so
+**/*.dylib
+**/*.dll
+**/*.pb.go
+.git
+**/.gradle
+
+# The operator has its own docker build (with its own .dockerignore), so we don't want to rebuild the whole
+# Paladin docker every time you're re-running the operator/test.
+# So we only install enough to keep the build happy.
+operator/**
+!operator/go.mod
+!operator/build.gradle
