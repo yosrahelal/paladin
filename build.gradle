@@ -1,9 +1,23 @@
-plugins {
-    id 'java'
-}
+def libraries = [
+    'core/go/build/libs',
+    'core/java/build/libs',
+    'toolkit/go/build/libs'
+]
 
-group = 'io.kaleido'
-version = '1.0-SNAPSHOT'
+def domains = [
+    'domains/noto/build/libs',
+    'domains/pente/build/libs',
+    'domains/zeto/build/libs'
+]
+
+def assembleSubprojects = [
+    ':core:go',
+    ':core:java',
+    ':toolkit:go',
+    ':domains:pente',
+    ':domains:noto',
+    ':domains:zeto'
+]
 
 ext {
     helpers = [
@@ -32,4 +46,90 @@ ext {
             }
         }
     ]
+}
+
+task jar {
+    enabled = false
+}
+
+task installProtocGenGo(type: GoInstall) {
+    tool = "google.golang.org/protobuf/cmd/protoc-gen-go"
+    toolVersion = "v1.34.2"
+}
+
+task installProtocGenGoRPC(type: GoInstall) {
+    tool = "google.golang.org/grpc/cmd/protoc-gen-go-grpc"
+    toolVersion = "v1.5.1"
+}
+
+task installGolangCILint(type: GoInstall) {
+    tool = "github.com/golangci/golangci-lint/cmd/golangci-lint"
+    toolVersion = "v1.61.0"
+}
+
+task installMockery(type: GoInstall) {
+    tool = "github.com/vektra/mockery/v2"
+    toolVersion = "v2.46.0"
+}
+
+// Task to copy all executables and binaries to the root-level build/libs directory
+task copyLibraries(type: Copy) {
+    def libsDir = file("${buildDir}/libs")
+
+    doFirst {
+        libsDir.mkdirs()
+    }
+
+    libraries.each { dir ->
+        from dir
+    }
+    into libsDir
+
+    outputs.upToDateWhen { false }
+
+    doLast {
+        println "Copied executables to ${libsDir}"
+    }
+}
+
+task copyDomains(type: Copy) {
+    def domainsDir = file("${buildDir}/domains")
+
+    doFirst {
+        domainsDir.mkdirs()
+    }
+
+    domains.each { dir ->
+        from dir
+    }
+    into domainsDir
+
+    outputs.upToDateWhen { false }
+
+    doLast {
+        println "Copied domains to ${domainsDir}"
+    }
+}
+
+// Root assemble task that depends on subproject's assemble tasks
+task assemble {
+    assembleSubprojects.each { projectPath ->
+        dependsOn "${projectPath}:assemble"
+    }
+}
+
+assemble.finalizedBy(copyLibraries, copyDomains)
+
+defaultTasks 'build'
+
+// Clean task to clean all projects
+task clean {
+    delete "${buildDir}"
+}
+
+task docker(type: Exec) {
+    executable 'docker'
+    args 'build'
+    args '-t', 'paladin:test'
+    args '.'
 }

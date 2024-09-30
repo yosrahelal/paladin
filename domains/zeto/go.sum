@@ -121,8 +121,6 @@ github.com/hashicorp/hcl v1.0.0/go.mod h1:E5yfLk+7swimpb2L/Alb/PJmXilQ/rhwaUYs4T
 github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUqJM=
 github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSow5/V2vxeg=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
-github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240923130959-544659ea388d h1:Pz8IohClyAvNzlqh6C7ey2rRU7Ks270MIgcXNkCnkvE=
-github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240923130959-544659ea388d/go.mod h1:WyUa1UIizlcBQnTEMK5tWWskFz2glSTm7S6HaJTarps=
 github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240924145436-713dcce49c5d h1:o1M0ZGs7fJ15405THK47agvk2vtXq1owihbG6ezuc3k=
 github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240924145436-713dcce49c5d/go.mod h1:WyUa1UIizlcBQnTEMK5tWWskFz2glSTm7S6HaJTarps=
 github.com/hyperledger/firefly-common v1.4.11 h1:WKv2hQuNpS7yP51THxzpzrqU3jkln23C9vq5iminzBk=

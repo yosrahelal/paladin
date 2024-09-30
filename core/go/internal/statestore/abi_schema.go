@@ -331,8 +331,19 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 		return nil, err
 	}
 
+	// The ID must be unique, but domains can choose whether they calculate it or they defer to Paladin
+	// to calculate it. Domains (ZKP based domains in particular) that need specific algorithms to be used for
+	// hash calculation, or have other requirements of the derivation of the hash can pre-calculate the hash.
+	//
+	// Implementations MUST ensure:
+	// - The hash contains everything in the state that needs to be proved
+	// - The hash is deterministic and reproducible by anyone with access to the unmasked state data
 	if id == nil {
-		// Now do a typed data v4 hash of the struct value itself
+		// When Paladin is designated to create that hash, it uses a EIP-712 Typed Data V4 hash as this has
+		// the characteristics of:
+		// - Well proven and Ethereum standardized algorithm for hashing a complex structure
+		// - Deterministic order and type formatting of values
+		// - Only containing the data that is described in the associated the ABI
 		var hash ethtypes.HexBytes0xPrefix
 		hash, err = eip712.HashStruct(ctx, as.primaryType, psd.jsonTree, as.typeSet)
 		id = tktypes.HexBytes(hash)

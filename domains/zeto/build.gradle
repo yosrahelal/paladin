@@ -161,7 +161,7 @@ task copySolidityForTest(type: Copy, dependsOn: [extractZetoArtifacts, generateP
     includeEmptyDirs = false
 }
 
-task testE2E(type: Exec, dependsOn: [copySolidity, copySolidityForTest, ':testinfra:startTestInfra']) {
+task testE2E(type: Exec, dependsOn: [copySolidity, copySolidityForTest, ':testinfra:startTestInfra', ":core:go:makeMocks"]) {
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
     inputs.files(goFiles)
@@ -185,7 +185,7 @@ task testE2E(type: Exec, dependsOn: [copySolidity, copySolidityForTest, ':testin
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
-task test(type: Exec) {
+task test(type: Exec, dependsOn: [":core:go:makeMocks"]) {
 
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
@@ -211,6 +211,14 @@ task test(type: Exec) {
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
+task buildGo {
+    // TODO: implement buildGo task
+    doFirst() {
+        println ":domain:zeto buildGo task not implemented"
+    }
+}
+
+
 task build {
     dependsOn test
     dependsOn testE2E
@@ -222,4 +230,8 @@ task clean(type: Delete) {
     delete 'integration-test/abis'
     delete zkpOut
     delete toolsOut
+}
+
+task assemble {
+    dependsOn buildGo
 }

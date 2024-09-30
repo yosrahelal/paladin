@@ -843,7 +843,7 @@ func TestDSIResetWithMixed(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Len(t, dc.unFlushed.stateLocks, 1)
-	assert.Equal(t, dc.unFlushed.stateLocks[0].State, tktypes.Bytes32(state2[:]))
+	assert.Equal(t, dc.unFlushed.stateLocks[0].State, tktypes.HexBytes(state2[:]))
 
 }
 

@@ -37,7 +37,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
-	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240923130959-544659ea388d // indirect
+	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240924145436-713dcce49c5d // indirect
 	github.com/iden3/go-iden3-crypto v0.0.17 // indirect
 	github.com/iden3/go-rapidsnark/prover v0.0.10 // indirect
 	github.com/iden3/go-rapidsnark/types v0.0.2 // indirect
