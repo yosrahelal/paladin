@@ -23,6 +23,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
 )
 
 func TestReadAndParseYAMLFileFlatStruct(t *testing.T) {
@@ -125,7 +126,7 @@ func TestReadAndParseYAMLFileNestedInlineStruct(t *testing.T) {
 	}
 
 	type testConfigChildWrapperType struct {
-		testConfigChildType `json:",inline" yaml:",inline"`
+		testConfigChildType `json:",inline"`
 	}
 
 	type testConfigType struct {
@@ -225,4 +226,10 @@ invalid yaml content
 	err = ReadAndParseYAMLFile(ctx, tempFile.Name(), &result)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "PD020202")
+}
+
+func TestRawJSON(t *testing.T) {
+	bc := BlockIndexerConfig{}
+	yaml.Marshal(bc)
+
 }

@@ -29,6 +29,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -108,6 +110,18 @@ func (r *BesuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 	log.Info("Created Besu config secret", "Name", name)
+
+	if _, err := r.createService(ctx, &node, name); err != nil {
+		log.Error(err, "Failed to create Besu Service")
+		return ctrl.Result{}, err
+	}
+	log.Info("Created Besu Service", "Name", name)
+
+	if _, err := r.createPDB(ctx, &node, name); err != nil {
+		log.Error(err, "Failed to create Besu pod disruption budget")
+		return ctrl.Result{}, err
+	}
+	log.Info("Created Besu pod disruption budget", "Name", name)
 
 	ss, err := r.createStatefulSet(ctx, &node, configSum)
 	if err != nil {
@@ -206,19 +220,21 @@ func (r *BesuReconciler) generateBesuConfigTOML(node *corev1alpha1.Besu) (string
 	tomlConfig["genesis-file"] = "/genesis/genesis.json"
 
 	// Set up the networking, as that's always in our control (we wire it up to the service)
+	comprehensiveRPCSet := []string{"ETH", "NET", "QBFT", "WEB3", "ADMIN", "DEBUG"}
 	tomlConfig["rpc-http-enabled"] = true
 	tomlConfig["rpc-http-host"] = "0.0.0.0"
 	tomlConfig["rpc-http-port"] = "8545"
-	setIfUnset("rpc-http-api", []string{"ETH", "QBFT", "WEB3", "DEBUG"})
+	setIfUnset("rpc-http-api", comprehensiveRPCSet)
 	tomlConfig["rpc-ws-enabled"] = true
 	tomlConfig["rpc-ws-host"] = "0.0.0.0"
 	tomlConfig["rpc-ws-port"] = "8546"
-	setIfUnset("rpc-ws-api", []string{"ETH", "QBFT", "WEB3", "DEBUG"})
+	setIfUnset("rpc-ws-api", comprehensiveRPCSet)
 	tomlConfig["graphql-http-enabled"] = true
 	tomlConfig["graphql-http-host"] = "0.0.0.0"
 	tomlConfig["graphql-http-port"] = "8547"
 	tomlConfig["p2p-host"] = "0.0.0.0"
 	tomlConfig["p2p-port"] = "30303"
+	setIfUnset("host-allowlist", []string{"*"})
 
 	setIfUnset("logging", "DEBUG")
 	setIfUnset("revert-reason-enabled", true)
@@ -421,6 +437,37 @@ func (r *BesuReconciler) withStandardAnnotations(annotations map[string]string) 
 	return annotations
 }
 
+func (r *BesuReconciler) generatePDBTemplate(node *corev1alpha1.Besu, name string) *policyv1.PodDisruptionBudget {
+	// We only have once replica per statefulset, so eviction for upgrade makes sense as the default
+	return &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: node.Namespace,
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			UnhealthyPodEvictionPolicy: ptrTo(policyv1.AlwaysAllow),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: r.getLabels(node),
+			},
+		},
+	}
+}
+
+func (r *BesuReconciler) createPDB(ctx context.Context, node *corev1alpha1.Besu, name string) (*policyv1.PodDisruptionBudget, error) {
+	pdb := r.generatePDBTemplate(node, name)
+
+	var foundPDB policyv1.PodDisruptionBudget
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: pdb.Namespace}, &foundPDB); err != nil && errors.IsNotFound(err) {
+		err = r.Create(ctx, pdb)
+		if err != nil {
+			return pdb, err
+		}
+	} else if err != nil {
+		return nil, err
+	}
+	return &foundPDB, nil
+}
+
 func (r *BesuReconciler) generateStatefulSetTemplate(node *corev1alpha1.Besu, configSum string) *appsv1.StatefulSet {
 	// Define the StatefulSet to run Besu using the ConfigMap
 	return &appsv1.StatefulSet{
@@ -484,6 +531,11 @@ func (r *BesuReconciler) generateStatefulSetTemplate(node *corev1alpha1.Besu, co
 									Protocol:      corev1.ProtocolTCP,
 								},
 								{
+									Name:          "graphql-http",
+									ContainerPort: 8547,
+									Protocol:      corev1.ProtocolTCP,
+								},
+								{
 									Name:          "p2p-tcp",
 									ContainerPort: 30303,
 									Protocol:      corev1.ProtocolTCP,
@@ -535,6 +587,68 @@ func (r *BesuReconciler) generateStatefulSetTemplate(node *corev1alpha1.Besu, co
 					},
 				},
 			},
+		},
+	}
+}
+
+func (r *BesuReconciler) createService(ctx context.Context, node *corev1alpha1.Besu, name string) (*corev1.Service, error) {
+	svc := r.generateServiceTemplate(node, name)
+
+	var foundSvc corev1.Service
+	if err := r.Get(ctx, types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}, &foundSvc); err != nil && errors.IsNotFound(err) {
+		err = r.Create(ctx, svc)
+		if err != nil {
+			return svc, err
+		}
+	} else if err != nil {
+		return svc, err
+	}
+	return svc, nil
+}
+
+// generateServiceTemplate generates a ConfigMap for the Besu configuration
+func (r *BesuReconciler) generateServiceTemplate(node *corev1alpha1.Besu, name string) *corev1.Service {
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: node.Namespace,
+			Labels:    r.getLabels(node),
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: r.getLabels(node),
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "rpc-http",
+					Port:       8545,
+					TargetPort: intstr.FromInt(8545),
+					Protocol:   corev1.ProtocolTCP,
+				},
+				{
+					Name:       "rpc-ws",
+					Port:       8546,
+					TargetPort: intstr.FromInt(8546),
+					Protocol:   corev1.ProtocolTCP,
+				},
+				{
+					Name:       "graphql-http",
+					Port:       8547,
+					TargetPort: intstr.FromInt(8547),
+					Protocol:   corev1.ProtocolTCP,
+				},
+				{
+					Name:       "p2p-tcp",
+					Port:       30303,
+					TargetPort: intstr.FromInt(30303),
+					Protocol:   corev1.ProtocolTCP,
+				},
+				{
+					Name:       "p2p-udp",
+					Port:       30303,
+					TargetPort: intstr.FromInt(30303),
+					Protocol:   corev1.ProtocolUDP,
+				},
+			},
+			Type: corev1.ServiceTypeClusterIP,
 		},
 	}
 }

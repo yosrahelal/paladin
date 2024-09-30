@@ -31,12 +31,12 @@ var WSDefaults = WSEndpointConfig{
 
 type HTTPEndpointConfig struct {
 	Disabled          bool `json:"disabled,omitempty"`
-	httpserver.Config `json:",inline" yaml:"inline"`
+	httpserver.Config `json:",inline"`
 }
 
 type WSEndpointConfig struct {
 	Disabled          bool `json:"disabled,omitempty"`
-	httpserver.Config `json:",inline" yaml:"inline"`
+	httpserver.Config `json:",inline"`
 	ReadBufferSize    *string `json:"readBufferSize"`
 	WriteBufferSize   *string `json:"writeBufferSize"`
 }

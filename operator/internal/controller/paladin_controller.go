@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"strings"
 
 	pldconfig "github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
@@ -33,6 +32,7 @@ import (
 	"github.com/tyler-smith/go-bip39"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,7 +42,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	yaml "sigs.k8s.io/yaml/goyaml.v3"
+	"sigs.k8s.io/yaml"
 
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
 	"github.com/kaleido-io/paladin/operator/pkg/config"
@@ -90,14 +90,20 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	log.Info("Created Paladin config secret", "Name", name)
 
 	if _, err := r.createService(ctx, &node, name); err != nil {
-		log.Error(err, "Failed to create Paladin Paladin")
+		log.Error(err, "Failed to create Paladin Service")
 		return ctrl.Result{}, err
 	}
 	log.Info("Created Paladin Service", "Name", name)
 
+	if _, err := r.createPDB(ctx, &node, name); err != nil {
+		log.Error(err, "Failed to create Paladin pod disruption budget")
+		return ctrl.Result{}, err
+	}
+	log.Info("Created Paladin pod disruption budget", "Name", name)
+
 	ss, err := r.createStatefulSet(ctx, &node, name, configSum)
 	if err != nil {
-		log.Error(err, "Failed to create Paladin Paladin")
+		log.Error(err, "Failed to create Paladin StatefulSet")
 		return ctrl.Result{}, err
 	}
 	log.Info("Created Paladin StatefulSet", "Name", ss.Name, "Namespace", ss.Namespace)
@@ -182,6 +188,37 @@ func buildEnv(envMaps ...map[string]string) []corev1.EnvVar {
 	return envVars
 }
 
+func (r *PaladinReconciler) generatePDBTemplate(node *corev1alpha1.Paladin, name string) *policyv1.PodDisruptionBudget {
+	// We only have once replica per statefulset, so eviction for upgrade makes sense as the default
+	return &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: node.Namespace,
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			UnhealthyPodEvictionPolicy: ptrTo(policyv1.AlwaysAllow),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: r.getLabels(node),
+			},
+		},
+	}
+}
+
+func (r *PaladinReconciler) createPDB(ctx context.Context, node *corev1alpha1.Paladin, name string) (*policyv1.PodDisruptionBudget, error) {
+	pdb := r.generatePDBTemplate(node, name)
+
+	var foundPDB policyv1.PodDisruptionBudget
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: pdb.Namespace}, &foundPDB); err != nil && errors.IsNotFound(err) {
+		err = r.Create(ctx, pdb)
+		if err != nil {
+			return pdb, err
+		}
+	} else if err != nil {
+		return nil, err
+	}
+	return &foundPDB, nil
+}
+
 func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Paladin, name, configSum string) *appsv1.StatefulSet {
 	// Define the StatefulSet to run Paladin using the ConfigMap
 	return &appsv1.StatefulSet{
@@ -223,8 +260,13 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 							},
 							Ports: []corev1.ContainerPort{
 								{
-									Name:          "http",
-									ContainerPort: 8080,
+									Name:          "rpc-http",
+									ContainerPort: 8548,
+									Protocol:      corev1.ProtocolTCP,
+								},
+								{
+									Name:          "rpc-ws",
+									ContainerPort: 8549,
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
@@ -393,20 +435,33 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 			return "", fmt.Errorf("paladinConfigYAML is invalid: %s", err)
 		}
 	}
+
+	// Node name can be overridden, but defaults to the CR name
+	if pldConf.NodeName == "" {
+		pldConf.NodeName = node.Name
+	}
+
+	// Merge in the ports for our networking config (which we need to match our service defs)
+	pldConf.RPCServer.HTTP.Port = ptrTo(8548)
+	pldConf.RPCServer.WS.Port = ptrTo(8549)
+
+	// DB needs merging from user config and our config
 	if err := r.generatePaladinDBConfig(ctx, node, &pldConf, name); err != nil {
 		return "", err
 	}
+
+	// Signer config needs merging
 	if err := r.generatePaladinSigners(ctx, node, &pldConf); err != nil {
 		return "", err
 	}
+
 	// Bind to the a local besu node if we've been configured with one
 	if node.Spec.BesuNode != "" {
 		pldConf.Blockchain.HTTP.URL = fmt.Sprintf("http://%s:8545", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
 		pldConf.Blockchain.WS.URL = fmt.Sprintf("ws://%s:8546", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
 	}
-	sb := new(strings.Builder)
-	_ = yaml.NewEncoder(sb).Encode(&pldConf)
-	return sb.String(), nil
+	b, _ := yaml.Marshal(&pldConf)
+	return string(b), nil
 }
 
 func (r *PaladinReconciler) generatePaladinDBConfig(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconfig.PaladinConfig, name string) error {
@@ -590,9 +645,15 @@ func (r *PaladinReconciler) generateServiceTemplate(node *corev1alpha1.Paladin, 
 			// It will most likely get generated from the config
 			Ports: []corev1.ServicePort{
 				{
-					Name:       "http",
-					Port:       8080,
-					TargetPort: intstr.FromInt(8080),
+					Name:       "rpc-http",
+					Port:       8548,
+					TargetPort: intstr.FromInt(8548),
+					Protocol:   corev1.ProtocolTCP,
+				},
+				{
+					Name:       "rpc-ws",
+					Port:       8549,
+					TargetPort: intstr.FromInt(8549),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},
