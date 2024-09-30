@@ -1,0 +1,20 @@
+# We have a separate operator-specific docker ignore file,
+# with the difference that it does not exclude the operator.
+
+# Also we need the *.pb.go, which are built in the Gradle build.
+
+# But need to pull in the build for the all the go.work projects
+**/coverage
+**/mocks
+**/node_modules
+**/build
+**/bin
+**/tools
+**/typechain-types
+**/artifacts
+**/*.so
+**/*.dylib
+**/*.dll
+.git
+**/.gradle
+operator/manager

@@ -33,6 +33,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -73,7 +74,7 @@ type pubTxManager struct {
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 
-	conf             *Config
+	conf             *config.PublicTxManagerConfig
 	thMetrics        *publicTxEngineMetrics
 	p                persistence.Persistence
 	bIndexer         blockindexer.BlockIndexer
@@ -122,7 +123,7 @@ type txActivityRecords struct {
 	records []ptxapi.TransactionActivityRecord
 }
 
-func NewPublicTransactionManager(ctx context.Context, conf *Config) components.PublicTxManager {
+func NewPublicTransactionManager(ctx context.Context, conf *config.PublicTxManagerConfig) components.PublicTxManager {
 	log.L(ctx).Debugf("Creating new enterprise transaction handler")
 
 	gasPriceClient := NewGasPriceClient(ctx, conf)
@@ -139,17 +140,17 @@ func NewPublicTransactionManager(ctx context.Context, conf *Config) components.P
 		gasPriceClient:              gasPriceClient,
 		inFlightOrchestratorStale:   make(chan bool, 1),
 		signingAddressesPausedUntil: make(map[tktypes.EthAddress]time.Time),
-		maxInflight:                 confutil.IntMin(conf.Manager.MaxInFlightOrchestrators, 1, *DefaultConfig.Manager.MaxInFlightOrchestrators),
-		orchestratorSwapTimeout:     confutil.DurationMin(conf.Manager.OrchestratorSwapTimeout, 0, *DefaultConfig.Manager.OrchestratorSwapTimeout),
-		orchestratorStaleTimeout:    confutil.DurationMin(conf.Manager.OrchestratorStaleTimeout, 0, *DefaultConfig.Manager.OrchestratorStaleTimeout),
-		orchestratorIdleTimeout:     confutil.DurationMin(conf.Manager.OrchestratorIdleTimeout, 0, *DefaultConfig.Manager.OrchestratorIdleTimeout),
-		enginePollingInterval:       confutil.DurationMin(conf.Manager.Interval, 50*time.Millisecond, *DefaultConfig.Manager.Interval),
-		nonceCacheTimeout:           confutil.DurationMin(conf.Manager.NonceCacheTimeout, 0, *DefaultConfig.Manager.NonceCacheTimeout),
+		maxInflight:                 confutil.IntMin(conf.Manager.MaxInFlightOrchestrators, 1, *config.PublicTxManagerDefaults.Manager.MaxInFlightOrchestrators),
+		orchestratorSwapTimeout:     confutil.DurationMin(conf.Manager.OrchestratorSwapTimeout, 0, *config.PublicTxManagerDefaults.Manager.OrchestratorSwapTimeout),
+		orchestratorStaleTimeout:    confutil.DurationMin(conf.Manager.OrchestratorStaleTimeout, 0, *config.PublicTxManagerDefaults.Manager.OrchestratorStaleTimeout),
+		orchestratorIdleTimeout:     confutil.DurationMin(conf.Manager.OrchestratorIdleTimeout, 0, *config.PublicTxManagerDefaults.Manager.OrchestratorIdleTimeout),
+		enginePollingInterval:       confutil.DurationMin(conf.Manager.Interval, 50*time.Millisecond, *config.PublicTxManagerDefaults.Manager.Interval),
+		nonceCacheTimeout:           confutil.DurationMin(conf.Manager.NonceCacheTimeout, 0, *config.PublicTxManagerDefaults.Manager.NonceCacheTimeout),
 		retry:                       retry.NewRetryIndefinite(&conf.Manager.Retry),
 		gasPriceIncreaseMax:         gasPriceIncreaseMax,
-		gasPriceIncreasePercent:     confutil.Int(conf.GasPrice.IncreasePercentage, *DefaultConfig.GasPrice.IncreasePercentage),
-		activityRecordCache:         cache.NewCache[string, *txActivityRecords](&conf.Manager.ActivityRecords.Config, &DefaultConfig.Manager.ActivityRecords.Config),
-		maxActivityRecordsPerTx:     confutil.Int(conf.Manager.ActivityRecords.RecordsPerTransaction, *DefaultConfig.Manager.ActivityRecords.RecordsPerTransaction),
+		gasPriceIncreasePercent:     confutil.Int(conf.GasPrice.IncreasePercentage, *config.PublicTxManagerDefaults.GasPrice.IncreasePercentage),
+		activityRecordCache:         cache.NewCache[string, *txActivityRecords](&conf.Manager.ActivityRecords.Config, &config.PublicTxManagerDefaults.Manager.ActivityRecords.Config),
+		maxActivityRecordsPerTx:     confutil.Int(conf.Manager.ActivityRecords.RecordsPerTransaction, *config.PublicTxManagerDefaults.Manager.ActivityRecords.RecordsPerTransaction),
 	}
 }
 

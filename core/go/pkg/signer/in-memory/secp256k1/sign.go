@@ -20,13 +20,13 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/api"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 )
 
 type sepc256k1Signer struct{}
 
-func Register(registry map[string]api.InMemorySigner) {
+func Register(registry map[string]signerapi.InMemorySigner) {
 	signer := &sepc256k1Signer{}
 	registry[algorithms.ECDSA_SECP256K1_PLAINBYTES] = signer
 }

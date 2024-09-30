@@ -27,7 +27,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/api"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/tyler-smith/go-bip39"
 )
@@ -41,16 +41,16 @@ type hdWalletPathEntry struct {
 	Index uint64
 }
 
-func (sm *signingModule) initHDWallet(ctx context.Context, conf *api.KeyDerivationConfig) (err error) {
-	bip44Prefix := confutil.StringNotEmpty(conf.BIP44Prefix, *api.KeyDerivationDefaults.BIP44Prefix)
+func (sm *signingModule) initHDWallet(ctx context.Context, conf *signerapi.KeyDerivationConfig) (err error) {
+	bip44Prefix := confutil.StringNotEmpty(conf.BIP44Prefix, *signerapi.KeyDerivationDefaults.BIP44Prefix)
 	bip44Prefix = strings.ReplaceAll(bip44Prefix, " ", "")
 	sm.hd = &hdDerivation{
 		sm:                    sm,
 		bip44Prefix:           bip44Prefix,
 		bip44DirectResolution: conf.BIP44DirectResolution,
-		bip44HardenedSegments: confutil.IntMin(conf.BIP44HardenedSegments, 0, *api.KeyDerivationDefaults.BIP44HardenedSegments),
+		bip44HardenedSegments: confutil.IntMin(conf.BIP44HardenedSegments, 0, *signerapi.KeyDerivationDefaults.BIP44HardenedSegments),
 	}
-	seedKeyPath := api.KeyDerivationDefaults.SeedKeyPath
+	seedKeyPath := signerapi.KeyDerivationDefaults.SeedKeyPath
 	if conf.SeedKeyPath.Name != "" {
 		seedKeyPath = conf.SeedKeyPath
 	}

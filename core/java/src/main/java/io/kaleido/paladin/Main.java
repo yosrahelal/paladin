@@ -14,6 +14,8 @@
  */
 package io.kaleido.paladin;
 
+import io.grpc.LoadBalancerRegistry;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.kaleido.paladin.configlight.RuntimeInfo;
 import io.kaleido.paladin.configlight.YamlConfig;
 import io.kaleido.paladin.loader.PluginLoader;
@@ -59,6 +61,11 @@ public class Main {
                 }
             }
         }
+    }
+
+    static {
+        // see https://github.com/kaleido-io/paladin/issues/239
+        LoadBalancerRegistry.getDefaultRegistry().register(new PickFirstLoadBalancerProvider());
     }
 
     public static int run(String[] args) {

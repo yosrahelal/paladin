@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
@@ -35,7 +36,7 @@ import (
 type mockPlugin[T any] struct {
 	t *testing.T
 
-	conf                *components.PluginConfig
+	conf                *config.PluginConfig
 	allowRegisterErrors bool
 	preRegister         func(domainID string) *T
 	customResponses     func(*T) []*T
@@ -48,10 +49,10 @@ type mockPlugin[T any] struct {
 	handleResponse func(*T)
 }
 
-func (tp *mockPlugin[T]) Conf() *components.PluginConfig {
+func (tp *mockPlugin[T]) Conf() *config.PluginConfig {
 	if tp.conf == nil {
-		tp.conf = &components.PluginConfig{
-			Type:    tktypes.Enum[components.LibraryType](components.LibraryTypeCShared),
+		tp.conf = &config.PluginConfig{
+			Type:    tktypes.Enum[config.LibraryType](config.LibraryTypeCShared),
 			Library: "/any/where",
 		}
 	}

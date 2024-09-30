@@ -5,6 +5,8 @@
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
 VERSION ?= 0.0.1
 
+CLUSTER_NAME ?= kind
+
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
 # To re-generate a bundle for other specific channels without changing the standard setup, you can:
@@ -130,6 +132,20 @@ lint: golangci-lint ## Run golangci-lint linter & yamllint
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
 
+##@ Kind - the E2E tests expect a kind cluster called "kind"
+
+.PHONY: kind-start
+kind-start:	
+	if [ "$(shell kind get nodes --name "${CLUSTER_NAME}")" == "" ]; then kind create cluster --name "${CLUSTER_NAME}"; fi
+	kubectl version # fail the build if we can't connect to the cluster
+
+.PHONY: kind-promote
+kind-promote: kind-start
+	kind load docker-image paladin-operator:latest --name "${CLUSTER_NAME}"
+	kind load docker-image paladin:test --name "${CLUSTER_NAME}"
+	kind load docker-image postgres:latest --name "${CLUSTER_NAME}"
+	kind load docker-image hyperledger/besu:latest --name "${CLUSTER_NAME}"	
+
 ##@ Build
 
 .PHONY: build
@@ -145,7 +161,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build --platform linux/amd64 -t ${IMG} .
+	$(CONTAINER_TOOL) build -f Dockerfile -t ${IMG} ..
 
 # Load the docker image into the kind cluster. This is useful when you want to test the image in a kind cluster.
 .PHONY: docker-load
@@ -181,12 +197,25 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 
 ##@ helm-chart - Deployment
 
+.PHONY: helm-build
+helm-build: manifests
+	rm -f deploy/paladin-operator/crds/*
+	cd config/crd/bases; \
+		for crd in $$(ls *); do cp $$crd ../../../deploy/paladin-operator/crds/$$(echo $$crd | sed s/.yaml/.crd.yaml/); done
+
+# Note Helm will not update CRDs https://helm.sh/docs/chart_best_practices/custom_resource_definitions/#some-caveats-and-explanations
+# See update-crds
 .PHONY: helm-install
-install: 
+helm-install: helm-build
 	helm upgrade --install paladin deploy/paladin-operator -n ${NAMESPACE} --create-namespace --set operator.namespace=${NAMESPACE}
 
+# If you want to run in VSCode, but you want the CRDs updated via helm
+.PHONY: helm-pause
+helm-pause: 
+	helm upgrade --install paladin deploy/paladin-operator -n ${NAMESPACE} --create-namespace --set operator.namespace=${NAMESPACE} --set replicaCount=0
+
 .PHONY: helm-uninstall
-uninstall: 
+helm-uninstall: 
 	helm uninstall paladin -n ${NAMESPACE} || true
 	$(KUBECTL) delete namespace ${NAMESPACE} || true
 
@@ -228,8 +257,8 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest-$(ENVTEST_VERSION)
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 
 ## Tool Versions
-KUSTOMIZE_VERSION ?= v5.3.0
-CONTROLLER_TOOLS_VERSION ?= v0.14.0
+KUSTOMIZE_VERSION ?= v5.4.3
+CONTROLLER_TOOLS_VERSION ?= v0.16.3
 ENVTEST_VERSION ?= release-0.17
 GOLANGCI_LINT_VERSION ?= v1.57.2
 
@@ -263,15 +292,21 @@ mv "$$(echo "$(1)" | sed "s/-$(3)$$//")" $(1) ;\
 }
 endef
  
-##@ Node
+##@ Dev helpers
+
+.PHONY: update-crds
+update-crds: manifests generate
+	$(KUBECTL) apply -k config/crd
+
+##@ Paladin
 
 .PHONY: create-instance
 create-instance: ## Add a new instance of the paladin operator 
-	$(KUBECTL) apply -f config/samples/core_v1alpha1_node.yaml
+	$(KUBECTL) apply -f config/samples/core_v1alpha1_paladin.yaml
 
 .PHONY: delete-instance
 delete-instance: ## Delete an instance of the paladin operator 
-	$(KUBECTL) delete -f config/samples/core_v1alpha1_node.yaml || true
+	$(KUBECTL) delete -f config/samples/core_v1alpha1_paladin.yaml || true
 
 ## Cleanup
 

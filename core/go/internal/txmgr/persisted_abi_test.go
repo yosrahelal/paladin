@@ -21,13 +21,14 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestGetABIByHashError(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectQuery("SELECT.*abis").WillReturnError(fmt.Errorf("pop"))
 	})
 	defer done()
@@ -39,7 +40,7 @@ func TestGetABIByHashError(t *testing.T) {
 
 func TestGetABIByHashBadData(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectQuery("SELECT.*abis").WillReturnRows(sqlmock.NewRows(
 			[]string{"abi"},
 		).AddRow(
@@ -55,7 +56,7 @@ func TestGetABIByHashBadData(t *testing.T) {
 
 func TestGetABIByCache(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectQuery("SELECT.*abis").WillReturnRows(sqlmock.NewRows(
 			[]string{"abi"},
 		).AddRow(
@@ -88,7 +89,7 @@ func TestUpsertABIBadData(t *testing.T) {
 
 func TestUpsertABIFail(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectBegin()
 		mc.db.ExpectExec("INSERT INTO.*abis").WillReturnError(fmt.Errorf("pop"))
 		mc.db.ExpectRollback()

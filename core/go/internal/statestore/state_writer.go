@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -51,9 +52,9 @@ func (wo *writeOperation) WriteKey() string {
 	return wo.domainKey
 }
 
-func newStateWriter(bgCtx context.Context, ss *stateStore, conf *flushwriter.Config) *stateWriter {
+func newStateWriter(bgCtx context.Context, ss *stateStore, conf *config.FlushWriterConfig) *stateWriter {
 	sw := &stateWriter{}
-	sw.w = flushwriter.NewWriter(bgCtx, sw.runBatch, ss.p, conf, &StateWriterConfigDefaults)
+	sw.w = flushwriter.NewWriter(bgCtx, sw.runBatch, ss.p, conf, &config.StateWriterConfigDefaults)
 	return sw
 }
 

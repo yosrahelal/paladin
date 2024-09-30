@@ -34,8 +34,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	corev1alpha1 "github.com/kaleido-io/paladin/api/v1alpha1"
-	"github.com/kaleido-io/paladin/internal/controller"
+	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
+	"github.com/kaleido-io/paladin/operator/internal/controller"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -122,11 +122,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.NodeReconciler{
+	if err = (&controller.PaladinReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Node")
+		setupLog.Error(err, "unable to create controller", "controller", "Paladin")
 		os.Exit(1)
 	}
 	if err = (&controller.SmartContractReconciler{
@@ -134,6 +134,20 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SmartContract")
+		os.Exit(1)
+	}
+	if err = (&controller.BesuReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Besu")
+		os.Exit(1)
+	}
+	if err = (&controller.BesuGenesisReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "BesuGenesis")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

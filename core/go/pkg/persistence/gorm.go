@@ -19,7 +19,9 @@ package persistence
 import (
 	"context"
 	"database/sql"
-	"time"
+	"html/template"
+	"os"
+	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratedb "github.com/golang-migrate/migrate/v4/database"
@@ -46,32 +48,38 @@ type SQLDBProvider interface {
 	GetMigrationDriver(*sql.DB) (migratedb.Driver, error)
 }
 
-type SQLDBConfig struct {
-	URI             string  `yaml:"uri"`
-	MaxOpenConns    *int    `yaml:"maxOpenConns"`
-	MaxIdleConns    *int    `yaml:"maxIdleConns"`
-	ConnMaxIdleTime *string `yaml:"connMaxIdleTime"`
-	ConnMaxLifetime *string `yaml:"connMaxLifetime"`
-	AutoMigrate     *bool   `yaml:"autoMigrate"`
-	MigrationsDir   string  `yaml:"migrationsDir"`
-	DebugQueries    bool    `yaml:"debugQueries"`
-	StatementCache  *bool   `yaml:"statementCache"`
+// Extensible in case we want to add more options (not env vars are not available wrapped in Java)
+type DSNParamLocation struct {
+	File string `json:"file,omitempty"` // whole file contains the property value - will be trimmed before use
 }
 
-type SQLDBConfigDefaults struct {
-	MaxOpenConns    int
-	MaxIdleConns    int
-	ConnMaxIdleTime time.Duration
-	ConnMaxLifetime time.Duration
+type SQLDBConfig struct {
+	DSN             string                      `json:"dsn"` // can have {{.ParamName}} for replacement from params
+	DSNParams       map[string]DSNParamLocation `json:"dsnParams"`
+	MaxOpenConns    *int                        `json:"maxOpenConns"`
+	MaxIdleConns    *int                        `json:"maxIdleConns"`
+	ConnMaxIdleTime *string                     `json:"connMaxIdleTime"`
+	ConnMaxLifetime *string                     `json:"connMaxLifetime"`
+	AutoMigrate     *bool                       `json:"autoMigrate"`
+	MigrationsDir   string                      `json:"migrationsDir"`
+	DebugQueries    bool                        `json:"debugQueries"`
+	StatementCache  *bool                       `json:"statementCache"`
 }
 
 func NewSQLProvider(ctx context.Context, p SQLDBProvider, conf *SQLDBConfig, defs *SQLDBConfig) (_ Persistence, err error) {
-	if conf.URI == "" {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgPersistenceMissingURI)
+	if conf.DSN == "" {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgPersistenceMissingDSN)
+	}
+	dsn := conf.DSN
+
+	if len(conf.DSNParams) > 0 {
+		if dsn, err = templatedDSN(ctx, conf); err != nil {
+			return nil, err
+		}
 	}
 
 	var gp *provider
-	gdb, err := gorm.Open(p.Open(conf.URI), &gorm.Config{
+	gdb, err := gorm.Open(p.Open(dsn), &gorm.Config{
 		SkipDefaultTransaction: true,
 		PrepareStmt:            confutil.Bool(conf.StatementCache, *defs.StatementCache),
 	})
@@ -100,6 +108,35 @@ func NewSQLProvider(ctx context.Context, p SQLDBProvider, conf *SQLDBConfig, def
 		}
 	}
 	return gp, nil
+}
+
+func templatedDSN(ctx context.Context, conf *SQLDBConfig) (string, error) {
+
+	tmpl, err := template.New("dsn").Option("missingkey=error").Parse(conf.DSN)
+	if err != nil {
+		return "", i18n.WrapError(ctx, err, msgs.MsgPersistenceInvalidDSNTemplate)
+	}
+
+	// Load each of the params - from a kubernetes secret for example
+	values := map[string]any{}
+	for paramName, param := range conf.DSNParams {
+		switch {
+		case param.File != "":
+			valueBytes, err := os.ReadFile(param.File)
+			if err != nil {
+				return "", i18n.WrapError(ctx, err, msgs.MsgPersistenceDSNParamLoadFile, paramName, param.File)
+			}
+			values[paramName] = strings.TrimSpace(string(valueBytes))
+		}
+	}
+
+	out := new(strings.Builder)
+	if err := tmpl.Execute(out, values); err != nil {
+		return "", i18n.WrapError(ctx, err, msgs.MsgPersistenceInvalidDSNTemplate)
+	}
+	log.L(ctx).Warnf("REMOVE: DSN='%s'", out.String())
+	return out.String(), nil
+
 }
 
 func (gp *provider) runMigration(ctx context.Context, mig func(m *migrate.Migrate) error) error {

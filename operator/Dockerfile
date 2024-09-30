@@ -4,26 +4,21 @@ ARG TARGETOS
 ARG TARGETARCH
 
 WORKDIR /workspace
-# Copy the Go Modules manifests
-COPY go.mod go.mod
-COPY go.sum go.sum
-RUN go mod download
 
-# Copy the go source
-COPY cmd/ cmd/
-COPY api/ api/
-COPY pkg/ pkg/
-COPY utils/ utils/
-COPY internal/controller/ internal/controller/
+# We use Dockerfile.dockerignore to make this efficient
+COPY . .
 
 # Build
-# Use the TARGETOS and TARGETARCH to support cross-platform builds
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
+# TODO: Investigate if there is a need for cross-compilation, and if so we need to
+#       wait to implement until the domain specific signer plugin interface 
+#       is enabled, such that Zeto can remove non-cross-compilable ZKP libs
+#       from the core build.
+RUN cd operator; go build -a -o manager cmd/main.go
 
 # Use distroless as minimal base image to package the manager binary
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
-COPY --from=builder /workspace/manager .
+COPY --from=builder /workspace/operator/manager .
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]

@@ -21,9 +21,9 @@ import (
 )
 
 type Config struct {
-	WS                rpcclient.WSConfig   `yaml:"ws"`
-	HTTP              rpcclient.HTTPConfig `yaml:"http"`
-	EstimateGasFactor *float64             `yaml:"gasEstimateFactor"`
+	WS                rpcclient.WSConfig   `json:"ws"`
+	HTTP              rpcclient.HTTPConfig `json:"http"`
+	EstimateGasFactor *float64             `json:"gasEstimateFactor"`
 }
 
 var Defaults = &Config{

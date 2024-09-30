@@ -16,6 +16,18 @@ type Config struct {
 		Envs        map[string]string `json:"envs"`
 		// TODO: Add more fields
 	} `json:"paladin"`
+	Besu struct {
+		Image       string            `json:"image"`
+		Labels      map[string]string `json:"labels"`
+		Annotations map[string]string `json:"annotations"`
+		Envs        map[string]string `json:"envs"`
+		// TODO: Add more fields
+	} `json:"besu"`
+	Postgres struct {
+		Image string            `json:"image"`
+		Envs  map[string]string `json:"envs"`
+		// TODO: Add more fields
+	} `json:"postgres"`
 }
 
 // LoadConfig sets up Viper to load the config file
