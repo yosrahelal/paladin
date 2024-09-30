@@ -33,6 +33,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -47,7 +48,7 @@ type domain struct {
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 
-	conf            *DomainConfig
+	conf            *config.DomainConfig
 	dm              *domainManager
 	name            string
 	api             components.DomainManagerToDomain
@@ -65,7 +66,7 @@ type domain struct {
 	initDone  chan struct{}
 }
 
-func (dm *domainManager) newDomain(name string, conf *DomainConfig, toDomain components.DomainManagerToDomain) *domain {
+func (dm *domainManager) newDomain(name string, conf *config.DomainConfig, toDomain components.DomainManagerToDomain) *domain {
 	d := &domain{
 		dm:              dm,
 		conf:            conf,

@@ -21,14 +21,14 @@ import (
 
 	k1 "github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/api"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRegister(t *testing.T) {
-	registry := make(map[string]api.InMemorySigner)
+	registry := make(map[string]signerapi.InMemorySigner)
 	Register(registry)
 	assert.Equal(t, 1, len(registry))
 }

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
@@ -405,7 +406,7 @@ func TestProduceLatestInFlightStageContextSubmitRePrepare(t *testing.T) {
 }
 
 func TestProduceLatestInFlightStageContextTriggerSubmit(t *testing.T) {
-	ctx, o, m, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *Config) {
+	ctx, o, m, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
 		conf.Orchestrator.SubmissionRetry.MaxAttempts = confutil.P(1)
 	})
 	defer done()

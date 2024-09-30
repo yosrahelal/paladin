@@ -1,0 +1,41 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - core.paladin.io
+  resources:
+  - besugeneses
+  - besus
+  - paladins
+  - smartcontracts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - core.paladin.io
+  resources:
+  - besugeneses/finalizers
+  - besus/finalizers
+  - paladins/finalizers
+  - smartcontracts/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - core.paladin.io
+  resources:
+  - besugeneses/status
+  - besus/status
+  - paladins/status
+  - smartcontracts/status
+  verbs:
+  - get
+  - patch
+  - update

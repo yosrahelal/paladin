@@ -76,7 +76,7 @@ func (z *Zeto) makeNewState(coin *types.ZetoCoin) (*pb.NewState, error) {
 	}, nil
 }
 
-func (z *Zeto) prepareInputs(ctx context.Context, contractAddress, owner string, amount *tktypes.HexInteger) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, error) {
+func (z *Zeto) prepareInputs(ctx context.Context, contractAddress, owner string, amount *tktypes.HexUint256) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
 	stateRefs := []*pb.StateRef{}
@@ -103,13 +103,13 @@ func (z *Zeto) prepareInputs(ctx context.Context, contractAddress, owner string,
 			if err != nil {
 				return nil, nil, nil, fmt.Errorf("coin %s is invalid: %s", state.Id, err)
 			}
-			total = total.Add(total, coin.Amount.BigInt())
+			total = total.Add(total, coin.Amount.Int())
 			stateRefs = append(stateRefs, &pb.StateRef{
 				SchemaId: state.SchemaId,
 				Id:       state.Id,
 			})
 			coins = append(coins, coin)
-			if total.Cmp(amount.BigInt()) >= 0 {
+			if total.Cmp(amount.Int()) >= 0 {
 				return coins, stateRefs, total, nil
 			}
 			if len(stateRefs) >= INPUT_COUNT {
@@ -121,26 +121,30 @@ func (z *Zeto) prepareInputs(ctx context.Context, contractAddress, owner string,
 
 func (z *Zeto) addHash(newCoin *types.ZetoCoin, ownerKey *babyjub.PublicKey) error {
 	commitment, err := poseidon.Hash([]*big.Int{
-		newCoin.Amount.BigInt(),
-		newCoin.Salt.BigInt(),
+		newCoin.Amount.Int(),
+		newCoin.Salt.Int(),
 		ownerKey.X,
 		ownerKey.Y,
 	})
 	if err != nil {
 		return err
 	}
-	newCoin.Hash = tktypes.NewHexInteger(commitment)
+	newCoin.Hash = (*tktypes.HexUint256)(commitment)
 	return nil
 }
 
-func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount *tktypes.HexInteger) ([]*types.ZetoCoin, []*pb.NewState, error) {
+func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount *tktypes.HexUint256) ([]*types.ZetoCoin, []*pb.NewState, error) {
 	// Always produce a single coin for the entire output amount
 	// TODO: make this configurable
 	salt := crypto.NewSalt()
+	ownerKeyBytes, err := ownerKey.Compress().MarshalText()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to prepare outputs. %s", err)
+	}
 	newCoin := &types.ZetoCoin{
-		Salt:     tktypes.NewHexInteger(salt),
+		Salt:     (*tktypes.HexUint256)(salt),
 		Owner:    owner,
-		OwnerKey: ownerKey.Compress(),
+		OwnerKey: tktypes.HexBytes(ownerKeyBytes),
 		Amount:   amount,
 	}
 	if err := z.addHash(newCoin, ownerKey); err != nil {

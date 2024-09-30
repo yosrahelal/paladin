@@ -23,7 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/api"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -48,14 +48,14 @@ func (mkm *mockKeyManager) Close() {
 }
 
 func newTestHDWalletKeyManager(t *testing.T) (*simpleKeyManager, func()) {
-	kmgr, err := NewSimpleTestKeyManager(context.Background(), &api.Config{
-		KeyDerivation: api.KeyDerivationConfig{
-			Type: api.KeyDerivationTypeBIP32,
+	kmgr, err := NewSimpleTestKeyManager(context.Background(), &signerapi.Config{
+		KeyDerivation: signerapi.KeyDerivationConfig{
+			Type: signerapi.KeyDerivationTypeBIP32,
 		},
-		KeyStore: api.StoreConfig{
-			Type: api.KeyStoreTypeStatic,
-			Static: api.StaticKeyStorageConfig{
-				Keys: map[string]api.StaticKeyEntryConfig{
+		KeyStore: signerapi.StoreConfig{
+			Type: signerapi.KeyStoreTypeStatic,
+			Static: signerapi.StaticKeyStorageConfig{
+				Keys: map[string]signerapi.StaticKeyEntryConfig{
 					"seed": {
 						Encoding: "hex",
 						Inline:   tktypes.RandHex(32),
@@ -69,12 +69,12 @@ func newTestHDWalletKeyManager(t *testing.T) (*simpleKeyManager, func()) {
 }
 
 func TestSimpleKeyManagerInitFail(t *testing.T) {
-	_, err := NewSimpleTestKeyManager(context.Background(), &api.Config{
-		KeyDerivation: api.KeyDerivationConfig{
-			Type: api.KeyDerivationTypeBIP32,
+	_, err := NewSimpleTestKeyManager(context.Background(), &signerapi.Config{
+		KeyDerivation: signerapi.KeyDerivationConfig{
+			Type: signerapi.KeyDerivationTypeBIP32,
 		},
-		KeyStore: api.StoreConfig{
-			Type: api.KeyStoreTypeStatic,
+		KeyStore: signerapi.StoreConfig{
+			Type: signerapi.KeyStoreTypeStatic,
 		},
 	})
 	assert.Regexp(t, "PD011418", err)
@@ -96,9 +96,9 @@ func TestGenerateIndexes(t *testing.T) {
 
 func TestKeyManagerResolveFail(t *testing.T) {
 
-	kmgr, err := NewSimpleTestKeyManager(context.Background(), &api.Config{
-		KeyStore: api.StoreConfig{
-			Type: api.KeyStoreTypeStatic,
+	kmgr, err := NewSimpleTestKeyManager(context.Background(), &signerapi.Config{
+		KeyStore: signerapi.StoreConfig{
+			Type: signerapi.KeyStoreTypeStatic,
 		},
 	})
 	require.NoError(t, err)

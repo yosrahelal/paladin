@@ -23,7 +23,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/api"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/stretchr/testify/assert"
@@ -35,16 +35,16 @@ func TestHDSigningStaticExample(t *testing.T) {
 
 	ctx := context.Background()
 	mnemonic := "extra monster happy tone improve slight duck equal sponsor fruit sister rate very bulb reopen mammal venture pull just motion faculty grab tenant kind"
-	sm, err := NewSigningModule(ctx, &api.Config{
-		KeyDerivation: api.KeyDerivationConfig{
-			Type:                  api.KeyDerivationTypeBIP32,
+	sm, err := NewSigningModule(ctx, &signerapi.Config{
+		KeyDerivation: signerapi.KeyDerivationConfig{
+			Type:                  signerapi.KeyDerivationTypeBIP32,
 			BIP44Prefix:           confutil.P(" m / 44' / 60' / 0' / 0 "), // we allow friendly spaces here
 			BIP44HardenedSegments: confutil.P(0),
 		},
-		KeyStore: api.StoreConfig{
-			Type: api.KeyStoreTypeStatic,
-			Static: api.StaticKeyStorageConfig{
-				Keys: map[string]api.StaticKeyEntryConfig{
+		KeyStore: signerapi.StoreConfig{
+			Type: signerapi.KeyStoreTypeStatic,
+			Static: signerapi.StaticKeyStorageConfig{
+				Keys: map[string]signerapi.StaticKeyEntryConfig{
 					"seed": {
 						Encoding: "none",
 						Inline:   mnemonic,
@@ -77,16 +77,16 @@ func TestHDSigningStaticExample(t *testing.T) {
 func TestHDSigningDirectResNoPrefix(t *testing.T) {
 
 	ctx := context.Background()
-	sm, err := NewSigningModule(ctx, &api.Config{
-		KeyDerivation: api.KeyDerivationConfig{
-			Type:                  api.KeyDerivationTypeBIP32,
+	sm, err := NewSigningModule(ctx, &signerapi.Config{
+		KeyDerivation: signerapi.KeyDerivationConfig{
+			Type:                  signerapi.KeyDerivationTypeBIP32,
 			BIP44Prefix:           confutil.P("m"),
 			BIP44HardenedSegments: confutil.P(0),
 			BIP44DirectResolution: true,
 		},
-		KeyStore: api.StoreConfig{
-			Type:       api.KeyStoreTypeFilesystem,
-			FileSystem: api.FileSystemConfig{Path: confutil.P(t.TempDir())},
+		KeyStore: signerapi.StoreConfig{
+			Type:       signerapi.KeyStoreTypeFilesystem,
+			FileSystem: signerapi.FileSystemConfig{Path: confutil.P(t.TempDir())},
 		},
 	})
 	require.NoError(t, err)
@@ -150,21 +150,21 @@ func TestHDSigningDefaultBehaviorOK(t *testing.T) {
 	mnemonic, err := bip39.NewMnemonic(entropy)
 	require.NoError(t, err)
 
-	sm, err := NewSigningModule(ctx, &api.Config{
-		KeyDerivation: api.KeyDerivationConfig{
-			Type: api.KeyDerivationTypeBIP32,
-			SeedKeyPath: api.ConfigKeyEntry{
+	sm, err := NewSigningModule(ctx, &signerapi.Config{
+		KeyDerivation: signerapi.KeyDerivationConfig{
+			Type: signerapi.KeyDerivationTypeBIP32,
+			SeedKeyPath: signerapi.ConfigKeyEntry{
 				Name:  "seed",
 				Index: 0,
-				Path: []api.ConfigKeyPathEntry{
+				Path: []signerapi.ConfigKeyPathEntry{
 					{Name: "custom", Index: 0},
 				},
 			},
 		},
-		KeyStore: api.StoreConfig{
-			Type: api.KeyStoreTypeStatic,
-			Static: api.StaticKeyStorageConfig{
-				Keys: map[string]api.StaticKeyEntryConfig{
+		KeyStore: signerapi.StoreConfig{
+			Type: signerapi.KeyStoreTypeStatic,
+			Static: signerapi.StaticKeyStorageConfig{
+				Keys: map[string]signerapi.StaticKeyEntryConfig{
 					"custom/seed": {
 						Encoding: "none",
 						Inline:   mnemonic,
@@ -233,13 +233,13 @@ func TestHDSigningDefaultBehaviorOK(t *testing.T) {
 func TestHDSigningInitFailDisabled(t *testing.T) {
 
 	ctx := context.Background()
-	_, err := NewSigningModule(ctx, &api.Config{
-		KeyDerivation: api.KeyDerivationConfig{
-			Type: api.KeyDerivationTypeBIP32,
+	_, err := NewSigningModule(ctx, &signerapi.Config{
+		KeyDerivation: signerapi.KeyDerivationConfig{
+			Type: signerapi.KeyDerivationTypeBIP32,
 		},
-		KeyStore: api.StoreConfig{
+		KeyStore: signerapi.StoreConfig{
 			DisableKeyLoading: true,
-			Type:              api.KeyStoreTypeStatic,
+			Type:              signerapi.KeyStoreTypeStatic,
 		},
 	})
 	assert.Regexp(t, "PD011408", err)
@@ -249,14 +249,14 @@ func TestHDSigningInitFailDisabled(t *testing.T) {
 func TestHDSigningInitFailBadMnemonic(t *testing.T) {
 
 	ctx := context.Background()
-	_, err := NewSigningModule(ctx, &api.Config{
-		KeyDerivation: api.KeyDerivationConfig{
-			Type: api.KeyDerivationTypeBIP32,
+	_, err := NewSigningModule(ctx, &signerapi.Config{
+		KeyDerivation: signerapi.KeyDerivationConfig{
+			Type: signerapi.KeyDerivationTypeBIP32,
 		},
-		KeyStore: api.StoreConfig{
-			Type: api.KeyStoreTypeStatic,
-			Static: api.StaticKeyStorageConfig{
-				Keys: map[string]api.StaticKeyEntryConfig{
+		KeyStore: signerapi.StoreConfig{
+			Type: signerapi.KeyStoreTypeStatic,
+			Static: signerapi.StaticKeyStorageConfig{
+				Keys: map[string]signerapi.StaticKeyEntryConfig{
 					"seed": {
 						Encoding: "none",
 						Inline:   "wrong",
@@ -278,17 +278,17 @@ func TestHDInitBadSeed(t *testing.T) {
 	mnemonic, err := bip39.NewMnemonic(entropy)
 	require.NoError(t, err)
 
-	_, err = NewSigningModule(ctx, &api.Config{
-		KeyDerivation: api.KeyDerivationConfig{
-			Type: api.KeyDerivationTypeBIP32,
-			SeedKeyPath: api.ConfigKeyEntry{
+	_, err = NewSigningModule(ctx, &signerapi.Config{
+		KeyDerivation: signerapi.KeyDerivationConfig{
+			Type: signerapi.KeyDerivationTypeBIP32,
+			SeedKeyPath: signerapi.ConfigKeyEntry{
 				Name: "missing",
 			},
 		},
-		KeyStore: api.StoreConfig{
-			Type: api.KeyStoreTypeStatic,
-			Static: api.StaticKeyStorageConfig{
-				Keys: map[string]api.StaticKeyEntryConfig{
+		KeyStore: signerapi.StoreConfig{
+			Type: signerapi.KeyStoreTypeStatic,
+			Static: signerapi.StaticKeyStorageConfig{
+				Keys: map[string]signerapi.StaticKeyEntryConfig{
 					"seed": {
 						Encoding: "none",
 						Inline:   mnemonic,
@@ -305,17 +305,17 @@ func TestHDInitGenSeed(t *testing.T) {
 
 	ctx := context.Background()
 
-	sm, err := NewSigningModule(ctx, &api.Config{
-		KeyDerivation: api.KeyDerivationConfig{
-			Type: api.KeyDerivationTypeBIP32,
-			SeedKeyPath: api.ConfigKeyEntry{
+	sm, err := NewSigningModule(ctx, &signerapi.Config{
+		KeyDerivation: signerapi.KeyDerivationConfig{
+			Type: signerapi.KeyDerivationTypeBIP32,
+			SeedKeyPath: signerapi.ConfigKeyEntry{
 				Name: "seed",
-				Path: []api.ConfigKeyPathEntry{{Name: "generate"}},
+				Path: []signerapi.ConfigKeyPathEntry{{Name: "generate"}},
 			},
 		},
-		KeyStore: api.StoreConfig{
-			Type: api.KeyStoreTypeFilesystem,
-			FileSystem: api.FileSystemConfig{
+		KeyStore: signerapi.StoreConfig{
+			Type: signerapi.KeyStoreTypeFilesystem,
+			FileSystem: signerapi.FileSystemConfig{
 				Path: confutil.P(t.TempDir()),
 			},
 		},

@@ -146,7 +146,7 @@ task test(type: Exec, dependsOn: [goGet, makeMocks]) {
 
 task buildCoverageTxt(type: Exec, dependsOn: [
         protoc,
-        // lint,
+        lint,
         test,
     ]) {
     inputs.files(fileTree(project.mkdir('coverage')) {
@@ -207,7 +207,7 @@ task buildStarterLibrary(type:Exec, dependsOn:[goGet]) {
 }
 
 task build {
-    // dependsOn lint
+    dependsOn lint
     dependsOn test
     dependsOn checkCoverage
     dependsOn buildStarterLibrary

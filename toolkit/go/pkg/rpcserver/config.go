@@ -17,8 +17,8 @@
 package rpcserver
 
 import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
 )
 
 const DefaultHTTPPort = 8645
@@ -30,18 +30,18 @@ var WSDefaults = WSEndpointConfig{
 }
 
 type HTTPEndpointConfig struct {
-	Disabled          bool `yaml:"disabled,omitempty"`
-	httpserver.Config `yaml:",inline"`
+	Disabled          bool `json:"disabled,omitempty"`
+	httpserver.Config `json:",inline"`
 }
 
 type WSEndpointConfig struct {
-	Disabled          bool `yaml:"disabled,omitempty"`
-	httpserver.Config `yaml:",inline"`
-	ReadBufferSize    *string `yaml:"readBufferSize"`
-	WriteBufferSize   *string `yaml:"writeBufferSize"`
+	Disabled          bool `json:"disabled,omitempty"`
+	httpserver.Config `json:",inline"`
+	ReadBufferSize    *string `json:"readBufferSize"`
+	WriteBufferSize   *string `json:"writeBufferSize"`
 }
 
 type Config struct {
-	HTTP HTTPEndpointConfig `yaml:"http,omitempty"`
-	WS   WSEndpointConfig   `yaml:"ws,omitempty"`
+	HTTP HTTPEndpointConfig `json:"http,omitempty"`
+	WS   WSEndpointConfig   `json:"ws,omitempty"`
 }

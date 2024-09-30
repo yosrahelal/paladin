@@ -19,7 +19,6 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"math/big"
 	"testing"
 	"time"
 
@@ -200,7 +199,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 		Function: *types.ZetoABI.Functions()["mint"],
 		Inputs: toJSON(t, &types.MintParams{
 			To:     controllerName,
-			Amount: tktypes.NewHexInteger(big.NewInt(10)),
+			Amount: tktypes.Int64ToInt256(10),
 		}),
 	}, false)
 	if rpcerr != nil {
@@ -211,7 +210,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	coins, err := s.domain.FindCoins(ctx, zetoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 1)
-	assert.Equal(t, int64(10), coins[0].Amount.Int64())
+	assert.Equal(t, int64(10), coins[0].Amount.Int().Int64())
 	assert.Equal(t, controllerName, coins[0].Owner)
 
 	log.L(ctx).Infof("Mint 20 from controller to controller")
@@ -221,7 +220,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 		Function: *types.ZetoABI.Functions()["mint"],
 		Inputs: toJSON(t, &types.MintParams{
 			To:     controllerName,
-			Amount: tktypes.NewHexInteger(big.NewInt(20)),
+			Amount: tktypes.Int64ToInt256(20),
 		}),
 	}, false)
 	if rpcerr != nil {
@@ -232,9 +231,9 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	coins, err = s.domain.FindCoins(ctx, zetoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 2)
-	assert.Equal(t, int64(10), coins[0].Amount.Int64())
+	assert.Equal(t, int64(10), coins[0].Amount.Int().Int64())
 	assert.Equal(t, controllerName, coins[0].Owner)
-	assert.Equal(t, int64(20), coins[1].Amount.Int64())
+	assert.Equal(t, int64(20), coins[1].Amount.Int().Int64())
 	assert.Equal(t, controllerName, coins[1].Owner)
 
 	log.L(ctx).Infof("Attempt mint from non-controller (should fail)")
@@ -244,7 +243,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 		Function: *types.ZetoABI.Functions()["mint"],
 		Inputs: toJSON(t, &types.MintParams{
 			To:     recipient1Name,
-			Amount: tktypes.NewHexInteger(big.NewInt(10)),
+			Amount: tktypes.Int64ToInt256(10),
 		}),
 	}, false)
 	require.NotNil(t, rpcerr)
@@ -261,7 +260,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 		Function: *types.ZetoABI.Functions()["transfer"],
 		Inputs: toJSON(t, &types.TransferParams{
 			To:     recipient1Name,
-			Amount: tktypes.NewHexInteger(big.NewInt(25)),
+			Amount: tktypes.Int64ToInt256(25),
 		}),
 	}, true)
 	if rpcerr != nil {

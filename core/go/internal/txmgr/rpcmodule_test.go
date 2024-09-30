@@ -25,6 +25,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
@@ -36,7 +37,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*Config, *mockComponents)) (context.Context, string, *txManager, func()) {
+func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*config.TxManagerConfig, *mockComponents)) (context.Context, string, *txManager, func()) {
 	ctx, txm, txmDone := newTestTransactionManager(t, true, init...)
 
 	rpcServer, err := rpcserver.NewRPCServer(ctx, &rpcserver.Config{

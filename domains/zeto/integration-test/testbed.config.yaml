@@ -2,12 +2,12 @@ nodeName: node1
 db:
   # type: sqlite
   # sqlite:
-  #   uri: ':memory:'
+  #   dsn: ':memory:'
   #   autoMigrate: true
-  #   migrationsDir: '../../../core/go/db/migrations/sqlite'
+  #   migrationsDir: '../../../../core/go/db/migrations/sqlite'
   type: postgres
   postgres:
-    uri: 'postgres://postgres:my-secret@localhost:5432/postgres?sslmode=disable'
+    dsn: 'postgres://postgres:my-secret@localhost:5432/postgres?sslmode=disable'
     autoMigrate: true
     migrationsDir: '../../../core/go/db/migrations/postgres'
     debugQueries: false
@@ -24,6 +24,8 @@ blockchain:
   ws:
     url: ws://localhost:8546
     initialConnectAttempts: 25
+log:
+  level: info
 signer:
   keyDerivation:
     type: 'bip32'
@@ -32,6 +34,7 @@ signer:
     snarkProver:
       circuitsDir: ../zkp
       provingKeysDir: ../zkp
+      maxProverPerCircuit: 1
     static:
       keys:
         seed:

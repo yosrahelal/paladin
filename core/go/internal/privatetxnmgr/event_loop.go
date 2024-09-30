@@ -26,12 +26,12 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
 type OrchestratorState string
@@ -106,7 +106,7 @@ func NewOrchestrator(
 	ctx context.Context,
 	nodeID string,
 	contractAddress tktypes.EthAddress,
-	oc *OrchestratorConfig,
+	oc *config.PrivateTxManagerOrchestratorConfig,
 	allComponents components.PreInitComponentsAndManagers,
 	domainAPI components.DomainSmartContract,
 	sequencer ptmgrtypes.Sequencer,
@@ -119,19 +119,19 @@ func NewOrchestrator(
 		ctx:                  log.WithLogField(ctx, "role", fmt.Sprintf("orchestrator-%s", contractAddress)),
 		initiated:            time.Now(),
 		contractAddress:      contractAddress,
-		evalInterval:         confutil.DurationMin(oc.EvaluationInterval, 1*time.Millisecond, *orchestratorConfigDefault.EvaluationInterval),
-		maxConcurrentProcess: confutil.Int(oc.MaxConcurrentProcess, *orchestratorConfigDefault.MaxConcurrentProcess),
+		evalInterval:         confutil.DurationMin(oc.EvaluationInterval, 1*time.Millisecond, *config.PrivateTxManagerDefaults.Orchestrator.EvaluationInterval),
+		maxConcurrentProcess: confutil.Int(oc.MaxConcurrentProcess, *config.PrivateTxManagerDefaults.Orchestrator.MaxConcurrentProcess),
 		state:                OrchestratorStateNew,
 		stateEntryTime:       time.Now(),
 
 		incompleteTxSProcessMap: make(map[string]ptmgrtypes.TxProcessor),
-		persistenceRetryTimeout: confutil.DurationMin(oc.PersistenceRetryTimeout, 1*time.Millisecond, *orchestratorConfigDefault.PersistenceRetryTimeout),
+		persistenceRetryTimeout: confutil.DurationMin(oc.PersistenceRetryTimeout, 1*time.Millisecond, *config.PrivateTxManagerDefaults.Orchestrator.PersistenceRetryTimeout),
 
-		staleTimeout:                 confutil.DurationMin(oc.StaleTimeout, 1*time.Millisecond, *orchestratorConfigDefault.StaleTimeout),
+		staleTimeout:                 confutil.DurationMin(oc.StaleTimeout, 1*time.Millisecond, *config.PrivateTxManagerDefaults.Orchestrator.StaleTimeout),
 		processedTxIDs:               make(map[string]bool),
 		orchestrationEvalRequestChan: make(chan bool, 1),
 		stopProcess:                  make(chan bool, 1),
-		pendingEvents:                make(chan ptmgrtypes.PrivateTransactionEvent, *orchestratorConfigDefault.MaxPendingEvents),
+		pendingEvents:                make(chan ptmgrtypes.PrivateTransactionEvent, *config.PrivateTxManagerDefaults.Orchestrator.MaxPendingEvents),
 		nodeID:                       nodeID,
 		domainAPI:                    domainAPI,
 		sequencer:                    sequencer,

@@ -57,22 +57,22 @@ type Zeto struct {
 }
 
 type MintEvent struct {
-	Outputs []tktypes.HexInteger `json:"outputs"`
+	Outputs []tktypes.HexUint256 `json:"outputs"`
 	Data    tktypes.HexBytes     `json:"data"`
 }
 
 type TransferEvent struct {
-	Inputs  []tktypes.HexInteger `json:"inputs"`
-	Outputs []tktypes.HexInteger `json:"outputs"`
+	Inputs  []tktypes.HexUint256 `json:"inputs"`
+	Outputs []tktypes.HexUint256 `json:"outputs"`
 	Data    tktypes.HexBytes     `json:"data"`
 }
 
 type TransferWithEncryptedValuesEvent struct {
-	Inputs          []tktypes.HexInteger `json:"inputs"`
-	Outputs         []tktypes.HexInteger `json:"outputs"`
+	Inputs          []tktypes.HexUint256 `json:"inputs"`
+	Outputs         []tktypes.HexUint256 `json:"outputs"`
 	Data            tktypes.HexBytes     `json:"data"`
-	EncryptionNonce tktypes.HexInteger   `json:"encryptionNonce"`
-	EncryptedValues []tktypes.HexInteger `json:"encryptedValues"`
+	EncryptionNonce tktypes.HexUint256   `json:"encryptionNonce"`
+	EncryptedValues []tktypes.HexUint256 `json:"encryptedValues"`
 }
 
 func New(callbacks plugintk.DomainCallbacks) *Zeto {
@@ -164,7 +164,7 @@ func (z *Zeto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 
 	deployParams := &types.DeployParams{
 		TransactionID: req.Transaction.TransactionId,
-		Data:          ethtypes.HexBytes0xPrefix(encoded),
+		Data:          tktypes.HexBytes(encoded),
 		TokenName:     initParams.TokenName,
 		InitialOwner:  req.ResolvedVerifiers[0].Verifier, // TODO: allow the initial owner to be specified by the deploy request
 	}
@@ -387,7 +387,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 	return &res, nil
 }
 
-func (z *Zeto) updateMerkleTree(txID tktypes.HexBytes, tokenName string, address tktypes.EthAddress, output []tktypes.HexInteger) ([]*prototk.NewLocalState, error) {
+func (z *Zeto) updateMerkleTree(txID tktypes.HexBytes, tokenName string, address tktypes.EthAddress, output []tktypes.HexUint256) ([]*prototk.NewLocalState, error) {
 	var newStates []*prototk.NewLocalState
 	for _, out := range output {
 		states, err := z.addOutputToMerkleTree(txID, tokenName, address, out)
@@ -399,13 +399,13 @@ func (z *Zeto) updateMerkleTree(txID tktypes.HexBytes, tokenName string, address
 	return newStates, nil
 }
 
-func (z *Zeto) addOutputToMerkleTree(txID tktypes.HexBytes, tokenName string, address tktypes.EthAddress, output tktypes.HexInteger) ([]*prototk.NewLocalState, error) {
+func (z *Zeto) addOutputToMerkleTree(txID tktypes.HexBytes, tokenName string, address tktypes.EthAddress, output tktypes.HexUint256) ([]*prototk.NewLocalState, error) {
 	smtName := smt.MerkleTreeName(tokenName, address.Address0xHex())
 	storage, tree, err := smt.New(z.Callbacks, smtName, address.Address0xHex(), z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create Merkle tree for %s: %s", smtName, err)
 	}
-	idx, err := node.NewNodeIndexFromBigInt(output.BigInt())
+	idx, err := node.NewNodeIndexFromBigInt(output.Int())
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create node index for %s: %s", output.String(), err)
 	}
@@ -447,7 +447,7 @@ func decodeTransactionData(data tktypes.HexBytes) (txID tktypes.HexBytes) {
 	return data[4:]
 }
 
-func parseStatesFromEvent(txID tktypes.HexBytes, states []tktypes.HexInteger) []*prototk.StateUpdate {
+func parseStatesFromEvent(txID tktypes.HexBytes, states []tktypes.HexUint256) []*prototk.StateUpdate {
 	refs := make([]*prototk.StateUpdate, len(states))
 	for i, state := range states {
 		refs[i] = &prototk.StateUpdate{

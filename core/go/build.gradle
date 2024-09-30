@@ -481,7 +481,7 @@ task testcov(type: Exec, dependsOn: [test, aggregateCoverage]) {
 }
 
 task build {
-    // dependsOn lint
+    dependsOn lint
     dependsOn test
     dependsOn aggregateCoverage
     dependsOn checkCoverage

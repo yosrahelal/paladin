@@ -22,15 +22,15 @@ import (
 )
 
 type Config struct {
-	TLS                   tlsconf.Config `yaml:"tls"`
-	CORS                  CORSConfig     `yaml:"cors"`
-	Address               *string        `yaml:"address"`
-	Port                  *int           `yaml:"port"`
-	DefaultRequestTimeout *string        `yaml:"defaultRequestTimeout"`
-	MaxRequestTimeout     *string        `yaml:"maxRequestTimeout"`
-	ReadTimeout           *string        `yaml:"readTimeout"`
-	WriteTimeout          *string        `yaml:"writeTimeout"`
-	ShutdownTimeout       *string        `yaml:"shutdownTimeout"`
+	TLS                   tlsconf.Config `json:"tls"`
+	CORS                  CORSConfig     `json:"cors"`
+	Address               *string        `json:"address"`
+	Port                  *int           `json:"port"`
+	DefaultRequestTimeout *string        `json:"defaultRequestTimeout"`
+	MaxRequestTimeout     *string        `json:"maxRequestTimeout"`
+	ReadTimeout           *string        `json:"readTimeout"`
+	WriteTimeout          *string        `json:"writeTimeout"`
+	ShutdownTimeout       *string        `json:"shutdownTimeout"`
 }
 
 var HTTPDefaults = &Config{
@@ -41,11 +41,11 @@ var HTTPDefaults = &Config{
 }
 
 type CORSConfig struct {
-	Enabled          bool     `yaml:"enabled"`
-	Debug            bool     `yaml:"debug"`
-	AllowCredentials *bool    `yaml:"allowCredentials"`
-	AllowedHeaders   []string `yaml:"allowedHeaders"`
-	AllowedMethods   []string `yaml:"allowedMethods"`
-	AllowedOrigins   []string `yaml:"allowedOrigins"`
-	MaxAge           *string  `yaml:"maxAge"`
+	Enabled          bool     `json:"enabled"`
+	Debug            bool     `json:"debug"`
+	AllowCredentials *bool    `json:"allowCredentials"`
+	AllowedHeaders   []string `json:"allowedHeaders"`
+	AllowedMethods   []string `json:"allowedMethods"`
+	AllowedOrigins   []string `json:"allowedOrigins"`
+	MaxAge           *string  `json:"maxAge"`
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -35,48 +36,6 @@ import (
 // Balance manager is a component that provides the following services
 // - retrieve the balance of a given address either from the node or from the cache
 // - handle auto fueling requests when the feature is turned on
-
-type BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethod string
-
-const (
-	BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethodMin     BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethod = "min"
-	BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethodAverage BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethod = "avg"
-	BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethodMax     BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethod = "max"
-)
-
-type BalanceManagerConfig struct {
-	Cache       cache.Config      `yaml:"cache"`
-	AutoFueling AutoFuelingConfig `yaml:"autoFueling"`
-}
-
-type AutoFuelingConfig struct {
-	Source                           *string `yaml:"source"` // key resolution string
-	SourceAddressMinBalance          *string `yaml:"sourceAddressMinBalance"`
-	ProactiveFuelingTransactionTotal *int    `yaml:"proactiveFuelingTransactionTotal"`
-	ProactiveCostEstimationMethod    *string `yaml:"proactiveCostEstimationMethod"`
-	MinDestBalance                   *string `yaml:"minDestBalance"`
-	MaxDestBalance                   *string `yaml:"maxDestBalance"`
-	MinThreshold                     *string `yaml:"minThreshold"`
-}
-
-var DefaultBalanceManagerConfig = &BalanceManagerConfig{
-	Cache: cache.Config{
-		Capacity: confutil.P(100),
-		// TODO: Enable a KB based cache with TTL in Paladin
-		// Enabled:  confutil.P(true),
-		// Size:     confutil.P("5m"),
-		// TTL:      confutil.P("30s"),
-	},
-	AutoFueling: AutoFuelingConfig{
-		Source:                           nil,
-		SourceAddressMinBalance:          nil,
-		ProactiveFuelingTransactionTotal: confutil.P(1),
-		ProactiveCostEstimationMethod:    confutil.P(string(BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethodMax)),
-		MinDestBalance:                   nil,
-		MaxDestBalance:                   nil,
-		MinThreshold:                     nil,
-	},
-}
 
 type BalanceManagerWithInMemoryTracking struct {
 	// ethClient APIs are used to fetch information on chain
@@ -101,7 +60,7 @@ type BalanceManagerWithInMemoryTracking struct {
 	// to fill the extra slots
 	proactiveFuelingTransactionTotal int
 	// the base to be used by the multiplier
-	proactiveFuelingTransactionTotalEmptySlotCostCalcMethod BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethod
+	proactiveFuelingCalcMethod config.ProactiveAutoFuelingCalcMethod
 
 	// if set, the destination account will at least be topped up to this amount for any fueling tx
 	minDestBalance *big.Int
@@ -149,12 +108,12 @@ func (af *BalanceManagerWithInMemoryTracking) TopUpAccount(ctx context.Context, 
 			// when we don't have enough (minimum fuel ahead) number of transactions
 			// we use the configured calculation methods to calculate the value for the empty slots to fill
 			extraFillAmountInt := big.NewInt(int64(af.proactiveFuelingTransactionTotal - addAccount.SpentTransactionCount))
-			switch af.proactiveFuelingTransactionTotalEmptySlotCostCalcMethod {
-			case BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethodMin:
+			switch af.proactiveFuelingCalcMethod {
+			case config.ProactiveAutoFuelingCalcMethodMin:
 				topUpAmount = topUpAmount.Add(topUpAmount, addAccount.MinCost.Mul(addAccount.MinCost, extraFillAmountInt))
-			case BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethodMax:
+			case config.ProactiveAutoFuelingCalcMethodMax:
 				topUpAmount = topUpAmount.Add(topUpAmount, addAccount.MaxCost.Mul(addAccount.MaxCost, extraFillAmountInt))
-			case BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethodAverage:
+			case config.ProactiveAutoFuelingCalcMethodAverage:
 				spentTransactionCountBigInt := big.NewInt(int64(addAccount.SpentTransactionCount))
 				spentCopy = new(big.Int).Set(addAccount.Spent)
 				avgAmount := spentCopy.Div(spentCopy, spentTransactionCountBigInt)
@@ -340,7 +299,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 	return fuelingTx, nil
 }
 
-func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf *Config, ethClient ethclient.EthClient, publicTxMgr *pubTxManager) (_ BalanceManager, err error) {
+func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf *config.PublicTxManagerConfig, ethClient ethclient.EthClient, publicTxMgr *pubTxManager) (_ BalanceManager, err error) {
 
 	minSourceBalance := confutil.BigIntOrNil(conf.BalanceManager.AutoFueling.MinDestBalance)
 	minDestBalance := confutil.BigIntOrNil(conf.BalanceManager.AutoFueling.MinDestBalance)
@@ -372,17 +331,17 @@ func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf *Config, et
 			return nil, i18n.WrapError(ctx, err, msgs.MsgInvalidAutoFuelSource, autoFuelingSource)
 		}
 	}
-	calcMethod := confutil.StringNotEmpty(conf.BalanceManager.AutoFueling.ProactiveCostEstimationMethod, string(BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethodMax))
+	calcMethod := confutil.StringNotEmpty(conf.BalanceManager.AutoFueling.ProactiveCostEstimationMethod, string(config.ProactiveAutoFuelingCalcMethodMax))
 	log.L(ctx).Debugf("Balance manager calcMethod setting: %s", calcMethod)
 	bm := &BalanceManagerWithInMemoryTracking{
-		source:                           autoFuelingSource,
-		sourceAddress:                    autoFuelingSourceAddress,
-		ethClient:                        ethClient,
-		pubTxMgr:                         publicTxMgr,
-		balanceCache:                     cache.NewCache[tktypes.EthAddress, *big.Int](&conf.BalanceManager.Cache, &DefaultConfig.BalanceManager.Cache),
-		minSourceBalance:                 minSourceBalance,
-		proactiveFuelingTransactionTotal: confutil.IntMin(conf.BalanceManager.AutoFueling.ProactiveFuelingTransactionTotal, 0, *DefaultConfig.BalanceManager.AutoFueling.ProactiveFuelingTransactionTotal),
-		proactiveFuelingTransactionTotalEmptySlotCostCalcMethod: BalanceManagerAutoFuelingProactiveFuelingTransactionTotalEmptySlotCostCalcMethod(calcMethod),
+		source:                             autoFuelingSource,
+		sourceAddress:                      autoFuelingSourceAddress,
+		ethClient:                          ethClient,
+		pubTxMgr:                           publicTxMgr,
+		balanceCache:                       cache.NewCache[tktypes.EthAddress, *big.Int](&conf.BalanceManager.Cache, &config.PublicTxManagerDefaults.BalanceManager.Cache),
+		minSourceBalance:                   minSourceBalance,
+		proactiveFuelingTransactionTotal:   confutil.IntMin(conf.BalanceManager.AutoFueling.ProactiveFuelingTransactionTotal, 0, *config.PublicTxManagerDefaults.BalanceManager.AutoFueling.ProactiveFuelingTransactionTotal),
+		proactiveFuelingCalcMethod:         config.ProactiveAutoFuelingCalcMethod(calcMethod),
 		minDestBalance:                     minDestBalance,
 		maxDestBalance:                     maxDestBalance,
 		minThreshold:                       minThreshold,

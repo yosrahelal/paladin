@@ -39,7 +39,7 @@ func (h *mintHandler) ValidateParams(ctx context.Context, params string) (interf
 	if mintParams.To == "" {
 		return nil, fmt.Errorf("parameter 'to' is required")
 	}
-	if mintParams.Amount.BigInt().Sign() != 1 {
+	if mintParams.Amount.Int().Sign() != 1 {
 		return nil, fmt.Errorf("parameter 'amount' must be greater than 0")
 	}
 	return &mintParams, nil

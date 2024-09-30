@@ -26,10 +26,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	coreProto "github.com/kaleido-io/paladin/core/pkg/proto"
@@ -1080,12 +1080,12 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 		assert.NoError(t, err)
 	}).Maybe().Return(nil)
 
-	e := NewPrivateTransactionMgr(ctx, tktypes.RandHex(16), &Config{
-		Writer: flushwriter.Config{
+	e := NewPrivateTransactionMgr(ctx, tktypes.RandHex(16), &config.PrivateTxManagerConfig{
+		Writer: config.FlushWriterConfig{
 			WorkerCount:  confutil.P(1),
 			BatchMaxSize: confutil.P(1), // we don't want batching for our test
 		},
-		Orchestrator: OrchestratorConfig{
+		Orchestrator: config.PrivateTxManagerOrchestratorConfig{
 			// StaleTimeout: ,
 		},
 	})

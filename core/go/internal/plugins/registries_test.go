@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
@@ -52,10 +53,10 @@ func registryHeaderAccessor(msg *prototk.RegistryMessage) *prototk.Header {
 
 func (tp *testRegistryManager) mock(t *testing.T) *componentmocks.RegistryManager {
 	mdm := componentmocks.NewRegistryManager(t)
-	pluginMap := make(map[string]*components.PluginConfig)
+	pluginMap := make(map[string]*config.PluginConfig)
 	for name := range tp.registries {
-		pluginMap[name] = &components.PluginConfig{
-			Type:    components.LibraryTypeCShared.Enum(),
+		pluginMap[name] = &config.PluginConfig{
+			Type:    config.LibraryTypeCShared.Enum(),
 			Library: "/tmp/not/applicable",
 		}
 	}

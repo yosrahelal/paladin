@@ -32,7 +32,7 @@ func NewUnitTestPersistence(ctx context.Context) (Persistence, func(), error) {
 		Type: "sqlite",
 		SQLite: SQLiteConfig{
 			SQLDBConfig: SQLDBConfig{
-				URI:           ":memory:",
+				DSN:           ":memory:",
 				AutoMigrate:   confutil.P(true),
 				MigrationsDir: "../../db/migrations/sqlite",
 				DebugQueries:  true,

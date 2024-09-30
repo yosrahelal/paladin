@@ -48,9 +48,6 @@ func (h *transferHandler) ValidateParams(ctx context.Context, params string) (in
 	if transferParams.To == "" {
 		return nil, fmt.Errorf("parameter 'to' is required")
 	}
-	if transferParams.Amount.BigInt().Sign() != 1 {
-		return nil, fmt.Errorf("parameter 'amount' must be greater than 0")
-	}
 	return &transferParams, nil
 }
 
@@ -100,9 +97,9 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare outputs. %s", err)
 	}
-	if total.Cmp(params.Amount.BigInt()) == 1 {
-		remainder := big.NewInt(0).Sub(total, params.Amount.BigInt())
-		returnedCoins, returnedStates, err := h.zeto.prepareOutputs(tx.Transaction.From, senderKey, tktypes.NewHexInteger(remainder))
+	if total.Cmp(params.Amount.Int()) == 1 {
+		remainder := big.NewInt(0).Sub(total, params.Amount.Int())
+		returnedCoins, returnedStates, err := h.zeto.prepareOutputs(tx.Transaction.From, senderKey, (*tktypes.HexUint256)(remainder))
 		if err != nil {
 			return nil, fmt.Errorf("failed to prepare outputs for change coins. %s", err)
 		}
@@ -110,7 +107,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 		outputStates = append(outputStates, returnedStates...)
 	}
 
-	payloadBytes, err := h.formatProvingRequest(inputCoins, outputCoins, tx.DomainConfig.CircuitId, tx.DomainConfig.TokenName, tx.ContractAddress)
+	payloadBytes, err := h.formatProvingRequest(inputCoins, outputCoins, tx.DomainConfig.CircuitId, tx.DomainConfig.TokenName, ethtypes.MustNewAddress(req.Transaction.ContractAddress))
 	if err != nil {
 		return nil, fmt.Errorf("failed to format proving request. %s", err)
 	}
@@ -237,9 +234,9 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 	for i := 0; i < INPUT_COUNT; i++ {
 		if i < len(inputCoins) {
 			coin := inputCoins[i]
-			inputCommitments[i] = coin.Hash.BigInt().Text(16)
-			inputValueInts[i] = coin.Amount.Uint64()
-			inputSalts[i] = coin.Salt.BigInt().Text(16)
+			inputCommitments[i] = coin.Hash.Int().Text(16)
+			inputValueInts[i] = coin.Amount.Int().Uint64()
+			inputSalts[i] = coin.Salt.Int().Text(16)
 		} else {
 			inputCommitments[i] = "0"
 			inputSalts[i] = "0"
@@ -252,8 +249,8 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 	for i := 0; i < OUTPUT_COUNT; i++ {
 		if i < len(outputCoins) {
 			coin := outputCoins[i]
-			outputValueInts[i] = coin.Amount.Uint64()
-			outputSalts[i] = coin.Salt.BigInt().Text(16)
+			outputValueInts[i] = coin.Amount.Int().Uint64()
+			outputSalts[i] = coin.Salt.Int().Text(16)
 			outputOwners[i] = coin.OwnerKey.String()
 		} else {
 			outputSalts[i] = "0"
@@ -317,11 +314,12 @@ func (h *transferHandler) generatMerkleProofs(tokenName string, contractAddress 
 	// and generate a merkle proof for each
 	var indexes []*big.Int
 	for _, coin := range inputCoins {
-		pubKey, err := coin.OwnerKey.Decompress()
+		compressedKey := babyjub.PublicKeyComp(coin.OwnerKey)
+		pubKey, err := compressedKey.Decompress()
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to decompress owner key. %s", err)
 		}
-		idx := node.NewFungible(coin.Amount.BigInt(), pubKey, coin.Salt.BigInt())
+		idx := node.NewFungible(coin.Amount.Int(), pubKey, coin.Salt.Int())
 		leaf, err := node.NewLeafNode(idx)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create new leaf node. %s", err)
@@ -332,7 +330,7 @@ func (h *transferHandler) generatMerkleProofs(tokenName string, contractAddress 
 			// e.g because the transaction event hasn't been processed yet
 			return nil, nil, fmt.Errorf("failed to query the smt DB for leaf node (index=%s). %s", leaf.Index().Hex(), err)
 		}
-		if n.Index().BigInt().Cmp(coin.Hash.BigInt()) != 0 {
+		if n.Index().BigInt().Cmp(coin.Hash.Int()) != 0 {
 			return nil, nil, fmt.Errorf("coin %s has not been indexed", coin.Hash.String())
 		}
 		indexes = append(indexes, n.Index().BigInt())

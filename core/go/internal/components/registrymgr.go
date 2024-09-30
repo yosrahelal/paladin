@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 )
 
@@ -35,7 +36,7 @@ type RegistryManagerToRegistry interface {
 
 type RegistryManager interface {
 	ManagerLifecycle
-	ConfiguredRegistries() map[string]*PluginConfig
+	ConfiguredRegistries() map[string]*config.PluginConfig
 	RegistryRegistered(name string, id uuid.UUID, toRegistry RegistryManagerToRegistry) (fromRegistry plugintk.RegistryCallbacks, err error)
 	GetNodeTransports(ctx context.Context, node string) ([]*RegistryNodeTransportEntry, error)
 }
