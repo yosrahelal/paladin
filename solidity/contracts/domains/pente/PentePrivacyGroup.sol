@@ -15,8 +15,15 @@ import {IPente} from "../interfaces/IPente.sol";
 ///      - TODO: Spending privacy group / account states on accounts in other other privacy groups atomically
 ///
 contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
+    string private constant TRANSITION_TYPE =
+        "Transition(bytes32[] inputs,bytes32[] reads,bytes32[] outputs,ExternalCall[] externalCalls)";
+    string private constant EXTERNALCALL_TYPE =
+        "ExternalCall(address contractAddress,bytes encodedCall)";
     bytes32 private constant TRANSITION_TYPEHASH =
-        keccak256("Transition(bytes32[] inputs,bytes32[] reads,bytes32[] outputs)");
+        keccak256(abi.encodePacked(TRANSITION_TYPE, EXTERNALCALL_TYPE));
+    bytes32 private constant EXTERNALCALL_TYPEHASH =
+        keccak256(abi.encodePacked(EXTERNALCALL_TYPE));
+
     bytes32 private constant UPGRADE_TYPEHASH =
         keccak256("Upgrade(address address)");
 
@@ -89,10 +96,15 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
         bytes32[] calldata inputs,
         bytes32[] calldata reads,
         bytes32[] calldata outputs,
-        bytes[] calldata signatures,
-        ExternalCall[] calldata externalCalls
+        ExternalCall[] calldata externalCalls,
+        bytes[] calldata signatures
     ) public {
-        bytes32 transitionHash = _buildTransitionHash(inputs, reads, outputs);
+        bytes32 transitionHash = _buildTransitionHash(
+            inputs,
+            reads,
+            outputs,
+            externalCalls
+        );
         validateEndorsements(transitionHash, signatures);
 
         // Perform the state transitions
@@ -129,17 +141,35 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
     function _buildTransitionHash(
         bytes32[] calldata inputs,
         bytes32[] calldata reads,
-        bytes32[] calldata outputs
+        bytes32[] calldata outputs,
+        ExternalCall[] calldata externalCalls
     ) internal view returns (bytes32) {
         bytes32 structHash = keccak256(
             abi.encode(
                 TRANSITION_TYPEHASH,
                 keccak256(abi.encodePacked(inputs)),
                 keccak256(abi.encodePacked(reads)),
-                keccak256(abi.encodePacked(outputs))
+                keccak256(abi.encodePacked(outputs)),
+                _buildExternalCallsHash(externalCalls)
             )
         );
         return _hashTypedDataV4(structHash);
+    }
+
+    function _buildExternalCallsHash(
+        ExternalCall[] calldata externalCalls
+    ) internal pure returns (bytes32) {
+        bytes32[] memory hashes = new bytes32[](externalCalls.length);
+        for (uint i = 0; i < externalCalls.length; i++) {
+            hashes[i] = keccak256(
+                abi.encode(
+                    EXTERNALCALL_TYPEHASH,
+                    externalCalls[i].contractAddress,
+                    keccak256(externalCalls[i].encodedCall)
+                )
+            );
+        }
+        return keccak256(abi.encodePacked(hashes));
     }
 
     function _buildUpgradeHash(

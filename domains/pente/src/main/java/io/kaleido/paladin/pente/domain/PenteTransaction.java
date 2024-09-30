@@ -407,6 +407,11 @@ class PenteTransaction {
         return lookups;
     }
 
+    record EVMExternalCall(
+            org.hyperledger.besu.datatypes.Address contractAddress,
+            byte[] encodedCall
+    ) {}
+
     record EVMExecutionResult(
             EVMRunner evm,
             org.hyperledger.besu.datatypes.Address senderAddress,
@@ -452,13 +457,18 @@ class PenteTransaction {
         );
     }
 
-    byte[] eip712TypedDataEndorsementPayload(List<String> inputs, List<String> reads, List<String> outputs) throws IOException, ExecutionException, InterruptedException {
+    byte[] eip712TypedDataEndorsementPayload(List<String> inputs, List<String> reads, List<String> outputs, List<EVMExternalCall> externalCalls) throws IOException, ExecutionException, InterruptedException {
         var typedDataRequest = new HashMap<String, Object>(){{
             put("types", new HashMap<String, Object>(){{
                 put("Transition", new ArrayDeque<Map<String, Object>>(){{
                     add(new HashMap<>(){{put("name", "inputs"); put("type", "bytes32[]");}});
                     add(new HashMap<>(){{put("name", "reads"); put("type", "bytes32[]");}});
                     add(new HashMap<>(){{put("name", "outputs"); put("type", "bytes32[]");}});
+                    add(new HashMap<>(){{put("name", "externalCalls"); put("type", "ExternalCall[]");}});
+                }});
+                put("ExternalCall", new ArrayDeque<Map<String, Object>>(){{
+                    add(new HashMap<>(){{put("name", "contractAddress"); put("type", "address");}});
+                    add(new HashMap<>(){{put("name", "encodedCall"); put("type", "bytes");}});
                 }});
                 put("EIP712Domain", new ArrayDeque<Map<String, Object>>(){{
                     add(new HashMap<>(){{put("name", "name"); put("type", "string");}});
@@ -478,6 +488,7 @@ class PenteTransaction {
                 put("inputs", inputs);
                 put("reads", reads);
                 put("outputs", outputs);
+                put("externalCalls", externalCalls);
             }});
         }};
         var encoded = domain.encodeData(FromDomain.EncodeDataRequest.newBuilder().

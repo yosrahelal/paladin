@@ -322,7 +322,8 @@ public class PenteDomain extends DomainInstance {
             var endorsementPayload = tx.eip712TypedDataEndorsementPayload(
                 request.getInputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
                 request.getReadsList().stream().map(ToDomain.EndorsableState::getId).toList(),
-                request.getOutputsList().stream().map(ToDomain.EndorsableState::getId).toList()
+                request.getOutputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
+                new ArrayList<PenteTransaction.EVMExternalCall>()
             );
 
             // Ok - we are happy to add our endorsement signature
@@ -353,12 +354,12 @@ public class PenteDomain extends DomainInstance {
                 put("inputs", request.getInputStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
                 put("reads", request.getReadStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
                 put("outputs", request.getOutputStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
+                put("externalCalls", new ArrayList<PenteTransaction.EVMExternalCall>());
                 put("signatures", request.getAttestationResultList().stream().
                         filter(r -> r.getAttestationType() == ToDomain.AttestationType.ENDORSE).
                         map(r -> JsonHex.wrap(r.getPayload().toByteArray())).
                         toList()
                 );
-                put("externalCalls", new String[]{});
             }};
             var transitionFunctionABI = config.getPrivacyGroupABI().getABIEntry("function", "transition").toJSON(false);
             var preparedTx = ToDomain.BaseLedgerTransaction.newBuilder().
