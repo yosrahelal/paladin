@@ -65,7 +65,6 @@ jobs:
           test -f build/domains/pente.jar || (echo "pente.jar not found" && exit 1)
   
   image-build:
-    needs: build
     runs-on: ubuntu-latest
     env:
       IMAGE_REGISTRY: kaleido.io  # just a placeholder

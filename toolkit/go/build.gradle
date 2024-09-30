@@ -113,7 +113,7 @@ task makeMocks(type: Mockery, dependsOn: [":installMockery", protoc, goGet]) {
     }
 }
 
-task lint(type: Exec, dependsOn:[protoc, makeMocks]) {
+task lint(type: Exec, dependsOn:[protoc, makeMocks, ":installGolangCILint"]) {
     workingDir '.'
 
     helpers.lockResource(it, "lint.lock")
