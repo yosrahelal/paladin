@@ -40,6 +40,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
@@ -50,6 +51,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tyler-smith/go-bip39"
 	"gorm.io/gorm"
 	"sigs.k8s.io/yaml"
 )
@@ -351,6 +353,15 @@ func newInstanceForComponentTesting(t *testing.T) (*componentTestInstance, compo
 		},
 		Config:          map[string]any{"some": "config"},
 		RegistryAddress: domainRegistryAddress.String(),
+	}
+
+	entropy, _ := bip39.NewEntropy(256)
+	mnemonic, _ := bip39.NewMnemonic(entropy)
+	i.conf.Signer.KeyStore.Static.Keys = map[string]signerapi.StaticKeyEntryConfig{
+		"seed": {
+			Encoding: "none",
+			Inline:   mnemonic,
+		},
 	}
 
 	var pl plugins.UnitTestPluginLoader
