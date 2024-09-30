@@ -25,6 +25,7 @@ import io.kaleido.paladin.toolkit.JsonHex.Address;
 import io.kaleido.paladin.toolkit.JsonHex.Bytes32;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.tuweni.bytes.Bytes;
 import org.web3j.abi.TypeDecoder;
 import org.web3j.abi.TypeEncoder;
 import org.web3j.abi.TypeReference;
@@ -51,6 +52,11 @@ public class PenteConfiguration {
 
     private final JsonABI interfaceABI;
 
+    private final JsonABI externalCallABI;
+
+    // Topic generated from event "PenteExternalCall(address,bytes)"
+    private final Bytes externalCallTopic = Bytes.fromHexString("0xcac03685d5ba4ab3e1465a8ee1b2bb21094ddbd612a969fd34f93a5be7a0ac4f");
+
     private final String transferSignature = "event UTXOTransfer(bytes32 txId, bytes32[] inputs, bytes32[] outputs, bytes data)";
 
     private long chainId;
@@ -71,6 +77,9 @@ public class PenteConfiguration {
                     "abi");
             interfaceABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
                     "contracts/domains/interfaces/IPente.sol/IPente.json",
+                    "abi");
+            externalCallABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
+                    "contracts/private/interfaces/IPenteExternalCall.sol/IPenteExternalCall.json",
                     "abi");
         } catch (Exception t) {
             LOGGER.error("failed to initialize configuration", t);
@@ -213,6 +222,20 @@ public class PenteConfiguration {
         };
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TransactionExternalCall(
+            @JsonProperty
+            org.hyperledger.besu.datatypes.Address contractAddress,
+            @JsonProperty
+            byte[] encodedCall
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TransactionExtraData(
+            @JsonProperty
+            List<TransactionExternalCall> externalCalls
+    ) {}
+
     synchronized JsonABI getFactoryContractABI() {
         return factoryContractABI;
     }
@@ -222,6 +245,10 @@ public class PenteConfiguration {
     }
 
     synchronized JsonABI getInterfaceABI() { return interfaceABI; }
+
+    synchronized JsonABI getExternalCallABI() { return externalCallABI; }
+
+    synchronized Bytes getExternalCallTopic() { return externalCallTopic; }
 
     synchronized String getTransferSignature() { return transferSignature; }
 

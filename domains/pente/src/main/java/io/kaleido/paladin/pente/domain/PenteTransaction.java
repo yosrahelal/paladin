@@ -34,6 +34,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.tuweni.bytes.Bytes;
 import org.hyperledger.besu.evm.frame.MessageFrame;
 import org.hyperledger.besu.evm.internal.EvmConfiguration;
+import org.hyperledger.besu.evm.log.Log;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -407,16 +408,12 @@ class PenteTransaction {
         return lookups;
     }
 
-    record EVMExternalCall(
-            org.hyperledger.besu.datatypes.Address contractAddress,
-            byte[] encodedCall
-    ) {}
-
     record EVMExecutionResult(
             EVMRunner evm,
             org.hyperledger.besu.datatypes.Address senderAddress,
             byte[] txPayload,
-            JsonHex.Bytes32 txPayloadHash
+            JsonHex.Bytes32 txPayloadHash,
+            List<Log> logs
     ) {}
 
     static class EVMExecutionException extends Exception { EVMExecutionException(String message) { super(message); } }
@@ -453,11 +450,12 @@ class PenteTransaction {
                 evm,
                 senderAddress,
                 txPayload,
-                Keccak.Hash(txPayload)
+                Keccak.Hash(txPayload),
+                execResult.getLogs()
         );
     }
 
-    byte[] eip712TypedDataEndorsementPayload(List<String> inputs, List<String> reads, List<String> outputs, List<EVMExternalCall> externalCalls) throws IOException, ExecutionException, InterruptedException {
+    byte[] eip712TypedDataEndorsementPayload(List<String> inputs, List<String> reads, List<String> outputs, List<PenteConfiguration.TransactionExternalCall> externalCalls) throws IOException, ExecutionException, InterruptedException {
         var typedDataRequest = new HashMap<String, Object>(){{
             put("types", new HashMap<String, Object>(){{
                 put("Transition", new ArrayDeque<Map<String, Object>>(){{
