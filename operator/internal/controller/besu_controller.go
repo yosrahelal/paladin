@@ -253,8 +253,8 @@ func (r *BesuReconciler) generateStaticNodesJSON(ctx context.Context, node *core
 	for _, nodeIdSecret := range secrets.Items {
 		// note it's perfectly fine to include our own node in the static-nodes.json
 		nodeName := nodeIdSecret.Labels["besu-node-id"]
-		enodeURLs = append(enodeURLs, fmt.Sprintf("enode://%s@%s.%s.svc.cluster.local:30303",
-			nodeIdSecret.Data["id"], generateBesuName(nodeName), node.Namespace))
+		enodeURLs = append(enodeURLs, fmt.Sprintf("enode://%s@%s:30303",
+			nodeIdSecret.Data["id"], generateBesuServiceHostname(nodeName, node.Namespace)))
 	}
 
 	// Need a consistent hash
@@ -262,6 +262,10 @@ func (r *BesuReconciler) generateStaticNodesJSON(ctx context.Context, node *core
 
 	b, _ := json.MarshalIndent(enodeURLs, "", "  ")
 	return string(b), nil
+}
+
+func generateBesuServiceHostname(nodeName, namespace string) string {
+	return fmt.Sprintf("%s.%s.svc.cluster.local", generateBesuName(nodeName), namespace)
 }
 
 // generateBesuName generates a name for the Besu resources based on the Besu name.

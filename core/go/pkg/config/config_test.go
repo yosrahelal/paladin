@@ -125,7 +125,7 @@ func TestReadAndParseYAMLFileNestedInlineStruct(t *testing.T) {
 	}
 
 	type testConfigChildWrapperType struct {
-		testConfigChildType `json:",inline"`
+		testConfigChildType `json:",inline" yaml:",inline"`
 	}
 
 	type testConfigType struct {

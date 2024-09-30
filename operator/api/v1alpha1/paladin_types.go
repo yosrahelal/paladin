@@ -38,6 +38,10 @@ type PaladinSpec struct {
 
 	// Adds signing modules that load their key materials from a k8s secret
 	SecretBackedSigners []SecretBackedSigner `json:"secretBackedSigners,omitempty"`
+
+	// Optionally bind to a local besu node deployed with this operator
+	// (vs. configuring a connection to a production blockchain network)
+	BesuNode string `json:"besuNode,omitempty"`
 }
 
 const DBMode_EmbeddedSQLite = "embeddedSQLite"

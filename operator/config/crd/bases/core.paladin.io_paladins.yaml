@@ -39,6 +39,11 @@ spec:
           spec:
             description: PaladinSpec defines the desired state of Paladin
             properties:
+              besuNode:
+                description: |-
+                  Optionally bind to a local besu node deployed with this operator
+                  (vs. configuring a connection to a production blockchain network)
+                type: string
               config:
                 description: Settings from this config will be loaded as YAML and
                   used as the base of the configuration.

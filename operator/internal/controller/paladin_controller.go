@@ -82,7 +82,7 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	configSum, _, err := r.createConfigSecret(ctx, &node, namespace, name)
+	configSum, _, err := r.createConfigSecret(ctx, &node, name)
 	if err != nil {
 		log.Error(err, "Failed to create Paladin config secret")
 		return ctrl.Result{}, err
@@ -340,8 +340,8 @@ func (r *PaladinReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, sign
 	}
 }
 
-func (r *PaladinReconciler) createConfigSecret(ctx context.Context, node *corev1alpha1.Paladin, namespace, name string) (string, *corev1.Secret, error) {
-	configSum, configSecret, err := r.generateConfigSecret(ctx, node, namespace, name)
+func (r *PaladinReconciler) createConfigSecret(ctx context.Context, node *corev1alpha1.Paladin, name string) (string, *corev1.Secret, error) {
+	configSum, configSecret, err := r.generateConfigSecret(ctx, node, name)
 	if err != nil {
 		return "", nil, err
 	}
@@ -362,8 +362,8 @@ func (r *PaladinReconciler) createConfigSecret(ctx context.Context, node *corev1
 }
 
 // generatePaladinConfigMapTemplate generates a ConfigMap for the Paladin configuration
-func (r *PaladinReconciler) generateConfigSecret(ctx context.Context, node *corev1alpha1.Paladin, namespace, name string) (string, *corev1.Secret, error) {
-	pldConfigYAML, err := r.generatePaladinConfig(ctx, node, namespace, name)
+func (r *PaladinReconciler) generateConfigSecret(ctx context.Context, node *corev1alpha1.Paladin, name string) (string, *corev1.Secret, error) {
+	pldConfigYAML, err := r.generatePaladinConfig(ctx, node, name)
 	if err != nil {
 		return "", nil, err
 	}
@@ -374,7 +374,7 @@ func (r *PaladinReconciler) generateConfigSecret(ctx context.Context, node *core
 		&corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
-				Namespace: namespace,
+				Namespace: node.Namespace,
 				Labels:    r.getLabels(node),
 			},
 			StringData: map[string]string{
@@ -385,7 +385,7 @@ func (r *PaladinReconciler) generateConfigSecret(ctx context.Context, node *core
 }
 
 // generatePaladinConfig converts the Paladin CR spec to a Paladin YAML configuration
-func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *corev1alpha1.Paladin, namespace, name string) (string, error) {
+func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *corev1alpha1.Paladin, name string) (string, error) {
 	var pldConf pldconfig.PaladinConfig
 	if node.Spec.Config != nil {
 		err := yaml.Unmarshal([]byte(*node.Spec.Config), &pldConf)
@@ -393,18 +393,23 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 			return "", fmt.Errorf("paladinConfigYAML is invalid: %s", err)
 		}
 	}
-	if err := r.generatePaladinDBConfig(ctx, node, &pldConf, namespace, name); err != nil {
+	if err := r.generatePaladinDBConfig(ctx, node, &pldConf, name); err != nil {
 		return "", err
 	}
-	if err := r.generatePaladinSigners(ctx, node, &pldConf, namespace); err != nil {
+	if err := r.generatePaladinSigners(ctx, node, &pldConf); err != nil {
 		return "", err
+	}
+	// Bind to the a local besu node if we've been configured with one
+	if node.Spec.BesuNode != "" {
+		pldConf.Blockchain.HTTP.URL = fmt.Sprintf("http://%s:8545", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
+		pldConf.Blockchain.WS.URL = fmt.Sprintf("ws://%s:8546", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
 	}
 	sb := new(strings.Builder)
 	_ = yaml.NewEncoder(sb).Encode(&pldConf)
 	return sb.String(), nil
 }
 
-func (r *PaladinReconciler) generatePaladinDBConfig(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconfig.PaladinConfig, namespace, name string) error {
+func (r *PaladinReconciler) generatePaladinDBConfig(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconfig.PaladinConfig, name string) error {
 	dbSpec := &node.Spec.Database
 
 	// If we're responsible for the runtime, we need to fill in the URI
@@ -482,7 +487,7 @@ func (r *PaladinReconciler) generateDBPasswordSecretIfNotExist(ctx context.Conte
 	return nil
 }
 
-func (r *PaladinReconciler) generatePaladinSigners(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconfig.PaladinConfig, namespace string) error {
+func (r *PaladinReconciler) generatePaladinSigners(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconfig.PaladinConfig) error {
 
 	for i, s := range node.Spec.SecretBackedSigners {
 

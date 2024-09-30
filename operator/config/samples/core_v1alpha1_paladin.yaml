@@ -15,6 +15,7 @@ spec:
   database:
     mode: sidecarPostgres
     migrationMode: auto
+  besuNode: node1
   secretBackedSigners:
     - name: signer-1
       secret: node1.keys

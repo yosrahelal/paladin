@@ -30,10 +30,10 @@ import (
 )
 
 type PaladinConfig struct {
-	DomainManagerConfig    `json:",inline"`
-	PluginManagerConfig    `json:",inline"`
-	TransportManagerConfig `json:",inline"`
-	RegistryManagerConfig  `json:",inline"`
+	DomainManagerConfig    `json:",inline" yaml:",inline"`
+	PluginManagerConfig    `json:",inline" yaml:",inline"`
+	TransportManagerConfig `json:",inline" yaml:",inline"`
+	RegistryManagerConfig  `json:",inline" yaml:",inline"`
 	Log                    log.Config             `json:"log"`
 	Blockchain             ethclient.Config       `json:"blockchain"`
 	DB                     persistence.Config     `json:"db"`

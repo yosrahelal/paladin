@@ -42,11 +42,11 @@ type Config struct {
 }
 
 type PostgresConfig struct {
-	SQLDBConfig `json:",inline"`
+	SQLDBConfig `json:",inline" yaml:",inline"`
 }
 
 type SQLiteConfig struct {
-	SQLDBConfig `json:",inline"`
+	SQLDBConfig `json:",inline" yaml:",inline"`
 }
 
 func NewPersistence(ctx context.Context, conf *Config) (Persistence, error) {

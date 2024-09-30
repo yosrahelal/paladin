@@ -43,7 +43,7 @@ type HTTPConfig struct {
 }
 
 type WSConfig struct {
-	HTTPConfig             `json:",inline"`
+	HTTPConfig             `json:",inline" yaml:"inline"`
 	InitialConnectAttempts *int         `json:"initialConnectAttempts"`
 	ConnectionTimeout      *string      `json:"connectionTimeout"`
 	ConnectRetry           retry.Config `json:"connectRetry"`
