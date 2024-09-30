@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package ecdsa
+package signers
 
 import (
 	"context"
@@ -57,6 +57,9 @@ func TestErrors(t *testing.T) {
 	_, err = signer.GetVerifier(ctx, "ecdsa:unknown", "", nil)
 	assert.Regexp(t, "PD011422", err)
 
+	_, err = signer.GetMinimumKeyLen(ctx, "ecdsa:unknown")
+	assert.Regexp(t, "PD011422", err)
+
 	_, err = signer.GetVerifier(ctx, "ecdsa:secp256k1", "wrong", nil)
 	assert.Regexp(t, "PD011423", err)
 
@@ -69,6 +72,10 @@ func TestECDSASigning_secp256k1(t *testing.T) {
 	ctx, signer, kp := newTestSigner(t, tktypes.RandBytes(32))
 
 	testData := tktypes.RandBytes(128)
+
+	keyLen, err := signer.GetMinimumKeyLen(ctx, algorithms.ECDSA_SECP256K1)
+	require.NoError(t, err)
+	assert.Equal(t, 32, keyLen)
 
 	signatureRSV, err := signer.Sign(context.Background(), algorithms.ECDSA_SECP256K1, signpayloads.OPAQUE_TO_RSV, kp.PrivateKeyBytes(), testData)
 	require.NoError(t, err)

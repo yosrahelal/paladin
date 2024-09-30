@@ -16,4 +16,8 @@
 package algorithms
 
 // Primary constant used throughout Paladin codebase - ECDSA algorithm with SECP256K1 curve
-const ECDSA_SECP256K1 = "ecdsa:secp256k1"
+const ECDSA_SECP256K1 = Prefix_ECDSA + ":" + Curve_SECP256K1
+
+const Prefix_ECDSA = "ecdsa"
+
+const Curve_SECP256K1 = "secp256k1"

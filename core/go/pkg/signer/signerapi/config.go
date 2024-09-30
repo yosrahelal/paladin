@@ -53,7 +53,7 @@ func (c *Config) KeyDerivationConfig() *KeyDerivationConfig {
 type KeyStoreConfig struct {
 	Type              string                 `json:"type"`
 	DisableKeyListing bool                   `json:"disableKeyListing"`
-	DisableKeyLoading bool                   `json:"disableKeyLoading"` // if HD Wallet or ZKP based signing is required, in-memory keys are required (so this needs to be false)
+	KeyStoreSigning   bool                   `json:"keyStoreSigning"` // if HD Wallet or ZKP based signing is required, in-memory keys are required (so this needs to be false)
 	FileSystem        FileSystemConfig       `json:"filesystem"`
 	Static            StaticKeyStorageConfig `json:"static"`
 }

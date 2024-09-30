@@ -13,24 +13,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package common
+package signers
 
 import (
-	"github.com/iden3/go-iden3-crypto/babyjub"
-	"github.com/iden3/go-iden3-crypto/utils"
+	"context"
+
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 )
 
-func EncodePublicKey(pubKey *babyjub.PublicKey) string {
-	pubKeyComp := pubKey.Compress()
-	return utils.HexEncode(pubKeyComp[:])
+func NewECDSASignerFactory[C signerapi.ExtensibleConfig]() signerapi.InMemorySignerFactory[C] {
+	return &ecdsaSignerFactory[C]{}
 }
 
-func DecodePublicKey(pubKeyHex string) (*babyjub.PublicKey, error) {
-	pubKeyCompBytes, err := utils.HexDecode(pubKeyHex)
-	if err != nil {
-		return nil, err
-	}
-	var compressedPubKey babyjub.PublicKeyComp
-	copy(compressedPubKey[:], pubKeyCompBytes)
-	return compressedPubKey.Decompress()
+type ecdsaSignerFactory[C signerapi.ExtensibleConfig] struct{}
+
+func (sf *ecdsaSignerFactory[C]) NewSigner(ctx context.Context, conf C) (signerapi.InMemorySigner, error) {
+	// We have no configuration
+	return &ecdsaSigner{}, nil
 }

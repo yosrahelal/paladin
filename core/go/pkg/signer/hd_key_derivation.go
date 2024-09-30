@@ -41,10 +41,10 @@ type hdWalletPathEntry struct {
 	Index uint64
 }
 
-func (sm *signingModule) initHDWallet(ctx context.Context, conf *signerapi.KeyDerivationConfig) (err error) {
+func (sm *signingModule[C]) initHDWallet(ctx context.Context, conf *signerapi.KeyDerivationConfig) (err error) {
 	bip44Prefix := confutil.StringNotEmpty(conf.BIP44Prefix, *signerapi.KeyDerivationDefaults.BIP44Prefix)
 	bip44Prefix = strings.ReplaceAll(bip44Prefix, " ", "")
-	sm.hd = &hdDerivation{
+	sm.hd = &hdDerivation[C]{
 		sm:                    sm,
 		bip44Prefix:           bip44Prefix,
 		bip44DirectResolution: conf.BIP44DirectResolution,
@@ -71,13 +71,13 @@ func (sm *signingModule) initHDWallet(ctx context.Context, conf *signerapi.KeyDe
 	return err
 }
 
-func (sm *signingModule) new32ByteRandomSeed() ([]byte, error) {
+func (sm *signingModule[C]) new32ByteRandomSeed() ([]byte, error) {
 	buff := make([]byte, 32)
 	_, err := rand.Read(buff)
 	return buff, err
 }
 
-func (hd *hdDerivation) flatPathList(req *proto.ResolveKeyRequest) []hdWalletPathEntry {
+func (hd *hdDerivation[C]) flatPathList(req *proto.ResolveKeyRequest) []hdWalletPathEntry {
 	ret := make([]hdWalletPathEntry, len(req.Path)+1)
 	for i, p := range req.Path {
 		ret[i] = hdWalletPathEntry{Name: p.Name, Index: p.Index}
@@ -89,7 +89,7 @@ func (hd *hdDerivation) flatPathList(req *proto.ResolveKeyRequest) []hdWalletPat
 	return ret
 }
 
-func (hd *hdDerivation) resolveHDWalletKey(ctx context.Context, req *proto.ResolveKeyRequest) (res *proto.ResolveKeyResponse, err error) {
+func (hd *hdDerivation[C]) resolveHDWalletKey(ctx context.Context, req *proto.ResolveKeyRequest) (res *proto.ResolveKeyResponse, err error) {
 	keyHandle := hd.bip44Prefix
 	for i, s := range hd.flatPathList(req) {
 		var derivation uint64
@@ -134,10 +134,10 @@ func (hd *hdDerivation) resolveHDWalletKey(ctx context.Context, req *proto.Resol
 	}
 	// Once we've used key derivation, we've just got a 32byte private key in volatile memory,
 	// from the perspective of the rest of the signer module.
-	return hd.sm.publicKeyIdentifiersForAlgorithms(ctx, keyHandle, privateKey, req.Algorithms)
+	return hd.sm.buildResolveResponseWithIdentifiers(ctx, keyHandle, privateKey, req.RequiredIdentifiers)
 }
 
-func (hd *hdDerivation) loadHDWalletPrivateKey(ctx context.Context, keyHandle string) (privateKey []byte, err error) {
+func (hd *hdDerivation[C]) loadHDWalletPrivateKey(ctx context.Context, keyHandle string) (privateKey []byte, err error) {
 	segments := strings.Split(keyHandle, "/")
 	if len(segments) < 2 || segments[0] != "m" {
 		return nil, i18n.NewError(ctx, msgs.MsgSignerBIP44DerivationInvalid, keyHandle)
@@ -167,10 +167,10 @@ func (hd *hdDerivation) loadHDWalletPrivateKey(ctx context.Context, keyHandle st
 	return privateKey, err
 }
 
-func (hd *hdDerivation) signHDWalletKey(ctx context.Context, req *proto.SignRequest) (res *proto.SignResponse, err error) {
+func (hd *hdDerivation[C]) signHDWalletKey(ctx context.Context, req *proto.SignRequest) (res *proto.SignResponse, err error) {
 	privateKey, err := hd.loadHDWalletPrivateKey(ctx, req.KeyHandle)
 	if err != nil {
 		return nil, err
 	}
-	return hd.sm.signInMemory(ctx, privateKey, req)
+	return hd.sm.signInMemory(ctx, req.Algorithm, req.PayloadType, privateKey, req.Payload)
 }

@@ -22,30 +22,32 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type testExtension struct {
-	keyStore func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error)
+type testKeyStoreFactory struct {
+	keyStore *testKeyStoreAll
+	err      error
 }
 
-func (te *testExtension) KeyStore(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
-	return te.keyStore(ctx, config)
+func (tf *testKeyStoreFactory) NewKeyStore(ctx context.Context, conf *signerapi.Config) (signerapi.KeyStore, error) {
+	return tf.keyStore, tf.err
 }
 
 type testKeyStoreAll struct {
-	findOrCreateLoadableKey   func(ctx context.Context, req *proto.ResolveKeyRequest, newKeyMaterial func() ([]byte, error)) (keyMaterial []byte, keyHandle string, err error)
-	loadKeyMaterial           func(ctx context.Context, keyHandle string) ([]byte, error)
-	findOrCreateKey_secp256k1 func(ctx context.Context, req *proto.ResolveKeyRequest) (addr *ethtypes.Address0xHex, keyHandle string, err error)
-	sign_secp256k1            func(ctx context.Context, keyHandle string, payload []byte) (*secp256k1.SignatureData, error)
-	listKeys                  func(ctx context.Context, req *proto.ListKeysRequest) (res *proto.ListKeysResponse, err error)
+	findOrCreateLoadableKey       func(ctx context.Context, req *proto.ResolveKeyRequest, newKeyMaterial func() ([]byte, error)) (keyMaterial []byte, keyHandle string, err error)
+	loadKeyMaterial               func(ctx context.Context, keyHandle string) ([]byte, error)
+	findOrCreateInStoreSigningKey func(ctx context.Context, req *proto.ResolveKeyRequest) (res *proto.ResolveKeyResponse, err error)
+	signWithinKeystore            func(ctx context.Context, req *proto.SignRequest) (res *proto.SignResponse, err error)
+	listKeys                      func(ctx context.Context, req *proto.ListKeysRequest) (res *proto.ListKeysResponse, err error)
 }
 
 func (tk *testKeyStoreAll) FindOrCreateLoadableKey(ctx context.Context, req *proto.ResolveKeyRequest, newKeyMaterial func() ([]byte, error)) (keyMaterial []byte, keyHandle string, err error) {
@@ -56,12 +58,12 @@ func (tk *testKeyStoreAll) LoadKeyMaterial(ctx context.Context, keyHandle string
 	return tk.loadKeyMaterial(ctx, keyHandle)
 }
 
-func (tk *testKeyStoreAll) FindOrCreateKey_secp256k1(ctx context.Context, req *proto.ResolveKeyRequest) (addr *ethtypes.Address0xHex, keyHandle string, err error) {
-	return tk.findOrCreateKey_secp256k1(ctx, req)
+func (tk *testKeyStoreAll) FindOrCreateInStoreSigningKey(ctx context.Context, req *proto.ResolveKeyRequest) (res *proto.ResolveKeyResponse, err error) {
+	return tk.findOrCreateInStoreSigningKey(ctx, req)
 }
 
-func (tk *testKeyStoreAll) Sign_secp256k1(ctx context.Context, keyHandle string, payload []byte) (*secp256k1.SignatureData, error) {
-	return tk.sign_secp256k1(ctx, keyHandle, payload)
+func (tk *testKeyStoreAll) SignWithinKeystore(ctx context.Context, req *proto.SignRequest) (res *proto.SignResponse, err error) {
+	return tk.signWithinKeystore(ctx, req)
 }
 
 func (tk *testKeyStoreAll) ListKeys(ctx context.Context, req *proto.ListKeysRequest) (res *proto.ListKeysResponse, err error) {
@@ -74,10 +76,9 @@ func (tk *testKeyStoreAll) Close() {
 
 func TestExtensionInitFail(t *testing.T) {
 
-	te := &testExtension{
-		keyStore: func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
-			assert.Equal(t, "ext-store", config.Type)
-			return nil, fmt.Errorf("pop")
+	te := &signerapi.Extensions[*signerapi.Config]{
+		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
+			"ext-store": &testKeyStoreFactory{},
 		},
 	}
 
@@ -92,16 +93,11 @@ func TestExtensionInitFail(t *testing.T) {
 
 func TestKeystoreTypeUnknown(t *testing.T) {
 
-	te := &testExtension{
-		keyStore: func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
-			return nil, nil
-		},
-	}
 	_, err := NewSigningModule(context.Background(), &signerapi.Config{
 		KeyStore: signerapi.KeyStoreConfig{
 			Type: "unknown",
 		},
-	}, te)
+	})
 	assert.Regexp(t, "PD011407", err)
 
 }
@@ -129,7 +125,7 @@ func TestExtensionKeyStoreListOK(t *testing.T) {
 				Name:      "key 23456",
 				KeyHandle: "key23456",
 				Identifiers: []*proto.PublicKeyIdentifier{
-					{Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES, Identifier: "0x93e5a15ce57564278575ff7182b5b3746251e781"},
+					{Algorithm: algorithms.ECDSA_SECP256K1, Verifier: "0x93e5a15ce57564278575ff7182b5b3746251e781"},
 				},
 			},
 		},
@@ -142,10 +138,9 @@ func TestExtensionKeyStoreListOK(t *testing.T) {
 			return testRes, nil
 		},
 	}
-	te := &testExtension{
-		keyStore: func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
-			assert.Equal(t, "ext-store", config.Type)
-			return tk, nil
+	te := &signerapi.Extensions[*signerapi.Config]{
+		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
+			"ext-store": &testKeyStoreFactory{keyStore: tk},
 		},
 	}
 
@@ -163,7 +158,7 @@ func TestExtensionKeyStoreListOK(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, testRes, res)
 
-	sm.(*signingModule).disableKeyListing = true
+	sm.(*signingModule[*signerapi.Config]).disableKeyListing = true
 	_, err = sm.List(context.Background(), &proto.ListKeysRequest{
 		Limit:    10,
 		Continue: "key12345",
@@ -180,10 +175,9 @@ func TestExtensionKeyStoreListFail(t *testing.T) {
 			return nil, fmt.Errorf("pop")
 		},
 	}
-	te := &testExtension{
-		keyStore: func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
-			assert.Equal(t, "ext-store", config.Type)
-			return tk, nil
+	te := &signerapi.Extensions[*signerapi.Config]{
+		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
+			"ext-store": &testKeyStoreFactory{keyStore: tk},
 		},
 	}
 
@@ -205,20 +199,31 @@ func TestExtensionKeyStoreListFail(t *testing.T) {
 func TestExtensionKeyStoreResolveSignSECP256K1OK(t *testing.T) {
 
 	tk := &testKeyStoreAll{
-		findOrCreateKey_secp256k1: func(ctx context.Context, req *proto.ResolveKeyRequest) (addr *ethtypes.Address0xHex, keyHandle string, err error) {
+		findOrCreateInStoreSigningKey: func(ctx context.Context, req *proto.ResolveKeyRequest) (res *proto.ResolveKeyResponse, err error) {
 			assert.Equal(t, "key1", req.Name)
-			return ethtypes.MustNewAddress("0x98A356e0814382587D42B62Bd97871ee59D10b69"), "0x98a356e0814382587d42b62bd97871ee59d10b69", nil
+			return &proto.ResolveKeyResponse{
+				KeyHandle: "key_handle_1",
+				Identifiers: []*proto.PublicKeyIdentifier{
+					{
+						Algorithm:    req.RequiredIdentifiers[0].Algorithm,
+						VerifierType: req.RequiredIdentifiers[0].VerifierType,
+						Verifier:     "0x98a356e0814382587d42b62bd97871ee59d10b69",
+					},
+				},
+			}, nil
 		},
-		sign_secp256k1: func(ctx context.Context, keyHandle string, payload []byte) (*secp256k1.SignatureData, error) {
-			assert.Equal(t, "key1", keyHandle)
-			assert.Equal(t, "something to sign", (string)(payload))
-			return &secp256k1.SignatureData{V: big.NewInt(1), R: big.NewInt(2), S: big.NewInt(3)}, nil
+		signWithinKeystore: func(ctx context.Context, req *proto.SignRequest) (res *proto.SignResponse, err error) {
+			assert.Equal(t, "key_handle_1", req.KeyHandle)
+			assert.Equal(t, "something to sign", (string)(req.Payload))
+			sig := (&secp256k1.SignatureData{V: big.NewInt(1), R: big.NewInt(2), S: big.NewInt(3)}).CompactRSV()
+			return &proto.SignResponse{
+				Payload: sig,
+			}, nil
 		},
 	}
-	te := &testExtension{
-		keyStore: func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
-			assert.Equal(t, "ext-store", config.Type)
-			return tk, nil
+	te := &signerapi.Extensions[*signerapi.Config]{
+		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
+			"ext-store": &testKeyStoreFactory{keyStore: tk},
 		},
 	}
 
@@ -230,16 +235,17 @@ func TestExtensionKeyStoreResolveSignSECP256K1OK(t *testing.T) {
 	require.NoError(t, err)
 
 	resResolve, err := sm.Resolve(context.Background(), &proto.ResolveKeyRequest{
-		Algorithms: []string{algorithms.ECDSA_SECP256K1_PLAINBYTES},
-		Name:       "key1",
+		RequiredIdentifiers: []*proto.PublicKeyIdentifierType{{Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS}},
+		Name:                "key1",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "0x98a356e0814382587d42b62bd97871ee59d10b69", resResolve.Identifiers[0].Identifier)
+	assert.Equal(t, "0x98a356e0814382587d42b62bd97871ee59d10b69", resResolve.Identifiers[0].Verifier)
 
 	resSign, err := sm.Sign(context.Background(), &proto.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-		Payload:   ([]byte)("something to sign"),
+		KeyHandle:   "key1",
+		Algorithm:   algorithms.Prefix_ECDSA,
+		PayloadType: signpayloads.OPAQUE_TO_RSV,
+		Payload:     ([]byte)("something to sign"),
 	})
 	require.NoError(t, err)
 	// R, S, V compact encoding
@@ -249,14 +255,13 @@ func TestExtensionKeyStoreResolveSignSECP256K1OK(t *testing.T) {
 func TestExtensionKeyStoreResolveSECP256K1Fail(t *testing.T) {
 
 	tk := &testKeyStoreAll{
-		findOrCreateKey_secp256k1: func(ctx context.Context, req *proto.ResolveKeyRequest) (addr *ethtypes.Address0xHex, keyHandle string, err error) {
+		findOrCreateLoadableKey: func(ctx context.Context, req *proto.ResolveKeyRequest, newKeyMaterial func() ([]byte, error)) (keyMaterial []byte, keyHandle string, err error) {
 			return nil, "", fmt.Errorf("pop")
 		},
 	}
-	te := &testExtension{
-		keyStore: func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
-			assert.Equal(t, "ext-store", config.Type)
-			return tk, nil
+	te := &signerapi.Extensions[*signerapi.Config]{
+		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
+			"ext-store": &testKeyStoreFactory{keyStore: tk},
 		},
 	}
 
@@ -268,8 +273,8 @@ func TestExtensionKeyStoreResolveSECP256K1Fail(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = sm.Resolve(context.Background(), &proto.ResolveKeyRequest{
-		Name:       "key1",
-		Algorithms: []string{algorithms.ECDSA_SECP256K1_PLAINBYTES},
+		Name:                "key1",
+		RequiredIdentifiers: []*proto.PublicKeyIdentifierType{{Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS}},
 	})
 	assert.Regexp(t, "pop", err)
 
@@ -281,14 +286,13 @@ func TestExtensionKeyStoreResolveSECP256K1Fail(t *testing.T) {
 func TestExtensionKeyStoreSignSECP256K1Fail(t *testing.T) {
 
 	tk := &testKeyStoreAll{
-		sign_secp256k1: func(ctx context.Context, keyHandle string, payload []byte) (*secp256k1.SignatureData, error) {
+		signWithinKeystore: func(ctx context.Context, req *proto.SignRequest) (res *proto.SignResponse, err error) {
 			return nil, fmt.Errorf("pop")
 		},
 	}
-	te := &testExtension{
-		keyStore: func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
-			assert.Equal(t, "ext-store", config.Type)
-			return tk, nil
+	te := &signerapi.Extensions[*signerapi.Config]{
+		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
+			"ext-store": &testKeyStoreFactory{keyStore: tk},
 		},
 	}
 
@@ -300,9 +304,10 @@ func TestExtensionKeyStoreSignSECP256K1Fail(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = sm.Sign(context.Background(), &proto.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-		Payload:   ([]byte)("something to sign"),
+		KeyHandle:   "key1",
+		Algorithm:   algorithms.ECDSA_SECP256K1,
+		PayloadType: signpayloads.OPAQUE_TO_RSV,
+		Payload:     ([]byte)("something to sign"),
 	})
 	assert.Regexp(t, "pop", err)
 
@@ -318,9 +323,10 @@ func TestSignInMemoryFailBadKey(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = sm.Sign(context.Background(), &proto.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-		Payload:   ([]byte)("something to sign"),
+		KeyHandle:   "key1",
+		Algorithm:   algorithms.ECDSA_SECP256K1,
+		PayloadType: signpayloads.OPAQUE_TO_RSV,
+		Payload:     ([]byte)("something to sign"),
 	})
 	assert.Regexp(t, "PD011418", err)
 
@@ -339,19 +345,20 @@ func TestResolveSignWithNewKeyCreation(t *testing.T) {
 	require.NoError(t, err)
 
 	resolveRes, err := sm.Resolve(context.Background(), &proto.ResolveKeyRequest{
-		Algorithms: []string{algorithms.ECDSA_SECP256K1_PLAINBYTES},
-		Name:       "key1",
+		RequiredIdentifiers: []*proto.PublicKeyIdentifierType{{Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS}},
+		Name:                "key1",
 	})
 	require.NoError(t, err)
 	assert.NotEmpty(t, resolveRes.KeyHandle)
 	assert.Equal(t, "key1", resolveRes.KeyHandle)
-	assert.Equal(t, algorithms.ECDSA_SECP256K1_PLAINBYTES, resolveRes.Identifiers[0].Algorithm)
-	assert.NotEmpty(t, resolveRes.Identifiers[0].Identifier)
+	assert.Equal(t, algorithms.ECDSA_SECP256K1, resolveRes.Identifiers[0].Algorithm)
+	assert.NotEmpty(t, resolveRes.Identifiers[0].Verifier)
 
 	signRes, err := sm.Sign(context.Background(), &proto.SignRequest{
-		KeyHandle: resolveRes.KeyHandle,
-		Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-		Payload:   ([]byte)("sign me"),
+		KeyHandle:   resolveRes.KeyHandle,
+		Algorithm:   algorithms.ECDSA_SECP256K1,
+		PayloadType: signpayloads.OPAQUE_TO_RSV,
+		Payload:     ([]byte)("sign me"),
 	})
 	require.NoError(t, err)
 	assert.NotEmpty(t, signRes.Payload)
@@ -371,8 +378,8 @@ func TestResolveUnsupportedAlgo(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = sm.Resolve(context.Background(), &proto.ResolveKeyRequest{
-		Algorithms: []string{"wrong"},
-		Name:       "key1",
+		RequiredIdentifiers: []*proto.PublicKeyIdentifierType{{Algorithm: "wrong"}},
+		Name:                "key1",
 	})
 	assert.Regexp(t, "PD011410.*wrong", err)
 
@@ -415,8 +422,8 @@ func TestInMemorySignFailures(t *testing.T) {
 	require.NoError(t, err)
 
 	resolveRes, err := sm.Resolve(context.Background(), &proto.ResolveKeyRequest{
-		Algorithms: []string{algorithms.ECDSA_SECP256K1_PLAINBYTES},
-		Name:       "key1",
+		RequiredIdentifiers: []*proto.PublicKeyIdentifierType{{Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS}},
+		Name:                "key1",
 	})
 	require.NoError(t, err)
 
@@ -427,22 +434,9 @@ func TestInMemorySignFailures(t *testing.T) {
 	assert.Regexp(t, "PD011410", err)
 
 	_, err = sm.Resolve(context.Background(), &proto.ResolveKeyRequest{
-		Algorithms: []string{"wrong"},
-		Name:       "key1",
+		RequiredIdentifiers: []*proto.PublicKeyIdentifierType{{Algorithm: "wrong"}},
+		Name:                "key1",
 	})
 	assert.Regexp(t, "PD011410", err)
 
-	sm.(*signingModule).disableKeyLoading = true
-
-	_, err = sm.Resolve(context.Background(), &proto.ResolveKeyRequest{
-		Algorithms: []string{algorithms.ECDSA_SECP256K1_PLAINBYTES},
-		Name:       "key1",
-	})
-	assert.Regexp(t, "PD011409", err)
-
-	_, err = sm.Sign(context.Background(), &proto.SignRequest{
-		KeyHandle: resolveRes.KeyHandle,
-		Payload:   ([]byte)("something to sign"),
-	})
-	assert.Regexp(t, "PD011409", err)
 }

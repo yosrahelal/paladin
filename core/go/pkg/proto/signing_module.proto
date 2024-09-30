@@ -23,7 +23,7 @@ message ResolveKeyRequest {
   uint64 index = 2; // a unique index managed by the key manager assured to be unique at this path. Used for key derivation (BIP32). Should not be used for direct mapping.
   map<string, string> attributes = 3;
   repeated ResolveKeyPathSegment path = 4;
-  repeated string algorithms = 5;
+  repeated PublicKeyIdentifierType required_identifiers = 5;
 }
 
 message ResolveKeyResponse {
@@ -33,8 +33,9 @@ message ResolveKeyResponse {
 
 message SignRequest {
   string key_handle = 1; // the key handle as returned by a previoius Resolve call (potentially a very long time ago)
-  string algorithm = 2; // a descriptor that Paladin documents to descbe to the signer how to process the input payload, algorithm+curve of signing, and response formatting
-  bytes payload = 3; // the input payload to process according to the algorithm
+  string algorithm = 2; // identifier for the signing engine and algorithm to use in signing. Examples: "ecdsa:secp256k1" or "domain:zeto:circuit1"
+  string payload_type = 3; // describes the input and output payload combination to the signer. Example: "opaque:rsv" or "groth16:zeto"
+  bytes payload = 4; // the input payload to process according to the algorithm
 }
 
 message SignResponse {
@@ -69,7 +70,13 @@ message ListKeyPathSegment {
   string name = 1;
 }
 
+message PublicKeyIdentifierType {
+  string algorithm = 1;
+  string verifier_type = 2;
+}
+
 message PublicKeyIdentifier {
   string algorithm = 1;
-  string identifier = 2;
+  string verifier_type = 2;
+  string verifier = 3;
 }

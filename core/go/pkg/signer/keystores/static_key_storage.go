@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package keystore
+package keystores
 
 import (
 	"context"
@@ -32,8 +32,14 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
+type staticStoreFactory[C signerapi.ExtensibleConfig] struct{}
+
 type staticStore struct {
 	keys map[string][]byte
+}
+
+func NewStaticStoreFactory[C signerapi.ExtensibleConfig]() signerapi.KeyStoreFactory[C] {
+	return &staticStoreFactory[C]{}
 }
 
 // This is a trivial implementation of a keystore, that loads unencrypted keys
@@ -49,7 +55,9 @@ type staticStore struct {
 // The keys themselves can be in files, so as well as very simple testing
 // with keys in-line in the config, this helps use a file based Kubernetes
 // secret for a mnemonic seed phrase for example at the root of a HD wallet.
-func NewStaticKeyStore(ctx context.Context, conf signerapi.StaticKeyStorageConfig) (_ signerapi.KeyStore, err error) {
+func (fsf *staticStoreFactory[C]) NewKeyStore(ctx context.Context, eConf C) (_ signerapi.KeyStore, err error) {
+	conf := &eConf.KeyStoreConfig().Static
+
 	keyMap := conf.Keys
 	if keyMap == nil {
 		keyMap = make(map[string]signerapi.StaticKeyEntryConfig)

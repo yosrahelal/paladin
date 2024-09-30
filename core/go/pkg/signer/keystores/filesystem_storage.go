@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package keystore
+package keystores
 
 import (
 	"context"
@@ -35,6 +35,8 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
+type filesystemStoreFactory[C signerapi.ExtensibleConfig] struct{}
+
 type filesystemStore struct {
 	cache    cache.Cache[string, keystorev3.WalletFile]
 	path     string
@@ -42,7 +44,13 @@ type filesystemStore struct {
 	dirMode  os.FileMode
 }
 
-func NewFilesystemStore(ctx context.Context, conf signerapi.FileSystemConfig) (fss signerapi.KeyStore, err error) {
+func NewFilesystemStoreFactory[C signerapi.ExtensibleConfig]() signerapi.KeyStoreFactory[C] {
+	return &filesystemStoreFactory[C]{}
+}
+
+func (fsf *filesystemStoreFactory[C]) NewKeyStore(ctx context.Context, eConf C) (fss signerapi.KeyStore, err error) {
+	conf := &eConf.KeyStoreConfig().FileSystem
+
 	// Determine the path
 	var pathInfo fs.FileInfo
 	path, err := filepath.Abs(confutil.StringNotEmpty(conf.Path, *signerapi.FileSystemDefaults.Path))

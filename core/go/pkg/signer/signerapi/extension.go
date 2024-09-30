@@ -13,21 +13,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package ecdsa
+package signerapi
 
-import (
-	"context"
-
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
-)
-
-func NewECDSASignerFactory[C signerapi.ExtensibleConfig]() signerapi.InMemorySignerFactory[C] {
-	return &ecdsaSignerFactory[C]{}
-}
-
-type ecdsaSignerFactory[C signerapi.ExtensibleConfig] struct{}
-
-func (sf *ecdsaSignerFactory[C]) NewSigner(ctx context.Context, conf C) (signerapi.InMemorySigner, error) {
-	// We have no configuration
-	return &ecdsaSigner{}, nil
+type Extensions[C ExtensibleConfig] struct {
+	KeyStoreFactories       map[string]KeyStoreFactory[C]
+	InMemorySignerFactories map[string]InMemorySignerFactory[C]
 }

@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package ecdsa
+package signers
 
 import (
 	"context"
@@ -29,15 +29,13 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
-var curve_secp256k1 = strings.TrimPrefix(algorithms.ECDSA_SECP256K1, "ecdsa:")
-
 type ecdsaSigner struct{}
 
 func (s *ecdsaSigner) Sign(ctx context.Context, algorithm, payloadType string, privateKey, payload []byte) ([]byte, error) {
 	// We register for all ECDSA algorithms
-	curve := strings.TrimPrefix(strings.ToLower(algorithm), "ecdsa:")
+	curve := strings.TrimPrefix(strings.ToLower(algorithm), algorithms.Prefix_ECDSA+":")
 	switch curve {
-	case curve_secp256k1:
+	case algorithms.Curve_SECP256K1:
 		return s.Sign_secp256k1(ctx, algorithm, payloadType, privateKey, payload)
 	default:
 		return nil, i18n.NewError(ctx, msgs.MsgSigningUnsupportedECDSACurve, curve)
@@ -46,9 +44,9 @@ func (s *ecdsaSigner) Sign(ctx context.Context, algorithm, payloadType string, p
 
 func (s *ecdsaSigner) GetVerifier(ctx context.Context, algorithm, verifierType string, privateKey []byte) (string, error) {
 	// We register for all ECDSA algorithms
-	curve := strings.TrimPrefix(strings.ToLower(algorithm), "ecdsa:")
+	curve := strings.TrimPrefix(strings.ToLower(algorithm), algorithms.Prefix_ECDSA+":")
 	switch curve {
-	case curve_secp256k1:
+	case algorithms.Curve_SECP256K1:
 		return s.GetVerifier_secp256k1(ctx, algorithm, verifierType, privateKey)
 	default:
 		return "", i18n.NewError(ctx, msgs.MsgSigningUnsupportedECDSACurve, curve)
@@ -88,5 +86,15 @@ func (s *ecdsaSigner) GetVerifier_secp256k1(ctx context.Context, algorithm, veri
 		return hex.EncodeToString(kp.PublicKeyBytes()), nil
 	default:
 		return "", i18n.NewError(ctx, msgs.MsgSigningUnsupportedVerifierCombination, verifierType, algorithm)
+	}
+}
+
+func (s *ecdsaSigner) GetMinimumKeyLen(ctx context.Context, algorithm string) (int, error) {
+	curve := strings.TrimPrefix(strings.ToLower(algorithm), algorithms.Prefix_ECDSA+":")
+	switch curve {
+	case algorithms.Curve_SECP256K1:
+		return 32, nil
+	default:
+		return -1, i18n.NewError(ctx, msgs.MsgSigningUnsupportedECDSACurve, curve)
 	}
 }

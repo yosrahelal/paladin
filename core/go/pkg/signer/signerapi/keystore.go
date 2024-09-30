@@ -55,3 +55,21 @@ type KeyStore interface {
 type KeyStoreListable interface {
 	ListKeys(ctx context.Context, req *proto.ListKeysRequest) (res *proto.ListKeysResponse, err error)
 }
+
+// Some cryptographic storage systems, in particular Hardware Security Modules (HSMs) and Cloud HSM systems,
+// support signing directly with certain curves.
+//
+// This is an advanced feature of key store implementations, and hence kept on a separate interface.
+//
+// Configuring a signing module in this way provides enhanced security. However, it disables use of any
+// of the in-memory signing capabilities of the signing module - such as ZKP proof generation using in-memory keys.
+//
+// Note that even HSM based key storage systems support storage and retrieval of a key (by encrypting and
+// decrypting that key on storage and retrieval). So a signing-capable system (such as a HSM or Cloud HSM)
+// might still be used with this in-memory module by installing the code in this repo close to the HSM.
+//
+// See the Paladin architecture docs for more details.
+type KeyStoreSigner interface {
+	FindOrCreateInStoreSigningKey(ctx context.Context, req *proto.ResolveKeyRequest) (res *proto.ResolveKeyResponse, err error)
+	SignWithinKeystore(ctx context.Context, req *proto.SignRequest) (res *proto.SignResponse, err error)
+}

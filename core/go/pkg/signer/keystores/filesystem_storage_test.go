@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package keystore
+package keystores
 
 import (
 	"context"
@@ -24,7 +24,6 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
-	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -35,8 +34,14 @@ import (
 func newTestFilesystemStore(t *testing.T) (context.Context, *filesystemStore) {
 	ctx := context.Background()
 
-	store, err := NewFilesystemStore(ctx, signerapi.FileSystemConfig{
-		Path: confutil.P(t.TempDir()),
+	sf := NewFilesystemStoreFactory[*signerapi.Config]()
+	store, err := sf.NewKeyStore(ctx, &signerapi.Config{
+		KeyStore: signerapi.KeyStoreConfig{
+			Type: signerapi.KeyStoreTypeFilesystem,
+			FileSystem: signerapi.FileSystemConfig{
+				Path: confutil.P(t.TempDir()),
+			},
+		},
 	})
 	require.NoError(t, err)
 
@@ -49,21 +54,32 @@ func TestFileSystemStoreBadDir(t *testing.T) {
 
 	badPath := path.Join(t.TempDir(), "wrong")
 
-	_, err := NewFilesystemStore(context.Background(), signerapi.FileSystemConfig{
-		Path: confutil.P(badPath),
+	sf := NewFilesystemStoreFactory[*signerapi.Config]()
+	_, err := sf.NewKeyStore(context.Background(), &signerapi.Config{
+		KeyStore: signerapi.KeyStoreConfig{
+			Type: signerapi.KeyStoreTypeFilesystem,
+			FileSystem: signerapi.FileSystemConfig{
+				Path: confutil.P(badPath),
+			},
+		},
 	})
 	assert.Regexp(t, "PD011400", err)
 
 	err = os.WriteFile(badPath, []byte{}, 0644)
 	require.NoError(t, err)
 
-	_, err = NewFilesystemStore(context.Background(), signerapi.FileSystemConfig{
-		Path: confutil.P(badPath),
+	_, err = sf.NewKeyStore(context.Background(), &signerapi.Config{
+		KeyStore: signerapi.KeyStoreConfig{
+			Type: signerapi.KeyStoreTypeFilesystem,
+			FileSystem: signerapi.FileSystemConfig{
+				Path: confutil.P(badPath),
+			},
+		},
 	})
 	assert.Regexp(t, "PD011400", err)
 }
 
-func TestFileSystemStoreCreateSecp256k1(t *testing.T) {
+func TestFileSystemStoreCreate(t *testing.T) {
 	ctx, fs := newTestFilesystemStore(t)
 
 	key0, err := secp256k1.GenerateSecp256k1KeyPair()
@@ -98,37 +114,6 @@ func TestFileSystemStoreCreateSecp256k1(t *testing.T) {
 	require.NoError(t, err)
 	_, hasAddressProperty := jsonWallet["address"]
 	assert.False(t, hasAddressProperty)
-
-}
-
-func TestFileSystemStoreCreateBabyjubjub(t *testing.T) {
-	ctx, fs := newTestFilesystemStore(t)
-
-	privKey := babyjub.NewRandPrivKey()
-
-	keyBytes, keyHandle, err := fs.FindOrCreateLoadableKey(ctx, &proto.ResolveKeyRequest{
-		Name: "42",
-		Path: []*proto.ResolveKeyPathSegment{
-			{Name: "bob"},
-			{Name: "blue"},
-		},
-	}, func() ([]byte, error) { return privKey[:], nil })
-	require.NoError(t, err)
-
-	assert.Equal(t, keyBytes, privKey[:])
-	assert.Equal(t, "bob/blue/42", keyHandle)
-	cached, _ := fs.cache.Get(keyHandle)
-	assert.NotNil(t, cached)
-
-	keyBytes, err = fs.LoadKeyMaterial(ctx, keyHandle)
-	require.NoError(t, err)
-	assert.Equal(t, keyBytes, privKey[:])
-
-	fs.cache.Delete(keyHandle)
-
-	keyBytes, err = fs.LoadKeyMaterial(ctx, keyHandle)
-	require.NoError(t, err)
-	assert.Equal(t, keyBytes, privKey[:])
 
 }
 

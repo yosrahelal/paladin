@@ -28,4 +28,7 @@ type InMemorySigner interface {
 	Sign(ctx context.Context, algorithm, payloadType string, privateKey, payload []byte) ([]byte, error)
 	// Translate a signing key into a verifier of the requested type
 	GetVerifier(ctx context.Context, algorithm, verifierType string, privateKey []byte) (string, error)
+	// Get the minimum key length required for the supplied algorithm
+	// The key will be created and managed on behalf of the in memory signing using the configured key store
+	GetMinimumKeyLen(ctx context.Context, algorithm string) (int, error)
 }
