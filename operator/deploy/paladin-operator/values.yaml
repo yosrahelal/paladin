@@ -1,4 +1,9 @@
 
+
+# installCRDs controls whether to install CRDs
+installCRDs: true
+
+# Default values for paladin-operator
 operator:
   name: paladin-operator
   namespace: paladin
