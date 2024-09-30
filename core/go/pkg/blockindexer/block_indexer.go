@@ -31,6 +31,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 
@@ -96,7 +97,7 @@ type blockIndexer struct {
 	dispatcherDone             chan struct{}
 }
 
-func NewBlockIndexer(ctx context.Context, config *Config, wsConfig *rpcclient.WSConfig, persistence persistence.Persistence) (_ BlockIndexer, err error) {
+func NewBlockIndexer(ctx context.Context, config *config.BlockIndexerConfig, wsConfig *rpcclient.WSConfig, persistence persistence.Persistence) (_ BlockIndexer, err error) {
 
 	blockListener, err := newBlockListener(ctx, config, wsConfig)
 	if err != nil {
@@ -106,25 +107,25 @@ func NewBlockIndexer(ctx context.Context, config *Config, wsConfig *rpcclient.WS
 	return newBlockIndexer(ctx, config, persistence, blockListener)
 }
 
-func newBlockIndexer(ctx context.Context, config *Config, persistence persistence.Persistence, blockListener *blockListener) (bi *blockIndexer, err error) {
+func newBlockIndexer(ctx context.Context, conf *config.BlockIndexerConfig, persistence persistence.Persistence, blockListener *blockListener) (bi *blockIndexer, err error) {
 	bi = &blockIndexer{
 		parentCtxForReset:          ctx, // stored for startOrResetProcessing
 		persistence:                persistence,
 		wsConn:                     blockListener.wsConn,
 		blockListener:              blockListener,
-		requiredConfirmations:      confutil.IntMin(config.RequiredConfirmations, 0, *DefaultConfig.RequiredConfirmations),
+		requiredConfirmations:      confutil.IntMin(conf.RequiredConfirmations, 0, *config.BlockIndexerDefaults.RequiredConfirmations),
 		retry:                      blockListener.retry,
-		batchSize:                  confutil.IntMin(config.CommitBatchSize, 1, *DefaultConfig.CommitBatchSize),
-		batchTimeout:               confutil.DurationMin(config.CommitBatchTimeout, 0, *DefaultConfig.CommitBatchTimeout),
+		batchSize:                  confutil.IntMin(conf.CommitBatchSize, 1, *config.BlockIndexerDefaults.CommitBatchSize),
+		batchTimeout:               confutil.DurationMin(conf.CommitBatchTimeout, 0, *config.BlockIndexerDefaults.CommitBatchTimeout),
 		txWaiters:                  inflight.NewInflightManager[tktypes.Bytes32, *IndexedTransaction](tktypes.ParseBytes32),
 		eventStreams:               make(map[uuid.UUID]*eventStream),
 		eventStreamsHeadSet:        make(map[uuid.UUID]*eventStream),
-		esBlockDispatchQueueLength: confutil.IntMin(config.EventStreams.BlockDispatchQueueLength, 0, *DefaultEventStreamsConfig.BlockDispatchQueueLength),
-		esCatchUpQueryPageSize:     confutil.IntMin(config.EventStreams.CatchUpQueryPageSize, 0, *DefaultEventStreamsConfig.CatchUpQueryPageSize),
+		esBlockDispatchQueueLength: confutil.IntMin(conf.EventStreams.BlockDispatchQueueLength, 0, *config.EventStreamDefaults.BlockDispatchQueueLength),
+		esCatchUpQueryPageSize:     confutil.IntMin(conf.EventStreams.CatchUpQueryPageSize, 0, *config.EventStreamDefaults.CatchUpQueryPageSize),
 		dispatcherTap:              make(chan struct{}, 1),
 	}
 	bi.highestConfirmedBlock.Store(-1)
-	if err := bi.setFromBlock(ctx, config); err != nil {
+	if err := bi.setFromBlock(ctx, conf); err != nil {
 		return nil, err
 	}
 	if err := bi.loadEventStreams(ctx); err != nil {
@@ -241,7 +242,7 @@ func (bi *blockIndexer) GetBlockListenerHeight(ctx context.Context) (confirmed u
 	return bi.blockListener.getHighestBlock(ctx)
 }
 
-func (bi *blockIndexer) setFromBlock(ctx context.Context, conf *Config) error {
+func (bi *blockIndexer) setFromBlock(ctx context.Context, conf *config.BlockIndexerConfig) error {
 	var vUntyped interface{}
 	if conf.FromBlock == nil {
 		vUntyped = "latest"

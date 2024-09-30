@@ -19,41 +19,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-
-	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
-
-type LibraryType string
-
-const (
-	LibraryTypeCShared LibraryType = "c-shared"
-	LibraryTypeJar     LibraryType = "jar"
-)
-
-func (lt LibraryType) Enum() tktypes.Enum[LibraryType] {
-	return tktypes.Enum[LibraryType](lt)
-}
-
-func (pl LibraryType) Options() []string {
-	return []string{
-		string(LibraryTypeCShared),
-		string(LibraryTypeJar),
-	}
-}
-
-func MapLibraryTypeToProto(t tktypes.Enum[LibraryType]) (prototk.PluginLoad_LibType, error) {
-	return tktypes.MapEnum(t, map[LibraryType]prototk.PluginLoad_LibType{
-		LibraryTypeCShared: prototk.PluginLoad_C_SHARED,
-		LibraryTypeJar:     prototk.PluginLoad_JAR,
-	})
-}
-
-type PluginConfig struct {
-	Type    tktypes.Enum[LibraryType] `yaml:"type"`
-	Library string                    `yaml:"library"`
-	Class   *string                   `yaml:"class,omitempty"`
-}
 
 type PluginManager interface {
 	ManagerLifecycle

@@ -29,6 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -164,8 +165,8 @@ func newTestPlugin(domainFuncs *plugintk.DomainAPIFunctions) *testPlugin {
 
 func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *domainManager, *testPlugin, func()) {
 
-	ctx, dm, mc, done := newTestDomainManager(t, realDB, &DomainManagerConfig{
-		Domains: map[string]*DomainConfig{
+	ctx, dm, mc, done := newTestDomainManager(t, realDB, &config.DomainManagerConfig{
+		Domains: map[string]*config.DomainConfig{
 			"test1": {
 				Config:          map[string]any{"some": "conf"},
 				RegistryAddress: tktypes.RandHex(20),
@@ -350,8 +351,8 @@ func TestDomainInitFactorySchemaStoreFail(t *testing.T) {
 
 func TestDomainConfigureFail(t *testing.T) {
 
-	ctx, dm, _, done := newTestDomainManager(t, false, &DomainManagerConfig{
-		Domains: map[string]*DomainConfig{
+	ctx, dm, _, done := newTestDomainManager(t, false, &config.DomainManagerConfig{
+		Domains: map[string]*config.DomainConfig{
 			"test1": {
 				Config:          map[string]any{"some": "config"},
 				RegistryAddress: tktypes.RandHex(20),

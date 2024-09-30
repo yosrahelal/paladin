@@ -27,8 +27,8 @@ import (
 	"github.com/iden3/go-rapidsnark/types"
 	"github.com/iden3/go-rapidsnark/witness/v2"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/api"
 	"github.com/kaleido-io/paladin/core/pkg/signer/common"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
@@ -54,8 +54,8 @@ func NewKeypair() *User {
 }
 
 func TestRegister(t *testing.T) {
-	registry := make(map[string]api.InMemorySigner)
-	config := api.SnarkProverConfig{
+	registry := make(map[string]signerapi.InMemorySigner)
+	config := signerapi.SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
@@ -65,7 +65,7 @@ func TestRegister(t *testing.T) {
 }
 
 func TestNewProver(t *testing.T) {
-	config := api.SnarkProverConfig{
+	config := signerapi.SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
@@ -88,14 +88,14 @@ func (t *testWitnessCalculator) CalculateBinWitness(inputs map[string]interface{
 }
 
 func TestSnarkProve(t *testing.T) {
-	config := api.SnarkProverConfig{
+	config := signerapi.SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
 	assert.NoError(t, err)
 
-	testCircuitLoader := func(circuitID string, config api.SnarkProverConfig) (witness.Calculator, []byte, error) {
+	testCircuitLoader := func(circuitID string, config signerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
 		return &testWitnessCalculator{}, []byte("proving key"), nil
 	}
 	prover.circuitLoader = testCircuitLoader
@@ -156,7 +156,7 @@ func TestSnarkProve(t *testing.T) {
 }
 
 func TestSnarkProveError(t *testing.T) {
-	config := api.SnarkProverConfig{
+	config := signerapi.SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
@@ -186,7 +186,7 @@ func TestSnarkProveError(t *testing.T) {
 }
 
 func TestSnarkProveErrorCircuit(t *testing.T) {
-	config := api.SnarkProverConfig{
+	config := signerapi.SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
@@ -219,7 +219,7 @@ func TestSnarkProveErrorCircuit(t *testing.T) {
 }
 
 func TestSnarkProveErrorInputs(t *testing.T) {
-	config := api.SnarkProverConfig{
+	config := signerapi.SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
@@ -328,14 +328,14 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 }
 
 func TestSnarkProveErrorLoadcircuits(t *testing.T) {
-	config := api.SnarkProverConfig{
+	config := signerapi.SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
 	assert.NoError(t, err)
 
-	testCircuitLoader := func(circuitID string, config api.SnarkProverConfig) (witness.Calculator, []byte, error) {
+	testCircuitLoader := func(circuitID string, config signerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
 		return nil, nil, fmt.Errorf("bang!")
 	}
 	prover.circuitLoader = testCircuitLoader
@@ -382,14 +382,14 @@ func TestSnarkProveErrorLoadcircuits(t *testing.T) {
 }
 
 func TestSnarkProveErrorGenerateProof(t *testing.T) {
-	config := api.SnarkProverConfig{
+	config := signerapi.SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
 	assert.NoError(t, err)
 
-	testCircuitLoader := func(circuitID string, config api.SnarkProverConfig) (witness.Calculator, []byte, error) {
+	testCircuitLoader := func(circuitID string, config signerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
 		return &testWitnessCalculator{}, []byte("proving key"), nil
 	}
 	prover.circuitLoader = testCircuitLoader
@@ -432,14 +432,14 @@ func TestSnarkProveErrorGenerateProof(t *testing.T) {
 }
 
 func TestSnarkProveErrorGenerateProof2(t *testing.T) {
-	config := api.SnarkProverConfig{
+	config := signerapi.SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
 	assert.NoError(t, err)
 
-	testCircuitLoader := func(circuitID string, config api.SnarkProverConfig) (witness.Calculator, []byte, error) {
+	testCircuitLoader := func(circuitID string, config signerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
 		return &testWitnessCalculator{}, []byte("proving key"), nil
 	}
 	prover.circuitLoader = testCircuitLoader

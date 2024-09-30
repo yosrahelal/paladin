@@ -31,25 +31,25 @@ import (
 )
 
 type ConfigAuth struct {
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 type HTTPConfig struct {
-	URL         string                 `yaml:"url"`
-	HTTPHeaders map[string]interface{} `yaml:"httpHeaders"`
-	Auth        ConfigAuth             `yaml:"auth"`
-	TLS         tlsconf.Config         `yaml:"tls"`
+	URL         string                 `json:"url"`
+	HTTPHeaders map[string]interface{} `json:"httpHeaders"`
+	Auth        ConfigAuth             `json:"auth"`
+	TLS         tlsconf.Config         `json:"tls"`
 }
 
 type WSConfig struct {
-	HTTPConfig             `yaml:",inline"`
-	InitialConnectAttempts *int         `yaml:"initialConnectAttempts"`
-	ConnectionTimeout      *string      `yaml:"connectionTimeout"`
-	ConnectRetry           retry.Config `yaml:"connectRetry"`
-	ReadBufferSize         *string      `yaml:"readBufferSize"`
-	WriteBufferSize        *string      `yaml:"writeBufferSize"`
-	HeartbeatInterval      *string      `yaml:"heartbeatInterval"`
+	HTTPConfig             `json:",inline"`
+	InitialConnectAttempts *int         `json:"initialConnectAttempts"`
+	ConnectionTimeout      *string      `json:"connectionTimeout"`
+	ConnectRetry           retry.Config `json:"connectRetry"`
+	ReadBufferSize         *string      `json:"readBufferSize"`
+	WriteBufferSize        *string      `json:"writeBufferSize"`
+	HeartbeatInterval      *string      `json:"heartbeatInterval"`
 }
 
 var DefaultWSConfig = &WSConfig{

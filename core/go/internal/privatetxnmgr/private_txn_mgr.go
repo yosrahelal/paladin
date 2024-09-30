@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 
@@ -43,7 +44,7 @@ import (
 type privateTxManager struct {
 	ctx                  context.Context
 	ctxCancel            func()
-	config               *Config
+	config               *config.PrivateTxManagerConfig
 	orchestrators        map[string]*Orchestrator
 	endorsementGatherers map[string]ptmgrtypes.EndorsementGatherer
 	components           components.AllComponents
@@ -71,7 +72,7 @@ func (p *privateTxManager) Start() error {
 func (p *privateTxManager) Stop() {
 }
 
-func NewPrivateTransactionMgr(ctx context.Context, nodeID string, config *Config) components.PrivateTxManager {
+func NewPrivateTransactionMgr(ctx context.Context, nodeID string, config *config.PrivateTxManagerConfig) components.PrivateTxManager {
 	p := &privateTxManager{
 		config:               config,
 		orchestrators:        make(map[string]*Orchestrator),
@@ -102,7 +103,7 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 			NewOrchestrator(
 				p.ctx, p.nodeID,
 				contractAddr, /** TODO: fill in the real plug-ins*/
-				&OrchestratorConfig{},
+				&p.config.Orchestrator,
 				p.components,
 				domainAPI,
 				seq,

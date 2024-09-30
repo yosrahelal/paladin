@@ -26,6 +26,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
@@ -53,18 +54,18 @@ type blockListener struct {
 	newBlocks                  chan *BlockInfoJSONRPC
 }
 
-func newBlockListener(ctx context.Context, conf *Config, wsConfig *rpcclient.WSConfig) (bl *blockListener, err error) {
+func newBlockListener(ctx context.Context, conf *config.BlockIndexerConfig, wsConfig *rpcclient.WSConfig) (bl *blockListener, err error) {
 	wscConf, err := rpcclient.ParseWSConfig(ctx, wsConfig)
 	if err != nil {
 		return nil, err
 	}
-	chainHeadCacheLen := confutil.IntMin(conf.ChainHeadCacheLen, 1, *DefaultConfig.ChainHeadCacheLen)
+	chainHeadCacheLen := confutil.IntMin(conf.ChainHeadCacheLen, 1, *config.BlockIndexerDefaults.ChainHeadCacheLen)
 	bl = &blockListener{
 		ctx:                        log.WithLogField(ctx, "role", "blocklistener"),
 		initialBlockHeightObtained: make(chan struct{}),
 		newHeadsTap:                make(chan struct{}, 1),
 		highestBlock:               0,
-		blockPollingInterval:       confutil.DurationMin(conf.BlockPollingInterval, 1*time.Millisecond, *DefaultConfig.BlockPollingInterval),
+		blockPollingInterval:       confutil.DurationMin(conf.BlockPollingInterval, 1*time.Millisecond, *config.BlockIndexerDefaults.BlockPollingInterval),
 		canonicalChain:             list.New(),
 		unstableHeadLength:         chainHeadCacheLen,
 		retry:                      retry.NewRetryIndefinite(&conf.Retry),

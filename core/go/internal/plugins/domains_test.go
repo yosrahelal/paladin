@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -66,10 +67,10 @@ func domainHeaderAccessor(msg *prototk.DomainMessage) *prototk.Header {
 
 func (tp *testDomainManager) mock(t *testing.T) *componentmocks.DomainManager {
 	mdm := componentmocks.NewDomainManager(t)
-	pluginMap := make(map[string]*components.PluginConfig)
+	pluginMap := make(map[string]*config.PluginConfig)
 	for name := range tp.domains {
-		pluginMap[name] = &components.PluginConfig{
-			Type:    components.LibraryTypeCShared.Enum(),
+		pluginMap[name] = &config.PluginConfig{
+			Type:    config.LibraryTypeCShared.Enum(),
 			Library: "/tmp/not/applicable",
 		}
 	}

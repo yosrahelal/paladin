@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -31,7 +32,7 @@ func newDBTestStateStore(t *testing.T) (context.Context, *stateStore, func()) {
 	ctx := context.Background()
 	p, pDone, err := persistence.NewUnitTestPersistence(ctx)
 	require.NoError(t, err)
-	ss := NewStateStore(ctx, &Config{}, p)
+	ss := NewStateStore(ctx, &config.StateStoreConfig{}, p)
 	return ctx, ss.(*stateStore), func() {
 		ss.Close()
 		pDone()
@@ -43,7 +44,7 @@ func newDBMockStateStore(t *testing.T) (context.Context, *stateStore, sqlmock.Sq
 	log.SetLevel("debug")
 	p, err := mockpersistence.NewSQLMockProvider()
 	require.NoError(t, err)
-	ss := NewStateStore(ctx, &Config{}, p.P)
+	ss := NewStateStore(ctx, &config.StateStoreConfig{}, p.P)
 	return ctx, ss.(*stateStore), p.Mock, func() {
 		require.NoError(t, p.Mock.ExpectationsWereMet())
 	}

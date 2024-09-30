@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
@@ -50,8 +51,8 @@ func newTestPlugin(registryFuncs *plugintk.RegistryAPIFunctions) *testPlugin {
 }
 
 func newTestRegistry(t *testing.T, extraSetup ...func(mc *componentmocks.AllComponents)) (context.Context, *registryManager, *testPlugin, func()) {
-	ctx, tm, done := newTestRegistryManager(t, &RegistryManagerConfig{
-		Registries: map[string]*RegistryConfig{
+	ctx, tm, done := newTestRegistryManager(t, &config.RegistryManagerConfig{
+		Registries: map[string]*config.RegistryConfig{
 			"test1": {
 				Config: map[string]any{"some": "conf"},
 			},

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"gorm.io/gorm"
 
@@ -108,8 +109,8 @@ func NewWriter[T Writeable[R], R any](
 	bgCtx context.Context,
 	handler BatchHandler[T, R],
 	p persistence.Persistence,
-	conf *Config,
-	defaults *Config,
+	conf *config.FlushWriterConfig,
+	defaults *config.FlushWriterConfig,
 ) Writer[T, R] {
 	workerCount := confutil.IntMin(conf.WorkerCount, 1, *defaults.WorkerCount)
 	batchMaxSize := confutil.IntMin(conf.BatchMaxSize, 1, *defaults.BatchMaxSize)

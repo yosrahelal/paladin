@@ -25,12 +25,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/transportmgr"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/core/pkg/signer/api"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
@@ -44,15 +44,15 @@ func TestInitOK(t *testing.T) {
 
 	// We build a config that allows us to get through init successfully, as should be possible
 	// (anything that can't do this should have a separate Start() phase).
-	testConfig := &Config{
-		TransportManagerConfig: transportmgr.TransportManagerConfig{
+	testConfig := &config.PaladinConfig{
+		TransportManagerConfig: config.TransportManagerConfig{
 			NodeName: "node1",
 		},
 		DB: persistence.Config{
 			Type: "sqlite",
 			SQLite: persistence.SQLiteConfig{
 				SQLDBConfig: persistence.SQLDBConfig{
-					URI:           ":memory:",
+					DSN:           ":memory:",
 					AutoMigrate:   confutil.P(true),
 					MigrationsDir: "../../db/migrations/sqlite",
 				},
@@ -63,14 +63,14 @@ func TestInitOK(t *testing.T) {
 				URL: "http://localhost:8545", // we won't actually connect this test, just check the config
 			},
 		},
-		Signer: api.Config{
-			KeyDerivation: api.KeyDerivationConfig{
-				Type: api.KeyDerivationTypeBIP32,
+		Signer: signerapi.Config{
+			KeyDerivation: signerapi.KeyDerivationConfig{
+				Type: signerapi.KeyDerivationTypeBIP32,
 			},
-			KeyStore: api.StoreConfig{
+			KeyStore: signerapi.StoreConfig{
 				Type: "static",
-				Static: api.StaticKeyStorageConfig{
-					Keys: map[string]api.StaticKeyEntryConfig{
+				Static: signerapi.StaticKeyStorageConfig{
+					Keys: map[string]signerapi.StaticKeyEntryConfig{
 						"seed": {
 							Encoding: "hex",
 							Inline:   "dfaf68b749c53672e5fa8e0b41514f9efd033ba6aa3add3b8b07f92e66f0e64a",
@@ -184,7 +184,7 @@ func TestStartOK(t *testing.T) {
 	mockEngine.On("EngineName").Return("unittest_engine")
 	mockEngine.On("Stop").Return()
 
-	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &Config{}, mockEngine).(*componentManager)
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &config.PaladinConfig{}, mockEngine).(*componentManager)
 	cm.ethClientFactory = mockEthClientFactory
 	cm.initResults = map[string]*components.ManagerInitResult{
 		"utengine": {
@@ -217,7 +217,7 @@ func TestStartOK(t *testing.T) {
 }
 
 func TestBuildInternalEventStreamsPreCommitPostCommit(t *testing.T) {
-	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &Config{}, nil).(*componentManager)
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &config.PaladinConfig{}, nil).(*componentManager)
 	handler := func(ctx context.Context, dbTX *gorm.DB, blocks []*blockindexer.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
 		return nil, nil
 	}
@@ -236,7 +236,7 @@ func TestBuildInternalEventStreamsPreCommitPostCommit(t *testing.T) {
 }
 
 func TestErrorWrapping(t *testing.T) {
-	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &Config{}, nil).(*componentManager)
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &config.PaladinConfig{}, nil).(*componentManager)
 
 	mockKeyManager := componentmocks.NewKeyManager(t)
 	mockEthClientFactory := componentmocks.NewEthClientFactory(t)

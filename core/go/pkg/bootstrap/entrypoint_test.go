@@ -25,6 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/componentmgr"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -34,7 +35,7 @@ func setupTestConfig(t *testing.T, mockers ...func(mockCM *componentmocks.Compon
 	id := uuid.New()
 	origCMFactory := componentManagerFactory
 	mockCM := componentmocks.NewComponentManager(t)
-	componentManagerFactory = func(bgCtx context.Context, grpcTarget string, instanceUUID uuid.UUID, conf *componentmgr.Config, engine components.Engine) componentmgr.ComponentManager {
+	componentManagerFactory = func(bgCtx context.Context, grpcTarget string, instanceUUID uuid.UUID, conf *config.PaladinConfig, engine components.Engine) componentmgr.ComponentManager {
 		assert.Equal(t, id, instanceUUID)
 		assert.Equal(t, "http://localhost:8545", conf.Blockchain.HTTP.URL)
 		return mockCM

@@ -27,7 +27,7 @@ import (
 	"github.com/iden3/go-rapidsnark/witness/v2"
 	"github.com/kaleido-io/paladin/core/internal/cache"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/api"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -36,14 +36,14 @@ import (
 
 // snarkProver encapsulates the logic for generating SNARK proofs
 type snarkProver struct {
-	zkpProverConfig  api.SnarkProverConfig
+	zkpProverConfig  signerapi.SnarkProverConfig
 	circuitsCache    cache.Cache[string, witness.Calculator]
 	provingKeysCache cache.Cache[string, []byte]
-	circuitLoader    func(circuitID string, config api.SnarkProverConfig) (witness.Calculator, []byte, error)
+	circuitLoader    func(circuitID string, config signerapi.SnarkProverConfig) (witness.Calculator, []byte, error)
 	proofGenerator   func(witness []byte, provingKey []byte) (*types.ZKProof, error)
 }
 
-func Register(ctx context.Context, config api.SnarkProverConfig, registry map[string]api.InMemorySigner) error {
+func Register(ctx context.Context, config signerapi.SnarkProverConfig, registry map[string]signerapi.InMemorySigner) error {
 	// skip registration is no ZKP prover config is provided
 	if config.CircuitsDir == "" || config.ProvingKeysDir == "" {
 		log.L(ctx).Info("zkp prover not configured, skip registering as an in-memory signer")
@@ -58,7 +58,7 @@ func Register(ctx context.Context, config api.SnarkProverConfig, registry map[st
 	return nil
 }
 
-func newSnarkProver(config api.SnarkProverConfig) (*snarkProver, error) {
+func newSnarkProver(config signerapi.SnarkProverConfig) (*snarkProver, error) {
 	cacheConfig := cache.Config{
 		Capacity: confutil.P(5),
 	}
