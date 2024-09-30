@@ -491,7 +491,7 @@ func (d *domain) handleEventBatch(ctx context.Context, tx *gorm.DB, batch *block
 		return nil, err
 	}
 	for addr, events := range eventsByAddress {
-		res, err := d.handleEventBatchForContract(ctx, batch.BatchID, addr, events, configBytesByAddress[addr])
+		res, err := d.handleEventBatchForContract(ctx, batch.BatchID, addr, events)
 		if err != nil {
 			return nil, err
 		}
@@ -524,14 +524,13 @@ func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*
 	return &txUUID, nil
 }
 
-func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.UUID, contractAddress tktypes.EthAddress, events []*blockindexer.EventWithData, configBytes tktypes.HexBytes) (*prototk.HandleEventBatchResponse, error) {
+func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.UUID, contractAddress tktypes.EthAddress, events []*blockindexer.EventWithData) (*prototk.HandleEventBatchResponse, error) {
 	var res *prototk.HandleEventBatchResponse
 	eventsJSON, err := json.Marshal(events)
 	if err == nil {
 		res, err = d.api.HandleEventBatch(ctx, &prototk.HandleEventBatchRequest{
-			BatchId:     batchID.String(),
-			JsonEvents:  string(eventsJSON),
-			ConfigBytes: configBytes.HexString(),
+			BatchId:    batchID.String(),
+			JsonEvents: string(eventsJSON),
 		})
 	}
 	if err != nil {
