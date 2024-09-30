@@ -90,14 +90,10 @@ configurations {
 
 def grpcVersion = '1.65+'
 def protobufVersion = '3.25+'
-def protocVersion = protobufVersion
 
 dependencies {
 
-    implementation "io.grpc:grpc-protobuf:${grpcVersion}"
-    implementation "io.grpc:grpc-services:${grpcVersion}"
-    implementation "io.grpc:grpc-stub:${grpcVersion}"
-    implementation "io.grpc:grpc-netty:${grpcVersion}"
+    implementation "io.grpc:grpc-all:${grpcVersion}"
 
     implementation 'org.bouncycastle:bcprov-jdk18on:1.78+'
     implementation 'io.netty:netty-all:4.1+'
