@@ -284,7 +284,7 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataRequest) (*prototk.EncodeDataResponse, error) {
 	var abiData []byte
 	switch encRequest.EncodingType {
-	case prototk.EncodeDataRequest_FUNCTION_CALL_DATA:
+	case prototk.EncodingType_FUNCTION_CALL_DATA:
 		var entry *abi.Entry
 		err := json.Unmarshal([]byte(encRequest.Definition), &entry)
 		if err != nil {
@@ -294,7 +294,7 @@ func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataR
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIEncodingRequestEncodingFail)
 		}
-	case prototk.EncodeDataRequest_TUPLE:
+	case prototk.EncodingType_TUPLE:
 		var param *abi.Parameter
 		err := json.Unmarshal([]byte(encRequest.Definition), &param)
 		if err != nil {
@@ -304,7 +304,7 @@ func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataR
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIEncodingRequestEncodingFail)
 		}
-	case prototk.EncodeDataRequest_ETH_TRANSACTION:
+	case prototk.EncodingType_ETH_TRANSACTION:
 		var tx *ethsigner.Transaction
 		err := json.Unmarshal([]byte(encRequest.Body), &tx)
 		if err != nil {
@@ -319,7 +319,7 @@ func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataR
 		default:
 			return nil, i18n.NewError(ctx, msgs.MsgDomainABIEncodingRequestInvalidType, encRequest.Definition)
 		}
-	case prototk.EncodeDataRequest_TYPED_DATA_V4:
+	case prototk.EncodingType_TYPED_DATA_V4:
 		var tdv4 *eip712.TypedData
 		err := json.Unmarshal([]byte(encRequest.Body), &tdv4)
 		if err != nil {
@@ -334,6 +334,60 @@ func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataR
 	}
 	return &prototk.EncodeDataResponse{
 		Data: abiData,
+	}, nil
+}
+
+func (d *domain) DecodeData(ctx context.Context, decRequest *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error) {
+	var body []byte
+	switch decRequest.EncodingType {
+	case prototk.EncodingType_FUNCTION_CALL_DATA:
+		var entry *abi.Entry
+		err := json.Unmarshal([]byte(decRequest.Definition), &entry)
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestEntryInvalid)
+		}
+		cv, err := entry.DecodeCallDataCtx(ctx, decRequest.Data)
+		if err == nil {
+			body, err = cv.JSON()
+		}
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestFail)
+		}
+	case prototk.EncodingType_TUPLE:
+		var param *abi.Parameter
+		err := json.Unmarshal([]byte(decRequest.Definition), &param)
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestEntryInvalid)
+		}
+		cv, err := param.Components.DecodeABIDataCtx(ctx, []byte(decRequest.Data), 0)
+		if err == nil {
+			body, err = cv.JSON()
+		}
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestFail)
+		}
+	case prototk.EncodingType_EVENT_DATA:
+		var entry *abi.Entry
+		err := json.Unmarshal([]byte(decRequest.Definition), &entry)
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestEntryInvalid)
+		}
+		topics := make([]ethtypes.HexBytes0xPrefix, len(decRequest.Topics))
+		for i, topic := range decRequest.Topics {
+			topics[i] = topic
+		}
+		cv, err := entry.DecodeEventDataCtx(ctx, topics, decRequest.Data)
+		if err == nil {
+			body, err = cv.JSON()
+		}
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestFail)
+		}
+	default:
+		return nil, i18n.NewError(ctx, msgs.MsgDomainABIDecodingRequestInvalidType, decRequest.EncodingType)
+	}
+	return &prototk.DecodeDataResponse{
+		Body: string(body),
 	}, nil
 }
 

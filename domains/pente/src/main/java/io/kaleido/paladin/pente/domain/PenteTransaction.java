@@ -234,7 +234,7 @@ class PenteTransaction {
         switch (abiEntryType) {
         case ABIEntryType.DEPLOY -> {
             request = FromDomain.EncodeDataRequest.newBuilder().
-                    setEncodingType(FromDomain.EncodeDataRequest.EncodingType.TUPLE).
+                    setEncodingType(FromDomain.EncodingType.TUPLE).
                     setDefinition(defs.inputs.toJSON(false)).
                     setBody(paramsJSON).
                     build();
@@ -242,7 +242,7 @@ class PenteTransaction {
         case ABIEntryType.CUSTOM_FUNCTION -> {
             JsonABI.Entry functionEntry = JsonABI.newFunction(functionDef.name(), defs.inputs.components(), JsonABI.newParameters());
             request = FromDomain.EncodeDataRequest.newBuilder().
-                    setEncodingType(FromDomain.EncodeDataRequest.EncodingType.FUNCTION_CALL_DATA).
+                    setEncodingType(FromDomain.EncodingType.FUNCTION_CALL_DATA).
                     setDefinition(functionEntry.toJSON(false)).
                     setBody(paramsJSON).
                     build();
@@ -281,7 +281,7 @@ class PenteTransaction {
                 JsonHex.wrap(calldata)
         );
         var request = FromDomain.EncodeDataRequest.newBuilder().
-                        setEncodingType(FromDomain.EncodeDataRequest.EncodingType.ETH_TRANSACTION).
+                        setEncodingType(FromDomain.EncodingType.ETH_TRANSACTION).
                         setDefinition(defs.inputs.toJSON(false)).
                         setBody(new ObjectMapper().writeValueAsString(ethTXJson)).
                         setDefinition("eip-1559").
@@ -492,7 +492,7 @@ class PenteTransaction {
             }});
         }};
         var encoded = domain.encodeData(FromDomain.EncodeDataRequest.newBuilder().
-                setEncodingType(FromDomain.EncodeDataRequest.EncodingType.TYPED_DATA_V4).
+                setEncodingType(FromDomain.EncodingType.TYPED_DATA_V4).
                 setBody(new ObjectMapper().writeValueAsString(typedDataRequest)).
                 build()).get();
         return encoded.getData().toByteArray();
