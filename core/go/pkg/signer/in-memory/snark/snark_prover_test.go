@@ -19,7 +19,9 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/iden3/go-iden3-crypto/babyjub"
@@ -30,6 +32,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/signer/common"
 	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
 )
@@ -153,6 +156,114 @@ func TestSnarkProve(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, 36, len(res.Payload))
+}
+
+func TestConcurrentSnarkProofGeneration(t *testing.T) {
+	config := signerapi.SnarkProverConfig{
+		CircuitsDir:         "test",
+		ProvingKeysDir:      "test",
+		MaxProverPerCircuit: confutil.P(50), // equal to the default cache size, so all provers can be cached at once
+	}
+	prover, err := newSnarkProver(config)
+	assert.NoError(t, err)
+
+	circuitLoadedTotal := 0
+	circuitLoadedTotalMutex := &sync.Mutex{}
+
+	peakProverCount := 0
+	totalProvingRequestCount := 0
+	peakProverCountMutex := &sync.Mutex{}
+
+	testCircuitLoader := func(circuitID string, config signerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
+		circuitLoadedTotalMutex.Lock()
+		defer circuitLoadedTotalMutex.Unlock()
+		circuitLoadedTotal++
+		return &testWitnessCalculator{}, []byte("proving key"), nil
+	}
+	prover.circuitLoader = testCircuitLoader
+
+	testProofGenerator := func(witness []byte, provingKey []byte) (*types.ZKProof, error) {
+		peakProverCountMutex.Lock()
+		peakProverCount++
+		assert.LessOrEqual(t, peakProverCount, 50) // ensure the peak prover count is smaller than the default max
+		peakProverCountMutex.Unlock()
+		defer func() {
+			peakProverCountMutex.Lock()
+			peakProverCount--
+			totalProvingRequestCount++
+			peakProverCountMutex.Unlock()
+		}()
+		time.Sleep(100 * time.Millisecond) // simulate delay
+
+		return &types.ZKProof{
+			Proof: &types.ProofData{
+				A:        []string{"a"},
+				B:        [][]string{{"b1.1", "b1.2"}, {"b2.1", "b2.2"}},
+				C:        []string{"c"},
+				Protocol: "super snark",
+			},
+		}, nil
+	}
+	prover.proofGenerator = testProofGenerator
+
+	alice := NewKeypair()
+	bob := NewKeypair()
+
+	inputValues := []*big.Int{big.NewInt(30), big.NewInt(40)}
+	outputValues := []*big.Int{big.NewInt(32), big.NewInt(38)}
+
+	salt1 := crypto.NewSalt()
+	input1, _ := poseidon.Hash([]*big.Int{inputValues[0], salt1, alice.PublicKey.X, alice.PublicKey.Y})
+	salt2 := crypto.NewSalt()
+	input2, _ := poseidon.Hash([]*big.Int{inputValues[1], salt2, alice.PublicKey.X, alice.PublicKey.Y})
+	inputCommitments := []string{input1.Text(16), input2.Text(16)}
+
+	inputValueInts := []uint64{inputValues[0].Uint64(), inputValues[1].Uint64()}
+	inputSalts := []string{salt1.Text(16), salt2.Text(16)}
+	outputValueInts := []uint64{outputValues[0].Uint64(), outputValues[1].Uint64()}
+
+	alicePubKey := common.EncodePublicKey(alice.PublicKey)
+	bobPubKey := common.EncodePublicKey(bob.PublicKey)
+
+	req := pb.ProvingRequest{
+		CircuitId: "anon",
+		Common: &pb.ProvingRequestCommon{
+			InputCommitments: inputCommitments,
+			InputValues:      inputValueInts,
+			InputSalts:       inputSalts,
+			InputOwner:       "alice/key0",
+			OutputValues:     outputValueInts,
+			OutputSalts:      []string{crypto.NewSalt().Text(16), crypto.NewSalt().Text(16)},
+			OutputOwners:     []string{bobPubKey, alicePubKey},
+		},
+	}
+	payload, err := proto.Marshal(&req)
+	assert.NoError(t, err)
+	expectReqCount := 500
+	reqChan := make(chan struct{}, expectReqCount)
+
+	for i := 0; i < expectReqCount; i++ {
+		go func() {
+			res, err := prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
+				KeyHandle: "key1",
+				Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+				Payload:   payload,
+			})
+			assert.NoError(t, err)
+			assert.Equal(t, 36, len(res.Payload))
+			reqChan <- struct{}{}
+		}()
+	}
+	resCount := 0
+	for {
+		<-reqChan
+		resCount++
+		if resCount == expectReqCount {
+			assert.Equal(t, expectReqCount, totalProvingRequestCount) // check all proving requests has been processed
+			assert.Equal(t, 50, circuitLoadedTotal)                   // check cache works as expected, loaded circuit 50 times for 500 proving requests
+			break
+		}
+	}
 }
 
 func TestSnarkProveError(t *testing.T) {

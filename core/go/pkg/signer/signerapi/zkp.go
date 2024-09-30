@@ -18,6 +18,7 @@ package signerapi
 // StaticKeyEntryConfig is the configuration for a ZK prover
 // based on SNARK, which typically takes a circuit and proving key
 type SnarkProverConfig struct {
-	CircuitsDir    string `json:"circuitsDir"`    // directory for the circuits runtime (WASM currently supported)
-	ProvingKeysDir string `json:"provingKeysDir"` // public parameters for the prover, specific to each circuit
+	CircuitsDir         string `json:"circuitsDir"`         // directory for the circuits runtime (WASM currently supported)
+	ProvingKeysDir      string `json:"provingKeysDir"`      // public parameters for the prover, specific to each circuit
+	MaxProverPerCircuit *int   `json:"maxProverPerCircuit"` // maximum number of proving runtime per circuit, each prover owns a standalone WASM instance
 }
