@@ -42,6 +42,11 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
 
     EndorsementConfig _endorsementConfig;
 
+    struct ExternalCall {
+        address contractAddress;
+        bytes encodedCall;
+    }
+
     constructor() {}
 
     function initialize(
@@ -80,11 +85,12 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
     }
 
     function transition(
-        bytes32            txId,
+        bytes32 txId,
         bytes32[] calldata inputs,
         bytes32[] calldata reads,
         bytes32[] calldata outputs,
-        bytes[]   calldata signatures
+        bytes[] calldata signatures,
+        ExternalCall[] calldata externalCalls
     ) public {
         bytes32 transitionHash = _buildTransitionHash(inputs, reads, outputs);
         validateEndorsements(transitionHash, signatures);
@@ -94,7 +100,7 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
             if (!_unspent[inputs[i]]) {
                 revert PenteInputNotAvailable(inputs[i]);
             }
-            delete(_unspent[inputs[i]]);
+            delete _unspent[inputs[i]];
         }
         for (uint i = 0; i < reads.length; i++) {
             if (!_unspent[reads[i]]) {
@@ -108,8 +114,16 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
             _unspent[outputs[i]] = true;
         }
 
-        // Emmit the state transition event
+        // Emit the state transition event
         emit UTXOTransfer(txId, inputs, outputs, new bytes(0));
+
+        // Trigger any external calls
+        for (uint i = 0; i < externalCalls.length; i++) {
+            _invokeExternal(
+                externalCalls[i].contractAddress,
+                externalCalls[i].encodedCall
+            );
+        }
     }
 
     function _buildTransitionHash(
@@ -132,18 +146,14 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
         address newImplementation
     ) internal view returns (bytes32) {
         bytes32 structHash = keccak256(
-            abi.encode(
-                UPGRADE_TYPEHASH,
-                newImplementation
-            )
+            abi.encode(UPGRADE_TYPEHASH, newImplementation)
         );
         return _hashTypedDataV4(structHash);
     }
 
     function validateEndorsements(
         bytes32 txHash,
-        bytes[] calldata
-        signatures
+        bytes[] calldata signatures
     ) internal view {
         address[] memory endorsers = _endorsementConfig.endorsmentSet;
         address[] memory endorsements = new address[](signatures.length);
@@ -177,4 +187,18 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
         }
     }
 
+    function _invokeExternal(
+        address contractAddress,
+        bytes memory encodedCall
+    ) internal {
+        (bool success, bytes memory result) = contractAddress.call(encodedCall);
+        if (!success) {
+            assembly {
+                // Forward the revert reason
+                let size := mload(result)
+                let ptr := add(result, 32)
+                revert(ptr, size)
+            }
+        }
+    }
 }

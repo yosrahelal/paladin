@@ -358,6 +358,7 @@ public class PenteDomain extends DomainInstance {
                         map(r -> JsonHex.wrap(r.getPayload().toByteArray())).
                         toList()
                 );
+                put("externalCalls", new String[]{});
             }};
             var transitionFunctionABI = config.getPrivacyGroupABI().getABIEntry("function", "transition").toJSON(false);
             var preparedTx = ToDomain.BaseLedgerTransaction.newBuilder().
