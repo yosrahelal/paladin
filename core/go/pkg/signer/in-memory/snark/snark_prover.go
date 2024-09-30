@@ -18,14 +18,17 @@ package snark
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/key"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/iden3/go-rapidsnark/prover"
 	"github.com/iden3/go-rapidsnark/types"
 	"github.com/iden3/go-rapidsnark/witness/v2"
 	"github.com/kaleido-io/paladin/core/internal/cache"
+	"github.com/kaleido-io/paladin/core/internal/msgs"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/core/pkg/signer/api"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -34,13 +37,19 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+var defaultSnarkProverConfig = api.SnarkProverConfig{
+	MaxProverPerCircuit: confutil.P(10),
+}
+
 // snarkProver encapsulates the logic for generating SNARK proofs
 type snarkProver struct {
-	zkpProverConfig  api.SnarkProverConfig
-	circuitsCache    cache.Cache[string, witness.Calculator]
-	provingKeysCache cache.Cache[string, []byte]
-	circuitLoader    func(circuitID string, config api.SnarkProverConfig) (witness.Calculator, []byte, error)
-	proofGenerator   func(witness []byte, provingKey []byte) (*types.ZKProof, error)
+	zkpProverConfig         api.SnarkProverConfig
+	circuitsCache           cache.Cache[string, witness.Calculator]
+	provingKeysCache        cache.Cache[string, []byte]
+	workerPerCircuit        int
+	circuitsWorkerIndexChan map[string]chan int
+	circuitLoader           func(circuitID string, config api.SnarkProverConfig) (witness.Calculator, []byte, error)
+	proofGenerator          func(witness []byte, provingKey []byte) (*types.ZKProof, error)
 }
 
 func Register(ctx context.Context, config api.SnarkProverConfig, registry map[string]api.InMemorySigner) error {
@@ -63,11 +72,13 @@ func newSnarkProver(config api.SnarkProverConfig) (*snarkProver, error) {
 		Capacity: confutil.P(5),
 	}
 	return &snarkProver{
-		zkpProverConfig:  config,
-		circuitsCache:    cache.NewCache[string, witness.Calculator](&cacheConfig, &cacheConfig),
-		provingKeysCache: cache.NewCache[string, []byte](&cacheConfig, &cacheConfig),
-		circuitLoader:    loadCircuit,
-		proofGenerator:   generateProof,
+		zkpProverConfig:         config,
+		circuitsCache:           cache.NewCache[string, witness.Calculator](&cacheConfig, &cacheConfig),
+		provingKeysCache:        cache.NewCache[string, []byte](&cacheConfig, &cacheConfig),
+		circuitLoader:           loadCircuit,
+		proofGenerator:          generateProof,
+		workerPerCircuit:        confutil.Int(config.MaxProverPerCircuit, *defaultSnarkProverConfig.MaxProverPerCircuit),
+		circuitsWorkerIndexChan: make(map[string]chan int),
 	}, nil
 }
 
@@ -88,16 +99,39 @@ func (sp *snarkProver) Sign(ctx context.Context, privateKey []byte, req *pb.Sign
 		return nil, err
 	}
 
+	// obtain a slot for the proof generation for this specific circuit
+	ccChan, chanelFound := sp.circuitsWorkerIndexChan[inputs.CircuitId]
+	if !chanelFound {
+		ccChan = make(chan int, sp.workerPerCircuit) // init token channel
+		for i := 0; i < sp.workerPerCircuit; i++ {
+			ccChan <- i // add all tokens
+		}
+		sp.circuitsWorkerIndexChan[inputs.CircuitId] = ccChan
+	}
+	var workerIndex int
+	select {
+	case workerIndex = <-ccChan: // wait till there is a worker available
+		defer func() {
+			// put the worker index back into the queue upon function exit
+			ccChan <- workerIndex
+		}()
+	case <-ctx.Done():
+		return nil, i18n.NewError(ctx, msgs.MsgContextCanceled)
+	}
+
+	workerID := fmt.Sprintf("%s-%d", inputs.CircuitId, workerIndex)
 	// Perform proof generation
-	circuit, _ := sp.circuitsCache.Get(inputs.CircuitId)
-	provingKey, _ := sp.provingKeysCache.Get(inputs.CircuitId)
+	circuit, _ := sp.circuitsCache.Get(workerID)
+	provingKey, _ := sp.provingKeysCache.Get(workerID)
 	if circuit == nil || provingKey == nil {
+		// the generated WASM instance can only generate one proof at a time, circuitsWorkerIndexChan is used to ensure only 1 proof request
+		// is served per WASM instance at any given time
 		c, p, err := sp.circuitLoader(inputs.CircuitId, sp.zkpProverConfig)
 		if err != nil {
 			return nil, err
 		}
-		sp.circuitsCache.Set(inputs.CircuitId, c)
-		sp.provingKeysCache.Set(inputs.CircuitId, p)
+		sp.circuitsCache.Set(workerID, c)
+		sp.provingKeysCache.Set(workerID, p)
 		circuit = c
 		provingKey = p
 	}

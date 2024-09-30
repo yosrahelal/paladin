@@ -18,6 +18,7 @@ package api
 // StaticKeyEntryConfig is the configuration for a ZK prover
 // based on SNARK, which typically takes a circuit and proving key
 type SnarkProverConfig struct {
-	CircuitsDir    string `yaml:"circuitsDir"`    // directory for the circuits runtime (WASM currently supported)
-	ProvingKeysDir string `yaml:"provingKeysDir"` // public parameters for the prover, specific to each circuit
+	CircuitsDir         string `yaml:"circuitsDir"`         // directory for the circuits runtime (WASM currently supported)
+	ProvingKeysDir      string `yaml:"provingKeysDir"`      // public parameters for the prover, specific to each circuit
+	MaxProverPerCircuit *int   `yaml:"maxProverPerCircuit"` // maximum number of proving runtime per circuit, each prover owns a standalone WASM instance
 }
