@@ -29,9 +29,9 @@ import (
 	"github.com/kaleido-io/paladin/core/componenttest/domains"
 	"github.com/kaleido-io/paladin/core/internal/componentmgr"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/domainmgr"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
-	"github.com/kaleido-io/paladin/core/pkg/signer/api"
+	"github.com/kaleido-io/paladin/core/pkg/config"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -86,7 +86,7 @@ func transactionLatencyThreshold(t *testing.T) time.Duration {
 type componentTestInstance struct {
 	grpcTarget             string
 	id                     uuid.UUID
-	conf                   *componentmgr.Config
+	conf                   *config.PaladinConfig
 	ctx                    context.Context
 	client                 rpcclient.Client
 	resolveEthereumAddress func(identity string) string
@@ -142,10 +142,10 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	i.ctx = log.WithLogField(context.Background(), "instance", instanceName)
 
 	i.conf.Log.Level = confutil.P("trace")
-	i.conf.DomainManagerConfig.Domains = make(map[string]*domainmgr.DomainConfig, 1)
-	i.conf.DomainManagerConfig.Domains["domain1"] = &domainmgr.DomainConfig{
-		Plugin: components.PluginConfig{
-			Type:    components.LibraryTypeCShared.Enum(),
+	i.conf.DomainManagerConfig.Domains = make(map[string]*config.DomainConfig, 1)
+	i.conf.DomainManagerConfig.Domains["domain1"] = &config.DomainConfig{
+		Plugin: config.PluginConfig{
+			Type:    config.LibraryTypeCShared.Enum(),
 			Library: "loaded/via/unit/test/loader",
 		},
 		Config:          map[string]any{"some": "config"},
@@ -154,7 +154,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	entropy, _ := bip39.NewEntropy(256)
 	mnemonic, _ := bip39.NewMnemonic(entropy)
 
-	i.conf.Signer.KeyStore.Static.Keys = map[string]api.StaticKeyEntryConfig{
+	i.conf.Signer.KeyStore.Static.Keys = map[string]signerapi.StaticKeyEntryConfig{
 		"seed": {
 			Encoding: "none",
 			Inline:   mnemonic,
@@ -235,12 +235,12 @@ func (c *componentTestEngine) Stop() {
 
 }
 
-func testConfig(t *testing.T) *componentmgr.Config {
+func testConfig(t *testing.T) *config.PaladinConfig {
 	ctx := context.Background()
 	log.SetLevel("debug")
 
-	var conf *componentmgr.Config
-	err := componentmgr.ReadAndParseYAMLFile(ctx, "../test/config/sqlite.memory.config.yaml", &conf)
+	var conf *config.PaladinConfig
+	err := config.ReadAndParseYAMLFile(ctx, "../test/config/sqlite.memory.config.yaml", &conf)
 	assert.NoError(t, err)
 
 	// For running in this unit test the dirs are different to the sample config
