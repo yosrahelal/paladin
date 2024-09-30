@@ -160,6 +160,7 @@ func (tb *testbed) gatherEndorsements(ctx context.Context, psc components.Domain
 					Name:            ar.Name,
 					AttestationType: ar.AttestationType,
 					Verifier:        endorseRes.Endorser,
+					ExtraData:       endorseRes.ExtraData,
 				}
 				switch endorseRes.Result {
 				case prototk.EndorseTransactionResponse_REVERT:

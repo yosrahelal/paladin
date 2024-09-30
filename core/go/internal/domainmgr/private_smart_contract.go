@@ -326,6 +326,7 @@ func (dc *domainContract) EndorseTransaction(ctx context.Context, req *component
 		Result:       res.EndorsementResult,
 		Payload:      res.Payload,
 		RevertReason: res.RevertReason,
+		ExtraData:    res.ExtraData,
 	}, nil
 }
 

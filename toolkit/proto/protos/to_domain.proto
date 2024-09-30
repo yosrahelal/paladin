@@ -122,13 +122,14 @@ message EndorseTransactionRequest {
 
 message EndorseTransactionResponse {
   enum Result {
-      SIGN = 0; // the endorsement resulted in a signature
+      SIGN = 0; // the endorsement resulted in a payload that should be signed
       ENDORSER_SUBMIT = 1; // the endorsement resulted in a local approval, and a requirement that the endorsement verifier identity must submit the underlying base ledger TX
       REVERT = 2; // the edorsement failed
   }
   Result endorsement_result = 1;
-  optional bytes payload = 2;
-  optional string revert_reason = 3; // if the result was REVERT
+  optional bytes payload = 2; // payload to be signed (if the result was SIGN)
+  optional string revert_reason = 3; // revert reason (if the result was REVERT)
+  optional string extra_data = 4; // any extra data to be included in the attestation result
 }
 
 // **PREPARE** step for a transaction 
@@ -275,6 +276,7 @@ message AttestationResult {
   optional string payload_type = 4; // If a payload_type was specified in the request, it is populated in the result
   optional bytes payload = 5; // If the attestation is available
   repeated AttestationConstraint constraints = 6; // If the attester requires this transaction is submitted by their identity
+  optional string extra_data = 7; // Any extra data provided by the endorsement step (aside from the payload)
 }
 
 message BaseLedgerTransaction {
