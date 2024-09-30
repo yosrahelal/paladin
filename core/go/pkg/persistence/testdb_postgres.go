@@ -51,7 +51,7 @@ func NewUnitTestPersistence(ctx context.Context) (p Persistence, cleanup func(),
 			Type: "postgres",
 			Postgres: PostgresConfig{
 				SQLDBConfig: SQLDBConfig{
-					URI:           dbDSN(utdbName),
+					DSN:           dbDSN(utdbName),
 					MigrationsDir: "../../db/migrations/postgres",
 					AutoMigrate:   confutil.P(true),
 					DebugQueries:  true,

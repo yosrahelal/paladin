@@ -27,7 +27,6 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/testinfra/pkg/besugenesis"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 )
 
 func main() {
@@ -67,13 +66,13 @@ func main() {
 		Config: besugenesis.GenesisConfig{
 			ChainID:     1337,
 			CancunTime:  0,
-			ZeroBaseFee: confutil.P(true),
+			ZeroBaseFee: ptrTo(true),
 			QBFT: &besugenesis.QBFTConfig{
-				BlockPeriodSeconds:      confutil.P(1), // this is overwritten by the BlockPeriodMilliseconds
-				EpochLength:             confutil.P(30000),
-				RequestTimeoutSeconds:   confutil.P(10),
-				EmptyBlockPeriodSeconds: confutil.P(10),
-				BlockPeriodMilliseconds: confutil.P(200),
+				BlockPeriodSeconds:      ptrTo(1), // this is overwritten by the BlockPeriodMilliseconds
+				EpochLength:             ptrTo(30000),
+				RequestTimeoutSeconds:   ptrTo(10),
+				EmptyBlockPeriodSeconds: ptrTo(10),
+				BlockPeriodMilliseconds: ptrTo(200),
 			},
 		},
 		Nonce:      0,
@@ -137,4 +136,8 @@ func randBytes(len int) []byte {
 	b := make([]byte, len)
 	_, _ = rand.Read(b)
 	return b
+}
+
+func ptrTo[T any](v T) *T {
+	return &v
 }
