@@ -5,6 +5,7 @@ go 1.22.5
 toolchain go1.22.7
 
 require (
+	github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1
 	github.com/kaleido-io/paladin/core v0.0.0-00010101000000-000000000000
 	github.com/onsi/ginkgo/v2 v2.17.2
 	github.com/onsi/gomega v1.33.1
@@ -59,13 +60,7 @@ require (
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240905213624-43a614759076 // indirect
 	github.com/hyperledger/firefly-common v1.4.11 // indirect
-	github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1 // indirect
 	github.com/iden3/go-iden3-crypto v0.0.16 // indirect
-	github.com/iden3/go-rapidsnark/prover v0.0.10 // indirect
-	github.com/iden3/go-rapidsnark/types v0.0.2 // indirect
-	github.com/iden3/go-rapidsnark/witness/v2 v2.0.0 // indirect
-	github.com/iden3/go-rapidsnark/witness/wasmer v0.0.0-20240621085734-9323fbec34a3 // indirect
-	github.com/iden3/wasmer-go v0.0.1 // indirect
 	github.com/imdario/mergo v0.3.6 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/yaml v0.2.0 // indirect

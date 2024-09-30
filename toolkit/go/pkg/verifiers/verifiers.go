@@ -13,13 +13,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package signerapi
+package verifiers
 
-import (
-	"context"
-)
+// An ethereum address - 20 byte compressed public key identifier with 0x prefix (no checksum)
+const ETH_ADDRESS = "eth_address"
 
-type Extension interface {
-	// Return nil if keystore type is not known, or error if initialization fails
-	KeyStore(ctx context.Context, config *StoreConfig) (store KeyStore, err error)
-}
+// An ethereum address - 20 byte compressed public key identifier with 0x prefix and ERC-55 mixed-case checksum address encoding
+const ETH_ADDRESS_CHECKSUM = "eth_address_checksum"
+
+// The full hex encoded public key (no 0x prefix on the string)
+const HEX_PUBKEY_NO_PREFIX = "hex_pubkey_no_prefix"
+
+// The full hex encoded public key with 0x prefix
+const HEX_PUBKEY_0X_PREFIX = "hex_pubkey_0x_prefix"

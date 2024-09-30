@@ -33,10 +33,10 @@ import (
 )
 
 type testExtension struct {
-	keyStore func(ctx context.Context, config *signerapi.StoreConfig) (store signerapi.KeyStore, err error)
+	keyStore func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error)
 }
 
-func (te *testExtension) KeyStore(ctx context.Context, config *signerapi.StoreConfig) (store signerapi.KeyStore, err error) {
+func (te *testExtension) KeyStore(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
 	return te.keyStore(ctx, config)
 }
 
@@ -75,14 +75,14 @@ func (tk *testKeyStoreAll) Close() {
 func TestExtensionInitFail(t *testing.T) {
 
 	te := &testExtension{
-		keyStore: func(ctx context.Context, config *signerapi.StoreConfig) (store signerapi.KeyStore, err error) {
+		keyStore: func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
 			assert.Equal(t, "ext-store", config.Type)
 			return nil, fmt.Errorf("pop")
 		},
 	}
 
 	_, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: "ext-store",
 		},
 	}, te)
@@ -93,12 +93,12 @@ func TestExtensionInitFail(t *testing.T) {
 func TestKeystoreTypeUnknown(t *testing.T) {
 
 	te := &testExtension{
-		keyStore: func(ctx context.Context, config *signerapi.StoreConfig) (store signerapi.KeyStore, err error) {
+		keyStore: func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
 			return nil, nil
 		},
 	}
 	_, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: "unknown",
 		},
 	}, te)
@@ -113,7 +113,7 @@ func TestKeyDerivationTypeUnknown(t *testing.T) {
 		KeyDerivation: signerapi.KeyDerivationConfig{
 			Type: "unknown",
 		},
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: signerapi.KeyStoreTypeStatic,
 		},
 	})
@@ -143,14 +143,14 @@ func TestExtensionKeyStoreListOK(t *testing.T) {
 		},
 	}
 	te := &testExtension{
-		keyStore: func(ctx context.Context, config *signerapi.StoreConfig) (store signerapi.KeyStore, err error) {
+		keyStore: func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
 			assert.Equal(t, "ext-store", config.Type)
 			return tk, nil
 		},
 	}
 
 	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: "ext-store",
 		},
 	}, te)
@@ -181,14 +181,14 @@ func TestExtensionKeyStoreListFail(t *testing.T) {
 		},
 	}
 	te := &testExtension{
-		keyStore: func(ctx context.Context, config *signerapi.StoreConfig) (store signerapi.KeyStore, err error) {
+		keyStore: func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
 			assert.Equal(t, "ext-store", config.Type)
 			return tk, nil
 		},
 	}
 
 	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: "ext-store",
 		},
 	}, te)
@@ -216,14 +216,14 @@ func TestExtensionKeyStoreResolveSignSECP256K1OK(t *testing.T) {
 		},
 	}
 	te := &testExtension{
-		keyStore: func(ctx context.Context, config *signerapi.StoreConfig) (store signerapi.KeyStore, err error) {
+		keyStore: func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
 			assert.Equal(t, "ext-store", config.Type)
 			return tk, nil
 		},
 	}
 
 	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: "ext-store",
 		},
 	}, te)
@@ -254,14 +254,14 @@ func TestExtensionKeyStoreResolveSECP256K1Fail(t *testing.T) {
 		},
 	}
 	te := &testExtension{
-		keyStore: func(ctx context.Context, config *signerapi.StoreConfig) (store signerapi.KeyStore, err error) {
+		keyStore: func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
 			assert.Equal(t, "ext-store", config.Type)
 			return tk, nil
 		},
 	}
 
 	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: "ext-store",
 		},
 	}, te)
@@ -286,14 +286,14 @@ func TestExtensionKeyStoreSignSECP256K1Fail(t *testing.T) {
 		},
 	}
 	te := &testExtension{
-		keyStore: func(ctx context.Context, config *signerapi.StoreConfig) (store signerapi.KeyStore, err error) {
+		keyStore: func(ctx context.Context, config *signerapi.KeyStoreConfig) (store signerapi.KeyStore, err error) {
 			assert.Equal(t, "ext-store", config.Type)
 			return tk, nil
 		},
 	}
 
 	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: "ext-store",
 		},
 	}, te)
@@ -311,7 +311,7 @@ func TestExtensionKeyStoreSignSECP256K1Fail(t *testing.T) {
 func TestSignInMemoryFailBadKey(t *testing.T) {
 
 	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: signerapi.KeyStoreTypeStatic,
 		},
 	})
@@ -329,7 +329,7 @@ func TestSignInMemoryFailBadKey(t *testing.T) {
 func TestResolveSignWithNewKeyCreation(t *testing.T) {
 
 	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: signerapi.KeyStoreTypeFilesystem,
 			FileSystem: signerapi.FileSystemConfig{
 				Path: confutil.P(t.TempDir()),
@@ -361,7 +361,7 @@ func TestResolveSignWithNewKeyCreation(t *testing.T) {
 func TestResolveUnsupportedAlgo(t *testing.T) {
 
 	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: signerapi.KeyStoreTypeFilesystem,
 			FileSystem: signerapi.FileSystemConfig{
 				Path: confutil.P(t.TempDir()),
@@ -381,7 +381,7 @@ func TestResolveUnsupportedAlgo(t *testing.T) {
 func TestResolveMissingAlgo(t *testing.T) {
 
 	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: signerapi.KeyStoreTypeFilesystem,
 			FileSystem: signerapi.FileSystemConfig{
 				Path: confutil.P(t.TempDir()),
@@ -400,7 +400,7 @@ func TestResolveMissingAlgo(t *testing.T) {
 func TestInMemorySignFailures(t *testing.T) {
 
 	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: signerapi.KeyStoreTypeStatic,
 			Static: signerapi.StaticKeyStorageConfig{
 				Keys: map[string]signerapi.StaticKeyEntryConfig{
@@ -445,31 +445,4 @@ func TestInMemorySignFailures(t *testing.T) {
 		Payload:   ([]byte)("something to sign"),
 	})
 	assert.Regexp(t, "PD011409", err)
-}
-
-func TestZKPSigningModuleKeyResolution(t *testing.T) {
-	tmpDir := t.TempDir()
-	ctx := context.Background()
-
-	sm, err := NewSigningModule(ctx, &signerapi.Config{
-		KeyStore: signerapi.StoreConfig{
-			Type:       signerapi.KeyStoreTypeFilesystem,
-			FileSystem: signerapi.FileSystemConfig{Path: confutil.P(tmpDir)},
-			SnarkProver: signerapi.SnarkProverConfig{
-				CircuitsDir:    "tests",
-				ProvingKeysDir: "tests",
-			},
-		},
-	}, nil)
-	require.NoError(t, err)
-
-	resp1, err := sm.Resolve(ctx, &proto.ResolveKeyRequest{
-		Algorithms: []string{algorithms.ECDSA_SECP256K1_PLAINBYTES, algorithms.ZKP_BABYJUBJUB_PLAINBYTES},
-		Name:       "blueKey",
-		Path: []*proto.ResolveKeyPathSegment{
-			{Name: "alice"},
-		},
-	})
-	require.NoError(t, err)
-	assert.Equal(t, 2, len(resp1.Identifiers))
 }

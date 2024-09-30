@@ -13,35 +13,40 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package secp256k1
+package zetosigner
 
 import (
 	"context"
 	"testing"
 
-	k1 "github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
+	"github.com/kaleido-io/paladin/core/pkg/signer"
 	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestRegister(t *testing.T) {
-	registry := make(map[string]signerapi.InMemorySigner)
-	Register(registry)
-	assert.Equal(t, 1, len(registry))
-}
+func TestZKPSigningModuleKeyResolution(t *testing.T) {
+	tmpDir := t.TempDir()
+	ctx := context.Background()
 
-func TestNewSigner(t *testing.T) {
-	keypair, err := k1.GenerateSecp256k1KeyPair()
+	sm, err := signer.NewSigningModule(ctx, &signerapi.Config{
+		KeyStore: signerapi.KeyStoreConfig{
+			Type:       signerapi.KeyStoreTypeFilesystem,
+			FileSystem: signerapi.FileSystemConfig{Path: confutil.P(tmpDir)},
+		},
+	}, nil)
 	require.NoError(t, err)
-	signer := &sepc256k1Signer{}
-	res, err := signer.Sign(context.Background(), keypair.PrivateKeyBytes(), &proto.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-		Payload:   ([]byte)("something to sign"),
+
+	resp1, err := sm.Resolve(ctx, &proto.ResolveKeyRequest{
+		Algorithms: []string{algorithms.ECDSA_SECP256K1_PLAINBYTES, algorithms.ZKP_BABYJUBJUB_PLAINBYTES},
+		Name:       "blueKey",
+		Path: []*proto.ResolveKeyPathSegment{
+			{Name: "alice"},
+		},
 	})
 	require.NoError(t, err)
-	assert.NotNil(t, res)
+	assert.Equal(t, 2, len(resp1.Identifiers))
 }

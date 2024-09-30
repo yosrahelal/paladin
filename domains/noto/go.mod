@@ -39,11 +39,6 @@ require (
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240905213624-43a614759076 // indirect
 	github.com/iden3/go-iden3-crypto v0.0.16 // indirect
-	github.com/iden3/go-rapidsnark/prover v0.0.10 // indirect
-	github.com/iden3/go-rapidsnark/types v0.0.2 // indirect
-	github.com/iden3/go-rapidsnark/witness/v2 v2.0.0 // indirect
-	github.com/iden3/go-rapidsnark/witness/wasmer v0.0.0-20240621085734-9323fbec34a3 // indirect
-	github.com/iden3/wasmer-go v0.0.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/yaml v0.2.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -63,7 +58,7 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
+	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -107,6 +102,7 @@ require (
 	gorm.io/driver/postgres v1.5.9 // indirect
 	gorm.io/driver/sqlite v1.5.6 // indirect
 	gorm.io/gorm v1.25.11 // indirect
+	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
 replace github.com/kaleido-io/paladin/core => ../../core/go

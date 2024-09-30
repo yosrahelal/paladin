@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package signerapi
+package zetosigner
 
 // StaticKeyEntryConfig is the configuration for a ZK prover
 // based on SNARK, which typically takes a circuit and proving key

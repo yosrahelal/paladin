@@ -1,4 +1,4 @@
-package snark
+package zetosigner
 
 import (
 	"fmt"

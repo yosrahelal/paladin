@@ -20,23 +20,42 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 )
 
+// To enable extending of the default configuration that Paladin uses when embedding this module,
+// with additional configuration that is specific to particular environments
+type ExtensibleConfig interface {
+	KeyStoreConfig() *KeyStoreConfig
+	KeyDerivationConfig() *KeyDerivationConfig
+}
+
 const (
 	KeyStoreTypeFilesystem = "filesystem" // keystorev3 based filesystem storage
 	KeyStoreTypeStatic     = "static"     // unencrypted keys in-line in the config
 )
 
+// Config can be directly embedded to provide ExtensibleConfig implementation
+// (as in Paladin's core configuration) or you can create your own structure
+// with more options as long as you provide a way to get hold of the base
+// KeyStoreConfig / KeyDerivationConfig that the core module requires
+// (by embedding those somewhere in your config hierarchy).
 type Config struct {
-	KeyStore      StoreConfig         `json:"keyStore"`
+	KeyStore      KeyStoreConfig      `json:"keyStore"`
 	KeyDerivation KeyDerivationConfig `json:"keyDerivation"`
 }
 
-type StoreConfig struct {
+func (c *Config) KeyStoreConfig() *KeyStoreConfig {
+	return &c.KeyStore
+}
+
+func (c *Config) KeyDerivationConfig() *KeyDerivationConfig {
+	return &c.KeyDerivation
+}
+
+type KeyStoreConfig struct {
 	Type              string                 `json:"type"`
 	DisableKeyListing bool                   `json:"disableKeyListing"`
 	DisableKeyLoading bool                   `json:"disableKeyLoading"` // if HD Wallet or ZKP based signing is required, in-memory keys are required (so this needs to be false)
 	FileSystem        FileSystemConfig       `json:"filesystem"`
 	Static            StaticKeyStorageConfig `json:"static"`
-	SnarkProver       SnarkProverConfig      `json:"snarkProver"`
 }
 
 type KeyDerivationType string
@@ -88,4 +107,24 @@ func (k *ConfigKeyEntry) ToKeyResolutionRequest() *proto.ResolveKeyRequest {
 		})
 	}
 	return keyReq
+}
+
+type StaticKeyEntryEncoding string
+
+const (
+	StaticKeyEntryEncodingNONE   StaticKeyEntryEncoding = "none"
+	StaticKeyEntryEncodingHEX    StaticKeyEntryEncoding = "hex"
+	StaticKeyEntryEncodingBase64 StaticKeyEntryEncoding = "base64"
+)
+
+type StaticKeyEntryConfig struct {
+	Encoding StaticKeyEntryEncoding `json:"encoding"`
+	Filename string                 `json:"filename"`
+	Trim     bool                   `json:"trim"`
+	Inline   string                 `json:"inline"`
+}
+
+type StaticKeyStorageConfig struct {
+	File string                          `json:"file,omitempty"` // whole file to use as a store
+	Keys map[string]StaticKeyEntryConfig `json:"keys"`           // individual key entries in the config
 }

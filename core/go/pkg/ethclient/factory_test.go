@@ -160,7 +160,7 @@ func newTestClientAndServer(t *testing.T, mEth *mockEth) (ctx context.Context, _
 
 func TestNewEthClientFactoryBadConfig(t *testing.T) {
 	kmgr, err := NewSimpleTestKeyManager(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.StoreConfig{Type: signerapi.KeyStoreTypeStatic},
+		KeyStore: signerapi.KeyStoreConfig{Type: signerapi.KeyStoreTypeStatic},
 	})
 	require.NoError(t, err)
 	_, err = NewEthClientFactory(context.Background(), kmgr, &Config{

@@ -26,8 +26,6 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
-	sepc256k1Signer "github.com/kaleido-io/paladin/core/pkg/signer/in-memory/secp256k1"
-	zkpSigner "github.com/kaleido-io/paladin/core/pkg/signer/in-memory/snark"
 	"github.com/kaleido-io/paladin/core/pkg/signer/keystore"
 	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -38,6 +36,8 @@ import (
 // This module can be wrapped and loaded into the core Paladin runtime as an embedded module called directly
 // on the comms bus, or wrapped in a remote process connected over gRPC.
 type SigningModule interface {
+	RegisterSigningImplementation(ctx context.Context, name string, signer signerapi.SigningImplementation)
+	RegisterKeyStore(ctx context.Context, name string, keystore signerapi.KeyStore)
 	Resolve(ctx context.Context, req *proto.ResolveKeyRequest) (res *proto.ResolveKeyResponse, err error)
 	Sign(ctx context.Context, req *proto.SignRequest) (res *proto.SignResponse, err error)
 	List(ctx context.Context, req *proto.ListKeysRequest) (res *proto.ListKeysResponse, err error)
@@ -53,11 +53,11 @@ type hdDerivation struct {
 }
 
 type signingModule struct {
-	keyStore          signerapi.KeyStore
-	disableKeyListing bool
-	disableKeyLoading bool
-	hd                *hdDerivation
-	inMemorySigners   map[string]signerapi.InMemorySigner
+	keyStore               signerapi.KeyStore
+	disableKeyListing      bool
+	disableKeyLoading      bool
+	hd                     *hdDerivation
+	signingImplementations map[string]signerapi.SigningImplementation
 }
 
 // We allow this same code to be used (un-modified) with set of initialization functions passed
@@ -82,7 +82,7 @@ type signingModule struct {
 // The design is such that all built-in behaviors should be both:
 // 1. Easy to re-use if they are valuable with your extension
 // 2. Easy to disable in the Config object passed in, if you do not want to have them enabled
-func NewSigningModule(ctx context.Context, config *signerapi.Config, extensions ...signerapi.Extension) (_ SigningModule, err error) {
+func NewSigningModule[T signerapi.ExtensibleConfig](ctx context.Context, config *signerapi.Config, extensions ...signerapi.Extension) (_ SigningModule, err error) {
 	sm := &signingModule{}
 
 	keyStoreType := strings.ToLower(config.KeyStore.Type)
@@ -130,11 +130,12 @@ func NewSigningModule(ctx context.Context, config *signerapi.Config, extensions 
 
 	// Register any in-memory signers
 	sm.inMemorySigners = make(map[string]signerapi.InMemorySigner)
-	sepc256k1Signer.Register(sm.inMemorySigners)
-	err = zkpSigner.Register(ctx, config.KeyStore.SnarkProver, sm.inMemorySigners)
+	ecdsaSigner.Register(sm.inMemorySigners)
 
 	return sm, err
 }
+
+func (sm *signingModule) RegisterSigningModule()
 
 func (sm *signingModule) newKeyForAlgorithms(ctx context.Context, algorithms []string) ([]byte, error) {
 	keyLen, err := sm.getKeyLenForInMemorySigning(ctx, algorithms)

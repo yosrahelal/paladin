@@ -21,6 +21,10 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/proto"
 )
 
+type KeyStoreFactory[C ExtensibleConfig] interface {
+	NewKeyStore(ctx context.Context, conf C) (KeyStore, error)
+}
+
 // All cryptographic storage needs to support master key encryption, by which the bytes
 // can be decrypted an loaded into volatile memory for use, and then discarded.
 //

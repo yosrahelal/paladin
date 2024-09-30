@@ -52,7 +52,7 @@ func newTestHDWalletKeyManager(t *testing.T) (*simpleKeyManager, func()) {
 		KeyDerivation: signerapi.KeyDerivationConfig{
 			Type: signerapi.KeyDerivationTypeBIP32,
 		},
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: signerapi.KeyStoreTypeStatic,
 			Static: signerapi.StaticKeyStorageConfig{
 				Keys: map[string]signerapi.StaticKeyEntryConfig{
@@ -73,7 +73,7 @@ func TestSimpleKeyManagerInitFail(t *testing.T) {
 		KeyDerivation: signerapi.KeyDerivationConfig{
 			Type: signerapi.KeyDerivationTypeBIP32,
 		},
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: signerapi.KeyStoreTypeStatic,
 		},
 	})
@@ -97,7 +97,7 @@ func TestGenerateIndexes(t *testing.T) {
 func TestKeyManagerResolveFail(t *testing.T) {
 
 	kmgr, err := NewSimpleTestKeyManager(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: signerapi.KeyStoreTypeStatic,
 		},
 	})

@@ -15,8 +15,6 @@ require (
 	github.com/hyperledger/firefly-common v1.4.11
 	github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1
 	github.com/iden3/go-iden3-crypto v0.0.16
-	github.com/iden3/go-rapidsnark/witness/v2 v2.0.0
-	github.com/iden3/go-rapidsnark/witness/wasmer v0.0.0-20240621085734-9323fbec34a3
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000
 	github.com/serialx/hashring v0.0.0-20200727003509-22c0c7ab6b1b
 	github.com/sirupsen/logrus v1.9.3
@@ -26,7 +24,6 @@ require (
 	golang.org/x/text v0.18.0
 	google.golang.org/grpc v1.65.0
 	google.golang.org/protobuf v1.34.2
-	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/driver/postgres v1.5.9
 	gorm.io/driver/sqlite v1.5.6
@@ -41,6 +38,7 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/rs/cors v1.11.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 require (
@@ -63,9 +61,6 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
-	github.com/iden3/go-rapidsnark/prover v0.0.10
-	github.com/iden3/go-rapidsnark/types v0.0.2
-	github.com/iden3/wasmer-go v0.0.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/yaml v0.2.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -84,7 +79,7 @@ require (
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
-	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
+	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -117,7 +112,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240812133136-8ffd90a71988 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
-	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
 replace github.com/kaleido-io/paladin/toolkit => ../../toolkit/go

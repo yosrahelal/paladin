@@ -41,7 +41,7 @@ func TestHDSigningStaticExample(t *testing.T) {
 			BIP44Prefix:           confutil.P(" m / 44' / 60' / 0' / 0 "), // we allow friendly spaces here
 			BIP44HardenedSegments: confutil.P(0),
 		},
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: signerapi.KeyStoreTypeStatic,
 			Static: signerapi.StaticKeyStorageConfig{
 				Keys: map[string]signerapi.StaticKeyEntryConfig{
@@ -84,7 +84,7 @@ func TestHDSigningDirectResNoPrefix(t *testing.T) {
 			BIP44HardenedSegments: confutil.P(0),
 			BIP44DirectResolution: true,
 		},
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type:       signerapi.KeyStoreTypeFilesystem,
 			FileSystem: signerapi.FileSystemConfig{Path: confutil.P(t.TempDir())},
 		},
@@ -161,7 +161,7 @@ func TestHDSigningDefaultBehaviorOK(t *testing.T) {
 				},
 			},
 		},
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: signerapi.KeyStoreTypeStatic,
 			Static: signerapi.StaticKeyStorageConfig{
 				Keys: map[string]signerapi.StaticKeyEntryConfig{
@@ -237,7 +237,7 @@ func TestHDSigningInitFailDisabled(t *testing.T) {
 		KeyDerivation: signerapi.KeyDerivationConfig{
 			Type: signerapi.KeyDerivationTypeBIP32,
 		},
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			DisableKeyLoading: true,
 			Type:              signerapi.KeyStoreTypeStatic,
 		},
@@ -253,7 +253,7 @@ func TestHDSigningInitFailBadMnemonic(t *testing.T) {
 		KeyDerivation: signerapi.KeyDerivationConfig{
 			Type: signerapi.KeyDerivationTypeBIP32,
 		},
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: signerapi.KeyStoreTypeStatic,
 			Static: signerapi.StaticKeyStorageConfig{
 				Keys: map[string]signerapi.StaticKeyEntryConfig{
@@ -285,7 +285,7 @@ func TestHDInitBadSeed(t *testing.T) {
 				Name: "missing",
 			},
 		},
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: signerapi.KeyStoreTypeStatic,
 			Static: signerapi.StaticKeyStorageConfig{
 				Keys: map[string]signerapi.StaticKeyEntryConfig{
@@ -313,7 +313,7 @@ func TestHDInitGenSeed(t *testing.T) {
 				Path: []signerapi.ConfigKeyPathEntry{{Name: "generate"}},
 			},
 		},
-		KeyStore: signerapi.StoreConfig{
+		KeyStore: signerapi.KeyStoreConfig{
 			Type: signerapi.KeyStoreTypeFilesystem,
 			FileSystem: signerapi.FileSystemConfig{
 				Path: confutil.P(t.TempDir()),

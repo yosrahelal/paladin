@@ -187,6 +187,10 @@ var (
 	MsgSigningUnsupportedKeyDerivationType      = ffe("PD011419", "Unsupported key derivation type: '%s'")
 	MsgSigningKeyCannotBeEmpty                  = ffe("PD011420", "Cannot resolve a signing key for the empty string")
 	MsgSigningFailedToLoadStaticKeyFile         = ffe("PD011421", "Failed to load static key file")
+	MsgSigningUnsupportedECDSACurve             = ffe("PD011422", "Unsupported ECDSA curve: '%s'")
+	MsgSigningUnsupportedVerifierCombination    = ffe("PD011423", "Unsupported verifier type '%s' for algorithm '%s'")
+	MsgSigningUnsupportedPayloadCombination     = ffe("PD011424", "Unsupported payload type '%s' for algorithm '%s'")
+	MsgSigningEmptyPayload                      = ffe("PD011425", "No payload supplied for signing")
 
 	// EthClient module PD0115XX
 	MsgEthClientInvalidInput            = ffe("PD011500", "Unable to convert to ABI function input (func=%s)")

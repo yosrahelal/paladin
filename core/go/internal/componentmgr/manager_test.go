@@ -67,7 +67,7 @@ func TestInitOK(t *testing.T) {
 			KeyDerivation: signerapi.KeyDerivationConfig{
 				Type: signerapi.KeyDerivationTypeBIP32,
 			},
-			KeyStore: signerapi.StoreConfig{
+			KeyStore: signerapi.KeyStoreConfig{
 				Type: "static",
 				Static: signerapi.StaticKeyStorageConfig{
 					Keys: map[string]signerapi.StaticKeyEntryConfig{

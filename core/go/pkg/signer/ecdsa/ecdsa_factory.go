@@ -13,29 +13,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package secp256k1
+package ecdsa
 
 import (
 	"context"
 
-	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
-	"github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 )
 
-type sepc256k1Signer struct{}
-
-func Register(registry map[string]signerapi.InMemorySigner) {
-	signer := &sepc256k1Signer{}
-	registry[algorithms.ECDSA_SECP256K1_PLAINBYTES] = signer
+func NewECDSASignerFactory[C signerapi.ExtensibleConfig]() signerapi.InMemorySignerFactory[C] {
+	return &ecdsaSignerFactory[C]{}
 }
 
-func (s *sepc256k1Signer) Sign(ctx context.Context, privateKey []byte, req *proto.SignRequest) (*proto.SignResponse, error) {
-	kp := secp256k1.KeyPairFromBytes(privateKey)
-	sig, err := kp.SignDirect(req.Payload)
-	if err == nil {
-		return &proto.SignResponse{Payload: sig.CompactRSV()}, nil
-	}
-	return nil, err
+type ecdsaSignerFactory[C signerapi.ExtensibleConfig] struct{}
+
+func (sf *ecdsaSignerFactory[C]) NewSigner(ctx context.Context, conf C) (signerapi.InMemorySigner, error) {
+	// We have no configuration
+	return &ecdsaSigner{}, nil
 }

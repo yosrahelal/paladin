@@ -13,19 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package signerapi
+package algorithms
 
-import (
-	"context"
-)
-
-type InMemorySignerFactory[C ExtensibleConfig] interface {
-	NewSigner(ctx context.Context, conf C) (InMemorySigner, error)
-}
-
-type InMemorySigner interface {
-	// Perform signing using the specified algorithm, with the specified private key
-	Sign(ctx context.Context, algorithm, payloadType string, privateKey, payload []byte) ([]byte, error)
-	// Translate a signing key into a verifier of the requested type
-	GetVerifier(ctx context.Context, algorithm, verifierType string, privateKey []byte) (string, error)
-}
+// Primary constant used throughout Paladin codebase - ECDSA algorithm with SECP256K1 curve
+const ECDSA_SECP256K1 = "ecdsa:secp256k1"

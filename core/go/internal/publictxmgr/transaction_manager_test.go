@@ -111,7 +111,7 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 		require.NoError(t, err)
 
 		mocks.keyManager, err = ethclient.NewSimpleTestKeyManager(ctx, &signerapi.Config{
-			KeyStore: signerapi.StoreConfig{
+			KeyStore: signerapi.KeyStoreConfig{
 				Type: signerapi.KeyStoreTypeStatic,
 				Static: signerapi.StaticKeyStorageConfig{
 					Keys: map[string]signerapi.StaticKeyEntryConfig{

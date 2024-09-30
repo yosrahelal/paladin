@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package snark
+package zetosigner
 
 import (
 	"math/big"

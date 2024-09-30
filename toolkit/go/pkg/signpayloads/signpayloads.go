@@ -13,15 +13,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package algorithms
+package signpayloads
 
-// TODO: More work on algorithm taxonomy. These could become very dynamic strings,
-// as we specify complex dynamic payloads for ZKP proof generation
-// (with signing key access during the proof generation stage).
-
-// For now however, it's extremely simple - we just need one:
-// - ECDSA algorithm
-// - SECP256K1 curve
-// - Plain bytes-in, bytes-out (caller is responsible for generating/formatting/hashing the payload such as Eth TX at some version, or EIP-712 etc. prior to signing)
-const ECDSA_SECP256K1_PLAINBYTES = "ecdsa_secp256k1_plainbytes"
-const ZKP_BABYJUBJUB_PLAINBYTES = "zkp_babyjubjub_plainbytes"
+// Input:
+// An opaque payload goes into the signing module. No validation, or other processing
+// of the payload is performed before signing.
+// Output:
+// A compact 65 byte encoded R,S,V byte string (R=32b, S=32b, V=1b) with the V value
+// according to the Bitcoin/Eth standard of 27+recid (27 or 28)
+// denoting an uncompressed public key.
+const OPAQUE_TO_RSV = "opaque:rsv"

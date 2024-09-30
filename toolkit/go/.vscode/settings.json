@@ -1,3 +1,6 @@
 {
-    "window.title": "${activeEditorShort}${separator}Paladin Toolkit (${rootName})${separator}${profileName}"
+    "window.title": "${activeEditorShort}${separator}Paladin Toolkit (${rootName})${separator}${profileName}",
+    "cSpell.words": [
+        "pubkey"
+    ]
 }
