@@ -22,9 +22,11 @@ import (
 	"testing"
 
 	"github.com/kaleido-io/paladin/core/pkg/config"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tyler-smith/go-bip39"
 	"sigs.k8s.io/yaml"
 )
 
@@ -38,6 +40,14 @@ func writeTestConfig(t *testing.T) (configFile string) {
 	// For running in this unit test the dirs are different to the sample config
 	conf.DB.SQLite.MigrationsDir = "../../db/migrations/sqlite"
 	conf.DB.Postgres.MigrationsDir = "../../db/migrations/postgres"
+	entropy, _ := bip39.NewEntropy(256)
+	mnemonic, _ := bip39.NewMnemonic(entropy)
+	conf.Signer.KeyStore.Static.Keys = map[string]signerapi.StaticKeyEntryConfig{
+		"seed": {
+			Encoding: "none",
+			Inline:   mnemonic,
+		},
+	}
 	configFile = path.Join(t.TempDir(), "test.config.yaml")
 	f, err := os.Create(configFile)
 	require.NoError(t, err)
