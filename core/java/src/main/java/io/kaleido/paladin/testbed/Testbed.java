@@ -111,7 +111,7 @@ public class Testbed implements Closeable {
                 db:
                   type: sqlite
                   sqlite:
-                    uri:           ":memory:"
+                    dsn:           ":memory:"
                     autoMigrate:   true
                     migrationsDir: %s
                     debugQueries:  true

@@ -19,6 +19,7 @@ package persistence
 import (
 	"context"
 	"os"
+	"path"
 	"testing"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -33,7 +34,7 @@ func TestGormInitFail(t *testing.T) {
 		Type: "sqlite",
 		SQLite: SQLiteConfig{
 			SQLDBConfig: SQLDBConfig{
-				URI: "file://" + t.TempDir(),
+				DSN: "file://" + t.TempDir(),
 			},
 		},
 	})
@@ -51,7 +52,7 @@ func TestGormMigrationMissingDir(t *testing.T) {
 		Type: "sqlite",
 		SQLite: SQLiteConfig{
 			SQLDBConfig: SQLDBConfig{
-				URI:           ":memory:",
+				DSN:           ":memory:",
 				AutoMigrate:   confutil.P(true),
 				MigrationsDir: tempFile,
 			},
@@ -71,11 +72,72 @@ func TestGormMigrationFail(t *testing.T) {
 		Type: "sqlite",
 		SQLite: SQLiteConfig{
 			SQLDBConfig: SQLDBConfig{
-				URI:         ":memory:",
+				DSN:         ":memory:",
 				AutoMigrate: confutil.P(true),
 			},
 		},
 	})
 	assert.Regexp(t, "PD010203", err)
 
+}
+
+func TestGormInitTemplatedDSNEnvVar(t *testing.T) {
+	var1File := path.Join(t.TempDir(), "varfile1")
+	err := os.WriteFile(var1File, []byte("memory"), 0644)
+	require.NoError(t, err)
+	p, err := newSQLiteProvider(context.Background(), &Config{
+		Type: "sqlite",
+		SQLite: SQLiteConfig{
+			SQLDBConfig: SQLDBConfig{
+				DSN: ":{{.Var1}}:",
+				DSNParams: map[string]DSNParamLocation{
+					"Var1": {File: var1File},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	p.Close()
+}
+
+func TestGormInitTemplatedDSNMissing(t *testing.T) {
+	var1File := path.Join(t.TempDir(), "varfile1")
+	err := os.WriteFile(var1File, []byte("unused"), 0644)
+	require.NoError(t, err)
+	_, err = newSQLiteProvider(context.Background(), &Config{
+		Type: "sqlite",
+		SQLite: SQLiteConfig{
+			SQLDBConfig: SQLDBConfig{
+				DSN: ":{{.NotDefined}}:",
+				DSNParams: map[string]DSNParamLocation{
+					"Var1": {File: var1File},
+				},
+			},
+		},
+	})
+	assert.Regexp(t, "PD010205", err)
+}
+
+func TestDSNTemplateMixedFileLoadFail(t *testing.T) {
+	var2File := path.Join(t.TempDir(), "value2")
+	conf := &SQLDBConfig{
+		DSN: "mydbconn?var1={{.Var1}}",
+		DSNParams: map[string]DSNParamLocation{
+			"Var1": {File: var2File},
+		},
+	}
+	_, err := templatedDSN(context.Background(), conf)
+	require.Regexp(t, "PD010206", err)
+}
+
+func TestDSNTemplateBadTemplate(t *testing.T) {
+	var2File := path.Join(t.TempDir(), "value2")
+	conf := &SQLDBConfig{
+		DSN: "mydbconn?var1={{",
+		DSNParams: map[string]DSNParamLocation{
+			"Var1": {File: var2File},
+		},
+	}
+	_, err := templatedDSN(context.Background(), conf)
+	require.Regexp(t, "PD010205", err)
 }

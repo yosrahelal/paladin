@@ -1,11 +1,15 @@
 # Dependency versions (some used by builder and runtime)
 ARG JAVA_VERSION=21.0.4+7
-ARG JVM_TYPE=hotspot
-ARG JVM_HEAP=normal
-ARG NODE_VERSION=v20.17.0
+ARG NODE_VERSION=20.17.0
 ARG PROTO_VERSION=28.2
 ARG GO_VERSION=1.22.7
+ARG GO_MIGRATE_VERSION=4.18.1
 ARG GRADLE_VERSION=8.4
+ARG WASMER_VERSION=4.3.7
+
+# Additional JVM selection options
+ARG JVM_TYPE=hotspot
+ARG JVM_HEAP=normal
 
 # Stage 1: Builder
 FROM ubuntu:24.04 AS builder   
@@ -19,6 +23,7 @@ ARG NODE_VERSION
 ARG PROTO_VERSION
 ARG GO_VERSION
 ARG GRADLE_VERSION
+ARG WASMER_VERSION
 
 # Set environment variables
 ENV LANG=C.UTF-8
@@ -45,7 +50,7 @@ RUN JAVA_ARCH=$( if [ "$TARGETARCH" = "arm64" ]; then echo -n "aarch64"; else ec
 
 # Install Node.js v18 and npm
 RUN NODE_ARCH=$( if [ "$TARGETARCH" = "arm64" ]; then echo -n "arm64"; else echo -n "x64"; fi ) && \
-    curl -sLo - https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-${TARGETOS}-${NODE_ARCH}.tar.xz | \
+    curl -sLo - https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-${TARGETOS}-${NODE_ARCH}.tar.xz | \
     xz -cd - | tar -C /usr/local -xf - && \
     ln -s /usr/local/node-* /usr/local/node
 
@@ -68,7 +73,10 @@ RUN curl -sLo gradle-${GRADLE_VERSION}-bin.zip https://services.gradle.org/distr
     ln -s /usr/local/gradle-* /usr/local/gradle
 
 # Install Wasmer (which includes libwasmer.so)
-RUN curl https://get.wasmer.io -sSfL | sh
+RUN WASMER_ARCH=$( if [ "$TARGETARCH" = "arm64" ]; then echo -n "aarch64"; else echo -n "amd64"; fi  ) && \
+    mkdir -p /usr/local/wasmer && \
+    curl -sLo - https://github.com/wasmerio/wasmer/releases/download/v${WASMER_VERSION}/wasmer-${TARGETOS}-${WASMER_ARCH}.tar.gz | \
+    tar -C /usr/local/wasmer -zxf -
 
 # Add all the tools we installed to the path
 ENV PATH=$PATH:/usr/local/bin
@@ -78,12 +86,12 @@ ENV PATH=$PATH:/usr/local/node/bin
 ENV PATH=$PATH:/usr/local/java/bin
 ENV PATH=$PATH:/usr/local/gradle/bin
 ENV PATH=$PATH:/usr/local/protoc/bin
-ENV PATH=$PATH:/root/.wasmer/bin
+ENV PATH=$PATH:/usr/local/wasmer/bin
 
 # Set the working directory
 WORKDIR /app
 
-# Copy project files
+# Copy project files (check .dockerignore for details of what goes up)
 COPY . .
 
 # Set Go CGO environment variables
@@ -101,6 +109,7 @@ ARG TARGETARCH
 ARG JAVA_VERSION
 ARG JVM_TYPE
 ARG JVM_HEAP
+ARG GO_MIGRATE_VERSION
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
@@ -110,7 +119,7 @@ RUN apt-get update && apt-get install -y \
 
 # Set environment variables
 ENV LANG=C.UTF-8
-ENV LD_LIBRARY_PATH=/app/libs:/app/.wasmer/lib:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/app/libs:/usr/local/wasmer/lib:$LD_LIBRARY_PATH
 
 # Set the working directory
 WORKDIR /app
@@ -121,8 +130,13 @@ RUN JAVA_ARCH=$( if [ "$TARGETARCH" = "arm64" ]; then echo -n "aarch64"; else ec
     tar -C /usr/local -xzf - && \
     ln -s /usr/local/jdk-* /usr/local/java
 
+# Install DB migration tool
+RUN GO_MIRGATE_ARCH=$( if [ "$TARGETARCH" = "arm64" ]; then echo -n "arm64"; else echo -n "amd64"; fi ) && \
+    curl -sLo - https://github.com/golang-migrate/migrate/releases/download/v$GO_MIGRATE_VERSION/migrate.${TARGETOS}-${GO_MIRGATE_ARCH}.tar.gz | \
+    tar -C /usr/local/bin -xzf - migrate
+
 # Copy Wasmer shared libraries to the runtime container
-COPY --from=builder /root/.wasmer/lib/libwasmer.so /app/.wasmer/lib/libwasmer.so
+COPY --from=builder /usr/local/wasmer/lib/libwasmer.so /usr/local/wasmer/lib/libwasmer.so
 
 # Copy the build artifacts from the builder stage
 COPY --from=builder /app/build /app

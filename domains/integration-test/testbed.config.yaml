@@ -2,7 +2,7 @@ nodeName: node1
 db:
   type: sqlite
   sqlite:
-    uri: ':memory:'
+    dsn: ':memory:'
     autoMigrate: true
     migrationsDir: '../../core/go/db/migrations/sqlite'
 rpcServer:

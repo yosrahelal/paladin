@@ -26,10 +26,10 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/api"
 	sepc256k1Signer "github.com/kaleido-io/paladin/core/pkg/signer/in-memory/secp256k1"
 	zkpSigner "github.com/kaleido-io/paladin/core/pkg/signer/in-memory/snark"
 	"github.com/kaleido-io/paladin/core/pkg/signer/keystore"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 )
 
@@ -53,11 +53,11 @@ type hdDerivation struct {
 }
 
 type signingModule struct {
-	keyStore          api.KeyStore
+	keyStore          signerapi.KeyStore
 	disableKeyListing bool
 	disableKeyLoading bool
 	hd                *hdDerivation
-	inMemorySigners   map[string]api.InMemorySigner
+	inMemorySigners   map[string]signerapi.InMemorySigner
 }
 
 // We allow this same code to be used (un-modified) with set of initialization functions passed
@@ -82,14 +82,14 @@ type signingModule struct {
 // The design is such that all built-in behaviors should be both:
 // 1. Easy to re-use if they are valuable with your extension
 // 2. Easy to disable in the Config object passed in, if you do not want to have them enabled
-func NewSigningModule(ctx context.Context, config *api.Config, extensions ...api.Extension) (_ SigningModule, err error) {
+func NewSigningModule(ctx context.Context, config *signerapi.Config, extensions ...signerapi.Extension) (_ SigningModule, err error) {
 	sm := &signingModule{}
 
 	keyStoreType := strings.ToLower(config.KeyStore.Type)
 	switch keyStoreType {
-	case "", api.KeyStoreTypeFilesystem:
+	case "", signerapi.KeyStoreTypeFilesystem:
 		sm.keyStore, err = keystore.NewFilesystemStore(ctx, config.KeyStore.FileSystem)
-	case api.KeyStoreTypeStatic:
+	case signerapi.KeyStoreTypeStatic:
 		sm.keyStore, err = keystore.NewStaticKeyStore(ctx, config.KeyStore.Static)
 	default:
 		for _, ext := range extensions {
@@ -111,8 +111,8 @@ func NewSigningModule(ctx context.Context, config *api.Config, extensions ...api
 	}
 
 	switch config.KeyDerivation.Type {
-	case "", api.KeyDerivationTypeDirect:
-	case api.KeyDerivationTypeBIP32:
+	case "", signerapi.KeyDerivationTypeDirect:
+	case signerapi.KeyDerivationTypeBIP32:
 		// This is fundamentally incompatible with a request to disable loading key materials into memory
 		if config.KeyStore.DisableKeyLoading {
 			return nil, i18n.NewError(ctx, msgs.MsgSigningHierarchicalRequiresLoading)
@@ -129,7 +129,7 @@ func NewSigningModule(ctx context.Context, config *api.Config, extensions ...api
 	sm.disableKeyLoading = config.KeyStore.DisableKeyLoading
 
 	// Register any in-memory signers
-	sm.inMemorySigners = make(map[string]api.InMemorySigner)
+	sm.inMemorySigners = make(map[string]signerapi.InMemorySigner)
 	sepc256k1Signer.Register(sm.inMemorySigners)
 	err = zkpSigner.Register(ctx, config.KeyStore.SnarkProver, sm.inMemorySigners)
 
@@ -277,7 +277,7 @@ func (sm *signingModule) Sign(ctx context.Context, req *proto.SignRequest) (res 
 }
 
 func (sm *signingModule) List(ctx context.Context, req *proto.ListKeysRequest) (res *proto.ListKeysResponse, err error) {
-	listableStore, isListable := sm.keyStore.(api.KeyStoreListable)
+	listableStore, isListable := sm.keyStore.(signerapi.KeyStoreListable)
 	if !isListable || sm.disableKeyListing {
 		return nil, i18n.NewError(ctx, msgs.MsgSigningKeyListingNotSupported)
 	}

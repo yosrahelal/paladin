@@ -22,7 +22,7 @@ import (
 )
 
 type Config struct {
-	Capacity *int `yaml:"capacity"`
+	Capacity *int `json:"capacity"`
 }
 
 type Cache[K comparable, V any] interface {

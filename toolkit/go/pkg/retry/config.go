@@ -19,15 +19,15 @@ package retry
 import "github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 
 type Config struct {
-	InitialDelay *string  `yaml:"initialDelay"`
-	MaxDelay     *string  `yaml:"maxDelay"`
-	Factor       *float64 `yaml:"factor"`
+	InitialDelay *string  `json:"initialDelay"`
+	MaxDelay     *string  `json:"maxDelay"`
+	Factor       *float64 `json:"factor"`
 }
 
 type ConfigWithMax struct {
 	Config
-	MaxAttempts *int    `yaml:"maxAttempts"`
-	MaxTime     *string `yaml:"maxTime"`
+	MaxAttempts *int    `json:"maxAttempts"`
+	MaxTime     *string `json:"maxTime"`
 }
 
 var Defaults = &ConfigWithMax{

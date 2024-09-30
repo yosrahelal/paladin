@@ -1,0 +1,81 @@
+
+operator:
+  name: paladin-operator
+  namespace: paladin
+  image:
+    repository: paladin-operator
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  serviceAccount:
+    create: true
+    automount: true
+    annotations: {}
+
+  podSecurityContext:
+    runAsNonRoot: true
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 8081
+      scheme: HTTP
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: 8081
+      scheme: HTTP
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+
+  env:
+    - name: CONFIG_PATH
+      value: /etc/config
+
+  # Volumes configuration
+  volumes:
+  - name: config
+    configMap:
+      name: paladin-operator     
+
+  volumeMounts:
+  - name: config
+    mountPath: /etc/config/config.yaml    # Where the file will be mounted in the container
+    subPath: config.yaml                  # The key (file) from the ConfigMap to mount
+                     
+  labels:
+    control-plane: controller-manager
+
+  annotations: {}
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  configMap:
+    data:
+      config.yaml: |
+        {
+            "paladin": {
+                "image": "paladin:test",
+                "labels": {
+                    "app": "paladin"
+                }
+            }
+        }
+    

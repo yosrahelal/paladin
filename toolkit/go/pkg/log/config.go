@@ -20,49 +20,49 @@ import "github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 
 type Config struct {
 	// the logging level
-	Level *string `yaml:"level"`
+	Level *string `json:"level"`
 	// the format ('simple', 'json')
-	Format *string `yaml:"simple"`
+	Format *string `json:"simple"`
 	// the output location ('stdout','stderr','file')
-	Output *string `yaml:"output"`
+	Output *string `json:"output"`
 	// forces color to be enabled, even if we do not detect a TTY
-	ForceColor *bool `yaml:"forceColor"`
+	ForceColor *bool `json:"forceColor"`
 	// forces color to be disabled, even if we detect a TTY
-	DisableColor *bool `yaml:"disableColor"`
+	DisableColor *bool `json:"disableColor"`
 	// string format for timestamps
-	TimeFormat *string `yaml:"timeFormat"`
+	TimeFormat *string `json:"timeFormat"`
 	// sets log timestamps to the UTC timezone
-	UTC *bool `yaml:"utc"`
+	UTC *bool `json:"utc"`
 	// configure file based logging
-	File FileConfig `yaml:"file"`
+	File FileConfig `json:"file"`
 	// configure json based logging
-	JSON JSONConfig `yaml:"json"`
+	JSON JSONConfig `json:"json"`
 }
 
 type FileConfig struct {
 	// sets the log filename prefix
-	Filename *string `yaml:"filename"`
+	Filename *string `json:"filename"`
 	// sets the size to roll logs at a given size
-	MaxSize *string `yaml:"maxSize"`
+	MaxSize *string `json:"maxSize"`
 	// sets the maximum number of old files to keep
-	MaxBackups *int `yaml:"maxBackups"`
+	MaxBackups *int `json:"maxBackups"`
 	// sets the maximum age at which to roll
-	MaxAge *string `yaml:"maxAge"`
+	MaxAge *string `json:"maxAge"`
 	// Compress sets whether to compress backups
-	Compress *bool `yaml:"compress"`
+	Compress *bool `json:"compress"`
 }
 
 type JSONConfig struct {
 	// configures the JSON key containing the timestamp of the log
-	TimestampField *string `yaml:"timestampField"`
+	TimestampField *string `json:"timestampField"`
 	// configures the JSON key containing the log level
-	LevelField *string `yaml:"levelField"`
+	LevelField *string `json:"levelField"`
 	// configures the JSON key containing the log message
-	MessageField *string `yaml:"messageField"`
+	MessageField *string `json:"messageField"`
 	// configures the JSON key containing the calling function
-	FuncField *string `yaml:"funcField"`
+	FuncField *string `json:"funcField"`
 	// configures the JSON key containing the calling file
-	FileField *string `yaml:"fileField"`
+	FileField *string `json:"fileField"`
 }
 
 var LogDefaults = &Config{

@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -75,7 +76,7 @@ func TestResolveFunctionBadABI(t *testing.T) {
 	assert.Regexp(t, "PD012203.*FF22025", err)
 }
 
-func mockInsertABI(conf *Config, mc *mockComponents) {
+func mockInsertABI(conf *config.TxManagerConfig, mc *mockComponents) {
 	mc.db.ExpectBegin()
 	mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 	mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
@@ -96,7 +97,7 @@ func TestResolveFunctionNamedWithNoTarget(t *testing.T) {
 	assert.Regexp(t, "PD012204", err)
 }
 
-func mockInsertABIAndTransactionOK(conf *Config, mc *mockComponents) {
+func mockInsertABIAndTransactionOK(conf *config.TxManagerConfig, mc *mockComponents) {
 	mc.db.ExpectBegin()
 	mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 	mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
@@ -106,8 +107,8 @@ func mockInsertABIAndTransactionOK(conf *Config, mc *mockComponents) {
 	mc.db.ExpectCommit()
 }
 
-func mockPublicSubmitTxOk(t *testing.T) func(conf *Config, mc *mockComponents) {
-	return func(conf *Config, mc *mockComponents) {
+func mockPublicSubmitTxOk(t *testing.T) func(conf *config.TxManagerConfig, mc *mockComponents) {
+	return func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mockSubmissionBatch := componentmocks.NewPublicTxBatch(t)
 		mockSubmissionBatch.On("Rejected").Return([]components.PublicTxRejected{})
 		mockSubmissionBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
@@ -116,8 +117,8 @@ func mockPublicSubmitTxOk(t *testing.T) func(conf *Config, mc *mockComponents) {
 	}
 }
 
-func mockQueryPublicTxForTransactions(cb func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error)) func(conf *Config, mc *mockComponents) {
-	return func(conf *Config, mc *mockComponents) {
+func mockQueryPublicTxForTransactions(cb func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error)) func(conf *config.TxManagerConfig, mc *mockComponents) {
+	return func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mqb := mc.publicTxMgr.On("QueryPublicTxForTransactions", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 		mqb.Run(func(args mock.Arguments) {
 			result, err := cb(args[2].([]uuid.UUID), args[3].(*query.QueryJSON))
@@ -126,8 +127,8 @@ func mockQueryPublicTxForTransactions(cb func(ids []uuid.UUID, jq *query.QueryJS
 	}
 }
 
-func mockQueryPublicTxWithBindings(cb func(jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error)) func(conf *Config, mc *mockComponents) {
-	return func(conf *Config, mc *mockComponents) {
+func mockQueryPublicTxWithBindings(cb func(jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error)) func(conf *config.TxManagerConfig, mc *mockComponents) {
+	return func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mqb := mc.publicTxMgr.On("QueryPublicTxWithBindings", mock.Anything, mock.Anything, mock.Anything)
 		mqb.Run(func(args mock.Arguments) {
 			result, err := cb(args[2].(*query.QueryJSON))
@@ -136,8 +137,8 @@ func mockQueryPublicTxWithBindings(cb func(jq *query.QueryJSON) ([]*ptxapi.Publi
 	}
 }
 
-func mockGetPublicTransactionForHash(cb func(hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error)) func(conf *Config, mc *mockComponents) {
-	return func(conf *Config, mc *mockComponents) {
+func mockGetPublicTransactionForHash(cb func(hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error)) func(conf *config.TxManagerConfig, mc *mockComponents) {
+	return func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mqb := mc.publicTxMgr.On("GetPublicTransactionForHash", mock.Anything, mock.Anything, mock.Anything)
 		mqb.Run(func(args mock.Arguments) {
 			result, err := cb(args[2].(tktypes.Bytes32))
@@ -223,7 +224,7 @@ func TestResolveFunctionPlainNameOK(t *testing.T) {
 }
 
 func TestSendTransactionPrivateDeploy(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mc.privateTxMgr.On("HandleDeployTx", mock.Anything, mock.Anything).Return(nil)
 	})
 	defer done()
@@ -244,7 +245,7 @@ func TestSendTransactionPrivateDeploy(t *testing.T) {
 }
 
 func TestSendTransactionPrivateInvoke(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
 	})
 	defer done()
@@ -267,7 +268,7 @@ func TestSendTransactionPrivateInvoke(t *testing.T) {
 }
 
 func TestSendTransactionPrivateInvokeFail(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
 	})
 	defer done()
@@ -471,8 +472,8 @@ func TestParseInputsBadByteString(t *testing.T) {
 	assert.Regexp(t, "PD012208", err)
 }
 
-func mockPublicSubmitTxRollback(t *testing.T) func(conf *Config, mc *mockComponents) {
-	return func(conf *Config, mc *mockComponents) {
+func mockPublicSubmitTxRollback(t *testing.T) func(conf *config.TxManagerConfig, mc *mockComponents) {
+	return func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mockSubmissionBatch := componentmocks.NewPublicTxBatch(t)
 		mockSubmissionBatch.On("Rejected").Return([]components.PublicTxRejected{})
 		mockSubmissionBatch.On("Completed", mock.Anything, false).Return(nil)
@@ -480,7 +481,7 @@ func mockPublicSubmitTxRollback(t *testing.T) func(conf *Config, mc *mockCompone
 	}
 }
 func TestInsertTransactionFail(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectBegin()
 		mc.db.ExpectExec("INSERT.*abis").WillReturnResult(driver.ResultNoRows)
 		mc.db.ExpectExec("INSERT.*abi_errors").WillReturnResult(driver.ResultNoRows)
@@ -506,7 +507,7 @@ func TestInsertTransactionFail(t *testing.T) {
 }
 
 func TestInsertTransactionPublicTxPrepareFail(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mockSubmissionBatch := componentmocks.NewPublicTxBatch(t)
 		rejectedSubmission := componentmocks.NewPublicTxRejected(t)
 		rejectedSubmission.On("RejectedError").Return(fmt.Errorf("pop"))
@@ -533,7 +534,7 @@ func TestInsertTransactionPublicTxPrepareFail(t *testing.T) {
 }
 
 func TestInsertTransactionPublicTxPrepareReject(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *Config, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *config.TxManagerConfig, mc *mockComponents) {
 		mc.publicTxMgr.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()

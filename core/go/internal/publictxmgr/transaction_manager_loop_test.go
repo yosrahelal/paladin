@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -37,7 +38,7 @@ func TestNewEnginePollingStoppingAnOrchestratorForFairnessControl(t *testing.T) 
 	testSigningAddr1 := tktypes.RandAddress()
 	testSigningAddr2 := tktypes.RandAddress()
 
-	ctx, ble, m, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *Config) {
+	ctx, ble, m, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
 		mocks.disableManagerStart = true                         // we don't want the manager running... yet
 		conf.Manager.MaxInFlightOrchestrators = confutil.P(1)    // we only have one slot
 		conf.Manager.OrchestratorSwapTimeout = confutil.P("1ms") // we're very aggressive on swapping out
@@ -73,7 +74,7 @@ func TestNewEnginePollingExcludePausedOrchestrator(t *testing.T) {
 
 	testSigningAddr1 := *tktypes.RandAddress()
 
-	ctx, ble, m, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *Config) {
+	ctx, ble, m, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
 		mocks.disableManagerStart = true                         // we don't want the manager running... yet
 		conf.Manager.MaxInFlightOrchestrators = confutil.P(1)    // we only have one slot
 		conf.Manager.OrchestratorSwapTimeout = confutil.P("1ms") // we're very aggressive on swapping out
