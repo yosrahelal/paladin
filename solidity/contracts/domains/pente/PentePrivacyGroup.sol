@@ -45,7 +45,6 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
     constructor() {}
 
     function initialize(
-        bytes32 transactionId,
         bytes calldata config
     ) public initializer {
         __EIP712_init("pente", "0.0.1");
