@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/key"
@@ -46,6 +47,7 @@ type snarkProver struct {
 	zkpProverConfig         api.SnarkProverConfig
 	circuitsCache           cache.Cache[string, witness.Calculator]
 	provingKeysCache        cache.Cache[string, []byte]
+	proverCacheRWLock       sync.RWMutex
 	workerPerCircuit        int
 	circuitsWorkerIndexChan map[string]chan int
 	circuitLoader           func(circuitID string, config api.SnarkProverConfig) (witness.Calculator, []byte, error)
@@ -69,7 +71,7 @@ func Register(ctx context.Context, config api.SnarkProverConfig, registry map[st
 
 func newSnarkProver(config api.SnarkProverConfig) (*snarkProver, error) {
 	cacheConfig := cache.Config{
-		Capacity: confutil.P(5),
+		Capacity: confutil.P(50),
 	}
 	return &snarkProver{
 		zkpProverConfig:         config,
@@ -121,21 +123,31 @@ func (sp *snarkProver) Sign(ctx context.Context, privateKey []byte, req *pb.Sign
 
 	workerID := fmt.Sprintf("%s-%d", inputs.CircuitId, workerIndex)
 	// Perform proof generation
+	// Read lock to check the cache
+	sp.proverCacheRWLock.RLock()
 	circuit, _ := sp.circuitsCache.Get(workerID)
 	provingKey, _ := sp.provingKeysCache.Get(workerID)
+	sp.proverCacheRWLock.RUnlock() // release the lock, happy path, 1 lock is good enough
 	if circuit == nil || provingKey == nil {
-		// the generated WASM instance can only generate one proof at a time, circuitsWorkerIndexChan is used to ensure only 1 proof request
-		// is served per WASM instance at any given time
-		c, p, err := sp.circuitLoader(inputs.CircuitId, sp.zkpProverConfig)
-		if err != nil {
-			return nil, err
+		sp.proverCacheRWLock.Lock()
+		// obtain the W&R lock and check again
+		circuit, _ = sp.circuitsCache.Get(workerID)
+		provingKey, _ = sp.provingKeysCache.Get(workerID)
+		if circuit == nil || provingKey == nil {
+			// the generated WASM instance can only generate one proof at a time, circuitsWorkerIndexChan is used to ensure only 1 proof request
+			// is served per WASM instance at any given time
+			c, p, err := sp.circuitLoader(inputs.CircuitId, sp.zkpProverConfig)
+			if err != nil {
+				return nil, err
+			}
+			sp.circuitsCache.Set(workerID, c)
+			sp.provingKeysCache.Set(workerID, p)
+			circuit = c
+			provingKey = p
 		}
-		sp.circuitsCache.Set(workerID, c)
-		sp.provingKeysCache.Set(workerID, p)
-		circuit = c
-		provingKey = p
-	}
 
+		sp.proverCacheRWLock.Unlock()
+	}
 	wtns, publicInputs, err := calculateWitness(inputs.CircuitId, inputs.Common, extras, keyEntry, circuit)
 	if err != nil {
 		return nil, err

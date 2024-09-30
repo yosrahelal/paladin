@@ -32,6 +32,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/signer/api"
 	"github.com/kaleido-io/paladin/core/pkg/signer/common"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
 )
@@ -159,8 +160,9 @@ func TestSnarkProve(t *testing.T) {
 
 func TestConcurrentSnarkProofGeneration(t *testing.T) {
 	config := api.SnarkProverConfig{
-		CircuitsDir:    "test",
-		ProvingKeysDir: "test",
+		CircuitsDir:         "test",
+		ProvingKeysDir:      "test",
+		MaxProverPerCircuit: confutil.P(50), // equal to the default cache size, so all provers can be cached at once
 	}
 	prover, err := newSnarkProver(config)
 	assert.NoError(t, err)
@@ -183,7 +185,7 @@ func TestConcurrentSnarkProofGeneration(t *testing.T) {
 	testProofGenerator := func(witness []byte, provingKey []byte) (*types.ZKProof, error) {
 		peakProverCountMutex.Lock()
 		peakProverCount++
-		assert.LessOrEqual(t, peakProverCount, 10) // ensure the peak prover count is smaller than the default max
+		assert.LessOrEqual(t, peakProverCount, 50) // ensure the peak prover count is smaller than the default max
 		peakProverCountMutex.Unlock()
 		defer func() {
 			peakProverCountMutex.Lock()
@@ -237,7 +239,7 @@ func TestConcurrentSnarkProofGeneration(t *testing.T) {
 	}
 	payload, err := proto.Marshal(&req)
 	assert.NoError(t, err)
-	expectReqCount := 100
+	expectReqCount := 500
 	reqChan := make(chan struct{}, expectReqCount)
 
 	for i := 0; i < expectReqCount; i++ {
@@ -257,7 +259,8 @@ func TestConcurrentSnarkProofGeneration(t *testing.T) {
 		<-reqChan
 		resCount++
 		if resCount == expectReqCount {
-			assert.Equal(t, expectReqCount, totalProvingRequestCount)
+			assert.Equal(t, expectReqCount, totalProvingRequestCount) // check all proving requests has been processed
+			assert.Equal(t, 50, circuitLoadedTotal)                   // check only 5 wasm instances was created and loaded into the cache
 			break
 		}
 	}
