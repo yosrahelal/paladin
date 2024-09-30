@@ -1,0 +1,78 @@
+apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+name: paladin
+nodes:
+- role: control-plane
+  extraPortMappings:
+
+  # This Kind cluster configuration supports direct networking access
+  # to up to 3 Paladin + Besu nodes per the samples provided in the project,
+  # and the E2E tests.
+
+  # Open up ports on LOCALHOST only for the second Paladin node
+  - containerPort: 9545 # Besu2 - JSON/RPC HTTP
+    hostPort: 9545
+    listenAddress: "127.0.0.1"
+    protocol: tcp
+  - containerPort: 9546 # Besu2 - JSON/RPC WebSockets
+    hostPort: 9546
+    listenAddress: "127.0.0.1"
+    protocol: tcp
+  - containerPort: 9547 # Besu2 - GraphQL HTTP
+    hostPort: 9547
+    listenAddress: "127.0.0.1"
+    protocol: tcp
+  - containerPort: 9548 # Paladin2 - JSON/RPC HTTP
+    hostPort: 9548
+    listenAddress: "127.0.0.1"
+    protocol: tcp
+  - containerPort: 9549 # Paladin2 - JSON/RPC WebSockets
+    hostPort: 9549
+    listenAddress: "127.0.0.1"
+    protocol: tcp
+
+  # Open up ports on LOCALHOST only for the second Paladin node
+  - containerPort: 9645 # Besu2 - JSON/RPC HTTP
+    hostPort: 9645
+    listenAddress: "127.0.0.1"
+    protocol: tcp
+  - containerPort: 9646 # Besu2 - JSON/RPC WebSockets
+    hostPort: 9646
+    listenAddress: "127.0.0.1"
+    protocol: tcp
+  - containerPort: 9647 # Besu2 - GraphQL HTTP
+    hostPort: 9647
+    listenAddress: "127.0.0.1"
+    protocol: tcp
+  - containerPort: 9648 # Paladin2 - JSON/RPC HTTP
+    hostPort: 9648
+    listenAddress: "127.0.0.1"
+    protocol: tcp
+  - containerPort: 9649 # Paladin2 - JSON/RPC WebSockets
+    hostPort: 9649
+    listenAddress: "127.0.0.1"
+    protocol: tcp
+
+  # Open up ports on LOCALHOST only for the third Paladin node
+  - containerPort: 9745 # Besu3 - JSON/RPC HTTP
+    hostPort: 9745
+    listenAddress: "127.0.0.1"
+    protocol: tcp
+  - containerPort: 9746 # Besu3 - JSON/RPC WebSockets
+    hostPort: 9746
+    listenAddress: "127.0.0.1"
+    protocol: tcp
+  - containerPort: 9747 # Besu3 - GraphQL HTTP
+    hostPort: 9747
+    listenAddress: "127.0.0.1"
+    protocol: tcp
+  - containerPort: 9748 # Paladin3 - JSON/RPC HTTP
+    hostPort: 9748
+    listenAddress: "127.0.0.1"
+    protocol: tcp
+  - containerPort: 9749 # Paladin3 - JSON/RPC WebSockets
+    hostPort: 9749
+    listenAddress: "127.0.0.1"
+    protocol: tcp
+
+- role: worker

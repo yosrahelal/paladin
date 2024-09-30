@@ -5,7 +5,7 @@
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
 VERSION ?= 0.0.1
 
-CLUSTER_NAME ?= kind
+CLUSTER_NAME ?= paladin
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -136,7 +136,9 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 
 .PHONY: kind-start
 kind-start:	
-	if [ "$(shell kind get nodes --name "${CLUSTER_NAME}")" == "" ]; then kind create cluster --name "${CLUSTER_NAME}"; fi
+	if [ "$(shell kind get nodes --name "${CLUSTER_NAME}")" == "" ]; \
+		then kind create cluster --name "${CLUSTER_NAME}" --config paladin-kind.yaml; \
+	fi
 	kubectl version # fail the build if we can't connect to the cluster
 
 .PHONY: kind-promote

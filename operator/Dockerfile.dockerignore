@@ -18,3 +18,4 @@
 .git
 **/.gradle
 operator/manager
+operator/test
