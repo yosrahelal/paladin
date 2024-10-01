@@ -14,7 +14,7 @@ COPY . .
 RUN cd operator; go build -a -o manager cmd/main.go
 
 # TODO: Use distroless as minimal base image to package the manager binary
-#       Depends on reconciling dependencies of operator
+#       Depends on debugging/reconciling dependencies of operator
 # FROM gcr.io/distroless/static:nonroot
 
 FROM ubuntu:24.04
