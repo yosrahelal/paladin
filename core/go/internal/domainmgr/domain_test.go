@@ -35,7 +35,9 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -517,8 +519,9 @@ func TestDomainInitDeployOK(t *testing.T) {
 		return &prototk.InitDeployResponse{
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
-					Lookup:    "signer1",
-					Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+					Lookup:       "signer1",
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
 				},
 			},
 		}, nil
@@ -586,9 +589,10 @@ func goodTXForDeploy() *components.PrivateContractDeploy {
 		TransactionSpecification: &prototk.DeployTransactionSpecification{TransactionId: tktypes.Bytes32UUIDFirst16(txID).String()},
 		Verifiers: []*prototk.ResolvedVerifier{
 			{
-				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-				Lookup:    "notary",
-				Verifier:  tktypes.EthAddress(tktypes.RandBytes(20)).String(),
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
+				Lookup:       "notary",
+				Verifier:     tktypes.EthAddress(tktypes.RandBytes(20)).String(),
 			},
 		},
 	}
@@ -890,8 +894,9 @@ func TestRecoverSignerFailCases(t *testing.T) {
 	})
 	assert.Regexp(t, "PD011637", err)
 	_, err = d.RecoverSigner(ctx, &prototk.RecoverSignerRequest{
-		Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-		Signature: ([]byte)("not a signature RSV"),
+		Algorithm:   algorithms.ECDSA_SECP256K1,
+		PayloadType: signpayloads.OPAQUE_TO_RSV,
+		Signature:   ([]byte)("not a signature RSV"),
 	})
 	assert.Regexp(t, "PD011638", err)
 }

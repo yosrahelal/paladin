@@ -40,6 +40,7 @@ type TestbedDomain struct {
 	Config          map[string]any
 	Plugin          plugintk.Plugin
 	RegistryAddress *tktypes.EthAddress
+	AllowSigning    bool
 }
 
 type testbed struct {
@@ -151,6 +152,7 @@ func (tb *testbed) StartForTest(configFile string, domains map[string]*TestbedDo
 			},
 			Config:          domain.Config,
 			RegistryAddress: domain.RegistryAddress.String(),
+			AllowSigning:    domain.AllowSigning,
 		}
 	}
 

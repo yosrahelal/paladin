@@ -27,7 +27,9 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
 type approveHandler struct {
@@ -56,8 +58,9 @@ func (h *approveHandler) Init(ctx context.Context, tx *types.ParsedTransaction, 
 	return &prototk.InitTransactionResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:    tx.Transaction.From,
-				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+				Lookup:       tx.Transaction.From,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
 			},
 		},
 	}, nil
@@ -107,7 +110,9 @@ func (h *approveHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 			{
 				Name:            "sender",
 				AttestationType: prototk.AttestationType_SIGN,
-				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+				Algorithm:       algorithms.ECDSA_SECP256K1,
+				VerifierType:    verifiers.ETH_ADDRESS,
+				PayloadType:     signpayloads.OPAQUE_TO_RSV,
 				Payload:         encodedTransfer,
 				Parties:         []string{req.Transaction.From},
 			},
@@ -115,7 +120,8 @@ func (h *approveHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 			{
 				Name:            "notary",
 				AttestationType: prototk.AttestationType_ENDORSE,
-				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+				Algorithm:       algorithms.ECDSA_SECP256K1,
+				VerifierType:    verifiers.ETH_ADDRESS,
 				Parties:         []string{tx.DomainConfig.NotaryLookup},
 			},
 		},

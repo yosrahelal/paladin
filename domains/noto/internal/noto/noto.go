@@ -33,6 +33,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
 //go:embed abis/NotoFactory.json
@@ -153,8 +154,9 @@ func (n *Noto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (
 	return &prototk.InitDeployResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:    params.Notary,
-				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+				Lookup:       params.Notary,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
 			},
 		},
 	}, nil
@@ -165,7 +167,7 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	if err != nil {
 		return nil, err
 	}
-	notary := domain.FindVerifier(params.Notary, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
+	notary := domain.FindVerifier(params.Notary, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
 	if notary == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "notary")
 	}
@@ -449,4 +451,12 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 		}
 	}
 	return &res, nil
+}
+
+func (n *Noto) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.SignResponse, error) {
+	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
+}
+
+func (n *Noto) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error) {
+	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }

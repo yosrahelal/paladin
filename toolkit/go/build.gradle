@@ -54,7 +54,7 @@ task protoc(type: ProtoCompile, dependsOn: [":installProtocGenGo", ":installProt
     protocPath "bin"
     protoPath configurations.protoDefinitions.asPath
     protoFiles fileTree(configurations.protoDefinitions.asPath) {
-        include "*.proto"
+        include "**/*.proto"
     }
     plugins {
         go {
