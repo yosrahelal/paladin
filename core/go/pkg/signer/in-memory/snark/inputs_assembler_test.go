@@ -33,8 +33,17 @@ func TestAssembleInputsAnonEnc(t *testing.T) {
 }
 
 func TestAssembleInputsAnonNullifier(t *testing.T) {
-	inputs := commonWitnessInputs{}
-	key := core.KeyEntry{}
+	inputs := commonWitnessInputs{
+		inputCommitments: []*big.Int{big.NewInt(1), big.NewInt(2)},
+		inputValues:      []*big.Int{big.NewInt(3), big.NewInt(4)},
+		inputSalts:       []*big.Int{big.NewInt(5), big.NewInt(6)},
+	}
+	privKey, pubKey, zkpKey := newKeypair()
+	key := core.KeyEntry{
+		PrivateKey:       privKey,
+		PublicKey:        pubKey,
+		PrivateKeyForZkp: zkpKey,
+	}
 	extras := proto.ProvingRequestExtras_Nullifiers{
 		Root: "123",
 	}
@@ -87,4 +96,20 @@ func TestAssembleInputsAnonNullifier_fail(t *testing.T) {
 	extras.MerkleProofs[0].Nodes = []string{"bad number"}
 	_, err = assembleInputs_anon_nullifier(&inputs, &extras, &key)
 	assert.EqualError(t, err, "failed to parse node")
+
+	inputs = commonWitnessInputs{
+		inputCommitments: []*big.Int{big.NewInt(1), big.NewInt(2)},
+		inputValues:      []*big.Int{big.NewInt(3), big.NewInt(4)},
+		inputSalts:       []*big.Int{big.NewInt(5), big.NewInt(6)},
+	}
+	privKey, pubKey, _ := newKeypair()
+	tooBig, ok := new(big.Int).SetString("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16)
+	assert.True(t, ok)
+	key = core.KeyEntry{
+		PrivateKey:       privKey,
+		PublicKey:        pubKey,
+		PrivateKeyForZkp: tooBig,
+	}
+	_, err = assembleInputs_anon_nullifier(&inputs, &extras, &key)
+	assert.EqualError(t, err, "failed to calculate nullifier. failed to create the nullifier hash. inputs values not inside Finite Field")
 }
