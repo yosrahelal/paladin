@@ -88,9 +88,9 @@ func linkBytecode(artifact SolidityBuildWithLinks, libraries map[string]*tktypes
 	return hex.DecodeString(strings.TrimPrefix(bytecode, "0x"))
 }
 
-func FindVerifier(lookup, algorithm string, verifiers []*pb.ResolvedVerifier) *pb.ResolvedVerifier {
+func FindVerifier(lookup, algorithm, verifierType string, verifiers []*pb.ResolvedVerifier) *pb.ResolvedVerifier {
 	for _, verifier := range verifiers {
-		if verifier.Lookup == lookup && verifier.Algorithm == algorithm {
+		if verifier.Lookup == lookup && verifier.Algorithm == algorithm && verifier.VerifierType == verifierType {
 			return verifier
 		}
 	}

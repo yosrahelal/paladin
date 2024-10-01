@@ -41,6 +41,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -337,9 +338,9 @@ func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataR
 }
 
 func (d *domain) RecoverSigner(ctx context.Context, recoverRequest *prototk.RecoverSignerRequest) (_ *prototk.RecoverSignerResponse, err error) {
-	switch recoverRequest.Algorithm {
+	switch {
 	// If we add more signer algorithms to this utility in the future, we should make it an interface on the signer.
-	case algorithms.ECDSA_SECP256K1_PLAINBYTES:
+	case recoverRequest.Algorithm == algorithms.ECDSA_SECP256K1 && recoverRequest.PayloadType == signpayloads.OPAQUE_TO_RSV:
 		var addr *ethtypes.Address0xHex
 		signature, err := secp256k1.DecodeCompactRSV(ctx, recoverRequest.Signature)
 		if err == nil {
@@ -599,4 +600,29 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		return nil
 	})
 	return res, err
+}
+
+func (d *domain) getVerifier(ctx context.Context, algorithm string, verifierType string, privateKey []byte) (verifier string, err error) {
+	res, err := d.api.GetVerifier(ctx, &prototk.GetVerifierRequest{
+		Algorithm:    algorithm,
+		VerifierType: verifierType,
+		PrivateKey:   privateKey,
+	})
+	if err != nil {
+		return "", err
+	}
+	return res.Verifier, nil
+}
+
+func (d *domain) sign(ctx context.Context, algorithm string, payloadType string, privateKey []byte, payload []byte) (signature []byte, err error) {
+	res, err := d.api.Sign(ctx, &prototk.SignRequest{
+		Algorithm:   algorithm,
+		PayloadType: payloadType,
+		PrivateKey:  privateKey,
+		Payload:     payload,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return res.Payload, nil
 }

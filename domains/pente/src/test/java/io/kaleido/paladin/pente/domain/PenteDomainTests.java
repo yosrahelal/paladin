@@ -132,7 +132,7 @@ public class PenteDomainTests {
             // There will be new event/transaction commit domain functions needed to do that processing
             // (Pente will then implement those).
             String simpleStorageDeployer = testbed.getRpcClient().
-                    request("testbed_resolveVerifier", "simpleStorageDeployer", Algorithms.ECDSA_SECP256K1_PLAINBYTES);
+                    request("testbed_resolveVerifier", "simpleStorageDeployer", Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS);
             var expectedContractAddress = EVMRunner.nonceSmartContractAddress(Address.fromHexString(simpleStorageDeployer), 0);
 
             // Invoke set on Simple Storage

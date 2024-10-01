@@ -29,6 +29,7 @@ import (
 	internalZeto "github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zeto"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -62,6 +63,10 @@ func mapConfig(t *testing.T, config *types.DomainFactoryConfig) (m map[string]an
 
 func prepareDomainConfig(t *testing.T, domainContracts *zetoDomainContracts) *types.DomainFactoryConfig {
 	config := types.DomainFactoryConfig{
+		SnarkProver: zetosigner.SnarkProverConfig{
+			CircuitsDir:    "../zkp",
+			ProvingKeysDir: "../zkp",
+		},
 		DomainContracts: types.DomainConfigContracts{
 			Factory: &types.DomainContract{
 				ContractAddress: domainContracts.factoryAddress.String(),
@@ -124,6 +129,7 @@ func newZetoDomain(t *testing.T, config *types.DomainFactoryConfig) (zeto.Zeto, 
 			return &domain
 		}),
 		RegistryAddress: tktypes.MustEthAddress(config.FactoryAddress),
+		AllowSigning:    true,
 	}
 }
 

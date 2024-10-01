@@ -27,12 +27,15 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
 //go:embed abis/ZetoFactory.json
@@ -45,6 +48,7 @@ var zetoNonFungibleInitializableABIBytes []byte // From "gradle copySolidity"
 type Zeto struct {
 	Callbacks plugintk.DomainCallbacks
 
+	name                     string
 	config                   *types.DomainFactoryConfig
 	chainID                  int64
 	coinSchema               *prototk.StateSchema
@@ -54,6 +58,7 @@ type Zeto struct {
 	mintSignature            string
 	transferSignature        string
 	transferWithEncSignature string
+	snarkProver              signerapi.InMemorySigner
 }
 
 type MintEvent struct {
@@ -81,6 +86,10 @@ func New(callbacks plugintk.DomainCallbacks) *Zeto {
 	}
 }
 
+func (z *Zeto) getAlgoZetoSnarkBJJ() string {
+	return zetosigner.AlgoDomainZetoSnarkBJJ(z.name)
+}
+
 func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
 	var config types.DomainFactoryConfig
 	err := json.Unmarshal([]byte(req.ConfigJson), &config)
@@ -88,6 +97,7 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 		return nil, err
 	}
 
+	z.name = req.Name
 	z.config = &config
 	z.chainID = req.ChainId
 
@@ -107,13 +117,26 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 
 	z.registerEventSignatures(events)
 
+	var signingAlgos map[string]int32
+	if config.SnarkProver.CircuitsDir != "" {
+		// Only build the prover and enable the algorithms for signing if circuits configured
+		z.snarkProver, err = zetosigner.NewSnarkProver(&config.SnarkProver)
+		if err != nil {
+			return nil, err
+		}
+		signingAlgos = map[string]int32{
+			z.getAlgoZetoSnarkBJJ(): 32,
+		}
+	}
+
 	return &prototk.ConfigureDomainResponse{
 		DomainConfig: &prototk.DomainConfig{
 			AbiStateSchemasJson: schemas,
 			BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
 				SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
 			},
-			AbiEventsJson: string(eventsJSON),
+			AbiEventsJson:     string(eventsJSON),
+			SigningAlgorithms: signingAlgos,
 		},
 	}, nil
 }
@@ -133,8 +156,9 @@ func (z *Zeto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (
 	return &prototk.InitDeployResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:    initParams.From,
-				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+				Lookup:       initParams.From,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
 			},
 		},
 	}, nil
@@ -456,4 +480,24 @@ func parseStatesFromEvent(txID tktypes.HexBytes, states []tktypes.HexUint256) []
 		}
 	}
 	return refs
+}
+
+func (z *Zeto) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error) {
+	verifier, err := z.snarkProver.GetVerifier(ctx, req.Algorithm, req.VerifierType, req.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+	return &prototk.GetVerifierResponse{
+		Verifier: verifier,
+	}, nil
+}
+
+func (z *Zeto) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.SignResponse, error) {
+	proof, err := z.snarkProver.Sign(ctx, req.Algorithm, req.PayloadType, req.PrivateKey, req.Payload)
+	if err != nil {
+		return nil, err
+	}
+	return &prototk.SignResponse{
+		Payload: proof,
+	}, nil
 }
