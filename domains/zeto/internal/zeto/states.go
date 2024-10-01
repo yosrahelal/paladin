@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-iden3-crypto/poseidon"
+	"github.com/kaleido-io/paladin/core/pkg/signer/common"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -137,14 +138,11 @@ func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount 
 	// Always produce a single coin for the entire output amount
 	// TODO: make this configurable
 	salt := crypto.NewSalt()
-	ownerKeyBytes, err := ownerKey.Compress().MarshalText()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to prepare outputs. %s", err)
-	}
+	compressedKeyStr := common.EncodePublicKey(ownerKey)
 	newCoin := &types.ZetoCoin{
 		Salt:     (*tktypes.HexUint256)(salt),
 		Owner:    owner,
-		OwnerKey: tktypes.HexBytes(ownerKeyBytes),
+		OwnerKey: tktypes.MustParseHexBytes(compressedKeyStr),
 		Amount:   amount,
 	}
 	if err := z.addHash(newCoin, ownerKey); err != nil {

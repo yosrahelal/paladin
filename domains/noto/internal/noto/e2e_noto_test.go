@@ -18,7 +18,6 @@ package noto
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/go-resty/resty/v2"
@@ -70,7 +69,6 @@ func mapConfig(t *testing.T, config *types.DomainConfig) (m map[string]any) {
 func deployContracts(ctx context.Context, t *testing.T, contracts map[string][]byte) map[string]string {
 	tb := testbed.NewTestBed()
 	url, done, err := tb.StartForTest("../../testbed.config.yaml", map[string]*testbed.TestbedDomain{})
-	fmt.Printf("tb.Components(): %+v\n", tb.Components())
 	require.NoError(t, err)
 	defer done()
 	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))

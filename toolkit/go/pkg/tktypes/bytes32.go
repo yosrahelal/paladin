@@ -51,7 +51,7 @@ func Bytes32Keccak(b []byte) Bytes32 {
 func ParseBytes32Ctx(ctx context.Context, s string) (Bytes32, error) {
 	h, err := hex.DecodeString(strings.TrimPrefix(s, "0x"))
 	if err != nil {
-		return Bytes32{}, i18n.NewError(ctx, tkmsgs.MsgTypesInvalidHex, err)
+		return Bytes32{}, i18n.NewError(ctx, tkmsgs.MsgTypesInvalidHex, fmt.Sprintf("bytes 32 %s", err))
 	}
 	if len(h) != 32 {
 		return Bytes32{}, i18n.NewError(ctx, tkmsgs.MsgTypesValueInvalidHexBytes32, len(h))
