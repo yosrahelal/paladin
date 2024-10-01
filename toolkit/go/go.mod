@@ -3,6 +3,7 @@ module github.com/kaleido-io/paladin/toolkit
 go 1.22.5
 
 require (
+	github.com/Code-Hex/go-generics-cache v1.5.1
 	github.com/aidarkhanov/nanoid v1.0.8
 	github.com/docker/go-units v0.5.0
 	github.com/go-resty/resty/v2 v2.14.0
