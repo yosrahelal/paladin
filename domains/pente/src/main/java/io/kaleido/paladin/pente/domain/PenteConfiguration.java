@@ -29,6 +29,7 @@ import org.apache.tuweni.bytes.Bytes;
 import org.web3j.abi.TypeDecoder;
 import org.web3j.abi.TypeEncoder;
 import org.web3j.abi.TypeReference;
+import org.web3j.abi.datatypes.Bool;
 import org.web3j.abi.datatypes.DynamicArray;
 import org.web3j.abi.datatypes.DynamicStruct;
 import org.web3j.abi.datatypes.Utf8String;
@@ -111,7 +112,9 @@ public class PenteConfiguration {
             @JsonProperty
             String evmVersion,
             @JsonProperty
-            String endorsementType
+            String endorsementType,
+            @JsonProperty
+            boolean externalCallsEnabled
     ) {}
 
     public static String ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES =
@@ -168,25 +171,28 @@ public class PenteConfiguration {
         return ByteBuffer.wrap(data, offset, len).getInt();
     }
 
-    public static final int PenteConfigID_Endorsement_V0 = 0x00010000;
+    public static final int PenteConfigID_V0 = 0x00010000;
 
     interface OnChainConfig {
         String evmVersion();
     }
 
-    public static class Endorsement_V0 extends DynamicStruct implements OnChainConfig {
+    public static class PenteConfig_V0 extends DynamicStruct implements OnChainConfig {
         public Utf8String evmVersion;
         public Uint256 threshold;
         public DynamicArray<org.web3j.abi.datatypes.Address> addresses;
-        public Endorsement_V0(
+        public Bool externalCallsEnabled;
+        public PenteConfig_V0(
                 Utf8String evmVersion,
                 Uint256 threshold,
                 @Parameterized(type = org.web3j.abi.datatypes.Address.class)
-                DynamicArray<org.web3j.abi.datatypes.Address> addresses) {
+                DynamicArray<org.web3j.abi.datatypes.Address> addresses,
+                Bool externalCallsEnabled) {
             super(evmVersion, threshold, addresses);
             this.evmVersion = evmVersion;
             this.threshold = threshold;
             this.addresses = addresses;
+            this.externalCallsEnabled = externalCallsEnabled;
         }
 
         public String evmVersion() {
@@ -194,22 +200,23 @@ public class PenteConfiguration {
         }
     }
 
-    public static JsonHex.Bytes abiEncoder_Endorsement_V0(String evmVersion, int threshold, List<JsonHex.Address> endorsers) {
+    public static JsonHex.Bytes abiEncoder_Config_V0(String evmVersion, int threshold, List<JsonHex.Address> endorsers, boolean externalCallsEnabled) {
         var w3Addresses = new ArrayList<org.web3j.abi.datatypes.Address>(endorsers.size());
         for (var addr : endorsers) {
             org.web3j.abi.datatypes.Address w3Address = new org.web3j.abi.datatypes.Address(addr.to0xHex());
             w3Addresses.add(w3Address);
         }
         var w3AddressArray = new DynamicArray<>(org.web3j.abi.datatypes.Address.class, w3Addresses);
-        return new JsonHex.Bytes(TypeEncoder.encode(new Endorsement_V0(
+        return new JsonHex.Bytes(TypeEncoder.encode(new PenteConfig_V0(
                 new org.web3j.abi.datatypes.Utf8String(evmVersion),
                 new Uint256(threshold),
-                w3AddressArray
+                w3AddressArray,
+                new Bool(externalCallsEnabled)
         )));
     }
 
-    public static Endorsement_V0 abiDecoder_Endorsement_V0(JsonHex data, int offset) throws ClassNotFoundException {
-        return TypeDecoder.decodeDynamicStruct(data.to0xHex(), 2 + (2 * offset), TypeReference.create(Endorsement_V0.class));
+    public static PenteConfiguration.PenteConfig_V0 abiDecoder_Config_V0(JsonHex data, int offset) throws ClassNotFoundException {
+        return TypeDecoder.decodeDynamicStruct(data.to0xHex(), 2 + (2 * offset), TypeReference.create(PenteConfiguration.PenteConfig_V0.class));
     }
 
     static OnChainConfig decodeConfig(byte[] constructorConfig) throws IllegalArgumentException, ClassNotFoundException {
@@ -217,7 +224,7 @@ public class PenteConfiguration {
             throw new IllegalArgumentException("on-chain configuration must be at least 4 bytes");
         }
         return switch (bytes4ToInt(constructorConfig, 0, 4)) {
-            case PenteConfigID_Endorsement_V0 -> abiDecoder_Endorsement_V0(JsonHex.wrap(constructorConfig), 4);
+            case PenteConfigID_V0 -> abiDecoder_Config_V0(JsonHex.wrap(constructorConfig), 4);
             default -> throw new IllegalArgumentException("unknown config ID: %s".formatted(JsonHex.from(constructorConfig, 0, 4)));
         };
     }

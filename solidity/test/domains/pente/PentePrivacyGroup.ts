@@ -55,15 +55,20 @@ export async function newTransitionEIP712(
 }
 
 describe("PentePrivacyGroup", function () {
-  async function pentePrivacyGroupSetup() {
+  async function pentePrivacyGroupSetup(options?: { externalCalls: boolean }) {
     const [deployer, endorser1, endorser2, endorser3] =
       await hre.ethers.getSigners();
 
     const configType: PenteConfigID = PenteConfigID.Endorsement_V0;
     const configTypeBytes = "0x" + configType.toString(16).padStart(8, "0");
     const config = abiCoder.encode(
-      ["string", "uint", "address[]"],
-      ["shanghai", 3, [endorser1.address, endorser2.address, endorser3.address]]
+      ["string", "uint", "address[]", "bool"],
+      [
+        "shanghai",
+        3,
+        [endorser1.address, endorser2.address, endorser3.address],
+        options?.externalCalls ?? true,
+      ]
     );
     const configBytes = concat([configTypeBytes, config]);
 
@@ -348,5 +353,50 @@ describe("PentePrivacyGroup", function () {
       .withArgs(tx1ID, [], stateSet1, "0x")
       .and.to.emit(erc20, "Transfer")
       .withArgs(deployer, other, 100);
+  });
+
+  it("external calls disabled", async function () {
+    const { privacyGroup, endorsers } = await pentePrivacyGroupSetup({
+      externalCalls: false,
+    });
+
+    const [deployer, other] = await hre.ethers.getSigners();
+    const ERC20 = await hre.ethers.getContractFactory("ERC20Simple");
+    const erc20 = await ERC20.deploy("COIN", "COIN");
+    await erc20.mint(deployer, 100);
+    await erc20.approve(await privacyGroup.getAddress(), 100);
+
+    const stateSet1 = [randBytes32(), randBytes32(), randBytes32()];
+    const externalCalls = [
+      {
+        contractAddress: await erc20.getAddress(),
+        encodedCall: erc20.interface.encodeFunctionData("transferFrom", [
+          deployer.address,
+          other.address,
+          100,
+        ]),
+      },
+    ];
+
+    const { signatures: endorsements1 } = await newTransitionEIP712(
+      privacyGroup,
+      [],
+      [],
+      stateSet1,
+      externalCalls,
+      endorsers
+    );
+    const tx1ID = randBytes32();
+
+    await expect(
+      privacyGroup.transition(
+        tx1ID,
+        [],
+        [],
+        stateSet1,
+        externalCalls,
+        endorsements1
+      )
+    ).to.be.revertedWithCustomError(privacyGroup, "PenteExternalCallsDisabled");
   });
 });

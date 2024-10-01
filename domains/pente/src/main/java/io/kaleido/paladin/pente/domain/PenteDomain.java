@@ -144,11 +144,12 @@ public class PenteDomain extends DomainInstance {
 
             var resolvedVerifiers = getResolvedEndorsers(params.group().salt(), params.group().members(), request.getResolvedVerifiersList());
             var onchainConfBuilder = new ByteArrayOutputStream();
-            onchainConfBuilder.write(PenteConfiguration.intToBytes4(PenteConfiguration.PenteConfigID_Endorsement_V0));
-            onchainConfBuilder.write(PenteConfiguration.abiEncoder_Endorsement_V0(
+            onchainConfBuilder.write(PenteConfiguration.intToBytes4(PenteConfiguration.PenteConfigID_V0));
+            onchainConfBuilder.write(PenteConfiguration.abiEncoder_Config_V0(
                     params.evmVersion(),
                     resolvedVerifiers.size(),
-                    resolvedVerifiers
+                    resolvedVerifiers,
+                    params.externalCallsEnabled()
             ).getBytes());
             var response = ToDomain.PrepareDeployResponse.newBuilder();
             var newPrivacyGroupABIJson = config.getFactoryContractABI().getABIEntry("function", "newPrivacyGroup").toJSON(false);

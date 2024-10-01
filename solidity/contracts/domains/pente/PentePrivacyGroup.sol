@@ -31,7 +31,7 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
     address _nextImplementation;
 
     // Config follows the convention of a 4 byte type selector, followed by ABI encoded bytes
-    bytes4 public constant PenteConfigID_Endorsement_V0 = 0x00010000;
+    bytes4 public constant PenteConfig_V0 = 0x00010000;
 
     error PenteUnsupportedConfigType(bytes4 configSelector);
     error PenteDuplicateEndorser(address signer);
@@ -41,34 +41,42 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
     error PenteInputNotAvailable(bytes32 input);
     error PenteReadNotAvailable(bytes32 read);
     error PenteOutputAlreadyUnspent(bytes32 output);
+    error PenteExternalCallsDisabled();
 
     struct EndorsementConfig {
-        uint      threshold;
-        address[] endorsmentSet;
+        uint threshold;
+        address[] endorsementSet;
     }
 
     EndorsementConfig _endorsementConfig;
+    bool _externalCallsEnabled;
 
     struct ExternalCall {
         address contractAddress;
         bytes encodedCall;
     }
 
-    constructor() {}
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
 
-    function initialize(
-        bytes calldata config
-    ) public initializer {
+    function initialize(bytes calldata config) public initializer {
         __EIP712_init("pente", "0.0.1");
 
         bytes4 configSelector = bytes4(config[0:4]);
-        if (configSelector == PenteConfigID_Endorsement_V0) {
-            ( /* string memory evmVersion */, uint threshold, address[] memory endorsmentSet) = 
-                abi.decode(config[4:], (string, uint, address[]));
+        if (configSelector == PenteConfig_V0) {
+            (
+                /*string memory evmVersion*/,
+                uint threshold,
+                address[] memory endorsementSet,
+                uint externalCallsEnabled
+            ) = abi.decode(config[4:], (string, uint, address[], uint));
             _endorsementConfig = EndorsementConfig({
                 threshold: threshold,
-                endorsmentSet: endorsmentSet
+                endorsementSet: endorsementSet
             });
+            _externalCallsEnabled = externalCallsEnabled == 0 ? false : true;
         } else {
             revert PenteUnsupportedConfigType(configSelector);
         }
@@ -185,7 +193,7 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
         bytes32 txHash,
         bytes[] calldata signatures
     ) internal view {
-        address[] memory endorsers = _endorsementConfig.endorsmentSet;
+        address[] memory endorsers = _endorsementConfig.endorsementSet;
         address[] memory endorsements = new address[](signatures.length);
         uint collected;
         for (uint iSig = 0; iSig < signatures.length; iSig++) {
@@ -198,7 +206,11 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
             }
             // Check this signer is in the endorser list
             address endorser;
-            for (uint iEndorser = 0; iEndorser < endorsers.length; iEndorser++) {
+            for (
+                uint iEndorser = 0;
+                iEndorser < endorsers.length;
+                iEndorser++
+            ) {
                 if (signer == endorsers[iEndorser]) {
                     endorser = endorsers[iEndorser];
                     break;
@@ -213,7 +225,10 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
         }
         // Check we reached our threshold
         if (collected < _endorsementConfig.threshold) {
-            revert PenteEndorsementThreshold(collected, _endorsementConfig.threshold);
+            revert PenteEndorsementThreshold(
+                collected,
+                _endorsementConfig.threshold
+            );
         }
     }
 
@@ -221,6 +236,9 @@ contract PentePrivacyGroup is IPente, UUPSUpgradeable, EIP712Upgradeable {
         address contractAddress,
         bytes memory encodedCall
     ) internal {
+        if (!_externalCallsEnabled) {
+            revert PenteExternalCallsDisabled();
+        }
         (bool success, bytes memory result) = contractAddress.call(encodedCall);
         if (!success) {
             assembly {

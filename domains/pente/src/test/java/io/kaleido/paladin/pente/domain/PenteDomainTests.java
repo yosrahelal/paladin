@@ -123,7 +123,8 @@ public class PenteDomainTests {
                     new PenteConfiguration.PrivacyGroupConstructorParamsJSON(
                             groupInfo,
                             "shanghai",
-                            PenteConfiguration.ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES
+                            PenteConfiguration.ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES,
+                            false
                     ));
             assertFalse(contractAddr.isBlank());
 
@@ -229,7 +230,8 @@ public class PenteDomainTests {
                     new PenteConfiguration.PrivacyGroupConstructorParamsJSON(
                             groupInfo,
                             "shanghai",
-                            PenteConfiguration.ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES
+                            PenteConfiguration.ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES,
+                            true
                     ));
             assertFalse(penteAddr.isBlank());
 
