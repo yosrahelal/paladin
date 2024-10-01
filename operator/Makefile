@@ -154,8 +154,8 @@ kind-promote: kind-start
 build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
-.PHONY: run
-run: manifests generate fmt vet ## Run a controller from your host.
+.PHONY: run 
+run: manifests generate fmt vet install-dependencies ## Run a controller from your host.
 	go run ./cmd/main.go
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
@@ -201,9 +201,20 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 
 .PHONY: helm-build
 helm-build: manifests
-	rm -f deploy/paladin-operator/crds/*
-	cd config/crd/bases; \
-		for crd in $$(ls *); do cp $$crd ../../../deploy/paladin-operator/crds/$$(echo $$crd | sed s/.yaml/.crd.yaml/); done
+	CRDs_DIR=
+	rm -rf deploy/paladin-operator/charts/crds-definitions/crds/*.crd.yaml
+	cp -f config/crd/bases/* deploy/paladin-operator/charts/crds-definitions/crds
+	@for file in deploy/paladin-operator/charts/crds-definitions/crds/*.yaml; do \
+		mv "$$file" "$${file%.yaml}.crd.yaml"; \
+	done
+
+.PHONY: install-dependencies
+install-dependencies: helm-build ## Install the dependencies independently of helm-install (useful for VSCode)
+	helm upgrade --install paladin-operator-crds-definitions deploy/paladin-operator/charts/crds-definitions -n ${NAMESPACE} --create-namespace
+
+.PHONY: uninstall-dependencies
+uninstall-dependencies: ## unnstall the dependencies independently of helm-install
+	helm uninstall paladin-operator-crds-definitions -n ${NAMESPACE} || true
 
 # Note Helm will not update CRDs https://helm.sh/docs/chart_best_practices/custom_resource_definitions/#some-caveats-and-explanations
 # See update-crds
@@ -228,20 +239,20 @@ ifndef ignore-not-found
 endif
 
 .PHONY: kustomize-install
-kustomize-install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
+kustomize-install: manifests ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f -
 
 .PHONY: kustomize-uninstall
-kustomize-uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
+kustomize-uninstall: manifests ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 .PHONY: kustomize-deploy
-kustomize-deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+kustomize-deploy: manifests ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 
 .PHONY: kustomize-undeploy
-kustomize-undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
+kustomize-undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 ##@ Dependencies
@@ -313,4 +324,4 @@ delete-instance: ## Delete an instance of the paladin operator
 ## Cleanup
 
 .PHONY: clean
-clean: delete-instance uninstall  ## Clean up all resources and delete the namespace.
+clean: delete-instance helm-uninstall  ## Clean up all resources and delete the namespace.

@@ -132,7 +132,7 @@ var _ = Describe("controller", Ordered, func() {
 		cmd := exec.Command("kubectl", "create", "ns", namespace)
 		_, _ = utils.Run(cmd)
 
-		// startPaladinOperator()
+		startPaladinOperator()
 	})
 
 	AfterAll(func() {
@@ -166,7 +166,7 @@ var _ = Describe("controller", Ordered, func() {
 			By("waiting for the Paladin API to become available")
 			EventuallyWithOffset(1, func() error {
 				rpc, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{
-					URL: "http://127.0.0.1:9648",
+					URL: "http://127.0.0.1:31548",
 				})
 				if err != nil {
 					return err

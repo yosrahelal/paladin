@@ -19,3 +19,5 @@
 **/.gradle
 operator/manager
 operator/test
+operator/deploy
+

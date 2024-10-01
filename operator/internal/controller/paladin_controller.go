@@ -40,6 +40,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/yaml"
 
@@ -64,17 +65,11 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// Generate a name for the Paladin resources
 	name := generatePaladinName(req.Name)
-	namespace := req.Namespace
 
 	// Fetch the Paladin instance
 	var node corev1alpha1.Paladin
 	if err := r.Get(ctx, req.NamespacedName, &node); err != nil {
 		if errors.IsNotFound(err) {
-			log.Info("Paladin resource deleted, deleting related resources")
-			r.deleteService(ctx, namespace, name)
-			r.deleteStatefulSet(ctx, namespace, name)
-			r.deleteConfigSecret(ctx, namespace, name)
-
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get Paladin resource")
@@ -134,6 +129,7 @@ func (r *PaladinReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *PaladinReconciler) createStatefulSet(ctx context.Context, node *corev1alpha1.Paladin, name, configSum string) (*appsv1.StatefulSet, error) {
 	statefulSet := r.generateStatefulSetTemplate(node, name, configSum)
+	controllerutil.SetControllerReference(node, statefulSet, r.Scheme)
 
 	if node.Spec.Database.Mode == corev1alpha1.DBMode_SidecarPostgres {
 		// Earlier processing responsible for ensuring this is non-nil
@@ -212,6 +208,7 @@ func (r *PaladinReconciler) generatePDBTemplate(node *corev1alpha1.Paladin, name
 
 func (r *PaladinReconciler) createPDB(ctx context.Context, node *corev1alpha1.Paladin, name string) (*policyv1.PodDisruptionBudget, error) {
 	pdb := r.generatePDBTemplate(node, name)
+	controllerutil.SetControllerReference(node, pdb, r.Scheme)
 
 	var foundPDB policyv1.PodDisruptionBudget
 	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: pdb.Namespace}, &foundPDB); err != nil && errors.IsNotFound(err) {
@@ -231,6 +228,7 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: node.Namespace,
+			Labels:    r.getLabels(node),
 			Annotations: r.withStandardAnnotations(map[string]string{
 				"kubectl.kubernetes.io/default-container": "paladin",
 			}),
@@ -241,8 +239,9 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: r.getLabels(node, map[string]string{
-						"config-sum": configSum,
+					Labels: r.getLabels(node),
+					Annotations: r.withStandardAnnotations(map[string]string{
+						"core.paladin.io/config-sum": fmt.Sprintf("md5-%s", configSum),
 					}),
 				},
 				Spec: corev1.PodSpec{
@@ -359,6 +358,7 @@ func (r *PaladinReconciler) createPostgresPVC(ctx context.Context, node *corev1a
 	if _, resourceSet := pvc.Spec.Resources.Requests[corev1.ResourceStorage]; !resourceSet {
 		pvc.Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("1Gi")
 	}
+	controllerutil.SetControllerReference(node, &pvc, r.Scheme)
 
 	var foundPVC corev1.PersistentVolumeClaim
 	if err := r.Get(ctx, types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, &foundPVC); err != nil && errors.IsNotFound(err) {
@@ -409,6 +409,7 @@ func (r *PaladinReconciler) addPaladinDBSecret(ctx context.Context, ss *appsv1.S
 			},
 		},
 	})
+
 	return nil
 }
 
@@ -417,6 +418,7 @@ func (r *PaladinReconciler) createConfigMap(ctx context.Context, node *corev1alp
 	if err != nil {
 		return "", nil, err
 	}
+	controllerutil.SetControllerReference(node, configMap, r.Scheme)
 
 	var foundConfigMap corev1.ConfigMap
 	if err := r.Get(ctx, types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, &foundConfigMap); err != nil && errors.IsNotFound(err) {
@@ -549,6 +551,7 @@ func (r *PaladinReconciler) generatePaladinDBConfig(ctx context.Context, node *c
 
 func (r *PaladinReconciler) generateDBPasswordSecretIfNotExist(ctx context.Context, node *corev1alpha1.Paladin, name string) error {
 	secret := r.generateSecretTemplate(node, name)
+	controllerutil.SetControllerReference(node, secret, r.Scheme)
 
 	var foundSecret corev1.Secret
 	if err := r.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, &foundSecret); err != nil && errors.IsNotFound(err) {
@@ -599,6 +602,7 @@ func (r *PaladinReconciler) generatePaladinSigners(ctx context.Context, node *co
 
 func (r *PaladinReconciler) generateBIP39SeedSecretIfNotExist(ctx context.Context, node *corev1alpha1.Paladin, name string) error {
 	secret := r.generateSecretTemplate(node, name)
+	controllerutil.SetControllerReference(node, secret, r.Scheme)
 
 	var foundSecret corev1.Secret
 	if err := r.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, &foundSecret); err != nil && errors.IsNotFound(err) {
@@ -642,6 +646,7 @@ func (r *PaladinReconciler) retrieveUsernamePasswordSecret(ctx context.Context, 
 
 func (r *PaladinReconciler) createService(ctx context.Context, node *corev1alpha1.Paladin, name string) (*corev1.Service, error) {
 	svc := r.generateServiceTemplate(node, name)
+	controllerutil.SetControllerReference(node, svc, r.Scheme)
 
 	var foundSvc corev1.Service
 	if err := r.Get(ctx, types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}, &foundSvc); err != nil && errors.IsNotFound(err) {
@@ -727,33 +732,4 @@ func (r *PaladinReconciler) getLabels(node *corev1alpha1.Paladin, extraLabels ..
 // this is for generating unique names for the resources
 func generatePaladinName(n string) string {
 	return fmt.Sprintf("paladin-%s", n)
-}
-
-func (r *PaladinReconciler) deleteStatefulSet(ctx context.Context, namespace, name string) error {
-	var foundStatefulSet appsv1.StatefulSet
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &foundStatefulSet)
-	if err == nil {
-		return r.Delete(ctx, &foundStatefulSet)
-	}
-	return nil
-
-}
-
-func (r *PaladinReconciler) deleteConfigSecret(ctx context.Context, namespace, name string) error {
-	var foundSecret corev1.Secret
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &foundSecret)
-	if err == nil {
-		return r.Delete(ctx, &foundSecret)
-	}
-	return err
-}
-
-func (r *PaladinReconciler) deleteService(ctx context.Context, namespace, name string) error {
-
-	var foundSvc corev1.Service
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &foundSvc)
-	if err == nil {
-		return r.Delete(ctx, &foundSvc)
-	}
-	return err
 }

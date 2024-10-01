@@ -1,0 +1,16 @@
+suite: Snapshot tests
+tests:
+  - it: Basic snapshot test
+    when: snapshot
+    asserts:
+      - matchSnapshot: {}
+    set:
+      unittest: true
+  - it: Change namespace
+    when: snapshot
+    asserts:
+      - matchSnapshot: {}
+    set:
+      unittest: true
+      operator.namespace: test
+      
