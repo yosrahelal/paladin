@@ -24,11 +24,12 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
 //go:embed abis/ZetoFactory.json
@@ -90,8 +91,9 @@ func (z *Zeto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (
 	return &prototk.InitDeployResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:    initParams.From,
-				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+				Lookup:       initParams.From,
+				Algorithm:    zetosigner.ALGO_DOMAIN_ZETO_SNARK_BJJ,
+				VerifierType: verifiers.HEX_PUBKEY_0X_PREFIX,
 			},
 		},
 	}, nil
