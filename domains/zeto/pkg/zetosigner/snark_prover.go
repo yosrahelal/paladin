@@ -41,14 +41,15 @@ var defaultSnarkProverConfig = SnarkProverConfig{
 
 // snarkProver encapsulates the logic for generating SNARK proofs
 type snarkProver struct {
-	zkpProverConfig         *SnarkProverConfig
-	circuitsCache           cache.Cache[string, witness.Calculator]
-	provingKeysCache        cache.Cache[string, []byte]
-	proverCacheRWLock       sync.RWMutex
-	workerPerCircuit        int
-	circuitsWorkerIndexChan map[string]chan int
-	circuitLoader           func(circuitID string, config *SnarkProverConfig) (witness.Calculator, []byte, error)
-	proofGenerator          func(witness []byte, provingKey []byte) (*types.ZKProof, error)
+	zkpProverConfig                *SnarkProverConfig
+	circuitsCache                  cache.Cache[string, witness.Calculator]
+	provingKeysCache               cache.Cache[string, []byte]
+	proverCacheRWLock              sync.RWMutex
+	workerPerCircuit               int
+	circuitsWorkerIndexChanRWMutex sync.RWMutex
+	circuitsWorkerIndexChan        map[string]chan *int
+	circuitLoader                  func(circuitID string, config *SnarkProverConfig) (witness.Calculator, []byte, error)
+	proofGenerator                 func(witness []byte, provingKey []byte) (*types.ZKProof, error)
 }
 
 func NewSnarkProver(conf *SnarkProverConfig) (signerapi.InMemorySigner, error) {
@@ -66,7 +67,7 @@ func newSnarkProver(conf *SnarkProverConfig) (*snarkProver, error) {
 		circuitLoader:           loadCircuit,
 		proofGenerator:          generateProof,
 		workerPerCircuit:        confutil.Int(conf.MaxProverPerCircuit, *defaultSnarkProverConfig.MaxProverPerCircuit),
-		circuitsWorkerIndexChan: make(map[string]chan int),
+		circuitsWorkerIndexChan: make(map[string]chan *int),
 	}, nil
 }
 
@@ -92,10 +93,13 @@ func (sp *snarkProver) GetMinimumKeyLen(ctx context.Context, algorithm string) (
 }
 
 func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, privateKey, payload []byte) ([]byte, error) {
+	fmt.Println("<< enter")
+
 	if !ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP.MatchString(algorithm) {
 		return nil, fmt.Errorf("'%s' does not match supported algorithm '%s'", algorithm, ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP)
 	}
 	if payloadType != PAYLOAD_DOMAIN_ZETO_SNARK {
+		fmt.Printf("<< Released %d \n", 1122139)
 		return nil, fmt.Errorf("'%s' does not match supported payloadType '%s'", payloadType, PAYLOAD_DOMAIN_ZETO_SNARK)
 	}
 
@@ -116,15 +120,25 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 	}
 
 	// obtain a slot for the proof generation for this specific circuit
+	// check whether this is a controlling channel
+	sp.circuitsWorkerIndexChanRWMutex.RLock()
 	ccChan, chanelFound := sp.circuitsWorkerIndexChan[inputs.CircuitId]
+	sp.circuitsWorkerIndexChanRWMutex.RUnlock()
 	if !chanelFound {
-		ccChan = make(chan int, sp.workerPerCircuit) // init token channel
-		for i := 0; i < sp.workerPerCircuit; i++ {
-			ccChan <- i // add all tokens
+		// if not found, obtain the W&R lock and check again before initializing
+		sp.circuitsWorkerIndexChanRWMutex.Lock()
+		ccChan, chanelFound = sp.circuitsWorkerIndexChan[inputs.CircuitId]
+		if !chanelFound {
+			ccChan = make(chan *int, sp.workerPerCircuit) // init token channel
+			sp.circuitsWorkerIndexChan[inputs.CircuitId] = ccChan
+			for i := 0; i < sp.workerPerCircuit; i++ {
+				ccChan <- confutil.P(i) // add all tokens
+			}
 		}
-		sp.circuitsWorkerIndexChan[inputs.CircuitId] = ccChan
+		sp.circuitsWorkerIndexChanRWMutex.Unlock()
 	}
-	var workerIndex int
+
+	var workerIndex *int
 	select {
 	case workerIndex = <-ccChan: // wait till there is a worker available
 		defer func() {
@@ -159,7 +173,6 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 			circuit = c
 			provingKey = p
 		}
-
 		sp.proverCacheRWLock.Unlock()
 	}
 	wtns, publicInputs, err := calculateWitness(inputs.CircuitId, inputs.Common, extras, keyEntry, circuit)
