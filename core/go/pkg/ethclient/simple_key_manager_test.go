@@ -183,7 +183,7 @@ func TestKeyManagerResolveSameKeyTwoVerifierTypes(t *testing.T) {
 	keyHandle1, verifier1, err := kmgr.ResolveKey(context.Background(), "key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 
-	keyHandle2, verifier2, err := kmgr.ResolveKey(context.Background(), "key1", algorithms.ECDSA_SECP256K1, verifiers.HEX_PUBKEY_0X_PREFIX)
+	keyHandle2, verifier2, err := kmgr.ResolveKey(context.Background(), "key1", algorithms.ECDSA_SECP256K1, verifiers.HEX_ECDSA_PUBKEY_UNCOMPRESSED_0X)
 	require.NoError(t, err)
 
 	assert.Equal(t, keyHandle1, keyHandle2)
