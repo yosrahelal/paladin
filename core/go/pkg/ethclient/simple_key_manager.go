@@ -52,8 +52,8 @@ type keyMapping struct {
 // Super simple in-memory placeholder for Key Manager, which wraps a single signer, and does not
 // have any persistence of the folders and key mappings that are created.
 // TODO: Supersede with full key manager once it is in place
-func NewSimpleTestKeyManager(ctx context.Context, signerConfig *signerapi.Config) (KeyManager, error) {
-	signer, err := signer.NewSigningModule(ctx, signerConfig)
+func NewSimpleTestKeyManager(ctx context.Context, signerConfig *signerapi.Config, extensions ...*signerapi.Extensions[*signerapi.Config]) (KeyManager, error) {
+	signer, err := signer.NewSigningModule(ctx, signerConfig, extensions...)
 	if err != nil {
 		return nil, err
 	}
@@ -61,6 +61,10 @@ func NewSimpleTestKeyManager(ctx context.Context, signerConfig *signerapi.Config
 		signer:     signer,
 		rootFolder: &keyFolder{},
 	}, nil
+}
+
+func (km *simpleKeyManager) AddInMemorySigner(prefix string, signer signerapi.InMemorySigner) {
+	km.signer.AddInMemorySigner(prefix, signer)
 }
 
 func (km *simpleKeyManager) ResolveKey(ctx context.Context, identifier, algorithm, verifierType string) (keyHandle, verifier string, err error) {

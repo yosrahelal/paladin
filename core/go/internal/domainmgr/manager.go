@@ -99,7 +99,10 @@ func (dm *domainManager) PreInit(pic components.PreInitComponents) (*components.
 	dm.stateStore = pic.StateStore()
 	dm.ethClientFactory = pic.EthClientFactory()
 	dm.blockIndexer = pic.BlockIndexer()
+
+	// Register ourselves as a signing on the key manager
 	dm.domainSigner = &domainSigner{dm: dm}
+	pic.KeyManager().AddInMemorySigner("domain", dm.domainSigner)
 
 	for name, d := range dm.conf.Domains {
 		if _, err := tktypes.ParseEthAddress(d.RegistryAddress); err != nil {

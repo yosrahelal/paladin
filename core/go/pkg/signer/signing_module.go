@@ -35,6 +35,7 @@ import (
 // This module can be wrapped and loaded into the core Paladin runtime as an embedded module called directly
 // within the runtime, or wrapped in a remote process connected over a transport like HTTP, WebSockets, gRPC etc.
 type SigningModule interface {
+	AddInMemorySigner(prefix string, signer signerapi.InMemorySigner) // late bind support for signers only (keystores are construction only)
 	Resolve(ctx context.Context, req *proto.ResolveKeyRequest) (res *proto.ResolveKeyResponse, err error)
 	Sign(ctx context.Context, req *proto.SignRequest) (res *proto.SignResponse, err error)
 	List(ctx context.Context, req *proto.ListKeysRequest) (res *proto.ListKeysResponse, err error)
@@ -148,6 +149,10 @@ func NewSigningModule[C signerapi.ExtensibleConfig](ctx context.Context, conf C,
 	sm.disableKeyListing = ksConf.DisableKeyListing
 
 	return sm, err
+}
+
+func (sm *signingModule[C]) AddInMemorySigner(prefix string, signer signerapi.InMemorySigner) {
+	sm.signingImplementations[prefix] = signer
 }
 
 func (sm *signingModule[C]) getSignerForAlgorithm(ctx context.Context, algorithm string) (signerapi.InMemorySigner, error) {

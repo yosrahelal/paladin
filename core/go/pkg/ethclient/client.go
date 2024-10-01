@@ -32,6 +32,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -122,6 +123,7 @@ func (cr CallResult) JSON() (s string) {
 }
 
 type KeyManager interface {
+	AddInMemorySigner(prefix string, signer signerapi.InMemorySigner) // should only be called on initialization routine
 	ResolveKey(ctx context.Context, identifier, algorithm, verifierType string) (keyHandle, verifier string, err error)
 	Sign(ctx context.Context, req *proto.SignRequest) (*proto.SignResponse, error)
 	Close()

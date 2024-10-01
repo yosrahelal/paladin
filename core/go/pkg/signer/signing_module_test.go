@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -478,6 +479,40 @@ func TestResolveMissingAlgo(t *testing.T) {
 	})
 	assert.Regexp(t, "PD011411", err)
 
+}
+
+func TestResolveLateBindMemSignerError(t *testing.T) {
+
+	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
+		KeyDerivation: signerapi.KeyDerivationConfig{
+			Type: signerapi.KeyDerivationTypeBIP32,
+		},
+		KeyStore: signerapi.KeyStoreConfig{
+			Type: signerapi.KeyStoreTypeStatic,
+			Static: signerapi.StaticKeyStorageConfig{
+				Keys: map[string]signerapi.StaticKeyEntryConfig{
+					"seed": {
+						Encoding: "hex",
+						Inline:   tktypes.RandHex(32),
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	testSigner := &testMemSigner{
+		getVerifier: func(ctx context.Context, algorithm, verifierType string, privateKey []byte) (string, error) {
+			return "", fmt.Errorf("pop")
+		},
+	}
+	sm.AddInMemorySigner("test1", testSigner)
+	_, err = sm.Resolve(context.Background(), &proto.ResolveKeyRequest{
+		Name:                "test1",
+		Index:               0,
+		RequiredIdentifiers: []*proto.PublicKeyIdentifierType{{Algorithm: "test1:any"}},
+	})
+	assert.Regexp(t, err, "pop")
 }
 
 func TestInMemorySignFailures(t *testing.T) {

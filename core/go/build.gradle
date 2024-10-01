@@ -229,6 +229,12 @@ task makeMocks(type: Mockery, dependsOn: [":installMockery", protoc, goGet]) {
         outputDir 'mocks/componentmocks'
     }
     mock {
+        inputDir 'pkg/signer/signerapi'
+        name 'InMemorySigner'
+        outputPackage 'signerapimocks'
+        outputDir 'mocks/signerapimocks'
+    }
+    mock {
         inputDir "go list -f {{.Dir}} github.com/kaleido-io/paladin/toolkit/pkg/rpcserver".execute().text.trim()
         includeAll true
         outputPackage 'componentmocks'

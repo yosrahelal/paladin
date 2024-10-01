@@ -22,12 +22,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/core/mocks/signerapimocks"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,6 +37,9 @@ type mockKeyManager struct {
 	resolveKey func(ctx context.Context, identifier, algorithm, verifierType string) (keyHandle, verifier string, err error)
 	sign       func(ctx context.Context, req *proto.SignRequest) (*proto.SignResponse, error)
 }
+
+// AddInMemorySigner implements KeyManager.
+func (mkm *mockKeyManager) AddInMemorySigner(prefix string, signer signerapi.InMemorySigner) {}
 
 func (mkm *mockKeyManager) ResolveKey(ctx context.Context, identifier, algorithm, verifierType string) (keyHandle, verifier string, err error) {
 	return mkm.resolveKey(ctx, identifier, algorithm, verifierType)
@@ -79,7 +84,32 @@ func TestSimpleKeyManagerInitFail(t *testing.T) {
 		},
 	})
 	assert.Regexp(t, "PD011418", err)
+}
 
+func TestSimpleKeyManagerPassThoroughInMemSigner(t *testing.T) {
+	sm, err := NewSimpleTestKeyManager(context.Background(), &signerapi.Config{
+		KeyDerivation: signerapi.KeyDerivationConfig{
+			Type: signerapi.KeyDerivationTypeBIP32,
+		},
+		KeyStore: signerapi.KeyStoreConfig{
+			Type: signerapi.KeyStoreTypeStatic,
+			Static: signerapi.StaticKeyStorageConfig{
+				Keys: map[string]signerapi.StaticKeyEntryConfig{
+					"seed": {
+						Encoding: "hex",
+						Inline:   tktypes.RandHex(32),
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	mim := signerapimocks.NewInMemorySigner(t)
+	mim.On("GetVerifier", mock.Anything, "bad:test", verifiers.ETH_ADDRESS, mock.Anything).Return("", fmt.Errorf("pop"))
+	sm.AddInMemorySigner("bad", mim)
+	_, _, err = sm.ResolveKey(context.Background(), "any", "bad:test", verifiers.ETH_ADDRESS)
+	assert.Regexp(t, "pop", err)
 }
 
 func TestGenerateIndexes(t *testing.T) {
