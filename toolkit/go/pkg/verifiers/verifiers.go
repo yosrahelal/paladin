@@ -21,8 +21,8 @@ const ETH_ADDRESS = "eth_address"
 // An ethereum address - 20 byte compressed public key identifier with 0x prefix and ERC-55 mixed-case checksum address encoding
 const ETH_ADDRESS_CHECKSUM = "eth_address_checksum"
 
-// The full hex encoded public key (no 0x prefix on the string)
-const HEX_PUBKEY_NO_PREFIX = "hex_pubkey_no_prefix"
+// ECDSA public key in uncompressed form hex encoded (x and y [FIPS186] in uncompressed form [X9.62] without leading 0x04 "uncompressed" constant prefix)
+const HEX_ECDSA_PUBKEY_UNCOMPRESSED = "hex_ecdsa_pubkey_uncompressed"
 
-// The full hex encoded public key with 0x prefix
-const HEX_PUBKEY_0X_PREFIX = "hex_pubkey_0x_prefix"
+// ECDSA public key in uncompressed form hex encoded (x and y [FIPS186] in uncompressed form [X9.62] without leading 0x04 "uncompressed" constant prefix)
+const HEX_ECDSA_PUBKEY_UNCOMPRESSED_0X = "hex_ecdsa_pubkey_uncompressed_0x"
