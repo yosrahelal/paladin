@@ -612,7 +612,7 @@ func TestZKPProverInvalidAlgos(t *testing.T) {
 	_, err = prover.GetVerifier(ctx, AlgoDomainZetoSnarkBJJ("zeto"), "not_hex", nil)
 	assert.Regexp(t, "verifier", err)
 
-	_, err = prover.GetVerifier(ctx, AlgoDomainZetoSnarkBJJ("zeto"), verifiers.HEX_PUBKEY_0X_PREFIX, nil)
+	_, err = prover.GetVerifier(ctx, AlgoDomainZetoSnarkBJJ("zeto"), verifiers.HEX_ECDSA_UNCOMPRESSED_PUBKEY_0X_PREFIX, nil)
 	assert.Regexp(t, "invalid key", err)
 
 	_, err = prover.Sign(ctx, "domain:zeto:unsupported", "", nil, nil)

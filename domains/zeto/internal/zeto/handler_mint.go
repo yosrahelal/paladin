@@ -54,7 +54,7 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 			{
 				Lookup:       params.To,
 				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
-				VerifierType: verifiers.HEX_PUBKEY_0X_PREFIX,
+				VerifierType: verifiers.HEX_ECDSA_UNCOMPRESSED_PUBKEY_0X_PREFIX,
 			},
 		},
 	}, nil
@@ -63,7 +63,7 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.MintParams)
 
-	resolvedRecipient := domain.FindVerifier(params.To, h.zeto.getAlgoZetoSnarkBJJ(), verifiers.HEX_PUBKEY_0X_PREFIX, req.ResolvedVerifiers)
+	resolvedRecipient := domain.FindVerifier(params.To, h.zeto.getAlgoZetoSnarkBJJ(), verifiers.HEX_ECDSA_UNCOMPRESSED_PUBKEY_0X_PREFIX, req.ResolvedVerifiers)
 	if resolvedRecipient == nil {
 		return nil, fmt.Errorf("failed to resolve: %s", params.To)
 	}
@@ -92,7 +92,7 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 				Name:            "submitter",
 				AttestationType: pb.AttestationType_ENDORSE,
 				Algorithm:       h.zeto.getAlgoZetoSnarkBJJ(),
-				VerifierType:    verifiers.HEX_PUBKEY_0X_PREFIX,
+				VerifierType:    verifiers.HEX_ECDSA_UNCOMPRESSED_PUBKEY_0X_PREFIX,
 				PayloadType:     zetosigner.PAYLOAD_DOMAIN_ZETO_SNARK,
 				Parties:         []string{tx.Transaction.From},
 			},

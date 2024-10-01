@@ -74,8 +74,8 @@ func (sp *snarkProver) GetVerifier(ctx context.Context, algorithm, verifierType 
 	if !ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP.MatchString(algorithm) {
 		return "", fmt.Errorf("'%s' does not match supported algorithm '%s'", algorithm, ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP)
 	}
-	if verifierType != verifiers.HEX_PUBKEY_0X_PREFIX {
-		return "", fmt.Errorf("'%s' does not match supported verifierType '%s'", algorithm, verifiers.HEX_PUBKEY_0X_PREFIX)
+	if verifierType != verifiers.HEX_ECDSA_UNCOMPRESSED_PUBKEY_0X_PREFIX {
+		return "", fmt.Errorf("'%s' does not match supported verifierType '%s'", algorithm, verifiers.HEX_ECDSA_UNCOMPRESSED_PUBKEY_0X_PREFIX)
 	}
 	pk, err := NewBabyJubJubPrivateKey(privateKey)
 	if err != nil {
