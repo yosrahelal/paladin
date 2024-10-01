@@ -91,6 +91,8 @@ func (ts *PaladinTxProcessor) HandleTransactionSubmittedEvent(ctx context.Contex
 }
 
 func (ts *PaladinTxProcessor) isReadyToAssemble(ctx context.Context) bool {
+	log.L(ctx).Debug("PaladinTxProcessor:isReadyToAssemble")
+
 	if ts.transaction.PreAssembly != nil {
 		// assume they are all resolved until we find one in RequiredVerifiers that is not in Verifiers
 		verifieresResolved := true
@@ -119,17 +121,28 @@ func (ts *PaladinTxProcessor) isReadyToAssemble(ctx context.Context) bool {
 }
 
 func (ts *PaladinTxProcessor) HandleVerifierResolvedEvent(ctx context.Context, event *ptmgrtypes.ResolveVerifierResponseEvent) {
+	log.L(ctx).Debug("PaladinTxProcessor:HandleVerifierResolvedEvent")
+
 	ts.latestEvent = "HandleVerifierResolvedEvent"
 
 	// if the transaction is ready to be assembled, go ahead and do that otherwise, we assume some future event will trigger that
 	if ts.isReadyToAssemble(ctx) {
 		ts.assembleTransaction(ctx)
+	} else {
+		log.L(ctx).Debug("not ready to assemble")
+
 	}
 }
 
 func (ts *PaladinTxProcessor) assembleTransaction(ctx context.Context) {
 
 	log.L(ctx).Debug("PaladinTxProcessor:assembleTransaction")
+
+	if ts.transaction.PostAssembly != nil {
+		log.L(ctx).Debug("already assembled")
+		return
+	}
+
 	//syncronously assemble the transaction then inform the local sequencer and remote nodes for any parties in the
 	// privacy group that need to know about the transaction
 	// this could be other parties that have potential to attempt to spend the same state(s) as this transaction is assembled to spend
@@ -337,6 +350,7 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 		log.L(ctx).Errorf("failed to sign for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, attRequest.Algorithm, err)
 		//TODO return nil, err
 	}
+	log.L(ctx).Debugf("payload: %x signed %x by %s (%s)", attRequest.Payload, signaturePayload.Payload, partyName, verifier)
 
 	if err = ts.publisher.PublishTransactionSignedEvent(ctx,
 		ts.transaction.ID.String(),
@@ -534,7 +548,7 @@ func (ts *PaladinTxProcessor) requestEndorsements(ctx context.Context) {
 			if toBeComplete {
 
 				for _, party := range attRequest.GetParties() {
-					go ts.requestEndorsement(ctx, party, attRequest)
+					ts.requestEndorsement(ctx, party, attRequest)
 				}
 
 			}
