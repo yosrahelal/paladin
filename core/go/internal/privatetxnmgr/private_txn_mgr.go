@@ -553,11 +553,9 @@ func (p *privateTxManager) HandleResolveVerifierRequest(ctx context.Context, mes
 	_, verifier, err := p.components.KeyManager().ResolveKey(ctx, resolveVerifierRequest.Lookup, resolveVerifierRequest.Algorithm)
 	if err == nil {
 		resolveVerifierResponse := &engineProto.ResolveVerifierResponse{
-			ContractAddress: resolveVerifierRequest.ContractAddress,
-			TransactionId:   resolveVerifierRequest.TransactionId,
-			Lookup:          resolveVerifierRequest.Lookup,
-			Algorithm:       resolveVerifierRequest.Algorithm,
-			Verifier:        verifier,
+			Lookup:    resolveVerifierRequest.Lookup,
+			Algorithm: resolveVerifierRequest.Algorithm,
+			Verifier:  verifier,
 		}
 		resolveVerifierResponseBytes, err := proto.Marshal(resolveVerifierResponse)
 		if err == nil {
@@ -579,11 +577,9 @@ func (p *privateTxManager) HandleResolveVerifierRequest(ctx context.Context, mes
 
 	if err != nil {
 		resolveVerifierError := &engineProto.ResolveVerifierError{
-			ContractAddress: resolveVerifierRequest.ContractAddress,
-			TransactionId:   resolveVerifierRequest.TransactionId,
-			Lookup:          resolveVerifierRequest.Lookup,
-			Algorithm:       resolveVerifierRequest.Algorithm,
-			ErrorMessage:    err.Error(),
+			Lookup:       resolveVerifierRequest.Lookup,
+			Algorithm:    resolveVerifierRequest.Algorithm,
+			ErrorMessage: err.Error(),
 		}
 		resolveVerifierErrorBytes, err := proto.Marshal(resolveVerifierError)
 		if err == nil {
