@@ -17,13 +17,13 @@ package io.kaleido.paladin.pente.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import io.kaleido.paladin.pente.evmrunner.EVMRunner;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kaleido.paladin.testbed.Testbed;
 import io.kaleido.paladin.toolkit.*;
-import org.hyperledger.besu.datatypes.Address;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -104,6 +104,9 @@ public class PenteDomainTests {
             JsonABI.newParameters()
     );
 
+    Testbed.PrivateContractTransaction getTransactionInfo(LinkedHashMap<String, Object> res) {
+        return new ObjectMapper().convertValue(res, Testbed.PrivateContractTransaction.class);
+    }
 
     @Test
     void testSimpleStorage() throws Exception {
@@ -141,23 +144,16 @@ public class PenteDomainTests {
                     put("x", "1122334455");
                 }});
             }};
-            testbed.getRpcClient().request("testbed_invoke",
+            var tx = getTransactionInfo(
+                    testbed.getRpcClient().request("testbed_invoke",
                     new PrivateContractInvoke(
                             "simpleStorageDeployer",
                             JsonHex.addressFrom(contractAddr),
                             simpleStorageDeployABI,
                             deployValues
-                    ), true);
-            assertFalse(contractAddr.isBlank());
-
-            // TODO: This is a hack because we need to define a way for domain transactions to
-            // return information specific to them about the confirmation of a transaction
-            // on chain - by decoding the data field that's emitted from that event.
-            // There will be new event/transaction commit domain functions needed to do that processing
-            // (Pente will then implement those).
-            String simpleStorageDeployer = testbed.getRpcClient().
-                    request("testbed_resolveVerifier", "simpleStorageDeployer", Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS);
-            var expectedContractAddress = EVMRunner.nonceSmartContractAddress(Address.fromHexString(simpleStorageDeployer), 0);
+                    ), true));
+            var extraData = new ObjectMapper().readValue(tx.extraData(), PenteConfiguration.TransactionExtraData.class);
+            var expectedContractAddress = extraData.contractAddress();
 
             // Invoke set on Simple Storage
             Map<String, Object> setValues = new HashMap<>() {{
@@ -235,34 +231,28 @@ public class PenteDomainTests {
                     ));
             assertFalse(penteAddr.isBlank());
 
-            // Deploy SimpleStorageLinked to it
+            // Deploy SimpleStorageLinked to the privacy group
             String ssLinkedBytecode = ResourceLoader.jsonResourceEntryText(
                     this.getClass().getClassLoader(),
                     "contracts/testcontracts/SimpleStorageLinked.sol/SimpleStorageLinked.json",
                     "bytecode"
             );
-            testbed.getRpcClient().request("testbed_invoke",
-                    new PrivateContractInvoke(
-                            "simpleStorageDeployer",
-                            JsonHex.addressFrom(penteAddr),
-                            simpleStorageLinkedDeployABI,
-                            new HashMap<>() {{
-                                put("group", groupInfo);
-                                put("bytecode", ssLinkedBytecode);
-                                put("inputs", new HashMap<>() {{
-                                    put("linked", ssAddr);
-                                }});
-                            }}
-                    ), true);
-
-            // TODO: This is a hack because we need to define a way for domain transactions to
-            // return information specific to them about the confirmation of a transaction
-            // on chain - by decoding the data field that's emitted from that event.
-            // There will be new event/transaction commit domain functions needed to do that processing
-            // (Pente will then implement those).
-            String simpleStorageDeployer = testbed.getRpcClient().
-                    request("testbed_resolveVerifier", "simpleStorageDeployer", Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS);
-            var ssLinkedAddr = EVMRunner.nonceSmartContractAddress(Address.fromHexString(simpleStorageDeployer), 0);
+            var tx = getTransactionInfo(
+                testbed.getRpcClient().request("testbed_invoke",
+                        new PrivateContractInvoke(
+                                "simpleStorageDeployer",
+                                JsonHex.addressFrom(penteAddr),
+                                simpleStorageLinkedDeployABI,
+                                new HashMap<>() {{
+                                    put("group", groupInfo);
+                                    put("bytecode", ssLinkedBytecode);
+                                    put("inputs", new HashMap<>() {{
+                                        put("linked", ssAddr);
+                                    }});
+                                }}
+                        ), true));
+            var extraData = new ObjectMapper().readValue(tx.extraData(), PenteConfiguration.TransactionExtraData.class);
+            var ssLinkedAddr = extraData.contractAddress();
 
             testbed.getRpcClient().request("testbed_invoke",
                     new PrivateContractInvoke(

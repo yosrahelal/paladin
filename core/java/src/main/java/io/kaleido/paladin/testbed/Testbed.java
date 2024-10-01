@@ -16,6 +16,7 @@
 
 package io.kaleido.paladin.testbed;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.kaleido.paladin.toolkit.JsonHex;
 import io.kaleido.paladin.toolkit.JsonRpcClient;
 
@@ -55,6 +56,12 @@ public class Testbed implements Closeable {
     public record Setup(
             String dbMigrationsDir,
             long startTimeoutMS
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static record PrivateContractTransaction (
+            @JsonProperty
+            String extraData
     ) {}
 
     public Testbed(Setup testbedSetup, ConfigDomain... domains) throws Exception {

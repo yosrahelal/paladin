@@ -196,8 +196,8 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	log.L(ctx).Infof("Zeto instance deployed to %s", zetoAddress)
 
 	log.L(ctx).Infof("Mint 10 from controller to controller")
-	var boolResult bool
-	rpcerr = s.rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	var invokeResult tktypes.PrivateContractTransaction
+	rpcerr = s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     controllerName,
 		To:       tktypes.EthAddress(zetoAddress),
 		Function: *types.ZetoABI.Functions()["mint"],
@@ -209,7 +209,6 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
-	assert.True(t, boolResult)
 
 	coins, err := s.domain.FindCoins(ctx, zetoAddress, "{}")
 	require.NoError(t, err)
@@ -218,7 +217,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	assert.Equal(t, controllerName, coins[0].Owner)
 
 	log.L(ctx).Infof("Mint 20 from controller to controller")
-	rpcerr = s.rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	rpcerr = s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     controllerName,
 		To:       tktypes.EthAddress(zetoAddress),
 		Function: *types.ZetoABI.Functions()["mint"],
@@ -230,7 +229,6 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
-	assert.True(t, boolResult)
 
 	coins, err = s.domain.FindCoins(ctx, zetoAddress, "{}")
 	require.NoError(t, err)
@@ -241,7 +239,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	assert.Equal(t, controllerName, coins[1].Owner)
 
 	log.L(ctx).Infof("Attempt mint from non-controller (should fail)")
-	rpcerr = s.rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	rpcerr = s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     recipient1Name,
 		To:       tktypes.EthAddress(zetoAddress),
 		Function: *types.ZetoABI.Functions()["mint"],
@@ -252,10 +250,9 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	}, false)
 	require.NotNil(t, rpcerr)
 	assert.Regexp(t, "failed to send base ledger transaction: PD011513: Reverted: 0x118cdaa.*", rpcerr.Error())
-	assert.True(t, boolResult)
 
 	log.L(ctx).Infof("Transfer 25 from controller to recipient1")
-	rpcerr = s.rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
+	rpcerr = s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     controllerName,
 		To:       tktypes.EthAddress(zetoAddress),
 		Function: *types.ZetoABI.Functions()["transfer"],

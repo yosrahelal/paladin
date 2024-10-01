@@ -32,6 +32,7 @@ type PrivateContractTransaction struct {
 	EncodedCall  []byte       `json:"encodedCall"`
 	InputStates  []*FullState `json:"inputStates"`
 	OutputStates []*FullState `json:"outputStates"`
+	ExtraData    *string      `json:"extraData,omitempty"`
 }
 
 type FullState struct {

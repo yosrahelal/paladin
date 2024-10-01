@@ -284,6 +284,7 @@ func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) *tktypes.Pr
 	return &tktypes.PrivateContractTransaction{
 		InputStates:  inputStates,
 		OutputStates: outputStates,
+		ExtraData:    tx.PostAssembly.ExtraData,
 	}
 }
 
@@ -291,26 +292,27 @@ func (tb *testbed) rpcTestbedInvoke() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		invocation tktypes.PrivateContractInvoke,
 		waitForCompletion bool,
-	) (bool, error) {
+	) (*tktypes.PrivateContractTransaction, error) {
 
 		tx, err := tb.prepareTransaction(ctx, invocation)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
-
 		err = tb.execBaseLedgerTransaction(ctx, tx.Signer, tx.PreparedTransaction)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 
 		// Wait for the domain to index the transaction events
 		if waitForCompletion {
 			err = tb.c.DomainManager().WaitForTransaction(ctx, tx.ID)
 			if err != nil {
-				return false, err
+				return nil, err
 			}
 		}
-		return true, nil
+
+		result := tb.mapTransaction(tx)
+		return result, nil
 	})
 }
 
