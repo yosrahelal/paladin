@@ -20,45 +20,70 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/config"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func newTestRegistryManager(t *testing.T, conf *config.RegistryManagerConfig, extraSetup ...func(mc *componentmocks.AllComponents)) (context.Context, *registryManager, func()) {
+type mockComponents struct {
+	db sqlmock.Sqlmock
+}
+
+func newTestRegistryManager(t *testing.T, realDB bool, conf *config.RegistryManagerConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *registryManager, *mockComponents, func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
-	mc := componentmocks.NewAllComponents(t)
+	mc := &mockComponents{}
+	componentMocks := componentmocks.NewAllComponents(t)
+
+	var p persistence.Persistence
+	var err error
+	var pDone func()
+	if realDB {
+		p, pDone, err = persistence.NewUnitTestPersistence(ctx)
+		require.NoError(t, err)
+	} else {
+		mp, err := mockpersistence.NewSQLMockProvider()
+		require.NoError(t, err)
+		p = mp.P
+		mc.db = mp.Mock
+		pDone = func() {
+			require.NoError(t, mp.Mock.ExpectationsWereMet())
+		}
+	}
+	componentMocks.On("Persistence").Return(p)
 
 	for _, fn := range extraSetup {
 		fn(mc)
 	}
 
-	tm := NewRegistryManager(ctx, conf)
+	rm := NewRegistryManager(ctx, conf)
 
-	initData, err := tm.PreInit(mc)
+	initData, err := rm.PreInit(componentMocks)
 	require.NoError(t, err)
 	assert.NotNil(t, initData)
 
-	err = tm.PostInit(mc)
+	err = rm.PostInit(componentMocks)
 	require.NoError(t, err)
 
-	err = tm.Start()
+	err = rm.Start()
 	require.NoError(t, err)
 
-	return ctx, tm.(*registryManager), func() {
+	return ctx, rm.(*registryManager), mc, func() {
 		cancelCtx()
-		// pDone()
-		tm.Stop()
+		pDone()
+		rm.Stop()
 	}
 }
 
 func TestConfiguredRegistries(t *testing.T) {
-	_, dm, done := newTestRegistryManager(t, &config.RegistryManagerConfig{
+	_, dm, _, done := newTestRegistryManager(t, false, &config.RegistryManagerConfig{
 		Registries: map[string]*config.RegistryConfig{
 			"test1": {
 				Plugin: config.PluginConfig{
@@ -79,7 +104,7 @@ func TestConfiguredRegistries(t *testing.T) {
 }
 
 func TestRegistryRegisteredNotFound(t *testing.T) {
-	_, dm, done := newTestRegistryManager(t, &config.RegistryManagerConfig{
+	_, dm, _, done := newTestRegistryManager(t, false, &config.RegistryManagerConfig{
 		Registries: map[string]*config.RegistryConfig{},
 	})
 	defer done()
@@ -89,7 +114,7 @@ func TestRegistryRegisteredNotFound(t *testing.T) {
 }
 
 func TestConfigureRegistryFail(t *testing.T) {
-	_, tm, done := newTestRegistryManager(t, &config.RegistryManagerConfig{
+	_, tm, _, done := newTestRegistryManager(t, false, &config.RegistryManagerConfig{
 		Registries: map[string]*config.RegistryConfig{
 			"test1": {
 				Config: map[string]any{"some": "conf"},

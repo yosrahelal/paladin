@@ -17,18 +17,21 @@ package registrymgr
 
 import (
 	"context"
+	"database/sql/driver"
 	"sync/atomic"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var registryID uuid.UUID
 
 type testPlugin struct {
 	plugintk.RegistryAPIBase
@@ -50,8 +53,8 @@ func newTestPlugin(registryFuncs *plugintk.RegistryAPIFunctions) *testPlugin {
 	}
 }
 
-func newTestRegistry(t *testing.T, extraSetup ...func(mc *componentmocks.AllComponents)) (context.Context, *registryManager, *testPlugin, func()) {
-	ctx, tm, done := newTestRegistryManager(t, &config.RegistryManagerConfig{
+func newTestRegistry(t *testing.T, extraSetup ...func(mc *mockComponents)) (context.Context, *registryManager, *testPlugin, *mockComponents, func()) {
+	ctx, rm, mc, done := newTestRegistryManager(t, false, &config.RegistryManagerConfig{
 		Registries: map[string]*config.RegistryConfig{
 			"test1": {
 				Config: map[string]any{"some": "conf"},
@@ -68,12 +71,12 @@ func newTestRegistry(t *testing.T, extraSetup ...func(mc *componentmocks.AllComp
 		},
 	}
 
-	registerTestRegistry(t, tm, tp)
-	return ctx, tm, tp, done
+	registerTestRegistry(t, rm, tp)
+	return ctx, rm, tp, mc, done
 }
 
 func registerTestRegistry(t *testing.T, rm *registryManager, tp *testPlugin) {
-	registryID := uuid.New()
+	registryID = uuid.New()
 	_, err := rm.RegistryRegistered("test1", registryID, tp)
 	require.NoError(t, err)
 
@@ -86,7 +89,7 @@ func registerTestRegistry(t *testing.T, rm *registryManager, tp *testPlugin) {
 
 func TestDoubleRegisterReplaces(t *testing.T) {
 
-	_, rm, tp0, done := newTestRegistry(t)
+	_, rm, tp0, _, done := newTestRegistry(t)
 	defer done()
 	assert.Nil(t, tp0.r.initError.Load())
 	assert.True(t, tp0.initialized.Load())
@@ -107,8 +110,10 @@ func TestDoubleRegisterReplaces(t *testing.T) {
 }
 
 func TestRecordAndResolveInformation(t *testing.T) {
-	ctx, rm, tp, done := newTestRegistry(t)
+	ctx, rm, tp, mc, done := newTestRegistry(t)
 	defer done()
+
+	mc.db.ExpectQuery("SELECT.*registry_transport_details").WillReturnRows(sqlmock.NewRows([]string{}))
 
 	_, err := rm.GetNodeTransports(ctx, "node1")
 	assert.Regexp(t, "PD012100", err)
@@ -123,10 +128,18 @@ func TestRecordAndResolveInformation(t *testing.T) {
 		TransportDetails: "things and stuff",
 	}
 
+	mc.db.ExpectQuery("SELECT.*registry_transport_details").WillReturnRows(sqlmock.NewRows([]string{}))
+
+	mc.db.ExpectExec("INSERT.*registry_transport_details").WillReturnResult(driver.ResultNoRows)
+
 	// Upsert first entry
 	res, err := tp.r.UpsertTransportDetails(ctx, entry1)
 	require.NoError(t, err)
 	assert.NotNil(t, res)
+
+	mc.db.ExpectQuery("SELECT.*registry_transport_details").WillReturnRows(sqlmock.NewRows([]string{"node", "registry", "transport", "transport_details"}).AddRow(
+		"node1", registryID, "grpc", "things and stuff",
+	))
 
 	// Check we get it
 	transports, err := rm.GetNodeTransports(ctx, "node1")
@@ -134,6 +147,7 @@ func TestRecordAndResolveInformation(t *testing.T) {
 	assert.Len(t, transports, 1)
 	assert.Equal(t, components.RegistryNodeTransportEntry{
 		Node:             "node1",
+		Registry:         registryID.String(),
 		Transport:        "grpc",
 		TransportDetails: "things and stuff",
 	}, *transports[0])
@@ -145,6 +159,8 @@ func TestRecordAndResolveInformation(t *testing.T) {
 		TransportDetails: "more things and stuff",
 	}
 
+	mc.db.ExpectExec("INSERT.*registry_transport_details").WillReturnResult(driver.ResultNoRows)
+
 	// Upsert second entry
 	res, err = tp.r.UpsertTransportDetails(ctx, entry2)
 	require.NoError(t, err)
@@ -152,6 +168,8 @@ func TestRecordAndResolveInformation(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, res)
 	assert.Len(t, transports, 2)
+
+	mc.db.ExpectExec("INSERT.*registry_transport_details").WillReturnResult(driver.ResultNoRows)
 
 	// Upsert first entry again
 	res, err = tp.r.UpsertTransportDetails(ctx, entry1)

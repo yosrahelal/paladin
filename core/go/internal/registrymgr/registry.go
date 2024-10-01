@@ -18,7 +18,6 @@ package registrymgr
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"sync/atomic"
 
 	"github.com/google/uuid"
@@ -29,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
+	"gorm.io/gorm/clause"
 )
 
 type registry struct {
@@ -41,10 +41,6 @@ type registry struct {
 	name string
 	api  components.RegistryManagerToRegistry
 
-	// TODO: Replace with a cache-backed DB system
-	stateLock           sync.Mutex
-	inMemoryPlaceholder map[string][]*components.RegistryNodeTransportEntry
-
 	initialized atomic.Bool
 	initRetry   *retry.Retry
 
@@ -54,14 +50,13 @@ type registry struct {
 
 func (rm *registryManager) newRegistry(id uuid.UUID, name string, conf *config.RegistryConfig, toRegistry components.RegistryManagerToRegistry) *registry {
 	r := &registry{
-		rm:                  rm,
-		conf:                conf,
-		initRetry:           retry.NewRetryIndefinite(&conf.Init.Retry),
-		name:                name,
-		id:                  id,
-		api:                 toRegistry,
-		inMemoryPlaceholder: make(map[string][]*components.RegistryNodeTransportEntry),
-		initDone:            make(chan struct{}),
+		rm:        rm,
+		conf:      conf,
+		initRetry: retry.NewRetryIndefinite(&conf.Init.Retry),
+		name:      name,
+		id:        id,
+		api:       toRegistry,
+		initDone:  make(chan struct{}),
 	}
 	r.ctx, r.cancelCtx = context.WithCancel(log.WithLogField(rm.bgCtx, "registry", r.name))
 	return r
@@ -92,35 +87,36 @@ func (r *registry) init() {
 	}
 }
 
-func (r *registry) getNodeTransports(node string) []*components.RegistryNodeTransportEntry {
-	r.stateLock.Lock()
-	defer r.stateLock.Unlock()
-	return r.inMemoryPlaceholder[node]
-}
-
-// Registry callback to the registry manager when new entries are available to upsert & cache
-// (can be called during and after initialization asynchronously as pre-configured and updated information becomes known)
 func (r *registry) UpsertTransportDetails(ctx context.Context, req *prototk.UpsertTransportDetails) (*prototk.UpsertTransportDetailsResponse, error) {
-
-	r.stateLock.Lock()
-	defer r.stateLock.Unlock()
 
 	if req.Node == "" || req.Transport == "" {
 		return nil, i18n.NewError(ctx, msgs.MsgRegistryInvalidEntry)
 	}
 
-	existingEntries := r.inMemoryPlaceholder[req.Node]
+	existingEntries, _ := r.rm.GetNodeTransports(ctx, req.Node)
 	deDuped := make([]*components.RegistryNodeTransportEntry, 0, len(existingEntries))
 	for _, existing := range existingEntries {
-		if existing.Node != req.Node || existing.Transport != req.Transport {
+		if existing.Registry != r.id.String() || existing.Node != req.Node || existing.Transport != req.Transport {
 			deDuped = append(deDuped, existing)
 		}
 	}
-	r.inMemoryPlaceholder[req.Node] = append(deDuped, &components.RegistryNodeTransportEntry{
+	entry := append(deDuped, &components.RegistryNodeTransportEntry{
+		Registry:         r.id.String(),
 		Node:             req.Node,
 		Transport:        req.Transport,
 		TransportDetails: req.TransportDetails,
 	})
+
+	// Store entry in database
+	r.rm.persistence.DB().Clauses(clause.OnConflict{
+		UpdateAll: true,
+	}).Table("registry_transport_details").Create(entry)
+
+	// If the entry is present in cache, update it
+	_, present := r.rm.registryCache.Get(req.Node)
+	if present {
+		r.rm.registryCache.Set(req.Node, entry)
+	}
 
 	return &prototk.UpsertTransportDetailsResponse{}, nil
 }

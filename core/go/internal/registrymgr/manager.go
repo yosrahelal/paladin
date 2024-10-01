@@ -21,9 +21,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/config"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 )
 
@@ -32,6 +34,9 @@ type registryManager struct {
 	mux   sync.Mutex
 
 	conf *config.RegistryManagerConfig
+
+	persistence   persistence.Persistence
+	registryCache cache.Cache[string, []*components.RegistryNodeTransportEntry]
 
 	registriesByID   map[uuid.UUID]*registry
 	registriesByName map[string]*registry
@@ -43,13 +48,12 @@ func NewRegistryManager(bgCtx context.Context, conf *config.RegistryManagerConfi
 		conf:             conf,
 		registriesByID:   make(map[uuid.UUID]*registry),
 		registriesByName: make(map[string]*registry),
+		registryCache:    cache.NewCache[string, []*components.RegistryNodeTransportEntry](&conf.RegistryManager.RegistryCache, config.RegistryCacheDefaults),
 	}
 }
 
 func (rm *registryManager) PreInit(pic components.PreInitComponents) (*components.ManagerInitResult, error) {
-	// RegistryManager does not rely on any other components during the pre-init phase (at the moment)
-	// for QoS we may need persistence in the future, and this will be the plug point for the registry
-	// when we have it
+	rm.persistence = pic.Persistence()
 
 	return &components.ManagerInitResult{}, nil
 }
@@ -116,13 +120,19 @@ func (rm *registryManager) RegistryRegistered(name string, id uuid.UUID, toRegis
 }
 
 func (rm *registryManager) GetNodeTransports(ctx context.Context, node string) ([]*components.RegistryNodeTransportEntry, error) {
-	// Scroll through all the configured registries to see if one of them knows about this node
-	var transports []*components.RegistryNodeTransportEntry
-	for _, r := range rm.registriesByID {
-		transports = append(transports, r.getNodeTransports(node)...)
+	// Check cache
+	transports, present := rm.registryCache.Get(node)
+	if present {
+		return transports, nil
 	}
-	if len(transports) == 0 {
-		return nil, i18n.NewError(ctx, msgs.MsgRegistryNodeEntiresNotFound, node)
+
+	// Load from database
+	rm.persistence.DB().Table("registry_transport_details").Where("node = ?", node).Find(&transports)
+	if len(transports) > 0 {
+		// Set cache
+		rm.registryCache.Set(node, transports)
+		return transports, nil
 	}
-	return transports, nil
+
+	return nil, i18n.NewError(ctx, msgs.MsgRegistryNodeEntiresNotFound, node)
 }
