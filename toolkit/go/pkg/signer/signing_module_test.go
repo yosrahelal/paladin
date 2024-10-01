@@ -23,10 +23,10 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
-	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	proto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
@@ -162,7 +162,7 @@ func TestExtensionNotInKeyStoreSigner(t *testing.T) {
 			KeyStoreSigning: true,
 		},
 	}, te)
-	assert.Regexp(t, "PD011409", err)
+	assert.Regexp(t, "PD020809", err)
 
 }
 
@@ -173,7 +173,7 @@ func TestKeystoreTypeUnknown(t *testing.T) {
 			Type: "unknown",
 		},
 	})
-	assert.Regexp(t, "PD011407", err)
+	assert.Regexp(t, "PD020807", err)
 
 }
 
@@ -188,7 +188,7 @@ func TestKeyDerivationTypeUnknown(t *testing.T) {
 			Type: signerapi.KeyStoreTypeStatic,
 		},
 	})
-	assert.Regexp(t, "PD011419", err)
+	assert.Regexp(t, "PD020819", err)
 
 }
 
@@ -238,7 +238,7 @@ func TestExtensionKeyStoreListOK(t *testing.T) {
 		Limit:    10,
 		Continue: "key12345",
 	})
-	assert.Regexp(t, "PD011415", err)
+	assert.Regexp(t, "PD020815", err)
 
 	sm.Close()
 }
@@ -355,7 +355,7 @@ func TestExtensionKeyStoreResolveSECP256K1Fail(t *testing.T) {
 	assert.Regexp(t, "pop", err)
 
 	_, err = sm.Resolve(context.Background(), &proto.ResolveKeyRequest{})
-	assert.Regexp(t, "PD011420", err)
+	assert.Regexp(t, "PD020820", err)
 
 }
 
@@ -405,7 +405,7 @@ func TestSignInMemoryFailBadKey(t *testing.T) {
 		PayloadType: signpayloads.OPAQUE_TO_RSV,
 		Payload:     ([]byte)("something to sign"),
 	})
-	assert.Regexp(t, "PD011418", err)
+	assert.Regexp(t, "PD020818", err)
 
 }
 
@@ -458,7 +458,7 @@ func TestResolveUnsupportedAlgo(t *testing.T) {
 		RequiredIdentifiers: []*proto.PublicKeyIdentifierType{{Algorithm: "wrong"}},
 		Name:                "key1",
 	})
-	assert.Regexp(t, "PD011410.*wrong", err)
+	assert.Regexp(t, "PD020810.*wrong", err)
 
 }
 
@@ -477,7 +477,7 @@ func TestResolveMissingAlgo(t *testing.T) {
 	_, err = sm.Resolve(context.Background(), &proto.ResolveKeyRequest{
 		Name: "key1",
 	})
-	assert.Regexp(t, "PD011411", err)
+	assert.Regexp(t, "PD020811", err)
 
 }
 
@@ -542,12 +542,12 @@ func TestInMemorySignFailures(t *testing.T) {
 		KeyHandle: resolveRes.KeyHandle,
 		Payload:   ([]byte)("something to sign"),
 	})
-	assert.Regexp(t, "PD011410", err)
+	assert.Regexp(t, "PD020810", err)
 
 	_, err = sm.Resolve(context.Background(), &proto.ResolveKeyRequest{
 		RequiredIdentifiers: []*proto.PublicKeyIdentifierType{{Algorithm: "wrong"}},
 		Name:                "key1",
 	})
-	assert.Regexp(t, "PD011410", err)
+	assert.Regexp(t, "PD020810", err)
 
 }

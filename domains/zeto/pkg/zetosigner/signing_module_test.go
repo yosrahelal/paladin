@@ -20,9 +20,9 @@ import (
 	"testing"
 
 	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"

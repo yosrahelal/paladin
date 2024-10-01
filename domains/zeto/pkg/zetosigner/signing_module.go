@@ -18,8 +18,8 @@ package zetosigner
 import (
 	"context"
 
-	"github.com/kaleido-io/paladin/core/pkg/signer"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 )
 
 // This is a direct implementation of the extension point for signing in the Paladin signing toolkit.

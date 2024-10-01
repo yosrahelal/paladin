@@ -23,8 +23,8 @@ import (
 	"path"
 	"testing"
 
-	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
+	proto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -129,7 +129,7 @@ func TestStaticStoreLoadFileFail(t *testing.T) {
 			},
 		},
 	})
-	assert.Regexp(t, "PD011416", err)
+	assert.Regexp(t, "PD020816", err)
 
 }
 
@@ -149,7 +149,7 @@ func TestStaticStoreBadHEX(t *testing.T) {
 			},
 		},
 	})
-	assert.Regexp(t, "PD011416", err)
+	assert.Regexp(t, "PD020816", err)
 
 }
 
@@ -169,7 +169,7 @@ func TestStaticStoreBadBase64(t *testing.T) {
 			},
 		},
 	})
-	assert.Regexp(t, "PD011416", err)
+	assert.Regexp(t, "PD020816", err)
 
 }
 
@@ -190,7 +190,7 @@ func TestStaticStoreEmpty(t *testing.T) {
 			},
 		},
 	})
-	assert.Regexp(t, "PD011416", err)
+	assert.Regexp(t, "PD020816", err)
 
 }
 
@@ -210,7 +210,7 @@ func TestStaticStoreBadEncType(t *testing.T) {
 			},
 		},
 	})
-	assert.Regexp(t, "PD011417", err)
+	assert.Regexp(t, "PD020817", err)
 
 }
 
@@ -246,7 +246,7 @@ func TestStaticStoreResolveBadPath(t *testing.T) {
 	})
 
 	_, _, err := store.FindOrCreateLoadableKey(ctx, &proto.ResolveKeyRequest{}, nil)
-	assert.Regexp(t, "PD011403", err)
+	assert.Regexp(t, "PD020803", err)
 
 	_, _, err = store.FindOrCreateLoadableKey(ctx, &proto.ResolveKeyRequest{
 		Name: "something",
@@ -254,7 +254,7 @@ func TestStaticStoreResolveBadPath(t *testing.T) {
 			{Name: ""},
 		},
 	}, nil)
-	assert.Regexp(t, "PD011403", err)
+	assert.Regexp(t, "PD020803", err)
 
 }
 
@@ -274,7 +274,7 @@ func TestStaticStoreResolveNotFound(t *testing.T) {
 			{Name: "shiny"},
 		},
 	}, nil)
-	assert.Regexp(t, "PD011418", err)
+	assert.Regexp(t, "PD020818", err)
 
 }
 
@@ -322,6 +322,6 @@ func TestStaticStoreWholeStoreInFileFail(t *testing.T) {
 			},
 		},
 	})
-	require.Regexp(t, "PD011421", err)
+	require.Regexp(t, "PD020821", err)
 
 }

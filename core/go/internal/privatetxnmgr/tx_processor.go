@@ -22,8 +22,8 @@ import (
 
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
-	coreProto "github.com/kaleido-io/paladin/core/pkg/proto"
 	engineProto "github.com/kaleido-io/paladin/core/pkg/proto/engine"
+	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 
 	"github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -231,7 +231,7 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 		//TODO return nil, err
 	}
 	// TODO this could be calling out to a remote signer, should we be doing these in parallel?
-	signaturePayload, err := ts.components.KeyManager().Sign(ctx, &coreProto.SignRequest{
+	signaturePayload, err := ts.components.KeyManager().Sign(ctx, &signerproto.SignRequest{
 		KeyHandle:   keyHandle,
 		Algorithm:   attRequest.Algorithm,
 		Payload:     attRequest.Payload,

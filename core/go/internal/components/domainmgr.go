@@ -20,9 +20,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/pkg/config"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 

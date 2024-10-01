@@ -23,8 +23,8 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
@@ -49,22 +49,22 @@ func TestErrors(t *testing.T) {
 	ctx, signer, _ := newTestSigner(t, tktypes.RandBytes(32))
 
 	_, err := signer.Sign(ctx, "ecdsa:unknown", "", nil, nil)
-	assert.Regexp(t, "PD011422", err)
+	assert.Regexp(t, "PD020822", err)
 
 	_, err = signer.Sign(ctx, "ecdsa:secp256k1", "wrong", nil, nil)
-	assert.Regexp(t, "PD011424", err)
+	assert.Regexp(t, "PD020824", err)
 
 	_, err = signer.GetVerifier(ctx, "ecdsa:unknown", "", nil)
-	assert.Regexp(t, "PD011422", err)
+	assert.Regexp(t, "PD020822", err)
 
 	_, err = signer.GetMinimumKeyLen(ctx, "ecdsa:unknown")
-	assert.Regexp(t, "PD011422", err)
+	assert.Regexp(t, "PD020822", err)
 
 	_, err = signer.GetVerifier(ctx, "ecdsa:secp256k1", "wrong", nil)
-	assert.Regexp(t, "PD011423", err)
+	assert.Regexp(t, "PD020823", err)
 
 	_, err = signer.Sign(ctx, "ecdsa:secp256k1", "opaque:rsv", nil, nil)
-	assert.Regexp(t, "PD011425", err)
+	assert.Regexp(t, "PD020825", err)
 
 }
 

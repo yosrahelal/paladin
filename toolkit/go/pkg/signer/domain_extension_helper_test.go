@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/stretchr/testify/require"
 )
 
@@ -83,15 +83,15 @@ func TestNewDomainPrefixRouterErrors(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = signer.Sign(ctx, "edcsa:secp256k1", "test:example", []byte("key"), []byte("payload"))
-	require.Regexp(t, "PD011426", err)
+	require.Regexp(t, "PD020826", err)
 
 	_, err = signer.Sign(ctx, "domain:wrong:anything", "test:example", []byte("key"), []byte("payload"))
-	require.Regexp(t, "PD011427", err)
+	require.Regexp(t, "PD020827", err)
 
 	_, err = signer.GetVerifier(ctx, "domain:wrong:anything", "test:example", []byte("key"))
-	require.Regexp(t, "PD011427", err)
+	require.Regexp(t, "PD020827", err)
 
 	_, err = signer.GetMinimumKeyLen(ctx, "domain:wrong:anything")
-	require.Regexp(t, "PD011427", err)
+	require.Regexp(t, "PD020827", err)
 
 }

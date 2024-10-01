@@ -32,12 +32,12 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	coreProto "github.com/kaleido-io/paladin/core/pkg/proto"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
@@ -175,12 +175,12 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 		},
 	}, nil)
 
-	mocks.keyManager.On("Sign", mock.Anything, &coreProto.SignRequest{
+	mocks.keyManager.On("Sign", mock.Anything, &signerproto.SignRequest{
 		KeyHandle:   "notaryKeyHandle",
 		Algorithm:   algorithms.ECDSA_SECP256K1,
 		PayloadType: signpayloads.OPAQUE_TO_RSV,
 		Payload:     []byte("some-endorsement-bytes"),
-	}).Return(&coreProto.SignResponse{
+	}).Return(&signerproto.SignResponse{
 		Payload: []byte("some-signature-bytes"),
 	}, nil)
 
@@ -339,12 +339,12 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 			VerifierType: verifiers.ETH_ADDRESS,
 		},
 	}, nil)
-	remoteEngineMocks.keyManager.On("Sign", mock.Anything, &coreProto.SignRequest{
+	remoteEngineMocks.keyManager.On("Sign", mock.Anything, &signerproto.SignRequest{
 		KeyHandle:   "notaryKeyHandle",
 		Algorithm:   algorithms.ECDSA_SECP256K1,
 		PayloadType: signpayloads.OPAQUE_TO_RSV,
 		Payload:     []byte("some-endorsement-bytes"),
-	}).Return(&coreProto.SignResponse{
+	}).Return(&signerproto.SignResponse{
 		Payload: []byte("some-signature-bytes"),
 	}, nil)
 
@@ -805,12 +805,12 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 					VerifierType: verifiers.ETH_ADDRESS,
 				},
 			}, nil)
-			remoteEngineMocks.keyManager.On("Sign", mock.Anything, &coreProto.SignRequest{
+			remoteEngineMocks.keyManager.On("Sign", mock.Anything, &signerproto.SignRequest{
 				KeyHandle:   "notaryKeyHandle",
 				Algorithm:   algorithms.ECDSA_SECP256K1,
 				PayloadType: signpayloads.OPAQUE_TO_RSV,
 				Payload:     []byte("some-endorsement-bytes"),
-			}).Return(&coreProto.SignResponse{
+			}).Return(&signerproto.SignResponse{
 				Payload: []byte("some-signature-bytes"),
 			}, nil)
 

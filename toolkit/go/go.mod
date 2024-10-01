@@ -5,6 +5,8 @@ go 1.22.5
 require (
 	github.com/Code-Hex/go-generics-cache v1.5.1
 	github.com/aidarkhanov/nanoid v1.0.8
+	github.com/btcsuite/btcd v0.24.2
+	github.com/btcsuite/btcd/btcutil v1.1.6
 	github.com/docker/go-units v0.5.0
 	github.com/go-resty/resty/v2 v2.14.0
 	github.com/google/uuid v1.6.0
@@ -14,6 +16,7 @@ require (
 	github.com/rs/cors v1.11.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
+	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2
 	golang.org/x/crypto v0.27.0
 	golang.org/x/text v0.18.0
@@ -21,12 +24,16 @@ require (
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
+	sigs.k8s.io/yaml v1.4.0
 )
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/btcsuite/btcd/btcec/v2 v2.3.2 // indirect
+	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/getkin/kin-openapi v0.122.0 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect

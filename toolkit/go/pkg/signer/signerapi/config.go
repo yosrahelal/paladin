@@ -16,8 +16,8 @@
 package signerapi
 
 import (
-	"github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	proto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 )
 
 // To enable extending of the default configuration that Paladin uses when embedding this module,

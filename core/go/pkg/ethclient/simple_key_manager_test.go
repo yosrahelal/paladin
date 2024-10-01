@@ -22,20 +22,18 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/kaleido-io/paladin/core/mocks/signerapimocks"
-	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 type mockKeyManager struct {
 	resolveKey func(ctx context.Context, identifier, algorithm, verifierType string) (keyHandle, verifier string, err error)
-	sign       func(ctx context.Context, req *proto.SignRequest) (*proto.SignResponse, error)
+	sign       func(ctx context.Context, req *signerproto.SignRequest) (*signerproto.SignResponse, error)
 }
 
 // AddInMemorySigner implements KeyManager.
@@ -45,12 +43,30 @@ func (mkm *mockKeyManager) ResolveKey(ctx context.Context, identifier, algorithm
 	return mkm.resolveKey(ctx, identifier, algorithm, verifierType)
 }
 
-func (mkm *mockKeyManager) Sign(ctx context.Context, req *proto.SignRequest) (*proto.SignResponse, error) {
+func (mkm *mockKeyManager) Sign(ctx context.Context, req *signerproto.SignRequest) (*signerproto.SignResponse, error) {
 	return mkm.sign(ctx, req)
 }
 
 func (mkm *mockKeyManager) Close() {
 
+}
+
+type mockSigner struct {
+	getMinimumKeyLen func(ctx context.Context, algorithm string) (int, error)
+	getVerifier      func(ctx context.Context, algorithm string, verifierType string, privateKey []byte) (string, error)
+	sign             func(ctx context.Context, algorithm string, payloadType string, privateKey []byte, payload []byte) ([]byte, error)
+}
+
+func (m *mockSigner) GetMinimumKeyLen(ctx context.Context, algorithm string) (int, error) {
+	return m.getMinimumKeyLen(ctx, algorithm)
+}
+
+func (m *mockSigner) GetVerifier(ctx context.Context, algorithm string, verifierType string, privateKey []byte) (string, error) {
+	return m.getVerifier(ctx, algorithm, verifierType, privateKey)
+}
+
+func (m *mockSigner) Sign(ctx context.Context, algorithm string, payloadType string, privateKey []byte, payload []byte) ([]byte, error) {
+	return m.sign(ctx, algorithm, payloadType, privateKey, payload)
 }
 
 func newTestHDWalletKeyManager(t *testing.T) (*simpleKeyManager, func()) {
@@ -83,7 +99,7 @@ func TestSimpleKeyManagerInitFail(t *testing.T) {
 			Type: signerapi.KeyStoreTypeStatic,
 		},
 	})
-	assert.Regexp(t, "PD011418", err)
+	assert.Regexp(t, "PD020818", err)
 }
 
 func TestSimpleKeyManagerPassThoroughInMemSigner(t *testing.T) {
@@ -105,9 +121,11 @@ func TestSimpleKeyManagerPassThoroughInMemSigner(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mim := signerapimocks.NewInMemorySigner(t)
-	mim.On("GetVerifier", mock.Anything, "bad:test", verifiers.ETH_ADDRESS, mock.Anything).Return("", fmt.Errorf("pop"))
-	sm.AddInMemorySigner("bad", mim)
+	sm.AddInMemorySigner("bad", &mockSigner{
+		getVerifier: func(ctx context.Context, algorithm, verifierType string, privateKey []byte) (string, error) {
+			return "", fmt.Errorf("pop")
+		},
+	})
 	_, _, err = sm.ResolveKey(context.Background(), "any", "bad:test", verifiers.ETH_ADDRESS)
 	assert.Regexp(t, "pop", err)
 }
@@ -135,7 +153,7 @@ func TestKeyManagerResolveFail(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _, err = kmgr.ResolveKey(context.Background(), "does not exist", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
-	assert.Regexp(t, "PD011418", err)
+	assert.Regexp(t, "PD020818", err)
 }
 
 func TestKeyManagerResolveConflict(t *testing.T) {

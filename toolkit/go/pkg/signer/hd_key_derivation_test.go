@@ -22,10 +22,10 @@ import (
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
-	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	proto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
@@ -125,22 +125,22 @@ func TestHDSigningDirectResNoPrefix(t *testing.T) {
 		Name:                "key1",
 		Index:               0,
 	})
-	assert.Regexp(t, "PD011413", err)
+	assert.Regexp(t, "PD020813", err)
 
 	_, err = sm.Resolve(ctx, &proto.ResolveKeyRequest{
 		RequiredIdentifiers: []*proto.PublicKeyIdentifierType{{Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS}},
 		Name:                "2147483648", // too big
 		Index:               0,
 	})
-	assert.Regexp(t, "PD011414", err)
+	assert.Regexp(t, "PD020814", err)
 
 	_, err = sm.(*signingModule[*signerapi.Config]).hd.signHDWalletKey(ctx, &proto.SignRequest{
 		KeyHandle: "m/wrong",
 	})
-	assert.Regexp(t, "PD011413", err)
+	assert.Regexp(t, "PD020813", err)
 
 	_, err = sm.(*signingModule[*signerapi.Config]).hd.loadHDWalletPrivateKey(ctx, "")
-	assert.Regexp(t, "PD011413", err)
+	assert.Regexp(t, "PD020813", err)
 
 }
 
@@ -252,7 +252,7 @@ func TestHDSigningInitFailDisabled(t *testing.T) {
 			Type:            "ext-store",
 		},
 	}, te)
-	assert.Regexp(t, "PD011408", err)
+	assert.Regexp(t, "PD020808", err)
 
 }
 
@@ -275,7 +275,7 @@ func TestHDSigningInitFailBadMnemonic(t *testing.T) {
 			},
 		},
 	})
-	assert.Regexp(t, "PD011412", err)
+	assert.Regexp(t, "PD020812", err)
 
 }
 
@@ -307,7 +307,7 @@ func TestHDInitBadSeed(t *testing.T) {
 			},
 		},
 	})
-	assert.Regexp(t, "PD011418", err)
+	assert.Regexp(t, "PD020818", err)
 
 }
 

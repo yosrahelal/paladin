@@ -24,9 +24,9 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
-	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	proto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -63,7 +63,7 @@ func TestFileSystemStoreBadDir(t *testing.T) {
 			},
 		},
 	})
-	assert.Regexp(t, "PD011400", err)
+	assert.Regexp(t, "PD020800", err)
 
 	err = os.WriteFile(badPath, []byte{}, 0644)
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestFileSystemStoreBadDir(t *testing.T) {
 			},
 		},
 	})
-	assert.Regexp(t, "PD011400", err)
+	assert.Regexp(t, "PD020800", err)
 }
 
 func TestFileSystemStoreCreate(t *testing.T) {
@@ -148,14 +148,14 @@ func TestFileSystemStoreBadSegments(t *testing.T) {
 	ctx, fs := newTestFilesystemStore(t)
 
 	_, _, err := fs.FindOrCreateLoadableKey(ctx, &proto.ResolveKeyRequest{}, nil)
-	assert.Regexp(t, "PD011403", err)
+	assert.Regexp(t, "PD020803", err)
 
 	_, _, err = fs.FindOrCreateLoadableKey(ctx, &proto.ResolveKeyRequest{
 		Path: []*proto.ResolveKeyPathSegment{
 			{},
 		},
 	}, nil)
-	assert.Regexp(t, "PD011403", err)
+	assert.Regexp(t, "PD020803", err)
 }
 
 func TestFileSystemClashes(t *testing.T) {
@@ -167,7 +167,7 @@ func TestFileSystemClashes(t *testing.T) {
 	_, _, err = fs.FindOrCreateLoadableKey(ctx, &proto.ResolveKeyRequest{
 		Name: "clash",
 	}, func() ([]byte, error) { return []byte("key1"), nil })
-	assert.Regexp(t, "PD011405", err)
+	assert.Regexp(t, "PD020805", err)
 
 }
 
@@ -179,7 +179,7 @@ func TestCreateWalletFileFail(t *testing.T) {
 
 	_, err = fs.createWalletFile(ctx, path.Join(fs.path, "clash.key"), path.Join(fs.path, "clash.pwd"),
 		func() ([]byte, error) { return []byte{}, nil })
-	assert.Regexp(t, "PD011404", err)
+	assert.Regexp(t, "PD020804", err)
 
 	_, err = fs.createWalletFile(ctx, path.Join(fs.path, "ok.key"), path.Join(fs.path, "ok.pwd"),
 		func() ([]byte, error) { return nil, fmt.Errorf("pop") })
@@ -194,7 +194,7 @@ func TestReadWalletFileFail(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = fs.readWalletFile(ctx, path.Join(fs.path, "dir"), "")
-	assert.Regexp(t, "PD011401", err)
+	assert.Regexp(t, "PD020801", err)
 
 }
 
@@ -211,12 +211,12 @@ func TestReadPassFileFail(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = fs.readWalletFile(ctx, keyFilePath, passwordFilePath)
-	assert.Regexp(t, "PD011402", err)
+	assert.Regexp(t, "PD020802", err)
 }
 
 func TestLoadKeyFail(t *testing.T) {
 	ctx, fs := newTestFilesystemStore(t)
 
 	_, err := fs.LoadKeyMaterial(ctx, "wrong")
-	assert.Regexp(t, "PD011406", err)
+	assert.Regexp(t, "PD020806", err)
 }

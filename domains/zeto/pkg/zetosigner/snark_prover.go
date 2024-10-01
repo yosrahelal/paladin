@@ -28,9 +28,9 @@ import (
 	"github.com/iden3/go-rapidsnark/types"
 	"github.com/iden3/go-rapidsnark/witness/v2"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"google.golang.org/protobuf/proto"
 )

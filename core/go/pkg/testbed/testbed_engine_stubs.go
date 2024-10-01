@@ -24,8 +24,8 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -86,7 +86,7 @@ func (tb *testbed) gatherSignatures(ctx context.Context, tx *components.PrivateT
 				if err != nil {
 					return fmt.Errorf("failed to resolve local signer for %s (algorithm=%s): %s", partyName, ar.Algorithm, err)
 				}
-				signaturePayload, err := tb.c.KeyManager().Sign(ctx, &proto.SignRequest{
+				signaturePayload, err := tb.c.KeyManager().Sign(ctx, &signerproto.SignRequest{
 					KeyHandle:   keyHandle,
 					Algorithm:   ar.Algorithm,
 					Payload:     ar.Payload,
@@ -170,7 +170,7 @@ func (tb *testbed) gatherEndorsements(ctx context.Context, psc components.Domain
 					return fmt.Errorf("reverted: %s", revertReason)
 				case prototk.EndorseTransactionResponse_SIGN:
 					// Build the signature
-					signaturePayload, err := keyMgr.Sign(ctx, &proto.SignRequest{
+					signaturePayload, err := keyMgr.Sign(ctx, &signerproto.SignRequest{
 						KeyHandle:   keyHandle,
 						Algorithm:   ar.Algorithm,
 						Payload:     endorseRes.Payload,

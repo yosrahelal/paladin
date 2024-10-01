@@ -24,8 +24,8 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -233,7 +233,7 @@ func TestSignFail(t *testing.T) {
 		resolveKey: func(ctx context.Context, identifier, algorithm, verifierType string) (keyHandle string, verifier string, err error) {
 			return "kh1", "0x1d0cD5b99d2E2a380e52b4000377Dd507c6df754", nil
 		},
-		sign: func(ctx context.Context, req *proto.SignRequest) (*proto.SignResponse, error) {
+		sign: func(ctx context.Context, req *signerproto.SignRequest) (*signerproto.SignResponse, error) {
 			return nil, fmt.Errorf("pop")
 		},
 	}

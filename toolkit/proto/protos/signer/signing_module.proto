@@ -15,8 +15,8 @@
 
 syntax = "proto3";
 
-package io.kaleido.paladin.kata;
-option go_package = "pkg/proto";
+package io.kaleido.paladin.toolkit.signer;
+option go_package = "pkg/proto/signer";
 
 message ResolveKeyRequest {
   string name = 1; // a name assured to be unique at this path

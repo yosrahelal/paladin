@@ -18,7 +18,7 @@ package signerapi
 import (
 	"context"
 
-	"github.com/kaleido-io/paladin/core/pkg/proto"
+	proto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 )
 
 type KeyStoreFactory[C ExtensibleConfig] interface {

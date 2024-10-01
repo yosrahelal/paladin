@@ -5,8 +5,8 @@ go 1.22.5
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/alecthomas/assert/v2 v2.2.2
-	github.com/btcsuite/btcd v0.23.5-0.20231215221805-96c9fd8078fd
-	github.com/btcsuite/btcd/btcutil v1.1.5
+	github.com/btcsuite/btcd v0.24.2
+	github.com/btcsuite/btcd/btcutil v1.1.6
 	github.com/go-resty/resty/v2 v2.14.0
 	github.com/golang-migrate/migrate/v4 v4.17.1
 	github.com/google/uuid v1.6.0

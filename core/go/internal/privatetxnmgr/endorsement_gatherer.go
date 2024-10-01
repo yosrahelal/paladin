@@ -24,10 +24,10 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 )
 
 func NewEndorsementGatherer(psc components.DomainSmartContract, keyMgr ethclient.KeyManager) ptmgrtypes.EndorsementGatherer {
@@ -85,7 +85,7 @@ func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transaction
 		return nil, confutil.P(revertReason), nil
 	case prototk.EndorseTransactionResponse_SIGN:
 		// Build the signature
-		signaturePayload, err := e.keyMgr.Sign(ctx, &proto.SignRequest{
+		signaturePayload, err := e.keyMgr.Sign(ctx, &signerproto.SignRequest{
 			KeyHandle:   keyHandle,
 			Algorithm:   endorsementRequest.Algorithm,
 			Payload:     endorseRes.Payload,

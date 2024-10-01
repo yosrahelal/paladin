@@ -13,27 +13,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-syntax = "proto3";
+package signers
 
-package io.kaleido.paladin.kata.transaction;
-option go_package = "pkg/proto/transaction";
+import (
+	"context"
 
-message SubmitTransactionRequest {
-    string from = 1;
-    string contractAddress = 2;
-    string idempotencyKey = 3;
-    oneof payload {
-      string payloadJSON = 16;
-      string payloadRLP = 17;
-    }
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
+)
+
+func NewECDSASignerFactory[C signerapi.ExtensibleConfig]() signerapi.InMemorySignerFactory[C] {
+	return &ecdsaSignerFactory[C]{}
 }
 
-message SubmitTransactionResponse {
-    string id = 1;
-}
+type ecdsaSignerFactory[C signerapi.ExtensibleConfig] struct{}
 
-message SubmitTransactionError {
-    string id = 1;
-    string code = 2;
-    string reason = 3;
+func (sf *ecdsaSignerFactory[C]) NewSigner(ctx context.Context, conf C) (signerapi.InMemorySigner, error) {
+	// We have no configuration
+	return &ecdsaSigner{}, nil
 }

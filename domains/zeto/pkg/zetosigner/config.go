@@ -15,7 +15,7 @@
 
 package zetosigner
 
-import "github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
+import "github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 
 // StaticKeyEntryConfig is the configuration for a ZK prover
 // based on SNARK, which typically takes a circuit and proving key

@@ -25,10 +25,10 @@ import (
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	proto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"github.com/tyler-smith/go-bip39"
 )
 
@@ -64,7 +64,7 @@ func (sm *signingModule[C]) initHDWallet(ctx context.Context, conf *signerapi.Ke
 	if len(seed) != 32 {
 		seed, err = bip39.NewSeedWithErrorChecking(string(seed), "")
 		if err != nil {
-			return i18n.NewError(ctx, msgs.MsgSigningHDSeedMustBe32BytesOrMnemonic)
+			return i18n.NewError(ctx, tkmsgs.MsgSigningHDSeedMustBe32BytesOrMnemonic)
 		}
 	}
 	sm.hd.hdKeyChain, err = hdkeychain.NewMaster(seed, &chaincfg.MainNetParams)
@@ -108,7 +108,7 @@ func (hd *hdDerivation[C]) resolveHDWalletKey(ctx context.Context, req *proto.Re
 			numStr, isHardened := strings.CutSuffix(s.Name, "'")
 			ui64, err := strconv.ParseUint(numStr, 10, 64) // we use 64 bits here, but loadHDWalletPrivateKey will handle an overflow
 			if err != nil {
-				return nil, i18n.NewError(ctx, msgs.MsgSignerBIP44DerivationInvalid, s.Name)
+				return nil, i18n.NewError(ctx, tkmsgs.MsgSignerBIP44DerivationInvalid, s.Name)
 			}
 			if isHardened {
 				hardenedFlag = "'"
@@ -140,7 +140,7 @@ func (hd *hdDerivation[C]) resolveHDWalletKey(ctx context.Context, req *proto.Re
 func (hd *hdDerivation[C]) loadHDWalletPrivateKey(ctx context.Context, keyHandle string) (privateKey []byte, err error) {
 	segments := strings.Split(keyHandle, "/")
 	if len(segments) < 2 || segments[0] != "m" {
-		return nil, i18n.NewError(ctx, msgs.MsgSignerBIP44DerivationInvalid, keyHandle)
+		return nil, i18n.NewError(ctx, tkmsgs.MsgSignerBIP44DerivationInvalid, keyHandle)
 	}
 	pos := hd.hdKeyChain
 	for _, s := range segments[1:] {
@@ -148,7 +148,7 @@ func (hd *hdDerivation[C]) loadHDWalletPrivateKey(ctx context.Context, keyHandle
 		derivation, err := strconv.ParseUint(number, 10, 64) // we use 64bits up until the logic below
 		if err == nil {
 			if derivation >= 0x80000000 {
-				return nil, i18n.WrapError(ctx, err, msgs.MsgSingerBIP32DerivationTooLarge, derivation)
+				return nil, i18n.WrapError(ctx, err, tkmsgs.MsgSignerBIP32DerivationTooLarge, derivation)
 			}
 			if isHardened {
 				derivation += 0x80000000
@@ -156,7 +156,7 @@ func (hd *hdDerivation[C]) loadHDWalletPrivateKey(ctx context.Context, keyHandle
 			pos, err = pos.Derive(uint32(derivation))
 		}
 		if err != nil {
-			return nil, i18n.WrapError(ctx, err, msgs.MsgSignerBIP44DerivationInvalid, s)
+			return nil, i18n.WrapError(ctx, err, tkmsgs.MsgSignerBIP44DerivationInvalid, s)
 		}
 	}
 	ecPrivKey, err := pos.ECPrivKey()

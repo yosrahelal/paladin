@@ -27,7 +27,7 @@ import (
 
 	pldconfig "github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/tyler-smith/go-bip39"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
