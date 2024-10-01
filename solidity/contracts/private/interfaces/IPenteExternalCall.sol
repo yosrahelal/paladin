@@ -13,5 +13,5 @@ interface IPenteExternalCall {
      * @param contractAddress the address of another contract on the shared base ledger
      * @param encodedCall an ABI-encoded function call to perform on the contract
      */
-    event PenteExternalCall(address contractAddress, bytes encodedCall);
+    event PenteExternalCall(address indexed contractAddress, bytes encodedCall);
 }
