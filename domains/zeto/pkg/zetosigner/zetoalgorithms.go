@@ -29,3 +29,5 @@ func AlgoDomainZetoSnarkBJJ(name string) string {
 }
 
 const PAYLOAD_DOMAIN_ZETO_SNARK = "domain:zeto:snark"
+
+const IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X = "iden3_pubkey_babyjubjub_compressed_0x"

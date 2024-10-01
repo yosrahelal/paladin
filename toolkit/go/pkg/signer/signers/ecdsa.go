@@ -80,9 +80,9 @@ func (s *ecdsaSigner) GetVerifier_secp256k1(ctx context.Context, algorithm, veri
 		return ethtypes.Address0xHex(kp.Address).String(), nil
 	case verifiers.ETH_ADDRESS_CHECKSUM:
 		return ethtypes.AddressWithChecksum(kp.Address).String(), nil
-	case verifiers.HEX_ECDSA_UNCOMPRESSED_PUBKEY_0X_PREFIX:
+	case verifiers.HEX_ECDSA_PUBKEY_UNCOMPRESSED_0X:
 		return "0x" + hex.EncodeToString(kp.PublicKeyBytes()), nil
-	case verifiers.HEX_ECDSA_UNCOMPRESSED_PUBKEY_NO_PREFIX:
+	case verifiers.HEX_ECDSA_PUBKEY_UNCOMPRESSED:
 		return hex.EncodeToString(kp.PublicKeyBytes()), nil
 	default:
 		return "", i18n.NewError(ctx, tkmsgs.MsgSigningUnsupportedVerifierCombination, verifierType, algorithm)
