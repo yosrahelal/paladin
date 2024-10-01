@@ -225,13 +225,15 @@ public class PenteConfiguration {
     @JsonIgnoreProperties(ignoreUnknown = true)
     record TransactionExternalCall(
             @JsonProperty
-            org.hyperledger.besu.datatypes.Address contractAddress,
+            Address contractAddress,
             @JsonProperty
             byte[] encodedCall
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record TransactionExtraData(
+            @JsonProperty
+            Address contractAddress,
             @JsonProperty
             List<TransactionExternalCall> externalCalls
     ) {}

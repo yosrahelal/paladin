@@ -264,6 +264,29 @@ func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.Pr
 	return tx, nil
 }
 
+func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) *tktypes.PrivateContractTransaction {
+	inputStates := make([]*tktypes.FullState, len(tx.PostAssembly.InputStates))
+	for i, state := range tx.PostAssembly.InputStates {
+		inputStates[i] = &tktypes.FullState{
+			ID:     state.ID,
+			Schema: state.Schema,
+			Data:   []byte(state.Data),
+		}
+	}
+	outputStates := make([]*tktypes.FullState, len(tx.PostAssembly.OutputStates))
+	for i, state := range tx.PostAssembly.OutputStates {
+		outputStates[i] = &tktypes.FullState{
+			ID:     state.ID,
+			Schema: state.Schema,
+			Data:   []byte(state.Data),
+		}
+	}
+	return &tktypes.PrivateContractTransaction{
+		InputStates:  inputStates,
+		OutputStates: outputStates,
+	}
+}
+
 func (tb *testbed) rpcTestbedInvoke() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		invocation tktypes.PrivateContractInvoke,
@@ -294,37 +317,19 @@ func (tb *testbed) rpcTestbedInvoke() rpcserver.RPCHandler {
 func (tb *testbed) rpcTestbedPrepare() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		invocation tktypes.PrivateContractInvoke,
-	) (*tktypes.PrivateContractPreparedTransaction, error) {
+	) (*tktypes.PrivateContractTransaction, error) {
 
 		tx, err := tb.prepareTransaction(ctx, invocation)
 		if err != nil {
 			return nil, err
 		}
+		result := tb.mapTransaction(tx)
 		encodedCall, err := tx.PreparedTransaction.FunctionABI.EncodeCallDataCtx(ctx, tx.PreparedTransaction.Inputs)
 		if err != nil {
 			return nil, err
 		}
-		inputStates := make([]*tktypes.FullState, len(tx.PostAssembly.InputStates))
-		for i, state := range tx.PostAssembly.InputStates {
-			inputStates[i] = &tktypes.FullState{
-				ID:     state.ID,
-				Schema: state.Schema,
-				Data:   []byte(state.Data),
-			}
-		}
-		outputStates := make([]*tktypes.FullState, len(tx.PostAssembly.OutputStates))
-		for i, state := range tx.PostAssembly.OutputStates {
-			outputStates[i] = &tktypes.FullState{
-				ID:     state.ID,
-				Schema: state.Schema,
-				Data:   []byte(state.Data),
-			}
-		}
-		return &tktypes.PrivateContractPreparedTransaction{
-			EncodedCall:  encodedCall,
-			InputStates:  inputStates,
-			OutputStates: outputStates,
-		}, nil
+		result.EncodedCall = encodedCall
+		return result, nil
 	})
 }
 

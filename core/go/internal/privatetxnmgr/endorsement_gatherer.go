@@ -75,7 +75,6 @@ func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transaction
 		Name:            endorsementRequest.Name,
 		AttestationType: endorsementRequest.AttestationType,
 		Verifier:        endorseRes.Endorser,
-		ExtraData:       endorseRes.ExtraData,
 	}
 	switch endorseRes.Result {
 	case prototk.EndorseTransactionResponse_REVERT:

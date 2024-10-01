@@ -182,6 +182,33 @@ public class PenteDomain extends DomainInstance {
         }
     }
 
+    private List<PenteConfiguration.TransactionExternalCall> parseExternalCalls(PenteTransaction.EVMExecutionResult execResult) throws Exception {
+        var externalCallEventABI = config.getExternalCallABI().getABIEntry("event", "PenteExternalCall").toJSON(false);
+        var externalCalls = new ArrayList<PenteConfiguration.TransactionExternalCall>();
+        for (var log : execResult.logs()) {
+            if (log.getTopics().getFirst().equals(config.getExternalCallTopic())) {
+                var decodedEvent = decodeData(FromDomain.DecodeDataRequest.newBuilder().
+                        setEncodingType(FromDomain.EncodingType.EVENT_DATA).
+                        setDefinition(externalCallEventABI).
+                        addAllTopics(log.getTopics().stream().map(t -> ByteString.copyFrom(t.toArray())).toList()).
+                        setData(ByteString.copyFrom(log.getData().toArray())).
+                        build()).get();
+                var externalCall = new ObjectMapper().readValue(
+                        decodedEvent.getBody(),
+                        PenteConfiguration.TransactionExternalCall.class);
+                externalCalls.add(externalCall);
+            }
+        }
+        return externalCalls;
+    }
+
+    private String buildExtraData(PenteTransaction.EVMExecutionResult execResult) throws Exception {
+        return new ObjectMapper().writeValueAsString(
+                new PenteConfiguration.TransactionExtraData(
+                        new Address(execResult.contractAddress().toArray()),
+                        parseExternalCalls(execResult)));
+    }
+
     @Override
     protected CompletableFuture<ToDomain.AssembleTransactionResponse> assembleTransaction(ToDomain.AssembleTransactionRequest request) {
         try {
@@ -191,9 +218,10 @@ public class PenteDomain extends DomainInstance {
             var accountLoader = new AssemblyAccountLoader(request.getTransaction().getContractAddress());
             var execResult = tx.executeEVM(config.getChainId(), tx.getFromVerifier(request.getResolvedVerifiersList()), accountLoader);
             var result = ToDomain.AssembleTransactionResponse.newBuilder();
-            var assembledTransaction = tx.buildAssembledTransaction(execResult.evm(), accountLoader);
+            var assembledTransaction = tx.buildAssembledTransaction(execResult.evm(), accountLoader, buildExtraData(execResult));
             result.setAssemblyResult(ToDomain.AssembleTransactionResponse.Result.OK);
             result.setAssembledTransaction(assembledTransaction);
+
 
             // Just like a base Eth transaction, we sign the encoded transaction.
             // However, we do not package the signature back up in any RLP encoded way
@@ -317,37 +345,18 @@ public class PenteDomain extends DomainInstance {
                 throw new IllegalArgumentException("invalid signature for %s (recovered=%s)".formatted(execResult.senderAddress(), recovered.getVerifier()));
             }
 
-            // Parse out any external calls
-            var externalCallEventABI = config.getExternalCallABI().getABIEntry("event", "PenteExternalCall").toJSON(false);
-            var externalCalls = new ArrayList<PenteConfiguration.TransactionExternalCall>();
-            for (var log : execResult.logs()) {
-                if (log.getTopics().getFirst().equals(config.getExternalCallTopic())) {
-                    var decodedEvent = decodeData(FromDomain.DecodeDataRequest.newBuilder().
-                            setDefinition(externalCallEventABI).
-                            addAllTopics(log.getTopics().stream().map(t -> ByteString.copyFrom(t.toArray())).toList()).
-                            setData(ByteString.copyFrom(log.getData().toArray())).
-                            build()).get();
-                    var externalCall = new ObjectMapper().readValue(
-                            decodedEvent.getBody(),
-                            PenteConfiguration.TransactionExternalCall.class);
-                    externalCalls.add(externalCall);
-                }
-            }
-
             // Check we agree with the typed data we will sign
             var endorsementPayload = tx.eip712TypedDataEndorsementPayload(
                 request.getInputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
                 request.getReadsList().stream().map(ToDomain.EndorsableState::getId).toList(),
                 request.getOutputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
-                externalCalls
+                parseExternalCalls(execResult)
             );
 
             // Ok - we are happy to add our endorsement signature
             return CompletableFuture.completedFuture(ToDomain.EndorseTransactionResponse.newBuilder().
                     setEndorsementResult(ToDomain.EndorseTransactionResponse.Result.SIGN).
                     setPayload(ByteString.copyFrom(endorsementPayload)).
-                    setExtraData(new ObjectMapper().writeValueAsString(
-                            new PenteConfiguration.TransactionExtraData(externalCalls))).
                     build());
         } catch(PenteTransaction.EVMExecutionException e) {
             LOGGER.error(new FormattedMessage("EVM execution failed during endorsement TX {}", request.getTransaction().getTransactionId()), e);
@@ -367,7 +376,7 @@ public class PenteDomain extends DomainInstance {
                     filter(r -> r.getAttestationType() == ToDomain.AttestationType.ENDORSE).
                     toList();
             var extraData = new ObjectMapper().readValue(
-                    signatures.getFirst().getExtraData(),
+                    request.getExtraData(),
                     PenteConfiguration.TransactionExtraData.class);
 
             var params = new HashMap<String, Object>(){{

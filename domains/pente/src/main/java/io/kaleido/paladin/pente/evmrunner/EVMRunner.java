@@ -170,7 +170,7 @@ public class EVMRunner {
             Bytes callData
     ) {
         var sender = this.world.getUpdater().getOrCreate(senderAddress);
-        logger.debug("Deploying to={} from={} nonce={}", smartContractAddress, senderAddress, sender.getNonce());
+        logger.debug("Invoking to={} from={} nonce={}", smartContractAddress, senderAddress, sender.getNonce());
 
         // Build the message frame
         var contractAccount = this.world.getUpdater().get(smartContractAddress);

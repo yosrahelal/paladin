@@ -63,6 +63,7 @@ type TransactionPostAssembly struct {
 	AttestationPlan       []*prototk.AttestationRequest
 	Signatures            []*prototk.AttestationResult
 	Endorsements          []*prototk.AttestationResult
+	ExtraData             *string
 }
 
 // PrivateTransaction is the critical exchange object between the engine and the domain manager,
@@ -114,4 +115,5 @@ type PrivateTransactionEndorseRequest struct {
 	OutputStates             []*prototk.EndorsableState
 	Endorsement              *prototk.AttestationRequest
 	Endorser                 *prototk.ResolvedVerifier
+	ExtraData                *string
 }

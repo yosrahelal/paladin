@@ -158,6 +158,7 @@ func (dc *domainContract) AssembleTransaction(ctx context.Context, tx *component
 	// of the result, and the locking on the input states, the engine might decide to
 	// abandon this attempt and just re-assemble later.
 	postAssembly.OutputStatesPotential = res.AssembledTransaction.OutputStates
+	postAssembly.ExtraData = res.AssembledTransaction.ExtraData
 	tx.PostAssembly = postAssembly
 	return nil
 }
@@ -326,7 +327,6 @@ func (dc *domainContract) EndorseTransaction(ctx context.Context, req *component
 		Result:       res.EndorsementResult,
 		Payload:      res.Payload,
 		RevertReason: res.RevertReason,
-		ExtraData:    res.ExtraData,
 	}, nil
 }
 
@@ -381,6 +381,7 @@ func (dc *domainContract) PrepareTransaction(ctx context.Context, tx *components
 		ReadStates:        dc.toEndorsableList(postAssembly.ReadStates),
 		OutputStates:      dc.toEndorsableList(postAssembly.OutputStates),
 		AttestationResult: dc.allAttestations(tx),
+		ExtraData:         postAssembly.ExtraData,
 	})
 	if err != nil {
 		return err

@@ -323,7 +323,7 @@ func TestNotoApprove(t *testing.T) {
 	assert.True(t, boolResult)
 
 	log.L(ctx).Infof("Approve recipient1 to claim 50")
-	var prepared tktypes.PrivateContractPreparedTransaction
+	var prepared tktypes.PrivateContractTransaction
 	rpcerr = rpc.CallRPC(ctx, &prepared, "testbed_prepare", &tktypes.PrivateContractInvoke{
 		From:     notaryName,
 		To:       tktypes.EthAddress(notoAddress),

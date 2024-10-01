@@ -28,7 +28,7 @@ type PrivateContractInvoke struct {
 	Inputs   RawJSON    `json:"inputs,omitempty"`   // JSON encoded inputs - which will be validated against the function spec
 }
 
-type PrivateContractPreparedTransaction struct {
+type PrivateContractTransaction struct {
 	EncodedCall  []byte       `json:"encodedCall"`
 	InputStates  []*FullState `json:"inputStates"`
 	OutputStates []*FullState `json:"outputStates"`

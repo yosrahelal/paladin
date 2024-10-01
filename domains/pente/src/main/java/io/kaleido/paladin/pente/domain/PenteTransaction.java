@@ -334,7 +334,7 @@ class PenteTransaction {
             ToDomain.AssembledTransaction assembledTransaction
     ) {}
 
-    ToDomain.AssembledTransaction buildAssembledTransaction(EVMRunner evm, PenteDomain.AssemblyAccountLoader accountLoader) throws IOException {
+    ToDomain.AssembledTransaction buildAssembledTransaction(EVMRunner evm, PenteDomain.AssemblyAccountLoader accountLoader, String extraData) throws IOException {
         var latestSchemaId = domain.getConfig().schemaId_AccountStateLatest();
         var result = ToDomain.AssembledTransaction.newBuilder();
         var committedUpdates = evm.getWorld().getCommittedAccountUpdates();
@@ -376,6 +376,9 @@ class PenteTransaction {
         result.addAllInputStates(inputStates);
         result.addAllReadStates(readStates);
         result.addAllOutputStates(outputStates);
+        if (extraData != null) {
+            result.setExtraData(extraData);
+        }
         return result.build();
     }
 
@@ -411,6 +414,7 @@ class PenteTransaction {
     record EVMExecutionResult(
             EVMRunner evm,
             org.hyperledger.besu.datatypes.Address senderAddress,
+            org.hyperledger.besu.datatypes.Address contractAddress,
             byte[] txPayload,
             JsonHex.Bytes32 txPayloadHash,
             List<Log> logs
@@ -449,6 +453,7 @@ class PenteTransaction {
         return new EVMExecutionResult(
                 evm,
                 senderAddress,
+                execResult.getContractAddress(),
                 txPayload,
                 Keccak.Hash(txPayload),
                 execResult.getLogs()
