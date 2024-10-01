@@ -33,30 +33,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testKeyStoreFactory struct {
+type testKeyStoreAllFactory struct {
 	keyStore *testKeyStoreAll
 	err      error
 }
 
-func (tf *testKeyStoreFactory) NewKeyStore(ctx context.Context, conf *signerapi.Config) (signerapi.KeyStore, error) {
+type testKeyStoreBaseFactory struct {
+	keyStore *testKeyStoreBase
+	err      error
+}
+
+func (tf *testKeyStoreAllFactory) NewKeyStore(ctx context.Context, conf *signerapi.Config) (signerapi.KeyStore, error) {
 	return tf.keyStore, tf.err
 }
 
+func (tf *testKeyStoreBaseFactory) NewKeyStore(ctx context.Context, conf *signerapi.Config) (signerapi.KeyStore, error) {
+	return tf.keyStore, tf.err
+}
+
+type testKeyStoreBase struct {
+	findOrCreateLoadableKey func(ctx context.Context, req *proto.ResolveKeyRequest, newKeyMaterial func() ([]byte, error)) (keyMaterial []byte, keyHandle string, err error)
+	loadKeyMaterial         func(ctx context.Context, keyHandle string) ([]byte, error)
+}
+
 type testKeyStoreAll struct {
-	findOrCreateLoadableKey       func(ctx context.Context, req *proto.ResolveKeyRequest, newKeyMaterial func() ([]byte, error)) (keyMaterial []byte, keyHandle string, err error)
-	loadKeyMaterial               func(ctx context.Context, keyHandle string) ([]byte, error)
+	testKeyStoreBase
 	findOrCreateInStoreSigningKey func(ctx context.Context, req *proto.ResolveKeyRequest) (res *proto.ResolveKeyResponse, err error)
 	signWithinKeystore            func(ctx context.Context, req *proto.SignRequest) (res *proto.SignResponse, err error)
 	listKeys                      func(ctx context.Context, req *proto.ListKeysRequest) (res *proto.ListKeysResponse, err error)
 }
 
-func (tk *testKeyStoreAll) FindOrCreateLoadableKey(ctx context.Context, req *proto.ResolveKeyRequest, newKeyMaterial func() ([]byte, error)) (keyMaterial []byte, keyHandle string, err error) {
+func (tk *testKeyStoreBase) FindOrCreateLoadableKey(ctx context.Context, req *proto.ResolveKeyRequest, newKeyMaterial func() ([]byte, error)) (keyMaterial []byte, keyHandle string, err error) {
 	return tk.findOrCreateLoadableKey(ctx, req, newKeyMaterial)
 }
 
-func (tk *testKeyStoreAll) LoadKeyMaterial(ctx context.Context, keyHandle string) ([]byte, error) {
+func (tk *testKeyStoreBase) LoadKeyMaterial(ctx context.Context, keyHandle string) ([]byte, error) {
 	return tk.loadKeyMaterial(ctx, keyHandle)
 }
+
+func (tk *testKeyStoreBase) Close() {}
 
 func (tk *testKeyStoreAll) FindOrCreateInStoreSigningKey(ctx context.Context, req *proto.ResolveKeyRequest) (res *proto.ResolveKeyResponse, err error) {
 	return tk.findOrCreateInStoreSigningKey(ctx, req)
@@ -70,15 +85,38 @@ func (tk *testKeyStoreAll) ListKeys(ctx context.Context, req *proto.ListKeysRequ
 	return tk.listKeys(ctx, req)
 }
 
-func (tk *testKeyStoreAll) Close() {
-
+type testInMemorySignerFactory struct {
+	signer *testMemSigner
+	err    error
 }
 
-func TestExtensionInitFail(t *testing.T) {
+func (tf *testInMemorySignerFactory) NewSigner(ctx context.Context, conf *signerapi.Config) (signerapi.InMemorySigner, error) {
+	return tf.signer, tf.err
+}
+
+type testMemSigner struct {
+	sign             func(ctx context.Context, algorithm, payloadType string, privateKey, payload []byte) ([]byte, error)
+	getVerifier      func(ctx context.Context, algorithm, verifierType string, privateKey []byte) (string, error)
+	getMinimumKeyLen func(ctx context.Context, algorithm string) (int, error)
+}
+
+func (tf *testMemSigner) Sign(ctx context.Context, algorithm, payloadType string, privateKey, payload []byte) ([]byte, error) {
+	return tf.sign(ctx, algorithm, payloadType, privateKey, payload)
+}
+
+func (tf *testMemSigner) GetVerifier(ctx context.Context, algorithm, verifierType string, privateKey []byte) (string, error) {
+	return tf.getVerifier(ctx, algorithm, verifierType, privateKey)
+}
+
+func (tf *testMemSigner) GetMinimumKeyLen(ctx context.Context, algorithm string) (int, error) {
+	return tf.getMinimumKeyLen(ctx, algorithm)
+}
+
+func TestExtensionKeystoreInitFail(t *testing.T) {
 
 	te := &signerapi.Extensions[*signerapi.Config]{
 		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
-			"ext-store": &testKeyStoreFactory{},
+			"ext-store": &testKeyStoreBaseFactory{err: fmt.Errorf("pop")},
 		},
 	}
 
@@ -88,6 +126,42 @@ func TestExtensionInitFail(t *testing.T) {
 		},
 	}, te)
 	assert.Regexp(t, "pop", err)
+
+}
+
+func TestExtensionInMemSignerInitFail(t *testing.T) {
+
+	te := &signerapi.Extensions[*signerapi.Config]{
+		InMemorySignerFactories: map[string]signerapi.InMemorySignerFactory[*signerapi.Config]{
+			"ext-signer": &testInMemorySignerFactory{err: fmt.Errorf("pop")},
+		},
+	}
+
+	_, err := NewSigningModule(context.Background(), &signerapi.Config{
+		KeyStore: signerapi.KeyStoreConfig{
+			Type: "ext-signer",
+		},
+	}, te)
+	assert.Regexp(t, "pop", err)
+
+}
+
+func TestExtensionNotInKeyStoreSigner(t *testing.T) {
+
+	ks := &testKeyStoreBase{}
+	te := &signerapi.Extensions[*signerapi.Config]{
+		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
+			"ext-store": &testKeyStoreBaseFactory{keyStore: ks, err: nil},
+		},
+	}
+
+	_, err := NewSigningModule(context.Background(), &signerapi.Config{
+		KeyStore: signerapi.KeyStoreConfig{
+			Type:            "ext-store",
+			KeyStoreSigning: true,
+		},
+	}, te)
+	assert.Regexp(t, "PD011409", err)
 
 }
 
@@ -140,7 +214,7 @@ func TestExtensionKeyStoreListOK(t *testing.T) {
 	}
 	te := &signerapi.Extensions[*signerapi.Config]{
 		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
-			"ext-store": &testKeyStoreFactory{keyStore: tk},
+			"ext-store": &testKeyStoreAllFactory{keyStore: tk},
 		},
 	}
 
@@ -177,7 +251,7 @@ func TestExtensionKeyStoreListFail(t *testing.T) {
 	}
 	te := &signerapi.Extensions[*signerapi.Config]{
 		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
-			"ext-store": &testKeyStoreFactory{keyStore: tk},
+			"ext-store": &testKeyStoreAllFactory{keyStore: tk},
 		},
 	}
 
@@ -223,13 +297,14 @@ func TestExtensionKeyStoreResolveSignSECP256K1OK(t *testing.T) {
 	}
 	te := &signerapi.Extensions[*signerapi.Config]{
 		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
-			"ext-store": &testKeyStoreFactory{keyStore: tk},
+			"ext-store": &testKeyStoreAllFactory{keyStore: tk},
 		},
 	}
 
 	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
 		KeyStore: signerapi.KeyStoreConfig{
-			Type: "ext-store",
+			Type:            "ext-store",
+			KeyStoreSigning: true,
 		},
 	}, te)
 	require.NoError(t, err)
@@ -242,7 +317,7 @@ func TestExtensionKeyStoreResolveSignSECP256K1OK(t *testing.T) {
 	assert.Equal(t, "0x98a356e0814382587d42b62bd97871ee59d10b69", resResolve.Identifiers[0].Verifier)
 
 	resSign, err := sm.Sign(context.Background(), &proto.SignRequest{
-		KeyHandle:   "key1",
+		KeyHandle:   "key_handle_1",
 		Algorithm:   algorithms.Prefix_ECDSA,
 		PayloadType: signpayloads.OPAQUE_TO_RSV,
 		Payload:     ([]byte)("something to sign"),
@@ -254,14 +329,14 @@ func TestExtensionKeyStoreResolveSignSECP256K1OK(t *testing.T) {
 
 func TestExtensionKeyStoreResolveSECP256K1Fail(t *testing.T) {
 
-	tk := &testKeyStoreAll{
+	tk := &testKeyStoreBase{
 		findOrCreateLoadableKey: func(ctx context.Context, req *proto.ResolveKeyRequest, newKeyMaterial func() ([]byte, error)) (keyMaterial []byte, keyHandle string, err error) {
 			return nil, "", fmt.Errorf("pop")
 		},
 	}
 	te := &signerapi.Extensions[*signerapi.Config]{
 		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
-			"ext-store": &testKeyStoreFactory{keyStore: tk},
+			"ext-store": &testKeyStoreBaseFactory{keyStore: tk},
 		},
 	}
 
@@ -292,13 +367,14 @@ func TestExtensionKeyStoreSignSECP256K1Fail(t *testing.T) {
 	}
 	te := &signerapi.Extensions[*signerapi.Config]{
 		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
-			"ext-store": &testKeyStoreFactory{keyStore: tk},
+			"ext-store": &testKeyStoreAllFactory{keyStore: tk},
 		},
 	}
 
 	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
 		KeyStore: signerapi.KeyStoreConfig{
-			Type: "ext-store",
+			Type:            "ext-store",
+			KeyStoreSigning: true,
 		},
 	}, te)
 	require.NoError(t, err)

@@ -50,12 +50,11 @@ type hdDerivation[C signerapi.ExtensibleConfig] struct {
 }
 
 type signingModule[C signerapi.ExtensibleConfig] struct {
-	keyStore                signerapi.KeyStore
-	keyStoreSigner          signerapi.KeyStoreSigner
-	disableKeyListing       bool
-	hd                      *hdDerivation[C]
-	signingImplementations  map[string]signerapi.InMemorySigner
-	keyStoreImplementations map[string]signerapi.KeyStoreFactory[C]
+	keyStore               signerapi.KeyStore
+	keyStoreSigner         signerapi.KeyStoreSigner
+	disableKeyListing      bool
+	hd                     *hdDerivation[C]
+	signingImplementations map[string]signerapi.InMemorySigner
 }
 
 // We allow this same code to be used (un-modified) with set of initialization functions passed
@@ -111,7 +110,7 @@ func NewSigningModule[C signerapi.ExtensibleConfig](ctx context.Context, conf C,
 	// Now we have all the possible factories mapped, we load the one keystore type we actually use
 	ksConf := conf.KeyStoreConfig()
 	keyStoreType := strings.ToLower(ksConf.Type)
-	ksf := sm.keyStoreImplementations[keyStoreType]
+	ksf := keyStoreImplementations[keyStoreType]
 	if ksf == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgSigningUnsupportedKeyStoreType, ksConf.Type)
 	}
@@ -186,11 +185,11 @@ func (sm *signingModule[C]) newKeyForAlgorithms(ctx context.Context, requiredIde
 }
 
 func (sm *signingModule[C]) signInMemory(ctx context.Context, algorithm, payloadType string, privateKey, payload []byte) (res *proto.SignResponse, err error) {
+	var resultBytes []byte
 	signer, err := sm.getSignerForAlgorithm(ctx, algorithm)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		resultBytes, err = signer.Sign(ctx, algorithm, payloadType, privateKey, payload)
 	}
-	resultBytes, err := signer.Sign(ctx, algorithm, payloadType, privateKey, payload)
 	if err != nil {
 		return nil, err
 	}

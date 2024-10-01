@@ -236,6 +236,12 @@ func TestHDSigningDefaultBehaviorOK(t *testing.T) {
 
 func TestHDSigningInitFailDisabled(t *testing.T) {
 
+	te := &signerapi.Extensions[*signerapi.Config]{
+		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
+			"ext-store": &testKeyStoreAllFactory{keyStore: &testKeyStoreAll{}},
+		},
+	}
+
 	ctx := context.Background()
 	_, err := NewSigningModule(ctx, &signerapi.Config{
 		KeyDerivation: signerapi.KeyDerivationConfig{
@@ -243,9 +249,9 @@ func TestHDSigningInitFailDisabled(t *testing.T) {
 		},
 		KeyStore: signerapi.KeyStoreConfig{
 			KeyStoreSigning: true,
-			Type:            signerapi.KeyStoreTypeStatic,
+			Type:            "ext-store",
 		},
-	})
+	}, te)
 	assert.Regexp(t, "PD011408", err)
 
 }
