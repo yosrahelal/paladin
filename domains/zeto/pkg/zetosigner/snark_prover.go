@@ -31,7 +31,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -74,8 +73,8 @@ func (sp *snarkProver) GetVerifier(ctx context.Context, algorithm, verifierType 
 	if !ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP.MatchString(algorithm) {
 		return "", fmt.Errorf("'%s' does not match supported algorithm '%s'", algorithm, ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP)
 	}
-	if verifierType != verifiers.HEX_PUBKEY_0X_PREFIX {
-		return "", fmt.Errorf("'%s' does not match supported verifierType '%s'", algorithm, verifiers.HEX_PUBKEY_0X_PREFIX)
+	if verifierType != IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X {
+		return "", fmt.Errorf("'%s' does not match supported verifierType '%s'", algorithm, IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X)
 	}
 	pk, err := NewBabyJubJubPrivateKey(privateKey)
 	if err != nil {

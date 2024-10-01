@@ -30,7 +30,6 @@ import (
 	"github.com/iden3/go-rapidsnark/witness/v2"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -612,7 +611,7 @@ func TestZKPProverInvalidAlgos(t *testing.T) {
 	_, err = prover.GetVerifier(ctx, AlgoDomainZetoSnarkBJJ("zeto"), "not_hex", nil)
 	assert.Regexp(t, "verifier", err)
 
-	_, err = prover.GetVerifier(ctx, AlgoDomainZetoSnarkBJJ("zeto"), verifiers.HEX_PUBKEY_0X_PREFIX, nil)
+	_, err = prover.GetVerifier(ctx, AlgoDomainZetoSnarkBJJ("zeto"), IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, nil)
 	assert.Regexp(t, "invalid key", err)
 
 	_, err = prover.Sign(ctx, "domain:zeto:unsupported", "", nil, nil)

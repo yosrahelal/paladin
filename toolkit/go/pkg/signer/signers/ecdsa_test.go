@@ -110,11 +110,11 @@ func TestECDSAVerifiers_secp256k1(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, addrChecksum, verifier)
 
-	verifier, err = signer.GetVerifier(ctx, algorithms.ECDSA_SECP256K1, verifiers.HEX_PUBKEY_0X_PREFIX, privKey)
+	verifier, err = signer.GetVerifier(ctx, algorithms.ECDSA_SECP256K1, verifiers.HEX_ECDSA_PUBKEY_UNCOMPRESSED_0X, privKey)
 	require.NoError(t, err)
 	assert.Equal(t, "0xee2d5c9b18d8301da23217cdea41526ac96e57e2e43ff2d403f1ce90f35044e45cd6741e6ba3ec82882a8a96f57f487a3a0664acd35f03d0529210d2c05e1477", verifier)
 
-	verifier, err = signer.GetVerifier(ctx, algorithms.ECDSA_SECP256K1, verifiers.HEX_PUBKEY_NO_PREFIX, privKey)
+	verifier, err = signer.GetVerifier(ctx, algorithms.ECDSA_SECP256K1, verifiers.HEX_ECDSA_PUBKEY_UNCOMPRESSED, privKey)
 	require.NoError(t, err)
 	assert.Equal(t, pubKey, verifier)
 }
