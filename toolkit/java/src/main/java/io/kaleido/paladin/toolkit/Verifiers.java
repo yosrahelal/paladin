@@ -15,6 +15,12 @@
 
 package io.kaleido.paladin.toolkit;
 
-public class Algorithms {
-    public static final String ECDSA_SECP256K1 = "ecdsa:secp256k1";
+public class Verifiers {
+    public static final String ETH_ADDRESS = "eth_address";
+
+    public static final String ETH_ADDRESS_CHECKSUM = "eth_address_checksum";
+
+    public static final String HEX_PUBKEY_NO_PREFIX = "hex_pubkey_no_prefix";
+
+    public static final String HEX_PUBKEY_0X_PREFIX = "hex_pubkey_0x_prefix";
 }

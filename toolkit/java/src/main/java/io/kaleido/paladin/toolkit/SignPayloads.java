@@ -15,6 +15,6 @@
 
 package io.kaleido.paladin.toolkit;
 
-public class Algorithms {
-    public static final String ECDSA_SECP256K1 = "ecdsa:secp256k1";
+public class SignPayloads {
+    public static final String OPAQUE_TO_RSV = "opaque:rsv";
 }
