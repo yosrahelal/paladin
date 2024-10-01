@@ -22,13 +22,14 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
 	"github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAssembleInputsAnonEnc(t *testing.T) {
 	inputs := commonWitnessInputs{}
 	key := core.KeyEntry{}
 	_, publicInputs, err := assembleInputs_anon_enc(&inputs, nil, &key)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	_, ok := new(big.Int).SetString(publicInputs["encryptionNonce"], 10)
 	assert.True(t, ok)
 }
@@ -40,7 +41,7 @@ func TestAssembleInputsAnonEnc_fail(t *testing.T) {
 	}
 	key := core.KeyEntry{}
 	_, publicInputs, err := assembleInputs_anon_enc(&inputs, &extras, &key)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "1234", publicInputs["encryptionNonce"])
 
 	extras.EncryptionNonce = "bad number"

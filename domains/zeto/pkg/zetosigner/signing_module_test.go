@@ -23,28 +23,51 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/signer"
 	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func newZetoSigningModule(t *testing.T) {
-	sm, err := signer.NewSigningModule(ctx, &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type:       signerapi.KeyStoreTypeFilesystem,
-			FileSystem: signerapi.FileSystemConfig{Path: confutil.P(tmpDir)},
+func newZetoSigningModule(t *testing.T) (context.Context, signer.SigningModule, func()) {
+	ctx := context.Background()
+	sm, err := signer.NewSigningModule(ctx, &SnarkProverConfig{
+		Config: signerapi.Config{
+			KeyDerivation: signerapi.KeyDerivationConfig{
+				Type: signerapi.KeyDerivationTypeBIP32,
+			},
+			KeyStore: signerapi.KeyStoreConfig{
+				Type: signerapi.KeyStoreTypeStatic,
+				Static: signerapi.StaticKeyStorageConfig{
+					Keys: map[string]signerapi.StaticKeyEntryConfig{
+						"seed": {
+							Encoding: "hex",
+							Inline:   tktypes.RandHex(32),
+						},
+					},
+				},
+			},
 		},
-	}, nil)
+	}, &signerapi.Extensions[*SnarkProverConfig]{
+		InMemorySignerFactories: map[string]signerapi.InMemorySignerFactory[*SnarkProverConfig]{
+			"domain": NewZetoOnlyDomainRouter(),
+		},
+	})
 	require.NoError(t, err)
+
+	return ctx, sm, func() { sm.Close() }
 }
 
 func TestZKPSigningModuleKeyResolution(t *testing.T) {
-	tmpDir := t.TempDir()
-	ctx := context.Background()
+	ctx, sm, done := newZetoSigningModule(t)
+	defer done()
 
 	resp1, err := sm.Resolve(ctx, &proto.ResolveKeyRequest{
-		Algorithms: []string{algorithms.ECDSA_SECP256K1_PLAINBYTES, algorithms.ZKP_BABYJUBJUB_PLAINBYTES},
-		Name:       "blueKey",
+		RequiredIdentifiers: []*proto.PublicKeyIdentifierType{
+			{Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS},
+			{Algorithm: ALGO_DOMAIN_ZETO_SNARK_BJJ, VerifierType: verifiers.HEX_PUBKEY_0X_PREFIX},
+		},
+		Name: "blueKey",
 		Path: []*proto.ResolveKeyPathSegment{
 			{Name: "alice"},
 		},

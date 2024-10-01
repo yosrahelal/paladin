@@ -17,4 +17,6 @@ package zetosigner
 
 // - SNARK proving engine
 // - Baby Jub Jub key materials used in proofs
-const ALGO_DOMAINS_ZETO_SNARK = "domains:zeto:snark:babyjubjub"
+const ALGO_DOMAIN_ZETO_SNARK_BJJ = "domain:zeto:snark:babyjubjub"
+
+const PAYLOAD_DOMAIN_ZETO_SNARK = "domain:zeto:snark"

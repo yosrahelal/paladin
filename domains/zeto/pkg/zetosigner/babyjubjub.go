@@ -16,6 +16,8 @@
 package zetosigner
 
 import (
+	"fmt"
+
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-iden3-crypto/utils"
 )
@@ -33,4 +35,13 @@ func DecodeBabyJubJubPublicKey(pubKeyHex string) (*babyjub.PublicKey, error) {
 	var compressedPubKey babyjub.PublicKeyComp
 	copy(compressedPubKey[:], pubKeyCompBytes)
 	return compressedPubKey.Decompress()
+}
+
+func NewBabyJubJubPrivateKey(privateKey []byte) (*babyjub.PrivateKey, error) {
+	if len(privateKey) < 32 {
+		return nil, fmt.Errorf("invalid key length: %d", len(privateKey))
+	}
+	var pk babyjub.PrivateKey
+	copy(pk[:], privateKey[:])
+	return &pk, nil
 }

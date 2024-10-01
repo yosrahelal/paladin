@@ -55,9 +55,9 @@ func TestLoadCircuit(t *testing.T) {
 	assert.Equal(t, []byte{}, provingKey)
 
 	err = os.WriteFile(path.Join(tmpDir, "test_js", "test.wasm"), testWasm, 0644)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	circuit, provingKey, err = loadCircuit("test", config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, circuit)
 	assert.Equal(t, []byte("test"), provingKey)
 }

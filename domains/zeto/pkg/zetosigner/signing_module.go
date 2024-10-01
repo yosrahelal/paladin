@@ -18,6 +18,7 @@ package zetosigner
 import (
 	"context"
 
+	"github.com/kaleido-io/paladin/core/pkg/signer"
 	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 )
 
@@ -29,6 +30,13 @@ import (
 //	signer to call over to the Zeto domain over gRPC and request signing within the Paladin process itself.
 func NewZetoSignerFactory() signerapi.InMemorySignerFactory[*SnarkProverConfig] {
 	return &zetoSignerFactory{}
+}
+
+// A domain router that only knows about zeto (if that's the only domain you want to manage in your remote code deployment)
+func NewZetoOnlyDomainRouter() signerapi.InMemorySignerFactory[*SnarkProverConfig] {
+	return signer.NewDomainPrefixRouter(map[string]signerapi.InMemorySignerFactory[*SnarkProverConfig]{
+		"zeto": NewZetoSignerFactory(),
+	})
 }
 
 type zetoSignerFactory struct{}

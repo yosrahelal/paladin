@@ -20,6 +20,7 @@ import (
 
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -30,26 +31,22 @@ func TestDecodeProvingRequest(t *testing.T) {
 		Common:    &common,
 	}
 	bytes, err := proto.Marshal(req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	signReq := &pb.SignRequest{
-		Payload: bytes,
-	}
-	_, extras, err := decodeProvingRequest(signReq)
-	assert.NoError(t, err)
+	_, extras, err := decodeProvingRequest(bytes)
+	require.NoError(t, err)
 	assert.Empty(t, extras)
 
 	encExtras := &pb.ProvingRequestExtras_Encryption{
 		EncryptionNonce: "123456",
 	}
 	req.Extras, err = proto.Marshal(encExtras)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	bytes, err = proto.Marshal(req)
-	assert.NoError(t, err)
-	signReq.Payload = bytes
-	_, extras, err = decodeProvingRequest(signReq)
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	_, extras, err = decodeProvingRequest(bytes)
+	require.NoError(t, err)
 	assert.Equal(t, "123456", extras.(*pb.ProvingRequestExtras_Encryption).EncryptionNonce)
 }
 
@@ -61,11 +58,8 @@ func TestDecodeProvingRequest_Fail(t *testing.T) {
 		Extras:    []byte("invalid"),
 	}
 	bytes, err := proto.Marshal(req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	signReq := &pb.SignRequest{
-		Payload: bytes,
-	}
-	_, _, err = decodeProvingRequest(signReq)
+	_, _, err = decodeProvingRequest(bytes)
 	assert.ErrorContains(t, err, "cannot parse invalid wire-format data")
 }

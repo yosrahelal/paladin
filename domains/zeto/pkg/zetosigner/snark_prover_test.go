@@ -30,7 +30,9 @@ import (
 	"github.com/iden3/go-rapidsnark/witness/v2"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -59,7 +61,7 @@ func TestNewProver(t *testing.T) {
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, prover.circuitsCache)
 	assert.NotNil(t, prover.provingKeysCache)
 }
@@ -82,7 +84,7 @@ func TestSnarkProve(t *testing.T) {
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	testCircuitLoader := func(circuitID string, config *SnarkProverConfig) (witness.Calculator, []byte, error) {
 		return &testWitnessCalculator{}, []byte("proving key"), nil
@@ -133,15 +135,11 @@ func TestSnarkProve(t *testing.T) {
 		},
 	}
 	payload, err := proto.Marshal(&req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	res, err := prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
-		Payload:   payload,
-	})
-	assert.NoError(t, err)
-	assert.Equal(t, 36, len(res.Payload))
+	proof, err := prover.Sign(context.Background(), ALGO_DOMAIN_ZETO_SNARK_BJJ, PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
+	require.NoError(t, err)
+	assert.Equal(t, 36, len(proof))
 }
 
 func TestConcurrentSnarkProofGeneration(t *testing.T) {
@@ -151,7 +149,7 @@ func TestConcurrentSnarkProofGeneration(t *testing.T) {
 		MaxProverPerCircuit: confutil.P(50), // equal to the default cache size, so all provers can be cached at once
 	}
 	prover, err := newSnarkProver(config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	circuitLoadedTotal := 0
 	circuitLoadedTotalMutex := &sync.Mutex{}
@@ -224,19 +222,15 @@ func TestConcurrentSnarkProofGeneration(t *testing.T) {
 		},
 	}
 	payload, err := proto.Marshal(&req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	expectReqCount := 500
 	reqChan := make(chan struct{}, expectReqCount)
 
 	for i := 0; i < expectReqCount; i++ {
 		go func() {
-			res, err := prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
-				KeyHandle: "key1",
-				Algorithm: ALGO_DOMAINS_ZETO_SNARK,
-				Payload:   payload,
-			})
-			assert.NoError(t, err)
-			assert.Equal(t, 36, len(res.Payload))
+			proof, err := prover.Sign(context.Background(), ALGO_DOMAIN_ZETO_SNARK_BJJ, PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
+			require.NoError(t, err)
+			assert.Equal(t, 36, len(proof))
 			reqChan <- struct{}{}
 		}()
 	}
@@ -258,7 +252,7 @@ func TestSnarkProveError(t *testing.T) {
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	alice := NewKeypair()
 
@@ -272,13 +266,9 @@ func TestSnarkProveError(t *testing.T) {
 		OutputOwners:     []string{"bob", "alice"},
 	}
 	payload, err := proto.Marshal(&req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
-		Payload:   payload,
-	})
+	_, err = prover.Sign(context.Background(), ALGO_DOMAIN_ZETO_SNARK_BJJ, PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
 	assert.ErrorContains(t, err, "cannot parse invalid wire-format data")
 }
 
@@ -288,7 +278,7 @@ func TestSnarkProveErrorCircuit(t *testing.T) {
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	alice := NewKeypair()
 
@@ -305,13 +295,9 @@ func TestSnarkProveErrorCircuit(t *testing.T) {
 		},
 	}
 	payload, err := proto.Marshal(&req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
-		Payload:   payload,
-	})
+	_, err = prover.Sign(context.Background(), ALGO_DOMAIN_ZETO_SNARK_BJJ, PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
 	assert.ErrorContains(t, err, "circuit ID is required")
 }
 
@@ -321,7 +307,7 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	alice := NewKeypair()
 
@@ -330,12 +316,8 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 		Common:    &pb.ProvingRequestCommon{},
 	}
 	payload, err := proto.Marshal(&req)
-	assert.NoError(t, err)
-	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
-		Payload:   payload,
-	})
+	require.NoError(t, err)
+	_, err = prover.Sign(context.Background(), ALGO_DOMAIN_ZETO_SNARK_BJJ, PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
 	assert.ErrorContains(t, err, "input commitments are required")
 
 	req = pb.ProvingRequest{
@@ -345,12 +327,8 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 		},
 	}
 	payload, err = proto.Marshal(&req)
-	assert.NoError(t, err)
-	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
-		Payload:   payload,
-	})
+	require.NoError(t, err)
+	_, err = prover.Sign(context.Background(), ALGO_DOMAIN_ZETO_SNARK_BJJ, PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
 	assert.ErrorContains(t, err, "input values are required")
 
 	req = pb.ProvingRequest{
@@ -361,12 +339,8 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 		},
 	}
 	payload, err = proto.Marshal(&req)
-	assert.NoError(t, err)
-	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
-		Payload:   payload,
-	})
+	require.NoError(t, err)
+	_, err = prover.Sign(context.Background(), ALGO_DOMAIN_ZETO_SNARK_BJJ, PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
 	assert.ErrorContains(t, err, "input salts are required")
 
 	req = pb.ProvingRequest{
@@ -378,12 +352,8 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 		},
 	}
 	payload, err = proto.Marshal(&req)
-	assert.NoError(t, err)
-	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
-		Payload:   payload,
-	})
+	require.NoError(t, err)
+	_, err = prover.Sign(context.Background(), ALGO_DOMAIN_ZETO_SNARK_BJJ, PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
 	assert.ErrorContains(t, err, "output values are required")
 
 	req = pb.ProvingRequest{
@@ -396,12 +366,8 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 		},
 	}
 	payload, err = proto.Marshal(&req)
-	assert.NoError(t, err)
-	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
-		Payload:   payload,
-	})
+	require.NoError(t, err)
+	_, err = prover.Sign(context.Background(), ALGO_DOMAIN_ZETO_SNARK_BJJ, PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
 	assert.ErrorContains(t, err, "output owner keys are required")
 
 	req = pb.ProvingRequest{
@@ -415,12 +381,8 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 		},
 	}
 	payload, err = proto.Marshal(&req)
-	assert.NoError(t, err)
-	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
-		Payload:   payload,
-	})
+	require.NoError(t, err)
+	_, err = prover.Sign(context.Background(), ALGO_DOMAIN_ZETO_SNARK_BJJ, PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
 	assert.ErrorContains(t, err, "anon.wasm: no such file or directory")
 }
 
@@ -430,7 +392,7 @@ func TestSnarkProveErrorLoadcircuits(t *testing.T) {
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	testCircuitLoader := func(circuitID string, config *SnarkProverConfig) (witness.Calculator, []byte, error) {
 		return nil, nil, fmt.Errorf("bang!")
@@ -468,13 +430,9 @@ func TestSnarkProveErrorLoadcircuits(t *testing.T) {
 		},
 	}
 	payload, err := proto.Marshal(&req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
-		Payload:   payload,
-	})
+	_, err = prover.Sign(context.Background(), ALGO_DOMAIN_ZETO_SNARK_BJJ, PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
 	assert.EqualError(t, err, "bang!")
 }
 
@@ -484,7 +442,7 @@ func TestSnarkProveErrorGenerateProof(t *testing.T) {
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	testCircuitLoader := func(circuitID string, config *SnarkProverConfig) (witness.Calculator, []byte, error) {
 		return &testWitnessCalculator{}, []byte("proving key"), nil
@@ -518,13 +476,9 @@ func TestSnarkProveErrorGenerateProof(t *testing.T) {
 		},
 	}
 	payload, err := proto.Marshal(&req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
-		Payload:   payload,
-	})
+	_, err = prover.Sign(context.Background(), ALGO_DOMAIN_ZETO_SNARK_BJJ, PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
 	assert.ErrorContains(t, err, "witness is empty")
 }
 
@@ -534,7 +488,7 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	testCircuitLoader := func(circuitID string, config *SnarkProverConfig) (witness.Calculator, []byte, error) {
 		return &testWitnessCalculator{}, []byte("proving key"), nil
@@ -573,12 +527,8 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 		},
 	}
 	payload, err := proto.Marshal(&req)
-	assert.NoError(t, err)
-	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
-		Payload:   payload,
-	})
+	require.NoError(t, err)
+	_, err = prover.Sign(context.Background(), ALGO_DOMAIN_ZETO_SNARK_BJJ, PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
 	assert.ErrorContains(t, err, "failed to parse input commitment")
 
 	req = pb.ProvingRequest{
@@ -594,12 +544,8 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 		},
 	}
 	payload, err = proto.Marshal(&req)
-	assert.NoError(t, err)
-	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
-		KeyHandle: "key1",
-		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
-		Payload:   payload,
-	})
+	require.NoError(t, err)
+	_, err = prover.Sign(context.Background(), ALGO_DOMAIN_ZETO_SNARK_BJJ, PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
 	assert.ErrorContains(t, err, "failed to parse input salt")
 }
 
@@ -647,6 +593,38 @@ func TestSerializeProofResponse(t *testing.T) {
 		"encryptedValues": "1,2,3,4",
 	}
 	bytes, err := serializeProofResponse("anon_enc", &snark, publicInputs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 64, len(bytes))
+}
+
+func TestZKPProverInvalidAlgos(t *testing.T) {
+	ctx := context.Background()
+	config := &SnarkProverConfig{
+		CircuitsDir:    "test",
+		ProvingKeysDir: "test",
+	}
+	prover, err := newSnarkProver(config)
+	require.NoError(t, err)
+
+	_, err = prover.GetVerifier(ctx, "domain:zeto:unsupported", "", nil)
+	assert.Regexp(t, "algorithm", err)
+
+	_, err = prover.GetVerifier(ctx, ALGO_DOMAIN_ZETO_SNARK_BJJ, "not_hex", nil)
+	assert.Regexp(t, "verifier", err)
+
+	_, err = prover.GetVerifier(ctx, ALGO_DOMAIN_ZETO_SNARK_BJJ, verifiers.HEX_PUBKEY_0X_PREFIX, nil)
+	assert.Regexp(t, "invalid key", err)
+
+	_, err = prover.Sign(ctx, "domain:zeto:unsupported", "", nil, nil)
+	assert.Regexp(t, "algorithm", err)
+
+	_, err = prover.Sign(ctx, ALGO_DOMAIN_ZETO_SNARK_BJJ, "domain:zeto:unsupported", nil, nil)
+	assert.Regexp(t, "payloadType", err)
+
+	_, err = prover.GetMinimumKeyLen(ctx, "domain:zeto:unsupported")
+	assert.Regexp(t, "algorithm", err)
+
+	keyLen, err := prover.GetMinimumKeyLen(ctx, ALGO_DOMAIN_ZETO_SNARK_BJJ)
+	require.NoError(t, err)
+	assert.Equal(t, 32, keyLen)
 }

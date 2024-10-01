@@ -30,6 +30,7 @@ import (
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -65,19 +66,39 @@ func newSnarkProver(conf *SnarkProverConfig) (*snarkProver, error) {
 }
 
 func (sp *snarkProver) GetVerifier(ctx context.Context, algorithm, verifierType string, privateKey []byte) (string, error) {
-
+	if algorithm != ALGO_DOMAIN_ZETO_SNARK_BJJ {
+		return "", fmt.Errorf("'%s' does not match supported algorithm '%s'", algorithm, ALGO_DOMAIN_ZETO_SNARK_BJJ)
+	}
+	if verifierType != verifiers.HEX_PUBKEY_0X_PREFIX {
+		return "", fmt.Errorf("'%s' does not match supported verifierType '%s'", algorithm, verifiers.HEX_PUBKEY_0X_PREFIX)
+	}
+	pk, err := NewBabyJubJubPrivateKey(privateKey)
+	if err != nil {
+		return "", err
+	}
+	return EncodeBabyJubJubPublicKey(pk.Public()), nil
 }
 
 func (sp *snarkProver) GetMinimumKeyLen(ctx context.Context, algorithm string) (int, error) {
-
+	if algorithm != ALGO_DOMAIN_ZETO_SNARK_BJJ {
+		return -1, fmt.Errorf("'%s' does not match supported algorithm '%s'", algorithm, ALGO_DOMAIN_ZETO_SNARK_BJJ)
+	}
+	return 32, nil
 }
 
 func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, privateKey, payload []byte) ([]byte, error) {
+	if algorithm != ALGO_DOMAIN_ZETO_SNARK_BJJ {
+		return nil, fmt.Errorf("'%s' does not match supported algorithm '%s'", algorithm, ALGO_DOMAIN_ZETO_SNARK_BJJ)
+	}
+	if payloadType != PAYLOAD_DOMAIN_ZETO_SNARK {
+		return nil, fmt.Errorf("'%s' does not match supported payloadType '%s'", payloadType, PAYLOAD_DOMAIN_ZETO_SNARK)
+	}
+
 	keyBytes := [32]byte{}
 	copy(keyBytes[:], privateKey)
 	keyEntry := key.NewKeyEntryFromPrivateKeyBytes(keyBytes)
 
-	inputs, extras, err := decodeProvingRequest(req)
+	inputs, extras, err := decodeProvingRequest(payload)
 	if err != nil {
 		return nil, err
 	}
@@ -151,9 +172,7 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 		return nil, err
 	}
 
-	return &pb.SignResponse{
-		Payload: proofBytes,
-	}, nil
+	return proofBytes, nil
 }
 
 func validateInputs(inputs *pb.ProvingRequestCommon) error {

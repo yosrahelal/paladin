@@ -20,10 +20,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func decodeProvingRequest(req *pb.SignRequest) (*pb.ProvingRequest, interface{}, error) {
+func decodeProvingRequest(payload []byte) (*pb.ProvingRequest, interface{}, error) {
 	inputs := pb.ProvingRequest{}
 	// Unmarshal payload into inputs
-	err := proto.Unmarshal(req.Payload, &inputs)
+	err := proto.Unmarshal(payload, &inputs)
 	if err != nil {
 		return nil, nil, err
 	}
