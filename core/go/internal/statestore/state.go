@@ -122,7 +122,7 @@ func (ss *stateStore) GetState(ctx context.Context, domainName string, contractA
 // Built in fields all start with "." as that prevents them
 // clashing with variable names in ABI structs ($ and _ are valid leading chars there)
 var baseStateFields = map[string]filters.FieldResolver{
-	".id":      filters.Bytes32Field("id"),
+	".id":      filters.HexBytesField("id"),
 	".created": filters.TimestampField("created"),
 }
 
