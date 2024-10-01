@@ -8,7 +8,7 @@ rules:
   resources:
   - smartcontracts
   - besus
-  - paladin
+  - paladins
   - besugeneses
   verbs:
   - get
@@ -21,7 +21,7 @@ rules:
   resources:
   - smartcontracts/status
   - besus/status
-  - paladin/status
+  - paladins/status
   - besugeneses/status
   verbs:
   - get
