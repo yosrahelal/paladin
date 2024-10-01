@@ -559,13 +559,17 @@ func (p *privateTxManager) HandleResolveVerifierRequest(ctx context.Context, mes
 		}
 		resolveVerifierResponseBytes, err := proto.Marshal(resolveVerifierResponse)
 		if err == nil {
-			p.components.TransportManager().Send(ctx, &components.TransportMessage{
+			err = p.components.TransportManager().Send(ctx, &components.TransportMessage{
 				MessageType:   "ResolveVerifierResponse",
 				CorrelationID: requestID,
 				ReplyTo:       tktypes.PrivateIdentityLocator(p.nodeID),
 				Destination:   replyTo,
 				Payload:       resolveVerifierResponseBytes,
 			})
+			if err != nil {
+				log.L(ctx).Errorf("Failed to send resolve verifier response: %s", err)
+				// assume the requestor will eventually retry
+			}
 			return
 		} else {
 			log.L(ctx).Errorf("Failed to marshal resolve verifier response: %s", err)
@@ -583,13 +587,17 @@ func (p *privateTxManager) HandleResolveVerifierRequest(ctx context.Context, mes
 		}
 		resolveVerifierErrorBytes, err := proto.Marshal(resolveVerifierError)
 		if err == nil {
-			p.components.TransportManager().Send(ctx, &components.TransportMessage{
+			err = p.components.TransportManager().Send(ctx, &components.TransportMessage{
 				MessageType:   "ResolveVerifierError",
 				CorrelationID: requestID,
 				ReplyTo:       tktypes.PrivateIdentityLocator(p.nodeID),
 				Destination:   replyTo,
 				Payload:       resolveVerifierErrorBytes,
 			})
+			if err != nil {
+				log.L(ctx).Errorf("Failed to send resolve verifier error: %s", err)
+				// assume the requestor will eventually retry
+			}
 			return
 		} else {
 			log.L(ctx).Errorf("Failed to marshal resolve verifier response: %s", err)
