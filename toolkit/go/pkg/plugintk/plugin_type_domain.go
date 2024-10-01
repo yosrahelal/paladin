@@ -35,6 +35,7 @@ type DomainAPI interface {
 	PrepareTransaction(context.Context, *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error)
 	HandleEventBatch(context.Context, *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error)
 	Sign(context.Context, *prototk.SignRequest) (*prototk.SignResponse, error)
+	GetVerifier(context.Context, *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error)
 }
 
 type DomainCallbacks interface {
@@ -164,6 +165,10 @@ func (dp *domainHandler) RequestToPlugin(ctx context.Context, iReq PluginMessage
 		resMsg := &prototk.DomainMessage_SignRes{}
 		resMsg.SignRes, err = dp.api.Sign(ctx, input.Sign)
 		res.ResponseFromDomain = resMsg
+	case *prototk.DomainMessage_GetVerifier:
+		resMsg := &prototk.DomainMessage_GetVerifierRes{}
+		resMsg.GetVerifierRes, err = dp.api.GetVerifier(ctx, input.GetVerifier)
+		res.ResponseFromDomain = resMsg
 	default:
 		err = i18n.NewError(ctx, tkmsgs.MsgPluginUnsupportedRequest, input)
 	}
@@ -214,6 +219,7 @@ type DomainAPIFunctions struct {
 	PrepareTransaction  func(context.Context, *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error)
 	HandleEventBatch    func(context.Context, *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error)
 	Sign                func(context.Context, *prototk.SignRequest) (*prototk.SignResponse, error)
+	GetVerifier         func(context.Context, *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error)
 }
 
 type DomainAPIBase struct {
@@ -258,4 +264,8 @@ func (db *DomainAPIBase) HandleEventBatch(ctx context.Context, req *prototk.Hand
 
 func (db *DomainAPIBase) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.SignResponse, error) {
 	return callPluginImpl(ctx, req, db.Functions.Sign)
+}
+
+func (db *DomainAPIBase) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error) {
+	return callPluginImpl(ctx, req, db.Functions.GetVerifier)
 }

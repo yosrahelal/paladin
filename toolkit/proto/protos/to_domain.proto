@@ -85,6 +85,17 @@ message AssembleTransactionResponse {
   optional string revert_reason = 4; // if the result was REVERT
 }
 
+// **GET_VERIFIER** step only happens when signing is requested with a "domain:" scoped algorithm, and it is enabled for this domain in the Paladin configuration
+message GetVerifierRequest {
+  string algorithm = 1;
+  string verifier_type = 2;
+  bytes private_key = 3;
+}
+
+message GetVerifierResponse {
+  string verifier = 1;
+}
+
 // **SIGN** step only happens when signing is requested with a "domain:" scoped algorithm, and it is enabled for this domain in the Paladin configuration
 message SignRequest {
   string algorithm = 1;
@@ -151,6 +162,7 @@ message DomainConfig {
   repeated string abi_state_schemas_json = 1; // A list of Schema definitions (in ABI parameter format) the domain requires for all state types it interacts with
   BaseLedgerSubmitConfig base_ledger_submit_config = 2; // Describe the requirements of this domain for how submission happens
   string abi_events_json = 3; // ABI events that the domain will process for state updates
+  map<string, int32> signing_algorithms = 4; // A list of supported signing algorithms with the minimum key lengths for each algorithm
 }
 
 message BaseLedgerSubmitConfig {

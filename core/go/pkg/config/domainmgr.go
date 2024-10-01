@@ -36,6 +36,7 @@ type DomainConfig struct {
 	Plugin          PluginConfig     `json:"plugin"`
 	Config          map[string]any   `json:"config"`
 	RegistryAddress string           `json:"registryAddress"`
+	AllowSigning    bool             `json:"allowSigning"`
 }
 
 var ContractCacheDefaults = &cache.Config{

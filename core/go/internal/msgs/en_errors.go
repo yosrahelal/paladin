@@ -254,6 +254,8 @@ var (
 	MsgDomainABIEncodingTypedDataFail         = ffe("PD011640", "EIP-712 typed data V4 encoding request failed")
 	MsgDomainErrorParsingAddress              = ffe("PD011641", "Error parsing address")
 	MsgDomainInvalidEvents                    = ffe("PD011642", "Events ABI is invalid")
+	MsgDomainSigningDisabled                  = ffe("PD011643", "Domain signing it not enabled for domain '%s'")
+	MsgDomainSigningAlgorithmNotSupported     = ffe("PD011644", "Domain '%s' has not registered algorithm '%s'")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownEngine = ffe("PD011700", "Unknown engine '%s'")

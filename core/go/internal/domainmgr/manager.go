@@ -32,6 +32,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/inflight"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -76,6 +77,7 @@ type domainManager struct {
 	stateStore       statestore.StateStore
 	blockIndexer     blockindexer.BlockIndexer
 	ethClientFactory ethclient.EthClientFactory
+	domainSigner     *domainSigner
 
 	domainsByName    map[string]*domain
 	domainsByAddress map[tktypes.EthAddress]*domain
@@ -97,6 +99,7 @@ func (dm *domainManager) PreInit(pic components.PreInitComponents) (*components.
 	dm.stateStore = pic.StateStore()
 	dm.ethClientFactory = pic.EthClientFactory()
 	dm.blockIndexer = pic.BlockIndexer()
+	dm.domainSigner = &domainSigner{dm: dm}
 
 	for name, d := range dm.conf.Domains {
 		if _, err := tktypes.ParseEthAddress(d.RegistryAddress); err != nil {
@@ -169,6 +172,10 @@ func (dm *domainManager) DomainRegistered(name string, toDomain components.Domai
 }
 
 func (dm *domainManager) GetDomainByName(ctx context.Context, name string) (components.Domain, error) {
+	return dm.getDomainByName(ctx, name)
+}
+
+func (dm *domainManager) getDomainByName(ctx context.Context, name string) (*domain, error) {
 	dm.mux.Lock()
 	defer dm.mux.Unlock()
 	d := dm.domainsByName[name]
@@ -193,6 +200,10 @@ func (dm *domainManager) WaitForDeploy(ctx context.Context, txID uuid.UUID) (com
 		return dc, nil
 	}
 	return dm.waitAndEnrich(ctx, req)
+}
+
+func (dm *domainManager) GetSigner() signerapi.InMemorySigner {
+	return dm.domainSigner
 }
 
 func (dm *domainManager) waitAndEnrich(ctx context.Context, req *inflight.InflightRequest[uuid.UUID, *PrivateSmartContract]) (components.DomainSmartContract, error) {

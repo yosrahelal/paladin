@@ -182,6 +182,12 @@ func TestDomainRequestsOK(t *testing.T) {
 				Payload: []byte("signed"),
 			}, nil
 		},
+		GetVerifier: func(ctx context.Context, gvr *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error) {
+			assert.Equal(t, "algo1", gvr.Algorithm)
+			return &prototk.GetVerifierResponse{
+				Verifier: "verifier1",
+			}, nil
+		},
 	}
 
 	tdm := &testDomainManager{
@@ -301,6 +307,12 @@ func TestDomainRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "signed", string(sr.Payload))
+
+	gvr, err := domainAPI.GetVerifier(ctx, &prototk.GetVerifierRequest{
+		Algorithm: "algo1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "verifier1", string(gvr.Verifier))
 
 	callbacks := <-waitForCallbacks
 

@@ -243,3 +243,18 @@ func (br *domainBridge) Sign(ctx context.Context, req *prototk.SignRequest) (res
 	)
 	return
 }
+
+func (br *domainBridge) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest) (res *prototk.GetVerifierResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_GetVerifier{GetVerifier: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_GetVerifierRes); ok {
+				res = r.GetVerifierRes
+			}
+			return res != nil
+		},
+	)
+	return
+}

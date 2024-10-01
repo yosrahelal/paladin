@@ -54,6 +54,7 @@ message DomainMessage {
     PrepareTransactionRequest   prepare_transaction =       1080;
     HandleEventBatchRequest     handle_event_batch =        1090;
     SignRequest                 sign =                      1100;
+    GetVerifierRequest          get_verifier =              1110;
   }
 
   oneof response_from_domain {
@@ -67,6 +68,7 @@ message DomainMessage {
     PrepareTransactionResponse  prepare_transaction_res =   1081;
     HandleEventBatchResponse    handle_event_batch_res =    1091;
     SignResponse                sign_res =                  1101;
+    GetVerifierResponse         get_verifier_res =          1111;
   }
 
   // Request/reply exchanges initiated by the domain, to the paladin node

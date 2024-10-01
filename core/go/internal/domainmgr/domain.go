@@ -598,3 +598,28 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 	})
 	return res, err
 }
+
+func (d *domain) getVerifier(ctx context.Context, algorithm string, verifierType string, privateKey []byte) (verifier string, err error) {
+	res, err := d.api.GetVerifier(ctx, &prototk.GetVerifierRequest{
+		Algorithm:    algorithm,
+		VerifierType: verifierType,
+		PrivateKey:   privateKey,
+	})
+	if err != nil {
+		return "", err
+	}
+	return res.Verifier, nil
+}
+
+func (d *domain) sign(ctx context.Context, algorithm string, payloadType string, privateKey []byte, payload []byte) (signature []byte, err error) {
+	res, err := d.api.Sign(ctx, &prototk.SignRequest{
+		Algorithm:   algorithm,
+		PayloadType: payloadType,
+		PrivateKey:  privateKey,
+		Payload:     payload,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return res.Payload, nil
+}
