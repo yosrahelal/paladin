@@ -74,5 +74,4 @@ type EndorsementResult struct {
 	Result       prototk.EndorseTransactionResponse_Result
 	Payload      []byte
 	RevertReason *string
-	ExtraData    *string
 }

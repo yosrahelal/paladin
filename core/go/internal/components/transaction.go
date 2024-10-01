@@ -115,5 +115,4 @@ type PrivateTransactionEndorseRequest struct {
 	OutputStates             []*prototk.EndorsableState
 	Endorsement              *prototk.AttestationRequest
 	Endorser                 *prototk.ResolvedVerifier
-	ExtraData                *string
 }
