@@ -19,8 +19,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -62,13 +62,13 @@ func TestZKPSigningModuleKeyResolution(t *testing.T) {
 	ctx, sm, done := newZetoSigningModule(t)
 	defer done()
 
-	resp1, err := sm.Resolve(ctx, &proto.ResolveKeyRequest{
-		RequiredIdentifiers: []*proto.PublicKeyIdentifierType{
+	resp1, err := sm.Resolve(ctx, &signerproto.ResolveKeyRequest{
+		RequiredIdentifiers: []*signerproto.PublicKeyIdentifierType{
 			{Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS},
 			{Algorithm: AlgoDomainZetoSnarkBJJ("zeto"), VerifierType: verifiers.HEX_PUBKEY_0X_PREFIX},
 		},
 		Name: "blueKey",
-		Path: []*proto.ResolveKeyPathSegment{
+		Path: []*signerproto.ResolveKeyPathSegment{
 			{Name: "alice"},
 		},
 	})
