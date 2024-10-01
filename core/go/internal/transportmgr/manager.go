@@ -184,8 +184,13 @@ func (tm *transportManager) Send(ctx context.Context, msg *components.TransportM
 	if msg.CorrelationID != nil {
 		correlID = confutil.P(msg.CorrelationID.String())
 	}
+	var zeroUUID uuid.UUID
+	if msg.MessageID == zeroUUID {
+		msg.MessageID = uuid.New()
+	}
 	err = transport.send(ctx, &prototk.Message{
-		MessageId:     uuid.New().String(),
+		MessageType:   msg.MessageType,
+		MessageId:     msg.MessageID.String(),
 		CorrelationId: correlID,
 		Destination:   msg.Destination.String(),
 		ReplyTo:       msg.ReplyTo.String(),

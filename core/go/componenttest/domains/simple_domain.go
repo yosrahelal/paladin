@@ -494,9 +494,11 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 						Amount: (*ethtypes.HexInteger)(toKeep),
 					}
 					newCoins = append(newCoins, &coin)
+
 					newStates = append(newStates, &prototk.NewState{
-						SchemaId:      simpleTokenSchemaID,
-						StateDataJson: toJSONString(t, &coin),
+						SchemaId:         simpleTokenSchemaID,
+						StateDataJson:    toJSONString(t, &coin),
+						DistributionList: []string{toAddr.String()},
 					})
 				}
 				if toAddr != nil && amount.Sign() > 0 {

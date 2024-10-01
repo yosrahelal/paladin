@@ -151,10 +151,13 @@ type Sequencer interface {
 
 type Publisher interface {
 	//Service for sending messages and events within the local node
+	//TODO TBD - should these functions return errors?  If so, how should the caller deal with them?
 	PublishTransactionBlockedEvent(ctx context.Context, transactionId string) error
 	PublishTransactionDispatchedEvent(ctx context.Context, transactionId string, nonce uint64, signingAddress string) error
 	PublishTransactionSignedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult) error
 	PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult, revertReason *string) error
+	PublishResolveVerifierResponseEvent(ctx context.Context, transactionId string, lookup, algorithm, verifier string)
+	PublishResolveVerifierErrorEvent(ctx context.Context, transactionId string, lookup, algorithm, errorMessage string)
 }
 
 // Map of signing address to an ordered list of transaction IDs that are ready to be dispatched by that signing address
@@ -210,6 +213,14 @@ type TxProcessor interface {
 	HandleTransactionConfirmedEvent(ctx context.Context, event *TransactionConfirmedEvent)
 	HandleTransactionRevertedEvent(ctx context.Context, event *TransactionRevertedEvent)
 	HandleTransactionDelegatedEvent(ctx context.Context, event *TransactionDelegatedEvent)
-
+	HandleResolveVerifierResponseEvent(ctx context.Context, event *ResolveVerifierResponseEvent)
+	HandleResolveVerifierErrorEvent(ctx context.Context, event *ResolveVerifierErrorEvent)
 	PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error)
+}
+
+type IdentityResolver interface {
+	ResolveVerifier(ctx context.Context, lookup string, algorithm string) (string, error)
+	ResolveVerifierAsync(ctx context.Context, lookup string, algorithm string, resolved func(ctx context.Context, verifier string), failed func(ctx context.Context, err error))
+	HandleResolveVerifierReply(ctx context.Context, event *ResolveVerifierReply)
+	HandleResolveVerifierError(ctx context.Context, event *ResolveVerifierError)
 }

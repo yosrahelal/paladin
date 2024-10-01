@@ -41,7 +41,8 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_getPublicTransactionByHash", tm.rpcGetPublicTransactionByHash()).
 		Add("ptx_storeABI", tm.rpcStoreABI()).
 		Add("ptx_getStoredABI", tm.rpcGetStoredABI()).
-		Add("ptx_queryStoredABIs", tm.rpcQueryStoredABIs())
+		Add("ptx_queryStoredABIs", tm.rpcQueryStoredABIs()).
+		Add("ptx_resolveVerifier", tm.rpcResolveVerifier())
 }
 
 func (tm *txManager) rpcSendTransaction() rpcserver.RPCHandler {
@@ -166,5 +167,13 @@ func (tm *txManager) rpcQueryStoredABIs() rpcserver.RPCHandler {
 		query query.QueryJSON,
 	) ([]*ptxapi.StoredABI, error) {
 		return tm.queryABIs(ctx, &query)
+	})
+}
+
+func (tm *txManager) rpcResolveVerifier() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		resolveVerifierRequest *ptxapi.ResolveVerifierRequest,
+	) (*ptxapi.ResolvedVerifier, error) {
+		return tm.privateTxMgr.ResolveVerifier(ctx, resolveVerifierRequest)
 	})
 }

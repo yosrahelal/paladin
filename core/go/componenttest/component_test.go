@@ -33,6 +33,8 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -169,7 +171,7 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 	// The bootstrap code that is the entry point to the java side is not tested here, we bootstrap the component manager by hand
 
 	ctx := context.Background()
-	instance := newInstanceForComponentTesting(t, deplyDomainRegistry(t), "test-instance")
+	instance := newInstanceForComponentTesting(t, deplyDomainRegistry(t), nil, nil)
 	rpcClient := instance.client
 
 	// Check there are no transactions before we start
@@ -262,13 +264,13 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 
 	domainRegistryAddress := deplyDomainRegistry(t)
 
-	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, "alices-paladin")
+	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, nil, nil)
 	client1 := instance1.client
 	aliceIdentity := "wallets.org1.alice"
 	aliceAddress := instance1.resolveEthereumAddress(aliceIdentity)
 	t.Logf("Alice address: %s", aliceAddress)
 
-	instance2 := newInstanceForComponentTesting(t, domainRegistryAddress, "bobs-paladin")
+	instance2 := newInstanceForComponentTesting(t, domainRegistryAddress, nil, nil)
 	client2 := instance2.client
 	bobIdentity := "wallets.org2.bob"
 	bobAddress := instance2.resolveEthereumAddress(bobIdentity)
@@ -307,6 +309,7 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 	contractAddress := dplyTxFull.Receipt.ContractAddress
 
 	// Start a private transaction on alices node
+	// this is a mint to alice
 	var aliceTxID uuid.UUID
 	err = client1.CallRPC(ctx, &aliceTxID, "ptx_sendTransaction", &ptxapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
@@ -334,6 +337,7 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 	)
 
 	// Start a private transaction on bobs node
+	// This is a mint to bob
 	var bobTx1ID uuid.UUID
 	err = client2.CallRPC(ctx, &bobTx1ID, "ptx_sendTransaction", &ptxapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
@@ -359,5 +363,41 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 		100*time.Millisecond,
 		"Transaction did not receive a receipt",
 	)
+}
+
+func TestResolveIdentityFromRemoteNode(t *testing.T) {
+	// stand up 2 nodes, with different key managers
+	// send an RPC request to one node to resolve the identity of a user@the-other-node
+	// this forces both nodes to communicate with each other to resolve the identity
+
+	ctx := context.Background()
+
+	//TODO shouldn't need domain registry for this test
+	domainRegistryAddress := deplyDomainRegistry(t)
+
+	aliceNodeConfig := newNodeConfiguration(t)
+	bobNodeConfig := newNodeConfiguration(t)
+
+	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, aliceNodeConfig, []*nodeConfiguration{bobNodeConfig})
+	client1 := instance1.client
+	aliceIdentity := "wallets.org1.alice@" + instance1.id.String()
+	aliceAddress := instance1.resolveEthereumAddress(aliceIdentity)
+	t.Logf("Alice address: %s", aliceAddress)
+
+	instance2 := newInstanceForComponentTesting(t, domainRegistryAddress, bobNodeConfig, []*nodeConfiguration{aliceNodeConfig})
+
+	bobIdentity := "wallets.org2.bob@" + instance2.id.String()
+	bobAddress := instance2.resolveEthereumAddress(bobIdentity)
+	t.Logf("Bob address: %s", bobAddress)
+
+	// send JSON RPC message to node 1 to deploy a private contract
+	var resolveVerifierResponse ptxapi.ResolvedVerifier
+	err := client1.CallRPC(ctx, &resolveVerifierResponse, "ptx_resolveVerifier", &ptxapi.ResolveVerifierRequest{
+		Lookup:    &bobIdentity,
+		Algorithm: confutil.P(algorithms.ECDSA_SECP256K1_PLAINBYTES),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resolveVerifierResponse.Verifier)
+	assert.Equal(t, bobAddress, *resolveVerifierResponse.Verifier)
 
 }

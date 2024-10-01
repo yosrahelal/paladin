@@ -16,7 +16,15 @@
 package componenttest
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	_ "embed"
+	"encoding/pem"
+	"fmt"
+	"math/big"
+	"strings"
 
 	"context"
 	"net"
@@ -32,6 +40,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/plugins"
 	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
+	"github.com/kaleido-io/paladin/registries/static/pkg/static"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -39,6 +48,8 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tlsconf"
+	"github.com/kaleido-io/paladin/transports/grpc/pkg/grpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tyler-smith/go-bip39"
@@ -110,19 +121,48 @@ func deplyDomainRegistry(t *testing.T) *tktypes.EthAddress {
 	err = os.Remove(grpcTarget)
 	require.NoError(t, err)
 
-	cmTmp := componentmgr.NewComponentManager(context.Background(), grpcTarget, uuid.New(), tmpConf, &componentTestEngine{})
+	engine := &componentTestEngine{}
+	cmTmp := componentmgr.NewComponentManager(context.Background(), grpcTarget, uuid.New(), &tmpConf, engine)
 	err = cmTmp.Init()
 	require.NoError(t, err)
 	err = cmTmp.StartComponents()
 	require.NoError(t, err)
 	domainRegistryAddress := domains.DeploySmartContract(t, cmTmp.BlockIndexer(), cmTmp.EthClientFactory())
 
+	//TODO Horrible hack until we completelly remove the concept of an engine
+	engine.privateTransactionManager = cmTmp.PrivateTxManager()
+
 	cmTmp.Stop()
 	return domainRegistryAddress
 
 }
 
-func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes.EthAddress, instanceName string) *componentTestInstance {
+type nodeConfiguration struct {
+	identity uuid.UUID
+	address  string
+	port     int
+	cert     string
+	key      string
+}
+
+func newNodeConfiguration(t *testing.T) *nodeConfiguration {
+	identity := uuid.New()
+	port, err := getFreePort()
+	require.NoError(t, err)
+	cert, key := buildTestCertificate(t, pkix.Name{CommonName: identity.String()}, nil, nil)
+	return &nodeConfiguration{
+		identity: identity,
+		address:  "localhost",
+		port:     port,
+		cert:     cert,
+		key:      key,
+	}
+}
+
+func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes.EthAddress, binding *nodeConfiguration, peerNodes []*nodeConfiguration) *componentTestInstance {
+	if binding == nil {
+		binding = newNodeConfiguration(t)
+	}
 	f, err := os.CreateTemp("", "component-test.*.sock")
 	require.NoError(t, err)
 
@@ -134,12 +174,13 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	err = os.Remove(grpcTarget)
 	require.NoError(t, err)
 
+	conf := testConfig(t)
 	i := &componentTestInstance{
 		grpcTarget: grpcTarget,
-		id:         uuid.New(),
-		conf:       testConfig(t),
+		id:         binding.identity,
+		conf:       &conf,
 	}
-	i.ctx = log.WithLogField(context.Background(), "instance", instanceName)
+	i.ctx = log.WithLogField(context.Background(), "instance", binding.identity.String())
 
 	i.conf.Log.Level = confutil.P("trace")
 	i.conf.DomainManagerConfig.Domains = make(map[string]*config.DomainConfig, 1)
@@ -151,6 +192,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 		Config:          map[string]any{"some": "config"},
 		RegistryAddress: domainRegistryAddress.String(),
 	}
+
 	entropy, _ := bip39.NewEntropy(256)
 	mnemonic, _ := bip39.NewMnemonic(entropy)
 
@@ -161,12 +203,63 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 		},
 	}
 
+	i.conf.NodeName = binding.identity.String()
+	i.conf.Transports = map[string]*config.TransportConfig{
+		"grpc": {
+			Plugin: config.PluginConfig{
+				Type:    config.LibraryTypeCShared.Enum(),
+				Library: "loaded/via/unit/test/loader",
+			},
+			Config: map[string]any{
+				"address": "localhost",
+				"port":    binding.port,
+				"tls": tlsconf.Config{
+					Enabled: true,
+					Cert:    binding.cert,
+					Key:     binding.key,
+					//InsecureSkipHostVerify: true,
+				},
+				"directCertVerification": true,
+			},
+		},
+	}
+
+	nodesConfig := make(map[string]*static.NodeStaticEntry)
+	for _, peerNode := range peerNodes {
+		nodesConfig[peerNode.identity.String()] = &static.NodeStaticEntry{
+			Transports: map[string]tktypes.RawJSON{
+				"grpc": tktypes.JSONString(
+					grpc.PublishedTransportDetails{
+						Endpoint: fmt.Sprintf("dns:///%s:%d", peerNodes[0].address, peerNodes[0].port),
+						Issuers:  peerNodes[0].cert,
+					},
+				),
+			},
+		}
+	}
+
+	i.conf.Registries = map[string]*config.RegistryConfig{
+		"registry1": {
+			Plugin: config.PluginConfig{
+				Type:    config.LibraryTypeCShared.Enum(),
+				Library: "loaded/via/unit/test/loader",
+			},
+			Config: map[string]any{
+				"nodes": nodesConfig,
+			},
+		},
+	}
+
 	var pl plugins.UnitTestPluginLoader
 
-	cm := componentmgr.NewComponentManager(i.ctx, i.grpcTarget, i.id, i.conf, &componentTestEngine{})
+	engine := &componentTestEngine{}
+	cm := componentmgr.NewComponentManager(i.ctx, i.grpcTarget, i.id, i.conf, engine)
 	// Start it up
 	err = cm.Init()
 	require.NoError(t, err)
+
+	//TODO Horrible hack until we completelly remove the concept of an engine
+	engine.privateTransactionManager = cm.PrivateTxManager()
 
 	err = cm.StartComponents()
 	require.NoError(t, err)
@@ -175,7 +268,9 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	require.NoError(t, err)
 
 	loaderMap := map[string]plugintk.Plugin{
-		"domain1": domains.SimpleTokenDomain(t, i.ctx),
+		"domain1":   domains.SimpleTokenDomain(t, i.ctx),
+		"grpc":      grpc.NewPlugin(i.ctx),
+		"registry1": static.NewPlugin(i.ctx),
 	}
 	pc := cm.PluginManager()
 	pl, err = plugins.NewUnitTestPluginLoader(pc.GRPCTargetURL(), pc.LoaderID().String(), loaderMap)
@@ -190,7 +285,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 		cm.Stop()
 	})
 
-	client, err := rpcclient.NewHTTPClient(log.WithLogField(context.Background(), "client-for", instanceName), &rpcclient.HTTPConfig{URL: "http://localhost:" + strconv.Itoa(*i.conf.RPCServer.HTTP.Port)})
+	client, err := rpcclient.NewHTTPClient(log.WithLogField(context.Background(), "client-for", binding.identity.String()), &rpcclient.HTTPConfig{URL: "http://localhost:" + strconv.Itoa(*i.conf.RPCServer.HTTP.Port)})
 	require.NoError(t, err)
 	i.client = client
 
@@ -208,6 +303,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 // need to make this optional in the component manager interface or re-write the testbed to integrate with components
 // in a different way
 type componentTestEngine struct {
+	privateTransactionManager components.PrivateTxManager
 }
 
 // EngineName implements components.Engine.
@@ -221,8 +317,8 @@ func (c *componentTestEngine) Init(components.PreInitComponentsAndManagers) (*co
 }
 
 // ReceiveTransportMessage implements components.Engine.
-func (c *componentTestEngine) ReceiveTransportMessage(context.Context, *components.TransportMessage) {
-	panic("unimplemented")
+func (c *componentTestEngine) ReceiveTransportMessage(ctx context.Context, msg *components.TransportMessage) {
+	c.privateTransactionManager.ReceiveTransportMessage(ctx, msg)
 }
 
 // Start implements components.Engine.
@@ -235,7 +331,7 @@ func (c *componentTestEngine) Stop() {
 
 }
 
-func testConfig(t *testing.T) *config.PaladinConfig {
+func testConfig(t *testing.T) config.PaladinConfig {
 	ctx := context.Background()
 	log.SetLevel("debug")
 
@@ -252,7 +348,7 @@ func testConfig(t *testing.T) *config.PaladinConfig {
 	conf.RPCServer.HTTP.Port = &port
 	conf.RPCServer.HTTP.Address = confutil.P("127.0.0.1")
 
-	return conf
+	return *conf
 
 }
 
@@ -266,4 +362,40 @@ func getFreePort() (int, error) {
 
 	port := listener.Addr().(*net.TCPAddr).Port
 	return port, nil
+}
+
+func buildTestCertificate(t *testing.T, subject pkix.Name, ca *x509.Certificate, caKey *rsa.PrivateKey) (string, string) {
+	// Create an X509 certificate pair
+	privatekey, _ := rsa.GenerateKey(rand.Reader, 1024 /* smallish key to make the test faster */)
+	publickey := &privatekey.PublicKey
+	var privateKeyBytes []byte = x509.MarshalPKCS1PrivateKey(privatekey)
+	privateKeyBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: privateKeyBytes}
+	privateKeyPEM := &strings.Builder{}
+	err := pem.Encode(privateKeyPEM, privateKeyBlock)
+	require.NoError(t, err)
+	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	x509Template := &x509.Certificate{
+		SerialNumber:          serialNumber,
+		Subject:               subject,
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(100 * time.Second),
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		IPAddresses:           []net.IP{net.IPv4(127, 0, 0, 1)},
+		DNSNames:              []string{"127.0.0.1", "localhost"},
+	}
+	require.NoError(t, err)
+	if ca == nil {
+		ca = x509Template
+		caKey = privatekey
+		x509Template.IsCA = true
+		x509Template.KeyUsage |= x509.KeyUsageCertSign
+	}
+	derBytes, err := x509.CreateCertificate(rand.Reader, x509Template, ca, publickey, caKey)
+	require.NoError(t, err)
+	publicKeyPEM := &strings.Builder{}
+	err = pem.Encode(publicKeyPEM, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+	require.NoError(t, err)
+	return publicKeyPEM.String(), privateKeyPEM.String()
 }

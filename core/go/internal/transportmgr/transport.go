@@ -166,6 +166,7 @@ func (t *transport) ReceiveMessage(ctx context.Context, req *prototk.ReceiveMess
 	}
 	transportMessage := &components.TransportMessage{
 		MessageID:     msgID,
+		MessageType:   msg.MessageType,
 		CorrelationID: pCorrelID,
 		Destination:   tktypes.PrivateIdentityLocator(msg.Destination),
 		ReplyTo:       tktypes.PrivateIdentityLocator(msg.ReplyTo),

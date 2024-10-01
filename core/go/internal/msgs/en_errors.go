@@ -266,6 +266,7 @@ var (
 	MsgBaseLedgerTransactionFailed    = ffe("PD011810", "Failed to submit base ledger transaction")
 	MsgContractAddressNotProvided     = ffe("PD011811", "Contract address (To) not found in the transaction input")
 	MsgPrivTxMgrPublicTxFail          = ffe("PD011812", "Public transaction rejected")
+	MsgResolveVerifierRemoteFailed    = ffe("PD011813", "Failed to resolve verifier on remote node with lookup %s algorithm %s: Error %s")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")

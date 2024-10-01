@@ -62,7 +62,6 @@ message EndorsementRequest {
     repeated google.protobuf.Any inputStates = 8;
     repeated google.protobuf.Any readStates = 9;
     repeated google.protobuf.Any outputStates = 10;
-
 }
 
 message EndorsementResponse {
@@ -70,4 +69,21 @@ message EndorsementResponse {
     string contract_address = 2;
     google.protobuf.Any endorsement = 3;
     optional string revert_reason = 4;
+}
+
+message ResolveVerifierRequest {
+    string lookup = 1;
+    string algorithm = 2;
+}
+
+message ResolveVerifierResponse {
+    string lookup = 1;
+    string algorithm = 2;
+    string verifier = 3;
+}
+
+message ResolveVerifierError {
+    string lookup = 1;
+    string algorithm = 2;
+    string error_message = 3;
 }

@@ -40,6 +40,7 @@ type transactionProcessorDepencyMocks struct {
 	sequencer            *privatetxnmgrmocks.Sequencer
 	endorsementGatherer  *privatetxnmgrmocks.EndorsementGatherer
 	publisher            *privatetxnmgrmocks.Publisher
+	identityResolver     *privatetxnmgrmocks.IdentityResolver
 }
 
 func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context, transaction *components.PrivateTransaction) (*PaladinTxProcessor, *transactionProcessorDepencyMocks) {
@@ -55,13 +56,14 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 		sequencer:            privatetxnmgrmocks.NewSequencer(t),
 		endorsementGatherer:  privatetxnmgrmocks.NewEndorsementGatherer(t),
 		publisher:            privatetxnmgrmocks.NewPublisher(t),
+		identityResolver:     privatetxnmgrmocks.NewIdentityResolver(t),
 	}
 	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
 	mocks.allComponents.On("TransportManager").Return(mocks.transportManager).Maybe()
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 
-	tp := NewPaladinTransactionProcessor(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.publisher, mocks.endorsementGatherer)
+	tp := NewPaladinTransactionProcessor(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver)
 
 	return tp.(*PaladinTxProcessor), mocks
 }
@@ -70,7 +72,8 @@ func TestTransactionProcessorHandleTransactionSubmittedEvent(t *testing.T) {
 	ctx := context.Background()
 	newTxID := uuid.New()
 	testTx := &components.PrivateTransaction{
-		ID: newTxID,
+		ID:          newTxID,
+		PreAssembly: &components.TransactionPreAssembly{},
 	}
 	tp, dependencyMocks := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
 	dependencyMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {

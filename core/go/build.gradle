@@ -84,8 +84,8 @@ task copyTestContracts(type: Copy) {
 task copyTestDomainContracts(type: Copy) {
     inputs.files(configurations.compiledContracts)
     from fileTree(configurations.compiledContracts.asPath) {
-        include 'contracts/domains/testbed_sim/SIMDomain.sol/SIMDomain.json'
-        include 'contracts/domains/testbed_sim/SIMToken.sol/SIMToken.json'
+        include 'contracts/domains/componenttest/SimpleDomain.sol/SimpleDomain.json'
+        include 'contracts/domains/componenttest/SimpleToken.sol/SimpleToken.json'
     }
     into 'componenttest/domains/abis'
 
