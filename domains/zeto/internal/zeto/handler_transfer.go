@@ -27,7 +27,6 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	corepb "github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/common"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
@@ -321,7 +320,7 @@ func (h *transferHandler) generatMerkleProofs(tokenName string, contractAddress 
 	// and generate a merkle proof for each
 	var indexes []*big.Int
 	for _, coin := range inputCoins {
-		pubKey, err := common.DecodePublicKey(coin.OwnerKey.String())
+		pubKey, err := zetosigner.DecodeBabyJubJubPublicKey(coin.OwnerKey.String())
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to decode owner key. %s", err)
 		}

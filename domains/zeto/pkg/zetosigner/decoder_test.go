@@ -79,7 +79,7 @@ func TestDecodeProvingRequest_AnonNullifier(t *testing.T) {
 	bytes, err = proto.Marshal(req)
 	assert.NoError(t, err)
 	signReq.Payload = bytes
-	_, extras, err := decodeProvingRequest(signReq)
+	_, extras, err := decodeProvingRequest(signReq.Payload)
 	assert.NoError(t, err)
 	assert.Equal(t, "123456", extras.(*pb.ProvingRequestExtras_Nullifiers).Root)
 }
@@ -97,7 +97,7 @@ func TestDecodeProvingRequest_Fail(t *testing.T) {
 	signReq := &pb.SignRequest{
 		Payload: bytes,
 	}
-	_, _, err = decodeProvingRequest(signReq)
+	_, _, err = decodeProvingRequest(signReq.Payload)
 	assert.ErrorContains(t, err, "failed to unmarshal proving request extras for circuit anon_enc")
 
 	req.CircuitId = "anon_nullifier"
@@ -107,7 +107,7 @@ func TestDecodeProvingRequest_Fail(t *testing.T) {
 	signReq = &pb.SignRequest{
 		Payload: bytes,
 	}
-	_, _, err = decodeProvingRequest(signReq)
+	_, _, err = decodeProvingRequest(signReq.Payload)
 	assert.ErrorContains(t, err, "failed to unmarshal proving request extras for circuit anon_nullifier")
 	_, _, err = decodeProvingRequest(bytes)
 	assert.ErrorContains(t, err, "cannot parse invalid wire-format data")
