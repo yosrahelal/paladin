@@ -10,7 +10,10 @@ spec:
     ports:
     - name: rpc-http
       port: 8545
-      nodePort: 9648 # see paladin-kind.yaml
+      nodePort: 31545 # see paladin-kind.yaml
     - name: rpc-ws
       port: 8546
-      nodePort: 9649 # see paladin-kind.yaml
+      nodePort: 31546 # see paladin-kind.yaml
+    - name: graphql-http
+      port: 8547
+      nodePort: 31547 # see paladin-kind.yaml

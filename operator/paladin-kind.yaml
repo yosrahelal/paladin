@@ -10,68 +10,68 @@ nodes:
   # and the E2E tests.
 
   # Open up ports on LOCALHOST only for the second Paladin node
-  - containerPort: 9545 # Besu2 - JSON/RPC HTTP
-    hostPort: 9545
+  - containerPort: 31545 # Besu2 - JSON/RPC HTTP
+    hostPort: 31545
     listenAddress: "127.0.0.1"
     protocol: tcp
-  - containerPort: 9546 # Besu2 - JSON/RPC WebSockets
-    hostPort: 9546
+  - containerPort: 31546 # Besu2 - JSON/RPC WebSockets
+    hostPort: 31546
     listenAddress: "127.0.0.1"
     protocol: tcp
-  - containerPort: 9547 # Besu2 - GraphQL HTTP
-    hostPort: 9547
+  - containerPort: 31547 # Besu2 - GraphQL HTTP
+    hostPort: 31547
     listenAddress: "127.0.0.1"
     protocol: tcp
-  - containerPort: 9548 # Paladin2 - JSON/RPC HTTP
-    hostPort: 9548
+  - containerPort: 31548 # Paladin2 - JSON/RPC HTTP
+    hostPort: 31548
     listenAddress: "127.0.0.1"
     protocol: tcp
-  - containerPort: 9549 # Paladin2 - JSON/RPC WebSockets
-    hostPort: 9549
+  - containerPort: 31549 # Paladin2 - JSON/RPC WebSockets
+    hostPort: 31549
     listenAddress: "127.0.0.1"
     protocol: tcp
 
   # Open up ports on LOCALHOST only for the second Paladin node
-  - containerPort: 9645 # Besu2 - JSON/RPC HTTP
-    hostPort: 9645
+  - containerPort: 31645 # Besu2 - JSON/RPC HTTP
+    hostPort: 31645
     listenAddress: "127.0.0.1"
     protocol: tcp
-  - containerPort: 9646 # Besu2 - JSON/RPC WebSockets
-    hostPort: 9646
+  - containerPort: 31646 # Besu2 - JSON/RPC WebSockets
+    hostPort: 31646
     listenAddress: "127.0.0.1"
     protocol: tcp
-  - containerPort: 9647 # Besu2 - GraphQL HTTP
-    hostPort: 9647
+  - containerPort: 31647 # Besu2 - GraphQL HTTP
+    hostPort: 31647
     listenAddress: "127.0.0.1"
     protocol: tcp
-  - containerPort: 9648 # Paladin2 - JSON/RPC HTTP
-    hostPort: 9648
+  - containerPort: 31648 # Paladin2 - JSON/RPC HTTP
+    hostPort: 31648
     listenAddress: "127.0.0.1"
     protocol: tcp
-  - containerPort: 9649 # Paladin2 - JSON/RPC WebSockets
-    hostPort: 9649
+  - containerPort: 31649 # Paladin2 - JSON/RPC WebSockets
+    hostPort: 31649
     listenAddress: "127.0.0.1"
     protocol: tcp
 
   # Open up ports on LOCALHOST only for the third Paladin node
-  - containerPort: 9745 # Besu3 - JSON/RPC HTTP
-    hostPort: 9745
+  - containerPort: 31745 # Besu3 - JSON/RPC HTTP
+    hostPort: 31745
     listenAddress: "127.0.0.1"
     protocol: tcp
-  - containerPort: 9746 # Besu3 - JSON/RPC WebSockets
-    hostPort: 9746
+  - containerPort: 31746 # Besu3 - JSON/RPC WebSockets
+    hostPort: 31746
     listenAddress: "127.0.0.1"
     protocol: tcp
-  - containerPort: 9747 # Besu3 - GraphQL HTTP
-    hostPort: 9747
+  - containerPort: 31747 # Besu3 - GraphQL HTTP
+    hostPort: 31747
     listenAddress: "127.0.0.1"
     protocol: tcp
-  - containerPort: 9748 # Paladin3 - JSON/RPC HTTP
-    hostPort: 9748
+  - containerPort: 31748 # Paladin3 - JSON/RPC HTTP
+    hostPort: 31748
     listenAddress: "127.0.0.1"
     protocol: tcp
-  - containerPort: 9749 # Paladin3 - JSON/RPC WebSockets
-    hostPort: 9749
+  - containerPort: 31749 # Paladin3 - JSON/RPC WebSockets
+    hostPort: 31749
     listenAddress: "127.0.0.1"
     protocol: tcp
 
