@@ -74,16 +74,19 @@ message EndorsementResponse {
 message ResolveVerifierRequest {
     string lookup = 1;
     string algorithm = 2;
+    string verifier_type = 3;
 }
 
 message ResolveVerifierResponse {
     string lookup = 1;
     string algorithm = 2;
-    string verifier = 3;
+    string verifier_type = 3;
+    string verifier = 4;
 }
 
 message ResolveVerifierError {
     string lookup = 1;
     string algorithm = 2;
-    string error_message = 3;
+    string verifier_type = 3;
+    string error_message = 4;
 }

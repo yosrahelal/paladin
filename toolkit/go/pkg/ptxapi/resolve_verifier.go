@@ -17,12 +17,14 @@
 package ptxapi
 
 type ResolveVerifierRequest struct {
-	Lookup    *string `json:"lookup"`
-	Algorithm *string `json:"algorithm"`
+	Lookup       *string `json:"lookup"`
+	Algorithm    *string `json:"algorithm"`
+	VerifierType *string `json:"verifierType"`
 }
 
 type ResolvedVerifier struct {
-	Lookup    *string `json:"lookup"`
-	Algorithm *string `json:"algorithm"`
-	Verifier  *string `json:"verifier"`
+	Lookup       *string `json:"lookup"`
+	Algorithm    *string `json:"algorithm"`
+	VerifierType *string `json:"verifierType"`
+	Verifier     *string `json:"verifier"`
 }

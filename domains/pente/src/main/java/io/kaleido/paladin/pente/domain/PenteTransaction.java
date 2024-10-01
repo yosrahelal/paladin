@@ -22,18 +22,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.google.protobuf.ByteString;
-import io.kaleido.paladin.toolkit.FromDomain;
-import io.kaleido.paladin.toolkit.ToDomain;
+import io.kaleido.paladin.toolkit.*;
 import io.kaleido.paladin.pente.evmrunner.EVMRunner;
 import io.kaleido.paladin.pente.evmrunner.EVMVersion;
 import io.kaleido.paladin.pente.evmstate.AccountLoader;
 import io.kaleido.paladin.pente.evmstate.DynamicLoadWorldState;
 import io.kaleido.paladin.pente.evmstate.PersistedAccount;
-import io.kaleido.paladin.toolkit.Algorithms;
-import io.kaleido.paladin.toolkit.JsonABI;
-import io.kaleido.paladin.toolkit.JsonHex;
 import io.kaleido.paladin.toolkit.JsonHex.Address;
-import io.kaleido.paladin.toolkit.Keccak;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.tuweni.bytes.Bytes;
@@ -323,11 +318,14 @@ class PenteTransaction {
 
     Address getFromVerifier(List<ToDomain.ResolvedVerifier> verifiers) {
         for (var verifier : verifiers) {
-            if (verifier.getAlgorithm().equals(Algorithms.ECDSA_SECP256K1_PLAINBYTES) && verifier.getLookup().equals(from)) {
+            if (verifier.getAlgorithm().equals(Algorithms.ECDSA_SECP256K1) &&
+                    verifier.getVerifierType().equals(Verifiers.ETH_ADDRESS) &&
+                    verifier.getLookup().equals(from)) {
                 return new Address(verifier.getVerifier());
             }
         }
-        throw new IllegalArgumentException("missing resolved %s verifier for '%s'".formatted(Algorithms.ECDSA_SECP256K1_PLAINBYTES, from));
+        throw new IllegalArgumentException("missing resolved %s verifier for '%s' (type=%s)".
+                formatted(Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS, from));
     }
 
     record EVMStateResult(

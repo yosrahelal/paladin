@@ -37,7 +37,9 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -339,8 +341,9 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 				return &prototk.InitDeployResponse{
 					RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 						{
-							Lookup:    "domain1.contract1.notary",
-							Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+							Lookup:       "domain1.contract1.notary",
+							Algorithm:    algorithms.ECDSA_SECP256K1,
+							VerifierType: verifiers.ETH_ADDRESS,
 						},
 					},
 				}, nil
@@ -353,7 +356,8 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 					"symbol": "FT1"
 				}`, req.Transaction.ConstructorParamsJson)
 				assert.Len(t, req.ResolvedVerifiers, 1)
-				assert.Equal(t, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers[0].Algorithm)
+				assert.Equal(t, algorithms.ECDSA_SECP256K1, req.ResolvedVerifiers[0].Algorithm)
+				assert.Equal(t, verifiers.ETH_ADDRESS, req.ResolvedVerifiers[0].VerifierType)
 				assert.Equal(t, "domain1.contract1.notary", req.ResolvedVerifiers[0].Lookup)
 				assert.NotEmpty(t, req.ResolvedVerifiers[0].Verifier)
 				return &prototk.PrepareDeployResponse{
@@ -376,24 +380,28 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 				// execute the transaction. See notes above about this.
 				requiredVerifiers := []*prototk.ResolveVerifierRequest{
 					{
-						Lookup:    req.Transaction.From,
-						Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+						Lookup:       req.Transaction.From,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						VerifierType: verifiers.ETH_ADDRESS,
 					},
 					{
-						Lookup:    notaryLocator,
-						Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+						Lookup:       notaryLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						VerifierType: verifiers.ETH_ADDRESS,
 					},
 				}
 				if txInputs.From != "" {
 					requiredVerifiers = append(requiredVerifiers, &prototk.ResolveVerifierRequest{
-						Lookup:    txInputs.From,
-						Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+						Lookup:       txInputs.From,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						VerifierType: verifiers.ETH_ADDRESS,
 					})
 				}
 				if txInputs.To != "" && (txInputs.From == "" || txInputs.From != txInputs.To) {
 					requiredVerifiers = append(requiredVerifiers, &prototk.ResolveVerifierRequest{
-						Lookup:    txInputs.To,
-						Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+						Lookup:       txInputs.To,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						VerifierType: verifiers.ETH_ADDRESS,
 					})
 				}
 				return &prototk.InitTransactionResponse{
@@ -454,8 +462,10 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 						{
 							Name:            "sender",
 							AttestationType: prototk.AttestationType_SIGN,
-							Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+							Algorithm:       algorithms.ECDSA_SECP256K1,
+							VerifierType:    verifiers.ETH_ADDRESS,
 							Payload:         eip712Payload,
+							PayloadType:     signpayloads.OPAQUE_TO_RSV,
 							Parties: []string{
 								req.Transaction.From,
 							},
@@ -464,7 +474,8 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 							Name:            "notary",
 							AttestationType: prototk.AttestationType_ENDORSE,
 							// we expect an endorsement is of the form ENDORSER_SUBMIT - so we need an eth signing key to exist
-							Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+							Algorithm:    algorithms.ECDSA_SECP256K1,
+							VerifierType: verifiers.ETH_ADDRESS,
 							Parties: []string{
 								notaryLocator,
 							},
@@ -501,7 +512,8 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 				for _, ar := range req.Signatures {
 					if ar.AttestationType == prototk.AttestationType_SIGN &&
 						ar.Name == "sender" &&
-						ar.Verifier.Algorithm == algorithms.ECDSA_SECP256K1_PLAINBYTES {
+						ar.Verifier.Algorithm == algorithms.ECDSA_SECP256K1 &&
+						ar.Verifier.VerifierType == verifiers.ETH_ADDRESS {
 						signerVerification = ar
 						break
 					}
@@ -614,7 +626,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 		"name": "FakeToken1",
 		"symbol": "FT1"
 	}`))
-	assert.Nil(t, rpcErr)
+	assert.NoError(t, rpcErr)
 
 	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     "wallets.org1.aaaaaa",
@@ -626,7 +638,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 			"amount": "123000000000000000000"
 		}`),
 	}, true)
-	assert.Nil(t, rpcErr)
+	assert.NoError(t, rpcErr)
 
 	rpcErr = tbRPC.CallRPC(ctx, tktypes.RawJSON{}, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     "wallets.org1.aaaaaa",
@@ -638,12 +650,12 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 			"amount": "23000000000000000000"
 		}`),
 	}, true)
-	assert.Nil(t, rpcErr)
+	assert.NoError(t, rpcErr)
 
 	// Check we can also use the utility function externally to resolve verifiers
 	var address tktypes.EthAddress
-	rpcErr = tbRPC.CallRPC(ctx, &address, "testbed_resolveVerifier", "wallets.org2.bbbbbb", algorithms.ECDSA_SECP256K1_PLAINBYTES)
-	assert.Nil(t, rpcErr)
+	rpcErr = tbRPC.CallRPC(ctx, &address, "testbed_resolveVerifier", "wallets.org2.bbbbbb", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	assert.NoError(t, rpcErr)
 	assert.False(t, address.IsZero())
 
 }

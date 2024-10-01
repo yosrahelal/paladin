@@ -22,8 +22,8 @@ import (
 
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
-	coreProto "github.com/kaleido-io/paladin/core/pkg/proto"
 	engineProto "github.com/kaleido-io/paladin/core/pkg/proto/engine"
+	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 
 	"github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -334,17 +334,18 @@ func (ts *PaladinTxProcessor) HandleResolveVerifierErrorEvent(ctx context.Contex
 
 func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *prototk.AttestationRequest, partyName string) {
 
-	keyHandle, verifier, err := ts.components.KeyManager().ResolveKey(ctx, partyName, attRequest.Algorithm)
+	keyHandle, verifier, err := ts.components.KeyManager().ResolveKey(ctx, partyName, attRequest.Algorithm, attRequest.VerifierType)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to resolve local signer for %s (algorithm=%s): %s", partyName, attRequest.Algorithm, err)
 
 		//TODO return nil, err
 	}
 	// TODO this could be calling out to a remote signer, should we be doing these in parallel?
-	signaturePayload, err := ts.components.KeyManager().Sign(ctx, &coreProto.SignRequest{
-		KeyHandle: keyHandle,
-		Algorithm: attRequest.Algorithm,
-		Payload:   attRequest.Payload,
+	signaturePayload, err := ts.components.KeyManager().Sign(ctx, &signerproto.SignRequest{
+		KeyHandle:   keyHandle,
+		Algorithm:   attRequest.Algorithm,
+		Payload:     attRequest.Payload,
+		PayloadType: attRequest.PayloadType,
 	})
 	if err != nil {
 		log.L(ctx).Errorf("failed to sign for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, attRequest.Algorithm, err)
@@ -358,11 +359,13 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 			Name:            attRequest.Name,
 			AttestationType: attRequest.AttestationType,
 			Verifier: &prototk.ResolvedVerifier{
-				Lookup:    partyName,
-				Algorithm: attRequest.Algorithm,
-				Verifier:  verifier,
+				Lookup:       partyName,
+				Algorithm:    attRequest.Algorithm,
+				Verifier:     verifier,
+				VerifierType: attRequest.VerifierType,
 			},
-			Payload: signaturePayload.Payload,
+			Payload:     signaturePayload.Payload,
+			PayloadType: &attRequest.PayloadType,
 		},
 	); err != nil {
 		log.L(ctx).Errorf("failed to public event for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, attRequest.Algorithm, err)
@@ -649,6 +652,7 @@ func (ts *PaladinTxProcessor) requestVerifierResolution(ctx context.Context) err
 			ctx,
 			v.Lookup,
 			v.Algorithm,
+			v.VerifierType,
 			func(ctx context.Context, verifier string) {
 				//response event needs to be handled by the orchestrator so that the dispatch to a handling thread is done in fairness to all other in flight transactions
 				ts.publisher.PublishResolveVerifierResponseEvent(ctx, ts.transaction.ID.String(), v.Lookup, v.Algorithm, verifier)

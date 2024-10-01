@@ -42,6 +42,7 @@ type mockComponents struct {
 	stateStore           *componentmocks.StateStore
 	domainStateInterface *componentmocks.DomainStateInterface
 	blockIndexer         *componentmocks.BlockIndexer
+	keyManager           *componentmocks.KeyManager
 }
 
 func newTestDomainManager(t *testing.T, realDB bool, conf *config.DomainManagerConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *domainManager, *mockComponents, func()) {
@@ -52,6 +53,7 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *config.DomainManagerC
 		stateStore:           componentmocks.NewStateStore(t),
 		domainStateInterface: componentmocks.NewDomainStateInterface(t),
 		ethClientFactory:     componentmocks.NewEthClientFactory(t),
+		keyManager:           componentmocks.NewKeyManager(t),
 	}
 
 	// Blockchain stuff is always mocked
@@ -61,6 +63,8 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *config.DomainManagerC
 	mc.ethClientFactory.On("HTTPClient").Return(mc.ethClient).Maybe()
 	mc.ethClientFactory.On("WSClient").Return(mc.ethClient).Maybe()
 	componentMocks.On("BlockIndexer").Return(mc.blockIndexer)
+	mc.keyManager.On("AddInMemorySigner", "domain", mock.Anything).Return().Maybe()
+	componentMocks.On("KeyManager").Return(mc.keyManager)
 
 	var p persistence.Persistence
 	var err error
@@ -166,6 +170,7 @@ func TestDomainMissingRegistryAddress(t *testing.T) {
 		blockIndexer:     componentmocks.NewBlockIndexer(t),
 		stateStore:       componentmocks.NewStateStore(t),
 		ethClientFactory: componentmocks.NewEthClientFactory(t),
+		keyManager:       componentmocks.NewKeyManager(t),
 	}
 	componentMocks := componentmocks.NewAllComponents(t)
 	componentMocks.On("EthClientFactory").Return(mc.ethClientFactory)
@@ -173,6 +178,8 @@ func TestDomainMissingRegistryAddress(t *testing.T) {
 	mc.ethClientFactory.On("HTTPClient").Return(mc.ethClient).Maybe()
 	mc.ethClientFactory.On("WSClient").Return(mc.ethClient).Maybe()
 	componentMocks.On("BlockIndexer").Return(mc.blockIndexer)
+	mc.keyManager.On("AddInMemorySigner", "domain", mock.Anything).Return().Maybe()
+	componentMocks.On("KeyManager").Return(mc.keyManager)
 
 	mp, err := mockpersistence.NewSQLMockProvider()
 	require.NoError(t, err)

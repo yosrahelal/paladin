@@ -57,11 +57,11 @@ func NewIdentityResolver(nodeID string, keyManager ethclient.KeyManager, transpo
 	//TODO start a reaper thread to clean up inflight requests that have been hanging around too long
 }
 
-func (ir *identityResolver) ResolveVerifier(ctx context.Context, lookup string, algorithm string) (string, error) {
+func (ir *identityResolver) ResolveVerifier(ctx context.Context, lookup string, algorithm string, verifierType string) (string, error) {
 	//TODO should we have a timeout here? Shoudl be related to the async timeout and reaping of the inflight requests?
 	replyChan := make(chan string)
 	errChan := make(chan error)
-	ir.ResolveVerifierAsync(ctx, lookup, algorithm, func(ctx context.Context, verifier string) {
+	ir.ResolveVerifierAsync(ctx, lookup, algorithm, verifierType, func(ctx context.Context, verifier string) {
 		replyChan <- verifier
 	}, func(ctx context.Context, err error) {
 		errChan <- err
@@ -74,7 +74,7 @@ func (ir *identityResolver) ResolveVerifier(ctx context.Context, lookup string, 
 	}
 }
 
-func (ir *identityResolver) ResolveVerifierAsync(ctx context.Context, lookup string, algorithm string, resolved func(ctx context.Context, verifier string), failed func(ctx context.Context, err error)) {
+func (ir *identityResolver) ResolveVerifierAsync(ctx context.Context, lookup string, algorithm string, verifierType string, resolved func(ctx context.Context, verifier string), failed func(ctx context.Context, err error)) {
 	// if the verifier lookup is a local key, we can resolve it here
 	// if it is a remote key, we need to delegate to the remote node
 
@@ -86,9 +86,9 @@ func (ir *identityResolver) ResolveVerifierAsync(ctx context.Context, lookup str
 		// its a one and done go routine so no need for additional concurency controls
 		// we just need to be careful not to update the transaction object on this other thread
 		go func() {
-			_, verifier, err := ir.keyManager.ResolveKey(ctx, lookup, algorithm)
+			_, verifier, err := ir.keyManager.ResolveKey(ctx, lookup, algorithm, verifierType)
 			if err != nil {
-				log.L(ctx).Errorf("Failed to resolve local signer for %s (algorithm=%s): %s", lookup, algorithm, err)
+				log.L(ctx).Errorf("Failed to resolve local signer for %s (algorithm=%s, verifierType=%s): %s", lookup, algorithm, verifierType, err)
 				failed(ctx, err)
 				return
 
@@ -100,8 +100,9 @@ func (ir *identityResolver) ResolveVerifierAsync(ctx context.Context, lookup str
 		log.L(ctx).Debugf("resolving verifier via remote node %s", lookup)
 
 		resolveVerifierRequest := &engineProto.ResolveVerifierRequest{
-			Lookup:    lookup,
-			Algorithm: algorithm,
+			Lookup:       lookup,
+			Algorithm:    algorithm,
+			VerifierType: verifierType,
 		}
 		resolveVerifierRequestBytes, err := proto.Marshal(resolveVerifierRequest)
 		if err != nil {

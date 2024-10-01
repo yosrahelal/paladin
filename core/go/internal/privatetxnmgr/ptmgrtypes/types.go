@@ -219,8 +219,8 @@ type TxProcessor interface {
 }
 
 type IdentityResolver interface {
-	ResolveVerifier(ctx context.Context, lookup string, algorithm string) (string, error)
-	ResolveVerifierAsync(ctx context.Context, lookup string, algorithm string, resolved func(ctx context.Context, verifier string), failed func(ctx context.Context, err error))
+	ResolveVerifier(ctx context.Context, lookup string, algorithm string, verifierType string) (string, error)
+	ResolveVerifierAsync(ctx context.Context, lookup string, algorithm string, verifierType string, resolved func(ctx context.Context, verifier string), failed func(ctx context.Context, err error))
 	HandleResolveVerifierReply(ctx context.Context, event *ResolveVerifierReply)
 	HandleResolveVerifierError(ctx context.Context, event *ResolveVerifierError)
 }

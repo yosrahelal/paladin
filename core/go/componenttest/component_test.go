@@ -38,6 +38,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -393,8 +394,9 @@ func TestResolveIdentityFromRemoteNode(t *testing.T) {
 	// send JSON RPC message to node 1 to deploy a private contract
 	var resolveVerifierResponse ptxapi.ResolvedVerifier
 	err := client1.CallRPC(ctx, &resolveVerifierResponse, "ptx_resolveVerifier", &ptxapi.ResolveVerifierRequest{
-		Lookup:    &bobIdentity,
-		Algorithm: confutil.P(algorithms.ECDSA_SECP256K1_PLAINBYTES),
+		Lookup:       &bobIdentity,
+		Algorithm:    confutil.P(algorithms.ECDSA_SECP256K1),
+		VerifierType: confutil.P(verifiers.ETH_ADDRESS),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resolveVerifierResponse.Verifier)

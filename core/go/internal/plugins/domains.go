@@ -228,3 +228,33 @@ func (br *domainBridge) HandleEventBatch(ctx context.Context, req *prototk.Handl
 	)
 	return
 }
+
+func (br *domainBridge) Sign(ctx context.Context, req *prototk.SignRequest) (res *prototk.SignResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_Sign{Sign: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_SignRes); ok {
+				res = r.SignRes
+			}
+			return res != nil
+		},
+	)
+	return
+}
+
+func (br *domainBridge) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest) (res *prototk.GetVerifierResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_GetVerifier{GetVerifier: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_GetVerifierRes); ok {
+				res = r.GetVerifierRes
+			}
+			return res != nil
+		},
+	)
+	return
+}

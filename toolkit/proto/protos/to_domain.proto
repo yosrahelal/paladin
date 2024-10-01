@@ -85,6 +85,29 @@ message AssembleTransactionResponse {
   optional string revert_reason = 4; // if the result was REVERT
 }
 
+// **GET_VERIFIER** step only happens when signing is requested with a "domain:" scoped algorithm, and it is enabled for this domain in the Paladin configuration
+message GetVerifierRequest {
+  string algorithm = 1;
+  string verifier_type = 2;
+  bytes private_key = 3;
+}
+
+message GetVerifierResponse {
+  string verifier = 1;
+}
+
+// **SIGN** step only happens when signing is requested with a "domain:" scoped algorithm, and it is enabled for this domain in the Paladin configuration
+message SignRequest {
+  string algorithm = 1;
+  string payload_type = 2;
+  bytes private_key = 3;
+  bytes payload = 4;
+}
+
+message SignResponse {
+  bytes payload = 1;
+}
+
 // **ENDORSE** step happens upon instruction from the attestation plan output from ASSEMBLE
 message EndorseTransactionRequest {
   AttestationRequest endorsement_request = 1; // The attestation request from the attestation plan
@@ -139,6 +162,7 @@ message DomainConfig {
   repeated string abi_state_schemas_json = 1; // A list of Schema definitions (in ABI parameter format) the domain requires for all state types it interacts with
   BaseLedgerSubmitConfig base_ledger_submit_config = 2; // Describe the requirements of this domain for how submission happens
   string abi_events_json = 3; // ABI events that the domain will process for state updates
+  map<string, int32> signing_algorithms = 4; // A list of supported signing algorithms with the minimum key lengths for each algorithm
 }
 
 message BaseLedgerSubmitConfig {
@@ -221,21 +245,24 @@ message AttestationRequest {
   string name = 1; // Allows correlation of attestation requests, to attestation results in the domain code
   AttestationType attestation_type = 2; // The type of attestation, which instructs the Paladin engine how to coordinate and submit it
   string algorithm = 3; // An algorithm string to pass to the proof/siging technology to instruct it's operation
-  bool resolve_verifier = 4; // Whether the verfier for this party must be known to the assembler, in order to assemble the transaction
+  string verifier_type = 4; // When resolving the identity, the verifier type that is required - such as an eth_address
   bytes payload = 5; // A payload (encoded to string) in a format that the proof/signing technology is expecting for the given algorithm string
-  repeated string parties = 6; // The recipient for this attestation request (might be local to the Paladin node, or remote)
-  optional int32 threshold = 7; // The minimum number of parties that must produce the attestation to proceed from the assemble to the prepare stage (default is the number of parties)
+  string payload_type = 6; // A signing payload type string to pass to the proof/signing technology to instruct the input/output requirements 
+  repeated string parties = 7; // The recipient for this attestation request (might be local to the Paladin node, or remote)
+  optional int32 threshold = 8; // The minimum number of parties that must produce the attestation to proceed from the assemble to the prepare stage (default is the number of parties)
 }
 
 message ResolveVerifierRequest {
   string lookup = 1; // The string to use to look up this party
   string algorithm = 2; // The algorithm for which the verifier is required
+  string verifier_type = 3; // The type of verifier that is required (such as eth_address)
 }
 
 message ResolvedVerifier {
   string lookup = 1; // The string that was used to look up this verifier
   string algorithm = 2; // The algorithm for which the verifier has been resolved
-  string verifier = 3; // The algorithm specific public key identifier (address or other cryptographically significant identifier) that was used by the party to perform the attestation
+  string verifier_type = 3; // The type of verifier that was resolved
+  string verifier = 4; // The algorithm specific public key identifier (address or other cryptographically significant identifier) that was used by the party to perform the attestation
 }
 
 message AttestationResult {
@@ -245,8 +272,9 @@ message AttestationResult {
   string name = 1; // The name of the AttestationRequest, so the domain knows the detail of how to process this result
   AttestationType attestation_type = 2; // The type of attestation, which instructs the Paladin engine how to coordinate and submit it
   ResolvedVerifier verifier = 3; // The resolved verifier
-  optional bytes payload = 4; // If the attestation is available
-  repeated AttestationConstraint constraints = 5; // If the attester requires this transaction is submitted by their identity
+  optional string payload_type = 4; // If a payload_type was specified in the request, it is populated in the result
+  optional bytes payload = 5; // If the attestation is available
+  repeated AttestationConstraint constraints = 6; // If the attester requires this transaction is submitted by their identity
 }
 
 message BaseLedgerTransaction {

@@ -214,14 +214,15 @@ func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.Pr
 	keyMgr := p.components.KeyManager()
 	tx.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.RequiredVerifiers))
 	for i, v := range tx.RequiredVerifiers {
-		_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm)
+		_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
 		if err != nil {
 			return i18n.WrapError(ctx, err, msgs.MsgKeyResolutionFailed, v.Lookup, v.Algorithm)
 		}
 		tx.Verifiers[i] = &prototk.ResolvedVerifier{
-			Lookup:    v.Lookup,
-			Algorithm: v.Algorithm,
-			Verifier:  verifier,
+			Lookup:       v.Lookup,
+			Algorithm:    v.Algorithm,
+			Verifier:     verifier,
+			VerifierType: v.VerifierType,
 		}
 	}
 
@@ -550,12 +551,13 @@ func (p *privateTxManager) HandleResolveVerifierRequest(ctx context.Context, mes
 
 	// contractAddress and transactionID in the request message are simply used to populate the response
 	// so that the requesting node can correlate the response with the transaction that needs it
-	_, verifier, err := p.components.KeyManager().ResolveKey(ctx, resolveVerifierRequest.Lookup, resolveVerifierRequest.Algorithm)
+	_, verifier, err := p.components.KeyManager().ResolveKey(ctx, resolveVerifierRequest.Lookup, resolveVerifierRequest.Algorithm, resolveVerifierRequest.VerifierType)
 	if err == nil {
 		resolveVerifierResponse := &engineProto.ResolveVerifierResponse{
-			Lookup:    resolveVerifierRequest.Lookup,
-			Algorithm: resolveVerifierRequest.Algorithm,
-			Verifier:  verifier,
+			Lookup:       resolveVerifierRequest.Lookup,
+			Algorithm:    resolveVerifierRequest.Algorithm,
+			Verifier:     verifier,
+			VerifierType: resolveVerifierRequest.VerifierType,
 		}
 		resolveVerifierResponseBytes, err := proto.Marshal(resolveVerifierResponse)
 		if err == nil {
@@ -709,7 +711,7 @@ If the lookup is an identity@another-node then the request will be forwarded to 
 //TODO remove this and move IdentityResolver to be a component in its own right
 func (p *privateTxManager) ResolveVerifier(ctx context.Context, req *ptxapi.ResolveVerifierRequest) (*ptxapi.ResolvedVerifier, error) {
 
-	verifier, err := p.identityResolver.ResolveVerifier(ctx, *req.Lookup, *req.Algorithm)
+	verifier, err := p.identityResolver.ResolveVerifier(ctx, *req.Lookup, *req.Algorithm, *req.VerifierType)
 	if err != nil {
 		return nil, err
 	}

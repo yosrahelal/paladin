@@ -16,7 +16,7 @@
 package config
 
 import (
-	"github.com/kaleido-io/paladin/core/internal/cache"
+	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 )
@@ -36,6 +36,7 @@ type DomainConfig struct {
 	Plugin          PluginConfig     `json:"plugin"`
 	Config          map[string]any   `json:"config"`
 	RegistryAddress string           `json:"registryAddress"`
+	AllowSigning    bool             `json:"allowSigning"`
 }
 
 var ContractCacheDefaults = &cache.Config{

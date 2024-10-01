@@ -164,30 +164,6 @@ var (
 	MsgBlockIndexerNoBlocksIndexed          = ffe("PD011308", "No confirmed blocks have yet been indexed")
 	MsgBlockIndexerTransactionReverted      = ffe("PD011309", "Transaction reverted: %s")
 
-	// Signing module PD0114XX
-	MsgSigningModuleBadPathError                = ffe("PD011400", "Path '%s' does not exist, or it is not a directory")
-	MsgSigningModuleBadKeyFile                  = ffe("PD011401", "Key file '%s' does not exist")
-	MsgSigningModuleBadPassFile                 = ffe("PD011402", "Password file '%s' does not exist")
-	MsgSigningModuleBadKeyHandle                = ffe("PD011403", "Invalid key handle")
-	MsgSigningModuleFSError                     = ffe("PD011404", "Filesystem error")
-	MsgSigningModuleKeyHandleClash              = ffe("PD011405", "Invalid key handle (clash)")
-	MsgSigningModuleKeyNotExist                 = ffe("PD011406", "Key '%s' does not exist")
-	MsgSigningUnsupportedKeyStoreType           = ffe("PD011407", "Unsupported key store type: '%s'")
-	MsgSigningHierarchicalRequiresLoading       = ffe("PD011408", "Signing module has been configured to disallow in-memory key material. Hierarchical Deterministic (HD) wallet function implemented in the signing module requires in-memory key material")
-	MsgSigningStoreRequiresKeyLoadingForAlgo    = ffe("PD011409", "Signing module has been configured to disallow in-memory key material. In-memory signing is required for algorithms %s")
-	MsgSigningUnsupportedAlgoForInMemorySigning = ffe("PD011410", "Unsupported algorithm for in-memory signing: %s")
-	MsgSigningMustSpecifyAlgorithms             = ffe("PD011411", "Must specify at least one algorithm for key resolution")
-	MsgSigningHDSeedMustBe32BytesOrMnemonic     = ffe("PD011412", "Seed key material for HD Wallet must be either a 32byte value, or a BIP-39 compliant mnemonic seed phrase")
-	MsgSignerBIP44DerivationInvalid             = ffe("PD011413", "Invalid key handle - BIP44 key identifier expected (invalid derivation: '%s')")
-	MsgSingerBIP32DerivationTooLarge            = ffe("PD011414", "BIP-32 key index must be between 0 and 2^31-1 at each level in the hierarchy")
-	MsgSigningKeyListingNotSupported            = ffe("PD011415", "Listing keys in the key store is not supported by this signing module")
-	MsgSigningStaticKeyInvalid                  = ffe("PD011416", "Statically configured key with handle %s is invalid")
-	MsgSigningStaticBadEncoding                 = ffe("PD011417", "Statically configured key with handle %s has invalid encoding (must be one of 'none', 'hex', 'base64') '%s'")
-	MsgSigningKeyCannotBeResolved               = ffe("PD011418", "No key exists that matches the request")
-	MsgSigningUnsupportedKeyDerivationType      = ffe("PD011419", "Unsupported key derivation type: '%s'")
-	MsgSigningKeyCannotBeEmpty                  = ffe("PD011420", "Cannot resolve a signing key for the empty string")
-	MsgSigningFailedToLoadStaticKeyFile         = ffe("PD011421", "Failed to load static key file")
-
 	// EthClient module PD0115XX
 	MsgEthClientInvalidInput            = ffe("PD011500", "Unable to convert to ABI function input (func=%s)")
 	MsgEthClientMissingFrom             = ffe("PD011501", "Signer (from) missing")
@@ -248,6 +224,8 @@ var (
 	MsgDomainABIEncodingTypedDataFail         = ffe("PD011640", "EIP-712 typed data V4 encoding request failed")
 	MsgDomainErrorParsingAddress              = ffe("PD011641", "Error parsing address")
 	MsgDomainInvalidEvents                    = ffe("PD011642", "Events ABI is invalid")
+	MsgDomainSigningDisabled                  = ffe("PD011643", "Domain signing it not enabled for domain '%s'")
+	MsgDomainSigningAlgorithmNotSupported     = ffe("PD011644", "Domain '%s' has not registered algorithm '%s'")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownEngine = ffe("PD011700", "Unknown engine '%s'")
