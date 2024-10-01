@@ -224,7 +224,7 @@ func (ts *PaladinTxProcessor) HandleTransactionDelegatedEvent(ctx context.Contex
 
 func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *prototk.AttestationRequest, partyName string) {
 
-	keyHandle, verifier, err := ts.components.KeyManager().ResolveKey(ctx, partyName, attRequest.Algorithm)
+	keyHandle, verifier, err := ts.components.KeyManager().ResolveKey(ctx, partyName, attRequest.Algorithm, attRequest.VerifierType)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to resolve local signer for %s (algorithm=%s): %s", partyName, attRequest.Algorithm, err)
 
@@ -232,9 +232,10 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 	}
 	// TODO this could be calling out to a remote signer, should we be doing these in parallel?
 	signaturePayload, err := ts.components.KeyManager().Sign(ctx, &coreProto.SignRequest{
-		KeyHandle: keyHandle,
-		Algorithm: attRequest.Algorithm,
-		Payload:   attRequest.Payload,
+		KeyHandle:   keyHandle,
+		Algorithm:   attRequest.Algorithm,
+		Payload:     attRequest.Payload,
+		PayloadType: attRequest.PayloadType,
 	})
 	if err != nil {
 		log.L(ctx).Errorf("failed to sign for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, attRequest.Algorithm, err)
@@ -247,11 +248,13 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 			Name:            attRequest.Name,
 			AttestationType: attRequest.AttestationType,
 			Verifier: &prototk.ResolvedVerifier{
-				Lookup:    partyName,
-				Algorithm: attRequest.Algorithm,
-				Verifier:  verifier,
+				Lookup:       partyName,
+				Algorithm:    attRequest.Algorithm,
+				Verifier:     verifier,
+				VerifierType: attRequest.VerifierType,
 			},
-			Payload: signaturePayload.Payload,
+			Payload:     signaturePayload.Payload,
+			PayloadType: &attRequest.PayloadType,
 		},
 	); err != nil {
 		log.L(ctx).Errorf("failed to public event for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, attRequest.Algorithm, err)

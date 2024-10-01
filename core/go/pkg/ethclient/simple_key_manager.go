@@ -17,6 +17,7 @@ package ethclient
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -62,13 +63,18 @@ func NewSimpleTestKeyManager(ctx context.Context, signerConfig *signerapi.Config
 	}, nil
 }
 
-func (km *simpleKeyManager) ResolveKey(ctx context.Context, identifier string, algorithm string) (keyHandle, verifier string, err error) {
+func (km *simpleKeyManager) ResolveKey(ctx context.Context, identifier, algorithm, verifierType string) (keyHandle, verifier string, err error) {
 	km.lock.Lock()
 	defer km.lock.Unlock()
 
 	resolveRequest := &proto.ResolveKeyRequest{
 		Attributes: make(map[string]string),
-		Algorithms: []string{algorithm},
+		RequiredIdentifiers: []*proto.PublicKeyIdentifierType{
+			{
+				Algorithm:    algorithm,
+				VerifierType: verifierType,
+			},
+		},
 	}
 	loc := km.rootFolder
 	segments := strings.Split(identifier, "/")
@@ -97,7 +103,8 @@ func (km *simpleKeyManager) ResolveKey(ctx context.Context, identifier string, a
 		loc.Keys = make(map[string]*keyMapping)
 	}
 	key := loc.Keys[keyName]
-	if key == nil || key.Identifiers[algorithm] == "" {
+	algoAndVerifierType := strings.ToLower(fmt.Sprintf("%s/%s", algorithm, verifierType))
+	if key == nil || key.Identifiers[algoAndVerifierType] == "" {
 		resolveRequest.Name = keyName
 		// resolve either a new key, or a new identifier for an existing key
 		if key == nil {
@@ -124,11 +131,11 @@ func (km *simpleKeyManager) ResolveKey(ctx context.Context, identifier string, a
 			return "", "", i18n.NewError(ctx, msgs.MsgEthClientKeyMismatch, identifier, key.KeyHandle, resolved.KeyHandle)
 		}
 		for _, v := range resolved.Identifiers {
-			key.Identifiers[v.Algorithm] = v.Identifier
+			key.Identifiers[strings.ToLower(fmt.Sprintf("%s/%s", v.Algorithm, v.VerifierType))] = v.Verifier
 		}
 	}
 	// Double check we have the identifier we need
-	return key.KeyHandle, key.Identifiers[algorithm], nil
+	return key.KeyHandle, key.Identifiers[algoAndVerifierType], nil
 }
 
 func (km *simpleKeyManager) Sign(ctx context.Context, req *proto.SignRequest) (res *proto.SignResponse, err error) {

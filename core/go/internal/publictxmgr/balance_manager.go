@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
 // Balance manager is a component that provides the following services
@@ -323,7 +324,7 @@ func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf *config.Pub
 	autoFuelingSource := confutil.StringOrEmpty(conf.BalanceManager.AutoFueling.Source, "")
 	if autoFuelingSource != "" {
 		// We must be able to resolve the supplied auto fueling source at startup, so we can check its balance
-		_, sourceAddrStr, err := publicTxMgr.keymgr.ResolveKey(ctx, autoFuelingSource, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+		_, sourceAddrStr, err := publicTxMgr.keymgr.ResolveKey(ctx, autoFuelingSource, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 		if err == nil {
 			autoFuelingSourceAddress, err = tktypes.ParseEthAddress(sourceAddrStr)
 		}

@@ -36,7 +36,9 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -120,7 +122,7 @@ func (cr CallResult) JSON() (s string) {
 }
 
 type KeyManager interface {
-	ResolveKey(ctx context.Context, identifier string, algorithm string) (keyHandle, verifier string, err error)
+	ResolveKey(ctx context.Context, identifier, algorithm, verifierType string) (keyHandle, verifier string, err error)
 	Sign(ctx context.Context, req *proto.SignRequest) (*proto.SignResponse, error)
 	Close()
 }
@@ -187,7 +189,7 @@ func (ec *ethClient) setupChainID(ctx context.Context) error {
 func (ec *ethClient) resolveFrom(ctx context.Context, from *string, tx *ethsigner.Transaction) (string, *tktypes.EthAddress, error) {
 	if from != nil && *from != "" {
 		var fromAddr *tktypes.EthAddress
-		keyHandle, fromVerifier, err := ec.keymgr.ResolveKey(ctx, *from, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+		keyHandle, fromVerifier, err := ec.keymgr.ResolveKey(ctx, *from, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 		if err == nil {
 			fromAddr, err = tktypes.ParseEthAddress(fromVerifier)
 		}
@@ -398,9 +400,10 @@ func (ec *ethClient) BuildRawTransactionNoResolve(ctx context.Context, txVersion
 	hash := sha3.NewLegacyKeccak256()
 	_, _ = hash.Write(sigPayload.Bytes())
 	signature, err := ec.keymgr.Sign(ctx, &proto.SignRequest{
-		Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-		KeyHandle: from.KeyHandle,
-		Payload:   tktypes.HexBytes(hash.Sum(nil)),
+		Algorithm:   algorithms.ECDSA_SECP256K1,
+		PayloadType: signpayloads.OPAQUE_TO_RSV,
+		KeyHandle:   from.KeyHandle,
+		Payload:     tktypes.HexBytes(hash.Sum(nil)),
 	})
 	var sig *secp256k1.SignatureData
 	if err == nil {

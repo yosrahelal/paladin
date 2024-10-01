@@ -34,7 +34,9 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -409,8 +411,9 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				return &prototk.InitDeployResponse{
 					RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 						{
-							Lookup:    "domain1.contract1.notary",
-							Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+							Lookup:       "domain1.contract1.notary",
+							Algorithm:    algorithms.ECDSA_SECP256K1,
+							VerifierType: verifiers.ETH_ADDRESS,
 						},
 					},
 				}, nil
@@ -423,7 +426,8 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 					"symbol": "FT1"
 				}`, req.Transaction.ConstructorParamsJson)
 				assert.Len(t, req.ResolvedVerifiers, 1)
-				assert.Equal(t, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers[0].Algorithm)
+				assert.Equal(t, algorithms.ECDSA_SECP256K1, req.ResolvedVerifiers[0].Algorithm)
+				assert.Equal(t, verifiers.ETH_ADDRESS, req.ResolvedVerifiers[0].VerifierType)
 				assert.Equal(t, "domain1.contract1.notary", req.ResolvedVerifiers[0].Lookup)
 				assert.NotEmpty(t, req.ResolvedVerifiers[0].Verifier)
 				return &prototk.PrepareDeployResponse{
@@ -446,24 +450,28 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				// execute the transaction. See notes above about this.
 				requiredVerifiers := []*prototk.ResolveVerifierRequest{
 					{
-						Lookup:    req.Transaction.From,
-						Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+						Lookup:       req.Transaction.From,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						VerifierType: verifiers.ETH_ADDRESS,
 					},
 					{
-						Lookup:    notaryLocator,
-						Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+						Lookup:       notaryLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						VerifierType: verifiers.ETH_ADDRESS,
 					},
 				}
 				if txInputs.From != "" {
 					requiredVerifiers = append(requiredVerifiers, &prototk.ResolveVerifierRequest{
-						Lookup:    txInputs.From,
-						Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+						Lookup:       txInputs.From,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						VerifierType: verifiers.ETH_ADDRESS,
 					})
 				}
 				if txInputs.To != "" && (txInputs.From == "" || txInputs.From != txInputs.To) {
 					requiredVerifiers = append(requiredVerifiers, &prototk.ResolveVerifierRequest{
-						Lookup:    txInputs.To,
-						Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+						Lookup:       txInputs.To,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						VerifierType: verifiers.ETH_ADDRESS,
 					})
 				}
 				return &prototk.InitTransactionResponse{
@@ -524,7 +532,9 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 						{
 							Name:            "sender",
 							AttestationType: prototk.AttestationType_SIGN,
-							Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+							Algorithm:       algorithms.ECDSA_SECP256K1,
+							VerifierType:    verifiers.ETH_ADDRESS,
+							PayloadType:     signpayloads.OPAQUE_TO_RSV,
 							Payload:         eip712Payload,
 							Parties: []string{
 								req.Transaction.From,
@@ -534,7 +544,9 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 							Name:            "notary",
 							AttestationType: prototk.AttestationType_ENDORSE,
 							// we expect an endorsement is of the form ENDORSER_SUBMIT - so we need an eth signing key to exist
-							Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+							Algorithm:    algorithms.ECDSA_SECP256K1,
+							VerifierType: verifiers.ETH_ADDRESS,
+							PayloadType:  signpayloads.OPAQUE_TO_RSV,
 							Parties: []string{
 								notaryLocator,
 							},
@@ -571,7 +583,8 @@ func FakeCoinDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				for _, ar := range req.Signatures {
 					if ar.AttestationType == prototk.AttestationType_SIGN &&
 						ar.Name == "sender" &&
-						ar.Verifier.Algorithm == algorithms.ECDSA_SECP256K1_PLAINBYTES {
+						ar.Verifier.Algorithm == algorithms.ECDSA_SECP256K1 &&
+						ar.Verifier.VerifierType == verifiers.ETH_ADDRESS {
 						signerVerification = ar
 						break
 					}

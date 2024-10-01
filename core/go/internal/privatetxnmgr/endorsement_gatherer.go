@@ -43,9 +43,9 @@ type endorsementGatherer struct {
 }
 
 func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, partyName string, endorsementRequest *prototk.AttestationRequest) (*prototk.AttestationResult, *string, error) {
-	keyHandle, verifier, err := e.keyMgr.ResolveKey(ctx, partyName, endorsementRequest.Algorithm)
+	keyHandle, verifier, err := e.keyMgr.ResolveKey(ctx, partyName, endorsementRequest.Algorithm, endorsementRequest.VerifierType)
 	if err != nil {
-		errorMessage := fmt.Sprintf("failed to resolve key for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, endorsementRequest.Algorithm, err)
+		errorMessage := fmt.Sprintf("failed to resolve key for party %s (algorithm=%s,verifierType=%s): %s", partyName, endorsementRequest.Algorithm, endorsementRequest.VerifierType, err)
 		log.L(ctx).Error(errorMessage)
 		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, errorMessage)
 	}
@@ -59,9 +59,10 @@ func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transaction
 		OutputStates:             outputStates,
 		Endorsement:              endorsementRequest,
 		Endorser: &prototk.ResolvedVerifier{
-			Lookup:    partyName,
-			Algorithm: endorsementRequest.Algorithm,
-			Verifier:  verifier,
+			Lookup:       partyName,
+			Algorithm:    endorsementRequest.Algorithm,
+			Verifier:     verifier,
+			VerifierType: endorsementRequest.VerifierType,
 		},
 	})
 	if err != nil {
@@ -85,9 +86,10 @@ func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transaction
 	case prototk.EndorseTransactionResponse_SIGN:
 		// Build the signature
 		signaturePayload, err := e.keyMgr.Sign(ctx, &proto.SignRequest{
-			KeyHandle: keyHandle,
-			Algorithm: endorsementRequest.Algorithm,
-			Payload:   endorseRes.Payload,
+			KeyHandle:   keyHandle,
+			Algorithm:   endorsementRequest.Algorithm,
+			Payload:     endorseRes.Payload,
+			PayloadType: endorsementRequest.PayloadType,
 		})
 		if err != nil {
 			errorMessage := fmt.Sprintf("failed to endorse for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, endorsementRequest.Algorithm, err)

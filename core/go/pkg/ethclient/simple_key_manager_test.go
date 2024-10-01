@@ -26,17 +26,18 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 type mockKeyManager struct {
-	resolveKey func(ctx context.Context, identifier string, algorithm string) (keyHandle, verifier string, err error)
+	resolveKey func(ctx context.Context, identifier, algorithm, verifierType string) (keyHandle, verifier string, err error)
 	sign       func(ctx context.Context, req *proto.SignRequest) (*proto.SignResponse, error)
 }
 
-func (mkm *mockKeyManager) ResolveKey(ctx context.Context, identifier string, algorithm string) (keyHandle, verifier string, err error) {
-	return mkm.resolveKey(ctx, identifier, algorithm)
+func (mkm *mockKeyManager) ResolveKey(ctx context.Context, identifier, algorithm, verifierType string) (keyHandle, verifier string, err error) {
+	return mkm.resolveKey(ctx, identifier, algorithm, verifierType)
 }
 
 func (mkm *mockKeyManager) Sign(ctx context.Context, req *proto.SignRequest) (*proto.SignResponse, error) {
@@ -86,7 +87,7 @@ func TestGenerateIndexes(t *testing.T) {
 	defer done()
 	for iFolder := 0; iFolder < 10; iFolder++ {
 		for iKey := 0; iKey < 10; iKey++ {
-			keyHandle, addr, err := kmgr.ResolveKey(context.Background(), fmt.Sprintf("my/one-use-set-%d/%s", iFolder, uuid.New()), algorithms.ECDSA_SECP256K1_PLAINBYTES)
+			keyHandle, addr, err := kmgr.ResolveKey(context.Background(), fmt.Sprintf("my/one-use-set-%d/%s", iFolder, uuid.New()), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 			require.NoError(t, err)
 			assert.NotEmpty(t, ethtypes.MustNewAddress(addr))
 			assert.Equal(t, fmt.Sprintf("m/44'/60'/0'/%d/%d", iFolder, iKey), keyHandle)
@@ -103,7 +104,7 @@ func TestKeyManagerResolveFail(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, _, err = kmgr.ResolveKey(context.Background(), "does not exist", algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	_, _, err = kmgr.ResolveKey(context.Background(), "does not exist", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	assert.Regexp(t, "PD011418", err)
 }
 
@@ -120,21 +121,21 @@ func TestKeyManagerResolveConflict(t *testing.T) {
 		},
 	}
 
-	_, _, err := kmgr.ResolveKey(context.Background(), "key1", algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	_, _, err := kmgr.ResolveKey(context.Background(), "key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	assert.Regexp(t, "PD011509", err)
 }
 
-func TestKeyManagerResolveSameKeyTwoAlgorithms(t *testing.T) {
+func TestKeyManagerResolveSameKeyTwoVerifierTypes(t *testing.T) {
 
 	kmgr, done := newTestHDWalletKeyManager(t)
 	defer done()
 
 	kmgr.rootFolder.Keys = map[string]*keyMapping{}
 
-	keyHandle1, verifier1, err := kmgr.ResolveKey(context.Background(), "key1", algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	keyHandle1, verifier1, err := kmgr.ResolveKey(context.Background(), "key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 
-	keyHandle2, verifier2, err := kmgr.ResolveKey(context.Background(), "key1", algorithms.ZKP_BABYJUBJUB_PLAINBYTES)
+	keyHandle2, verifier2, err := kmgr.ResolveKey(context.Background(), "key1", algorithms.ECDSA_SECP256K1, verifiers.HEX_PUBKEY_0X_PREFIX)
 	require.NoError(t, err)
 
 	assert.Equal(t, keyHandle1, keyHandle2)

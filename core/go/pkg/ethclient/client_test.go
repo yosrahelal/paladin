@@ -38,7 +38,7 @@ func TestResolveKeyFail(t *testing.T) {
 	ec := ecf.HTTPClient().(*ethClient)
 
 	ec.keymgr = &mockKeyManager{
-		resolveKey: func(ctx context.Context, identifier, algorithm string) (keyHandle string, verifier string, err error) {
+		resolveKey: func(ctx context.Context, identifier, algorithm, verifierType string) (keyHandle string, verifier string, err error) {
 			return "", "", fmt.Errorf("pop")
 		},
 	}
@@ -230,7 +230,7 @@ func TestSignFail(t *testing.T) {
 
 	ec := ecf.HTTPClient().(*ethClient)
 	ec.keymgr = &mockKeyManager{
-		resolveKey: func(ctx context.Context, identifier, algorithm string) (keyHandle string, verifier string, err error) {
+		resolveKey: func(ctx context.Context, identifier, algorithm, verifierType string) (keyHandle string, verifier string, err error) {
 			return "kh1", "0x1d0cD5b99d2E2a380e52b4000377Dd507c6df754", nil
 		},
 		sign: func(ctx context.Context, req *proto.SignRequest) (*proto.SignResponse, error) {

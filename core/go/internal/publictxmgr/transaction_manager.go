@@ -43,6 +43,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
@@ -407,7 +408,7 @@ func (ble *pubTxManager) prepareSubmission(ctx context.Context, batchSoFar []*pr
 	}
 
 	var fromAddr *tktypes.EthAddress
-	keyHandle, fromAddrString, err := ble.keymgr.ResolveKey(ctx, txi.From, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	keyHandle, fromAddrString, err := ble.keymgr.ResolveKey(ctx, txi.From, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	if err == nil {
 		fromAddr, err = tktypes.ParseEthAddress(fromAddrString)
 	}
