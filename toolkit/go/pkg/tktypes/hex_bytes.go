@@ -35,7 +35,7 @@ type HexBytes []byte
 func ParseHexBytes(ctx context.Context, s string) (HexBytes, error) {
 	h, err := hex.DecodeString(strings.TrimPrefix(s, "0x"))
 	if err != nil {
-		return nil, i18n.NewError(ctx, tkmsgs.MsgTypesInvalidHex, fmt.Sprintf("hex bytes %s", err))
+		return nil, i18n.NewError(ctx, tkmsgs.MsgTypesInvalidHex, err)
 	}
 	return h, nil
 }
