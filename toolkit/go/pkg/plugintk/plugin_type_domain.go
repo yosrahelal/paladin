@@ -34,6 +34,7 @@ type DomainAPI interface {
 	EndorseTransaction(context.Context, *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error)
 	PrepareTransaction(context.Context, *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error)
 	HandleEventBatch(context.Context, *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error)
+	Sign(context.Context, *prototk.SignRequest) (*prototk.SignResponse, error)
 }
 
 type DomainCallbacks interface {
@@ -159,6 +160,10 @@ func (dp *domainHandler) RequestToPlugin(ctx context.Context, iReq PluginMessage
 		resMsg := &prototk.DomainMessage_HandleEventBatchRes{}
 		resMsg.HandleEventBatchRes, err = dp.api.HandleEventBatch(ctx, input.HandleEventBatch)
 		res.ResponseFromDomain = resMsg
+	case *prototk.DomainMessage_Sign:
+		resMsg := &prototk.DomainMessage_SignRes{}
+		resMsg.SignRes, err = dp.api.Sign(ctx, input.Sign)
+		res.ResponseFromDomain = resMsg
 	default:
 		err = i18n.NewError(ctx, tkmsgs.MsgPluginUnsupportedRequest, input)
 	}
@@ -208,6 +213,7 @@ type DomainAPIFunctions struct {
 	EndorseTransaction  func(context.Context, *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error)
 	PrepareTransaction  func(context.Context, *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error)
 	HandleEventBatch    func(context.Context, *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error)
+	Sign                func(context.Context, *prototk.SignRequest) (*prototk.SignResponse, error)
 }
 
 type DomainAPIBase struct {
@@ -248,4 +254,8 @@ func (db *DomainAPIBase) PrepareTransaction(ctx context.Context, req *prototk.Pr
 
 func (db *DomainAPIBase) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
 	return callPluginImpl(ctx, req, db.Functions.HandleEventBatch)
+}
+
+func (db *DomainAPIBase) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.SignResponse, error) {
+	return callPluginImpl(ctx, req, db.Functions.Sign)
 }

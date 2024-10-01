@@ -38,6 +38,7 @@ public abstract class DomainInstance extends PluginInstance<Service.DomainMessag
     protected abstract CompletableFuture<ToDomain.EndorseTransactionResponse> endorseTransaction(ToDomain.EndorseTransactionRequest request);
     protected abstract CompletableFuture<ToDomain.PrepareTransactionResponse> prepareTransaction(ToDomain.PrepareTransactionRequest request);
     protected abstract CompletableFuture<ToDomain.HandleEventBatchResponse> handleEventBatch(ToDomain.HandleEventBatchRequest request);
+    protected abstract CompletableFuture<ToDomain.SignResponse> sign(ToDomain.SignRequest request);
 
     protected DomainInstance(String grpcTarget, String instanceId) {
         super(grpcTarget, instanceId);
@@ -96,6 +97,7 @@ public abstract class DomainInstance extends PluginInstance<Service.DomainMessag
                 case ENDORSE_TRANSACTION -> endorseTransaction(request.getEndorseTransaction()).thenApply(response::setEndorseTransactionRes);
                 case PREPARE_TRANSACTION -> prepareTransaction(request.getPrepareTransaction()).thenApply(response::setPrepareTransactionRes);
                 case HANDLE_EVENT_BATCH -> handleEventBatch(request.getHandleEventBatch()).thenApply(response::setHandleEventBatchRes);
+                case SIGN -> sign(request.getSign()).thenApply(response::setSignRes);
                 default -> throw new IllegalArgumentException("unknown request: %s".formatted(request.getRequestToDomainCase()));
             };
             return resultApplied.thenApply((ra) -> {

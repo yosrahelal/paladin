@@ -1,4 +1,5 @@
 github.com/Code-Hex/go-generics-cache v1.5.1 h1:6vhZGc5M7Y/YD8cIUcY8kcuQLB4cHR7U+0KMqAA0KcU=
+github.com/Code-Hex/go-generics-cache v1.5.1/go.mod h1:qxcC9kRVrct9rHeiYpFWSoW1vxyillCVzX13KZG8dl4=
 github.com/aidarkhanov/nanoid v1.0.8 h1:yxyJkgsEDFXP7+97vc6JevMcjyb03Zw+/9fqhlVXBXA=
 github.com/aidarkhanov/nanoid v1.0.8/go.mod h1:vadfZHT+m4uDhttg0yY4wW3GKtl2T6i4d2Age+45pYk=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=

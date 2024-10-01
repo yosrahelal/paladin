@@ -401,6 +401,13 @@ public class PenteDomain extends DomainInstance {
         }
     }
 
+    @Override
+    protected CompletableFuture<ToDomain.SignResponse> sign(ToDomain.SignRequest request) {
+        // Pente currently only uses SECP256K1 cryptography, which is fully supported by the built
+        // in Paladin signing module without any extension requirements.
+        return CompletableFuture.failedFuture(new UnsupportedOperationException());
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     record EventWithData(
             @JsonProperty

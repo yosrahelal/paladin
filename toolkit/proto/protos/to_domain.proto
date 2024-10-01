@@ -85,6 +85,18 @@ message AssembleTransactionResponse {
   optional string revert_reason = 4; // if the result was REVERT
 }
 
+// **SIGN** step only happens when signing is requested with a "domain:" scoped algorithm, and it is enabled for this domain in the Paladin configuration
+message SignRequest {
+  string algorithm = 1;
+  string payload_type = 2;
+  bytes private_key = 3;
+  bytes payload = 4;
+}
+
+message SignResponse {
+  bytes payload = 1;
+}
+
 // **ENDORSE** step happens upon instruction from the attestation plan output from ASSEMBLE
 message EndorseTransactionRequest {
   AttestationRequest endorsement_request = 1; // The attestation request from the attestation plan

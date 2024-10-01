@@ -78,4 +78,9 @@ public class TestDomain extends DomainInstance {
     protected CompletableFuture<ToDomain.HandleEventBatchResponse> handleEventBatch(ToDomain.HandleEventBatchRequest request) {
         return CompletableFuture.failedFuture(new UnsupportedOperationException());
     }
+
+    @Override
+    protected CompletableFuture<ToDomain.SignResponse> sign(ToDomain.SignRequest request) {
+        return CompletableFuture.failedFuture(new UnsupportedOperationException());
+    }
 }

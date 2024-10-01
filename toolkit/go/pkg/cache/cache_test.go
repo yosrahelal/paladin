@@ -43,4 +43,6 @@ func TestCache(t *testing.T) {
 	c.Delete("key2")
 	_, ok = c.Get("key2")
 	assert.False(t, ok)
+
+	assert.Equal(t, 1, c.Capacity())
 }
