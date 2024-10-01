@@ -263,6 +263,31 @@ func TestEncodeDecodeABIData(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, `{"from":"dafce4acc2703a24f29d1321adaadf5768f54642","to":"dbfd76af2157dc15ee4e57f3f942bb45ba84af24","value":"42"}`, decResult.Body)
 
+	eventDef = `{
+      "inputs": [
+        {
+          "name": "contractAddress",
+          "type": "address"
+        },
+        {
+          "name": "encodedCall",
+          "type": "bytes"
+        }
+      ],
+      "name": "PenteExternalCall",
+      "type": "event"
+    }`
+	decResult, err = tp.d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_EVENT_DATA,
+		Definition:   eventDef,
+		Data:         ethtypes.MustNewHexBytes0xPrefix("0x0000000000000000000000003153e3e67d3d4be35aa5baff60b5a862f55a54310000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000002460fe47b1000000000000000000000000000000000000000000000000000000000000006400000000000000000000000000000000000000000000000000000000"),
+		Topics: [][]byte{
+			ethtypes.MustNewHexBytes0xPrefix("0xcac03685d5ba4ab3e1465a8ee1b2bb21094ddbd612a969fd34f93a5be7a0ac4f"),
+		},
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, `{"contractAddress":"3153e3e67d3d4be35aa5baff60b5a862f55a5431","encodedCall":"60fe47b10000000000000000000000000000000000000000000000000000000000000064"}`, decResult.Body)
+
 }
 
 func TestRecoverSignature(t *testing.T) {
