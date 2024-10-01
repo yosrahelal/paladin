@@ -87,7 +87,7 @@ task test(type: Exec, dependsOn: [":core:go:makeMocks"]) {
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
-task buildGo(type: GoLib) {
+task buildGo(type: GoLib, dependsOn: [":toolkit:go:protoc"]) {
      baseName "noto"
      goFiles goFiles
      mainFile 'noto.go'
