@@ -41,6 +41,10 @@ task e2e(type: Exec, dependsOn: promoteKindImages) {
     args 'test-e2e'
 }
 
+task make(type: Exec) {
+    executable 'make'
+}
+
 task build {
-    dependsOn docker
+    dependsOn make
 }

@@ -87,11 +87,10 @@ task test(type: Exec, dependsOn: [":core:go:makeMocks"]) {
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
-task buildGo{
-    // TODO: implement buildGo task
-    doFirst() {
-        println ":domain:noto buildGo task not implemented"
-    }
+task buildGo(type: GoLib) {
+     baseName "noto"
+     goFiles goFiles
+     mainFile 'noto.go'
 }
 
 task build {

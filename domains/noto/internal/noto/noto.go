@@ -42,6 +42,10 @@ var notoFactoryJSON []byte
 //go:embed abis/INoto.json
 var notoInterfaceJSON []byte
 
+func NewNoto(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
+	return &Noto{Callbacks: callbacks}
+}
+
 type Noto struct {
 	Callbacks plugintk.DomainCallbacks
 
