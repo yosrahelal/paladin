@@ -40,6 +40,10 @@ configurations {
         canBeConsumed = true
         canBeResolved = false
     }
+    libnoto {
+        canBeConsumed = true
+        canBeResolved = false
+    }
 }
 
 dependencies {
@@ -108,5 +112,6 @@ task assemble {
 }
 
 dependencies {
+    libnoto files(buildGo)
     goSource files(goFiles, copySolidity)
 }
