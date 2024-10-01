@@ -475,7 +475,9 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 
 	// Merge in the ports for our networking config (which we need to match our service defs)
 	pldConf.RPCServer.HTTP.Port = ptrTo(8548)
+	pldConf.RPCServer.HTTP.Address = ptrTo("0.0.0.0") // use k8s for network control outside the pod
 	pldConf.RPCServer.WS.Port = ptrTo(8549)
+	pldConf.RPCServer.WS.Address = ptrTo("0.0.0.0") // use k8s for network control outside the pod
 
 	// DB needs merging from user config and our config
 	if err := r.generatePaladinDBConfig(ctx, node, &pldConf, name); err != nil {

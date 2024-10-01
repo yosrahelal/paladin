@@ -19,8 +19,8 @@ spec:
     type: NodePort
     ports:
     - name: rpc-http
-      port: 8545
+      port: 8548
       nodePort: 31548 # see paladin-kind.yaml
     - name: rpc-ws
-      port: 8546
+      port: 8549
       nodePort: 31549 # see paladin-kind.yaml
