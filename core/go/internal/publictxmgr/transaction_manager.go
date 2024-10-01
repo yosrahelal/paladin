@@ -29,7 +29,6 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/kaleido-io/paladin/core/internal/cache"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
@@ -37,12 +36,14 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
@@ -407,7 +408,7 @@ func (ble *pubTxManager) prepareSubmission(ctx context.Context, batchSoFar []*pr
 	}
 
 	var fromAddr *tktypes.EthAddress
-	keyHandle, fromAddrString, err := ble.keymgr.ResolveKey(ctx, txi.From, algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	keyHandle, fromAddrString, err := ble.keymgr.ResolveKey(ctx, txi.From, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	if err == nil {
 		fromAddr, err = tktypes.ParseEthAddress(fromAddrString)
 	}

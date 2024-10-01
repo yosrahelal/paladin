@@ -26,6 +26,8 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
 type mintHandler struct {
@@ -55,12 +57,14 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 	return &prototk.InitTransactionResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:    tx.DomainConfig.NotaryLookup,
-				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+				Lookup:       tx.DomainConfig.NotaryLookup,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
 			},
 			{
-				Lookup:    params.To,
-				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+				Lookup:       params.To,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
 			},
 		},
 	}, nil
@@ -69,14 +73,14 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.MintParams)
 
-	notary := domain.FindVerifier(tx.DomainConfig.NotaryLookup, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
+	notary := domain.FindVerifier(tx.DomainConfig.NotaryLookup, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
 	if notary == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "notary")
 	}
 	if notary.Verifier != tx.DomainConfig.NotaryAddress {
 		return nil, i18n.NewError(ctx, msgs.MsgNotaryUnexpectedAddress, tx.DomainConfig.NotaryAddress, notary.Verifier)
 	}
-	to := domain.FindVerifier(params.To, algorithms.ECDSA_SECP256K1_PLAINBYTES, req.ResolvedVerifiers)
+	to := domain.FindVerifier(params.To, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
 	if to == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "to")
 	}
@@ -105,15 +109,18 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 			{
 				Name:            "sender",
 				AttestationType: prototk.AttestationType_SIGN,
-				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+				Algorithm:       algorithms.ECDSA_SECP256K1,
+				VerifierType:    verifiers.ETH_ADDRESS,
 				Payload:         encodedTransfer,
+				PayloadType:     signpayloads.OPAQUE_TO_RSV,
 				Parties:         []string{req.Transaction.From},
 			},
 			// Notary will endorse the assembled transaction (by submitting to the ledger)
 			{
 				Name:            "notary",
 				AttestationType: prototk.AttestationType_ENDORSE,
-				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+				Algorithm:       algorithms.ECDSA_SECP256K1,
+				VerifierType:    verifiers.ETH_ADDRESS,
 				Parties:         []string{tx.DomainConfig.NotaryLookup},
 			},
 		},

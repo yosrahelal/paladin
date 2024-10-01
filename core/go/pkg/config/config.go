@@ -22,9 +22,9 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"sigs.k8s.io/yaml" // because it supports JSON tags, and we embed our structs in the k8s operator
 )

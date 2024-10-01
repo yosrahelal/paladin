@@ -71,7 +71,7 @@ func deployDomainContracts(ctx context.Context, rpc rpcbackend.Backend, deployer
 	}
 
 	// deploy the factory contract
-	factoryAddr, _, err := deployContract(ctx, rpc, deployer, &config.DomainContracts.Factory, deployedContracts)
+	factoryAddr, _, err := deployContract(ctx, rpc, deployer, &config.DomainContracts.Factory)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func deployContracts(ctx context.Context, rpc rpcbackend.Backend, deployer strin
 	deployedContracts := make(map[string]*tktypes.EthAddress)
 	deployedContractAbis := make(map[string]abi.ABI)
 	for _, contract := range contracts {
-		addr, abi, err := deployContract(ctx, rpc, deployer, &contract, deployedContracts)
+		addr, abi, err := deployContract(ctx, rpc, deployer, &contract)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -114,7 +114,7 @@ func deployContracts(ctx context.Context, rpc rpcbackend.Backend, deployer strin
 	return deployedContracts, deployedContractAbis, nil
 }
 
-func deployContract(ctx context.Context, rpc rpcbackend.Backend, deployer string, contract *domainContract, deployedContracts map[string]*tktypes.EthAddress) (*tktypes.EthAddress, abi.ABI, error) {
+func deployContract(ctx context.Context, rpc rpcbackend.Backend, deployer string, contract *domainContract) (*tktypes.EthAddress, abi.ABI, error) {
 	if contract.AbiAndBytecode.Path == "" {
 		return nil, nil, fmt.Errorf("no path or JSON specified for the abi and bytecode for contract %s", contract.Name)
 	}
