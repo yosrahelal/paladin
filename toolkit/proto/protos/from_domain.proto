@@ -48,7 +48,8 @@ message EncodeDataResponse {
 message RecoverSignerRequest {
   string algorithm = 1;
   bytes payload = 2;
-  bytes signature = 3;
+  string payload_type = 3;
+  bytes signature = 4;
 }
 
 message RecoverSignerResponse {

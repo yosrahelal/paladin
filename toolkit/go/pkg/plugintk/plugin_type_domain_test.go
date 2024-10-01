@@ -254,6 +254,40 @@ func TestDomainFunction_HandleEventBatch(t *testing.T) {
 	})
 }
 
+func TestDomainFunction_Sign(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// Sign - paladin to domain
+	funcs.Sign = func(ctx context.Context, cdr *prototk.SignRequest) (*prototk.SignResponse, error) {
+		return &prototk.SignResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_Sign{
+			Sign: &prototk.SignRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_SignRes{}, res.ResponseFromDomain)
+	})
+}
+
+func TestDomainFunction_GetVerifier(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// GetVerifier - paladin to domain
+	funcs.GetVerifier = func(ctx context.Context, cdr *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error) {
+		return &prototk.GetVerifierResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_GetVerifier{
+			GetVerifier: &prototk.GetVerifierRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_GetVerifierRes{}, res.ResponseFromDomain)
+	})
+}
+
 func TestDomainRequestError(t *testing.T) {
 	_, exerciser, _, _, _, done := setupDomainTests(t)
 	defer done()

@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/sha3"
@@ -186,7 +187,7 @@ func testInvokeNewWidgetOk(t *testing.T, isWS bool, txVersion EthTXVersion, gasL
 		ec = ecf.HTTPClient()
 	}
 
-	_, key1, err := ecf.keymgr.ResolveKey(ctx, "key1", algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	_, key1, err := ecf.keymgr.ResolveKey(ctx, "key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 
 	fakeContractAddr := ethtypes.MustNewAddress("0xCC3b61E636B395a4821Df122d652820361FF26f1")
@@ -265,7 +266,7 @@ func testCallGetWidgetsOk(t *testing.T, withFrom, withBlock, withBlockRef bool) 
 	defer done()
 
 	if withFrom {
-		_, key1, err = ec.keymgr.ResolveKey(ctx, "key1", algorithms.ECDSA_SECP256K1_PLAINBYTES)
+		_, key1, err = ec.keymgr.ResolveKey(ctx, "key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 		require.NoError(t, err)
 	}
 
@@ -571,7 +572,7 @@ func TestInvokeConstructor(t *testing.T) {
 	})
 	defer done()
 
-	_, key1, err := ec.keymgr.ResolveKey(ctx, "key1", algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	_, key1, err := ec.keymgr.ResolveKey(ctx, "key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 
 	testABI = ec.HTTPClient().MustABIJSON(testABIJSON)

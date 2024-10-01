@@ -41,7 +41,7 @@ func newTestBalanceManager(t *testing.T, autoFuel bool, cbs ...func(m *mocksAndT
 			conf.BalanceManager.AutoFueling.Source = confutil.P("autofueler")
 
 			autoFuelSourceAddr := tktypes.RandAddress()
-			m.keyManager.(*componentmocks.KeyManager).On("ResolveKey", mock.Anything, "autofueler", mock.Anything).
+			m.keyManager.(*componentmocks.KeyManager).On("ResolveKey", mock.Anything, "autofueler", mock.Anything, mock.Anything).
 				Return("", autoFuelSourceAddr.String(), nil)
 		}
 		for _, cb := range cbs {

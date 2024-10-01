@@ -103,7 +103,8 @@ public class PenteDomain extends DomainInstance {
             LOGGER.info("endorsement group identity lookups: {}", lookups);
             for (String lookup : lookups) {
                 response.addRequiredVerifiers(ToDomain.ResolveVerifierRequest.newBuilder().
-                        setAlgorithm(Algorithms.ECDSA_SECP256K1_PLAINBYTES).
+                        setAlgorithm(Algorithms.ECDSA_SECP256K1).
+                        setVerifierType(Verifiers.ETH_ADDRESS).
                         setLookup(lookup).
                         build());
             }
@@ -119,7 +120,9 @@ public class PenteDomain extends DomainInstance {
         List<Address> endorsementAddresses = new ArrayList<>(lookups.size());
         for (String lookup : lookups) {
             for (ToDomain.ResolvedVerifier verifier : resolvedVerifiers) {
-                if (verifier.getLookup().equals(lookup) && verifier.getAlgorithm().equals(Algorithms.ECDSA_SECP256K1_PLAINBYTES)) {
+                if (verifier.getLookup().equals(lookup) &&
+                        verifier.getAlgorithm().equals(Algorithms.ECDSA_SECP256K1) &&
+                        verifier.getVerifierType().equals(Verifiers.ETH_ADDRESS)) {
                     // Check it's not in the list already
                     Address addr = JsonHex.addressFrom(verifier.getVerifier());
                     for (Address endorser : endorsementAddresses) {
@@ -169,7 +172,8 @@ public class PenteDomain extends DomainInstance {
             var tx = new PenteTransaction(this, request.getTransaction());
             var response = ToDomain.InitTransactionResponse.newBuilder();
             response.addRequiredVerifiers(ToDomain.ResolveVerifierRequest.newBuilder().
-                    setAlgorithm(Algorithms.ECDSA_SECP256K1_PLAINBYTES).
+                    setAlgorithm(Algorithms.ECDSA_SECP256K1).
+                    setVerifierType(Verifiers.ETH_ADDRESS).
                     setLookup(tx.getFrom()).
                     build()
             );
@@ -196,8 +200,10 @@ public class PenteDomain extends DomainInstance {
             // However, we do not package the signature back up in any RLP encoded way
             // back again into a full transaction RLP bytestring.
             result.addAttestationPlan(ToDomain.AttestationRequest.newBuilder().
-                    setAlgorithm(Algorithms.ECDSA_SECP256K1_PLAINBYTES).
+                    setAlgorithm(Algorithms.ECDSA_SECP256K1).
+                    setVerifierType(Verifiers.ETH_ADDRESS).
                     setAttestationType(ToDomain.AttestationType.SIGN).
+                    setPayloadType(SignPayloads.OPAQUE_TO_RSV).
                     setPayload(ByteString.copyFrom(execResult.txPayloadHash().getBytes())).
                     addParties(tx.getFrom()).
                     build()
@@ -210,8 +216,10 @@ public class PenteDomain extends DomainInstance {
             var params = tx.getValues();
             var endorsers = PenteTransaction.buildGroupScopeIdentityLookups(params.group().salt(), params.group().members());
             result.addAttestationPlan(ToDomain.AttestationRequest.newBuilder().
-                    setAlgorithm(Algorithms.ECDSA_SECP256K1_PLAINBYTES).
+                    setAlgorithm(Algorithms.ECDSA_SECP256K1).
+                    setVerifierType(Verifiers.ETH_ADDRESS).
                     setAttestationType(ToDomain.AttestationType.ENDORSE).
+                    setPayloadType(SignPayloads.OPAQUE_TO_RSV).
                     addAllParties(endorsers).
                     build()
             );
@@ -291,7 +299,8 @@ public class PenteDomain extends DomainInstance {
             // Recover the signer against the payload as we processed it
             ByteString signature = null;
             for (var sign : request.getSignaturesList()) {
-                if (sign.getVerifier().getAlgorithm().equals(Algorithms.ECDSA_SECP256K1_PLAINBYTES) &&
+                if (sign.getVerifier().getAlgorithm().equals(Algorithms.ECDSA_SECP256K1) &&
+                    sign.getVerifier().getVerifierType().equals(Verifiers.ETH_ADDRESS) &&
                    sign.getVerifier().getVerifier().equals(execResult.senderAddress().toString())) {
                     signature = sign.getPayload();
                 }
@@ -300,8 +309,9 @@ public class PenteDomain extends DomainInstance {
                 throw new IllegalArgumentException("missing signature for %s".formatted(execResult.senderAddress()));
             }
             var recovered = recoverSigner(FromDomain.RecoverSignerRequest.newBuilder().
-                    setAlgorithm(Algorithms.ECDSA_SECP256K1_PLAINBYTES).
+                    setAlgorithm(Algorithms.ECDSA_SECP256K1).
                     setPayload(ByteString.copyFrom(execResult.txPayloadHash().getBytes())).
+                    setPayloadType(SignPayloads.OPAQUE_TO_RSV).
                     setSignature(signature).
                     build()).get();
             if (!recovered.getVerifier().equals(execResult.senderAddress().toString())) {
@@ -389,6 +399,20 @@ public class PenteDomain extends DomainInstance {
         } catch(Exception e) {
             return CompletableFuture.failedFuture(e);
         }
+    }
+
+    @Override
+    protected CompletableFuture<ToDomain.SignResponse> sign(ToDomain.SignRequest request) {
+        // Pente currently only uses SECP256K1 cryptography, which is fully supported by the built-in
+        // Paladin signing module without any extension requirements.
+        return CompletableFuture.failedFuture(new UnsupportedOperationException());
+    }
+
+    @Override
+    protected CompletableFuture<ToDomain.GetVerifierResponse> getVerifier(ToDomain.GetVerifierRequest request) {
+        // Pente currently only uses SECP256K1 cryptography, which is fully supported by the built-in
+        // Paladin signing module without any extension requirements.
+        return CompletableFuture.failedFuture(new UnsupportedOperationException());
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

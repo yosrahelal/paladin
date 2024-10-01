@@ -30,6 +30,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -162,7 +163,7 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 		conf.Orchestrator.MaxInFlight = confutil.P(1) // just one inflight - which we inject in
 		conf.BalanceManager.AutoFueling.Source = confutil.P("autofueler")
 
-		m.keyManager.(*componentmocks.KeyManager).On("ResolveKey", mock.Anything, "autofueler", algorithms.ECDSA_SECP256K1_PLAINBYTES).
+		m.keyManager.(*componentmocks.KeyManager).On("ResolveKey", mock.Anything, "autofueler", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
 			Return("", autoFuelingSourceAddr.String(), nil)
 
 	})

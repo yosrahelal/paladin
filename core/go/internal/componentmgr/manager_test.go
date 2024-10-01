@@ -30,10 +30,10 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -67,7 +67,7 @@ func TestInitOK(t *testing.T) {
 			KeyDerivation: signerapi.KeyDerivationConfig{
 				Type: signerapi.KeyDerivationTypeBIP32,
 			},
-			KeyStore: signerapi.StoreConfig{
+			KeyStore: signerapi.KeyStoreConfig{
 				Type: "static",
 				Static: signerapi.StaticKeyStorageConfig{
 					Keys: map[string]signerapi.StaticKeyEntryConfig{

@@ -32,7 +32,9 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -108,8 +110,9 @@ func doDomainInitTransactionOK(t *testing.T, ctx context.Context, tp *testPlugin
 		res := &prototk.InitTransactionResponse{
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
-					Lookup:    tx.Signer,
-					Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+					Lookup:       tx.Signer,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
 				},
 			},
 		}
@@ -135,7 +138,8 @@ func doDomainInitAssembleTransactionOK(t *testing.T, ctx context.Context, tp *te
 				{
 					Name:            "ensorsement1",
 					AttestationType: prototk.AttestationType_ENDORSE,
-					Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
 					Parties:         []string{"endorser1"},
 				},
 			},
@@ -232,9 +236,10 @@ func TestRecoverSignature(t *testing.T) {
 	require.NoError(t, err)
 
 	res, err := tp.d.RecoverSigner(ctx, &prototk.RecoverSignerRequest{
-		Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-		Payload:   ([]byte)("some data"),
-		Signature: s.CompactRSV(),
+		Algorithm:   algorithms.ECDSA_SECP256K1,
+		PayloadType: signpayloads.OPAQUE_TO_RSV,
+		Payload:     ([]byte)("some data"),
+		Signature:   s.CompactRSV(),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, kp.Address.String(), res.Verifier)
@@ -362,7 +367,12 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 				},
 			},
 			AttestationPlan: []*prototk.AttestationRequest{
-				{Name: "sign", AttestationType: prototk.AttestationType_SIGN, Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES},
+				{
+					Name:            "sign",
+					AttestationType: prototk.AttestationType_SIGN,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+				},
 			},
 		}, nil
 	}
@@ -437,9 +447,10 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	endorsementRequest := tx.PostAssembly.AttestationPlan[0]
 	endorserAddr := tktypes.EthAddress(tktypes.RandBytes(20))
 	endorser := &prototk.ResolvedVerifier{
-		Lookup:    "endorser1",
-		Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-		Verifier:  endorserAddr.String(),
+		Lookup:       "endorser1",
+		Algorithm:    algorithms.ECDSA_SECP256K1,
+		VerifierType: verifiers.ETH_ADDRESS,
+		Verifier:     endorserAddr.String(),
 	}
 	endorsement, err := psc.EndorseTransaction(ctx, &components.PrivateTransactionEndorseRequest{
 		TransactionSpecification: tx.PreAssembly.TransactionSpecification,
@@ -547,7 +558,12 @@ func TestDomainAssembleTransactionLoadInputError(t *testing.T) {
 				},
 			},
 			AttestationPlan: []*prototk.AttestationRequest{
-				{Name: "sign", AttestationType: prototk.AttestationType_SIGN, Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES},
+				{
+					Name:            "sign",
+					AttestationType: prototk.AttestationType_SIGN,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+				},
 			},
 		}, nil
 	}
@@ -571,7 +587,12 @@ func TestDomainAssembleTransactionLoadReadError(t *testing.T) {
 				},
 			},
 			AttestationPlan: []*prototk.AttestationRequest{
-				{Name: "sign", AttestationType: prototk.AttestationType_SIGN, Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES},
+				{
+					Name:            "sign",
+					AttestationType: prototk.AttestationType_SIGN,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+				},
 			},
 		}, nil
 	}

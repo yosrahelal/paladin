@@ -6,7 +6,7 @@
 **/*.dylib
 **/*.dll
 **/*.wasm
-!core/go/pkg/signer/in-memory/snark/test-resources/test.wasm
+!domains/zeto/pkg/zetosigner/test-resources/test.wasm
 **/*.zip
 
 .gradle
