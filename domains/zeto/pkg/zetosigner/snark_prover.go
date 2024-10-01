@@ -28,6 +28,7 @@ import (
 	"github.com/iden3/go-rapidsnark/types"
 	"github.com/iden3/go-rapidsnark/witness/v2"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
+	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
@@ -50,6 +51,10 @@ type snarkProver struct {
 	proofGenerator          func(witness []byte, provingKey []byte) (*types.ZKProof, error)
 }
 
+func NewSnarkProver(conf *SnarkProverConfig) (signerapi.InMemorySigner, error) {
+	return newSnarkProver(conf)
+}
+
 func newSnarkProver(conf *SnarkProverConfig) (*snarkProver, error) {
 	cacheConfig := cache.Config{
 		Capacity: confutil.P(50),
@@ -66,8 +71,8 @@ func newSnarkProver(conf *SnarkProverConfig) (*snarkProver, error) {
 }
 
 func (sp *snarkProver) GetVerifier(ctx context.Context, algorithm, verifierType string, privateKey []byte) (string, error) {
-	if algorithm != ALGO_DOMAIN_ZETO_SNARK_BJJ {
-		return "", fmt.Errorf("'%s' does not match supported algorithm '%s'", algorithm, ALGO_DOMAIN_ZETO_SNARK_BJJ)
+	if !ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP.MatchString(algorithm) {
+		return "", fmt.Errorf("'%s' does not match supported algorithm '%s'", algorithm, ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP)
 	}
 	if verifierType != verifiers.HEX_PUBKEY_0X_PREFIX {
 		return "", fmt.Errorf("'%s' does not match supported verifierType '%s'", algorithm, verifiers.HEX_PUBKEY_0X_PREFIX)
@@ -80,15 +85,15 @@ func (sp *snarkProver) GetVerifier(ctx context.Context, algorithm, verifierType 
 }
 
 func (sp *snarkProver) GetMinimumKeyLen(ctx context.Context, algorithm string) (int, error) {
-	if algorithm != ALGO_DOMAIN_ZETO_SNARK_BJJ {
-		return -1, fmt.Errorf("'%s' does not match supported algorithm '%s'", algorithm, ALGO_DOMAIN_ZETO_SNARK_BJJ)
+	if !ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP.MatchString(algorithm) {
+		return -1, fmt.Errorf("'%s' does not match supported algorithm '%s'", algorithm, ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP)
 	}
 	return 32, nil
 }
 
 func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, privateKey, payload []byte) ([]byte, error) {
-	if algorithm != ALGO_DOMAIN_ZETO_SNARK_BJJ {
-		return nil, fmt.Errorf("'%s' does not match supported algorithm '%s'", algorithm, ALGO_DOMAIN_ZETO_SNARK_BJJ)
+	if !ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP.MatchString(algorithm) {
+		return nil, fmt.Errorf("'%s' does not match supported algorithm '%s'", algorithm, ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP)
 	}
 	if payloadType != PAYLOAD_DOMAIN_ZETO_SNARK {
 		return nil, fmt.Errorf("'%s' does not match supported payloadType '%s'", payloadType, PAYLOAD_DOMAIN_ZETO_SNARK)

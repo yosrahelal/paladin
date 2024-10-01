@@ -65,7 +65,7 @@ func TestZKPSigningModuleKeyResolution(t *testing.T) {
 	resp1, err := sm.Resolve(ctx, &proto.ResolveKeyRequest{
 		RequiredIdentifiers: []*proto.PublicKeyIdentifierType{
 			{Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS},
-			{Algorithm: ALGO_DOMAIN_ZETO_SNARK_BJJ, VerifierType: verifiers.HEX_PUBKEY_0X_PREFIX},
+			{Algorithm: AlgoDomainZetoSnarkBJJ("zeto"), VerifierType: verifiers.HEX_PUBKEY_0X_PREFIX},
 		},
 		Name: "blueKey",
 		Path: []*proto.ResolveKeyPathSegment{

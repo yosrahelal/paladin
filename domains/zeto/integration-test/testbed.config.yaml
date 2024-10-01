@@ -23,9 +23,6 @@ signer:
     type: 'bip32'
   keyStore:
     type: 'static'
-    snarkProver:
-      circuitsDir: ../zkp
-      provingKeysDir: ../zkp
     static:
       keys:
         seed:

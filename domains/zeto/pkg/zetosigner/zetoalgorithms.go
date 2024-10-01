@@ -15,8 +15,17 @@
 
 package zetosigner
 
+import (
+	"fmt"
+	"regexp"
+)
+
 // - SNARK proving engine
 // - Baby Jub Jub key materials used in proofs
-const ALGO_DOMAIN_ZETO_SNARK_BJJ = "domain:zeto:snark:babyjubjub"
+var ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP = regexp.MustCompile(`^domain:([a-zA-Z0-9-._]+):snark:babyjubjub$`)
+
+func AlgoDomainZetoSnarkBJJ(name string) string {
+	return fmt.Sprintf("domain:%s:snark:babyjubjub", name)
+}
 
 const PAYLOAD_DOMAIN_ZETO_SNARK = "domain:zeto:snark"

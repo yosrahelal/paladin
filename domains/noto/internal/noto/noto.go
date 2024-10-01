@@ -452,3 +452,11 @@ func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 	}
 	return &res, nil
 }
+
+func (n *Noto) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.SignResponse, error) {
+	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
+}
+
+func (n *Noto) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error) {
+	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
+}
