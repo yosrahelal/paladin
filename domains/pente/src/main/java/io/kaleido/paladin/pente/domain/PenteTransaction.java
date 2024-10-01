@@ -360,7 +360,7 @@ class PenteTransaction {
                     outputStates.add(ToDomain.NewState.newBuilder().
                             setSchemaId(latestSchemaId).
                             setStateDataJsonBytes(ByteString.copyFrom(updatedAccount.serialize())).
-                            addAllDistibutionList(lookups).
+                            addAllDistributionList(lookups).
                             build());
                 } else {
                     LOGGER.info("Deleting account {} (existing={})", loadedAccount, inputState);
