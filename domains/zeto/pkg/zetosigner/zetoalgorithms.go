@@ -13,25 +13,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package signerapi
+package zetosigner
 
-import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-)
-
-type FileSystemConfig struct {
-	Path     *string      `json:"path"`
-	Cache    cache.Config `json:"cache"`
-	FileMode *string      `json:"fileMode"`
-	DirMode  *string      `json:"dirMode"`
-}
-
-var FileSystemDefaults = &FileSystemConfig{
-	Path:     confutil.P("keystore"),
-	FileMode: confutil.P("0600"),
-	DirMode:  confutil.P("0700"),
-	Cache: cache.Config{
-		Capacity: confutil.P(100),
-	},
-}
+// - SNARK proving engine
+// - Baby Jub Jub key materials used in proofs
+const ALGO_DOMAINS_ZETO_SNARK = "domains:zeto:snark:babyjubjub"

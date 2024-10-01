@@ -28,10 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestZKPSigningModuleKeyResolution(t *testing.T) {
-	tmpDir := t.TempDir()
-	ctx := context.Background()
-
+func newZetoSigningModule(t *testing.T) {
 	sm, err := signer.NewSigningModule(ctx, &signerapi.Config{
 		KeyStore: signerapi.KeyStoreConfig{
 			Type:       signerapi.KeyStoreTypeFilesystem,
@@ -39,6 +36,11 @@ func TestZKPSigningModuleKeyResolution(t *testing.T) {
 		},
 	}, nil)
 	require.NoError(t, err)
+}
+
+func TestZKPSigningModuleKeyResolution(t *testing.T) {
+	tmpDir := t.TempDir()
+	ctx := context.Background()
 
 	resp1, err := sm.Resolve(ctx, &proto.ResolveKeyRequest{
 		Algorithms: []string{algorithms.ECDSA_SECP256K1_PLAINBYTES, algorithms.ZKP_BABYJUBJUB_PLAINBYTES},

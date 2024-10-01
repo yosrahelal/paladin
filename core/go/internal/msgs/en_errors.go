@@ -191,6 +191,8 @@ var (
 	MsgSigningUnsupportedVerifierCombination    = ffe("PD011423", "Unsupported verifier type '%s' for algorithm '%s'")
 	MsgSigningUnsupportedPayloadCombination     = ffe("PD011424", "Unsupported payload type '%s' for algorithm '%s'")
 	MsgSigningEmptyPayload                      = ffe("PD011425", "No payload supplied for signing")
+	MsgSigningInvalidDomainAlgorithmNoPrefix    = ffe("PD011426", "Invalid domain algorithm (no 'domain:' prefix): %s")
+	MsgSigningNoDomainRegisteredWithModule      = ffe("PD011427", "Domain '%s' has not been registered in this signing module")
 
 	// EthClient module PD0115XX
 	MsgEthClientInvalidInput            = ffe("PD011500", "Unable to convert to ABI function input (func=%s)")

@@ -29,9 +29,6 @@ import (
 	"github.com/iden3/go-rapidsnark/types"
 	"github.com/iden3/go-rapidsnark/witness/v2"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/common"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
@@ -56,19 +53,8 @@ func NewKeypair() *User {
 	}
 }
 
-func TestRegister(t *testing.T) {
-	registry := make(map[string]signerapi.InMemorySigner)
-	config := signerapi.SnarkProverConfig{
-		CircuitsDir:    "test",
-		ProvingKeysDir: "test",
-	}
-	err := Register(context.Background(), config, registry)
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(registry))
-}
-
 func TestNewProver(t *testing.T) {
-	config := signerapi.SnarkProverConfig{
+	config := &SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
@@ -91,14 +77,14 @@ func (t *testWitnessCalculator) CalculateBinWitness(inputs map[string]interface{
 }
 
 func TestSnarkProve(t *testing.T) {
-	config := signerapi.SnarkProverConfig{
+	config := &SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
 	assert.NoError(t, err)
 
-	testCircuitLoader := func(circuitID string, config signerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
+	testCircuitLoader := func(circuitID string, config *SnarkProverConfig) (witness.Calculator, []byte, error) {
 		return &testWitnessCalculator{}, []byte("proving key"), nil
 	}
 	prover.circuitLoader = testCircuitLoader
@@ -131,8 +117,8 @@ func TestSnarkProve(t *testing.T) {
 	inputSalts := []string{salt1.Text(16), salt2.Text(16)}
 	outputValueInts := []uint64{outputValues[0].Uint64(), outputValues[1].Uint64()}
 
-	alicePubKey := common.EncodePublicKey(alice.PublicKey)
-	bobPubKey := common.EncodePublicKey(bob.PublicKey)
+	alicePubKey := EncodeBabyJubJubPublicKey(alice.PublicKey)
+	bobPubKey := EncodeBabyJubJubPublicKey(bob.PublicKey)
 
 	req := pb.ProvingRequest{
 		CircuitId: "anon",
@@ -151,7 +137,7 @@ func TestSnarkProve(t *testing.T) {
 
 	res, err := prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
 		KeyHandle: "key1",
-		Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
 		Payload:   payload,
 	})
 	assert.NoError(t, err)
@@ -159,7 +145,7 @@ func TestSnarkProve(t *testing.T) {
 }
 
 func TestConcurrentSnarkProofGeneration(t *testing.T) {
-	config := signerapi.SnarkProverConfig{
+	config := &SnarkProverConfig{
 		CircuitsDir:         "test",
 		ProvingKeysDir:      "test",
 		MaxProverPerCircuit: confutil.P(50), // equal to the default cache size, so all provers can be cached at once
@@ -174,7 +160,7 @@ func TestConcurrentSnarkProofGeneration(t *testing.T) {
 	totalProvingRequestCount := 0
 	peakProverCountMutex := &sync.Mutex{}
 
-	testCircuitLoader := func(circuitID string, config signerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
+	testCircuitLoader := func(circuitID string, config *SnarkProverConfig) (witness.Calculator, []byte, error) {
 		circuitLoadedTotalMutex.Lock()
 		defer circuitLoadedTotalMutex.Unlock()
 		circuitLoadedTotal++
@@ -222,8 +208,8 @@ func TestConcurrentSnarkProofGeneration(t *testing.T) {
 	inputSalts := []string{salt1.Text(16), salt2.Text(16)}
 	outputValueInts := []uint64{outputValues[0].Uint64(), outputValues[1].Uint64()}
 
-	alicePubKey := common.EncodePublicKey(alice.PublicKey)
-	bobPubKey := common.EncodePublicKey(bob.PublicKey)
+	alicePubKey := EncodeBabyJubJubPublicKey(alice.PublicKey)
+	bobPubKey := EncodeBabyJubJubPublicKey(bob.PublicKey)
 
 	req := pb.ProvingRequest{
 		CircuitId: "anon",
@@ -246,7 +232,7 @@ func TestConcurrentSnarkProofGeneration(t *testing.T) {
 		go func() {
 			res, err := prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
 				KeyHandle: "key1",
-				Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+				Algorithm: ALGO_DOMAINS_ZETO_SNARK,
 				Payload:   payload,
 			})
 			assert.NoError(t, err)
@@ -267,7 +253,7 @@ func TestConcurrentSnarkProofGeneration(t *testing.T) {
 }
 
 func TestSnarkProveError(t *testing.T) {
-	config := signerapi.SnarkProverConfig{
+	config := &SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
@@ -290,14 +276,14 @@ func TestSnarkProveError(t *testing.T) {
 
 	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
 		KeyHandle: "key1",
-		Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
 		Payload:   payload,
 	})
 	assert.ErrorContains(t, err, "cannot parse invalid wire-format data")
 }
 
 func TestSnarkProveErrorCircuit(t *testing.T) {
-	config := signerapi.SnarkProverConfig{
+	config := &SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
@@ -323,14 +309,14 @@ func TestSnarkProveErrorCircuit(t *testing.T) {
 
 	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
 		KeyHandle: "key1",
-		Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
 		Payload:   payload,
 	})
 	assert.ErrorContains(t, err, "circuit ID is required")
 }
 
 func TestSnarkProveErrorInputs(t *testing.T) {
-	config := signerapi.SnarkProverConfig{
+	config := &SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
@@ -347,7 +333,7 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
 		KeyHandle: "key1",
-		Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
 		Payload:   payload,
 	})
 	assert.ErrorContains(t, err, "input commitments are required")
@@ -362,7 +348,7 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
 		KeyHandle: "key1",
-		Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
 		Payload:   payload,
 	})
 	assert.ErrorContains(t, err, "input values are required")
@@ -378,7 +364,7 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
 		KeyHandle: "key1",
-		Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
 		Payload:   payload,
 	})
 	assert.ErrorContains(t, err, "input salts are required")
@@ -395,7 +381,7 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
 		KeyHandle: "key1",
-		Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
 		Payload:   payload,
 	})
 	assert.ErrorContains(t, err, "output values are required")
@@ -413,7 +399,7 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
 		KeyHandle: "key1",
-		Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
 		Payload:   payload,
 	})
 	assert.ErrorContains(t, err, "output owner keys are required")
@@ -432,21 +418,21 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
 		KeyHandle: "key1",
-		Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
 		Payload:   payload,
 	})
 	assert.ErrorContains(t, err, "anon.wasm: no such file or directory")
 }
 
 func TestSnarkProveErrorLoadcircuits(t *testing.T) {
-	config := signerapi.SnarkProverConfig{
+	config := &SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
 	assert.NoError(t, err)
 
-	testCircuitLoader := func(circuitID string, config signerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
+	testCircuitLoader := func(circuitID string, config *SnarkProverConfig) (witness.Calculator, []byte, error) {
 		return nil, nil, fmt.Errorf("bang!")
 	}
 	prover.circuitLoader = testCircuitLoader
@@ -467,8 +453,8 @@ func TestSnarkProveErrorLoadcircuits(t *testing.T) {
 	inputSalts := []string{salt1.Text(16), salt2.Text(16)}
 	outputValueInts := []uint64{outputValues[0].Uint64(), outputValues[1].Uint64()}
 
-	alicePubKey := common.EncodePublicKey(alice.PublicKey)
-	bobPubKey := common.EncodePublicKey(bob.PublicKey)
+	alicePubKey := EncodeBabyJubJubPublicKey(alice.PublicKey)
+	bobPubKey := EncodeBabyJubJubPublicKey(bob.PublicKey)
 
 	req := pb.ProvingRequest{
 		CircuitId: "anon",
@@ -486,21 +472,21 @@ func TestSnarkProveErrorLoadcircuits(t *testing.T) {
 
 	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
 		KeyHandle: "key1",
-		Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
 		Payload:   payload,
 	})
 	assert.EqualError(t, err, "bang!")
 }
 
 func TestSnarkProveErrorGenerateProof(t *testing.T) {
-	config := signerapi.SnarkProverConfig{
+	config := &SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
 	assert.NoError(t, err)
 
-	testCircuitLoader := func(circuitID string, config signerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
+	testCircuitLoader := func(circuitID string, config *SnarkProverConfig) (witness.Calculator, []byte, error) {
 		return &testWitnessCalculator{}, []byte("proving key"), nil
 	}
 	prover.circuitLoader = testCircuitLoader
@@ -536,21 +522,21 @@ func TestSnarkProveErrorGenerateProof(t *testing.T) {
 
 	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
 		KeyHandle: "key1",
-		Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
 		Payload:   payload,
 	})
 	assert.ErrorContains(t, err, "witness is empty")
 }
 
 func TestSnarkProveErrorGenerateProof2(t *testing.T) {
-	config := signerapi.SnarkProverConfig{
+	config := &SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
 	assert.NoError(t, err)
 
-	testCircuitLoader := func(circuitID string, config signerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
+	testCircuitLoader := func(circuitID string, config *SnarkProverConfig) (witness.Calculator, []byte, error) {
 		return &testWitnessCalculator{}, []byte("proving key"), nil
 	}
 	prover.circuitLoader = testCircuitLoader
@@ -571,8 +557,8 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 	inputSalts := []string{salt1.Text(16), salt2.Text(16)}
 	outputValueInts := []uint64{outputValues[0].Uint64(), outputValues[1].Uint64()}
 
-	alicePubKey := common.EncodePublicKey(alice.PublicKey)
-	bobPubKey := common.EncodePublicKey(bob.PublicKey)
+	alicePubKey := EncodeBabyJubJubPublicKey(alice.PublicKey)
+	bobPubKey := EncodeBabyJubJubPublicKey(bob.PublicKey)
 
 	req := pb.ProvingRequest{
 		CircuitId: "anon",
@@ -590,7 +576,7 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
 		KeyHandle: "key1",
-		Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
 		Payload:   payload,
 	})
 	assert.ErrorContains(t, err, "failed to parse input commitment")
@@ -611,7 +597,7 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = prover.Sign(context.Background(), alice.PrivateKey[:], &pb.SignRequest{
 		KeyHandle: "key1",
-		Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+		Algorithm: ALGO_DOMAINS_ZETO_SNARK,
 		Payload:   payload,
 	})
 	assert.ErrorContains(t, err, "failed to parse input salt")

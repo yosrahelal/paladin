@@ -24,67 +24,55 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/key"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/iden3/go-rapidsnark/prover"
 	"github.com/iden3/go-rapidsnark/types"
 	"github.com/iden3/go-rapidsnark/witness/v2"
-	"github.com/kaleido-io/paladin/core/internal/cache"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"google.golang.org/protobuf/proto"
 )
 
-var defaultSnarkProverConfig = signerapi.SnarkProverConfig{
+var defaultSnarkProverConfig = SnarkProverConfig{
 	MaxProverPerCircuit: confutil.P(10),
 }
 
 // snarkProver encapsulates the logic for generating SNARK proofs
 type snarkProver struct {
-	zkpProverConfig         signerapi.SnarkProverConfig
+	zkpProverConfig         *SnarkProverConfig
 	circuitsCache           cache.Cache[string, witness.Calculator]
 	provingKeysCache        cache.Cache[string, []byte]
 	proverCacheRWLock       sync.RWMutex
 	workerPerCircuit        int
 	circuitsWorkerIndexChan map[string]chan int
-	circuitLoader           func(circuitID string, config signerapi.SnarkProverConfig) (witness.Calculator, []byte, error)
+	circuitLoader           func(circuitID string, config *SnarkProverConfig) (witness.Calculator, []byte, error)
 	proofGenerator          func(witness []byte, provingKey []byte) (*types.ZKProof, error)
 }
 
-func Register(ctx context.Context, config signerapi.SnarkProverConfig, registry map[string]signerapi.InMemorySigner) error {
-	// skip registration is no ZKP prover config is provided
-	if config.CircuitsDir == "" || config.ProvingKeysDir == "" {
-		log.L(ctx).Info("zkp prover not configured, skip registering as an in-memory signer")
-		return nil
-	}
-
-	signer, err := newSnarkProver(config)
-	if err != nil {
-		return err
-	}
-	registry[algorithms.ZKP_BABYJUBJUB_PLAINBYTES] = signer
-	return nil
-}
-
-func newSnarkProver(config signerapi.SnarkProverConfig) (*snarkProver, error) {
+func newSnarkProver(conf *SnarkProverConfig) (*snarkProver, error) {
 	cacheConfig := cache.Config{
 		Capacity: confutil.P(50),
 	}
 	return &snarkProver{
-		zkpProverConfig:         config,
+		zkpProverConfig:         conf,
 		circuitsCache:           cache.NewCache[string, witness.Calculator](&cacheConfig, &cacheConfig),
 		provingKeysCache:        cache.NewCache[string, []byte](&cacheConfig, &cacheConfig),
 		circuitLoader:           loadCircuit,
 		proofGenerator:          generateProof,
-		workerPerCircuit:        confutil.Int(config.MaxProverPerCircuit, *defaultSnarkProverConfig.MaxProverPerCircuit),
+		workerPerCircuit:        confutil.Int(conf.MaxProverPerCircuit, *defaultSnarkProverConfig.MaxProverPerCircuit),
 		circuitsWorkerIndexChan: make(map[string]chan int),
 	}, nil
 }
 
-func (sp *snarkProver) Sign(ctx context.Context, privateKey []byte, req *pb.SignRequest) (*pb.SignResponse, error) {
+func (sp *snarkProver) GetVerifier(ctx context.Context, algorithm, verifierType string, privateKey []byte) (string, error) {
+
+}
+
+func (sp *snarkProver) GetMinimumKeyLen(ctx context.Context, algorithm string) (int, error) {
+
+}
+
+func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, privateKey, payload []byte) ([]byte, error) {
 	keyBytes := [32]byte{}
 	copy(keyBytes[:], privateKey)
 	keyEntry := key.NewKeyEntryFromPrivateKeyBytes(keyBytes)
@@ -118,7 +106,7 @@ func (sp *snarkProver) Sign(ctx context.Context, privateKey []byte, req *pb.Sign
 			ccChan <- workerIndex
 		}()
 	case <-ctx.Done():
-		return nil, i18n.NewError(ctx, msgs.MsgContextCanceled)
+		return nil, errors.New("context cancelled")
 	}
 
 	workerID := fmt.Sprintf("%s-%d", inputs.CircuitId, workerIndex)

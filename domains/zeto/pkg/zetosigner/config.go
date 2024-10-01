@@ -15,10 +15,24 @@
 
 package zetosigner
 
+import "github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
+
 // StaticKeyEntryConfig is the configuration for a ZK prover
 // based on SNARK, which typically takes a circuit and proving key
 type SnarkProverConfig struct {
+	signerapi.Config
 	CircuitsDir         string `json:"circuitsDir"`         // directory for the circuits runtime (WASM currently supported)
 	ProvingKeysDir      string `json:"provingKeysDir"`      // public parameters for the prover, specific to each circuit
 	MaxProverPerCircuit *int   `json:"maxProverPerCircuit"` // maximum number of proving runtime per circuit, each prover owns a standalone WASM instance
+}
+
+// Implements the extensible config interface of the signer
+var _ signerapi.ExtensibleConfig = &SnarkProverConfig{}
+
+func (c *SnarkProverConfig) KeyStoreConfig() *signerapi.KeyStoreConfig {
+	return &c.KeyStore
+}
+
+func (c *SnarkProverConfig) KeyDerivationConfig() *signerapi.KeyDerivationConfig {
+	return &c.KeyDerivation
 }

@@ -21,7 +21,6 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/utxo"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer/common"
 )
 
 type commonWitnessInputs struct {
@@ -53,7 +52,7 @@ func buildCircuitInputs(commonInputs *pb.ProvingRequestCommon) (*commonWitnessIn
 			outputValues[i] = big.NewInt(0)
 			outputCommitments[i] = big.NewInt(0)
 		} else {
-			ownerPubKey, err := common.DecodePublicKey(commonInputs.OutputOwners[i])
+			ownerPubKey, err := DecodeBabyJubJubPublicKey(commonInputs.OutputOwners[i])
 			if err != nil {
 				return nil, err
 			}

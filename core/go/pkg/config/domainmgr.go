@@ -16,7 +16,7 @@
 package config
 
 import (
-	"github.com/kaleido-io/paladin/core/internal/cache"
+	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 )

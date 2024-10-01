@@ -13,25 +13,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package signerapi
+package zetosigner
 
 import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/iden3/go-iden3-crypto/babyjub"
+	"github.com/iden3/go-iden3-crypto/utils"
 )
 
-type FileSystemConfig struct {
-	Path     *string      `json:"path"`
-	Cache    cache.Config `json:"cache"`
-	FileMode *string      `json:"fileMode"`
-	DirMode  *string      `json:"dirMode"`
+func EncodeBabyJubJubPublicKey(pubKey *babyjub.PublicKey) string {
+	pubKeyComp := pubKey.Compress()
+	return utils.HexEncode(pubKeyComp[:])
 }
 
-var FileSystemDefaults = &FileSystemConfig{
-	Path:     confutil.P("keystore"),
-	FileMode: confutil.P("0600"),
-	DirMode:  confutil.P("0700"),
-	Cache: cache.Config{
-		Capacity: confutil.P(100),
-	},
+func DecodeBabyJubJubPublicKey(pubKeyHex string) (*babyjub.PublicKey, error) {
+	pubKeyCompBytes, err := utils.HexDecode(pubKeyHex)
+	if err != nil {
+		return nil, err
+	}
+	var compressedPubKey babyjub.PublicKeyComp
+	copy(compressedPubKey[:], pubKeyCompBytes)
+	return compressedPubKey.Decompress()
 }
