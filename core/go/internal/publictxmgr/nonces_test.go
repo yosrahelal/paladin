@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -582,7 +583,7 @@ func TestBatchDoubleSubmit(t *testing.T) {
 
 	signingKey := tktypes.EthAddress(tktypes.RandBytes(20))
 	mockKeyManager := mocks.keyManager.(*componentmocks.KeyManager)
-	mockKeyManager.On("ResolveKey", mock.Anything, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", signingKey.String(), nil)
+	mockKeyManager.On("ResolveKey", mock.Anything, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("", signingKey.String(), nil)
 
 	mocks.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(tktypes.HexUint64(1122334455)), nil).Once()

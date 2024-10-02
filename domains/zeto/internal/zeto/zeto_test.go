@@ -35,8 +35,10 @@ func TestDecodeDomainConfig(t *testing.T) {
 	encoded, err := types.DomainInstanceConfigABI.EncodeABIDataJSON(configJSON)
 	assert.NoError(t, err)
 
-	z := &Zeto{}
+	z := &Zeto{name: "z1"}
 	decoded, err := z.decodeDomainConfig(context.Background(), encoded)
 	assert.NoError(t, err)
 	assert.Equal(t, config, decoded)
+
+	assert.Equal(t, z.getAlgoZetoSnarkBJJ(), "domain:z1:snark:babyjubjub")
 }

@@ -170,6 +170,24 @@ func TestDomainRequestsOK(t *testing.T) {
 				},
 			}, nil
 		},
+		HandleEventBatch: func(ctx context.Context, hebr *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+			assert.Equal(t, "batch1", hebr.BatchId)
+			return &prototk.HandleEventBatchResponse{
+				TransactionsComplete: []string{"tx1"},
+			}, nil
+		},
+		Sign: func(ctx context.Context, sr *prototk.SignRequest) (*prototk.SignResponse, error) {
+			assert.Equal(t, "algo1", sr.Algorithm)
+			return &prototk.SignResponse{
+				Payload: []byte("signed"),
+			}, nil
+		},
+		GetVerifier: func(ctx context.Context, gvr *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error) {
+			assert.Equal(t, "algo1", gvr.Algorithm)
+			return &prototk.GetVerifierResponse{
+				Verifier: "verifier1",
+			}, nil
+		},
 	}
 
 	tdm := &testDomainManager{
@@ -277,6 +295,24 @@ func TestDomainRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, `{"test": "value"}`, ptr.Transaction.ParamsJson)
+
+	heb, err := domainAPI.HandleEventBatch(ctx, &prototk.HandleEventBatchRequest{
+		BatchId: "batch1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"tx1"}, heb.TransactionsComplete)
+
+	sr, err := domainAPI.Sign(ctx, &prototk.SignRequest{
+		Algorithm: "algo1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "signed", string(sr.Payload))
+
+	gvr, err := domainAPI.GetVerifier(ctx, &prototk.GetVerifierRequest{
+		Algorithm: "algo1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "verifier1", string(gvr.Verifier))
 
 	callbacks := <-waitForCallbacks
 

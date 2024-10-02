@@ -475,6 +475,7 @@ func (r *BesuReconciler) generateStatefulSetTemplate(node *corev1alpha1.Besu, na
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: node.Namespace,
+			Labels:    r.getLabels(node),
 			Annotations: r.withStandardAnnotations(map[string]string{
 				"kubectl.kubernetes.io/default-container": "besu",
 			}),
@@ -485,8 +486,9 @@ func (r *BesuReconciler) generateStatefulSetTemplate(node *corev1alpha1.Besu, na
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: r.getLabels(node, map[string]string{
-						"config-sum": configSum,
+					Labels: r.getLabels(node),
+					Annotations: r.withStandardAnnotations(map[string]string{
+						"core.paladin.io/config-sum": fmt.Sprintf("md5-%s", configSum),
 					}),
 				},
 				Spec: corev1.PodSpec{
@@ -612,47 +614,54 @@ func (r *BesuReconciler) createService(ctx context.Context, node *corev1alpha1.B
 
 // generateServiceTemplate generates a ConfigMap for the Besu configuration
 func (r *BesuReconciler) generateServiceTemplate(node *corev1alpha1.Besu, name string) *corev1.Service {
-	return &corev1.Service{
+	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: node.Namespace,
 			Labels:    r.getLabels(node),
 		},
-		Spec: corev1.ServiceSpec{
-			Selector: r.getLabels(node),
-			Ports: []corev1.ServicePort{
-				{
-					Name:       "rpc-http",
-					Port:       8545,
-					TargetPort: intstr.FromInt(8545),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       "rpc-ws",
-					Port:       8546,
-					TargetPort: intstr.FromInt(8546),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       "graphql-http",
-					Port:       8547,
-					TargetPort: intstr.FromInt(8547),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       "p2p-tcp",
-					Port:       30303,
-					TargetPort: intstr.FromInt(30303),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       "p2p-udp",
-					Port:       30303,
-					TargetPort: intstr.FromInt(30303),
-					Protocol:   corev1.ProtocolUDP,
-				},
-			},
-			Type: corev1.ServiceTypeClusterIP,
-		},
+		Spec: node.Spec.Service,
 	}
+	// We own the selector regardless of config in the CR
+	svc.Spec.Selector = r.getLabels(node)
+	// Default to a cluster IP
+	if svc.Spec.Type == "" {
+		svc.Spec.Type = corev1.ServiceTypeClusterIP
+	}
+	// Set ports unless CR has taken ownership
+	if svc.Spec.Ports == nil {
+		mergeServicePorts(&svc.Spec, []corev1.ServicePort{
+			{
+				Name:       "rpc-http",
+				Port:       8545,
+				TargetPort: intstr.FromInt(8545),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       "rpc-ws",
+				Port:       8546,
+				TargetPort: intstr.FromInt(8546),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       "graphql-http",
+				Port:       8547,
+				TargetPort: intstr.FromInt(8547),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       "p2p-tcp",
+				Port:       30303,
+				TargetPort: intstr.FromInt(30303),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       "p2p-udp",
+				Port:       30303,
+				TargetPort: intstr.FromInt(30303),
+				Protocol:   corev1.ProtocolUDP,
+			},
+		})
+	}
+	return svc
 }

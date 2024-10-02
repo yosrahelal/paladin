@@ -27,7 +27,7 @@ import (
 
 	pldconfig "github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/tyler-smith/go-bip39"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -228,6 +228,7 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: node.Namespace,
+			Labels:    r.getLabels(node),
 			Annotations: r.withStandardAnnotations(map[string]string{
 				"kubectl.kubernetes.io/default-container": "paladin",
 			}),
@@ -238,8 +239,9 @@ func (r *PaladinReconciler) generateStatefulSetTemplate(node *corev1alpha1.Palad
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: r.getLabels(node, map[string]string{
-						"config-sum": configSum,
+					Labels: r.getLabels(node),
+					Annotations: r.withStandardAnnotations(map[string]string{
+						"core.paladin.io/config-sum": fmt.Sprintf("md5-%s", configSum),
 					}),
 				},
 				Spec: corev1.PodSpec{
@@ -473,7 +475,9 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 
 	// Merge in the ports for our networking config (which we need to match our service defs)
 	pldConf.RPCServer.HTTP.Port = ptrTo(8548)
+	pldConf.RPCServer.HTTP.Address = ptrTo("0.0.0.0") // use k8s for network control outside the pod
 	pldConf.RPCServer.WS.Port = ptrTo(8549)
+	pldConf.RPCServer.WS.Address = ptrTo("0.0.0.0") // use k8s for network control outside the pod
 
 	// DB needs merging from user config and our config
 	if err := r.generatePaladinDBConfig(ctx, node, &pldConf, name); err != nil {
@@ -660,33 +664,38 @@ func (r *PaladinReconciler) createService(ctx context.Context, node *corev1alpha
 
 // generateServiceTemplate generates a ConfigMap for the Paladin configuration
 func (r *PaladinReconciler) generateServiceTemplate(node *corev1alpha1.Paladin, name string) *corev1.Service {
-	return &corev1.Service{
+	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: node.Namespace,
 			Labels:    r.getLabels(node),
 		},
-		Spec: corev1.ServiceSpec{
-			Selector: r.getLabels(node),
-			// TODO: Complete the ServiceSpec (e.g., ports, type, etc.)
-			// It will most likely get generated from the config
-			Ports: []corev1.ServicePort{
-				{
-					Name:       "rpc-http",
-					Port:       8548,
-					TargetPort: intstr.FromInt(8548),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       "rpc-ws",
-					Port:       8549,
-					TargetPort: intstr.FromInt(8549),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
-			Type: corev1.ServiceTypeClusterIP,
-		},
+		Spec: node.Spec.Service,
 	}
+	// We own the selector regardless of config in the CR
+	svc.Spec.Selector = r.getLabels(node)
+	// Default to a cluster IP
+	if svc.Spec.Type == "" {
+		svc.Spec.Type = corev1.ServiceTypeClusterIP
+	}
+	// Set ports unless CR has taken ownership
+	if svc.Spec.Ports == nil {
+		mergeServicePorts(&svc.Spec, []corev1.ServicePort{
+			{
+				Name:       "rpc-http",
+				Port:       8548,
+				TargetPort: intstr.FromInt(8548),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       "rpc-ws",
+				Port:       8549,
+				TargetPort: intstr.FromInt(8549),
+				Protocol:   corev1.ProtocolTCP,
+			},
+		})
+	}
+	return svc
 }
 
 func randURLSafeBase64(count int) string {

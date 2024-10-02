@@ -17,11 +17,19 @@ limitations under the License.
 package utils
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/onsi/ginkgo/v2" //nolint:golint,revive
 )
 
@@ -107,8 +115,8 @@ func InstallCertManager() error {
 
 // LoadImageToKindCluster loads a local docker image to the kind cluster
 func LoadImageToKindClusterWithName(name string) error {
-	cluster := "kind"
-	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
+	cluster := "paladin"
+	if v, ok := os.LookupEnv("CLUSTER_NAME"); ok {
 		cluster = v
 	}
 	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
@@ -139,4 +147,57 @@ func GetProjectDir() (string, error) {
 	}
 	wd = strings.Replace(wd, "/test/e2e", "", -1)
 	return wd, nil
+}
+
+func KubectlApplyYAML(yaml string) error {
+	cmd := exec.Command("kubectl", "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(yaml)
+	_, err := Run(cmd)
+	return err
+}
+
+type TestDeployer struct {
+	RPC  rpcclient.Client
+	From string
+}
+
+func (td *TestDeployer) DeploySmartContractBytecode(ctx context.Context, buildJSON string, params any) (receipt *ptxapi.TransactionReceipt, err error) {
+	type buildDefinition struct {
+		Bytecode tktypes.HexBytes `json:"bytecode"`
+		ABI      abi.ABI          `json:"abi"`
+	}
+	var build buildDefinition
+	if err := json.Unmarshal([]byte(buildJSON), &build); err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+
+	txIn := &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type: ptxapi.TransactionTypePublic.Enum(),
+			From: td.From,
+			Data: data,
+		},
+		ABI:      build.ABI,
+		Bytecode: build.Bytecode,
+	}
+
+	startTime := time.Now()
+	var txID uuid.UUID
+	if err = td.RPC.CallRPC(ctx, &txID, "ptx_sendTransaction", txIn); err != nil {
+		return nil, err
+	}
+
+	for {
+		if err = td.RPC.CallRPC(ctx, &receipt, "ptx_getTransactionReceipt", txID); err != nil {
+			return nil, err
+		}
+		if receipt != nil {
+			return receipt, nil
+		}
+		fmt.Printf("... waiting for receipt TX=%s (%s)\n", txID, time.Since(startTime))
+	}
 }

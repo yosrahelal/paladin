@@ -35,14 +35,15 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -111,7 +112,7 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 		require.NoError(t, err)
 
 		mocks.keyManager, err = ethclient.NewSimpleTestKeyManager(ctx, &signerapi.Config{
-			KeyStore: signerapi.StoreConfig{
+			KeyStore: signerapi.KeyStoreConfig{
 				Type: signerapi.KeyStoreTypeStatic,
 				Static: signerapi.StaticKeyStorageConfig{
 					Keys: map[string]signerapi.StaticKeyEntryConfig{
@@ -197,7 +198,7 @@ func TestNewEngineErrors(t *testing.T) {
 			},
 		},
 	})
-	mockKeyManager.On("ResolveKey", mock.Anything, "bad address", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", "", fmt.Errorf("lookup failed"))
+	mockKeyManager.On("ResolveKey", mock.Anything, "bad address", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("", "", fmt.Errorf("lookup failed"))
 	err := pmgr.PostInit(mocks.allComponents)
 	assert.Regexp(t, "lookup failed", err)
 }
@@ -227,7 +228,7 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 	passthroughBuildRawTransactionNoResolve(m, chainID.Int64())
 
 	// Resolve the key ourselves for comparison
-	_, resolvedKeyStr, err := m.keyManager.ResolveKey(ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	_, resolvedKeyStr, err := m.keyManager.ResolveKey(ctx, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 	resolvedKey := tktypes.MustEthAddress(resolvedKeyStr)
 
@@ -425,7 +426,7 @@ func TestResolveFail(t *testing.T) {
 	keyManager := m.keyManager.(*componentmocks.KeyManager)
 
 	// resolve key failure
-	keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", "", fmt.Errorf("resolve err")).Once()
+	keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("", "", fmt.Errorf("resolve err")).Once()
 	_, err := ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
 		PublicTxInput: ptxapi.PublicTxInput{
 			From: "signer1",
@@ -434,7 +435,7 @@ func TestResolveFail(t *testing.T) {
 	assert.Regexp(t, "resolve err", err)
 
 	resolvedKey := tktypes.EthAddress(tktypes.RandBytes(20))
-	keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("keyhandle1", resolvedKey.String(), nil)
+	keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("keyhandle1", resolvedKey.String(), nil)
 }
 
 func TestSubmitFailures(t *testing.T) {
@@ -443,7 +444,7 @@ func TestSubmitFailures(t *testing.T) {
 
 	resolvedKey := tktypes.EthAddress(tktypes.RandBytes(20))
 	keyManager := m.keyManager.(*componentmocks.KeyManager)
-	keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", resolvedKey.String(), nil)
+	keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("", resolvedKey.String(), nil)
 
 	// estimation failure - for non-revert
 	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
@@ -513,7 +514,7 @@ func TestAddActivityWrap(t *testing.T) {
 func mockForSubmitSuccess(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
 	signingKey := tktypes.EthAddress(tktypes.RandBytes(20))
 	mockKeyManager := mocks.keyManager.(*componentmocks.KeyManager)
-	mockKeyManager.On("ResolveKey", mock.Anything, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("", signingKey.String(), nil)
+	mockKeyManager.On("ResolveKey", mock.Anything, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("", signingKey.String(), nil)
 	mocks.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(tktypes.HexUint64(1122334455)), nil).Once()
 	mocks.db.ExpectBegin()
@@ -584,7 +585,7 @@ func TestEngineSuspendResumeRealDB(t *testing.T) {
 	defer ticker.Stop()
 
 	// Resolve the key ourselves for comparison
-	_, resolvedKeyStr, err := m.keyManager.ResolveKey(ctx, "signer1", algorithms.ECDSA_SECP256K1_PLAINBYTES)
+	_, resolvedKeyStr, err := m.keyManager.ResolveKey(ctx, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 	resolvedKey := *tktypes.MustEthAddress(resolvedKeyStr)
 
