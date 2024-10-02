@@ -98,6 +98,7 @@ type Orchestrator struct {
 	components          components.PreInitComponentsAndManagers
 	endorsementGatherer ptmgrtypes.EndorsementGatherer
 	publisher           ptmgrtypes.Publisher
+	identityResolver    components.IdentityResolver
 
 	store privatetxnstore.Store
 }
@@ -113,6 +114,7 @@ func NewOrchestrator(
 	endorsementGatherer ptmgrtypes.EndorsementGatherer,
 	publisher ptmgrtypes.Publisher,
 	store privatetxnstore.Store,
+	identityResolver components.IdentityResolver,
 ) *Orchestrator {
 
 	newOrchestrator := &Orchestrator{
@@ -139,6 +141,7 @@ func NewOrchestrator(
 		endorsementGatherer:          endorsementGatherer,
 		publisher:                    publisher,
 		store:                        store,
+		identityResolver:             identityResolver,
 	}
 
 	newOrchestrator.sequencer = sequencer
@@ -179,6 +182,10 @@ func (oc *Orchestrator) handleEvent(ctx context.Context, event ptmgrtypes.Privat
 		transactionProccessor.HandleTransactionRevertedEvent(ctx, event)
 	case *ptmgrtypes.TransactionDelegatedEvent:
 		transactionProccessor.HandleTransactionDelegatedEvent(ctx, event)
+	case *ptmgrtypes.ResolveVerifierResponseEvent:
+		transactionProccessor.HandleResolveVerifierResponseEvent(ctx, event)
+	case *ptmgrtypes.ResolveVerifierErrorEvent:
+		transactionProccessor.HandleResolveVerifierErrorEvent(ctx, event)
 	default:
 		log.L(ctx).Warnf("Unknown event type: %T", event)
 	}
@@ -227,7 +234,7 @@ func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *component
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.publisher, oc.endorsementGatherer)
+			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.publisher, oc.endorsementGatherer, oc.identityResolver)
 		}
 		oc.incompleteTxSProcessMap[tx.ID.String()].Init(ctx)
 		oc.pendingEvents <- &ptmgrtypes.TransactionSubmittedEvent{
@@ -294,7 +301,7 @@ func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status co
 
 // synchronously prepare and dispatch all given transactions to their associated signing address
 func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTransactions ptmgrtypes.DispatchableTransactions) error {
-
+	log.L(ctx).Debug("DispatchTransactions")
 	//prepare all transactions then dispatch them
 
 	// array of sequences with space for one per signing address
@@ -304,7 +311,8 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 	}
 
 	completed := false // and include whether we committed the DB transaction or not
-	for _, transactionIDs := range dispatchableTransactions {
+	for signingAddress, transactionIDs := range dispatchableTransactions {
+		log.L(ctx).Debugf("DispatchTransactions: %d transactions for signingAddress %s", len(transactionIDs), signingAddress)
 
 		preparedTransactions := make([]*components.PrivateTransaction, len(transactionIDs))
 
@@ -313,7 +321,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		}
 
 		for i, transactionID := range transactionIDs {
-			// prepare all trasnsactions for the given transaction IDs
+			// prepare all transactions for the given transaction IDs
 
 			sequence.PrivateTransactionDispatches[i] = &privatetxnstore.DispatchPersisted{
 				PrivateTransactionID: transactionID,
@@ -348,6 +356,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 
 		publicTXs := make([]*components.PublicTxSubmission, len(preparedTransactions))
 		for i, pt := range preparedTransactions {
+			log.L(ctx).Debugf("DispatchTransactions: creating PublicTxSubmission from %s", pt.Signer)
 			publicTXs[i] = &components.PublicTxSubmission{
 				Bindings: []*components.PaladinTXReference{{TransactionID: pt.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
 				PublicTxInput: ptxapi.PublicTxInput{

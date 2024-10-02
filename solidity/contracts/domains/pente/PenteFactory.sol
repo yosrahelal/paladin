@@ -13,7 +13,7 @@ contract PenteFactory is IPaladinContractRegistry_V0 {
         bytes memory data
     ) external {
         address instance = Clones.clone(address(pentePrivacyGroupFactory));
-        (PentePrivacyGroup(instance)).initialize(transactionId, data);
+        (PentePrivacyGroup(instance)).initialize(data);
 
         emit PaladinRegisterSmartContract_V0(
             transactionId,

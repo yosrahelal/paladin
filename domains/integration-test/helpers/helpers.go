@@ -129,8 +129,8 @@ func (dth *DomainTransactionHelper) SignAndSend(signer string) *SentDomainTransa
 	return tx
 }
 
-func (dth *DomainTransactionHelper) Prepare(signer string) *tktypes.PrivateContractPreparedTransaction {
-	var result tktypes.PrivateContractPreparedTransaction
+func (dth *DomainTransactionHelper) Prepare(signer string) *tktypes.PrivateContractTransaction {
+	var result tktypes.PrivateContractTransaction
 	dth.tx.From = signer
 	rpcerr := dth.rpc.CallRPC(dth.ctx, &result, "testbed_prepare", dth.tx)
 	if rpcerr != nil {

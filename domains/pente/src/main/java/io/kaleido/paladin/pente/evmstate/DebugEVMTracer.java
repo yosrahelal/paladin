@@ -15,6 +15,8 @@
 
 package io.kaleido.paladin.pente.evmstate;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.tuweni.bytes.Bytes;
 import org.hyperledger.besu.datatypes.Transaction;
 import org.hyperledger.besu.evm.frame.ExceptionalHaltReason;
@@ -23,15 +25,13 @@ import org.hyperledger.besu.evm.log.Log;
 import org.hyperledger.besu.evm.operation.Operation;
 import org.hyperledger.besu.evm.tracing.OperationTracer;
 import org.hyperledger.besu.evm.worldstate.WorldView;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
 
 public class DebugEVMTracer implements OperationTracer {
 
-    private final Logger logger = LoggerFactory.getLogger(DebugEVMTracer.class);
+    private static final Logger logger = LogManager.getLogger(DebugEVMTracer.class);
 
     @Override
     public void tracePreExecution(MessageFrame frame) {

@@ -78,9 +78,9 @@ func (n *Noto) makeNewState(coin *types.NotoCoin, distributionList []string) (*p
 		return nil, err
 	}
 	return &prototk.NewState{
-		SchemaId:        n.coinSchema.Id,
-		StateDataJson:   string(coinJSON),
-		DistibutionList: distributionList,
+		SchemaId:         n.coinSchema.Id,
+		StateDataJson:    string(coinJSON),
+		DistributionList: distributionList,
 	}, nil
 }
 

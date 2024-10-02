@@ -264,67 +264,83 @@ func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.Pr
 	return tx, nil
 }
 
+func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) *tktypes.PrivateContractTransaction {
+	inputStates := make([]*tktypes.FullState, len(tx.PostAssembly.InputStates))
+	for i, state := range tx.PostAssembly.InputStates {
+		inputStates[i] = &tktypes.FullState{
+			ID:     state.ID,
+			Schema: state.Schema,
+			Data:   []byte(state.Data),
+		}
+	}
+	outputStates := make([]*tktypes.FullState, len(tx.PostAssembly.OutputStates))
+	for i, state := range tx.PostAssembly.OutputStates {
+		outputStates[i] = &tktypes.FullState{
+			ID:     state.ID,
+			Schema: state.Schema,
+			Data:   []byte(state.Data),
+		}
+	}
+	readStates := make([]*tktypes.FullState, len(tx.PostAssembly.ReadStates))
+	for i, state := range tx.PostAssembly.ReadStates {
+		readStates[i] = &tktypes.FullState{
+			ID:     state.ID,
+			Schema: state.Schema,
+			Data:   []byte(state.Data),
+		}
+	}
+	return &tktypes.PrivateContractTransaction{
+		InputStates:  inputStates,
+		OutputStates: outputStates,
+		ReadStates:   readStates,
+		ExtraData:    tx.PostAssembly.ExtraData,
+	}
+}
+
 func (tb *testbed) rpcTestbedInvoke() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		invocation tktypes.PrivateContractInvoke,
 		waitForCompletion bool,
-	) (bool, error) {
+	) (*tktypes.PrivateContractTransaction, error) {
 
 		tx, err := tb.prepareTransaction(ctx, invocation)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
-
 		err = tb.execBaseLedgerTransaction(ctx, tx.Signer, tx.PreparedTransaction)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 
 		// Wait for the domain to index the transaction events
 		if waitForCompletion {
 			err = tb.c.DomainManager().WaitForTransaction(ctx, tx.ID)
 			if err != nil {
-				return false, err
+				return nil, err
 			}
 		}
-		return true, nil
+
+		result := tb.mapTransaction(tx)
+		return result, nil
 	})
 }
 
 func (tb *testbed) rpcTestbedPrepare() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		invocation tktypes.PrivateContractInvoke,
-	) (*tktypes.PrivateContractPreparedTransaction, error) {
+	) (*tktypes.PrivateContractTransaction, error) {
 
 		tx, err := tb.prepareTransaction(ctx, invocation)
 		if err != nil {
 			return nil, err
 		}
+		result := tb.mapTransaction(tx)
 		encodedCall, err := tx.PreparedTransaction.FunctionABI.EncodeCallDataCtx(ctx, tx.PreparedTransaction.Inputs)
 		if err != nil {
 			return nil, err
 		}
-		inputStates := make([]*tktypes.FullState, len(tx.PostAssembly.InputStates))
-		for i, state := range tx.PostAssembly.InputStates {
-			inputStates[i] = &tktypes.FullState{
-				ID:     state.ID,
-				Schema: state.Schema,
-				Data:   []byte(state.Data),
-			}
-		}
-		outputStates := make([]*tktypes.FullState, len(tx.PostAssembly.OutputStates))
-		for i, state := range tx.PostAssembly.OutputStates {
-			outputStates[i] = &tktypes.FullState{
-				ID:     state.ID,
-				Schema: state.Schema,
-				Data:   []byte(state.Data),
-			}
-		}
-		return &tktypes.PrivateContractPreparedTransaction{
-			EncodedCall:  encodedCall,
-			InputStates:  inputStates,
-			OutputStates: outputStates,
-		}, nil
+		result.EncodedCall = encodedCall
+		return result, nil
 	})
 }
 

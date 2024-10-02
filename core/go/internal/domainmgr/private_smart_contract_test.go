@@ -164,38 +164,56 @@ func TestDomainInitTransactionOK(t *testing.T) {
 	_, _ = doDomainInitTransactionOK(t, ctx, tp)
 }
 
-func TestEncodeABIData(t *testing.T) {
+func TestEncodeDecodeABIData(t *testing.T) {
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
 	assert.Nil(t, tp.d.initError.Load())
 
-	_, err := tp.d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_FUNCTION_CALL_DATA,
-		Definition: `{
-			  "type": "function",
-			  "name": "doStuff",
-			  "inputs": [
-				 { "name": "intVal", "type": "uint256" }
-			  ]
-			}`,
-		Body: `{ "intVal": 42 }`,
+	funcDef := `{
+		"type": "function",
+		"name": "doStuff",
+		"inputs": [
+			{ "name": "intVal", "type": "uint256" }
+		]
+	}`
+	encResult, err := tp.d.EncodeData(ctx, &prototk.EncodeDataRequest{
+		EncodingType: prototk.EncodingType_FUNCTION_CALL_DATA,
+		Definition:   funcDef,
+		Body:         `{ "intVal": 42 }`,
 	})
 	assert.NoError(t, err)
 
-	_, err = tp.d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_TUPLE,
-		Definition: `{
-		  "type": "tuple",
-		  "components": [
-			 { "name": "intVal", "type": "uint256" }
-		  ]
-		}`,
-		Body: `{ "intVal": 42 }`,
+	decResult, err := tp.d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_FUNCTION_CALL_DATA,
+		Definition:   funcDef,
+		Data:         encResult.Data,
 	})
 	assert.NoError(t, err)
+	assert.Equal(t, `{"intVal":"42"}`, decResult.Body)
+
+	tupleDef := `{
+		"type": "tuple",
+		"components": [
+			{ "name": "intVal", "type": "uint256" }
+		]
+	}`
+	encResult, err = tp.d.EncodeData(ctx, &prototk.EncodeDataRequest{
+		EncodingType: prototk.EncodingType_TUPLE,
+		Definition:   tupleDef,
+		Body:         `{ "intVal": 42 }`,
+	})
+	assert.NoError(t, err)
+
+	decResult, err = tp.d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_TUPLE,
+		Definition:   tupleDef,
+		Data:         encResult.Data,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, `{"intVal":"42"}`, decResult.Body)
 
 	txEIP1559_a, err := tp.d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_ETH_TRANSACTION,
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION,
 		Definition:   "",
 		Body: `{
 		  "to": "0x05d936207F04D81a85881b72A0D17854Ee8BE45A"
@@ -204,7 +222,7 @@ func TestEncodeABIData(t *testing.T) {
 	assert.NoError(t, err)
 
 	txEIP1559_b, err := tp.d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_ETH_TRANSACTION,
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION,
 		Definition:   "eip1559",
 		Body: `{
 		  "to": "0x05d936207F04D81a85881b72A0D17854Ee8BE45A"
@@ -214,7 +232,7 @@ func TestEncodeABIData(t *testing.T) {
 	assert.Equal(t, txEIP1559_a, txEIP1559_b)
 
 	txEIP155, err := tp.d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_ETH_TRANSACTION,
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION,
 		Definition:   "eip155",
 		Body: `{
 		  "to": "0x05d936207F04D81a85881b72A0D17854Ee8BE45A"
@@ -222,6 +240,53 @@ func TestEncodeABIData(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.NotEqual(t, txEIP155, txEIP1559_a)
+
+	eventDef := `{
+		"type": "event",
+		"name": "Transfer",
+		"inputs": [
+			{ "name": "from", "type": "address", "indexed": true },
+			{ "name": "to", "type": "address", "indexed": true },
+			{ "name": "value", "type": "uint256" }
+		]
+	}`
+	decResult, err = tp.d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_EVENT_DATA,
+		Definition:   eventDef,
+		Data:         ethtypes.MustNewHexBytes0xPrefix("0x000000000000000000000000000000000000000000000000000000000000002a"),
+		Topics: [][]byte{
+			ethtypes.MustNewHexBytes0xPrefix("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"),
+			ethtypes.MustNewHexBytes0xPrefix("0x000000000000000000000000dafce4acc2703a24f29d1321adaadf5768f54642"),
+			ethtypes.MustNewHexBytes0xPrefix("0x000000000000000000000000dbfd76af2157dc15ee4e57f3f942bb45ba84af24"),
+		},
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, `{"from":"dafce4acc2703a24f29d1321adaadf5768f54642","to":"dbfd76af2157dc15ee4e57f3f942bb45ba84af24","value":"42"}`, decResult.Body)
+
+	eventDef = `{
+      "inputs": [
+        {
+          "name": "contractAddress",
+          "type": "address"
+        },
+        {
+          "name": "encodedCall",
+          "type": "bytes"
+        }
+      ],
+      "name": "PenteExternalCall",
+      "type": "event"
+    }`
+	decResult, err = tp.d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_EVENT_DATA,
+		Definition:   eventDef,
+		Data:         ethtypes.MustNewHexBytes0xPrefix("0x0000000000000000000000003153e3e67d3d4be35aa5baff60b5a862f55a54310000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000002460fe47b1000000000000000000000000000000000000000000000000000000000000006400000000000000000000000000000000000000000000000000000000"),
+		Topics: [][]byte{
+			ethtypes.MustNewHexBytes0xPrefix("0xcac03685d5ba4ab3e1465a8ee1b2bb21094ddbd612a969fd34f93a5be7a0ac4f"),
+		},
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, `{"contractAddress":"3153e3e67d3d4be35aa5baff60b5a862f55a5431","encodedCall":"60fe47b10000000000000000000000000000000000000000000000000000000000000064"}`, decResult.Body)
 
 }
 
