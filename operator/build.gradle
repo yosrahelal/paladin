@@ -66,7 +66,7 @@ task e2e(type: Exec, dependsOn: promoteKindImages) {
     args 'test-e2e'
 }
 
-task make(type: Exec, dependsOn: [":toolkit:go:protoc"]) {
+task make(type: Exec, dependsOn: [":toolkit:go:protoc", copySolidity]) {
     executable 'make'
 }
 
