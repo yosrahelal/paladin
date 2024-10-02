@@ -69,6 +69,7 @@ var (
 	MsgComponentPrivateTxManagerStartError = ffe("PD010026", "Error starting private transaction manager ")
 	MsgComponentTxManagerInitError         = ffe("PD010027", "Error initializing transaction manager")
 	MsgComponentTxManagerStartError        = ffe("PD010028", "Error starting transaction manager ")
+	MsgComponentIdentityResolverInitError  = ffe("PD010029", "Error initializing identity resolver")
 
 	// States PD0101XX
 	MsgStateInvalidLength             = ffe("PD010101", "Invalid hash len expected=%d actual=%d")
@@ -247,6 +248,7 @@ var (
 	MsgBaseLedgerTransactionFailed    = ffe("PD011810", "Failed to submit base ledger transaction")
 	MsgContractAddressNotProvided     = ffe("PD011811", "Contract address (To) not found in the transaction input")
 	MsgPrivTxMgrPublicTxFail          = ffe("PD011812", "Public transaction rejected")
+	MsgResolveVerifierRemoteFailed    = ffe("PD011813", "Failed to resolve verifier on remote node with lookup %s algorithm %s: Error %s")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")
@@ -288,6 +290,8 @@ var (
 	MsgTransportInvalidDestinationSend        = ffe("PD012007", "Message has invalid destination for sending from local node '%s': '%s'")
 	MsgTransportInvalidReplyToSend            = ffe("PD012008", "Message has invalid replyTo destination: '%s'")
 	MsgTransportInvalidLocalNode              = ffe("PD012009", "Node '%s' is the local node")
+	MsgTransportClientAlreadyRegistered       = ffe("PD012010", "Client '%s' already registered")
+	MsgTransportDestinationNotFound           = ffe("PD012011", "Destination '%s' not found")
 
 	// RegistryManager module PD0121XX
 	MsgRegistryNodeEntiresNotFound = ffe("PD012100", "No entries found for node '%s'")

@@ -90,3 +90,30 @@ func (p *publisher) PublishTransactionEndorsedEvent(ctx context.Context, transac
 	p.privateTxManager.HandleNewEvent(ctx, event)
 	return nil
 }
+
+func (p *publisher) PublishResolveVerifierResponseEvent(ctx context.Context, transactionId string, lookup, algorithm, verifier string) {
+	event := &ptmgrtypes.ResolveVerifierResponseEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
+		},
+		Lookup:    &lookup,
+		Algorithm: &algorithm,
+		Verifier:  &verifier,
+	}
+	p.privateTxManager.HandleNewEvent(ctx, event)
+
+}
+
+func (p *publisher) PublishResolveVerifierErrorEvent(ctx context.Context, transactionId string, lookup, algorithm, errorMessage string) {
+	event := &ptmgrtypes.ResolveVerifierErrorEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
+		},
+		Lookup:       &lookup,
+		Algorithm:    &algorithm,
+		ErrorMessage: &errorMessage,
+	}
+	p.privateTxManager.HandleNewEvent(ctx, event)
+}

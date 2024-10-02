@@ -30,11 +30,12 @@ import (
 )
 
 type mockComponents struct {
-	db            sqlmock.Sqlmock
-	domainManager *componentmocks.DomainManager
-	blockIndexer  *componentmocks.BlockIndexer
-	publicTxMgr   *componentmocks.PublicTxManager
-	privateTxMgr  *componentmocks.PrivateTxManager
+	db               sqlmock.Sqlmock
+	domainManager    *componentmocks.DomainManager
+	blockIndexer     *componentmocks.BlockIndexer
+	publicTxMgr      *componentmocks.PublicTxManager
+	privateTxMgr     *componentmocks.PrivateTxManager
+	identityResolver *componentmocks.IdentityResolver
 }
 
 func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *config.TxManagerConfig, mc *mockComponents)) (context.Context, *txManager, func()) {
@@ -44,10 +45,11 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *con
 
 	conf := &config.TxManagerConfig{}
 	mc := &mockComponents{
-		blockIndexer:  componentmocks.NewBlockIndexer(t),
-		domainManager: componentmocks.NewDomainManager(t),
-		publicTxMgr:   componentmocks.NewPublicTxManager(t),
-		privateTxMgr:  componentmocks.NewPrivateTxManager(t),
+		blockIndexer:     componentmocks.NewBlockIndexer(t),
+		domainManager:    componentmocks.NewDomainManager(t),
+		publicTxMgr:      componentmocks.NewPublicTxManager(t),
+		privateTxMgr:     componentmocks.NewPrivateTxManager(t),
+		identityResolver: componentmocks.NewIdentityResolver(t),
 	}
 
 	componentMocks := componentmocks.NewAllComponents(t)
@@ -55,6 +57,7 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *con
 	componentMocks.On("DomainManager").Return(mc.domainManager).Maybe()
 	componentMocks.On("PublicTxManager").Return(mc.publicTxMgr).Maybe()
 	componentMocks.On("PrivateTxManager").Return(mc.privateTxMgr).Maybe()
+	componentMocks.On("IdentityResolver").Return(mc.identityResolver).Maybe()
 
 	var p persistence.Persistence
 	var err error
