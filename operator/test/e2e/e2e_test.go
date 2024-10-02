@@ -28,10 +28,13 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/kaleido-io/paladin/operator/test/utils"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 )
+
+const disableCleanup = true
 
 const namespace = "paladin-e2e" // if changed, must also change the YAML
 
@@ -41,12 +44,19 @@ var e2eSingleNodeBesuGenesisYAML string
 //go:embed e2e_single_node_besu.yaml
 var e2eSingleNodeBesuYAML string
 
-//go:embed e2e_single_node_paladin_postgres.yaml
-var e2eSingleNodePaladinPostgresYAML string
+//go:embed e2e_single_node_paladin_psql_nodomains.yaml
+var e2eSingleNodePaladinPSQLNoDomainsYAML string
+
+//go:embed abis/PenteFactory.json
+var penteFactoryBuild string
+
+//go:embed abis/NotoFactory.json
+var notoFactoryBuild string
 
 func startPaladinOperator() {
 	var controllerPodName string
 	var err error
+	log.SetLevel("debug")
 
 	// projectimage stores the name of the image used in the example
 	var projectimage = "paladin-operator:latest"
@@ -136,15 +146,17 @@ var _ = Describe("controller", Ordered, func() {
 	})
 
 	AfterAll(func() {
-		By("uninstalling the Prometheus manager bundle")
-		utils.UninstallPrometheusOperator()
+		if !disableCleanup {
+			By("uninstalling the Prometheus manager bundle")
+			utils.UninstallPrometheusOperator()
 
-		By("uninstalling the cert-manager bundle")
-		utils.UninstallCertManager()
+			By("uninstalling the cert-manager bundle")
+			utils.UninstallCertManager()
 
-		By("removing manager namespace")
-		cmd := exec.Command("kubectl", "delete", "ns", namespace)
-		_, _ = utils.Run(cmd)
+			By("removing manager namespace")
+			cmd := exec.Command("kubectl", "delete", "ns", namespace)
+			_, _ = utils.Run(cmd)
+		}
 	})
 
 	Context("Paladin Single Node", func() {
@@ -160,20 +172,33 @@ var _ = Describe("controller", Ordered, func() {
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
 			By("creating a Paladin node CR")
-			err = utils.KubectlApplyYAML(e2eSingleNodePaladinPostgresYAML)
+			err = utils.KubectlApplyYAML(e2eSingleNodePaladinPSQLNoDomainsYAML)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
-			By("waiting for the Paladin API to become available")
+			rpc, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{
+				URL: "http://127.0.0.1:31548",
+			})
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+
+			By("waiting for Paladin node to be ready")
 			EventuallyWithOffset(1, func() error {
-				rpc, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{
-					URL: "http://127.0.0.1:31548",
-				})
-				if err != nil {
-					return err
-				}
 				var txs []*ptxapi.Transaction
-				return rpc.CallRPC(ctx, &txs, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), false)
-			}, time.Minute, time.Second).Should(Succeed())
+				return rpc.CallRPC(ctx, &txs, "ptx_queryPendingTransactions", query.NewQueryBuilder().Limit(1).Query(), false)
+			}, time.Minute, 100*time.Millisecond).Should(Succeed())
+
+			deployer := utils.TestDeployer{RPC: rpc, From: "deployerKey"}
+
+			By("deploying the pente factory")
+			_, err = deployer.DeploySmartContractBytecode(ctx, penteFactoryBuild, []any{})
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			// penteFactoryAddr := receipt.ContractAddress
+			// By("recording pente factory deployed at " + penteFactoryAddr.String())
+
+			By("deploying the noto factory")
+			_, err = deployer.DeploySmartContractBytecode(ctx, notoFactoryBuild, []any{})
+			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			// notoFactoryAddr := receipt.ContractAddress
+			// By("recording noto factory deployed at " + notoFactoryAddr.String())
 
 		})
 	})
