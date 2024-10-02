@@ -151,6 +151,26 @@ func TestParseCustomTimeout(t *testing.T) {
 	assert.Equal(t, 10*time.Second, s.calcRequestTimeout(req, 10*time.Second, 20*time.Second))
 }
 
+func TestOnlyAcceptsTLSConnectionsWhenTLSConfigProvided(t *testing.T) {
+	tlsConfig := tlsconf.Config{
+		Enabled: true,
+	}
+	config := &Config{
+		TLS: tlsConfig,
+	}
+	
+	url, _, done := newTestServer(t, config, func(w http.ResponseWriter, r *http.Request) {})
+	defer done()
+
+	// Make a HTTP request to the server and check that we get a 400 (client speaking HTTP to a HTTPS server)
+	req, err := http.NewRequest(http.MethodPut, url, nil)
+	require.NoError(t, err)
+	res, err := http.DefaultClient.Do(req)
+	assert.Nil(t, err)
+	assert.NotNil(t, res)
+	assert.Equal(t, 400, res.StatusCode)
+}
+
 type mockResponseWriter struct{}
 
 func (*mockResponseWriter) Header() http.Header { return nil }
