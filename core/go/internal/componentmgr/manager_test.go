@@ -23,17 +23,14 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/config"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -44,33 +41,33 @@ func TestInitOK(t *testing.T) {
 
 	// We build a config that allows us to get through init successfully, as should be possible
 	// (anything that can't do this should have a separate Start() phase).
-	testConfig := &config.PaladinConfig{
-		TransportManagerConfig: config.TransportManagerConfig{
+	testConfig := &pldconf.PaladinConfig{
+		TransportManagerConfig: pldconf.TransportManagerConfig{
 			NodeName: "node1",
 		},
-		DB: persistence.Config{
+		DB: pldconf.DBConfig{
 			Type: "sqlite",
-			SQLite: persistence.SQLiteConfig{
-				SQLDBConfig: persistence.SQLDBConfig{
+			SQLite: pldconf.SQLiteConfig{
+				SQLDBConfig: pldconf.SQLDBConfig{
 					DSN:           ":memory:",
 					AutoMigrate:   confutil.P(true),
 					MigrationsDir: "../../db/migrations/sqlite",
 				},
 			},
 		},
-		Blockchain: ethclient.Config{
-			HTTP: rpcclient.HTTPConfig{
+		Blockchain: pldconf.EthClientConfig{
+			HTTP: pldconf.HTTPClientConfig{
 				URL: "http://localhost:8545", // we won't actually connect this test, just check the config
 			},
 		},
-		Signer: signerapi.Config{
-			KeyDerivation: signerapi.KeyDerivationConfig{
-				Type: signerapi.KeyDerivationTypeBIP32,
+		Signer: pldconf.SignerConfig{
+			KeyDerivation: pldconf.KeyDerivationConfig{
+				Type: pldconf.KeyDerivationTypeBIP32,
 			},
-			KeyStore: signerapi.KeyStoreConfig{
+			KeyStore: pldconf.KeyStoreConfig{
 				Type: "static",
-				Static: signerapi.StaticKeyStorageConfig{
-					Keys: map[string]signerapi.StaticKeyEntryConfig{
+				Static: pldconf.StaticKeyStoreConfig{
+					Keys: map[string]pldconf.StaticKeyEntryConfig{
 						"seed": {
 							Encoding: "hex",
 							Inline:   "dfaf68b749c53672e5fa8e0b41514f9efd033ba6aa3add3b8b07f92e66f0e64a",
@@ -79,9 +76,9 @@ func TestInitOK(t *testing.T) {
 				},
 			},
 		},
-		RPCServer: rpcserver.Config{
-			HTTP: rpcserver.HTTPEndpointConfig{Disabled: true},
-			WS:   rpcserver.WSEndpointConfig{Disabled: true},
+		RPCServer: pldconf.RPCServerConfig{
+			HTTP: pldconf.RPCServerConfigHTTP{Disabled: true},
+			WS:   pldconf.RPCServerConfigWS{Disabled: true},
 		},
 	}
 
@@ -184,7 +181,7 @@ func TestStartOK(t *testing.T) {
 	mockEngine.On("EngineName").Return("unittest_engine")
 	mockEngine.On("Stop").Return()
 
-	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &config.PaladinConfig{}, mockEngine).(*componentManager)
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &pldconf.PaladinConfig{}, mockEngine).(*componentManager)
 	cm.ethClientFactory = mockEthClientFactory
 	cm.initResults = map[string]*components.ManagerInitResult{
 		"utengine": {
@@ -217,7 +214,7 @@ func TestStartOK(t *testing.T) {
 }
 
 func TestBuildInternalEventStreamsPreCommitPostCommit(t *testing.T) {
-	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &config.PaladinConfig{}, nil).(*componentManager)
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &pldconf.PaladinConfig{}, nil).(*componentManager)
 	handler := func(ctx context.Context, dbTX *gorm.DB, blocks []*blockindexer.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
 		return nil, nil
 	}
@@ -236,7 +233,7 @@ func TestBuildInternalEventStreamsPreCommitPostCommit(t *testing.T) {
 }
 
 func TestErrorWrapping(t *testing.T) {
-	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &config.PaladinConfig{}, nil).(*componentManager)
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &pldconf.PaladinConfig{}, nil).(*componentManager)
 
 	mockKeyManager := componentmocks.NewKeyManager(t)
 	mockEthClientFactory := componentmocks.NewEthClientFactory(t)

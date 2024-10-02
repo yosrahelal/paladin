@@ -23,11 +23,12 @@ import (
 	"time"
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"gorm.io/gorm"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -109,8 +110,8 @@ func NewWriter[T Writeable[R], R any](
 	bgCtx context.Context,
 	handler BatchHandler[T, R],
 	p persistence.Persistence,
-	conf *config.FlushWriterConfig,
-	defaults *config.FlushWriterConfig,
+	conf *pldconf.FlushWriterConfig,
+	defaults *pldconf.FlushWriterConfig,
 ) Writer[T, R] {
 	workerCount := confutil.IntMin(conf.WorkerCount, 1, *defaults.WorkerCount)
 	batchMaxSize := confutil.IntMin(conf.BatchMaxSize, 1, *defaults.BatchMaxSize)

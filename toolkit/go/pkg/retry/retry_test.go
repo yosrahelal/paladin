@@ -22,13 +22,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRetryEventuallyOk(t *testing.T) {
-	r := NewRetryIndefinite(&Config{
+	r := NewRetryIndefinite(&pldconf.RetryConfig{
 		InitialDelay: confutil.P("1ms"),
 		MaxDelay:     confutil.P("3ms"),
 	})
@@ -42,7 +43,7 @@ func TestRetryEventuallyOk(t *testing.T) {
 }
 
 func TestRetryDeadlineTimeout(t *testing.T) {
-	r := NewRetryIndefinite(&Config{
+	r := NewRetryIndefinite(&pldconf.RetryConfig{
 		InitialDelay: confutil.P("1s"),
 		MaxDelay:     confutil.P("1s"),
 	})
@@ -55,7 +56,7 @@ func TestRetryDeadlineTimeout(t *testing.T) {
 }
 
 func TestRetryContextCanceled(t *testing.T) {
-	r := NewRetryIndefinite(&Config{
+	r := NewRetryIndefinite(&pldconf.RetryConfig{
 		InitialDelay: confutil.P("1s"),
 		MaxDelay:     confutil.P("1s"),
 	})
@@ -68,8 +69,8 @@ func TestRetryContextCanceled(t *testing.T) {
 }
 
 func TestRetryLimited(t *testing.T) {
-	r := NewRetryLimited(&ConfigWithMax{
-		Config: Config{
+	r := NewRetryLimited(&pldconf.RetryConfigWithMax{
+		RetryConfig: pldconf.RetryConfig{
 			InitialDelay: confutil.P("1ms"),
 			MaxDelay:     confutil.P("1ms"),
 		},
@@ -85,7 +86,7 @@ func TestRetryLimited(t *testing.T) {
 }
 
 func TestRetryUTLimited(t *testing.T) {
-	r := NewRetryIndefinite(&Config{
+	r := NewRetryIndefinite(&pldconf.RetryConfig{
 		InitialDelay: confutil.P("1ms"),
 		MaxDelay:     confutil.P("1ms"),
 	})

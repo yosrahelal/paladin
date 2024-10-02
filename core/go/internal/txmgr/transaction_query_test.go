@@ -21,14 +21,15 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestGetTransactionByIDFullFail(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectBegin()
 		mc.db.ExpectQuery("SELECT.*transactions").WillReturnError(fmt.Errorf("pop"))
 		mc.db.ExpectRollback()
@@ -40,7 +41,7 @@ func TestGetTransactionByIDFullFail(t *testing.T) {
 }
 
 func TestGetTransactionByIDFullPublicFail(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectBegin()
 		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(uuid.New()))
 		mc.db.ExpectQuery("SELECT.*transaction_deps").WillReturnRows(sqlmock.NewRows([]string{}))
@@ -55,7 +56,7 @@ func TestGetTransactionByIDFullPublicFail(t *testing.T) {
 }
 
 func TestGetTransactionByIDFail(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectQuery("SELECT.*transactions").WillReturnError(fmt.Errorf("pop"))
 	})
 	defer done()
@@ -65,7 +66,7 @@ func TestGetTransactionByIDFail(t *testing.T) {
 }
 
 func TestGetTransactionDependenciesFail(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectQuery("SELECT.*transaction_deps").WillReturnError(fmt.Errorf("pop"))
 	})
 	defer done()

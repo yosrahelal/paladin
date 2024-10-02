@@ -24,44 +24,13 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/ffresty"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tlsconf"
 )
 
-type ConfigAuth struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-type HTTPConfig struct {
-	URL         string                 `json:"url"`
-	HTTPHeaders map[string]interface{} `json:"httpHeaders"`
-	Auth        ConfigAuth             `json:"auth"`
-	TLS         tlsconf.Config         `json:"tls"`
-}
-
-type WSConfig struct {
-	HTTPConfig             `json:",inline"`
-	InitialConnectAttempts *int         `json:"initialConnectAttempts"`
-	ConnectionTimeout      *string      `json:"connectionTimeout"`
-	ConnectRetry           retry.Config `json:"connectRetry"`
-	ReadBufferSize         *string      `json:"readBufferSize"`
-	WriteBufferSize        *string      `json:"writeBufferSize"`
-	HeartbeatInterval      *string      `json:"heartbeatInterval"`
-}
-
-var DefaultWSConfig = &WSConfig{
-	ReadBufferSize:         confutil.P("16Kb"),
-	WriteBufferSize:        confutil.P("16Kb"),
-	InitialConnectAttempts: confutil.P(0),
-	ConnectionTimeout:      confutil.P("30s"),
-	HeartbeatInterval:      confutil.P("15s"),
-	ConnectRetry:           retry.Defaults.Config,
-}
-
-func ParseWSConfig(ctx context.Context, config *WSConfig) (*wsclient.WSConfig, error) {
+func ParseWSConfig(ctx context.Context, config *pldconf.WSClientConfig) (*wsclient.WSConfig, error) {
 	u, err := url.Parse(config.URL)
 	if err != nil || (u.Scheme != "ws" && u.Scheme != "wss") {
 		return nil, i18n.WrapError(ctx, err, tkmsgs.MsgRPCClientInvalidWebSocketURL, u)
@@ -76,20 +45,20 @@ func ParseWSConfig(ctx context.Context, config *WSConfig) (*wsclient.WSConfig, e
 	return &wsclient.WSConfig{
 		WebSocketURL:           u.String(),
 		HTTPHeaders:            config.HTTPHeaders,
-		ReadBufferSize:         int(confutil.ByteSize(config.ReadBufferSize, 0, *DefaultWSConfig.ReadBufferSize)),
-		WriteBufferSize:        int(confutil.ByteSize(config.WriteBufferSize, 0, *DefaultWSConfig.WriteBufferSize)),
-		ConnectionTimeout:      confutil.DurationMin(config.ConnectionTimeout, 0, *DefaultWSConfig.ConnectionTimeout),
-		InitialDelay:           confutil.DurationMin(config.ConnectRetry.InitialDelay, 0, *DefaultWSConfig.ConnectRetry.InitialDelay),
-		MaximumDelay:           confutil.DurationMin(config.ConnectRetry.MaxDelay, 0, *DefaultWSConfig.ConnectRetry.MaxDelay),
-		HeartbeatInterval:      confutil.DurationMin(config.HeartbeatInterval, 0, *DefaultWSConfig.HeartbeatInterval),
+		ReadBufferSize:         int(confutil.ByteSize(config.ReadBufferSize, 0, *pldconf.DefaultWSConfig.ReadBufferSize)),
+		WriteBufferSize:        int(confutil.ByteSize(config.WriteBufferSize, 0, *pldconf.DefaultWSConfig.WriteBufferSize)),
+		ConnectionTimeout:      confutil.DurationMin(config.ConnectionTimeout, 0, *pldconf.DefaultWSConfig.ConnectionTimeout),
+		InitialDelay:           confutil.DurationMin(config.ConnectRetry.InitialDelay, 0, *pldconf.DefaultWSConfig.ConnectRetry.InitialDelay),
+		MaximumDelay:           confutil.DurationMin(config.ConnectRetry.MaxDelay, 0, *pldconf.DefaultWSConfig.ConnectRetry.MaxDelay),
+		HeartbeatInterval:      confutil.DurationMin(config.HeartbeatInterval, 0, *pldconf.DefaultWSConfig.HeartbeatInterval),
 		AuthUsername:           config.Auth.Username,
 		AuthPassword:           config.Auth.Password,
 		TLSClientConfig:        tlsConfig,
-		InitialConnectAttempts: confutil.IntMin(config.InitialConnectAttempts, 0, *DefaultWSConfig.InitialConnectAttempts),
+		InitialConnectAttempts: confutil.IntMin(config.InitialConnectAttempts, 0, *pldconf.DefaultWSConfig.InitialConnectAttempts),
 	}, nil
 }
 
-func ParseHTTPConfig(ctx context.Context, config *HTTPConfig) (*resty.Client, error) {
+func ParseHTTPConfig(ctx context.Context, config *pldconf.HTTPClientConfig) (*resty.Client, error) {
 	u, err := url.Parse(config.URL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 		return nil, i18n.WrapError(ctx, err, tkmsgs.MsgRPCClientInvalidHTTPURL, u)

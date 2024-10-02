@@ -27,9 +27,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/mocks/rpcclientmocks"
-	"github.com/kaleido-io/paladin/core/pkg/config"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -296,9 +297,9 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 	// Stop and restart
 	bi.Stop()
 
-	bi, err = newBlockIndexer(ctx, &config.BlockIndexerConfig{
+	bi, err = newBlockIndexer(ctx, &pldconf.BlockIndexerConfig{
 		CommitBatchSize: confutil.P(1),
-		FromBlock:       tktypes.RawJSON(`0`),
+		FromBlock:       json.RawMessage(`0`),
 	}, bi.persistence, bi.blockListener)
 	require.NoError(t, err)
 	err = bi.Start(&InternalEventStream{
@@ -425,7 +426,7 @@ func TestTestNotifyEventStreamDoesNotBlock(t *testing.T) {
 }
 
 func TestUpsertInternalEventQueryExistingStreamFail(t *testing.T) {
-	_, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	_, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnError(fmt.Errorf("pop"))
@@ -439,7 +440,7 @@ func TestUpsertInternalEventQueryExistingStreamFail(t *testing.T) {
 }
 
 func TestUpsertInternalEventStreamMismatchExistingSourceABI(t *testing.T) {
-	_, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	_, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows(
@@ -458,7 +459,7 @@ func TestUpsertInternalEventStreamMismatchExistingSourceABI(t *testing.T) {
 }
 
 func TestUpsertInternalEventStreamMismatchExistingSourceAddress(t *testing.T) {
-	_, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	_, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows(
@@ -484,7 +485,7 @@ func TestUpsertInternalEventStreamMismatchExistingSourceAddress(t *testing.T) {
 }
 
 func TestUpsertInternalEventStreamMismatchExistingSourceLength(t *testing.T) {
-	_, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	_, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows(
@@ -507,7 +508,7 @@ func TestUpsertInternalEventStreamMismatchExistingSourceLength(t *testing.T) {
 }
 
 func TestUpsertInternalEventStreamUpdateFail(t *testing.T) {
-	_, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	_, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows(
@@ -532,7 +533,7 @@ func TestUpsertInternalEventStreamUpdateFail(t *testing.T) {
 }
 
 func TestUpsertInternalEventStreamCreateFail(t *testing.T) {
-	_, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	_, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows(
@@ -554,7 +555,7 @@ func TestUpsertInternalEventStreamCreateFail(t *testing.T) {
 }
 
 func TestProcessCheckpointFail(t *testing.T) {
-	ctx, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	bi.retry.UTSetMaxAttempts(1)
@@ -572,7 +573,7 @@ func TestProcessCheckpointFail(t *testing.T) {
 }
 
 func TestGetHighestIndexedBlockFail(t *testing.T) {
-	ctx, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	bi.retry.UTSetMaxAttempts(1)
@@ -599,7 +600,7 @@ func TestReturnToCatchupAfterStartHeadBlock5(t *testing.T) {
 }
 
 func testReturnToCatchupAfterStart(t *testing.T, headBlock int64) {
-	ctx, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*event_stream_checkpoints").WillReturnRows(p.Mock.NewRows([]string{}))
@@ -659,7 +660,7 @@ func testReturnToCatchupAfterStart(t *testing.T, headBlock int64) {
 }
 
 func TestExitInCatchupPhase(t *testing.T) {
-	ctx, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	bi.retry.UTSetMaxAttempts(1)
@@ -689,7 +690,7 @@ func TestExitInCatchupPhase(t *testing.T) {
 }
 
 func TestSendToDispatcherClosedNoBlock(t *testing.T) {
-	ctx, bi, _, _, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	ctx, bi, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	done()
 
 	es := &eventStream{
@@ -703,7 +704,7 @@ func TestSendToDispatcherClosedNoBlock(t *testing.T) {
 }
 
 func TestDispatcherDispatchClosed(t *testing.T) {
-	ctx, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectBegin()
@@ -747,7 +748,7 @@ func TestDispatcherDispatchClosed(t *testing.T) {
 }
 
 func TestProcessCatchupEventPageFailRPC(t *testing.T) {
-	ctx, bi, mRPC, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	ctx, bi, mRPC, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	txHash := tktypes.MustParseBytes32(tktypes.RandHex(32))

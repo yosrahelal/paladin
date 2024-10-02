@@ -23,13 +23,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func newTestServerHTTP(t *testing.T, conf *Config) (string, *rpcServer, func()) {
+func newTestServerHTTP(t *testing.T, conf *pldconf.RPCServerConfig) (string, *rpcServer, func()) {
 
 	conf.HTTP.Address = confutil.P("127.0.0.1")
 	conf.HTTP.Port = confutil.P(0)
@@ -43,7 +43,7 @@ func newTestServerHTTP(t *testing.T, conf *Config) (string, *rpcServer, func()) 
 
 }
 
-func newTestServerWebSockets(t *testing.T, conf *Config) (string, *rpcServer, func()) {
+func newTestServerWebSockets(t *testing.T, conf *pldconf.RPCServerConfig) (string, *rpcServer, func()) {
 
 	conf.WS.Address = confutil.P("127.0.0.1")
 	conf.WS.Port = confutil.P(0)
@@ -69,13 +69,13 @@ func regTestRPC(s *rpcServer, method string, handler RPCHandler) {
 
 func TestBadHTTPConfig(t *testing.T) {
 
-	_, err := NewRPCServer(context.Background(), &Config{
-		HTTP: HTTPEndpointConfig{
-			Config: httpserver.Config{
+	_, err := NewRPCServer(context.Background(), &pldconf.RPCServerConfig{
+		HTTP: pldconf.RPCServerConfigHTTP{
+			HTTPServerConfig: pldconf.HTTPServerConfig{
 				Address: confutil.P("::::::wrong"),
 			},
 		},
-		WS: WSEndpointConfig{Disabled: true},
+		WS: pldconf.RPCServerConfigWS{Disabled: true},
 	})
 	assert.Regexp(t, "PD020601", err)
 
@@ -83,13 +83,13 @@ func TestBadHTTPConfig(t *testing.T) {
 
 func TestBadWSConfig(t *testing.T) {
 
-	_, err := NewRPCServer(context.Background(), &Config{
-		WS: WSEndpointConfig{
-			Config: httpserver.Config{
+	_, err := NewRPCServer(context.Background(), &pldconf.RPCServerConfig{
+		WS: pldconf.RPCServerConfigWS{
+			HTTPServerConfig: pldconf.HTTPServerConfig{
 				Address: confutil.P("::::::wrong"),
 			},
 		},
-		HTTP: HTTPEndpointConfig{Disabled: true},
+		HTTP: pldconf.RPCServerConfigHTTP{Disabled: true},
 	})
 	assert.Regexp(t, "PD020601", err)
 
@@ -97,7 +97,7 @@ func TestBadWSConfig(t *testing.T) {
 
 func TestBadHTTPMethod(t *testing.T) {
 
-	url, _, done := newTestServerHTTP(t, &Config{})
+	url, _, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	res, err := http.DefaultClient.Get(url)
@@ -108,7 +108,7 @@ func TestBadHTTPMethod(t *testing.T) {
 
 func TestBadWSUpgrade(t *testing.T) {
 
-	_, s, done := newTestServerWebSockets(t, &Config{})
+	_, s, done := newTestServerWebSockets(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	res, err := http.DefaultClient.Get(fmt.Sprintf("http://%s", s.WSAddr()))

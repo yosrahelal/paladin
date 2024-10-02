@@ -276,32 +276,10 @@ task lint(type: Exec, dependsOn:[
     args '--timeout', '5m'
 }
 
-task buildSharedLibrary(type:Exec, dependsOn:[goGet]) {
-    workingDir '.'
-
-    def libName
-    if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-        libName = "libcore.dll"
-    } else if (Os.isFamily(Os.FAMILY_MAC)) {
-        libName = "libcore.dylib"
-    } else {
-        libName = "libcore.so"
-    }
-
-    def outputDir = "${buildDir}/libs"
-    def outputLib = "${outputDir}/${libName}"
-    def outputHeader = "${outputDir}/libcore.h"
-
-    inputs.files(goFilesBuildOnly)
-    outputs.files(outputLib, outputHeader)
-
-    environment("CGO_ENABLED", "1")
-
-    executable 'go'
-    args 'build'
-    args '-o', outputLib
-    args '-buildmode=c-shared'
-    args 'core.go'
+task buildSharedLibrary(type:GoLib, dependsOn:[goGet]) {
+    baseName "core"
+    goFiles goFiles
+    mainFile 'core.go'
 }
 
 task buildTestbed(type:Exec, dependsOn: [goGet, makeMocks, copyContracts]) {

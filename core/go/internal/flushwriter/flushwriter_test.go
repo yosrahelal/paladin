@@ -24,9 +24,10 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -44,13 +45,13 @@ func (tw *testWritable) WriteKey() string {
 	return tw.input
 }
 
-var testDefaults = &config.FlushWriterConfig{
+var testDefaults = &pldconf.FlushWriterConfig{
 	WorkerCount:  confutil.P(1),
 	BatchTimeout: confutil.P("100m"), // tests set this if they need it
 	BatchMaxSize: confutil.P(1),
 }
 
-func newTestWriter(t *testing.T, conf *config.FlushWriterConfig, handler BatchHandler[*testWritable, *testResult]) (context.Context, *writer[*testWritable, *testResult], sqlmock.Sqlmock, func()) {
+func newTestWriter(t *testing.T, conf *pldconf.FlushWriterConfig, handler BatchHandler[*testWritable, *testResult]) (context.Context, *writer[*testWritable, *testResult], sqlmock.Sqlmock, func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	p, err := mockpersistence.NewSQLMockProvider()
 	require.NoError(t, err)
@@ -80,7 +81,7 @@ func writeTestOps(ctx context.Context, w *writer[*testWritable, *testResult], co
 }
 
 func TestSuccessfulWriteBatch(t *testing.T) {
-	ctx, w, mdb, done := newTestWriter(t, &config.FlushWriterConfig{
+	ctx, w, mdb, done := newTestWriter(t, &pldconf.FlushWriterConfig{
 		BatchMaxSize: confutil.P(1000),
 	},
 		func(ctx context.Context, tx *gorm.DB, values []*testWritable) ([]Result[*testResult], error) {
@@ -105,7 +106,7 @@ func TestSuccessfulWriteBatch(t *testing.T) {
 }
 
 func TestBatchTimeout(t *testing.T) {
-	ctx, w, mdb, done := newTestWriter(t, &config.FlushWriterConfig{
+	ctx, w, mdb, done := newTestWriter(t, &pldconf.FlushWriterConfig{
 		BatchMaxSize: confutil.P(1000),
 		BatchTimeout: confutil.P("10ms"),
 	},
@@ -127,7 +128,7 @@ func TestBatchTimeout(t *testing.T) {
 }
 
 func TestShutdownNowInBatchWait(t *testing.T) {
-	ctx, w, _, done := newTestWriter(t, &config.FlushWriterConfig{
+	ctx, w, _, done := newTestWriter(t, &pldconf.FlushWriterConfig{
 		BatchMaxSize: confutil.P(1000),
 		BatchTimeout: confutil.P("10ms"),
 	}, nil)
@@ -138,7 +139,7 @@ func TestShutdownNowInBatchWait(t *testing.T) {
 }
 
 func TestBadResult(t *testing.T) {
-	ctx, w, mdb, done := newTestWriter(t, &config.FlushWriterConfig{
+	ctx, w, mdb, done := newTestWriter(t, &pldconf.FlushWriterConfig{
 		BatchMaxSize: confutil.P(1000),
 	},
 		func(ctx context.Context, tx *gorm.DB, values []*testWritable) ([]Result[*testResult], error) {
@@ -158,7 +159,7 @@ func TestBadResult(t *testing.T) {
 }
 
 func TestBadOp(t *testing.T) {
-	ctx, w, _, done := newTestWriter(t, &config.FlushWriterConfig{
+	ctx, w, _, done := newTestWriter(t, &pldconf.FlushWriterConfig{
 		BatchMaxSize: confutil.P(1000),
 	}, nil)
 	defer done()
@@ -169,7 +170,7 @@ func TestBadOp(t *testing.T) {
 }
 
 func TestIndividualError(t *testing.T) {
-	ctx, w, mdb, done := newTestWriter(t, &config.FlushWriterConfig{
+	ctx, w, mdb, done := newTestWriter(t, &pldconf.FlushWriterConfig{
 		BatchMaxSize: confutil.P(1000),
 	},
 		func(ctx context.Context, tx *gorm.DB, values []*testWritable) ([]Result[*testResult], error) {
@@ -195,7 +196,7 @@ func TestIndividualError(t *testing.T) {
 }
 
 func TestWaitFlushTimeout(t *testing.T) {
-	ctx, w, _, done := newTestWriter(t, &config.FlushWriterConfig{
+	ctx, w, _, done := newTestWriter(t, &pldconf.FlushWriterConfig{
 		BatchMaxSize: confutil.P(1000),
 	},
 		func(ctx context.Context, tx *gorm.DB, values []*testWritable) ([]Result[*testResult], error) {
@@ -211,7 +212,7 @@ func TestWaitFlushTimeout(t *testing.T) {
 }
 
 func TestFailedWriteBatch(t *testing.T) {
-	ctx, w, mdb, done := newTestWriter(t, &config.FlushWriterConfig{
+	ctx, w, mdb, done := newTestWriter(t, &pldconf.FlushWriterConfig{
 		BatchMaxSize: confutil.P(1000),
 	},
 		func(ctx context.Context, tx *gorm.DB, values []*testWritable) ([]Result[*testResult], error) {

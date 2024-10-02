@@ -22,14 +22,15 @@ import (
 
 	migratedb "github.com/golang-migrate/migrate/v4/database"
 	migratesqlite3 "github.com/golang-migrate/migrate/v4/database/sqlite3"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	gormSQLite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 type sqliteProvider struct{}
 
-var SQLiteDefaults = &SQLDBConfig{
+var SQLiteDefaults = &pldconf.SQLDBConfig{
 	MaxOpenConns:    confutil.P(1),
 	MaxIdleConns:    confutil.P(1),
 	ConnMaxIdleTime: confutil.P("0"),
@@ -37,7 +38,7 @@ var SQLiteDefaults = &SQLDBConfig{
 	StatementCache:  confutil.P(false),
 }
 
-func newSQLiteProvider(ctx context.Context, conf *Config) (p Persistence, err error) {
+func newSQLiteProvider(ctx context.Context, conf *pldconf.DBConfig) (p Persistence, err error) {
 	return NewSQLProvider(ctx, &sqliteProvider{}, &conf.SQLite.SQLDBConfig, SQLiteDefaults)
 }
 

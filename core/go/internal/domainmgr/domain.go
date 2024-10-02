@@ -29,11 +29,12 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -49,7 +50,7 @@ type domain struct {
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 
-	conf            *config.DomainConfig
+	conf            *pldconf.DomainConfig
 	dm              *domainManager
 	name            string
 	api             components.DomainManagerToDomain
@@ -67,7 +68,7 @@ type domain struct {
 	initDone  chan struct{}
 }
 
-func (dm *domainManager) newDomain(name string, conf *config.DomainConfig, toDomain components.DomainManagerToDomain) *domain {
+func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDomain components.DomainManagerToDomain) *domain {
 	d := &domain{
 		dm:              dm,
 		conf:            conf,

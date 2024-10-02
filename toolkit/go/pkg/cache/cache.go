@@ -18,12 +18,9 @@ package cache
 
 import (
 	"github.com/Code-Hex/go-generics-cache/policy/lru"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 )
-
-type Config struct {
-	Capacity *int `json:"capacity"`
-}
 
 type Cache[K comparable, V any] interface {
 	Get(key K) (V, bool)
@@ -37,7 +34,7 @@ type cache[K comparable, V any] struct {
 	capacity int
 }
 
-func NewCache[K comparable, V any](conf *Config, defs *Config) Cache[K, V] {
+func NewCache[K comparable, V any](conf *pldconf.CacheConfig, defs *pldconf.CacheConfig) Cache[K, V] {
 	capacity := confutil.Int(conf.Capacity, *defs.Capacity)
 	c := &cache[K, V]{
 		capacity: capacity,

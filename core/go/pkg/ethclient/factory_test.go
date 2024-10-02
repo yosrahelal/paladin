@@ -22,8 +22,8 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
@@ -46,26 +46,26 @@ type mockEth struct {
 }
 
 func newTestServer(t *testing.T, ctx context.Context, isWS bool, mEth *mockEth) (rpcServer rpcserver.RPCServer, done func()) {
-	var rpcServerConf *rpcserver.Config
+	var rpcServerConf *pldconf.RPCServerConfig
 	if isWS {
-		rpcServerConf = &rpcserver.Config{
-			HTTP: rpcserver.HTTPEndpointConfig{
+		rpcServerConf = &pldconf.RPCServerConfig{
+			HTTP: pldconf.RPCServerConfigHTTP{
 				Disabled: true,
 			},
-			WS: rpcserver.WSEndpointConfig{
-				Config: httpserver.Config{
+			WS: pldconf.RPCServerConfigWS{
+				HTTPServerConfig: pldconf.HTTPServerConfig{
 					Port: confutil.P(0),
 				},
 			},
 		}
 	} else {
-		rpcServerConf = &rpcserver.Config{
-			HTTP: rpcserver.HTTPEndpointConfig{
-				Config: httpserver.Config{
+		rpcServerConf = &pldconf.RPCServerConfig{
+			HTTP: pldconf.RPCServerConfigHTTP{
+				HTTPServerConfig: pldconf.HTTPServerConfig{
 					Port: confutil.P(0),
 				},
 			},
-			WS: rpcserver.WSEndpointConfig{
+			WS: pldconf.RPCServerConfigWS{
 				Disabled: true,
 			},
 		}
@@ -132,12 +132,12 @@ func newTestClientAndServer(t *testing.T, mEth *mockEth) (ctx context.Context, _
 	kmgr, done := newTestHDWalletKeyManager(t)
 	defer done()
 
-	conf := &Config{
-		HTTP: rpcclient.HTTPConfig{
+	conf := &pldconf.EthClientConfig{
+		HTTP: pldconf.HTTPClientConfig{
 			URL: fmt.Sprintf("http://%s", httpRPCServer.HTTPAddr().String()),
 		},
-		WS: rpcclient.WSConfig{
-			HTTPConfig: rpcclient.HTTPConfig{
+		WS: pldconf.WSClientConfig{
+			HTTPClientConfig: pldconf.HTTPClientConfig{
 				URL: fmt.Sprintf("ws://%s", wsRPCServer.WSAddr().String()),
 			},
 		},
@@ -159,16 +159,16 @@ func newTestClientAndServer(t *testing.T, mEth *mockEth) (ctx context.Context, _
 }
 
 func TestNewEthClientFactoryBadConfig(t *testing.T) {
-	kmgr, err := NewSimpleTestKeyManager(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{Type: signerapi.KeyStoreTypeStatic},
+	kmgr, err := NewSimpleTestKeyManager(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{Type: pldconf.KeyStoreTypeStatic},
 	})
 	require.NoError(t, err)
-	_, err = NewEthClientFactory(context.Background(), kmgr, &Config{
-		HTTP: rpcclient.HTTPConfig{
+	_, err = NewEthClientFactory(context.Background(), kmgr, &pldconf.EthClientConfig{
+		HTTP: pldconf.HTTPClientConfig{
 			URL: "http://ok.example.com",
 		},
-		WS: rpcclient.WSConfig{
-			HTTPConfig: rpcclient.HTTPConfig{
+		WS: pldconf.WSClientConfig{
+			HTTPClientConfig: pldconf.HTTPClientConfig{
 				URL: "wrong://bad.example.com",
 			},
 		},
@@ -179,15 +179,15 @@ func TestNewEthClientFactoryBadConfig(t *testing.T) {
 func TestNewEthClientFactoryMissingURL(t *testing.T) {
 	kmgr, done := newTestHDWalletKeyManager(t)
 	defer done()
-	_, err := NewEthClientFactory(context.Background(), kmgr, &Config{})
+	_, err := NewEthClientFactory(context.Background(), kmgr, &pldconf.EthClientConfig{})
 	assert.Regexp(t, "PD011511", err)
 }
 
 func TestNewEthClientFactoryBadURL(t *testing.T) {
 	kmgr, done := newTestHDWalletKeyManager(t)
 	defer done()
-	_, err := NewEthClientFactory(context.Background(), kmgr, &Config{
-		HTTP: rpcclient.HTTPConfig{
+	_, err := NewEthClientFactory(context.Background(), kmgr, &pldconf.EthClientConfig{
+		HTTP: pldconf.HTTPClientConfig{
 			URL: "wrong://type",
 		},
 	})
@@ -203,8 +203,8 @@ func TestNewEthClientFactoryChainIDFail(t *testing.T) {
 
 	kmgr, kmDone := newTestHDWalletKeyManager(t)
 	defer kmDone()
-	ecf, err := NewEthClientFactory(context.Background(), kmgr, &Config{
-		HTTP: rpcclient.HTTPConfig{
+	ecf, err := NewEthClientFactory(context.Background(), kmgr, &pldconf.EthClientConfig{
+		HTTP: pldconf.HTTPClientConfig{
 			URL: fmt.Sprintf("http://%s", rpcServer.HTTPAddr().String()),
 		},
 	})
@@ -231,12 +231,12 @@ func TestMismatchedChainID(t *testing.T) {
 	kmgr, kmDone := newTestHDWalletKeyManager(t)
 	defer kmDone()
 
-	conf := &Config{
-		HTTP: rpcclient.HTTPConfig{
+	conf := &pldconf.EthClientConfig{
+		HTTP: pldconf.HTTPClientConfig{
 			URL: fmt.Sprintf("http://%s", httpRPCServer.HTTPAddr().String()),
 		},
-		WS: rpcclient.WSConfig{
-			HTTPConfig: rpcclient.HTTPConfig{
+		WS: pldconf.WSClientConfig{
+			HTTPClientConfig: pldconf.HTTPClientConfig{
 				URL: fmt.Sprintf("ws://%s", wsRPCServer.WSAddr().String()),
 			},
 		},

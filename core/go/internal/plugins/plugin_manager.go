@@ -26,14 +26,21 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/grpc"
 )
+
+func MapLibraryTypeToProto(t tktypes.Enum[tktypes.LibraryType]) (prototk.PluginLoad_LibType, error) {
+	return tktypes.MapEnum(t, map[tktypes.LibraryType]prototk.PluginLoad_LibType{
+		tktypes.LibraryTypeCShared: prototk.PluginLoad_C_SHARED,
+		tktypes.LibraryTypeJar:     prototk.PluginLoad_JAR,
+	})
+}
 
 type pluginManager struct {
 	prototk.UnimplementedPluginControllerServer
@@ -66,14 +73,14 @@ type pluginManager struct {
 func NewPluginManager(bgCtx context.Context,
 	grpcTarget string, // default is a UDS path, can use tcp:127.0.0.1:12345 strings too (or tcp4:/tcp6:)
 	loaderID uuid.UUID,
-	conf *config.PluginManagerConfig) components.PluginManager {
+	conf *pldconf.PluginManagerConfig) components.PluginManager {
 
 	pc := &pluginManager{
 		bgCtx: bgCtx,
 
 		grpcTarget:      grpcTarget,
 		loaderID:        loaderID,
-		shutdownTimeout: confutil.DurationMin(conf.GRPC.ShutdownTimeout, 0, *config.DefaultGRPCConfig.ShutdownTimeout),
+		shutdownTimeout: confutil.DurationMin(conf.GRPC.ShutdownTimeout, 0, *pldconf.DefaultGRPCConfig.ShutdownTimeout),
 
 		domainPlugins:    make(map[uuid.UUID]*plugin[prototk.DomainMessage]),
 		transportPlugins: make(map[uuid.UUID]*plugin[prototk.TransportMessage]),
@@ -274,7 +281,7 @@ func (pm *pluginManager) LoadFailed(ctx context.Context, req *prototk.PluginLoad
 	return &prototk.EmptyResponse{}, nil
 }
 
-func initPlugin[CB any](ctx context.Context, pm *pluginManager, pluginMap map[uuid.UUID]*plugin[CB], name string, pType prototk.PluginInfo_PluginType, conf *config.PluginConfig) (err error) {
+func initPlugin[CB any](ctx context.Context, pm *pluginManager, pluginMap map[uuid.UUID]*plugin[CB], name string, pType prototk.PluginInfo_PluginType, conf *pldconf.PluginConfig) (err error) {
 	pm.mux.Lock()
 	defer pm.mux.Unlock()
 	plugin := &plugin[CB]{pc: pm, id: uuid.New(), name: name}
@@ -290,8 +297,11 @@ func initPlugin[CB any](ctx context.Context, pm *pluginManager, pluginMap map[uu
 		LibLocation: conf.Library,
 		Class:       conf.Class,
 	}
-	plugin.def.LibType, err = config.MapLibraryTypeToProto(conf.Type)
-	pluginMap[plugin.id] = plugin
+	pluginType, err := tktypes.LibraryType(conf.Type).Enum().Validate()
+	if err == nil {
+		plugin.def.LibType, err = MapLibraryTypeToProto(pluginType.Enum())
+		pluginMap[plugin.id] = plugin
+	}
 	return err
 }
 

@@ -21,9 +21,9 @@ import (
 	"path"
 	"testing"
 
-	"github.com/kaleido-io/paladin/core/pkg/config"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tyler-smith/go-bip39"
@@ -34,15 +34,15 @@ func writeTestConfig(t *testing.T) (configFile string) {
 	ctx := context.Background()
 	log.SetLevel("debug")
 
-	var conf *config.PaladinConfig
-	err := config.ReadAndParseYAMLFile(ctx, "../../test/config/sqlite.memory.config.yaml", &conf)
+	var conf *pldconf.PaladinConfig
+	err := pldconf.ReadAndParseYAMLFile(ctx, "../../test/config/sqlite.memory.config.yaml", &conf)
 	require.NoError(t, err)
 	// For running in this unit test the dirs are different to the sample config
 	conf.DB.SQLite.MigrationsDir = "../../db/migrations/sqlite"
 	conf.DB.Postgres.MigrationsDir = "../../db/migrations/postgres"
 	entropy, _ := bip39.NewEntropy(256)
 	mnemonic, _ := bip39.NewMnemonic(entropy)
-	conf.Signer.KeyStore.Static.Keys = map[string]signerapi.StaticKeyEntryConfig{
+	conf.Signer.KeyStore.Static.Keys = map[string]pldconf.StaticKeyEntryConfig{
 		"seed": {
 			Encoding: "none",
 			Inline:   mnemonic,
@@ -97,7 +97,7 @@ domains:
 log:
   level: debug	
 `
-	var conf config.PaladinConfig
+	var conf pldconf.PaladinConfig
 	err := yaml.Unmarshal([]byte(yamlConf), &conf)
 	require.NoError(t, err)
 

@@ -24,8 +24,8 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -36,11 +36,11 @@ import (
 func newTestRPCServer(t *testing.T) (context.Context, *stateStore, rpcclient.Client, func()) {
 	ctx, ss, ssDone := newDBTestStateStore(t)
 
-	s, err := rpcserver.NewRPCServer(ctx, &rpcserver.Config{
-		HTTP: rpcserver.HTTPEndpointConfig{
-			Config: httpserver.Config{Address: confutil.P("127.0.0.1"), Port: confutil.P(0)},
+	s, err := rpcserver.NewRPCServer(ctx, &pldconf.RPCServerConfig{
+		HTTP: pldconf.RPCServerConfigHTTP{
+			HTTPServerConfig: pldconf.HTTPServerConfig{Address: confutil.P("127.0.0.1"), Port: confutil.P(0)},
 		},
-		WS: rpcserver.WSEndpointConfig{Disabled: true},
+		WS: pldconf.RPCServerConfigWS{Disabled: true},
 	})
 	require.NoError(t, err)
 	err = s.Start()

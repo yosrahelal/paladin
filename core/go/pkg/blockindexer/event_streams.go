@@ -25,7 +25,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
@@ -174,7 +174,7 @@ func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventSt
 	es := bi.eventStreams[definition.ID]
 	batchSize := confutil.IntMin(definition.Config.BatchSize, 1, *EventStreamDefaults.BatchSize)
 	if es != nil {
-		// If we're already initialized, the only thing that can be changed is the config.
+		// If we're already initialized, the only thing that can be changed is the pldconf.
 		// Caller is responsible for ensuring we're stopped at this point
 		es.definition.Config = definition.Config
 	} else {

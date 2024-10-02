@@ -24,8 +24,9 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
@@ -38,7 +39,7 @@ type RPCServer interface {
 	WSAddr() net.Addr
 }
 
-func NewRPCServer(ctx context.Context, conf *Config) (_ RPCServer, err error) {
+func NewRPCServer(ctx context.Context, conf *pldconf.RPCServerConfig) (_ RPCServer, err error) {
 	s := &rpcServer{
 		bgCtx:         ctx,
 		wsConnections: make(map[string]*webSocketConnection),
@@ -46,18 +47,18 @@ func NewRPCServer(ctx context.Context, conf *Config) (_ RPCServer, err error) {
 	}
 
 	if !conf.HTTP.Disabled {
-		if s.httpServer, err = httpserver.NewServer(ctx, "JSON/RPC (HTTP)", &conf.HTTP.Config, http.HandlerFunc(s.httpHandler)); err != nil {
+		if s.httpServer, err = httpserver.NewServer(ctx, "JSON/RPC (HTTP)", &conf.HTTP.HTTPServerConfig, http.HandlerFunc(s.httpHandler)); err != nil {
 			return nil, err
 		}
 	}
 
 	if !conf.WS.Disabled {
 		s.wsUpgrader = &websocket.Upgrader{
-			ReadBufferSize:  int(confutil.ByteSize(conf.WS.ReadBufferSize, 0, *WSDefaults.ReadBufferSize)),
-			WriteBufferSize: int(confutil.ByteSize(conf.WS.WriteBufferSize, 0, *WSDefaults.WriteBufferSize)),
+			ReadBufferSize:  int(confutil.ByteSize(conf.WS.ReadBufferSize, 0, *pldconf.WSDefaults.ReadBufferSize)),
+			WriteBufferSize: int(confutil.ByteSize(conf.WS.WriteBufferSize, 0, *pldconf.WSDefaults.WriteBufferSize)),
 		}
 		log.L(ctx).Infof("WebSocket server readBufferSize=%d writeBufferSize=%d", s.wsUpgrader.ReadBufferSize, s.wsUpgrader.WriteBufferSize)
-		if s.wsServer, err = httpserver.NewServer(ctx, "JSON/RPC (WebSocket)", &conf.WS.Config, http.HandlerFunc(s.wsHandler)); err != nil {
+		if s.wsServer, err = httpserver.NewServer(ctx, "JSON/RPC (WebSocket)", &conf.WS.HTTPServerConfig, http.HandlerFunc(s.wsHandler)); err != nil {
 			return nil, err
 		}
 	}

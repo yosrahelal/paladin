@@ -24,9 +24,10 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -45,7 +46,7 @@ type mockComponents struct {
 	keyManager           *componentmocks.KeyManager
 }
 
-func newTestDomainManager(t *testing.T, realDB bool, conf *config.DomainManagerConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *domainManager, *mockComponents, func()) {
+func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManagerConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *domainManager, *mockComponents, func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	mc := &mockComponents{
@@ -72,7 +73,7 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *config.DomainManagerC
 	if realDB {
 		p, pDone, err = persistence.NewUnitTestPersistence(ctx)
 		require.NoError(t, err)
-		realStateStore := statestore.NewStateStore(ctx, &config.StateStoreConfig{}, p)
+		realStateStore := statestore.NewStateStore(ctx, &pldconf.StateStoreConfig{}, p)
 		componentMocks.On("StateStore").Return(realStateStore)
 	} else {
 		mp, err := mockpersistence.NewSQLMockProvider()
@@ -119,11 +120,11 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *config.DomainManagerC
 }
 
 func TestConfiguredDomains(t *testing.T) {
-	_, dm, _, done := newTestDomainManager(t, false, &config.DomainManagerConfig{
-		Domains: map[string]*config.DomainConfig{
+	_, dm, _, done := newTestDomainManager(t, false, &pldconf.DomainManagerConfig{
+		Domains: map[string]*pldconf.DomainConfig{
 			"test1": {
-				Plugin: config.PluginConfig{
-					Type:    config.LibraryTypeCShared.Enum(),
+				Plugin: pldconf.PluginConfig{
+					Type:    string(tktypes.LibraryTypeCShared),
 					Library: "some/where",
 				},
 				RegistryAddress: tktypes.RandHex(20),
@@ -132,17 +133,17 @@ func TestConfiguredDomains(t *testing.T) {
 	})
 	defer done()
 
-	assert.Equal(t, map[string]*config.PluginConfig{
+	assert.Equal(t, map[string]*pldconf.PluginConfig{
 		"test1": {
-			Type:    config.LibraryTypeCShared.Enum(),
+			Type:    string(tktypes.LibraryTypeCShared),
 			Library: "some/where",
 		},
 	}, dm.ConfiguredDomains())
 }
 
 func TestDomainRegisteredNotFound(t *testing.T) {
-	_, dm, _, done := newTestDomainManager(t, false, &config.DomainManagerConfig{
-		Domains: map[string]*config.DomainConfig{
+	_, dm, _, done := newTestDomainManager(t, false, &pldconf.DomainManagerConfig{
+		Domains: map[string]*pldconf.DomainConfig{
 			"domain1": {
 				RegistryAddress: tktypes.RandHex(20),
 			},
@@ -155,11 +156,11 @@ func TestDomainRegisteredNotFound(t *testing.T) {
 }
 
 func TestDomainMissingRegistryAddress(t *testing.T) {
-	config := &config.DomainManagerConfig{
-		Domains: map[string]*config.DomainConfig{
+	config := &pldconf.DomainManagerConfig{
+		Domains: map[string]*pldconf.DomainConfig{
 			"domain1": {
-				Plugin: config.PluginConfig{
-					Type:    config.LibraryTypeCShared.Enum(),
+				Plugin: pldconf.PluginConfig{
+					Type:    string(tktypes.LibraryTypeCShared),
 					Library: "some/where",
 				},
 			},
@@ -191,8 +192,8 @@ func TestDomainMissingRegistryAddress(t *testing.T) {
 }
 
 func TestGetDomainNotFound(t *testing.T) {
-	ctx, dm, _, done := newTestDomainManager(t, false, &config.DomainManagerConfig{
-		Domains: map[string]*config.DomainConfig{
+	ctx, dm, _, done := newTestDomainManager(t, false, &pldconf.DomainManagerConfig{
+		Domains: map[string]*pldconf.DomainConfig{
 			"domain1": {
 				RegistryAddress: tktypes.RandHex(20),
 			},
@@ -231,8 +232,8 @@ func TestMustParseLoaders(t *testing.T) {
 }
 
 func TestWaitForDeployQueryError(t *testing.T) {
-	ctx, dm, _, done := newTestDomainManager(t, false, &config.DomainManagerConfig{
-		Domains: map[string]*config.DomainConfig{
+	ctx, dm, _, done := newTestDomainManager(t, false, &pldconf.DomainManagerConfig{
+		Domains: map[string]*pldconf.DomainConfig{
 			"domain1": {
 				RegistryAddress: tktypes.RandHex(20),
 			},
@@ -247,8 +248,8 @@ func TestWaitForDeployQueryError(t *testing.T) {
 }
 
 func TestWaitForDeployDomainNotFound(t *testing.T) {
-	ctx, dm, _, done := newTestDomainManager(t, false, &config.DomainManagerConfig{
-		Domains: map[string]*config.DomainConfig{
+	ctx, dm, _, done := newTestDomainManager(t, false, &pldconf.DomainManagerConfig{
+		Domains: map[string]*pldconf.DomainConfig{
 			"domain1": {
 				RegistryAddress: tktypes.RandHex(20),
 			},
@@ -277,8 +278,8 @@ func TestWaitForDeployDomainNotFound(t *testing.T) {
 }
 
 func TestWaitForDeployTimeout(t *testing.T) {
-	ctx, dm, _, done := newTestDomainManager(t, false, &config.DomainManagerConfig{
-		Domains: map[string]*config.DomainConfig{
+	ctx, dm, _, done := newTestDomainManager(t, false, &pldconf.DomainManagerConfig{
+		Domains: map[string]*pldconf.DomainConfig{
 			"domain1": {
 				RegistryAddress: tktypes.RandHex(20),
 			},
@@ -293,8 +294,8 @@ func TestWaitForDeployTimeout(t *testing.T) {
 }
 
 func TestWaitForTransactionTimeout(t *testing.T) {
-	ctx, dm, _, done := newTestDomainManager(t, false, &config.DomainManagerConfig{
-		Domains: map[string]*config.DomainConfig{
+	ctx, dm, _, done := newTestDomainManager(t, false, &pldconf.DomainManagerConfig{
+		Domains: map[string]*pldconf.DomainConfig{
 			"domain1": {
 				RegistryAddress: tktypes.RandHex(20),
 			},

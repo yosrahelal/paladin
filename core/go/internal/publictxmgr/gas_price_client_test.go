@@ -23,8 +23,9 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
@@ -35,7 +36,7 @@ import (
 )
 
 func longLivedGasPriceTestCache() cache.Cache[string, *fftypes.JSONAny] {
-	return cache.NewCache[string, *fftypes.JSONAny](&cache.Config{}, &config.PublicTxManagerDefaults.GasPrice.Cache)
+	return cache.NewCache[string, *fftypes.JSONAny](&pldconf.CacheConfig{}, &pldconf.PublicTxManagerDefaults.GasPrice.Cache)
 }
 
 func NewTestFixedPriceGasPriceClient(t *testing.T) GasPriceClient {
@@ -125,8 +126,8 @@ func TestGasPriceClientInit(t *testing.T) {
 func TestFixedGasPrice(t *testing.T) {
 	ctx := context.Background()
 
-	gasPriceClient := NewGasPriceClient(ctx, &config.PublicTxManagerConfig{
-		GasPrice: config.GasPriceConfig{
+	gasPriceClient := NewGasPriceClient(ctx, &pldconf.PublicTxManagerConfig{
+		GasPrice: pldconf.GasPriceConfig{
 			FixedGasPrice: "1020304050",
 		},
 	})
@@ -142,7 +143,7 @@ func TestFixedGasPrice(t *testing.T) {
 func TestGasPriceClient(t *testing.T) {
 	ctx := context.Background()
 
-	gasPriceClient := NewGasPriceClient(ctx, &config.PublicTxManagerConfig{})
+	gasPriceClient := NewGasPriceClient(ctx, &pldconf.PublicTxManagerConfig{})
 	hgc := gasPriceClient.(*HybridGasPriceClient)
 
 	mEC := componentmocks.NewEthClient(t)

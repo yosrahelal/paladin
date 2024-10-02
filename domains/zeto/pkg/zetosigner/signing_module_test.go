@@ -19,6 +19,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer"
@@ -32,14 +33,14 @@ import (
 func newZetoSigningModule(t *testing.T) (context.Context, signer.SigningModule, func()) {
 	ctx := context.Background()
 	sm, err := signer.NewSigningModule(ctx, &SnarkProverConfig{
-		Config: signerapi.Config{
-			KeyDerivation: signerapi.KeyDerivationConfig{
-				Type: signerapi.KeyDerivationTypeBIP32,
+		ConfigNoExt: signerapi.ConfigNoExt{
+			KeyDerivation: pldconf.KeyDerivationConfig{
+				Type: pldconf.KeyDerivationTypeBIP32,
 			},
-			KeyStore: signerapi.KeyStoreConfig{
-				Type: signerapi.KeyStoreTypeStatic,
-				Static: signerapi.StaticKeyStorageConfig{
-					Keys: map[string]signerapi.StaticKeyEntryConfig{
+			KeyStore: pldconf.KeyStoreConfig{
+				Type: pldconf.KeyStoreTypeStatic,
+				Static: pldconf.StaticKeyStoreConfig{
+					Keys: map[string]pldconf.StaticKeyEntryConfig{
 						"seed": {
 							Encoding: "hex",
 							Inline:   tktypes.RandHex(32),

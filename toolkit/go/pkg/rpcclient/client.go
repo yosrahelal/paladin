@@ -26,6 +26,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -79,7 +80,7 @@ type RPCSubscriptionNotification struct {
 // Note this is (currently) a very thin wrapper around rpcbackend in firefly-signer, which has a lot of very
 // helpful code/utility, but a couple of weirdnesses in the interface that this package addresses.
 // The biggest being the fact that the errors, are not errors (the Error() function returns the error, not a string).
-func NewHTTPClient(ctx context.Context, conf *HTTPConfig) (Client, error) {
+func NewHTTPClient(ctx context.Context, conf *pldconf.HTTPClientConfig) (Client, error) {
 	rc, err := ParseHTTPConfig(ctx, conf)
 	if err != nil {
 		return nil, err
@@ -91,7 +92,7 @@ func WrapRestyClient(rc *resty.Client) Client {
 	return &httpWrap{c: rpcbackend.NewRPCClient(rc)}
 }
 
-func NewWSClient(ctx context.Context, conf *WSConfig) (WSClient, error) {
+func NewWSClient(ctx context.Context, conf *pldconf.WSClientConfig) (WSClient, error) {
 	wsc, err := ParseWSConfig(ctx, conf)
 	if err != nil {
 		return nil, err
