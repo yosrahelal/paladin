@@ -281,9 +281,18 @@ func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) *tktypes.Pr
 			Data:   []byte(state.Data),
 		}
 	}
+	readStates := make([]*tktypes.FullState, len(tx.PostAssembly.ReadStates))
+	for i, state := range tx.PostAssembly.ReadStates {
+		readStates[i] = &tktypes.FullState{
+			ID:     state.ID,
+			Schema: state.Schema,
+			Data:   []byte(state.Data),
+		}
+	}
 	return &tktypes.PrivateContractTransaction{
 		InputStates:  inputStates,
 		OutputStates: outputStates,
+		ReadStates:   readStates,
 		ExtraData:    tx.PostAssembly.ExtraData,
 	}
 }
