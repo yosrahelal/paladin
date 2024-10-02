@@ -204,7 +204,8 @@ task test(type: Exec, dependsOn: [":core:go:makeMocks"]) {
     if (project.findProperty('verboseTests') == 'true') {
         args '-v'
     }
-    args "-test.gocoverdir=${projectDir}/coverage"
+    args "-coverprofile"
+    args "${projectDir}/coverage.txt"
 
     dependsOn copySolidity
     dependsOn ':testinfra:startTestInfra'

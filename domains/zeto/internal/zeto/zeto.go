@@ -452,7 +452,7 @@ func (z *Zeto) addOutputToMerkleTree(txID tktypes.HexBytes, tokenName string, ad
 func encodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {
 	txID, err := tktypes.ParseHexBytes(ctx, transaction.TransactionId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse transaction id. %s", err)
 	}
 	var data []byte
 	data = append(data, types.ZetoTransactionData_V0...)
