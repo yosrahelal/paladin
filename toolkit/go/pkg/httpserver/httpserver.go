@@ -19,6 +19,7 @@ package httpserver
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -26,9 +27,9 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tlsconf"
 )
@@ -72,6 +73,11 @@ func NewServer(ctx context.Context, description string, conf *Config, handler ht
 	tlsConfig, err := tlsconf.BuildTLSConfig(ctx, &conf.TLS, tlsconf.ServerType)
 	if err != nil {
 		return nil, err
+	}
+
+	// If TLS Config is provided, only accept connections doing TLS
+	if tlsConfig != nil {
+		s.listener = tls.NewListener(s.listener, tlsConfig)
 	}
 
 	maxRequestTimeout := confutil.DurationMin(conf.MaxRequestTimeout, 1*time.Second, *HTTPDefaults.MaxRequestTimeout)
