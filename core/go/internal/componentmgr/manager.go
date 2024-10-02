@@ -22,6 +22,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/domainmgr"
+	"github.com/kaleido-io/paladin/core/internal/identityresolver"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr"
@@ -70,6 +71,8 @@ type componentManager struct {
 	txManager        components.TXManager
 	// engine
 	engine components.Engine
+	// late-bound
+	identityResolver components.IdentityResolver
 	// init to start tracking
 	initResults          map[string]*components.ManagerInitResult
 	internalEventStreams []*blockindexer.InternalEventStream
@@ -175,6 +178,13 @@ func (cm *componentManager) Init() (err error) {
 	if err == nil {
 		cm.initResults[cm.engine.EngineName()], err = cm.engine.Init(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentEngineInitError)
+	}
+
+	// late-bound components
+	// Late bound components are created and intialised with a single function call
+	if err == nil {
+		cm.identityResolver = identityresolver.NewIdentityResolver(cm.bgCtx, cm.instanceUUID.String(), cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentIdentityResolverInitError)
 	}
 
 	// post-init the managers
@@ -425,6 +435,10 @@ func (cm *componentManager) PrivateTxManager() components.PrivateTxManager {
 
 func (cm *componentManager) TxManager() components.TXManager {
 	return cm.txManager
+}
+
+func (cm *componentManager) IdentityResolver() components.IdentityResolver {
+	return cm.identityResolver
 }
 
 func (cm *componentManager) Engine() components.Engine {

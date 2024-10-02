@@ -69,6 +69,7 @@ var (
 	MsgComponentPrivateTxManagerStartError = ffe("PD010026", "Error starting private transaction manager ")
 	MsgComponentTxManagerInitError         = ffe("PD010027", "Error initializing transaction manager")
 	MsgComponentTxManagerStartError        = ffe("PD010028", "Error starting transaction manager ")
+	MsgComponentIdentityResolverInitError  = ffe("PD010029", "Error initializing identity resolver")
 
 	// States PD0101XX
 	MsgStateInvalidLength             = ffe("PD010101", "Invalid hash len expected=%d actual=%d")
@@ -286,6 +287,8 @@ var (
 	MsgTransportInvalidDestinationSend        = ffe("PD012007", "Message has invalid destination for sending from local node '%s': '%s'")
 	MsgTransportInvalidReplyToSend            = ffe("PD012008", "Message has invalid replyTo destination: '%s'")
 	MsgTransportInvalidLocalNode              = ffe("PD012009", "Node '%s' is the local node")
+	MsgTransportClientAlreadyRegistered       = ffe("PD012010", "Client '%s' already registered")
+	MsgTransportDestinationNotFound           = ffe("PD012011", "Destination '%s' not found")
 
 	// RegistryManager module PD0121XX
 	MsgRegistryNodeEntiresNotFound = ffe("PD012100", "No entries found for node '%s'")

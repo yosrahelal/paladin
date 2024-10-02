@@ -29,7 +29,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	engineProto "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
@@ -53,7 +52,6 @@ type privateTxManager struct {
 	subscribers          []components.PrivateTxEventSubscriber
 	subscribersLock      sync.Mutex
 	store                privatetxnstore.Store
-	identityResolver     ptmgrtypes.IdentityResolver
 }
 
 // Init implements Engine.
@@ -63,13 +61,9 @@ func (p *privateTxManager) PreInit(c components.PreInitComponents) (*components.
 
 func (p *privateTxManager) PostInit(c components.AllComponents) error {
 	p.components = c
-	p.identityResolver = NewIdentityResolver(
-		p.nodeID,
-		p.components.KeyManager(),
-		p.components.TransportManager(),
-	)
 	p.store = privatetxnstore.NewStore(p.ctx, &p.config.Writer, c.Persistence())
-	return nil
+	err := p.components.TransportManager().RegisterClient(p.ctx, p)
+	return err
 }
 
 func (p *privateTxManager) Start() error {
@@ -118,7 +112,7 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 				endorsementGatherer,
 				publisher,
 				p.store,
-				p.identityResolver,
+				p.components.IdentityResolver(),
 			)
 		orchestratorDone, err := p.orchestrators[contractAddr.String()].Start(ctx)
 		if err != nil {
@@ -368,7 +362,7 @@ func (p *privateTxManager) HandleNewEvent(ctx context.Context, event ptmgrtypes.
 	}
 }
 
-func (p *privateTxManager) HandleEndorsementRequest(ctx context.Context, messagePayload []byte, replyTo tktypes.PrivateIdentityLocator) {
+func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, messagePayload []byte, replyTo tktypes.PrivateIdentityLocator) {
 	endorsementRequest := &pbEngine.EndorsementRequest{}
 	err := proto.Unmarshal(messagePayload, endorsementRequest)
 	if err != nil {
@@ -503,7 +497,7 @@ func (p *privateTxManager) HandleEndorsementRequest(ctx context.Context, message
 	}
 }
 
-func (p *privateTxManager) HandleEndorsementResponse(ctx context.Context, messagePayload []byte) {
+func (p *privateTxManager) handleEndorsementResponse(ctx context.Context, messagePayload []byte) {
 
 	endorsementResponse := &pbEngine.EndorsementResponse{}
 	err := proto.Unmarshal(messagePayload, endorsementResponse)
@@ -536,144 +530,6 @@ func (p *privateTxManager) HandleEndorsementResponse(ctx context.Context, messag
 
 }
 
-// TODO should this function move to identityResovler?
-func (p *privateTxManager) HandleResolveVerifierRequest(ctx context.Context, messagePayload []byte, replyTo tktypes.PrivateIdentityLocator, requestID *uuid.UUID) {
-
-	resolveVerifierRequest := &pbEngine.ResolveVerifierRequest{}
-	err := proto.Unmarshal(messagePayload, resolveVerifierRequest)
-	if err != nil {
-		log.L(ctx).Errorf("Failed to unmarshal resolveVerifierRequest: %s", err)
-		return
-	}
-
-	//We don't need to bring a transaction processor into memory.  We can just service this request
-	// in isolation to any other processing for that transaction
-
-	// contractAddress and transactionID in the request message are simply used to populate the response
-	// so that the requesting node can correlate the response with the transaction that needs it
-	_, verifier, err := p.components.KeyManager().ResolveKey(ctx, resolveVerifierRequest.Lookup, resolveVerifierRequest.Algorithm, resolveVerifierRequest.VerifierType)
-	if err == nil {
-		resolveVerifierResponse := &engineProto.ResolveVerifierResponse{
-			Lookup:       resolveVerifierRequest.Lookup,
-			Algorithm:    resolveVerifierRequest.Algorithm,
-			Verifier:     verifier,
-			VerifierType: resolveVerifierRequest.VerifierType,
-		}
-		resolveVerifierResponseBytes, err := proto.Marshal(resolveVerifierResponse)
-		if err == nil {
-			err = p.components.TransportManager().Send(ctx, &components.TransportMessage{
-				MessageType:   "ResolveVerifierResponse",
-				CorrelationID: requestID,
-				ReplyTo:       tktypes.PrivateIdentityLocator(p.nodeID),
-				Destination:   replyTo,
-				Payload:       resolveVerifierResponseBytes,
-			})
-			if err != nil {
-				log.L(ctx).Errorf("Failed to send resolve verifier response: %s", err)
-				// assume the requestor will eventually retry
-			}
-			return
-		} else {
-			log.L(ctx).Errorf("Failed to marshal resolve verifier response: %s", err)
-		}
-
-	} else {
-		log.L(ctx).Errorf("Failed to resolve verifier for %s (algorithm=%s): %s", resolveVerifierRequest.Lookup, resolveVerifierRequest.Algorithm, err)
-	}
-
-	if err != nil {
-		resolveVerifierError := &engineProto.ResolveVerifierError{
-			Lookup:       resolveVerifierRequest.Lookup,
-			Algorithm:    resolveVerifierRequest.Algorithm,
-			ErrorMessage: err.Error(),
-		}
-		resolveVerifierErrorBytes, err := proto.Marshal(resolveVerifierError)
-		if err == nil {
-			err = p.components.TransportManager().Send(ctx, &components.TransportMessage{
-				MessageType:   "ResolveVerifierError",
-				CorrelationID: requestID,
-				ReplyTo:       tktypes.PrivateIdentityLocator(p.nodeID),
-				Destination:   replyTo,
-				Payload:       resolveVerifierErrorBytes,
-			})
-			if err != nil {
-				log.L(ctx).Errorf("Failed to send resolve verifier error: %s", err)
-				// assume the requestor will eventually retry
-			}
-			return
-		} else {
-			log.L(ctx).Errorf("Failed to marshal resolve verifier response: %s", err)
-			//TODO what can we do here other than panic
-		}
-	}
-}
-
-// TODO not to be confused with HandleResolveVerifierResponseEvent
-// hopefully should be less confuding once we move IdentityResolver to be a component
-func (p *privateTxManager) HandleResolveVerifierReply(ctx context.Context, messagePayload []byte, correlationID string) {
-
-	resolveVerifierResponse := &pbEngine.ResolveVerifierResponse{}
-	err := proto.Unmarshal(messagePayload, resolveVerifierResponse)
-	if err != nil {
-		log.L(ctx).Errorf("Failed to unmarshal resolveVerifierResponse: %s", err)
-		return
-	}
-
-	p.identityResolver.HandleResolveVerifierReply(ctx, &ptmgrtypes.ResolveVerifierReply{
-		PrivateTransactionReplyBase: ptmgrtypes.PrivateTransactionReplyBase{
-			RequestID: correlationID,
-		},
-		Verifier:  &resolveVerifierResponse.Verifier,
-		Lookup:    &resolveVerifierResponse.Lookup,
-		Algorithm: &resolveVerifierResponse.Algorithm,
-	})
-}
-
-// TODO not to be confused with HandleResolveVerifierErrorEvent
-// hopefully should be less confuding once we move IdentityResolver to be a component
-func (p *privateTxManager) HandleResolveVerifierError(ctx context.Context, messagePayload []byte, correlationID string) {
-
-	resolveVerifierError := &pbEngine.ResolveVerifierError{}
-	err := proto.Unmarshal(messagePayload, resolveVerifierError)
-	if err != nil {
-		log.L(ctx).Errorf("Failed to unmarshal resolveVerifierError: %s", err)
-		return
-	}
-
-	p.identityResolver.HandleResolveVerifierError(ctx, &ptmgrtypes.ResolveVerifierError{
-		PrivateTransactionReplyBase: ptmgrtypes.PrivateTransactionReplyBase{
-			RequestID: correlationID,
-		},
-		Algorithm:    &resolveVerifierError.Algorithm,
-		Lookup:       &resolveVerifierError.Lookup,
-		ErrorMessage: &resolveVerifierError.ErrorMessage,
-	})
-}
-
-func (p *privateTxManager) ReceiveTransportMessage(ctx context.Context, message *components.TransportMessage) {
-	//TODO this need to become an ultra low latency, non blocking, handover to the event loop thread.
-	// need some thought on how to handle errors, retries, buffering, swapping idle orchestrators in and out of memory etc...
-
-	//Send the event to the orchestrator for the contract and any transaction manager for the signing key
-	messagePayload := message.Payload
-	replyToDestination := message.ReplyTo
-
-	switch message.MessageType {
-	case "EndorsementRequest":
-		go p.HandleEndorsementRequest(ctx, messagePayload, replyToDestination)
-	case "EndorsementResponse":
-		go p.HandleEndorsementResponse(ctx, messagePayload)
-	case "ResolveVerifierRequest":
-		go p.HandleResolveVerifierRequest(ctx, messagePayload, replyToDestination, &message.MessageID)
-	case "ResolveVerifierResponse":
-		go p.HandleResolveVerifierReply(ctx, messagePayload, message.CorrelationID.String())
-	case "ResolveVerifierError":
-		go p.HandleResolveVerifierError(ctx, messagePayload, message.CorrelationID.String())
-	default:
-		log.L(ctx).Errorf("Unknown message type: %s", message.MessageType)
-	}
-}
-
 // For now, this is here to help with testing but it seems like it could be useful thing to have
 // in the future if we want to have an eventing interface but at such time we would need to put more effort
 // into the reliabilty of the event delivery or maybe there is only a consumer of the event and it is responsible
@@ -702,22 +558,4 @@ func (p *privateTxManager) NotifyConfirmed(ctx context.Context, confirms []*comp
 		completed[confirm.TransactionID] = true
 	}
 	return completed, nil
-}
-
-/*
-ResolveVerifier is a synchronous function to resolve a single verifier
-If the lookup is an identity@another-node then the request will be forwarded to that other node and the trhead will block until a response is received
-*/
-//TODO remove this and move IdentityResolver to be a component in its own right
-func (p *privateTxManager) ResolveVerifier(ctx context.Context, req *ptxapi.ResolveVerifierRequest) (*ptxapi.ResolvedVerifier, error) {
-
-	verifier, err := p.identityResolver.ResolveVerifier(ctx, *req.Lookup, *req.Algorithm, *req.VerifierType)
-	if err != nil {
-		return nil, err
-	}
-	return &ptxapi.ResolvedVerifier{
-		Lookup:    req.Lookup,
-		Algorithm: req.Algorithm,
-		Verifier:  &verifier,
-	}, nil
 }

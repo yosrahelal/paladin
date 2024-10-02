@@ -46,7 +46,7 @@ type orchestratorDepencyMocks struct {
 	sequencer            *privatetxnmgrmocks.Sequencer
 	endorsementGatherer  *privatetxnmgrmocks.EndorsementGatherer
 	publisher            *privatetxnmgrmocks.Publisher
-	identityResolver     *privatetxnmgrmocks.IdentityResolver
+	identityResolver     *componentmocks.IdentityResolver
 }
 
 func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress *tktypes.EthAddress) (*Orchestrator, *orchestratorDepencyMocks, func()) {
@@ -65,7 +65,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 		sequencer:            privatetxnmgrmocks.NewSequencer(t),
 		endorsementGatherer:  privatetxnmgrmocks.NewEndorsementGatherer(t),
 		publisher:            privatetxnmgrmocks.NewPublisher(t),
-		identityResolver:     privatetxnmgrmocks.NewIdentityResolver(t),
+		identityResolver:     componentmocks.NewIdentityResolver(t),
 	}
 	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()

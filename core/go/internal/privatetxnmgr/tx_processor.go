@@ -33,7 +33,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver ptmgrtypes.IdentityResolver) ptmgrtypes.TxProcessor {
+func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.PreInitComponentsAndManagers, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver) ptmgrtypes.TxProcessor {
 	return &PaladinTxProcessor{
 		stageErrorRetry:     10 * time.Second,
 		sequencer:           sequencer,
@@ -59,7 +59,7 @@ type PaladinTxProcessor struct {
 	endorsementGatherer ptmgrtypes.EndorsementGatherer
 	status              string
 	latestEvent         string
-	identityResolver    ptmgrtypes.IdentityResolver
+	identityResolver    components.IdentityResolver
 }
 
 func (ts *PaladinTxProcessor) Init(ctx context.Context) {

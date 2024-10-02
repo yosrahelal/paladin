@@ -172,7 +172,20 @@ func (t *transport) ReceiveMessage(ctx context.Context, req *prototk.ReceiveMess
 		ReplyTo:       tktypes.PrivateIdentityLocator(msg.ReplyTo),
 		Payload:       msg.Payload,
 	}
-	t.tm.engine.ReceiveTransportMessage(ctx, transportMessage)
+	t.tm.destinationsMux.RLock()
+	defer t.tm.destinationsMux.RUnlock()
+	localDestination, err := tktypes.PrivateIdentityLocator(msg.Destination).Identity(ctx)
+	if err != nil {
+		log.L(ctx).Errorf("Error resolving destination: %s", err)
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTransportInvalidDestinationReceived, msg.Destination)
+	}
+	receiver, found := t.tm.destinations[localDestination]
+	if !found {
+		log.L(ctx).Errorf("Destination not found: %s", msg.Destination)
+		return nil, i18n.NewError(ctx, msgs.MsgTransportDestinationNotFound, msg.Destination)
+	}
+
+	receiver.ReceiveTransportMessage(ctx, transportMessage)
 
 	return &prototk.ReceiveMessageResponse{}, nil
 }

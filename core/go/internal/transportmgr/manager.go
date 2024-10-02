@@ -41,6 +41,9 @@ type transportManager struct {
 
 	transportsByID   map[uuid.UUID]*transport
 	transportsByName map[string]*transport
+
+	destinations    map[string]components.TransportClient
+	destinationsMux sync.RWMutex
 }
 
 func NewTransportManager(bgCtx context.Context, conf *config.TransportManagerConfig) components.TransportManager {
@@ -50,6 +53,7 @@ func NewTransportManager(bgCtx context.Context, conf *config.TransportManagerCon
 		localNodeName:    conf.NodeName,
 		transportsByID:   make(map[uuid.UUID]*transport),
 		transportsByName: make(map[string]*transport),
+		destinations:     make(map[string]components.TransportClient),
 	}
 }
 
@@ -81,6 +85,18 @@ func (tm *transportManager) Stop() {
 	for _, t := range allTransports {
 		tm.cleanupTransport(t)
 	}
+
+}
+
+func (tm *transportManager) RegisterClient(ctx context.Context, client components.TransportClient) error {
+	tm.destinationsMux.Lock()
+	defer tm.destinationsMux.Unlock()
+	if _, found := tm.destinations[client.Destination()]; found {
+		log.L(ctx).Errorf("Client already registered for destination %s", client.Destination())
+		return i18n.NewError(tm.bgCtx, msgs.MsgTransportClientAlreadyRegistered, client.Destination())
+	}
+	tm.destinations[client.Destination()] = client
+	return nil
 
 }
 

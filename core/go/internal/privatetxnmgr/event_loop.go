@@ -98,7 +98,7 @@ type Orchestrator struct {
 	components          components.PreInitComponentsAndManagers
 	endorsementGatherer ptmgrtypes.EndorsementGatherer
 	publisher           ptmgrtypes.Publisher
-	identityResolver    ptmgrtypes.IdentityResolver
+	identityResolver    components.IdentityResolver
 
 	store privatetxnstore.Store
 }
@@ -114,7 +114,7 @@ func NewOrchestrator(
 	endorsementGatherer ptmgrtypes.EndorsementGatherer,
 	publisher ptmgrtypes.Publisher,
 	store privatetxnstore.Store,
-	identityResolver ptmgrtypes.IdentityResolver,
+	identityResolver components.IdentityResolver,
 ) *Orchestrator {
 
 	newOrchestrator := &Orchestrator{

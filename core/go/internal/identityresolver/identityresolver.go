@@ -14,10 +14,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package privatetxnmgr
+package identityresolver
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -25,9 +26,8 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	engineProto "github.com/kaleido-io/paladin/core/pkg/proto/engine"
+	pbIdentityResolver "github.com/kaleido-io/paladin/core/pkg/proto/identityresolver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
@@ -46,14 +46,23 @@ type inflightRequest struct {
 	failed   func(ctx context.Context, err error)
 }
 
-func NewIdentityResolver(nodeID string, keyManager ethclient.KeyManager, transportManager components.TransportManager) ptmgrtypes.IdentityResolver {
-	return &identityResolver{
+// As a LateBoundComponent, the identity resolver is created and initialised in a single function call
+func NewIdentityResolver(ctx context.Context, nodeID string, c components.AllComponents) components.IdentityResolver {
+	ir := &identityResolver{
 		nodeID:                nodeID,
-		keyManager:            keyManager,
-		transportManager:      transportManager,
+		keyManager:            c.KeyManager(),
+		transportManager:      c.TransportManager(),
 		inflightRequests:      make(map[string]*inflightRequest),
 		inflightRequestsMutex: &sync.Mutex{},
 	}
+	err := c.TransportManager().RegisterClient(ctx, ir)
+	if err != nil {
+		// this is a code error that should block startup
+		// mostlikely a duplicate registration
+		panic("error from RegisterClient: " + err.Error())
+	}
+	return ir
+
 	//TODO start a reaper thread to clean up inflight requests that have been hanging around too long
 }
 
@@ -99,7 +108,7 @@ func (ir *identityResolver) ResolveVerifierAsync(ctx context.Context, lookup str
 	} else {
 		log.L(ctx).Debugf("resolving verifier via remote node %s", lookup)
 
-		resolveVerifierRequest := &engineProto.ResolveVerifierRequest{
+		resolveVerifierRequest := &pbIdentityResolver.ResolveVerifierRequest{
 			Lookup:       lookup,
 			Algorithm:    algorithm,
 			VerifierType: verifierType,
@@ -113,11 +122,17 @@ func (ir *identityResolver) ResolveVerifierAsync(ctx context.Context, lookup str
 
 		requestID := uuid.New()
 
+		remoteNodeId, err := tktypes.PrivateIdentityLocator(lookup).Node(ctx, false)
+		if err != nil {
+			failed(ctx, err)
+			return
+		}
+
 		err = ir.transportManager.Send(ctx, &components.TransportMessage{
 			MessageType: "ResolveVerifierRequest",
 			MessageID:   requestID,
-			Destination: tktypes.PrivateIdentityLocator(lookup),
-			ReplyTo:     tktypes.PrivateIdentityLocator(ir.nodeID),
+			Destination: tktypes.PrivateIdentityLocator(fmt.Sprintf("%s@%s", IDENTITIY_RESOLVER_DESTINATION, remoteNodeId)),
+			ReplyTo:     tktypes.PrivateIdentityLocator(fmt.Sprintf("%s@%s", IDENTITIY_RESOLVER_DESTINATION, ir.nodeID)),
 			Payload:     resolveVerifierRequestBytes,
 		})
 		if err != nil {
@@ -165,10 +180,100 @@ func (ir *identityResolver) failInflightRequest(ctx context.Context, requestID s
 	go request.failed(ctx, err)
 }
 
-func (ir *identityResolver) HandleResolveVerifierReply(ctx context.Context, event *ptmgrtypes.ResolveVerifierReply) {
-	ir.resolveInflightRequest(ctx, event.RequestID, *event.Verifier)
+func (ir *identityResolver) handleResolveVerifierReply(ctx context.Context, messagePayload []byte, correlationID string) {
+
+	resolveVerifierResponse := &pbIdentityResolver.ResolveVerifierResponse{}
+	err := proto.Unmarshal(messagePayload, resolveVerifierResponse)
+	if err != nil {
+		log.L(ctx).Errorf("Failed to unmarshal resolveVerifierResponse: %s", err)
+		return
+	}
+
+	ir.resolveInflightRequest(ctx, correlationID, resolveVerifierResponse.Verifier)
+
 }
 
-func (ir *identityResolver) HandleResolveVerifierError(ctx context.Context, event *ptmgrtypes.ResolveVerifierError) {
-	ir.failInflightRequest(ctx, event.RequestID, i18n.NewError(ctx, msgs.MsgResolveVerifierRemoteFailed, event.Lookup, event.Algorithm, event.ErrorMessage))
+func (ir *identityResolver) handleResolveVerifierError(ctx context.Context, messagePayload []byte, correlationID string) {
+
+	resolveVerifierError := &pbIdentityResolver.ResolveVerifierError{}
+	err := proto.Unmarshal(messagePayload, resolveVerifierError)
+	if err != nil {
+		log.L(ctx).Errorf("Failed to unmarshal resolveVerifierError: %s", err)
+		return
+	}
+
+	ir.failInflightRequest(ctx, correlationID, i18n.NewError(ctx, msgs.MsgResolveVerifierRemoteFailed, resolveVerifierError.Lookup, resolveVerifierError.Algorithm, resolveVerifierError.ErrorMessage))
+
+}
+
+// TODO some common code with ResolveVerifierAsync. Refactor out to a re-usable function
+func (ir *identityResolver) handleResolveVerifierRequest(ctx context.Context, messagePayload []byte, replyTo tktypes.PrivateIdentityLocator, requestID *uuid.UUID) {
+
+	resolveVerifierRequest := &pbIdentityResolver.ResolveVerifierRequest{}
+	err := proto.Unmarshal(messagePayload, resolveVerifierRequest)
+	if err != nil {
+		log.L(ctx).Errorf("Failed to unmarshal resolveVerifierRequest: %s", err)
+		return
+	}
+
+	//We don't need to bring a transaction processor into memory.  We can just service this request
+	// in isolation to any other processing for that transaction
+
+	// contractAddress and transactionID in the request message are simply used to populate the response
+	// so that the requesting node can correlate the response with the transaction that needs it
+	_, verifier, err := ir.keyManager.ResolveKey(ctx, resolveVerifierRequest.Lookup, resolveVerifierRequest.Algorithm, resolveVerifierRequest.VerifierType)
+	if err == nil {
+		resolveVerifierResponse := &pbIdentityResolver.ResolveVerifierResponse{
+			Lookup:       resolveVerifierRequest.Lookup,
+			Algorithm:    resolveVerifierRequest.Algorithm,
+			Verifier:     verifier,
+			VerifierType: resolveVerifierRequest.VerifierType,
+		}
+		resolveVerifierResponseBytes, err := proto.Marshal(resolveVerifierResponse)
+		if err == nil {
+			err = ir.transportManager.Send(ctx, &components.TransportMessage{
+				MessageType:   "ResolveVerifierResponse",
+				CorrelationID: requestID,
+				ReplyTo:       tktypes.PrivateIdentityLocator(fmt.Sprintf("%s@%s", IDENTITIY_RESOLVER_DESTINATION, ir.nodeID)),
+				Destination:   replyTo,
+				Payload:       resolveVerifierResponseBytes,
+			})
+			if err != nil {
+				log.L(ctx).Errorf("Failed to send resolve verifier response: %s", err)
+				// assume the requestor will eventually retry
+			}
+			return
+		} else {
+			log.L(ctx).Errorf("Failed to marshal resolve verifier response: %s", err)
+		}
+
+	} else {
+		log.L(ctx).Errorf("Failed to resolve verifier for %s (algorithm=%s): %s", resolveVerifierRequest.Lookup, resolveVerifierRequest.Algorithm, err)
+	}
+
+	if err != nil {
+		resolveVerifierError := &pbIdentityResolver.ResolveVerifierError{
+			Lookup:       resolveVerifierRequest.Lookup,
+			Algorithm:    resolveVerifierRequest.Algorithm,
+			ErrorMessage: err.Error(),
+		}
+		resolveVerifierErrorBytes, err := proto.Marshal(resolveVerifierError)
+		if err == nil {
+			err = ir.transportManager.Send(ctx, &components.TransportMessage{
+				MessageType:   "ResolveVerifierError",
+				CorrelationID: requestID,
+				ReplyTo:       tktypes.PrivateIdentityLocator(fmt.Sprintf("%s@%s", IDENTITIY_RESOLVER_DESTINATION, ir.nodeID)),
+				Destination:   replyTo,
+				Payload:       resolveVerifierErrorBytes,
+			})
+			if err != nil {
+				log.L(ctx).Errorf("Failed to send resolve verifier error: %s", err)
+				// assume the requestor will eventually retry
+			}
+			return
+		} else {
+			log.L(ctx).Errorf("Failed to marshal resolve verifier response: %s", err)
+			//TODO what can we do here other than panic
+		}
+	}
 }

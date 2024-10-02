@@ -174,6 +174,15 @@ func (tm *txManager) rpcResolveVerifier() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		resolveVerifierRequest *ptxapi.ResolveVerifierRequest,
 	) (*ptxapi.ResolvedVerifier, error) {
-		return tm.privateTxMgr.ResolveVerifier(ctx, resolveVerifierRequest)
+
+		verifier, err := tm.identityResolver.ResolveVerifier(ctx, *resolveVerifierRequest.Lookup, *resolveVerifierRequest.Algorithm, *resolveVerifierRequest.VerifierType)
+		if err != nil {
+			return nil, err
+		}
+		return &ptxapi.ResolvedVerifier{
+			Lookup:    resolveVerifierRequest.Lookup,
+			Algorithm: resolveVerifierRequest.Algorithm,
+			Verifier:  &verifier,
+		}, nil
 	})
 }
