@@ -42,6 +42,12 @@ type PaladinSpec struct {
 	// Optionally bind to a local besu node deployed with this operator
 	// (vs. configuring a connection to a production blockchain network)
 	BesuNode string `json:"besuNode,omitempty"`
+
+	// Optionally tune the service definition.
+	// We merge any configuration you add (such as node ports) for the following services:
+	// "rpc-http" - 8545 (TCP),
+	// "rpc-ws" - 8546 (TCP)
+	Service corev1.ServiceSpec `json:"service,omitempty"`
 }
 
 const DBMode_EmbeddedSQLite = "embeddedSQLite"

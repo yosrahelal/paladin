@@ -22,6 +22,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -39,6 +40,7 @@ type DomainManager interface {
 	GetSmartContractByAddress(ctx context.Context, addr tktypes.EthAddress) (DomainSmartContract, error)
 	WaitForDeploy(ctx context.Context, txID uuid.UUID) (DomainSmartContract, error)
 	WaitForTransaction(ctx context.Context, txID uuid.UUID) error
+	GetSigner() signerapi.InMemorySigner
 }
 
 // External interface for other components (engine, testbed) to call against a domain

@@ -22,7 +22,7 @@ import (
 
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
@@ -51,8 +51,9 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 	return &pb.InitTransactionResponse{
 		RequiredVerifiers: []*pb.ResolveVerifierRequest{
 			{
-				Lookup:    params.To,
-				Algorithm: algorithms.ZKP_BABYJUBJUB_PLAINBYTES,
+				Lookup:       params.To,
+				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
+				VerifierType: zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
 		},
 	}, nil
@@ -61,7 +62,7 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.MintParams)
 
-	resolvedRecipient := domain.FindVerifier(params.To, algorithms.ZKP_BABYJUBJUB_PLAINBYTES, req.ResolvedVerifiers)
+	resolvedRecipient := domain.FindVerifier(params.To, h.zeto.getAlgoZetoSnarkBJJ(), zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
 	if resolvedRecipient == nil {
 		return nil, fmt.Errorf("failed to resolve: %s", params.To)
 	}
@@ -89,7 +90,9 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 			{
 				Name:            "submitter",
 				AttestationType: pb.AttestationType_ENDORSE,
-				Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+				Algorithm:       h.zeto.getAlgoZetoSnarkBJJ(),
+				VerifierType:    zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+				PayloadType:     zetosigner.PAYLOAD_DOMAIN_ZETO_SNARK,
 				Parties:         []string{tx.Transaction.From},
 			},
 		},

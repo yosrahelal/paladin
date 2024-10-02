@@ -32,15 +32,17 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	coreProto "github.com/kaleido-io/paladin/core/pkg/proto"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -110,15 +112,16 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
-					Lookup:    "alice",
-					Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+					Lookup:       "alice",
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
 				},
 			},
 		}
 		initialised <- struct{}{}
 	}).Return(nil)
 
-	mocks.keyManager.On("ResolveKey", mock.Anything, "alice", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("aliceKeyHandle", "aliceVerifier", nil)
+	mocks.keyManager.On("ResolveKey", mock.Anything, "alice", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("aliceKeyHandle", "aliceVerifier", nil)
 	// TODO check that the transaction is signed with this key
 
 	assembled := make(chan struct{}, 1)
@@ -138,7 +141,9 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 				{
 					Name:            "notary",
 					AttestationType: prototk.AttestationType_ENDORSE,
-					Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
 					Parties: []string{
 						"domain1.contract1.notary",
 					},
@@ -149,7 +154,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 
 	}).Return(nil)
 
-	mocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("notaryKeyHandle", "notaryVerifier", nil)
+	mocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("notaryKeyHandle", "notaryVerifier", nil)
 
 	signingAddress := tktypes.RandHex(32)
 
@@ -163,17 +168,19 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 		Result:  prototk.EndorseTransactionResponse_SIGN,
 		Payload: []byte("some-endorsement-bytes"),
 		Endorser: &prototk.ResolvedVerifier{
-			Lookup:    "notaryKeyHandle",
-			Verifier:  "notaryVerifier",
-			Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+			Lookup:       "notaryKeyHandle",
+			Verifier:     "notaryVerifier",
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
 		},
 	}, nil)
 
-	mocks.keyManager.On("Sign", mock.Anything, &coreProto.SignRequest{
-		KeyHandle: "notaryKeyHandle",
-		Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-		Payload:   []byte("some-endorsement-bytes"),
-	}).Return(&coreProto.SignResponse{
+	mocks.keyManager.On("Sign", mock.Anything, &signerproto.SignRequest{
+		KeyHandle:   "notaryKeyHandle",
+		Algorithm:   algorithms.ECDSA_SECP256K1,
+		PayloadType: signpayloads.OPAQUE_TO_RSV,
+		Payload:     []byte("some-endorsement-bytes"),
+	}).Return(&signerproto.SignResponse{
 		Payload: []byte("some-signature-bytes"),
 	}, nil)
 
@@ -255,15 +262,16 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
-					Lookup:    "alice",
-					Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+					Lookup:       "alice",
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
 				},
 			},
 		}
 		initialised <- struct{}{}
 	}).Return(nil)
 
-	mocks.keyManager.On("ResolveKey", mock.Anything, "alice", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("aliceKeyHandle", "aliceVerifier", nil)
+	mocks.keyManager.On("ResolveKey", mock.Anything, "alice", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("aliceKeyHandle", "aliceVerifier", nil)
 
 	assembled := make(chan struct{}, 1)
 	mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
@@ -282,7 +290,9 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 				{
 					Name:            "notary",
 					AttestationType: prototk.AttestationType_ENDORSE,
-					Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
 					Parties: []string{
 						"domain1.contract1.notary@othernode",
 					},
@@ -309,7 +319,7 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 
 	remoteEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(remoteEngineMocks.domainSmartContract, nil)
 
-	remoteEngineMocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("notaryKeyHandle", "notaryVerifier", nil)
+	remoteEngineMocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("notaryKeyHandle", "notaryVerifier", nil)
 
 	signingAddress := tktypes.RandHex(32)
 
@@ -323,16 +333,18 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 		Result:  prototk.EndorseTransactionResponse_SIGN,
 		Payload: []byte("some-endorsement-bytes"),
 		Endorser: &prototk.ResolvedVerifier{
-			Lookup:    "notaryKeyHandle",
-			Verifier:  "notaryVerifier",
-			Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+			Lookup:       "notaryKeyHandle",
+			Verifier:     "notaryVerifier",
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
 		},
 	}, nil)
-	remoteEngineMocks.keyManager.On("Sign", mock.Anything, &coreProto.SignRequest{
-		KeyHandle: "notaryKeyHandle",
-		Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-		Payload:   []byte("some-endorsement-bytes"),
-	}).Return(&coreProto.SignResponse{
+	remoteEngineMocks.keyManager.On("Sign", mock.Anything, &signerproto.SignRequest{
+		KeyHandle:   "notaryKeyHandle",
+		Algorithm:   algorithms.ECDSA_SECP256K1,
+		PayloadType: signpayloads.OPAQUE_TO_RSV,
+		Payload:     []byte("some-endorsement-bytes"),
+	}).Return(&signerproto.SignResponse{
 		Payload: []byte("some-signature-bytes"),
 	}, nil)
 
@@ -403,15 +415,16 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
 
 	domainAddressString := domainAddress.String()
-	mocks.keyManager.On("ResolveKey", mock.Anything, "alice", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("aliceKeyHandle", "aliceVerifier", nil)
+	mocks.keyManager.On("ResolveKey", mock.Anything, "alice", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("aliceKeyHandle", "aliceVerifier", nil)
 
 	mocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
-					Lookup:    "alice",
-					Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+					Lookup:       "alice",
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
 				},
 			},
 		}
@@ -456,7 +469,9 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 					{
 						Name:            "notary",
 						AttestationType: prototk.AttestationType_ENDORSE,
-						Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+						Algorithm:       algorithms.ECDSA_SECP256K1,
+						VerifierType:    verifiers.ETH_ADDRESS,
+						PayloadType:     signpayloads.OPAQUE_TO_RSV,
 						Parties: []string{
 							"domain1.contract1.notary@othernode",
 						},
@@ -471,7 +486,9 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 					{
 						Name:            "notary",
 						AttestationType: prototk.AttestationType_ENDORSE,
-						Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+						Algorithm:       algorithms.ECDSA_SECP256K1,
+						VerifierType:    verifiers.ETH_ADDRESS,
+						PayloadType:     signpayloads.OPAQUE_TO_RSV,
 						Parties: []string{
 							"domain1.contract1.notary@othernode",
 						},
@@ -668,13 +685,14 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 				tx.PreAssembly = &components.TransactionPreAssembly{
 					RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 						{
-							Lookup:    "alice",
-							Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+							Lookup:       "alice",
+							Algorithm:    algorithms.ECDSA_SECP256K1,
+							VerifierType: verifiers.ETH_ADDRESS,
 						},
 					},
 				}
 			}).Return(nil)
-			mocks.keyManager.On("ResolveKey", mock.Anything, "alice", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("aliceKeyHandle", "aliceVerifier", nil)
+			mocks.keyManager.On("ResolveKey", mock.Anything, "alice", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("aliceKeyHandle", "aliceVerifier", nil)
 
 			failEarly := make(chan string, 1)
 
@@ -737,7 +755,9 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 						{
 							Name:            "notary",
 							AttestationType: prototk.AttestationType_ENDORSE,
-							Algorithm:       algorithms.ECDSA_SECP256K1_PLAINBYTES,
+							Algorithm:       algorithms.ECDSA_SECP256K1,
+							VerifierType:    verifiers.ETH_ADDRESS,
+							PayloadType:     signpayloads.OPAQUE_TO_RSV,
 							Parties: []string{
 								"domain1.contract1.notary@othernode",
 							},
@@ -765,7 +785,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 			}).Return(nil).Maybe()
 			remoteEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(remoteEngineMocks.domainSmartContract, nil)
 
-			remoteEngineMocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1_PLAINBYTES).Return("notaryKeyHandle", "notaryVerifier", nil)
+			remoteEngineMocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("notaryKeyHandle", "notaryVerifier", nil)
 
 			signingAddress := tktypes.RandHex(32)
 
@@ -779,16 +799,18 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 				Result:  prototk.EndorseTransactionResponse_SIGN,
 				Payload: []byte("some-endorsement-bytes"),
 				Endorser: &prototk.ResolvedVerifier{
-					Lookup:    "notaryKeyHandle",
-					Verifier:  "notaryVerifier",
-					Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
+					Lookup:       "notaryKeyHandle",
+					Verifier:     "notaryVerifier",
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
 				},
 			}, nil)
-			remoteEngineMocks.keyManager.On("Sign", mock.Anything, &coreProto.SignRequest{
-				KeyHandle: "notaryKeyHandle",
-				Algorithm: algorithms.ECDSA_SECP256K1_PLAINBYTES,
-				Payload:   []byte("some-endorsement-bytes"),
-			}).Return(&coreProto.SignResponse{
+			remoteEngineMocks.keyManager.On("Sign", mock.Anything, &signerproto.SignRequest{
+				KeyHandle:   "notaryKeyHandle",
+				Algorithm:   algorithms.ECDSA_SECP256K1,
+				PayloadType: signpayloads.OPAQUE_TO_RSV,
+				Payload:     []byte("some-endorsement-bytes"),
+			}).Return(&signerproto.SignResponse{
 				Payload: []byte("some-signature-bytes"),
 			}, nil)
 
@@ -866,6 +888,9 @@ func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, pri
 	tick := time.Tick(100 * time.Millisecond)
 
 	for {
+		if t.Failed() {
+			panic("test failed")
+		}
 		select {
 		case <-timeout:
 			// Timeout reached, exit the loop

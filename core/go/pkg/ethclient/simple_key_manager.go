@@ -17,14 +17,15 @@ package ethclient
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/core/pkg/signer"
-	"github.com/kaleido-io/paladin/core/pkg/signer/signerapi"
+	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 )
 
 type simpleKeyManager struct {
@@ -51,8 +52,8 @@ type keyMapping struct {
 // Super simple in-memory placeholder for Key Manager, which wraps a single signer, and does not
 // have any persistence of the folders and key mappings that are created.
 // TODO: Supersede with full key manager once it is in place
-func NewSimpleTestKeyManager(ctx context.Context, signerConfig *signerapi.Config) (KeyManager, error) {
-	signer, err := signer.NewSigningModule(ctx, signerConfig)
+func NewSimpleTestKeyManager(ctx context.Context, signerConfig *signerapi.Config, extensions ...*signerapi.Extensions[*signerapi.Config]) (KeyManager, error) {
+	signer, err := signer.NewSigningModule(ctx, signerConfig, extensions...)
 	if err != nil {
 		return nil, err
 	}
@@ -62,13 +63,22 @@ func NewSimpleTestKeyManager(ctx context.Context, signerConfig *signerapi.Config
 	}, nil
 }
 
-func (km *simpleKeyManager) ResolveKey(ctx context.Context, identifier string, algorithm string) (keyHandle, verifier string, err error) {
+func (km *simpleKeyManager) AddInMemorySigner(prefix string, signer signerapi.InMemorySigner) {
+	km.signer.AddInMemorySigner(prefix, signer)
+}
+
+func (km *simpleKeyManager) ResolveKey(ctx context.Context, identifier, algorithm, verifierType string) (keyHandle, verifier string, err error) {
 	km.lock.Lock()
 	defer km.lock.Unlock()
 
-	resolveRequest := &proto.ResolveKeyRequest{
+	resolveRequest := &signerproto.ResolveKeyRequest{
 		Attributes: make(map[string]string),
-		Algorithms: []string{algorithm},
+		RequiredIdentifiers: []*signerproto.PublicKeyIdentifierType{
+			{
+				Algorithm:    algorithm,
+				VerifierType: verifierType,
+			},
+		},
 	}
 	loc := km.rootFolder
 	segments := strings.Split(identifier, "/")
@@ -87,7 +97,7 @@ func (km *simpleKeyManager) ResolveKey(ctx context.Context, identifier string, a
 			loc.Children++ // increment for folders optimistically (and keys pessimistically below)
 		}
 		loc = folder
-		resolveRequest.Path = append(resolveRequest.Path, &proto.ResolveKeyPathSegment{
+		resolveRequest.Path = append(resolveRequest.Path, &signerproto.ResolveKeyPathSegment{
 			Name:  folder.Name,
 			Index: folder.Index,
 		})
@@ -97,7 +107,8 @@ func (km *simpleKeyManager) ResolveKey(ctx context.Context, identifier string, a
 		loc.Keys = make(map[string]*keyMapping)
 	}
 	key := loc.Keys[keyName]
-	if key == nil || key.Identifiers[algorithm] == "" {
+	algoAndVerifierType := strings.ToLower(fmt.Sprintf("%s/%s", algorithm, verifierType))
+	if key == nil || key.Identifiers[algoAndVerifierType] == "" {
 		resolveRequest.Name = keyName
 		// resolve either a new key, or a new identifier for an existing key
 		if key == nil {
@@ -124,14 +135,14 @@ func (km *simpleKeyManager) ResolveKey(ctx context.Context, identifier string, a
 			return "", "", i18n.NewError(ctx, msgs.MsgEthClientKeyMismatch, identifier, key.KeyHandle, resolved.KeyHandle)
 		}
 		for _, v := range resolved.Identifiers {
-			key.Identifiers[v.Algorithm] = v.Identifier
+			key.Identifiers[strings.ToLower(fmt.Sprintf("%s/%s", v.Algorithm, v.VerifierType))] = v.Verifier
 		}
 	}
 	// Double check we have the identifier we need
-	return key.KeyHandle, key.Identifiers[algorithm], nil
+	return key.KeyHandle, key.Identifiers[algoAndVerifierType], nil
 }
 
-func (km *simpleKeyManager) Sign(ctx context.Context, req *proto.SignRequest) (res *proto.SignResponse, err error) {
+func (km *simpleKeyManager) Sign(ctx context.Context, req *signerproto.SignRequest) (res *signerproto.SignResponse, err error) {
 	return km.signer.Sign(ctx, req)
 }
 
