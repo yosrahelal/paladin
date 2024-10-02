@@ -111,7 +111,7 @@ task protoc(type: ProtoCompile, dependsOn: [
     }
 }
 
-task copyPoseidonBuildScript(type: Copy) {
+task copyPoseidonBuildScript(type: Copy, dependsOn: protoc) {
     from file("${projectDir}/scripts/build-poseidon.js")
     into "${toolsOut}/solidity"
 }

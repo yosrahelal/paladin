@@ -44,6 +44,10 @@ func (dc *testDomainCallbacks) RecoverSigner(ctx context.Context, req *prototk.R
 	return nil, nil
 }
 
+func (dc *testDomainCallbacks) DecodeData(context.Context, *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error) {
+	return nil, nil
+}
+
 func returnCustomError() (*prototk.FindAvailableStatesResponse, error) {
 	return nil, errors.New("test error")
 }
