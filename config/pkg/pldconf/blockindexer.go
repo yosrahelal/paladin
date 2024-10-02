@@ -14,23 +14,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package pldconf
 
 import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"encoding/json"
+
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 )
 
 type BlockIndexerConfig struct {
-	FromBlock             tktypes.RawJSON    `json:"fromBlock,omitempty"`
+	FromBlock             json.RawMessage    `json:"fromBlock,omitempty"`
 	CommitBatchSize       *int               `json:"commitBatchSize"`
 	CommitBatchTimeout    *string            `json:"commitBatchTimeout"`
 	RequiredConfirmations *int               `json:"requiredConfirmations"`
 	ChainHeadCacheLen     *int               `json:"chainHeadCacheLen"`
 	BlockPollingInterval  *string            `json:"blockPollingInterval"`
 	EventStreams          EventStreamsConfig `json:"eventStreams"`
-	Retry                 retry.Config       `json:"retry"`
+	Retry                 RetryConfig        `json:"retry"`
 }
 
 type EventStreamsConfig struct {
@@ -44,7 +44,7 @@ var EventStreamDefaults = &EventStreamsConfig{
 }
 
 var BlockIndexerDefaults = &BlockIndexerConfig{
-	FromBlock:             tktypes.RawJSON(`0`),
+	FromBlock:             json.RawMessage(`0`),
 	CommitBatchSize:       confutil.P(50),
 	CommitBatchTimeout:    confutil.P("100ms"),
 	RequiredConfirmations: confutil.P(0),

@@ -32,15 +32,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/componenttest/domains"
 	"github.com/kaleido-io/paladin/core/internal/componentmgr"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
@@ -63,7 +64,7 @@ func TestRunSimpleStorageEthTransaction(t *testing.T) {
 	ctx := context.Background()
 	logrus.SetLevel(logrus.DebugLevel)
 
-	var testConfig config.PaladinConfig
+	var testConfig pldconf.PaladinConfig
 
 	err := yaml.Unmarshal([]byte(`
 db:
@@ -96,8 +97,8 @@ signer:
 	require.NoError(t, err)
 	defer p.Close()
 
-	indexer, err := blockindexer.NewBlockIndexer(ctx, &config.BlockIndexerConfig{
-		FromBlock: tktypes.RawJSON(`"latest"`), // don't want earlier events
+	indexer, err := blockindexer.NewBlockIndexer(ctx, &pldconf.BlockIndexerConfig{
+		FromBlock: json.RawMessage(`"latest"`), // don't want earlier events
 	}, &testConfig.Blockchain.WS, p)
 	require.NoError(t, err)
 
@@ -132,7 +133,7 @@ signer:
 	require.NoError(t, err)
 	defer indexer.Stop()
 
-	keyMgr, err := ethclient.NewSimpleTestKeyManager(ctx, &testConfig.Signer)
+	keyMgr, err := ethclient.NewSimpleTestKeyManager(ctx, (*signerapi.ConfigNoExt)(&testConfig.Signer))
 	require.NoError(t, err)
 
 	ecf, err := ethclient.NewEthClientFactory(ctx, keyMgr, &testConfig.Blockchain)
@@ -198,7 +199,7 @@ func TestCoreGoComponent(t *testing.T) {
 	instance, _ := newInstanceForComponentTesting(t)
 
 	// send JSON RPC message to check the status of the server
-	rpcClient, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{URL: "http://localhost:" + strconv.Itoa(*instance.conf.RPCServer.HTTP.Port)})
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: "http://localhost:" + strconv.Itoa(*instance.conf.RPCServer.HTTP.Port)})
 	require.NoError(t, err)
 
 	// Check there are no transactions before we start
@@ -303,7 +304,7 @@ type componentTestInstance struct {
 	grpcTarget string
 	engineName string
 	id         uuid.UUID
-	conf       *config.PaladinConfig
+	conf       *pldconf.PaladinConfig
 	ctx        context.Context
 	cancelCtx  context.CancelFunc
 }
@@ -345,10 +346,10 @@ func newInstanceForComponentTesting(t *testing.T) (*componentTestInstance, compo
 
 	cmTmp.Stop()
 
-	i.conf.DomainManagerConfig.Domains = make(map[string]*config.DomainConfig, 1)
-	i.conf.DomainManagerConfig.Domains["domain1"] = &config.DomainConfig{
-		Plugin: config.PluginConfig{
-			Type:    config.LibraryTypeCShared.Enum(),
+	i.conf.DomainManagerConfig.Domains = make(map[string]*pldconf.DomainConfig, 1)
+	i.conf.DomainManagerConfig.Domains["domain1"] = &pldconf.DomainConfig{
+		Plugin: pldconf.PluginConfig{
+			Type:    string(tktypes.LibraryTypeCShared),
 			Library: "loaded/via/unit/test/loader",
 		},
 		Config:          map[string]any{"some": "config"},
@@ -357,7 +358,7 @@ func newInstanceForComponentTesting(t *testing.T) (*componentTestInstance, compo
 
 	entropy, _ := bip39.NewEntropy(256)
 	mnemonic, _ := bip39.NewMnemonic(entropy)
-	i.conf.Signer.KeyStore.Static.Keys = map[string]signerapi.StaticKeyEntryConfig{
+	i.conf.Signer.KeyStore.Static.Keys = map[string]pldconf.StaticKeyEntryConfig{
 		"seed": {
 			Encoding: "none",
 			Inline:   mnemonic,
@@ -428,12 +429,12 @@ func (c *componentTestEngine) Stop() {
 
 }
 
-func testConfig(t *testing.T) *config.PaladinConfig {
+func testConfig(t *testing.T) *pldconf.PaladinConfig {
 	ctx := context.Background()
 	log.SetLevel("debug")
 
-	var conf *config.PaladinConfig
-	err := config.ReadAndParseYAMLFile(ctx, "../test/config/sqlite.memory.config.yaml", &conf)
+	var conf *pldconf.PaladinConfig
+	err := pldconf.ReadAndParseYAMLFile(ctx, "../test/config/sqlite.memory.config.yaml", &conf)
 	assert.NoError(t, err)
 
 	// For running in this unit test the dirs are different to the sample config

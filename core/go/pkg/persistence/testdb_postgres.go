@@ -25,7 +25,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
@@ -47,10 +48,10 @@ func NewUnitTestPersistence(ctx context.Context) (p Persistence, cleanup func(),
 		err = adminDB.Close()
 	}
 	if err == nil {
-		p, err = newPostgresProvider(ctx, &Config{
+		p, err = newPostgresProvider(ctx, &pldconf.DBConfig{
 			Type: "postgres",
-			Postgres: PostgresConfig{
-				SQLDBConfig: SQLDBConfig{
+			Postgres: pldconf.PostgresConfig{
+				SQLDBConfig: pldconf.SQLDBConfig{
 					DSN:           dbDSN(utdbName),
 					MigrationsDir: "../../db/migrations/postgres",
 					AutoMigrate:   confutil.P(true),

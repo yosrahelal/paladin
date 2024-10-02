@@ -25,10 +25,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/componentmgr"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
@@ -99,8 +100,8 @@ func (i *instance) run() RC {
 		return RC_FAIL
 	}
 
-	var conf config.PaladinConfig
-	if err = config.ReadAndParseYAMLFile(i.ctx, i.configFile, &conf); err != nil {
+	var conf pldconf.PaladinConfig
+	if err = pldconf.ReadAndParseYAMLFile(i.ctx, i.configFile, &conf); err != nil {
 		log.L(i.ctx).Error(err.Error())
 		return RC_FAIL
 	}

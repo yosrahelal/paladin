@@ -12,26 +12,26 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
-package config
+package pldconf
 
 import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 )
 
-type TxManagerConfig struct {
-	ABI ABIConfig `json:"abi"`
+type PluginManagerConfig struct {
+	GRPC GRPCConfig `json:"grpc"`
 }
 
-type ABIConfig struct {
-	Cache cache.Config `json:"cache"`
+type GRPCConfig struct {
+	ShutdownTimeout *string `json:"shutdownTimeout"`
 }
 
-var TxManagerDefaults = &TxManagerConfig{
-	ABI: ABIConfig{
-		Cache: cache.Config{
-			Capacity: confutil.P(100),
-		},
-	},
+var DefaultGRPCConfig = &GRPCConfig{
+	ShutdownTimeout: confutil.P("10s"),
+}
+
+type PluginConfig struct {
+	Type    string  `json:"type"`
+	Library string  `json:"library"`
+	Class   *string `json:"class,omitempty"`
 }

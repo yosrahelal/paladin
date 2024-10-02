@@ -23,9 +23,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
@@ -35,7 +36,7 @@ type registry struct {
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 
-	conf *config.RegistryConfig
+	conf *pldconf.RegistryConfig
 	rm   *registryManager
 	id   uuid.UUID
 	name string
@@ -52,7 +53,7 @@ type registry struct {
 	initDone  chan struct{}
 }
 
-func (rm *registryManager) newRegistry(id uuid.UUID, name string, conf *config.RegistryConfig, toRegistry components.RegistryManagerToRegistry) *registry {
+func (rm *registryManager) newRegistry(id uuid.UUID, name string, conf *pldconf.RegistryConfig, toRegistry components.RegistryManagerToRegistry) *registry {
 	r := &registry{
 		rm:                  rm,
 		conf:                conf,

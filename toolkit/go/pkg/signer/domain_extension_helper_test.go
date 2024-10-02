@@ -41,11 +41,11 @@ func TestNewDomainPrefixRouterOk(t *testing.T) {
 		},
 	}
 
-	dpr := NewDomainPrefixRouter(map[string]signerapi.InMemorySignerFactory[*signerapi.Config]{
+	dpr := NewDomainPrefixRouter(map[string]signerapi.InMemorySignerFactory[*signerapi.ConfigNoExt]{
 		"test": signerFactory,
 	})
 
-	signer, err := dpr.NewSigner(ctx, &signerapi.Config{})
+	signer, err := dpr.NewSigner(ctx, &signerapi.ConfigNoExt{})
 	require.NoError(t, err)
 	require.NotNil(t, dpr.GetSigner("test"))
 
@@ -71,15 +71,15 @@ func TestNewDomainPrefixRouterErrors(t *testing.T) {
 		err:    fmt.Errorf("pop"),
 	}
 
-	dpr := NewDomainPrefixRouter(map[string]signerapi.InMemorySignerFactory[*signerapi.Config]{
+	dpr := NewDomainPrefixRouter(map[string]signerapi.InMemorySignerFactory[*signerapi.ConfigNoExt]{
 		"test": signerFactory,
 	})
 
-	_, err := dpr.NewSigner(ctx, &signerapi.Config{})
+	_, err := dpr.NewSigner(ctx, &signerapi.ConfigNoExt{})
 	require.Regexp(t, "pop", err)
 
 	signerFactory.err = nil
-	signer, err := dpr.NewSigner(ctx, &signerapi.Config{})
+	signer, err := dpr.NewSigner(ctx, &signerapi.ConfigNoExt{})
 	require.NoError(t, err)
 
 	_, err = signer.Sign(ctx, "edcsa:secp256k1", "test:example", []byte("key"), []byte("payload"))

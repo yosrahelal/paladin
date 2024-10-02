@@ -22,9 +22,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
@@ -37,7 +38,7 @@ type transport struct {
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 
-	conf *config.TransportConfig
+	conf *pldconf.TransportConfig
 	tm   *transportManager
 	id   uuid.UUID
 	name string
@@ -50,7 +51,7 @@ type transport struct {
 	initDone  chan struct{}
 }
 
-func (tm *transportManager) newTransport(id uuid.UUID, name string, conf *config.TransportConfig, toTransport components.TransportManagerToTransport) *transport {
+func (tm *transportManager) newTransport(id uuid.UUID, name string, conf *pldconf.TransportConfig, toTransport components.TransportManagerToTransport) *transport {
 	t := &transport{
 		tm:        tm,
 		conf:      conf,

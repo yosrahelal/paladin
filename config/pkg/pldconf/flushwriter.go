@@ -14,27 +14,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package retry
+package pldconf
 
-import "github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-
-type Config struct {
-	InitialDelay *string  `json:"initialDelay"`
-	MaxDelay     *string  `json:"maxDelay"`
-	Factor       *float64 `json:"factor"`
-}
-
-type ConfigWithMax struct {
-	Config
-	MaxAttempts *int    `json:"maxAttempts"`
-	MaxTime     *string `json:"maxTime"`
-}
-
-var Defaults = &ConfigWithMax{
-	Config: Config{
-		InitialDelay: confutil.P("250ms"),
-		MaxDelay:     confutil.P("30s"),
-		Factor:       confutil.P(2.0),
-	},
-	MaxAttempts: confutil.P(3),
+type FlushWriterConfig struct {
+	WorkerCount  *int    `json:"workerCount"`
+	BatchTimeout *string `json:"batchTimeout"`
+	BatchMaxSize *int    `json:"batchMaxSize"`
 }

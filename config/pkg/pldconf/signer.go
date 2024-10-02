@@ -13,19 +13,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package signerapi
+package pldconf
 
 import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	proto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 )
-
-// To enable extending of the default configuration that Paladin uses when embedding this module,
-// with additional configuration that is specific to particular environments
-type ExtensibleConfig interface {
-	KeyStoreConfig() *KeyStoreConfig
-	KeyDerivationConfig() *KeyDerivationConfig
-}
 
 const (
 	KeyStoreTypeFilesystem = "filesystem" // keystorev3 based filesystem storage
@@ -37,25 +29,17 @@ const (
 // with more options as long as you provide a way to get hold of the base
 // KeyStoreConfig / KeyDerivationConfig that the core module requires
 // (by embedding those somewhere in your config hierarchy).
-type Config struct {
+type SignerConfig struct {
 	KeyStore      KeyStoreConfig      `json:"keyStore"`
 	KeyDerivation KeyDerivationConfig `json:"keyDerivation"`
 }
 
-func (c *Config) KeyStoreConfig() *KeyStoreConfig {
-	return &c.KeyStore
-}
-
-func (c *Config) KeyDerivationConfig() *KeyDerivationConfig {
-	return &c.KeyDerivation
-}
-
 type KeyStoreConfig struct {
-	Type              string                 `json:"type"`
-	DisableKeyListing bool                   `json:"disableKeyListing"`
-	KeyStoreSigning   bool                   `json:"keyStoreSigning"` // if HD Wallet or ZKP based signing is required, in-memory keys are required (so this needs to be false)
-	FileSystem        FileSystemConfig       `json:"filesystem"`
-	Static            StaticKeyStorageConfig `json:"static"`
+	Type              string                   `json:"type"`
+	DisableKeyListing bool                     `json:"disableKeyListing"`
+	KeyStoreSigning   bool                     `json:"keyStoreSigning"` // if HD Wallet or ZKP based signing is required, in-memory keys are required (so this needs to be false)
+	FileSystem        FileSystemKeyStoreConfig `json:"filesystem"`
+	Static            StaticKeyStoreConfig     `json:"static"`
 }
 
 type KeyDerivationType string
@@ -72,7 +56,7 @@ type ConfigKeyPathEntry struct {
 	Index uint64 `json:"index"`
 }
 
-type ConfigKeyEntry struct {
+type SigningKeyConfigEntry struct {
 	Name       string               `json:"name"`
 	Index      uint64               `json:"index"`
 	Attributes map[string]string    `json:"attributes"`
@@ -80,33 +64,17 @@ type ConfigKeyEntry struct {
 }
 
 type KeyDerivationConfig struct {
-	Type                  KeyDerivationType `json:"type"`
-	SeedKeyPath           ConfigKeyEntry    `json:"seedKey"`
-	BIP44DirectResolution bool              `json:"bip44DirectResolution"`
-	BIP44Prefix           *string           `json:"bip44Prefix"`
-	BIP44HardenedSegments *int              `json:"bip44HardenedSegments"`
+	Type                  KeyDerivationType     `json:"type"`
+	SeedKeyPath           SigningKeyConfigEntry `json:"seedKey"`
+	BIP44DirectResolution bool                  `json:"bip44DirectResolution"`
+	BIP44Prefix           *string               `json:"bip44Prefix"`
+	BIP44HardenedSegments *int                  `json:"bip44HardenedSegments"`
 }
 
 var KeyDerivationDefaults = &KeyDerivationConfig{
 	BIP44Prefix:           confutil.P("m/44'/60'"),
 	BIP44HardenedSegments: confutil.P(1), // in addition to the prefix, so `m/44'/60'/0'/0/0` for example with 3 segments, on top of the prefix
-	SeedKeyPath:           ConfigKeyEntry{Name: "seed", Index: 0},
-}
-
-func (k *ConfigKeyEntry) ToKeyResolutionRequest() *proto.ResolveKeyRequest {
-	keyReq := &proto.ResolveKeyRequest{
-		Name:       k.Name,
-		Index:      k.Index,
-		Attributes: k.Attributes,
-		Path:       []*proto.ResolveKeyPathSegment{},
-	}
-	for _, p := range k.Path {
-		keyReq.Path = append(keyReq.Path, &proto.ResolveKeyPathSegment{
-			Name:  p.Name,
-			Index: p.Index,
-		})
-	}
-	return keyReq
+	SeedKeyPath:           SigningKeyConfigEntry{Name: "seed", Index: 0},
 }
 
 type StaticKeyEntryEncoding string
@@ -124,7 +92,23 @@ type StaticKeyEntryConfig struct {
 	Inline   string                 `json:"inline"`
 }
 
-type StaticKeyStorageConfig struct {
+type StaticKeyStoreConfig struct {
 	File string                          `json:"file,omitempty"` // whole file to use as a store
 	Keys map[string]StaticKeyEntryConfig `json:"keys"`           // individual key entries in the config
+}
+
+type FileSystemKeyStoreConfig struct {
+	Path     *string     `json:"path"`
+	Cache    CacheConfig `json:"cache"`
+	FileMode *string     `json:"fileMode"`
+	DirMode  *string     `json:"dirMode"`
+}
+
+var FileSystemDefaults = &FileSystemKeyStoreConfig{
+	Path:     confutil.P("keystore"),
+	FileMode: confutil.P("0600"),
+	DirMode:  confutil.P("0700"),
+	Cache: CacheConfig{
+		Capacity: confutil.P(100),
+	},
 }

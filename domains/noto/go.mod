@@ -45,6 +45,7 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
+	github.com/kaleido-io/paladin/config v0.0.0-00010101000000-000000000000 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
@@ -105,3 +106,5 @@ require (
 replace github.com/kaleido-io/paladin/core => ../../core/go
 
 replace github.com/kaleido-io/paladin/toolkit => ../../toolkit/go
+
+replace github.com/kaleido-io/paladin/config => ../../config

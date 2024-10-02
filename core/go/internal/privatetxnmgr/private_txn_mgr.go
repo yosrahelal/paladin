@@ -27,11 +27,12 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
@@ -44,7 +45,7 @@ import (
 type privateTxManager struct {
 	ctx                  context.Context
 	ctxCancel            func()
-	config               *config.PrivateTxManagerConfig
+	config               *pldconf.PrivateTxManagerConfig
 	orchestrators        map[string]*Orchestrator
 	endorsementGatherers map[string]ptmgrtypes.EndorsementGatherer
 	components           components.AllComponents
@@ -72,7 +73,7 @@ func (p *privateTxManager) Start() error {
 func (p *privateTxManager) Stop() {
 }
 
-func NewPrivateTransactionMgr(ctx context.Context, nodeID string, config *config.PrivateTxManagerConfig) components.PrivateTxManager {
+func NewPrivateTransactionMgr(ctx context.Context, nodeID string, config *pldconf.PrivateTxManagerConfig) components.PrivateTxManager {
 	p := &privateTxManager{
 		config:               config,
 		orchestrators:        make(map[string]*Orchestrator),

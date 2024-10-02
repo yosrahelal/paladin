@@ -21,8 +21,9 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
 )
@@ -39,7 +40,7 @@ func TestFinalizeTransactionsNoOp(t *testing.T) {
 
 func TestFinalizeTransactionsLookupFail(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectQuery("SELECT.*transactions").WillReturnError(fmt.Errorf("pop"))
 	})
 	defer done()
@@ -55,7 +56,7 @@ func TestFinalizeTransactionsLookupFail(t *testing.T) {
 func TestFinalizeTransactionsSuccessWithFailure(t *testing.T) {
 
 	txID := uuid.New()
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(txID))
 	})
 	defer done()
@@ -70,7 +71,7 @@ func TestFinalizeTransactionsSuccessWithFailure(t *testing.T) {
 func TestFinalizeTransactionsBadType(t *testing.T) {
 
 	txID := uuid.New()
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(txID))
 	})
 	defer done()
@@ -85,7 +86,7 @@ func TestFinalizeTransactionsBadType(t *testing.T) {
 func TestFinalizeTransactionsFailedWithMessageNoMessage(t *testing.T) {
 
 	txID := uuid.New()
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(txID))
 	})
 	defer done()
@@ -100,7 +101,7 @@ func TestFinalizeTransactionsFailedWithMessageNoMessage(t *testing.T) {
 func TestFinalizeTransactionsFailedWithRevertDataWithMessage(t *testing.T) {
 
 	txID := uuid.New()
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(txID))
 	})
 	defer done()
@@ -116,7 +117,7 @@ func TestFinalizeTransactionsFailedWithRevertDataWithMessage(t *testing.T) {
 func TestFinalizeTransactionsInsertFail(t *testing.T) {
 
 	txID := uuid.New()
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectBegin()
 		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(txID))
 		mc.db.ExpectExec("INSERT.*transaction_receipts").WillReturnError(fmt.Errorf("pop"))
@@ -135,7 +136,7 @@ func TestFinalizeTransactionsInsertFail(t *testing.T) {
 
 func TestFinalizeTransactionsIgnoreUnknown(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(sqlmock.NewRows([]string{"id"}))
 	})
 	defer done()
@@ -160,7 +161,7 @@ func TestCalculateRevertErrorNoData(t *testing.T) {
 
 func TestCalculateRevertErrorQueryFail(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectQuery("SELECT.*abi_errors").WillReturnError(fmt.Errorf("pop"))
 	})
 	defer done()
@@ -172,7 +173,7 @@ func TestCalculateRevertErrorQueryFail(t *testing.T) {
 
 func TestCalculateRevertErrorDecodeFail(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectQuery("SELECT.*abi_errors").WillReturnRows(sqlmock.NewRows([]string{"definition"}).AddRow(`{}`))
 	})
 	defer done()
@@ -184,7 +185,7 @@ func TestCalculateRevertErrorDecodeFail(t *testing.T) {
 
 func TestGetTransactionReceiptNoResult(t *testing.T) {
 
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectQuery("SELECT.*transaction_receipts").WillReturnRows(sqlmock.NewRows([]string{}))
 	})
 	defer done()

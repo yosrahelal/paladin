@@ -12,22 +12,25 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-package config
+
+package pldconf
 
 import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 )
 
-type RegistryManagerConfig struct {
-	Registries map[string]*RegistryConfig `json:"registries"`
+type TxManagerConfig struct {
+	ABI ABIConfig `json:"abi"`
 }
 
-type RegistryInitConfig struct {
-	Retry retry.Config `json:"retry"`
+type ABIConfig struct {
+	Cache CacheConfig `json:"cache"`
 }
 
-type RegistryConfig struct {
-	Init   RegistryInitConfig `json:"init"`
-	Plugin PluginConfig       `json:"plugin"`
-	Config map[string]any     `json:"config"`
+var TxManagerDefaults = &TxManagerConfig{
+	ABI: ABIConfig{
+		Cache: CacheConfig{
+			Capacity: confutil.P(100),
+		},
+	},
 }

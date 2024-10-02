@@ -13,14 +13,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package config
+package pldconf
 
 import (
 	"context"
 	"os"
 	"testing"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -184,7 +184,7 @@ func TestReadAndParseYAMLFileFailMissingFile(t *testing.T) {
 
 	err = ReadAndParseYAMLFile(ctx, tempFile.Name(), confutil.P(struct{}{}))
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "PD020200")
+	assert.Contains(t, err.Error(), "PD050000")
 	assert.Contains(t, err.Error(), tempFile.Name())
 
 }
@@ -193,7 +193,7 @@ func TestReadAndParseYAMLFileFailDirNotFile(t *testing.T) {
 	ctx := context.Background()
 	err := ReadAndParseYAMLFile(ctx, t.TempDir(), confutil.P(struct{}{}))
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "PD020201")
+	assert.Contains(t, err.Error(), "PD050001")
 }
 
 func TestReadAndParseYAMLFileFailedParse(t *testing.T) {
@@ -224,5 +224,5 @@ invalid yaml content
 
 	err = ReadAndParseYAMLFile(ctx, tempFile.Name(), &result)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "PD020202")
+	assert.Contains(t, err.Error(), "PD050002")
 }

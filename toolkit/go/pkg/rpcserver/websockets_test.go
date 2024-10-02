@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -32,7 +33,7 @@ func TestWebSocketRPCRequestResponse(t *testing.T) {
 
 	ctx, cancelCtx := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancelCtx()
-	url, s, done := newTestServerWebSockets(t, &Config{})
+	url, s, done := newTestServerWebSockets(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	client := rpcclient.WrapWSConfig(&wsclient.WSConfig{WebSocketURL: url, DisableReconnect: true})
@@ -54,7 +55,7 @@ func TestWebSocketRPCRequestResponse(t *testing.T) {
 }
 
 func TestWebSocketConnectionFailureHandling(t *testing.T) {
-	url, s, done := newTestServerWebSockets(t, &Config{})
+	url, s, done := newTestServerWebSockets(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	client := rpcclient.WrapWSConfig(&wsclient.WSConfig{WebSocketURL: url, DisableReconnect: true})
@@ -95,7 +96,7 @@ func TestWebSocketConnectionFailureHandling(t *testing.T) {
 }
 
 func TestWebSocketEthSubscribeUnsubscribe(t *testing.T) {
-	url, s, done := newTestServerWebSockets(t, &Config{})
+	url, s, done := newTestServerWebSockets(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	client := rpcclient.WrapWSConfig(&wsclient.WSConfig{WebSocketURL: url, DisableReconnect: true})

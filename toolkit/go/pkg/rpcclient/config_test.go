@@ -20,21 +20,21 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/tlsconf"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestWSConfigOK(t *testing.T) {
 	ctx := context.Background()
-	wsc, err := ParseWSConfig(ctx, &WSConfig{HTTPConfig: HTTPConfig{URL: "ws://localhost:8545"}})
+	wsc, err := ParseWSConfig(ctx, &pldconf.WSClientConfig{HTTPClientConfig: pldconf.HTTPClientConfig{URL: "ws://localhost:8545"}})
 	require.NoError(t, err)
 	assert.Equal(t, "ws://localhost:8545", wsc.WebSocketURL)
 }
 
 func TestWSConfigTLSOK(t *testing.T) {
 	ctx := context.Background()
-	wsc, err := ParseWSConfig(ctx, &WSConfig{HTTPConfig: HTTPConfig{URL: "wss://localhost:8545"}})
+	wsc, err := ParseWSConfig(ctx, &pldconf.WSClientConfig{HTTPClientConfig: pldconf.HTTPClientConfig{URL: "wss://localhost:8545"}})
 	require.NoError(t, err)
 	assert.Equal(t, "wss://localhost:8545", wsc.WebSocketURL)
 	assert.NotNil(t, wsc.TLSClientConfig)
@@ -42,38 +42,38 @@ func TestWSConfigTLSOK(t *testing.T) {
 
 func TestWSConfigBadURL(t *testing.T) {
 	ctx := context.Background()
-	_, err := NewWSClient(ctx, &WSConfig{HTTPConfig: HTTPConfig{URL: "http://localhost:8545"}})
+	_, err := NewWSClient(ctx, &pldconf.WSClientConfig{HTTPClientConfig: pldconf.HTTPClientConfig{URL: "http://localhost:8545"}})
 	assert.Regexp(t, "PD020500", err)
 }
 
 func TestWSConfigBadTLS(t *testing.T) {
 	ctx := context.Background()
-	_, err := NewWSClient(ctx, &WSConfig{HTTPConfig: HTTPConfig{URL: "wss://localhost:8545", TLS: tlsconf.Config{CAFile: t.TempDir()}}})
+	_, err := NewWSClient(ctx, &pldconf.WSClientConfig{HTTPClientConfig: pldconf.HTTPClientConfig{URL: "wss://localhost:8545", TLS: pldconf.TLSConfig{CAFile: t.TempDir()}}})
 	assert.Regexp(t, "PD020401", err)
 }
 
 func TestHTTPonfigOK(t *testing.T) {
 	ctx := context.Background()
-	r, err := ParseHTTPConfig(ctx, &HTTPConfig{URL: "http://localhost:8545"})
+	r, err := ParseHTTPConfig(ctx, &pldconf.HTTPClientConfig{URL: "http://localhost:8545"})
 	require.NoError(t, err)
 	assert.Equal(t, "http://localhost:8545", r.BaseURL)
 }
 
 func TestHTTPConfigTLSOK(t *testing.T) {
 	ctx := context.Background()
-	r, err := ParseHTTPConfig(ctx, &HTTPConfig{URL: "https://localhost:8545"})
+	r, err := ParseHTTPConfig(ctx, &pldconf.HTTPClientConfig{URL: "https://localhost:8545"})
 	require.NoError(t, err)
 	assert.Equal(t, "https://localhost:8545", r.BaseURL)
 }
 
 func TestHTTPConfigBadURL(t *testing.T) {
 	ctx := context.Background()
-	_, err := NewHTTPClient(ctx, &HTTPConfig{URL: "wss://localhost:8545"})
+	_, err := NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: "wss://localhost:8545"})
 	assert.Regexp(t, "PD020501", err)
 }
 
 func TestHTTPConfigBadTLS(t *testing.T) {
 	ctx := context.Background()
-	_, err := NewHTTPClient(ctx, &HTTPConfig{URL: "https://localhost:8545", TLS: tlsconf.Config{CAFile: t.TempDir()}})
+	_, err := NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: "https://localhost:8545", TLS: pldconf.TLSConfig{CAFile: t.TempDir()}})
 	assert.Regexp(t, "PD020401", err)
 }

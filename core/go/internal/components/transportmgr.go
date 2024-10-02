@@ -19,7 +19,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -40,7 +41,7 @@ type TransportManagerToTransport interface {
 
 type TransportManager interface {
 	ManagerLifecycle
-	ConfiguredTransports() map[string]*config.PluginConfig
+	ConfiguredTransports() map[string]*pldconf.PluginConfig
 	TransportRegistered(name string, id uuid.UUID, toTransport TransportManagerToTransport) (fromTransport plugintk.TransportCallbacks, err error)
 	LocalNodeName() string
 

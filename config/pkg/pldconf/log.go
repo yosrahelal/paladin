@@ -14,11 +14,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package log
+package pldconf
 
-import "github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+import "github.com/kaleido-io/paladin/config/pkg/confutil"
 
-type Config struct {
+type LogConfig struct {
 	// the logging level
 	Level *string `json:"level"`
 	// the format ('simple', 'json')
@@ -34,12 +34,12 @@ type Config struct {
 	// sets log timestamps to the UTC timezone
 	UTC *bool `json:"utc"`
 	// configure file based logging
-	File FileConfig `json:"file"`
+	File LogFileConfig `json:"file"`
 	// configure json based logging
-	JSON JSONConfig `json:"json"`
+	JSON LogJSONConfig `json:"json"`
 }
 
-type FileConfig struct {
+type LogFileConfig struct {
 	// sets the log filename prefix
 	Filename *string `json:"filename"`
 	// sets the size to roll logs at a given size
@@ -52,7 +52,7 @@ type FileConfig struct {
 	Compress *bool `json:"compress"`
 }
 
-type JSONConfig struct {
+type LogJSONConfig struct {
 	// configures the JSON key containing the timestamp of the log
 	TimestampField *string `json:"timestampField"`
 	// configures the JSON key containing the log level
@@ -65,7 +65,7 @@ type JSONConfig struct {
 	FileField *string `json:"fileField"`
 }
 
-var LogDefaults = &Config{
+var LogDefaults = &LogConfig{
 	Level:        confutil.P("info"),
 	Format:       confutil.P("simple"),
 	Output:       confutil.P("stderr"),
@@ -73,14 +73,14 @@ var LogDefaults = &Config{
 	DisableColor: confutil.P(false),
 	TimeFormat:   confutil.P("2006-01-02T15:04:05.000Z07:00"),
 	UTC:          confutil.P(false),
-	File: FileConfig{
+	File: LogFileConfig{
 		Filename:   confutil.P("paladin.log"),
 		MaxSize:    confutil.P("100Mb"),
 		MaxBackups: confutil.P(2),
 		MaxAge:     confutil.P("24h"),
 		Compress:   confutil.P(true),
 	},
-	JSON: JSONConfig{
+	JSON: LogJSONConfig{
 		TimestampField: confutil.P("@timestamp"),
 		LevelField:     confutil.P("level"),
 		MessageField:   confutil.P("message"),

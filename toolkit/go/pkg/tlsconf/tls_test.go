@@ -31,7 +31,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hyperledger/firefly-common/pkg/config"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/stretchr/testify/require"
 
 	"github.com/stretchr/testify/assert"
@@ -95,7 +95,7 @@ func buildSelfSignedTLSKeyPairFiles(t *testing.T, subject pkix.Name) (string, st
 	return publicKeyFile.Name(), privateKeyFile.Name()
 }
 
-func buildTLSListener(t *testing.T, conf *Config, tlsType TLSType) (string, func()) {
+func buildTLSListener(t *testing.T, conf *pldconf.TLSConfig, tlsType TLSType) (string, func()) {
 
 	// Create the TLS Config with the CA pool and enable Client certificate validation
 	tlsConfig, err := BuildTLSConfig(context.Background(), conf, tlsType)
@@ -138,7 +138,7 @@ func buildTLSListener(t *testing.T, conf *Config, tlsType TLSType) (string, func
 
 func TestNilIfNotEnabled(t *testing.T) {
 
-	tlsConfig, err := BuildTLSConfig(context.Background(), &Config{}, ClientType)
+	tlsConfig, err := BuildTLSConfig(context.Background(), &pldconf.TLSConfig{}, ClientType)
 	require.NoError(t, err)
 	assert.Nil(t, tlsConfig)
 
@@ -146,7 +146,7 @@ func TestNilIfNotEnabled(t *testing.T) {
 
 func TestTLSDefault(t *testing.T) {
 
-	tlsConfig, err := BuildTLSConfig(context.Background(), &Config{
+	tlsConfig, err := BuildTLSConfig(context.Background(), &pldconf.TLSConfig{
 		Enabled: true,
 	}, ClientType)
 	require.NoError(t, err)
@@ -159,12 +159,11 @@ func TestTLSDefault(t *testing.T) {
 
 func TestErrInvalidCAFile(t *testing.T) {
 
-	config.RootConfigReset()
 	_, notTheCAFileTheKey := buildSelfSignedTLSKeyPairFiles(t, pkix.Name{
 		CommonName: "server.example.com",
 	})
 
-	_, err := BuildTLSConfig(context.Background(), &Config{
+	_, err := BuildTLSConfig(context.Background(), &pldconf.TLSConfig{
 		Enabled: true,
 		CAFile:  notTheCAFileTheKey,
 	}, ClientType)
@@ -172,13 +171,11 @@ func TestErrInvalidCAFile(t *testing.T) {
 }
 
 func TestErrInvalidCA(t *testing.T) {
-
-	config.RootConfigReset()
 	_, notTheCATheKey := buildSelfSignedTLSKeyPair(t, pkix.Name{
 		CommonName: "server.example.com",
 	})
 
-	_, err := BuildTLSConfig(context.Background(), &Config{
+	_, err := BuildTLSConfig(context.Background(), &pldconf.TLSConfig{
 		Enabled: true,
 		CA:      notTheCATheKey,
 	}, ClientType)
@@ -187,12 +184,11 @@ func TestErrInvalidCA(t *testing.T) {
 
 func TestErrInvalidKeyPairFile(t *testing.T) {
 
-	config.RootConfigReset()
 	notTheKeyFile, notTheCertFile := buildSelfSignedTLSKeyPairFiles(t, pkix.Name{
 		CommonName: "server.example.com",
 	})
 
-	_, err := BuildTLSConfig(context.Background(), &Config{
+	_, err := BuildTLSConfig(context.Background(), &pldconf.TLSConfig{
 		Enabled:  true,
 		KeyFile:  notTheKeyFile,
 		CertFile: notTheCertFile,
@@ -203,12 +199,11 @@ func TestErrInvalidKeyPairFile(t *testing.T) {
 
 func TestErrInvalidKeyPair(t *testing.T) {
 
-	config.RootConfigReset()
 	notTheKey, notTheCert := buildSelfSignedTLSKeyPair(t, pkix.Name{
 		CommonName: "server.example.com",
 	})
 
-	_, err := BuildTLSConfig(context.Background(), &Config{
+	_, err := BuildTLSConfig(context.Background(), &pldconf.TLSConfig{
 		Enabled: true,
 		Key:     notTheKey,
 		Cert:    notTheCert,
@@ -225,7 +220,7 @@ func TestMTLSOk(t *testing.T) {
 		CommonName: "client.example.com",
 	})
 
-	addr, done := buildTLSListener(t, &Config{
+	addr, done := buildTLSListener(t, &pldconf.TLSConfig{
 		Enabled:    true,
 		CA:         clientPublicKey,
 		Cert:       serverPublicKey,
@@ -234,7 +229,7 @@ func TestMTLSOk(t *testing.T) {
 	}, ServerType)
 	defer done()
 
-	tlsConfig, err := BuildTLSConfig(context.Background(), &Config{
+	tlsConfig, err := BuildTLSConfig(context.Background(), &pldconf.TLSConfig{
 		Enabled: true,
 		CA:      serverPublicKey,
 		Cert:    clientPublicKey,
@@ -261,7 +256,7 @@ func TestMTLSMissingClientCert(t *testing.T) {
 		CommonName: "server.example.com",
 	})
 
-	addr, done := buildTLSListener(t, &Config{
+	addr, done := buildTLSListener(t, &pldconf.TLSConfig{
 		Enabled:    true,
 		CAFile:     serverPublicKeyFile,
 		CertFile:   serverPublicKeyFile,
@@ -270,7 +265,7 @@ func TestMTLSMissingClientCert(t *testing.T) {
 	}, ServerType)
 	defer done()
 
-	tlsConfig, err := BuildTLSConfig(context.Background(), &Config{
+	tlsConfig, err := BuildTLSConfig(context.Background(), &pldconf.TLSConfig{
 		Enabled: true,
 		CAFile:  serverPublicKeyFile,
 	}, ClientType)
@@ -301,7 +296,7 @@ func TestMTLSMatchFullSubject(t *testing.T) {
 		SerialNumber:       "12345",
 	})
 
-	addr, done := buildTLSListener(t, &Config{
+	addr, done := buildTLSListener(t, &pldconf.TLSConfig{
 		Enabled:    true,
 		CAFile:     clientPublicKeyFile,
 		CertFile:   serverPublicKeyFile,
@@ -321,7 +316,7 @@ func TestMTLSMatchFullSubject(t *testing.T) {
 	}, ServerType)
 	defer done()
 
-	tlsConfig, err := BuildTLSConfig(context.Background(), &Config{
+	tlsConfig, err := BuildTLSConfig(context.Background(), &pldconf.TLSConfig{
 		Enabled:  true,
 		CAFile:   serverPublicKeyFile,
 		CertFile: clientPublicKeyFile,
@@ -351,7 +346,7 @@ func TestMTLSMismatchSubject(t *testing.T) {
 		CommonName: "wrong.example.com",
 	})
 
-	addr, done := buildTLSListener(t, &Config{
+	addr, done := buildTLSListener(t, &pldconf.TLSConfig{
 		Enabled:    true,
 		CAFile:     clientPublicKeyFile,
 		CertFile:   serverPublicKeyFile,
@@ -363,7 +358,7 @@ func TestMTLSMismatchSubject(t *testing.T) {
 	}, ServerType)
 	defer done()
 
-	tlsConfig, err := BuildTLSConfig(context.Background(), &Config{
+	tlsConfig, err := BuildTLSConfig(context.Background(), &pldconf.TLSConfig{
 		Enabled:  true,
 		CAFile:   serverPublicKeyFile,
 		CertFile: clientPublicKeyFile,
@@ -387,7 +382,7 @@ func TestSubjectDNKnownAttributesAlwaysArray(t *testing.T) {
 
 func TestMTLSInvalidDNConfUnknown(t *testing.T) {
 
-	_, err := BuildTLSConfig(context.Background(), &Config{
+	_, err := BuildTLSConfig(context.Background(), &pldconf.TLSConfig{
 		Enabled:    true,
 		ClientAuth: true,
 		RequiredDNAttributes: map[string]string{
@@ -399,7 +394,7 @@ func TestMTLSInvalidDNConfUnknown(t *testing.T) {
 }
 
 func TestMTLSInvalidDNConfBadRegexp(t *testing.T) {
-	_, err := BuildTLSConfig(context.Background(), &Config{
+	_, err := BuildTLSConfig(context.Background(), &pldconf.TLSConfig{
 		Enabled:    true,
 		ClientAuth: true,
 		RequiredDNAttributes: map[string]string{
@@ -438,7 +433,7 @@ func TestConnectSkipVerification(t *testing.T) {
 		CommonName: "server.example.com",
 	})
 
-	addr, done := buildTLSListener(t, &Config{
+	addr, done := buildTLSListener(t, &pldconf.TLSConfig{
 		Enabled:  true,
 		CAFile:   serverPublicKeyFile,
 		CertFile: serverPublicKeyFile,
@@ -446,7 +441,7 @@ func TestConnectSkipVerification(t *testing.T) {
 	}, ServerType)
 	defer done()
 
-	tlsConfig, err := BuildTLSConfig(context.Background(), &Config{
+	tlsConfig, err := BuildTLSConfig(context.Background(), &pldconf.TLSConfig{
 		Enabled:                true,
 		InsecureSkipHostVerify: true,
 	}, ClientType)

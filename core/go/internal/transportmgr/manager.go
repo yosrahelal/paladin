@@ -21,10 +21,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -34,7 +35,7 @@ type transportManager struct {
 	bgCtx context.Context
 	mux   sync.Mutex
 
-	conf            *config.TransportManagerConfig
+	conf            *pldconf.TransportManagerConfig
 	localNodeName   string
 	registryManager components.RegistryManager
 	engine          components.Engine
@@ -43,7 +44,7 @@ type transportManager struct {
 	transportsByName map[string]*transport
 }
 
-func NewTransportManager(bgCtx context.Context, conf *config.TransportManagerConfig) components.TransportManager {
+func NewTransportManager(bgCtx context.Context, conf *pldconf.TransportManagerConfig) components.TransportManager {
 	return &transportManager{
 		bgCtx:            bgCtx,
 		conf:             conf,
@@ -91,8 +92,8 @@ func (tm *transportManager) cleanupTransport(t *transport) {
 	delete(tm.transportsByName, t.name)
 }
 
-func (tm *transportManager) ConfiguredTransports() map[string]*config.PluginConfig {
-	pluginConf := make(map[string]*config.PluginConfig)
+func (tm *transportManager) ConfiguredTransports() map[string]*pldconf.PluginConfig {
+	pluginConf := make(map[string]*pldconf.PluginConfig)
 	for name, conf := range tm.conf.Transports {
 		pluginConf[name] = &conf.Plugin
 	}

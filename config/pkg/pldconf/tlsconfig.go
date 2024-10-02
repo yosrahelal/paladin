@@ -14,9 +14,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tlsconf
+package pldconf
 
-type Config struct {
+type TLSConfig struct {
 	Enabled                bool              `json:"enabled"`
 	ClientAuth             bool              `json:"clientAuth,omitempty"`
 	CAFile                 string            `json:"caFile,omitempty"`

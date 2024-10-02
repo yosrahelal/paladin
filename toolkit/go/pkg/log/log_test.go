@@ -22,7 +22,8 @@ import (
 	"path"
 	"testing"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -71,8 +72,8 @@ func TestSettingDefaultLevel(t *testing.T) {
 }
 
 func TestSetFormatting(t *testing.T) {
-	defer func() { InitConfig(&Config{}) /* reinstae defaults for other tests */ }()
-	InitConfig(&Config{
+	defer func() { InitConfig(&pldconf.LogConfig{}) /* reinstae defaults for other tests */ }()
+	InitConfig(&pldconf.LogConfig{
 		DisableColor: confutil.P(true),
 		UTC:          confutil.P(true),
 	})
@@ -80,43 +81,43 @@ func TestSetFormatting(t *testing.T) {
 }
 
 func TestSetFormattingStderr(t *testing.T) {
-	defer func() { InitConfig(&Config{}) /* reinstae defaults for other tests */ }()
-	InitConfig(&Config{
+	defer func() { InitConfig(&pldconf.LogConfig{}) /* reinstae defaults for other tests */ }()
+	InitConfig(&pldconf.LogConfig{
 		Output: confutil.P("stderr"),
 	})
 	L(context.Background()).Infof("code info included")
 }
 
 func TestSetFormattingStdout(t *testing.T) {
-	defer func() { InitConfig(&Config{}) /* reinstae defaults for other tests */ }()
-	InitConfig(&Config{
+	defer func() { InitConfig(&pldconf.LogConfig{}) /* reinstae defaults for other tests */ }()
+	InitConfig(&pldconf.LogConfig{
 		Output: confutil.P("stdout"),
 	})
 	L(context.Background()).Infof("code info included")
 }
 
 func TestSetFormattingIncludeCodeInfo(t *testing.T) {
-	defer func() { InitConfig(&Config{}) /* reinstae defaults for other tests */ }()
-	InitConfig(&Config{
+	defer func() { InitConfig(&pldconf.LogConfig{}) /* reinstae defaults for other tests */ }()
+	InitConfig(&pldconf.LogConfig{
 		Format: confutil.P("detailed"),
 	})
 	L(context.Background()).Infof("code info included")
 }
 
 func TestSetFormattingJSONEnabled(t *testing.T) {
-	defer func() { InitConfig(&Config{}) /* reinstae defaults for other tests */ }()
-	InitConfig(&Config{
+	defer func() { InitConfig(&pldconf.LogConfig{}) /* reinstae defaults for other tests */ }()
+	InitConfig(&pldconf.LogConfig{
 		Format: confutil.P("json"),
 	})
 	L(context.Background()).Infof("JSON logs")
 }
 
 func TestSetFormattingFile(t *testing.T) {
-	defer func() { InitConfig(&Config{}) /* reinstae defaults for other tests */ }()
+	defer func() { InitConfig(&pldconf.LogConfig{}) /* reinstae defaults for other tests */ }()
 	logFile := path.Join(t.TempDir(), "paladin.log")
-	InitConfig(&Config{
+	InitConfig(&pldconf.LogConfig{
 		Output: confutil.P("file"),
-		File: FileConfig{
+		File: pldconf.LogFileConfig{
 			Filename: confutil.P(logFile),
 		},
 	})

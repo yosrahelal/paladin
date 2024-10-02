@@ -14,34 +14,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package rpcserver
+package pldconf
 
 import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 )
 
 const DefaultHTTPPort = 8645
 const DefaultWebSocketPort = 8646
 
-var WSDefaults = WSEndpointConfig{
+var WSDefaults = RPCServerConfigWS{
 	ReadBufferSize:  confutil.P("64KB"),
 	WriteBufferSize: confutil.P("64KB"),
 }
 
-type HTTPEndpointConfig struct {
-	Disabled          bool `json:"disabled,omitempty"`
-	httpserver.Config `json:",inline"`
+type RPCServerConfigHTTP struct {
+	Disabled         bool `json:"disabled,omitempty"`
+	HTTPServerConfig `json:",inline"`
 }
 
-type WSEndpointConfig struct {
-	Disabled          bool `json:"disabled,omitempty"`
-	httpserver.Config `json:",inline"`
-	ReadBufferSize    *string `json:"readBufferSize"`
-	WriteBufferSize   *string `json:"writeBufferSize"`
+type RPCServerConfigWS struct {
+	Disabled         bool `json:"disabled,omitempty"`
+	HTTPServerConfig `json:",inline"`
+	ReadBufferSize   *string `json:"readBufferSize"`
+	WriteBufferSize  *string `json:"writeBufferSize"`
 }
 
-type Config struct {
-	HTTP HTTPEndpointConfig `json:"http,omitempty"`
-	WS   WSEndpointConfig   `json:"ws,omitempty"`
+type RPCServerConfig struct {
+	HTTP RPCServerConfigHTTP `json:"http,omitempty"`
+	WS   RPCServerConfigWS   `json:"ws,omitempty"`
 }

@@ -12,26 +12,18 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+package pldconf
 
-package signerapi
-
-import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-)
-
-type FileSystemConfig struct {
-	Path     *string      `json:"path"`
-	Cache    cache.Config `json:"cache"`
-	FileMode *string      `json:"fileMode"`
-	DirMode  *string      `json:"dirMode"`
+type RegistryManagerConfig struct {
+	Registries map[string]*RegistryConfig `json:"registries"`
 }
 
-var FileSystemDefaults = &FileSystemConfig{
-	Path:     confutil.P("keystore"),
-	FileMode: confutil.P("0600"),
-	DirMode:  confutil.P("0700"),
-	Cache: cache.Config{
-		Capacity: confutil.P(100),
-	},
+type RegistryInitConfig struct {
+	Retry RetryConfig `json:"retry"`
+}
+
+type RegistryConfig struct {
+	Init   RegistryInitConfig `json:"init"`
+	Plugin PluginConfig       `json:"plugin"`
+	Config map[string]any     `json:"config"`
 }

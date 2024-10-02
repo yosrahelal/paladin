@@ -187,7 +187,7 @@ func (r *BesuReconciler) generateConfigMap(ctx context.Context, node *corev1alph
 				Labels:    r.getLabels(node),
 			},
 			Data: map[string]string{
-				"config.besu.toml":  besuConfigTOML,
+				"pldconf.besu.toml": besuConfigTOML,
 				"static-nodes.json": staticNodesJSON,
 			},
 		},
@@ -518,7 +518,7 @@ func (r *BesuReconciler) generateStatefulSetTemplate(node *corev1alpha1.Besu, na
 							},
 							Args: []string{
 								"--config-file",
-								"/config/config.besu.toml",
+								"/config/pldconf.besu.toml",
 							},
 							Ports: []corev1.ContainerPort{
 								{

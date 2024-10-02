@@ -30,9 +30,10 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
@@ -138,11 +139,11 @@ type ethClient struct {
 
 // A direct creation of a dedicated RPC client for things like unit tests outside of Paladin.
 // Within Paladin, use the EthClientFactory instead as passed to your component/manager/engine via the initialization
-func WrapRPCClient(ctx context.Context, keymgr KeyManager, rpc rpcclient.Client, conf *Config) (EthClient, error) {
+func WrapRPCClient(ctx context.Context, keymgr KeyManager, rpc rpcclient.Client, conf *pldconf.EthClientConfig) (EthClient, error) {
 	ec := &ethClient{
 		keymgr:            keymgr,
 		rpc:               rpc,
-		gasEstimateFactor: confutil.Float64Min(conf.EstimateGasFactor, 1.0, *Defaults.EstimateGasFactor),
+		gasEstimateFactor: confutil.Float64Min(conf.EstimateGasFactor, 1.0, *pldconf.EthClientDefaults.EstimateGasFactor),
 	}
 	if err := ec.setupChainID(ctx); err != nil {
 		return nil, err
@@ -152,11 +153,11 @@ func WrapRPCClient(ctx context.Context, keymgr KeyManager, rpc rpcclient.Client,
 
 // This is useful in cases where the RPC client is used only for ABI formatting.
 // All JSON/RPC requests will fail, and there is no chain ID available
-func NewUnconnectedRPCClient(ctx context.Context, keymgr KeyManager, conf *Config, chainID int64) EthClient {
+func NewUnconnectedRPCClient(ctx context.Context, keymgr KeyManager, conf *pldconf.EthClientConfig, chainID int64) EthClient {
 	return &ethClient{
 		keymgr:            keymgr,
 		rpc:               &unconnectedRPC{},
-		gasEstimateFactor: confutil.Float64Min(conf.EstimateGasFactor, 1.0, *Defaults.EstimateGasFactor),
+		gasEstimateFactor: confutil.Float64Min(conf.EstimateGasFactor, 1.0, *pldconf.EthClientDefaults.EstimateGasFactor),
 		chainID:           chainID,
 	}
 }

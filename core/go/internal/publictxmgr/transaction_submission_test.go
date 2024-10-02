@@ -20,9 +20,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/kaleido-io/paladin/core/pkg/config"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -38,7 +39,7 @@ func TestTxSubmissionWithSignedMessage(t *testing.T) {
 	textTxHashByte32 := tktypes.MustParseBytes32(testTxHash)
 	textWrongTxHashByte32 := tktypes.MustParseBytes32(testWrongTxHash)
 
-	ctx, o, m, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, o, m, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		conf.Orchestrator.SubmissionRetry.MaxAttempts = confutil.P(1)
 	})
 	defer done()
@@ -154,7 +155,7 @@ func TestTxSubmissionWithSignedMessageWithRetry(t *testing.T) {
 	textTxHashByte32 := tktypes.MustParseBytes32(testTxHash)
 	textWrongTxHashByte32 := tktypes.MustParseBytes32(testWrongTxHash)
 
-	ctx, o, m, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, o, m, done := newTestOrchestrator(t, func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		conf.Orchestrator.SubmissionRetry.MaxAttempts = confutil.P(2)
 	})
 	defer done()

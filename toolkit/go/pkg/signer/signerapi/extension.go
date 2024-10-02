@@ -15,6 +15,27 @@
 
 package signerapi
 
+import "github.com/kaleido-io/paladin/config/pkg/pldconf"
+
+type ConfigNoExt pldconf.SignerConfig
+
+// See signerapi.ExtensibleConfig
+func (c *ConfigNoExt) KeyStoreConfig() *pldconf.KeyStoreConfig {
+	return &c.KeyStore
+}
+
+// See signerapi.ExtensibleConfig
+func (c *ConfigNoExt) KeyDerivationConfig() *pldconf.KeyDerivationConfig {
+	return &c.KeyDerivation
+}
+
+// To enable extending of the default configuration that Paladin uses when embedding this module,
+// with additional configuration that is specific to particular environments
+type ExtensibleConfig interface {
+	KeyStoreConfig() *pldconf.KeyStoreConfig
+	KeyDerivationConfig() *pldconf.KeyDerivationConfig
+}
+
 type Extensions[C ExtensibleConfig] struct {
 	KeyStoreFactories       map[string]KeyStoreFactory[C]
 	InMemorySignerFactories map[string]InMemorySignerFactory[C]

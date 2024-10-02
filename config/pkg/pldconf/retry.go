@@ -14,20 +14,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package pldconf
 
-import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-)
+import "github.com/kaleido-io/paladin/config/pkg/confutil"
 
-type StateStoreConfig struct {
-	SchemaCache cache.Config      `json:"schemaCache"`
-	StateWriter FlushWriterConfig `json:"stateWriter"`
+type RetryConfig struct {
+	InitialDelay *string  `json:"initialDelay"`
+	MaxDelay     *string  `json:"maxDelay"`
+	Factor       *float64 `json:"factor"`
 }
 
-var StateWriterConfigDefaults = FlushWriterConfig{
-	WorkerCount:  confutil.P(10),
-	BatchTimeout: confutil.P("25ms"),
-	BatchMaxSize: confutil.P(100),
+type RetryConfigWithMax struct {
+	RetryConfig
+	MaxAttempts *int    `json:"maxAttempts"`
+	MaxTime     *string `json:"maxTime"`
+}
+
+var RetryDefaults = &RetryConfigWithMax{
+	RetryConfig: RetryConfig{
+		InitialDelay: confutil.P("250ms"),
+		MaxDelay:     confutil.P("30s"),
+		Factor:       confutil.P(2.0),
+	},
+	MaxAttempts: confutil.P(3),
 }

@@ -12,20 +12,22 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+package tktypes
 
-package ethclient
+type LibraryType string
 
-import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
+const (
+	LibraryTypeCShared LibraryType = "c-shared"
+	LibraryTypeJar     LibraryType = "jar"
 )
 
-type Config struct {
-	WS                rpcclient.WSConfig   `json:"ws"`
-	HTTP              rpcclient.HTTPConfig `json:"http"`
-	EstimateGasFactor *float64             `json:"gasEstimateFactor"`
+func (lt LibraryType) Enum() Enum[LibraryType] {
+	return Enum[LibraryType](lt)
 }
 
-var Defaults = &Config{
-	EstimateGasFactor: confutil.P(2.0),
+func (pl LibraryType) Options() []string {
+	return []string{
+		string(LibraryTypeCShared),
+		string(LibraryTypeJar),
+	}
 }

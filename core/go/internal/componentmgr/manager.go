@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/domainmgr"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
@@ -31,11 +32,12 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/transportmgr"
 	"github.com/kaleido-io/paladin/core/internal/txmgr"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 )
 
 type ComponentManager interface {
@@ -52,7 +54,7 @@ type componentManager struct {
 	instanceUUID uuid.UUID
 	bgCtx        context.Context
 	// config
-	conf *config.PaladinConfig
+	conf *pldconf.PaladinConfig
 	// pre-init
 	keyManager       ethclient.KeyManager
 	ethClientFactory ethclient.EthClientFactory
@@ -88,7 +90,7 @@ type closeable interface {
 	Close()
 }
 
-func NewComponentManager(bgCtx context.Context, grpcTarget string, instanceUUID uuid.UUID, conf *config.PaladinConfig, engine components.Engine) ComponentManager {
+func NewComponentManager(bgCtx context.Context, grpcTarget string, instanceUUID uuid.UUID, conf *pldconf.PaladinConfig, engine components.Engine) ComponentManager {
 	log.InitConfig(&conf.Log)
 	return &componentManager{
 		grpcTarget:   grpcTarget, // default is a UDS path, can use tcp:127.0.0.1:12345 strings too (or tcp4:/tcp6:)
@@ -104,7 +106,7 @@ func NewComponentManager(bgCtx context.Context, grpcTarget string, instanceUUID 
 
 func (cm *componentManager) Init() (err error) {
 	// pre-init components
-	cm.keyManager, err = ethclient.NewSimpleTestKeyManager(cm.bgCtx, &cm.conf.Signer)
+	cm.keyManager, err = ethclient.NewSimpleTestKeyManager(cm.bgCtx, (*signerapi.ConfigNoExt)(&cm.conf.Signer))
 	err = cm.addIfOpened("key_manager", cm.keyManager, err, msgs.MsgComponentKeyManagerInitError)
 	if err == nil {
 		cm.ethClientFactory, err = ethclient.NewEthClientFactory(cm.bgCtx, cm.keyManager, &cm.conf.Blockchain)

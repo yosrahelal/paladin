@@ -13,12 +13,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package config
+package pldconf
 
 import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 )
 
 type PublicTxManagerConfig struct {
@@ -36,7 +34,7 @@ var PublicTxManagerDefaults = &PublicTxManagerConfig{
 		OrchestratorStaleTimeout: confutil.P("5m"),
 		OrchestratorSwapTimeout:  confutil.P("10m"),
 		NonceCacheTimeout:        confutil.P("1h"),
-		Retry: retry.Config{
+		Retry: RetryConfig{
 			InitialDelay: confutil.P("250ms"),
 			MaxDelay:     confutil.P("30s"),
 			Factor:       confutil.P(2.0),
@@ -47,7 +45,7 @@ var PublicTxManagerDefaults = &PublicTxManagerConfig{
 			BatchMaxSize: confutil.P(50),
 		},
 		ActivityRecords: PublicTxManagerActivityRecordsConfig{
-			Config: cache.Config{
+			CacheConfig: CacheConfig{
 				// Status cache can be is shared across orchestrators, allowing status to live beyond TX completion
 				// while still only being in memory
 				Capacity: confutil.P(1000),
@@ -62,8 +60,8 @@ var PublicTxManagerDefaults = &PublicTxManagerConfig{
 		StaleTimeout:         confutil.P("5m"),
 		StageRetryTime:       confutil.P("10s"),
 		PersistenceRetryTime: confutil.P("5s"),
-		SubmissionRetry: retry.ConfigWithMax{
-			Config: retry.Config{
+		SubmissionRetry: RetryConfigWithMax{
+			RetryConfig: RetryConfig{
 				InitialDelay: confutil.P("250ms"),
 				MaxDelay:     confutil.P("10s"),
 				Factor:       confutil.P(4.0),
@@ -75,7 +73,7 @@ var PublicTxManagerDefaults = &PublicTxManagerConfig{
 		IncreaseMax:        nil,
 		IncreasePercentage: confutil.P(0),
 		FixedGasPrice:      nil,
-		Cache: cache.Config{
+		Cache: CacheConfig{
 			Capacity: confutil.P(100),
 			// TODO: Enable a KB based cache with TTL in Paladin
 			//       Until then the gas price cache will not expire (which is problematic)
@@ -85,7 +83,7 @@ var PublicTxManagerDefaults = &PublicTxManagerConfig{
 		},
 	},
 	BalanceManager: BalanceManagerConfig{
-		Cache: cache.Config{
+		Cache: CacheConfig{
 			Capacity: confutil.P(100),
 			// TODO: Enable a KB based cache with TTL in Paladin
 			// Enabled:  confutil.P(true),
@@ -113,11 +111,11 @@ type PublicTxManagerManagerConfig struct {
 	NonceCacheTimeout        *string                              `json:"nonceCacheTimeout"`
 	ActivityRecords          PublicTxManagerActivityRecordsConfig `json:"activityRecords"`
 	SubmissionWriter         FlushWriterConfig                    `json:"submissionWriter"`
-	Retry                    retry.Config                         `json:"retry"`
+	Retry                    RetryConfig                          `json:"retry"`
 }
 
 type PublicTxManagerActivityRecordsConfig struct {
-	cache.Config
+	CacheConfig
 	RecordsPerTransaction *int `json:"entriesPerTransaction"`
 }
 
@@ -130,7 +128,7 @@ const (
 )
 
 type BalanceManagerConfig struct {
-	Cache       cache.Config      `json:"cache"`
+	Cache       CacheConfig       `json:"cache"`
 	AutoFueling AutoFuelingConfig `json:"autoFueling"`
 }
 
@@ -145,19 +143,19 @@ type AutoFuelingConfig struct {
 }
 
 type GasPriceConfig struct {
-	IncreaseMax        *string      `json:"increaseMax"`
-	IncreasePercentage *int         `json:"increasePercentage"`
-	FixedGasPrice      any          `json:"fixedGasPrice"` // number or object
-	Cache              cache.Config `json:"cache"`
+	IncreaseMax        *string     `json:"increaseMax"`
+	IncreasePercentage *int        `json:"increasePercentage"`
+	FixedGasPrice      any         `json:"fixedGasPrice"` // number or object
+	Cache              CacheConfig `json:"cache"`
 }
 
 type PublicTxManagerOrchestratorConfig struct {
-	MaxInFlight               *int                `json:"maxInFlight"`
-	Interval                  *string             `json:"interval"`
-	ResubmitInterval          *string             `json:"resubmitInterval"`
-	StaleTimeout              *string             `json:"staleTimeout"`
-	StageRetryTime            *string             `json:"stageRetryTime"`
-	PersistenceRetryTime      *string             `json:"persistenceRetryTime"`
-	UnavailableBalanceHandler *string             `json:"unavailableBalanceHandler"`
-	SubmissionRetry           retry.ConfigWithMax `json:"submissionRetry"`
+	MaxInFlight               *int               `json:"maxInFlight"`
+	Interval                  *string            `json:"interval"`
+	ResubmitInterval          *string            `json:"resubmitInterval"`
+	StaleTimeout              *string            `json:"staleTimeout"`
+	StageRetryTime            *string            `json:"stageRetryTime"`
+	PersistenceRetryTime      *string            `json:"persistenceRetryTime"`
+	UnavailableBalanceHandler *string            `json:"unavailableBalanceHandler"`
+	SubmissionRetry           RetryConfigWithMax `json:"submissionRetry"`
 }

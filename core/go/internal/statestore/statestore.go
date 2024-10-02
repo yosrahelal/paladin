@@ -21,10 +21,11 @@ import (
 	"sync"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -48,11 +49,11 @@ type stateStore struct {
 	domainContexts map[string]*domainContext
 }
 
-var SchemaCacheDefaults = &cache.Config{
+var SchemaCacheDefaults = &pldconf.CacheConfig{
 	Capacity: confutil.P(1000),
 }
 
-func NewStateStore(ctx context.Context, conf *config.StateStoreConfig, p persistence.Persistence) StateStore {
+func NewStateStore(ctx context.Context, conf *pldconf.StateStoreConfig, p persistence.Persistence) StateStore {
 	ss := &stateStore{
 		p:              p,
 		abiSchemaCache: cache.NewCache[string, Schema](&conf.SchemaCache, SchemaCacheDefaults),

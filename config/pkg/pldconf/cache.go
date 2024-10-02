@@ -14,10 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package pldconf
 
-type FlushWriterConfig struct {
-	WorkerCount  *int    `json:"workerCount"`
-	BatchTimeout *string `json:"batchTimeout"`
-	BatchMaxSize *int    `json:"batchMaxSize"`
+type CacheConfig struct {
+	Capacity *int `json:"capacity"`
 }

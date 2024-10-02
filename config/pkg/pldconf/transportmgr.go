@@ -12,11 +12,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-package config
-
-import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
-)
+package pldconf
 
 type TransportManagerConfig struct {
 	NodeName   string                      `json:"nodeName"`
@@ -24,7 +20,7 @@ type TransportManagerConfig struct {
 }
 
 type TransportInitConfig struct {
-	Retry retry.Config `json:"retry"`
+	Retry RetryConfig `json:"retry"`
 }
 
 type TransportConfig struct {

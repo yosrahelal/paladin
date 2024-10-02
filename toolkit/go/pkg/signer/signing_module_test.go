@@ -23,8 +23,9 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	proto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
@@ -44,11 +45,11 @@ type testKeyStoreBaseFactory struct {
 	err      error
 }
 
-func (tf *testKeyStoreAllFactory) NewKeyStore(ctx context.Context, conf *signerapi.Config) (signerapi.KeyStore, error) {
+func (tf *testKeyStoreAllFactory) NewKeyStore(ctx context.Context, conf *signerapi.ConfigNoExt) (signerapi.KeyStore, error) {
 	return tf.keyStore, tf.err
 }
 
-func (tf *testKeyStoreBaseFactory) NewKeyStore(ctx context.Context, conf *signerapi.Config) (signerapi.KeyStore, error) {
+func (tf *testKeyStoreBaseFactory) NewKeyStore(ctx context.Context, conf *signerapi.ConfigNoExt) (signerapi.KeyStore, error) {
 	return tf.keyStore, tf.err
 }
 
@@ -91,7 +92,7 @@ type testInMemorySignerFactory struct {
 	err    error
 }
 
-func (tf *testInMemorySignerFactory) NewSigner(ctx context.Context, conf *signerapi.Config) (signerapi.InMemorySigner, error) {
+func (tf *testInMemorySignerFactory) NewSigner(ctx context.Context, conf *signerapi.ConfigNoExt) (signerapi.InMemorySigner, error) {
 	return tf.signer, tf.err
 }
 
@@ -115,14 +116,14 @@ func (tf *testMemSigner) GetMinimumKeyLen(ctx context.Context, algorithm string)
 
 func TestExtensionKeystoreInitFail(t *testing.T) {
 
-	te := &signerapi.Extensions[*signerapi.Config]{
-		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
+	te := &signerapi.Extensions[*signerapi.ConfigNoExt]{
+		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.ConfigNoExt]{
 			"ext-store": &testKeyStoreBaseFactory{err: fmt.Errorf("pop")},
 		},
 	}
 
-	_, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
+	_, err := NewSigningModule(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
 			Type: "ext-store",
 		},
 	}, te)
@@ -132,14 +133,14 @@ func TestExtensionKeystoreInitFail(t *testing.T) {
 
 func TestExtensionInMemSignerInitFail(t *testing.T) {
 
-	te := &signerapi.Extensions[*signerapi.Config]{
-		InMemorySignerFactories: map[string]signerapi.InMemorySignerFactory[*signerapi.Config]{
+	te := &signerapi.Extensions[*signerapi.ConfigNoExt]{
+		InMemorySignerFactories: map[string]signerapi.InMemorySignerFactory[*signerapi.ConfigNoExt]{
 			"ext-signer": &testInMemorySignerFactory{err: fmt.Errorf("pop")},
 		},
 	}
 
-	_, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
+	_, err := NewSigningModule(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
 			Type: "ext-signer",
 		},
 	}, te)
@@ -150,14 +151,14 @@ func TestExtensionInMemSignerInitFail(t *testing.T) {
 func TestExtensionNotInKeyStoreSigner(t *testing.T) {
 
 	ks := &testKeyStoreBase{}
-	te := &signerapi.Extensions[*signerapi.Config]{
-		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
+	te := &signerapi.Extensions[*signerapi.ConfigNoExt]{
+		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.ConfigNoExt]{
 			"ext-store": &testKeyStoreBaseFactory{keyStore: ks, err: nil},
 		},
 	}
 
-	_, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
+	_, err := NewSigningModule(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
 			Type:            "ext-store",
 			KeyStoreSigning: true,
 		},
@@ -168,8 +169,8 @@ func TestExtensionNotInKeyStoreSigner(t *testing.T) {
 
 func TestKeystoreTypeUnknown(t *testing.T) {
 
-	_, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
+	_, err := NewSigningModule(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
 			Type: "unknown",
 		},
 	})
@@ -180,12 +181,12 @@ func TestKeystoreTypeUnknown(t *testing.T) {
 func TestKeyDerivationTypeUnknown(t *testing.T) {
 
 	ctx := context.Background()
-	_, err := NewSigningModule(ctx, &signerapi.Config{
-		KeyDerivation: signerapi.KeyDerivationConfig{
+	_, err := NewSigningModule(ctx, &signerapi.ConfigNoExt{
+		KeyDerivation: pldconf.KeyDerivationConfig{
 			Type: "unknown",
 		},
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
 		},
 	})
 	assert.Regexp(t, "PD020819", err)
@@ -213,14 +214,14 @@ func TestExtensionKeyStoreListOK(t *testing.T) {
 			return testRes, nil
 		},
 	}
-	te := &signerapi.Extensions[*signerapi.Config]{
-		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
+	te := &signerapi.Extensions[*signerapi.ConfigNoExt]{
+		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.ConfigNoExt]{
 			"ext-store": &testKeyStoreAllFactory{keyStore: tk},
 		},
 	}
 
-	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
+	sm, err := NewSigningModule(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
 			Type: "ext-store",
 		},
 	}, te)
@@ -233,7 +234,7 @@ func TestExtensionKeyStoreListOK(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, testRes, res)
 
-	sm.(*signingModule[*signerapi.Config]).disableKeyListing = true
+	sm.(*signingModule[*signerapi.ConfigNoExt]).disableKeyListing = true
 	_, err = sm.List(context.Background(), &proto.ListKeysRequest{
 		Limit:    10,
 		Continue: "key12345",
@@ -250,14 +251,14 @@ func TestExtensionKeyStoreListFail(t *testing.T) {
 			return nil, fmt.Errorf("pop")
 		},
 	}
-	te := &signerapi.Extensions[*signerapi.Config]{
-		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
+	te := &signerapi.Extensions[*signerapi.ConfigNoExt]{
+		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.ConfigNoExt]{
 			"ext-store": &testKeyStoreAllFactory{keyStore: tk},
 		},
 	}
 
-	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
+	sm, err := NewSigningModule(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
 			Type: "ext-store",
 		},
 	}, te)
@@ -296,14 +297,14 @@ func TestExtensionKeyStoreResolveSignSECP256K1OK(t *testing.T) {
 			}, nil
 		},
 	}
-	te := &signerapi.Extensions[*signerapi.Config]{
-		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
+	te := &signerapi.Extensions[*signerapi.ConfigNoExt]{
+		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.ConfigNoExt]{
 			"ext-store": &testKeyStoreAllFactory{keyStore: tk},
 		},
 	}
 
-	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
+	sm, err := NewSigningModule(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
 			Type:            "ext-store",
 			KeyStoreSigning: true,
 		},
@@ -335,14 +336,14 @@ func TestExtensionKeyStoreResolveSECP256K1Fail(t *testing.T) {
 			return nil, "", fmt.Errorf("pop")
 		},
 	}
-	te := &signerapi.Extensions[*signerapi.Config]{
-		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
+	te := &signerapi.Extensions[*signerapi.ConfigNoExt]{
+		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.ConfigNoExt]{
 			"ext-store": &testKeyStoreBaseFactory{keyStore: tk},
 		},
 	}
 
-	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
+	sm, err := NewSigningModule(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
 			Type: "ext-store",
 		},
 	}, te)
@@ -366,14 +367,14 @@ func TestExtensionKeyStoreSignSECP256K1Fail(t *testing.T) {
 			return nil, fmt.Errorf("pop")
 		},
 	}
-	te := &signerapi.Extensions[*signerapi.Config]{
-		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.Config]{
+	te := &signerapi.Extensions[*signerapi.ConfigNoExt]{
+		KeyStoreFactories: map[string]signerapi.KeyStoreFactory[*signerapi.ConfigNoExt]{
 			"ext-store": &testKeyStoreAllFactory{keyStore: tk},
 		},
 	}
 
-	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
+	sm, err := NewSigningModule(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
 			Type:            "ext-store",
 			KeyStoreSigning: true,
 		},
@@ -392,9 +393,9 @@ func TestExtensionKeyStoreSignSECP256K1Fail(t *testing.T) {
 
 func TestSignInMemoryFailBadKey(t *testing.T) {
 
-	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
+	sm, err := NewSigningModule(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
 		},
 	})
 	require.NoError(t, err)
@@ -411,10 +412,10 @@ func TestSignInMemoryFailBadKey(t *testing.T) {
 
 func TestResolveSignWithNewKeyCreation(t *testing.T) {
 
-	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeFilesystem,
-			FileSystem: signerapi.FileSystemConfig{
+	sm, err := NewSigningModule(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeFilesystem,
+			FileSystem: pldconf.FileSystemKeyStoreConfig{
 				Path: confutil.P(t.TempDir()),
 			},
 		},
@@ -444,10 +445,10 @@ func TestResolveSignWithNewKeyCreation(t *testing.T) {
 
 func TestResolveUnsupportedAlgo(t *testing.T) {
 
-	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeFilesystem,
-			FileSystem: signerapi.FileSystemConfig{
+	sm, err := NewSigningModule(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeFilesystem,
+			FileSystem: pldconf.FileSystemKeyStoreConfig{
 				Path: confutil.P(t.TempDir()),
 			},
 		},
@@ -464,10 +465,10 @@ func TestResolveUnsupportedAlgo(t *testing.T) {
 
 func TestResolveMissingAlgo(t *testing.T) {
 
-	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeFilesystem,
-			FileSystem: signerapi.FileSystemConfig{
+	sm, err := NewSigningModule(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeFilesystem,
+			FileSystem: pldconf.FileSystemKeyStoreConfig{
 				Path: confutil.P(t.TempDir()),
 			},
 		},
@@ -483,14 +484,14 @@ func TestResolveMissingAlgo(t *testing.T) {
 
 func TestResolveLateBindMemSignerError(t *testing.T) {
 
-	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyDerivation: signerapi.KeyDerivationConfig{
-			Type: signerapi.KeyDerivationTypeBIP32,
+	sm, err := NewSigningModule(context.Background(), &signerapi.ConfigNoExt{
+		KeyDerivation: pldconf.KeyDerivationConfig{
+			Type: pldconf.KeyDerivationTypeBIP32,
 		},
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
-			Static: signerapi.StaticKeyStorageConfig{
-				Keys: map[string]signerapi.StaticKeyEntryConfig{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
+			Static: pldconf.StaticKeyStoreConfig{
+				Keys: map[string]pldconf.StaticKeyEntryConfig{
 					"seed": {
 						Encoding: "hex",
 						Inline:   tktypes.RandHex(32),
@@ -517,11 +518,11 @@ func TestResolveLateBindMemSignerError(t *testing.T) {
 
 func TestInMemorySignFailures(t *testing.T) {
 
-	sm, err := NewSigningModule(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
-			Static: signerapi.StaticKeyStorageConfig{
-				Keys: map[string]signerapi.StaticKeyEntryConfig{
+	sm, err := NewSigningModule(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
+			Static: pldconf.StaticKeyStoreConfig{
+				Keys: map[string]pldconf.StaticKeyEntryConfig{
 					"key1": {
 						Encoding: "hex",
 						Inline:   "0x00",

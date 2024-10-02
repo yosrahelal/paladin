@@ -13,12 +13,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package config
+package pldconf
 
 import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 )
 
 // Intended to be embedded at root level of paladin config
@@ -28,7 +26,7 @@ type DomainManagerConfig struct {
 }
 
 type DomainManagerManagerConfig struct {
-	ContractCache cache.Config `json:"contractCache"`
+	ContractCache CacheConfig `json:"contractCache"`
 }
 
 type DomainConfig struct {
@@ -39,10 +37,10 @@ type DomainConfig struct {
 	AllowSigning    bool             `json:"allowSigning"`
 }
 
-var ContractCacheDefaults = &cache.Config{
+var ContractCacheDefaults = &CacheConfig{
 	Capacity: confutil.P(1000),
 }
 
 type DomainInitConfig struct {
-	Retry retry.Config `json:"retry"`
+	Retry RetryConfig `json:"retry"`
 }

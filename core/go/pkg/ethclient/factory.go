@@ -21,6 +21,7 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 )
@@ -39,7 +40,7 @@ type EthClientFactory interface {
 type ethClientFactory struct {
 	bgCtx context.Context
 
-	conf   *Config
+	conf   *pldconf.EthClientConfig
 	keymgr KeyManager
 
 	httpRPC    rpcclient.Client
@@ -56,7 +57,7 @@ type ethClientFactory struct {
 // using that connection.
 //
 // Callers can later
-func NewEthClientFactory(bgCtx context.Context, keymgr KeyManager, conf *Config) (_ EthClientFactory, err error) {
+func NewEthClientFactory(bgCtx context.Context, keymgr KeyManager, conf *pldconf.EthClientConfig) (_ EthClientFactory, err error) {
 	ecf := &ethClientFactory{
 		bgCtx:   bgCtx,
 		conf:    conf,

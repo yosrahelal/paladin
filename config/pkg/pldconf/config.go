@@ -13,19 +13,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package config
+package pldconf
 
 import (
 	"context"
 	"os"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
+	"github.com/kaleido-io/paladin/config/internal/msgs"
+
 	"sigs.k8s.io/yaml" // because it supports JSON tags, and we embed our structs in the k8s operator
 )
 
@@ -34,13 +30,13 @@ type PaladinConfig struct {
 	PluginManagerConfig    `json:",inline"`
 	TransportManagerConfig `json:",inline"`
 	RegistryManagerConfig  `json:",inline"`
-	Log                    log.Config             `json:"log"`
-	Blockchain             ethclient.Config       `json:"blockchain"`
-	DB                     persistence.Config     `json:"db"`
-	RPCServer              rpcserver.Config       `json:"rpcServer"`
+	Log                    LogConfig              `json:"log"`
+	Blockchain             EthClientConfig        `json:"blockchain"`
+	DB                     DBConfig               `json:"db"`
+	RPCServer              RPCServerConfig        `json:"rpcServer"`
 	StateStore             StateStoreConfig       `json:"statestore"`
 	BlockIndexer           BlockIndexerConfig     `json:"blockIndexer"`
-	Signer                 signerapi.Config       `json:"signer"`
+	Signer                 SignerConfig           `json:"signer"`
 	TempDir                *string                `json:"tempDir"`
 	TxManager              TxManagerConfig        `json:"txManager"`
 	PrivateTxManager       PrivateTxManagerConfig `json:"privateTxManager"`
@@ -50,20 +46,17 @@ type PaladinConfig struct {
 func ReadAndParseYAMLFile(ctx context.Context, filePath string, config interface{}) error {
 	// Note we use the YAML parser (like Kubernetes) that handles json tags
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		log.L(ctx).Errorf("file not found: %s", filePath)
-		return i18n.NewError(ctx, tkmsgs.MsgConfigFileMissing, filePath)
+		return i18n.NewError(ctx, msgs.MsgConfigFileMissing, filePath)
 	}
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		log.L(ctx).Errorf("failed to read file: %v", err)
-		return i18n.NewError(ctx, tkmsgs.MsgConfigFileReadError, filePath, err.Error())
+		return i18n.NewError(ctx, msgs.MsgConfigFileReadError, filePath, err.Error())
 	}
 
 	err = yaml.Unmarshal(data, config)
 	if err != nil {
-		log.L(ctx).Errorf("failed to parse file: %v", err)
-		return i18n.NewError(ctx, tkmsgs.MsgConfigFileParseError, err.Error())
+		return i18n.NewError(ctx, msgs.MsgConfigFileParseError, err.Error())
 	}
 
 	return nil

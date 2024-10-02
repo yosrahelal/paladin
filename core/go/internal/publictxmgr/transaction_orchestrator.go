@@ -21,10 +21,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -145,15 +146,15 @@ const veryShortMinimum = 50 * time.Millisecond
 func NewOrchestrator(
 	ble *pubTxManager,
 	signingAddress tktypes.EthAddress,
-	conf *config.PublicTxManagerConfig,
+	conf *pldconf.PublicTxManagerConfig,
 ) *orchestrator {
 	ctx := ble.ctx
 
 	newOrchestrator := &orchestrator{
 		pubTxManager:                ble,
 		orchestratorBirthTime:       time.Now(),
-		orchestratorPollingInterval: confutil.DurationMin(conf.Orchestrator.Interval, veryShortMinimum, *config.PublicTxManagerDefaults.Orchestrator.Interval),
-		maxInFlightTxs:              confutil.IntMin(conf.Orchestrator.MaxInFlight, 1, *config.PublicTxManagerDefaults.Orchestrator.MaxInFlight),
+		orchestratorPollingInterval: confutil.DurationMin(conf.Orchestrator.Interval, veryShortMinimum, *pldconf.PublicTxManagerDefaults.Orchestrator.Interval),
+		maxInFlightTxs:              confutil.IntMin(conf.Orchestrator.MaxInFlight, 1, *pldconf.PublicTxManagerDefaults.Orchestrator.MaxInFlight),
 		signingAddress:              signingAddress,
 		state:                       OrchestratorStateNew,
 		stateEntryTime:              time.Now(),
@@ -161,13 +162,13 @@ func NewOrchestrator(
 			confutil.StringNotEmpty(conf.Orchestrator.UnavailableBalanceHandler, string(OrchestratorBalanceCheckUnavailableBalanceHandlingStrategyWait))),
 
 		// in-flight transaction configs
-		resubmitInterval:        confutil.DurationMin(conf.Orchestrator.ResubmitInterval, veryShortMinimum, *config.PublicTxManagerDefaults.Orchestrator.ResubmitInterval),
-		stageRetryTimeout:       confutil.DurationMin(conf.Orchestrator.StageRetryTime, veryShortMinimum, *config.PublicTxManagerDefaults.Orchestrator.StageRetryTime),
-		persistenceRetryTimeout: confutil.DurationMin(conf.Orchestrator.PersistenceRetryTime, veryShortMinimum, *config.PublicTxManagerDefaults.Orchestrator.PersistenceRetryTime),
+		resubmitInterval:        confutil.DurationMin(conf.Orchestrator.ResubmitInterval, veryShortMinimum, *pldconf.PublicTxManagerDefaults.Orchestrator.ResubmitInterval),
+		stageRetryTimeout:       confutil.DurationMin(conf.Orchestrator.StageRetryTime, veryShortMinimum, *pldconf.PublicTxManagerDefaults.Orchestrator.StageRetryTime),
+		persistenceRetryTimeout: confutil.DurationMin(conf.Orchestrator.PersistenceRetryTime, veryShortMinimum, *pldconf.PublicTxManagerDefaults.Orchestrator.PersistenceRetryTime),
 
 		// submission retry
 		transactionSubmissionRetry: retry.NewRetryLimited(&conf.Orchestrator.SubmissionRetry),
-		staleTimeout:               confutil.DurationMin(conf.Orchestrator.StaleTimeout, 0, *config.PublicTxManagerDefaults.Orchestrator.StaleTimeout),
+		staleTimeout:               confutil.DurationMin(conf.Orchestrator.StaleTimeout, 0, *pldconf.PublicTxManagerDefaults.Orchestrator.StaleTimeout),
 		hasZeroGasPrice:            ble.gasPriceClient.HasZeroGasPrice(ctx),
 		InFlightTxsStale:           make(chan bool, 1),
 		stopProcess:                make(chan bool, 1),

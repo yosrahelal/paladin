@@ -14,26 +14,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package httpserver
+package pldconf
 
 import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tlsconf"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 )
 
-type Config struct {
-	TLS                   tlsconf.Config `json:"tls"`
-	CORS                  CORSConfig     `json:"cors"`
-	Address               *string        `json:"address"`
-	Port                  *int           `json:"port"`
-	DefaultRequestTimeout *string        `json:"defaultRequestTimeout"`
-	MaxRequestTimeout     *string        `json:"maxRequestTimeout"`
-	ReadTimeout           *string        `json:"readTimeout"`
-	WriteTimeout          *string        `json:"writeTimeout"`
-	ShutdownTimeout       *string        `json:"shutdownTimeout"`
+type HTTPServerConfig struct {
+	TLS                   TLSConfig  `json:"tls"`
+	CORS                  CORSConfig `json:"cors"`
+	Address               *string    `json:"address"`
+	Port                  *int       `json:"port"`
+	DefaultRequestTimeout *string    `json:"defaultRequestTimeout"`
+	MaxRequestTimeout     *string    `json:"maxRequestTimeout"`
+	ReadTimeout           *string    `json:"readTimeout"`
+	WriteTimeout          *string    `json:"writeTimeout"`
+	ShutdownTimeout       *string    `json:"shutdownTimeout"`
 }
 
-var HTTPDefaults = &Config{
+var HTTPDefaults = &HTTPServerConfig{
 	Address:               confutil.P("127.0.0.1"),
 	DefaultRequestTimeout: confutil.P("2m"),
 	MaxRequestTimeout:     confutil.P("10m"),

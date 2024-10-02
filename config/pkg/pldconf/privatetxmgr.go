@@ -12,9 +12,9 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-package config
+package pldconf
 
-import "github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+import "github.com/kaleido-io/paladin/config/pkg/confutil"
 
 type PrivateTxManagerConfig struct {
 	Writer       FlushWriterConfig                  `json:"writer"`

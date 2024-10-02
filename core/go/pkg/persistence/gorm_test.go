@@ -22,7 +22,8 @@ import (
 	"path"
 	"testing"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,10 +31,10 @@ import (
 func TestGormInitFail(t *testing.T) {
 
 	// We can make SQLite fail by pointing it at a directory
-	_, err := newSQLiteProvider(context.Background(), &Config{
+	_, err := newSQLiteProvider(context.Background(), &pldconf.DBConfig{
 		Type: "sqlite",
-		SQLite: SQLiteConfig{
-			SQLDBConfig: SQLDBConfig{
+		SQLite: pldconf.SQLiteConfig{
+			SQLDBConfig: pldconf.SQLDBConfig{
 				DSN: "file://" + t.TempDir(),
 			},
 		},
@@ -48,10 +49,10 @@ func TestGormMigrationMissingDir(t *testing.T) {
 	tempFile := t.TempDir() + "/wrong"
 	err := os.WriteFile(tempFile, []byte{}, 0664)
 	require.NoError(t, err)
-	_, err = newSQLiteProvider(context.Background(), &Config{
+	_, err = newSQLiteProvider(context.Background(), &pldconf.DBConfig{
 		Type: "sqlite",
-		SQLite: SQLiteConfig{
-			SQLDBConfig: SQLDBConfig{
+		SQLite: pldconf.SQLiteConfig{
+			SQLDBConfig: pldconf.SQLDBConfig{
 				DSN:           ":memory:",
 				AutoMigrate:   confutil.P(true),
 				MigrationsDir: tempFile,
@@ -68,10 +69,10 @@ func TestGormMigrationFail(t *testing.T) {
 	tempFile := t.TempDir() + "/wrong"
 	err := os.WriteFile(tempFile, []byte{}, 0664)
 	require.NoError(t, err)
-	_, err = newSQLiteProvider(context.Background(), &Config{
+	_, err = newSQLiteProvider(context.Background(), &pldconf.DBConfig{
 		Type: "sqlite",
-		SQLite: SQLiteConfig{
-			SQLDBConfig: SQLDBConfig{
+		SQLite: pldconf.SQLiteConfig{
+			SQLDBConfig: pldconf.SQLDBConfig{
 				DSN:         ":memory:",
 				AutoMigrate: confutil.P(true),
 			},
@@ -85,12 +86,12 @@ func TestGormInitTemplatedDSNEnvVar(t *testing.T) {
 	var1File := path.Join(t.TempDir(), "varfile1")
 	err := os.WriteFile(var1File, []byte("memory"), 0644)
 	require.NoError(t, err)
-	p, err := newSQLiteProvider(context.Background(), &Config{
+	p, err := newSQLiteProvider(context.Background(), &pldconf.DBConfig{
 		Type: "sqlite",
-		SQLite: SQLiteConfig{
-			SQLDBConfig: SQLDBConfig{
+		SQLite: pldconf.SQLiteConfig{
+			SQLDBConfig: pldconf.SQLDBConfig{
 				DSN: ":{{.Var1}}:",
-				DSNParams: map[string]DSNParamLocation{
+				DSNParams: map[string]pldconf.DSNParamLocation{
 					"Var1": {File: var1File},
 				},
 			},
@@ -104,12 +105,12 @@ func TestGormInitTemplatedDSNMissing(t *testing.T) {
 	var1File := path.Join(t.TempDir(), "varfile1")
 	err := os.WriteFile(var1File, []byte("unused"), 0644)
 	require.NoError(t, err)
-	_, err = newSQLiteProvider(context.Background(), &Config{
+	_, err = newSQLiteProvider(context.Background(), &pldconf.DBConfig{
 		Type: "sqlite",
-		SQLite: SQLiteConfig{
-			SQLDBConfig: SQLDBConfig{
+		SQLite: pldconf.SQLiteConfig{
+			SQLDBConfig: pldconf.SQLDBConfig{
 				DSN: ":{{.NotDefined}}:",
-				DSNParams: map[string]DSNParamLocation{
+				DSNParams: map[string]pldconf.DSNParamLocation{
 					"Var1": {File: var1File},
 				},
 			},
@@ -120,9 +121,9 @@ func TestGormInitTemplatedDSNMissing(t *testing.T) {
 
 func TestDSNTemplateMixedFileLoadFail(t *testing.T) {
 	var2File := path.Join(t.TempDir(), "value2")
-	conf := &SQLDBConfig{
+	conf := &pldconf.SQLDBConfig{
 		DSN: "mydbconn?var1={{.Var1}}",
-		DSNParams: map[string]DSNParamLocation{
+		DSNParams: map[string]pldconf.DSNParamLocation{
 			"Var1": {File: var2File},
 		},
 	}
@@ -132,9 +133,9 @@ func TestDSNTemplateMixedFileLoadFail(t *testing.T) {
 
 func TestDSNTemplateBadTemplate(t *testing.T) {
 	var2File := path.Join(t.TempDir(), "value2")
-	conf := &SQLDBConfig{
+	conf := &pldconf.SQLDBConfig{
 		DSN: "mydbconn?var1={{",
-		DSNParams: map[string]DSNParamLocation{
+		DSNParams: map[string]pldconf.DSNParamLocation{
 			"Var1": {File: var2File},
 		},
 	}
