@@ -26,6 +26,14 @@ configurations {
         canBeConsumed = true
         canBeResolved = false
     }
+    toolkitGo {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+    coreGo {
+        canBeConsumed = false
+        canBeResolved = true
+    }
 }
 
 dependencies {

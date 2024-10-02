@@ -13,6 +13,7 @@ include 'solidity'
 include 'toolkit:proto'
 include 'toolkit:go'
 include 'operator'
+include 'config'
 
 include ':toolkit_java'
 project(':toolkit_java').projectDir = file('toolkit/java')
