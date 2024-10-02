@@ -44,6 +44,21 @@ contract IdentityRegistry {
 
     constructor() {
         // Root identity is created
+        Identity memory rootIdentity = Identity(
+            0,
+            new bytes32[](0),
+            "root",
+            msg.sender
+        );
+        identities[0] = rootIdentity;
+        emit IdentityRegistered(
+            rootIdentity.parent,
+            sha256(abi.encodePacked(rootIdentity.parent, rootIdentity.name)),
+            rootIdentity.name,
+            rootIdentity.owner
+        );
+    }
+        // Root identity is created
         identities[0] = Identity(0, new bytes32[](0), "root", msg.sender);
     }
 
