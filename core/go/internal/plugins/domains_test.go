@@ -39,6 +39,7 @@ type testDomainManager struct {
 	domainRegistered    func(name string, toDomain components.DomainManagerToDomain) (fromDomain plugintk.DomainCallbacks, err error)
 	findAvailableStates func(context.Context, *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error)
 	encodeData          func(context.Context, *prototk.EncodeDataRequest) (*prototk.EncodeDataResponse, error)
+	decodeData          func(context.Context, *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error)
 	recoverSigner       func(context.Context, *prototk.RecoverSignerRequest) (*prototk.RecoverSignerResponse, error)
 }
 
@@ -48,6 +49,10 @@ func (tp *testDomainManager) FindAvailableStates(ctx context.Context, req *proto
 
 func (tp *testDomainManager) EncodeData(ctx context.Context, req *prototk.EncodeDataRequest) (*prototk.EncodeDataResponse, error) {
 	return tp.encodeData(ctx, req)
+}
+
+func (tp *testDomainManager) DecodeData(ctx context.Context, req *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error) {
+	return tp.decodeData(ctx, req)
 }
 
 func (tp *testDomainManager) RecoverSigner(ctx context.Context, req *prototk.RecoverSignerRequest) (*prototk.RecoverSignerResponse, error) {
@@ -220,6 +225,13 @@ func TestDomainRequestsOK(t *testing.T) {
 		}, nil
 	}
 
+	tdm.decodeData = func(ctx context.Context, edr *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error) {
+		assert.Equal(t, edr.Data, []byte("some input data"))
+		return &prototk.DecodeDataResponse{
+			Body: "some output data",
+		}, nil
+	}
+
 	tdm.recoverSigner = func(ctx context.Context, edr *prototk.RecoverSignerRequest) (*prototk.RecoverSignerResponse, error) {
 		assert.Equal(t, edr.Algorithm, "some algo")
 		return &prototk.RecoverSignerResponse{
@@ -327,6 +339,12 @@ func TestDomainRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "some output data", string(edr.Data))
+
+	ddr, err := callbacks.DecodeData(ctx, &prototk.DecodeDataRequest{
+		Data: []byte("some input data"),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "some output data", string(ddr.Body))
 
 	rsr, err := callbacks.RecoverSigner(ctx, &prototk.RecoverSignerRequest{
 		Algorithm: "some algo",

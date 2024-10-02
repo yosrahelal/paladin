@@ -227,6 +227,9 @@ var (
 	MsgDomainInvalidEvents                    = ffe("PD011642", "Events ABI is invalid")
 	MsgDomainSigningDisabled                  = ffe("PD011643", "Domain signing it not enabled for domain '%s'")
 	MsgDomainSigningAlgorithmNotSupported     = ffe("PD011644", "Domain '%s' has not registered algorithm '%s'")
+	MsgDomainABIDecodingRequestEntryInvalid   = ffe("PD011645", "ABI decoding request could not be completed as ABI entry is invalid")
+	MsgDomainABIDecodingRequestFail           = ffe("PD011646", "ABI decoding request failed")
+	MsgDomainABIDecodingRequestInvalidType    = ffe("PD011647", "ABI decoding request is of invalid type '%s'")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownEngine = ffe("PD011700", "Unknown engine '%s'")

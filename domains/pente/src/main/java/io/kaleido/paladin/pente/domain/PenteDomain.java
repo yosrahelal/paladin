@@ -17,7 +17,6 @@ package io.kaleido.paladin.pente.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.ByteString;
@@ -145,11 +144,12 @@ public class PenteDomain extends DomainInstance {
 
             var resolvedVerifiers = getResolvedEndorsers(params.group().salt(), params.group().members(), request.getResolvedVerifiersList());
             var onchainConfBuilder = new ByteArrayOutputStream();
-            onchainConfBuilder.write(PenteConfiguration.intToBytes4(PenteConfiguration.PenteConfigID_Endorsement_V0));
-            onchainConfBuilder.write(PenteConfiguration.abiEncoder_Endorsement_V0(
+            onchainConfBuilder.write(PenteConfiguration.intToBytes4(PenteConfiguration.PenteConfigID_V0));
+            onchainConfBuilder.write(PenteConfiguration.abiEncoder_Config_V0(
                     params.evmVersion(),
                     resolvedVerifiers.size(),
-                    resolvedVerifiers
+                    resolvedVerifiers,
+                    params.externalCallsEnabled()
             ).getBytes());
             var response = ToDomain.PrepareDeployResponse.newBuilder();
             var newPrivacyGroupABIJson = config.getFactoryContractABI().getABIEntry("function", "newPrivacyGroup").toJSON(false);
@@ -183,6 +183,33 @@ public class PenteDomain extends DomainInstance {
         }
     }
 
+    private List<PenteConfiguration.TransactionExternalCall> parseExternalCalls(PenteTransaction.EVMExecutionResult execResult) throws Exception {
+        var externalCallEventABI = config.getExternalCallABI().getABIEntry("event", "PenteExternalCall").toJSON(false);
+        var externalCalls = new ArrayList<PenteConfiguration.TransactionExternalCall>();
+        for (var log : execResult.logs()) {
+            if (log.getTopics().getFirst().equals(config.getExternalCallTopic())) {
+                var decodedEvent = decodeData(FromDomain.DecodeDataRequest.newBuilder().
+                        setEncodingType(FromDomain.EncodingType.EVENT_DATA).
+                        setDefinition(externalCallEventABI).
+                        addAllTopics(log.getTopics().stream().map(t -> ByteString.copyFrom(t.toArray())).toList()).
+                        setData(ByteString.copyFrom(log.getData().toArray())).
+                        build()).get();
+                var externalCall = new ObjectMapper().readValue(
+                        decodedEvent.getBody(),
+                        PenteConfiguration.TransactionExternalCall.class);
+                externalCalls.add(externalCall);
+            }
+        }
+        return externalCalls;
+    }
+
+    private String buildExtraData(PenteTransaction.EVMExecutionResult execResult) throws Exception {
+        return new ObjectMapper().writeValueAsString(
+                new PenteConfiguration.TransactionExtraData(
+                        new Address(execResult.contractAddress().toArray()),
+                        parseExternalCalls(execResult)));
+    }
+
     @Override
     protected CompletableFuture<ToDomain.AssembleTransactionResponse> assembleTransaction(ToDomain.AssembleTransactionRequest request) {
         try {
@@ -192,9 +219,10 @@ public class PenteDomain extends DomainInstance {
             var accountLoader = new AssemblyAccountLoader(request.getTransaction().getContractAddress());
             var execResult = tx.executeEVM(config.getChainId(), tx.getFromVerifier(request.getResolvedVerifiersList()), accountLoader);
             var result = ToDomain.AssembleTransactionResponse.newBuilder();
-            var assembledTransaction = tx.buildAssembledTransaction(execResult.evm(), accountLoader);
+            var assembledTransaction = tx.buildAssembledTransaction(execResult.evm(), accountLoader, buildExtraData(execResult));
             result.setAssemblyResult(ToDomain.AssembleTransactionResponse.Result.OK);
             result.setAssembledTransaction(assembledTransaction);
+
 
             // Just like a base Eth transaction, we sign the encoded transaction.
             // However, we do not package the signature back up in any RLP encoded way
@@ -322,7 +350,8 @@ public class PenteDomain extends DomainInstance {
             var endorsementPayload = tx.eip712TypedDataEndorsementPayload(
                 request.getInputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
                 request.getReadsList().stream().map(ToDomain.EndorsableState::getId).toList(),
-                request.getOutputsList().stream().map(ToDomain.EndorsableState::getId).toList()
+                request.getOutputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
+                parseExternalCalls(execResult)
             );
 
             // Ok - we are happy to add our endorsement signature
@@ -344,19 +373,20 @@ public class PenteDomain extends DomainInstance {
     @Override
     protected CompletableFuture<ToDomain.PrepareTransactionResponse> prepareTransaction(ToDomain.PrepareTransactionRequest request) {
         try {
-            var inputIds = request.getInputStatesList().stream().map(ToDomain.EndorsableState::getId).toList();
-            var readIds = request.getReadStatesList().stream().map(ToDomain.EndorsableState::getId).toList();
-            var outputIds = request.getOutputStatesList().stream().map(ToDomain.EndorsableState::getId).toList();
+            var signatures = request.getAttestationResultList().stream().
+                    filter(r -> r.getAttestationType() == ToDomain.AttestationType.ENDORSE).
+                    toList();
+            var extraData = new ObjectMapper().readValue(
+                    request.getExtraData(),
+                    PenteConfiguration.TransactionExtraData.class);
 
             var params = new HashMap<String, Object>(){{
                 put("txId", request.getTransaction().getTransactionId());
                 put("inputs", request.getInputStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
                 put("reads", request.getReadStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
                 put("outputs", request.getOutputStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
-                put("signatures", request.getAttestationResultList().stream().
-                        filter(r -> r.getAttestationType() == ToDomain.AttestationType.ENDORSE).
-                        map(r -> JsonHex.wrap(r.getPayload().toByteArray())).
-                        toList()
+                put("externalCalls", extraData.externalCalls());
+                put("signatures", signatures.stream().map(r -> JsonHex.wrap(r.getPayload().toByteArray())).toList()
                 );
             }};
             var transitionFunctionABI = config.getPrivacyGroupABI().getABIEntry("function", "transition").toJSON(false);
