@@ -74,9 +74,7 @@ func (s *statesStorage) GetRootNodeIndex() (core.NodeIndex, error) {
 		SchemaId:        s.rootSchemaId,
 		QueryJson:       queryBuilder.Query().String(),
 	})
-	if err == gorm.ErrRecordNotFound {
-		return nil, core.ErrNotFound
-	} else if err != nil {
+	if err != nil {
 		return nil, fmt.Errorf("failed to find available states. %s", err)
 	}
 
@@ -137,6 +135,9 @@ func (s *statesStorage) GetNode(ref core.NodeIndex) (core.Node, error) {
 	}
 	var n MerkleTreeNode
 	err = json.Unmarshal([]byte(res.States[0].DataJson), &n)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal Merkle Tree Node from state json. %s", err)
+	}
 
 	var newNode core.Node
 	nodeType := core.NodeTypeFromByte(n.Type[:][0])
@@ -144,18 +145,18 @@ func (s *statesStorage) GetNode(ref core.NodeIndex) (core.Node, error) {
 	case core.NodeTypeLeaf:
 		idx, err1 := node.NewNodeIndexFromHex(n.Index.HexString())
 		if err1 != nil {
-			return nil, err1
+			return nil, fmt.Errorf("failed to create lead node index. %s", err1)
 		}
 		v := node.NewIndexOnly(idx)
 		newNode, err = node.NewLeafNode(v)
 	case core.NodeTypeBranch:
 		leftChild, err1 := node.NewNodeIndexFromHex(n.LeftChild.HexString())
 		if err1 != nil {
-			return nil, err1
+			return nil, fmt.Errorf("failed to create left child node index. %s", err1)
 		}
 		rightChild, err2 := node.NewNodeIndexFromHex(n.RightChild.HexString())
 		if err2 != nil {
-			return nil, err2
+			return nil, fmt.Errorf("failed to create right child node index. %s", err2)
 		}
 		newNode, err = node.NewBranchNode(leftChild, rightChild)
 	}
@@ -210,15 +211,24 @@ func (s *statesStorage) InsertNode(n core.Node) error {
 }
 
 func (s *statesStorage) BeginTx() (core.Transaction, error) {
+	// not needed for this implementation because the DB transaction
+	// is already enforced by the core interface
 	return s, nil
 }
 
 func (s *statesStorage) Commit() error {
+	// not needed for this implementation because the DB transaction
+	// is already enforced by the core interface
 	return nil
 }
 
 func (s *statesStorage) Rollback() error {
+	// not needed for this implementation because the DB transaction
+	// is already enforced by the core interface
 	return nil
 }
 
-func (s *statesStorage) Close() {}
+func (s *statesStorage) Close() {
+	// not needed for this implementation because
+	// there are no resources to close
+}

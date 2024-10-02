@@ -23,7 +23,6 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/iden3/go-iden3-crypto/babyjub"
-	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
@@ -69,9 +68,13 @@ func (z *Zeto) makeNewState(coin *types.ZetoCoin) (*pb.NewState, error) {
 	if err != nil {
 		return nil, err
 	}
-	hash := coin.Hash.String()
+	hash, err := coin.Hash()
+	if err != nil {
+		return nil, err
+	}
+	hashStr := hash.String()
 	return &pb.NewState{
-		Id:            &hash,
+		Id:            &hashStr,
 		SchemaId:      z.coinSchema.Id,
 		StateDataJson: string(coinJSON),
 	}, nil
@@ -121,16 +124,6 @@ func (z *Zeto) prepareInputs(ctx context.Context, contractAddress, owner string,
 }
 
 func (z *Zeto) addHash(newCoin *types.ZetoCoin, ownerKey *babyjub.PublicKey) error {
-	commitment, err := poseidon.Hash([]*big.Int{
-		newCoin.Amount.Int(),
-		newCoin.Salt.Int(),
-		ownerKey.X,
-		ownerKey.Y,
-	})
-	if err != nil {
-		return err
-	}
-	newCoin.Hash = (*tktypes.HexUint256)(commitment)
 	return nil
 }
 

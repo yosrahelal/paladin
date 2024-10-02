@@ -20,13 +20,13 @@ import (
 	_ "embed"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	internalZeto "github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
@@ -172,15 +172,15 @@ func (s *zetoDomainTestSuite) TearDownSuite() {
 }
 
 func (s *zetoDomainTestSuite) TestZeto_Anon() {
-	s.testZetoFungible(s.T(), "Zeto_Anon")
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON)
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
-	s.testZetoFungible(s.T(), "Zeto_AnonEnc")
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC)
 }
 
 func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
-	s.testZetoFungible(s.T(), "Zeto_AnonNullifier")
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER)
 }
 
 func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
@@ -207,7 +207,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 			To:     controllerName,
 			Amount: tktypes.Int64ToInt256(10),
 		}),
-	}, false)
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -228,7 +228,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 			To:     controllerName,
 			Amount: tktypes.Int64ToInt256(20),
 		}),
-	}, false)
+	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
@@ -256,9 +256,6 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	assert.Regexp(t, "failed to send base ledger transaction: PD011513: Reverted: 0x118cdaa.*", rpcerr.Error())
 	assert.True(t, boolResult)
 
-	// allow the merkle tree to update from the events
-	time.Sleep(1 * time.Second)
-
 	log.L(ctx).Infof("Transfer 25 from controller to recipient1")
 	rpcerr = s.rpc.CallRPC(ctx, &boolResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     controllerName,
@@ -272,9 +269,6 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
-
-	// allow the merkle tree to update from the events
-	time.Sleep(1 * time.Second)
 
 	// check that we now only have one unspent coin, of value 5
 	coins, err = s.domain.FindCoins(ctx, zetoAddress, "{}")

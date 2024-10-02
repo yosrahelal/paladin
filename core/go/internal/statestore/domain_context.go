@@ -240,7 +240,7 @@ func (dc *domainContext) mergedUnFlushed(schema Schema, dbStates []*State, query
 	}
 
 	matches := make([]*StateWithLabels, 0, len(dc.unFlushed.states))
-	schemaId := tktypes.MustParseBytes32(schema.IDString())
+	schemaId := schema.Persisted().ID
 	for _, state := range allUnFlushedStates {
 		if !state.Schema.Equals(&schemaId) {
 			continue

@@ -13,13 +13,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zeto
+package constants
 
-import "github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
+const (
+	CIRCUIT_ANON           = "anon"
+	CIRCUIT_ANON_ENC       = "anon_enc"
+	CIRCUIT_ANON_NULLIFIER = "anon_nullifier"
 
-func useNullifiers(circuitId string) bool {
-	if circuitId == constants.CIRCUIT_ANON_NULLIFIER {
-		return true
-	}
-	return false
-}
+	TOKEN_ANON           = "Zeto_Anon"
+	TOKEN_ANON_ENC       = "Zeto_AnonEnc"
+	TOKEN_ANON_NULLIFIER = "Zeto_AnonNullifier"
+)

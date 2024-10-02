@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestValidateParams(t *testing.T) {
+func TestMintValidateParams(t *testing.T) {
 	h := mintHandler{}
 	ctx := context.Background()
 	_, err := h.ValidateParams(ctx, "bad json")
@@ -48,7 +48,7 @@ func TestValidateParams(t *testing.T) {
 	assert.Equal(t, "0x0a", params.(*types.MintParams).Amount.String())
 }
 
-func TestIni(t *testing.T) {
+func TestMintInit(t *testing.T) {
 	h := mintHandler{
 		zeto: &Zeto{
 			name: "test1",
@@ -70,7 +70,7 @@ func TestIni(t *testing.T) {
 	assert.Equal(t, zetosigner.AlgoDomainZetoSnarkBJJ("test1"), res.RequiredVerifiers[0].Algorithm)
 }
 
-func TestAssemble(t *testing.T) {
+func TestMintAssemble(t *testing.T) {
 	h := mintHandler{
 		zeto: &Zeto{
 			name: "test1",
@@ -89,8 +89,13 @@ func TestAssemble(t *testing.T) {
 			From: "Bob",
 		},
 	}
-
 	req := &prototk.AssembleTransactionRequest{
+		ResolvedVerifiers: []*prototk.ResolvedVerifier{},
+	}
+	_, err := h.Assemble(ctx, tx, req)
+	assert.EqualError(t, err, "failed to resolve: Alice")
+
+	req = &prototk.AssembleTransactionRequest{
 		ResolvedVerifiers: []*prototk.ResolvedVerifier{
 			{
 				Lookup:       "Alice",
@@ -100,7 +105,7 @@ func TestAssemble(t *testing.T) {
 			},
 		},
 	}
-	_, err := h.Assemble(ctx, tx, req)
+	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "expected 32 bytes in hex string, got 20")
 
 	privKey := babyjub.NewRandPrivKey()
@@ -118,7 +123,7 @@ func TestAssemble(t *testing.T) {
 	assert.Equal(t, "coin", res.AssembledTransaction.OutputStates[0].SchemaId)
 }
 
-func TestEndorse(t *testing.T) {
+func TestMintEndorse(t *testing.T) {
 	h := mintHandler{}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
@@ -137,7 +142,7 @@ func TestEndorse(t *testing.T) {
 	assert.Equal(t, prototk.EndorseTransactionResponse_ENDORSER_SUBMIT, res.EndorsementResult)
 }
 
-func TestPrepare(t *testing.T) {
+func TestMintPrepare(t *testing.T) {
 	z := &Zeto{
 		name: "test1",
 	}

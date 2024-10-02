@@ -90,11 +90,28 @@ task installPoseidonDependencies(type: Exec) {
     workingDir "${toolsOut}/solidity"
     executable "npm"
     args "install"
-    args "circomlibjs"
+    args "circomlibjs@0.1.7"
+}
+
+task protoc(type: ProtoCompile, dependsOn: [
+        ":toolkit:go:protoc",
+    ]) {
+    protocPath "bin"
+    protoPath projectDir
+    protoFiles fileTree("pkg/proto") {
+        include "**/*.proto"
+    }
+    plugins {
+        go {
+            out projectDir
+        }
+        go_grpc {
+            out projectDir
+        }
+    }
 }
 
 task copyPoseidonBuildScript(type: Copy) {
-    inputs.file(file("${projectDir}/scripts/build-poseidon.js"))
     from file("${projectDir}/scripts/build-poseidon.js")
     into "${toolsOut}/solidity"
 }
@@ -108,17 +125,14 @@ task generatePoseidonArtifacts(type: Exec, dependsOn: [installPoseidonDependenci
     args "build-poseidon.js"
 }
 
-task extractZetoArtifacts(type: Copy, dependsOn: [downloadZetoProver, downloadZetoTestProvingKeys, downloadZetoCompiledContracts]) {
+task extractZetoArtifacts(type: Copy, dependsOn: [protoc, downloadZetoProver, downloadZetoTestProvingKeys, downloadZetoCompiledContracts]) {
     from tarTree("${toolsOut}/zeto-wasm-${zetoVersion}.tar.gz")
     from tarTree("${toolsOut}/zeto-test-proving-keys-${zetoVersion}.tar.gz")
     from tarTree("${toolsOut}/zeto-contracts-${zetoVersion}.tar.gz")
     into zkpOut
 }
 
-task copySolidity(type: Copy, dependsOn: extractZetoArtifacts) {
-    inputs.files(configurations.contractCompile)
-    inputs.files(fileTree("${zkpOut}/artifacts/contracts"))
-    outputs.dir('internal/zeto/abis')
+task copySolidity(type: Copy, dependsOn: [protoc, ":solidity:compile", extractZetoArtifacts]) {
     from fileTree(configurations.contractCompile.asPath) {
         include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
     }
@@ -136,9 +150,6 @@ task copySolidity(type: Copy, dependsOn: extractZetoArtifacts) {
 }
 
 task copySolidityForTest(type: Copy, dependsOn: [extractZetoArtifacts, generatePoseidonArtifacts, ":solidity:compile"]) {
-    inputs.files(fileTree("${zkpOut}/artifacts/contracts"))
-    inputs.files(fileTree("${zkpOut}/artifacts/@iden3/contracts"))
-    outputs.dir('integration-test/abis')
     from fileTree("${rootDir}/solidity/artifacts") {
         include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
     }
@@ -161,7 +172,7 @@ task copySolidityForTest(type: Copy, dependsOn: [extractZetoArtifacts, generateP
     includeEmptyDirs = false
 }
 
-task testE2E(type: Exec, dependsOn: [copySolidity, copySolidityForTest, ':testinfra:startTestInfra', ":core:go:makeMocks"]) {
+task testE2E(type: Exec, dependsOn: [protoc, copySolidity, copySolidityForTest, ':testinfra:startTestInfra', ":core:go:makeMocks"]) {
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
     inputs.files(goFiles)
@@ -185,7 +196,7 @@ task testE2E(type: Exec, dependsOn: [copySolidity, copySolidityForTest, ':testin
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
-task test(type: Exec, dependsOn: [":core:go:makeMocks"]) {
+task test(type: Exec, dependsOn: [protoc, ":core:go:makeMocks"]) {
 
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)

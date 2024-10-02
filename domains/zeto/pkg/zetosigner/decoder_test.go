@@ -18,7 +18,8 @@ package zetosigner
 import (
 	"testing"
 
-	pb "github.com/kaleido-io/paladin/core/pkg/proto"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
+	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	protosigner "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,7 +29,7 @@ import (
 func TestDecodeProvingRequest_AnonEnc(t *testing.T) {
 	common := pb.ProvingRequestCommon{}
 	req := &pb.ProvingRequest{
-		CircuitId: "anon_enc",
+		CircuitId: constants.CIRCUIT_ANON_ENC,
 		Common:    &common,
 	}
 	bytes, err := proto.Marshal(req)
@@ -54,7 +55,7 @@ func TestDecodeProvingRequest_AnonEnc(t *testing.T) {
 func TestDecodeProvingRequest_AnonNullifier(t *testing.T) {
 	common := pb.ProvingRequestCommon{}
 	req := &pb.ProvingRequest{
-		CircuitId: "anon_nullifier",
+		CircuitId: constants.CIRCUIT_ANON_NULLIFIER,
 		Common:    &common,
 	}
 	encExtras := &pb.ProvingRequestExtras_Nullifiers{
@@ -88,7 +89,7 @@ func TestDecodeProvingRequest_AnonNullifier(t *testing.T) {
 func TestDecodeProvingRequest_Fail(t *testing.T) {
 	common := pb.ProvingRequestCommon{}
 	req := &pb.ProvingRequest{
-		CircuitId: "anon_enc",
+		CircuitId: constants.CIRCUIT_ANON_ENC,
 		Common:    &common,
 		Extras:    []byte("invalid"),
 	}
@@ -101,7 +102,7 @@ func TestDecodeProvingRequest_Fail(t *testing.T) {
 	_, _, err = decodeProvingRequest(signReq.Payload)
 	assert.ErrorContains(t, err, "failed to unmarshal proving request extras for circuit anon_enc")
 
-	req.CircuitId = "anon_nullifier"
+	req.CircuitId = constants.CIRCUIT_ANON_NULLIFIER
 	bytes, err = proto.Marshal(req)
 	assert.NoError(t, err)
 

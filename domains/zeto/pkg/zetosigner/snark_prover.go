@@ -27,7 +27,8 @@ import (
 	"github.com/iden3/go-rapidsnark/prover"
 	"github.com/iden3/go-rapidsnark/types"
 	"github.com/iden3/go-rapidsnark/witness/v2"
-	pb "github.com/kaleido-io/paladin/core/pkg/proto"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
+	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
@@ -227,10 +228,10 @@ func serializeProofResponse(circuitId string, proof *types.ZKProof) ([]byte, err
 
 	publicInputs := make(map[string]string)
 	switch circuitId {
-	case "anon_enc":
+	case constants.CIRCUIT_ANON_ENC:
 		publicInputs["encryptedValues"] = strings.Join(proof.PubSignals[0:4], ",")
 		publicInputs["encryptionNonce"] = proof.PubSignals[8]
-	case "anon_nullifier":
+	case constants.CIRCUIT_ANON_NULLIFIER:
 		publicInputs["nullifiers"] = strings.Join(proof.PubSignals[:2], ",")
 		publicInputs["root"] = proof.PubSignals[2]
 	}
@@ -251,14 +252,14 @@ func calculateWitness(circuitId string, commonInputs *pb.ProvingRequestCommon, e
 
 	var witnessInputs map[string]any
 	switch circuitId {
-	case "anon":
+	case constants.CIRCUIT_ANON:
 		witnessInputs = assembleInputs_anon(inputs, keyEntry)
-	case "anon_enc":
+	case constants.CIRCUIT_ANON_ENC:
 		witnessInputs, err = assembleInputs_anon_enc(inputs, extras.(*pb.ProvingRequestExtras_Encryption), keyEntry)
 		if err != nil {
 			return nil, fmt.Errorf("failed to assemble private inputs for witness calculation. %s", err)
 		}
-	case "anon_nullifier":
+	case constants.CIRCUIT_ANON_NULLIFIER:
 		witnessInputs, err = assembleInputs_anon_nullifier(inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
 		if err != nil {
 			return nil, fmt.Errorf("failed to assemble private inputs for witness calculation. %s", err)

@@ -15,11 +15,17 @@
 
 package zeto
 
-import "github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
+import (
+	"testing"
 
-func useNullifiers(circuitId string) bool {
-	if circuitId == constants.CIRCUIT_ANON_NULLIFIER {
-		return true
+	"github.com/stretchr/testify/assert"
+)
+
+func TestGetHandler(t *testing.T) {
+	z := &Zeto{
+		name: "test1",
 	}
-	return false
+	assert.NotNil(t, z.GetHandler("mint"))
+	assert.NotNil(t, z.GetHandler("transfer"))
+	assert.Nil(t, z.GetHandler("bad"))
 }

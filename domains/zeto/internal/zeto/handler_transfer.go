@@ -26,8 +26,9 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/iden3/go-iden3-crypto/babyjub"
-	corepb "github.com/kaleido-io/paladin/core/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
+	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
@@ -109,7 +110,11 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 		outputStates = append(outputStates, returnedStates...)
 	}
 
-	payloadBytes, err := h.formatProvingRequest(inputCoins, outputCoins, tx.DomainConfig.CircuitId, tx.DomainConfig.TokenName, ethtypes.MustNewAddress(req.Transaction.ContractAddress))
+	contract, err := ethtypes.NewAddress(req.Transaction.ContractAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse contract address. %s", err)
+	}
+	payloadBytes, err := h.formatProvingRequest(inputCoins, outputCoins, tx.DomainConfig.CircuitId, tx.DomainConfig.TokenName, contract)
 	if err != nil {
 		return nil, fmt.Errorf("failed to format proving request. %s", err)
 	}
@@ -155,7 +160,7 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		return nil, fmt.Errorf("did not find 'sender' attestation")
 	}
 	if err := proto.Unmarshal(result.Payload, &proofRes); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal proving response. %s", err)
 	}
 
 	inputs := make([]string, INPUT_COUNT)
@@ -164,9 +169,13 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 			state := req.InputStates[i]
 			coin, err := h.zeto.makeCoin(state.StateDataJson)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to parse input states. %s", err)
 			}
-			inputs[i] = coin.Hash.String()
+			hash, err := coin.Hash()
+			if err != nil {
+				return nil, fmt.Errorf("failed to create Poseidon hash for an input coin. %s", err)
+			}
+			inputs[i] = hash.String()
 		} else {
 			inputs[i] = "0"
 		}
@@ -177,9 +186,13 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 			state := req.OutputStates[i]
 			coin, err := h.zeto.makeCoin(state.StateDataJson)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to parse output states. %s", err)
 			}
-			outputs[i] = coin.Hash.String()
+			hash, err := coin.Hash()
+			if err != nil {
+				return nil, fmt.Errorf("failed to create Poseidon hash for an output coin. %s", err)
+			}
+			outputs[i] = hash.String()
 		} else {
 			outputs[i] = "0"
 		}
@@ -195,21 +208,21 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		"proof":   h.encodeProof(proofRes.Proof),
 		"data":    data,
 	}
-	if tx.DomainConfig.TokenName == "Zeto_AnonEnc" {
+	if tx.DomainConfig.TokenName == constants.TOKEN_ANON_ENC {
 		params["encryptionNonce"] = proofRes.PublicInputs["encryptionNonce"]
 		params["encryptedValues"] = strings.Split(proofRes.PublicInputs["encryptedValues"], ",")
-	} else if tx.DomainConfig.TokenName == "Zeto_AnonNullifier" {
+	} else if tx.DomainConfig.TokenName == constants.TOKEN_ANON_NULLIFIER {
 		delete(params, "inputs")
 		params["nullifiers"] = strings.Split(proofRes.PublicInputs["nullifiers"], ",")
 		params["root"] = proofRes.PublicInputs["root"]
 	}
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal prepared params to JSON. %s", err)
 	}
 	contractAbi, err := h.zeto.config.GetContractAbi(tx.DomainConfig.TokenName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to find abi for the token contract %s. %s", tx.DomainConfig.TokenName, err)
 	}
 	functionJSON, err := json.Marshal(contractAbi.Functions()["transfer"])
 	if err != nil {
@@ -240,7 +253,11 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 	for i := 0; i < INPUT_COUNT; i++ {
 		if i < len(inputCoins) {
 			coin := inputCoins[i]
-			inputCommitments[i] = coin.Hash.Int().Text(16)
+			hash, err := coin.Hash()
+			if err != nil {
+				return nil, fmt.Errorf("failed to create Poseidon hash for an input coin. %s", err)
+			}
+			inputCommitments[i] = hash.Int().Text(16)
 			inputValueInts[i] = coin.Amount.Int().Uint64()
 			inputSalts[i] = coin.Salt.Int().Text(16)
 		} else {
@@ -265,7 +282,7 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 
 	var extras []byte
 	if useNullifiers(circuitId) {
-		proofs, extrasObj, err := h.generatMerkleProofs(tokenName, contractAddress, inputCoins)
+		proofs, extrasObj, err := h.generateMerkleProofs(tokenName, contractAddress, inputCoins)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate merkle proofs. %s", err)
 		}
@@ -310,7 +327,7 @@ func (h *transferHandler) encodeProof(proof *corepb.SnarkProof) map[string]inter
 	}
 }
 
-func (h *transferHandler) generatMerkleProofs(tokenName string, contractAddress *ethtypes.Address0xHex, inputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.ProvingRequestExtras_Nullifiers, error) {
+func (h *transferHandler) generateMerkleProofs(tokenName string, contractAddress *ethtypes.Address0xHex, inputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.ProvingRequestExtras_Nullifiers, error) {
 	smtName := smt.MerkleTreeName(tokenName, contractAddress)
 	_, mt, err := smt.New(h.zeto.Callbacks, smtName, contractAddress, h.zeto.merkleTreeRootSchema.Id, h.zeto.merkleTreeNodeSchema.Id)
 	if err != nil {
@@ -335,8 +352,12 @@ func (h *transferHandler) generatMerkleProofs(tokenName string, contractAddress 
 			// e.g because the transaction event hasn't been processed yet
 			return nil, nil, fmt.Errorf("failed to query the smt DB for leaf node (index=%s). %s", leaf.Index().Hex(), err)
 		}
-		if n.Index().BigInt().Cmp(coin.Hash.Int()) != 0 {
-			return nil, nil, fmt.Errorf("coin %s has not been indexed", coin.Hash.String())
+		hash, err := coin.Hash()
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create Poseidon hash for an input coin. %s", err)
+		}
+		if n.Index().BigInt().Cmp(hash.Int()) != 0 {
+			return nil, nil, fmt.Errorf("coin %s has not been indexed", hash.String())
 		}
 		indexes = append(indexes, n.Index().BigInt())
 	}

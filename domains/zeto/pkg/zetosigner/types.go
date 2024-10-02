@@ -21,7 +21,7 @@ import (
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/utxo"
-	pb "github.com/kaleido-io/paladin/core/pkg/proto"
+	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 )
 
 type commonWitnessInputs struct {
