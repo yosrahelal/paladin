@@ -27,6 +27,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/operator/test/utils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
@@ -175,7 +176,7 @@ var _ = Describe("controller", Ordered, func() {
 			err = utils.KubectlApplyYAML(e2eSingleNodePaladinPSQLNoDomainsYAML)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
-			rpc, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{
+			rpc, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{
 				URL: "http://127.0.0.1:31548",
 			})
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())

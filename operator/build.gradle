@@ -40,9 +40,7 @@ task copySolidity(type: Copy) {
 
 // The operator uses the standard build experience for a Go based kubernetes operator.
 // The gradle wrapper is just to orchestrate it into the overall Paladin build system.
-task docker(type: Exec, dependsOn: [
-    ":core:go:protoc"
-]) {
+task docker(type: Exec) {
     executable 'make'
     args 'docker-build'
 }
@@ -66,7 +64,7 @@ task e2e(type: Exec, dependsOn: promoteKindImages) {
     args 'test-e2e'
 }
 
-task make(type: Exec, dependsOn: [":toolkit:go:protoc", copySolidity]) {
+task make(type: Exec, dependsOn: [copySolidity]) {
     executable 'make'
 }
 

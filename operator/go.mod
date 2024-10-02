@@ -99,8 +99,4 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 )
 
-replace github.com/kaleido-io/paladin/toolkit => ../toolkit/go
-
-replace github.com/kaleido-io/paladin/core => ../core/go
-
 replace github.com/kaleido-io/paladin/config => ../config
