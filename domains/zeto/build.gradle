@@ -45,6 +45,10 @@ configurations {
     }
 
     // Consumable configurations
+    goSource {
+        canBeConsumed = true
+        canBeResolved = false
+    }
     zetoArtifacts {
         canBeConsumed = true
         canBeResolved = false
@@ -243,6 +247,7 @@ task assemble {
 }
 
 dependencies {
+    goSource files(goFiles, copySolidity)
     zetoArtifacts files(extractZetoArtifacts)
     poseidonArtifacts files(generatePoseidonArtifacts)
 }

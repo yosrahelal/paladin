@@ -37,6 +37,10 @@ configurations {
         canBeConsumed = false
         canBeResolved = true
     }
+    zetoGo {
+        canBeConsumed = false
+        canBeResolved = true
+    }
     zetoArtifacts {
         canBeConsumed = false
         canBeResolved = true
@@ -52,6 +56,7 @@ dependencies {
     toolkitGo project(path: ":toolkit:go", configuration: "goSource")
     coreGo project(path: ":core:go", configuration: "goSource")
     notoGo project(path: ":domains:noto", configuration: "goSource")
+    zetoGo project(path: ":domains:zeto", configuration: "goSource")
     zetoArtifacts project(path: ":domains:zeto", configuration: "zetoArtifacts")
     poseidonArtifacts project(path: ":domains:zeto", configuration: "poseidonArtifacts")
 }
