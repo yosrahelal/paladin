@@ -61,6 +61,14 @@ public abstract class DomainInstance extends PluginInstance<Service.DomainMessag
         return requestReply(message).thenApply(Service.DomainMessage::getEncodeDataRes);
     }
 
+    public CompletableFuture<FromDomain.DecodeDataResponse> decodeData(FromDomain.DecodeDataRequest request) {
+        Service.DomainMessage message = Service.DomainMessage.newBuilder().
+                setHeader(newRequestHeader()).
+                setDecodeData(request).
+                build();
+        return requestReply(message).thenApply(Service.DomainMessage::getDecodeDataRes);
+    }
+
     public CompletableFuture<FromDomain.RecoverSignerResponse> recoverSigner(FromDomain.RecoverSignerRequest request) {
         Service.DomainMessage message = Service.DomainMessage.newBuilder().
                 setHeader(newRequestHeader()).
