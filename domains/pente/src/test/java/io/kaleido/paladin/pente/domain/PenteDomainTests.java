@@ -15,13 +15,15 @@
 
 package io.kaleido.paladin.pente.domain;
 
-import io.kaleido.paladin.pente.evmrunner.EVMRunner;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kaleido.paladin.testbed.Testbed;
 import io.kaleido.paladin.toolkit.*;
-import org.hyperledger.besu.datatypes.Address;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -66,6 +68,12 @@ public class PenteDomainTests {
             JsonABI.newParameters()
     );
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static final record SimpleStorageConstructorJSON(
+            @JsonProperty
+            String x
+    ) {}
+
     static final JsonABI.Entry simpleStorageSetABI = JsonABI.newFunction(
             "set",
             JsonABI.newParameters(
@@ -81,6 +89,24 @@ public class PenteDomainTests {
             JsonABI.newParameters()
     );
 
+    static final JsonABI.Entry simpleStorageLinkedDeployABI = JsonABI.newFunction(
+            "deploy",
+            JsonABI.newParameters(
+                    JsonABI.newTuple("group", "Group", JsonABI.newParameters(
+                            JsonABI.newParameter("salt", "bytes32"),
+                            JsonABI.newParameter("members", "string[]")
+                    )),
+                    JsonABI.newParameter("bytecode", "bytes"),
+                    JsonABI.newTuple("inputs", "", JsonABI.newParameters(
+                            JsonABI.newParameter("linked", "address")
+                    ))
+            ),
+            JsonABI.newParameters()
+    );
+
+    Testbed.PrivateContractTransaction getTransactionInfo(LinkedHashMap<String, Object> res) {
+        return new ObjectMapper().convertValue(res, Testbed.PrivateContractTransaction.class);
+    }
 
     @Test
     void testSimpleStorage() throws Exception {
@@ -100,11 +126,12 @@ public class PenteDomainTests {
                     new PenteConfiguration.PrivacyGroupConstructorParamsJSON(
                             groupInfo,
                             "shanghai",
-                            PenteConfiguration.ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES
+                            PenteConfiguration.ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES,
+                            false
                     ));
             assertFalse(contractAddr.isBlank());
 
-            // Deploy Simple Storage to it
+            // Deploy Simple Storage to the privacy group
             String simpleStorageBytecode = ResourceLoader.jsonResourceEntryText(
                     this.getClass().getClassLoader(),
                     "contracts/testcontracts/SimpleStorage.sol/SimpleStorage.json",
@@ -117,23 +144,16 @@ public class PenteDomainTests {
                     put("x", "1122334455");
                 }});
             }};
-            testbed.getRpcClient().request("testbed_invoke",
+            var tx = getTransactionInfo(
+                    testbed.getRpcClient().request("testbed_invoke",
                     new PrivateContractInvoke(
                             "simpleStorageDeployer",
                             JsonHex.addressFrom(contractAddr),
                             simpleStorageDeployABI,
                             deployValues
-                    ), true);
-            assertFalse(contractAddr.isBlank());
-
-            // TODO: This is a hack because we need to define a way for domain transactions to
-            // return information specific to them about the confirmation of a transaction
-            // on chain - by decoding the data field that's emitted from that event.
-            // There will be new event/transaction commit domain functions needed to do that processing
-            // (Pente will then implement those).
-            String simpleStorageDeployer = testbed.getRpcClient().
-                    request("testbed_resolveVerifier", "simpleStorageDeployer", Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS);
-            var expectedContractAddress = EVMRunner.nonceSmartContractAddress(Address.fromHexString(simpleStorageDeployer), 0);
+                    ), true));
+            var extraData = new ObjectMapper().readValue(tx.extraData(), PenteConfiguration.TransactionExtraData.class);
+            var expectedContractAddress = extraData.contractAddress();
 
             // Invoke set on Simple Storage
             Map<String, Object> setValues = new HashMap<>() {{
@@ -167,6 +187,86 @@ public class PenteDomainTests {
                             setValues
                     ), true);
 
+        }
+    }
+
+    @Test
+    void testSimpleStorageLinked() throws Exception {
+        JsonHex.Address address = deployFactory();
+        JsonHex.Bytes32 groupSalt = JsonHex.randomBytes32();
+        try (Testbed testbed = new Testbed(testbedSetup, new Testbed.ConfigDomain(
+                "pente", address, new Testbed.ConfigPlugin("jar", "", PenteDomainFactory.class.getName()), new HashMap<>()
+        ))) {
+            PenteConfiguration.GroupTupleJSON groupInfo = new PenteConfiguration.GroupTupleJSON(
+                    groupSalt,
+                    new String[]{"member1", "member2"}
+            );
+
+            // Deploy SimpleStorage to the base ledger
+            String ssBytecode = ResourceLoader.jsonResourceEntryText(
+                    this.getClass().getClassLoader(),
+                    "contracts/testcontracts/SimpleStorage.sol/SimpleStorage.json",
+                    "bytecode"
+            );
+            JsonABI ssABI = JsonABI.fromJSONResourceEntry(
+                    this.getClass().getClassLoader(),
+                    "contracts/testcontracts/SimpleStorage.sol/SimpleStorage.json",
+                    "abi"
+            );
+            String ssAddr = testbed.getRpcClient().request("testbed_deployBytecode",
+                    "simpleStorageDeployer",
+                    ssABI,
+                    ssBytecode,
+                    new SimpleStorageConstructorJSON("1"));
+            assertFalse(ssAddr.isBlank());
+
+            // Create the privacy group
+            String penteAddr = testbed.getRpcClient().request("testbed_deploy",
+                    "pente",
+                    new PenteConfiguration.PrivacyGroupConstructorParamsJSON(
+                            groupInfo,
+                            "shanghai",
+                            PenteConfiguration.ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES,
+                            true
+                    ));
+            assertFalse(penteAddr.isBlank());
+
+            // Deploy SimpleStorageLinked to the privacy group
+            String ssLinkedBytecode = ResourceLoader.jsonResourceEntryText(
+                    this.getClass().getClassLoader(),
+                    "contracts/testcontracts/SimpleStorageLinked.sol/SimpleStorageLinked.json",
+                    "bytecode"
+            );
+            var tx = getTransactionInfo(
+                testbed.getRpcClient().request("testbed_invoke",
+                        new PrivateContractInvoke(
+                                "simpleStorageDeployer",
+                                JsonHex.addressFrom(penteAddr),
+                                simpleStorageLinkedDeployABI,
+                                new HashMap<>() {{
+                                    put("group", groupInfo);
+                                    put("bytecode", ssLinkedBytecode);
+                                    put("inputs", new HashMap<>() {{
+                                        put("linked", ssAddr);
+                                    }});
+                                }}
+                        ), true));
+            var extraData = new ObjectMapper().readValue(tx.extraData(), PenteConfiguration.TransactionExtraData.class);
+            var ssLinkedAddr = extraData.contractAddress();
+
+            testbed.getRpcClient().request("testbed_invoke",
+                    new PrivateContractInvoke(
+                            "simpleStorageDeployer",
+                            JsonHex.addressFrom(penteAddr),
+                            simpleStorageSetABI,
+                            new HashMap<>() {{
+                                put("group", groupInfo);
+                                put("to", ssLinkedAddr.toString());
+                                put("inputs", new HashMap<>() {{
+                                    put("x", 100);
+                                }});
+                            }}
+                    ), true);
         }
     }
 }

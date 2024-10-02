@@ -37,7 +37,7 @@ import java.util.*;
 import static io.kaleido.paladin.pente.TestUtils.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-public class SimpleStorageWrappedStoreRetreiveTest {
+public class SimpleStorageWrappedStoreRetrieveTest {
 
     @Test
     void runAnEVM() throws IOException {

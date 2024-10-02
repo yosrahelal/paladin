@@ -122,13 +122,13 @@ message EndorseTransactionRequest {
 
 message EndorseTransactionResponse {
   enum Result {
-      SIGN = 0; // the endorsement resulted in a signature
+      SIGN = 0; // the endorsement resulted in a payload that should be signed
       ENDORSER_SUBMIT = 1; // the endorsement resulted in a local approval, and a requirement that the endorsement verifier identity must submit the underlying base ledger TX
       REVERT = 2; // the edorsement failed
   }
   Result endorsement_result = 1;
-  optional bytes payload = 2;
-  optional string revert_reason = 3; // if the result was REVERT
+  optional bytes payload = 2; // payload to be signed (if the result was SIGN)
+  optional string revert_reason = 3; // revert reason (if the result was REVERT)
 }
 
 // **PREPARE** step for a transaction 
@@ -138,6 +138,7 @@ message PrepareTransactionRequest {
   repeated EndorsableState read_states = 3; // The list of read states
   repeated EndorsableState output_states = 4; // The list of output states
   repeated AttestationResult attestation_result = 5; // The results of any proofs/attestations that came out of the endorsement phase
+  optional string extra_data = 6; // Any extra data that was included in the transaction assembly
 }
 
 message PrepareTransactionResponse {
@@ -202,6 +203,7 @@ message AssembledTransaction {
   repeated StateRef input_states = 1; // A list of the state IDs that the transaction spends - these might include ones being minted on other sequences, resulting in an instruction to the TX manager to re-allocate the transaction to another sequence
   repeated StateRef read_states = 2; // A list of state IDs that the execution of the transaction depends on being unspent on the chain (but will not spend). Also could be being minted on other sequences.
   repeated NewState output_states = 3; // A list of new states the domain will create as an output from this transaction, if it is executed and confirmed
+  optional string extra_data = 4; // Any extra data to be included in the transaction (other than states)
 }
 
 message StateRef {

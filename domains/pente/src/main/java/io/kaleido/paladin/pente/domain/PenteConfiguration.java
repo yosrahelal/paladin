@@ -25,9 +25,11 @@ import io.kaleido.paladin.toolkit.JsonHex.Address;
 import io.kaleido.paladin.toolkit.JsonHex.Bytes32;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.tuweni.bytes.Bytes;
 import org.web3j.abi.TypeDecoder;
 import org.web3j.abi.TypeEncoder;
 import org.web3j.abi.TypeReference;
+import org.web3j.abi.datatypes.Bool;
 import org.web3j.abi.datatypes.DynamicArray;
 import org.web3j.abi.datatypes.DynamicStruct;
 import org.web3j.abi.datatypes.Utf8String;
@@ -51,6 +53,11 @@ public class PenteConfiguration {
 
     private final JsonABI interfaceABI;
 
+    private final JsonABI externalCallABI;
+
+    // Topic generated from event "PenteExternalCall(address,bytes)"
+    private final Bytes externalCallTopic = Bytes.fromHexString("0xcac03685d5ba4ab3e1465a8ee1b2bb21094ddbd612a969fd34f93a5be7a0ac4f");
+
     private final String transferSignature = "event UTXOTransfer(bytes32 txId, bytes32[] inputs, bytes32[] outputs, bytes data)";
 
     private long chainId;
@@ -71,6 +78,9 @@ public class PenteConfiguration {
                     "abi");
             interfaceABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
                     "contracts/domains/interfaces/IPente.sol/IPente.json",
+                    "abi");
+            externalCallABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
+                    "contracts/private/interfaces/IPenteExternalCall.sol/IPenteExternalCall.json",
                     "abi");
         } catch (Exception t) {
             LOGGER.error("failed to initialize configuration", t);
@@ -102,7 +112,9 @@ public class PenteConfiguration {
             @JsonProperty
             String evmVersion,
             @JsonProperty
-            String endorsementType
+            String endorsementType,
+            @JsonProperty
+            boolean externalCallsEnabled
     ) {}
 
     public static String ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES =
@@ -159,25 +171,28 @@ public class PenteConfiguration {
         return ByteBuffer.wrap(data, offset, len).getInt();
     }
 
-    public static final int PenteConfigID_Endorsement_V0 = 0x00010000;
+    public static final int PenteConfigID_V0 = 0x00010000;
 
     interface OnChainConfig {
         String evmVersion();
     }
 
-    public static class Endorsement_V0 extends DynamicStruct implements OnChainConfig {
+    public static class PenteConfig_V0 extends DynamicStruct implements OnChainConfig {
         public Utf8String evmVersion;
         public Uint256 threshold;
         public DynamicArray<org.web3j.abi.datatypes.Address> addresses;
-        public Endorsement_V0(
+        public Bool externalCallsEnabled;
+        public PenteConfig_V0(
                 Utf8String evmVersion,
                 Uint256 threshold,
                 @Parameterized(type = org.web3j.abi.datatypes.Address.class)
-                DynamicArray<org.web3j.abi.datatypes.Address> addresses) {
+                DynamicArray<org.web3j.abi.datatypes.Address> addresses,
+                Bool externalCallsEnabled) {
             super(evmVersion, threshold, addresses);
             this.evmVersion = evmVersion;
             this.threshold = threshold;
             this.addresses = addresses;
+            this.externalCallsEnabled = externalCallsEnabled;
         }
 
         public String evmVersion() {
@@ -185,22 +200,23 @@ public class PenteConfiguration {
         }
     }
 
-    public static JsonHex.Bytes abiEncoder_Endorsement_V0(String evmVersion, int threshold, List<JsonHex.Address> endorsers) {
+    public static JsonHex.Bytes abiEncoder_Config_V0(String evmVersion, int threshold, List<JsonHex.Address> endorsers, boolean externalCallsEnabled) {
         var w3Addresses = new ArrayList<org.web3j.abi.datatypes.Address>(endorsers.size());
         for (var addr : endorsers) {
             org.web3j.abi.datatypes.Address w3Address = new org.web3j.abi.datatypes.Address(addr.to0xHex());
             w3Addresses.add(w3Address);
         }
         var w3AddressArray = new DynamicArray<>(org.web3j.abi.datatypes.Address.class, w3Addresses);
-        return new JsonHex.Bytes(TypeEncoder.encode(new Endorsement_V0(
+        return new JsonHex.Bytes(TypeEncoder.encode(new PenteConfig_V0(
                 new org.web3j.abi.datatypes.Utf8String(evmVersion),
                 new Uint256(threshold),
-                w3AddressArray
+                w3AddressArray,
+                new Bool(externalCallsEnabled)
         )));
     }
 
-    public static Endorsement_V0 abiDecoder_Endorsement_V0(JsonHex data, int offset) throws ClassNotFoundException {
-        return TypeDecoder.decodeDynamicStruct(data.to0xHex(), 2 + (2 * offset), TypeReference.create(Endorsement_V0.class));
+    public static PenteConfiguration.PenteConfig_V0 abiDecoder_Config_V0(JsonHex data, int offset) throws ClassNotFoundException {
+        return TypeDecoder.decodeDynamicStruct(data.to0xHex(), 2 + (2 * offset), TypeReference.create(PenteConfiguration.PenteConfig_V0.class));
     }
 
     static OnChainConfig decodeConfig(byte[] constructorConfig) throws IllegalArgumentException, ClassNotFoundException {
@@ -208,10 +224,26 @@ public class PenteConfiguration {
             throw new IllegalArgumentException("on-chain configuration must be at least 4 bytes");
         }
         return switch (bytes4ToInt(constructorConfig, 0, 4)) {
-            case PenteConfigID_Endorsement_V0 -> abiDecoder_Endorsement_V0(JsonHex.wrap(constructorConfig), 4);
+            case PenteConfigID_V0 -> abiDecoder_Config_V0(JsonHex.wrap(constructorConfig), 4);
             default -> throw new IllegalArgumentException("unknown config ID: %s".formatted(JsonHex.from(constructorConfig, 0, 4)));
         };
     }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TransactionExternalCall(
+            @JsonProperty
+            Address contractAddress,
+            @JsonProperty
+            byte[] encodedCall
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TransactionExtraData(
+            @JsonProperty
+            Address contractAddress,
+            @JsonProperty
+            List<TransactionExternalCall> externalCalls
+    ) {}
 
     synchronized JsonABI getFactoryContractABI() {
         return factoryContractABI;
@@ -222,6 +254,10 @@ public class PenteConfiguration {
     }
 
     synchronized JsonABI getInterfaceABI() { return interfaceABI; }
+
+    synchronized JsonABI getExternalCallABI() { return externalCallABI; }
+
+    synchronized Bytes getExternalCallTopic() { return externalCallTopic; }
 
     synchronized String getTransferSignature() { return transferSignature; }
 

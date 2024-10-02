@@ -837,52 +837,96 @@ func TestEncodeABIDataFailCases(t *testing.T) {
 	d := tp.d
 
 	_, err := d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_EncodingType(42),
+		EncodingType: prototk.EncodingType(42),
 	})
 	assert.Regexp(t, "PD011635", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_FUNCTION_CALL_DATA,
+		EncodingType: prototk.EncodingType_FUNCTION_CALL_DATA,
 		Body:         `{!!!`,
 	})
 	assert.Regexp(t, "PD011633", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_TUPLE,
+		EncodingType: prototk.EncodingType_TUPLE,
 		Body:         `{!!!`,
 	})
 	assert.Regexp(t, "PD011633", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_FUNCTION_CALL_DATA,
+		EncodingType: prototk.EncodingType_FUNCTION_CALL_DATA,
 		Definition:   `{"inputs":[{"name":"int1","type":"uint256"}]}`,
 		Body:         `{}`,
 	})
 	assert.Regexp(t, "PD011634.*int1", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_TUPLE,
+		EncodingType: prototk.EncodingType_TUPLE,
 		Definition:   `{"components":[{"name":"int1","type":"uint256"}]}`,
 		Body:         `{}`,
 	})
 	assert.Regexp(t, "PD011634.*int1", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_ETH_TRANSACTION,
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION,
 		Definition:   `wrong`,
 		Body:         `{"to":"0x92CB9e0086a774525469bbEde564729F277d2549"}`,
 	})
 	assert.Regexp(t, "PD011635", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_ETH_TRANSACTION,
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION,
 		Body:         `{!!!bad`,
 	})
 	assert.Regexp(t, "PD011633", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_TYPED_DATA_V4,
+		EncodingType: prototk.EncodingType_TYPED_DATA_V4,
 		Body:         `{}`,
 	})
 	assert.Regexp(t, "PD011640", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_TYPED_DATA_V4,
+		EncodingType: prototk.EncodingType_TYPED_DATA_V4,
 		Body:         `{!!!bad`,
 	})
 	assert.Regexp(t, "PD011639", err)
+}
+
+func TestDecodeABIDataFailCases(t *testing.T) {
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	d := tp.d
+
+	_, err := d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType(42),
+	})
+	assert.Regexp(t, "PD011647", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_FUNCTION_CALL_DATA,
+		Data:         []byte(`{!!!`),
+	})
+	assert.Regexp(t, "PD011645", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_TUPLE,
+		Data:         []byte(`{!!!`),
+	})
+	assert.Regexp(t, "PD011645", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_EVENT_DATA,
+		Data:         []byte(`{!!!`),
+	})
+	assert.Regexp(t, "PD011645", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_FUNCTION_CALL_DATA,
+		Definition:   `{"inputs":[{"name":"int1","type":"uint256"}]}`,
+		Data:         []byte(``),
+	})
+	assert.Regexp(t, "PD011646.*Insufficient bytes", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_TUPLE,
+		Definition:   `{"components":[{"name":"int1","type":"uint256"}]}`,
+		Data:         []byte(``),
+	})
+	assert.Regexp(t, "PD011646.*Insufficient bytes", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_EVENT_DATA,
+		Definition:   `{"inputs":[{"name":"int1","type":"uint256"}]}`,
+		Data:         []byte(``),
+	})
+	assert.Regexp(t, "PD011646.*Insufficient bytes", err)
 }
 
 func TestRecoverSignerFailCases(t *testing.T) {

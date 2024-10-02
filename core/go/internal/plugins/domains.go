@@ -80,6 +80,15 @@ func (br *domainBridge) RequestReply(ctx context.Context, reqMsg plugintk.Plugin
 				}
 			},
 		)
+	case *prototk.DomainMessage_DecodeData:
+		return callManagerImpl(ctx, req.DecodeData,
+			br.manager.DecodeData,
+			func(resMsg *prototk.DomainMessage, res *prototk.DecodeDataResponse) {
+				resMsg.ResponseToDomain = &prototk.DomainMessage_DecodeDataRes{
+					DecodeDataRes: res,
+				}
+			},
+		)
 	case *prototk.DomainMessage_RecoverSigner:
 		return callManagerImpl(ctx, req.RecoverSigner,
 			br.manager.RecoverSigner,
