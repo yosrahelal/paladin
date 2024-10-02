@@ -35,17 +35,19 @@ func NewTXManager(ctx context.Context, conf *pldconf.TxManagerConfig) components
 }
 
 type txManager struct {
-	p            persistence.Persistence
-	publicTxMgr  components.PublicTxManager
-	privateTxMgr components.PrivateTxManager
-	abiCache     cache.Cache[tktypes.Bytes32, *ptxapi.StoredABI]
-	rpcModule    *rpcserver.RPCModule
+	p                persistence.Persistence
+	publicTxMgr      components.PublicTxManager
+	privateTxMgr     components.PrivateTxManager
+	identityResolver components.IdentityResolver
+	abiCache         cache.Cache[tktypes.Bytes32, *ptxapi.StoredABI]
+	rpcModule        *rpcserver.RPCModule
 }
 
 func (tm *txManager) PostInit(c components.AllComponents) error {
 	tm.p = c.Persistence()
 	tm.publicTxMgr = c.PublicTxManager()
 	tm.privateTxMgr = c.PrivateTxManager()
+	tm.identityResolver = c.IdentityResolver()
 	return nil
 }
 

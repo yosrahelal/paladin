@@ -26,7 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -283,21 +283,26 @@ func TestSendInvalidMessageNoPayload(t *testing.T) {
 func TestReceiveMessage(t *testing.T) {
 	receivedMessages := make(chan *components.TransportMessage, 1)
 
-	ctx, _, tp, done := newTestTransport(t, func(mc *mockComponents) {
-		mc.engine.On("ReceiveTransportMessage", mock.Anything, mock.Anything).Return().Run(func(args mock.Arguments) {
-			receivedMessages <- args[1].(*components.TransportMessage)
-		})
-	})
+	ctx, tm, tp, done := newTestTransport(t)
 	defer done()
+
+	receivingClient := componentmocks.NewTransportClient(t)
+	receivingClient.On("Destination").Return("receivingClient1")
+	receivingClient.On("ReceiveTransportMessage", mock.Anything, mock.Anything).Return().Run(func(args mock.Arguments) {
+		receivedMessages <- args[1].(*components.TransportMessage)
+	})
+	err := tm.RegisterClient(ctx, receivingClient)
+	assert.NoError(t, err)
 
 	msg := &prototk.Message{
 		MessageId:     uuid.NewString(),
 		CorrelationId: confutil.P(uuid.NewString()),
-		Destination:   "to@node1",
+		Destination:   "receivingClient1@node1",
 		ReplyTo:       "from@node2",
 		MessageType:   "myMessageType",
 		Payload:       []byte("some data"),
 	}
+
 	rmr, err := tp.t.ReceiveMessage(ctx, &prototk.ReceiveMessageRequest{
 		Message: msg,
 	})

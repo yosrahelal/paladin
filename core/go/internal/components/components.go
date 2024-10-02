@@ -55,6 +55,10 @@ type Managers interface {
 	TxManager() TXManager
 }
 
+type LateBoundComponents interface {
+	IdentityResolver() IdentityResolver
+}
+
 // All managers conform to a standard lifecycle
 type ManagerLifecycle interface {
 	// Init only depends on the configuration and components - no other managers
@@ -115,9 +119,9 @@ type Engine interface {
 	// - with whatever concurrency is performed by the transport plugin(s), which is commonly one per remote node, but that's not assured
 	ReceiveTransportMessage(context.Context, *TransportMessage)
 }
-
 type AllComponents interface {
 	PreInitComponents
 	Managers
 	Engine() Engine
+	LateBoundComponents
 }

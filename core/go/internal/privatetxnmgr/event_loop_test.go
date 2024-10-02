@@ -47,6 +47,7 @@ type orchestratorDepencyMocks struct {
 	sequencer            *privatetxnmgrmocks.Sequencer
 	endorsementGatherer  *privatetxnmgrmocks.EndorsementGatherer
 	publisher            *privatetxnmgrmocks.Publisher
+	identityResolver     *componentmocks.IdentityResolver
 }
 
 func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress *tktypes.EthAddress) (*Orchestrator, *orchestratorDepencyMocks, func()) {
@@ -65,6 +66,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 		sequencer:            privatetxnmgrmocks.NewSequencer(t),
 		endorsementGatherer:  privatetxnmgrmocks.NewEndorsementGatherer(t),
 		publisher:            privatetxnmgrmocks.NewPublisher(t),
+		identityResolver:     componentmocks.NewIdentityResolver(t),
 	}
 	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
@@ -77,7 +79,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	mocks.allComponents.On("Persistence").Return(p).Maybe()
 
 	store := privatetxnstore.NewStore(ctx, &pldconf.FlushWriterConfig{}, p)
-	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher, store)
+	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher, store, mocks.identityResolver)
 	ocDone, err := o.Start(ctx)
 	require.NoError(t, err)
 
@@ -95,7 +97,8 @@ func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
 
 	newTxID := uuid.New()
 	testTx := &components.PrivateTransaction{
-		ID: newTxID,
+		ID:          newTxID,
+		PreAssembly: &components.TransactionPreAssembly{},
 	}
 
 	waitForAssemble := make(chan bool, 1)
