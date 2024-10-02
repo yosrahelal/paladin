@@ -540,16 +540,27 @@ func TestInsertTransactionPublicTxPrepareReject(t *testing.T) {
 	})
 	defer done()
 
-	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
-
+	// Default public constructor invoke - no ABI or data
 	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
 		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
-			Function: exampleABI[0].FunctionSelectorBytes().String(),
-			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
-			Data:     tktypes.RawJSON(`[]`),
+			Type: ptxapi.TransactionTypePublic.Enum(),
 		},
-		ABI: exampleABI,
+		Bytecode: tktypes.HexBytes(tktypes.RandBytes(1)),
 	})
 	assert.Regexp(t, "pop", err)
+}
+
+func TestInsertTransactionOkDefaultConstructor(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitTxOk(t))
+	defer done()
+
+	// Default public constructor invoke
+	_, err := txm.sendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type: ptxapi.TransactionTypePublic.Enum(),
+		},
+		ABI:      abi.ABI{{Name: "notConstructor", Type: abi.Function, Inputs: abi.ParameterArray{}}},
+		Bytecode: tktypes.HexBytes(tktypes.RandBytes(1)),
+	})
+	assert.NoError(t, err)
 }

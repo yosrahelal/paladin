@@ -13,6 +13,31 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+configurations {
+    // Resolvable configurations
+    contractCompile {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
+dependencies {
+    contractCompile project(path: ":solidity", configuration: "compiledContracts")
+}
+
+task copySolidity(type: Copy) {
+    inputs.files(configurations.contractCompile)
+    from fileTree(configurations.contractCompile.asPath) {
+        include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
+        include 'contracts/domains/pente/PenteFactory.sol/PenteFactory.json'
+    }
+    into 'test/e2e/abis'
+
+    // Flatten all paths into the destination folder
+    eachFile { path = name }
+    includeEmptyDirs = false
+}
+
 // The operator uses the standard build experience for a Go based kubernetes operator.
 // The gradle wrapper is just to orchestrate it into the overall Paladin build system.
 task docker(type: Exec, dependsOn: [
@@ -41,6 +66,10 @@ task e2e(type: Exec, dependsOn: promoteKindImages) {
     args 'test-e2e'
 }
 
+task make(type: Exec, dependsOn: [":toolkit:go:protoc", copySolidity]) {
+    executable 'make'
+}
+
 task build {
-    dependsOn docker
+    dependsOn make
 }
