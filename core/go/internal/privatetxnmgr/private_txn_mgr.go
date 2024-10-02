@@ -174,14 +174,15 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.Priva
 	}
 	tx.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.PreAssembly.RequiredVerifiers))
 	for i, v := range tx.PreAssembly.RequiredVerifiers {
-		_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm)
+		_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
 		if err != nil {
 			return i18n.WrapError(ctx, err, msgs.MsgKeyResolutionFailed, v.Lookup, v.Algorithm)
 		}
 		tx.PreAssembly.Verifiers[i] = &prototk.ResolvedVerifier{
-			Lookup:    v.Lookup,
-			Algorithm: v.Algorithm,
-			Verifier:  verifier,
+			Lookup:       v.Lookup,
+			Algorithm:    v.Algorithm,
+			Verifier:     verifier,
+			VerifierType: v.VerifierType,
 		}
 	}
 
@@ -219,14 +220,15 @@ func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.Pr
 	keyMgr := p.components.KeyManager()
 	tx.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.RequiredVerifiers))
 	for i, v := range tx.RequiredVerifiers {
-		_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm)
+		_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
 		if err != nil {
 			return i18n.WrapError(ctx, err, msgs.MsgKeyResolutionFailed, v.Lookup, v.Algorithm)
 		}
 		tx.Verifiers[i] = &prototk.ResolvedVerifier{
-			Lookup:    v.Lookup,
-			Algorithm: v.Algorithm,
-			Verifier:  verifier,
+			Lookup:       v.Lookup,
+			Algorithm:    v.Algorithm,
+			Verifier:     verifier,
+			VerifierType: v.VerifierType,
 		}
 	}
 

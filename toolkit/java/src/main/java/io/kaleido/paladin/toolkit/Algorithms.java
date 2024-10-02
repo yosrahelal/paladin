@@ -16,5 +16,5 @@
 package io.kaleido.paladin.toolkit;
 
 public class Algorithms {
-    public static final String ECDSA_SECP256K1_PLAINBYTES = "ecdsa_secp256k1_plainbytes";
+    public static final String ECDSA_SECP256K1 = "ecdsa:secp256k1";
 }

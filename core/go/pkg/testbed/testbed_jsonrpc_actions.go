@@ -138,14 +138,15 @@ func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
 		keyMgr := tb.c.KeyManager()
 		tx.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.RequiredVerifiers))
 		for i, v := range tx.RequiredVerifiers {
-			_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm)
+			_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
 			if err != nil {
 				return nil, fmt.Errorf("failed to resolve key %q: %s", v.Lookup, err)
 			}
 			tx.Verifiers[i] = &prototk.ResolvedVerifier{
-				Lookup:    v.Lookup,
-				Algorithm: v.Algorithm,
-				Verifier:  verifier,
+				Lookup:       v.Lookup,
+				Algorithm:    v.Algorithm,
+				Verifier:     verifier,
+				VerifierType: v.VerifierType,
 			}
 		}
 
@@ -206,14 +207,15 @@ func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.Pr
 	keyMgr := tb.c.KeyManager()
 	tx.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.PreAssembly.RequiredVerifiers))
 	for i, v := range tx.PreAssembly.RequiredVerifiers {
-		_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm)
+		_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve key %q: %s", v.Lookup, err)
 		}
 		tx.PreAssembly.Verifiers[i] = &prototk.ResolvedVerifier{
-			Lookup:    v.Lookup,
-			Algorithm: v.Algorithm,
-			Verifier:  verifier,
+			Lookup:       v.Lookup,
+			Algorithm:    v.Algorithm,
+			Verifier:     verifier,
+			VerifierType: v.VerifierType,
 		}
 	}
 
@@ -327,13 +329,14 @@ func (tb *testbed) rpcTestbedPrepare() rpcserver.RPCHandler {
 }
 
 func (tb *testbed) rpcResolveVerifier() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod2(func(ctx context.Context,
+	return rpcserver.RPCMethod3(func(ctx context.Context,
 		lookup string,
 		algorithm string,
+		verifierType string,
 	) (verifier string, _ error) {
 		identifier, err := tktypes.PrivateIdentityLocator(lookup).Identity(ctx)
 		if err == nil {
-			_, verifier, err = tb.c.KeyManager().ResolveKey(ctx, identifier, algorithm)
+			_, verifier, err = tb.c.KeyManager().ResolveKey(ctx, identifier, algorithm, verifierType)
 		}
 		if err != nil {
 			return "", err
