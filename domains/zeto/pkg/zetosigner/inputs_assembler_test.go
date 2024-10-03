@@ -20,18 +20,36 @@ import (
 	"testing"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
-	"github.com/kaleido-io/paladin/core/pkg/proto"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestAssembleInputsAnonEnc(t *testing.T) {
 	inputs := commonWitnessInputs{}
 	key := core.KeyEntry{}
-	_, publicInputs, err := assembleInputs_anon_enc(&inputs, nil, &key)
-	require.NoError(t, err)
-	_, ok := new(big.Int).SetString(publicInputs["encryptionNonce"], 10)
-	assert.True(t, ok)
+	privateInputs, err := assembleInputs_anon_enc(&inputs, nil, &key)
+	assert.NoError(t, err)
+	assert.Equal(t, 9, len(privateInputs))
+}
+
+func TestAssembleInputsAnonNullifier(t *testing.T) {
+	inputs := commonWitnessInputs{
+		inputCommitments: []*big.Int{big.NewInt(1), big.NewInt(2)},
+		inputValues:      []*big.Int{big.NewInt(3), big.NewInt(4)},
+		inputSalts:       []*big.Int{big.NewInt(5), big.NewInt(6)},
+	}
+	privKey, pubKey, zkpKey := newKeypair()
+	key := core.KeyEntry{
+		PrivateKey:       privKey,
+		PublicKey:        pubKey,
+		PrivateKeyForZkp: zkpKey,
+	}
+	extras := proto.ProvingRequestExtras_Nullifiers{
+		Root: "123",
+	}
+	privateInputs, err := assembleInputs_anon_nullifier(&inputs, &extras, &key)
+	assert.NoError(t, err)
+	assert.Equal(t, 12, len(privateInputs))
 }
 
 func TestAssembleInputsAnonEnc_fail(t *testing.T) {
@@ -40,11 +58,58 @@ func TestAssembleInputsAnonEnc_fail(t *testing.T) {
 		EncryptionNonce: "1234",
 	}
 	key := core.KeyEntry{}
-	_, publicInputs, err := assembleInputs_anon_enc(&inputs, &extras, &key)
-	require.NoError(t, err)
-	assert.Equal(t, "1234", publicInputs["encryptionNonce"])
+	privateInputs, err := assembleInputs_anon_enc(&inputs, &extras, &key)
+	assert.NoError(t, err)
+	assert.Equal(t, privateInputs["encryptionNonce"], new(big.Int).SetInt64(1234))
 
 	extras.EncryptionNonce = "bad number"
-	_, _, err = assembleInputs_anon_enc(&inputs, &extras, &key)
+	_, err = assembleInputs_anon_enc(&inputs, &extras, &key)
 	assert.EqualError(t, err, "failed to parse encryption nonce")
+}
+
+func TestAssembleInputsAnonNullifier_fail(t *testing.T) {
+	inputs := commonWitnessInputs{}
+	extras := proto.ProvingRequestExtras_Nullifiers{
+		Root: "123456",
+		MerkleProofs: []*proto.MerkleProof{
+			{
+				Nodes: []string{"1", "2", "3"},
+			},
+			{
+				Nodes: []string{"0", "0", "0"},
+			},
+		},
+		Enabled: []bool{true, false},
+	}
+	key := core.KeyEntry{}
+	privateInputs, err := assembleInputs_anon_nullifier(&inputs, &extras, &key)
+	assert.NoError(t, err)
+	assert.Equal(t, "123456", privateInputs["root"].(*big.Int).Text(16))
+	assert.Equal(t, "1", privateInputs["enabled"].([]*big.Int)[0].Text(10))
+	assert.Equal(t, "0", privateInputs["enabled"].([]*big.Int)[1].Text(10))
+
+	extras.Root = "bad number"
+	_, err = assembleInputs_anon_nullifier(&inputs, &extras, &key)
+	assert.EqualError(t, err, "failed to parse root")
+
+	extras.Root = "123456"
+	extras.MerkleProofs[0].Nodes = []string{"bad number"}
+	_, err = assembleInputs_anon_nullifier(&inputs, &extras, &key)
+	assert.EqualError(t, err, "failed to parse node")
+
+	inputs = commonWitnessInputs{
+		inputCommitments: []*big.Int{big.NewInt(1), big.NewInt(2)},
+		inputValues:      []*big.Int{big.NewInt(3), big.NewInt(4)},
+		inputSalts:       []*big.Int{big.NewInt(5), big.NewInt(6)},
+	}
+	privKey, pubKey, _ := newKeypair()
+	tooBig, ok := new(big.Int).SetString("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16)
+	assert.True(t, ok)
+	key = core.KeyEntry{
+		PrivateKey:       privKey,
+		PublicKey:        pubKey,
+		PrivateKeyForZkp: tooBig,
+	}
+	_, err = assembleInputs_anon_nullifier(&inputs, &extras, &key)
+	assert.EqualError(t, err, "failed to calculate nullifier. failed to create the nullifier hash. inputs values not inside Finite Field")
 }

@@ -516,21 +516,23 @@ func (d *domain) close() {
 	<-d.initDone
 }
 
-func (d *domain) groupEventsByAddress(ctx context.Context, tx *gorm.DB, events []*blockindexer.EventWithData) (map[tktypes.EthAddress][]*blockindexer.EventWithData, error) {
+func (d *domain) groupEventsByAddress(ctx context.Context, tx *gorm.DB, events []*blockindexer.EventWithData) (map[tktypes.EthAddress][]*blockindexer.EventWithData, map[tktypes.EthAddress]tktypes.HexBytes, error) {
 	eventsByAddress := make(map[tktypes.EthAddress][]*blockindexer.EventWithData)
+	configBytesByAddress := make(map[tktypes.EthAddress]tktypes.HexBytes)
 	for _, ev := range events {
 		// Note: hits will be cached, but events from unrecognized contracts will always
 		// result in a cache miss and a database lookup
 		// TODO: revisit if we should optimize this
 		psc, err := d.dm.getSmartContractCached(ctx, tx, ev.Address)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if psc != nil && psc.Domain().Name() == d.name {
 			eventsByAddress[ev.Address] = append(eventsByAddress[ev.Address], ev)
+			configBytesByAddress[ev.Address] = psc.info.ConfigBytes
 		}
 	}
-	return eventsByAddress, nil
+	return eventsByAddress, configBytesByAddress, nil
 }
 
 func (d *domain) handleEventBatch(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
@@ -542,12 +544,12 @@ func (d *domain) handleEventBatch(ctx context.Context, tx *gorm.DB, batch *block
 
 	// Then divide events by contract address and dispatch to the appropriate domain context
 	transactionsComplete := make([]uuid.UUID, 0, len(batch.Events))
-	eventsByAddress, err := d.groupEventsByAddress(ctx, tx, batch.Events)
+	eventsByAddress, configBytesByAddress, err := d.groupEventsByAddress(ctx, tx, batch.Events)
 	if err != nil {
 		return nil, err
 	}
 	for addr, events := range eventsByAddress {
-		res, err := d.handleEventBatchForContract(ctx, batch.BatchID, addr, events)
+		res, err := d.handleEventBatchForContract(ctx, batch.BatchID, addr, events, configBytesByAddress[addr])
 		if err != nil {
 			return nil, err
 		}
@@ -580,13 +582,14 @@ func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*
 	return &txUUID, nil
 }
 
-func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.UUID, contractAddress tktypes.EthAddress, events []*blockindexer.EventWithData) (*prototk.HandleEventBatchResponse, error) {
+func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.UUID, contractAddress tktypes.EthAddress, events []*blockindexer.EventWithData, configBytes tktypes.HexBytes) (*prototk.HandleEventBatchResponse, error) {
 	var res *prototk.HandleEventBatchResponse
 	eventsJSON, err := json.Marshal(events)
 	if err == nil {
 		res, err = d.api.HandleEventBatch(ctx, &prototk.HandleEventBatchRequest{
-			BatchId:    batchID.String(),
-			JsonEvents: string(eventsJSON),
+			BatchId:     batchID.String(),
+			JsonEvents:  string(eventsJSON),
+			ConfigBytes: configBytes.HexString(),
 		})
 	}
 	if err != nil {

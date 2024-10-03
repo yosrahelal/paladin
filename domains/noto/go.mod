@@ -99,7 +99,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/postgres v1.5.9 // indirect
 	gorm.io/driver/sqlite v1.5.6 // indirect
-	gorm.io/gorm v1.25.11 // indirect
+	gorm.io/gorm v1.25.12 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 

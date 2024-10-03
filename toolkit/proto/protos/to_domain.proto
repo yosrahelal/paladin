@@ -150,6 +150,7 @@ message PrepareTransactionResponse {
 message HandleEventBatchRequest {
   string batch_id = 1; // A unique identifier for this batch
   string json_events = 2; // The list of events from the block indexer
+  string configBytes = 3; // the domain config bytes
 }
 
 message HandleEventBatchResponse {

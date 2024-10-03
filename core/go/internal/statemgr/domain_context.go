@@ -159,7 +159,11 @@ func (dc *domainContext) mergedUnFlushed(schema components.Schema, dbStates []*c
 	}
 
 	matches := make([]*components.StateWithLabels, 0, len(dc.unFlushed.states))
+	schemaId := schema.Persisted().ID
 	for _, state := range allUnFlushedStates {
+		if !state.Schema.Equals(&schemaId) {
+			continue
+		}
 		spent := false
 		for _, spend := range allUnFlushedStateSpends {
 			if spend.State.Equals(state.ID) {

@@ -55,6 +55,27 @@ const fakeCoinABI = `{
 	]
 }`
 
+const fakeCoinABI2 = `{
+	"type": "tuple",
+	"internalType": "struct FakeCoin2",
+	"components": [
+		{
+			"name": "salt",
+			"type": "bytes32"
+		},
+		{
+			"name": "owner",
+			"type": "address",
+			"indexed": true
+		},
+		{
+			"name": "tokenUri",
+			"type": "bytes32",
+			"indexed": true
+		}
+	]
+}`
+
 type FakeCoin struct {
 	Amount ethtypes.HexInteger       `json:"amount"`
 	Salt   ethtypes.HexBytes0xPrefix `json:"salt"`
@@ -601,22 +622,32 @@ func TestDSIMergedUnFlushedSpend(t *testing.T) {
 	ctx, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
-	schema, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
+	schema1, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
+	require.NoError(t, err)
+
+	schema2, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI2))
 	require.NoError(t, err)
 
 	contractAddress := tktypes.RandAddress()
 	dc := ss.getDomainContext("domain1", *contractAddress)
 
-	s1, err := schema.ProcessState(ctx, *contractAddress, tktypes.RawJSON(fmt.Sprintf(
+	s1, err := schema1.ProcessState(ctx, *contractAddress, tktypes.RawJSON(fmt.Sprintf(
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
 		tktypes.RandHex(32))), nil)
 	require.NoError(t, err)
 	s1.Locked = &components.StateLock{State: s1.ID, Transaction: uuid.New(), Creating: true}
 
+	s2, err := schema2.ProcessState(ctx, *contractAddress, tktypes.RawJSON(fmt.Sprintf(
+		`{"tokenUri": "%s", "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
+		tktypes.RandHex(32), tktypes.RandHex(32))), nil)
+	require.NoError(t, err)
+	s2.Locked = &components.StateLock{State: s2.ID, Transaction: uuid.New(), Creating: true}
+
 	dc.flushing = &writeOperation{
-		states: []*components.StateWithLabels{s1},
+		states: []*components.StateWithLabels{s1, s2},
 		stateSpends: []*components.StateSpend{
 			{State: s1.ID[:]},
+			{State: s2.ID[:]},
 		},
 	}
 	dc.unFlushed = &writeOperation{
@@ -627,9 +658,9 @@ func TestDSIMergedUnFlushedSpend(t *testing.T) {
 
 	_, spent, _, err := dc.getUnFlushedStates()
 	require.NoError(t, err)
-	assert.Len(t, spent, 2)
+	assert.Len(t, spent, 3)
 
-	states, err := dc.mergedUnFlushed(schema, []*components.State{}, &query.QueryJSON{}, false)
+	states, err := dc.mergedUnFlushed(schema1, []*components.State{}, &query.QueryJSON{}, false)
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 

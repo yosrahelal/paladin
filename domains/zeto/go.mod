@@ -4,9 +4,9 @@ go 1.22.5
 
 require (
 	github.com/go-resty/resty/v2 v2.14.0
-	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240905213624-43a614759076
+	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20240924145436-713dcce49c5d
 	github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1
-	github.com/iden3/go-iden3-crypto v0.0.16
+	github.com/iden3/go-iden3-crypto v0.0.17
 	github.com/iden3/go-rapidsnark/prover v0.0.10
 	github.com/iden3/go-rapidsnark/types v0.0.2
 	github.com/iden3/go-rapidsnark/witness/v2 v2.0.0
@@ -17,6 +17,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v3 v3.0.1
+	gorm.io/gorm v1.25.12
 )
 
 require (

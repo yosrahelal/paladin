@@ -17,7 +17,7 @@ package types
 
 import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 var ZetoABI = abi.ABI{
@@ -46,18 +46,18 @@ type InitializerParams struct {
 }
 
 type DeployParams struct {
-	TransactionID string                    `json:"transactionId"`
-	Data          ethtypes.HexBytes0xPrefix `json:"data"`
-	TokenName     string                    `json:"tokenName"`
-	InitialOwner  string                    `json:"initialOwner"`
+	TransactionID string           `json:"transactionId"`
+	Data          tktypes.HexBytes `json:"data"`
+	TokenName     string           `json:"tokenName"`
+	InitialOwner  string           `json:"initialOwner"`
 }
 
 type MintParams struct {
-	To     string               `json:"to"`
-	Amount *ethtypes.HexInteger `json:"amount"`
+	To     string              `json:"to"`
+	Amount *tktypes.HexUint256 `json:"amount"`
 }
 
 type TransferParams struct {
-	To     string               `json:"to"`
-	Amount *ethtypes.HexInteger `json:"amount"`
+	To     string              `json:"to"`
+	Amount *tktypes.HexUint256 `json:"amount"`
 }

@@ -39,7 +39,7 @@ func (h *mintHandler) ValidateParams(ctx context.Context, params string) (interf
 	if mintParams.To == "" {
 		return nil, fmt.Errorf("parameter 'to' is required")
 	}
-	if mintParams.Amount.BigInt().Sign() != 1 {
+	if mintParams.Amount.Int().Sign() != 1 {
 		return nil, fmt.Errorf("parameter 'amount' must be greater than 0")
 	}
 	return &mintParams, nil
@@ -80,7 +80,6 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 	if err != nil {
 		return nil, err
 	}
-
 	return &pb.AssembleTransactionResponse{
 		AssemblyResult: pb.AssembleTransactionResponse_OK,
 		AssembledTransaction: &pb.AssembledTransaction{
@@ -112,11 +111,20 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		if err != nil {
 			return nil, err
 		}
-		outputs[i] = coin.Hash.String()
+		hash, err := coin.Hash()
+		if err != nil {
+			return nil, err
+		}
+		outputs[i] = hash.String()
 	}
 
+	data, err := encodeTransactionData(ctx, req.Transaction)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode transaction data. %s", err)
+	}
 	params := map[string]interface{}{
 		"utxos": outputs,
+		"data":  data,
 	}
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
