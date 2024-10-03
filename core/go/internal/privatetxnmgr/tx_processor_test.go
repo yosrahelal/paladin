@@ -35,7 +35,7 @@ type transactionProcessorDepencyMocks struct {
 	domainSmartContract  *componentmocks.DomainSmartContract
 	domainMgr            *componentmocks.DomainManager
 	transportManager     *componentmocks.TransportManager
-	stateStore           *componentmocks.StateStore
+	stateStore           *componentmocks.StateManager
 	keyManager           *componentmocks.KeyManager
 	sequencer            *privatetxnmgrmocks.Sequencer
 	endorsementGatherer  *privatetxnmgrmocks.EndorsementGatherer
@@ -51,14 +51,14 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 		domainSmartContract:  componentmocks.NewDomainSmartContract(t),
 		domainMgr:            componentmocks.NewDomainManager(t),
 		transportManager:     componentmocks.NewTransportManager(t),
-		stateStore:           componentmocks.NewStateStore(t),
+		stateStore:           componentmocks.NewStateManager(t),
 		keyManager:           componentmocks.NewKeyManager(t),
 		sequencer:            privatetxnmgrmocks.NewSequencer(t),
 		endorsementGatherer:  privatetxnmgrmocks.NewEndorsementGatherer(t),
 		publisher:            privatetxnmgrmocks.NewPublisher(t),
 		identityResolver:     componentmocks.NewIdentityResolver(t),
 	}
-	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
+	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
 	mocks.allComponents.On("TransportManager").Return(mocks.transportManager).Maybe()
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()

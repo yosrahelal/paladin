@@ -14,25 +14,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package statestore
+package statemgr
 
 import (
 	"context"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"gorm.io/gorm/clause"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-)
-
-type SchemaType string
-
-const (
-	// ABI schema uses the same semantics as events for defining indexed fields (must be top-level)
-	SchemaTypeABI SchemaType = "abi"
 )
 
 type labelType int
@@ -46,16 +40,6 @@ const (
 	labelTypeBool
 )
 
-type SchemaPersisted struct {
-	ID         tktypes.Bytes32   `json:"id"          gorm:"primaryKey"`
-	Created    tktypes.Timestamp `json:"created"     gorm:"autoCreateTime:false"` // we calculate the created time ourselves due to complex in-memory caching
-	DomainName string            `json:"domain"`
-	Type       SchemaType        `json:"type"`
-	Signature  string            `json:"signature"`
-	Definition tktypes.RawJSON   `json:"definition"`
-	Labels     []string          `json:"labels"      gorm:"type:text[]; serializer:json"`
-}
-
 type schemaLabelInfo struct {
 	label         string
 	virtualColumn string
@@ -67,15 +51,6 @@ type idOnly struct {
 	ID tktypes.HexBytes `gorm:"primaryKey"`
 }
 
-type Schema interface {
-	Type() SchemaType
-	IDString() string
-	Signature() string
-	Persisted() *SchemaPersisted
-	ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, id tktypes.HexBytes) (*StateWithLabels, error)
-	RecoverLabels(ctx context.Context, s *State) (*StateWithLabels, error)
-}
-
 type labelInfoAccess interface {
 	labelInfo() []*schemaLabelInfo
 }
@@ -84,7 +59,7 @@ func schemaCacheKey(domainName string, id tktypes.Bytes32) string {
 	return domainName + "/" + id.String()
 }
 
-func (ss *stateStore) persistSchemas(schemas []*SchemaPersisted) error {
+func (ss *stateStore) persistSchemas(schemas []*components.SchemaPersisted) error {
 	return ss.p.DB().
 		Table("schemas").
 		Clauses(clause.OnConflict{
@@ -98,7 +73,7 @@ func (ss *stateStore) persistSchemas(schemas []*SchemaPersisted) error {
 		Error
 }
 
-func (ss *stateStore) GetSchema(ctx context.Context, domainName, schemaID string, failNotFound bool) (Schema, error) {
+func (ss *stateStore) GetSchema(ctx context.Context, domainName, schemaID string, failNotFound bool) (components.Schema, error) {
 	id, err := tktypes.ParseBytes32Ctx(ctx, schemaID)
 	if err != nil {
 		return nil, err
@@ -106,7 +81,7 @@ func (ss *stateStore) GetSchema(ctx context.Context, domainName, schemaID string
 	return ss.getSchemaByID(ctx, domainName, id, failNotFound)
 }
 
-func (ss *stateStore) getSchemaByID(ctx context.Context, domainName string, schemaID tktypes.Bytes32, failNotFound bool) (Schema, error) {
+func (ss *stateStore) getSchemaByID(ctx context.Context, domainName string, schemaID tktypes.Bytes32, failNotFound bool) (components.Schema, error) {
 
 	cacheKey := schemaCacheKey(domainName, schemaID)
 	s, cached := ss.abiSchemaCache.Get(cacheKey)
@@ -114,7 +89,7 @@ func (ss *stateStore) getSchemaByID(ctx context.Context, domainName string, sche
 		return s, nil
 	}
 
-	var results []*SchemaPersisted
+	var results []*components.SchemaPersisted
 	err := ss.p.DB().
 		Table("schemas").
 		Where("domain_name = ?", domainName).
@@ -131,7 +106,7 @@ func (ss *stateStore) getSchemaByID(ctx context.Context, domainName string, sche
 
 	persisted := results[0]
 	switch persisted.Type {
-	case SchemaTypeABI:
+	case components.SchemaTypeABI:
 		s, err = newABISchemaFromDB(ctx, persisted)
 	default:
 		err = i18n.NewError(ctx, msgs.MsgStateInvalidSchemaType, persisted.Type)
@@ -143,7 +118,7 @@ func (ss *stateStore) getSchemaByID(ctx context.Context, domainName string, sche
 	return s, nil
 }
 
-func (ss *stateStore) ListSchemas(ctx context.Context, domainName string) (results []Schema, err error) {
+func (ss *stateStore) ListSchemas(ctx context.Context, domainName string) (results []components.Schema, err error) {
 	var ids []*idOnly
 	err = ss.p.DB().
 		Table("schemas").
@@ -154,7 +129,7 @@ func (ss *stateStore) ListSchemas(ctx context.Context, domainName string) (resul
 	if err != nil {
 		return nil, err
 	}
-	results = make([]Schema, len(ids))
+	results = make([]components.Schema, len(ids))
 	for i, id := range ids {
 		if results[i], err = ss.getSchemaByID(ctx, domainName, tktypes.Bytes32(id.ID), true); err != nil {
 			return nil, err
@@ -163,14 +138,14 @@ func (ss *stateStore) ListSchemas(ctx context.Context, domainName string) (resul
 	return results, nil
 }
 
-func (ss *stateStore) EnsureABISchemas(ctx context.Context, domainName string, defs []*abi.Parameter) ([]Schema, error) {
+func (ss *stateStore) EnsureABISchemas(ctx context.Context, domainName string, defs []*abi.Parameter) ([]components.Schema, error) {
 	if len(defs) == 0 {
 		return nil, nil
 	}
 
 	// Validate all the schemas
-	prepared := make([]Schema, len(defs))
-	toFlush := make([]*SchemaPersisted, len(defs))
+	prepared := make([]components.Schema, len(defs))
+	toFlush := make([]*components.SchemaPersisted, len(defs))
 	for i, def := range defs {
 		s, err := newABISchema(ctx, domainName, def)
 		if err != nil {

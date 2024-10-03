@@ -28,7 +28,6 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
@@ -927,7 +926,7 @@ type dependencyMocks struct {
 	domainSmartContract  *componentmocks.DomainSmartContract
 	domainMgr            *componentmocks.DomainManager
 	transportManager     *componentmocks.TransportManager
-	stateStore           *componentmocks.StateStore
+	stateStore           *componentmocks.StateManager
 	keyManager           *componentmocks.KeyManager
 	ethClientFactory     *componentmocks.EthClientFactory
 	publicTxManager      components.PublicTxManager /* could be fake or mock */
@@ -1097,13 +1096,13 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 		domainSmartContract:  componentmocks.NewDomainSmartContract(t),
 		domainMgr:            componentmocks.NewDomainManager(t),
 		transportManager:     componentmocks.NewTransportManager(t),
-		stateStore:           componentmocks.NewStateStore(t),
+		stateStore:           componentmocks.NewStateManager(t),
 		keyManager:           componentmocks.NewKeyManager(t),
 		ethClientFactory:     componentmocks.NewEthClientFactory(t),
 		publicTxManager:      publicTxMgr,
 		identityResolver:     componentmocks.NewIdentityResolver(t),
 	}
-	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
+	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
 	mocks.allComponents.On("TransportManager").Return(mocks.transportManager).Maybe()
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
@@ -1113,8 +1112,8 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 	unconnectedRealClient := ethclient.NewUnconnectedRPCClient(ctx, mocks.keyManager, &pldconf.EthClientConfig{}, 0)
 	mocks.ethClientFactory.On("SharedWS").Return(unconnectedRealClient).Maybe()
 
-	mocks.stateStore.On("RunInDomainContext", mock.Anything, mock.AnythingOfType("statestore.DomainContextFunction")).Run(func(args mock.Arguments) {
-		fn := args.Get(1).(statestore.DomainContextFunction)
+	mocks.stateStore.On("RunInDomainContext", mock.Anything, mock.AnythingOfType("components.DomainContextFunction")).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(components.DomainContextFunction)
 		err := fn(context.Background(), mocks.domainStateInterface)
 		assert.NoError(t, err)
 	}).Maybe().Return(nil)

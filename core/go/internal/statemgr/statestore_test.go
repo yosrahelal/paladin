@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package statestore
+package statemgr
 
 import (
 	"context"
@@ -29,23 +29,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newDBTestStateStore(t *testing.T) (context.Context, *stateStore, func()) {
+func newDBTestStateManager(t *testing.T) (context.Context, *stateStore, func()) {
 	ctx := context.Background()
 	p, pDone, err := persistence.NewUnitTestPersistence(ctx)
 	require.NoError(t, err)
-	ss := NewStateStore(ctx, &pldconf.StateStoreConfig{}, p)
+	ss := NewStateManager(ctx, &pldconf.StateStoreConfig{}, p)
+
+	ir, err := ss.PreInit(nil /* no current use of components */)
+	require.NoError(t, err)
+	require.NotNil(t, ir)
+	require.NotEmpty(t, ir.RPCModules)
+
+	err = ss.PostInit(nil)
+	require.NoError(t, err)
+
+	err = ss.Start()
+	require.NoError(t, err)
+
 	return ctx, ss.(*stateStore), func() {
-		ss.Close()
+		ss.Stop()
 		pDone()
 	}
 }
 
-func newDBMockStateStore(t *testing.T) (context.Context, *stateStore, sqlmock.Sqlmock, func()) {
+func newDBMockStateManager(t *testing.T) (context.Context, *stateStore, sqlmock.Sqlmock, func()) {
 	ctx := context.Background()
 	log.SetLevel("debug")
 	p, err := mockpersistence.NewSQLMockProvider()
 	require.NoError(t, err)
-	ss := NewStateStore(ctx, &pldconf.StateStoreConfig{}, p.P)
+	ss := NewStateManager(ctx, &pldconf.StateStoreConfig{}, p.P)
 	return ctx, ss.(*stateStore), p.Mock, func() {
 		require.NoError(t, p.Mock.ExpectationsWereMet())
 	}

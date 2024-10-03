@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package statestore
+package statemgr
 
 import (
 	"encoding/json"
@@ -23,6 +23,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -39,7 +40,7 @@ func testABIParam(t *testing.T, jsonParam string) *abi.Parameter {
 // This is an E2E test using the actual database, the flush-writer DB storage system, and the schema cache
 func TestStoreRetrieveABISchema(t *testing.T) {
 
-	ctx, ss, done := newDBTestStateStore(t)
+	ctx, ss, done := newDBTestStateManager(t)
 	defer done()
 
 	as, err := newABISchema(ctx, "domain1", &abi.Parameter{
@@ -94,14 +95,14 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, SchemaTypeABI, as.Persisted().Type)
-	assert.Equal(t, SchemaTypeABI, as.Type())
+	assert.Equal(t, components.SchemaTypeABI, as.Persisted().Type)
+	assert.Equal(t, components.SchemaTypeABI, as.Type())
 	assert.NotNil(t, as.definition)
 	assert.Equal(t, "type=MyStruct(uint256 field1,string field2,int64 field3,bool field4,address field5,int256 field6,bytes field7,uint32 field8,string field9),labels=[field1,field2,field3,field4,field5,field6,field7,field8]", as.Persisted().Signature)
 	cacheKey := "domain1/0xcf41493c8bb9652d1483ee6cb5122efbec6fbdf67cc27363ba5b030b59244cad"
 	assert.Equal(t, cacheKey, schemaCacheKey(as.Persisted().DomainName, as.Persisted().ID))
 
-	err = ss.persistSchemas([]*SchemaPersisted{as.SchemaPersisted})
+	err = ss.persistSchemas([]*components.SchemaPersisted{as.SchemaPersisted})
 	require.NoError(t, err)
 	schemaID := as.Persisted().ID.String()
 	contractAddress := tktypes.RandAddress()
@@ -120,7 +121,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		"cruft": "to remove"
 	}`), nil)
 	require.NoError(t, err)
-	assert.Equal(t, []*StateLabel{
+	assert.Equal(t, []*components.StateLabel{
 		// uint256 written as zero padded string
 		{DomainName: "domain1", State: state1.ID, Label: "field1", Value: "0000000000000000000000000123456789012345678901234567890123456789"},
 		// string written as it is
@@ -133,7 +134,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		// bytes are just bytes
 		{DomainName: "domain1", State: state1.ID, Label: "field7", Value: "feedbeef"},
 	}, state1.Labels)
-	assert.Equal(t, []*StateInt64Label{
+	assert.Equal(t, []*components.StateInt64Label{
 		// int64 can just be stored directly in a numeric index
 		{DomainName: "domain1", State: state1.ID, Label: "field3", Value: 42},
 		// bool also gets an efficient numeric index - we don't attempt to allocate anything smaller than int64 to this
@@ -157,7 +158,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	}`, string(state1.Data))
 
 	// Second should succeed, but not do anything
-	err = ss.persistSchemas([]*SchemaPersisted{as.SchemaPersisted})
+	err = ss.persistSchemas([]*components.SchemaPersisted{as.SchemaPersisted})
 	require.NoError(t, err)
 	schemaID = as.IDString()
 
@@ -229,7 +230,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 
 func TestNewABISchemaInvalidTypedDataType(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	_, err := newABISchema(ctx, "domain1", &abi.Parameter{
@@ -248,12 +249,12 @@ func TestNewABISchemaInvalidTypedDataType(t *testing.T) {
 }
 
 func TestGetSchemaInvalidJSON(t *testing.T) {
-	ctx, ss, mdb, done := newDBMockStateStore(t)
+	ctx, ss, mdb, done := newDBMockStateManager(t)
 	defer done()
 
 	mdb.ExpectQuery("SELECT.*schemas").WillReturnRows(sqlmock.NewRows(
 		[]string{"type", "content"},
-	).AddRow(SchemaTypeABI, "!!! { bad json"))
+	).AddRow(components.SchemaTypeABI, "!!! { bad json"))
 
 	_, err := ss.GetSchema(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("test")).String(), true)
 	assert.Regexp(t, "PD010113", err)
@@ -261,10 +262,10 @@ func TestGetSchemaInvalidJSON(t *testing.T) {
 
 func TestRestoreABISchemaInvalidType(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
-	_, err := newABISchemaFromDB(ctx, &SchemaPersisted{
+	_, err := newABISchemaFromDB(ctx, &components.SchemaPersisted{
 		Definition: tktypes.RawJSON(`{}`),
 	})
 	assert.Regexp(t, "PD010114", err)
@@ -273,10 +274,10 @@ func TestRestoreABISchemaInvalidType(t *testing.T) {
 
 func TestRestoreABISchemaInvalidTypeTree(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
-	_, err := newABISchemaFromDB(ctx, &SchemaPersisted{
+	_, err := newABISchemaFromDB(ctx, &components.SchemaPersisted{
 		Definition: tktypes.RawJSON(`{"type":"tuple","internalType":"struct MyType","components":[{"type":"wrong"}]}`),
 	})
 	assert.Regexp(t, "FF22025.*wrong", err)
@@ -285,7 +286,7 @@ func TestRestoreABISchemaInvalidTypeTree(t *testing.T) {
 
 func TestABILabelSetupMissingName(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	_, err := newABISchema(ctx, "domain1", &abi.Parameter{
@@ -305,7 +306,7 @@ func TestABILabelSetupMissingName(t *testing.T) {
 
 func TestABILabelSetupBadTree(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	_, err := newABISchema(ctx, "domain1", &abi.Parameter{
@@ -325,7 +326,7 @@ func TestABILabelSetupBadTree(t *testing.T) {
 
 func TestABILabelSetupDuplicateField(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	_, err := newABISchema(ctx, "domain1", &abi.Parameter{
@@ -350,7 +351,7 @@ func TestABILabelSetupDuplicateField(t *testing.T) {
 
 func TestABILabelSetupUnsupportedType(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	_, err := newABISchema(ctx, "domain1", &abi.Parameter{
@@ -372,7 +373,7 @@ func TestABILabelSetupUnsupportedType(t *testing.T) {
 
 func TestABISchemaGetLabelTypeBadType(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	as := &abiSchema{
@@ -398,11 +399,11 @@ func TestABISchemaGetLabelTypeBadType(t *testing.T) {
 
 func TestABISchemaProcessStateInvalidType(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &SchemaPersisted{
+		SchemaPersisted: &components.SchemaPersisted{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{
@@ -436,11 +437,11 @@ func TestABISchemaProcessStateInvalidType(t *testing.T) {
 
 func TestABISchemaProcessStateLabelMissing(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &SchemaPersisted{
+		SchemaPersisted: &components.SchemaPersisted{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{
@@ -468,7 +469,7 @@ func TestABISchemaProcessStateLabelMissing(t *testing.T) {
 
 func TestABISchemaProcessStateBadDefinition(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	as := &abiSchema{
@@ -481,11 +482,11 @@ func TestABISchemaProcessStateBadDefinition(t *testing.T) {
 
 func TestABISchemaProcessStateBadValue(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &SchemaPersisted{
+		SchemaPersisted: &components.SchemaPersisted{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{
@@ -504,11 +505,11 @@ func TestABISchemaProcessStateBadValue(t *testing.T) {
 
 func TestABISchemaProcessStateMismatchValue(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &SchemaPersisted{
+		SchemaPersisted: &components.SchemaPersisted{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{
@@ -529,11 +530,11 @@ func TestABISchemaProcessStateMismatchValue(t *testing.T) {
 
 func TestABISchemaProcessStateEIP712Failure(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &SchemaPersisted{
+		SchemaPersisted: &components.SchemaPersisted{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{
@@ -554,11 +555,11 @@ func TestABISchemaProcessStateEIP712Failure(t *testing.T) {
 
 func TestABISchemaProcessStateDataFailure(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &SchemaPersisted{
+		SchemaPersisted: &components.SchemaPersisted{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{
@@ -579,11 +580,11 @@ func TestABISchemaProcessStateDataFailure(t *testing.T) {
 
 func TestABISchemaMapLabelResolverBadType(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &SchemaPersisted{
+		SchemaPersisted: &components.SchemaPersisted{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{
@@ -601,11 +602,11 @@ func TestABISchemaMapLabelResolverBadType(t *testing.T) {
 
 func TestABISchemaMapValueToLabelTypeErrors(t *testing.T) {
 
-	ctx, _, _, done := newDBMockStateStore(t)
+	ctx, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &SchemaPersisted{
+		SchemaPersisted: &components.SchemaPersisted{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{

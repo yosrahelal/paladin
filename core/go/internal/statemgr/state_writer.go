@@ -14,13 +14,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package statestore
+package statemgr
 
 import (
 	"context"
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -34,11 +35,11 @@ type writeOperation struct {
 	id                     string
 	domainKey              string
 	writerOp               flushwriter.Operation[*writeOperation, *noResult]
-	states                 []*StateWithLabels
-	stateConfirms          []*StateConfirm
-	stateSpends            []*StateSpend
-	stateLocks             []*StateLock
-	stateNullifiers        []*StateNullifier
+	states                 []*components.StateWithLabels
+	stateConfirms          []*components.StateConfirm
+	stateSpends            []*components.StateSpend
+	stateLocks             []*components.StateLock
+	stateNullifiers        []*components.StateNullifier
 	transactionLockDeletes []uuid.UUID
 }
 
@@ -77,13 +78,13 @@ func (sw *stateWriter) queue(ctx context.Context, op *writeOperation) {
 func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writeOperation) ([]flushwriter.Result[*noResult], error) {
 
 	// Build lists of things to insert (we are insert only)
-	var states []*State
-	var labels []*StateLabel
-	var int64Labels []*StateInt64Label
-	var stateConfirms []*StateConfirm
-	var stateSpends []*StateSpend
-	var stateLocks []*StateLock
-	var stateNullifiers []*StateNullifier
+	var states []*components.State
+	var labels []*components.StateLabel
+	var int64Labels []*components.StateInt64Label
+	var stateConfirms []*components.StateConfirm
+	var stateSpends []*components.StateSpend
+	var stateLocks []*components.StateLock
+	var stateNullifiers []*components.StateNullifier
 	var transactionLockDeletes []uuid.UUID
 	for _, op := range values {
 		for _, s := range op.states {
@@ -190,7 +191,7 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 		// locks can be removed
 		err = tx.
 			Table("state_locks").
-			Delete(&State{}, `"transaction" IN (?)`, transactionLockDeletes).
+			Delete(&components.State{}, `"transaction" IN (?)`, transactionLockDeletes).
 			Error
 	}
 	// We don't actually provide any result, so just build an array of nil results

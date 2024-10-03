@@ -16,32 +16,20 @@
 package bootstrap
 
 import (
-	"context"
 	"fmt"
 	"path"
 	"syscall"
 	"testing"
 
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 )
-
-func TestEngineFactory(t *testing.T) {
-	tb, err := engineFactory(context.Background(), "testbed")
-	require.NoError(t, err)
-	assert.NotNil(t, tb)
-
-	_, err = engineFactory(context.Background(), "wrong")
-	assert.Regexp(t, "PD011700", err)
-}
 
 func TestSignalHandlerStop(t *testing.T) {
 
 	cmStarted := make(chan struct{})
-	socketFile, loaderUUID, configFile, done := setupTestConfig(t, func(mockCM *componentmocks.ComponentManager, mockEngine *componentmocks.Engine) {
+	socketFile, loaderUUID, configFile, done := setupTestConfig(t, func(mockCM *componentmocks.ComponentManager) {
 		mockCM.On("Init").Return(nil)
 		mockCM.On("StartComponents").Return(nil)
 		mockCM.On("StartManagers").Return(nil)
@@ -57,7 +45,7 @@ func TestSignalHandlerStop(t *testing.T) {
 		defer func() {
 			completed <- recover()
 		}()
-		Run(socketFile, loaderUUID, configFile, "unittest")
+		Run(socketFile, loaderUUID, configFile, "engine")
 	}()
 
 	<-cmStarted
@@ -75,7 +63,7 @@ func TestBadLoaderID(t *testing.T) {
 	socketFile, _, configFile, done := setupTestConfig(t)
 	defer done()
 
-	Run(socketFile, "wrong", configFile, "unittest")
+	Run(socketFile, "wrong", configFile, "engine")
 
 }
 
@@ -84,26 +72,13 @@ func TestBadConfigFile(t *testing.T) {
 	socketFile, loaderUUID, _, done := setupTestConfig(t)
 	defer done()
 
-	Run(socketFile, loaderUUID, path.Join(t.TempDir(), "wrong.yaml"), "unittest")
-
-}
-
-func TestEngineFactoryFail(t *testing.T) {
-
-	socketFile, loaderUUID, configFile, done := setupTestConfig(t)
-	defer done()
-
-	engineFactory = func(ctx context.Context, engineName string) (components.Engine, error) {
-		return nil, fmt.Errorf("pop")
-	}
-
-	Run(socketFile, loaderUUID, configFile, "unittest")
+	Run(socketFile, loaderUUID, path.Join(t.TempDir(), "wrong.yaml"), "engine")
 
 }
 
 func TestComponentManagerStartFail(t *testing.T) {
 
-	socketFile, loaderUUID, configFile, done := setupTestConfig(t, func(mockCM *componentmocks.ComponentManager, mockEngine *componentmocks.Engine) {
+	socketFile, loaderUUID, configFile, done := setupTestConfig(t, func(mockCM *componentmocks.ComponentManager) {
 		mockCM.On("Init").Return(nil)
 		mockCM.On("StartComponents").Return(nil)
 		mockCM.On("StartManagers").Return(nil)
@@ -112,6 +87,6 @@ func TestComponentManagerStartFail(t *testing.T) {
 	})
 	defer done()
 
-	Run(socketFile, loaderUUID, configFile, "unittest")
+	Run(socketFile, loaderUUID, configFile, "engine")
 
 }

@@ -14,11 +14,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package statestore
+package statemgr
 
 import (
 	"context"
 
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -38,7 +39,7 @@ func (ss *stateStore) initRPC() {
 func (ss *stateStore) rpcListSchema() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		domain string,
-	) ([]Schema, error) {
+	) ([]components.Schema, error) {
 		return ss.ListSchemas(ctx, domain)
 	})
 }
@@ -49,8 +50,8 @@ func (ss *stateStore) rpcStoreState() rpcserver.RPCHandler {
 		contractAddress tktypes.EthAddress,
 		schema string,
 		data tktypes.RawJSON,
-	) (*State, error) {
-		var state *State
+	) (*components.State, error) {
+		var state *components.State
 		newState, err := ss.PersistState(ctx, domain, contractAddress, schema, data, nil)
 		if err == nil {
 			state = newState.State
@@ -66,7 +67,7 @@ func (ss *stateStore) rpcQuery() rpcserver.RPCHandler {
 		schema string,
 		query query.QueryJSON,
 		status StateStatusQualifier,
-	) ([]*State, error) {
+	) ([]*components.State, error) {
 		return ss.FindStates(ctx, domain, contractAddress, schema, &query, status)
 	})
 }

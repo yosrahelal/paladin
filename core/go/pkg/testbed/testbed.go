@@ -32,7 +32,7 @@ import (
 )
 
 type Testbed interface {
-	components.Engine
+	components.AdditionalManager
 	StartForTest(configFile string, domains map[string]*TestbedDomain, initFunctions ...*UTInitFunction) (url string, done func(), err error)
 	Components() AllComponents
 }
@@ -48,7 +48,7 @@ type testbed struct {
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 	rpcModule *rpcserver.RPCModule
-	c         components.PreInitComponentsAndManagers
+	c         components.AllComponents
 }
 
 func NewTestBed() Testbed {
@@ -58,7 +58,7 @@ func NewTestBed() Testbed {
 	return tb
 }
 
-func (tb *testbed) EngineName() string {
+func (tb *testbed) Name() string {
 	return "testbed"
 }
 
@@ -69,11 +69,15 @@ func (tb *testbed) Start() error {
 
 func (tb *testbed) Stop() {}
 
-func (tb *testbed) Init(c components.PreInitComponentsAndManagers) (*components.ManagerInitResult, error) {
-	tb.c = c
+func (tb *testbed) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
 	return &components.ManagerInitResult{
 		RPCModules: []*rpcserver.RPCModule{tb.rpcModule},
 	}, nil
+}
+
+func (tb *testbed) PostInit(c components.AllComponents) error {
+	tb.c = c
+	return nil
 }
 
 func (tb *testbed) Components() AllComponents {
@@ -83,7 +87,7 @@ func (tb *testbed) Components() AllComponents {
 // redeclare the AllComponents interface to allow unit test
 // code in the same package to access the AllComponents interface
 // while keeping it internal
-type AllComponents components.PreInitComponentsAndManagers
+type AllComponents components.AllComponents
 
 type UTInitFunction struct {
 	PreManagerStart  func(c AllComponents) error
@@ -104,10 +108,10 @@ func unitTestSocketFile() (fileName string, err error) {
 	return
 }
 
-func unitTestComponentManagerStart(ctx context.Context, conf *pldconf.PaladinConfig, engine components.Engine, callbacks ...*UTInitFunction) (cm componentmgr.ComponentManager, err error) {
+func unitTestComponentManagerStart(ctx context.Context, conf *pldconf.PaladinConfig, tb *testbed, callbacks ...*UTInitFunction) (cm componentmgr.ComponentManager, err error) {
 	socketFile, err := unitTestSocketFile()
 	if err == nil {
-		cm = componentmgr.NewComponentManager(ctx, socketFile, uuid.New(), conf, engine)
+		cm = componentmgr.NewComponentManager(ctx, socketFile, uuid.New(), conf, tb)
 		err = cm.Init()
 	}
 	if err == nil {

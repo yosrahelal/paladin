@@ -28,7 +28,6 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
@@ -75,7 +74,7 @@ type domainManager struct {
 
 	conf             *pldconf.DomainManagerConfig
 	persistence      persistence.Persistence
-	stateStore       statestore.StateStore
+	stateStore       components.StateManager
 	blockIndexer     blockindexer.BlockIndexer
 	ethClientFactory ethclient.EthClientFactory
 	domainSigner     *domainSigner
@@ -96,24 +95,24 @@ type event_PaladinRegisterSmartContract_V0 struct {
 }
 
 func (dm *domainManager) PreInit(pic components.PreInitComponents) (*components.ManagerInitResult, error) {
-	dm.persistence = pic.Persistence()
-	dm.stateStore = pic.StateStore()
-	dm.ethClientFactory = pic.EthClientFactory()
-	dm.blockIndexer = pic.BlockIndexer()
-
-	// Register ourselves as a signing on the key manager
-	dm.domainSigner = &domainSigner{dm: dm}
-	pic.KeyManager().AddInMemorySigner("domain", dm.domainSigner)
-
-	for name, d := range dm.conf.Domains {
-		if _, err := tktypes.ParseEthAddress(d.RegistryAddress); err != nil {
-			return nil, i18n.WrapError(dm.bgCtx, err, msgs.MsgDomainRegistryAddressInvalid, d.RegistryAddress, name)
-		}
-	}
 	return &components.ManagerInitResult{}, nil
 }
 
 func (dm *domainManager) PostInit(c components.AllComponents) error {
+	dm.stateStore = c.StateManager()
+	dm.persistence = c.Persistence()
+	dm.ethClientFactory = c.EthClientFactory()
+	dm.blockIndexer = c.BlockIndexer()
+
+	// Register ourselves as a signing on the key manager
+	dm.domainSigner = &domainSigner{dm: dm}
+	c.KeyManager().AddInMemorySigner("domain", dm.domainSigner)
+
+	for name, d := range dm.conf.Domains {
+		if _, err := tktypes.ParseEthAddress(d.RegistryAddress); err != nil {
+			return i18n.WrapError(dm.bgCtx, err, msgs.MsgDomainRegistryAddressInvalid, d.RegistryAddress, name)
+		}
+	}
 	return nil
 }
 

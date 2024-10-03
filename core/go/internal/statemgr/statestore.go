@@ -14,36 +14,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package statestore
+package statemgr
 
 import (
 	"context"
 	"sync"
 
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
-
-type StateStore interface {
-	RPCModule() *rpcserver.RPCModule
-	RunInDomainContext(domainName string, contractAddress tktypes.EthAddress, fn DomainContextFunction) error
-	RunInDomainContextFlush(domainName string, contractAddress tktypes.EthAddress, fn DomainContextFunction) error
-	EnsureABISchemas(ctx context.Context, domainName string, defs []*abi.Parameter) ([]Schema, error)
-	Close()
-}
 
 type stateStore struct {
 	p              persistence.Persistence
 	bgCtx          context.Context
 	cancelCtx      context.CancelFunc
+	conf           *pldconf.StateStoreConfig
 	writer         *stateWriter
-	abiSchemaCache cache.Cache[string, Schema]
+	abiSchemaCache cache.Cache[string, components.Schema]
 	rpcModule      *rpcserver.RPCModule
 	domainLock     sync.Mutex
 	domainContexts map[string]*domainContext
@@ -53,19 +44,34 @@ var SchemaCacheDefaults = &pldconf.CacheConfig{
 	Capacity: confutil.P(1000),
 }
 
-func NewStateStore(ctx context.Context, conf *pldconf.StateStoreConfig, p persistence.Persistence) StateStore {
+func NewStateManager(ctx context.Context, conf *pldconf.StateStoreConfig, p persistence.Persistence) components.StateManager {
 	ss := &stateStore{
 		p:              p,
-		abiSchemaCache: cache.NewCache[string, Schema](&conf.SchemaCache, SchemaCacheDefaults),
+		conf:           conf,
+		abiSchemaCache: cache.NewCache[string, components.Schema](&conf.SchemaCache, SchemaCacheDefaults),
 		domainContexts: make(map[string]*domainContext),
 	}
 	ss.bgCtx, ss.cancelCtx = context.WithCancel(ctx)
-	ss.writer = newStateWriter(ctx, ss, &conf.StateWriter)
-	ss.initRPC()
 	return ss
 }
 
-func (ss *stateStore) Close() {
+func (ss *stateStore) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
+	ss.initRPC()
+	return &components.ManagerInitResult{
+		RPCModules: []*rpcserver.RPCModule{ss.rpcModule},
+	}, nil
+}
+
+func (ss *stateStore) PostInit(c components.AllComponents) error {
+	ss.writer = newStateWriter(ss.bgCtx, ss, &ss.conf.StateWriter)
+	return nil
+}
+
+func (ss *stateStore) Start() error {
+	return nil
+}
+
+func (ss *stateStore) Stop() {
 	ss.writer.stop()
 	ss.cancelCtx()
 }

@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	pbSequence "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -95,7 +94,7 @@ type StageContext struct {
 type StageFoundationService interface {
 	TransportManager() components.TransportManager
 	DomainAPI() components.DomainSmartContract
-	StateStore() statestore.StateStore // TODO: filter out to only getters so setters can be coordinated efficiently like transactions
+	StateManager() components.StateManager // TODO: filter out to only getters so setters can be coordinated efficiently like transactions
 	KeyManager() ethclient.KeyManager
 }
 
