@@ -184,14 +184,14 @@ contract IdentityRegistry is UUPSUpgradeable {
 
     function listIdentityProperties(
         bytes32 identityHash
-    ) public view returns (PropertyInfo[] memory propertyInfos) {
+    ) public view returns (PropertyInfo[] memory identityProperties) {
         bytes32[] memory hashes = propertyNames[identityHash];
-        propertyInfos = new PropertyInfo[](hashes.length);
+        identityProperties = new PropertyInfo[](hashes.length);
 
         for (uint256 i = 0; i < hashes.length; i++) {
             bytes32 hash = hashes[i];
             Property memory prop = properties[identityHash][hash];
-            propertyInfos[i] = PropertyInfo({
+            identityProperties[i] = PropertyInfo({
                 name: prop.name,
                 value: prop.value,
                 hash: hash
