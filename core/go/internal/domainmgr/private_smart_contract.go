@@ -24,7 +24,6 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/statestore"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -178,7 +177,7 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 	//       and write them directly to the sequence prior to endorsement
 	postAssembly := tx.PostAssembly
 
-	newStatesToWrite := make([]*statestore.StateUpsert, len(postAssembly.OutputStatesPotential))
+	newStatesToWrite := make([]*components.StateUpsert, len(postAssembly.OutputStatesPotential))
 	domain := dc.d
 	for i, s := range postAssembly.OutputStatesPotential {
 		schema := domain.schemasByID[s.SchemaId]
@@ -195,7 +194,7 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 				return err
 			}
 		}
-		newStatesToWrite[i] = &statestore.StateUpsert{
+		newStatesToWrite[i] = &components.StateUpsert{
 			ID:       id,
 			SchemaID: schema.IDString(),
 			Data:     tktypes.RawJSON(s.StateDataJson),
@@ -204,9 +203,9 @@ func (dc *domainContract) WritePotentialStates(ctx context.Context, tx *componen
 		}
 	}
 
-	var states []*statestore.State
+	var states []*components.State
 	if len(newStatesToWrite) > 0 {
-		err := dc.dm.stateStore.RunInDomainContext(domain.name, dc.info.Address, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
+		err := dc.dm.stateStore.RunInDomainContext(domain.name, dc.info.Address, func(ctx context.Context, dsi components.DomainStateInterface) (err error) {
 			states, err = dsi.UpsertStates(&tx.ID, newStatesToWrite)
 			return err
 		})
@@ -246,16 +245,16 @@ func (dc *domainContract) LockStates(ctx context.Context, tx *components.Private
 	postAssembly := tx.PostAssembly
 
 	// Input and output states are locked to the transaction
-	var txLockedStateUpserts []*statestore.StateUpsert
+	var txLockedStateUpserts []*components.StateUpsert
 	for _, s := range postAssembly.InputStates {
-		txLockedStateUpserts = append(txLockedStateUpserts, &statestore.StateUpsert{
+		txLockedStateUpserts = append(txLockedStateUpserts, &components.StateUpsert{
 			SchemaID: s.Schema.String(),
 			Data:     s.Data,
 			Spending: true,
 		})
 	}
 	for _, s := range postAssembly.OutputStates {
-		txLockedStateUpserts = append(txLockedStateUpserts, &statestore.StateUpsert{
+		txLockedStateUpserts = append(txLockedStateUpserts, &components.StateUpsert{
 			SchemaID: s.Schema.String(),
 			Data:     s.Data,
 			Creating: true,
@@ -263,15 +262,15 @@ func (dc *domainContract) LockStates(ctx context.Context, tx *components.Private
 	}
 
 	// Read states are just stored
-	var readStateUpserts []*statestore.StateUpsert
+	var readStateUpserts []*components.StateUpsert
 	for _, s := range postAssembly.ReadStates {
-		readStateUpserts = append(readStateUpserts, &statestore.StateUpsert{
+		readStateUpserts = append(readStateUpserts, &components.StateUpsert{
 			SchemaID: s.Schema.String(),
 			Data:     s.Data,
 		})
 	}
 
-	return dc.dm.stateStore.RunInDomainContext(dc.d.name, dc.info.Address, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
+	return dc.dm.stateStore.RunInDomainContext(dc.d.name, dc.info.Address, func(ctx context.Context, dsi components.DomainStateInterface) error {
 		// Heavy lifting is all done for us by the state store
 		_, err := dsi.UpsertStates(&tx.ID, txLockedStateUpserts)
 		if err == nil && len(readStateUpserts) > 0 {
@@ -433,8 +432,8 @@ func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateR
 		rawIDsBySchema[s.SchemaId] = append(rawIDsBySchema[s.SchemaId], tktypes.JSONString(stateID.String()))
 		stateIDs[i] = stateID
 	}
-	statesByID := make(map[string]*statestore.State)
-	err := dc.dm.stateStore.RunInDomainContext(dc.d.name, dc.info.Address, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
+	statesByID := make(map[string]*components.State)
+	err := dc.dm.stateStore.RunInDomainContext(dc.d.name, dc.info.Address, func(ctx context.Context, dsi components.DomainStateInterface) error {
 		for schemaID, stateIDs := range rawIDsBySchema {
 			statesForSchema, err := dsi.FindAvailableStates(schemaID, &query.QueryJSON{
 				Statements: query.Statements{

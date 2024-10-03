@@ -34,15 +34,12 @@ import (
 type mockComponents struct {
 	c               *componentmocks.AllComponents
 	registryManager *componentmocks.RegistryManager
-	engine          *componentmocks.Engine
 }
 
 func newMockComponents(t *testing.T) *mockComponents {
 	mc := &mockComponents{c: componentmocks.NewAllComponents(t)}
 	mc.registryManager = componentmocks.NewRegistryManager(t)
 	mc.c.On("RegistryManager").Return(mc.registryManager).Maybe()
-	mc.engine = componentmocks.NewEngine(t)
-	mc.c.On("Engine").Return(mc.engine).Maybe()
 	return mc
 }
 

@@ -82,17 +82,18 @@ func TestInitOK(t *testing.T) {
 		},
 	}
 
-	mockEngine := componentmocks.NewEngine(t)
-	mockEngine.On("EngineName").Return("utengine")
-	mockEngine.On("Init", mock.Anything).Return(&components.ManagerInitResult{}, nil)
-	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), testConfig, mockEngine).(*componentManager)
+	mockExtraManager := componentmocks.NewAdditionalManager(t)
+	mockExtraManager.On("Name").Return("unittest_manager")
+	mockExtraManager.On("PreInit", mock.Anything).Return(&components.ManagerInitResult{}, nil)
+	mockExtraManager.On("PostInit", mock.Anything).Return(nil)
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), testConfig, mockExtraManager).(*componentManager)
 	err := cm.Init()
 	require.NoError(t, err)
 
 	assert.NotNil(t, cm.KeyManager())
 	assert.NotNil(t, cm.EthClientFactory())
 	assert.NotNil(t, cm.Persistence())
-	assert.NotNil(t, cm.StateStore())
+	assert.NotNil(t, cm.StateManager())
 	assert.NotNil(t, cm.RPCServer())
 	assert.NotNil(t, cm.BlockIndexer())
 	assert.NotNil(t, cm.DomainManager())
@@ -102,7 +103,7 @@ func TestInitOK(t *testing.T) {
 	assert.NotNil(t, cm.PrivateTxManager())
 	assert.NotNil(t, cm.PublicTxManager())
 	assert.NotNil(t, cm.TxManager())
-	assert.NotNil(t, cm.Engine())
+	assert.NotNil(t, cm.IdentityResolver())
 
 	cm.Stop()
 
@@ -166,8 +167,9 @@ func TestStartOK(t *testing.T) {
 	mockTxManager.On("Start").Return(nil)
 	mockTxManager.On("Stop").Return()
 
-	mockStateStore := componentmocks.NewStateStore(t)
-	mockStateStore.On("RPCModule").Return(rpcserver.NewRPCModule("utss"))
+	mockStateManager := componentmocks.NewStateManager(t)
+	mockStateManager.On("Start").Return(nil)
+	mockStateManager.On("Stop").Return()
 
 	mockRPCServer := componentmocks.NewRPCServer(t)
 	mockRPCServer.On("Start").Return(nil)
@@ -176,12 +178,12 @@ func TestStartOK(t *testing.T) {
 	mockRPCServer.On("HTTPAddr").Return(&net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8545})
 	mockRPCServer.On("WSAddr").Return(&net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8546})
 
-	mockEngine := componentmocks.NewEngine(t)
-	mockEngine.On("Start").Return(nil)
-	mockEngine.On("EngineName").Return("unittest_engine")
-	mockEngine.On("Stop").Return()
+	mockExtraManager := componentmocks.NewAdditionalManager(t)
+	mockExtraManager.On("Start").Return(nil)
+	mockExtraManager.On("Name").Return("unittest_manager")
+	mockExtraManager.On("Stop").Return()
 
-	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &pldconf.PaladinConfig{}, mockEngine).(*componentManager)
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &pldconf.PaladinConfig{}, mockExtraManager).(*componentManager)
 	cm.ethClientFactory = mockEthClientFactory
 	cm.initResults = map[string]*components.ManagerInitResult{
 		"utengine": {
@@ -195,12 +197,12 @@ func TestStartOK(t *testing.T) {
 	cm.domainManager = mockDomainManager
 	cm.transportManager = mockTransportManager
 	cm.registryManager = mockRegistryManager
-	cm.stateStore = mockStateStore
+	cm.stateManager = mockStateManager
 	cm.rpcServer = mockRPCServer
 	cm.publicTxManager = mockPublicTxManager
 	cm.privateTxManager = mockPrivateTxManager
 	cm.txManager = mockTxManager
-	cm.engine = mockEngine
+	cm.additionalManagers = append(cm.additionalManagers, mockExtraManager)
 
 	err := cm.StartComponents()
 	require.NoError(t, err)

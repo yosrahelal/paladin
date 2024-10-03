@@ -32,7 +32,6 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
 	"gorm.io/gorm"
@@ -60,8 +59,8 @@ type domain struct {
 	initialized        atomic.Bool
 	initRetry          *retry.Retry
 	config             *prototk.DomainConfig
-	schemasBySignature map[string]statestore.Schema
-	schemasByID        map[string]statestore.Schema
+	schemasBySignature map[string]components.Schema
+	schemasByID        map[string]components.Schema
 	eventStream        *blockindexer.EventStream
 
 	initError atomic.Pointer[error]
@@ -78,8 +77,8 @@ func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDo
 		initDone:        make(chan struct{}),
 		registryAddress: tktypes.MustEthAddress(conf.RegistryAddress), // check earlier in startup
 
-		schemasByID:        make(map[string]statestore.Schema),
-		schemasBySignature: make(map[string]statestore.Schema),
+		schemasByID:        make(map[string]components.Schema),
+		schemasBySignature: make(map[string]components.Schema),
 	}
 	log.L(dm.bgCtx).Debugf("Domain %s configured. Config: %s", name, tktypes.JSONString(conf.Config))
 	d.ctx, d.cancelCtx = context.WithCancel(log.WithLogField(dm.bgCtx, "domain", d.name))
@@ -103,7 +102,7 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 	}
 
 	// Ensure all the schemas are recorded to the DB
-	var schemas []statestore.Schema
+	var schemas []components.Schema
 	if len(abiSchemas) > 0 {
 		var err error
 		schemas, err = d.dm.stateStore.EnsureABISchemas(d.ctx, d.name, abiSchemas)
@@ -247,8 +246,8 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainErrorParsingAddress)
 	}
 
-	var states []*statestore.State
-	err = d.dm.stateStore.RunInDomainContext(d.name, *addr, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
+	var states []*components.State
+	err = d.dm.stateStore.RunInDomainContext(d.name, *addr, func(ctx context.Context, dsi components.DomainStateInterface) (err error) {
 		if req.UseNullifiers != nil && *req.UseNullifiers {
 			states, err = dsi.FindAvailableNullifiers(req.SchemaId, &query)
 		} else {
@@ -615,7 +614,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		confirmedStates[*txUUID] = append(confirmedStates[*txUUID], state.Id)
 	}
 
-	newStates := make(map[uuid.UUID][]*statestore.StateUpsert, len(res.NewStates))
+	newStates := make(map[uuid.UUID][]*components.StateUpsert, len(res.NewStates))
 	for _, state := range res.NewStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
@@ -628,7 +627,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 				return nil, err
 			}
 		}
-		newStates[*txUUID] = append(newStates[*txUUID], &statestore.StateUpsert{
+		newStates[*txUUID] = append(newStates[*txUUID], &components.StateUpsert{
 			ID:       id,
 			SchemaID: state.SchemaId,
 			Data:     tktypes.RawJSON(state.StateDataJson),
@@ -636,7 +635,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		})
 	}
 
-	err = d.dm.stateStore.RunInDomainContext(d.name, contractAddress, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
+	err = d.dm.stateStore.RunInDomainContext(d.name, contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 		for txID, states := range newStates {
 			if _, err = dsi.UpsertStates(&txID, states); err != nil {
 				return err

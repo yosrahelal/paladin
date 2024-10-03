@@ -28,7 +28,7 @@ import (
 // Runs until an error occurs, or interrupted via a signal, or calling of the Stop() function
 //
 //export Run
-func Run(grpcTargetPtr, loaderUUIDPtr, configFilePtr, engineNamePtr *C.char) (rc int) {
+func Run(grpcTargetPtr, loaderUUIDPtr, configFilePtr, modePtr *C.char) (rc int) {
 	defer func() {
 		panicked := recover()
 		if panicked != nil {
@@ -42,7 +42,7 @@ func Run(grpcTargetPtr, loaderUUIDPtr, configFilePtr, engineNamePtr *C.char) (rc
 		C.GoString(grpcTargetPtr),
 		C.GoString(loaderUUIDPtr),
 		C.GoString(configFilePtr),
-		C.GoString(engineNamePtr),
+		C.GoString(modePtr),
 	)
 	rc = int(kRC)
 	return

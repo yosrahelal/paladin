@@ -38,7 +38,6 @@ type transportManager struct {
 	conf            *pldconf.TransportManagerConfig
 	localNodeName   string
 	registryManager components.RegistryManager
-	engine          components.Engine
 
 	transportsByID   map[uuid.UUID]*transport
 	transportsByName map[string]*transport
@@ -70,7 +69,6 @@ func (tm *transportManager) PostInit(c components.AllComponents) error {
 	// plugin manager starts, and thus before any domain would have started any go-routine
 	// that could have cached a nil value in memory.
 	tm.registryManager = c.RegistryManager()
-	tm.engine = c.Engine()
 	return nil
 }
 

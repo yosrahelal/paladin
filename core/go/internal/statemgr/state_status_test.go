@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package statestore
+package statemgr
 
 import (
 	"context"
@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -54,8 +55,8 @@ const widgetABI = `{
 	]
 }`
 
-func makeWidgets(t *testing.T, ctx context.Context, ss *stateStore, domainName string, contractAddress tktypes.EthAddress, schemaID string, withoutSalt []string) []*StateWithLabels {
-	states := make([]*StateWithLabels, len(withoutSalt))
+func makeWidgets(t *testing.T, ctx context.Context, ss *stateStore, domainName string, contractAddress tktypes.EthAddress, schemaID string, withoutSalt []string) []*components.StateWithLabels {
+	states := make([]*components.StateWithLabels, len(withoutSalt))
 	for i, w := range withoutSalt {
 		var ij map[string]interface{}
 		err := json.Unmarshal([]byte(w), &ij)
@@ -79,12 +80,12 @@ func toQuery(t *testing.T, queryString string) *query.QueryJSON {
 
 func TestStateLockingQuery(t *testing.T) {
 
-	ctx, ss, done := newDBTestStateStore(t)
+	ctx, ss, done := newDBTestStateManager(t)
 	defer done()
 
 	schema, err := newABISchema(ctx, "domain1", testABIParam(t, widgetABI))
 	require.NoError(t, err)
-	err = ss.persistSchemas([]*SchemaPersisted{schema.SchemaPersisted})
+	err = ss.persistSchemas([]*components.SchemaPersisted{schema.SchemaPersisted})
 	require.NoError(t, err)
 	schemaID := schema.IDString()
 

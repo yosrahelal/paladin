@@ -46,8 +46,8 @@ var (
 	MsgComponentEthClientStartError        = ffe("PD010003", "Error starting ethereum client")
 	MsgComponentDBInitError                = ffe("PD010004", "Error initializing database")
 	MsgComponentDBStartError               = ffe("PD010005", "Error starting database")
-	MsgComponentStateStoreInitError        = ffe("PD010006", "Error initializing state store")
-	MsgComponentStateStoreStartError       = ffe("PD010007", "Error starting state store")
+	MsgComponentStateManagerInitError      = ffe("PD010006", "Error initializing state store")
+	MsgComponentStateManagerStartError     = ffe("PD010007", "Error starting state store")
 	MsgComponentBlockIndexerInitError      = ffe("PD010008", "Error initializing block indexer")
 	MsgComponentBlockIndexerStartError     = ffe("PD010009", "Error starting block indexer ")
 	MsgComponentRPCServerInitError         = ffe("PD010010", "Error initializing RPC server")
@@ -70,6 +70,9 @@ var (
 	MsgComponentTxManagerInitError         = ffe("PD010027", "Error initializing transaction manager")
 	MsgComponentTxManagerStartError        = ffe("PD010028", "Error starting transaction manager ")
 	MsgComponentIdentityResolverInitError  = ffe("PD010029", "Error initializing identity resolver")
+	MsgComponentIdentityResolverStartError = ffe("PD010030", "Error starting identity resolver")
+	MsgComponentAdditionalMgrInitError     = ffe("PD010031", "Error initializing %s manager")
+	MsgComponentAdditionalMgrStartError    = ffe("PD010032", "Error initializing %s manager")
 
 	// States PD0101XX
 	MsgStateInvalidLength             = ffe("PD010101", "Invalid hash len expected=%d actual=%d")
@@ -232,7 +235,7 @@ var (
 	MsgDomainABIDecodingRequestInvalidType    = ffe("PD011647", "ABI decoding request is of invalid type '%s'")
 
 	// Entrypoint PD0117XX
-	MsgEntrypointUnknownEngine = ffe("PD011700", "Unknown engine '%s'")
+	MsgEntrypointUnknownRunMode = ffe("PD011700", "Unknown run mode '%s'")
 
 	// PrivTxMgr PD0118XX
 	MsgDomainNotProvided              = ffe("PD011800", "Domain not found in the transaction input")

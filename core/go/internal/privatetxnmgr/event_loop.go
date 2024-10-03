@@ -96,7 +96,7 @@ type Orchestrator struct {
 	nodeID              string
 	domainAPI           components.DomainSmartContract
 	sequencer           ptmgrtypes.Sequencer
-	components          components.PreInitComponentsAndManagers
+	components          components.AllComponents
 	endorsementGatherer ptmgrtypes.EndorsementGatherer
 	publisher           ptmgrtypes.Publisher
 	identityResolver    components.IdentityResolver
@@ -109,7 +109,7 @@ func NewOrchestrator(
 	nodeID string,
 	contractAddress tktypes.EthAddress,
 	oc *pldconf.PrivateTxManagerOrchestratorConfig,
-	allComponents components.PreInitComponentsAndManagers,
+	allComponents components.AllComponents,
 	domainAPI components.DomainSmartContract,
 	sequencer ptmgrtypes.Sequencer,
 	endorsementGatherer ptmgrtypes.EndorsementGatherer,

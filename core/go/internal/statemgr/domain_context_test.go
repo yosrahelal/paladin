@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package statestore
+package statemgr
 
 import (
 	"context"
@@ -26,6 +26,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -80,7 +81,7 @@ type FakeCoin struct {
 	Salt   ethtypes.HexBytes0xPrefix `json:"salt"`
 }
 
-func parseFakeCoin(t *testing.T, s *State) *FakeCoin {
+func parseFakeCoin(t *testing.T, s *components.State) *FakeCoin {
 	var c FakeCoin
 	err := json.Unmarshal(s.Data, &c)
 	require.NoError(t, err)
@@ -89,13 +90,13 @@ func parseFakeCoin(t *testing.T, s *State) *FakeCoin {
 
 func TestStateFlushAsync(t *testing.T) {
 
-	_, ss, done := newDBTestStateStore(t)
+	_, ss, done := newDBTestStateManager(t)
 	defer done()
 
 	contractAddress := tktypes.RandAddress()
 	flushed := make(chan bool)
-	err := ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
-		return dsi.Flush(func(ctx context.Context, dsi DomainStateInterface) error {
+	err := ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+		return dsi.Flush(func(ctx context.Context, dsi components.DomainStateInterface) error {
 			flushed <- true
 			return nil
 		})
@@ -112,7 +113,7 @@ func TestStateFlushAsync(t *testing.T) {
 
 func TestUpsertSchemaEmptyList(t *testing.T) {
 
-	_, ss, done := newDBTestStateStore(t)
+	_, ss, done := newDBTestStateManager(t)
 	defer done()
 
 	schemas, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{})
@@ -123,7 +124,7 @@ func TestUpsertSchemaEmptyList(t *testing.T) {
 
 func TestUpsertSchemaAndStates(t *testing.T) {
 
-	_, ss, done := newDBTestStateStore(t)
+	_, ss, done := newDBTestStateManager(t)
 	defer done()
 
 	schemas, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
@@ -133,8 +134,8 @@ func TestUpsertSchemaAndStates(t *testing.T) {
 	fakeHash := tktypes.HexBytes(tktypes.RandBytes(32))
 
 	contractAddress := tktypes.RandAddress()
-	err = ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
-		states, err := dsi.UpsertStates(nil, []*StateUpsert{
+	err = ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+		states, err := dsi.UpsertStates(nil, []*components.StateUpsert{
 			{
 				SchemaID: schemaID,
 				Data:     tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0x1eDfD974fE6828dE81a1a762df680111870B7cDD", "salt": "%s"}`, tktypes.RandHex(32))),
@@ -157,7 +158,7 @@ func TestUpsertSchemaAndStates(t *testing.T) {
 
 func TestStateContextMintSpendMint(t *testing.T) {
 
-	_, ss, done := newDBTestStateStore(t)
+	_, ss, done := newDBTestStateManager(t)
 	defer done()
 
 	transactionID := uuid.New()
@@ -170,10 +171,10 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	schemaID = schemas[0].IDString()
 
 	contractAddress := tktypes.RandAddress()
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 
 		// Store some states
-		tx1states, err := dsi.UpsertStates(&transactionID, []*StateUpsert{
+		tx1states, err := dsi.UpsertStates(&transactionID, []*components.StateUpsert{
 			{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
 			{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 10,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
 			{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 75,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
@@ -216,7 +217,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 		// Do a quick check on upsert semantics with un-flushed updates, to make sure the unflushed list doesn't dup
 		tx2Salts := []string{tktypes.RandHex(32), tktypes.RandHex(32)}
 		for dup := 0; dup < 2; dup++ {
-			tx2states, err := dsi.UpsertStates(&transactionID, []*StateUpsert{
+			tx2states, err := dsi.UpsertStates(&transactionID, []*components.StateUpsert{
 				{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 35, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tx2Salts[0])), Creating: true},
 				{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 50, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tx2Salts[1])), Creating: true},
 			})
@@ -250,7 +251,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 		// Check the DB persisted state is what we expect
 		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{
 			"sort": [ "owner", "amount" ]
@@ -272,7 +273,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 			states[0].ID.String(), // 50
 		})
 		require.NoError(t, err)
-		tx3states, err := dsi.UpsertStates(&transactionID, []*StateUpsert{
+		tx3states, err := dsi.UpsertStates(&transactionID, []*components.StateUpsert{
 			{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
 			{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 30, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
 		})
@@ -343,7 +344,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 
 		// Confirm
 		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{}`))
@@ -358,7 +359,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 
 func TestStateContextMintSpendWithNullifier(t *testing.T) {
 
-	_, ss, done := newDBTestStateStore(t)
+	_, ss, done := newDBTestStateManager(t)
 	defer done()
 
 	transactionID := uuid.New()
@@ -376,10 +377,10 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	data2 := tktypes.RawJSON(fmt.Sprintf(`{"amount": 10,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32)))
 
 	contractAddress := tktypes.RandAddress()
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 
 		// Start with 2 states
-		tx1states, err := dsi.UpsertStates(&transactionID, []*StateUpsert{
+		tx1states, err := dsi.UpsertStates(&transactionID, []*components.StateUpsert{
 			{ID: stateID1, SchemaID: schemaID, Data: data1, Creating: true},
 			{ID: stateID2, SchemaID: schemaID, Data: data2, Creating: true},
 		})
@@ -394,7 +395,7 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 		assert.Len(t, states, 0)
 
 		// Attach a nullifier to the first state
-		err = dsi.UpsertNullifiers([]*StateNullifier{
+		err = dsi.UpsertNullifiers([]*components.StateNullifier{
 			{State: stateID1, Nullifier: nullifier1},
 		})
 		require.NoError(t, err)
@@ -410,7 +411,7 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 
 		// Confirm still 2 states and 1 nullifier
 		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{}`))
@@ -427,7 +428,7 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 		require.NoError(t, err)
 
 		// Mark the first state as "spending"
-		_, err = dsi.UpsertStates(&transactionID, []*StateUpsert{
+		_, err = dsi.UpsertStates(&transactionID, []*components.StateUpsert{
 			{ID: stateID1, SchemaID: schemaID, Data: data1, Spending: true},
 		})
 		assert.NoError(t, err)
@@ -458,14 +459,14 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 
 		states, err := dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 		require.NoError(t, err)
 		assert.Len(t, states, 0)
 
 		// Attach a nullifier to the second state
-		err = dsi.UpsertNullifiers([]*StateNullifier{
+		err = dsi.UpsertNullifiers([]*components.StateNullifier{
 			{State: stateID2, Nullifier: nullifier2},
 		})
 		require.NoError(t, err)
@@ -484,7 +485,7 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 
 func TestDSILatch(t *testing.T) {
 
-	_, ss, done := newDBTestStateStore(t)
+	_, ss, done := newDBTestStateManager(t)
 
 	contractAddress := tktypes.RandAddress()
 	dsi := ss.getDomainContext("domain1", *contractAddress)
@@ -492,14 +493,14 @@ func TestDSILatch(t *testing.T) {
 	require.NoError(t, err)
 
 	done()
-	err = dsi.run(func(ctx context.Context, dsi DomainStateInterface) error { return nil })
+	err = dsi.run(func(ctx context.Context, dsi components.DomainStateInterface) error { return nil })
 	assert.Regexp(t, "PD010301", err)
 
 }
 
 func TestDSIBadSchema(t *testing.T) {
 
-	_, ss, _, done := newDBMockStateStore(t)
+	_, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	_, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{{}})
@@ -509,7 +510,7 @@ func TestDSIBadSchema(t *testing.T) {
 
 func TestDSIFlushErrorCapture(t *testing.T) {
 
-	_, ss, done := newDBTestStateStore(t)
+	_, ss, done := newDBTestStateManager(t)
 	defer done()
 
 	fakeFlushError := func(dc *domainContext) {
@@ -522,7 +523,7 @@ func TestDSIFlushErrorCapture(t *testing.T) {
 	require.NoError(t, err)
 
 	contractAddress := tktypes.RandAddress()
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 
 		dc := dsi.(*domainContext)
 
@@ -581,7 +582,7 @@ func TestDSIFlushErrorCapture(t *testing.T) {
 
 func TestDSIMergedUnFlushedWhileFlushing(t *testing.T) {
 
-	ctx, ss, _, done := newDBMockStateStore(t)
+	ctx, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	schema, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
@@ -594,11 +595,11 @@ func TestDSIMergedUnFlushedWhileFlushing(t *testing.T) {
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
 		tktypes.RandHex(32))), nil)
 	require.NoError(t, err)
-	s1.Locked = &StateLock{State: s1.ID, Transaction: uuid.New(), Creating: true}
+	s1.Locked = &components.StateLock{State: s1.ID, Transaction: uuid.New(), Creating: true}
 
 	dc.flushing = &writeOperation{
-		states: []*StateWithLabels{s1},
-		stateLocks: []*StateLock{
+		states: []*components.StateWithLabels{s1},
+		stateLocks: []*components.StateLock{
 			s1.Locked,
 			{State: []byte("another"), Spending: true},
 		},
@@ -608,7 +609,7 @@ func TestDSIMergedUnFlushedWhileFlushing(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, spending, 1)
 
-	states, err := dc.mergedUnFlushed(schema, []*State{}, &query.QueryJSON{
+	states, err := dc.mergedUnFlushed(schema, []*components.State{}, &query.QueryJSON{
 		Sort: []string{".created"},
 	}, false)
 	require.NoError(t, err)
@@ -618,7 +619,7 @@ func TestDSIMergedUnFlushedWhileFlushing(t *testing.T) {
 
 func TestDSIMergedUnFlushedSpend(t *testing.T) {
 
-	ctx, ss, _, done := newDBMockStateStore(t)
+	ctx, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	schema1, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
@@ -634,23 +635,23 @@ func TestDSIMergedUnFlushedSpend(t *testing.T) {
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
 		tktypes.RandHex(32))), nil)
 	require.NoError(t, err)
-	s1.Locked = &StateLock{State: s1.ID, Transaction: uuid.New(), Creating: true}
+	s1.Locked = &components.StateLock{State: s1.ID, Transaction: uuid.New(), Creating: true}
 
 	s2, err := schema2.ProcessState(ctx, *contractAddress, tktypes.RawJSON(fmt.Sprintf(
 		`{"tokenUri": "%s", "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
 		tktypes.RandHex(32), tktypes.RandHex(32))), nil)
 	require.NoError(t, err)
-	s2.Locked = &StateLock{State: s2.ID, Transaction: uuid.New(), Creating: true}
+	s2.Locked = &components.StateLock{State: s2.ID, Transaction: uuid.New(), Creating: true}
 
 	dc.flushing = &writeOperation{
-		states: []*StateWithLabels{s1, s2},
-		stateSpends: []*StateSpend{
+		states: []*components.StateWithLabels{s1, s2},
+		stateSpends: []*components.StateSpend{
 			{State: s1.ID[:]},
 			{State: s2.ID[:]},
 		},
 	}
 	dc.unFlushed = &writeOperation{
-		stateSpends: []*StateSpend{
+		stateSpends: []*components.StateSpend{
 			{State: tktypes.RandBytes(32)},
 		},
 	}
@@ -659,7 +660,7 @@ func TestDSIMergedUnFlushedSpend(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, spent, 3)
 
-	states, err := dc.mergedUnFlushed(schema1, []*State{}, &query.QueryJSON{}, false)
+	states, err := dc.mergedUnFlushed(schema1, []*components.State{}, &query.QueryJSON{}, false)
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 
@@ -667,7 +668,7 @@ func TestDSIMergedUnFlushedSpend(t *testing.T) {
 
 func TestDSIMergedUnFlushedWhileFlushingDedup(t *testing.T) {
 
-	ctx, ss, _, done := newDBMockStateStore(t)
+	ctx, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	schema, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
@@ -680,11 +681,11 @@ func TestDSIMergedUnFlushedWhileFlushingDedup(t *testing.T) {
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
 		tktypes.RandHex(32))), nil)
 	require.NoError(t, err)
-	s1.Locked = &StateLock{State: s1.ID, Transaction: uuid.New(), Creating: true}
+	s1.Locked = &components.StateLock{State: s1.ID, Transaction: uuid.New(), Creating: true}
 
 	dc.flushing = &writeOperation{
-		states: []*StateWithLabels{s1},
-		stateLocks: []*StateLock{
+		states: []*components.StateWithLabels{s1},
+		stateLocks: []*components.StateLock{
 			s1.Locked,
 			{State: []byte("another"), Spending: true},
 		},
@@ -698,7 +699,7 @@ func TestDSIMergedUnFlushedWhileFlushingDedup(t *testing.T) {
 	inTheFlush := dc.flushing.states[0]
 	dc.stateLock.Unlock()
 
-	states, err := dc.mergedUnFlushed(schema, []*State{
+	states, err := dc.mergedUnFlushed(schema, []*components.State{
 		inTheFlush.State,
 	}, &query.QueryJSON{
 		Sort: []string{".created"},
@@ -710,7 +711,7 @@ func TestDSIMergedUnFlushedWhileFlushingDedup(t *testing.T) {
 
 func TestDSIMergedUnFlushedEvalError(t *testing.T) {
 
-	ctx, ss, _, done := newDBMockStateStore(t)
+	ctx, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	schema, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
@@ -725,10 +726,10 @@ func TestDSIMergedUnFlushedEvalError(t *testing.T) {
 	require.NoError(t, err)
 
 	dc.flushing = &writeOperation{
-		states: []*StateWithLabels{s1},
+		states: []*components.StateWithLabels{s1},
 	}
 
-	_, err = dc.mergedUnFlushed(schema, []*State{}, toQuery(t,
+	_, err = dc.mergedUnFlushed(schema, []*components.State{}, toQuery(t,
 		`{"eq": [{ "field": "wrong", "value": "any" }]}`,
 	), false)
 	assert.Regexp(t, "PD010700", err)
@@ -737,7 +738,7 @@ func TestDSIMergedUnFlushedEvalError(t *testing.T) {
 
 func TestDSIMergedInMemoryMatchesRecoverLabelsFail(t *testing.T) {
 
-	ctx, ss, _, done := newDBMockStateStore(t)
+	ctx, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	schema, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
@@ -753,19 +754,19 @@ func TestDSIMergedInMemoryMatchesRecoverLabelsFail(t *testing.T) {
 	s1.Data = tktypes.RawJSON(`! wrong `)
 
 	dc.flushing = &writeOperation{
-		states: []*StateWithLabels{s1},
+		states: []*components.StateWithLabels{s1},
 	}
 
-	_, err = dc.mergeInMemoryMatches(schema, []*State{
+	_, err = dc.mergeInMemoryMatches(schema, []*components.State{
 		s1.State,
-	}, []*StateWithLabels{}, nil)
+	}, []*components.StateWithLabels{}, nil)
 	assert.Regexp(t, "PD010116", err)
 
 }
 
 func TestDSIMergedInMemoryMatchesSortFail(t *testing.T) {
 
-	ctx, ss, _, done := newDBMockStateStore(t)
+	ctx, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	schema, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
@@ -780,12 +781,12 @@ func TestDSIMergedInMemoryMatchesSortFail(t *testing.T) {
 	require.NoError(t, err)
 
 	dc.flushing = &writeOperation{
-		states: []*StateWithLabels{s1},
+		states: []*components.StateWithLabels{s1},
 	}
 
-	_, err = dc.mergeInMemoryMatches(schema, []*State{
+	_, err = dc.mergeInMemoryMatches(schema, []*components.State{
 		s1.State,
-	}, []*StateWithLabels{}, toQuery(t,
+	}, []*components.StateWithLabels{}, toQuery(t,
 		`{"sort": ["wrong"]}`,
 	))
 	assert.Regexp(t, "PD010700", err)
@@ -793,7 +794,7 @@ func TestDSIMergedInMemoryMatchesSortFail(t *testing.T) {
 
 func TestDSIFindBadQueryAndInsert(t *testing.T) {
 
-	_, ss, done := newDBTestStateStore(t)
+	_, ss, done := newDBTestStateManager(t)
 	defer done()
 
 	schemas, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
@@ -802,7 +803,7 @@ func TestDSIFindBadQueryAndInsert(t *testing.T) {
 	assert.Equal(t, "type=FakeCoin(bytes32 salt,address owner,uint256 amount),labels=[owner,amount]", schemas[0].Signature())
 
 	contractAddress := tktypes.RandAddress()
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 		_, err = dsi.FindAvailableStates(schemaID, toQuery(t,
 			`{"sort":["wrong"]}`))
 		assert.Regexp(t, "PD010700", err)
@@ -811,7 +812,7 @@ func TestDSIFindBadQueryAndInsert(t *testing.T) {
 			`{"sort":["wrong"]}`))
 		assert.Regexp(t, "PD010700", err)
 
-		_, err = dsi.UpsertStates(nil, []*StateUpsert{
+		_, err = dsi.UpsertStates(nil, []*components.StateUpsert{
 			{SchemaID: schemaID, Data: tktypes.RawJSON(`"wrong"`)},
 		})
 		assert.Regexp(t, "FF22038", err)
@@ -824,13 +825,13 @@ func TestDSIFindBadQueryAndInsert(t *testing.T) {
 
 func TestDSIBadIDs(t *testing.T) {
 
-	_, ss, _, done := newDBMockStateStore(t)
+	_, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	contractAddress := tktypes.RandAddress()
-	_ = ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi DomainStateInterface) error {
+	_ = ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 
-		_, err := dsi.UpsertStates(nil, []*StateUpsert{
+		_, err := dsi.UpsertStates(nil, []*components.StateUpsert{
 			{SchemaID: "wrong"},
 		})
 		assert.Regexp(t, "PD020007", err)
@@ -854,7 +855,7 @@ func TestDSIBadIDs(t *testing.T) {
 
 func TestDSIResetWithMixed(t *testing.T) {
 
-	_, ss, _, done := newDBMockStateStore(t)
+	_, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	contractAddress := tktypes.RandAddress()
@@ -879,7 +880,7 @@ func TestDSIResetWithMixed(t *testing.T) {
 }
 
 func TestCheckEvalGTTimestamp(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateStore(t)
+	ctx, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	contractAddress := tktypes.RandAddress()
@@ -895,7 +896,7 @@ func TestCheckEvalGTTimestamp(t *testing.T) {
 	require.NoError(t, err)
 	labelSet := dc.ss.labelSetFor(schema)
 
-	s := &State{
+	s := &components.State{
 		ID:      tktypes.MustParseHexBytes("2eaf4727b7c7e9b3728b1344ac38ea6d8698603dc3b41d9458d7c011c20ce672"),
 		Created: tktypes.TimestampFromUnix(1726545933211347000),
 	}

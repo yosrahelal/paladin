@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package statestore
+package statemgr
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"gorm.io/gorm"
@@ -30,54 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-type State struct {
-	ID              tktypes.HexBytes   `json:"id"                  gorm:"primaryKey"`
-	Created         tktypes.Timestamp  `json:"created"             gorm:"autoCreateTime:nano"`
-	DomainName      string             `json:"domain"              gorm:"primaryKey"`
-	Schema          tktypes.Bytes32    `json:"schema"`
-	ContractAddress tktypes.EthAddress `json:"contractAddress"`
-	Data            tktypes.RawJSON    `json:"data"`
-	Labels          []*StateLabel      `json:"-"                   gorm:"foreignKey:state;references:id;"`
-	Int64Labels     []*StateInt64Label `json:"-"                   gorm:"foreignKey:state;references:id;"`
-	Confirmed       *StateConfirm      `json:"confirmed,omitempty" gorm:"foreignKey:state;references:id;"`
-	Spent           *StateSpend        `json:"spent,omitempty"     gorm:"foreignKey:state;references:id;"`
-	Locked          *StateLock         `json:"locked,omitempty"    gorm:"foreignKey:state;references:id;"`
-	Nullifier       *StateNullifier    `json:"nullifier,omitempty" gorm:"foreignKey:state;references:id;"`
-}
-
-type StateUpsert struct {
-	ID       tktypes.HexBytes
-	SchemaID string
-	Data     tktypes.RawJSON
-	Creating bool
-	Spending bool
-}
-
-// StateWithLabels is a newly prepared state that has not yet been persisted
-type StateWithLabels struct {
-	*State
-	LabelValues filters.ValueSet
-}
-
-type StateLabel struct {
-	DomainName string           `gorm:"primaryKey"`
-	State      tktypes.HexBytes `gorm:"primaryKey"`
-	Label      string
-	Value      string
-}
-
-type StateInt64Label struct {
-	DomainName string           `gorm:"primaryKey"`
-	State      tktypes.HexBytes `gorm:"primaryKey"`
-	Label      string
-	Value      int64
-}
-
-func (s *StateWithLabels) ValueSet() filters.ValueSet {
-	return s.LabelValues
-}
-
-func (ss *stateStore) PersistState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, data tktypes.RawJSON, id tktypes.HexBytes) (*StateWithLabels, error) {
+func (ss *stateStore) PersistState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, data tktypes.RawJSON, id tktypes.HexBytes) (*components.StateWithLabels, error) {
 
 	schema, err := ss.GetSchema(ctx, domainName, schemaID, true)
 	if err != nil {
@@ -90,12 +44,12 @@ func (ss *stateStore) PersistState(ctx context.Context, domainName string, contr
 	}
 
 	op := ss.writer.newWriteOp(s.State.DomainName, contractAddress)
-	op.states = []*StateWithLabels{s}
+	op.states = []*components.StateWithLabels{s}
 	ss.writer.queue(ctx, op)
 	return s, op.flush(ctx)
 }
 
-func (ss *stateStore) GetState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID string, failNotFound, withLabels bool) (*State, error) {
+func (ss *stateStore) GetState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID string, failNotFound, withLabels bool) (*components.State, error) {
 	id, err := tktypes.ParseBytes32Ctx(ctx, stateID)
 	if err != nil {
 		return nil, err
@@ -105,7 +59,7 @@ func (ss *stateStore) GetState(ctx context.Context, domainName string, contractA
 	if withLabels {
 		q = q.Preload("Labels").Preload("Int64Labels")
 	}
-	var states []*State
+	var states []*components.State
 	err = q.
 		Where("domain_name = ?", domainName).
 		Where("contract_address = ?", contractAddress).
@@ -150,7 +104,7 @@ func (ft trackingLabelSet) ResolverFor(fieldName string) filters.FieldResolver {
 	return nil
 }
 
-func (ss *stateStore) labelSetFor(schema Schema) *trackingLabelSet {
+func (ss *stateStore) labelSetFor(schema components.Schema) *trackingLabelSet {
 	tls := trackingLabelSet{labels: make(map[string]*schemaLabelInfo), used: make(map[string]*schemaLabelInfo)}
 	for _, fi := range schema.(labelInfoAccess).labelInfo() {
 		tls.labels[fi.label] = fi
@@ -158,7 +112,7 @@ func (ss *stateStore) labelSetFor(schema Schema) *trackingLabelSet {
 	return &tls
 }
 
-func (ss *stateStore) FindStates(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, query *query.QueryJSON, status StateStatusQualifier) (s []*State, err error) {
+func (ss *stateStore) FindStates(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, query *query.QueryJSON, status StateStatusQualifier) (s []*components.State, err error) {
 	_, s, err = ss.findStates(ctx, domainName, contractAddress, schemaID, query, status)
 	return s, err
 }
@@ -171,7 +125,7 @@ func (ss *stateStore) findStates(
 	jq *query.QueryJSON,
 	status StateStatusQualifier,
 	excluded ...tktypes.HexBytes,
-) (schema Schema, s []*State, err error) {
+) (schema components.Schema, s []*components.State, err error) {
 	return ss.findStatesCommon(ctx, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
 		db := ss.p.DB()
 		q = q.Joins("Confirmed", db.Select("transaction")).
@@ -197,7 +151,7 @@ func (ss *stateStore) findAvailableNullifiers(
 	statesWithNullifiers []tktypes.HexBytes,
 	spendingStates []tktypes.HexBytes,
 	spentNullifiers []tktypes.HexBytes,
-) (schema Schema, s []*State, err error) {
+) (schema components.Schema, s []*components.State, err error) {
 	return ss.findStatesCommon(ctx, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
 		db := ss.p.DB()
 		hasNullifier := db.Where("nullifier IS NOT NULL")
@@ -236,7 +190,7 @@ func (ss *stateStore) findStatesCommon(
 	schemaID string,
 	jq *query.QueryJSON,
 	addQuery func(q *gorm.DB) *gorm.DB,
-) (schema Schema, s []*State, err error) {
+) (schema components.Schema, s []*components.State, err error) {
 	if len(jq.Sort) == 0 {
 		jq.Sort = []string{".created"}
 	}
@@ -269,7 +223,7 @@ func (ss *stateStore) findStatesCommon(
 		Where("states.schema = ?", schema.Persisted().ID)
 	q = addQuery(q)
 
-	var states []*State
+	var states []*components.State
 	q = q.Find(&states)
 	if q.Error != nil {
 		return nil, nil, q.Error
@@ -284,7 +238,7 @@ func (ss *stateStore) MarkConfirmed(ctx context.Context, domainName string, cont
 	}
 
 	op := ss.writer.newWriteOp(domainName, contractAddress)
-	op.stateConfirms = []*StateConfirm{
+	op.stateConfirms = []*components.StateConfirm{
 		{DomainName: domainName, State: id, Transaction: transactionID},
 	}
 
@@ -299,7 +253,7 @@ func (ss *stateStore) MarkSpent(ctx context.Context, domainName string, contract
 	}
 
 	op := ss.writer.newWriteOp(domainName, contractAddress)
-	op.stateSpends = []*StateSpend{
+	op.stateSpends = []*components.StateSpend{
 		{DomainName: domainName, State: id, Transaction: transactionID},
 	}
 
@@ -314,7 +268,7 @@ func (ss *stateStore) MarkLocked(ctx context.Context, domainName string, contrac
 	}
 
 	op := ss.writer.newWriteOp(domainName, contractAddress)
-	op.stateLocks = []*StateLock{
+	op.stateLocks = []*components.StateLock{
 		{DomainName: domainName, State: id, Transaction: transactionID, Creating: creating, Spending: spending},
 	}
 

@@ -29,7 +29,6 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
@@ -221,7 +220,7 @@ func goodDomainConf() *prototk.DomainConfig {
 	}
 }
 
-func mockSchemas(schemas ...statestore.Schema) func(mc *mockComponents) {
+func mockSchemas(schemas ...components.Schema) func(mc *mockComponents) {
 	return func(mc *mockComponents) {
 		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return(schemas, nil)
 	}
@@ -415,7 +414,7 @@ func TestDomainFindAvailableStatesBadAddress(t *testing.T) {
 
 func TestDomainFindAvailableStatesFail(t *testing.T) {
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), func(mc *mockComponents) {
-		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return([]statestore.Schema{}, nil)
+		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return([]components.Schema{}, nil)
 		mc.domainStateInterface.On("FindAvailableStates", "12345", mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
@@ -437,8 +436,8 @@ func storeState(t *testing.T, dm *domainManager, tp *testPlugin, contractAddress
 	stateJSON, err := json.Marshal(state)
 	require.NoError(t, err)
 
-	err = dm.stateStore.RunInDomainContextFlush("test1", contractAddress, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
-		newStates, err := dsi.UpsertStates(&txID, []*statestore.StateUpsert{
+	err = dm.stateStore.RunInDomainContextFlush("test1", contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+		newStates, err := dsi.UpsertStates(&txID, []*components.StateUpsert{
 			{
 				SchemaID: tp.stateSchemas[0].Id,
 				Data:     stateJSON,

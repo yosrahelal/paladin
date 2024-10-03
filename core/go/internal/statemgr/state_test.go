@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package statestore
+package statemgr
 
 import (
 	"fmt"
@@ -23,13 +23,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestPersistStateMissingSchema(t *testing.T) {
-	ctx, ss, db, done := newDBMockStateStore(t)
+	ctx, ss, db, done := newDBMockStateManager(t)
 	defer done()
 
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
@@ -40,7 +41,7 @@ func TestPersistStateMissingSchema(t *testing.T) {
 }
 
 func TestPersistStateInvalidState(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateStore(t)
+	ctx, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
@@ -55,7 +56,7 @@ func TestPersistStateInvalidState(t *testing.T) {
 }
 
 func TestGetStateMissing(t *testing.T) {
-	ctx, ss, db, done := newDBMockStateStore(t)
+	ctx, ss, db, done := newDBMockStateManager(t)
 	defer done()
 
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
@@ -66,7 +67,7 @@ func TestGetStateMissing(t *testing.T) {
 }
 
 func TestGetStateBadID(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateStore(t)
+	ctx, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	contractAddress := tktypes.RandAddress()
@@ -75,7 +76,7 @@ func TestGetStateBadID(t *testing.T) {
 }
 
 func TestMarkConfirmedBadID(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateStore(t)
+	ctx, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	contractAddress := tktypes.RandAddress()
@@ -84,7 +85,7 @@ func TestMarkConfirmedBadID(t *testing.T) {
 }
 
 func TestMarkSpentBadID(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateStore(t)
+	ctx, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	contractAddress := tktypes.RandAddress()
@@ -93,7 +94,7 @@ func TestMarkSpentBadID(t *testing.T) {
 }
 
 func TestMarkLockedBadID(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateStore(t)
+	ctx, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	contractAddress := tktypes.RandAddress()
@@ -102,7 +103,7 @@ func TestMarkLockedBadID(t *testing.T) {
 }
 
 func TestFindStatesMissingSchema(t *testing.T) {
-	ctx, ss, db, done := newDBMockStateStore(t)
+	ctx, ss, db, done := newDBMockStateManager(t)
 	defer done()
 
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
@@ -113,7 +114,7 @@ func TestFindStatesMissingSchema(t *testing.T) {
 }
 
 func TestFindStatesBadQuery(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateStore(t)
+	ctx, ss, _, done := newDBMockStateManager(t)
 	defer done()
 
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
@@ -137,13 +138,13 @@ func TestFindStatesBadQuery(t *testing.T) {
 }
 
 func TestFindStatesFail(t *testing.T) {
-	ctx, ss, db, done := newDBMockStateStore(t)
+	ctx, ss, db, done := newDBMockStateManager(t)
 	defer done()
 
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
 	cacheKey := schemaCacheKey("domain1", schemaID)
 	ss.abiSchemaCache.Set(cacheKey, &abiSchema{
-		SchemaPersisted: &SchemaPersisted{ID: schemaID},
+		SchemaPersisted: &components.SchemaPersisted{ID: schemaID},
 		definition:      &abi.Parameter{},
 	})
 

@@ -21,6 +21,7 @@ import "context"
 // It can integrate with a local key manager or can communicate with an other IdentityResolver on a remote node
 // depending on the node identity part of the lookup string
 type IdentityResolver interface {
+	ManagerLifecycle
 	TransportClient
 	ResolveVerifier(ctx context.Context, lookup string, algorithm string, verifierType string) (string, error)
 	ResolveVerifierAsync(ctx context.Context, lookup string, algorithm string, verifierType string, resolved func(ctx context.Context, verifier string), failed func(ctx context.Context, err error))
