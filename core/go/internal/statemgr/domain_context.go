@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package statestore
+package statemgr
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
@@ -29,88 +30,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
-
-type DomainContextFunction func(ctx context.Context, dsi DomainStateInterface) error
-
-// The DSI is the state interface that is exposed outside of the statestore package, for the
-// transaction engine to use to safely query and update the state in the context of a particular
-// domain.
-//
-// A single locked execution context is available per domain private contract, per paladin runtime.
-// In the future we may consider more granular execution contexts to increase parallelism.
-//
-// The locked execution context works only in-memory until explicitly committed, at which point
-// all the operations queued up are flushed to the DB asynchronously.
-//
-// We can then continue to build the next set of flushable operations, while the first set is
-// still flushing (a simple pipeline approach).
-type DomainStateInterface interface {
-
-	// FindAvailableStates is the main query function, only returning states that are available.
-	// Note this does not lock these states in any way, you must call that afterwards as:
-	// 1) We don't know which will be selected as important by the domain - some might be un-used
-	// 2) We deliberately return states that are locked to a transaction (but not spent yet) - which means the
-	//    result of the any assemble that uses those states, will be a transaction that must
-	//    be on the same transaction where those states are locked.
-	FindAvailableStates(schemaID string, query *query.QueryJSON) (s []*State, err error)
-
-	// FindAvailableNullifiers is similar to FindAvailableStates, but for domains that leverage
-	// nullifiers to record spending.
-	FindAvailableNullifiers(schemaID string, query *query.QueryJSON) (s []*State, err error)
-
-	// MarkStatesSpending writes a lock record so the state is now locked for spending, and
-	// thus subsequent calls to FindAvailableStates will not return these states.
-	MarkStatesSpending(transactionID uuid.UUID, stateIDs []string) error
-
-	// MarkStatesRead writes a lock record so the state is now locked to this transaction
-	// for reading - thus subsequent calls to FindAvailableStates will return these states
-	// with the lock record attached.
-	// That will inform them they need to join to this transaction if they wish to use those states.
-	MarkStatesRead(transactionID uuid.UUID, stateIDs []string) error
-
-	// MarkStatesSpent writes a spend record so the state is now considered spent, and can
-	// no longer be used as an input to a future transaction.
-	MarkStatesSpent(transactionID uuid.UUID, stateIDs []string) error
-
-	// MarkStatesConfirmed writes a confirmation record so the state is now confirmed and unspent.
-	MarkStatesConfirmed(transactionID uuid.UUID, stateIDs []string) error
-
-	// UpsertStates creates or updates states.
-	// They are available immediately within the domain for return in FindAvailableStates
-	// on the domain (even before the flush).
-	// If a non-nil transaction ID is supplied, then the states are mark locked to the specified
-	// transaction. They can then be locked-for-creation, locked-for-spending, for simply
-	// locked for existence to avoid other transactions spending them.
-	UpsertStates(transactionID *uuid.UUID, states []*StateUpsert) (s []*State, err error)
-
-	// UpsertNullifiers creates nullifier records associated with states.
-	// Nullifiers are an alternate state identifier (separate from the state ID) that can be used
-	// when recording spent states.
-	UpsertNullifiers(nullifiers []*StateNullifier) error
-
-	// ResetTransaction queues up removal of all lock records for a given transaction
-	// Note that the private data of the states themselves are not removed
-	ResetTransaction(transactionID uuid.UUID) error
-
-	// Flush moves the un-flushed set into flushing status, queueing to a DB writer to batch write
-	// to the database.
-	// Subsequent calls to the DMI will add to a new un-flushed set.
-	//
-	// If there is already a flush in progress, this call will BLOCK until that flush has finished.
-	//
-	// The flush itself then happens asynchronously - any error will be reported back to the next call
-	// that happens after the error occurs, and the unFlushed state will be cleared at that point.
-	//
-	// This reverts the domain back in the same way as a crash-restart.
-	//
-	// Callback is invoked ONLY on a successful flush, asynchronously on the Domain Context.
-	// So if supplied, the caller must not rely on it being called, and must not block holding the
-	// domain context until it is called.
-	//
-	// NOTE: For special cases where a domain callback requires a sync flush or error to complete processing,
-	//       use RunInDomainContextFlush()
-	Flush(successCallback ...DomainContextFunction) error
-}
 
 type domainContext struct {
 	ss              *stateStore
@@ -124,11 +43,11 @@ type domainContext struct {
 	flushResult     chan error
 }
 
-func (ss *stateStore) RunInDomainContext(domainName string, contractAddress tktypes.EthAddress, fn DomainContextFunction) error {
+func (ss *stateStore) RunInDomainContext(domainName string, contractAddress tktypes.EthAddress, fn components.DomainContextFunction) error {
 	return ss.getDomainContext(domainName, contractAddress).run(fn)
 }
 
-func (ss *stateStore) RunInDomainContextFlush(domainName string, contractAddress tktypes.EthAddress, fn DomainContextFunction) error {
+func (ss *stateStore) RunInDomainContextFlush(domainName string, contractAddress tktypes.EthAddress, fn components.DomainContextFunction) error {
 	dc := ss.getDomainContext(domainName, contractAddress)
 	err := dc.run(fn)
 	if err == nil {
@@ -177,7 +96,7 @@ func (dc *domainContext) returnLatch() {
 	<-dc.latch
 }
 
-func (dc *domainContext) run(fn func(ctx context.Context, dsi DomainStateInterface) error) error {
+func (dc *domainContext) run(fn func(ctx context.Context, dsi components.DomainStateInterface) error) error {
 	// Latch is held for entire function call, but the call happens on the caller's routine.
 	// (state is locked separately)
 	if err := dc.takeLatch(); err != nil {
@@ -187,7 +106,7 @@ func (dc *domainContext) run(fn func(ctx context.Context, dsi DomainStateInterfa
 	return fn(dc.ctx, dc)
 }
 
-func (dc *domainContext) getUnFlushedStates() (spending []tktypes.HexBytes, spent []tktypes.HexBytes, nullifiers []*StateNullifier, err error) {
+func (dc *domainContext) getUnFlushedStates() (spending []tktypes.HexBytes, spent []tktypes.HexBytes, nullifiers []*components.StateNullifier, err error) {
 	// Take lock and check flush state
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
@@ -218,7 +137,7 @@ func (dc *domainContext) getUnFlushedStates() (spending []tktypes.HexBytes, spen
 	return spending, spent, nullifiers, nil
 }
 
-func (dc *domainContext) mergedUnFlushed(schema Schema, dbStates []*State, query *query.QueryJSON, requireNullifier bool) (_ []*State, err error) {
+func (dc *domainContext) mergedUnFlushed(schema components.Schema, dbStates []*components.State, query *query.QueryJSON, requireNullifier bool) (_ []*components.State, err error) {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
@@ -226,10 +145,10 @@ func (dc *domainContext) mergedUnFlushed(schema Schema, dbStates []*State, query
 	}
 
 	// Get the list of new un-flushed states, which are not already locked for spend
-	var allUnFlushedStates []*StateWithLabels
-	var allUnFlushedStateSpends []*StateSpend
-	var allUnFlushedStateLocks []*StateLock
-	var allUnflushedNullifiers []*StateNullifier
+	var allUnFlushedStates []*components.StateWithLabels
+	var allUnFlushedStateSpends []*components.StateSpend
+	var allUnFlushedStateLocks []*components.StateLock
+	var allUnflushedNullifiers []*components.StateNullifier
 	for _, ops := range []*writeOperation{dc.unFlushed, dc.flushing} {
 		if ops != nil {
 			allUnFlushedStates = append(allUnFlushedStates, ops.states...)
@@ -239,7 +158,7 @@ func (dc *domainContext) mergedUnFlushed(schema Schema, dbStates []*State, query
 		}
 	}
 
-	matches := make([]*StateWithLabels, 0, len(dc.unFlushed.states))
+	matches := make([]*components.StateWithLabels, 0, len(dc.unFlushed.states))
 	for _, state := range allUnFlushedStates {
 		spent := false
 		for _, spend := range allUnFlushedStateSpends {
@@ -305,10 +224,10 @@ func (dc *domainContext) mergedUnFlushed(schema Schema, dbStates []*State, query
 	return dbStates, nil
 }
 
-func (dc *domainContext) mergeInMemoryMatches(schema Schema, states []*State, extras []*StateWithLabels, query *query.QueryJSON) (_ []*State, err error) {
+func (dc *domainContext) mergeInMemoryMatches(schema components.Schema, states []*components.State, extras []*components.StateWithLabels, query *query.QueryJSON) (_ []*components.State, err error) {
 
 	// Reconstitute the labels for all the loaded states into the front of an aggregate list
-	fullList := make([]*StateWithLabels, len(states), len(states)+len(extras))
+	fullList := make([]*components.StateWithLabels, len(states), len(states)+len(extras))
 	persistedStateIDs := make(map[string]bool)
 	for i, s := range states {
 		if fullList[i], err = schema.RecoverLabels(dc.ctx, s); err != nil {
@@ -338,7 +257,7 @@ func (dc *domainContext) mergeInMemoryMatches(schema Schema, states []*State, ex
 	if query.Limit != nil && len > *query.Limit {
 		len = *query.Limit
 	}
-	retList := make([]*State, len)
+	retList := make([]*components.State, len)
 	for i := 0; i < len; i++ {
 		retList[i] = fullList[i].State
 	}
@@ -346,7 +265,7 @@ func (dc *domainContext) mergeInMemoryMatches(schema Schema, states []*State, ex
 
 }
 
-func (dc *domainContext) FindAvailableStates(schemaID string, query *query.QueryJSON) (s []*State, err error) {
+func (dc *domainContext) FindAvailableStates(schemaID string, query *query.QueryJSON) (s []*components.State, err error) {
 
 	// Build a list of spending states
 	spending, spent, _, err := dc.getUnFlushedStates()
@@ -365,7 +284,7 @@ func (dc *domainContext) FindAvailableStates(schemaID string, query *query.Query
 	return dc.mergedUnFlushed(schema, states, query, false)
 }
 
-func (dc *domainContext) FindAvailableNullifiers(schemaID string, query *query.QueryJSON) (s []*State, err error) {
+func (dc *domainContext) FindAvailableNullifiers(schemaID string, query *query.QueryJSON) (s []*components.State, err error) {
 
 	// Build a list of unflushed and spending nullifiers
 	spending, spent, nullifiers, err := dc.getUnFlushedStates()
@@ -399,10 +318,10 @@ func (dc *domainContext) FindAvailableNullifiers(schemaID string, query *query.Q
 	return dc.mergedUnFlushed(schema, states, query, true)
 }
 
-func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*StateUpsert) (states []*State, err error) {
+func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*components.StateUpsert) (states []*components.State, err error) {
 
-	states = make([]*State, len(stateUpserts))
-	withValues := make([]*StateWithLabels, len(stateUpserts))
+	states = make([]*components.State, len(stateUpserts))
+	withValues := make([]*components.StateWithLabels, len(stateUpserts))
 	for i, ns := range stateUpserts {
 		schema, err := dc.ss.GetSchema(dc.ctx, dc.domainName, ns.SchemaID, true)
 		if err != nil {
@@ -415,7 +334,7 @@ func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*
 		}
 		states[i] = withValues[i].State
 		if transactionID != nil {
-			states[i].Locked = &StateLock{
+			states[i].Locked = &components.StateLock{
 				Transaction: *transactionID,
 				State:       withValues[i].State.ID,
 				Creating:    ns.Creating,
@@ -435,7 +354,7 @@ func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*
 	}
 
 	// We need to de-duplicate out any previous un-flushed state writes of the same ID
-	deDuppedUnFlushedStates := make([]*StateWithLabels, 0, len(dc.unFlushed.states))
+	deDuppedUnFlushedStates := make([]*components.StateWithLabels, 0, len(dc.unFlushed.states))
 	for _, existing := range dc.unFlushed.states {
 		var replaced bool
 		for _, s := range withValues {
@@ -453,7 +372,7 @@ func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*
 	// Then add all the state locks if this is transaction flush (which need individual de-duping too)
 	if transactionID != nil {
 		for _, s := range withValues {
-			_, err = dc.setUnFlushedLock(*transactionID, s.State.ID, func(sl *StateLock) {
+			_, err = dc.setUnFlushedLock(*transactionID, s.State.ID, func(sl *components.StateLock) {
 				// Upsert semantics for states will replace any existing locks with the explicitly set locks in the upsert
 				sl.Creating = s.Locked.Creating
 				sl.Spending = s.Locked.Spending
@@ -464,7 +383,7 @@ func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*
 	return states, nil
 }
 
-func (dc *domainContext) UpsertNullifiers(nullifiers []*StateNullifier) error {
+func (dc *domainContext) UpsertNullifiers(nullifiers []*components.StateNullifier) error {
 	// Take lock and check flush state
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
@@ -476,7 +395,7 @@ func (dc *domainContext) UpsertNullifiers(nullifiers []*StateNullifier) error {
 	return nil
 }
 
-func (dc *domainContext) lockStates(transactionID uuid.UUID, stateIDStrings []string, setLockState func(*StateLock)) (err error) {
+func (dc *domainContext) lockStates(transactionID uuid.UUID, stateIDStrings []string, setLockState func(*components.StateLock)) (err error) {
 	stateIDs := make([]tktypes.HexBytes, len(stateIDStrings))
 	for i, id := range stateIDStrings {
 		stateIDs[i], err = tktypes.ParseHexBytes(dc.ctx, id)
@@ -502,7 +421,7 @@ func (dc *domainContext) lockStates(transactionID uuid.UUID, stateIDStrings []st
 	return nil
 }
 
-func (dc *domainContext) setUnFlushedLock(transactionID uuid.UUID, stateID tktypes.HexBytes, setLockState func(*StateLock)) (*StateLock, error) {
+func (dc *domainContext) setUnFlushedLock(transactionID uuid.UUID, stateID tktypes.HexBytes, setLockState func(*components.StateLock)) (*components.StateLock, error) {
 	// Update an existing un-flushed record if one exists
 	for _, lock := range dc.unFlushed.stateLocks {
 		if lock.State.Equals(stateID) {
@@ -515,13 +434,13 @@ func (dc *domainContext) setUnFlushedLock(transactionID uuid.UUID, stateID tktyp
 		}
 	}
 	// Otherwise create a new one
-	l := &StateLock{State: stateID, Transaction: transactionID}
+	l := &components.StateLock{State: stateID, Transaction: transactionID}
 	dc.unFlushed.stateLocks = append(dc.unFlushed.stateLocks, l)
 	setLockState(l)
 	return l, nil
 }
 
-func (dc *domainContext) setUnFlushedSpend(transactionID uuid.UUID, stateID tktypes.HexBytes) (*StateSpend, error) {
+func (dc *domainContext) setUnFlushedSpend(transactionID uuid.UUID, stateID tktypes.HexBytes) (*components.StateSpend, error) {
 	// Check for an existing record
 	for _, spend := range dc.unFlushed.stateSpends {
 		if spend.State.Equals(stateID) {
@@ -532,12 +451,12 @@ func (dc *domainContext) setUnFlushedSpend(transactionID uuid.UUID, stateID tkty
 			return spend, nil
 		}
 	}
-	s := &StateSpend{State: stateID, Transaction: transactionID}
+	s := &components.StateSpend{State: stateID, Transaction: transactionID}
 	dc.unFlushed.stateSpends = append(dc.unFlushed.stateSpends, s)
 	return s, nil
 }
 
-func (dc *domainContext) setUnFlushedConfirm(transactionID uuid.UUID, stateID tktypes.HexBytes) (*StateConfirm, error) {
+func (dc *domainContext) setUnFlushedConfirm(transactionID uuid.UUID, stateID tktypes.HexBytes) (*components.StateConfirm, error) {
 	// Check for an existing record
 	for _, confirm := range dc.unFlushed.stateConfirms {
 		if confirm.State.Equals(stateID) {
@@ -548,17 +467,17 @@ func (dc *domainContext) setUnFlushedConfirm(transactionID uuid.UUID, stateID tk
 			return confirm, nil
 		}
 	}
-	s := &StateConfirm{State: stateID, Transaction: transactionID}
+	s := &components.StateConfirm{State: stateID, Transaction: transactionID}
 	dc.unFlushed.stateConfirms = append(dc.unFlushed.stateConfirms, s)
 	return s, nil
 }
 
 func (dc *domainContext) MarkStatesRead(transactionID uuid.UUID, stateIDs []string) (err error) {
-	return dc.lockStates(transactionID, stateIDs, func(*StateLock) {})
+	return dc.lockStates(transactionID, stateIDs, func(*components.StateLock) {})
 }
 
 func (dc *domainContext) MarkStatesSpending(transactionID uuid.UUID, stateIDs []string) (err error) {
-	return dc.lockStates(transactionID, stateIDs, func(l *StateLock) { l.Spending = true })
+	return dc.lockStates(transactionID, stateIDs, func(l *components.StateLock) { l.Spending = true })
 }
 
 func (dc *domainContext) MarkStatesSpent(transactionID uuid.UUID, stateIDStrings []string) (err error) {
@@ -620,7 +539,7 @@ func (dc *domainContext) ResetTransaction(transactionID uuid.UUID) error {
 	}
 
 	// Remove anything un-flushed for this transaction, as we will delete everything instead
-	newStateLocks := make([]*StateLock, 0, len(dc.unFlushed.stateLocks))
+	newStateLocks := make([]*components.StateLock, 0, len(dc.unFlushed.stateLocks))
 	for _, l := range dc.unFlushed.stateLocks {
 		if l.Transaction != transactionID {
 			newStateLocks = append(newStateLocks, l)
@@ -632,7 +551,7 @@ func (dc *domainContext) ResetTransaction(transactionID uuid.UUID) error {
 	return nil
 }
 
-func (dc *domainContext) Flush(successCallbacks ...DomainContextFunction) error {
+func (dc *domainContext) Flush(successCallbacks ...components.DomainContextFunction) error {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 
@@ -657,7 +576,7 @@ func (dc *domainContext) Flush(successCallbacks ...DomainContextFunction) error 
 }
 
 // flushOp MUST NOT take the stateLock
-func (dc *domainContext) flushOp(op *writeOperation, flushed chan error, successCallbacks ...DomainContextFunction) {
+func (dc *domainContext) flushOp(op *writeOperation, flushed chan error, successCallbacks ...components.DomainContextFunction) {
 	dc.ss.writer.queue(dc.ctx, op)
 	err := op.flush(dc.ctx)
 	flushed <- err

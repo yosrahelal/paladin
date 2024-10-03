@@ -34,6 +34,7 @@ import (
 )
 
 type identityResolver struct {
+	bgCtx                 context.Context
 	nodeID                string
 	keyManager            ethclient.KeyManager
 	transportManager      components.TransportManager
@@ -47,23 +48,32 @@ type inflightRequest struct {
 }
 
 // As a LateBoundComponent, the identity resolver is created and initialised in a single function call
-func NewIdentityResolver(ctx context.Context, nodeID string, c components.AllComponents) components.IdentityResolver {
-	ir := &identityResolver{
+func NewIdentityResolver(ctx context.Context, nodeID string) components.IdentityResolver {
+	return &identityResolver{
+		bgCtx:                 ctx,
 		nodeID:                nodeID,
-		keyManager:            c.KeyManager(),
-		transportManager:      c.TransportManager(),
 		inflightRequests:      make(map[string]*inflightRequest),
 		inflightRequestsMutex: &sync.Mutex{},
 	}
-	err := c.TransportManager().RegisterClient(ctx, ir)
-	if err != nil {
-		// this is a code error that should block startup
-		// mostlikely a duplicate registration
-		panic("error from RegisterClient: " + err.Error())
-	}
-	return ir
+}
 
+func (ir *identityResolver) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
+	return &components.ManagerInitResult{}, nil
+}
+
+func (ir *identityResolver) PostInit(c components.AllComponents) error {
+	ir.keyManager = c.KeyManager()
+	ir.transportManager = c.TransportManager()
+	return c.TransportManager().RegisterClient(ir.bgCtx, ir)
+}
+
+func (ir *identityResolver) Start() error {
 	//TODO start a reaper thread to clean up inflight requests that have been hanging around too long
+
+	return nil
+}
+
+func (ir *identityResolver) Stop() {
 }
 
 func (ir *identityResolver) ResolveVerifier(ctx context.Context, lookup string, algorithm string, verifierType string) (string, error) {

@@ -25,7 +25,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/internal/statestore"
+	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/statemgr"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
@@ -40,7 +41,7 @@ type mockComponents struct {
 	db                   sqlmock.Sqlmock
 	ethClient            *componentmocks.EthClient
 	ethClientFactory     *componentmocks.EthClientFactory
-	stateStore           *componentmocks.StateStore
+	stateStore           *componentmocks.StateManager
 	domainStateInterface *componentmocks.DomainStateInterface
 	blockIndexer         *componentmocks.BlockIndexer
 	keyManager           *componentmocks.KeyManager
@@ -51,7 +52,7 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManager
 
 	mc := &mockComponents{
 		blockIndexer:         componentmocks.NewBlockIndexer(t),
-		stateStore:           componentmocks.NewStateStore(t),
+		stateStore:           componentmocks.NewStateManager(t),
 		domainStateInterface: componentmocks.NewDomainStateInterface(t),
 		ethClientFactory:     componentmocks.NewEthClientFactory(t),
 		keyManager:           componentmocks.NewKeyManager(t),
@@ -73,8 +74,11 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManager
 	if realDB {
 		p, pDone, err = persistence.NewUnitTestPersistence(ctx)
 		require.NoError(t, err)
-		realStateStore := statestore.NewStateStore(ctx, &pldconf.StateStoreConfig{}, p)
-		componentMocks.On("StateStore").Return(realStateStore)
+		realStateManager := statemgr.NewStateManager(ctx, &pldconf.StateStoreConfig{}, p)
+		componentMocks.On("StateManager").Return(realStateManager)
+		_, _ = realStateManager.PreInit(componentMocks)
+		_ = realStateManager.PostInit(componentMocks)
+		_ = realStateManager.Start()
 	} else {
 		mp, err := mockpersistence.NewSQLMockProvider()
 		require.NoError(t, err)
@@ -83,16 +87,16 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManager
 		pDone = func() {
 			require.NoError(t, mp.Mock.ExpectationsWereMet())
 		}
-		componentMocks.On("StateStore").Return(mc.stateStore)
+		componentMocks.On("StateManager").Return(mc.stateStore)
 		mridc := mc.stateStore.On("RunInDomainContext", mock.Anything, mock.Anything, mock.Anything)
 		mridc.Run(func(args mock.Arguments) {
-			mridc.Return((args[2].(statestore.DomainContextFunction))(
+			mridc.Return((args[2].(components.DomainContextFunction))(
 				ctx, mc.domainStateInterface,
 			))
 		}).Maybe()
 		mridcf := mc.stateStore.On("RunInDomainContextFlush", mock.Anything, mock.Anything, mock.Anything)
 		mridcf.Run(func(args mock.Arguments) {
-			mridcf.Return((args[2].(statestore.DomainContextFunction))(
+			mridcf.Return((args[2].(components.DomainContextFunction))(
 				ctx, mc.domainStateInterface,
 			))
 		}).Maybe()
@@ -169,7 +173,7 @@ func TestDomainMissingRegistryAddress(t *testing.T) {
 
 	mc := &mockComponents{
 		blockIndexer:     componentmocks.NewBlockIndexer(t),
-		stateStore:       componentmocks.NewStateStore(t),
+		stateStore:       componentmocks.NewStateManager(t),
 		ethClientFactory: componentmocks.NewEthClientFactory(t),
 		keyManager:       componentmocks.NewKeyManager(t),
 	}
@@ -184,10 +188,12 @@ func TestDomainMissingRegistryAddress(t *testing.T) {
 
 	mp, err := mockpersistence.NewSQLMockProvider()
 	require.NoError(t, err)
-	componentMocks.On("StateStore").Return(mc.stateStore)
+	componentMocks.On("StateManager").Return(mc.stateStore)
 	componentMocks.On("Persistence").Return(mp.P)
 	dm := NewDomainManager(context.Background(), config)
 	_, err = dm.PreInit(componentMocks)
+	require.NoError(t, err)
+	err = dm.PostInit(componentMocks)
 	assert.Regexp(t, "PD011606", err)
 }
 

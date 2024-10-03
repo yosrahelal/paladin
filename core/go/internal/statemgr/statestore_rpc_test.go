@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package statestore
+package statemgr
 
 import (
 	"context"
@@ -26,6 +26,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -34,7 +35,7 @@ import (
 )
 
 func newTestRPCServer(t *testing.T) (context.Context, *stateStore, rpcclient.Client, func()) {
-	ctx, ss, ssDone := newDBTestStateStore(t)
+	ctx, ss, ssDone := newDBTestStateManager(t)
 
 	s, err := rpcserver.NewRPCServer(ctx, &pldconf.RPCServerConfig{
 		HTTP: pldconf.RPCServerConfigHTTP{
@@ -70,19 +71,19 @@ func TestRPC(t *testing.T) {
 	assert.NoError(t, err)
 	schema, err := newABISchema(ctx, "domain1", &abiParam)
 	assert.NoError(t, err)
-	err = ss.persistSchemas([]*SchemaPersisted{schema.SchemaPersisted})
+	err = ss.persistSchemas([]*components.SchemaPersisted{schema.SchemaPersisted})
 	assert.NoError(t, err)
 
-	var schemas []*SchemaPersisted
+	var schemas []*components.SchemaPersisted
 	rpcErr := c.CallRPC(ctx, &schemas, "pstate_listSchemas", "domain1")
 	jsonTestLog(t, "pstate_listSchemas", schemas)
 	assert.Nil(t, rpcErr)
 	assert.Len(t, schemas, 1)
-	assert.Equal(t, SchemaTypeABI, schemas[0].Type)
+	assert.Equal(t, components.SchemaTypeABI, schemas[0].Type)
 	assert.Equal(t, "0x3612029bf239cbed1e27548e9211ecfe72496dfec4183fd3ea79a3a54eb126be", schemas[0].ID.String())
 
 	contractAddress := tktypes.RandAddress()
-	var state *State
+	var state *components.State
 	rpcErr = c.CallRPC(ctx, &state, "pstate_storeState", "domain1", contractAddress.String(), schemas[0].ID, tktypes.RawJSON(`{
 	    "salt": "fd2724ce91a859e24c228e50ae17b9443454514edce9a64437c208b0184d8910",
 		"size": 10,
@@ -95,7 +96,7 @@ func TestRPC(t *testing.T) {
 	assert.Equal(t, "domain1", state.DomainName)
 	assert.Equal(t, "0x30e278bca8d876cdceb24520b0ebe736a64a9cb8019157f40fa5b03f083f824d", state.ID.String())
 
-	var states []*State
+	var states []*components.State
 	rpcErr = c.CallRPC(ctx, &states, "pstate_queryStates", "domain1", contractAddress.String(), schemas[0].ID, tktypes.RawJSON(`{
 		"eq": [{
 		  "field": "color",

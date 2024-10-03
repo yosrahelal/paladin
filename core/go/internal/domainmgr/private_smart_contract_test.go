@@ -27,7 +27,6 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -863,7 +862,7 @@ func TestLoadStatesError(t *testing.T) {
 
 func TestLoadStatesNotFound(t *testing.T) {
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight, func(mc *mockComponents) {
-		mc.domainStateInterface.On("FindAvailableStates", mock.Anything, mock.Anything).Return([]*statestore.State{}, nil)
+		mc.domainStateInterface.On("FindAvailableStates", mock.Anything, mock.Anything).Return([]*components.State{}, nil)
 	})
 	defer done()
 

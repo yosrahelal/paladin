@@ -38,7 +38,6 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/componenttest/domains"
 	"github.com/kaleido-io/paladin/core/internal/componentmgr"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
 	"github.com/kaleido-io/paladin/registries/static/pkg/static"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -120,16 +119,12 @@ func deplyDomainRegistry(t *testing.T) *tktypes.EthAddress {
 	err = os.Remove(grpcTarget)
 	require.NoError(t, err)
 
-	engine := &componentTestEngine{}
-	cmTmp := componentmgr.NewComponentManager(context.Background(), grpcTarget, uuid.New(), &tmpConf, engine)
+	cmTmp := componentmgr.NewComponentManager(context.Background(), grpcTarget, uuid.New(), &tmpConf)
 	err = cmTmp.Init()
 	require.NoError(t, err)
 	err = cmTmp.StartComponents()
 	require.NoError(t, err)
 	domainRegistryAddress := domains.DeploySmartContract(t, cmTmp.BlockIndexer(), cmTmp.EthClientFactory())
-
-	//TODO Horrible hack until we completelly remove the concept of an engine
-	engine.privateTransactionManager = cmTmp.PrivateTxManager()
 
 	cmTmp.Stop()
 	return domainRegistryAddress
@@ -251,14 +246,10 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 
 	var pl plugins.UnitTestPluginLoader
 
-	engine := &componentTestEngine{}
-	cm := componentmgr.NewComponentManager(i.ctx, i.grpcTarget, i.id, i.conf, engine)
+	cm := componentmgr.NewComponentManager(i.ctx, i.grpcTarget, i.id, i.conf)
 	// Start it up
 	err = cm.Init()
 	require.NoError(t, err)
-
-	//TODO Horrible hack until we completelly remove the concept of an engine
-	engine.privateTransactionManager = cm.PrivateTxManager()
 
 	err = cm.StartComponents()
 	require.NoError(t, err)
@@ -295,38 +286,6 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	}
 
 	return i
-
-}
-
-// TODO should not need an engine at all. It is only in the component manager interface to enable the testbed to integrate with domain manager etc
-// need to make this optional in the component manager interface or re-write the testbed to integrate with components
-// in a different way
-type componentTestEngine struct {
-	privateTransactionManager components.PrivateTxManager
-}
-
-// EngineName implements components.Engine.
-func (c *componentTestEngine) EngineName() string {
-	return "component-test-engine"
-}
-
-// Init implements components.Engine.
-func (c *componentTestEngine) Init(components.PreInitComponentsAndManagers) (*components.ManagerInitResult, error) {
-	return &components.ManagerInitResult{}, nil
-}
-
-// ReceiveTransportMessage implements components.Engine.
-func (c *componentTestEngine) ReceiveTransportMessage(ctx context.Context, msg *components.TransportMessage) {
-	c.privateTransactionManager.ReceiveTransportMessage(ctx, msg)
-}
-
-// Start implements components.Engine.
-func (c *componentTestEngine) Start() error {
-	return nil
-}
-
-// Stop implements components.Engine.
-func (c *componentTestEngine) Stop() {
 
 }
 
