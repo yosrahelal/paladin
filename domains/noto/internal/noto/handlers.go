@@ -18,7 +18,10 @@ package noto
 import (
 	"context"
 
+	"encoding/json"
+
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -116,4 +119,33 @@ func (n *Noto) validateOwners(ctx context.Context, tx *types.ParsedTransaction, 
 		}
 	}
 	return nil
+}
+
+type TransactionWrapper struct {
+	functionABI     *abi.Entry
+	paramsJSON      []byte
+	contractAddress *tktypes.EthAddress
+}
+
+func (tw *TransactionWrapper) prepare() (*prototk.PrepareTransactionResponse, error) {
+	functionJSON, err := json.Marshal(tw.functionABI)
+	if err != nil {
+		return nil, err
+	}
+	var contractAddress *string
+	if tw.contractAddress != nil {
+		addr := tw.contractAddress.String()
+		contractAddress = &addr
+	}
+	return &prototk.PrepareTransactionResponse{
+		Transaction: &prototk.PreparedTransaction{
+			FunctionAbiJson: string(functionJSON),
+			ParamsJson:      string(tw.paramsJSON),
+			ContractAddress: contractAddress,
+		},
+	}, nil
+}
+
+func (tw *TransactionWrapper) encode(ctx context.Context) ([]byte, error) {
+	return tw.functionABI.EncodeCallDataJSONCtx(ctx, tw.paramsJSON)
 }

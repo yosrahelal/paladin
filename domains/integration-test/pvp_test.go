@@ -28,8 +28,8 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gotest.tools/assert"
 )
 
 var (
@@ -39,14 +39,34 @@ var (
 )
 
 type NotoTransferParams struct {
-	Inputs  []interface{}    `json:"inputs"`
-	Outputs []interface{}    `json:"outputs"`
-	Data    tktypes.HexBytes `json:"data"`
+	Inputs  []tktypes.Bytes32 `json:"inputs"`
+	Outputs []tktypes.Bytes32 `json:"outputs"`
+	Data    tktypes.HexBytes  `json:"data"`
+}
+
+type NotoGuardTransferParams struct {
+	From     *tktypes.EthAddress          `json:"from"`
+	To       *tktypes.EthAddress          `json:"to"`
+	Amount   *tktypes.HexUint256          `json:"amount"`
+	Prepared NotoGuardPreparedTransaction `json:"prepared"`
+}
+
+type NotoGuardPreparedTransaction struct {
+	ContractAddress tktypes.EthAddress `json:"contractAddress"`
+	EncodedCall     tktypes.HexBytes   `json:"encodedCall"`
 }
 
 func TestNotoForNoto(t *testing.T) {
+	pvpNotoNoto(t, false)
+}
+
+func TestNotoForNotoWithGuard(t *testing.T) {
+	pvpNotoNoto(t, true)
+}
+
+func pvpNotoNoto(t *testing.T, withGuard bool) {
 	ctx := context.Background()
-	log.L(ctx).Infof("TestNotoForNoto")
+	log.L(ctx).Infof("TestNotoForNoto (withGuard=%t)", withGuard)
 	domainName := "noto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
 
@@ -76,9 +96,16 @@ func TestNotoForNoto(t *testing.T) {
 
 	atomFactory := helpers.InitAtom(t, tb, rpc, contracts["atom"])
 
+	var guard *helpers.NotoGuardHelper
+	var guardAddress *tktypes.EthAddress
+	if withGuard {
+		guard = helpers.DeployGuard(ctx, t, tb, notary)
+		guardAddress = guard.Address
+	}
+
 	log.L(ctx).Infof("Deploying 2 instances of Noto")
-	notoGold := helpers.DeployNoto(ctx, t, rpc, domainName, notary)
-	notoSilver := helpers.DeployNoto(ctx, t, rpc, domainName, notary)
+	notoGold := helpers.DeployNoto(ctx, t, rpc, domainName, notary, guardAddress)
+	notoSilver := helpers.DeployNoto(ctx, t, rpc, domainName, notary, nil)
 	log.L(ctx).Infof("Noto gold deployed to %s", notoGold.Address)
 	log.L(ctx).Infof("Noto silver deployed to %s", notoSilver.Address)
 
@@ -118,25 +145,46 @@ func TestNotoForNoto(t *testing.T) {
 	}).SignAndSend(bob).Wait()
 
 	var transferGoldParams NotoTransferParams
-	err = json.Unmarshal(transferGold.ParamsJSON, &transferGoldParams)
-	require.NoError(t, err)
-	var transferSilverParams NotoTransferParams
-	err = json.Unmarshal(transferSilver.ParamsJSON, &transferSilverParams)
-	require.NoError(t, err)
+	var transferGoldEncoded []byte
+	if withGuard {
+		// Unpack the inner "transfer" and replace with "transferWithApproval"
+		// TODO: make this simpler
+		var guardParams NotoGuardTransferParams
+		err = json.Unmarshal(transferGold.ParamsJSON, &guardParams)
+		require.NoError(t, err)
+		decoded, err := notoGold.ABI.Functions()["transfer"].DecodeCallDataCtx(ctx, guardParams.Prepared.EncodedCall)
+		require.NoError(t, err)
+		decodedJSON, err := decoded.JSON()
+		require.NoError(t, err)
+		guardParams.Prepared.EncodedCall, err = notoGold.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, decodedJSON)
+		require.NoError(t, err)
+		newParamsJSON, err := json.Marshal(guardParams)
+		require.NoError(t, err)
+		transferGoldEncoded, err = guard.ABI.Functions()["onTransfer"].EncodeCallDataJSONCtx(ctx, newParamsJSON)
+		require.NoError(t, err)
+		err = json.Unmarshal(decodedJSON, &transferGoldParams)
+		require.NoError(t, err)
+	} else {
+		transferGoldEncoded, err = notoGold.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferGold.ParamsJSON)
+		require.NoError(t, err)
+		err = json.Unmarshal(transferGold.ParamsJSON, &transferGoldParams)
+		require.NoError(t, err)
+	}
 
-	transferGoldEncoded, err := notoGold.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferGold.ParamsJSON)
-	require.NoError(t, err)
+	var transferSilverParams NotoTransferParams
 	transferSilverEncoded, err := notoSilver.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferSilver.ParamsJSON)
+	require.NoError(t, err)
+	err = json.Unmarshal(transferSilver.ParamsJSON, &transferSilverParams)
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Create Atom instance")
 	transferAtom := atomFactory.Create(ctx, alice, []*helpers.AtomOperation{
 		{
-			ContractAddress: notoGold.Address,
+			ContractAddress: &transferGold.To,
 			CallData:        transferGoldEncoded,
 		},
 		{
-			ContractAddress: notoSilver.Address,
+			ContractAddress: &transferSilver.To,
 			CallData:        transferSilverEncoded,
 		},
 		{
@@ -149,12 +197,21 @@ func TestNotoForNoto(t *testing.T) {
 	// If any party found a discrepancy at this point, they could cancel the swap (last chance to back out)
 
 	log.L(ctx).Infof("Approve both Noto transactions")
-	notoGold.ApproveTransfer(ctx, &nototypes.ApproveParams{
-		Inputs:   transferGold.InputStates,
-		Outputs:  transferGold.OutputStates,
-		Data:     transferGoldParams.Data,
-		Delegate: transferAtom.Address,
-	}).SignAndSend(alice).Wait()
+	if withGuard {
+		notoGold.ApproveTransfer(ctx, &nototypes.ApproveParams{
+			Inputs:   transferGold.InputStates,
+			Outputs:  transferGold.OutputStates,
+			Data:     transferGoldParams.Data,
+			Delegate: guardAddress,
+		}).SignAndSend(alice).Wait()
+	} else {
+		notoGold.ApproveTransfer(ctx, &nototypes.ApproveParams{
+			Inputs:   transferGold.InputStates,
+			Outputs:  transferGold.OutputStates,
+			Data:     transferGoldParams.Data,
+			Delegate: transferAtom.Address,
+		}).SignAndSend(alice).Wait()
+	}
 	notoSilver.ApproveTransfer(ctx, &nototypes.ApproveParams{
 		Inputs:   transferSilver.InputStates,
 		Outputs:  transferSilver.OutputStates,
@@ -207,7 +264,7 @@ func TestNotoForZeto(t *testing.T) {
 	atomFactory := helpers.InitAtom(t, tb, rpc, contracts["atom"])
 
 	log.L(ctx).Infof("Deploying Noto and Zeto")
-	noto := helpers.DeployNoto(ctx, t, rpc, notoDomainName, notary)
+	noto := helpers.DeployNoto(ctx, t, rpc, notoDomainName, notary, nil)
 	zeto := helpers.DeployZeto(ctx, t, rpc, zetoDomainName, notary, "Zeto_Anon")
 	log.L(ctx).Infof("Noto deployed to %s", noto.Address)
 	log.L(ctx).Infof("Zeto deployed to %s", zeto.Address)
