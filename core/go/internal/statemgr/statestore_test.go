@@ -29,7 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newDBTestStateManager(t *testing.T) (context.Context, *stateStore, func()) {
+func newDBTestStateManager(t *testing.T) (context.Context, *stateManager, func()) {
 	ctx := context.Background()
 	p, pDone, err := persistence.NewUnitTestPersistence(ctx)
 	require.NoError(t, err)
@@ -46,19 +46,19 @@ func newDBTestStateManager(t *testing.T) (context.Context, *stateStore, func()) 
 	err = ss.Start()
 	require.NoError(t, err)
 
-	return ctx, ss.(*stateStore), func() {
+	return ctx, ss.(*stateManager), func() {
 		ss.Stop()
 		pDone()
 	}
 }
 
-func newDBMockStateManager(t *testing.T) (context.Context, *stateStore, sqlmock.Sqlmock, func()) {
+func newDBMockStateManager(t *testing.T) (context.Context, *stateManager, sqlmock.Sqlmock, func()) {
 	ctx := context.Background()
 	log.SetLevel("debug")
 	p, err := mockpersistence.NewSQLMockProvider()
 	require.NoError(t, err)
 	ss := NewStateManager(ctx, &pldconf.StateStoreConfig{}, p.P)
-	return ctx, ss.(*stateStore), p.Mock, func() {
+	return ctx, ss.(*stateManager), p.Mock, func() {
 		require.NoError(t, p.Mock.ExpectationsWereMet())
 	}
 }

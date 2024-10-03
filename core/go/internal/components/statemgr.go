@@ -23,6 +23,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"gorm.io/gorm"
 )
 
 type StateManager interface {
@@ -30,6 +31,9 @@ type StateManager interface {
 	RunInDomainContext(domainName string, contractAddress tktypes.EthAddress, fn DomainContextFunction) error
 	RunInDomainContextFlush(domainName string, contractAddress tktypes.EthAddress, fn DomainContextFunction) error
 	EnsureABISchemas(ctx context.Context, domainName string, defs []*abi.Parameter) ([]Schema, error)
+
+	// State finalizations are written on the DB context of the block indexer, by the domain manager.
+	WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*StateSpend, confirms []*StateConfirm) (err error)
 }
 
 type DomainContextFunction func(ctx context.Context, dsi DomainStateInterface) error
@@ -69,13 +73,6 @@ type DomainStateInterface interface {
 	// with the lock record attached.
 	// That will inform them they need to join to this transaction if they wish to use those states.
 	MarkStatesRead(transactionID uuid.UUID, stateIDs []string) error
-
-	// MarkStatesSpent writes a spend record so the state is now considered spent, and can
-	// no longer be used as an input to a future transaction.
-	MarkStatesSpent(transactionID uuid.UUID, stateIDs []string) error
-
-	// MarkStatesConfirmed writes a confirmation record so the state is now confirmed and unspent.
-	MarkStatesConfirmed(transactionID uuid.UUID, stateIDs []string) error
 
 	// UpsertStates creates or updates states.
 	// They are available immediately within the domain for return in FindAvailableStates

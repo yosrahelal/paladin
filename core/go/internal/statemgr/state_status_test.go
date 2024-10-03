@@ -55,7 +55,7 @@ const widgetABI = `{
 	]
 }`
 
-func makeWidgets(t *testing.T, ctx context.Context, ss *stateStore, domainName string, contractAddress tktypes.EthAddress, schemaID string, withoutSalt []string) []*components.StateWithLabels {
+func makeWidgets(t *testing.T, ctx context.Context, ss *stateManager, domainName string, contractAddress tktypes.EthAddress, schemaID string, withoutSalt []string) []*components.StateWithLabels {
 	states := make([]*components.StateWithLabels, len(withoutSalt))
 	for i, w := range withoutSalt {
 		var ij map[string]interface{}
@@ -129,7 +129,10 @@ func TestStateLockingQuery(t *testing.T) {
 	// Mark them all confirmed apart from one
 	for i, w := range widgets {
 		if i != 3 {
-			err = ss.MarkConfirmed(ctx, "domain1", *contractAddress, w.ID.String(), uuid.New())
+			err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*components.StateSpend{},
+				[]*components.StateConfirm{
+					{DomainName: "domain1", State: w.ID, Transaction: uuid.New()},
+				})
 			require.NoError(t, err)
 		}
 	}
@@ -143,7 +146,10 @@ func TestStateLockingQuery(t *testing.T) {
 	checkQuery(`{}`, seqQual)                          // unchanged
 
 	// Mark one spent
-	err = ss.MarkSpent(ctx, "domain1", *contractAddress, widgets[0].ID.String(), uuid.New())
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
+		[]*components.StateSpend{
+			{DomainName: "domain1", State: widgets[0].ID, Transaction: uuid.New()},
+		}, []*components.StateConfirm{})
 	require.NoError(t, err)
 
 	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4) // unchanged

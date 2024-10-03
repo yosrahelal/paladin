@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestRPCServer(t *testing.T) (context.Context, *stateStore, rpcclient.Client, func()) {
+func newTestRPCServer(t *testing.T) (context.Context, *stateManager, rpcclient.Client, func()) {
 	ctx, ss, ssDone := newDBTestStateManager(t)
 
 	s, err := rpcserver.NewRPCServer(ctx, &pldconf.RPCServerConfig{

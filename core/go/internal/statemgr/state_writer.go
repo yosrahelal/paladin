@@ -36,8 +36,6 @@ type writeOperation struct {
 	domainKey              string
 	writerOp               flushwriter.Operation[*writeOperation, *noResult]
 	states                 []*components.StateWithLabels
-	stateConfirms          []*components.StateConfirm
-	stateSpends            []*components.StateSpend
 	stateLocks             []*components.StateLock
 	stateNullifiers        []*components.StateNullifier
 	transactionLockDeletes []uuid.UUID
@@ -53,7 +51,7 @@ func (wo *writeOperation) WriteKey() string {
 	return wo.domainKey
 }
 
-func newStateWriter(bgCtx context.Context, ss *stateStore, conf *pldconf.FlushWriterConfig) *stateWriter {
+func newStateWriter(bgCtx context.Context, ss *stateManager, conf *pldconf.FlushWriterConfig) *stateWriter {
 	sw := &stateWriter{}
 	sw.w = flushwriter.NewWriter(bgCtx, sw.runBatch, ss.p, conf, &pldconf.StateWriterConfigDefaults)
 	return sw
@@ -81,8 +79,6 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 	var states []*components.State
 	var labels []*components.StateLabel
 	var int64Labels []*components.StateInt64Label
-	var stateConfirms []*components.StateConfirm
-	var stateSpends []*components.StateSpend
 	var stateLocks []*components.StateLock
 	var stateNullifiers []*components.StateNullifier
 	var transactionLockDeletes []uuid.UUID
@@ -91,12 +87,6 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 			states = append(states, s.State)
 			labels = append(labels, s.State.Labels...)
 			int64Labels = append(int64Labels, s.State.Int64Labels...)
-		}
-		if len(op.stateConfirms) > 0 {
-			stateConfirms = append(stateConfirms, op.stateConfirms...)
-		}
-		if len(op.stateSpends) > 0 {
-			stateSpends = append(stateSpends, op.stateSpends...)
 		}
 		if len(op.stateLocks) > 0 {
 			stateLocks = append(stateLocks, op.stateLocks...)
@@ -108,8 +98,8 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 			transactionLockDeletes = append(transactionLockDeletes, op.transactionLockDeletes...)
 		}
 	}
-	log.L(ctx).Debugf("Writing state batch states=%d confirms=%d spends=%d locks=%d nullifiers=%d seqLockDeletes=%d labels=%d int64Labels=%d",
-		len(states), len(stateConfirms), len(stateSpends), len(stateLocks), len(stateNullifiers), len(transactionLockDeletes), len(labels), len(int64Labels))
+	log.L(ctx).Debugf("Writing state batch states=%d locks=%d nullifiers=%d seqLockDeletes=%d labels=%d int64Labels=%d",
+		len(states), len(stateLocks), len(stateNullifiers), len(transactionLockDeletes), len(labels), len(int64Labels))
 
 	var err error
 	if len(states) > 0 {
@@ -121,16 +111,6 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 			}).
 			Omit("Labels", "Int64Labels", "Confirmed", "Spent", "Locked"). // we do this ourselves below
 			Create(states).
-			Error
-	}
-	if err == nil && len(stateConfirms) > 0 {
-		err = tx.
-			Table("state_confirms").
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}},
-				DoNothing: true, // immutable
-			}).
-			Create(stateConfirms).
 			Error
 	}
 	if err == nil && len(labels) > 0 {
@@ -151,16 +131,6 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 				DoNothing: true, // immutable
 			}).
 			Create(int64Labels).
-			Error
-	}
-	if err == nil && len(stateSpends) > 0 {
-		err = tx.
-			Table("state_spends").
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}},
-				DoNothing: true, // immutable
-			}).
-			Create(stateSpends).
 			Error
 	}
 	if err == nil && len(stateLocks) > 0 {

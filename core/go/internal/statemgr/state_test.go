@@ -75,24 +75,6 @@ func TestGetStateBadID(t *testing.T) {
 	assert.Regexp(t, "PD020007", err)
 }
 
-func TestMarkConfirmedBadID(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateManager(t)
-	defer done()
-
-	contractAddress := tktypes.RandAddress()
-	err := ss.MarkConfirmed(ctx, "domain1", *contractAddress, "bad id", uuid.New())
-	assert.Regexp(t, "PD020007", err)
-}
-
-func TestMarkSpentBadID(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateManager(t)
-	defer done()
-
-	contractAddress := tktypes.RandAddress()
-	err := ss.MarkSpent(ctx, "domain1", *contractAddress, "bad id", uuid.New())
-	assert.Regexp(t, "PD020007", err)
-}
-
 func TestMarkLockedBadID(t *testing.T) {
 	ctx, ss, _, done := newDBMockStateManager(t)
 	defer done()

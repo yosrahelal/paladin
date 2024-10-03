@@ -28,6 +28,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -251,6 +252,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	var stateToConfirmAndThenSpend *components.State
 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 		// Check the DB persisted state is what we expect
 		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{
@@ -261,6 +263,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 		assert.Equal(t, int64(50), parseFakeCoin(t, states[0]).Amount.Int64())
 		assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
 		assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
+		log.L(ctx).Infof("STATE(35): %s", states[1].ID)
 
 		// Mark a persisted one read - doesn't affect it's availability, but will be locked to that transaction
 		err = dsi.MarkStatesRead(transactionID, []string{
@@ -300,24 +303,25 @@ func TestStateContextMintSpendMint(t *testing.T) {
 		assert.Len(t, states, 1)
 		assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
 
-		// Mark a state confirmed
-		confirmState := states[0].ID.String() // 20
-		err = dsi.MarkStatesConfirmed(transactionID, []string{confirmState})
-		require.NoError(t, err)
+		stateToConfirmAndThenSpend = states[0]
 
-		// Can't confirm again from a different transaction (but can from the same transaction)
-		err = dsi.MarkStatesConfirmed(uuid.New(), []string{confirmState})
-		require.ErrorContains(t, err, "PD010121")
-		err = dsi.MarkStatesConfirmed(transactionID, []string{confirmState})
-		require.NoError(t, err)
+		return nil
+	})
+	require.NoError(t, err)
 
-		// Mark a state spent
-		spendState := states[0].ID.String() // 20
-		err = dsi.MarkStatesSpent(transactionID, []string{spendState})
-		require.NoError(t, err)
+	// Mark a state confirmed, and the same state state spent - all in one DB TX
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
+		[]*components.StateSpend{
+			{DomainName: "domain1", State: stateToConfirmAndThenSpend.ID, Transaction: transactionID},
+		}, []*components.StateConfirm{
+			{DomainName: "domain1", State: stateToConfirmAndThenSpend.ID, Transaction: transactionID},
+		})
+	require.NoError(t, err)
+
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 
 		// Check the remaining states
-		states, err = dsi.FindAvailableStates(schemaID, toQuery(t, `{
+		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{
 			"sort": [ "owner", "amount" ]
 		}`))
 		require.NoError(t, err)
@@ -325,12 +329,6 @@ func TestStateContextMintSpendMint(t *testing.T) {
 		assert.Equal(t, int64(30), parseFakeCoin(t, states[0]).Amount.Int64())
 		assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
 		assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
-
-		// Can't spend again from a different transaction (but can from the same transaction)
-		err = dsi.MarkStatesSpent(uuid.New(), []string{spendState})
-		require.ErrorContains(t, err, "PD010120")
-		err = dsi.MarkStatesSpent(transactionID, []string{spendState})
-		require.NoError(t, err)
 
 		// Reset the transaction - this will clear the in-memory state,
 		// and remove the locks from the DB. It will not remove the states
@@ -422,11 +420,18 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 		assert.Len(t, states, 1)
 		require.NotNil(t, states[0].Nullifier)
 		assert.Equal(t, nullifier1, states[0].Nullifier.Nullifier)
+		return nil
+	})
+	require.NoError(t, err)
 
-		// Mark both states confirmed
-		err = dsi.MarkStatesConfirmed(transactionID, []string{stateID1.String(), stateID2.String()})
-		require.NoError(t, err)
+	// Mark both states confirmed
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*components.StateSpend{},
+		[]*components.StateConfirm{
+			{DomainName: "domain1", State: stateID1, Transaction: transactionID},
+			{DomainName: "domain1", State: stateID2, Transaction: transactionID},
+		})
 
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 		// Mark the first state as "spending"
 		_, err = dsi.UpsertStates(&transactionID, []*components.StateUpsert{
 			{ID: stateID1, SchemaID: schemaID, Data: data1, Spending: true},
@@ -434,7 +439,7 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Confirm no more nullifiers available
-		states, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+		states, err := dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 		require.NoError(t, err)
 		assert.Len(t, states, 0)
 
@@ -445,12 +450,19 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, states, 1)
 
-		// Spend the nullifier
-		err = dsi.MarkStatesSpent(transactionID, []string{nullifier1.String()})
-		assert.NoError(t, err)
+		return nil
+	})
 
+	// Spend the nullifier
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
+		[]*components.StateSpend{
+			{DomainName: "domain1", State: nullifier1, Transaction: transactionID},
+		}, []*components.StateConfirm{})
+	require.NoError(t, err)
+
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 		// Confirm no more nullifiers available
-		states, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+		states, err := dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 		require.NoError(t, err)
 		assert.Len(t, states, 0)
 
@@ -558,14 +570,6 @@ func TestDSIFlushErrorCapture(t *testing.T) {
 		assert.Regexp(t, "pop", err)
 
 		fakeFlushError(dc)
-		err = dsi.MarkStatesSpent(uuid.New(), nil)
-		assert.Regexp(t, "pop", err)
-
-		fakeFlushError(dc)
-		err = dsi.MarkStatesConfirmed(uuid.New(), nil)
-		assert.Regexp(t, "pop", err)
-
-		fakeFlushError(dc)
 		err = dsi.ResetTransaction(uuid.New())
 		assert.Regexp(t, "pop", err)
 
@@ -642,23 +646,6 @@ func TestDSIMergedUnFlushedSpend(t *testing.T) {
 		tktypes.RandHex(32), tktypes.RandHex(32))), nil)
 	require.NoError(t, err)
 	s2.Locked = &components.StateLock{State: s2.ID, Transaction: uuid.New(), Creating: true}
-
-	dc.flushing = &writeOperation{
-		states: []*components.StateWithLabels{s1, s2},
-		stateSpends: []*components.StateSpend{
-			{State: s1.ID[:]},
-			{State: s2.ID[:]},
-		},
-	}
-	dc.unFlushed = &writeOperation{
-		stateSpends: []*components.StateSpend{
-			{State: tktypes.RandBytes(32)},
-		},
-	}
-
-	_, spent, _, err := dc.getUnFlushedStates()
-	require.NoError(t, err)
-	assert.Len(t, spent, 3)
 
 	states, err := dc.mergedUnFlushed(schema1, []*components.State{}, &query.QueryJSON{}, false)
 	require.NoError(t, err)
@@ -840,12 +827,6 @@ func TestDSIBadIDs(t *testing.T) {
 		assert.Regexp(t, "PD020007", err)
 
 		err = dsi.MarkStatesSpending(uuid.New(), []string{"wrong"})
-		assert.Regexp(t, "PD020007", err)
-
-		err = dsi.MarkStatesSpent(uuid.New(), []string{"wrong"})
-		assert.Regexp(t, "PD020007", err)
-
-		err = dsi.MarkStatesConfirmed(uuid.New(), []string{"wrong"})
 		assert.Regexp(t, "PD020007", err)
 
 		return nil
