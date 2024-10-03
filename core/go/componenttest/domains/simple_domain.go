@@ -294,9 +294,9 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 			err := json.Unmarshal([]byte(tx.FunctionParamsJson), &inputs)
 			require.NoError(t, err)
 			assert.Greater(t, inputs.Amount.BigInt().Sign(), 0)
-			contractAddr, err := ethtypes.NewAddress(tx.ContractAddress)
+			contractAddr, err := ethtypes.NewAddress(tx.ContractInfo.ContractAddress)
 			require.NoError(t, err)
-			configValues, err := contractDataABI.DecodeABIData(tx.ContractConfig, 0)
+			configValues, err := contractDataABI.DecodeABIData(tx.ContractInfo.ContractConfig, 0)
 			require.NoError(t, err)
 			configJSON, err := tktypes.StandardABISerializer().SerializeJSON(configValues)
 			require.NoError(t, err)
@@ -487,7 +487,7 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				coinsToSpend := []*simpleTokenParser{}
 				stateRefsToSpend := []*prototk.StateRef{}
 				if txInputs.From != "" {
-					coinsToSpend, stateRefsToSpend, toKeep, err = simpleTokenSelection(ctx, fromAddr, req.Transaction.ContractAddress, amount)
+					coinsToSpend, stateRefsToSpend, toKeep, err = simpleTokenSelection(ctx, fromAddr, req.Transaction.ContractInfo.ContractAddress, amount)
 					if err != nil {
 						return nil, err
 					}

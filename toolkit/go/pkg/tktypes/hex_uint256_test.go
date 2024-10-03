@@ -38,6 +38,15 @@ func TestHexUint256(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint64(9223372036854775807), v.Int().Uint64())
 
+	v = MustParseHexUint256("1152921504606846975")
+	assert.Equal(t, uint64(1152921504606846975), v.Int().Uint64())
+	dbv, err = v.Value()
+	require.NoError(t, err)
+	assert.Equal(t, "0x0fffffffffffffff", v.String())
+	err = v.Scan(dbv)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1152921504606846975), v.Int().Uint64())
+
 	v = MustParseHexUint256("0x8000000000000000")
 	assert.Equal(t, uint64(9223372036854775808), v.Int().Uint64())
 	dbv, err = v.Value()

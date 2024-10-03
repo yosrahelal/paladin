@@ -151,7 +151,7 @@ func TestGasPriceClient(t *testing.T) {
 	// check functions
 	assert.True(t, hgc.HasZeroGasPrice(ctx))
 
-	testNodeGasPrice := `"0x3e8"`
+	testNodeGasPrice := `"0x03e8"`
 	// fall back to connector when get call failed
 	mEC.On("GasPrice", ctx, mock.Anything).Return(tktypes.Uint64ToUint256(1000), nil).Once()
 	gasPriceJSON, err := hgc.getGasPriceJSON(ctx)

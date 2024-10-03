@@ -306,12 +306,12 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 		return nil, nil, i18n.NewError(ctx, msgs.MsgUnexpectedFunctionSignature, functionABI.Name, signature, tx.FunctionSignature)
 	}
 
-	domainConfig, err := n.decodeConfig(ctx, tx.ContractConfig)
+	domainConfig, err := n.decodeConfig(ctx, tx.ContractInfo.ContractConfig)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	contractAddress, err := ethtypes.NewAddress(tx.ContractAddress)
+	contractAddress, err := ethtypes.NewAddress(tx.ContractInfo.ContractAddress)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -33,8 +33,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
-	"gorm.io/gorm"
-
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -513,23 +511,6 @@ func emptyJSONIfBlank(js string) []byte {
 func (d *domain) close() {
 	d.cancelCtx()
 	<-d.initDone
-}
-
-func (d *domain) groupEventsByAddress(ctx context.Context, tx *gorm.DB, events []*blockindexer.EventWithData) (map[tktypes.EthAddress][]*blockindexer.EventWithData, error) {
-	eventsByAddress := make(map[tktypes.EthAddress][]*blockindexer.EventWithData)
-	for _, ev := range events {
-		// Note: hits will be cached, but events from unrecognized contracts will always
-		// result in a cache miss and a database lookup
-		// TODO: revisit if we should optimize this
-		psc, err := d.dm.getSmartContractCached(ctx, tx, ev.Address)
-		if err != nil {
-			return nil, err
-		}
-		if psc != nil && psc.Domain().Name() == d.name {
-			eventsByAddress[ev.Address] = append(eventsByAddress[ev.Address], ev)
-		}
-	}
-	return eventsByAddress, nil
 }
 
 func (d *domain) getVerifier(ctx context.Context, algorithm string, verifierType string, privateKey []byte) (verifier string, err error) {

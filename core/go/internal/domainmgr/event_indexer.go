@@ -109,6 +109,49 @@ func (dm *domainManager) notifyTransactions(txCompletions receiptsByOnChainOrder
 	}
 }
 
+func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID string, events []*blockindexer.EventWithData) (map[tktypes.EthAddress]*prototk.HandleEventBatchRequest, error) {
+
+	batches := make(map[tktypes.EthAddress]*prototk.HandleEventBatchRequest)
+
+	for _, ev := range events {
+		batch := batches[ev.Address]
+		if batch == nil {
+			// Note: hits will be cached, but events from unrecognized contracts will always
+			// result in a cache miss and a database lookup
+			// TODO: revisit if we should optimize this
+			psc, err := d.dm.getSmartContractCached(ctx, tx, ev.Address)
+			if err != nil {
+				return nil, err
+			}
+			if psc == nil {
+				log.L(ctx).Debugf("Discarding %s event for unregistered address %s", ev.SoliditySignature, ev.Address)
+				continue
+			}
+			batch = &prototk.HandleEventBatchRequest{
+				BatchId: batchID,
+				ContractInfo: &prototk.ContractInfo{
+					ContractAddress: psc.Address().String(),
+					ContractConfig:  psc.ConfigBytes(),
+				},
+			}
+			batches[ev.Address] = batch
+		}
+		batch.Events = append(batch.Events, &prototk.OnChainEvent{
+			Location: &prototk.OnChainEventLocation{
+				TransactionHash:  ev.TransactionHash.String(),
+				BlockNumber:      ev.BlockNumber,
+				TransactionIndex: ev.TransactionIndex,
+				LogIndex:         ev.LogIndex,
+			},
+			Signature:         ev.Signature.String(),
+			SoliditySignature: ev.SoliditySignature,
+			DataJson:          ev.Data.String(),
+		})
+	}
+
+	return batches, nil
+}
+
 func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
 	// First index any domain contract deployments
 	nonDeployEvents, txCompletions, err := d.dm.registrationIndexer(ctx, dbTX, batch)
@@ -117,12 +160,12 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 	}
 
 	// Then divide remaining events by contract address and dispatch to the appropriate domain context
-	eventsByAddress, err := d.groupEventsByAddress(ctx, dbTX, nonDeployEvents)
+	batchesByAddress, err := d.batchEventsByAddress(ctx, dbTX, batch.BatchID.String(), nonDeployEvents)
 	if err != nil {
 		return nil, err
 	}
-	for addr, events := range eventsByAddress {
-		res, err := d.handleEventBatchForContract(ctx, batch.BatchID, addr, events)
+	for addr, batch := range batchesByAddress {
+		res, err := d.handleEventBatchForContract(ctx, addr, batch)
 		if err != nil {
 			return nil, err
 		}
@@ -164,7 +207,7 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 		// for ALL private transactions (not just those where we're the sender) as there
 		// might be in-memory coordination activities that need to re-process now these
 		// transactions have been finalized.
-		if err := d.dm.txManager.FinalizeTransactions(ctx, dbTX, txCompletions); err != nil {
+		if _, err := d.dm.txManager.MatchAndFinalizeTransactions(ctx, dbTX, txCompletions); err != nil {
 			return nil, err
 		}
 	}
@@ -183,28 +226,10 @@ func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*
 	return &txUUID, nil
 }
 
-func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.UUID, contractAddress tktypes.EthAddress, events []*blockindexer.EventWithData) (*prototk.HandleEventBatchResponse, error) {
-	protoEvents := make([]*prototk.OnChainEvent, len(events))
-	for i, e := range events {
-		protoEvents[i] = &prototk.OnChainEvent{
-			Address: e.Address.String(),
-			Location: &prototk.OnChainEventLocation{
-				TransactionHash:  e.TransactionHash.String(),
-				BlockNumber:      e.BlockNumber,
-				TransactionIndex: e.TransactionIndex,
-				LogIndex:         e.LogIndex,
-			},
-			Signature:         e.Signature.String(),
-			SoliditySignature: e.SoliditySignature,
-			DataJson:          e.Data.String(),
-		}
-	}
+func (d *domain) handleEventBatchForContract(ctx context.Context, addr tktypes.EthAddress, batch *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
 
 	var res *prototk.HandleEventBatchResponse
-	res, err := d.api.HandleEventBatch(ctx, &prototk.HandleEventBatchRequest{
-		BatchId: batchID.String(),
-		Events:  protoEvents,
-	})
+	res, err := d.api.HandleEventBatch(ctx, batch)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +273,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		})
 	}
 
-	err = d.dm.stateStore.RunInDomainContext(d.name, contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+	err = d.dm.stateStore.RunInDomainContext(d.name, addr, func(ctx context.Context, dsi components.DomainStateInterface) error {
 		for txID, states := range newStates {
 			if _, err = dsi.UpsertStates(&txID, states); err != nil {
 				return err

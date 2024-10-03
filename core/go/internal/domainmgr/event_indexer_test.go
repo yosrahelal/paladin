@@ -226,7 +226,7 @@ func TestHandleEventBatch(t *testing.T) {
 		mc.domainStateInterface.On("MarkStatesSpent", txID, []string{stateSpent}).Return(nil)
 		mc.domainStateInterface.On("MarkStatesConfirmed", txID, []string{stateConfirmed}).Return(nil)
 		mc.domainStateInterface.On("UpsertStates", &txID, mock.Anything).Return(nil, nil)
-		mc.txManager.On("FinalizeTransactions", mock.Anything, mock.Anything, mock.MatchedBy(func(receipts []*components.ReceiptInput) bool {
+		mc.txManager.On("MatchAndFinalizeTransactions", mock.Anything, mock.Anything, mock.MatchedBy(func(receipts []*components.ReceiptInput) bool {
 			// Note first contract is unrecognized, second is recognized
 			require.Len(t, receipts, 1)
 			r := receipts[0]
@@ -238,7 +238,7 @@ func TestHandleEventBatch(t *testing.T) {
 			assert.Equal(t, expectedEvent.TransactionIndex, r.OnChain.TransactionIndex)
 			assert.Equal(t, expectedEvent.LogIndex, r.OnChain.LogIndex)
 			return true
-		})).Return(nil)
+		})).Return([]uuid.UUID{txID}, nil)
 	})
 	defer done()
 	d := tp.d
@@ -256,6 +256,7 @@ func TestHandleEventBatch(t *testing.T) {
 
 	tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
 		assert.Equal(t, batchID.String(), req.BatchId)
+		assert.Equal(t, contract2.String(), req.ContractInfo.ContractAddress)
 		assert.Equal(t, `{"result": "success"}`, req.Events[0].DataJson)
 		return &prototk.HandleEventBatchResponse{
 			TransactionsComplete: []*prototk.CompletedTransaction{
@@ -304,7 +305,7 @@ func TestHandleEventBatchFinalizeFail(t *testing.T) {
 	ctx, dm, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
 		mc.db.ExpectExec(`INSERT.*private_smart_contracts`).WillReturnResult(driver.ResultNoRows)
 
-		mc.txManager.On("FinalizeTransactions", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
+		mc.txManager.On("MatchAndFinalizeTransactions", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
 	d := tp.d

@@ -17,10 +17,11 @@ package zetosigner
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/utxo"
-	pb "github.com/kaleido-io/paladin/core/pkg/proto"
+	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 )
 
 type commonWitnessInputs struct {
@@ -54,7 +55,7 @@ func buildCircuitInputs(commonInputs *pb.ProvingRequestCommon) (*commonWitnessIn
 		} else {
 			ownerPubKey, err := DecodeBabyJubJubPublicKey(commonInputs.OutputOwners[i])
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to decode output owner public key. %s", err)
 			}
 			outputOwnerPublicKeys[i] = []*big.Int{ownerPubKey.X, ownerPubKey.Y}
 			value := commonInputs.OutputValues[i]

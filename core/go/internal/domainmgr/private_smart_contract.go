@@ -83,9 +83,11 @@ func (dc *domainContract) InitTransaction(ctx context.Context, tx *components.Pr
 	}
 
 	txSpec := &prototk.TransactionSpecification{
-		TransactionId:      tktypes.Bytes32UUIDFirst16(tx.ID).String(),
-		ContractAddress:    dc.info.Address.String(),
-		ContractConfig:     dc.info.ConfigBytes,
+		TransactionId: tktypes.Bytes32UUIDFirst16(tx.ID).String(),
+		ContractInfo: &prototk.ContractInfo{
+			ContractAddress: dc.info.Address.String(),
+			ContractConfig:  dc.info.ConfigBytes,
+		},
 		From:               txi.From,
 		FunctionAbiJson:    string(abiJSON),
 		FunctionParamsJson: string(paramsJSON),
