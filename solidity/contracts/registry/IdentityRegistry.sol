@@ -17,6 +17,12 @@ contract IdentityRegistry is UUPSUpgradeable {
         string value;
     }
 
+    struct PropertyInfo {
+        string name;
+        string value;
+        bytes32 hash;
+    }
+
     event IdentityRegistered(
         bytes32 parentIdentityHash,
         bytes32 identityHash,
@@ -174,6 +180,23 @@ contract IdentityRegistry is UUPSUpgradeable {
     ) public view returns (bytes32[] memory hashes) {
         // Lists the property name hashes for a given identity
         hashes = propertyNames[identityHash];
+    }
+
+    function listIdentityProperties(
+        bytes32 identityHash
+    ) public view returns (PropertyInfo[] memory propertyInfos) {
+        bytes32[] memory hashes = propertyNames[identityHash];
+        propertyInfos = new PropertyInfo[](hashes.length);
+
+        for (uint256 i = 0; i < hashes.length; i++) {
+            bytes32 hash = hashes[i];
+            Property memory prop = properties[identityHash][hash];
+            propertyInfos[i] = PropertyInfo({
+                name: prop.name,
+                value: prop.value,
+                hash: hash
+            });
+        }
     }
 
     function getIdentityPropertyByHash(

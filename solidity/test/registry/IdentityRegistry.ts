@@ -311,6 +311,16 @@ describe("Identity Registry", () => {
       hre.ethers.ZeroHash
     );
     expect(transaction1.length).to.equal(2);
+    let listedProperties = await identityRegistry.listIdentityProperties(
+      hre.ethers.ZeroHash
+    );
+    expect(listedProperties.length).to.equal(2);
+    expect(listedProperties[0].hash).to.equal(transaction1[0]);
+    expect(listedProperties[0].name).to.equal("key-root-1");
+    expect(listedProperties[0].value).to.equal("value-root-1");
+    expect(listedProperties[1].hash).to.equal(transaction1[1]);
+    expect(listedProperties[1].name).to.equal("key-root-2");
+    expect(listedProperties[1].value).to.equal("value-root-2");
 
     // Get property key="key-root-1" using retreived key hash
     const transaction2 = await identityRegistry.getIdentityPropertyByHash(
@@ -333,6 +343,17 @@ describe("Identity Registry", () => {
       identity_a_hash
     );
     expect(transaction4.length).to.equal(2);
+
+    listedProperties = await identityRegistry.listIdentityProperties(
+      identity_a_hash
+    );
+    expect(listedProperties.length).to.equal(2);
+    expect(listedProperties[0].hash).to.equal(transaction4[0]);
+    expect(listedProperties[0].name).to.equal("key-identity-a-1");
+    expect(listedProperties[0].value).to.equal("value-identity-a-1");
+    expect(listedProperties[1].hash).to.equal(transaction4[1]);
+    expect(listedProperties[1].name).to.equal("key-identity-a-2");
+    expect(listedProperties[1].value).to.equal("value-identity-a-2");
 
     // Get property key="key-identity-a-1" using retreived key hash
     const transaction5 = await identityRegistry.getIdentityPropertyByHash(
