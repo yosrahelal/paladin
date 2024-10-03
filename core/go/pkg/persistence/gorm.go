@@ -26,8 +26,9 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	migratedb "github.com/golang-migrate/migrate/v4/database"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 
 	"gorm.io/gorm"
@@ -39,7 +40,7 @@ type provider struct {
 	p    SQLDBProvider
 	gdb  *gorm.DB
 	db   *sql.DB
-	conf *SQLDBConfig
+	conf *pldconf.SQLDBConfig
 }
 
 type SQLDBProvider interface {
@@ -48,25 +49,7 @@ type SQLDBProvider interface {
 	GetMigrationDriver(*sql.DB) (migratedb.Driver, error)
 }
 
-// Extensible in case we want to add more options (not env vars are not available wrapped in Java)
-type DSNParamLocation struct {
-	File string `json:"file,omitempty"` // whole file contains the property value - will be trimmed before use
-}
-
-type SQLDBConfig struct {
-	DSN             string                      `json:"dsn"` // can have {{.ParamName}} for replacement from params
-	DSNParams       map[string]DSNParamLocation `json:"dsnParams"`
-	MaxOpenConns    *int                        `json:"maxOpenConns"`
-	MaxIdleConns    *int                        `json:"maxIdleConns"`
-	ConnMaxIdleTime *string                     `json:"connMaxIdleTime"`
-	ConnMaxLifetime *string                     `json:"connMaxLifetime"`
-	AutoMigrate     *bool                       `json:"autoMigrate"`
-	MigrationsDir   string                      `json:"migrationsDir"`
-	DebugQueries    bool                        `json:"debugQueries"`
-	StatementCache  *bool                       `json:"statementCache"`
-}
-
-func NewSQLProvider(ctx context.Context, p SQLDBProvider, conf *SQLDBConfig, defs *SQLDBConfig) (_ Persistence, err error) {
+func NewSQLProvider(ctx context.Context, p SQLDBProvider, conf *pldconf.SQLDBConfig, defs *pldconf.SQLDBConfig) (_ Persistence, err error) {
 	if conf.DSN == "" {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgPersistenceMissingDSN)
 	}
@@ -110,7 +93,7 @@ func NewSQLProvider(ctx context.Context, p SQLDBProvider, conf *SQLDBConfig, def
 	return gp, nil
 }
 
-func templatedDSN(ctx context.Context, conf *SQLDBConfig) (string, error) {
+func templatedDSN(ctx context.Context, conf *pldconf.SQLDBConfig) (string, error) {
 
 	tmpl, err := template.New("dsn").Option("missingkey=error").Parse(conf.DSN)
 	if err != nil {

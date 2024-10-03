@@ -15,8 +15,10 @@
 
 package zeto
 
+import "github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
+
 func useNullifiers(circuitId string) bool {
-	if circuitId == "anon_nullifier" || circuitId == "anon_enc_nullifier" {
+	if circuitId == constants.CIRCUIT_ANON_NULLIFIER {
 		return true
 	}
 	return false

@@ -26,6 +26,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -362,7 +363,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				txID := decodeTransactionData(mint.Data)
 				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
 				res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, mint.Outputs)...)
-				if domainConfig.TokenName == "Zeto_AnonNullifier" {
+				if domainConfig.TokenName == constants.TOKEN_ANON_NULLIFIER {
 					newStates, err := z.updateMerkleTree(txID, domainConfig.TokenName, ev.Address, mint.Outputs)
 					if err != nil {
 						return nil, err
@@ -379,7 +380,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
 				res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
 				res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
-				if domainConfig.TokenName == "Zeto_AnonNullifier" {
+				if domainConfig.TokenName == constants.TOKEN_ANON_NULLIFIER {
 					newStates, err := z.updateMerkleTree(txID, domainConfig.TokenName, ev.Address, transfer.Outputs)
 					if err != nil {
 						return nil, err
@@ -396,7 +397,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
 				res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
 				res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
-				if domainConfig.TokenName == "Zeto_AnonNullifier" {
+				if domainConfig.TokenName == constants.TOKEN_ANON_NULLIFIER {
 					newStates, err := z.updateMerkleTree(txID, domainConfig.TokenName, ev.Address, transfer.Outputs)
 					if err != nil {
 						return nil, err

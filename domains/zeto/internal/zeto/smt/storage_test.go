@@ -27,7 +27,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
-	"gorm.io/gorm"
 )
 
 type testDomainCallbacks struct {
@@ -45,8 +44,8 @@ func (dc *testDomainCallbacks) RecoverSigner(ctx context.Context, req *prototk.R
 	return nil, nil
 }
 
-func returnNotFoundError() (*prototk.FindAvailableStatesResponse, error) {
-	return nil, gorm.ErrRecordNotFound
+func (dc *testDomainCallbacks) DecodeData(context.Context, *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error) {
+	return nil, nil
 }
 
 func returnCustomError() (*prototk.FindAvailableStatesResponse, error) {
@@ -100,6 +99,22 @@ func returnNode(t int) func() (*prototk.FindAvailableStatesResponse, error) {
 			"rightChild": "0x1234567890123456789012345678901234567890123456789012345678901234",
 			"type":       "0x01", // branch node
 		})
+	} else if t == 5 {
+		data, _ = json.Marshal(map[string]string{
+			"index":      "baddata",
+			"leftChild":  "0x0000000000000000000000000000000000000000000000000000000000000000",
+			"refKey":     "0xedca9c581dad38731c33e94afb39cb78c44d602de59440e128ad3ce882cce409",
+			"rightChild": "0x0000000000000000000000000000000000000000000000000000000000000000",
+			"type":       "0x02", // leaf node
+		})
+	} else if t == 6 {
+		data, _ = json.Marshal(map[string]string{
+			"index":      "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			"leftChild":  "0x0000000000000000000000000000000000000000000000000000000000000000",
+			"refKey":     "0xedca9c581dad38731c33e94afb39cb78c44d602de59440e128ad3ce882cce409",
+			"rightChild": "0x0000000000000000000000000000000000000000000000000000000000000000",
+			"type":       "0x02", // leaf node
+		})
 	}
 	return func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{
@@ -114,14 +129,6 @@ func returnNode(t int) func() (*prototk.FindAvailableStatesResponse, error) {
 
 func TestStorage(t *testing.T) {
 	contractAddress := tktypes.RandAddress().Address0xHex()
-	storage, _, err := New(&testDomainCallbacks{returnFunc: returnNotFoundError}, "test", contractAddress, "root-schema", "node-schema")
-	assert.NoError(t, err)
-	assert.Equal(t, 0, big.NewInt(0).Cmp(storage.(*statesStorage).rootNode.BigInt()))
-	assert.Equal(t, 1, len(storage.(*statesStorage).newNodes))
-	var root MerkleTreeRoot
-	err = json.Unmarshal([]byte(storage.(*statesStorage).newNodes[0].StateDataJson), &root)
-	assert.NoError(t, err)
-	assert.Equal(t, "0x0000000000000000000000000000000000000000000000000000000000000000", root.RootIndex)
 
 	storage, smt, err := New(&testDomainCallbacks{returnFunc: returnCustomError}, "test", contractAddress, "root-schema", "node-schema")
 	assert.EqualError(t, err, "failed to find available states. test error")
@@ -133,6 +140,11 @@ func TestStorage(t *testing.T) {
 	assert.NotNil(t, storage)
 	assert.NotNil(t, smt)
 	assert.Equal(t, 0, big.NewInt(0).Cmp(storage.(*statesStorage).rootNode.BigInt()))
+	assert.Equal(t, 1, len(storage.(*statesStorage).newNodes))
+	var root MerkleTreeRoot
+	err = json.Unmarshal([]byte(storage.(*statesStorage).newNodes[0].StateDataJson), &root)
+	assert.NoError(t, err)
+	assert.Equal(t, "0x0000000000000000000000000000000000000000000000000000000000000000", root.RootIndex)
 
 	storage, smt, err = New(&testDomainCallbacks{returnFunc: returnBadData}, "test", contractAddress, "root-schema", "node-schema")
 	assert.EqualError(t, err, "failed to unmarshal root node index. invalid character 'b' looking for beginning of value")
@@ -144,17 +156,19 @@ func TestStorage(t *testing.T) {
 	assert.NotNil(t, storage)
 	assert.NotNil(t, smt)
 	assert.Equal(t, "1234567890123456789012345678901234567890123456789012345678901234", storage.(*statesStorage).rootNode.Hex())
+
+	assert.Empty(t, storage.(*statesStorage).GetNewStates())
+	idx, err := storage.(*statesStorage).GetRootNodeIndex()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, idx)
 }
 
 func TestGetNode(t *testing.T) {
 	contractAddress := tktypes.RandAddress().Address0xHex()
-	storage := NewStatesStorage(&testDomainCallbacks{returnFunc: returnNotFoundError}, "test", contractAddress, "root-schema", "node-schema")
 	idx, _ := node.NewNodeIndexFromBigInt(big.NewInt(1234))
-	_, err := storage.GetNode(idx)
-	assert.EqualError(t, err, core.ErrNotFound.Error())
 
-	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnCustomError}, "test", contractAddress, "root-schema", "node-schema")
-	_, err = storage.GetNode(idx)
+	storage := NewStatesStorage(&testDomainCallbacks{returnFunc: returnCustomError}, "test", contractAddress, "root-schema", "node-schema")
+	_, err := storage.GetNode(idx)
 	assert.EqualError(t, err, "failed to find available states. test error")
 
 	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", contractAddress, "root-schema", "node-schema")
@@ -182,6 +196,14 @@ func TestGetNode(t *testing.T) {
 	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(4)}, "test", contractAddress, "root-schema", "node-schema")
 	_, err = storage.GetNode(idx)
 	assert.EqualError(t, err, "inputs values not inside Finite Field")
+
+	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(5)}, "test", contractAddress, "root-schema", "node-schema")
+	_, err = storage.GetNode(idx)
+	assert.ErrorContains(t, err, "failed to unmarshal Merkle Tree Node from state json. PD020007: Invalid hex")
+
+	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(6)}, "test", contractAddress, "root-schema", "node-schema")
+	_, err = storage.GetNode(idx)
+	assert.ErrorContains(t, err, "failed to unmarshal Merkle Tree Node from state json. PD020008: Failed to parse value as 32 byte hex string")
 }
 
 func TestInsertNode(t *testing.T) {

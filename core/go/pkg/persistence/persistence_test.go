@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/golang-migrate/migrate/v4"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,17 +45,17 @@ func TestMigrateUpDown(t *testing.T) {
 func TestPersistenceTypes(t *testing.T) {
 	ctx := context.Background()
 
-	_, err := NewPersistence(ctx, &Config{})
+	_, err := NewPersistence(ctx, &pldconf.DBConfig{})
 	assert.Regexp(t, "PD010201", err)
 
-	_, err = NewPersistence(ctx, &Config{Type: "sqlite"})
+	_, err = NewPersistence(ctx, &pldconf.DBConfig{Type: "sqlite"})
 	assert.Regexp(t, "PD010201", err)
 
-	_, err = NewPersistence(ctx, &Config{Type: "postgres"})
+	_, err = NewPersistence(ctx, &pldconf.DBConfig{Type: "postgres"})
 	assert.Regexp(t, "PD010201", err)
 
 	// Different error for wrong case
-	_, err = NewPersistence(ctx, &Config{Type: "wrong"})
+	_, err = NewPersistence(ctx, &pldconf.DBConfig{Type: "wrong"})
 	assert.Regexp(t, "PD010200.*wrong", err)
 
 }

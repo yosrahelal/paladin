@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
-	"github.com/kaleido-io/paladin/core/pkg/proto"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -19,6 +19,7 @@ package httpserver
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -26,9 +27,10 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tlsconf"
 )
@@ -50,12 +52,12 @@ type httpServer struct {
 	started         bool
 }
 
-func NewServer(ctx context.Context, description string, conf *Config, handler http.Handler) (_ Server, err error) {
+func NewServer(ctx context.Context, description string, conf *pldconf.HTTPServerConfig, handler http.Handler) (_ Server, err error) {
 
 	s := &httpServer{
 		description:     description,
 		httpServerDone:  make(chan error),
-		shutdownTimeout: confutil.DurationMin(conf.ShutdownTimeout, 0, *HTTPDefaults.ShutdownTimeout),
+		shutdownTimeout: confutil.DurationMin(conf.ShutdownTimeout, 0, *pldconf.HTTPDefaults.ShutdownTimeout),
 	}
 	s.ctx, s.cancelCtx = context.WithCancel(ctx)
 
@@ -63,7 +65,7 @@ func NewServer(ctx context.Context, description string, conf *Config, handler ht
 		return nil, i18n.NewError(ctx, tkmsgs.MsgHTTPServerMissingPort, description)
 	}
 
-	listenAddr := fmt.Sprintf("%s:%d", confutil.StringNotEmpty(conf.Address, *HTTPDefaults.Address), *conf.Port)
+	listenAddr := fmt.Sprintf("%s:%d", confutil.StringNotEmpty(conf.Address, *pldconf.HTTPDefaults.Address), *conf.Port)
 	if s.listener, err = net.Listen("tcp", listenAddr); err != nil {
 		return nil, i18n.WrapError(ctx, err, tkmsgs.MsgHTTPServerStartFailed, listenAddr)
 	}
@@ -74,8 +76,13 @@ func NewServer(ctx context.Context, description string, conf *Config, handler ht
 		return nil, err
 	}
 
-	maxRequestTimeout := confutil.DurationMin(conf.MaxRequestTimeout, 1*time.Second, *HTTPDefaults.MaxRequestTimeout)
-	defaultRequestTimeout := confutil.DurationMin(conf.DefaultRequestTimeout, 1*time.Second, *HTTPDefaults.DefaultRequestTimeout)
+	// If TLS Config is provided, only accept connections doing TLS
+	if tlsConfig != nil {
+		s.listener = tls.NewListener(s.listener, tlsConfig)
+	}
+
+	maxRequestTimeout := confutil.DurationMin(conf.MaxRequestTimeout, 1*time.Second, *pldconf.HTTPDefaults.MaxRequestTimeout)
+	defaultRequestTimeout := confutil.DurationMin(conf.DefaultRequestTimeout, 1*time.Second, *pldconf.HTTPDefaults.DefaultRequestTimeout)
 	readTimeout := confutil.DurationMin(conf.ReadTimeout, maxRequestTimeout+1*time.Second, "0")
 	writeTimeout := confutil.DurationMin(conf.WriteTimeout, maxRequestTimeout+1*time.Second, "0")
 

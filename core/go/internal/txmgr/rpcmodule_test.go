@@ -24,10 +24,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/pkg/config"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
@@ -37,17 +37,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*config.TxManagerConfig, *mockComponents)) (context.Context, string, *txManager, func()) {
+func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*pldconf.TxManagerConfig, *mockComponents)) (context.Context, string, *txManager, func()) {
 	ctx, txm, txmDone := newTestTransactionManager(t, true, init...)
 
-	rpcServer, err := rpcserver.NewRPCServer(ctx, &rpcserver.Config{
-		HTTP: rpcserver.HTTPEndpointConfig{
-			Config: httpserver.Config{
+	rpcServer, err := rpcserver.NewRPCServer(ctx, &pldconf.RPCServerConfig{
+		HTTP: pldconf.RPCServerConfigHTTP{
+			HTTPServerConfig: pldconf.HTTPServerConfig{
 				Port:            confutil.P(0),
 				ShutdownTimeout: confutil.P("0"),
 			},
 		},
-		WS: rpcserver.WSEndpointConfig{Disabled: true},
+		WS: pldconf.RPCServerConfigWS{Disabled: true},
 	})
 	require.NoError(t, err)
 
@@ -74,7 +74,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	)
 	defer done()
 
-	rpcClient, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{URL: url})
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
 	require.NoError(t, err)
 
 	sampleABI := abi.ABI{
@@ -283,7 +283,7 @@ func TestPublicTransactionPassthroughQueries(t *testing.T) {
 	)
 	defer done()
 
-	rpcClient, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{URL: url})
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
 	require.NoError(t, err)
 
 	// Simple query

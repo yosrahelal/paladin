@@ -112,7 +112,11 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		if err != nil {
 			return nil, err
 		}
-		outputs[i] = coin.Hash.String()
+		hash, err := coin.Hash()
+		if err != nil {
+			return nil, err
+		}
+		outputs[i] = hash.String()
 	}
 
 	data, err := encodeTransactionData(ctx, req.Transaction)

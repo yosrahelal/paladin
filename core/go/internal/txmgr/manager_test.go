@@ -21,8 +21,9 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/alecthomas/assert/v2"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -30,24 +31,26 @@ import (
 )
 
 type mockComponents struct {
-	db            sqlmock.Sqlmock
-	domainManager *componentmocks.DomainManager
-	blockIndexer  *componentmocks.BlockIndexer
-	publicTxMgr   *componentmocks.PublicTxManager
-	privateTxMgr  *componentmocks.PrivateTxManager
+	db               sqlmock.Sqlmock
+	domainManager    *componentmocks.DomainManager
+	blockIndexer     *componentmocks.BlockIndexer
+	publicTxMgr      *componentmocks.PublicTxManager
+	privateTxMgr     *componentmocks.PrivateTxManager
+	identityResolver *componentmocks.IdentityResolver
 }
 
-func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *config.TxManagerConfig, mc *mockComponents)) (context.Context, *txManager, func()) {
+func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pldconf.TxManagerConfig, mc *mockComponents)) (context.Context, *txManager, func()) {
 
 	log.SetLevel("debug")
 	ctx := context.Background()
 
-	conf := &config.TxManagerConfig{}
+	conf := &pldconf.TxManagerConfig{}
 	mc := &mockComponents{
-		blockIndexer:  componentmocks.NewBlockIndexer(t),
-		domainManager: componentmocks.NewDomainManager(t),
-		publicTxMgr:   componentmocks.NewPublicTxManager(t),
-		privateTxMgr:  componentmocks.NewPrivateTxManager(t),
+		blockIndexer:     componentmocks.NewBlockIndexer(t),
+		domainManager:    componentmocks.NewDomainManager(t),
+		publicTxMgr:      componentmocks.NewPublicTxManager(t),
+		privateTxMgr:     componentmocks.NewPrivateTxManager(t),
+		identityResolver: componentmocks.NewIdentityResolver(t),
 	}
 
 	componentMocks := componentmocks.NewAllComponents(t)
@@ -55,6 +58,7 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *con
 	componentMocks.On("DomainManager").Return(mc.domainManager).Maybe()
 	componentMocks.On("PublicTxManager").Return(mc.publicTxMgr).Maybe()
 	componentMocks.On("PrivateTxManager").Return(mc.privateTxMgr).Maybe()
+	componentMocks.On("IdentityResolver").Return(mc.identityResolver).Maybe()
 
 	var p persistence.Persistence
 	var err error

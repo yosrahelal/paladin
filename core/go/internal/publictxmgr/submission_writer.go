@@ -18,8 +18,9 @@ package publictxmgr
 import (
 	"context"
 
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/flushwriter"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
 	"gorm.io/gorm"
@@ -32,9 +33,9 @@ type submissionWriter struct {
 	flushwriter.Writer[*DBPubTxnSubmission, *noResult]
 }
 
-func newSubmissionWriter(bgCtx context.Context, p persistence.Persistence, conf *config.PublicTxManagerConfig) *submissionWriter {
+func newSubmissionWriter(bgCtx context.Context, p persistence.Persistence, conf *pldconf.PublicTxManagerConfig) *submissionWriter {
 	sw := &submissionWriter{}
-	sw.Writer = flushwriter.NewWriter(bgCtx, sw.runBatch, p, &conf.Manager.SubmissionWriter, &config.PublicTxManagerDefaults.Manager.SubmissionWriter)
+	sw.Writer = flushwriter.NewWriter(bgCtx, sw.runBatch, p, &conf.Manager.SubmissionWriter, &pldconf.PublicTxManagerDefaults.Manager.SubmissionWriter)
 	return sw
 }
 

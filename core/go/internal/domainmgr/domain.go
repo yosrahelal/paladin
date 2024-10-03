@@ -29,11 +29,11 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -49,7 +49,7 @@ type domain struct {
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 
-	conf            *config.DomainConfig
+	conf            *pldconf.DomainConfig
 	dm              *domainManager
 	name            string
 	api             components.DomainManagerToDomain
@@ -59,15 +59,15 @@ type domain struct {
 	initialized        atomic.Bool
 	initRetry          *retry.Retry
 	config             *prototk.DomainConfig
-	schemasBySignature map[string]statestore.Schema
-	schemasByID        map[string]statestore.Schema
+	schemasBySignature map[string]components.Schema
+	schemasByID        map[string]components.Schema
 	eventStream        *blockindexer.EventStream
 
 	initError atomic.Pointer[error]
 	initDone  chan struct{}
 }
 
-func (dm *domainManager) newDomain(name string, conf *config.DomainConfig, toDomain components.DomainManagerToDomain) *domain {
+func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDomain components.DomainManagerToDomain) *domain {
 	d := &domain{
 		dm:              dm,
 		conf:            conf,
@@ -77,8 +77,8 @@ func (dm *domainManager) newDomain(name string, conf *config.DomainConfig, toDom
 		initDone:        make(chan struct{}),
 		registryAddress: tktypes.MustEthAddress(conf.RegistryAddress), // check earlier in startup
 
-		schemasByID:        make(map[string]statestore.Schema),
-		schemasBySignature: make(map[string]statestore.Schema),
+		schemasByID:        make(map[string]components.Schema),
+		schemasBySignature: make(map[string]components.Schema),
 	}
 	log.L(dm.bgCtx).Debugf("Domain %s configured. Config: %s", name, tktypes.JSONString(conf.Config))
 	d.ctx, d.cancelCtx = context.WithCancel(log.WithLogField(dm.bgCtx, "domain", d.name))
@@ -102,7 +102,7 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 	}
 
 	// Ensure all the schemas are recorded to the DB
-	var schemas []statestore.Schema
+	var schemas []components.Schema
 	if len(abiSchemas) > 0 {
 		var err error
 		schemas, err = d.dm.stateStore.EnsureABISchemas(d.ctx, d.name, abiSchemas)
@@ -246,8 +246,8 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainErrorParsingAddress)
 	}
 
-	var states []*statestore.State
-	err = d.dm.stateStore.RunInDomainContext(d.name, *addr, func(ctx context.Context, dsi statestore.DomainStateInterface) (err error) {
+	var states []*components.State
+	err = d.dm.stateStore.RunInDomainContext(d.name, *addr, func(ctx context.Context, dsi components.DomainStateInterface) (err error) {
 		if req.UseNullifiers != nil && *req.UseNullifiers {
 			states, err = dsi.FindAvailableNullifiers(req.SchemaId, &query)
 		} else {
@@ -284,7 +284,7 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataRequest) (*prototk.EncodeDataResponse, error) {
 	var abiData []byte
 	switch encRequest.EncodingType {
-	case prototk.EncodeDataRequest_FUNCTION_CALL_DATA:
+	case prototk.EncodingType_FUNCTION_CALL_DATA:
 		var entry *abi.Entry
 		err := json.Unmarshal([]byte(encRequest.Definition), &entry)
 		if err != nil {
@@ -294,7 +294,7 @@ func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataR
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIEncodingRequestEncodingFail)
 		}
-	case prototk.EncodeDataRequest_TUPLE:
+	case prototk.EncodingType_TUPLE:
 		var param *abi.Parameter
 		err := json.Unmarshal([]byte(encRequest.Definition), &param)
 		if err != nil {
@@ -304,7 +304,7 @@ func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataR
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIEncodingRequestEncodingFail)
 		}
-	case prototk.EncodeDataRequest_ETH_TRANSACTION:
+	case prototk.EncodingType_ETH_TRANSACTION:
 		var tx *ethsigner.Transaction
 		err := json.Unmarshal([]byte(encRequest.Body), &tx)
 		if err != nil {
@@ -319,7 +319,7 @@ func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataR
 		default:
 			return nil, i18n.NewError(ctx, msgs.MsgDomainABIEncodingRequestInvalidType, encRequest.Definition)
 		}
-	case prototk.EncodeDataRequest_TYPED_DATA_V4:
+	case prototk.EncodingType_TYPED_DATA_V4:
 		var tdv4 *eip712.TypedData
 		err := json.Unmarshal([]byte(encRequest.Body), &tdv4)
 		if err != nil {
@@ -334,6 +334,60 @@ func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataR
 	}
 	return &prototk.EncodeDataResponse{
 		Data: abiData,
+	}, nil
+}
+
+func (d *domain) DecodeData(ctx context.Context, decRequest *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error) {
+	var body []byte
+	switch decRequest.EncodingType {
+	case prototk.EncodingType_FUNCTION_CALL_DATA:
+		var entry *abi.Entry
+		err := json.Unmarshal([]byte(decRequest.Definition), &entry)
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestEntryInvalid)
+		}
+		cv, err := entry.DecodeCallDataCtx(ctx, decRequest.Data)
+		if err == nil {
+			body, err = cv.JSON()
+		}
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestFail)
+		}
+	case prototk.EncodingType_TUPLE:
+		var param *abi.Parameter
+		err := json.Unmarshal([]byte(decRequest.Definition), &param)
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestEntryInvalid)
+		}
+		cv, err := param.Components.DecodeABIDataCtx(ctx, []byte(decRequest.Data), 0)
+		if err == nil {
+			body, err = cv.JSON()
+		}
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestFail)
+		}
+	case prototk.EncodingType_EVENT_DATA:
+		var entry *abi.Entry
+		err := json.Unmarshal([]byte(decRequest.Definition), &entry)
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestEntryInvalid)
+		}
+		topics := make([]ethtypes.HexBytes0xPrefix, len(decRequest.Topics))
+		for i, topic := range decRequest.Topics {
+			topics[i] = topic
+		}
+		cv, err := entry.DecodeEventDataCtx(ctx, topics, decRequest.Data)
+		if err == nil {
+			body, err = cv.JSON()
+		}
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestFail)
+		}
+	default:
+		return nil, i18n.NewError(ctx, msgs.MsgDomainABIDecodingRequestInvalidType, decRequest.EncodingType)
+	}
+	return &prototk.DecodeDataResponse{
+		Body: string(body),
 	}, nil
 }
 
@@ -560,7 +614,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		confirmedStates[*txUUID] = append(confirmedStates[*txUUID], state.Id)
 	}
 
-	newStates := make(map[uuid.UUID][]*statestore.StateUpsert, len(res.NewStates))
+	newStates := make(map[uuid.UUID][]*components.StateUpsert, len(res.NewStates))
 	for _, state := range res.NewStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
@@ -573,7 +627,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 				return nil, err
 			}
 		}
-		newStates[*txUUID] = append(newStates[*txUUID], &statestore.StateUpsert{
+		newStates[*txUUID] = append(newStates[*txUUID], &components.StateUpsert{
 			ID:       id,
 			SchemaID: state.SchemaId,
 			Data:     tktypes.RawJSON(state.StateDataJson),
@@ -581,7 +635,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, batchID uuid.U
 		})
 	}
 
-	err = d.dm.stateStore.RunInDomainContext(d.name, contractAddress, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
+	err = d.dm.stateStore.RunInDomainContext(d.name, contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 		for txID, states := range newStates {
 			if _, err = dsi.UpsertStates(&txID, states); err != nil {
 				return err

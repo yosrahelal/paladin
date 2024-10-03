@@ -25,6 +25,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
+
 	pb "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"

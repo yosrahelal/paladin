@@ -24,6 +24,7 @@ import (
 	"testing/iotest"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -32,7 +33,7 @@ import (
 
 func TestRPCMessageBatch(t *testing.T) {
 
-	url, s, done := newTestServerHTTP(t, &Config{})
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	regTestRPC(s, "ut_methodA", RPCMethod2(func(ctx context.Context, param0, param1 string) (string, error) {
@@ -84,7 +85,7 @@ func TestRPCMessageBatch(t *testing.T) {
 
 func TestRPCMessageBatchOneFails200WithError(t *testing.T) {
 
-	url, s, done := newTestServerHTTP(t, &Config{})
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	regTestRPC(s, "ut_methodA", RPCMethod2(func(ctx context.Context, param0, param1 string) (string, error) {
@@ -139,7 +140,7 @@ func TestRPCMessageBatchOneFails200WithError(t *testing.T) {
 
 func TestRPCMessageBatchAllFail(t *testing.T) {
 
-	url, s, done := newTestServerHTTP(t, &Config{})
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	regTestRPC(s, "ut_methodA", RPCMethod2(func(ctx context.Context, param0, param1 string) (string, error) {
@@ -215,7 +216,7 @@ func TestRPCMessageBatchAllFail(t *testing.T) {
 
 func TestRPCHandleBadDataEmptySpace(t *testing.T) {
 
-	url, _, done := newTestServerHTTP(t, &Config{})
+	url, _, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	var jsonResponse rpcclient.RPCResponse
@@ -233,7 +234,7 @@ func TestRPCHandleBadDataEmptySpace(t *testing.T) {
 
 func TestRPCHandleIOError(t *testing.T) {
 
-	_, s, done := newTestServerHTTP(t, &Config{})
+	_, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	iRPCResponse, ok := s.rpcHandler(context.Background(), iotest.ErrReader(fmt.Errorf("pop")), nil)
@@ -246,7 +247,7 @@ func TestRPCHandleIOError(t *testing.T) {
 
 func TestRPCBadArrayError(t *testing.T) {
 
-	_, s, done := newTestServerHTTP(t, &Config{})
+	_, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	iRPCResponse, ok := s.rpcHandler(context.Background(), strings.NewReader("[... this is not an array"), nil)

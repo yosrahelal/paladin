@@ -24,7 +24,8 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	proto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/stretchr/testify/assert"
@@ -34,11 +35,11 @@ import (
 func newTestFilesystemStore(t *testing.T) (context.Context, *filesystemStore) {
 	ctx := context.Background()
 
-	sf := NewFilesystemStoreFactory[*signerapi.Config]()
-	store, err := sf.NewKeyStore(ctx, &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeFilesystem,
-			FileSystem: signerapi.FileSystemConfig{
+	sf := NewFilesystemStoreFactory[*signerapi.ConfigNoExt]()
+	store, err := sf.NewKeyStore(ctx, &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeFilesystem,
+			FileSystem: pldconf.FileSystemKeyStoreConfig{
 				Path: confutil.P(t.TempDir()),
 			},
 		},
@@ -54,11 +55,11 @@ func TestFileSystemStoreBadDir(t *testing.T) {
 
 	badPath := path.Join(t.TempDir(), "wrong")
 
-	sf := NewFilesystemStoreFactory[*signerapi.Config]()
-	_, err := sf.NewKeyStore(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeFilesystem,
-			FileSystem: signerapi.FileSystemConfig{
+	sf := NewFilesystemStoreFactory[*signerapi.ConfigNoExt]()
+	_, err := sf.NewKeyStore(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeFilesystem,
+			FileSystem: pldconf.FileSystemKeyStoreConfig{
 				Path: confutil.P(badPath),
 			},
 		},
@@ -68,10 +69,10 @@ func TestFileSystemStoreBadDir(t *testing.T) {
 	err = os.WriteFile(badPath, []byte{}, 0644)
 	require.NoError(t, err)
 
-	_, err = sf.NewKeyStore(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeFilesystem,
-			FileSystem: signerapi.FileSystemConfig{
+	_, err = sf.NewKeyStore(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeFilesystem,
+			FileSystem: pldconf.FileSystemKeyStoreConfig{
 				Path: confutil.P(badPath),
 			},
 		},

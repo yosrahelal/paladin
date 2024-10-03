@@ -21,7 +21,8 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/stretchr/testify/assert"
@@ -46,7 +47,7 @@ func TestQueryWrapperLimitRequired(t *testing.T) {
 }
 
 func TestQueryWrapperMapFail(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, func(conf *config.TxManagerConfig, mc *mockComponents) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.db.ExpectQuery("SELECT.*transactions").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(uuid.New()))
 	})
 	defer done()

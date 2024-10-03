@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/inflight"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -59,7 +60,7 @@ func newPluginInstance[M any](pf *pluginFactory[M], connString, pluginID string)
 		impl:       pf.impl,
 		connString: connString,
 		id:         pluginID,
-		retry:      retry.NewRetryIndefinite(&retry.Defaults.Config),
+		retry:      retry.NewRetryIndefinite(&pldconf.RetryDefaults.RetryConfig),
 		done:       make(chan struct{}),
 	}
 	pi.ctx, pi.cancelCtx = context.WithCancel(log.WithLogField(context.Background(), "plugin", pluginID))

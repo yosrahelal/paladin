@@ -6,7 +6,7 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
-	pb "github.com/kaleido-io/paladin/core/pkg/proto"
+	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 )
 
 func assembleInputs_anon(inputs *commonWitnessInputs, keyEntry *core.KeyEntry) map[string]interface{} {

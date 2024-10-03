@@ -21,10 +21,12 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,19 +34,16 @@ import (
 type mockComponents struct {
 	c               *componentmocks.AllComponents
 	registryManager *componentmocks.RegistryManager
-	engine          *componentmocks.Engine
 }
 
 func newMockComponents(t *testing.T) *mockComponents {
 	mc := &mockComponents{c: componentmocks.NewAllComponents(t)}
 	mc.registryManager = componentmocks.NewRegistryManager(t)
 	mc.c.On("RegistryManager").Return(mc.registryManager).Maybe()
-	mc.engine = componentmocks.NewEngine(t)
-	mc.c.On("Engine").Return(mc.engine).Maybe()
 	return mc
 }
 
-func newTestTransportManager(t *testing.T, conf *config.TransportManagerConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *transportManager, *mockComponents, func()) {
+func newTestTransportManager(t *testing.T, conf *pldconf.TransportManagerConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *transportManager, *mockComponents, func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	mc := newMockComponents(t)
@@ -74,18 +73,18 @@ func newTestTransportManager(t *testing.T, conf *config.TransportManagerConfig, 
 }
 
 func TestMissingName(t *testing.T) {
-	tm := NewTransportManager(context.Background(), &config.TransportManagerConfig{})
+	tm := NewTransportManager(context.Background(), &pldconf.TransportManagerConfig{})
 	_, err := tm.PreInit(newMockComponents(t).c)
 	assert.Regexp(t, "PD012002", err)
 }
 
 func TestConfiguredTransports(t *testing.T) {
-	_, dm, _, done := newTestTransportManager(t, &config.TransportManagerConfig{
+	_, dm, _, done := newTestTransportManager(t, &pldconf.TransportManagerConfig{
 		NodeName: "node1",
-		Transports: map[string]*config.TransportConfig{
+		Transports: map[string]*pldconf.TransportConfig{
 			"test1": {
-				Plugin: config.PluginConfig{
-					Type:    config.LibraryTypeCShared.Enum(),
+				Plugin: pldconf.PluginConfig{
+					Type:    string(tktypes.LibraryTypeCShared),
 					Library: "some/where",
 				},
 			},
@@ -93,18 +92,18 @@ func TestConfiguredTransports(t *testing.T) {
 	})
 	defer done()
 
-	assert.Equal(t, map[string]*config.PluginConfig{
+	assert.Equal(t, map[string]*pldconf.PluginConfig{
 		"test1": {
-			Type:    config.LibraryTypeCShared.Enum(),
+			Type:    string(tktypes.LibraryTypeCShared),
 			Library: "some/where",
 		},
 	}, dm.ConfiguredTransports())
 }
 
 func TestTransportRegisteredNotFound(t *testing.T) {
-	_, dm, _, done := newTestTransportManager(t, &config.TransportManagerConfig{
+	_, dm, _, done := newTestTransportManager(t, &pldconf.TransportManagerConfig{
 		NodeName:   "node1",
-		Transports: map[string]*config.TransportConfig{},
+		Transports: map[string]*pldconf.TransportConfig{},
 	})
 	defer done()
 
@@ -113,9 +112,9 @@ func TestTransportRegisteredNotFound(t *testing.T) {
 }
 
 func TestConfigureTransportFail(t *testing.T) {
-	_, tm, _, done := newTestTransportManager(t, &config.TransportManagerConfig{
+	_, tm, _, done := newTestTransportManager(t, &pldconf.TransportManagerConfig{
 		NodeName: "node1",
-		Transports: map[string]*config.TransportConfig{
+		Transports: map[string]*pldconf.TransportConfig{
 			"test1": {
 				Config: map[string]any{"some": "conf"},
 			},

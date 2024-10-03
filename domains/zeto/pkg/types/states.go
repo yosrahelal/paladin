@@ -16,7 +16,11 @@
 package types
 
 import (
+	"math/big"
+
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/iden3/go-iden3-crypto/poseidon"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -25,7 +29,27 @@ type ZetoCoin struct {
 	Owner    string              `json:"owner"`
 	OwnerKey tktypes.HexBytes    `json:"ownerKey"`
 	Amount   *tktypes.HexUint256 `json:"amount"`
-	Hash     *tktypes.HexUint256 `json:"hash"`
+	hash     *tktypes.HexUint256
+}
+
+func (z *ZetoCoin) Hash() (*tktypes.HexUint256, error) {
+	if z.hash == nil {
+		ownerKey, err := zetosigner.DecodeBabyJubJubPublicKey(z.OwnerKey.HexString())
+		if err != nil {
+			return nil, err
+		}
+		commitment, err := poseidon.Hash([]*big.Int{
+			z.Amount.Int(),
+			z.Salt.Int(),
+			ownerKey.X,
+			ownerKey.Y,
+		})
+		if err != nil {
+			return nil, err
+		}
+		z.hash = (*tktypes.HexUint256)(commitment)
+	}
+	return z.hash, nil
 }
 
 var ZetoCoinABI = &abi.Parameter{
@@ -36,6 +60,5 @@ var ZetoCoinABI = &abi.Parameter{
 		{Name: "owner", Type: "string", Indexed: true},
 		{Name: "ownerKey", Type: "bytes32"},
 		{Name: "amount", Type: "uint256", Indexed: true},
-		{Name: "hash", Type: "uint256"},
 	},
 }

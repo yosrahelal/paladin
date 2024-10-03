@@ -24,7 +24,8 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -395,7 +396,7 @@ func TestUnconnectedRPCClient(t *testing.T) {
 	ctx := context.Background()
 	keymgr, kmDone := newTestHDWalletKeyManager(t)
 	defer kmDone()
-	ec := NewUnconnectedRPCClient(ctx, keymgr, &Config{}, 0)
+	ec := NewUnconnectedRPCClient(ctx, keymgr, &pldconf.EthClientConfig{}, 0)
 	_, err := ec.GetTransactionReceipt(ctx, testTxHash)
 	assert.Regexp(t, "PD011517", err)
 }

@@ -24,7 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/sirupsen/logrus"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -43,23 +44,23 @@ type (
 	ctxLogKey struct{}
 )
 
-func InitConfig(conf *Config) {
+func InitConfig(conf *pldconf.LogConfig) {
 	initAtLeastOnce.Store(true) // must store before SetLevel
 
-	level := confutil.StringNotEmpty(conf.Level, *LogDefaults.Level)
+	level := confutil.StringNotEmpty(conf.Level, *pldconf.LogDefaults.Level)
 	SetLevel(level)
 
-	output := confutil.StringNotEmpty(conf.Output, *LogDefaults.Output)
+	output := confutil.StringNotEmpty(conf.Output, *pldconf.LogDefaults.Output)
 	switch output {
 	case "file":
-		maxSizeBytes := confutil.ByteSize(conf.File.MaxSize, 0, *LogDefaults.File.MaxSize)
-		maxAgeDuration := confutil.DurationMin(conf.File.MaxAge, 0, *LogDefaults.File.MaxAge)
+		maxSizeBytes := confutil.ByteSize(conf.File.MaxSize, 0, *pldconf.LogDefaults.File.MaxSize)
+		maxAgeDuration := confutil.DurationMin(conf.File.MaxAge, 0, *pldconf.LogDefaults.File.MaxAge)
 		lumberjack := &lumberjack.Logger{
-			Filename:   confutil.StringNotEmpty(conf.File.Filename, *LogDefaults.File.Filename),
+			Filename:   confutil.StringNotEmpty(conf.File.Filename, *pldconf.LogDefaults.File.Filename),
 			MaxSize:    int(math.Ceil(float64(maxSizeBytes) / 1024 / 1024)), /* round up in megabytes */
-			MaxBackups: confutil.IntMin(conf.File.MaxBackups, 0, *LogDefaults.File.MaxBackups),
+			MaxBackups: confutil.IntMin(conf.File.MaxBackups, 0, *pldconf.LogDefaults.File.MaxBackups),
 			MaxAge:     int(math.Ceil(float64(maxAgeDuration) / float64(time.Hour) / 24)), /* round up in days */
-			Compress:   confutil.Bool(conf.File.Compress, *LogDefaults.File.Compress),
+			Compress:   confutil.Bool(conf.File.Compress, *pldconf.LogDefaults.File.Compress),
 		}
 		logrus.SetOutput(lumberjack)
 	case "stderr":
@@ -71,16 +72,16 @@ func InitConfig(conf *Config) {
 	}
 
 	setFormatting(&Formatting{
-		Format:             confutil.StringNotEmpty(conf.Format, *LogDefaults.Format),
-		DisableColor:       confutil.Bool(conf.DisableColor, *LogDefaults.DisableColor),
-		ForceColor:         confutil.Bool(conf.ForceColor, *LogDefaults.ForceColor),
-		TimestampFormat:    confutil.StringNotEmpty(conf.TimeFormat, *LogDefaults.TimeFormat),
-		UTC:                confutil.Bool(conf.UTC, *LogDefaults.UTC),
-		JSONTimestampField: confutil.StringNotEmpty(conf.JSON.TimestampField, *LogDefaults.JSON.TimestampField),
-		JSONLevelField:     confutil.StringNotEmpty(conf.JSON.LevelField, *LogDefaults.JSON.LevelField),
-		JSONMessageField:   confutil.StringNotEmpty(conf.JSON.MessageField, *LogDefaults.JSON.MessageField),
-		JSONFuncField:      confutil.StringNotEmpty(conf.JSON.FuncField, *LogDefaults.JSON.FuncField),
-		JSONFileField:      confutil.StringNotEmpty(conf.JSON.FileField, *LogDefaults.JSON.FileField),
+		Format:             confutil.StringNotEmpty(conf.Format, *pldconf.LogDefaults.Format),
+		DisableColor:       confutil.Bool(conf.DisableColor, *pldconf.LogDefaults.DisableColor),
+		ForceColor:         confutil.Bool(conf.ForceColor, *pldconf.LogDefaults.ForceColor),
+		TimestampFormat:    confutil.StringNotEmpty(conf.TimeFormat, *pldconf.LogDefaults.TimeFormat),
+		UTC:                confutil.Bool(conf.UTC, *pldconf.LogDefaults.UTC),
+		JSONTimestampField: confutil.StringNotEmpty(conf.JSON.TimestampField, *pldconf.LogDefaults.JSON.TimestampField),
+		JSONLevelField:     confutil.StringNotEmpty(conf.JSON.LevelField, *pldconf.LogDefaults.JSON.LevelField),
+		JSONMessageField:   confutil.StringNotEmpty(conf.JSON.MessageField, *pldconf.LogDefaults.JSON.MessageField),
+		JSONFuncField:      confutil.StringNotEmpty(conf.JSON.FuncField, *pldconf.LogDefaults.JSON.FuncField),
+		JSONFileField:      confutil.StringNotEmpty(conf.JSON.FileField, *pldconf.LogDefaults.JSON.FileField),
 	})
 }
 
@@ -96,7 +97,7 @@ func ensureInit() {
 	// Called at a couple of strategic points to check we get log initialize in things like unit tests
 	// However NOT guaranteed to be called because we can't afford to do atomic load on every log line
 	if !initAtLeastOnce.Load() {
-		InitConfig(&Config{})
+		InitConfig(&pldconf.LogConfig{})
 	}
 }
 

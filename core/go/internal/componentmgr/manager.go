@@ -20,26 +20,29 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/domainmgr"
+	"github.com/kaleido-io/paladin/core/internal/identityresolver"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr"
 	"github.com/kaleido-io/paladin/core/internal/publictxmgr"
 	"github.com/kaleido-io/paladin/core/internal/registrymgr"
-	"github.com/kaleido-io/paladin/core/internal/statestore"
+	"github.com/kaleido-io/paladin/core/internal/statemgr"
 	"github.com/kaleido-io/paladin/core/internal/transportmgr"
 	"github.com/kaleido-io/paladin/core/internal/txmgr"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 )
 
 type ComponentManager interface {
-	components.PreInitComponentsAndManagers
+	components.AllComponents
 	Init() error
 	StartComponents() error
 	StartManagers() error
@@ -52,15 +55,15 @@ type componentManager struct {
 	instanceUUID uuid.UUID
 	bgCtx        context.Context
 	// config
-	conf *config.PaladinConfig
+	conf *pldconf.PaladinConfig
 	// pre-init
 	keyManager       ethclient.KeyManager
 	ethClientFactory ethclient.EthClientFactory
 	persistence      persistence.Persistence
-	stateStore       statestore.StateStore
 	blockIndexer     blockindexer.BlockIndexer
 	rpcServer        rpcserver.RPCServer
 	// managers
+	stateManager     components.StateManager
 	domainManager    components.DomainManager
 	transportManager components.TransportManager
 	registryManager  components.RegistryManager
@@ -68,8 +71,10 @@ type componentManager struct {
 	publicTxManager  components.PublicTxManager
 	privateTxManager components.PrivateTxManager
 	txManager        components.TXManager
-	// engine
-	engine components.Engine
+	identityResolver components.IdentityResolver
+	// managers that are not a core part of the engine, but allow Paladin to operate in an extended mode - the testbed is an example.
+	// these cannot be queried by other components (no AdditionalManagers() function on AllComponents)
+	additionalManagers []components.AdditionalManager
 	// init to start tracking
 	initResults          map[string]*components.ManagerInitResult
 	internalEventStreams []*blockindexer.InternalEventStream
@@ -88,23 +93,26 @@ type closeable interface {
 	Close()
 }
 
-func NewComponentManager(bgCtx context.Context, grpcTarget string, instanceUUID uuid.UUID, conf *config.PaladinConfig, engine components.Engine) ComponentManager {
+func NewComponentManager(bgCtx context.Context, grpcTarget string, instanceUUID uuid.UUID, conf *pldconf.PaladinConfig,
+	// the testbed registers itself into the lifecycle as an additional manager
+	additionalManagers ...components.AdditionalManager,
+) ComponentManager {
 	log.InitConfig(&conf.Log)
 	return &componentManager{
-		grpcTarget:   grpcTarget, // default is a UDS path, can use tcp:127.0.0.1:12345 strings too (or tcp4:/tcp6:)
-		instanceUUID: instanceUUID,
-		bgCtx:        bgCtx,
-		conf:         conf,
-		engine:       engine,
-		initResults:  make(map[string]*components.ManagerInitResult),
-		started:      make(map[string]stoppable),
-		opened:       make(map[string]closeable),
+		grpcTarget:         grpcTarget, // default is a UDS path, can use tcp:127.0.0.1:12345 strings too (or tcp4:/tcp6:)
+		instanceUUID:       instanceUUID,
+		bgCtx:              bgCtx,
+		conf:               conf,
+		additionalManagers: additionalManagers,
+		initResults:        make(map[string]*components.ManagerInitResult),
+		started:            make(map[string]stoppable),
+		opened:             make(map[string]closeable),
 	}
 }
 
 func (cm *componentManager) Init() (err error) {
 	// pre-init components
-	cm.keyManager, err = ethclient.NewSimpleTestKeyManager(cm.bgCtx, &cm.conf.Signer)
+	cm.keyManager, err = ethclient.NewSimpleTestKeyManager(cm.bgCtx, (*signerapi.ConfigNoExt)(&cm.conf.Signer))
 	err = cm.addIfOpened("key_manager", cm.keyManager, err, msgs.MsgComponentKeyManagerInitError)
 	if err == nil {
 		cm.ethClientFactory, err = ethclient.NewEthClientFactory(cm.bgCtx, cm.keyManager, &cm.conf.Blockchain)
@@ -115,11 +123,6 @@ func (cm *componentManager) Init() (err error) {
 		err = cm.addIfOpened("database", cm.persistence, err, msgs.MsgComponentDBInitError)
 	}
 	if err == nil {
-		cm.stateStore = statestore.NewStateStore(cm.bgCtx, &cm.conf.StateStore, cm.persistence)
-		err = cm.addIfOpened("state_store", cm.stateStore, err, msgs.MsgComponentStateStoreInitError)
-	}
-
-	if err == nil {
 		cm.blockIndexer, err = blockindexer.NewBlockIndexer(cm.bgCtx, &cm.conf.BlockIndexer, &cm.conf.Blockchain.WS, cm.persistence)
 		err = cm.wrapIfErr(err, msgs.MsgComponentBlockIndexerInitError)
 	}
@@ -129,6 +132,11 @@ func (cm *componentManager) Init() (err error) {
 	}
 
 	// pre-init managers
+	if err == nil {
+		cm.stateManager = statemgr.NewStateManager(cm.bgCtx, &cm.conf.StateStore, cm.persistence)
+		cm.initResults["state_manager"], err = cm.stateManager.PreInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentStateManagerInitError)
+	}
 	if err == nil {
 		cm.domainManager = domainmgr.NewDomainManager(cm.bgCtx, &cm.conf.DomainManagerConfig)
 		cm.initResults["domain_manager"], err = cm.domainManager.PreInit(cm)
@@ -171,13 +179,26 @@ func (cm *componentManager) Init() (err error) {
 		err = cm.wrapIfErr(err, msgs.MsgComponentTxManagerInitError)
 	}
 
-	// init engine
 	if err == nil {
-		cm.initResults[cm.engine.EngineName()], err = cm.engine.Init(cm)
-		err = cm.wrapIfErr(err, msgs.MsgComponentEngineInitError)
+		cm.identityResolver = identityresolver.NewIdentityResolver(cm.bgCtx, cm.instanceUUID.String())
+		cm.initResults["identity_resolver"], err = cm.identityResolver.PreInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentIdentityResolverInitError)
+	}
+
+	for _, am := range cm.additionalManagers {
+		if err == nil {
+			cm.initResults[am.Name()], err = am.PreInit(cm)
+			err = cm.wrapIfErr(err, msgs.MsgComponentAdditionalMgrInitError, am.Name())
+		}
+
 	}
 
 	// post-init the managers
+	if err == nil {
+		err = cm.stateManager.PostInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentStateManagerInitError)
+	}
+
 	if err == nil {
 		err = cm.domainManager.PostInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentDomainInitError)
@@ -213,6 +234,18 @@ func (cm *componentManager) Init() (err error) {
 		err = cm.wrapIfErr(err, msgs.MsgComponentTxManagerInitError)
 	}
 
+	if err == nil {
+		err = cm.identityResolver.PostInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentIdentityResolverInitError)
+	}
+
+	for _, am := range cm.additionalManagers {
+		if err == nil {
+			err = am.PostInit(cm)
+			err = cm.wrapIfErr(err, msgs.MsgComponentAdditionalMgrInitError, am.Name())
+		}
+	}
+
 	return err
 }
 
@@ -243,8 +276,13 @@ func (cm *componentManager) StartComponents() (err error) {
 func (cm *componentManager) StartManagers() (err error) {
 
 	// start the managers
-	err = cm.domainManager.Start()
-	err = cm.addIfStarted("domain_manager", cm.domainManager, err, msgs.MsgComponentDomainStartError)
+	err = cm.stateManager.Start()
+	err = cm.addIfStarted("state_manager", cm.stateManager, err, msgs.MsgComponentStateManagerStartError)
+
+	if err == nil {
+		err = cm.domainManager.Start()
+		err = cm.addIfStarted("domain_manager", cm.domainManager, err, msgs.MsgComponentDomainStartError)
+	}
 
 	if err == nil {
 		err = cm.transportManager.Start()
@@ -276,6 +314,13 @@ func (cm *componentManager) StartManagers() (err error) {
 		err = cm.addIfStarted("tx_manager", cm.txManager, err, msgs.MsgComponentTxManagerStartError)
 	}
 
+	for _, am := range cm.additionalManagers {
+		if err == nil {
+			err = am.Start()
+			err = cm.addIfStarted(am.Name(), am, err, msgs.MsgComponentAdditionalMgrStartError, am.Name())
+		}
+	}
+
 	return err
 }
 
@@ -283,12 +328,6 @@ func (cm *componentManager) CompleteStart() error {
 	// Wait for the plugins to all start
 	err := cm.pluginManager.WaitForInit(cm.bgCtx)
 	err = cm.wrapIfErr(err, msgs.MsgComponentWaitPluginStartError)
-
-	// start the engine
-	if err == nil {
-		err = cm.engine.Start()
-		err = cm.addIfStarted(cm.engine.EngineName(), cm.engine, err, msgs.MsgComponentEngineStartError)
-	}
 
 	// start the RPC server last
 	if err == nil {
@@ -311,16 +350,16 @@ func (cm *componentManager) CompleteStart() error {
 	return err
 }
 
-func (cm *componentManager) wrapIfErr(err error, failMsg i18n.ErrorMessageKey) error {
+func (cm *componentManager) wrapIfErr(err error, failMsg i18n.ErrorMessageKey, inserts ...any) error {
 	if err != nil {
-		return i18n.WrapError(cm.bgCtx, err, failMsg)
+		return i18n.WrapError(cm.bgCtx, err, failMsg, inserts...)
 	}
 	return nil
 }
 
-func (cm *componentManager) addIfStarted(desc string, c stoppable, err error, failMsg i18n.ErrorMessageKey) error {
+func (cm *componentManager) addIfStarted(desc string, c stoppable, err error, failMsg i18n.ErrorMessageKey, inserts ...any) error {
 	if err != nil {
-		return i18n.WrapError(cm.bgCtx, err, failMsg)
+		return i18n.WrapError(cm.bgCtx, err, failMsg, inserts...)
 	}
 	cm.started[desc] = c
 	return nil
@@ -348,8 +387,6 @@ func (cm *componentManager) buildInternalEventStreams() ([]*blockindexer.Interna
 }
 
 func (cm *componentManager) registerRPCModules() {
-	// Component modules
-	cm.rpcServer.Register(cm.stateStore.RPCModule())
 	// Manager/engine modules
 	for _, initResult := range cm.initResults {
 		for _, rpcMod := range initResult.RPCModules {
@@ -387,8 +424,8 @@ func (cm *componentManager) Persistence() persistence.Persistence {
 	return cm.persistence
 }
 
-func (cm *componentManager) StateStore() statestore.StateStore {
-	return cm.stateStore
+func (cm *componentManager) StateManager() components.StateManager {
+	return cm.stateManager
 }
 
 func (cm *componentManager) RPCServer() rpcserver.RPCServer {
@@ -427,6 +464,6 @@ func (cm *componentManager) TxManager() components.TXManager {
 	return cm.txManager
 }
 
-func (cm *componentManager) Engine() components.Engine {
-	return cm.engine
+func (cm *componentManager) IdentityResolver() components.IdentityResolver {
+	return cm.identityResolver
 }

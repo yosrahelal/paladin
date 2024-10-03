@@ -26,13 +26,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
@@ -167,8 +167,8 @@ func newTestPlugin(domainFuncs *plugintk.DomainAPIFunctions) *testPlugin {
 
 func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *domainManager, *testPlugin, func()) {
 
-	ctx, dm, mc, done := newTestDomainManager(t, realDB, &config.DomainManagerConfig{
-		Domains: map[string]*config.DomainConfig{
+	ctx, dm, mc, done := newTestDomainManager(t, realDB, &pldconf.DomainManagerConfig{
+		Domains: map[string]*pldconf.DomainConfig{
 			"test1": {
 				Config:          map[string]any{"some": "conf"},
 				RegistryAddress: tktypes.RandHex(20),
@@ -220,7 +220,7 @@ func goodDomainConf() *prototk.DomainConfig {
 	}
 }
 
-func mockSchemas(schemas ...statestore.Schema) func(mc *mockComponents) {
+func mockSchemas(schemas ...components.Schema) func(mc *mockComponents) {
 	return func(mc *mockComponents) {
 		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return(schemas, nil)
 	}
@@ -353,8 +353,8 @@ func TestDomainInitFactorySchemaStoreFail(t *testing.T) {
 
 func TestDomainConfigureFail(t *testing.T) {
 
-	ctx, dm, _, done := newTestDomainManager(t, false, &config.DomainManagerConfig{
-		Domains: map[string]*config.DomainConfig{
+	ctx, dm, _, done := newTestDomainManager(t, false, &pldconf.DomainManagerConfig{
+		Domains: map[string]*pldconf.DomainConfig{
 			"test1": {
 				Config:          map[string]any{"some": "config"},
 				RegistryAddress: tktypes.RandHex(20),
@@ -414,7 +414,7 @@ func TestDomainFindAvailableStatesBadAddress(t *testing.T) {
 
 func TestDomainFindAvailableStatesFail(t *testing.T) {
 	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), func(mc *mockComponents) {
-		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return([]statestore.Schema{}, nil)
+		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return([]components.Schema{}, nil)
 		mc.domainStateInterface.On("FindAvailableStates", "12345", mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
@@ -436,8 +436,8 @@ func storeState(t *testing.T, dm *domainManager, tp *testPlugin, contractAddress
 	stateJSON, err := json.Marshal(state)
 	require.NoError(t, err)
 
-	err = dm.stateStore.RunInDomainContextFlush("test1", contractAddress, func(ctx context.Context, dsi statestore.DomainStateInterface) error {
-		newStates, err := dsi.UpsertStates(&txID, []*statestore.StateUpsert{
+	err = dm.stateStore.RunInDomainContextFlush("test1", contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+		newStates, err := dsi.UpsertStates(&txID, []*components.StateUpsert{
 			{
 				SchemaID: tp.stateSchemas[0].Id,
 				Data:     stateJSON,
@@ -836,52 +836,96 @@ func TestEncodeABIDataFailCases(t *testing.T) {
 	d := tp.d
 
 	_, err := d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_EncodingType(42),
+		EncodingType: prototk.EncodingType(42),
 	})
 	assert.Regexp(t, "PD011635", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_FUNCTION_CALL_DATA,
+		EncodingType: prototk.EncodingType_FUNCTION_CALL_DATA,
 		Body:         `{!!!`,
 	})
 	assert.Regexp(t, "PD011633", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_TUPLE,
+		EncodingType: prototk.EncodingType_TUPLE,
 		Body:         `{!!!`,
 	})
 	assert.Regexp(t, "PD011633", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_FUNCTION_CALL_DATA,
+		EncodingType: prototk.EncodingType_FUNCTION_CALL_DATA,
 		Definition:   `{"inputs":[{"name":"int1","type":"uint256"}]}`,
 		Body:         `{}`,
 	})
 	assert.Regexp(t, "PD011634.*int1", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_TUPLE,
+		EncodingType: prototk.EncodingType_TUPLE,
 		Definition:   `{"components":[{"name":"int1","type":"uint256"}]}`,
 		Body:         `{}`,
 	})
 	assert.Regexp(t, "PD011634.*int1", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_ETH_TRANSACTION,
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION,
 		Definition:   `wrong`,
 		Body:         `{"to":"0x92CB9e0086a774525469bbEde564729F277d2549"}`,
 	})
 	assert.Regexp(t, "PD011635", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_ETH_TRANSACTION,
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION,
 		Body:         `{!!!bad`,
 	})
 	assert.Regexp(t, "PD011633", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_TYPED_DATA_V4,
+		EncodingType: prototk.EncodingType_TYPED_DATA_V4,
 		Body:         `{}`,
 	})
 	assert.Regexp(t, "PD011640", err)
 	_, err = d.EncodeData(ctx, &prototk.EncodeDataRequest{
-		EncodingType: prototk.EncodeDataRequest_TYPED_DATA_V4,
+		EncodingType: prototk.EncodingType_TYPED_DATA_V4,
 		Body:         `{!!!bad`,
 	})
 	assert.Regexp(t, "PD011639", err)
+}
+
+func TestDecodeABIDataFailCases(t *testing.T) {
+	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	d := tp.d
+
+	_, err := d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType(42),
+	})
+	assert.Regexp(t, "PD011647", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_FUNCTION_CALL_DATA,
+		Data:         []byte(`{!!!`),
+	})
+	assert.Regexp(t, "PD011645", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_TUPLE,
+		Data:         []byte(`{!!!`),
+	})
+	assert.Regexp(t, "PD011645", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_EVENT_DATA,
+		Data:         []byte(`{!!!`),
+	})
+	assert.Regexp(t, "PD011645", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_FUNCTION_CALL_DATA,
+		Definition:   `{"inputs":[{"name":"int1","type":"uint256"}]}`,
+		Data:         []byte(``),
+	})
+	assert.Regexp(t, "PD011646.*Insufficient bytes", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_TUPLE,
+		Definition:   `{"components":[{"name":"int1","type":"uint256"}]}`,
+		Data:         []byte(``),
+	})
+	assert.Regexp(t, "PD011646.*Insufficient bytes", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_EVENT_DATA,
+		Definition:   `{"inputs":[{"name":"int1","type":"uint256"}]}`,
+		Data:         []byte(``),
+	})
+	assert.Regexp(t, "PD011646.*Insufficient bytes", err)
 }
 
 func TestRecoverSignerFailCases(t *testing.T) {

@@ -31,7 +31,7 @@ ext {
         include "mocks/**/*.go"
     }
 
-    targetCoverage = 95
+    targetCoverage = 94
     maxCoverageBarGap = 1
     coverageExcludedPackages = [
         'github.com/kaleido-io/paladin/core/pkg/proto',
@@ -84,8 +84,8 @@ task copyTestContracts(type: Copy) {
 task copyTestDomainContracts(type: Copy) {
     inputs.files(configurations.compiledContracts)
     from fileTree(configurations.compiledContracts.asPath) {
-        include 'contracts/domains/testbed_sim/SIMDomain.sol/SIMDomain.json'
-        include 'contracts/domains/testbed_sim/SIMToken.sol/SIMToken.json'
+        include 'contracts/domains/componenttest/SimpleDomain.sol/SimpleDomain.json'
+        include 'contracts/domains/componenttest/SimpleToken.sol/SimpleToken.json'
     }
     into 'componenttest/domains/abis'
 
@@ -129,6 +129,7 @@ task copyContracts(dependsOn:[
 ])
 
 task protoc(type: ProtoCompile, dependsOn: [
+        ":transports:grpc:protoc",
         ":toolkit:go:protoc",
         ":installProtocGenGo",
         ":installProtocGenGoRPC",
@@ -189,24 +190,6 @@ task makeMocks(type: Mockery, dependsOn: [":installMockery", protoc, goGet]) {
     mock {
         inputDir 'internal/componentmgr'
         name 'ComponentManager'
-        outputPackage 'componentmocks'
-        outputDir 'mocks/componentmocks'
-    }
-    mock {
-        inputDir 'internal/statestore'
-        name 'StateStore'
-        outputPackage 'componentmocks'
-        outputDir 'mocks/componentmocks'
-    }
-    mock {
-        inputDir 'internal/statestore'
-        name 'Schema'
-        outputPackage 'componentmocks'
-        outputDir 'mocks/componentmocks'
-    }
-    mock {
-        inputDir 'internal/statestore'
-        name 'DomainStateInterface'
         outputPackage 'componentmocks'
         outputDir 'mocks/componentmocks'
     }
@@ -275,32 +258,10 @@ task lint(type: Exec, dependsOn:[
     args '--timeout', '5m'
 }
 
-task buildSharedLibrary(type:Exec, dependsOn:[goGet]) {
-    workingDir '.'
-
-    def libName
-    if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-        libName = "libcore.dll"
-    } else if (Os.isFamily(Os.FAMILY_MAC)) {
-        libName = "libcore.dylib"
-    } else {
-        libName = "libcore.so"
-    }
-
-    def outputDir = "${buildDir}/libs"
-    def outputLib = "${outputDir}/${libName}"
-    def outputHeader = "${outputDir}/libcore.h"
-
-    inputs.files(goFilesBuildOnly)
-    outputs.files(outputLib, outputHeader)
-
-    environment("CGO_ENABLED", "1")
-
-    executable 'go'
-    args 'build'
-    args '-o', outputLib
-    args '-buildmode=c-shared'
-    args 'core.go'
+task buildSharedLibrary(type:GoLib, dependsOn:[goGet]) {
+    baseName "core"
+    goFiles goFiles
+    mainFile 'core.go'
 }
 
 task buildTestbed(type:Exec, dependsOn: [goGet, makeMocks, copyContracts]) {

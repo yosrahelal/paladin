@@ -18,6 +18,7 @@ package smt
 import (
 	"testing"
 
+	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,4 +26,8 @@ func TestPackageInit(t *testing.T) {
 	assert.Equal(t, SMT_HEIGHT_UTXO, len(Empty_Proof.Nodes))
 	assert.Equal(t, "0", Empty_Proof.Nodes[0])
 	assert.Equal(t, "0", Empty_Proof.Nodes[SMT_HEIGHT_UTXO-1])
+}
+
+func TestMerkleTreeName(t *testing.T) {
+	assert.Equal(t, "smt_test1_0x1234567890123456789012345678901234567890", MerkleTreeName("test1", ethtypes.MustNewAddress("0x1234567890123456789012345678901234567890")))
 }

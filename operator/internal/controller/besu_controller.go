@@ -40,6 +40,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
@@ -65,17 +66,11 @@ func (r *BesuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	// Generate a name for the Besu resources
 	name := generateBesuName(req.Name)
-	namespace := req.Namespace
 
 	// Fetch the Besu instance
 	var node corev1alpha1.Besu
 	if err := r.Get(ctx, req.NamespacedName, &node); err != nil {
 		if errors.IsNotFound(err) {
-			log.Info("Besu resource deleted, deleting related resources")
-			r.deleteService(ctx, namespace, name)
-			r.deleteStatefulSet(ctx, namespace, name)
-			r.deleteConfigSecret(ctx, namespace, name)
-
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get Besu resource")
@@ -152,6 +147,7 @@ func (r *BesuReconciler) createConfigMap(ctx context.Context, node *corev1alpha1
 	if err != nil {
 		return "", nil, err
 	}
+	controllerutil.SetControllerReference(node, configMap, r.Scheme)
 
 	var foundConfigMap corev1.ConfigMap
 	if err := r.Get(ctx, types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, &foundConfigMap); err != nil && errors.IsNotFound(err) {
@@ -191,7 +187,7 @@ func (r *BesuReconciler) generateConfigMap(ctx context.Context, node *corev1alph
 				Labels:    r.getLabels(node),
 			},
 			Data: map[string]string{
-				"config.besu.toml":  besuConfigTOML,
+				"pldconf.besu.toml": besuConfigTOML,
 				"static-nodes.json": staticNodesJSON,
 			},
 		},
@@ -329,6 +325,8 @@ func (r *BesuReconciler) createIdentitySecret(ctx context.Context, node *corev1a
 			"id":      hex.EncodeToString(nodeKey.PublicKeyBytes()),
 			"address": nodeKey.Address.String(),
 		}
+		controllerutil.SetControllerReference(node, &idSecret, r.Scheme)
+
 		err = r.Create(ctx, &idSecret)
 		if err != nil {
 			return nil, err
@@ -376,6 +374,7 @@ func (r *BesuReconciler) createStatefulSet(ctx context.Context, node *corev1alph
 	if err := r.createDataPVC(ctx, node); err != nil {
 		return nil, err
 	}
+	controllerutil.SetControllerReference(node, statefulSet, r.Scheme)
 
 	// Check if the StatefulSet already exists, create if not
 	var foundStatefulSet appsv1.StatefulSet
@@ -417,6 +416,7 @@ func (r *BesuReconciler) createDataPVC(ctx context.Context, node *corev1alpha1.B
 	if _, resourceSet := pvc.Spec.Resources.Requests[corev1.ResourceStorage]; !resourceSet {
 		pvc.Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("1Gi")
 	}
+	controllerutil.SetControllerReference(node, &pvc, r.Scheme)
 
 	var foundPVC corev1.PersistentVolumeClaim
 	if err := r.Get(ctx, types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, &foundPVC); err != nil && errors.IsNotFound(err) {
@@ -455,6 +455,7 @@ func (r *BesuReconciler) generatePDBTemplate(node *corev1alpha1.Besu, name strin
 
 func (r *BesuReconciler) createPDB(ctx context.Context, node *corev1alpha1.Besu, name string) (*policyv1.PodDisruptionBudget, error) {
 	pdb := r.generatePDBTemplate(node, name)
+	controllerutil.SetControllerReference(node, pdb, r.Scheme)
 
 	var foundPDB policyv1.PodDisruptionBudget
 	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: pdb.Namespace}, &foundPDB); err != nil && errors.IsNotFound(err) {
@@ -474,6 +475,7 @@ func (r *BesuReconciler) generateStatefulSetTemplate(node *corev1alpha1.Besu, na
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: node.Namespace,
+			Labels:    r.getLabels(node),
 			Annotations: r.withStandardAnnotations(map[string]string{
 				"kubectl.kubernetes.io/default-container": "besu",
 			}),
@@ -484,8 +486,9 @@ func (r *BesuReconciler) generateStatefulSetTemplate(node *corev1alpha1.Besu, na
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: r.getLabels(node, map[string]string{
-						"config-sum": configSum,
+					Labels: r.getLabels(node),
+					Annotations: r.withStandardAnnotations(map[string]string{
+						"core.paladin.io/config-sum": fmt.Sprintf("md5-%s", configSum),
 					}),
 				},
 				Spec: corev1.PodSpec{
@@ -517,7 +520,7 @@ func (r *BesuReconciler) generateStatefulSetTemplate(node *corev1alpha1.Besu, na
 							},
 							Args: []string{
 								"--config-file",
-								"/config/config.besu.toml",
+								"/config/pldconf.besu.toml",
 							},
 							Ports: []corev1.ContainerPort{
 								{
@@ -595,6 +598,7 @@ func (r *BesuReconciler) generateStatefulSetTemplate(node *corev1alpha1.Besu, na
 
 func (r *BesuReconciler) createService(ctx context.Context, node *corev1alpha1.Besu, name string) (*corev1.Service, error) {
 	svc := r.generateServiceTemplate(node, name)
+	controllerutil.SetControllerReference(node, svc, r.Scheme)
 
 	var foundSvc corev1.Service
 	if err := r.Get(ctx, types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}, &foundSvc); err != nil && errors.IsNotFound(err) {
@@ -610,76 +614,54 @@ func (r *BesuReconciler) createService(ctx context.Context, node *corev1alpha1.B
 
 // generateServiceTemplate generates a ConfigMap for the Besu configuration
 func (r *BesuReconciler) generateServiceTemplate(node *corev1alpha1.Besu, name string) *corev1.Service {
-	return &corev1.Service{
+	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: node.Namespace,
 			Labels:    r.getLabels(node),
 		},
-		Spec: corev1.ServiceSpec{
-			Selector: r.getLabels(node),
-			Ports: []corev1.ServicePort{
-				{
-					Name:       "rpc-http",
-					Port:       8545,
-					TargetPort: intstr.FromInt(8545),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       "rpc-ws",
-					Port:       8546,
-					TargetPort: intstr.FromInt(8546),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       "graphql-http",
-					Port:       8547,
-					TargetPort: intstr.FromInt(8547),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       "p2p-tcp",
-					Port:       30303,
-					TargetPort: intstr.FromInt(30303),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       "p2p-udp",
-					Port:       30303,
-					TargetPort: intstr.FromInt(30303),
-					Protocol:   corev1.ProtocolUDP,
-				},
+		Spec: node.Spec.Service,
+	}
+	// We own the selector regardless of config in the CR
+	svc.Spec.Selector = r.getLabels(node)
+	// Default to a cluster IP
+	if svc.Spec.Type == "" {
+		svc.Spec.Type = corev1.ServiceTypeClusterIP
+	}
+	// Set ports unless CR has taken ownership
+	if svc.Spec.Ports == nil {
+		mergeServicePorts(&svc.Spec, []corev1.ServicePort{
+			{
+				Name:       "rpc-http",
+				Port:       8545,
+				TargetPort: intstr.FromInt(8545),
+				Protocol:   corev1.ProtocolTCP,
 			},
-			Type: corev1.ServiceTypeClusterIP,
-		},
+			{
+				Name:       "rpc-ws",
+				Port:       8546,
+				TargetPort: intstr.FromInt(8546),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       "graphql-http",
+				Port:       8547,
+				TargetPort: intstr.FromInt(8547),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       "p2p-tcp",
+				Port:       30303,
+				TargetPort: intstr.FromInt(30303),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       "p2p-udp",
+				Port:       30303,
+				TargetPort: intstr.FromInt(30303),
+				Protocol:   corev1.ProtocolUDP,
+			},
+		})
 	}
-}
-
-func (r *BesuReconciler) deleteStatefulSet(ctx context.Context, namespace, name string) error {
-	var foundStatefulSet appsv1.StatefulSet
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &foundStatefulSet)
-	if err == nil {
-		return r.Delete(ctx, &foundStatefulSet)
-	}
-	return nil
-
-}
-
-func (r *BesuReconciler) deleteConfigSecret(ctx context.Context, namespace, name string) error {
-	var foundSecret corev1.Secret
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &foundSecret)
-	if err == nil {
-		return r.Delete(ctx, &foundSecret)
-	}
-	return err
-}
-
-func (r *BesuReconciler) deleteService(ctx context.Context, namespace, name string) error {
-
-	var foundSvc corev1.Service
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &foundSvc)
-	if err == nil {
-		return r.Delete(ctx, &foundSvc)
-	}
-	return err
+	return svc
 }
