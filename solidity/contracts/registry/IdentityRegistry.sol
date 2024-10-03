@@ -5,7 +5,6 @@ pragma solidity ^0.8.13;
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 contract IdentityRegistry is UUPSUpgradeable {
-
     struct Identity {
         bytes32 parent;
         bytes32[] children;
@@ -18,18 +17,14 @@ contract IdentityRegistry is UUPSUpgradeable {
         string value;
     }
 
-    event IdentityRegistered (
+    event IdentityRegistered(
         bytes32 parentIdentityHash,
         bytes32 identityHash,
         string name,
         address owner
     );
 
-    event PropertySet (
-        bytes32 identityHash,
-        string name,
-        string value
-    );
+    event PropertySet(bytes32 identityHash, string name, string value);
 
     // Each identity has a unique hash, calculated as a hash of its name and the hash of the parent
     // Identities are stored in a map, from identity hash to identity struct
@@ -57,7 +52,7 @@ contract IdentityRegistry is UUPSUpgradeable {
         identities[0] = rootIdentity;
         emit IdentityRegistered(
             rootIdentity.parent,
-            makeIdentityHash(rootIdentity.parent, rootIdentity.name),
+            rootIdentity.parent,
             rootIdentity.name,
             rootIdentity.owner
         );
@@ -74,18 +69,30 @@ contract IdentityRegistry is UUPSUpgradeable {
         _;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyRootIdentityOwner {}
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal override onlyRootIdentityOwner {}
 
-    function makeIdentityHash(bytes32 parentIdentityHash, string memory name) internal pure returns (bytes32) {
+    function makeIdentityHash(
+        bytes32 parentIdentityHash,
+        string memory name
+    ) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(parentIdentityHash, name));
     }
 
-    function registerIdentity(bytes32 parentIdentityHash, string memory name, address owner) public {
+    function registerIdentity(
+        bytes32 parentIdentityHash,
+        string memory name,
+        address owner
+    ) public {
         // Ensure name is not empty
         require(bytes(name).length != 0, "Name cannot be empty");
 
         // Ensure sender owns parent identity
-        require(identities[parentIdentityHash].owner == msg.sender, "Forbidden");
+        require(
+            identities[parentIdentityHash].owner == msg.sender,
+            "Forbidden"
+        );
 
         // Calculate identiy has based on its name and the hash of the parent identity
         bytes32 hash = makeIdentityHash(parentIdentityHash, name);
@@ -94,7 +101,12 @@ contract IdentityRegistry is UUPSUpgradeable {
         require(bytes(identities[hash].name).length == 0, "Name already taken");
 
         // Store new identity with a reference to the parent identity, empty list of children, name and owner
-        identities[hash] = Identity(parentIdentityHash, new bytes32[](0), name, owner);
+        identities[hash] = Identity(
+            parentIdentityHash,
+            new bytes32[](0),
+            name,
+            owner
+        );
 
         // Store new child identity in parent identity so it can later be listed
         identities[parentIdentityHash].children.push(hash);
@@ -108,7 +120,9 @@ contract IdentityRegistry is UUPSUpgradeable {
         identity = identities[0];
     }
 
-    function getIdentity(bytes32 identityHash) public view returns (Identity memory identity) {
+    function getIdentity(
+        bytes32 identityHash
+    ) public view returns (Identity memory identity) {
         // Return identity based on hash
         identity = identities[identityHash];
 
@@ -116,7 +130,11 @@ contract IdentityRegistry is UUPSUpgradeable {
         require(bytes(identity.name).length > 0, "Identity not found");
     }
 
-    function setIdentityProperty(bytes32 identityHash, string memory name, string memory value) public {
+    function setIdentityProperty(
+        bytes32 identityHash,
+        string memory name,
+        string memory value
+    ) public {
         // Ensure name is not empty
         require(bytes(name).length != 0, "Name cannot be empty");
 
@@ -127,8 +145,7 @@ contract IdentityRegistry is UUPSUpgradeable {
         bytes32 nameHash = keccak256(abi.encodePacked(name));
 
         // If this is the first time the name is used in the identity, set it up
-        if(bytes(properties[identityHash][nameHash].name).length == 0) {
-            
+        if (bytes(properties[identityHash][nameHash].name).length == 0) {
             // Store property name
             properties[identityHash][nameHash].name = name;
 
@@ -143,15 +160,29 @@ contract IdentityRegistry is UUPSUpgradeable {
         emit PropertySet(identityHash, name, value);
     }
 
-    function listIdentityPropertyHashes(bytes32 identityHash) public view returns (bytes32[] memory hashes) {
+    function setIdentityProperties(
+        bytes32 identityHash,
+        Property[] memory props
+    ) public {
+        for (uint256 i = 0; i < props.length; i++) {
+            setIdentityProperty(identityHash, props[i].name, props[i].value);
+        }
+    }
+
+    function listIdentityPropertyHashes(
+        bytes32 identityHash
+    ) public view returns (bytes32[] memory hashes) {
         // Lists the property name hashes for a given identity
         hashes = propertyNames[identityHash];
     }
 
-    function getIdentityPropertyByHash(bytes32 identityHash, bytes32 propertyNameHash) public view returns(string memory name, string memory value) {
+    function getIdentityPropertyByHash(
+        bytes32 identityHash,
+        bytes32 propertyNameHash
+    ) public view returns (string memory name, string memory value) {
         // Get the property based on the name hash
         Property memory property = properties[identityHash][propertyNameHash];
-        
+
         // Check that the property exists
         require(bytes(property.name).length > 0, "Property not found");
 
@@ -160,12 +191,14 @@ contract IdentityRegistry is UUPSUpgradeable {
         value = property.value;
     }
 
-    function getIdentityPropertyValueByName(bytes32 identityHash, string memory name) public view returns(string memory value) {
+    function getIdentityPropertyValueByName(
+        bytes32 identityHash,
+        string memory name
+    ) public view returns (string memory value) {
         // Calculate name hash
         bytes32 nameHash = keccak256(abi.encodePacked(name));
 
         // Invoke function to return property value
         (, value) = getIdentityPropertyByHash(identityHash, nameHash);
     }
-
 }
