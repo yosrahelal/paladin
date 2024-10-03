@@ -216,7 +216,7 @@ public class PenteDomain extends DomainInstance {
             var tx = new PenteTransaction(this, request.getTransaction());
 
             // Execution throws an EVMExecutionException if fails
-            var accountLoader = new AssemblyAccountLoader(request.getTransaction().getContractAddress());
+            var accountLoader = new AssemblyAccountLoader(request.getTransaction().getContractInfo().getContractAddress());
             var execResult = tx.executeEVM(config.getChainId(), tx.getFromVerifier(request.getResolvedVerifiersList()), accountLoader);
             var result = ToDomain.AssembleTransactionResponse.newBuilder();
             var assembledTransaction = tx.buildAssembledTransaction(execResult.evm(), accountLoader, buildExtraData(execResult));
