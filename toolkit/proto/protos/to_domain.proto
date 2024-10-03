@@ -149,11 +149,11 @@ message PrepareTransactionResponse {
 
 message HandleEventBatchRequest {
   string batch_id = 1; // A unique identifier for this batch
-  string json_events = 2; // The list of events from the block indexer
+  repeated OnChainEvent events = 2; // The list of events from the block indexer
 }
 
 message HandleEventBatchResponse {
-  repeated string transactions_complete = 1; // A list of Paladin transaction IDs that may be considered complete
+  repeated CompletedTransaction transactions_complete = 1; // A list of Paladin transaction IDs that may be considered complete
   repeated StateUpdate spent_states = 2; // A list of states that are now spent
   repeated StateUpdate confirmed_states = 3; // A list of states that are now confirmed (and unspent)
   repeated NewLocalState new_states = 4; // A list of new states to store (only for events that contain full state data)
@@ -292,4 +292,24 @@ message BaseLedgerDeployTransaction {
 
 message DomainAPIError {
   string error_message = 1;
+}
+
+message OnChainEventLocation {
+  string transaction_hash = 1; // The on-chain ethereum hash of the blockchain transaction
+  int64 block_number = 2; // The block number of the transaction
+  int64 transaction_index = 3; // The index of the transaction within the block
+  int64 log_index = 4; // The index of the log of the event that completed the transaction
+}
+
+message OnChainEvent {
+  string address = 1; // the address of the on-chain smart contract that emitted the event
+  OnChainEventLocation location = 2; // the event locator information on the blockchain
+  string signature = 3; // 32 byte hex signature
+  string solidity_signature = 4; // The friendly solidity signature to match against
+  string data_json = 5; // The parsed event data
+}
+
+message CompletedTransaction {
+  string transaction_id = 1; // The ID of the transaction that has completed (opaque 32 byte identifier)
+  OnChainEventLocation location = 2; // the locator information on the blockchain to point at as the source of the confirmation
 }

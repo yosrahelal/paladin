@@ -97,7 +97,6 @@ func NewComponentManager(bgCtx context.Context, grpcTarget string, instanceUUID 
 	// the testbed registers itself into the lifecycle as an additional manager
 	additionalManagers ...components.AdditionalManager,
 ) ComponentManager {
-	log.InitConfig(&conf.Log)
 	return &componentManager{
 		grpcTarget:         grpcTarget, // default is a UDS path, can use tcp:127.0.0.1:12345 strings too (or tcp4:/tcp6:)
 		instanceUUID:       instanceUUID,

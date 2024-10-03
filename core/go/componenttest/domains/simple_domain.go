@@ -656,18 +656,16 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 			},
 
 			HandleEventBatch: func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
-				var events []*blockindexer.EventWithData
-				if err := json.Unmarshal([]byte(req.JsonEvents), &events); err != nil {
-					return nil, err
-				}
-
 				var res prototk.HandleEventBatchResponse
-				for _, ev := range events {
+				for _, ev := range req.Events {
 					switch ev.SoliditySignature {
 					case transferSignature:
 						var transfer UTXOTransfer_Event
-						if err := json.Unmarshal(ev.Data, &transfer); err == nil {
-							res.TransactionsComplete = append(res.TransactionsComplete, transfer.TX.String())
+						if err := json.Unmarshal([]byte(ev.DataJson), &transfer); err == nil {
+							res.TransactionsComplete = append(res.TransactionsComplete, &prototk.CompletedTransaction{
+								TransactionId: transfer.TX.String(),
+								Location:      ev.Location,
+							})
 							res.SpentStates = append(res.SpentStates, parseStatesFromEvent(transfer.TX, transfer.Inputs)...)
 							res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(transfer.TX, transfer.Outputs)...)
 						}
