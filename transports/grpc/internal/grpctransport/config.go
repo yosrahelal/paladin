@@ -16,8 +16,8 @@
 package grpctransport
 
 import (
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tlsconf"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 )
 
 type Config struct {
@@ -26,7 +26,7 @@ type Config struct {
 	// port to listen on
 	Port *int `json:"port"`
 	// Server side
-	TLS tlsconf.Config `json:"tls"`
+	TLS pldconf.TLSConfig `json:"tls"`
 	// If true (default) a network can be built by publishing self-signed certs to a registry without a common CA.
 	// This disables the default certificate verification chain, and instead performs a direct comparison
 	// of the certificate against the registered certificate for the extracted node name.

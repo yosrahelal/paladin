@@ -1,4 +1,9 @@
 
+
+# installCRDs controls whether to install CRDs
+installCRDs: true
+
+# Default values for paladin-operator
 operator:
   name: paladin-operator
   namespace: paladin
@@ -76,6 +81,15 @@ operator:
                 "labels": {
                     "app": "paladin"
                 }
+            },
+            "besu": {
+                "image": "hyperledger/besu:latest",
+                "labels": {
+                    "app": "besu"
+                }
+            },
+            "postgres": {
+                "image": "postgres:latest"
             }
         }
     

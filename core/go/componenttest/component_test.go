@@ -28,15 +28,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/componenttest/domains"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/sirupsen/logrus"
@@ -51,7 +53,7 @@ func TestRunSimpleStorageEthTransaction(t *testing.T) {
 	ctx := context.Background()
 	logrus.SetLevel(logrus.DebugLevel)
 
-	var testConfig config.PaladinConfig
+	var testConfig pldconf.PaladinConfig
 
 	err := yaml.Unmarshal([]byte(`
 db:
@@ -84,8 +86,8 @@ signer:
 	require.NoError(t, err)
 	defer p.Close()
 
-	indexer, err := blockindexer.NewBlockIndexer(ctx, &config.BlockIndexerConfig{
-		FromBlock: tktypes.RawJSON(`"latest"`), // don't want earlier events
+	indexer, err := blockindexer.NewBlockIndexer(ctx, &pldconf.BlockIndexerConfig{
+		FromBlock: json.RawMessage(`"latest"`), // don't want earlier events
 	}, &testConfig.Blockchain.WS, p)
 	require.NoError(t, err)
 
@@ -120,7 +122,7 @@ signer:
 	require.NoError(t, err)
 	defer indexer.Stop()
 
-	keyMgr, err := ethclient.NewSimpleTestKeyManager(ctx, &testConfig.Signer)
+	keyMgr, err := ethclient.NewSimpleTestKeyManager(ctx, (*signerapi.ConfigNoExt)(&testConfig.Signer))
 	require.NoError(t, err)
 
 	ecf, err := ethclient.NewEthClientFactory(ctx, keyMgr, &testConfig.Blockchain)

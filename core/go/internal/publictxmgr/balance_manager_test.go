@@ -24,10 +24,11 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -35,8 +36,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestBalanceManager(t *testing.T, autoFuel bool, cbs ...func(m *mocksAndTestControl, conf *config.PublicTxManagerConfig)) (context.Context, *BalanceManagerWithInMemoryTracking, *pubTxManager, *mocksAndTestControl, func()) {
-	ctx, ble, m, done := newTestPublicTxManager(t, false, func(m *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+func newTestBalanceManager(t *testing.T, autoFuel bool, cbs ...func(m *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig)) (context.Context, *BalanceManagerWithInMemoryTracking, *pubTxManager, *mocksAndTestControl, func()) {
+	ctx, ble, m, done := newTestPublicTxManager(t, false, func(m *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		if autoFuel {
 			conf.BalanceManager.AutoFueling.Source = confutil.P("autofueler")
 
@@ -281,7 +282,7 @@ func mockAutoFuelTransactionSubmit(m *mocksAndTestControl, bm *BalanceManagerWit
 }
 
 func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
-	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		m.disableManagerStart = true
 	})
 	defer done()
@@ -380,7 +381,7 @@ func TestTopUpWithNoAmountModificationWithMultipleFuelingTxs(t *testing.T) {
 }
 
 func TestTopUpSuccessTopUpMinAheadUseMin(t *testing.T) {
-	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		m.disableManagerStart = true
 	})
 	defer done()
@@ -402,7 +403,7 @@ func TestTopUpSuccessTopUpMinAheadUseMin(t *testing.T) {
 
 	// set the minimum to have 2 extra spaces
 	bm.proactiveFuelingTransactionTotal = 4
-	bm.proactiveFuelingCalcMethod = config.ProactiveAutoFuelingCalcMethodMin
+	bm.proactiveFuelingCalcMethod = pldconf.ProactiveAutoFuelingCalcMethodMin
 
 	// the expectTopUpAmount should include min Value (50) multiply 2 extra space we set
 	expectedTopUpAmount := big.NewInt(200)
@@ -415,7 +416,7 @@ func TestTopUpSuccessTopUpMinAheadUseMin(t *testing.T) {
 }
 
 func TestTopUpSuccessTopUpMinAheadUseMax(t *testing.T) {
-	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		m.disableManagerStart = true
 	})
 	defer done()
@@ -437,7 +438,7 @@ func TestTopUpSuccessTopUpMinAheadUseMax(t *testing.T) {
 
 	// set the minimum to have 2 extra spaces
 	bm.proactiveFuelingTransactionTotal = 4
-	bm.proactiveFuelingCalcMethod = config.ProactiveAutoFuelingCalcMethodMax
+	bm.proactiveFuelingCalcMethod = pldconf.ProactiveAutoFuelingCalcMethodMax
 
 	// the expectTopUpAmount should include max Value (150) multiply 2 extra space we set
 	expectedTopUpAmount := big.NewInt(400)
@@ -450,7 +451,7 @@ func TestTopUpSuccessTopUpMinAheadUseMax(t *testing.T) {
 }
 
 func TestTopUpSuccessTopUpMinAheadUseAvg(t *testing.T) {
-	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		m.disableManagerStart = true
 	})
 	defer done()
@@ -472,7 +473,7 @@ func TestTopUpSuccessTopUpMinAheadUseAvg(t *testing.T) {
 
 	// set the minimum to have 2 extra spaces
 	bm.proactiveFuelingTransactionTotal = 4
-	bm.proactiveFuelingCalcMethod = config.ProactiveAutoFuelingCalcMethodAverage
+	bm.proactiveFuelingCalcMethod = pldconf.ProactiveAutoFuelingCalcMethodAverage
 
 	// the expectTopUpAmount should include avg Value (100) multiply 2 extra space we set
 	expectedTopUpAmount := big.NewInt(300)
@@ -485,7 +486,7 @@ func TestTopUpSuccessTopUpMinAheadUseAvg(t *testing.T) {
 }
 
 func TestTopUpSuccessUseMinDestBalance(t *testing.T) {
-	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		m.disableManagerStart = true
 	})
 	defer done()
@@ -516,7 +517,7 @@ func TestTopUpSuccessUseMinDestBalance(t *testing.T) {
 }
 
 func TestTopUpSuccessUseMaxDestBalance(t *testing.T) {
-	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		m.disableManagerStart = true
 	})
 	defer done()
@@ -547,7 +548,7 @@ func TestTopUpSuccessUseMaxDestBalance(t *testing.T) {
 }
 
 func TestTopUpNoOpAlreadyAboveMaxDestBalance(t *testing.T) {
-	ctx, bm, _, _, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, bm, _, _, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		m.disableManagerStart = true
 	})
 	defer done()
@@ -571,7 +572,7 @@ func TestTopUpNoOpAlreadyAboveMaxDestBalance(t *testing.T) {
 }
 
 func TestTopUpNoOpAmountBelowMinThreshold(t *testing.T) {
-	ctx, bm, _, _, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, bm, _, _, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		m.disableManagerStart = true
 	})
 	defer done()
@@ -595,7 +596,7 @@ func TestTopUpNoOpAmountBelowMinThreshold(t *testing.T) {
 }
 
 func TestTopUpFailedDueToSourceBalanceBelowMin(t *testing.T) {
-	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		m.disableManagerStart = true
 	})
 	defer done()
@@ -626,7 +627,7 @@ func TestTopUpFailedDueToSourceBalanceBelowMin(t *testing.T) {
 }
 
 func TestTopUpFailedDueToSourceBalanceBelowRequestedAmount(t *testing.T) {
-	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		m.disableManagerStart = true
 	})
 	defer done()
@@ -654,7 +655,7 @@ func TestTopUpFailedDueToSourceBalanceBelowRequestedAmount(t *testing.T) {
 }
 
 func TestTopUpFailedDueToUnableToGetPendingFuelingTransaction(t *testing.T) {
-	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		m.disableManagerStart = true
 	})
 	defer done()
@@ -679,7 +680,7 @@ func TestTopUpFailedDueToUnableToGetPendingFuelingTransaction(t *testing.T) {
 }
 
 func TestTopUpFailedDueToUnableToGetSourceAddressBalance(t *testing.T) {
-	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, bm, _, m, done := newTestBalanceManager(t, true, func(m *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		m.disableManagerStart = true
 	})
 	defer done()

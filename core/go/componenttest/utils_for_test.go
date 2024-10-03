@@ -34,21 +34,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/componenttest/domains"
 	"github.com/kaleido-io/paladin/core/internal/componentmgr"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
-	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/registries/static/pkg/static"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tlsconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/kaleido-io/paladin/transports/grpc/pkg/grpc"
 	"github.com/stretchr/testify/assert"
@@ -98,7 +96,7 @@ func transactionLatencyThreshold(t *testing.T) time.Duration {
 type componentTestInstance struct {
 	grpcTarget             string
 	id                     uuid.UUID
-	conf                   *config.PaladinConfig
+	conf                   *pldconf.PaladinConfig
 	ctx                    context.Context
 	client                 rpcclient.Client
 	resolveEthereumAddress func(identity string) string
@@ -184,10 +182,10 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	i.ctx = log.WithLogField(context.Background(), "instance", binding.identity.String())
 
 	i.conf.Log.Level = confutil.P("trace")
-	i.conf.DomainManagerConfig.Domains = make(map[string]*config.DomainConfig, 1)
-	i.conf.DomainManagerConfig.Domains["domain1"] = &config.DomainConfig{
-		Plugin: config.PluginConfig{
-			Type:    config.LibraryTypeCShared.Enum(),
+	i.conf.DomainManagerConfig.Domains = make(map[string]*pldconf.DomainConfig, 1)
+	i.conf.DomainManagerConfig.Domains["domain1"] = &pldconf.DomainConfig{
+		Plugin: pldconf.PluginConfig{
+			Type:    string(tktypes.LibraryTypeCShared),
 			Library: "loaded/via/unit/test/loader",
 		},
 		Config:          map[string]any{"some": "config"},
@@ -197,7 +195,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	entropy, _ := bip39.NewEntropy(256)
 	mnemonic, _ := bip39.NewMnemonic(entropy)
 
-	i.conf.Signer.KeyStore.Static.Keys = map[string]signerapi.StaticKeyEntryConfig{
+	i.conf.Signer.KeyStore.Static.Keys = map[string]pldconf.StaticKeyEntryConfig{
 		"seed": {
 			Encoding: "none",
 			Inline:   mnemonic,
@@ -205,16 +203,16 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	}
 
 	i.conf.NodeName = binding.identity.String()
-	i.conf.Transports = map[string]*config.TransportConfig{
+	i.conf.Transports = map[string]*pldconf.TransportConfig{
 		"grpc": {
-			Plugin: config.PluginConfig{
-				Type:    config.LibraryTypeCShared.Enum(),
+			Plugin: pldconf.PluginConfig{
+				Type:    string(tktypes.LibraryTypeCShared),
 				Library: "loaded/via/unit/test/loader",
 			},
 			Config: map[string]any{
 				"address": "localhost",
 				"port":    binding.port,
-				"tls": tlsconf.Config{
+				"tls": pldconf.TLSConfig{
 					Enabled: true,
 					Cert:    binding.cert,
 					Key:     binding.key,
@@ -239,10 +237,10 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 		}
 	}
 
-	i.conf.Registries = map[string]*config.RegistryConfig{
+	i.conf.Registries = map[string]*pldconf.RegistryConfig{
 		"registry1": {
-			Plugin: config.PluginConfig{
-				Type:    config.LibraryTypeCShared.Enum(),
+			Plugin: pldconf.PluginConfig{
+				Type:    string(tktypes.LibraryTypeCShared),
 				Library: "loaded/via/unit/test/loader",
 			},
 			Config: map[string]any{
@@ -286,7 +284,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 		cm.Stop()
 	})
 
-	client, err := rpcclient.NewHTTPClient(log.WithLogField(context.Background(), "client-for", binding.identity.String()), &rpcclient.HTTPConfig{URL: "http://localhost:" + strconv.Itoa(*i.conf.RPCServer.HTTP.Port)})
+	client, err := rpcclient.NewHTTPClient(log.WithLogField(context.Background(), "client-for", binding.identity.String()), &pldconf.HTTPClientConfig{URL: "http://localhost:" + strconv.Itoa(*i.conf.RPCServer.HTTP.Port)})
 	require.NoError(t, err)
 	i.client = client
 
@@ -332,12 +330,12 @@ func (c *componentTestEngine) Stop() {
 
 }
 
-func testConfig(t *testing.T) config.PaladinConfig {
+func testConfig(t *testing.T) pldconf.PaladinConfig {
 	ctx := context.Background()
 	log.SetLevel("debug")
 
-	var conf *config.PaladinConfig
-	err := config.ReadAndParseYAMLFile(ctx, "../test/config/sqlite.memory.config.yaml", &conf)
+	var conf *pldconf.PaladinConfig
+	err := pldconf.ReadAndParseYAMLFile(ctx, "../test/config/sqlite.memory.config.yaml", &conf)
 	assert.NoError(t, err)
 
 	// For running in this unit test the dirs are different to the sample config
@@ -355,7 +353,7 @@ func testConfig(t *testing.T) config.PaladinConfig {
 
 // getFreePort finds an available TCP port and returns it.
 func getFreePort() (int, error) {
-	listener, err := net.Listen("tcp", ":0")
+	listener, err := net.Listen("tcp", "127.0.0.1:0") // localhost so we're not opening ports on the machine that need firewall approval
 	if err != nil {
 		return 0, err
 	}

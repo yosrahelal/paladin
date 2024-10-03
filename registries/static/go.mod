@@ -15,7 +15,8 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1 // indirect
-	github.com/kr/pretty v0.3.1 // indirect
+	github.com/kaleido-io/paladin/config v0.0.0-00010101000000-000000000000 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
@@ -31,11 +32,14 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240812133136-8ffd90a71988 // indirect
 	google.golang.org/grpc v1.65.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
-	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
+	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
 replace github.com/kaleido-io/paladin/kata => ../../kata
 
 replace github.com/kaleido-io/paladin/toolkit => ../../toolkit/go
+
+replace github.com/kaleido-io/paladin/config => ../../config

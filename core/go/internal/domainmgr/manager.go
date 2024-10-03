@@ -25,11 +25,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
@@ -51,7 +52,7 @@ var eventSolSig_PaladinRegisterSmartContract_V0 = mustParseEventSoliditySignatur
 
 // var eventSig_PaladinPrivateTransaction_V0 = mustParseEventSignature(iPaladinContractABI, "PaladinPrivateTransaction_V0")
 
-func NewDomainManager(bgCtx context.Context, conf *config.DomainManagerConfig) components.DomainManager {
+func NewDomainManager(bgCtx context.Context, conf *pldconf.DomainManagerConfig) components.DomainManager {
 	allDomains := []string{}
 	for name := range conf.Domains {
 		allDomains = append(allDomains, name)
@@ -64,7 +65,7 @@ func NewDomainManager(bgCtx context.Context, conf *config.DomainManagerConfig) c
 		domainsByAddress:  make(map[tktypes.EthAddress]*domain),
 		contractWaiter:    inflight.NewInflightManager[uuid.UUID, *PrivateSmartContract](uuid.Parse),
 		transactionWaiter: inflight.NewInflightManager[uuid.UUID, any](uuid.Parse),
-		contractCache:     cache.NewCache[tktypes.EthAddress, *domainContract](&conf.DomainManager.ContractCache, config.ContractCacheDefaults),
+		contractCache:     cache.NewCache[tktypes.EthAddress, *domainContract](&conf.DomainManager.ContractCache, pldconf.ContractCacheDefaults),
 	}
 }
 
@@ -72,7 +73,7 @@ type domainManager struct {
 	bgCtx context.Context
 	mux   sync.Mutex
 
-	conf             *config.DomainManagerConfig
+	conf             *pldconf.DomainManagerConfig
 	persistence      persistence.Persistence
 	stateStore       statestore.StateStore
 	blockIndexer     blockindexer.BlockIndexer
@@ -138,8 +139,8 @@ func (dm *domainManager) cleanupDomain(d *domain) {
 	delete(dm.domainsByAddress, *d.RegistryAddress())
 }
 
-func (dm *domainManager) ConfiguredDomains() map[string]*config.PluginConfig {
-	pluginConf := make(map[string]*config.PluginConfig)
+func (dm *domainManager) ConfiguredDomains() map[string]*pldconf.PluginConfig {
+	pluginConf := make(map[string]*pldconf.PluginConfig)
 	for name, conf := range dm.conf.Domains {
 		pluginConf[name] = &conf.Plugin
 	}

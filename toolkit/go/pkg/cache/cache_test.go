@@ -19,13 +19,14 @@ package cache
 import (
 	"testing"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCache(t *testing.T) {
 
-	c := NewCache[string, string](&Config{}, &Config{Capacity: confutil.P(1)})
+	c := NewCache[string, string](&pldconf.CacheConfig{}, &pldconf.CacheConfig{Capacity: confutil.P(1)})
 
 	c.Set("key1", "val1")
 	v, ok := c.Get("key1")

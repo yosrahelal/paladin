@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	proto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
@@ -50,7 +51,7 @@ func NewStaticStoreFactory[C signerapi.ExtensibleConfig]() signerapi.KeyStoreFac
 //
 // Note that special characters in key names must be URL path encoded in the
 // YAML keys, and "/" characters (rather than object nesting) is used
-// in the YAML config.
+// in the YAML pldconf.
 //
 // The keys themselves can be in files, so as well as very simple testing
 // with keys in-line in the config, this helps use a file based Kubernetes
@@ -60,7 +61,7 @@ func (fsf *staticStoreFactory[C]) NewKeyStore(ctx context.Context, eConf C) (_ s
 
 	keyMap := conf.Keys
 	if keyMap == nil {
-		keyMap = make(map[string]signerapi.StaticKeyEntryConfig)
+		keyMap = make(map[string]pldconf.StaticKeyEntryConfig)
 	}
 	ils := &staticStore{
 		keys: make(map[string][]byte),
@@ -88,12 +89,12 @@ func (fsf *staticStoreFactory[C]) NewKeyStore(ctx context.Context, eConf C) (_ s
 			return nil, i18n.NewError(ctx, tkmsgs.MsgSigningStaticKeyInvalid, keyHandle)
 		}
 		switch keyEntry.Encoding {
-		case signerapi.StaticKeyEntryEncodingNONE:
-		case signerapi.StaticKeyEntryEncodingHEX:
+		case pldconf.StaticKeyEntryEncodingNONE:
+		case pldconf.StaticKeyEntryEncodingHEX:
 			if keyData, err = hex.DecodeString(strings.TrimPrefix(string(keyData), "0x")); err != nil {
 				return nil, i18n.NewError(ctx, tkmsgs.MsgSigningStaticKeyInvalid, keyHandle)
 			}
-		case signerapi.StaticKeyEntryEncodingBase64:
+		case pldconf.StaticKeyEntryEncodingBase64:
 			if keyData, err = base64.StdEncoding.DecodeString(string(keyData)); err != nil {
 				return nil, i18n.NewError(ctx, tkmsgs.MsgSigningStaticKeyInvalid, keyHandle)
 			}
@@ -105,8 +106,8 @@ func (fsf *staticStoreFactory[C]) NewKeyStore(ctx context.Context, eConf C) (_ s
 	return ils, nil
 }
 
-func (ils *staticStore) loadFileIntoKeyMap(ctx context.Context, filename string, keyMap map[string]signerapi.StaticKeyEntryConfig) error {
-	var fileKeyMap map[string]signerapi.StaticKeyEntryConfig
+func (ils *staticStore) loadFileIntoKeyMap(ctx context.Context, filename string, keyMap map[string]pldconf.StaticKeyEntryConfig) error {
+	var fileKeyMap map[string]pldconf.StaticKeyEntryConfig
 	b, err := os.ReadFile(filename)
 	if err == nil {
 		err = yaml.Unmarshal(b, &fileKeyMap)

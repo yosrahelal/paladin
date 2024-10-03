@@ -34,6 +34,15 @@ type BesuSpec struct {
 	// The name of the genesis CR that these nodes will use to obtain their genesis file, and find bootnodes
 	Genesis     string                           `json:"genesis"`
 	PVCTemplate corev1.PersistentVolumeClaimSpec `json:"pvcTemplate,omitempty"`
+
+	// Optionally tune the service definition.
+	// We merge any configuration you add (such as node ports) for the following services:
+	// "rpc-http" - 8545 (TCP),
+	// "rpc-ws" - 8546 (TCP),
+	// "graphql-http" - 8547 (TCP),
+	// "p2p-tcp" - 30303 (TCP),
+	// "p2p-udp" - 30303 (UDP)
+	Service corev1.ServiceSpec `json:"service,omitempty"`
 }
 
 // BesuStatus defines the observed state of Besu

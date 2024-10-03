@@ -22,16 +22,17 @@ package persistence
 import (
 	"context"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 )
 
 // Used for unit tests throughout the project that want to test against a real DB
 // This version return an in-memory DB
 func NewUnitTestPersistence(ctx context.Context) (Persistence, func(), error) {
-	p, err := newSQLiteProvider(ctx, &Config{
+	p, err := newSQLiteProvider(ctx, &pldconf.DBConfig{
 		Type: "sqlite",
-		SQLite: SQLiteConfig{
-			SQLDBConfig: SQLDBConfig{
+		SQLite: pldconf.SQLiteConfig{
+			SQLDBConfig: pldconf.SQLDBConfig{
 				DSN:           ":memory:",
 				AutoMigrate:   confutil.P(true),
 				MigrationsDir: "../../db/migrations/sqlite",

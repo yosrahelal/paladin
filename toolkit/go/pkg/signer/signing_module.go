@@ -22,6 +22,7 @@ import (
 
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	proto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/keystores"
@@ -89,8 +90,8 @@ func NewSigningModule[C signerapi.ExtensibleConfig](ctx context.Context, conf C,
 		},
 	}
 	keyStoreImplementations := map[string]signerapi.KeyStoreFactory[C]{
-		signerapi.KeyStoreTypeFilesystem: keystores.NewFilesystemStoreFactory[C](),
-		signerapi.KeyStoreTypeStatic:     keystores.NewStaticStoreFactory[C](),
+		pldconf.KeyStoreTypeFilesystem: keystores.NewFilesystemStoreFactory[C](),
+		pldconf.KeyStoreTypeStatic:     keystores.NewStaticStoreFactory[C](),
 	}
 
 	for _, e := range extensions {
@@ -132,8 +133,8 @@ func NewSigningModule[C signerapi.ExtensibleConfig](ctx context.Context, conf C,
 
 	kdConf := conf.KeyDerivationConfig()
 	switch kdConf.Type {
-	case "", signerapi.KeyDerivationTypeDirect:
-	case signerapi.KeyDerivationTypeBIP32:
+	case "", pldconf.KeyDerivationTypeDirect:
+	case pldconf.KeyDerivationTypeBIP32:
 		// This is fundamentally incompatible with a request to disable loading key materials into memory
 		if ksConf.KeyStoreSigning {
 			return nil, i18n.NewError(ctx, tkmsgs.MsgSigningHierarchicalRequiresLoading)

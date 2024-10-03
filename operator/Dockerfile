@@ -1,7 +1,5 @@
 # Build the manager binary
 FROM golang:1.22 AS builder
-ARG TARGETOS
-ARG TARGETARCH
 
 WORKDIR /workspace
 
@@ -15,10 +13,13 @@ COPY . .
 #       from the core build.
 RUN cd operator; go build -a -o manager cmd/main.go
 
-# Use distroless as minimal base image to package the manager binary
-FROM gcr.io/distroless/static:nonroot
+# TODO: Use distroless as minimal base image to package the manager binary
+#       Depends on debugging/reconciling dependencies of operator
+# FROM gcr.io/distroless/static:nonroot
+
+FROM ubuntu:24.04
 WORKDIR /
-COPY --from=builder /workspace/operator/manager .
+COPY --from=builder --chown=65532:65532 /workspace/operator/manager .
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]

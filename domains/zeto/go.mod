@@ -11,6 +11,7 @@ require (
 	github.com/iden3/go-rapidsnark/types v0.0.2
 	github.com/iden3/go-rapidsnark/witness/v2 v2.0.0
 	github.com/iden3/go-rapidsnark/witness/wasmer v0.0.0-20240621085734-9323fbec34a3
+	github.com/kaleido-io/paladin/config v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/core v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.9.0
@@ -116,3 +117,5 @@ replace github.com/kaleido-io/paladin/core => ../../core/go
 replace github.com/kaleido-io/paladin/toolkit => ../../toolkit/go
 
 replace github.com/iden3/go-iden3-crypto => github.com/kaleido-io/go-iden3-crypto v0.0.0-20240905154504-333f60687c26
+
+replace github.com/kaleido-io/paladin/config => ../../config

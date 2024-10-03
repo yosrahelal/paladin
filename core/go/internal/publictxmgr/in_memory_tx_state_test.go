@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -35,7 +35,7 @@ import (
 // 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 // 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 // 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-// 	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+// 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 // 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 // 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 

@@ -10,6 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hyperledger/firefly-common v1.4.11
 	github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1
+	github.com/kaleido-io/paladin/config v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000
 	github.com/serialx/hashring v0.0.0-20200727003509-22c0c7ab6b1b
 	github.com/sirupsen/logrus v1.9.3
@@ -113,3 +114,5 @@ require (
 )
 
 replace github.com/kaleido-io/paladin/toolkit => ../../toolkit/go
+
+replace github.com/kaleido-io/paladin/config => ../../config

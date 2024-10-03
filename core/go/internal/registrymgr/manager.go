@@ -21,9 +21,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 )
 
@@ -31,13 +32,13 @@ type registryManager struct {
 	bgCtx context.Context
 	mux   sync.Mutex
 
-	conf *config.RegistryManagerConfig
+	conf *pldconf.RegistryManagerConfig
 
 	registriesByID   map[uuid.UUID]*registry
 	registriesByName map[string]*registry
 }
 
-func NewRegistryManager(bgCtx context.Context, conf *config.RegistryManagerConfig) components.RegistryManager {
+func NewRegistryManager(bgCtx context.Context, conf *pldconf.RegistryManagerConfig) components.RegistryManager {
 	return &registryManager{
 		bgCtx:            bgCtx,
 		conf:             conf,
@@ -78,8 +79,8 @@ func (rm *registryManager) cleanupRegistry(t *registry) {
 	delete(rm.registriesByName, t.name)
 }
 
-func (rm *registryManager) ConfiguredRegistries() map[string]*config.PluginConfig {
-	pluginConf := make(map[string]*config.PluginConfig)
+func (rm *registryManager) ConfiguredRegistries() map[string]*pldconf.PluginConfig {
+	pluginConf := make(map[string]*pldconf.PluginConfig)
 	for name, conf := range rm.conf.Registries {
 		pluginConf[name] = &conf.Plugin
 	}

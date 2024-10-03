@@ -27,8 +27,9 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/keystorev3"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	proto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
@@ -53,17 +54,17 @@ func (fsf *filesystemStoreFactory[C]) NewKeyStore(ctx context.Context, eConf C) 
 
 	// Determine the path
 	var pathInfo fs.FileInfo
-	path, err := filepath.Abs(confutil.StringNotEmpty(conf.Path, *signerapi.FileSystemDefaults.Path))
+	path, err := filepath.Abs(confutil.StringNotEmpty(conf.Path, *pldconf.FileSystemDefaults.Path))
 	if err == nil {
 		pathInfo, err = os.Stat(path)
 	}
 	if err != nil || !pathInfo.IsDir() {
-		return nil, i18n.WrapError(ctx, err, tkmsgs.MsgSigningModuleBadPathError, *signerapi.FileSystemDefaults.Path)
+		return nil, i18n.WrapError(ctx, err, tkmsgs.MsgSigningModuleBadPathError, *pldconf.FileSystemDefaults.Path)
 	}
 	return &filesystemStore{
-		cache:    cache.NewCache[string, keystorev3.WalletFile](&conf.Cache, &signerapi.FileSystemDefaults.Cache),
-		fileMode: confutil.UnixFileMode(conf.FileMode, *signerapi.FileSystemDefaults.FileMode),
-		dirMode:  confutil.UnixFileMode(conf.DirMode, *signerapi.FileSystemDefaults.DirMode),
+		cache:    cache.NewCache[string, keystorev3.WalletFile](&conf.Cache, &pldconf.FileSystemDefaults.Cache),
+		fileMode: confutil.UnixFileMode(conf.FileMode, *pldconf.FileSystemDefaults.FileMode),
+		dirMode:  confutil.UnixFileMode(conf.DirMode, *pldconf.FileSystemDefaults.DirMode),
 		path:     path,
 	}, nil
 }

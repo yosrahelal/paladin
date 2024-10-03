@@ -27,10 +27,11 @@ import (
 	"github.com/iden3/go-rapidsnark/prover"
 	"github.com/iden3/go-rapidsnark/types"
 	"github.com/iden3/go-rapidsnark/witness/v2"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"google.golang.org/protobuf/proto"
 )
@@ -57,7 +58,7 @@ func NewSnarkProver(conf *SnarkProverConfig) (signerapi.InMemorySigner, error) {
 }
 
 func newSnarkProver(conf *SnarkProverConfig) (*snarkProver, error) {
-	cacheConfig := cache.Config{
+	cacheConfig := pldconf.CacheConfig{
 		Capacity: confutil.P(50),
 	}
 	return &snarkProver{

@@ -63,6 +63,12 @@ type resolvedFunction struct {
 	signature    string
 }
 
+var defaultConstructor = &abi.Entry{Type: abi.Constructor, Inputs: abi.ParameterArray{}}
+var defaultConstructorSignature = func() string {
+	sig, _ := defaultConstructor.Signature()
+	return sig
+}()
+
 func (tm *txManager) resolveFunction(ctx context.Context, inputABI abi.ABI, inputABIRef *tktypes.Bytes32, requiredFunction string, to *tktypes.EthAddress) (_ *resolvedFunction, err error) {
 
 	// Lookup the ABI we're working with.
@@ -74,10 +80,17 @@ func (tm *txManager) resolveFunction(ctx context.Context, inputABI abi.ABI, inpu
 			return nil, i18n.NewError(ctx, msgs.MsgTxMgrABIAndDefinition)
 		}
 		pa, err = tm.getABIByHash(ctx, *inputABIRef)
-	} else if len(inputABI) > 0 {
-		pa, err = tm.upsertABI(ctx, inputABI)
 	} else {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrNoABIOrReference)
+		if len(inputABI) == 0 {
+			if to != nil {
+				return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrNoABIOrReference)
+			}
+			// it's convenient to do a deploy without a constructor, of bytecode with no
+			// parameters - treat this as an ABI with just the default constructor
+			// (we need something to hash to an abiReference in all cases)
+			inputABI = abi.ABI{defaultConstructor}
+		}
+		pa, err = tm.upsertABI(ctx, inputABI)
 	}
 	if err != nil || pa == nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrABIReferenceLookupFailed, inputABIRef)
@@ -119,7 +132,13 @@ func (tm *txManager) resolveFunction(ctx context.Context, inputABI abi.ABI, inpu
 		}
 	}
 	if functionSignature == "" || selectedFunction == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgTxMgrFunctionNoMatch)
+		if to == nil {
+			// This is the common case when the ABI was non-empty, but there's no constructor in there.
+			selectedFunction = defaultConstructor
+			functionSignature = defaultConstructorSignature
+		} else {
+			return nil, i18n.NewError(ctx, msgs.MsgTxMgrFunctionNoMatch)
+		}
 	}
 	log.L(ctx).Debugf("Function selected: %s", selectedFunction.SolString())
 	return &resolvedFunction{
@@ -161,10 +180,12 @@ func (tm *txManager) parseInputs(
 	// TODO: Resolve domain for private TX
 
 	var iDecoded any
-	d := json.NewDecoder(bytes.NewReader(data.BytesOrNull()))
-	d.UseNumber()
-	if err := d.Decode(&iDecoded); err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidInputData, e.String())
+	if data != nil {
+		d := json.NewDecoder(bytes.NewReader(data.Bytes()))
+		d.UseNumber()
+		if err := d.Decode(&iDecoded); err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidInputData, e.String())
+		}
 	}
 	var cv *abi.ComponentValue
 	switch decoded := iDecoded.(type) {

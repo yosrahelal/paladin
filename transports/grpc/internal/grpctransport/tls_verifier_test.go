@@ -31,10 +31,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tlsconf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -264,7 +264,7 @@ func TestGRPCTransport_CACertVerificationWithSubjectRegex_OK(t *testing.T) {
 
 	node1Cert, node1Key := buildTestCertificate(t, pkix.Name{CommonName: "node1"}, cas[0], caKey)
 	plugin1, transportDetails1, callbacks1, done1 := newTestGRPCTransport(t, node1Cert, node1Key, &Config{
-		TLS:                    tlsconf.Config{CA: caCert},
+		TLS:                    pldconf.TLSConfig{CA: caCert},
 		DirectCertVerification: confutil.P(false),
 		CertSubjectMatcher:     confutil.P(`^.*CN=([0-9A-Za-z._-]+).*$`),
 	})
@@ -273,7 +273,7 @@ func TestGRPCTransport_CACertVerificationWithSubjectRegex_OK(t *testing.T) {
 
 	node2Cert, node2Key := buildTestCertificate(t, pkix.Name{CommonName: "node2"}, cas[0], caKey)
 	_, transportDetails2, callbacks2, done2 := newTestGRPCTransport(t, node2Cert, node2Key, &Config{
-		TLS:                    tlsconf.Config{CA: caCert},
+		TLS:                    pldconf.TLSConfig{CA: caCert},
 		DirectCertVerification: confutil.P(false),
 		CertSubjectMatcher:     confutil.P(`^.*CN=([0-9A-Za-z._-]+).*$`),
 	})
@@ -318,7 +318,7 @@ func TestGRPCTransport_CAServerWrongCA(t *testing.T) {
 
 	node1Cert, node1Key := buildTestCertificate(t, pkix.Name{CommonName: "node1"}, cas[0], caKey)
 	plugin1, transportDetails1, callbacks1, done1 := newTestGRPCTransport(t, node1Cert, node1Key, &Config{
-		TLS:                    tlsconf.Config{CA: caCert},
+		TLS:                    pldconf.TLSConfig{CA: caCert},
 		DirectCertVerification: confutil.P(false),
 	})
 	defer done1()
@@ -326,7 +326,7 @@ func TestGRPCTransport_CAServerWrongCA(t *testing.T) {
 
 	node2Cert, node2Key := buildTestCertificate(t, pkix.Name{CommonName: "node2"}, nil, nil)
 	_, transportDetails2, callbacks2, done2 := newTestGRPCTransport(t, node2Cert, node2Key, &Config{
-		TLS:                    tlsconf.Config{CA: caCert},
+		TLS:                    pldconf.TLSConfig{CA: caCert},
 		DirectCertVerification: confutil.P(false),
 	})
 	defer done2()
@@ -357,7 +357,7 @@ func TestGRPCTransport_CAClientWrongCA(t *testing.T) {
 
 	node1Cert, node1Key := buildTestCertificate(t, pkix.Name{CommonName: "node1"}, nil, nil)
 	plugin1, transportDetails1, callbacks1, done1 := newTestGRPCTransport(t, node1Cert, node1Key, &Config{
-		TLS:                    tlsconf.Config{CA: caCert},
+		TLS:                    pldconf.TLSConfig{CA: caCert},
 		DirectCertVerification: confutil.P(false),
 	})
 	defer done1()
@@ -365,7 +365,7 @@ func TestGRPCTransport_CAClientWrongCA(t *testing.T) {
 
 	node2Cert, node2Key := buildTestCertificate(t, pkix.Name{CommonName: "node2"}, cas[0], caKey)
 	_, transportDetails2, callbacks2, done2 := newTestGRPCTransport(t, node2Cert, node2Key, &Config{
-		TLS:                    tlsconf.Config{CA: caCert},
+		TLS:                    pldconf.TLSConfig{CA: caCert},
 		DirectCertVerification: confutil.P(false),
 	})
 	defer done2()

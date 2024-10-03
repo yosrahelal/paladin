@@ -28,19 +28,19 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
-	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
@@ -83,20 +83,20 @@ func baseMocks(t *testing.T) *mocksAndTestControl {
 	return mocks
 }
 
-func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig)) (context.Context, *pubTxManager, *mocksAndTestControl, func()) {
+func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig)) (context.Context, *pubTxManager, *mocksAndTestControl, func()) {
 	log.SetLevel("debug")
 	ctx := context.Background()
-	conf := &config.PublicTxManagerConfig{
-		Manager: config.PublicTxManagerManagerConfig{
+	conf := &pldconf.PublicTxManagerConfig{
+		Manager: pldconf.PublicTxManagerManagerConfig{
 			Interval:                 confutil.P("1h"),
 			MaxInFlightOrchestrators: confutil.P(1),
-			SubmissionWriter: config.FlushWriterConfig{
+			SubmissionWriter: pldconf.FlushWriterConfig{
 				WorkerCount: confutil.P(1),
 			},
 		},
-		Orchestrator: config.PublicTxManagerOrchestratorConfig{
+		Orchestrator: pldconf.PublicTxManagerOrchestratorConfig{
 			Interval: confutil.P("1h"),
-			SubmissionRetry: retry.ConfigWithMax{
+			SubmissionRetry: pldconf.RetryConfigWithMax{
 				MaxAttempts: confutil.P(1),
 			},
 		},
@@ -111,11 +111,11 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 		p, dbClose, err = persistence.NewUnitTestPersistence(ctx)
 		require.NoError(t, err)
 
-		mocks.keyManager, err = ethclient.NewSimpleTestKeyManager(ctx, &signerapi.Config{
-			KeyStore: signerapi.KeyStoreConfig{
-				Type: signerapi.KeyStoreTypeStatic,
-				Static: signerapi.StaticKeyStorageConfig{
-					Keys: map[string]signerapi.StaticKeyEntryConfig{
+		mocks.keyManager, err = ethclient.NewSimpleTestKeyManager(ctx, &signerapi.ConfigNoExt{
+			KeyStore: pldconf.KeyStoreConfig{
+				Type: pldconf.KeyStoreTypeStatic,
+				Static: pldconf.StaticKeyStoreConfig{
+					Keys: map[string]pldconf.StaticKeyEntryConfig{
 						"seed": {
 							Encoding: "hex",
 							Inline:   tktypes.Bytes32(tktypes.RandBytes(32)).String(),
@@ -123,8 +123,8 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 					},
 				},
 			},
-			KeyDerivation: signerapi.KeyDerivationConfig{
-				Type: signerapi.KeyDerivationTypeBIP32,
+			KeyDerivation: pldconf.KeyDerivationConfig{
+				Type: pldconf.KeyDerivationTypeBIP32,
 			},
 		})
 		require.NoError(t, err)
@@ -174,7 +174,7 @@ func passthroughBuildRawTransactionNoResolve(m *mocksAndTestControl, chainID int
 		for _, a := range args[4:] {
 			callOpts = append(callOpts, a.(ethclient.CallOption))
 		}
-		r, err := ethclient.NewUnconnectedRPCClient(context.Background(), m.keyManager, &ethclient.Config{}, chainID).BuildRawTransactionNoResolve(
+		r, err := ethclient.NewUnconnectedRPCClient(context.Background(), m.keyManager, &pldconf.EthClientConfig{}, chainID).BuildRawTransactionNoResolve(
 			args[0].(context.Context),
 			args[1].(ethclient.EthTXVersion),
 			args[2].(*ethclient.ResolvedSigner),
@@ -191,9 +191,9 @@ func TestNewEngineErrors(t *testing.T) {
 	mockKeyManager := componentmocks.NewKeyManager(t)
 	mocks.keyManager = mockKeyManager
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager)
-	pmgr := NewPublicTransactionManager(context.Background(), &config.PublicTxManagerConfig{
-		BalanceManager: config.BalanceManagerConfig{
-			AutoFueling: config.AutoFuelingConfig{
+	pmgr := NewPublicTransactionManager(context.Background(), &pldconf.PublicTxManagerConfig{
+		BalanceManager: pldconf.BalanceManagerConfig{
+			AutoFueling: pldconf.AutoFuelingConfig{
 				Source: confutil.P("bad address"),
 			},
 		},
@@ -209,7 +209,7 @@ func TestInit(t *testing.T) {
 }
 
 func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
-	ctx, ble, m, done := newTestPublicTxManager(t, true, func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, ble, m, done := newTestPublicTxManager(t, true, func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		conf.Manager.Interval = confutil.P("50ms")
 		conf.Orchestrator.Interval = confutil.P("50ms")
 		conf.Manager.OrchestratorIdleTimeout = confutil.P("1ms")
@@ -485,7 +485,7 @@ func TestSubmitFailures(t *testing.T) {
 }
 
 func TestAddActivityDisabled(t *testing.T) {
-	_, ble, _, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	_, ble, _, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		conf.Manager.ActivityRecords.RecordsPerTransaction = confutil.P(0)
 	})
 	defer done()
@@ -511,7 +511,7 @@ func TestAddActivityWrap(t *testing.T) {
 
 }
 
-func mockForSubmitSuccess(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+func mockForSubmitSuccess(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 	signingKey := tktypes.EthAddress(tktypes.RandBytes(20))
 	mockKeyManager := mocks.keyManager.(*componentmocks.KeyManager)
 	mockKeyManager.On("ResolveKey", mock.Anything, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("", signingKey.String(), nil)
@@ -546,7 +546,7 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 
 func TestEngineSuspendResumeRealDB(t *testing.T) {
 
-	ctx, ble, m, done := newTestPublicTxManager(t, true, func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, ble, m, done := newTestPublicTxManager(t, true, func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		conf.Manager.Interval = confutil.P("50ms")
 		conf.Orchestrator.Interval = confutil.P("50ms")
 		conf.Manager.OrchestratorIdleTimeout = confutil.P("1ms")

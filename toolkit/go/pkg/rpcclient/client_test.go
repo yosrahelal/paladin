@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/mocks/rpcbackendmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -33,7 +34,7 @@ import (
 
 func newWrappedHTTP(t *testing.T) (context.Context, *httpWrap, *rpcbackendmocks.Backend) {
 	ctx := context.Background()
-	iC, err := NewHTTPClient(ctx, &HTTPConfig{
+	iC, err := NewHTTPClient(ctx, &pldconf.HTTPClientConfig{
 		URL: "http://localhost:8545",
 	})
 	require.NoError(t, err)
@@ -47,8 +48,8 @@ func newWrappedHTTP(t *testing.T) (context.Context, *httpWrap, *rpcbackendmocks.
 
 func newWrappedWS(t *testing.T) (context.Context, *wsWrap, *rpcbackendmocks.WebSocketRPCClient) {
 	ctx := context.Background()
-	iC, err := NewWSClient(ctx, &WSConfig{
-		HTTPConfig: HTTPConfig{
+	iC, err := NewWSClient(ctx, &pldconf.WSClientConfig{
+		HTTPClientConfig: pldconf.HTTPClientConfig{
 			URL: "ws://localhost:8545",
 		},
 	})
