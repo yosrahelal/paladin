@@ -101,8 +101,11 @@ type DomainContext interface {
 	// No dependency analysis is done by this function call - that is the responsibility of the caller.
 	ClearTransactions(ctx context.Context, transactionID []uuid.UUID)
 
-	// Return a copy of the current set of locks being managed in this context
-	GetStateLocks(ctx context.Context) []StateLock
+	// Return a complete copy of the current set of locks being managed in this context
+	// Mainly for debugging (lots of memory is copied) so any case this function is used on a critical path
+	// should be considered as a requirement for a new function on this interface that can be performed
+	// safely under the mutex of the domain context.
+	GetStateLockCopy() map[uuid.UUID][]StateLock
 
 	// Reset restores the world to the current state of the database, clearing any errors
 	// from failed flush, all un-flushed writes, and all in-memory state locks.
