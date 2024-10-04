@@ -53,10 +53,11 @@ var (
 	recipient2Name = "recipient2"
 )
 
-type TransferWithApprovalParams struct {
-	Inputs  []interface{}    `json:"inputs"`
-	Outputs []interface{}    `json:"outputs"`
-	Data    tktypes.HexBytes `json:"data"`
+type NotoTransferParams struct {
+	Inputs    []interface{}    `json:"inputs"`
+	Outputs   []interface{}    `json:"outputs"`
+	Data      tktypes.HexBytes `json:"data"`
+	Signature tktypes.HexBytes `json:"signature,omitempty"`
 }
 
 func toJSON(t *testing.T, v any) []byte {
@@ -288,7 +289,7 @@ func TestNotoApprove(t *testing.T) {
 		log.L(ctx).Infof("%s deployed to %s", name, address)
 	}
 
-	_, notoTestbed := newNotoDomain(t, &types.DomainConfig{
+	noto, notoTestbed := newNotoDomain(t, &types.DomainConfig{
 		FactoryAddress: contracts["factory"],
 	})
 	done, tb, rpc := newTestbed(t, map[string]*testbed.TestbedDomain{
@@ -330,7 +331,7 @@ func TestNotoApprove(t *testing.T) {
 	rpcerr = rpc.CallRPC(ctx, &prepared, "testbed_prepare", &tktypes.PrivateContractInvoke{
 		From:     notaryName,
 		To:       tktypes.EthAddress(notoAddress),
-		Function: *types.NotoABI.Functions()["transferWithApproval"],
+		Function: *types.NotoABI.Functions()["transfer"],
 		Inputs: toJSON(t, &types.TransferParams{
 			To:     recipient1Name,
 			Amount: ethtypes.NewHexInteger64(50),
@@ -340,7 +341,7 @@ func TestNotoApprove(t *testing.T) {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	var transferParams TransferWithApprovalParams
+	var transferParams NotoTransferParams
 	err = json.Unmarshal(prepared.ParamsJSON, &transferParams)
 	require.NoError(t, err)
 
@@ -358,6 +359,19 @@ func TestNotoApprove(t *testing.T) {
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
+
+	log.L(ctx).Infof("Claim 50 using approval")
+	eth := tb.Components().EthClientFactory().HTTPClient()
+	abiClient, err := eth.ABI(ctx, noto.contractABI)
+	assert.NoError(t, err)
+	transferWithApproval, err := abiClient.Function(ctx, "transferWithApproval")
+	assert.NoError(t, err)
+	_, err = transferWithApproval.R(ctx).
+		Signer(recipient1Name).
+		To((*ethtypes.Address0xHex)(&notoAddress)).
+		Input(transferParams).
+		SignAndSend()
+	assert.NoError(t, err)
 }
 
 func TestNotoSelfSubmit(t *testing.T) {

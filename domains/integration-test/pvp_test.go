@@ -39,7 +39,7 @@ var (
 	bob    = "bob"
 )
 
-type TransferWithApprovalParams struct {
+type NotoTransferParams struct {
 	Inputs  []interface{}    `json:"inputs"`
 	Outputs []interface{}    `json:"outputs"`
 	Data    tktypes.HexBytes `json:"data"`
@@ -101,8 +101,8 @@ func TestNotoForNoto(t *testing.T) {
 	})
 
 	log.L(ctx).Infof("Prepare the transfers")
-	transferGold := notoGold.TransferWithApproval(ctx, bob, 1).Prepare(alice)
-	transferSilver := notoSilver.TransferWithApproval(ctx, alice, 10).Prepare(bob)
+	transferGold := notoGold.Transfer(ctx, bob, 1).Prepare(alice)
+	transferSilver := notoSilver.Transfer(ctx, alice, 10).Prepare(bob)
 
 	// TODO: this should actually be a Pente state transition
 	log.L(ctx).Infof("Prepare the trade execute")
@@ -118,16 +118,16 @@ func TestNotoForNoto(t *testing.T) {
 		Outputs: transferSilver.OutputStates,
 	}).SignAndSend(bob).Wait()
 
-	var transferGoldParams TransferWithApprovalParams
+	var transferGoldParams NotoTransferParams
 	err = json.Unmarshal(transferGold.ParamsJSON, &transferGoldParams)
 	require.NoError(t, err)
-	var transferSilverParams TransferWithApprovalParams
+	var transferSilverParams NotoTransferParams
 	err = json.Unmarshal(transferSilver.ParamsJSON, &transferSilverParams)
 	require.NoError(t, err)
 
-	transferGoldEncoded, err := transferGold.FunctionABI.EncodeCallDataJSONCtx(ctx, transferGold.ParamsJSON)
+	transferGoldEncoded, err := notoGold.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferGold.ParamsJSON)
 	require.NoError(t, err)
-	transferSilverEncoded, err := transferSilver.FunctionABI.EncodeCallDataJSONCtx(ctx, transferSilver.ParamsJSON)
+	transferSilverEncoded, err := notoSilver.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferSilver.ParamsJSON)
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Create Atom instance")
@@ -243,10 +243,10 @@ func TestNotoForZeto(t *testing.T) {
 	})
 
 	log.L(ctx).Infof("Prepare the transfers")
-	transferNoto := noto.TransferWithApproval(ctx, bob, 1).Prepare(alice)
+	transferNoto := noto.Transfer(ctx, bob, 1).Prepare(alice)
 	transferZeto := zeto.Transfer(ctx, alice, 1).Prepare(bob)
 
-	transferNotoEncoded, err := transferNoto.FunctionABI.EncodeCallDataJSONCtx(ctx, transferNoto.ParamsJSON)
+	transferNotoEncoded, err := noto.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferNoto.ParamsJSON)
 	require.NoError(t, err)
 	transferZetoEncoded, err := transferZeto.FunctionABI.EncodeCallDataJSONCtx(ctx, transferZeto.ParamsJSON)
 	require.NoError(t, err)
@@ -301,7 +301,7 @@ func TestNotoForZeto(t *testing.T) {
 	// TODO: all parties should verify the Atom against the original proposed trade
 	// If any party found a discrepancy at this point, they could cancel the swap (last chance to back out)
 
-	var transferNotoParams TransferWithApprovalParams
+	var transferNotoParams NotoTransferParams
 	err = json.Unmarshal(transferNoto.ParamsJSON, &transferNotoParams)
 	require.NoError(t, err)
 

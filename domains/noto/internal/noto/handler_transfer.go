@@ -280,7 +280,7 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 	if err != nil {
 		return nil, err
 	}
-	functionJSON, err := json.Marshal(h.noto.contractABI.Functions()[tx.FunctionABI.Name])
+	functionJSON, err := json.Marshal(h.noto.contractABI.Functions()["transfer"])
 	if err != nil {
 		return nil, err
 	}

@@ -39,14 +39,6 @@ var NotoABI = abi.ABI{
 		},
 	},
 	{
-		Name: "transferWithApproval",
-		Type: abi.Function,
-		Inputs: abi.ParameterArray{
-			{Name: "to", Type: "string"},
-			{Name: "amount", Type: "uint256"},
-		},
-	},
-	{
 		Name: "approveTransfer",
 		Type: abi.Function,
 		Inputs: abi.ParameterArray{

@@ -20,9 +20,11 @@ import (
 	_ "embed"
 	"testing"
 
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
+	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
@@ -30,10 +32,14 @@ import (
 //go:embed abis/NotoFactory.json
 var NotoFactoryJSON []byte
 
+//go:embed abis/INoto.json
+var NotoInterfaceJSON []byte
+
 type NotoHelper struct {
 	t       *testing.T
 	rpc     rpcbackend.Backend
 	Address ethtypes.Address0xHex
+	ABI     abi.ABI
 }
 
 func DeployNoto(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domainName, notary string) *NotoHelper {
@@ -48,6 +54,7 @@ func DeployNoto(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domai
 		t:       t,
 		rpc:     rpc,
 		Address: addr,
+		ABI:     domain.LoadBuild(NotoInterfaceJSON).ABI,
 	}
 }
 
@@ -61,14 +68,6 @@ func (n *NotoHelper) Mint(ctx context.Context, to string, amount uint64) *Domain
 
 func (n *NotoHelper) Transfer(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
 	fn := types.NotoABI.Functions()["transfer"]
-	return NewDomainTransactionHelper(ctx, n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.TransferParams{
-		To:     to,
-		Amount: ethtypes.NewHexIntegerU64(amount),
-	}))
-}
-
-func (n *NotoHelper) TransferWithApproval(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
-	fn := types.NotoABI.Functions()["transferWithApproval"]
 	return NewDomainTransactionHelper(ctx, n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.TransferParams{
 		To:     to,
 		Amount: ethtypes.NewHexIntegerU64(amount),
