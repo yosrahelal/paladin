@@ -14,12 +14,6 @@ contracts:
     - name: Groth16Verifier_CheckInputsOutputsValue
       abiAndBytecode:
         path: ./helpers/abis/Groth16Verifier_CheckInputsOutputsValue.json
-    - name: PoseidonUnit2L
-      abiAndBytecode:
-        path: ./helpers/abis/Poseidon2.json
-    - name: PoseidonUnit3L
-      abiAndBytecode:
-        path: ./helpers/abis/Poseidon3.json
     - name: Zeto_Anon
       verifier: Groth16Verifier_Anon
       circuitId: anon

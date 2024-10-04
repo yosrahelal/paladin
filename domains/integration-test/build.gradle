@@ -45,10 +45,6 @@ configurations {
         canBeConsumed = false
         canBeResolved = true
     }
-    poseidonArtifacts {
-        canBeConsumed = false
-        canBeResolved = true
-    }
 }
 
 dependencies {
@@ -58,7 +54,6 @@ dependencies {
     notoGo project(path: ":domains:noto", configuration: "goSource")
     zetoGo project(path: ":domains:zeto", configuration: "goSource")
     zetoArtifacts project(path: ":domains:zeto", configuration: "zetoArtifacts")
-    poseidonArtifacts project(path: ":domains:zeto", configuration: "poseidonArtifacts")
 }
 
 task copySolidity(type: Copy) {
@@ -76,12 +71,6 @@ task copySolidity(type: Copy) {
         include 'artifacts/contracts/**/*.json'
         include 'artifacts/@iden3/contracts/**/*.json'
         exclude '**/*.dbg.json'
-    }
-
-    inputs.files(configurations.poseidonArtifacts)
-    from fileTree(configurations.poseidonArtifacts.asPath) {
-        include 'Poseidon2.json'
-        include 'Poseidon3.json'
     }
 
     into 'helpers/abis'
