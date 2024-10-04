@@ -95,6 +95,7 @@ task test(type: Exec, dependsOn: [":core:go:makeMocks"]) {
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
     inputs.files(configurations.notoGo)
+    inputs.files(configurations.zetoGo)
     inputs.files(goFiles)
     inputs.files(copySolidity)
     outputs.dir('coverage')
