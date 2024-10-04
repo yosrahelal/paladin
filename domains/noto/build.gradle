@@ -40,6 +40,10 @@ configurations {
         canBeConsumed = true
         canBeResolved = false
     }
+    libnoto {
+        canBeConsumed = true
+        canBeResolved = false
+    }
 }
 
 dependencies {
@@ -87,11 +91,10 @@ task test(type: Exec, dependsOn: [":core:go:makeMocks"]) {
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
-task buildGo{
-    // TODO: implement buildGo task
-    doFirst() {
-        println ":domain:noto buildGo task not implemented"
-    }
+task buildGo(type: GoLib, dependsOn: [":toolkit:go:protoc", copySolidity]) {
+     baseName "noto"
+     goFiles goFiles
+     mainFile 'noto.go'
 }
 
 task build {
@@ -109,5 +112,6 @@ task assemble {
 }
 
 dependencies {
+    libnoto files(buildGo)
     goSource files(goFiles, copySolidity)
 }

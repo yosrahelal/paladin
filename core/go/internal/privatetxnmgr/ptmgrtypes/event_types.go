@@ -20,6 +20,8 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
+// TODO there is a lot of boilerplate code in lots of different places that is needed every time we add a new event or internode message exchange
+// should consider refactoring the overrall code structure here
 type PrivateTransactionEvent interface {
 	GetTransactionID() string
 	GetContractAddress() string
@@ -46,33 +48,73 @@ func (e *PrivateTransactionEventBase) SetContractAddress(contractAddress string)
 type TransactionSubmittedEvent struct {
 	PrivateTransactionEventBase
 }
+
 type TransactionAssembledEvent struct {
 	PrivateTransactionEventBase
 	sequence.TransactionAssembledEvent
 }
+
 type TransactionSignedEvent struct {
 	PrivateTransactionEventBase
 	AttestationResult *prototk.AttestationResult
 }
+
 type TransactionEndorsedEvent struct {
 	PrivateTransactionEventBase
 	RevertReason *string
 	Endorsement  *prototk.AttestationResult
 }
+
 type TransactionDispatchedEvent struct {
 	PrivateTransactionEventBase
 	Nonce          uint64
 	SigningAddress string
 }
+
 type TransactionConfirmedEvent struct {
 	PrivateTransactionEventBase
 }
+
 type TransactionRevertedEvent struct {
 	PrivateTransactionEventBase
 }
+
 type TransactionDelegatedEvent struct {
 	PrivateTransactionEventBase
 }
+
 type TransactionBlockedEvent struct {
 	PrivateTransactionEventBase
+}
+
+type ResolveVerifierResponseEvent struct {
+	PrivateTransactionEventBase
+	Lookup    *string
+	Algorithm *string
+	Verifier  *string
+}
+
+type ResolveVerifierErrorEvent struct {
+	PrivateTransactionEventBase
+	Lookup       *string
+	Algorithm    *string
+	ErrorMessage *string
+}
+
+// Replies are correlated to the corresponding request and not necessarily to a specific transaction and/or contract
+type PrivateTransactionReplyBase struct {
+	RequestID string
+}
+type ResolveVerifierReply struct {
+	PrivateTransactionReplyBase
+	Lookup    *string
+	Algorithm *string
+	Verifier  *string
+}
+
+type ResolveVerifierError struct {
+	PrivateTransactionReplyBase
+	Lookup       *string
+	Algorithm    *string
+	ErrorMessage *string
 }

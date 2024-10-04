@@ -20,18 +20,20 @@ import (
 	"fmt"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 // DomainFactoryConfig is the configuration for a Zeto domain
 // to provision new domain instances based on a factory contract
 // and avalable implementation contracts
 type DomainFactoryConfig struct {
-	FactoryAddress  string                       `json:"factoryAddress"`
-	Libraries       map[string]string            `json:"libraries"`
-	DomainContracts DomainConfigContracts        `json:"domainContracts"`
-	SnarkProver     zetosigner.SnarkProverConfig `json:"snarkProver"`
+	FactoryAddress  string                         `json:"factoryAddress"`
+	Libraries       map[string]*tktypes.EthAddress `json:"libraries"`
+	DomainContracts DomainConfigContracts          `json:"domainContracts"`
+	SnarkProver     zetosigner.SnarkProverConfig   `json:"snarkProver"`
 }
 
 type DomainConfigContracts struct {
@@ -85,6 +87,9 @@ var DomainInstanceConfigABI = &abi.ParameterArray{
 	{Type: "string", Name: "tokenName"},
 	{Type: "string", Name: "circuitId"},
 }
+
+// marks the version of the Zeto transaction data schema
+var ZetoTransactionData_V0 = ethtypes.MustNewHexBytes0xPrefix("0x00010000")
 
 type DomainHandler = domain.DomainHandler[DomainInstanceConfig]
 type ParsedTransaction = domain.ParsedTransaction[DomainInstanceConfig]

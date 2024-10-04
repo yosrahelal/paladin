@@ -19,15 +19,16 @@ package privatetxnstore
 import (
 	"context"
 
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/flushwriter"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 )
 
-var WriterConfigDefaults = config.FlushWriterConfig{
+var WriterConfigDefaults = pldconf.FlushWriterConfig{
 	WorkerCount:  confutil.P(10),
 	BatchTimeout: confutil.P("25ms"),
 	BatchMaxSize: confutil.P(100),
@@ -45,7 +46,7 @@ type store struct {
 	writer flushwriter.Writer[*dispatchSequenceOperation, *noResult]
 }
 
-func NewStore(ctx context.Context, conf *config.FlushWriterConfig, p persistence.Persistence) Store {
+func NewStore(ctx context.Context, conf *pldconf.FlushWriterConfig, p persistence.Persistence) Store {
 	s := &store{}
 	s.writer = flushwriter.NewWriter(ctx, s.runBatch, p, conf, &WriterConfigDefaults)
 	return s

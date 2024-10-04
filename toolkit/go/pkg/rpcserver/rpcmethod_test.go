@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -30,7 +31,7 @@ import (
 
 func TestRCPMethod0(t *testing.T) {
 
-	url, s, done := newTestServerHTTP(t, &Config{})
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	regTestRPC(s, "stringy_method", RPCMethod0(func(ctx context.Context) (string, error) {
@@ -60,7 +61,7 @@ func TestRCPMethod0(t *testing.T) {
 
 func TestRCPMethod1(t *testing.T) {
 
-	url, s, done := newTestServerHTTP(t, &Config{})
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	regTestRPC(s, "stringy_method", RPCMethod1(func(ctx context.Context, param0 string) (string, error) {
@@ -93,7 +94,7 @@ func TestRCPMethod1(t *testing.T) {
 
 func TestRCPMethod2(t *testing.T) {
 
-	url, s, done := newTestServerHTTP(t, &Config{})
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	regTestRPC(s, "stringy_method", RPCMethod2(func(ctx context.Context, param0 string, param1 string) (string, error) {
@@ -128,7 +129,7 @@ func TestRCPMethod2(t *testing.T) {
 
 func TestRCPMethod3(t *testing.T) {
 
-	url, s, done := newTestServerHTTP(t, &Config{})
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	regTestRPC(s, "stringy_method", RPCMethod3(func(ctx context.Context, param0 string, param1 string, param2 string) (string, error) {
@@ -165,7 +166,7 @@ func TestRCPMethod3(t *testing.T) {
 
 func TestRCPMethod4(t *testing.T) {
 
-	url, s, done := newTestServerHTTP(t, &Config{})
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	regTestRPC(s, "stringy_method", RPCMethod4(func(ctx context.Context, param0 string, param1 string, param2 string, param3 string) (string, error) {
@@ -204,7 +205,7 @@ func TestRCPMethod4(t *testing.T) {
 
 func TestRCPMethod5(t *testing.T) {
 
-	url, s, done := newTestServerHTTP(t, &Config{})
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	regTestRPC(s, "stringy_method", RPCMethod5(func(ctx context.Context, param0 string, param1 string, param2 string, param3 string, param4 string) (string, error) {
@@ -245,7 +246,7 @@ func TestRCPMethod5(t *testing.T) {
 
 func TestRCPMethodNullParamPointerPassed(t *testing.T) {
 
-	url, s, done := newTestServerHTTP(t, &Config{})
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	regTestRPC(s, "stringy_method", RPCMethod2(func(ctx context.Context, param0 *string, param1 *ethtypes.Address0xHex) (string, error) {
@@ -280,7 +281,7 @@ func TestRCPMethodNullParamPointerPassed(t *testing.T) {
 
 func TestRCPMethodNullParamNonPointerEmptyVal(t *testing.T) {
 
-	url, s, done := newTestServerHTTP(t, &Config{})
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	regTestRPC(s, "stringy_method", RPCMethod2(func(ctx context.Context, param0 string, param1 ethtypes.Address0xHex) (string, error) {
@@ -315,7 +316,7 @@ func TestRCPMethodNullParamNonPointerEmptyVal(t *testing.T) {
 
 func TestRCPMethodInvalidValue(t *testing.T) {
 
-	url, s, done := newTestServerHTTP(t, &Config{})
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	regTestRPC(s, "stringy_method", RPCMethod1(func(ctx context.Context, param0 []string) (string, error) {
@@ -342,7 +343,7 @@ func TestRCPMethodInvalidValue(t *testing.T) {
 
 func TestRCPMethodWrongParamCount(t *testing.T) {
 
-	url, s, done := newTestServerHTTP(t, &Config{})
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	regTestRPC(s, "stringy_method", RPCMethod1(func(ctx context.Context, param0 string) (string, error) {
@@ -369,7 +370,7 @@ func TestRCPMethodWrongParamCount(t *testing.T) {
 
 func TestRCPMethodBadResult(t *testing.T) {
 
-	url, s, done := newTestServerHTTP(t, &Config{})
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	regTestRPC(s, "stringy_method", RPCMethod0(func(ctx context.Context) (map[bool]bool, error) {

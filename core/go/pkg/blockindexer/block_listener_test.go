@@ -28,9 +28,10 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/mocks/rpcclientmocks"
-	"github.com/kaleido-io/paladin/core/pkg/config"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/sirupsen/logrus"
@@ -44,14 +45,14 @@ const testBlockFilterID2 = "block_filter_2"
 
 func newTestBlockListener(t *testing.T) (context.Context, *blockListener, *rpcclientmocks.WSClient, func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	bl, mRPC := newTestBlockListenerConf(t, ctx, &config.BlockIndexerConfig{})
+	bl, mRPC := newTestBlockListenerConf(t, ctx, &pldconf.BlockIndexerConfig{})
 	return ctx, bl, mRPC, func() {
 		cancelCtx()
 		bl.waitClosed()
 	}
 }
 
-func newTestBlockListenerConf(t *testing.T, ctx context.Context, config *config.BlockIndexerConfig) (*blockListener, *rpcclientmocks.WSClient) {
+func newTestBlockListenerConf(t *testing.T, ctx context.Context, config *pldconf.BlockIndexerConfig) (*blockListener, *rpcclientmocks.WSClient) {
 
 	logrus.SetLevel(logrus.DebugLevel)
 
@@ -68,8 +69,8 @@ func newTestBlockListenerConf(t *testing.T, ctx context.Context, config *config.
 	mRPC.On("UnsubscribeAll", mock.Anything).Return(nil).Maybe()
 	mRPC.On("Close", mock.Anything).Return(nil).Maybe()
 
-	bl, err := newBlockListener(ctx, config, &rpcclient.WSConfig{
-		HTTPConfig: rpcclient.HTTPConfig{URL: "ws://localhost:0" /* unused per below re-wire to mRPC */}})
+	bl, err := newBlockListener(ctx, config, &pldconf.WSClientConfig{
+		HTTPClientConfig: pldconf.HTTPClientConfig{URL: "ws://localhost:0" /* unused per below re-wire to mRPC */}})
 	require.NoError(t, err)
 	bl.wsConn = mRPC
 	return bl, mRPC
@@ -216,10 +217,10 @@ func TestBlockListenerWSShoulderTap(t *testing.T) {
 	})
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	bl, err := newBlockListener(ctx, &config.BlockIndexerConfig{
+	bl, err := newBlockListener(ctx, &pldconf.BlockIndexerConfig{
 		BlockPollingInterval: confutil.P("100s"), // so the test would just hang if no WS notifications
-	}, &rpcclient.WSConfig{
-		HTTPConfig: rpcclient.HTTPConfig{URL: url},
+	}, &pldconf.WSClientConfig{
+		HTTPClientConfig: pldconf.HTTPClientConfig{URL: url},
 	})
 	require.NoError(t, err)
 	defer cancelCtx()

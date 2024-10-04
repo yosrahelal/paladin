@@ -40,7 +40,14 @@ spec:
             name: http
             protocol: TCP
         env:
-          {{- toYaml .Values.operator.env | nindent 12 }}
+          - name: WATCH_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          {{- range .Values.operator.env }}
+          - name: {{ .name }}
+            value: {{ .value | quote }}
+          {{- end }}
         livenessProbe:
           {{- toYaml .Values.operator.livenessProbe | nindent 10 }}
         readinessProbe:

@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,7 +29,7 @@ import (
 
 func TestRCPModule(t *testing.T) {
 
-	url, s, done := newTestServerHTTP(t, &Config{})
+	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	s.Register(NewRPCModule("example").

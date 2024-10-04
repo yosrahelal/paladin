@@ -20,12 +20,13 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/rs/cors"
 )
 
-var DefaultCORS = &CORSConfig{
+var DefaultCORS = &pldconf.CORSConfig{
 	AllowCredentials: confutil.P(false),
 	AllowedMethods:   []string{http.MethodHead, http.MethodGet, http.MethodPost},
 	AllowedHeaders:   []string{},
@@ -33,7 +34,7 @@ var DefaultCORS = &CORSConfig{
 	MaxAge:           confutil.P("0"),
 }
 
-func WrapCorsIfEnabled(ctx context.Context, chain http.Handler, conf *CORSConfig) http.Handler {
+func WrapCorsIfEnabled(ctx context.Context, chain http.Handler, conf *pldconf.CORSConfig) http.Handler {
 	if !conf.Enabled {
 		return chain
 	}

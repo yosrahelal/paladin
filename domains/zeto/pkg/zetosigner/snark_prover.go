@@ -27,9 +27,11 @@ import (
 	"github.com/iden3/go-rapidsnark/prover"
 	"github.com/iden3/go-rapidsnark/types"
 	"github.com/iden3/go-rapidsnark/witness/v2"
-	pb "github.com/kaleido-io/paladin/core/pkg/proto"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
+	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"google.golang.org/protobuf/proto"
 )
@@ -56,7 +58,7 @@ func NewSnarkProver(conf *SnarkProverConfig) (signerapi.InMemorySigner, error) {
 }
 
 func newSnarkProver(conf *SnarkProverConfig) (*snarkProver, error) {
-	cacheConfig := cache.Config{
+	cacheConfig := pldconf.CacheConfig{
 		Capacity: confutil.P(50),
 	}
 	return &snarkProver{
@@ -171,7 +173,7 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 		}
 		sp.proverCacheRWLock.Unlock()
 	}
-	wtns, publicInputs, err := calculateWitness(inputs.CircuitId, inputs.Common, extras, keyEntry, circuit)
+	wtns, err := calculateWitness(inputs.CircuitId, inputs.Common, extras, keyEntry, circuit)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +183,7 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 		return nil, err
 	}
 
-	proofBytes, err := serializeProofResponse(inputs.CircuitId, proof, publicInputs)
+	proofBytes, err := serializeProofResponse(inputs.CircuitId, proof)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +216,7 @@ func validateInputs(inputs *pb.ProvingRequestCommon) error {
 	return nil
 }
 
-func serializeProofResponse(circuitId string, proof *types.ZKProof, publicInputs map[string]string) ([]byte, error) {
+func serializeProofResponse(circuitId string, proof *types.ZKProof) ([]byte, error) {
 	snark := pb.SnarkProof{}
 	snark.A = proof.Proof.A
 	snark.B = make([]*pb.B_Item, 0, len(proof.Proof.B))
@@ -225,9 +227,14 @@ func serializeProofResponse(circuitId string, proof *types.ZKProof, publicInputs
 	}
 	snark.C = proof.Proof.C
 
+	publicInputs := make(map[string]string)
 	switch circuitId {
-	case "anon_enc":
+	case constants.CIRCUIT_ANON_ENC:
 		publicInputs["encryptedValues"] = strings.Join(proof.PubSignals[0:4], ",")
+		publicInputs["encryptionNonce"] = proof.PubSignals[8]
+	case constants.CIRCUIT_ANON_NULLIFIER:
+		publicInputs["nullifiers"] = strings.Join(proof.PubSignals[:2], ",")
+		publicInputs["root"] = proof.PubSignals[2]
 	}
 
 	res := pb.ProvingResponse{
@@ -238,36 +245,40 @@ func serializeProofResponse(circuitId string, proof *types.ZKProof, publicInputs
 	return proto.Marshal(&res)
 }
 
-func calculateWitness(circuitId string, commonInputs *pb.ProvingRequestCommon, extras interface{}, keyEntry *core.KeyEntry, circuit witness.Calculator) ([]byte, map[string]string, error) {
+func calculateWitness(circuitId string, commonInputs *pb.ProvingRequestCommon, extras interface{}, keyEntry *core.KeyEntry, circuit witness.Calculator) ([]byte, error) {
 	inputs, err := buildCircuitInputs(commonInputs)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	var witnessInputs map[string]any
-	var publicInputs map[string]string
 	switch circuitId {
-	case "anon":
+	case constants.CIRCUIT_ANON:
 		witnessInputs = assembleInputs_anon(inputs, keyEntry)
-	case "anon_enc":
-		witnessInputs, publicInputs, err = assembleInputs_anon_enc(inputs, extras.(*pb.ProvingRequestExtras_Encryption), keyEntry)
+	case constants.CIRCUIT_ANON_ENC:
+		witnessInputs, err = assembleInputs_anon_enc(inputs, extras.(*pb.ProvingRequestExtras_Encryption), keyEntry)
 		if err != nil {
-			return nil, nil, err
+			return nil, fmt.Errorf("failed to assemble private inputs for witness calculation. %s", err)
+		}
+	case constants.CIRCUIT_ANON_NULLIFIER:
+		witnessInputs, err = assembleInputs_anon_nullifier(inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
+		if err != nil {
+			return nil, fmt.Errorf("failed to assemble private inputs for witness calculation. %s", err)
 		}
 	}
 
 	wtns, err := circuit.CalculateWTNSBin(witnessInputs, true)
 	if err != nil {
-		return nil, nil, err
+		return nil, fmt.Errorf("failed to calculate the witness. %s", err)
 	}
 
-	return wtns, publicInputs, nil
+	return wtns, nil
 }
 
 func generateProof(wtns, provingKey []byte) (*types.ZKProof, error) {
 	proof, err := prover.Groth16Prover(provingKey, wtns)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate proof. %s", err)
 	}
 	return proof, nil
 }

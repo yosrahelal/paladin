@@ -23,6 +23,7 @@ import (
 	"path"
 	"testing"
 
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	proto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -30,14 +31,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestStaticStore(t *testing.T, keys map[string]signerapi.StaticKeyEntryConfig) (context.Context, *staticStore) {
+func newTestStaticStore(t *testing.T, keys map[string]pldconf.StaticKeyEntryConfig) (context.Context, *staticStore) {
 	ctx := context.Background()
 
-	sf := NewStaticStoreFactory[*signerapi.Config]()
-	store, err := sf.NewKeyStore(ctx, &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
-			Static: signerapi.StaticKeyStorageConfig{
+	sf := NewStaticStoreFactory[*signerapi.ConfigNoExt]()
+	store, err := sf.NewKeyStore(ctx, &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
+			Static: pldconf.StaticKeyStoreConfig{
 				Keys: keys,
 			},
 		},
@@ -56,7 +57,7 @@ func TestStaticStoreFileFileWithTrim(t *testing.T) {
 	err := os.WriteFile(keyFile, []byte(keyData+"\n"), 0644)
 	require.NoError(t, err)
 
-	ctx, store := newTestStaticStore(t, map[string]signerapi.StaticKeyEntryConfig{
+	ctx, store := newTestStaticStore(t, map[string]pldconf.StaticKeyEntryConfig{
 		"myKey": {
 			Encoding: "none",
 			Filename: keyFile,
@@ -77,7 +78,7 @@ func TestStaticStoreHexLoadFile(t *testing.T) {
 	err := os.WriteFile(keyFile, []byte(keyData), 0644)
 	require.NoError(t, err)
 
-	ctx, store := newTestStaticStore(t, map[string]signerapi.StaticKeyEntryConfig{
+	ctx, store := newTestStaticStore(t, map[string]pldconf.StaticKeyEntryConfig{
 		"myKey": {
 			Encoding: "hex",
 			Filename: keyFile,
@@ -99,7 +100,7 @@ func TestStaticStoreBase64InConf(t *testing.T) {
 	require.NoError(t, err)
 	b64KeyData := base64.StdEncoding.EncodeToString(keyData)
 
-	ctx, store := newTestStaticStore(t, map[string]signerapi.StaticKeyEntryConfig{
+	ctx, store := newTestStaticStore(t, map[string]pldconf.StaticKeyEntryConfig{
 		"myKey": {
 			Encoding: "base64",
 			Inline:   b64KeyData,
@@ -114,12 +115,12 @@ func TestStaticStoreBase64InConf(t *testing.T) {
 
 func TestStaticStoreLoadFileFail(t *testing.T) {
 
-	sf := NewStaticStoreFactory[*signerapi.Config]()
-	_, err := sf.NewKeyStore(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
-			Static: signerapi.StaticKeyStorageConfig{
-				Keys: map[string]signerapi.StaticKeyEntryConfig{
+	sf := NewStaticStoreFactory[*signerapi.ConfigNoExt]()
+	_, err := sf.NewKeyStore(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
+			Static: pldconf.StaticKeyStoreConfig{
+				Keys: map[string]pldconf.StaticKeyEntryConfig{
 					"myKey": {
 						Encoding: "none",
 						Filename: t.TempDir(),
@@ -135,12 +136,12 @@ func TestStaticStoreLoadFileFail(t *testing.T) {
 
 func TestStaticStoreBadHEX(t *testing.T) {
 
-	sf := NewStaticStoreFactory[*signerapi.Config]()
-	_, err := sf.NewKeyStore(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
-			Static: signerapi.StaticKeyStorageConfig{
-				Keys: map[string]signerapi.StaticKeyEntryConfig{
+	sf := NewStaticStoreFactory[*signerapi.ConfigNoExt]()
+	_, err := sf.NewKeyStore(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
+			Static: pldconf.StaticKeyStoreConfig{
+				Keys: map[string]pldconf.StaticKeyEntryConfig{
 					"myKey": {
 						Encoding: "hex",
 						Inline:   "not hex",
@@ -155,12 +156,12 @@ func TestStaticStoreBadHEX(t *testing.T) {
 
 func TestStaticStoreBadBase64(t *testing.T) {
 
-	sf := NewStaticStoreFactory[*signerapi.Config]()
-	_, err := sf.NewKeyStore(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
-			Static: signerapi.StaticKeyStorageConfig{
-				Keys: map[string]signerapi.StaticKeyEntryConfig{
+	sf := NewStaticStoreFactory[*signerapi.ConfigNoExt]()
+	_, err := sf.NewKeyStore(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
+			Static: pldconf.StaticKeyStoreConfig{
+				Keys: map[string]pldconf.StaticKeyEntryConfig{
 					"myKey": {
 						Encoding: "base64",
 						Inline:   "!$$**~~",
@@ -175,12 +176,12 @@ func TestStaticStoreBadBase64(t *testing.T) {
 
 func TestStaticStoreEmpty(t *testing.T) {
 
-	sf := NewStaticStoreFactory[*signerapi.Config]()
-	_, err := sf.NewKeyStore(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
-			Static: signerapi.StaticKeyStorageConfig{
-				Keys: map[string]signerapi.StaticKeyEntryConfig{
+	sf := NewStaticStoreFactory[*signerapi.ConfigNoExt]()
+	_, err := sf.NewKeyStore(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
+			Static: pldconf.StaticKeyStoreConfig{
+				Keys: map[string]pldconf.StaticKeyEntryConfig{
 					"myKey": {
 						Encoding: "none",
 						Trim:     true,
@@ -196,12 +197,12 @@ func TestStaticStoreEmpty(t *testing.T) {
 
 func TestStaticStoreBadEncType(t *testing.T) {
 
-	sf := NewStaticStoreFactory[*signerapi.Config]()
-	_, err := sf.NewKeyStore(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
-			Static: signerapi.StaticKeyStorageConfig{
-				Keys: map[string]signerapi.StaticKeyEntryConfig{
+	sf := NewStaticStoreFactory[*signerapi.ConfigNoExt]()
+	_, err := sf.NewKeyStore(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
+			Static: pldconf.StaticKeyStoreConfig{
+				Keys: map[string]pldconf.StaticKeyEntryConfig{
 					"myKey": {
 						Encoding: "",
 						Inline:   "anything",
@@ -216,7 +217,7 @@ func TestStaticStoreBadEncType(t *testing.T) {
 
 func TestStaticStoreResolveOK(t *testing.T) {
 
-	ctx, store := newTestStaticStore(t, map[string]signerapi.StaticKeyEntryConfig{
+	ctx, store := newTestStaticStore(t, map[string]pldconf.StaticKeyEntryConfig{
 		"my/shiny/key%20ten": {
 			Encoding: "none",
 			Inline:   "my key",
@@ -238,7 +239,7 @@ func TestStaticStoreResolveOK(t *testing.T) {
 
 func TestStaticStoreResolveBadPath(t *testing.T) {
 
-	ctx, store := newTestStaticStore(t, map[string]signerapi.StaticKeyEntryConfig{
+	ctx, store := newTestStaticStore(t, map[string]pldconf.StaticKeyEntryConfig{
 		"my/shiny/key%20ten": {
 			Encoding: "none",
 			Inline:   "my key",
@@ -260,7 +261,7 @@ func TestStaticStoreResolveBadPath(t *testing.T) {
 
 func TestStaticStoreResolveNotFound(t *testing.T) {
 
-	ctx, store := newTestStaticStore(t, map[string]signerapi.StaticKeyEntryConfig{
+	ctx, store := newTestStaticStore(t, map[string]pldconf.StaticKeyEntryConfig{
 		"my/shiny/key%20ten": {
 			Encoding: "none",
 			Inline:   "my key",
@@ -288,11 +289,11 @@ key1:
 `), 0644)
 	require.NoError(t, err)
 
-	sf := NewStaticStoreFactory[*signerapi.Config]()
-	store, err := sf.NewKeyStore(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
-			Static: signerapi.StaticKeyStorageConfig{
+	sf := NewStaticStoreFactory[*signerapi.ConfigNoExt]()
+	store, err := sf.NewKeyStore(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
+			Static: pldconf.StaticKeyStoreConfig{
 				File: filePath,
 			},
 		},
@@ -313,11 +314,11 @@ func TestStaticStoreWholeStoreInFileFail(t *testing.T) {
 	err := os.WriteFile(filePath, []byte(`{!!!! not good YAML`), 0644)
 	require.NoError(t, err)
 
-	sf := NewStaticStoreFactory[*signerapi.Config]()
-	_, err = sf.NewKeyStore(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
-			Static: signerapi.StaticKeyStorageConfig{
+	sf := NewStaticStoreFactory[*signerapi.ConfigNoExt]()
+	_, err = sf.NewKeyStore(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
+			Static: pldconf.StaticKeyStoreConfig{
 				File: filePath,
 			},
 		},

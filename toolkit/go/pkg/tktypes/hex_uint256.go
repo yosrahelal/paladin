@@ -102,7 +102,11 @@ func (hi *HexUint256) NilOrZero() bool {
 // Get string with 0x prefix - nil is all zeros
 func (hi *HexUint256) HexString0xPrefix() string {
 	absHi := new(big.Int).Abs(hi.Int())
-	return fmt.Sprintf("0x%s", absHi.Text(16))
+	str := absHi.Text(16)
+	if len(str)%2 != 0 {
+		str = "0" + str
+	}
+	return fmt.Sprintf("0x%s", str)
 }
 
 // Get string (without 0x prefix) - nil is all zeros

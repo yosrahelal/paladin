@@ -24,11 +24,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
@@ -576,7 +577,7 @@ func newNonceCacheForTesting(cbFuncs ...NextNonceCallback) *nonceCacheStruct {
 }
 
 func TestBatchDoubleSubmit(t *testing.T) {
-	ctx, ble, mocks, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *config.PublicTxManagerConfig) {
+	ctx, ble, mocks, done := newTestPublicTxManager(t, false, func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
 		conf.Manager.NonceCacheTimeout = confutil.P("0")
 	})
 	defer done()

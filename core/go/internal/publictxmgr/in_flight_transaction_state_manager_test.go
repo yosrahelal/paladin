@@ -22,9 +22,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/publictxmocks"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -47,7 +48,7 @@ func newTestInFlightTransactionStateManager(t *testing.T) (*testInFlightTransact
 	mockInMemoryState := NewTestInMemoryTxState(t)
 	mockActionTriggers := publictxmocks.NewInFlightStageActionTriggers(t)
 	iftxs := NewInFlightTransactionStateManager(&publicTxEngineMetrics{}, balanceManager, m.blockIndexer, mockActionTriggers, mockInMemoryState,
-		retry.NewRetryIndefinite(&retry.Config{
+		retry.NewRetryIndefinite(&pldconf.RetryConfig{
 			InitialDelay: confutil.P("1ms"),
 			MaxDelay:     confutil.P("100ms"),
 			Factor:       confutil.P(2.0),

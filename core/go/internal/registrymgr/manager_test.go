@@ -21,15 +21,17 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func newTestRegistryManager(t *testing.T, conf *config.RegistryManagerConfig, extraSetup ...func(mc *componentmocks.AllComponents)) (context.Context, *registryManager, func()) {
+func newTestRegistryManager(t *testing.T, conf *pldconf.RegistryManagerConfig, extraSetup ...func(mc *componentmocks.AllComponents)) (context.Context, *registryManager, func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	mc := componentmocks.NewAllComponents(t)
@@ -58,11 +60,11 @@ func newTestRegistryManager(t *testing.T, conf *config.RegistryManagerConfig, ex
 }
 
 func TestConfiguredRegistries(t *testing.T) {
-	_, dm, done := newTestRegistryManager(t, &config.RegistryManagerConfig{
-		Registries: map[string]*config.RegistryConfig{
+	_, dm, done := newTestRegistryManager(t, &pldconf.RegistryManagerConfig{
+		Registries: map[string]*pldconf.RegistryConfig{
 			"test1": {
-				Plugin: config.PluginConfig{
-					Type:    config.LibraryTypeCShared.Enum(),
+				Plugin: pldconf.PluginConfig{
+					Type:    string(tktypes.LibraryTypeCShared),
 					Library: "some/where",
 				},
 			},
@@ -70,17 +72,17 @@ func TestConfiguredRegistries(t *testing.T) {
 	})
 	defer done()
 
-	assert.Equal(t, map[string]*config.PluginConfig{
+	assert.Equal(t, map[string]*pldconf.PluginConfig{
 		"test1": {
-			Type:    config.LibraryTypeCShared.Enum(),
+			Type:    string(tktypes.LibraryTypeCShared),
 			Library: "some/where",
 		},
 	}, dm.ConfiguredRegistries())
 }
 
 func TestRegistryRegisteredNotFound(t *testing.T) {
-	_, dm, done := newTestRegistryManager(t, &config.RegistryManagerConfig{
-		Registries: map[string]*config.RegistryConfig{},
+	_, dm, done := newTestRegistryManager(t, &pldconf.RegistryManagerConfig{
+		Registries: map[string]*pldconf.RegistryConfig{},
 	})
 	defer done()
 
@@ -89,8 +91,8 @@ func TestRegistryRegisteredNotFound(t *testing.T) {
 }
 
 func TestConfigureRegistryFail(t *testing.T) {
-	_, tm, done := newTestRegistryManager(t, &config.RegistryManagerConfig{
-		Registries: map[string]*config.RegistryConfig{
+	_, tm, done := newTestRegistryManager(t, &pldconf.RegistryManagerConfig{
+		Registries: map[string]*pldconf.RegistryConfig{
 			"test1": {
 				Config: map[string]any{"some": "conf"},
 			},

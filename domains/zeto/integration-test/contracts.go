@@ -18,7 +18,6 @@ package integration_test
 import (
 	"context"
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -48,7 +47,7 @@ type cloneableContract struct {
 }
 
 func newZetoDomainContracts() *zetoDomainContracts {
-	factory := domain.LoadBuildLinked(zetoFactoryJSON, map[string]string{})
+	factory := domain.LoadBuildLinked(zetoFactoryJSON, map[string]*tktypes.EthAddress{})
 
 	return &zetoDomainContracts{
 		factoryAbi: factory.ABI,
@@ -71,7 +70,7 @@ func deployDomainContracts(ctx context.Context, rpc rpcbackend.Backend, deployer
 	}
 
 	// deploy the factory contract
-	factoryAddr, _, err := deployContract(ctx, rpc, deployer, &config.DomainContracts.Factory)
+	factoryAddr, _, err := deployContract(ctx, rpc, deployer, &config.DomainContracts.Factory, deployedContracts)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +101,7 @@ func deployContracts(ctx context.Context, rpc rpcbackend.Backend, deployer strin
 	deployedContracts := make(map[string]*tktypes.EthAddress)
 	deployedContractAbis := make(map[string]abi.ABI)
 	for _, contract := range contracts {
-		addr, abi, err := deployContract(ctx, rpc, deployer, &contract)
+		addr, abi, err := deployContract(ctx, rpc, deployer, &contract, deployedContracts)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -114,12 +113,12 @@ func deployContracts(ctx context.Context, rpc rpcbackend.Backend, deployer strin
 	return deployedContracts, deployedContractAbis, nil
 }
 
-func deployContract(ctx context.Context, rpc rpcbackend.Backend, deployer string, contract *domainContract) (*tktypes.EthAddress, abi.ABI, error) {
+func deployContract(ctx context.Context, rpc rpcbackend.Backend, deployer string, contract *domainContract, deployedContracts map[string]*tktypes.EthAddress) (*tktypes.EthAddress, abi.ABI, error) {
 	if contract.AbiAndBytecode.Path == "" {
 		return nil, nil, fmt.Errorf("no path or JSON specified for the abi and bytecode for contract %s", contract.Name)
 	}
 	// deploy the contract
-	build, err := getContractSpec(contract)
+	build, err := getContractSpec(contract, deployedContracts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -130,17 +129,13 @@ func deployContract(ctx context.Context, rpc rpcbackend.Backend, deployer string
 	return addr, build.ABI, nil
 }
 
-func getContractSpec(contract *domainContract) (*domain.SolidityBuild, error) {
-	var build domain.SolidityBuild
+func getContractSpec(contract *domainContract, deployedContracts map[string]*tktypes.EthAddress) (*domain.SolidityBuild, error) {
 	bytes, err := os.ReadFile(contract.AbiAndBytecode.Path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read abi+bytecode file %s. %s", contract.AbiAndBytecode.Path, err)
 	}
-	err = json.Unmarshal(bytes, &build)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse abi and bytecode content in the Domain configuration. %s", err)
-	}
-	return &build, nil
+	build := domain.LoadBuildLinked(bytes, deployedContracts)
+	return build, nil
 }
 
 func deployBytecode(ctx context.Context, rpc rpcbackend.Backend, deployer string, build *domain.SolidityBuild) (*tktypes.EthAddress, error) {

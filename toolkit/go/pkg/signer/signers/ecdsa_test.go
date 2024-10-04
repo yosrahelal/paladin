@@ -37,8 +37,8 @@ func newTestSigner(t *testing.T, privKey []byte) (context.Context, *ecdsaSigner,
 
 	keypair := secp256k1.KeyPairFromBytes(privKey)
 
-	signerFactory := NewECDSASignerFactory[*signerapi.Config]()
-	signer, err := signerFactory.NewSigner(ctx, &signerapi.Config{})
+	signerFactory := NewECDSASignerFactory[*signerapi.ConfigNoExt]()
+	signer, err := signerFactory.NewSigner(ctx, &signerapi.ConfigNoExt{})
 	require.NoError(t, err)
 
 	return ctx, signer.(*ecdsaSigner), keypair

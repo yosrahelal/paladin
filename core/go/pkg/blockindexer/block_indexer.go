@@ -31,11 +31,12 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/inflight"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
@@ -97,7 +98,7 @@ type blockIndexer struct {
 	dispatcherDone             chan struct{}
 }
 
-func NewBlockIndexer(ctx context.Context, config *config.BlockIndexerConfig, wsConfig *rpcclient.WSConfig, persistence persistence.Persistence) (_ BlockIndexer, err error) {
+func NewBlockIndexer(ctx context.Context, config *pldconf.BlockIndexerConfig, wsConfig *pldconf.WSClientConfig, persistence persistence.Persistence) (_ BlockIndexer, err error) {
 
 	blockListener, err := newBlockListener(ctx, config, wsConfig)
 	if err != nil {
@@ -107,21 +108,21 @@ func NewBlockIndexer(ctx context.Context, config *config.BlockIndexerConfig, wsC
 	return newBlockIndexer(ctx, config, persistence, blockListener)
 }
 
-func newBlockIndexer(ctx context.Context, conf *config.BlockIndexerConfig, persistence persistence.Persistence, blockListener *blockListener) (bi *blockIndexer, err error) {
+func newBlockIndexer(ctx context.Context, conf *pldconf.BlockIndexerConfig, persistence persistence.Persistence, blockListener *blockListener) (bi *blockIndexer, err error) {
 	bi = &blockIndexer{
 		parentCtxForReset:          ctx, // stored for startOrResetProcessing
 		persistence:                persistence,
 		wsConn:                     blockListener.wsConn,
 		blockListener:              blockListener,
-		requiredConfirmations:      confutil.IntMin(conf.RequiredConfirmations, 0, *config.BlockIndexerDefaults.RequiredConfirmations),
+		requiredConfirmations:      confutil.IntMin(conf.RequiredConfirmations, 0, *pldconf.BlockIndexerDefaults.RequiredConfirmations),
 		retry:                      blockListener.retry,
-		batchSize:                  confutil.IntMin(conf.CommitBatchSize, 1, *config.BlockIndexerDefaults.CommitBatchSize),
-		batchTimeout:               confutil.DurationMin(conf.CommitBatchTimeout, 0, *config.BlockIndexerDefaults.CommitBatchTimeout),
+		batchSize:                  confutil.IntMin(conf.CommitBatchSize, 1, *pldconf.BlockIndexerDefaults.CommitBatchSize),
+		batchTimeout:               confutil.DurationMin(conf.CommitBatchTimeout, 0, *pldconf.BlockIndexerDefaults.CommitBatchTimeout),
 		txWaiters:                  inflight.NewInflightManager[tktypes.Bytes32, *IndexedTransaction](tktypes.ParseBytes32),
 		eventStreams:               make(map[uuid.UUID]*eventStream),
 		eventStreamsHeadSet:        make(map[uuid.UUID]*eventStream),
-		esBlockDispatchQueueLength: confutil.IntMin(conf.EventStreams.BlockDispatchQueueLength, 0, *config.EventStreamDefaults.BlockDispatchQueueLength),
-		esCatchUpQueryPageSize:     confutil.IntMin(conf.EventStreams.CatchUpQueryPageSize, 0, *config.EventStreamDefaults.CatchUpQueryPageSize),
+		esBlockDispatchQueueLength: confutil.IntMin(conf.EventStreams.BlockDispatchQueueLength, 0, *pldconf.EventStreamDefaults.BlockDispatchQueueLength),
+		esCatchUpQueryPageSize:     confutil.IntMin(conf.EventStreams.CatchUpQueryPageSize, 0, *pldconf.EventStreamDefaults.CatchUpQueryPageSize),
 		dispatcherTap:              make(chan struct{}, 1),
 	}
 	bi.highestConfirmedBlock.Store(-1)
@@ -242,7 +243,7 @@ func (bi *blockIndexer) GetBlockListenerHeight(ctx context.Context) (confirmed u
 	return bi.blockListener.getHighestBlock(ctx)
 }
 
-func (bi *blockIndexer) setFromBlock(ctx context.Context, conf *config.BlockIndexerConfig) error {
+func (bi *blockIndexer) setFromBlock(ctx context.Context, conf *pldconf.BlockIndexerConfig) error {
 	var vUntyped interface{}
 	if conf.FromBlock == nil {
 		vUntyped = "latest"
