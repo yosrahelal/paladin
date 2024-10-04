@@ -264,7 +264,7 @@ func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.Pr
 	return tx, nil
 }
 
-func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) *tktypes.PrivateContractTransaction {
+func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) (*tktypes.PrivateContractTransaction, error) {
 	inputStates := make([]*tktypes.FullState, len(tx.PostAssembly.InputStates))
 	for i, state := range tx.PostAssembly.InputStates {
 		inputStates[i] = &tktypes.FullState{
@@ -289,12 +289,19 @@ func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) *tktypes.Pr
 			Data:   []byte(state.Data),
 		}
 	}
+	paramsJSON, err := tx.PreparedTransaction.Inputs.JSON()
+	if err != nil {
+		return nil, err
+	}
 	return &tktypes.PrivateContractTransaction{
+		FunctionABI:  tx.PreparedTransaction.FunctionABI,
+		To:           tx.PreparedTransaction.To,
+		ParamsJSON:   paramsJSON,
 		InputStates:  inputStates,
 		OutputStates: outputStates,
 		ReadStates:   readStates,
 		ExtraData:    tx.PostAssembly.ExtraData,
-	}
+	}, nil
 }
 
 func (tb *testbed) rpcTestbedInvoke() rpcserver.RPCHandler {
@@ -320,8 +327,7 @@ func (tb *testbed) rpcTestbedInvoke() rpcserver.RPCHandler {
 			}
 		}
 
-		result := tb.mapTransaction(tx)
-		return result, nil
+		return tb.mapTransaction(tx)
 	})
 }
 
@@ -334,13 +340,7 @@ func (tb *testbed) rpcTestbedPrepare() rpcserver.RPCHandler {
 		if err != nil {
 			return nil, err
 		}
-		result := tb.mapTransaction(tx)
-		encodedCall, err := tx.PreparedTransaction.FunctionABI.EncodeCallDataCtx(ctx, tx.PreparedTransaction.Inputs)
-		if err != nil {
-			return nil, err
-		}
-		result.EncodedCall = encodedCall
-		return result, nil
+		return tb.mapTransaction(tx)
 	})
 }
 

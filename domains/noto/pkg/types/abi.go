@@ -18,6 +18,7 @@ package types
 import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 var NotoABI = abi.ABI{
@@ -49,8 +50,28 @@ var NotoABI = abi.ABI{
 		Name: "approveTransfer",
 		Type: abi.Function,
 		Inputs: abi.ParameterArray{
+			{
+				Name:         "inputs",
+				Type:         "tuple[]",
+				InternalType: "struct FullState[]",
+				Components: abi.ParameterArray{
+					{Name: "id", Type: "bytes"},
+					{Name: "schema", Type: "bytes32"},
+					{Name: "data", Type: "bytes"},
+				},
+			},
+			{
+				Name:         "outputs",
+				Type:         "tuple[]",
+				InternalType: "struct FullState[]",
+				Components: abi.ParameterArray{
+					{Name: "id", Type: "bytes"},
+					{Name: "schema", Type: "bytes32"},
+					{Name: "data", Type: "bytes"},
+				},
+			},
+			{Name: "data", Type: "bytes"},
 			{Name: "delegate", Type: "address"},
-			{Name: "call", Type: "bytes"}, // assumed to be an encoded "transferWithApproval"
 		},
 	},
 }
@@ -71,6 +92,8 @@ type TransferParams struct {
 }
 
 type ApproveParams struct {
-	Delegate ethtypes.Address0xHex     `json:"delegate"`
-	Call     ethtypes.HexBytes0xPrefix `json:"call"`
+	Inputs   []*tktypes.FullState `json:"inputs"`
+	Outputs  []*tktypes.FullState `json:"outputs"`
+	Data     tktypes.HexBytes     `json:"data"`
+	Delegate tktypes.EthAddress   `json:"delegate"`
 }

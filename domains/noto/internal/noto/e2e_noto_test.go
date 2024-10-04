@@ -53,6 +53,12 @@ var (
 	recipient2Name = "recipient2"
 )
 
+type TransferWithApprovalParams struct {
+	Inputs  []interface{}    `json:"inputs"`
+	Outputs []interface{}    `json:"outputs"`
+	Data    tktypes.HexBytes `json:"data"`
+}
+
 func toJSON(t *testing.T, v any) []byte {
 	result, err := json.Marshal(v)
 	require.NoError(t, err)
@@ -333,13 +339,20 @@ func TestNotoApprove(t *testing.T) {
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
+
+	var transferParams TransferWithApprovalParams
+	err = json.Unmarshal(prepared.ParamsJSON, &transferParams)
+	require.NoError(t, err)
+
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     notaryName,
 		To:       tktypes.EthAddress(notoAddress),
 		Function: *types.NotoABI.Functions()["approveTransfer"],
 		Inputs: toJSON(t, &types.ApproveParams{
-			Delegate: *ethtypes.MustNewAddress(recipient1Key),
-			Call:     prepared.EncodedCall,
+			Inputs:   prepared.InputStates,
+			Outputs:  prepared.OutputStates,
+			Data:     transferParams.Data,
+			Delegate: *tktypes.MustEthAddress(recipient1Key),
 		}),
 	}, true)
 	if rpcerr != nil {

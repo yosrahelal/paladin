@@ -307,7 +307,7 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 		return nil, nil, err
 	}
 
-	signature, _, err := abi.SolidityDefCtx(ctx)
+	signature, err := abi.SolidityStringCtx(ctx)
 	if err != nil {
 		return nil, nil, err
 	}

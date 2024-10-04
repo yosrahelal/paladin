@@ -62,4 +62,5 @@ var (
 	MsgDuplicateStateInList        = ffe("PD200020", "Duplicate state in list %s[%d] (%s)")
 	MsgUnknownEvent                = ffe("PD200021", "Unknown event: %s")
 	MsgNotImplemented              = ffe("PD200022", "Not implemented")
+	MsgInvalidDelegate             = ffe("PD200023", "Invalid delegate: %s")
 )

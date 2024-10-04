@@ -17,6 +17,7 @@ package integrationtest
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -37,6 +38,12 @@ var (
 	alice  = "alice"
 	bob    = "bob"
 )
+
+type TransferWithApprovalParams struct {
+	Inputs  []interface{}    `json:"inputs"`
+	Outputs []interface{}    `json:"outputs"`
+	Data    tktypes.HexBytes `json:"data"`
+}
 
 func TestNotoForNoto(t *testing.T) {
 	ctx := context.Background()
@@ -111,15 +118,27 @@ func TestNotoForNoto(t *testing.T) {
 		Outputs: transferSilver.OutputStates,
 	}).SignAndSend(bob).Wait()
 
+	var transferGoldParams TransferWithApprovalParams
+	err = json.Unmarshal(transferGold.ParamsJSON, &transferGoldParams)
+	require.NoError(t, err)
+	var transferSilverParams TransferWithApprovalParams
+	err = json.Unmarshal(transferSilver.ParamsJSON, &transferSilverParams)
+	require.NoError(t, err)
+
+	transferGoldEncoded, err := transferGold.FunctionABI.EncodeCallDataJSONCtx(ctx, transferGold.ParamsJSON)
+	require.NoError(t, err)
+	transferSilverEncoded, err := transferSilver.FunctionABI.EncodeCallDataJSONCtx(ctx, transferSilver.ParamsJSON)
+	require.NoError(t, err)
+
 	log.L(ctx).Infof("Create Atom instance")
 	transferAtom := atomFactory.Create(ctx, alice, []*helpers.AtomOperation{
 		{
 			ContractAddress: notoGold.Address,
-			CallData:        transferGold.EncodedCall,
+			CallData:        transferGoldEncoded,
 		},
 		{
 			ContractAddress: notoSilver.Address,
-			CallData:        transferSilver.EncodedCall,
+			CallData:        transferSilverEncoded,
 		},
 		{
 			ContractAddress: swap.Address,
@@ -131,8 +150,18 @@ func TestNotoForNoto(t *testing.T) {
 	// If any party found a discrepancy at this point, they could cancel the swap (last chance to back out)
 
 	log.L(ctx).Infof("Approve both Noto transactions")
-	notoGold.ApproveTransfer(ctx, transferAtom.Address, transferGold.EncodedCall).SignAndSend(alice).Wait()
-	notoSilver.ApproveTransfer(ctx, transferAtom.Address, transferSilver.EncodedCall).SignAndSend(bob).Wait()
+	notoGold.ApproveTransfer(ctx, &nototypes.ApproveParams{
+		Inputs:   transferGold.InputStates,
+		Outputs:  transferGold.OutputStates,
+		Data:     transferGoldParams.Data,
+		Delegate: tktypes.EthAddress(transferAtom.Address),
+	}).SignAndSend(alice).Wait()
+	notoSilver.ApproveTransfer(ctx, &nototypes.ApproveParams{
+		Inputs:   transferSilver.InputStates,
+		Outputs:  transferSilver.OutputStates,
+		Data:     transferSilverParams.Data,
+		Delegate: tktypes.EthAddress(transferAtom.Address),
+	}).SignAndSend(bob).Wait()
 
 	log.L(ctx).Infof("Execute the atomic operation")
 	transferAtom.Execute(ctx).SignAndSend(alice).Wait()
@@ -216,7 +245,12 @@ func TestNotoForZeto(t *testing.T) {
 	log.L(ctx).Infof("Prepare the transfers")
 	transferNoto := noto.TransferWithApproval(ctx, bob, 1).Prepare(alice)
 	transferZeto := zeto.Transfer(ctx, alice, 1).Prepare(bob)
-	zeto.LockProof(ctx, *tktypes.MustEthAddress(bobKey), transferZeto.EncodedCall).SignAndSend(bob, false).Wait()
+
+	transferNotoEncoded, err := transferNoto.FunctionABI.EncodeCallDataJSONCtx(ctx, transferNoto.ParamsJSON)
+	require.NoError(t, err)
+	transferZetoEncoded, err := transferZeto.FunctionABI.EncodeCallDataJSONCtx(ctx, transferZeto.ParamsJSON)
+	require.NoError(t, err)
+	zeto.LockProof(ctx, *tktypes.MustEthAddress(bobKey), transferZetoEncoded).SignAndSend(bob, false).Wait()
 
 	// TODO: this should actually be a Pente state transition
 	log.L(ctx).Infof("Prepare the trade execute")
@@ -247,11 +281,11 @@ func TestNotoForZeto(t *testing.T) {
 	transferAtom := atomFactory.Create(ctx, alice, []*helpers.AtomOperation{
 		{
 			ContractAddress: noto.Address,
-			CallData:        transferNoto.EncodedCall,
+			CallData:        transferNotoEncoded,
 		},
 		{
 			ContractAddress: zeto.Address,
-			CallData:        transferZeto.EncodedCall,
+			CallData:        transferZetoEncoded,
 		},
 		{
 			ContractAddress: swap.Address,
@@ -267,9 +301,18 @@ func TestNotoForZeto(t *testing.T) {
 	// TODO: all parties should verify the Atom against the original proposed trade
 	// If any party found a discrepancy at this point, they could cancel the swap (last chance to back out)
 
+	var transferNotoParams TransferWithApprovalParams
+	err = json.Unmarshal(transferNoto.ParamsJSON, &transferNotoParams)
+	require.NoError(t, err)
+
 	log.L(ctx).Infof("Approve both transfers")
-	noto.ApproveTransfer(ctx, transferAtom.Address, transferNoto.EncodedCall).SignAndSend(alice).Wait()
-	zeto.LockProof(ctx, tktypes.EthAddress(transferAtom.Address), transferZeto.EncodedCall).SignAndSend(bob, false).Wait()
+	noto.ApproveTransfer(ctx, &nototypes.ApproveParams{
+		Inputs:   transferNoto.InputStates,
+		Outputs:  transferNoto.OutputStates,
+		Data:     transferNotoParams.Data,
+		Delegate: tktypes.EthAddress(transferAtom.Address),
+	}).SignAndSend(alice).Wait()
+	zeto.LockProof(ctx, tktypes.EthAddress(transferAtom.Address), transferZetoEncoded).SignAndSend(bob, false).Wait()
 
 	log.L(ctx).Infof("Execute the atomic operation")
 	transferAtom.Execute(ctx).SignAndSend(alice).Wait()

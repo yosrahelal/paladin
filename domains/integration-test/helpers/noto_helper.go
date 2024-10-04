@@ -75,10 +75,7 @@ func (n *NotoHelper) TransferWithApproval(ctx context.Context, to string, amount
 	}))
 }
 
-func (n *NotoHelper) ApproveTransfer(ctx context.Context, delegate ethtypes.Address0xHex, call []byte) *DomainTransactionHelper {
+func (n *NotoHelper) ApproveTransfer(ctx context.Context, params *types.ApproveParams) *DomainTransactionHelper {
 	fn := types.NotoABI.Functions()["approveTransfer"]
-	return NewDomainTransactionHelper(ctx, n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.ApproveParams{
-		Delegate: delegate,
-		Call:     call,
-	}))
+	return NewDomainTransactionHelper(ctx, n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, params))
 }

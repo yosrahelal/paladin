@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
@@ -28,7 +27,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
@@ -36,20 +34,13 @@ type approveHandler struct {
 	noto *Noto
 }
 
-type TransferWithApprovalParams struct {
-	Inputs  []interface{}             `json:"inputs"`
-	Outputs []interface{}             `json:"outputs"`
-	Data    ethtypes.HexBytes0xPrefix `json:"data"`
-}
-
 func (h *approveHandler) ValidateParams(ctx context.Context, config *types.NotoConfigOutput_V0, params string) (interface{}, error) {
 	var approveParams types.ApproveParams
 	if err := json.Unmarshal([]byte(params), &approveParams); err != nil {
 		return nil, err
 	}
-	_, err := h.decodeTransferCall(context.Background(), approveParams.Call)
-	if err != nil {
-		return nil, err
+	if approveParams.Delegate.IsZero() {
+		return nil, i18n.NewError(ctx, msgs.MsgInvalidDelegate, approveParams.Delegate)
 	}
 	return &approveParams, nil
 }
@@ -66,38 +57,16 @@ func (h *approveHandler) Init(ctx context.Context, tx *types.ParsedTransaction, 
 	}, nil
 }
 
-func (h *approveHandler) decodeTransferCall(ctx context.Context, encodedCall []byte) (*TransferWithApprovalParams, error) {
-	transferWithApproval := h.noto.contractABI.Functions()["transferWithApproval"]
-	if transferWithApproval == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, "transferWithApproval")
-	}
-	paramsJSON, err := h.decodeFunctionParams(ctx, transferWithApproval, encodedCall)
-	if err != nil {
-		return nil, err
-	}
-	var params TransferWithApprovalParams
-	err = json.Unmarshal(paramsJSON, &params)
-	return &params, err
-}
-
-func (h *approveHandler) decodeFunctionParams(ctx context.Context, functionABI *abi.Entry, encodedCall []byte) ([]byte, error) {
-	callData, err := functionABI.DecodeCallDataCtx(ctx, encodedCall)
-	if err != nil {
-		return nil, err
-	}
-	return tktypes.StandardABISerializer().SerializeJSON(callData)
-}
-
 func (h *approveHandler) transferHash(ctx context.Context, tx *types.ParsedTransaction, params *types.ApproveParams) (ethtypes.HexBytes0xPrefix, error) {
-	transferParams, err := h.decodeTransferCall(ctx, params.Call)
-	if err != nil {
-		return nil, err
+	inputs := make([]any, len(params.Inputs))
+	for i, state := range params.Inputs {
+		inputs[i] = state.ID
 	}
-	return h.noto.encodeTransferMasked(ctx,
-		tx.ContractAddress,
-		transferParams.Inputs,
-		transferParams.Outputs,
-		transferParams.Data)
+	outputs := make([]any, len(params.Outputs))
+	for i, state := range params.Outputs {
+		outputs[i] = state.ID
+	}
+	return h.noto.encodeTransferMasked(ctx, tx.ContractAddress, inputs, outputs, params.Data)
 }
 
 func (h *approveHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
@@ -137,6 +106,17 @@ func (h *approveHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 }
 
 func (h *approveHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
+	coins, err := h.noto.gatherCoins(ctx, req.Inputs, req.Outputs)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.noto.validateTransferAmounts(ctx, coins); err != nil {
+		return nil, err
+	}
+	if err := h.noto.validateOwners(ctx, tx, req, coins); err != nil {
+		return nil, err
+	}
+
 	params := tx.Params.(*types.ApproveParams)
 	transferHash, err := h.transferHash(ctx, tx, params)
 	if err != nil {

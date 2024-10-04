@@ -214,7 +214,7 @@ func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransacti
 			if err != nil {
 				return nil, err
 			}
-			encodedTransfer, err := h.noto.encodeTransferMasked(ctx, tx.ContractAddress, inputIDs, outputIDs, ethtypes.HexBytes0xPrefix(data))
+			encodedTransfer, err := h.noto.encodeTransferMasked(ctx, tx.ContractAddress, inputIDs, outputIDs, data)
 			if err != nil {
 				return nil, err
 			}
