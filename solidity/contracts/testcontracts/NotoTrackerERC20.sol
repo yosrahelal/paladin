@@ -1,18 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../private/interfaces/INotoGuard.sol";
 
 /**
- * Contract for testing Noto guards without using Pente.
- * TODO: this may become irrelevant as more "real" integration tests are developed.
+ * Example Noto Guard which tracks all Noto token movements on a private ERC20.
+ * Currently implemented as a base ledger contract.
+ * TODO: migrate this to a test using Pente and PenteExternalCall.
  */
-contract NotoGuardSimple is INotoGuard {
+contract NotoTrackerERC20 is INotoGuard, ERC20 {
+    constructor(string memory name, string memory symbol) ERC20(name, symbol) {}
+
     function onMint(
         address to,
         uint256 amount,
         PreparedTransaction calldata prepared
     ) external {
+        _mint(to, amount);
         _executeOperation(prepared);
     }
 
@@ -22,6 +27,7 @@ contract NotoGuardSimple is INotoGuard {
         uint256 amount,
         PreparedTransaction calldata prepared
     ) external {
+        _transfer(from, to, amount);
         _executeOperation(prepared);
     }
 

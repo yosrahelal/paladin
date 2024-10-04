@@ -96,10 +96,10 @@ func pvpNotoNoto(t *testing.T, withGuard bool) {
 
 	atomFactory := helpers.InitAtom(t, tb, rpc, contracts["atom"])
 
-	var guard *helpers.NotoGuardHelper
+	var guard *helpers.NotoTrackerHelper
 	var guardAddress *tktypes.EthAddress
 	if withGuard {
-		guard = helpers.DeployGuard(ctx, t, tb, notary)
+		guard = helpers.DeployTracker(ctx, t, tb, notary)
 		guardAddress = guard.Address
 	}
 
@@ -221,6 +221,11 @@ func pvpNotoNoto(t *testing.T, withGuard bool) {
 
 	log.L(ctx).Infof("Execute the atomic operation")
 	transferAtom.Execute(ctx).SignAndSend(alice).Wait()
+
+	if withGuard {
+		assert.Equal(t, int64(9), guard.GetBalance(ctx, aliceKey))
+		assert.Equal(t, int64(1), guard.GetBalance(ctx, bobKey))
+	}
 }
 
 func TestNotoForZeto(t *testing.T) {
