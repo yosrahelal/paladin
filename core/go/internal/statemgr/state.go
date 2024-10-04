@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
@@ -229,27 +228,4 @@ func (ss *stateManager) findStatesCommon(
 		return nil, nil, q.Error
 	}
 	return schema, states, nil
-}
-
-func (ss *stateManager) MarkLocked(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID string, transactionID uuid.UUID, creating, spending bool) error {
-	id, err := tktypes.ParseHexBytes(ctx, stateID)
-	if err != nil {
-		return err
-	}
-
-	op := ss.writer.newWriteOp(domainName, contractAddress)
-	op.stateLocks = []*components.StateLock{
-		{DomainName: domainName, State: id, Transaction: transactionID, Creating: creating, Spending: spending},
-	}
-
-	ss.writer.queue(ctx, op)
-	return op.flush(ctx)
-}
-
-func (ss *stateManager) ResetTransaction(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, transactionID uuid.UUID) error {
-	op := ss.writer.newWriteOp(domainName, contractAddress)
-	op.transactionLockDeletes = []uuid.UUID{transactionID}
-
-	ss.writer.queue(ctx, op)
-	return op.flush(ctx)
 }

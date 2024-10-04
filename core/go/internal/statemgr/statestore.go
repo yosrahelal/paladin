@@ -18,7 +18,6 @@ package statemgr
 
 import (
 	"context"
-	"sync"
 
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
@@ -38,8 +37,6 @@ type stateManager struct {
 	writer         *stateWriter
 	abiSchemaCache cache.Cache[string, components.Schema]
 	rpcModule      *rpcserver.RPCModule
-	domainLock     sync.Mutex
-	domainContexts map[string]*domainContext
 }
 
 var SchemaCacheDefaults = &pldconf.CacheConfig{
@@ -51,7 +48,6 @@ func NewStateManager(ctx context.Context, conf *pldconf.StateStoreConfig, p pers
 		p:              p,
 		conf:           conf,
 		abiSchemaCache: cache.NewCache[string, components.Schema](&conf.SchemaCache, SchemaCacheDefaults),
-		domainContexts: make(map[string]*domainContext),
 	}
 	ss.bgCtx, ss.cancelCtx = context.WithCancel(ctx)
 	return ss

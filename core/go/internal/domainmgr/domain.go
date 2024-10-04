@@ -244,7 +244,7 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 	}
 
 	var states []*components.State
-	err = d.dm.stateStore.RunInDomainContext(d.name, *addr, func(ctx context.Context, dsi components.DomainStateInterface) (err error) {
+	err = d.dm.stateStore.RunInDomainContext(d.name, *addr, func(ctx context.Context, dsi components.DomainContext) (err error) {
 		if req.UseNullifiers != nil && *req.UseNullifiers {
 			states, err = dsi.FindAvailableNullifiers(req.SchemaId, &query)
 		} else {

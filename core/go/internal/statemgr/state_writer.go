@@ -19,7 +19,6 @@ package statemgr
 import (
 	"context"
 
-	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/flushwriter"
@@ -31,14 +30,21 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
+// Each domain context can have up to two of these
+// - one active
+// - one flushing
+// the rotation and is protected by the stateLock of the parent stateContext
 type writeOperation struct {
-	id                     string
-	domainKey              string
-	writerOp               flushwriter.Operation[*writeOperation, *noResult]
-	states                 []*components.StateWithLabels
-	stateLocks             []*components.StateLock
-	stateNullifiers        []*components.StateNullifier
-	transactionLockDeletes []uuid.UUID
+	id          string
+	domainKey   string
+	writerOp    flushwriter.Operation[*writeOperation, *noResult]
+	flushResult error
+	flushed     chan struct{}
+	// States and state nullifiers can be flushed to persistence, although
+	// are only available for consumption outside of a DomainContext
+	// with creation locks once they are confirmed via the blockchain.
+	states          []*components.StateWithLabels
+	stateNullifiers []*components.StateNullifier
 }
 
 type noResult struct{}
@@ -81,25 +87,18 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 	var int64Labels []*components.StateInt64Label
 	var stateLocks []*components.StateLock
 	var stateNullifiers []*components.StateNullifier
-	var transactionLockDeletes []uuid.UUID
 	for _, op := range values {
 		for _, s := range op.states {
 			states = append(states, s.State)
 			labels = append(labels, s.State.Labels...)
 			int64Labels = append(int64Labels, s.State.Int64Labels...)
 		}
-		if len(op.stateLocks) > 0 {
-			stateLocks = append(stateLocks, op.stateLocks...)
-		}
 		if len(op.stateNullifiers) > 0 {
 			stateNullifiers = append(stateNullifiers, op.stateNullifiers...)
 		}
-		if len(op.transactionLockDeletes) > 0 {
-			transactionLockDeletes = append(transactionLockDeletes, op.transactionLockDeletes...)
-		}
 	}
-	log.L(ctx).Debugf("Writing state batch states=%d locks=%d nullifiers=%d seqLockDeletes=%d labels=%d int64Labels=%d",
-		len(states), len(stateLocks), len(stateNullifiers), len(transactionLockDeletes), len(labels), len(int64Labels))
+	log.L(ctx).Debugf("Writing state batch states=%d locks=%d nullifiers=%d labels=%d int64Labels=%d",
+		len(states), len(stateLocks), len(stateNullifiers), len(labels), len(int64Labels))
 
 	var err error
 	if len(states) > 0 {
@@ -155,13 +154,6 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 				DoNothing: true, // immutable
 			}).
 			Create(stateNullifiers).
-			Error
-	}
-	if err == nil && len(transactionLockDeletes) > 0 {
-		// locks can be removed
-		err = tx.
-			Table("state_locks").
-			Delete(&components.State{}, `"transaction" IN (?)`, transactionLockDeletes).
 			Error
 	}
 	// We don't actually provide any result, so just build an array of nil results

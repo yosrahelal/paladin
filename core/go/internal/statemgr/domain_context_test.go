@@ -96,8 +96,8 @@ func TestStateFlushAsync(t *testing.T) {
 
 	contractAddress := tktypes.RandAddress()
 	flushed := make(chan bool)
-	err := ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
-		return dsi.Flush(func(ctx context.Context, dsi components.DomainStateInterface) error {
+	err := ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
+		return dsi.Flush(func(ctx context.Context, dsi components.DomainContext) error {
 			flushed <- true
 			return nil
 		})
@@ -135,7 +135,7 @@ func TestUpsertSchemaAndStates(t *testing.T) {
 	fakeHash := tktypes.HexBytes(tktypes.RandBytes(32))
 
 	contractAddress := tktypes.RandAddress()
-	err = ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+	err = ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 		states, err := dsi.UpsertStates(nil, []*components.StateUpsert{
 			{
 				SchemaID: schemaID,
@@ -172,7 +172,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	schemaID = schemas[0].IDString()
 
 	contractAddress := tktypes.RandAddress()
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 
 		// Store some states
 		tx1states, err := dsi.UpsertStates(&transactionID, []*components.StateUpsert{
@@ -252,8 +252,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var stateToConfirmAndThenSpend *components.State
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 		// Check the DB persisted state is what we expect
 		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{
 			"sort": [ "owner", "amount" ]
@@ -342,7 +341,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 
 		// Confirm
 		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{}`))
@@ -375,7 +374,7 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	data2 := tktypes.RawJSON(fmt.Sprintf(`{"amount": 10,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32)))
 
 	contractAddress := tktypes.RandAddress()
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 
 		// Start with 2 states
 		tx1states, err := dsi.UpsertStates(&transactionID, []*components.StateUpsert{
@@ -409,7 +408,7 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 
 		// Confirm still 2 states and 1 nullifier
 		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{}`))
@@ -471,7 +470,7 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 
 		states, err := dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 		require.NoError(t, err)
@@ -505,7 +504,7 @@ func TestDSILatch(t *testing.T) {
 	require.NoError(t, err)
 
 	done()
-	err = dsi.run(func(ctx context.Context, dsi components.DomainStateInterface) error { return nil })
+	err = dsi.run(func(ctx context.Context, dsi components.DomainContext) error { return nil })
 	assert.Regexp(t, "PD010301", err)
 
 }
@@ -535,7 +534,7 @@ func TestDSIFlushErrorCapture(t *testing.T) {
 	require.NoError(t, err)
 
 	contractAddress := tktypes.RandAddress()
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 
 		dc := dsi.(*domainContext)
 
@@ -790,7 +789,7 @@ func TestDSIFindBadQueryAndInsert(t *testing.T) {
 	assert.Equal(t, "type=FakeCoin(bytes32 salt,address owner,uint256 amount),labels=[owner,amount]", schemas[0].Signature())
 
 	contractAddress := tktypes.RandAddress()
-	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 		_, err = dsi.FindAvailableStates(schemaID, toQuery(t,
 			`{"sort":["wrong"]}`))
 		assert.Regexp(t, "PD010700", err)
@@ -816,7 +815,7 @@ func TestDSIBadIDs(t *testing.T) {
 	defer done()
 
 	contractAddress := tktypes.RandAddress()
-	_ = ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+	_ = ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 
 		_, err := dsi.UpsertStates(nil, []*components.StateUpsert{
 			{SchemaID: "wrong"},

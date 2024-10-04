@@ -28,15 +28,14 @@ import (
 
 type StateManager interface {
 	ManagerLifecycle
-	RunInDomainContext(domainName string, contractAddress tktypes.EthAddress, fn DomainContextFunction) error
-	RunInDomainContextFlush(domainName string, contractAddress tktypes.EthAddress, fn DomainContextFunction) error
-	EnsureABISchemas(ctx context.Context, domainName string, defs []*abi.Parameter) ([]Schema, error)
+	NewDomainContext(domainName string, contractAddress tktypes.EthAddress) DomainContext
+
+	// Ensure ABI schemas upserts all the specified schemas, using the given DB transaction
+	EnsureABISchemas(ctx context.Context, dbTX *gorm.DB, domainName string, defs []*abi.Parameter) ([]Schema, error)
 
 	// State finalizations are written on the DB context of the block indexer, by the domain manager.
 	WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*StateSpend, confirms []*StateConfirm) (err error)
 }
-
-type DomainContextFunction func(ctx context.Context, dsi DomainStateInterface) error
 
 // The DSI is the state interface that is exposed outside of the statestore package, for the
 // transaction engine to use to safely query and update the state in the context of a particular
@@ -50,7 +49,7 @@ type DomainContextFunction func(ctx context.Context, dsi DomainStateInterface) e
 //
 // We can then continue to build the next set of flushable operations, while the first set is
 // still flushing (a simple pipeline approach).
-type DomainStateInterface interface {
+type DomainContext interface {
 
 	// FindAvailableStates is the main query function, only returning states that are available.
 	// Note this does not lock these states in any way, you must call that afterwards as:
@@ -87,28 +86,23 @@ type DomainStateInterface interface {
 	// when recording spent states.
 	UpsertNullifiers(nullifiers []*StateNullifier) error
 
-	// ResetTransaction queues up removal of all lock records for a given transaction
-	// Note that the private data of the states themselves are not removed
-	ResetTransaction(transactionID uuid.UUID) error
+	// Reset restores the world to the current state of the database, clearing any errors
+	// from failed flush, and all in-memory state locks.
+	// It does not wait for an in-progress flush to complete
+	Reset(ctx context.Context)
 
 	// Flush moves the un-flushed set into flushing status, queueing to a DB writer to batch write
 	// to the database.
-	// Subsequent calls to the DMI will add to a new un-flushed set.
 	//
-	// If there is already a flush in progress, this call will BLOCK until that flush has finished.
+	// We will wait for any previously initiated flush to complete.
+	// Synchronous error will be returned if a previously initiated flush fails/failed
+	// and Reset() has not yet been called.
 	//
-	// The flush itself then happens asynchronously - any error will be reported back to the next call
-	// that happens after the error occurs, and the unFlushed state will be cleared at that point.
+	// Then if any previous flush is cleared ok, we go asynchronous allowing the current goroutine to continue.
 	//
-	// This reverts the domain back in the same way as a crash-restart.
-	//
-	// Callback is invoked ONLY on a successful flush, asynchronously on the Domain Context.
-	// So if supplied, the caller must not rely on it being called, and must not block holding the
-	// domain context until it is called.
-	//
-	// NOTE: For special cases where a domain callback requires a sync flush or error to complete processing,
-	//       use RunInDomainContextFlush()
-	Flush(successCallback ...DomainContextFunction) error
+	// The supplied callback will be called once all writes up to the point of this call have
+	// been flushed to the database - for success or failure.
+	InitiateFlush(ctx context.Context, cb func(error)) error
 }
 
 type State struct {

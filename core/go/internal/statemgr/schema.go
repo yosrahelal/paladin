@@ -24,6 +24,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -59,9 +60,10 @@ func schemaCacheKey(domainName string, id tktypes.Bytes32) string {
 	return domainName + "/" + id.String()
 }
 
-func (ss *stateManager) persistSchemas(schemas []*components.SchemaPersisted) error {
-	return ss.p.DB().
+func (ss *stateManager) persistSchemas(ctx context.Context, dbTX *gorm.DB, schemas []*components.SchemaPersisted) error {
+	return dbTX.
 		Table("schemas").
+		WithContext(ctx).
 		Clauses(clause.OnConflict{
 			Columns: []clause.Column{
 				{Name: "domain_name"},
@@ -138,7 +140,7 @@ func (ss *stateManager) ListSchemas(ctx context.Context, domainName string) (res
 	return results, nil
 }
 
-func (ss *stateManager) EnsureABISchemas(ctx context.Context, domainName string, defs []*abi.Parameter) ([]components.Schema, error) {
+func (ss *stateManager) EnsureABISchemas(ctx context.Context, dbTX *gorm.DB, domainName string, defs []*abi.Parameter) ([]components.Schema, error) {
 	if len(defs) == 0 {
 		return nil, nil
 	}
@@ -155,5 +157,5 @@ func (ss *stateManager) EnsureABISchemas(ctx context.Context, domainName string,
 		toFlush[i] = s.SchemaPersisted
 	}
 
-	return prepared, ss.persistSchemas(toFlush)
+	return prepared, ss.persistSchemas(ctx, dbTX, toFlush)
 }

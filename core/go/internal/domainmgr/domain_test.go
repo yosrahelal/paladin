@@ -433,7 +433,7 @@ func storeState(t *testing.T, dm *domainManager, tp *testPlugin, contractAddress
 	stateJSON, err := json.Marshal(state)
 	require.NoError(t, err)
 
-	err = dm.stateStore.RunInDomainContextFlush("test1", contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+	err = dm.stateStore.RunInDomainContextFlush("test1", contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 		newStates, err := dsi.UpsertStates(&txID, []*components.StateUpsert{
 			{
 				SchemaID: tp.stateSchemas[0].Id,

@@ -40,88 +40,37 @@ type domainContext struct {
 	latch           chan struct{}
 	unFlushed       *writeOperation
 	flushing        *writeOperation
-	flushResult     chan error
+	flushErr        error // an error has been recorded and a reset is required
+	// State locks are an in memory structure only
+	stateLocks []*components.StateLock
 }
 
-func (ss *stateManager) RunInDomainContext(domainName string, contractAddress tktypes.EthAddress, fn components.DomainContextFunction) error {
-	return ss.getDomainContext(domainName, contractAddress).run(fn)
-}
-
-func (ss *stateManager) RunInDomainContextFlush(domainName string, contractAddress tktypes.EthAddress, fn components.DomainContextFunction) error {
-	dc := ss.getDomainContext(domainName, contractAddress)
-	err := dc.run(fn)
-	if err == nil {
-		err = dc.Flush()
+func (ss *stateManager) NewDomainContext(domainName string, contractAddress tktypes.EthAddress) components.DomainContext {
+	return &domainContext{
+		ss:              ss,
+		domainName:      domainName,
+		contractAddress: contractAddress,
+		ctx:             log.WithLogField(ss.bgCtx, "domain_context", domainName),
+		latch:           make(chan struct{}, 1),
 	}
-	if err == nil {
-		err = dc.checkFlushCompletion(true)
-	}
-	return err
-}
-
-func (ss *stateManager) getDomainContext(domainName string, contractAddress tktypes.EthAddress) *domainContext {
-	ss.domainLock.Lock()
-	defer ss.domainLock.Unlock()
-
-	domainKey := domainName + ":" + contractAddress.String()
-	dc := ss.domainContexts[domainKey]
-	if dc == nil {
-		dc = &domainContext{
-			ss:              ss,
-			domainName:      domainName,
-			contractAddress: contractAddress,
-			ctx:             log.WithLogField(ss.bgCtx, "domain_context", domainName),
-			latch:           make(chan struct{}, 1),
-			unFlushed:       ss.writer.newWriteOp(domainName, contractAddress),
-		}
-		ss.domainContexts[domainKey] = dc
-	}
-	return dc
-}
-
-// The latch protects to ensure only a single routine executes against the DSI interface concurrently.
-// We have no opinion in this module about how long-lived the function that holds the latch is -
-// it can be a long lived go-routine, or short lived event handlers on lots of different go-routines
-// (obviously a mixture of both would not work).
-func (dc *domainContext) takeLatch() error {
-	select {
-	case <-dc.ctx.Done():
-		return i18n.NewError(dc.ctx, msgs.MsgContextCanceled)
-	case dc.latch <- struct{}{}:
-		return nil
-	}
-}
-
-func (dc *domainContext) returnLatch() {
-	<-dc.latch
-}
-
-func (dc *domainContext) run(fn func(ctx context.Context, dsi components.DomainStateInterface) error) error {
-	// Latch is held for entire function call, but the call happens on the caller's routine.
-	// (state is locked separately)
-	if err := dc.takeLatch(); err != nil {
-		return err
-	}
-	defer dc.returnLatch()
-	return fn(dc.ctx, dc)
 }
 
 func (dc *domainContext) getUnFlushedStates() (spending []tktypes.HexBytes, spent []tktypes.HexBytes, nullifiers []*components.StateNullifier, err error) {
 	// Take lock and check flush state
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
-	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
+	if flushErr := dc.checkResetInitUnFlushed(); flushErr != nil {
 		return nil, nil, nil, flushErr
 	}
 
-	for _, l := range dc.unFlushed.stateLocks {
+	for _, l := range dc.stateLocks {
 		if l.Spending {
 			spending = append(spending, l.State)
 		}
 	}
 	nullifiers = append(nullifiers, dc.unFlushed.stateNullifiers...)
 	if dc.flushing != nil {
-		for _, l := range dc.flushing.stateLocks {
+		for _, l := range dc.stateLocks {
 			if l.Spending {
 				spending = append(spending, l.State)
 			}
@@ -134,18 +83,16 @@ func (dc *domainContext) getUnFlushedStates() (spending []tktypes.HexBytes, spen
 func (dc *domainContext) mergedUnFlushed(schema components.Schema, dbStates []*components.State, query *query.QueryJSON, requireNullifier bool) (_ []*components.State, err error) {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
-	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
+	if flushErr := dc.checkResetInitUnFlushed(); flushErr != nil {
 		return nil, flushErr
 	}
 
 	// Get the list of new un-flushed states, which are not already locked for spend
 	var allUnFlushedStates []*components.StateWithLabels
-	var allUnFlushedStateLocks []*components.StateLock
 	var allUnflushedNullifiers []*components.StateNullifier
 	for _, ops := range []*writeOperation{dc.unFlushed, dc.flushing} {
 		if ops != nil {
 			allUnFlushedStates = append(allUnFlushedStates, ops.states...)
-			allUnFlushedStateLocks = append(allUnFlushedStateLocks, ops.stateLocks...)
 			allUnflushedNullifiers = append(allUnflushedNullifiers, ops.stateNullifiers...)
 		}
 	}
@@ -157,7 +104,7 @@ func (dc *domainContext) mergedUnFlushed(schema components.Schema, dbStates []*c
 			continue
 		}
 		spent := false
-		for _, lock := range allUnFlushedStateLocks {
+		for _, lock := range dc.stateLocks {
 			if lock.State.Equals(state.ID) {
 				spent = lock.Spending
 				break
@@ -338,7 +285,7 @@ func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*
 	// Take lock and check flush state
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
-	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
+	if flushErr := dc.checkResetInitUnFlushed(); flushErr != nil {
 		return nil, flushErr
 	}
 
@@ -361,7 +308,7 @@ func (dc *domainContext) UpsertStates(transactionID *uuid.UUID, stateUpserts []*
 	// Then add all the state locks if this is transaction flush (which need individual de-duping too)
 	if transactionID != nil {
 		for _, s := range withValues {
-			_, err = dc.setUnFlushedLock(*transactionID, s.State.ID, func(sl *components.StateLock) {
+			_, err = dc.updateStateLocks(*transactionID, s.State.ID, func(sl *components.StateLock) {
 				// Upsert semantics for states will replace any existing locks with the explicitly set locks in the upsert
 				sl.Creating = s.Locked.Creating
 				sl.Spending = s.Locked.Spending
@@ -376,7 +323,7 @@ func (dc *domainContext) UpsertNullifiers(nullifiers []*components.StateNullifie
 	// Take lock and check flush state
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
-	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
+	if flushErr := dc.checkResetInitUnFlushed(); flushErr != nil {
 		return flushErr
 	}
 
@@ -396,23 +343,23 @@ func (dc *domainContext) lockStates(transactionID uuid.UUID, stateIDStrings []st
 	// Take lock and check flush state
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
-	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
+	if flushErr := dc.checkResetInitUnFlushed(); flushErr != nil {
 		return flushErr
 	}
 
 	// Update an existing un-flushed record, or add a new one.
 	// Note we might fail on a clash (and the caller should then reset this transaction)
 	for _, id := range stateIDs {
-		if _, err := dc.setUnFlushedLock(transactionID, id, setLockState); err != nil {
+		if _, err := dc.updateStateLocks(transactionID, id, setLockState); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (dc *domainContext) setUnFlushedLock(transactionID uuid.UUID, stateID tktypes.HexBytes, setLockState func(*components.StateLock)) (*components.StateLock, error) {
+func (dc *domainContext) updateStateLocks(transactionID uuid.UUID, stateID tktypes.HexBytes, setLockState func(*components.StateLock)) (*components.StateLock, error) {
 	// Update an existing un-flushed record if one exists
-	for _, lock := range dc.unFlushed.stateLocks {
+	for _, lock := range dc.stateLocks {
 		if lock.State.Equals(stateID) {
 			if lock.Transaction != transactionID {
 				// This represents a failure to call ResetTransaction() correctly
@@ -424,7 +371,7 @@ func (dc *domainContext) setUnFlushedLock(transactionID uuid.UUID, stateID tktyp
 	}
 	// Otherwise create a new one
 	l := &components.StateLock{State: stateID, Transaction: transactionID}
-	dc.unFlushed.stateLocks = append(dc.unFlushed.stateLocks, l)
+	dc.stateLocks = append(dc.stateLocks, l)
 	setLockState(l)
 	return l, nil
 }
@@ -437,87 +384,87 @@ func (dc *domainContext) MarkStatesSpending(transactionID uuid.UUID, stateIDs []
 	return dc.lockStates(transactionID, stateIDs, func(l *components.StateLock) { l.Spending = true })
 }
 
-func (dc *domainContext) ResetTransaction(transactionID uuid.UUID) error {
-	// Take lock and check flush state
-	dc.stateLock.Lock()
-	defer dc.stateLock.Unlock()
-	if flushErr := dc.checkFlushCompletion(false); flushErr != nil {
-		return flushErr
-	}
-
-	// Remove anything un-flushed for this transaction, as we will delete everything instead
-	newStateLocks := make([]*components.StateLock, 0, len(dc.unFlushed.stateLocks))
-	for _, l := range dc.unFlushed.stateLocks {
-		if l.Transaction != transactionID {
-			newStateLocks = append(newStateLocks, l)
-		}
-	}
-	dc.unFlushed.stateLocks = newStateLocks
-	// Add the delete to be flushed
-	dc.unFlushed.transactionLockDeletes = append(dc.unFlushed.transactionLockDeletes, transactionID)
-	return nil
-}
-
-func (dc *domainContext) Flush(successCallbacks ...components.DomainContextFunction) error {
+// Reset puts the world back to the point that has been so far flushed to storage.
+//
+// Must be called after a flush error before the context can be used, as on a flush
+// error the caller must reset their processing to the last point of consistency
+// as they cannot trust in-memory state
+//
+// Note it does not cancel or check the status of any in-progress flush, as the
+// things that are flushed are inert records in isolation.
+// Reset instead is intended to be a boundary where the calling code knows explicitly
+// that any state-locks and states that haven't reached a confirmed flush must
+// be re-written into the DomainContext.
+func (dc *domainContext) Reset(ctx context.Context) {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 
-	// Note the implementation of this function ensures this is safe while holding the lock
-	// we can't get to the point dc.flushing is non-nil, until we can be confident
-	// dc.flushed is also non-nil and will be closed.
-	//
-	// This is a long-lived lock, but it only happens when we're double-flushing
-	// (the previous flush didn't finish before the next is initiated)
-	if flushErr := dc.checkFlushCompletion(true); flushErr != nil {
-		return flushErr
-	}
-
-	// Cycle it out
-	dc.flushing = dc.unFlushed
-	dc.flushResult = make(chan error, 1)
-	dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainName, dc.contractAddress)
-
-	// We pass the vars directly to the routine, so the routine does not need the lock
-	go dc.flushOp(dc.flushing, dc.flushResult, successCallbacks...)
-	return nil
+	dc.unFlushed = nil
+	dc.stateLocks = nil
+	dc.flushErr = nil
 }
 
-// flushOp MUST NOT take the stateLock
-func (dc *domainContext) flushOp(op *writeOperation, flushed chan error, successCallbacks ...components.DomainContextFunction) {
-	dc.ss.writer.queue(dc.ctx, op)
-	err := op.flush(dc.ctx)
-	flushed <- err
-	if err == nil {
-		for _, cb := range successCallbacks {
-			callback := cb
-			go func() { _ = dc.run(callback) }()
-		}
-	}
-}
+func (dc *domainContext) InitiateFlush(ctx context.Context, asyncCallback func(err error)) error {
+	dc.stateLock.Lock()
+	defer dc.stateLock.Unlock()
 
-// checkFlushCompletion MUST be called holding the lock
-func (dc *domainContext) checkFlushCompletion(block bool) error {
-	if dc.flushing == nil {
-		return nil
+	// Sync check if there's already an error
+	if dc.flushErr != nil {
+		return i18n.WrapError(dc.ctx, dc.flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainName)
 	}
-	var flushErr error
-	if block {
-		flushErr = <-dc.flushResult
-	} else {
+
+	// If we are already flushing, then we wait for that flush while holding the lock
+	// here - until we can queue up the next flush.
+	// e.g. we only get one flush ahead
+	if dc.flushing != nil {
 		select {
-		case flushErr = <-dc.flushResult:
-		default:
-			log.L(dc.ctx).Debugf("flush is still active")
-			return nil
+		case <-dc.flushing.flushed:
+		case <-ctx.Done():
+			// The caller gave up on us, we cannot flush
+			return i18n.NewError(ctx, msgs.MsgContextCanceled)
+		}
+		// If we find an uncleared flush error, we are the ones that put it on for all calls to return
+		// and then return it ourselves
+		if dc.flushing.flushResult != nil {
+			log.L(ctx).Errorf("flush %s failed - domain context must be reset", dc.flushing.id)
+			dc.flushErr = dc.flushing.flushResult
+			return i18n.WrapError(dc.ctx, dc.flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainName)
 		}
 	}
-	// If we reached here, we've popped a flush result - clear the status
-	dc.flushing = nil
-	dc.flushResult = nil
-	// If there was an error, we need to clean out the whole un-flushed state before we return it
-	if flushErr != nil {
+
+	// Ok we're good to go async
+	dc.flushing = dc.unFlushed
+	dc.unFlushed = nil
+	// Always dispatch a routine for the callback
+	// even if there's a nil dc.flushing - meaning nothing to do
+	go dc.waitForFlush(ctx, asyncCallback, dc.flushing)
+	return nil
+}
+
+// MUST hold the lock to call this function
+// Simply checks there isn't an un-cleared error that means the caller must reset.
+func (dc *domainContext) checkResetInitUnFlushed() error {
+	if dc.flushErr != nil {
+		return i18n.WrapError(dc.ctx, dc.flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainName)
+	}
+	if dc.unFlushed == nil {
 		dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainName, dc.contractAddress)
-		return i18n.WrapError(dc.ctx, flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainName)
 	}
 	return nil
+}
+
+// MUST NOT hold the lock to call this function - instead pass in a list of all the
+// unflushed writers (max 2 in practice) that need to be successful for this flush to
+// be considered complete
+func (dc *domainContext) waitForFlush(ctx context.Context, cb func(error), flushing *writeOperation) {
+	var err error
+	// We might have found by the time we got the lock to flush, there was nothing to do
+	if flushing != nil {
+		log.L(ctx).Debugf("waiting for flush %s", flushing.id)
+		err = flushing.flush(ctx)
+		flushing.flushResult = err // for any other routines the blocked waiting
+		log.L(ctx).Debugf("flush %s completed (err=%v)", flushing.id, err)
+		close(flushing.flushed)
+	}
+	cb(err)
 }

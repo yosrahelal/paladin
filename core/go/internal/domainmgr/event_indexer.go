@@ -273,7 +273,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, addr tktypes.E
 		})
 	}
 
-	err = d.dm.stateStore.RunInDomainContext(d.name, addr, func(ctx context.Context, dsi components.DomainStateInterface) error {
+	err = d.dm.stateStore.RunInDomainContext(d.name, addr, func(ctx context.Context, dsi components.DomainContext) error {
 		for txID, states := range newStates {
 			if _, err = dsi.UpsertStates(&txID, states); err != nil {
 				return err
