@@ -71,7 +71,7 @@ func (h *approveHandler) decodeTransferCall(ctx context.Context, encodedCall []b
 	if transferWithApproval == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, "transferWithApproval")
 	}
-	paramsJSON, err := decodeParams(ctx, transferWithApproval, encodedCall)
+	paramsJSON, err := h.decodeFunctionParams(ctx, transferWithApproval, encodedCall)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,15 @@ func (h *approveHandler) decodeTransferCall(ctx context.Context, encodedCall []b
 	return &params, err
 }
 
-func (h *approveHandler) encodeTransfer(ctx context.Context, tx *types.ParsedTransaction, params *types.ApproveParams) (ethtypes.HexBytes0xPrefix, error) {
+func (h *approveHandler) decodeFunctionParams(ctx context.Context, functionABI *abi.Entry, encodedCall []byte) ([]byte, error) {
+	callData, err := functionABI.DecodeCallDataCtx(ctx, encodedCall)
+	if err != nil {
+		return nil, err
+	}
+	return tktypes.StandardABISerializer().SerializeJSON(callData)
+}
+
+func (h *approveHandler) transferHash(ctx context.Context, tx *types.ParsedTransaction, params *types.ApproveParams) (ethtypes.HexBytes0xPrefix, error) {
 	transferParams, err := h.decodeTransferCall(ctx, params.Call)
 	if err != nil {
 		return nil, err
@@ -94,7 +102,7 @@ func (h *approveHandler) encodeTransfer(ctx context.Context, tx *types.ParsedTra
 
 func (h *approveHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.ApproveParams)
-	encodedTransfer, err := h.encodeTransfer(ctx, tx, params)
+	transferHash, err := h.transferHash(ctx, tx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +121,7 @@ func (h *approveHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 				Algorithm:       algorithms.ECDSA_SECP256K1,
 				VerifierType:    verifiers.ETH_ADDRESS,
 				PayloadType:     signpayloads.OPAQUE_TO_RSV,
-				Payload:         encodedTransfer,
+				Payload:         transferHash,
 				Parties:         []string{req.Transaction.From},
 			},
 			// Notary will endorse the assembled transaction (by submitting to the ledger)
@@ -128,28 +136,13 @@ func (h *approveHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 	}, nil
 }
 
-func (h *approveHandler) validateSenderSignature(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest) error {
-	params := tx.Params.(*types.ApproveParams)
-	encodedTransfer, err := h.encodeTransfer(ctx, tx, params)
-	if err != nil {
-		return err
-	}
-	signature := domain.FindAttestation("sender", req.Signatures)
-	if signature == nil {
-		return i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
-	}
-	recoveredSignature, err := h.noto.recoverSignature(ctx, encodedTransfer, signature.Payload)
-	if err != nil {
-		return err
-	}
-	if recoveredSignature.String() != signature.Verifier.Verifier {
-		return i18n.NewError(ctx, msgs.MsgSignatureDoesNotMatch, "sender", signature.Verifier.Verifier, recoveredSignature.String())
-	}
-	return nil
-}
-
 func (h *approveHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
-	if err := h.validateSenderSignature(ctx, tx, req); err != nil {
+	params := tx.Params.(*types.ApproveParams)
+	transferHash, err := h.transferHash(ctx, tx, params)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.noto.validateApprovalSignature(ctx, req, transferHash); err != nil {
 		return nil, err
 	}
 	return &prototk.EndorseTransactionResponse{
@@ -157,17 +150,9 @@ func (h *approveHandler) Endorse(ctx context.Context, tx *types.ParsedTransactio
 	}, nil
 }
 
-func decodeParams(ctx context.Context, abi *abi.Entry, encodedCall []byte) ([]byte, error) {
-	callData, err := abi.DecodeCallDataCtx(ctx, encodedCall)
-	if err != nil {
-		return nil, err
-	}
-	return tktypes.StandardABISerializer().SerializeJSON(callData)
-}
-
 func (h *approveHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
 	params := tx.Params.(*types.ApproveParams)
-	encodedTransfer, err := h.encodeTransfer(ctx, tx, params)
+	transferHash, err := h.transferHash(ctx, tx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +167,7 @@ func (h *approveHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 	}
 	approveParams := map[string]interface{}{
 		"delegate":  params.Delegate,
-		"txhash":    encodedTransfer,
+		"txhash":    transferHash,
 		"signature": ethtypes.HexBytes0xPrefix(signature.Payload),
 		"data":      data,
 	}

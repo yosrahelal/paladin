@@ -127,23 +127,13 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 	}, nil
 }
 
-func (h *mintHandler) validateAmounts(ctx context.Context, params *types.MintParams, coins *gatheredCoins) error {
-	if len(coins.inCoins) > 0 {
-		return i18n.NewError(ctx, msgs.MsgInvalidInputs, "mint", coins.inCoins)
-	}
-	if coins.outTotal.Cmp(params.Amount.BigInt()) != 0 {
-		return i18n.NewError(ctx, msgs.MsgInvalidAmount, "mint", params.Amount.BigInt().Text(10), coins.outTotal.Text(10))
-	}
-	return nil
-}
-
 func (h *mintHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
 	params := tx.Params.(*types.MintParams)
 	coins, err := h.noto.gatherCoins(ctx, req.Inputs, req.Outputs)
 	if err != nil {
 		return nil, err
 	}
-	if err := h.validateAmounts(ctx, params, coins); err != nil {
+	if err := h.noto.validateMintAmounts(ctx, params, coins); err != nil {
 		return nil, err
 	}
 	return &prototk.EndorseTransactionResponse{

@@ -176,62 +176,15 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	}, nil
 }
 
-func (h *transferHandler) validateAmounts(ctx context.Context, coins *gatheredCoins) error {
-	if coins.inTotal.Cmp(coins.outTotal) != 0 {
-		return i18n.NewError(ctx, msgs.MsgInvalidAmount, "transfer", coins.inTotal, coins.outTotal)
-	}
-	return nil
-}
-
-func (h *transferHandler) validateSenderSignature(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest, coins *gatheredCoins) error {
-	signature := domain.FindAttestation("sender", req.Signatures)
-	if signature == nil {
-		return i18n.NewError(ctx, msgs.MsgAttestationNotFound, "sender")
-	}
-	if signature.Verifier.Lookup != tx.Transaction.From {
-		return i18n.NewError(ctx, msgs.MsgAttestationUnexpected, "sender", tx.Transaction.From, signature.Verifier.Lookup)
-	}
-	encodedTransfer, err := h.noto.encodeTransferUnmasked(ctx, tx.ContractAddress, coins.inCoins, coins.outCoins)
-	if err != nil {
-		return err
-	}
-	recoveredSignature, err := h.noto.recoverSignature(ctx, encodedTransfer, signature.Payload)
-	if err != nil {
-		return err
-	}
-	if recoveredSignature.String() != signature.Verifier.Verifier {
-		return i18n.NewError(ctx, msgs.MsgSignatureDoesNotMatch, "sender", signature.Verifier.Verifier, recoveredSignature.String())
-	}
-	return nil
-}
-
-func (h *transferHandler) validateOwners(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest, coins *gatheredCoins) error {
-	from := domain.FindVerifier(tx.Transaction.From, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
-	if from == nil {
-		return i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "from")
-	}
-	fromAddress, err := ethtypes.NewAddress(from.Verifier)
-	if err != nil {
-		return err
-	}
-
-	for i, coin := range coins.inCoins {
-		if coin.Owner != *fromAddress {
-			return i18n.NewError(ctx, msgs.MsgStateWrongOwner, coins.inStates[i].Id, tx.Transaction.From)
-		}
-	}
-	return nil
-}
-
 func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
 	coins, err := h.noto.gatherCoins(ctx, req.Inputs, req.Outputs)
 	if err != nil {
 		return nil, err
 	}
-	if err := h.validateAmounts(ctx, coins); err != nil {
+	if err := h.noto.validateTransferAmounts(ctx, coins); err != nil {
 		return nil, err
 	}
-	if err := h.validateOwners(ctx, tx, req, coins); err != nil {
+	if err := h.noto.validateOwners(ctx, tx, req, coins); err != nil {
 		return nil, err
 	}
 
@@ -239,7 +192,7 @@ func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransacti
 	case types.NotoVariantDefault:
 		if req.EndorsementRequest.Name == "notary" {
 			// Notary checks the signature from the sender, then submits the transaction
-			if err := h.validateSenderSignature(ctx, tx, req, coins); err != nil {
+			if err := h.noto.validateTransferSignature(ctx, tx, req, coins); err != nil {
 				return nil, err
 			}
 			return &prototk.EndorseTransactionResponse{
