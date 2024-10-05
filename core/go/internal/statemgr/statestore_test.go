@@ -58,7 +58,12 @@ func newDBMockStateManager(t *testing.T) (context.Context, *stateManager, sqlmoc
 	p, err := mockpersistence.NewSQLMockProvider()
 	require.NoError(t, err)
 	ss := NewStateManager(ctx, &pldconf.StateStoreConfig{}, p.P)
+	_, err = ss.PreInit(nil)
+	require.NoError(t, err)
+	err = ss.PostInit(nil)
+	require.NoError(t, err)
 	return ctx, ss.(*stateManager), p.Mock, func() {
+		ss.Stop()
 		require.NoError(t, p.Mock.ExpectationsWereMet())
 	}
 }

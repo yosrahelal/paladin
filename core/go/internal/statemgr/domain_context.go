@@ -39,7 +39,6 @@ type domainContext struct {
 	stateLock       sync.Mutex
 	unFlushed       *writeOperation
 	flushing        *writeOperation
-	flushErr        error // an error has been recorded and a reset is required
 	domainContexts  map[uuid.UUID]*domainContext
 	closed          bool
 
@@ -486,7 +485,6 @@ func (dc *domainContext) Reset(ctx context.Context) {
 	dc.flushing = nil
 	dc.unFlushed = nil
 	dc.txLocks = nil
-	dc.flushErr = nil
 }
 
 func (dc *domainContext) Close(ctx context.Context) {
@@ -512,13 +510,7 @@ func (dc *domainContext) clearExistingFlush(ctx context.Context) error {
 			// The caller gave up on us, we cannot flush
 			return i18n.NewError(ctx, msgs.MsgContextCanceled)
 		}
-		// If we find an uncleared flush error, we are the ones that put it on for all calls to return
-		// and then return it ourselves
-		if dc.flushing.flushResult != nil {
-			log.L(ctx).Errorf("flush %s failed - domain context must be reset", dc.flushing.id)
-			dc.flushErr = dc.flushing.flushResult
-			return i18n.WrapError(ctx, dc.flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainName)
-		}
+		return dc.flushing.flushResult
 	}
 	return nil
 }
@@ -528,9 +520,6 @@ func (dc *domainContext) InitiateFlush(ctx context.Context, asyncCallback func(e
 	defer dc.stateLock.Unlock()
 
 	// Sync check if there's already an error
-	if dc.flushErr != nil {
-		return i18n.WrapError(ctx, dc.flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainName)
-	}
 	if err := dc.clearExistingFlush(ctx); err != nil {
 		return err
 	}
@@ -553,10 +542,19 @@ func (dc *domainContext) InitiateFlush(ctx context.Context, asyncCallback func(e
 // Simply checks there isn't an un-cleared error that means the caller must reset.
 func (dc *domainContext) checkResetInitUnFlushed(ctx context.Context) error {
 	if dc.closed {
-		return i18n.WrapError(ctx, dc.flushErr, msgs.MsgStateDomainContextClosed)
+		return i18n.NewError(ctx, msgs.MsgStateDomainContextClosed)
 	}
-	if dc.flushErr != nil {
-		return i18n.WrapError(ctx, dc.flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainName, dc.contractAddress)
+	// Peek if there's a broken flush that needs a reset
+	if dc.flushing != nil {
+		select {
+		case <-dc.flushing.flushed:
+			if dc.flushing.flushResult != nil {
+				log.L(ctx).Errorf("flush %s failed - domain context must be reset", dc.flushing.id)
+				return i18n.WrapError(ctx, dc.flushing.flushResult, msgs.MsgStateFlushFailedDomainReset, dc.domainName, dc.contractAddress)
+
+			}
+		default:
+		}
 	}
 	if dc.unFlushed == nil {
 		dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainName, dc.contractAddress)

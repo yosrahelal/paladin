@@ -17,6 +17,7 @@
 package statemgr
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -447,94 +448,72 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 
 }
 
-// func TestDSILatch(t *testing.T) {
+func TestBadSchema(t *testing.T) {
 
-// 	_, ss, done := newDBTestStateManager(t)
+	ctx, ss, _, done := newDBMockStateManager(t)
+	defer done()
 
-// 	contractAddress := tktypes.RandAddress()
-// 	dsi := ss.getDomainContext("domain1", *contractAddress)
-// 	err := dc.takeLatch()
-// 	require.NoError(t, err)
+	_, err := ss.EnsureABISchemas(ctx, ss.p.DB(), "domain1", []*abi.Parameter{{}})
+	assert.Regexp(t, "PD010114", err)
 
-// 	done()
-// 	err = dc.run(func(ctx context.Context, dsi components.DomainContext) error { return nil })
-// 	assert.Regexp(t, "PD010301", err)
+}
 
-// }
+func TestDomainContextFlushErrorCapture(t *testing.T) {
 
-// func TestDSIBadSchema(t *testing.T) {
+	ctx, ss, db, done := newDBMockStateManager(t)
+	defer done()
 
-// 	_, ss, _, done := newDBMockStateManager(t)
-// 	defer done()
+	db.ExpectExec("INSERT.*schemas").WillReturnResult(driver.ResultNoRows)
+	db.ExpectBegin()
+	db.ExpectExec("INSERT").WillReturnError(fmt.Errorf("pop"))
 
-// 	_, err := ss.EnsureABISchemas(ctx, "domain1", []*abi.Parameter{{}})
-// 	assert.Regexp(t, "PD010114", err)
+	schemas, err := ss.EnsureABISchemas(ctx, ss.p.DB(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
+	require.NoError(t, err)
 
-// }
+	ss.abiSchemaCache.Set(schemaCacheKey("domain1", schemas[0].ID()), schemas[0])
 
-// func TestDSIFlushErrorCapture(t *testing.T) {
+	contractAddress := tktypes.RandAddress()
+	dc := ss.NewDomainContext(ctx, "domain1", *contractAddress)
+	defer dc.Close(ctx)
 
-// 	_, ss, done := newDBTestStateManager(t)
-// 	defer done()
+	data1 := fmt.Sprintf(`{"amount": 100, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))
+	tx1 := uuid.New()
+	_, err = dc.UpsertStates(ctx, genWidget(t, schemas[0].ID(), &tx1, data1))
+	require.NoError(t, err)
 
-// 	fakeFlushError := func(dc *domainContext) {
-// 		dc.flushing = &writeOperation{}
-// 		dc.flushResult = make(chan error, 1)
-// 		dc.flushResult <- fmt.Errorf("pop")
-// 	}
+	flushed := make(chan error)
+	err = dc.InitiateFlush(ctx, func(err error) {
+		flushed <- err
+	})
+	require.NoError(t, err)
+	assert.Regexp(t, "pop", <-flushed)
 
-// 	schemas, err := ss.EnsureABISchemas(ctx, "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
-// 	require.NoError(t, err)
+	_, _, err = dc.FindAvailableStates(ctx, schemas[0].ID(), nil)
+	assert.Regexp(t, "PD010119.*pop", err)
 
-// 	contractAddress := tktypes.RandAddress()
-// 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
+	_, _, err = dc.FindAvailableStates(ctx, schemas[0].ID(), nil)
+	assert.Regexp(t, "PD010119.*pop", err)
 
-// 		dc := dc.(*domainContext)
+	_, err = dc.(*domainContext).mergeUnFlushedApplyLocks(ctx, schemas[0], nil, nil, false)
+	assert.Regexp(t, "PD010119.*pop", err)
 
-// 		fakeFlushError(dc)
-// 		_, err = dc.FindAvailableStates("", nil)
-// 		assert.Regexp(t, "pop", err)
+	_, err = dc.UpsertStates(ctx, genWidget(t, schemas[0].ID(), &tx1, data1))
+	assert.Regexp(t, "PD010119.*pop", err)
 
-// 		fakeFlushError(dc)
-// 		_, err = dc.FindAvailableNullifiers("", nil)
-// 		assert.Regexp(t, "pop", err)
+	err = dc.UpsertNullifiers(ctx)
+	assert.Regexp(t, "PD010119.*pop", err)
 
-// 		fakeFlushError(dc)
-// 		schema, err := ss.getSchemaByID(ctx, "domain1", tktypes.MustParseBytes32(schemas[0].ID()), true)
-// 		require.NoError(t, err)
-// 		_, err = dc.mergedUnFlushed(schema, nil, nil, false)
-// 		assert.Regexp(t, "pop", err)
+	err = dc.AddStateLocks(ctx, &components.StateLock{})
+	assert.Regexp(t, "PD010119.*pop", err)
 
-// 		fakeFlushError(dc)
-// 		_, err = dc.UpsertStates(nil, nil)
-// 		assert.Regexp(t, "pop", err)
+	err = dc.InitiateFlush(ctx, func(err error) {})
+	assert.Regexp(t, "pop", err)
 
-// 		fakeFlushError(dc)
-// 		err = dc.UpsertNullifiers(nil)
-// 		assert.Regexp(t, "pop", err)
+	dc.Reset(ctx)
 
-// 		fakeFlushError(dc)
-// 		err = dc.MarkStatesRead(uuid.New(), nil)
-// 		assert.Regexp(t, "pop", err)
-
-// 		fakeFlushError(dc)
-// 		err = dc.MarkStatesSpending(uuid.New(), nil)
-// 		assert.Regexp(t, "pop", err)
-
-// 		fakeFlushError(dc)
-// 		err = dc.ResetTransaction(uuid.New())
-// 		assert.Regexp(t, "pop", err)
-
-// 		fakeFlushError(dc)
-// 		err = dc.Flush()
-// 		assert.Regexp(t, "pop", err)
-
-// 		return nil
-
-// 	})
-// 	require.NoError(t, err)
-
-// }
+	err = dc.(*domainContext).checkResetInitUnFlushed(ctx)
+	require.NoError(t, err)
+}
 
 // func TestDSIMergedUnFlushedWhileFlushing(t *testing.T) {
 
