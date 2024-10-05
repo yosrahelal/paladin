@@ -32,6 +32,7 @@ import (
 )
 
 type domainContext struct {
+	id              uuid.UUID
 	ss              *stateManager
 	domainName      string
 	contractAddress tktypes.EthAddress
@@ -39,20 +40,57 @@ type domainContext struct {
 	unFlushed       *writeOperation
 	flushing        *writeOperation
 	flushErr        error // an error has been recorded and a reset is required
+	domainContexts  map[uuid.UUID]*domainContext
+	closed          bool
+
+	// We track creating states beyond the flush - until the transaction that created them is removed, or a full reset
+	// This is because the DB will never return them as "available"
+	creating map[string]*components.StateWithLabels
 
 	// State locks are an in memory structure only, recording a set of locks associated with each transaction.
 	// These are held only in memory, and used during DB queries to create a view on top of the database
 	// that can make both additional states available, and remove visibility to states.
-	txLocks map[uuid.UUID][]*components.StateLock
+	txLocks []*components.StateLock
 }
 
-func (ss *stateManager) NewDomainContext(domainName string, contractAddress tktypes.EthAddress) components.DomainContext {
-	return &domainContext{
+// Very important that callers Close domain contexts they open
+func (ss *stateManager) NewDomainContext(ctx context.Context, domainName string, contractAddress tktypes.EthAddress) components.DomainContext {
+	id := uuid.New()
+	log.L(ctx).Debugf("Domain context %s for domain %s contract %s closed", id, domainName, contractAddress)
+
+	ss.domainContextLock.Lock()
+	defer ss.domainContextLock.Unlock()
+
+	dc := &domainContext{
+		id:              id,
 		ss:              ss,
 		domainName:      domainName,
 		contractAddress: contractAddress,
-		txLocks:         make(map[uuid.UUID][]*components.StateLock),
+		creating:        make(map[string]*components.StateWithLabels),
+		domainContexts:  make(map[uuid.UUID]*domainContext),
 	}
+	ss.domainContexts[id] = dc
+	return dc
+}
+
+// nil if not found
+func (ss *stateManager) GetDomainContext(ctx context.Context, id uuid.UUID) components.DomainContext {
+	ss.domainContextLock.Lock()
+	defer ss.domainContextLock.Unlock()
+
+	return ss.domainContexts[id]
+}
+
+func (ss *stateManager) ListDomainContext() []components.DomainContextInfo {
+	ss.domainContextLock.Lock()
+	defer ss.domainContextLock.Unlock()
+
+	dcs := make([]components.DomainContextInfo, 0, len(ss.domainContexts))
+	for _, dc := range ss.domainContexts {
+		dcs = append(dcs, dc.Info())
+	}
+	return dcs
+
 }
 
 func (dc *domainContext) getUnFlushedStates(ctx context.Context) (spending []tktypes.HexBytes, spent []tktypes.HexBytes, nullifiers []*components.StateNullifier, err error) {
@@ -63,11 +101,9 @@ func (dc *domainContext) getUnFlushedStates(ctx context.Context) (spending []tkt
 		return nil, nil, nil, flushErr
 	}
 
-	for _, locks := range dc.txLocks {
-		for _, l := range locks {
-			if l.Spending {
-				spending = append(spending, l.State)
-			}
+	for _, l := range dc.txLocks {
+		if l.Type.V() == components.StateLockTypeSpend {
+			spending = append(spending, l.State)
 		}
 	}
 	nullifiers = append(nullifiers, dc.unFlushed.stateNullifiers...)
@@ -85,28 +121,17 @@ func (dc *domainContext) mergedUnFlushed(ctx context.Context, schema components.
 	}
 
 	// Get the list of new un-flushed states, which are not already locked for spend
-	var allUnFlushedStates []*components.StateWithLabels
-	var allUnflushedNullifiers []*components.StateNullifier
-	for _, ops := range []*writeOperation{dc.unFlushed, dc.flushing} {
-		if ops != nil {
-			allUnFlushedStates = append(allUnFlushedStates, ops.states...)
-			allUnflushedNullifiers = append(allUnflushedNullifiers, ops.stateNullifiers...)
-		}
-	}
-
 	matches := make([]*components.StateWithLabels, 0, len(dc.unFlushed.states))
 	schemaId := schema.Persisted().ID
-	for _, state := range allUnFlushedStates {
+	for _, state := range dc.creating {
 		if !state.Schema.Equals(&schemaId) {
 			continue
 		}
 		spent := false
-		for _, locks := range dc.txLocks {
-			for _, lock := range locks {
-				if lock.State.Equals(state.ID) {
-					spent = lock.Spending
-					break
-				}
+		for _, lock := range dc.txLocks {
+			if lock.State.Equals(state.ID) && lock.Type.V() == components.StateLockTypeSpend {
+				spent = true
+				break
 			}
 		}
 		// Cannot return it if it's spent or locked for spending
@@ -114,18 +139,8 @@ func (dc *domainContext) mergedUnFlushed(ctx context.Context, schema components.
 			continue
 		}
 
-		if requireNullifier {
-			hasNullifier := false
-			for _, nullifier := range allUnflushedNullifiers {
-				if nullifier.State.Equals(state.ID) {
-					state.Nullifier = nullifier
-					hasNullifier = true
-					break
-				}
-			}
-			if !hasNullifier {
-				continue
-			}
+		if requireNullifier && state.Nullifier == nil {
+			continue
 		}
 
 		// Now we see if it matches the query
@@ -157,6 +172,14 @@ func (dc *domainContext) mergedUnFlushed(ctx context.Context, schema components.
 	}
 
 	return dbStates, nil
+}
+
+func (dc *domainContext) Info() components.DomainContextInfo {
+	return components.DomainContextInfo{
+		ID:              dc.id,
+		Domain:          dc.domainName,
+		ContractAddress: dc.contractAddress,
+	}
 }
 
 func (dc *domainContext) mergeInMemoryMatches(ctx context.Context, schema components.Schema, states []*components.State, extras []*components.StateWithLabels, query *query.QueryJSON) (_ []*components.State, err error) {
@@ -200,31 +223,32 @@ func (dc *domainContext) mergeInMemoryMatches(ctx context.Context, schema compon
 
 }
 
-func (dc *domainContext) FindAvailableStates(ctx context.Context, schemaID string, query *query.QueryJSON) (s []*components.State, err error) {
+func (dc *domainContext) FindAvailableStates(ctx context.Context, schemaID string, query *query.QueryJSON) (components.Schema, []*components.State, error) {
 
 	// Build a list of spending states
 	spending, spent, _, err := dc.getUnFlushedStates(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	spending = append(spending, spent...)
 
 	// Run the query against the DB
 	schema, states, err := dc.ss.findStates(ctx, dc.domainName, dc.contractAddress, schemaID, query, StateStatusAvailable, spending...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Merge in un-flushed states to results
-	return dc.mergedUnFlushed(ctx, schema, states, query, false)
+	states, err = dc.mergedUnFlushed(ctx, schema, states, query, false)
+	return schema, states, err
 }
 
-func (dc *domainContext) FindAvailableNullifiers(ctx context.Context, schemaID string, query *query.QueryJSON) (s []*components.State, err error) {
+func (dc *domainContext) FindAvailableNullifiers(ctx context.Context, schemaID string, query *query.QueryJSON) (components.Schema, []*components.State, error) {
 
 	// Build a list of unflushed and spending nullifiers
 	spending, spent, nullifiers, err := dc.getUnFlushedStates(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	statesWithNullifiers := make([]tktypes.HexBytes, len(nullifiers))
 	for i, n := range nullifiers {
@@ -234,7 +258,7 @@ func (dc *domainContext) FindAvailableNullifiers(ctx context.Context, schemaID s
 	// Run the query against the DB
 	schema, states, err := dc.ss.findAvailableNullifiers(ctx, dc.domainName, dc.contractAddress, schemaID, query, statesWithNullifiers, spending, spent)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Attach nullifiers to states
@@ -250,34 +274,39 @@ func (dc *domainContext) FindAvailableNullifiers(ctx context.Context, schemaID s
 	}
 
 	// Merge in un-flushed states to results
-	return dc.mergedUnFlushed(ctx, schema, states, query, true)
+	states, err = dc.mergedUnFlushed(ctx, schema, states, query, true)
+	return schema, states, err
 }
 
-func (dc *domainContext) UpsertStates(ctx context.Context, transactionID *uuid.UUID, stateUpserts []*components.StateUpsert) (states []*components.State, err error) {
+func (dc *domainContext) UpsertStates(ctx context.Context, stateUpserts ...*components.StateUpsert) (states []*components.State, err error) {
 
 	states = make([]*components.State, len(stateUpserts))
+	stateLocks := make([]*components.StateLock, 0, len(stateUpserts))
 	withValues := make([]*components.StateWithLabels, len(stateUpserts))
+	toMakeAvailable := make([]*components.StateWithLabels, 0, len(stateUpserts))
 	for i, ns := range stateUpserts {
 		schema, err := dc.ss.GetSchema(ctx, dc.domainName, ns.SchemaID, true)
 		if err != nil {
 			return nil, err
 		}
 
-		withValues[i], err = schema.ProcessState(ctx, dc.contractAddress, ns.Data, ns.ID)
+		vs, err := schema.ProcessState(ctx, dc.contractAddress, ns.Data, ns.ID)
 		if err != nil {
 			return nil, err
 		}
+		withValues[i] = vs
 		states[i] = withValues[i].State
-		if transactionID != nil {
+		if ns.CreatedBy != nil {
 			states[i].Locked = &components.StateLock{
-				Transaction: *transactionID,
+				Type:        components.StateLockTypeCreate.Enum(),
+				Transaction: *ns.CreatedBy,
 				State:       withValues[i].State.ID,
-				Creating:    ns.Creating,
-				Spending:    ns.Spending,
 			}
-			log.L(ctx).Infof("Upserting state %s locked to tx=%s creating=%t spending=%t", states[i].ID, transactionID, states[i].Locked.Creating, states[i].Locked.Spending)
+			stateLocks = append(stateLocks, states[i].Locked)
+			toMakeAvailable = append(toMakeAvailable, vs)
+			log.L(ctx).Infof("Upserting state %s with create lock tx=%s", states[i].ID, ns.CreatedBy)
 		} else {
-			log.L(ctx).Infof("Upserting state %s UNLOCKED", states[i].ID)
+			log.L(ctx).Infof("Upserting state %s (no create lock)", states[i].ID)
 		}
 	}
 
@@ -304,21 +333,20 @@ func (dc *domainContext) UpsertStates(ctx context.Context, transactionID *uuid.U
 	}
 	// Now we can add our own un-flushed writes to the de-duplicated lists
 	dc.unFlushed.states = append(deDuppedUnFlushedStates, withValues...)
-	// Then add all the state locks if this is transaction flush (which need individual de-duping too)
-	if transactionID != nil {
-		for _, s := range withValues {
-			_, err = dc.updateStateLocks(ctx, *transactionID, s.State.ID, func(sl *components.StateLock) {
-				// Upsert semantics for states will replace any existing locks with the explicitly set locks in the upsert
-				sl.Creating = s.Locked.Creating
-				sl.Spending = s.Locked.Spending
-			})
-		}
+	// Only those transactions with a creating TX lock can be returned from queries
+	// (any other states supplied for flushing are just to ensure we have a copy of the state
+	// for data availability when the existing/later confirm is available)
+	for _, s := range toMakeAvailable {
+		dc.creating[s.ID.String()] = s
 	}
-
+	err = dc.addStateLocks(ctx, stateLocks...)
+	if err != nil {
+		return nil, err
+	}
 	return states, nil
 }
 
-func (dc *domainContext) UpsertNullifiers(ctx context.Context, nullifiers []*components.StateNullifier) error {
+func (dc *domainContext) UpsertNullifiers(ctx context.Context, nullifiers ...*components.StateNullifier) error {
 	// Take lock and check flush state
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
@@ -327,18 +355,33 @@ func (dc *domainContext) UpsertNullifiers(ctx context.Context, nullifiers []*com
 	}
 
 	dc.unFlushed.stateNullifiers = append(dc.unFlushed.stateNullifiers, nullifiers...)
-	return nil
-}
 
-func (dc *domainContext) lockStates(ctx context.Context, transactionID uuid.UUID, stateIDStrings []string, setLockState func(*components.StateLock)) (err error) {
-	stateIDs := make([]tktypes.HexBytes, len(stateIDStrings))
-	for i, id := range stateIDStrings {
-		stateIDs[i], err = tktypes.ParseHexBytes(ctx, id)
-		if err != nil {
-			return err
+	for _, creating := range dc.creating {
+		for _, nullifier := range nullifiers {
+			if nullifier.State.Equals(creating.ID) {
+				creating.Nullifier = nullifier
+			}
 		}
 	}
 
+	return nil
+}
+
+func (dc *domainContext) addStateLocks(ctx context.Context, locks ...*components.StateLock) error {
+	for _, l := range locks {
+		// For creating the state must be in our map (via Upsert) or we will fail to return it
+		if l.Type.V() == components.StateLockTypeCreate && dc.creating[l.State.String()] == nil {
+			return i18n.NewError(ctx, msgs.MsgStateLockCreateNotInContext, l.State)
+		}
+
+		// Note we do NOT check for conflicts on existing state locks
+		log.L(ctx).Debugf("state %s adding %s lock tx=%s)", l.State, l.Type, l.Transaction)
+		dc.txLocks = append(dc.txLocks, l)
+	}
+	return nil
+}
+
+func (dc *domainContext) AddStateLocks(ctx context.Context, locks ...*components.StateLock) (err error) {
 	// Take lock and check flush state
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
@@ -346,67 +389,45 @@ func (dc *domainContext) lockStates(ctx context.Context, transactionID uuid.UUID
 		return flushErr
 	}
 
-	// Update an existing un-flushed record, or add a new one.
-	// Note we might fail on a clash (and the caller should then reset this transaction)
-	for _, id := range stateIDs {
-		if _, err := dc.updateStateLocks(ctx, transactionID, id, setLockState); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (dc *domainContext) updateStateLocks(ctx context.Context, transactionID uuid.UUID, stateID tktypes.HexBytes, setLockState func(*components.StateLock)) (*components.StateLock, error) {
-	// Update an existing un-flushed record if one exists
-	locks := dc.txLocks[transactionID]
-	for _, lock := range locks {
-		if lock.State.Equals(stateID) {
-			if lock.Transaction != transactionID {
-				// This represents a failure to call ResetTransaction() correctly
-				return nil, i18n.NewError(ctx, msgs.MsgStateLockConflictUnexpected, lock.Transaction, transactionID)
-			}
-			setLockState(lock)
-			return lock, nil
-		}
-	}
-	// Otherwise create a new one
-	l := &components.StateLock{State: stateID, Transaction: transactionID}
-	locks = append(locks, l)
-	dc.txLocks[transactionID] = locks
-	setLockState(l)
-	return l, nil
-}
-
-func (dc *domainContext) MarkStatesRead(ctx context.Context, transactionID uuid.UUID, stateIDs []string) (err error) {
-	return dc.lockStates(ctx, transactionID, stateIDs, func(*components.StateLock) {})
-}
-
-func (dc *domainContext) MarkStatesSpending(ctx context.Context, transactionID uuid.UUID, stateIDs []string) (err error) {
-	return dc.lockStates(ctx, transactionID, stateIDs, func(l *components.StateLock) { l.Spending = true })
+	return dc.addStateLocks(ctx, locks...)
 }
 
 // Clear all in-memory locks associated with individual transactions, because they are no longer needed/applicable
-// Most likely because the state transitions have now been finalized
-func (dc *domainContext) ClearTransactions(ctx context.Context, transactions []uuid.UUID) {
+// Most likely because the state transitions have now been finalized.
+//
+// Note it's important that this occurs after the confirmation record of creation of a state is fully committed
+// to the database, as the in-memory "creating" record for a state will be removed as part of this.
+func (dc *domainContext) ClearTransactions(ctx context.Context, transactions ...uuid.UUID) {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 
-	for _, transaction := range transactions {
-		delete(dc.txLocks, transaction)
+	newLocks := make([]*components.StateLock, 0)
+	for _, lock := range dc.txLocks {
+		skip := false
+		for _, tx := range transactions {
+			if lock.Transaction == tx {
+				if lock.Type.V() == components.StateLockTypeCreate {
+					// Clean up the creating record
+					delete(dc.creating, lock.State.String())
+				}
+				skip = true
+				break
+			}
+		}
+		if !skip {
+			newLocks = append(newLocks, lock)
+		}
 	}
+	dc.txLocks = newLocks
 }
 
-func (dc *domainContext) GetStateLockCopy() map[uuid.UUID][]components.StateLock {
+func (dc *domainContext) StateLocksByTransaction() map[uuid.UUID][]components.StateLock {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 
 	txLocksCopy := make(map[uuid.UUID][]components.StateLock)
-	for tx, locks := range dc.txLocks {
-		locksCopy := make([]components.StateLock, len(locks))
-		for i, l := range locks {
-			locksCopy[i] = *l // note we copy the whole state lock struct, not the pointer
-		}
-		txLocksCopy[tx] = locksCopy
+	for _, l := range dc.txLocks {
+		txLocksCopy[l.Transaction] = append(txLocksCopy[l.Transaction], *l)
 	}
 	return txLocksCopy
 }
@@ -427,8 +448,20 @@ func (dc *domainContext) Reset(ctx context.Context) {
 	defer dc.stateLock.Unlock()
 
 	dc.unFlushed = nil
-	dc.txLocks = make(map[uuid.UUID][]*components.StateLock)
+	dc.txLocks = nil
 	dc.flushErr = nil
+}
+
+func (dc *domainContext) Close(ctx context.Context) {
+	dc.stateLock.Lock()
+	dc.closed = true
+	dc.stateLock.Unlock()
+
+	log.L(ctx).Debugf("Domain context %s for domain %s contract %s closed", dc.id, dc.domainName, dc.contractAddress)
+
+	dc.ss.domainContextLock.Lock()
+	defer dc.ss.domainContextLock.Unlock()
+	delete(dc.ss.domainContexts, dc.id)
 }
 
 func (dc *domainContext) InitiateFlush(ctx context.Context, asyncCallback func(err error)) error {
@@ -460,19 +493,27 @@ func (dc *domainContext) InitiateFlush(ctx context.Context, asyncCallback func(e
 	}
 
 	// Ok we're good to go async
-	dc.flushing = dc.unFlushed
+	flushing := dc.unFlushed
+	dc.flushing = flushing
 	dc.unFlushed = nil
 	// Always dispatch a routine for the callback
-	// even if there's a nil dc.flushing - meaning nothing to do
-	go dc.waitForFlush(ctx, asyncCallback, dc.flushing)
+	// even if there's a nil flushing - meaning nothing to do
+	if flushing != nil {
+		flushing.flushed = make(chan struct{})
+		dc.ss.writer.queue(ctx, flushing)
+	}
+	go dc.doFlush(ctx, asyncCallback, flushing)
 	return nil
 }
 
 // MUST hold the lock to call this function
 // Simply checks there isn't an un-cleared error that means the caller must reset.
 func (dc *domainContext) checkResetInitUnFlushed(ctx context.Context) error {
+	if dc.closed {
+		return i18n.WrapError(ctx, dc.flushErr, msgs.MsgStateDomainContextClosed)
+	}
 	if dc.flushErr != nil {
-		return i18n.WrapError(ctx, dc.flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainName)
+		return i18n.WrapError(ctx, dc.flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainName, dc.contractAddress)
 	}
 	if dc.unFlushed == nil {
 		dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainName, dc.contractAddress)
@@ -483,7 +524,7 @@ func (dc *domainContext) checkResetInitUnFlushed(ctx context.Context) error {
 // MUST NOT hold the lock to call this function - instead pass in a list of all the
 // unflushed writers (max 2 in practice) that need to be successful for this flush to
 // be considered complete
-func (dc *domainContext) waitForFlush(ctx context.Context, cb func(error), flushing *writeOperation) {
+func (dc *domainContext) doFlush(ctx context.Context, cb func(error), flushing *writeOperation) {
 	var err error
 	// We might have found by the time we got the lock to flush, there was nothing to do
 	if flushing != nil {

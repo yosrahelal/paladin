@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
@@ -125,20 +126,35 @@ func (ss *stateManager) findStates(
 	status StateStatusQualifier,
 	excluded ...tktypes.HexBytes,
 ) (schema components.Schema, s []*components.State, err error) {
-	return ss.findStatesCommon(ctx, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
-		db := ss.p.DB()
-		q = q.Joins("Confirmed", db.Select("transaction")).
-			Joins("Spent", db.Select("transaction")).
-			Joins("Locked", db.Select("transaction"))
+	db := ss.p.DB()
+	whereClause, isPlainDB := status.whereClause(db)
+	if isPlainDB {
+		return ss.findStatesCommon(ctx, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
+			q = q.Joins("Confirmed", db.Select("transaction")).
+				Joins("Spent", db.Select("transaction"))
 
-		if len(excluded) > 0 {
-			q = q.Not("id IN(?)", excluded)
+			if len(excluded) > 0 {
+				q = q.Not("id IN(?)", excluded)
+			}
+
+			// Scope the query based on the status qualifier
+			q = q.Where(whereClause)
+			return q
+		})
+	}
+
+	// We need to run it against the specified domain context
+	var dc components.DomainContext
+	dcID, err := uuid.Parse(string(status))
+	if err == nil {
+		if dc = ss.GetDomainContext(ctx, dcID); dc == nil {
+			err = i18n.NewError(ctx, msgs.MsgStateDomainContextNotActive, dcID)
 		}
-
-		// Scope the query based on the status qualifier
-		q = q.Where(status.whereClause(db))
-		return q
-	})
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return dc.FindAvailableStates(ctx, schemaID, jq)
 }
 
 func (ss *stateManager) findAvailableNullifiers(
@@ -159,7 +175,6 @@ func (ss *stateManager) findAvailableNullifiers(
 		}
 
 		q = q.Joins("Confirmed", db.Select("transaction")).
-			Joins("Locked", db.Select("transaction")).
 			Joins("Nullifier", db.Select("nullifier")).
 			Joins("Nullifier.Spent", db.Select("transaction")).
 			Where(hasNullifier)
@@ -173,10 +188,8 @@ func (ss *stateManager) findAvailableNullifiers(
 
 		// Scope to only unspent
 		q = q.Where(`"Nullifier__Spent"."transaction" IS NULL`).
-			Where(`"Locked"."spending" IS NOT TRUE`).
 			Where(db.
-				Or(`"Confirmed"."transaction" IS NOT NULL`).
-				Or(`"Locked"."creating" = TRUE`),
+				Or(`"Confirmed"."transaction" IS NOT NULL`),
 			)
 		return q
 	})

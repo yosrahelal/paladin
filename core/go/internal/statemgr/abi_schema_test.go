@@ -102,7 +102,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	cacheKey := "domain1/0xcf41493c8bb9652d1483ee6cb5122efbec6fbdf67cc27363ba5b030b59244cad"
 	assert.Equal(t, cacheKey, schemaCacheKey(as.Persisted().DomainName, as.Persisted().ID))
 
-	err = ss.persistSchemas([]*components.SchemaPersisted{as.SchemaPersisted})
+	err = ss.persistSchemas(ctx, ss.p.DB(), []*components.SchemaPersisted{as.SchemaPersisted})
 	require.NoError(t, err)
 	schemaID := as.Persisted().ID.String()
 	contractAddress := tktypes.RandAddress()
@@ -158,7 +158,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	}`, string(state1.Data))
 
 	// Second should succeed, but not do anything
-	err = ss.persistSchemas([]*components.SchemaPersisted{as.SchemaPersisted})
+	err = ss.persistSchemas(ctx, ss.p.DB(), []*components.SchemaPersisted{as.SchemaPersisted})
 	require.NoError(t, err)
 	schemaID = as.IDString()
 

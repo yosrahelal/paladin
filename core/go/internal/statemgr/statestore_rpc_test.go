@@ -71,7 +71,7 @@ func TestRPC(t *testing.T) {
 	assert.NoError(t, err)
 	schema, err := newABISchema(ctx, "domain1", &abiParam)
 	assert.NoError(t, err)
-	err = ss.persistSchemas([]*components.SchemaPersisted{schema.SchemaPersisted})
+	err = ss.persistSchemas(ctx, ss.p.DB(), []*components.SchemaPersisted{schema.SchemaPersisted})
 	assert.NoError(t, err)
 
 	var schemas []*components.SchemaPersisted

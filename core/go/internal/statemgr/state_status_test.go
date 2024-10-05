@@ -55,17 +55,27 @@ const widgetABI = `{
 	]
 }`
 
-func makeWidgets(t *testing.T, ctx context.Context, ss *stateManager, domainName string, contractAddress tktypes.EthAddress, schemaID string, withoutSalt []string) []*components.StateWithLabels {
-	states := make([]*components.StateWithLabels, len(withoutSalt))
+func genWidget(t *testing.T, schemaID string, txID *uuid.UUID, withoutSalt string) *components.StateUpsert {
+	var ij map[string]interface{}
+	err := json.Unmarshal([]byte(withoutSalt), &ij)
+	require.NoError(t, err)
+	ij["salt"] = tktypes.RandHex(32)
+	withSalt, err := json.Marshal(ij)
+	require.NoError(t, err)
+	return &components.StateUpsert{
+		SchemaID:  schemaID,
+		Data:      withSalt,
+		CreatedBy: txID,
+	}
+}
+
+func makeWidgets(t *testing.T, ctx context.Context, ss *stateManager, domainName string, contractAddress tktypes.EthAddress, schemaID string, withoutSalt []string) []*components.State {
+	states := make([]*components.State, len(withoutSalt))
 	for i, w := range withoutSalt {
-		var ij map[string]interface{}
-		err := json.Unmarshal([]byte(w), &ij)
+		withSalt := genWidget(t, schemaID, nil, w)
+		newState, err := ss.PersistState(ctx, domainName, contractAddress, schemaID, withSalt.Data, nil)
 		require.NoError(t, err)
-		ij["salt"] = tktypes.RandHex(32)
-		withSalt, err := json.Marshal(ij)
-		require.NoError(t, err)
-		states[i], err = ss.PersistState(ctx, domainName, contractAddress, schemaID, withSalt, nil)
-		require.NoError(t, err)
+		states[i] = newState.State
 		fmt.Printf("widget[%d]: %s\n", i, states[i].Data)
 	}
 	return states
@@ -78,6 +88,14 @@ func toQuery(t *testing.T, queryString string) *query.QueryJSON {
 	return &q
 }
 
+func syncFlushContext(t *testing.T, ctx context.Context, dc components.DomainContext) {
+	flushed := make(chan error)
+	err := dc.InitiateFlush(ctx, func(err error) { flushed <- err })
+	require.NoError(t, err)
+	err = <-flushed
+	require.NoError(t, err)
+}
+
 func TestStateLockingQuery(t *testing.T) {
 
 	ctx, ss, done := newDBTestStateManager(t)
@@ -85,7 +103,7 @@ func TestStateLockingQuery(t *testing.T) {
 
 	schema, err := newABISchema(ctx, "domain1", testABIParam(t, widgetABI))
 	require.NoError(t, err)
-	err = ss.persistSchemas([]*components.SchemaPersisted{schema.SchemaPersisted})
+	err = ss.persistSchemas(ctx, ss.p.DB(), []*components.SchemaPersisted{schema.SchemaPersisted})
 	require.NoError(t, err)
 	schemaID := schema.IDString()
 
@@ -115,12 +133,13 @@ func TestStateLockingQuery(t *testing.T) {
 		}
 	}
 
-	seqID := uuid.New()
-	seqQual := StateStatusQualifier(seqID.String())
+	dc := ss.NewDomainContext(ctx, "domain1", *contractAddress)
+	defer dc.Close(ctx)
+
+	seqQual := StateStatusQualifier(dc.Info().ID.String())
 
 	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4)
 	checkQuery(`{}`, StateStatusAvailable)
-	checkQuery(`{}`, StateStatusLocked)
 	checkQuery(`{}`, StateStatusConfirmed)
 	checkQuery(`{}`, StateStatusUnconfirmed, 0, 1, 2, 3, 4)
 	checkQuery(`{}`, StateStatusSpent)
@@ -139,11 +158,10 @@ func TestStateLockingQuery(t *testing.T) {
 
 	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4)    // unchanged
 	checkQuery(`{}`, StateStatusAvailable, 0, 1, 2, 4) // added all but 3
-	checkQuery(`{}`, StateStatusLocked)                // unchanged
 	checkQuery(`{}`, StateStatusConfirmed, 0, 1, 2, 4) // added all but 3
 	checkQuery(`{}`, StateStatusUnconfirmed, 3)        // added 3
 	checkQuery(`{}`, StateStatusSpent)                 // unchanged
-	checkQuery(`{}`, seqQual)                          // unchanged
+	checkQuery(`{}`, seqQual, 0, 1, 2, 4)              // added all but 3
 
 	// Mark one spent
 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
@@ -154,51 +172,93 @@ func TestStateLockingQuery(t *testing.T) {
 
 	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4) // unchanged
 	checkQuery(`{}`, StateStatusAvailable, 1, 2, 4) // removed 0
-	checkQuery(`{}`, StateStatusLocked)             // unchanged
 	checkQuery(`{}`, StateStatusConfirmed, 1, 2, 4) // removed 0
 	checkQuery(`{}`, StateStatusUnconfirmed, 3)     // unchanged
 	checkQuery(`{}`, StateStatusSpent, 0)           // added 0
-	checkQuery(`{}`, seqQual)                       // unchanged
+	checkQuery(`{}`, seqQual, 1, 2, 4)              // unchanged
 
-	// lock a confirmed one for spending
-	err = ss.MarkLocked(ctx, "domain1", *contractAddress, widgets[1].ID.String(), seqID, false, true)
+	// add a new state only within the domain context
+	txID1 := uuid.New()
+	contextStates, err := dc.UpsertStates(ctx,
+		genWidget(t, schemaID, &txID1, `{"size": 66666, "color": "blue", "price": 600}`))
 	require.NoError(t, err)
+	widgets = append(widgets, contextStates...)
+	syncFlushContext(t, ctx, dc)
 
-	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4) // unchanged
-	checkQuery(`{}`, StateStatusAvailable, 2, 4)    // removed 1
-	checkQuery(`{}`, StateStatusLocked, 1)          // added 1
-	checkQuery(`{}`, StateStatusConfirmed, 1, 2, 4) // unchanged
-	checkQuery(`{}`, StateStatusUnconfirmed, 3)     // unchanged
-	checkQuery(`{}`, StateStatusSpent, 0)           // added 0
-	checkQuery(`{}`, seqQual, 1)                    // added 1
+	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4, 5) // added 5
+	checkQuery(`{}`, StateStatusAvailable, 1, 2, 4)    // unchanged
+	checkQuery(`{}`, StateStatusConfirmed, 1, 2, 4)    // unchanged
+	checkQuery(`{}`, StateStatusUnconfirmed, 3, 5)     // added 5
+	checkQuery(`{}`, StateStatusSpent, 0)              // unchanged
+	checkQuery(`{}`, seqQual, 1, 2, 4, 5)              // added 5
 
 	// lock the unconfirmed one for spending
-	err = ss.MarkLocked(ctx, "domain1", *contractAddress, widgets[3].ID.String(), seqID, false, true)
+	txID2 := uuid.New()
+	err = dc.AddStateLocks(ctx, &components.StateLock{
+		Type:        components.StateLockTypeSpend.Enum(),
+		Transaction: txID2,
+		State:       widgets[5].ID,
+	})
 	require.NoError(t, err)
 
-	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4) // unchanged
-	checkQuery(`{}`, StateStatusAvailable, 2, 4)    // unchanged
-	checkQuery(`{}`, StateStatusLocked, 1, 3)       // added 3
-	checkQuery(`{}`, StateStatusConfirmed, 1, 2, 4) // unchanged
-	checkQuery(`{}`, StateStatusUnconfirmed, 3)     // unchanged
-	checkQuery(`{}`, StateStatusSpent, 0)           // unchanged
-	checkQuery(`{}`, seqQual, 1, 3)                 // added 3
+	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
+	checkQuery(`{}`, StateStatusAvailable, 1, 2, 4)    // unchanged
+	checkQuery(`{}`, StateStatusConfirmed, 1, 2, 4)    // unchanged
+	checkQuery(`{}`, StateStatusUnconfirmed, 3, 5)     // unchanged
+	checkQuery(`{}`, StateStatusSpent, 0)              // unchanged
+	checkQuery(`{}`, seqQual, 1, 2, 4)                 // removed 5
+
+	// cancel that spend lock
+	dc.ClearTransactions(ctx, txID2)
+
+	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
+	checkQuery(`{}`, StateStatusAvailable, 1, 2, 4)    // unchanged
+	checkQuery(`{}`, StateStatusConfirmed, 1, 2, 4)    // unchanged
+	checkQuery(`{}`, StateStatusUnconfirmed, 3, 5)     // unchanged
+	checkQuery(`{}`, StateStatusSpent, 0)              // unchanged
+	checkQuery(`{}`, seqQual, 1, 2, 4, 5)              // added 5 back
+
+	// Mark that new state confirmed
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
+		[]*components.StateSpend{},
+		[]*components.StateConfirm{
+			{DomainName: "domain1", State: widgets[5].ID, Transaction: uuid.New()},
+		})
+	require.NoError(t, err)
+
+	// reset the domain context - does not matter now
+	dc.Reset(ctx)
+
+	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
+	checkQuery(`{}`, StateStatusAvailable, 1, 2, 4, 5) // added 5
+	checkQuery(`{}`, StateStatusConfirmed, 1, 2, 4, 5) // added 5
+	checkQuery(`{}`, StateStatusUnconfirmed, 3)        // removed 5
+	checkQuery(`{}`, StateStatusSpent, 0)              // unchanged
+	checkQuery(`{}`, seqQual, 1, 2, 4, 5)              // unchanged
+
+	// Add 3 only as confirmed by a TX only within the domain context
+	// Note we have to re-supply the data here, so that the domain context can
+	// have it in memory for queries
+	txID13 := uuid.New()
+	_, err = dc.UpsertStates(ctx, &components.StateUpsert{
+		ID:        widgets[3].ID,
+		SchemaID:  widgets[3].Schema.String(),
+		Data:      widgets[3].Data,
+		CreatedBy: &txID13,
+	})
+	require.NoError(t, err)
+
+	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
+	checkQuery(`{}`, StateStatusAvailable, 1, 2, 4, 5) // unchanged
+	checkQuery(`{}`, StateStatusConfirmed, 1, 2, 4, 5) // unchanged
+	checkQuery(`{}`, StateStatusUnconfirmed, 3)        // unchanged
+	checkQuery(`{}`, StateStatusSpent, 0)              // unchanged
+	checkQuery(`{}`, seqQual, 1, 2, 3, 4, 5)           // added 3
 
 	// check a sub-select
 	checkQuery(`{"eq":[{"field":"color","value":"pink"}]}`, seqQual, 3)
 	checkQuery(`{"eq":[{"field":"color","value":"pink"}]}`, StateStatusAvailable)
 
-	// clear the transaction locks
-	err = ss.ResetTransaction(ctx, "domain1", *contractAddress, seqID)
-	require.NoError(t, err)
-
-	checkQuery(`{}`, StateStatusAll, 0, 1, 2, 3, 4) // unchanged
-	checkQuery(`{}`, StateStatusAvailable, 1, 2, 4) // added 1
-	checkQuery(`{}`, StateStatusLocked)             // removed 1, 3
-	checkQuery(`{}`, StateStatusConfirmed, 1, 2, 4) // unchanged
-	checkQuery(`{}`, StateStatusUnconfirmed, 3)     // unchanged
-	checkQuery(`{}`, StateStatusSpent, 0)           // unchanged
-	checkQuery(`{}`, seqQual)                       // removed 1, 3
 }
 
 func TestStateStatusQualifierJSON(t *testing.T) {

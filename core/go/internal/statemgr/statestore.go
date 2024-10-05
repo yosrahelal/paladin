@@ -18,7 +18,9 @@ package statemgr
 
 import (
 	"context"
+	"sync"
 
+	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -30,13 +32,15 @@ import (
 )
 
 type stateManager struct {
-	p              persistence.Persistence
-	bgCtx          context.Context
-	cancelCtx      context.CancelFunc
-	conf           *pldconf.StateStoreConfig
-	writer         *stateWriter
-	abiSchemaCache cache.Cache[string, components.Schema]
-	rpcModule      *rpcserver.RPCModule
+	p                 persistence.Persistence
+	bgCtx             context.Context
+	cancelCtx         context.CancelFunc
+	conf              *pldconf.StateStoreConfig
+	writer            *stateWriter
+	abiSchemaCache    cache.Cache[string, components.Schema]
+	rpcModule         *rpcserver.RPCModule
+	domainContextLock sync.Mutex
+	domainContexts    map[uuid.UUID]*domainContext
 }
 
 var SchemaCacheDefaults = &pldconf.CacheConfig{
@@ -48,6 +52,7 @@ func NewStateManager(ctx context.Context, conf *pldconf.StateStoreConfig, p pers
 		p:              p,
 		conf:           conf,
 		abiSchemaCache: cache.NewCache[string, components.Schema](&conf.SchemaCache, SchemaCacheDefaults),
+		domainContexts: make(map[uuid.UUID]*domainContext),
 	}
 	ss.bgCtx, ss.cancelCtx = context.WithCancel(ctx)
 	return ss
@@ -88,24 +93,24 @@ func (ss *stateManager) Stop() {
 // might find new states become available and/or states marked locked for spending
 // become fully unavailable.
 func (ss *stateManager) WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*components.StateSpend, confirms []*components.StateConfirm) (err error) {
-	if len(confirms) > 0 {
+	if len(spends) > 0 {
 		err = dbTX.
 			Table("state_spends").
 			Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}},
 				DoNothing: true, // immutable
 			}).
-			Create(confirms).
+			Create(spends).
 			Error
 	}
-	if err == nil && len(spends) > 0 {
+	if err == nil && len(confirms) > 0 {
 		err = dbTX.
 			Table("state_confirms").
 			Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}},
 				DoNothing: true, // immutable
 			}).
-			Create(spends).
+			Create(confirms).
 			Error
 	}
 	return err

@@ -108,7 +108,7 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "id"}},
 				DoNothing: true, // immutable
 			}).
-			Omit("Labels", "Int64Labels", "Confirmed", "Spent", "Locked"). // we do this ourselves below
+			Omit("Labels", "Int64Labels", "Confirmed", "Spent"). // we do this ourselves below
 			Create(states).
 			Error
 	}
@@ -130,21 +130,6 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 				DoNothing: true, // immutable
 			}).
 			Create(int64Labels).
-			Error
-	}
-	if err == nil && len(stateLocks) > 0 {
-		err = tx.
-			Table("state_locks").
-			Clauses(clause.OnConflict{
-				Columns: []clause.Column{{Name: "domain_name"}, {Name: "state"}},
-				// locks can move to another transaction
-				DoUpdates: clause.AssignmentColumns([]string{
-					"transaction",
-					"spending",
-					"creating",
-				}),
-			}).
-			Create(stateLocks).
 			Error
 	}
 	if err == nil && len(stateNullifiers) > 0 {

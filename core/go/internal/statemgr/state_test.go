@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -72,15 +71,6 @@ func TestGetStateBadID(t *testing.T) {
 
 	contractAddress := tktypes.RandAddress()
 	_, err := ss.GetState(ctx, "domain1", *contractAddress, "bad id", true, false)
-	assert.Regexp(t, "PD020007", err)
-}
-
-func TestMarkLockedBadID(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateManager(t)
-	defer done()
-
-	contractAddress := tktypes.RandAddress()
-	err := ss.MarkLocked(ctx, "domain1", *contractAddress, "bad id", uuid.New(), false, false)
 	assert.Regexp(t, "PD020007", err)
 }
 

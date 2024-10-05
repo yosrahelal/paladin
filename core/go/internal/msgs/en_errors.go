@@ -91,10 +91,12 @@ var (
 	MsgStateLabelFieldNotUnique       = ffe("PD010115", "Label field with index %d has a duplicate name '%s'")
 	MsgStateInvalidValue              = ffe("PD010116", "Invalid value")
 	MsgStateInvalidQualifier          = ffe("PD010117", "Status must be one of 'available','confirmed','unconfirmed','spent','locked','all' or the UUID of a transaction")
-	MsgStateLockConflictUnexpected    = ffe("PD010118", "Pending lock for transaction %s found when attempting to lock to transaction %s")
-	MsgStateFlushFailedDomainReset    = ffe("PD010119", "Flush of state for domain %s has failed. The domain context must be reset")
+	MsgStateLockCreateNotInContext    = ffe("PD010118", "Cannot mark a creating lock for state %s as it was not added in this context")
+	MsgStateFlushFailedDomainReset    = ffe("PD010119", "Flush of state for domain %s contract %s has failed. The domain context must be reset")
 	MsgStateSpendConflictUnexpected   = ffe("PD010120", "Pending spend for transaction %s found when attempting to spend from transaction %s")
 	MsgStateConfirmConflictUnexpected = ffe("PD010121", "Pending confirmation for transaction %s found when attempting to confirm from transaction %s")
+	MsgStateDomainContextClosed       = ffe("PD010122", "Domain context has been closed")
+	MsgStateDomainContextNotActive    = ffe("PD010123", "There is no domain context with UUID %s active")
 
 	// Persistence PD0102XX
 	MsgPersistenceInvalidType         = ffe("PD010200", "Invalid persistence type: %s")

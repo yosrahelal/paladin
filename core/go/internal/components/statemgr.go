@@ -28,13 +28,27 @@ import (
 
 type StateManager interface {
 	ManagerLifecycle
-	NewDomainContext(domainName string, contractAddress tktypes.EthAddress) DomainContext
+
+	// Get a list of all active domain contexts
+	ListDomainContext() []DomainContextInfo
+
+	// Create a new domain context - caller is responsible for closing it
+	NewDomainContext(ctx context.Context, domainName string, contractAddress tktypes.EthAddress) DomainContext
+
+	// Get a previously created domain context
+	GetDomainContext(ctx context.Context, id uuid.UUID) DomainContext
 
 	// Ensure ABI schemas upserts all the specified schemas, using the given DB transaction
 	EnsureABISchemas(ctx context.Context, dbTX *gorm.DB, domainName string, defs []*abi.Parameter) ([]Schema, error)
 
 	// State finalizations are written on the DB context of the block indexer, by the domain manager.
 	WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*StateSpend, confirms []*StateConfirm) (err error)
+}
+
+type DomainContextInfo struct {
+	ID              uuid.UUID          `json:"id"`
+	Domain          string             `json:"domain"`
+	ContractAddress tktypes.EthAddress `json:"contractAddress"`
 }
 
 // The DSI is the state interface that is exposed outside of the statestore package, for the
@@ -51,31 +65,30 @@ type StateManager interface {
 // still flushing (a simple pipeline approach).
 type DomainContext interface {
 
+	// Get the ID, domain and address of this domain context
+	Info() DomainContextInfo
+
 	// FindAvailableStates is the main query function, only returning states that are available.
 	// Note this does not lock these states in any way, you must call that afterwards as:
 	// 1) We don't know which will be selected as important by the domain - some might be un-used
 	// 2) We deliberately return states that are locked to a transaction (but not spent yet) - which means the
 	//    result of the any assemble that uses those states, will be a transaction that must
 	//    be on the same transaction where those states are locked.
-	FindAvailableStates(ctx context.Context, schemaID string, query *query.QueryJSON) (s []*State, err error)
+	FindAvailableStates(ctx context.Context, schemaID string, query *query.QueryJSON) (Schema, []*State, error)
 
 	// FindAvailableNullifiers is similar to FindAvailableStates, but for domains that leverage
 	// nullifiers to record spending.
-	FindAvailableNullifiers(ctx context.Context, schemaID string, query *query.QueryJSON) (s []*State, err error)
+	FindAvailableNullifiers(ctx context.Context, schemaID string, query *query.QueryJSON) (Schema, []*State, error)
 
-	// MarkStatesSpending writes a lock record so the state is now locked for spending, and
-	// thus subsequent calls to FindAvailableStates will not return these states.
+	// AddStateLocks updates the in-memory state of the domain context, to record a set of locks
+	// that affect queries on available states and nullifiers.
+	//
+	// - Spend locks mark the states unavailable
+	// - Create locks make un-confirmed states available for selection (also automatically added in UpsertStates with non-nil transaction)
+	// - Read locks just mark the relationship for later processing
 	//
 	// This is an in-memory record that will be lost on Reset, and can be deleted using ClearTransaction
-	MarkStatesSpending(ctx context.Context, transactionID uuid.UUID, stateIDs []string) error
-
-	// MarkStatesRead writes a lock record so the state is now locked to this transaction
-	// for reading - thus subsequent calls to FindAvailableStates will return these states
-	// with the lock record attached.
-	// That will inform them they need to join to this transaction if they wish to use those states.
-	//
-	// This is an in-memory record that will be lost on Reset, and can be deleted using ClearTransaction
-	MarkStatesRead(ctx context.Context, transactionID uuid.UUID, stateIDs []string) error
+	AddStateLocks(ctx context.Context, locks ...*StateLock) (err error)
 
 	// UpsertStates creates or updates states.
 	// They are available immediately within the domain for return in FindAvailableStates
@@ -84,14 +97,14 @@ type DomainContext interface {
 	// the specified transaction using an in-memory lock.
 	//
 	// States will be written to the DB on the next flush (the associated lock is not)
-	UpsertStates(ctx context.Context, transactionID *uuid.UUID, states []*StateUpsert) (s []*State, err error)
+	UpsertStates(ctx context.Context, states ...*StateUpsert) (s []*State, err error)
 
 	// UpsertNullifiers creates nullifier records associated with states.
 	// Nullifiers are an alternate state identifier (separate from the state ID) that can be used
 	// when recording spent states.
 	//
 	// Nullifiers will be written to the DB on the next flush
-	UpsertNullifiers(ctx context.Context, nullifiers []*StateNullifier) error
+	UpsertNullifiers(ctx context.Context, nullifiers ...*StateNullifier) error
 
 	// Call this to remove all locks associated with individual transactions without clearing the whole state.
 	// For example if a notification has been received that the transaction is either confirmed, or rejected.
@@ -99,13 +112,13 @@ type DomainContext interface {
 	// This only affects in memory state.
 	//
 	// No dependency analysis is done by this function call - that is the responsibility of the caller.
-	ClearTransactions(ctx context.Context, transactionID []uuid.UUID)
+	ClearTransactions(ctx context.Context, transactionID ...uuid.UUID)
 
 	// Return a complete copy of the current set of locks being managed in this context
 	// Mainly for debugging (lots of memory is copied) so any case this function is used on a critical path
 	// should be considered as a requirement for a new function on this interface that can be performed
 	// safely under the mutex of the domain context.
-	GetStateLockCopy() map[uuid.UUID][]StateLock
+	StateLocksByTransaction() map[uuid.UUID][]StateLock
 
 	// Reset restores the world to the current state of the database, clearing any errors
 	// from failed flush, all un-flushed writes, and all in-memory state locks.
@@ -124,6 +137,9 @@ type DomainContext interface {
 	// The supplied callback will be called once all writes up to the point of this call have
 	// been flushed to the database - for success or failure.
 	InitiateFlush(ctx context.Context, cb func(error)) error
+
+	// Removes the domain context from the state manager, and prevents any further use
+	Close(ctx context.Context)
 }
 
 type State struct {
@@ -137,16 +153,15 @@ type State struct {
 	Int64Labels     []*StateInt64Label `json:"-"                   gorm:"foreignKey:state;references:id;"`
 	Confirmed       *StateConfirm      `json:"confirmed,omitempty" gorm:"foreignKey:state;references:id;"`
 	Spent           *StateSpend        `json:"spent,omitempty"     gorm:"foreignKey:state;references:id;"`
-	Locked          *StateLock         `json:"locked,omitempty"    gorm:"foreignKey:state;references:id;"`
+	Locked          *StateLock         `json:"locked,omitempty"    gorm:"-"` // in memory only processing here
 	Nullifier       *StateNullifier    `json:"nullifier,omitempty" gorm:"foreignKey:state;references:id;"`
 }
 
 type StateUpsert struct {
-	ID       tktypes.HexBytes
-	SchemaID string
-	Data     tktypes.RawJSON
-	Creating bool
-	Spending bool
+	ID        tktypes.HexBytes
+	SchemaID  string
+	Data      tktypes.RawJSON
+	CreatedBy *uuid.UUID
 }
 
 // StateWithLabels is a newly prepared state that has not yet been persisted
@@ -191,15 +206,34 @@ type StateSpend struct {
 	Transaction uuid.UUID        `json:"transaction"`
 }
 
+type StateLockType string
+
+const (
+	StateLockTypeCreate StateLockType = "create"
+	StateLockTypeRead   StateLockType = "read"
+	StateLockTypeSpend  StateLockType = "spend"
+)
+
+func (tt StateLockType) Enum() tktypes.Enum[StateLockType] {
+	return tktypes.Enum[StateLockType](tt)
+}
+
+func (tt StateLockType) Options() []string {
+	return []string{
+		string(StateLockTypeCreate),
+		string(StateLockTypeRead),
+		string(StateLockTypeSpend),
+	}
+}
+
 // State locks record which transaction a state is being locked to, either
 // spending a previously confirmed state, or an optimistic record of creating
 // (and maybe later spending) a state that is yet to be confirmed.
 type StateLock struct {
-	DomainName  string           `json:"domain"`
-	State       tktypes.HexBytes `json:"state"`
-	Transaction uuid.UUID        `json:"transaction"`
-	Creating    bool             `json:"creating"`
-	Spending    bool             `json:"spending"`
+	DomainName  string                      `json:"domain"`
+	State       tktypes.HexBytes            `json:"state"`
+	Transaction uuid.UUID                   `json:"transaction"`
+	Type        tktypes.Enum[StateLockType] `json:"type"`
 }
 
 // State nullifiers are used when a domain chooses to use a separate identifier
