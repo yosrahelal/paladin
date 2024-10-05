@@ -320,144 +320,132 @@ func TestStateContextMintSpendMint(t *testing.T) {
 
 }
 
-// func TestStateContextMintSpendWithNullifier(t *testing.T) {
+func TestStateContextMintSpendWithNullifier(t *testing.T) {
 
-// 	_, ss, done := newDBTestStateManager(t)
-// 	defer done()
+	ctx, ss, done := newDBTestStateManager(t)
+	defer done()
 
-// 	transactionID := uuid.New()
+	transactionID1 := uuid.New()
 
-// 	schemas, err := ss.EnsureABISchemas(ctx, "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
-// 	require.NoError(t, err)
-// 	assert.Len(t, schemas, 1)
-// 	schemaID := schemas[0].ID)
-// 	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
-// 	stateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
-// 	nullifier1 := tktypes.HexBytes(tktypes.RandBytes(32))
-// 	nullifier2 := tktypes.HexBytes(tktypes.RandBytes(32))
-// 	data1 := tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32)))
-// 	data2 := tktypes.RawJSON(fmt.Sprintf(`{"amount": 10,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32)))
+	schemas, err := ss.EnsureABISchemas(ctx, ss.p.DB(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
+	require.NoError(t, err)
+	assert.Len(t, schemas, 1)
+	schemaID := schemas[0].ID()
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
+	nullifier1 := tktypes.HexBytes(tktypes.RandBytes(32))
+	nullifier2 := tktypes.HexBytes(tktypes.RandBytes(32))
+	data1 := tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32)))
+	data2 := tktypes.RawJSON(fmt.Sprintf(`{"amount": 10,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32)))
 
-// 	contractAddress := tktypes.RandAddress()
-// 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
+	contractAddress := tktypes.RandAddress()
+	dc := ss.NewDomainContext(ctx, "domain1", *contractAddress)
+	defer dc.Close(ctx)
 
-// 		// Start with 2 states
-// 		tx1states, err := dc.UpsertStates(&transactionID, []*components.StateUpsert{
-// 			{ID: stateID1, SchemaID: schemaID, Data: data1, Creating: true},
-// 			{ID: stateID2, SchemaID: schemaID, Data: data2, Creating: true},
-// 		})
-// 		require.NoError(t, err)
-// 		assert.Len(t, tx1states, 2)
+	// Start with 2 states
+	tx1states, err := dc.UpsertStates(ctx,
+		&components.StateUpsert{ID: stateID1, SchemaID: schemaID, Data: data1, CreatedBy: &transactionID1},
+		&components.StateUpsert{ID: stateID2, SchemaID: schemaID, Data: data2, CreatedBy: &transactionID1},
+	)
+	require.NoError(t, err)
+	assert.Len(t, tx1states, 2)
 
-// 		states, err := dc.FindAvailableStates(schemaID, toQuery(t, `{}`))
-// 		require.NoError(t, err)
-// 		assert.Len(t, states, 2)
-// 		states, err = dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
-// 		require.NoError(t, err)
-// 		assert.Len(t, states, 0)
+	_, states, err := dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().Query())
+	require.NoError(t, err)
+	assert.Len(t, states, 2)
+	_, states, err = dc.FindAvailableNullifiers(ctx, schemaID, query.NewQueryBuilder().Query())
+	require.NoError(t, err)
+	assert.Len(t, states, 0)
 
-// 		// Attach a nullifier to the first state
-// 		err = dc.UpsertNullifiers([]*components.StateNullifier{
-// 			{State: stateID1, Nullifier: nullifier1},
-// 		})
-// 		require.NoError(t, err)
+	// Attach a nullifier to the first state
+	err = dc.UpsertNullifiers(ctx,
+		&components.StateNullifier{State: stateID1, ID: nullifier1},
+	)
+	require.NoError(t, err)
 
-// 		states, err = dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
-// 		require.NoError(t, err)
-// 		require.Len(t, states, 1)
-// 		require.NotNil(t, states[0].Nullifier)
-// 		assert.Equal(t, nullifier1, states[0].Nullifier.Nullifier)
+	_, states, err = dc.FindAvailableNullifiers(ctx, schemaID, query.NewQueryBuilder().Query())
+	require.NoError(t, err)
+	require.Len(t, states, 1)
+	require.NotNil(t, states[0].Nullifier)
+	assert.Equal(t, nullifier1, states[0].Nullifier.ID)
 
-// 		// Flush the states to the database
-// 		return nil
-// 	})
-// 	require.NoError(t, err)
+	// Flush the states to the database
+	syncFlushContext(t, ctx, dc)
 
-// 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
+	// Confirm still 2 states and 1 nullifier
+	_, states, err = dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().Query())
+	require.NoError(t, err)
+	assert.Len(t, states, 2)
+	_, states, err = dc.FindAvailableNullifiers(ctx, schemaID, query.NewQueryBuilder().Query())
+	require.NoError(t, err)
+	assert.Len(t, states, 1)
+	require.NotNil(t, states[0].Nullifier)
+	assert.Equal(t, nullifier1, states[0].Nullifier.ID)
 
-// 		// Confirm still 2 states and 1 nullifier
-// 		states, err := dc.FindAvailableStates(schemaID, toQuery(t, `{}`))
-// 		require.NoError(t, err)
-// 		assert.Len(t, states, 2)
-// 		states, err = dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
-// 		require.NoError(t, err)
-// 		assert.Len(t, states, 1)
-// 		require.NotNil(t, states[0].Nullifier)
-// 		assert.Equal(t, nullifier1, states[0].Nullifier.Nullifier)
-// 		return nil
-// 	})
-// 	require.NoError(t, err)
+	syncFlushContext(t, ctx, dc)
 
-// 	// Mark both states confirmed
-// 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*components.StateSpend{},
-// 		[]*components.StateConfirm{
-// 			{DomainName: "domain1", State: stateID1, Transaction: transactionID},
-// 			{DomainName: "domain1", State: stateID2, Transaction: transactionID},
-// 		})
+	// Mark both states confirmed
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*components.StateSpend{},
+		[]*components.StateConfirm{
+			{DomainName: "domain1", State: stateID1, Transaction: transactionID1},
+			{DomainName: "domain1", State: stateID2, Transaction: transactionID1},
+		})
+	require.NoError(t, err)
 
-// 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
-// 		// Mark the first state as "spending"
-// 		_, err = dc.UpsertStates(&transactionID, []*components.StateUpsert{
-// 			{ID: stateID1, SchemaID: schemaID, Data: data1, Spending: true},
-// 		})
-// 		assert.NoError(t, err)
+	// Mark the first state as "spending"
+	transactionID2 := uuid.New()
+	err = dc.AddStateLocks(ctx,
+		&components.StateLock{Type: components.StateLockTypeSpend.Enum(), State: stateID1, Transaction: transactionID2},
+	)
+	assert.NoError(t, err)
 
-// 		// Confirm no more nullifiers available
-// 		states, err := dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
-// 		require.NoError(t, err)
-// 		assert.Len(t, states, 0)
+	// Confirm no more nullifiers available
+	_, states, err = dc.FindAvailableNullifiers(ctx, schemaID, query.NewQueryBuilder().Query())
+	require.NoError(t, err)
+	assert.Len(t, states, 0)
 
-// 		// Reset transaction to unlock
-// 		err = dc.ResetTransaction(transactionID)
-// 		assert.NoError(t, err)
-// 		states, err = dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
-// 		require.NoError(t, err)
-// 		assert.Len(t, states, 1)
+	// Reset transaction to unlock
+	dc.ClearTransactions(ctx, transactionID2)
+	_, states, err = dc.FindAvailableNullifiers(ctx, schemaID, query.NewQueryBuilder().Query())
+	require.NoError(t, err)
+	assert.Len(t, states, 1)
 
-// 		return nil
-// 	})
+	syncFlushContext(t, ctx, dc)
 
-// 	// Spend the nullifier
-// 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
-// 		[]*components.StateSpend{
-// 			{DomainName: "domain1", State: nullifier1, Transaction: transactionID},
-// 		}, []*components.StateConfirm{})
-// 	require.NoError(t, err)
+	// Spend the state associated with nullifier
+	transactionID3 := uuid.New()
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
+		[]*components.StateSpend{
+			{DomainName: "domain1", State: nullifier1, Transaction: transactionID3},
+		}, []*components.StateConfirm{})
+	require.NoError(t, err)
 
-// 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
-// 		// Confirm no more nullifiers available
-// 		states, err := dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
-// 		require.NoError(t, err)
-// 		assert.Len(t, states, 0)
+	// reset the domain context so we're working from the db
+	dc.Reset(ctx)
 
-// 		// Flush the states to the database
-// 		return nil
-// 	})
-// 	require.NoError(t, err)
+	// Confirm no more nullifiers available
+	_, states, err = dc.FindAvailableNullifiers(ctx, schemaID, query.NewQueryBuilder().Query())
+	require.NoError(t, err)
+	assert.Len(t, states, 0)
 
-// 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
+	// Attach a nullifier to the second state
+	// Note - this is only allowed when the state is loaded into the context for creation, as otherwise:
+	// - queries within the context before the nullifier is flushed would not return the nullifier
+	// - the creation of the nullifier in the DB might fail due to the state not existing
+	err = dc.UpsertNullifiers(ctx, &components.StateNullifier{State: stateID2, ID: nullifier2})
+	assert.Regexp(t, "PD010126", err)
+	_, err = dc.UpsertStates(ctx, &components.StateUpsert{ID: stateID2, SchemaID: schemaID, Data: data2, CreatedBy: &transactionID1})
+	require.NoError(t, err)
+	err = dc.UpsertNullifiers(ctx, &components.StateNullifier{State: stateID2, ID: nullifier2})
+	require.NoError(t, err)
 
-// 		states, err := dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
-// 		require.NoError(t, err)
-// 		assert.Len(t, states, 0)
+	_, states, err = dc.FindAvailableNullifiers(ctx, schemaID, query.NewQueryBuilder().Query())
+	require.NoError(t, err)
+	require.Len(t, states, 1)
+	require.NotNil(t, states[0].Nullifier)
+	assert.Equal(t, nullifier2, states[0].Nullifier.ID)
 
-// 		// Attach a nullifier to the second state
-// 		err = dc.UpsertNullifiers([]*components.StateNullifier{
-// 			{State: stateID2, Nullifier: nullifier2},
-// 		})
-// 		require.NoError(t, err)
-
-// 		states, err = dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
-// 		require.NoError(t, err)
-// 		require.Len(t, states, 1)
-// 		require.NotNil(t, states[0].Nullifier)
-// 		assert.Equal(t, nullifier2, states[0].Nullifier.Nullifier)
-
-// 		return nil
-// 	})
-// 	require.NoError(t, err)
-
-// }
+}
 
 // func TestDSILatch(t *testing.T) {
 

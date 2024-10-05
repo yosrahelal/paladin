@@ -71,8 +71,8 @@ func (ss *stateManager) GetState(ctx context.Context, domainName string, contrac
 // Built in fields all start with "." as that prevents them
 // clashing with variable names in ABI structs ($ and _ are valid leading chars there)
 var baseStateFields = map[string]filters.FieldResolver{
-	".id":      filters.HexBytesField("id"),
-	".created": filters.TimestampField("created"),
+	".id":      filters.HexBytesField(`"states"."id"`),
+	".created": filters.TimestampField(`"states"."created"`),
 }
 
 func addStateBaseLabels(labelValues filters.PassthroughValueSet, id tktypes.HexBytes, createdAt tktypes.Timestamp) filters.PassthroughValueSet {
@@ -129,7 +129,7 @@ func (ss *stateManager) findStates(
 				Joins("Spent", db.Select("transaction"))
 
 			if len(excluded) > 0 {
-				q = q.Not("id IN(?)", excluded)
+				q = q.Not(`"states"."id" IN(?)`, excluded)
 			}
 
 			// Scope the query based on the status qualifier
@@ -164,21 +164,21 @@ func (ss *stateManager) findAvailableNullifiers(
 ) (schema components.Schema, s []*components.State, err error) {
 	return ss.findStatesCommon(ctx, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
 		db := ss.p.DB()
-		hasNullifier := db.Where("nullifier IS NOT NULL")
+		hasNullifier := db.Where(`"Nullifier"."id" IS NOT NULL`)
 		if len(statesWithNullifiers) > 0 {
-			hasNullifier = hasNullifier.Or("id IN(?)", statesWithNullifiers)
+			hasNullifier = hasNullifier.Or(`"Nullifier"."id" IN(?)`, statesWithNullifiers)
 		}
 
 		q = q.Joins("Confirmed", db.Select("transaction")).
-			Joins("Nullifier", db.Select("nullifier")).
+			Joins("Nullifier", db.Select(`"Nullifier"."id"`)).
 			Joins("Nullifier.Spent", db.Select("transaction")).
 			Where(hasNullifier)
 
 		if len(spendingStates) > 0 {
-			q = q.Not("id IN(?)", spendingStates)
+			q = q.Not(`"states"."id" IN(?)`, spendingStates)
 		}
 		if len(spentNullifiers) > 0 {
-			q = q.Not("nullifier IN(?)", spentNullifiers)
+			q = q.Not(`"Nullifier"."id" IN(?)"`, spentNullifiers)
 		}
 
 		// Scope to only unspent

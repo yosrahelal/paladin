@@ -18,9 +18,9 @@ CREATE INDEX state_spend_transaction ON state_spends("transaction");
 
 CREATE TABLE state_nullifiers (
     "domain_name" TEXT    NOT NULL,
-    "nullifier"   TEXT    NOT NULL,
+    "id"          TEXT    NOT NULL,
     "state"       TEXT    NOT NULL,
-    PRIMARY KEY ("domain_name", "nullifier")
+    PRIMARY KEY ("domain_name", "id")
 );
 CREATE UNIQUE INDEX state_nullifiers_state ON state_nullifiers("domain_name", "state");
 

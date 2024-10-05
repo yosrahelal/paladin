@@ -97,6 +97,10 @@ var (
 	MsgStateConfirmConflictUnexpected = ffe("PD010121", "Pending confirmation for transaction %s found when attempting to confirm from transaction %s")
 	MsgStateDomainContextClosed       = ffe("PD010122", "Domain context has been closed")
 	MsgStateDomainContextNotActive    = ffe("PD010123", "There is no domain context with UUID %s active")
+	MsgStateLockNoTransaction         = ffe("PD010124", "Transaction missing from state lock")
+	MsgStateLockNoState               = ffe("PD010125", "State missing from state lock")
+	MsgStateNullifierStateNotInCtx    = ffe("PD010126", "State %s referred to by nullifier %s has not previously been added to the context")
+	MsgStateNullifierConflict         = ffe("PD010127", "State %s already has nullifier %s associated in this context")
 
 	// Persistence PD0102XX
 	MsgPersistenceInvalidType         = ffe("PD010200", "Invalid persistence type: %s")

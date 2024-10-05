@@ -231,7 +231,7 @@ func (tt StateLockType) Options() []string {
 // (and maybe later spending) a state that is yet to be confirmed.
 type StateLock struct {
 	DomainName  string                      `json:"domain"`
-	State       tktypes.HexBytes            `json:"state"`
+	State       tktypes.HexBytes            `json:"state,omitempty"`
 	Transaction uuid.UUID                   `json:"transaction"`
 	Type        tktypes.Enum[StateLockType] `json:"type"`
 }
@@ -244,9 +244,9 @@ type StateLock struct {
 // Immutable once written
 type StateNullifier struct {
 	DomainName string           `json:"domain"          gorm:"primaryKey"`
-	Nullifier  tktypes.HexBytes `json:"nullifier"       gorm:"primaryKey"`
+	ID         tktypes.HexBytes `json:"id"              gorm:"primaryKey"`
 	State      tktypes.HexBytes `json:"-"`
-	Spent      *StateSpend      `json:"spent,omitempty" gorm:"foreignKey:state;references:nullifier;"`
+	Spent      *StateSpend      `json:"spent,omitempty" gorm:"foreignKey:state;references:id;"`
 }
 
 type Schema interface {

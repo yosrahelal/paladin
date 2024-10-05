@@ -43,9 +43,9 @@ type domainContext struct {
 	domainContexts  map[uuid.UUID]*domainContext
 	closed          bool
 
-	// We track creating states beyond the flush - until the transaction that created them is removed, or a full reset
+	// We track creatingStates states beyond the flush - until the transaction that created them is removed, or a full reset
 	// This is because the DB will never return them as "available"
-	creating map[string]*components.StateWithLabels
+	creatingStates map[string]*components.StateWithLabels
 
 	// State locks are an in memory structure only, recording a set of locks associated with each transaction.
 	// These are held only in memory, and used during DB queries to create a view on top of the database
@@ -66,7 +66,7 @@ func (ss *stateManager) NewDomainContext(ctx context.Context, domainName string,
 		ss:              ss,
 		domainName:      domainName,
 		contractAddress: contractAddress,
-		creating:        make(map[string]*components.StateWithLabels),
+		creatingStates:  make(map[string]*components.StateWithLabels),
 		domainContexts:  make(map[uuid.UUID]*domainContext),
 	}
 	ss.domainContexts[id] = dc
@@ -123,7 +123,7 @@ func (dc *domainContext) mergeUnFlushedApplyLocks(ctx context.Context, schema co
 	// Get the list of new un-flushed states, which are not already locked for spend
 	matches := make([]*components.StateWithLabels, 0, len(dc.unFlushed.states))
 	schemaId := schema.Persisted().ID
-	for _, state := range dc.creating {
+	for _, state := range dc.creatingStates {
 		if !state.Schema.Equals(&schemaId) {
 			continue
 		}
@@ -346,7 +346,7 @@ func (dc *domainContext) UpsertStates(ctx context.Context, stateUpserts ...*comp
 	// (any other states supplied for flushing are just to ensure we have a copy of the state
 	// for data availability when the existing/later confirm is available)
 	for _, s := range toMakeAvailable {
-		dc.creating[s.ID.String()] = s
+		dc.creatingStates[s.ID.String()] = s
 	}
 	err = dc.addStateLocks(ctx, stateLocks...)
 	if err != nil {
@@ -365,12 +365,14 @@ func (dc *domainContext) UpsertNullifiers(ctx context.Context, nullifiers ...*co
 
 	dc.unFlushed.stateNullifiers = append(dc.unFlushed.stateNullifiers, nullifiers...)
 
-	for _, creating := range dc.creating {
-		for _, nullifier := range nullifiers {
-			if nullifier.State.Equals(creating.ID) {
-				creating.Nullifier = nullifier
-			}
+	for _, nullifier := range nullifiers {
+		creatingState := dc.creatingStates[nullifier.State.String()]
+		if creatingState == nil {
+			return i18n.NewError(ctx, msgs.MsgStateNullifierStateNotInCtx, nullifier.State, nullifier.ID)
+		} else if creatingState.Nullifier != nil && !creatingState.Nullifier.ID.Equals(nullifier.ID) {
+			return i18n.NewError(ctx, msgs.MsgStateNullifierConflict, nullifier.State, creatingState.Nullifier.ID)
 		}
+		creatingState.Nullifier = nullifier
 	}
 
 	return nil
@@ -378,8 +380,14 @@ func (dc *domainContext) UpsertNullifiers(ctx context.Context, nullifiers ...*co
 
 func (dc *domainContext) addStateLocks(ctx context.Context, locks ...*components.StateLock) error {
 	for _, l := range locks {
+		if l.Transaction == (uuid.UUID{}) {
+			return i18n.NewError(ctx, msgs.MsgStateLockNoTransaction)
+		} else if len(l.State) == 0 {
+			return i18n.NewError(ctx, msgs.MsgStateLockNoState)
+		}
+
 		// For creating the state must be in our map (via Upsert) or we will fail to return it
-		creatingState := dc.creating[l.State.String()]
+		creatingState := dc.creatingStates[l.State.String()]
 		if l.Type.V() == components.StateLockTypeCreate && creatingState == nil {
 			return i18n.NewError(ctx, msgs.MsgStateLockCreateNotInContext, l.State)
 		}
@@ -430,7 +438,7 @@ func (dc *domainContext) ClearTransactions(ctx context.Context, transactions ...
 			if lock.Transaction == tx {
 				if lock.Type.V() == components.StateLockTypeCreate {
 					// Clean up the creating record
-					delete(dc.creating, lock.State.String())
+					delete(dc.creatingStates, lock.State.String())
 				}
 				skip = true
 				break
@@ -454,7 +462,7 @@ func (dc *domainContext) StateLocksByTransaction() map[uuid.UUID][]components.St
 	return txLocksCopy
 }
 
-// Reset puts the world back to the point that has been so far flushed to storage.
+// Reset puts the world back to fresh - including completing any flush.
 //
 // Must be called after a flush error before the context can be used, as on a flush
 // error the caller must reset their processing to the last point of consistency
@@ -469,6 +477,13 @@ func (dc *domainContext) Reset(ctx context.Context) {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 
+	err := dc.clearExistingFlush(ctx)
+	if err != nil {
+		log.L(ctx).Warnf("Reset recovering from flush error: %s", err)
+	}
+
+	dc.creatingStates = make(map[string]*components.StateWithLabels)
+	dc.flushing = nil
 	dc.unFlushed = nil
 	dc.txLocks = nil
 	dc.flushErr = nil
@@ -486,15 +501,7 @@ func (dc *domainContext) Close(ctx context.Context) {
 	delete(dc.ss.domainContexts, dc.id)
 }
 
-func (dc *domainContext) InitiateFlush(ctx context.Context, asyncCallback func(err error)) error {
-	dc.stateLock.Lock()
-	defer dc.stateLock.Unlock()
-
-	// Sync check if there's already an error
-	if dc.flushErr != nil {
-		return i18n.WrapError(ctx, dc.flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainName)
-	}
-
+func (dc *domainContext) clearExistingFlush(ctx context.Context) error {
 	// If we are already flushing, then we wait for that flush while holding the lock
 	// here - until we can queue up the next flush.
 	// e.g. we only get one flush ahead
@@ -512,6 +519,20 @@ func (dc *domainContext) InitiateFlush(ctx context.Context, asyncCallback func(e
 			dc.flushErr = dc.flushing.flushResult
 			return i18n.WrapError(ctx, dc.flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainName)
 		}
+	}
+	return nil
+}
+
+func (dc *domainContext) InitiateFlush(ctx context.Context, asyncCallback func(err error)) error {
+	dc.stateLock.Lock()
+	defer dc.stateLock.Unlock()
+
+	// Sync check if there's already an error
+	if dc.flushErr != nil {
+		return i18n.WrapError(ctx, dc.flushErr, msgs.MsgStateFlushFailedDomainReset, dc.domainName)
+	}
+	if err := dc.clearExistingFlush(ctx); err != nil {
+		return err
 	}
 
 	// Ok we're good to go async
