@@ -26,6 +26,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -160,7 +161,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	ctx, ss, done := newDBTestStateManager(t)
 	defer done()
 
-	transactionID := uuid.New()
+	transactionID1 := uuid.New()
 	var schemaID tktypes.Bytes32
 
 	// Pop in our widget ABI
@@ -175,9 +176,9 @@ func TestStateContextMintSpendMint(t *testing.T) {
 
 	// Store some states
 	tx1states, err := dc.UpsertStates(ctx,
-		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID},
-		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 10,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID},
-		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 75,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID},
+		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID1},
+		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 10,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID1},
+		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 75,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID1},
 	)
 	require.NoError(t, err)
 	assert.Len(t, tx1states, 3)
@@ -191,9 +192,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 
 	// Query the states, and notice we find the ones that are still in the process of creating
 	// even though they've not yet been written to the DB
-	_, states, err := dc.FindAvailableStates(ctx, schemaID, toQuery(t, `{
-			"sort": [ "amount" ]
-		}`))
+	_, states, err := dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().Sort("amount").Query())
 	require.NoError(t, err)
 	assert.Len(t, states, 3)
 
@@ -203,140 +202,121 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
 	require.Len(t, states[0].Locks, 2)
 	assert.Equal(t, components.StateLockTypeCreate, states[0].Locks[0].Type.V()) // should be marked creating
-	assert.Equal(t, transactionID, states[0].Locks[0].Transaction)               // for the transaction we specified
+	assert.Equal(t, transactionID1, states[0].Locks[0].Transaction)              // for the transaction we specified
 	assert.Equal(t, components.StateLockTypeRead, states[0].Locks[1].Type.V())   // should be marked read
 	assert.Equal(t, transactionID2, states[0].Locks[1].Transaction)              // for the transaction we specified
 
-	// // Simulate a transaction where we spend two states, and create 2 new ones
-	// err = dc.MarkStatesSpending(transactionID, []string{
-	// 	states[0].ID.String(), // 10 +
-	// 	states[1].ID.String(), // 75
-	// })
-	// require.NoError(t, err)
+	// Simulate a transaction where we spend two states, and create 2 new ones
+	transactionID3 := uuid.New()
+	err = dc.AddStateLocks(ctx,
+		&components.StateLock{Type: components.StateLockTypeSpend.Enum(), State: states[0].ID, Transaction: transactionID3}, // 10 +
+		&components.StateLock{Type: components.StateLockTypeSpend.Enum(), State: states[1].ID, Transaction: transactionID3}, // 75 +
+	)
+	require.NoError(t, err)
 
-	// // Do a quick check on upsert semantics with un-flushed updates, to make sure the unflushed list doesn't dup
-	// tx2Salts := []string{tktypes.RandHex(32), tktypes.RandHex(32)}
-	// for dup := 0; dup < 2; dup++ {
-	// 	tx2states, err := dc.UpsertStates(ctx,
-	// 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 35, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tx2Salts[0])), CreatedBy: &transactionID},
-	// 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 50, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tx2Salts[1])), CreatedBy: &transactionID},
-	// 	)
-	// 	require.NoError(t, err)
-	// 	assert.Len(t, tx2states, 2)
-	// 	assert.Equal(t, len(dc.(*domainContext).unFlushed.states), 5)
-	// 	assert.Equal(t, len(dc.(*domainContext).txLocks), 5)
-	// }
+	// Do a quick check on upsert semantics with un-flushed updates, to make sure the unflushed list doesn't dup
+	tx2states, err := dc.UpsertStates(ctx,
+		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 35, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID3},
+		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 50, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID3},
+	)
+	require.NoError(t, err)
+	assert.Len(t, tx2states, 2)
+	assert.Equal(t, len(dc.(*domainContext).unFlushed.states), 5)
+	assert.Equal(t, len(dc.(*domainContext).txLocks), 8)
 
-	// // Query the states on the first address
-	// states, err = dc.FindAvailableStates(schemaID, toQuery(t, `{
-	// 		"sort": [ "-amount" ],
-	// 		"eq": [{"field": "owner", "value": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180"}]
-	// 	}`))
-	// require.NoError(t, err)
-	// assert.Len(t, states, 2)
-	// assert.Equal(t, int64(100), parseFakeCoin(t, states[0]).Amount.Int64())
-	// assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
+	// Query the states on the first address
+	_, states, err = dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().
+		Equal("owner", "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180").Sort("-amount").Query())
+	require.NoError(t, err)
+	assert.Len(t, states, 2)
+	assert.Equal(t, int64(100), parseFakeCoin(t, states[0]).Amount.Int64())
+	assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
 
-	// // Query the states on the other address
-	// states, err = dc.FindAvailableStates(schemaID, toQuery(t, `{
-	// 				"sort": [ "-amount" ],
-	// 				"eq": [{"field": "owner", "value": "0x615dD09124271D8008225054d85Ffe720E7a447A"}]
-	// 			}`))
-	// require.NoError(t, err)
-	// assert.Len(t, states, 1)
-	// assert.Equal(t, int64(50), parseFakeCoin(t, states[0]).Amount.Int64())
+	// Query the states on the other address
+	_, states, err = dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().
+		Equal("owner", "0x615dD09124271D8008225054d85Ffe720E7a447A").Sort("-amount").Query())
+	require.NoError(t, err)
+	assert.Len(t, states, 1)
+	assert.Equal(t, int64(50), parseFakeCoin(t, states[0]).Amount.Int64())
 
-	// // Flush the states to the database
-	// syncFlushContext(t, ctx, dc)
+	// Flush the states to the database
+	syncFlushContext(t, ctx, dc)
 
-	// // Check the DB persisted state is what we expect
-	// states, err = dc.FindAvailableStates(schemaID, toQuery(t, `{
-	// 	"sort": [ "owner", "amount" ]
-	// }`))
-	// require.NoError(t, err)
-	// assert.Len(t, states, 3)
-	// assert.Equal(t, int64(50), parseFakeCoin(t, states[0]).Amount.Int64())
-	// assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
-	// assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
-	// log.L(ctx).Infof("STATE(35): %s", states[1].ID)
+	// Check the DB persisted state is what we expect
+	_, states, err = dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().Sort("owner", "amount").Query())
+	require.NoError(t, err)
+	assert.Len(t, states, 3)
+	assert.Equal(t, int64(50), parseFakeCoin(t, states[0]).Amount.Int64())
+	assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
+	assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
 
-	// // Mark a persisted one read - doesn't affect it's availability, but will be locked to that transaction
-	// err = dc.MarkStatesRead(transactionID, []string{
-	// 	states[1].ID.String(),
-	// })
-	// require.NoError(t, err)
+	// Write another transaction that splits a coin to two
+	transactionID4 := uuid.New()
+	err = dc.AddStateLocks(ctx,
+		&components.StateLock{Type: components.StateLockTypeSpend.Enum(), State: states[0].ID, Transaction: transactionID4}, // 50
+	)
+	require.NoError(t, err)
+	tx3states, err := dc.UpsertStates(ctx,
+		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID4},
+		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 30, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID4},
+	)
+	require.NoError(t, err)
+	assert.Len(t, tx3states, 2)
 
-	// // Write another transaction that splits a coin to two
-	// err = dc.MarkStatesSpending(transactionID, []string{
-	// 	states[0].ID.String(), // 50
-	// })
-	// require.NoError(t, err)
-	// tx3states, err := dc.UpsertStates(&transactionID, []*components.StateUpsert{
-	// 	{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
-	// 	{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 30, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
-	// })
-	// require.NoError(t, err)
-	// assert.Len(t, tx3states, 2)
+	// Now check that we merge the DB and in-memory state
+	_, states, err = dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().Sort("owner", "amount").Query())
+	require.NoError(t, err)
+	assert.Len(t, states, 4)
+	assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
+	assert.Equal(t, int64(30), parseFakeCoin(t, states[1]).Amount.Int64())
+	assert.Equal(t, int64(35), parseFakeCoin(t, states[2]).Amount.Int64())
+	assert.Equal(t, int64(100), parseFakeCoin(t, states[3]).Amount.Int64())
 
-	// // Now check that we merge the DB and in-memory state
-	// states, err = dc.FindAvailableStates(schemaID, toQuery(t, `{
-	// 	"sort": [ "owner", "amount" ]
-	// }`))
-	// require.NoError(t, err)
-	// assert.Len(t, states, 4)
-	// assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
-	// assert.Equal(t, int64(30), parseFakeCoin(t, states[1]).Amount.Int64())
-	// assert.Equal(t, int64(35), parseFakeCoin(t, states[2]).Amount.Int64())
-	// assert.Equal(t, int64(100), parseFakeCoin(t, states[3]).Amount.Int64())
+	// Check the limit works too across this
+	_, states, err = dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().Sort("owner", "amount").Limit(1).Query())
+	require.NoError(t, err)
+	assert.Len(t, states, 1)
+	assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
 
-	// // Check the limit works too across this
-	// states, err = dc.FindAvailableStates(schemaID, toQuery(t, `{
-	// 	"limit": 1,
-	// 	"sort": [ "owner", "amount" ]
-	// }`))
-	// require.NoError(t, err)
-	// assert.Len(t, states, 1)
-	// assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
+	syncFlushContext(t, ctx, dc)
 
-	// stateToConfirmAndThenSpend = states[0]
+	// Write confirmations for all the things that happened above
+	var spends []*components.StateSpend
+	var confirms []*components.StateConfirm
+	for _, lock := range dc.(*domainContext).txLocks {
+		switch lock.Type.V() {
+		case components.StateLockTypeSpend:
+			spends = append(spends, &components.StateSpend{DomainName: "domain1", State: lock.State, Transaction: lock.Transaction})
+		case components.StateLockTypeCreate:
+			confirms = append(confirms, &components.StateConfirm{DomainName: "domain1", State: lock.State, Transaction: lock.Transaction})
+		}
+	}
+	// We add one extra spend that simulates something happening outside of this context
+	transactionID5 := uuid.New()
+	spends = append(spends, &components.StateSpend{DomainName: "domain1", State: states[0].ID, Transaction: transactionID5}) //20
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), spends, confirms)
+	require.NoError(t, err)
 
-	// syncFlushContext(t, ctx, dc)
+	// So in the domain context, this states will still be visible - because we don't have transactionID5
+	// that spends the state, but we have transactionID4 that created the state in our in-memory.
+	// So the right thing that would happen in practice, is we would clear transactionID4 when the confirmation
+	// was notified to us.
+	dc.ClearTransactions(ctx, transactionID1)
+	dc.ClearTransactions(ctx, transactionID3)
+	dc.ClearTransactions(ctx, transactionID4)
 
-	// // Mark a state confirmed, and the same state state spent - all in one DB TX
-	// err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
-	// 	[]*components.StateSpend{
-	// 		{DomainName: "domain1", State: stateToConfirmAndThenSpend.ID, Transaction: transactionID},
-	// 	}, []*components.StateConfirm{
-	// 		{DomainName: "domain1", State: stateToConfirmAndThenSpend.ID, Transaction: transactionID},
-	// 	})
-	// require.NoError(t, err)
+	// We left the read
+	assert.Len(t, dc.(*domainContext).txLocks, 1)
+	assert.Equal(t, components.StateLockTypeRead, dc.(*domainContext).txLocks[0].Type.V()) // should be marked read
+	assert.Equal(t, transactionID2, dc.(*domainContext).txLocks[0].Transaction)            // for the transaction we specified
 
-	// // Check the remaining states
-	// states, err = dc.FindAvailableStates(schemaID, toQuery(t, `{
-	// 	"sort": [ "owner", "amount" ]
-	// }`))
-	// require.NoError(t, err)
-	// assert.Len(t, states, 3)
-	// assert.Equal(t, int64(30), parseFakeCoin(t, states[0]).Amount.Int64())
-	// assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
-	// assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
-
-	// // Reset the transaction - this will clear the in-memory state,
-	// // and remove the locks from the DB. It will not remove the states
-	// // themselves
-	// err = dc.ResetTransaction(transactionID)
-	// require.NoError(t, err)
-
-	// // None of the states will be returned to available after the flush
-	// // - but before then the DB ones will be
-	// syncFlushContext(t, ctx, dc)
-
-	// // Confirm
-	// states, err = dc.FindAvailableStates(schemaID, toQuery(t, `{}`))
-	// require.NoError(t, err)
-	// assert.Empty(t, states)
-
-	// syncFlushContext(t, ctx, dc)
+	// Check the remaining states
+	_, states, err = dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().Sort("owner", "amount").Query())
+	require.NoError(t, err)
+	assert.Len(t, states, 3)
+	assert.Equal(t, int64(30), parseFakeCoin(t, states[0]).Amount.Int64())
+	assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
+	assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
 
 }
 
