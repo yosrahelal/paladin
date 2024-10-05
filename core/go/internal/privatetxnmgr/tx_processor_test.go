@@ -30,33 +30,31 @@ import (
 )
 
 type transactionProcessorDepencyMocks struct {
-	allComponents        *componentmocks.AllComponents
-	domainStateInterface *componentmocks.DomainStateInterface
-	domainSmartContract  *componentmocks.DomainSmartContract
-	domainMgr            *componentmocks.DomainManager
-	transportManager     *componentmocks.TransportManager
-	stateStore           *componentmocks.StateManager
-	keyManager           *componentmocks.KeyManager
-	sequencer            *privatetxnmgrmocks.Sequencer
-	endorsementGatherer  *privatetxnmgrmocks.EndorsementGatherer
-	publisher            *privatetxnmgrmocks.Publisher
-	identityResolver     *componentmocks.IdentityResolver
+	allComponents       *componentmocks.AllComponents
+	domainSmartContract *componentmocks.DomainSmartContract
+	domainMgr           *componentmocks.DomainManager
+	transportManager    *componentmocks.TransportManager
+	stateStore          *componentmocks.StateManager
+	keyManager          *componentmocks.KeyManager
+	sequencer           *privatetxnmgrmocks.Sequencer
+	endorsementGatherer *privatetxnmgrmocks.EndorsementGatherer
+	publisher           *privatetxnmgrmocks.Publisher
+	identityResolver    *componentmocks.IdentityResolver
 }
 
 func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context, transaction *components.PrivateTransaction) (*PaladinTxProcessor, *transactionProcessorDepencyMocks) {
 
 	mocks := &transactionProcessorDepencyMocks{
-		allComponents:        componentmocks.NewAllComponents(t),
-		domainStateInterface: componentmocks.NewDomainStateInterface(t),
-		domainSmartContract:  componentmocks.NewDomainSmartContract(t),
-		domainMgr:            componentmocks.NewDomainManager(t),
-		transportManager:     componentmocks.NewTransportManager(t),
-		stateStore:           componentmocks.NewStateManager(t),
-		keyManager:           componentmocks.NewKeyManager(t),
-		sequencer:            privatetxnmgrmocks.NewSequencer(t),
-		endorsementGatherer:  privatetxnmgrmocks.NewEndorsementGatherer(t),
-		publisher:            privatetxnmgrmocks.NewPublisher(t),
-		identityResolver:     componentmocks.NewIdentityResolver(t),
+		allComponents:       componentmocks.NewAllComponents(t),
+		domainSmartContract: componentmocks.NewDomainSmartContract(t),
+		domainMgr:           componentmocks.NewDomainManager(t),
+		transportManager:    componentmocks.NewTransportManager(t),
+		stateStore:          componentmocks.NewStateManager(t),
+		keyManager:          componentmocks.NewKeyManager(t),
+		sequencer:           privatetxnmgrmocks.NewSequencer(t),
+		endorsementGatherer: privatetxnmgrmocks.NewEndorsementGatherer(t),
+		publisher:           privatetxnmgrmocks.NewPublisher(t),
+		identityResolver:    componentmocks.NewIdentityResolver(t),
 	}
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()

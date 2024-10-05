@@ -921,16 +921,15 @@ func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, pri
 }
 
 type dependencyMocks struct {
-	allComponents        *componentmocks.AllComponents
-	domainStateInterface *componentmocks.DomainStateInterface
-	domainSmartContract  *componentmocks.DomainSmartContract
-	domainMgr            *componentmocks.DomainManager
-	transportManager     *componentmocks.TransportManager
-	stateStore           *componentmocks.StateManager
-	keyManager           *componentmocks.KeyManager
-	ethClientFactory     *componentmocks.EthClientFactory
-	publicTxManager      components.PublicTxManager /* could be fake or mock */
-	identityResolver     *componentmocks.IdentityResolver
+	allComponents       *componentmocks.AllComponents
+	domainSmartContract *componentmocks.DomainSmartContract
+	domainMgr           *componentmocks.DomainManager
+	transportManager    *componentmocks.TransportManager
+	stateStore          *componentmocks.StateManager
+	keyManager          *componentmocks.KeyManager
+	ethClientFactory    *componentmocks.EthClientFactory
+	publicTxManager     components.PublicTxManager /* could be fake or mock */
+	identityResolver    *componentmocks.IdentityResolver
 }
 
 // For Black box testing we return components.PrivateTxManager
@@ -1091,16 +1090,15 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 
 	ctx := context.Background()
 	mocks := &dependencyMocks{
-		allComponents:        componentmocks.NewAllComponents(t),
-		domainStateInterface: componentmocks.NewDomainStateInterface(t),
-		domainSmartContract:  componentmocks.NewDomainSmartContract(t),
-		domainMgr:            componentmocks.NewDomainManager(t),
-		transportManager:     componentmocks.NewTransportManager(t),
-		stateStore:           componentmocks.NewStateManager(t),
-		keyManager:           componentmocks.NewKeyManager(t),
-		ethClientFactory:     componentmocks.NewEthClientFactory(t),
-		publicTxManager:      publicTxMgr,
-		identityResolver:     componentmocks.NewIdentityResolver(t),
+		allComponents:       componentmocks.NewAllComponents(t),
+		domainSmartContract: componentmocks.NewDomainSmartContract(t),
+		domainMgr:           componentmocks.NewDomainManager(t),
+		transportManager:    componentmocks.NewTransportManager(t),
+		stateStore:          componentmocks.NewStateManager(t),
+		keyManager:          componentmocks.NewKeyManager(t),
+		ethClientFactory:    componentmocks.NewEthClientFactory(t),
+		publicTxManager:     publicTxMgr,
+		identityResolver:    componentmocks.NewIdentityResolver(t),
 	}
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
@@ -1111,12 +1109,6 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 	mocks.allComponents.On("EthClientFactory").Return(mocks.ethClientFactory).Maybe()
 	unconnectedRealClient := ethclient.NewUnconnectedRPCClient(ctx, mocks.keyManager, &pldconf.EthClientConfig{}, 0)
 	mocks.ethClientFactory.On("SharedWS").Return(unconnectedRealClient).Maybe()
-
-	mocks.stateStore.On("RunInDomainContext", mock.Anything, mock.AnythingOfType("components.DomainContextFunction")).Run(func(args mock.Arguments) {
-		fn := args.Get(1).(components.DomainContextFunction)
-		err := fn(context.Background(), mocks.domainStateInterface)
-		assert.NoError(t, err)
-	}).Maybe().Return(nil)
 
 	e := NewPrivateTransactionMgr(ctx, tktypes.RandHex(16), &pldconf.PrivateTxManagerConfig{
 		Writer: pldconf.FlushWriterConfig{
