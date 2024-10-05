@@ -74,11 +74,11 @@ type DomainContext interface {
 	// 2) We deliberately return states that are locked to a transaction (but not spent yet) - which means the
 	//    result of the any assemble that uses those states, will be a transaction that must
 	//    be on the same transaction where those states are locked.
-	FindAvailableStates(ctx context.Context, schemaID string, query *query.QueryJSON) (Schema, []*State, error)
+	FindAvailableStates(ctx context.Context, schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*State, error)
 
 	// FindAvailableNullifiers is similar to FindAvailableStates, but for domains that leverage
 	// nullifiers to record spending.
-	FindAvailableNullifiers(ctx context.Context, schemaID string, query *query.QueryJSON) (Schema, []*State, error)
+	FindAvailableNullifiers(ctx context.Context, schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*State, error)
 
 	// AddStateLocks updates the in-memory state of the domain context, to record a set of locks
 	// that affect queries on available states and nullifiers.
@@ -153,13 +153,13 @@ type State struct {
 	Int64Labels     []*StateInt64Label `json:"-"                   gorm:"foreignKey:state;references:id;"`
 	Confirmed       *StateConfirm      `json:"confirmed,omitempty" gorm:"foreignKey:state;references:id;"`
 	Spent           *StateSpend        `json:"spent,omitempty"     gorm:"foreignKey:state;references:id;"`
-	Locked          *StateLock         `json:"locked,omitempty"    gorm:"-"` // in memory only processing here
+	Locks           []*StateLock       `json:"locks,omitempty"     gorm:"-"` // in memory only processing here
 	Nullifier       *StateNullifier    `json:"nullifier,omitempty" gorm:"foreignKey:state;references:id;"`
 }
 
 type StateUpsert struct {
 	ID        tktypes.HexBytes
-	SchemaID  string
+	SchemaID  tktypes.Bytes32
 	Data      tktypes.RawJSON
 	CreatedBy *uuid.UUID
 }
@@ -251,7 +251,7 @@ type StateNullifier struct {
 
 type Schema interface {
 	Type() SchemaType
-	IDString() string
+	ID() tktypes.Bytes32
 	Signature() string
 	Persisted() *SchemaPersisted
 	ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, id tktypes.HexBytes) (*StateWithLabels, error)

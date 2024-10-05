@@ -32,7 +32,7 @@ func TestGetSchemaNotFoundNil(t *testing.T) {
 
 	mdb.ExpectQuery("SELECT.*schemas").WillReturnRows(sqlmock.NewRows([]string{}))
 
-	s, err := ss.GetSchema(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("test")).String(), false)
+	s, err := ss.GetSchema(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("test")), false)
 	require.NoError(t, err)
 	assert.Nil(t, s)
 }
@@ -43,7 +43,7 @@ func TestGetSchemaNotFoundError(t *testing.T) {
 
 	mdb.ExpectQuery("SELECT.*schemas").WillReturnRows(sqlmock.NewRows([]string{}))
 
-	_, err := ss.GetSchema(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("test")).String(), true)
+	_, err := ss.GetSchema(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("test")), true)
 	assert.Regexp(t, "PD010106", err)
 }
 
@@ -55,16 +55,8 @@ func TestGetSchemaInvalidType(t *testing.T) {
 		[]string{"type"},
 	).AddRow("wrong"))
 
-	_, err := ss.GetSchema(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("test")).String(), true)
+	_, err := ss.GetSchema(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("test")), true)
 	assert.Regexp(t, "PD010103.*wrong", err)
-}
-
-func TestGetSchemaInvalidID(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateManager(t)
-	defer done()
-
-	_, err := ss.GetSchema(ctx, "domain1", "wrong", true)
-	assert.Regexp(t, "PD020007", err)
 }
 
 func TestListSchemasListIDsFail(t *testing.T) {

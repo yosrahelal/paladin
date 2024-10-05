@@ -62,7 +62,7 @@ func newABISchema(ctx context.Context, domainName string, def *abi.Parameter) (*
 		as.SchemaPersisted.Signature, err = as.FullSignature(ctx)
 	}
 	if err == nil {
-		as.ID = tktypes.Bytes32Keccak([]byte(as.SchemaPersisted.Signature))
+		as.SchemaPersisted.ID = tktypes.Bytes32Keccak([]byte(as.SchemaPersisted.Signature))
 	}
 	if err != nil {
 		return nil, err
@@ -89,8 +89,8 @@ func (as *abiSchema) Type() components.SchemaType {
 	return components.SchemaTypeABI
 }
 
-func (as *abiSchema) IDString() string {
-	return as.SchemaPersisted.ID.String()
+func (as *abiSchema) ID() tktypes.Bytes32 {
+	return as.SchemaPersisted.ID
 }
 
 func (as *abiSchema) Signature() string {
@@ -377,7 +377,7 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 			ID:              id,
 			Created:         now,
 			DomainName:      as.DomainName,
-			Schema:          as.ID,
+			Schema:          as.SchemaPersisted.ID,
 			ContractAddress: contractAddress,
 			Data:            jsonData,
 			Labels:          psd.labels,

@@ -55,7 +55,7 @@ const widgetABI = `{
 	]
 }`
 
-func genWidget(t *testing.T, schemaID string, txID *uuid.UUID, withoutSalt string) *components.StateUpsert {
+func genWidget(t *testing.T, schemaID tktypes.Bytes32, txID *uuid.UUID, withoutSalt string) *components.StateUpsert {
 	var ij map[string]interface{}
 	err := json.Unmarshal([]byte(withoutSalt), &ij)
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func genWidget(t *testing.T, schemaID string, txID *uuid.UUID, withoutSalt strin
 	}
 }
 
-func makeWidgets(t *testing.T, ctx context.Context, ss *stateManager, domainName string, contractAddress tktypes.EthAddress, schemaID string, withoutSalt []string) []*components.State {
+func makeWidgets(t *testing.T, ctx context.Context, ss *stateManager, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, withoutSalt []string) []*components.State {
 	states := make([]*components.State, len(withoutSalt))
 	for i, w := range withoutSalt {
 		withSalt := genWidget(t, schemaID, nil, w)
@@ -105,7 +105,7 @@ func TestStateLockingQuery(t *testing.T) {
 	require.NoError(t, err)
 	err = ss.persistSchemas(ctx, ss.p.DB(), []*components.SchemaPersisted{schema.SchemaPersisted})
 	require.NoError(t, err)
-	schemaID := schema.IDString()
+	schemaID := schema.ID()
 
 	contractAddress := tktypes.RandAddress()
 	widgets := makeWidgets(t, ctx, ss, "domain1", *contractAddress, schemaID, []string{
@@ -242,7 +242,7 @@ func TestStateLockingQuery(t *testing.T) {
 	txID13 := uuid.New()
 	_, err = dc.UpsertStates(ctx, &components.StateUpsert{
 		ID:        widgets[3].ID,
-		SchemaID:  widgets[3].Schema.String(),
+		SchemaID:  widgets[3].Schema,
 		Data:      widgets[3].Data,
 		CreatedBy: &txID13,
 	})

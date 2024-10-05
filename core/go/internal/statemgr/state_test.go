@@ -35,7 +35,7 @@ func TestPersistStateMissingSchema(t *testing.T) {
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.PersistState(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("test")).String(), nil, nil)
+	_, err := ss.PersistState(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("test")), nil, nil)
 	assert.Regexp(t, "PD010106", err)
 }
 
@@ -50,7 +50,7 @@ func TestPersistStateInvalidState(t *testing.T) {
 	})
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.PersistState(ctx, "domain1", *contractAddress, schemaID.String(), nil, nil)
+	_, err := ss.PersistState(ctx, "domain1", *contractAddress, schemaID, nil, nil)
 	assert.Regexp(t, "PD010116", err)
 }
 
@@ -61,17 +61,8 @@ func TestGetStateMissing(t *testing.T) {
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.GetState(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("state1")).String(), true, false)
+	_, err := ss.GetState(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("state1")).Bytes(), true, false)
 	assert.Regexp(t, "PD010112", err)
-}
-
-func TestGetStateBadID(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateManager(t)
-	defer done()
-
-	contractAddress := tktypes.RandAddress()
-	_, err := ss.GetState(ctx, "domain1", *contractAddress, "bad id", true, false)
-	assert.Regexp(t, "PD020007", err)
 }
 
 func TestFindStatesMissingSchema(t *testing.T) {
@@ -81,7 +72,7 @@ func TestFindStatesMissingSchema(t *testing.T) {
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindStates(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("schema1")).String(), &query.QueryJSON{}, "all")
+	_, err := ss.FindStates(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("schema1")), &query.QueryJSON{}, "all")
 	assert.Regexp(t, "PD010106", err)
 }
 
@@ -96,7 +87,7 @@ func TestFindStatesBadQuery(t *testing.T) {
 	})
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID.String(), &query.QueryJSON{
+	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID, &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				Equal: []*query.OpSingleVal{
@@ -123,7 +114,7 @@ func TestFindStatesFail(t *testing.T) {
 	db.ExpectQuery("SELECT.*created").WillReturnError(fmt.Errorf("pop"))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID.String(), &query.QueryJSON{
+	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID, &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				GreaterThan: []*query.OpSingleVal{

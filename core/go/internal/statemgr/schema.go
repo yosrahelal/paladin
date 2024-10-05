@@ -75,12 +75,8 @@ func (ss *stateManager) persistSchemas(ctx context.Context, dbTX *gorm.DB, schem
 		Error
 }
 
-func (ss *stateManager) GetSchema(ctx context.Context, domainName, schemaID string, failNotFound bool) (components.Schema, error) {
-	id, err := tktypes.ParseBytes32Ctx(ctx, schemaID)
-	if err != nil {
-		return nil, err
-	}
-	return ss.getSchemaByID(ctx, domainName, id, failNotFound)
+func (ss *stateManager) GetSchema(ctx context.Context, domainName string, schemaID tktypes.Bytes32, failNotFound bool) (components.Schema, error) {
+	return ss.getSchemaByID(ctx, domainName, schemaID, failNotFound)
 }
 
 func (ss *stateManager) getSchemaByID(ctx context.Context, domainName string, schemaID tktypes.Bytes32, failNotFound bool) (components.Schema, error) {

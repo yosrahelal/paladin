@@ -48,7 +48,7 @@ func (ss *stateManager) rpcStoreState() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod4(func(ctx context.Context,
 		domain string,
 		contractAddress tktypes.EthAddress,
-		schema string,
+		schema tktypes.Bytes32,
 		data tktypes.RawJSON,
 	) (*components.State, error) {
 		var state *components.State
@@ -64,7 +64,7 @@ func (ss *stateManager) rpcQuery() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod5(func(ctx context.Context,
 		domain string,
 		contractAddress tktypes.EthAddress,
-		schema string,
+		schema tktypes.Bytes32,
 		query query.QueryJSON,
 		status StateStatusQualifier,
 	) ([]*components.State, error) {

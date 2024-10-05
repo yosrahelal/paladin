@@ -113,7 +113,7 @@ func (dc *domainContext) getUnFlushedStates(ctx context.Context) (spending []tkt
 	return spending, spent, nullifiers, nil
 }
 
-func (dc *domainContext) mergedUnFlushed(ctx context.Context, schema components.Schema, dbStates []*components.State, query *query.QueryJSON, requireNullifier bool) (_ []*components.State, err error) {
+func (dc *domainContext) mergeUnFlushedApplyLocks(ctx context.Context, schema components.Schema, dbStates []*components.State, query *query.QueryJSON, requireNullifier bool) (_ []*components.State, err error) {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 	if flushErr := dc.checkResetInitUnFlushed(ctx); flushErr != nil {
@@ -159,19 +159,24 @@ func (dc *domainContext) mergedUnFlushed(ctx context.Context, schema components.
 			}
 			if !dup {
 				log.L(ctx).Debugf("Matched state %s from un-flushed writes", &state.ID)
-				matches = append(matches, state)
+				// Take a shallow copy, as we'll apply the locks as they exist right now
+				shallowCopy := *state
+				matches = append(matches, &shallowCopy)
 			}
 		}
 	}
 
+	retStates := dbStates
 	if len(matches) > 0 {
 		// Build the merged list - this involves extra cost, as we deliberately don't reconstitute
 		// the labels in JOIN on DB load (affecting every call at the DB side), instead we re-parse
 		// them as we need them
-		return dc.mergeInMemoryMatches(ctx, schema, dbStates, matches, query)
+		if retStates, err = dc.mergeInMemoryMatches(ctx, schema, dbStates, matches, query); err != nil {
+			return nil, err
+		}
 	}
 
-	return dbStates, nil
+	return dc.applyLocks(retStates), nil
 }
 
 func (dc *domainContext) Info() components.DomainContextInfo {
@@ -223,7 +228,7 @@ func (dc *domainContext) mergeInMemoryMatches(ctx context.Context, schema compon
 
 }
 
-func (dc *domainContext) FindAvailableStates(ctx context.Context, schemaID string, query *query.QueryJSON) (components.Schema, []*components.State, error) {
+func (dc *domainContext) FindAvailableStates(ctx context.Context, schemaID tktypes.Bytes32, query *query.QueryJSON) (components.Schema, []*components.State, error) {
 
 	// Build a list of spending states
 	spending, spent, _, err := dc.getUnFlushedStates(ctx)
@@ -239,11 +244,15 @@ func (dc *domainContext) FindAvailableStates(ctx context.Context, schemaID strin
 	}
 
 	// Merge in un-flushed states to results
-	states, err = dc.mergedUnFlushed(ctx, schema, states, query, false)
+	states, err = dc.mergeUnFlushedApplyLocks(ctx, schema, states, query, false)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	return schema, states, err
 }
 
-func (dc *domainContext) FindAvailableNullifiers(ctx context.Context, schemaID string, query *query.QueryJSON) (components.Schema, []*components.State, error) {
+func (dc *domainContext) FindAvailableNullifiers(ctx context.Context, schemaID tktypes.Bytes32, query *query.QueryJSON) (components.Schema, []*components.State, error) {
 
 	// Build a list of unflushed and spending nullifiers
 	spending, spent, nullifiers, err := dc.getUnFlushedStates(ctx)
@@ -274,7 +283,7 @@ func (dc *domainContext) FindAvailableNullifiers(ctx context.Context, schemaID s
 	}
 
 	// Merge in un-flushed states to results
-	states, err = dc.mergedUnFlushed(ctx, schema, states, query, true)
+	states, err = dc.mergeUnFlushedApplyLocks(ctx, schema, states, query, true)
 	return schema, states, err
 }
 
@@ -297,12 +306,12 @@ func (dc *domainContext) UpsertStates(ctx context.Context, stateUpserts ...*comp
 		withValues[i] = vs
 		states[i] = withValues[i].State
 		if ns.CreatedBy != nil {
-			states[i].Locked = &components.StateLock{
+			createLock := &components.StateLock{
 				Type:        components.StateLockTypeCreate.Enum(),
 				Transaction: *ns.CreatedBy,
 				State:       withValues[i].State.ID,
 			}
-			stateLocks = append(stateLocks, states[i].Locked)
+			stateLocks = append(stateLocks, createLock)
 			toMakeAvailable = append(toMakeAvailable, vs)
 			log.L(ctx).Infof("Upserting state %s with create lock tx=%s", states[i].ID, ns.CreatedBy)
 		} else {
@@ -370,7 +379,8 @@ func (dc *domainContext) UpsertNullifiers(ctx context.Context, nullifiers ...*co
 func (dc *domainContext) addStateLocks(ctx context.Context, locks ...*components.StateLock) error {
 	for _, l := range locks {
 		// For creating the state must be in our map (via Upsert) or we will fail to return it
-		if l.Type.V() == components.StateLockTypeCreate && dc.creating[l.State.String()] == nil {
+		creatingState := dc.creating[l.State.String()]
+		if l.Type.V() == components.StateLockTypeCreate && creatingState == nil {
 			return i18n.NewError(ctx, msgs.MsgStateLockCreateNotInContext, l.State)
 		}
 
@@ -379,6 +389,18 @@ func (dc *domainContext) addStateLocks(ctx context.Context, locks ...*components
 		dc.txLocks = append(dc.txLocks, l)
 	}
 	return nil
+}
+
+func (dc *domainContext) applyLocks(states []*components.State) []*components.State {
+	for _, s := range states {
+		s.Locks = []*components.StateLock{}
+		for _, l := range dc.txLocks {
+			if l.State.Equals(s.ID) {
+				s.Locks = append(s.Locks, l)
+			}
+		}
+	}
+	return states
 }
 
 func (dc *domainContext) AddStateLocks(ctx context.Context, locks ...*components.StateLock) (err error) {

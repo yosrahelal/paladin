@@ -16,324 +16,329 @@
 
 package statemgr
 
-// const fakeCoinABI = `{
-// 	"type": "tuple",
-// 	"internalType": "struct FakeCoin",
-// 	"components": [
-// 		{
-// 			"name": "salt",
-// 			"type": "bytes32"
-// 		},
-// 		{
-// 			"name": "owner",
-// 			"type": "address",
-// 			"indexed": true
-// 		},
-// 		{
-// 			"name": "amount",
-// 			"type": "uint256",
-// 			"indexed": true
-// 		}
-// 	]
-// }`
+import (
+	"encoding/json"
+	"fmt"
+	"testing"
+	"time"
 
-// const fakeCoinABI2 = `{
-// 	"type": "tuple",
-// 	"internalType": "struct FakeCoin2",
-// 	"components": [
-// 		{
-// 			"name": "salt",
-// 			"type": "bytes32"
-// 		},
-// 		{
-// 			"name": "owner",
-// 			"type": "address",
-// 			"indexed": true
-// 		},
-// 		{
-// 			"name": "tokenUri",
-// 			"type": "bytes32",
-// 			"indexed": true
-// 		}
-// 	]
-// }`
+	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
-// type FakeCoin struct {
-// 	Amount ethtypes.HexInteger       `json:"amount"`
-// 	Salt   ethtypes.HexBytes0xPrefix `json:"salt"`
-// }
+const fakeCoinABI = `{
+	"type": "tuple",
+	"internalType": "struct FakeCoin",
+	"components": [
+		{
+			"name": "salt",
+			"type": "bytes32"
+		},
+		{
+			"name": "owner",
+			"type": "address",
+			"indexed": true
+		},
+		{
+			"name": "amount",
+			"type": "uint256",
+			"indexed": true
+		}
+	]
+}`
 
-// func parseFakeCoin(t *testing.T, s *components.State) *FakeCoin {
-// 	var c FakeCoin
-// 	err := json.Unmarshal(s.Data, &c)
-// 	require.NoError(t, err)
-// 	return &c
-// }
+const fakeCoinABI2 = `{
+	"type": "tuple",
+	"internalType": "struct FakeCoin2",
+	"components": [
+		{
+			"name": "salt",
+			"type": "bytes32"
+		},
+		{
+			"name": "owner",
+			"type": "address",
+			"indexed": true
+		},
+		{
+			"name": "tokenUri",
+			"type": "bytes32",
+			"indexed": true
+		}
+	]
+}`
 
-// func TestStateFlushAsync(t *testing.T) {
+type FakeCoin struct {
+	Amount ethtypes.HexInteger       `json:"amount"`
+	Salt   ethtypes.HexBytes0xPrefix `json:"salt"`
+}
 
-// 	_, ss, done := newDBTestStateManager(t)
-// 	defer done()
+func parseFakeCoin(t *testing.T, s *components.State) *FakeCoin {
+	var c FakeCoin
+	err := json.Unmarshal(s.Data, &c)
+	require.NoError(t, err)
+	return &c
+}
 
-// 	contractAddress := tktypes.RandAddress()
-// 	flushed := make(chan bool)
-// 	err := ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
-// 		return dsi.Flush(func(ctx context.Context, dsi components.DomainContext) error {
-// 			flushed <- true
-// 			return nil
-// 		})
-// 	})
-// 	require.NoError(t, err)
+func TestStateFlushAsyncNoWork(t *testing.T) {
 
-// 	select {
-// 	case <-flushed:
-// 	case <-time.After(5 * time.Second):
-// 		assert.Fail(t, "timed out")
-// 	}
+	ctx, ss, _, done := newDBMockStateManager(t)
+	defer done()
 
-// }
+	contractAddress := tktypes.RandAddress()
+	flushed := make(chan error)
 
-// func TestUpsertSchemaEmptyList(t *testing.T) {
+	dc := ss.NewDomainContext(ctx, "domain1", *contractAddress)
+	defer dc.Close(ctx)
 
-// 	_, ss, done := newDBTestStateManager(t)
-// 	defer done()
+	err := dc.InitiateFlush(ctx, func(err error) { flushed <- err })
+	require.NoError(t, err)
 
-// 	schemas, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{})
-// 	require.NoError(t, err)
-// 	require.Len(t, schemas, 0)
+	require.Eventually(t, func() bool {
+		select {
+		case err := <-flushed:
+			require.NoError(t, err)
+			return true
+		default:
+			return false
+		}
+	}, 1*time.Second, 10*time.Millisecond)
 
-// }
+}
 
-// func TestUpsertSchemaAndStates(t *testing.T) {
+func TestUpsertSchemaEmptyList(t *testing.T) {
 
-// 	_, ss, done := newDBTestStateManager(t)
-// 	defer done()
+	ctx, ss, _, done := newDBMockStateManager(t)
+	defer done()
 
-// 	schemas, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
-// 	require.NoError(t, err)
-// 	require.Len(t, schemas, 1)
-// 	schemaID := schemas[0].IDString()
-// 	fakeHash := tktypes.HexBytes(tktypes.RandBytes(32))
+	schemas, err := ss.EnsureABISchemas(ctx, ss.p.DB(), "domain1", []*abi.Parameter{})
+	require.NoError(t, err)
+	require.Len(t, schemas, 0)
 
-// 	contractAddress := tktypes.RandAddress()
-// 	err = ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
-// 		states, err := dsi.UpsertStates(nil, []*components.StateUpsert{
-// 			{
-// 				SchemaID: schemaID,
-// 				Data:     tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0x1eDfD974fE6828dE81a1a762df680111870B7cDD", "salt": "%s"}`, tktypes.RandHex(32))),
-// 			},
-// 			{
-// 				ID:       fakeHash,
-// 				SchemaID: schemaID,
-// 				Data:     tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0x1eDfD974fE6828dE81a1a762df680111870B7cDD", "salt": "%s"}`, tktypes.RandHex(32))),
-// 			},
-// 		})
-// 		require.NoError(t, err)
-// 		require.Len(t, states, 2)
-// 		assert.NotEmpty(t, states[0].ID)
-// 		assert.Equal(t, fakeHash, states[1].ID)
-// 		return nil
-// 	})
-// 	require.NoError(t, err)
+}
 
-// }
+func TestUpsertSchemaAndStates(t *testing.T) {
 
-// func TestStateContextMintSpendMint(t *testing.T) {
+	ctx, ss, done := newDBTestStateManager(t)
+	defer done()
 
-// 	_, ss, done := newDBTestStateManager(t)
-// 	defer done()
+	schemas, err := ss.EnsureABISchemas(ctx, ss.p.DB(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
+	require.NoError(t, err)
+	require.Len(t, schemas, 1)
+	schemaID := schemas[0].ID()
+	fakeHash := tktypes.HexBytes(tktypes.RandBytes(32))
 
-// 	transactionID := uuid.New()
-// 	var schemaID string
+	contractAddress := tktypes.RandAddress()
+	dc := ss.NewDomainContext(ctx, "domain1", *contractAddress)
+	defer dc.Close(ctx)
 
-// 	// Pop in our widget ABI
-// 	schemas, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
-// 	require.NoError(t, err)
-// 	assert.Len(t, schemas, 1)
-// 	schemaID = schemas[0].IDString()
+	states, err := dc.UpsertStates(ctx,
+		&components.StateUpsert{
+			SchemaID: schemaID,
+			Data:     tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0x1eDfD974fE6828dE81a1a762df680111870B7cDD", "salt": "%s"}`, tktypes.RandHex(32))),
+		},
+		&components.StateUpsert{
+			ID:       fakeHash,
+			SchemaID: schemaID,
+			Data:     tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0x1eDfD974fE6828dE81a1a762df680111870B7cDD", "salt": "%s"}`, tktypes.RandHex(32))),
+		},
+	)
+	require.NoError(t, err)
+	require.Len(t, states, 2)
+	assert.NotEmpty(t, states[0].ID)
+	assert.Equal(t, fakeHash, states[1].ID)
 
-// 	contractAddress := tktypes.RandAddress()
-// 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
+}
 
-// 		// Store some states
-// 		tx1states, err := dsi.UpsertStates(&transactionID, []*components.StateUpsert{
-// 			{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
-// 			{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 10,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
-// 			{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 75,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
-// 		})
-// 		require.NoError(t, err)
-// 		assert.Len(t, tx1states, 3)
+func TestStateContextMintSpendMint(t *testing.T) {
 
-// 		// Mark an in-memory read - doesn't affect it's availability, but will be locked to that transaction
-// 		err = dsi.MarkStatesRead(transactionID, []string{tx1states[0].ID.String()})
-// 		require.NoError(t, err)
+	ctx, ss, done := newDBTestStateManager(t)
+	defer done()
 
-// 		// We can't arbitrarily move it to another transaction (would need to reset the first transaction)
-// 		err = dsi.MarkStatesRead(uuid.New(), []string{tx1states[0].ID.String()})
-// 		assert.Regexp(t, "PD010118", err)
-// 		err = dsi.MarkStatesSpending(uuid.New(), []string{tx1states[0].ID.String()})
-// 		assert.Regexp(t, "PD010118", err)
+	transactionID := uuid.New()
+	var schemaID tktypes.Bytes32
 
-// 		// Query the states, and notice we find the ones that are still in the process of creating
-// 		// even though they've not yet been written to the DB
-// 		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{
-// 			"sort": [ "amount" ]
-// 		}`))
-// 		require.NoError(t, err)
-// 		assert.Len(t, states, 3)
+	// Pop in our widget ABI
+	schemas, err := ss.EnsureABISchemas(ctx, ss.p.DB(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
+	require.NoError(t, err)
+	assert.Len(t, schemas, 1)
+	schemaID = schemas[0].ID()
 
-// 		// The values should be sorted according to the requested order
-// 		assert.Equal(t, int64(10), parseFakeCoin(t, states[0]).Amount.Int64())
-// 		assert.Equal(t, int64(75), parseFakeCoin(t, states[1]).Amount.Int64())
-// 		assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
-// 		assert.True(t, states[0].Locked.Creating)                    // should be marked creating
-// 		assert.Equal(t, transactionID, states[0].Locked.Transaction) // for the transaction we specified
+	contractAddress := tktypes.RandAddress()
+	dc := ss.NewDomainContext(ctx, "domain1", *contractAddress)
+	defer dc.Close(ctx)
 
-// 		// Simulate a transaction where we spend two states, and create 2 new ones
-// 		err = dsi.MarkStatesSpending(transactionID, []string{
-// 			states[0].ID.String(), // 10 +
-// 			states[1].ID.String(), // 75
-// 		})
-// 		require.NoError(t, err)
+	// Store some states
+	tx1states, err := dc.UpsertStates(ctx,
+		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID},
+		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 10,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID},
+		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 75,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID},
+	)
+	require.NoError(t, err)
+	assert.Len(t, tx1states, 3)
 
-// 		// Do a quick check on upsert semantics with un-flushed updates, to make sure the unflushed list doesn't dup
-// 		tx2Salts := []string{tktypes.RandHex(32), tktypes.RandHex(32)}
-// 		for dup := 0; dup < 2; dup++ {
-// 			tx2states, err := dsi.UpsertStates(&transactionID, []*components.StateUpsert{
-// 				{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 35, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tx2Salts[0])), Creating: true},
-// 				{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 50, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tx2Salts[1])), Creating: true},
-// 			})
-// 			require.NoError(t, err)
-// 			assert.Len(t, tx2states, 2)
-// 			assert.Equal(t, len(dsi.(*domainContext).unFlushed.states), 5)
-// 			assert.Equal(t, len(dsi.(*domainContext).unFlushed.stateLocks), 5)
-// 		}
+	// Mark an in-memory read - doesn't affect it's availability
+	transactionID2 := uuid.New()
+	err = dc.AddStateLocks(ctx,
+		&components.StateLock{Type: components.StateLockTypeRead.Enum(), State: tx1states[1].ID, Transaction: transactionID2},
+	)
+	require.NoError(t, err)
 
-// 		// Query the states on the first address
-// 		states, err = dsi.FindAvailableStates(schemaID, toQuery(t, `{
-// 			"sort": [ "-amount" ],
-// 			"eq": [{"field": "owner", "value": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180"}]
-// 		}`))
-// 		require.NoError(t, err)
-// 		assert.Len(t, states, 2)
-// 		assert.Equal(t, int64(100), parseFakeCoin(t, states[0]).Amount.Int64())
-// 		assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
+	// Query the states, and notice we find the ones that are still in the process of creating
+	// even though they've not yet been written to the DB
+	_, states, err := dc.FindAvailableStates(ctx, schemaID, toQuery(t, `{
+			"sort": [ "amount" ]
+		}`))
+	require.NoError(t, err)
+	assert.Len(t, states, 3)
 
-// 		// Query the states on the other address
-// 		states, err = dsi.FindAvailableStates(schemaID, toQuery(t, `{
-// 					"sort": [ "-amount" ],
-// 					"eq": [{"field": "owner", "value": "0x615dD09124271D8008225054d85Ffe720E7a447A"}]
-// 				}`))
-// 		require.NoError(t, err)
-// 		assert.Len(t, states, 1)
-// 		assert.Equal(t, int64(50), parseFakeCoin(t, states[0]).Amount.Int64())
+	// The values should be sorted according to the requested order
+	assert.Equal(t, int64(10), parseFakeCoin(t, states[0]).Amount.Int64())
+	assert.Equal(t, int64(75), parseFakeCoin(t, states[1]).Amount.Int64())
+	assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
+	require.Len(t, states[0].Locks, 2)
+	assert.Equal(t, components.StateLockTypeCreate, states[0].Locks[0].Type.V()) // should be marked creating
+	assert.Equal(t, transactionID, states[0].Locks[0].Transaction)               // for the transaction we specified
+	assert.Equal(t, components.StateLockTypeRead, states[0].Locks[1].Type.V())   // should be marked read
+	assert.Equal(t, transactionID2, states[0].Locks[1].Transaction)              // for the transaction we specified
 
-// 		// Flush the states to the database
-// 		return nil
-// 	})
-// 	require.NoError(t, err)
+	// // Simulate a transaction where we spend two states, and create 2 new ones
+	// err = dc.MarkStatesSpending(transactionID, []string{
+	// 	states[0].ID.String(), // 10 +
+	// 	states[1].ID.String(), // 75
+	// })
+	// require.NoError(t, err)
 
-// 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
-// 		// Check the DB persisted state is what we expect
-// 		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{
-// 			"sort": [ "owner", "amount" ]
-// 		}`))
-// 		require.NoError(t, err)
-// 		assert.Len(t, states, 3)
-// 		assert.Equal(t, int64(50), parseFakeCoin(t, states[0]).Amount.Int64())
-// 		assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
-// 		assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
-// 		log.L(ctx).Infof("STATE(35): %s", states[1].ID)
+	// // Do a quick check on upsert semantics with un-flushed updates, to make sure the unflushed list doesn't dup
+	// tx2Salts := []string{tktypes.RandHex(32), tktypes.RandHex(32)}
+	// for dup := 0; dup < 2; dup++ {
+	// 	tx2states, err := dc.UpsertStates(ctx,
+	// 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 35, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tx2Salts[0])), CreatedBy: &transactionID},
+	// 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 50, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tx2Salts[1])), CreatedBy: &transactionID},
+	// 	)
+	// 	require.NoError(t, err)
+	// 	assert.Len(t, tx2states, 2)
+	// 	assert.Equal(t, len(dc.(*domainContext).unFlushed.states), 5)
+	// 	assert.Equal(t, len(dc.(*domainContext).txLocks), 5)
+	// }
 
-// 		// Mark a persisted one read - doesn't affect it's availability, but will be locked to that transaction
-// 		err = dsi.MarkStatesRead(transactionID, []string{
-// 			states[1].ID.String(),
-// 		})
-// 		require.NoError(t, err)
+	// // Query the states on the first address
+	// states, err = dc.FindAvailableStates(schemaID, toQuery(t, `{
+	// 		"sort": [ "-amount" ],
+	// 		"eq": [{"field": "owner", "value": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180"}]
+	// 	}`))
+	// require.NoError(t, err)
+	// assert.Len(t, states, 2)
+	// assert.Equal(t, int64(100), parseFakeCoin(t, states[0]).Amount.Int64())
+	// assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
 
-// 		// Write another transaction that splits a coin to two
-// 		err = dsi.MarkStatesSpending(transactionID, []string{
-// 			states[0].ID.String(), // 50
-// 		})
-// 		require.NoError(t, err)
-// 		tx3states, err := dsi.UpsertStates(&transactionID, []*components.StateUpsert{
-// 			{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
-// 			{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 30, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
-// 		})
-// 		require.NoError(t, err)
-// 		assert.Len(t, tx3states, 2)
+	// // Query the states on the other address
+	// states, err = dc.FindAvailableStates(schemaID, toQuery(t, `{
+	// 				"sort": [ "-amount" ],
+	// 				"eq": [{"field": "owner", "value": "0x615dD09124271D8008225054d85Ffe720E7a447A"}]
+	// 			}`))
+	// require.NoError(t, err)
+	// assert.Len(t, states, 1)
+	// assert.Equal(t, int64(50), parseFakeCoin(t, states[0]).Amount.Int64())
 
-// 		// Now check that we merge the DB and in-memory state
-// 		states, err = dsi.FindAvailableStates(schemaID, toQuery(t, `{
-// 			"sort": [ "owner", "amount" ]
-// 		}`))
-// 		require.NoError(t, err)
-// 		assert.Len(t, states, 4)
-// 		assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
-// 		assert.Equal(t, int64(30), parseFakeCoin(t, states[1]).Amount.Int64())
-// 		assert.Equal(t, int64(35), parseFakeCoin(t, states[2]).Amount.Int64())
-// 		assert.Equal(t, int64(100), parseFakeCoin(t, states[3]).Amount.Int64())
+	// // Flush the states to the database
+	// syncFlushContext(t, ctx, dc)
 
-// 		// Check the limit works too across this
-// 		states, err = dsi.FindAvailableStates(schemaID, toQuery(t, `{
-// 			"limit": 1,
-// 			"sort": [ "owner", "amount" ]
-// 		}`))
-// 		require.NoError(t, err)
-// 		assert.Len(t, states, 1)
-// 		assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
+	// // Check the DB persisted state is what we expect
+	// states, err = dc.FindAvailableStates(schemaID, toQuery(t, `{
+	// 	"sort": [ "owner", "amount" ]
+	// }`))
+	// require.NoError(t, err)
+	// assert.Len(t, states, 3)
+	// assert.Equal(t, int64(50), parseFakeCoin(t, states[0]).Amount.Int64())
+	// assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
+	// assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
+	// log.L(ctx).Infof("STATE(35): %s", states[1].ID)
 
-// 		stateToConfirmAndThenSpend = states[0]
+	// // Mark a persisted one read - doesn't affect it's availability, but will be locked to that transaction
+	// err = dc.MarkStatesRead(transactionID, []string{
+	// 	states[1].ID.String(),
+	// })
+	// require.NoError(t, err)
 
-// 		return nil
-// 	})
-// 	require.NoError(t, err)
+	// // Write another transaction that splits a coin to two
+	// err = dc.MarkStatesSpending(transactionID, []string{
+	// 	states[0].ID.String(), // 50
+	// })
+	// require.NoError(t, err)
+	// tx3states, err := dc.UpsertStates(&transactionID, []*components.StateUpsert{
+	// 	{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
+	// 	{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 30, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), Creating: true},
+	// })
+	// require.NoError(t, err)
+	// assert.Len(t, tx3states, 2)
 
-// 	// Mark a state confirmed, and the same state state spent - all in one DB TX
-// 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
-// 		[]*components.StateSpend{
-// 			{DomainName: "domain1", State: stateToConfirmAndThenSpend.ID, Transaction: transactionID},
-// 		}, []*components.StateConfirm{
-// 			{DomainName: "domain1", State: stateToConfirmAndThenSpend.ID, Transaction: transactionID},
-// 		})
-// 	require.NoError(t, err)
+	// // Now check that we merge the DB and in-memory state
+	// states, err = dc.FindAvailableStates(schemaID, toQuery(t, `{
+	// 	"sort": [ "owner", "amount" ]
+	// }`))
+	// require.NoError(t, err)
+	// assert.Len(t, states, 4)
+	// assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
+	// assert.Equal(t, int64(30), parseFakeCoin(t, states[1]).Amount.Int64())
+	// assert.Equal(t, int64(35), parseFakeCoin(t, states[2]).Amount.Int64())
+	// assert.Equal(t, int64(100), parseFakeCoin(t, states[3]).Amount.Int64())
 
-// 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+	// // Check the limit works too across this
+	// states, err = dc.FindAvailableStates(schemaID, toQuery(t, `{
+	// 	"limit": 1,
+	// 	"sort": [ "owner", "amount" ]
+	// }`))
+	// require.NoError(t, err)
+	// assert.Len(t, states, 1)
+	// assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
 
-// 		// Check the remaining states
-// 		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{
-// 			"sort": [ "owner", "amount" ]
-// 		}`))
-// 		require.NoError(t, err)
-// 		assert.Len(t, states, 3)
-// 		assert.Equal(t, int64(30), parseFakeCoin(t, states[0]).Amount.Int64())
-// 		assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
-// 		assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
+	// stateToConfirmAndThenSpend = states[0]
 
-// 		// Reset the transaction - this will clear the in-memory state,
-// 		// and remove the locks from the DB. It will not remove the states
-// 		// themselves
-// 		err = dsi.ResetTransaction(transactionID)
-// 		require.NoError(t, err)
+	// syncFlushContext(t, ctx, dc)
 
-// 		// None of the states will be returned to available after the flush
-// 		// - but before then the DB ones will be
-// 		return nil
-// 	})
-// 	require.NoError(t, err)
+	// // Mark a state confirmed, and the same state state spent - all in one DB TX
+	// err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
+	// 	[]*components.StateSpend{
+	// 		{DomainName: "domain1", State: stateToConfirmAndThenSpend.ID, Transaction: transactionID},
+	// 	}, []*components.StateConfirm{
+	// 		{DomainName: "domain1", State: stateToConfirmAndThenSpend.ID, Transaction: transactionID},
+	// 	})
+	// require.NoError(t, err)
 
-// 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
+	// // Check the remaining states
+	// states, err = dc.FindAvailableStates(schemaID, toQuery(t, `{
+	// 	"sort": [ "owner", "amount" ]
+	// }`))
+	// require.NoError(t, err)
+	// assert.Len(t, states, 3)
+	// assert.Equal(t, int64(30), parseFakeCoin(t, states[0]).Amount.Int64())
+	// assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
+	// assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
 
-// 		// Confirm
-// 		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{}`))
-// 		require.NoError(t, err)
-// 		assert.Empty(t, states)
+	// // Reset the transaction - this will clear the in-memory state,
+	// // and remove the locks from the DB. It will not remove the states
+	// // themselves
+	// err = dc.ResetTransaction(transactionID)
+	// require.NoError(t, err)
 
-// 		return nil
-// 	})
-// 	require.NoError(t, err)
+	// // None of the states will be returned to available after the flush
+	// // - but before then the DB ones will be
+	// syncFlushContext(t, ctx, dc)
 
-// }
+	// // Confirm
+	// states, err = dc.FindAvailableStates(schemaID, toQuery(t, `{}`))
+	// require.NoError(t, err)
+	// assert.Empty(t, states)
+
+	// syncFlushContext(t, ctx, dc)
+
+}
 
 // func TestStateContextMintSpendWithNullifier(t *testing.T) {
 
@@ -341,12 +346,11 @@ package statemgr
 // 	defer done()
 
 // 	transactionID := uuid.New()
-// 	var schemaID string
 
-// 	schemas, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
+// 	schemas, err := ss.EnsureABISchemas(ctx, "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
 // 	require.NoError(t, err)
 // 	assert.Len(t, schemas, 1)
-// 	schemaID = schemas[0].IDString()
+// 	schemaID := schemas[0].ID)
 // 	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
 // 	stateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
 // 	nullifier1 := tktypes.HexBytes(tktypes.RandBytes(32))
@@ -358,27 +362,27 @@ package statemgr
 // 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 
 // 		// Start with 2 states
-// 		tx1states, err := dsi.UpsertStates(&transactionID, []*components.StateUpsert{
+// 		tx1states, err := dc.UpsertStates(&transactionID, []*components.StateUpsert{
 // 			{ID: stateID1, SchemaID: schemaID, Data: data1, Creating: true},
 // 			{ID: stateID2, SchemaID: schemaID, Data: data2, Creating: true},
 // 		})
 // 		require.NoError(t, err)
 // 		assert.Len(t, tx1states, 2)
 
-// 		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{}`))
+// 		states, err := dc.FindAvailableStates(schemaID, toQuery(t, `{}`))
 // 		require.NoError(t, err)
 // 		assert.Len(t, states, 2)
-// 		states, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+// 		states, err = dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 // 		require.NoError(t, err)
 // 		assert.Len(t, states, 0)
 
 // 		// Attach a nullifier to the first state
-// 		err = dsi.UpsertNullifiers([]*components.StateNullifier{
+// 		err = dc.UpsertNullifiers([]*components.StateNullifier{
 // 			{State: stateID1, Nullifier: nullifier1},
 // 		})
 // 		require.NoError(t, err)
 
-// 		states, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+// 		states, err = dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 // 		require.NoError(t, err)
 // 		require.Len(t, states, 1)
 // 		require.NotNil(t, states[0].Nullifier)
@@ -392,10 +396,10 @@ package statemgr
 // 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 
 // 		// Confirm still 2 states and 1 nullifier
-// 		states, err := dsi.FindAvailableStates(schemaID, toQuery(t, `{}`))
+// 		states, err := dc.FindAvailableStates(schemaID, toQuery(t, `{}`))
 // 		require.NoError(t, err)
 // 		assert.Len(t, states, 2)
-// 		states, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+// 		states, err = dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 // 		require.NoError(t, err)
 // 		assert.Len(t, states, 1)
 // 		require.NotNil(t, states[0].Nullifier)
@@ -413,20 +417,20 @@ package statemgr
 
 // 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 // 		// Mark the first state as "spending"
-// 		_, err = dsi.UpsertStates(&transactionID, []*components.StateUpsert{
+// 		_, err = dc.UpsertStates(&transactionID, []*components.StateUpsert{
 // 			{ID: stateID1, SchemaID: schemaID, Data: data1, Spending: true},
 // 		})
 // 		assert.NoError(t, err)
 
 // 		// Confirm no more nullifiers available
-// 		states, err := dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+// 		states, err := dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 // 		require.NoError(t, err)
 // 		assert.Len(t, states, 0)
 
 // 		// Reset transaction to unlock
-// 		err = dsi.ResetTransaction(transactionID)
+// 		err = dc.ResetTransaction(transactionID)
 // 		assert.NoError(t, err)
-// 		states, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+// 		states, err = dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 // 		require.NoError(t, err)
 // 		assert.Len(t, states, 1)
 
@@ -442,7 +446,7 @@ package statemgr
 
 // 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
 // 		// Confirm no more nullifiers available
-// 		states, err := dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+// 		states, err := dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 // 		require.NoError(t, err)
 // 		assert.Len(t, states, 0)
 
@@ -453,17 +457,17 @@ package statemgr
 
 // 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 
-// 		states, err := dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+// 		states, err := dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 // 		require.NoError(t, err)
 // 		assert.Len(t, states, 0)
 
 // 		// Attach a nullifier to the second state
-// 		err = dsi.UpsertNullifiers([]*components.StateNullifier{
+// 		err = dc.UpsertNullifiers([]*components.StateNullifier{
 // 			{State: stateID2, Nullifier: nullifier2},
 // 		})
 // 		require.NoError(t, err)
 
-// 		states, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
+// 		states, err = dc.FindAvailableNullifiers(schemaID, toQuery(t, `{}`))
 // 		require.NoError(t, err)
 // 		require.Len(t, states, 1)
 // 		require.NotNil(t, states[0].Nullifier)
@@ -481,11 +485,11 @@ package statemgr
 
 // 	contractAddress := tktypes.RandAddress()
 // 	dsi := ss.getDomainContext("domain1", *contractAddress)
-// 	err := dsi.takeLatch()
+// 	err := dc.takeLatch()
 // 	require.NoError(t, err)
 
 // 	done()
-// 	err = dsi.run(func(ctx context.Context, dsi components.DomainContext) error { return nil })
+// 	err = dc.run(func(ctx context.Context, dsi components.DomainContext) error { return nil })
 // 	assert.Regexp(t, "PD010301", err)
 
 // }
@@ -495,7 +499,7 @@ package statemgr
 // 	_, ss, _, done := newDBMockStateManager(t)
 // 	defer done()
 
-// 	_, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{{}})
+// 	_, err := ss.EnsureABISchemas(ctx, "domain1", []*abi.Parameter{{}})
 // 	assert.Regexp(t, "PD010114", err)
 
 // }
@@ -511,50 +515,50 @@ package statemgr
 // 		dc.flushResult <- fmt.Errorf("pop")
 // 	}
 
-// 	schemas, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
+// 	schemas, err := ss.EnsureABISchemas(ctx, "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
 // 	require.NoError(t, err)
 
 // 	contractAddress := tktypes.RandAddress()
 // 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 
-// 		dc := dsi.(*domainContext)
+// 		dc := dc.(*domainContext)
 
 // 		fakeFlushError(dc)
-// 		_, err = dsi.FindAvailableStates("", nil)
+// 		_, err = dc.FindAvailableStates("", nil)
 // 		assert.Regexp(t, "pop", err)
 
 // 		fakeFlushError(dc)
-// 		_, err = dsi.FindAvailableNullifiers("", nil)
+// 		_, err = dc.FindAvailableNullifiers("", nil)
 // 		assert.Regexp(t, "pop", err)
 
 // 		fakeFlushError(dc)
-// 		schema, err := ss.getSchemaByID(ctx, "domain1", tktypes.MustParseBytes32(schemas[0].IDString()), true)
+// 		schema, err := ss.getSchemaByID(ctx, "domain1", tktypes.MustParseBytes32(schemas[0].ID()), true)
 // 		require.NoError(t, err)
 // 		_, err = dc.mergedUnFlushed(schema, nil, nil, false)
 // 		assert.Regexp(t, "pop", err)
 
 // 		fakeFlushError(dc)
-// 		_, err = dsi.UpsertStates(nil, nil)
+// 		_, err = dc.UpsertStates(nil, nil)
 // 		assert.Regexp(t, "pop", err)
 
 // 		fakeFlushError(dc)
-// 		err = dsi.UpsertNullifiers(nil)
+// 		err = dc.UpsertNullifiers(nil)
 // 		assert.Regexp(t, "pop", err)
 
 // 		fakeFlushError(dc)
-// 		err = dsi.MarkStatesRead(uuid.New(), nil)
+// 		err = dc.MarkStatesRead(uuid.New(), nil)
 // 		assert.Regexp(t, "pop", err)
 
 // 		fakeFlushError(dc)
-// 		err = dsi.MarkStatesSpending(uuid.New(), nil)
+// 		err = dc.MarkStatesSpending(uuid.New(), nil)
 // 		assert.Regexp(t, "pop", err)
 
 // 		fakeFlushError(dc)
-// 		err = dsi.ResetTransaction(uuid.New())
+// 		err = dc.ResetTransaction(uuid.New())
 // 		assert.Regexp(t, "pop", err)
 
 // 		fakeFlushError(dc)
-// 		err = dsi.Flush()
+// 		err = dc.Flush()
 // 		assert.Regexp(t, "pop", err)
 
 // 		return nil
@@ -764,22 +768,22 @@ package statemgr
 // 	_, ss, done := newDBTestStateManager(t)
 // 	defer done()
 
-// 	schemas, err := ss.EnsureABISchemas(context.Background(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
+// 	schemas, err := ss.EnsureABISchemas(ctx, "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
 // 	require.NoError(t, err)
-// 	schemaID := schemas[0].IDString()
+// 	schemaID := schemas[0].ID()
 // 	assert.Equal(t, "type=FakeCoin(bytes32 salt,address owner,uint256 amount),labels=[owner,amount]", schemas[0].Signature())
 
 // 	contractAddress := tktypes.RandAddress()
 // 	err = ss.RunInDomainContextFlush("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
-// 		_, err = dsi.FindAvailableStates(schemaID, toQuery(t,
+// 		_, err = dc.FindAvailableStates(schemaID, toQuery(t,
 // 			`{"sort":["wrong"]}`))
 // 		assert.Regexp(t, "PD010700", err)
 
-// 		_, err = dsi.FindAvailableNullifiers(schemaID, toQuery(t,
+// 		_, err = dc.FindAvailableNullifiers(schemaID, toQuery(t,
 // 			`{"sort":["wrong"]}`))
 // 		assert.Regexp(t, "PD010700", err)
 
-// 		_, err = dsi.UpsertStates(nil, []*components.StateUpsert{
+// 		_, err = dc.UpsertStates(nil, []*components.StateUpsert{
 // 			{SchemaID: schemaID, Data: tktypes.RawJSON(`"wrong"`)},
 // 		})
 // 		assert.Regexp(t, "FF22038", err)
@@ -798,15 +802,15 @@ package statemgr
 // 	contractAddress := tktypes.RandAddress()
 // 	_ = ss.RunInDomainContext("domain1", *contractAddress, func(ctx context.Context, dsi components.DomainContext) error {
 
-// 		_, err := dsi.UpsertStates(nil, []*components.StateUpsert{
+// 		_, err := dc.UpsertStates(nil, []*components.StateUpsert{
 // 			{SchemaID: "wrong"},
 // 		})
 // 		assert.Regexp(t, "PD020007", err)
 
-// 		err = dsi.MarkStatesRead(uuid.New(), []string{"wrong"})
+// 		err = dc.MarkStatesRead(uuid.New(), []string{"wrong"})
 // 		assert.Regexp(t, "PD020007", err)
 
-// 		err = dsi.MarkStatesSpending(uuid.New(), []string{"wrong"})
+// 		err = dc.MarkStatesSpending(uuid.New(), []string{"wrong"})
 // 		assert.Regexp(t, "PD020007", err)
 
 // 		return nil

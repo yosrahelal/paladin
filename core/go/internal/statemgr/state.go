@@ -31,7 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func (ss *stateManager) PersistState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, data tktypes.RawJSON, id tktypes.HexBytes) (*components.StateWithLabels, error) {
+func (ss *stateManager) PersistState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, data tktypes.RawJSON, id tktypes.HexBytes) (*components.StateWithLabels, error) {
 
 	schema, err := ss.GetSchema(ctx, domainName, schemaID, true)
 	if err != nil {
@@ -49,26 +49,21 @@ func (ss *stateManager) PersistState(ctx context.Context, domainName string, con
 	return s, op.flush(ctx)
 }
 
-func (ss *stateManager) GetState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID string, failNotFound, withLabels bool) (*components.State, error) {
-	id, err := tktypes.ParseBytes32Ctx(ctx, stateID)
-	if err != nil {
-		return nil, err
-	}
-
+func (ss *stateManager) GetState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID tktypes.HexBytes, failNotFound, withLabels bool) (*components.State, error) {
 	q := ss.p.DB().Table("states")
 	if withLabels {
 		q = q.Preload("Labels").Preload("Int64Labels")
 	}
 	var states []*components.State
-	err = q.
+	err := q.
 		Where("domain_name = ?", domainName).
 		Where("contract_address = ?", contractAddress).
-		Where("id = ?", id).
+		Where("id = ?", stateID).
 		Limit(1).
 		Find(&states).
 		Error
 	if err == nil && len(states) == 0 && failNotFound {
-		return nil, i18n.NewError(ctx, msgs.MsgStateNotFound, id)
+		return nil, i18n.NewError(ctx, msgs.MsgStateNotFound, stateID)
 	}
 	return states[0], err
 }
@@ -112,7 +107,7 @@ func (ss *stateManager) labelSetFor(schema components.Schema) *trackingLabelSet 
 	return &tls
 }
 
-func (ss *stateManager) FindStates(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, query *query.QueryJSON, status StateStatusQualifier) (s []*components.State, err error) {
+func (ss *stateManager) FindStates(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, query *query.QueryJSON, status StateStatusQualifier) (s []*components.State, err error) {
 	_, s, err = ss.findStates(ctx, domainName, contractAddress, schemaID, query, status)
 	return s, err
 }
@@ -121,7 +116,7 @@ func (ss *stateManager) findStates(
 	ctx context.Context,
 	domainName string,
 	contractAddress tktypes.EthAddress,
-	schemaID string,
+	schemaID tktypes.Bytes32,
 	jq *query.QueryJSON,
 	status StateStatusQualifier,
 	excluded ...tktypes.HexBytes,
@@ -161,7 +156,7 @@ func (ss *stateManager) findAvailableNullifiers(
 	ctx context.Context,
 	domainName string,
 	contractAddress tktypes.EthAddress,
-	schemaID string,
+	schemaID tktypes.Bytes32,
 	jq *query.QueryJSON,
 	statesWithNullifiers []tktypes.HexBytes,
 	spendingStates []tktypes.HexBytes,
@@ -199,7 +194,7 @@ func (ss *stateManager) findStatesCommon(
 	ctx context.Context,
 	domainName string,
 	contractAddress tktypes.EthAddress,
-	schemaID string,
+	schemaID tktypes.Bytes32,
 	jq *query.QueryJSON,
 	addQuery func(q *gorm.DB) *gorm.DB,
 ) (schema components.Schema, s []*components.State, err error) {
