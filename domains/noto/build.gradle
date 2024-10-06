@@ -92,9 +92,9 @@ task test(type: Exec, dependsOn: [":core:go:makeMocks"]) {
 }
 
 task buildGo(type: GoLib, dependsOn: [":toolkit:go:protoc", copySolidity]) {
-     baseName "noto"
-     goFiles goFiles
-     mainFile 'noto.go'
+    baseName "noto"
+    sources goFiles
+    mainFile 'noto.go'
 }
 
 task build {
