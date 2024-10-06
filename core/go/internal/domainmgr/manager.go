@@ -176,8 +176,16 @@ func (dm *domainManager) DomainRegistered(name string, toDomain components.Domai
 	return d, nil
 }
 
+// fails if domain is not yet initialized (note external endpoints of Paladin do not open up until all domains initialized)
 func (dm *domainManager) GetDomainByName(ctx context.Context, name string) (components.Domain, error) {
-	return dm.getDomainByName(ctx, name)
+	domain, err := dm.getDomainByName(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if err := domain.checkInit(ctx); err != nil {
+		return nil, err
+	}
+	return domain, nil
 }
 
 func (dm *domainManager) getDomainByName(ctx context.Context, name string) (*domain, error) {

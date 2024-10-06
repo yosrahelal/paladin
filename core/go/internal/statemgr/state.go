@@ -50,9 +50,22 @@ func (ss *stateManager) WriteReceivedStates(ctx context.Context, dbTX *gorm.DB, 
 	}
 
 	if d.CustomHashFunction() {
-		if err := d.ValidateStateHashes(ctx, states); err != nil {
+		dStates := make([]*components.FullState, len(states))
+		for i, s := range states {
+			dStates[i] = &components.FullState{
+				ID:     s.ID,
+				Schema: s.SchemaID,
+				Data:   s.Data,
+			}
+		}
+		ids, err := d.ValidateStateHashes(ctx, dStates)
+		if err != nil {
 			// Whole batch fails if any state in the batch is invalid
 			return nil, err
+		}
+		for i, s := range states {
+			// The domain is responsible for generating any missing IDs
+			s.ID = ids[i]
 		}
 	}
 

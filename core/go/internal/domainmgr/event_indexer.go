@@ -155,6 +155,7 @@ func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID 
 }
 
 func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
+
 	// First index any domain contract deployments
 	nonDeployEvents, txCompletions, err := d.dm.registrationIndexer(ctx, dbTX, batch)
 	if err != nil {
@@ -167,7 +168,7 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 		return nil, err
 	}
 	for addr, batch := range batchesByAddress {
-		res, err := d.handleEventBatchForContract(ctx, addr, batch)
+		res, err := d.handleEventBatchForContract(ctx, dbTX, addr, batch)
 		if err != nil {
 			return nil, err
 		}
@@ -228,9 +229,10 @@ func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*
 	return &txUUID, nil
 }
 
-func (d *domain) handleEventBatchForContract(ctx context.Context, c *inFlightDomainRequest, dbTX *gorm.DB, batch *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB, addr tktypes.EthAddress, batch *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
 
-	di := c.dc.Info()
+	c := d.newInFlightDomainRequest(dbTX, d.dm.stateStore.NewDomainContext(ctx, d, addr))
+	defer c.close(ctx)
 
 	var res *prototk.HandleEventBatchResponse
 	res, err := d.api.HandleEventBatch(ctx, batch)
@@ -248,7 +250,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, c *inFlightDom
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
 		}
-		stateSpends[i] = &components.StateSpend{DomainName: di.DomainName, State: stateID, Transaction: *txUUID}
+		stateSpends[i] = &components.StateSpend{DomainName: d.name, State: stateID, Transaction: *txUUID}
 	}
 
 	stateConfirms := make([]*components.StateConfirm, len(res.ConfirmedStates))
@@ -261,7 +263,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, c *inFlightDom
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
 		}
-		stateConfirms[i] = &components.StateConfirm{DomainName: di.DomainName, State: stateID, Transaction: *txUUID}
+		stateConfirms[i] = &components.StateConfirm{DomainName: d.name, State: stateID, Transaction: *txUUID}
 	}
 
 	newStates := make(map[uuid.UUID][]*components.StateUpsert, len(res.NewStates))

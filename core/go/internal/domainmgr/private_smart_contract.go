@@ -467,15 +467,3 @@ func (dc *domainContract) loadStates(ctx context.Context, refs []*prototk.StateR
 	return states, nil
 
 }
-
-func (dc *domainContract) toEndorsableList(states []*components.FullState) []*prototk.EndorsableState {
-	endorsableList := make([]*prototk.EndorsableState, len(states))
-	for i, input := range states {
-		endorsableList[i] = &prototk.EndorsableState{
-			Id:            input.ID.String(),
-			SchemaId:      input.Schema.String(),
-			StateDataJson: string(input.Data),
-		}
-	}
-	return endorsableList
-}

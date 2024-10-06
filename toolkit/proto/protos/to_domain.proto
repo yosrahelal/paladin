@@ -165,11 +165,21 @@ message HandleEventBatchResponse {
   repeated NewLocalState new_states = 4; // A list of new states to store (only for events that contain full state data)
 }
 
+// **VALIDATE_STATE_HASHES** step only happens when custom_state_hash is true in the domain config, and then must be implemented
+message ValidateStateHashesRequest {
+  repeated EndorsableState states = 1; // set of states with either empty IDs to calculate, or with an ID to validate
+}
+
+message ValidateStateHashesResponse {
+  repeated string state_ids = 1; // the validates ids in the same order as the states supplied (if any states were invalid, return an error instead)
+}
+
 message DomainConfig {
-  repeated string abi_state_schemas_json = 1; // A list of Schema definitions (in ABI parameter format) the domain requires for all state types it interacts with
-  BaseLedgerSubmitConfig base_ledger_submit_config = 2; // Describe the requirements of this domain for how submission happens
-  string abi_events_json = 3; // ABI events that the domain will process for state updates
-  map<string, int32> signing_algorithms = 4; // A list of supported signing algorithms with the minimum key lengths for each algorithm
+  bool custom_hash_function = 1; // If true then the ValidateStateHashes function must be implemeted, and all states must come with a pre-caclculated ID
+  repeated string abi_state_schemas_json = 2; // A list of Schema definitions (in ABI parameter format) the domain requires for all state types it interacts with
+  BaseLedgerSubmitConfig base_ledger_submit_config = 3; // Describe the requirements of this domain for how submission happens
+  string abi_events_json = 4; // ABI events that the domain will process for state updates
+  map<string, int32> signing_algorithms = 5; // A list of supported signing algorithms with the minimum key lengths for each algorithm
 }
 
 message BaseLedgerSubmitConfig {

@@ -195,7 +195,7 @@ func TestWriteReceivedStatesValidateHashFail(t *testing.T) {
 	defer done()
 
 	md := mockDomain(t, m, "domain1", true)
-	md.On("ValidateStateHashes", mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
+	md.On("ValidateStateHashes", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 
 	_, err := ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", []*components.StateUpsertOutsideContext{
 		{ID: tktypes.RandBytes(32), SchemaID: tktypes.Bytes32(tktypes.RandBytes(32)),
@@ -217,10 +217,11 @@ func TestWriteReceivedStatesValidateHashOkInsertFail(t *testing.T) {
 	ss.abiSchemaCache.Set(schemaCacheKey("domain1", schema1.ID()), schema1)
 
 	md := mockDomain(t, m, "domain1", true)
-	md.On("ValidateStateHashes", mock.Anything, mock.Anything).Return(nil)
+	stateID1 := tktypes.RandBytes(32)
+	md.On("ValidateStateHashes", mock.Anything, mock.Anything).Return([]tktypes.HexBytes{stateID1}, nil)
 
 	_, err = ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", []*components.StateUpsertOutsideContext{
-		{ID: tktypes.RandBytes(32), SchemaID: schema1.ID(), Data: tktypes.RawJSON(fmt.Sprintf(
+		{SchemaID: schema1.ID(), Data: tktypes.RawJSON(fmt.Sprintf(
 			`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
 			tktypes.RandHex(32)))},
 	})

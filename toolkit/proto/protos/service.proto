@@ -55,6 +55,7 @@ message DomainMessage {
     HandleEventBatchRequest     handle_event_batch =        1090;
     SignRequest                 sign =                      1100;
     GetVerifierRequest          get_verifier =              1110;
+    ValidateStateHashesRequest  validate_state_hashes =     1120;
   }
 
   oneof response_from_domain {
@@ -69,6 +70,7 @@ message DomainMessage {
     HandleEventBatchResponse    handle_event_batch_res =    1091;
     SignResponse                sign_res =                  1101;
     GetVerifierResponse         get_verifier_res =          1111;
+    ValidateStateHashesResponse validate_state_hashes_res = 1121;
   }
 
   // Request/reply exchanges initiated by the domain, to the paladin node

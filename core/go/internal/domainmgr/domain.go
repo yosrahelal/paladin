@@ -214,6 +214,18 @@ func (d *domain) init() {
 	}
 }
 
+func (d *domain) newInFlightDomainRequest(dbTX *gorm.DB, dc components.DomainContext) *inFlightDomainRequest {
+	return &inFlightDomainRequest{
+		id:   tktypes.ShortID(),
+		dbTX: dbTX,
+		dc:   dc,
+	}
+}
+
+func (i *inFlightDomainRequest) close(ctx context.Context) {
+	i.dc.Close(ctx)
+}
+
 func (d *domain) checkInFlight(ctx context.Context, stateQueryContext string) (*inFlightDomainRequest, error) {
 	if err := d.checkInit(ctx); err != nil {
 		return nil, err
@@ -571,4 +583,26 @@ func (d *domain) sign(ctx context.Context, algorithm string, payloadType string,
 		return nil, err
 	}
 	return res.Payload, nil
+}
+
+func (d *domain) toEndorsableList(states []*components.FullState) []*prototk.EndorsableState {
+	endorsableList := make([]*prototk.EndorsableState, len(states))
+	for i, input := range states {
+		endorsableList[i] = &prototk.EndorsableState{
+			Id:            input.ID.String(),
+			SchemaId:      input.Schema.String(),
+			StateDataJson: string(input.Data),
+		}
+	}
+	return endorsableList
+}
+
+func (d *domain) CustomHashFunction() bool {
+	// note config assured to be non-nil by GetDomainByName() not returning a domain until init complete
+	return d.config.CustomHashFunction
+}
+
+func (d *domain) ValidateStateHashes(ctx context.Context, states []*components.FullState) ([]tktypes.HexBytes, error) {
+	// Calls straight into the domain for this
+	protoStates := d.toEndorsableList(states)
 }
