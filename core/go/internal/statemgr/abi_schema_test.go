@@ -17,6 +17,7 @@
 package statemgr
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -41,7 +42,7 @@ func testABIParam(t *testing.T, jsonParam string) *abi.Parameter {
 
 func mockDomain(t *testing.T, m *mockComponents, name string, customHashFunction bool) *componentmocks.Domain {
 	md := componentmocks.NewDomain(t)
-	md.On("Name").Return(name)
+	md.On("Name").Return(name).Maybe()
 	md.On("CustomHashFunction").Return(customHashFunction)
 	m.domainManager.On("GetDomainByName", mock.Anything, name).Return(md, nil)
 	return md
@@ -618,6 +619,46 @@ func TestABISchemaMapLabelResolverBadType(t *testing.T) {
 	}
 	_, _, err := as.mapLabelResolver(ctx, "", -1)
 	assert.Regexp(t, "PD010103", err)
+}
+
+func TestABISchemaInsertCustomHashNoID(t *testing.T) {
+
+	as := &abiSchema{
+		SchemaPersisted: &components.SchemaPersisted{},
+		definition:      &abi.Parameter{Components: abi.ParameterArray{}},
+	}
+	tc, err := as.definition.Components.TypeComponentTree()
+	require.NoError(t, err)
+	as.tc = tc
+	_, err = as.ProcessState(context.Background(), *tktypes.RandAddress(), tktypes.RawJSON(`{}`), nil, true)
+	assert.Regexp(t, "PD010130", err)
+}
+
+func TestABISchemaInsertStandardHashMismatch(t *testing.T) {
+	as, err := newABISchema(context.Background(), "domain1", &abi.Parameter{
+		Type:         "tuple",
+		Name:         "MyStruct",
+		InternalType: "struct MyStruct",
+		Components:   abi.ParameterArray{},
+	})
+	require.NoError(t, err)
+	_, err = as.ProcessState(context.Background(), *tktypes.RandAddress(),
+		tktypes.RawJSON(`{}`), tktypes.RandBytes(32), false)
+	assert.Regexp(t, "PD010129", err)
+}
+
+func TestABISchemaInsertCustomHashBadData(t *testing.T) {
+	as := &abiSchema{
+		SchemaPersisted: &components.SchemaPersisted{},
+		definition: &abi.Parameter{Components: abi.ParameterArray{
+			{Type: "uint256", Name: "field1"},
+		}},
+	}
+	tc, err := as.definition.Components.TypeComponentTree()
+	require.NoError(t, err)
+	as.tc = tc
+	_, err = as.ProcessState(context.Background(), *tktypes.RandAddress(), tktypes.RawJSON(`{}`), tktypes.RandBytes(32), false)
+	assert.Regexp(t, "FF22040", err)
 }
 
 func TestABISchemaMapValueToLabelTypeErrors(t *testing.T) {

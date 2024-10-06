@@ -27,6 +27,8 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPersistStateMissingSchema(t *testing.T) {
@@ -171,5 +173,57 @@ func TestFindStatesUnknownContext(t *testing.T) {
 		},
 	}, StateStatusQualifier(uuid.NewString()))
 	assert.Regexp(t, "PD010123", err)
+
+}
+
+func TestWritePreVerifiedStateInvalidDomain(t *testing.T) {
+	ctx, ss, _, m, done := newDBMockStateManager(t)
+	defer done()
+
+	m.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(nil, fmt.Errorf("not found"))
+
+	_, err := ss.WritePreVerifiedStates(ctx, ss.p.DB(), "domain1", []*components.StateUpsertOutsideContext{})
+	assert.Regexp(t, "not found", err)
+
+	_, err = ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", []*components.StateUpsertOutsideContext{})
+	assert.Regexp(t, "not found", err)
+
+}
+
+func TestWriteReceivedStatesValidateHashFail(t *testing.T) {
+	ctx, ss, _, m, done := newDBMockStateManager(t)
+	defer done()
+
+	md := mockDomain(t, m, "domain1", true)
+	md.On("ValidateStateHashes", mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
+
+	_, err := ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", []*components.StateUpsertOutsideContext{
+		{ID: tktypes.RandBytes(32), SchemaID: tktypes.Bytes32(tktypes.RandBytes(32)),
+			Data: tktypes.RawJSON(fmt.Sprintf(
+				`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
+				tktypes.RandHex(32)))},
+	})
+	assert.Regexp(t, "pop", err)
+
+}
+func TestWriteReceivedStatesValidateHashOkInsertFail(t *testing.T) {
+	ctx, ss, db, m, done := newDBMockStateManager(t)
+	defer done()
+
+	db.ExpectExec("INSERT.*states").WillReturnError(fmt.Errorf("pop"))
+
+	schema1, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
+	require.NoError(t, err)
+	ss.abiSchemaCache.Set(schemaCacheKey("domain1", schema1.ID()), schema1)
+
+	md := mockDomain(t, m, "domain1", true)
+	md.On("ValidateStateHashes", mock.Anything, mock.Anything).Return(nil)
+
+	_, err = ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", []*components.StateUpsertOutsideContext{
+		{ID: tktypes.RandBytes(32), SchemaID: schema1.ID(), Data: tktypes.RawJSON(fmt.Sprintf(
+			`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
+			tktypes.RandHex(32)))},
+	})
+	assert.Regexp(t, "pop", err)
 
 }

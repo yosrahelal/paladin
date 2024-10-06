@@ -327,7 +327,15 @@ func (as *abiSchema) parseStateData(ctx context.Context, data tktypes.RawJSON) (
 // build the label values to store in the DB for comparison appropriate to the type.
 func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, id tktypes.HexBytes, customHashFunction bool) (*components.StateWithLabels, error) {
 
+	// We need to re-serialize the data according to the ABI to:
+	// - Ensure it's valid
+	// - Remove anything that is not part of the schema
+	// - Standardize formatting of all the data elements so domains do not need to worry
+	var jsonData []byte
 	psd, err := as.parseStateData(ctx, data)
+	if err == nil {
+		jsonData, err = tktypes.StandardABISerializer().SerializeJSONCtx(ctx, psd.cv)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -358,21 +366,9 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 			return nil, i18n.WrapError(ctx, err, msgs.MsgStateInvalidCalculatingHash)
 		}
 		if id != nil && !id.Equals(tktypes.HexBytes(hash)) {
-			return nil, i18n.NewError(ctx, msgs.MsgStateInvalidCalculatingHash, id, hash)
+			return nil, i18n.NewError(ctx, msgs.MsgStateHashMismatch, id, hash)
 		}
 		id = tktypes.HexBytes(hash)
-	}
-
-	// We need to re-serialize the data according to the ABI to:
-	// - Ensure it's valid
-	// - Remove anything that is not part of the schema
-	// - Standardize formatting of all the data elements so domains do not need to worry
-	var jsonData []byte
-	if err == nil {
-		jsonData, err = tktypes.StandardABISerializer().SerializeJSONCtx(ctx, psd.cv)
-	}
-	if err != nil {
-		return nil, err
 	}
 
 	for i := range psd.labels {
