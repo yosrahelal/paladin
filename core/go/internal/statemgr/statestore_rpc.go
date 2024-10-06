@@ -52,9 +52,15 @@ func (ss *stateManager) rpcStoreState() rpcserver.RPCHandler {
 		data tktypes.RawJSON,
 	) (*components.State, error) {
 		var state *components.State
-		newState, err := ss.PersistState(ctx, domain, contractAddress, schema, data, nil)
+		newStates, err := ss.WriteReceivedStates(ctx, ss.p.DB(), domain, []*components.StateUpsertOutsideContext{
+			{
+				ContractAddress: contractAddress,
+				SchemaID:        schema,
+				Data:            data,
+			},
+		})
 		if err == nil {
-			state = newState.State
+			state = newStates[0]
 		}
 		return state, err
 	})

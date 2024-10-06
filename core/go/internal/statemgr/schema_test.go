@@ -27,7 +27,7 @@ import (
 )
 
 func TestGetSchemaNotFoundNil(t *testing.T) {
-	ctx, ss, mdb, done := newDBMockStateManager(t)
+	ctx, ss, mdb, _, done := newDBMockStateManager(t)
 	defer done()
 
 	mdb.ExpectQuery("SELECT.*schemas").WillReturnRows(sqlmock.NewRows([]string{}))
@@ -38,7 +38,7 @@ func TestGetSchemaNotFoundNil(t *testing.T) {
 }
 
 func TestGetSchemaNotFoundError(t *testing.T) {
-	ctx, ss, mdb, done := newDBMockStateManager(t)
+	ctx, ss, mdb, _, done := newDBMockStateManager(t)
 	defer done()
 
 	mdb.ExpectQuery("SELECT.*schemas").WillReturnRows(sqlmock.NewRows([]string{}))
@@ -48,7 +48,7 @@ func TestGetSchemaNotFoundError(t *testing.T) {
 }
 
 func TestGetSchemaInvalidType(t *testing.T) {
-	ctx, ss, mdb, done := newDBMockStateManager(t)
+	ctx, ss, mdb, _, done := newDBMockStateManager(t)
 	defer done()
 
 	mdb.ExpectQuery("SELECT.*schemas").WillReturnRows(sqlmock.NewRows(
@@ -60,7 +60,7 @@ func TestGetSchemaInvalidType(t *testing.T) {
 }
 
 func TestListSchemasListIDsFail(t *testing.T) {
-	ctx, ss, mdb, done := newDBMockStateManager(t)
+	ctx, ss, mdb, _, done := newDBMockStateManager(t)
 	defer done()
 
 	mdb.ExpectQuery("SELECT").WillReturnError(fmt.Errorf("pop"))
@@ -70,7 +70,7 @@ func TestListSchemasListIDsFail(t *testing.T) {
 }
 
 func TestListSchemasGetFullSchemaFail(t *testing.T) {
-	ctx, ss, mdb, done := newDBMockStateManager(t)
+	ctx, ss, mdb, _, done := newDBMockStateManager(t)
 	defer done()
 
 	id := tktypes.Bytes32Keccak(([]byte)("test"))

@@ -941,3 +941,12 @@ func TestRecoverSignerFailCases(t *testing.T) {
 	})
 	assert.Regexp(t, "PD011638", err)
 }
+
+func TestMapStateLockType(t *testing.T) {
+	for _, pldType := range components.StateLockType("").Options() {
+		assert.NotNil(t, mapStateLockType(components.StateLockType(pldType)))
+	}
+	assert.Panics(t, func() {
+		_ = mapStateLockType(components.StateLockType("wrong"))
+	})
+}

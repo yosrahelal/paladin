@@ -23,46 +23,70 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/stretchr/testify/require"
 )
 
-func newDBTestStateManager(t *testing.T) (context.Context, *stateManager, func()) {
+type mockComponents struct {
+	domainManager *componentmocks.DomainManager
+	allComponents *componentmocks.AllComponents
+}
+
+func newMockComponents(t *testing.T) *mockComponents {
+	m := &mockComponents{}
+	m.domainManager = componentmocks.NewDomainManager(t)
+	m.allComponents = componentmocks.NewAllComponents(t)
+	m.allComponents.On("DomainManager").Return(m.domainManager)
+	return m
+}
+
+func newDBTestStateManager(t *testing.T) (context.Context, *stateManager, *mockComponents, func()) {
 	ctx := context.Background()
 	p, pDone, err := persistence.NewUnitTestPersistence(ctx)
 	require.NoError(t, err)
 	ss := NewStateManager(ctx, &pldconf.StateStoreConfig{}, p)
 
-	ir, err := ss.PreInit(nil /* no current use of components */)
+	m := newMockComponents(t)
+
+	ir, err := ss.PreInit(m.allComponents)
 	require.NoError(t, err)
 	require.NotNil(t, ir)
 	require.NotEmpty(t, ir.RPCModules)
 
-	err = ss.PostInit(nil)
+	err = ss.PostInit(m.allComponents)
 	require.NoError(t, err)
 
 	err = ss.Start()
 	require.NoError(t, err)
 
-	return ctx, ss.(*stateManager), func() {
+	return ctx, ss.(*stateManager), m, func() {
 		ss.Stop()
 		pDone()
 	}
 }
 
-func newDBMockStateManager(t *testing.T) (context.Context, *stateManager, sqlmock.Sqlmock, func()) {
+func newDBMockStateManager(t *testing.T) (context.Context, *stateManager, sqlmock.Sqlmock, *mockComponents, func()) {
 	ctx := context.Background()
 	log.SetLevel("debug")
 	p, err := mockpersistence.NewSQLMockProvider()
 	require.NoError(t, err)
 	ss := NewStateManager(ctx, &pldconf.StateStoreConfig{}, p.P)
-	_, err = ss.PreInit(nil)
+
+	m := newMockComponents(t)
+
+	_, err = ss.PreInit(m.allComponents)
 	require.NoError(t, err)
-	err = ss.PostInit(nil)
+
+	err = ss.PostInit(m.allComponents)
 	require.NoError(t, err)
-	return ctx, ss.(*stateManager), p.Mock, func() {
+
+	err = ss.Start()
+	require.NoError(t, err)
+
+	return ctx, ss.(*stateManager), p.Mock, m, func() {
 		ss.Stop()
 		require.NoError(t, p.Mock.ExpectationsWereMet())
 	}

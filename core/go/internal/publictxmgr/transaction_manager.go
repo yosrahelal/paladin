@@ -180,6 +180,7 @@ func (ble *pubTxManager) PostInit(pic components.AllComponents) error {
 }
 
 func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *components.ManagerInitResult, err error) {
+	ble.submissionWriter = newSubmissionWriter(ble.ctx, ble.p, ble.conf)
 	return &components.ManagerInitResult{}, nil
 }
 
@@ -204,7 +205,7 @@ func (ble *pubTxManager) Start() error {
 		go ble.engineLoop()
 	}
 	ble.MarkInFlightOrchestratorsStale()
-	ble.submissionWriter = newSubmissionWriter(ctx, ble.p, ble.conf)
+	ble.submissionWriter.Start()
 	log.L(ctx).Infof("Started enterprise transaction handler")
 	return nil
 }

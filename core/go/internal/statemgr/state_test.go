@@ -30,19 +30,33 @@ import (
 )
 
 func TestPersistStateMissingSchema(t *testing.T) {
-	ctx, ss, db, done := newDBMockStateManager(t)
+	ctx, ss, db, m, done := newDBMockStateManager(t)
 	defer done()
 
+	_ = mockDomain(t, m, "domain1", false)
+
+	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
-	contractAddress := tktypes.RandAddress()
-	_, err := ss.PersistState(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("test")), nil, nil)
+	upserts := []*components.StateUpsertOutsideContext{
+		{
+			ContractAddress: *tktypes.RandAddress(),
+			SchemaID:        tktypes.Bytes32Keccak(([]byte)("test")),
+		},
+	}
+
+	_, err := ss.WritePreVerifiedStates(ctx, ss.p.DB(), "domain1", upserts)
+	assert.Regexp(t, "PD010106", err)
+
+	_, err = ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", upserts)
 	assert.Regexp(t, "PD010106", err)
 }
 
 func TestPersistStateInvalidState(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateManager(t)
+	ctx, ss, _, m, done := newDBMockStateManager(t)
 	defer done()
+
+	_ = mockDomain(t, m, "domain1", false)
 
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
 	cacheKey := schemaCacheKey("domain1", schemaID)
@@ -50,13 +64,22 @@ func TestPersistStateInvalidState(t *testing.T) {
 		definition: &abi.Parameter{},
 	})
 
-	contractAddress := tktypes.RandAddress()
-	_, err := ss.PersistState(ctx, "domain1", *contractAddress, schemaID, nil, nil)
+	upserts := []*components.StateUpsertOutsideContext{
+		{
+			ContractAddress: *tktypes.RandAddress(),
+			SchemaID:        schemaID,
+		},
+	}
+
+	_, err := ss.WritePreVerifiedStates(ctx, ss.p.DB(), "domain1", upserts)
+	assert.Regexp(t, "PD010116", err)
+
+	_, err = ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", upserts)
 	assert.Regexp(t, "PD010116", err)
 }
 
 func TestGetStateMissing(t *testing.T) {
-	ctx, ss, db, done := newDBMockStateManager(t)
+	ctx, ss, db, _, done := newDBMockStateManager(t)
 	defer done()
 
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
@@ -67,7 +90,7 @@ func TestGetStateMissing(t *testing.T) {
 }
 
 func TestFindStatesMissingSchema(t *testing.T) {
-	ctx, ss, db, done := newDBMockStateManager(t)
+	ctx, ss, db, _, done := newDBMockStateManager(t)
 	defer done()
 
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
@@ -78,7 +101,7 @@ func TestFindStatesMissingSchema(t *testing.T) {
 }
 
 func TestFindStatesBadQuery(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateManager(t)
+	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
@@ -102,7 +125,7 @@ func TestFindStatesBadQuery(t *testing.T) {
 }
 
 func TestFindStatesFail(t *testing.T) {
-	ctx, ss, db, done := newDBMockStateManager(t)
+	ctx, ss, db, _, done := newDBMockStateManager(t)
 	defer done()
 
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
@@ -131,7 +154,7 @@ func TestFindStatesFail(t *testing.T) {
 }
 
 func TestFindStatesUnknownContext(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateManager(t)
+	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))

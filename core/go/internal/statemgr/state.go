@@ -26,27 +26,104 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func (ss *stateManager) PersistState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, data tktypes.RawJSON, id tktypes.HexBytes) (*components.StateWithLabels, error) {
+func (ss *stateManager) WritePreVerifiedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*components.StateUpsertOutsideContext) ([]*components.State, error) {
 
-	schema, err := ss.GetSchema(ctx, domainName, schemaID, true)
+	d, err := ss.domainManager.GetDomainByName(ctx, domainName)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := schema.ProcessState(ctx, contractAddress, data, id)
+	return ss.processInsertStates(ctx, dbTX, d, states)
+}
+
+func (ss *stateManager) WriteReceivedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*components.StateUpsertOutsideContext) ([]*components.State, error) {
+
+	d, err := ss.domainManager.GetDomainByName(ctx, domainName)
 	if err != nil {
 		return nil, err
 	}
 
-	op := ss.writer.newWriteOp(s.State.DomainName, contractAddress)
-	op.states = []*components.StateWithLabels{s}
-	ss.writer.queue(ctx, op)
-	return s, op.flush(ctx)
+	if d.CustomHashFunction() {
+		if err := d.ValidateStateHashes(ctx, states); err != nil {
+			// Whole batch fails if any state in the batch is invalid
+			return nil, err
+		}
+	}
+
+	return ss.processInsertStates(ctx, dbTX, d, states)
+}
+
+func (ss *stateManager) processInsertStates(ctx context.Context, dbTX *gorm.DB, d components.Domain, inStates []*components.StateUpsertOutsideContext) (processedStates []*components.State, err error) {
+
+	processedStates = make([]*components.State, len(inStates))
+	for i, inState := range inStates {
+		schema, err := ss.GetSchema(ctx, d.Name(), inState.SchemaID, true)
+		if err != nil {
+			return nil, err
+		}
+
+		s, err := schema.ProcessState(ctx, inState.ContractAddress, inState.Data, inState.ID, d.CustomHashFunction())
+		if err != nil {
+			return nil, err
+		}
+		processedStates[i] = s.State
+	}
+
+	// Write them directly
+	if err = ss.writeStates(ctx, dbTX, processedStates); err != nil {
+		return nil, err
+	}
+
+	return processedStates, nil
+}
+
+func (ss *stateManager) writeStates(ctx context.Context, dbTX *gorm.DB, states []*components.State) (err error) {
+	var labels []*components.StateLabel
+	var int64Labels []*components.StateInt64Label
+	for _, s := range states {
+		labels = append(labels, s.Labels...)
+		int64Labels = append(int64Labels, s.Int64Labels...)
+	}
+
+	if len(states) > 0 {
+		err = dbTX.
+			Table("states").
+			WithContext(ctx).
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "id"}},
+				DoNothing: true, // immutable
+			}).
+			Omit("Labels", "Int64Labels", "Confirmed", "Spent"). // we do this ourselves below
+			Create(states).
+			Error
+	}
+	if err == nil && len(labels) > 0 {
+		err = dbTX.
+			Table("state_labels").
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}, {Name: "label"}},
+				DoNothing: true, // immutable
+			}).
+			Create(labels).
+			Error
+	}
+	if err == nil && len(int64Labels) > 0 {
+		err = dbTX.
+			Table("state_int64_labels").
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}, {Name: "label"}},
+				DoNothing: true, // immutable
+			}).
+			Create(int64Labels).
+			Error
+	}
+	return err
 }
 
 func (ss *stateManager) GetState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID tktypes.HexBytes, failNotFound, withLabels bool) (*components.State, error) {

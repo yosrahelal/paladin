@@ -32,15 +32,16 @@ import (
 )
 
 type domainContext struct {
-	id              uuid.UUID
-	ss              *stateManager
-	domainName      string
-	contractAddress tktypes.EthAddress
-	stateLock       sync.Mutex
-	unFlushed       *writeOperation
-	flushing        *writeOperation
-	domainContexts  map[uuid.UUID]*domainContext
-	closed          bool
+	id                 uuid.UUID
+	ss                 *stateManager
+	domainName         string
+	customHashFunction bool
+	contractAddress    tktypes.EthAddress
+	stateLock          sync.Mutex
+	unFlushed          *writeOperation
+	flushing           *writeOperation
+	domainContexts     map[uuid.UUID]*domainContext
+	closed             bool
 
 	// We track creatingStates states beyond the flush - until the transaction that created them is removed, or a full reset
 	// This is because the DB will never return them as "available"
@@ -53,20 +54,21 @@ type domainContext struct {
 }
 
 // Very important that callers Close domain contexts they open
-func (ss *stateManager) NewDomainContext(ctx context.Context, domainName string, contractAddress tktypes.EthAddress) components.DomainContext {
+func (ss *stateManager) NewDomainContext(ctx context.Context, domain components.Domain, contractAddress tktypes.EthAddress) components.DomainContext {
 	id := uuid.New()
-	log.L(ctx).Debugf("Domain context %s for domain %s contract %s closed", id, domainName, contractAddress)
+	log.L(ctx).Debugf("Domain context %s for domain %s contract %s closed", id, domain.Name(), contractAddress)
 
 	ss.domainContextLock.Lock()
 	defer ss.domainContextLock.Unlock()
 
 	dc := &domainContext{
-		id:              id,
-		ss:              ss,
-		domainName:      domainName,
-		contractAddress: contractAddress,
-		creatingStates:  make(map[string]*components.StateWithLabels),
-		domainContexts:  make(map[uuid.UUID]*domainContext),
+		id:                 id,
+		ss:                 ss,
+		domainName:         domain.Name(),
+		customHashFunction: domain.CustomHashFunction(),
+		contractAddress:    contractAddress,
+		creatingStates:     make(map[string]*components.StateWithLabels),
+		domainContexts:     make(map[uuid.UUID]*domainContext),
 	}
 	ss.domainContexts[id] = dc
 	return dc
@@ -189,7 +191,7 @@ func (dc *domainContext) mergeUnFlushedApplyLocks(ctx context.Context, schema co
 func (dc *domainContext) Info() components.DomainContextInfo {
 	return components.DomainContextInfo{
 		ID:              dc.id,
-		Domain:          dc.domainName,
+		DomainName:      dc.domainName,
 		ContractAddress: dc.contractAddress,
 	}
 }
@@ -289,7 +291,7 @@ func (dc *domainContext) UpsertStates(ctx context.Context, stateUpserts ...*comp
 			return nil, err
 		}
 
-		vs, err := schema.ProcessState(ctx, dc.contractAddress, ns.Data, ns.ID)
+		vs, err := schema.ProcessState(ctx, dc.contractAddress, ns.Data, ns.ID, dc.customHashFunction)
 		if err != nil {
 			return nil, err
 		}

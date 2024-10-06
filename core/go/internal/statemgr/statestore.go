@@ -36,6 +36,7 @@ type stateManager struct {
 	bgCtx             context.Context
 	cancelCtx         context.CancelFunc
 	conf              *pldconf.StateStoreConfig
+	domainManager     components.DomainManager
 	writer            *stateWriter
 	abiSchemaCache    cache.Cache[string, components.Schema]
 	rpcModule         *rpcserver.RPCModule
@@ -67,10 +68,12 @@ func (ss *stateManager) PreInit(c components.PreInitComponents) (*components.Man
 
 func (ss *stateManager) PostInit(c components.AllComponents) error {
 	ss.writer = newStateWriter(ss.bgCtx, ss, &ss.conf.StateWriter)
+	ss.domainManager = c.DomainManager()
 	return nil
 }
 
 func (ss *stateManager) Start() error {
+	ss.writer.start()
 	return nil
 }
 

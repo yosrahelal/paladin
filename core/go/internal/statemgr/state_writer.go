@@ -50,7 +50,8 @@ type writeOperation struct {
 type noResult struct{}
 
 type stateWriter struct {
-	w flushwriter.Writer[*writeOperation, *noResult]
+	ss *stateManager
+	w  flushwriter.Writer[*writeOperation, *noResult]
 }
 
 func (wo *writeOperation) WriteKey() string {
@@ -58,9 +59,13 @@ func (wo *writeOperation) WriteKey() string {
 }
 
 func newStateWriter(bgCtx context.Context, ss *stateManager, conf *pldconf.FlushWriterConfig) *stateWriter {
-	sw := &stateWriter{}
+	sw := &stateWriter{ss: ss}
 	sw.w = flushwriter.NewWriter(bgCtx, sw.runBatch, ss.p, conf, &pldconf.StateWriterConfigDefaults)
 	return sw
+}
+
+func (sw *stateWriter) start() {
+	sw.w.Start()
 }
 
 func (op *writeOperation) flush(ctx context.Context) error {
@@ -83,55 +88,25 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 
 	// Build lists of things to insert (we are insert only)
 	var states []*components.State
-	var labels []*components.StateLabel
-	var int64Labels []*components.StateInt64Label
 	var stateLocks []*components.StateLock
 	var stateNullifiers []*components.StateNullifier
 	for _, op := range values {
 		for _, s := range op.states {
 			states = append(states, s.State)
-			labels = append(labels, s.State.Labels...)
-			int64Labels = append(int64Labels, s.State.Int64Labels...)
 		}
 		if len(op.stateNullifiers) > 0 {
 			stateNullifiers = append(stateNullifiers, op.stateNullifiers...)
 		}
 	}
-	log.L(ctx).Debugf("Writing state batch states=%d locks=%d nullifiers=%d labels=%d int64Labels=%d",
-		len(states), len(stateLocks), len(stateNullifiers), len(labels), len(int64Labels))
+	log.L(ctx).Debugf("Writing state batch states=%d locks=%d nullifiers=%d ",
+		len(states), len(stateLocks), len(stateNullifiers))
 
 	var err error
+
 	if len(states) > 0 {
-		err = tx.
-			Table("states").
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "id"}},
-				DoNothing: true, // immutable
-			}).
-			Omit("Labels", "Int64Labels", "Confirmed", "Spent"). // we do this ourselves below
-			Create(states).
-			Error
+		err = sw.ss.writeStates(ctx, tx, states)
 	}
-	if err == nil && len(labels) > 0 {
-		err = tx.
-			Table("state_labels").
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}, {Name: "label"}},
-				DoNothing: true, // immutable
-			}).
-			Create(labels).
-			Error
-	}
-	if err == nil && len(int64Labels) > 0 {
-		err = tx.
-			Table("state_int64_labels").
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}, {Name: "label"}},
-				DoNothing: true, // immutable
-			}).
-			Create(int64Labels).
-			Error
-	}
+
 	if err == nil && len(stateNullifiers) > 0 {
 		err = tx.
 			Table("state_nullifiers").

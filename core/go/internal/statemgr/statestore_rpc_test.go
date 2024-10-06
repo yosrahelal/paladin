@@ -34,8 +34,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestRPCServer(t *testing.T) (context.Context, *stateManager, rpcclient.Client, func()) {
-	ctx, ss, ssDone := newDBTestStateManager(t)
+func newTestRPCServer(t *testing.T) (context.Context, *stateManager, rpcclient.Client, *mockComponents, func()) {
+	ctx, ss, m, ssDone := newDBTestStateManager(t)
 
 	s, err := rpcserver.NewRPCServer(ctx, &pldconf.RPCServerConfig{
 		HTTP: pldconf.RPCServerConfigHTTP{
@@ -51,7 +51,7 @@ func newTestRPCServer(t *testing.T) (context.Context, *stateManager, rpcclient.C
 
 	c := rpcclient.WrapRestyClient(resty.New().SetBaseURL(fmt.Sprintf("http://%s", s.HTTPAddr())))
 
-	return ctx, ss, c, func() { s.Stop(); ssDone() }
+	return ctx, ss, c, m, func() { s.Stop(); ssDone() }
 
 }
 
@@ -63,8 +63,10 @@ func jsonTestLog(t *testing.T, desc string, f interface{}) {
 
 func TestRPC(t *testing.T) {
 
-	ctx, ss, c, done := newTestRPCServer(t)
+	ctx, ss, c, m, done := newTestRPCServer(t)
 	defer done()
+
+	_ = mockDomain(t, m, "domain1", false)
 
 	var abiParam abi.Parameter
 	err := json.Unmarshal([]byte(widgetABI), &abiParam)

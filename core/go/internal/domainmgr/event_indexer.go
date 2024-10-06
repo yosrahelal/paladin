@@ -21,7 +21,9 @@ import (
 	"sort"
 
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -226,7 +228,9 @@ func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*
 	return &txUUID, nil
 }
 
-func (d *domain) handleEventBatchForContract(ctx context.Context, addr tktypes.EthAddress, batch *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+func (d *domain) handleEventBatchForContract(ctx context.Context, c *inFlightDomainRequest, dbTX *gorm.DB, batch *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+
+	di := c.dc.Info()
 
 	var res *prototk.HandleEventBatchResponse
 	res, err := d.api.HandleEventBatch(ctx, batch)
@@ -234,22 +238,30 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, addr tktypes.E
 		return nil, err
 	}
 
-	spentStates := make(map[uuid.UUID][]string, len(res.SpentStates))
-	for _, state := range res.SpentStates {
+	stateSpends := make([]*components.StateSpend, len(res.SpentStates))
+	for i, state := range res.SpentStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
 			return nil, err
 		}
-		spentStates[*txUUID] = append(spentStates[*txUUID], state.Id)
+		stateID, err := tktypes.ParseHexBytes(ctx, state.Id)
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
+		}
+		stateSpends[i] = &components.StateSpend{DomainName: di.DomainName, State: stateID, Transaction: *txUUID}
 	}
 
-	confirmedStates := make(map[uuid.UUID][]string, len(res.ConfirmedStates))
-	for _, state := range res.ConfirmedStates {
+	stateConfirms := make([]*components.StateConfirm, len(res.ConfirmedStates))
+	for i, state := range res.ConfirmedStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
 			return nil, err
 		}
-		confirmedStates[*txUUID] = append(confirmedStates[*txUUID], state.Id)
+		stateID, err := tktypes.ParseHexBytes(ctx, state.Id)
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
+		}
+		stateConfirms[i] = &components.StateConfirm{DomainName: di.DomainName, State: stateID, Transaction: *txUUID}
 	}
 
 	newStates := make(map[uuid.UUID][]*components.StateUpsert, len(res.NewStates))
@@ -262,34 +274,33 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, addr tktypes.E
 		if state.Id != nil {
 			id, err = tktypes.ParseHexBytes(ctx, *state.Id)
 			if err != nil {
-				return nil, err
+				return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, *state.Id)
 			}
 		}
+		schemaID, err := tktypes.ParseBytes32(state.SchemaId)
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidSchemaID, state.SchemaId)
+		}
 		newStates[*txUUID] = append(newStates[*txUUID], &components.StateUpsert{
-			ID:       id,
-			SchemaID: state.SchemaId,
-			Data:     tktypes.RawJSON(state.StateDataJson),
-			Creating: true,
+			ID:        id,
+			SchemaID:  schemaID,
+			Data:      tktypes.RawJSON(state.StateDataJson),
+			CreatedBy: txUUID,
 		})
 	}
 
-	err = d.dm.stateStore.RunInDomainContext(d.name, addr, func(ctx context.Context, dsi components.DomainContext) error {
-		for txID, states := range newStates {
-			if _, err = dsi.UpsertStates(&txID, states); err != nil {
-				return err
-			}
+	if len(stateSpends) > 0 || len(stateConfirms) > 0 {
+		if err := d.dm.stateStore.WriteStateFinalizations(ctx, dbTX, stateSpends, stateConfirms); err != nil {
+			return nil, err
 		}
-		for txID, states := range spentStates {
-			if err = dsi.MarkStatesSpent(txID, states); err != nil {
-				return err
-			}
-		}
-		for txID, states := range confirmedStates {
-			if err = dsi.MarkStatesConfirmed(txID, states); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	}
+
+	if len(newStates) > 0 {
+		// This is an outlier case - we're writing states that are distributed via the blockchain using
+		// encryption, rather than selectively disclosed.
+		// The domain MUST HAVE PRE-VERIFIED these states (we do not call verify again against the domain
+		// for states that reach this path)
+	}
+
 	return res, err
 }

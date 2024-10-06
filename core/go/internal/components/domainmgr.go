@@ -50,9 +50,14 @@ type Domain interface {
 	Name() string
 	RegistryAddress() *tktypes.EthAddress
 	Configuration() *prototk.DomainConfig
+	CustomHashFunction() bool
 
 	InitDeploy(ctx context.Context, tx *PrivateContractDeploy) error
 	PrepareDeploy(ctx context.Context, tx *PrivateContractDeploy) error
+
+	// The state manager calls this when states are received for a domain that has a custom hash function.
+	// Any nil IDs should be filled in, and any mis-matched IDs should result in an error
+	ValidateStateHashes(ctx context.Context, states []*StateUpsertOutsideContext) error
 }
 
 // External interface for other components to call against a private smart contract

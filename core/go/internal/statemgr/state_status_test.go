@@ -24,6 +24,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -73,9 +74,15 @@ func makeWidgets(t *testing.T, ctx context.Context, ss *stateManager, domainName
 	states := make([]*components.State, len(withoutSalt))
 	for i, w := range withoutSalt {
 		withSalt := genWidget(t, schemaID, nil, w)
-		newState, err := ss.PersistState(ctx, domainName, contractAddress, schemaID, withSalt.Data, nil)
+		newStates, err := ss.WritePreVerifiedStates(ctx, ss.p.DB(), domainName, []*components.StateUpsertOutsideContext{
+			{
+				ContractAddress: contractAddress,
+				SchemaID:        schemaID,
+				Data:            withSalt.Data,
+			},
+		})
 		require.NoError(t, err)
-		states[i] = newState.State
+		states[i] = newStates[0]
 		fmt.Printf("widget[%d]: %s\n", i, states[i].Data)
 	}
 	return states
@@ -89,10 +96,21 @@ func syncFlushContext(t *testing.T, ctx context.Context, dc components.DomainCon
 	require.NoError(t, err)
 }
 
+func newTestDomainContext(t *testing.T, ss *stateManager, name string, customHashFunction bool) (tktypes.EthAddress, *domainContext) {
+	md := componentmocks.NewDomain(t)
+	md.On("Name").Return(name)
+	md.On("CustomHashFunction").Return(customHashFunction)
+	contractAddress := tktypes.RandAddress()
+	dc := ss.NewDomainContext(ss.bgCtx, md, *contractAddress)
+	return *contractAddress, dc.(*domainContext)
+}
+
 func TestStateLockingQuery(t *testing.T) {
 
-	ctx, ss, done := newDBTestStateManager(t)
+	ctx, ss, m, done := newDBTestStateManager(t)
 	defer done()
+
+	_ = mockDomain(t, m, "domain1", false)
 
 	schema, err := newABISchema(ctx, "domain1", testABIParam(t, widgetABI))
 	require.NoError(t, err)
@@ -100,8 +118,10 @@ func TestStateLockingQuery(t *testing.T) {
 	require.NoError(t, err)
 	schemaID := schema.ID()
 
-	contractAddress := tktypes.RandAddress()
-	widgets := makeWidgets(t, ctx, ss, "domain1", *contractAddress, schemaID, []string{
+	contractAddress, dc := newTestDomainContext(t, ss, "domain1", false)
+	defer dc.Close(ctx)
+
+	widgets := makeWidgets(t, ctx, ss, "domain1", contractAddress, schemaID, []string{
 		`{"size": 11111, "color": "red",  "price": 100}`,
 		`{"size": 22222, "color": "red",  "price": 150}`,
 		`{"size": 33333, "color": "blue", "price": 199}`,
@@ -110,7 +130,7 @@ func TestStateLockingQuery(t *testing.T) {
 	})
 
 	checkQuery := func(jq *query.QueryJSON, status StateStatusQualifier, expected ...int) {
-		states, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID, jq, status)
+		states, err := ss.FindStates(ctx, "domain1", contractAddress, schemaID, jq, status)
 		require.NoError(t, err)
 		assert.Len(t, states, len(expected))
 		for _, wIndex := range expected {
@@ -125,9 +145,6 @@ func TestStateLockingQuery(t *testing.T) {
 			assert.True(t, found, fmt.Sprintf("Widget %d missing", wIndex))
 		}
 	}
-
-	dc := ss.NewDomainContext(ctx, "domain1", *contractAddress)
-	defer dc.Close(ctx)
 
 	seqQual := StateStatusQualifier(dc.Info().ID.String())
 	all := query.NewQueryBuilder().Query()

@@ -101,6 +101,9 @@ var (
 	MsgStateLockNoState               = ffe("PD010125", "State missing from state lock")
 	MsgStateNullifierStateNotInCtx    = ffe("PD010126", "State %s referred to by nullifier %s has not previously been added to the context")
 	MsgStateNullifierConflict         = ffe("PD010127", "State %s already has nullifier %s associated in this context")
+	MsgStateInvalidCalculatingHash    = ffe("PD010128", "Failed to generate hash as state is invalid")
+	MsgStateHashMismatch              = ffe("PD010129", "The supplied state ID '%s' does not match the state hash '%s'")
+	MsgStateIDMissing                 = ffe("PD010130", "The state id must be supplied for this domain")
 
 	// Persistence PD0102XX
 	MsgPersistenceInvalidType         = ffe("PD010200", "Invalid persistence type: %s")
@@ -232,7 +235,7 @@ var (
 	MsgDomainABIRecoverRequestSignature       = ffe("PD011638", "Invalid signature")
 	MsgDomainABIEncodingTypedDataInvalid      = ffe("PD011639", "EIP-712 typed data V4 encoding request invalid")
 	MsgDomainABIEncodingTypedDataFail         = ffe("PD011640", "EIP-712 typed data V4 encoding request failed")
-	MsgDomainErrorParsingAddress              = ffe("PD011641", "Error parsing address")
+	MsgDomainInvalidSchemaID                  = ffe("PD011641", "Invalid schema ID '%s'")
 	MsgDomainInvalidEvents                    = ffe("PD011642", "Events ABI is invalid")
 	MsgDomainSigningDisabled                  = ffe("PD011643", "Domain signing it not enabled for domain '%s'")
 	MsgDomainSigningAlgorithmNotSupported     = ffe("PD011644", "Domain '%s' has not registered algorithm '%s'")
@@ -240,6 +243,8 @@ var (
 	MsgDomainABIDecodingRequestFail           = ffe("PD011646", "ABI decoding request failed")
 	MsgDomainABIDecodingRequestInvalidType    = ffe("PD011647", "ABI decoding request is of invalid type '%s'")
 	MsgDomainTransactionWasNotADeployment     = ffe("PD011648", "Transaction %s did not result in a deployment")
+	MsgDomainRequestNotInFlight               = ffe("PD011649", "State query context '%s' not in-flight")
+	MsgDomainInvalidStateID                   = ffe("PD011650", "Invalid state ID '%s'")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownRunMode = ffe("PD011700", "Unknown run mode '%s'")

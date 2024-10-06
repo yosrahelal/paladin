@@ -33,7 +33,7 @@ type StateManager interface {
 	ListDomainContexts() []DomainContextInfo
 
 	// Create a new domain context - caller is responsible for closing it
-	NewDomainContext(ctx context.Context, domainName string, contractAddress tktypes.EthAddress) DomainContext
+	NewDomainContext(ctx context.Context, domain Domain, contractAddress tktypes.EthAddress) DomainContext
 
 	// Get a previously created domain context
 	GetDomainContext(ctx context.Context, id uuid.UUID) DomainContext
@@ -43,11 +43,18 @@ type StateManager interface {
 
 	// State finalizations are written on the DB context of the block indexer, by the domain manager.
 	WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*StateSpend, confirms []*StateConfirm) (err error)
+
+	// MUST NOT be called for states received over a network from another node.
+	// Writes a batch of states that have been pre-verified BY THIS NODE so can bypass domain hash verification.
+	WritePreVerifiedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*StateUpsertOutsideContext) ([]*State, error)
+
+	// Write a batch of states that have been received over the network. ID hash calculation will be validated by the domain as prior to storage
+	WriteReceivedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*StateUpsertOutsideContext) ([]*State, error)
 }
 
 type DomainContextInfo struct {
 	ID              uuid.UUID          `json:"id"`
-	Domain          string             `json:"domain"`
+	DomainName      string             `json:"domain"`
 	ContractAddress tktypes.EthAddress `json:"contractAddress"`
 }
 
@@ -164,6 +171,13 @@ type StateUpsert struct {
 	CreatedBy *uuid.UUID
 }
 
+type StateUpsertOutsideContext struct {
+	ID              tktypes.HexBytes
+	SchemaID        tktypes.Bytes32
+	ContractAddress tktypes.EthAddress
+	Data            tktypes.RawJSON
+}
+
 // StateWithLabels is a newly prepared state that has not yet been persisted
 type StateWithLabels struct {
 	*State
@@ -259,7 +273,7 @@ type Schema interface {
 	ID() tktypes.Bytes32
 	Signature() string
 	Persisted() *SchemaPersisted
-	ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, id tktypes.HexBytes) (*StateWithLabels, error)
+	ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, id tktypes.HexBytes, customHash bool) (*StateWithLabels, error)
 	RecoverLabels(ctx context.Context, s *State) (*StateWithLabels, error)
 }
 

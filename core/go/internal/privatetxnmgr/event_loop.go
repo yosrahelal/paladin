@@ -262,6 +262,7 @@ func (oc *Orchestrator) HandleEvent(ctx context.Context, event ptmgrtypes.Privat
 }
 
 func (oc *Orchestrator) Start(c context.Context) (done <-chan struct{}, err error) {
+	oc.store.Start()
 	oc.orchestratorLoopDone = make(chan struct{})
 	go oc.evaluationLoop()
 	oc.TriggerOrchestratorEvaluation()

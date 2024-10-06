@@ -67,6 +67,7 @@ func (p *privateTxManager) PostInit(c components.AllComponents) error {
 }
 
 func (p *privateTxManager) Start() error {
+	p.store.Start()
 	return nil
 }
 
