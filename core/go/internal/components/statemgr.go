@@ -30,7 +30,7 @@ type StateManager interface {
 	ManagerLifecycle
 
 	// Get a list of all active domain contexts
-	ListDomainContext() []DomainContextInfo
+	ListDomainContexts() []DomainContextInfo
 
 	// Create a new domain context - caller is responsible for closing it
 	NewDomainContext(ctx context.Context, domainName string, contractAddress tktypes.EthAddress) DomainContext

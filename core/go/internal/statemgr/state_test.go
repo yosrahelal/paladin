@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -126,5 +127,26 @@ func TestFindStatesFail(t *testing.T) {
 		},
 	}, "all")
 	assert.Regexp(t, "pop", err)
+
+}
+
+func TestFindStatesUnknownContext(t *testing.T) {
+	ctx, ss, _, done := newDBMockStateManager(t)
+	defer done()
+
+	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
+	contractAddress := tktypes.RandAddress()
+	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID, &query.QueryJSON{
+		Statements: query.Statements{
+			Ops: query.Ops{
+				GreaterThan: []*query.OpSingleVal{
+					{Op: query.Op{
+						Field: ".created",
+					}, Value: tktypes.RawJSON(fmt.Sprintf("%d", time.Now().UnixNano()))},
+				},
+			},
+		},
+	}, StateStatusQualifier(uuid.NewString()))
+	assert.Regexp(t, "PD010123", err)
 
 }

@@ -77,10 +77,14 @@ func (ss *stateManager) GetDomainContext(ctx context.Context, id uuid.UUID) comp
 	ss.domainContextLock.Lock()
 	defer ss.domainContextLock.Unlock()
 
-	return ss.domainContexts[id]
+	ret, found := ss.domainContexts[id]
+	if found {
+		return ret
+	}
+	return nil // means an actual nil value to the interface
 }
 
-func (ss *stateManager) ListDomainContext() []components.DomainContextInfo {
+func (ss *stateManager) ListDomainContexts() []components.DomainContextInfo {
 	ss.domainContextLock.Lock()
 	defer ss.domainContextLock.Unlock()
 
@@ -247,10 +251,6 @@ func (dc *domainContext) FindAvailableStates(ctx context.Context, schemaID tktyp
 
 	// Merge in un-flushed states to results
 	states, err = dc.mergeUnFlushedApplyLocks(ctx, schema, states, query, false)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	return schema, states, err
 }
 
@@ -270,18 +270,6 @@ func (dc *domainContext) FindAvailableNullifiers(ctx context.Context, schemaID t
 	schema, states, err := dc.ss.findAvailableNullifiers(ctx, dc.domainName, dc.contractAddress, schemaID, query, spending, nullifierIDs)
 	if err != nil {
 		return nil, nil, err
-	}
-
-	// Attach nullifiers to states
-	for _, s := range states {
-		if s.Nullifier == nil {
-			for _, n := range nullifiers {
-				if n.State.Equals(s.ID) {
-					s.Nullifier = n
-					break
-				}
-			}
-		}
 	}
 
 	// Merge in un-flushed states to results
@@ -328,22 +316,6 @@ func (dc *domainContext) UpsertStates(ctx context.Context, stateUpserts ...*comp
 		return nil, flushErr
 	}
 
-	// We need to de-duplicate out any previous un-flushed state writes of the same ID
-	deDuppedUnFlushedStates := make([]*components.StateWithLabels, 0, len(dc.unFlushed.states))
-	for _, existing := range dc.unFlushed.states {
-		var replaced bool
-		for _, s := range withValues {
-			if existing.ID.Equals(s.ID) {
-				replaced = true
-				break
-			}
-		}
-		if !replaced {
-			deDuppedUnFlushedStates = append(deDuppedUnFlushedStates, existing)
-		}
-	}
-	// Now we can add our own un-flushed writes to the de-duplicated lists
-	dc.unFlushed.states = append(deDuppedUnFlushedStates, withValues...)
 	// Only those transactions with a creating TX lock can be returned from queries
 	// (any other states supplied for flushing are just to ensure we have a copy of the state
 	// for data availability when the existing/later confirm is available)
@@ -354,6 +326,9 @@ func (dc *domainContext) UpsertStates(ctx context.Context, stateUpserts ...*comp
 	if err != nil {
 		return nil, err
 	}
+
+	// Add all the states to the flush that will go to the DB
+	dc.unFlushed.states = append(dc.unFlushed.states, withValues...)
 	return states, nil
 }
 

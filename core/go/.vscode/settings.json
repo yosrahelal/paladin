@@ -4,5 +4,5 @@
     "cSpell.words": [
         "Upsert"
     ],
-    "go.testTags": "testdbpostgres"
+    // "go.testTags": "testdbpostgres"
 }
