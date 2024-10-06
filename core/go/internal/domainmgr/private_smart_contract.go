@@ -111,7 +111,7 @@ func (dc *domainContract) InitTransaction(ctx context.Context, tx *components.Pr
 	return nil
 }
 
-func (dc *domainContract) AssembleTransaction(ctx context.Context, tx *components.PrivateTransaction) error {
+func (dc *domainContract) AssembleTransaction(ctx context.Context, dc components.DomainContext, tx *components.PrivateTransaction) error {
 	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil {
 		return i18n.NewError(ctx, msgs.MsgDomainTXIncompleteAssembleTransaction)
 	}
@@ -242,16 +242,16 @@ func (dc *domainContract) LockStates(ctx context.Context, tx *components.Private
 	var txLockedStateUpserts []*components.StateUpsert
 	for _, s := range postAssembly.InputStates {
 		txLockedStateUpserts = append(txLockedStateUpserts, &components.StateUpsert{
-			SchemaID: s.Schema.String(),
-			Data:     s.Data,
-			Spending: true,
+			SchemaID:  s.Schema,
+			Data:      s.Data,
+			CreatedBy: &tx.ID,
 		})
 	}
 	for _, s := range postAssembly.OutputStates {
 		txLockedStateUpserts = append(txLockedStateUpserts, &components.StateUpsert{
-			SchemaID: s.Schema.String(),
-			Data:     s.Data,
-			Creating: true,
+			SchemaID:  s.Schema,
+			Data:      s.Data,
+			CreatedBy: &tx.ID,
 		})
 	}
 
@@ -259,7 +259,7 @@ func (dc *domainContract) LockStates(ctx context.Context, tx *components.Private
 	var readStateUpserts []*components.StateUpsert
 	for _, s := range postAssembly.ReadStates {
 		readStateUpserts = append(readStateUpserts, &components.StateUpsert{
-			SchemaID: s.Schema.String(),
+			SchemaID: s.Schema,
 			Data:     s.Data,
 		})
 	}

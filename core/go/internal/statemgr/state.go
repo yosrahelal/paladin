@@ -239,7 +239,7 @@ func (ss *stateManager) findStates(
 	if err != nil {
 		return nil, nil, err
 	}
-	return dc.FindAvailableStates(ctx, schemaID, jq)
+	return dc.FindAvailableStates(schemaID, jq)
 }
 
 func (ss *stateManager) findAvailableNullifiers(

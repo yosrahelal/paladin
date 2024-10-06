@@ -266,12 +266,8 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		stateConfirms[i] = &components.StateConfirm{DomainName: d.name, State: stateID, Transaction: *txUUID}
 	}
 
-	newStates := make(map[uuid.UUID][]*components.StateUpsert, len(res.NewStates))
+	newStates := make([]*components.StateUpsertOutsideContext, 0)
 	for _, state := range res.NewStates {
-		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
-		if err != nil {
-			return nil, err
-		}
 		var id tktypes.HexBytes
 		if state.Id != nil {
 			id, err = tktypes.ParseHexBytes(ctx, *state.Id)
@@ -283,11 +279,10 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidSchemaID, state.SchemaId)
 		}
-		newStates[*txUUID] = append(newStates[*txUUID], &components.StateUpsert{
-			ID:        id,
-			SchemaID:  schemaID,
-			Data:      tktypes.RawJSON(state.StateDataJson),
-			CreatedBy: txUUID,
+		newStates = append(newStates, &components.StateUpsertOutsideContext{
+			ID:       id,
+			SchemaID: schemaID,
+			Data:     tktypes.RawJSON(state.StateDataJson),
 		})
 	}
 
@@ -302,6 +297,9 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		// encryption, rather than selectively disclosed.
 		// The domain MUST HAVE PRE-VERIFIED these states (we do not call verify again against the domain
 		// for states that reach this path)
+		if _, err := d.dm.stateStore.WritePreVerifiedStates(ctx, dbTX, d.name, newStates); err != nil {
+			return nil, err
+		}
 	}
 
 	return res, err

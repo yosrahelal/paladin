@@ -603,6 +603,28 @@ func (d *domain) CustomHashFunction() bool {
 }
 
 func (d *domain) ValidateStateHashes(ctx context.Context, states []*components.FullState) ([]tktypes.HexBytes, error) {
-	// Calls straight into the domain for this
-	protoStates := d.toEndorsableList(states)
+	if len(states) == 0 {
+		return []tktypes.HexBytes{}, nil
+	}
+	validateRes, err := d.api.ValidateStateHashes(d.ctx, &prototk.ValidateStateHashesRequest{
+		States: d.toEndorsableList(states),
+	})
+	if err != nil {
+		return nil, i18n.WrapError(d.ctx, err, msgs.MsgDomainInvalidStates)
+	}
+	validResponse := len(validateRes.StateIds) == len(states)
+	hexIDs := make([]tktypes.HexBytes, len(states))
+	for i := 0; i < len(states) && validResponse; i++ {
+		hexID, err := tktypes.ParseHexBytes(ctx, validateRes.StateIds[i])
+		if err != nil || len(hexID) == 0 {
+			return nil, i18n.WrapError(d.ctx, err, msgs.MsgDomainInvalidResponseToValidate)
+		}
+		hexIDs[i] = hexID
+		// If a state ID was supplied on the way in, it must be returned unchanged
+		validResponse = states[i].ID == nil || states[i].ID.Equals(hexID)
+	}
+	if !validResponse {
+		return nil, i18n.NewError(d.ctx, msgs.MsgDomainInvalidResponseToValidate)
+	}
+	return hexIDs, nil
 }

@@ -95,9 +95,9 @@ func TestListDomainContexts(t *testing.T) {
 	defer done()
 
 	// Three contexts on different address, two on one domain, one on another
-	_, dc1 := newTestDomainContext(t, ss, "domainA", false)
-	_, dc2 := newTestDomainContext(t, ss, "domainA", false)
-	_, dc3 := newTestDomainContext(t, ss, "domainB", false)
+	_, dc1 := newTestDomainContext(t, ctx, ss, "domainA", false)
+	_, dc2 := newTestDomainContext(t, ctx, ss, "domainA", false)
+	_, dc3 := newTestDomainContext(t, ctx, ss, "domainB", false)
 
 	dcList := ss.ListDomainContexts()
 	assert.Len(t, dcList, 3)
@@ -105,13 +105,13 @@ func TestListDomainContexts(t *testing.T) {
 	assert.Contains(t, dcList, dc2.Info())
 	assert.Contains(t, dcList, dc3.Info())
 
-	dc1.Close(ctx)
+	dc1.Close()
 	dcList = ss.ListDomainContexts()
 	assert.Len(t, dcList, 2)
 	assert.NotContains(t, dcList, dc1.Info())
 
-	dc2.Close(ctx)
-	dc3.Close(ctx)
+	dc2.Close()
+	dc3.Close()
 	assert.Empty(t, ss.ListDomainContexts())
 
 }
@@ -123,10 +123,10 @@ func TestStateFlushAsyncNoWork(t *testing.T) {
 
 	flushed := make(chan error)
 
-	_, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	_, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
-	err := dc.InitiateFlush(ctx, func(err error) { flushed <- err })
+	err := dc.InitiateFlush(func(err error) { flushed <- err })
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
@@ -164,15 +164,15 @@ func TestUpsertSchemaAndStates(t *testing.T) {
 	fakeHash1 := tktypes.HexBytes(tktypes.RandBytes(32))
 	fakeHash2 := tktypes.HexBytes(tktypes.RandBytes(32))
 
-	_, dc := newTestDomainContext(t, ss, "domain1", true)
-	defer dc.Close(ctx)
+	_, dc := newTestDomainContext(t, ctx, ss, "domain1", true)
+	defer dc.Close()
 
 	upsert1 := &components.StateUpsert{
 		ID:       fakeHash1,
 		SchemaID: schemaID,
 		Data:     tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0x1eDfD974fE6828dE81a1a762df680111870B7cDD", "salt": "%s"}`, tktypes.RandHex(32))),
 	}
-	states, err := dc.UpsertStates(ctx,
+	states, err := dc.UpsertStates(
 		upsert1,
 		&components.StateUpsert{
 			ID:       fakeHash2,
@@ -186,11 +186,11 @@ func TestUpsertSchemaAndStates(t *testing.T) {
 	assert.Equal(t, fakeHash2, states[1].ID)
 
 	// Check the DB is happy with us double-writing states so we don't de-dup anything in the unFlushed list
-	_, err = dc.UpsertStates(ctx, upsert1)
+	_, err = dc.UpsertStates(upsert1)
 	require.NoError(t, err)
 	require.Len(t, dc.unFlushed.states, 3)
 
-	syncFlushContext(t, ctx, dc)
+	syncFlushContext(t, dc)
 
 }
 
@@ -203,11 +203,11 @@ func TestStateLockErrorsTransaction(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, schemas, 1)
 
-	_, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	_, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
 	zeroTxn := uuid.UUID{}
-	_, err = dc.UpsertStates(ctx,
+	_, err = dc.UpsertStates(
 		&components.StateUpsert{
 			SchemaID:  schemas[0].ID(),
 			Data:      tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0x1eDfD974fE6828dE81a1a762df680111870B7cDD", "salt": "%s"}`, tktypes.RandHex(32))),
@@ -216,24 +216,24 @@ func TestStateLockErrorsTransaction(t *testing.T) {
 	)
 	require.Regexp(t, "PD010124", err) // zero/missing txn
 
-	err = dc.AddStateLocks(ctx, &components.StateLock{
+	err = dc.AddStateLocks(&components.StateLock{
 		Type: components.StateLockTypeSpend.Enum(),
 	})
 	require.Regexp(t, "PD010124", err) // zero/missing txn
 
-	err = dc.AddStateLocks(ctx, &components.StateLock{
+	err = dc.AddStateLocks(&components.StateLock{
 		Type: tktypes.Enum[components.StateLockType]("wrong"),
 	})
 	require.Regexp(t, "PD020003", err) // bad type
 
 	txn1 := uuid.New()
-	err = dc.AddStateLocks(ctx, &components.StateLock{
+	err = dc.AddStateLocks(&components.StateLock{
 		Type:        components.StateLockTypeSpend.Enum(),
 		Transaction: txn1,
 	})
 	require.Regexp(t, "PD010125", err) // missing state
 
-	err = dc.AddStateLocks(ctx, &components.StateLock{
+	err = dc.AddStateLocks(&components.StateLock{
 		Type:        components.StateLockTypeCreate.Enum(),
 		State:       tktypes.RandBytes(32),
 		Transaction: txn1,
@@ -255,11 +255,11 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	assert.Len(t, schemas, 1)
 	schemaID = schemas[0].ID()
 
-	_, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	_, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
 	// Store some states
-	tx1states, err := dc.UpsertStates(ctx,
+	tx1states, err := dc.UpsertStates(
 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID1},
 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 10,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID1},
 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 75,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID1},
@@ -269,7 +269,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 
 	// Mark an in-memory read - doesn't affect it's availability
 	transactionID2 := uuid.New()
-	err = dc.AddStateLocks(ctx,
+	err = dc.AddStateLocks(
 		&components.StateLock{Type: components.StateLockTypeRead.Enum(), State: tx1states[1].ID, Transaction: transactionID2},
 	)
 	require.NoError(t, err)
@@ -290,7 +290,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 
 	// Query the states, and notice we find the ones that are still in the process of creating
 	// even though they've not yet been written to the DB
-	_, states, err := dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().Sort("amount").Query())
+	_, states, err := dc.FindAvailableStates(schemaID, query.NewQueryBuilder().Sort("amount").Query())
 	require.NoError(t, err)
 	assert.Len(t, states, 3)
 
@@ -306,14 +306,14 @@ func TestStateContextMintSpendMint(t *testing.T) {
 
 	// Simulate a transaction where we spend two states, and create 2 new ones
 	transactionID3 := uuid.New()
-	err = dc.AddStateLocks(ctx,
+	err = dc.AddStateLocks(
 		&components.StateLock{Type: components.StateLockTypeSpend.Enum(), State: states[0].ID, Transaction: transactionID3}, // 10 +
 		&components.StateLock{Type: components.StateLockTypeSpend.Enum(), State: states[1].ID, Transaction: transactionID3}, // 75 +
 	)
 	require.NoError(t, err)
 
 	// Do a quick check on upsert semantics with un-flushed updates, to make sure the unflushed list doesn't dup
-	tx2states, err := dc.UpsertStates(ctx,
+	tx2states, err := dc.UpsertStates(
 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 35, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID3},
 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 50, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID3},
 	)
@@ -323,7 +323,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	assert.Equal(t, len(dc.txLocks), 8)
 
 	// Query the states on the first address
-	_, states, err = dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().
+	_, states, err = dc.FindAvailableStates(schemaID, query.NewQueryBuilder().
 		Equal("owner", "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180").Sort("-amount").Query())
 	require.NoError(t, err)
 	assert.Len(t, states, 2)
@@ -331,17 +331,17 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
 
 	// Query the states on the other address
-	_, states, err = dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().
+	_, states, err = dc.FindAvailableStates(schemaID, query.NewQueryBuilder().
 		Equal("owner", "0x615dD09124271D8008225054d85Ffe720E7a447A").Sort("-amount").Query())
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 	assert.Equal(t, int64(50), parseFakeCoin(t, states[0]).Amount.Int64())
 
 	// Flush the states to the database
-	syncFlushContext(t, ctx, dc)
+	syncFlushContext(t, dc)
 
 	// Check the DB persisted state is what we expect
-	_, states, err = dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().Sort("owner", "amount").Query())
+	_, states, err = dc.FindAvailableStates(schemaID, query.NewQueryBuilder().Sort("owner", "amount").Query())
 	require.NoError(t, err)
 	assert.Len(t, states, 3)
 	assert.Equal(t, int64(50), parseFakeCoin(t, states[0]).Amount.Int64())
@@ -350,11 +350,11 @@ func TestStateContextMintSpendMint(t *testing.T) {
 
 	// Write another transaction that splits a coin to two
 	transactionID4 := uuid.New()
-	err = dc.AddStateLocks(ctx,
+	err = dc.AddStateLocks(
 		&components.StateLock{Type: components.StateLockTypeSpend.Enum(), State: states[0].ID, Transaction: transactionID4}, // 50
 	)
 	require.NoError(t, err)
-	tx3states, err := dc.UpsertStates(ctx,
+	tx3states, err := dc.UpsertStates(
 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID4},
 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 30, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID4},
 	)
@@ -362,7 +362,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	assert.Len(t, tx3states, 2)
 
 	// Now check that we merge the DB and in-memory state
-	_, states, err = dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().Sort("owner", "amount").Query())
+	_, states, err = dc.FindAvailableStates(schemaID, query.NewQueryBuilder().Sort("owner", "amount").Query())
 	require.NoError(t, err)
 	assert.Len(t, states, 4)
 	assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
@@ -371,12 +371,12 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	assert.Equal(t, int64(100), parseFakeCoin(t, states[3]).Amount.Int64())
 
 	// Check the limit works too across this
-	_, states, err = dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().Sort("owner", "amount").Limit(1).Query())
+	_, states, err = dc.FindAvailableStates(schemaID, query.NewQueryBuilder().Sort("owner", "amount").Limit(1).Query())
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 	assert.Equal(t, int64(20), parseFakeCoin(t, states[0]).Amount.Int64())
 
-	syncFlushContext(t, ctx, dc)
+	syncFlushContext(t, dc)
 
 	// Write confirmations for all the things that happened above
 	var spends []*components.StateSpend
@@ -399,9 +399,9 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	// that spends the state, but we have transactionID4 that created the state in our in-memory.
 	// So the right thing that would happen in practice, is we would clear transactionID4 when the confirmation
 	// was notified to us.
-	dc.ResetTransactions(ctx, transactionID1)
-	dc.ResetTransactions(ctx, transactionID3)
-	dc.ResetTransactions(ctx, transactionID4)
+	dc.ResetTransactions(transactionID1)
+	dc.ResetTransactions(transactionID3)
+	dc.ResetTransactions(transactionID4)
 
 	// We left the read
 	assert.Len(t, dc.txLocks, 1)
@@ -409,7 +409,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	assert.Equal(t, transactionID2, dc.txLocks[0].Transaction)            // for the transaction we specified
 
 	// Check the remaining states
-	_, states, err = dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().Sort("owner", "amount").Query())
+	_, states, err = dc.FindAvailableStates(schemaID, query.NewQueryBuilder().Sort("owner", "amount").Query())
 	require.NoError(t, err)
 	assert.Len(t, states, 3)
 	assert.Equal(t, int64(30), parseFakeCoin(t, states[0]).Amount.Int64())
@@ -436,56 +436,56 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	data1 := tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32)))
 	data2 := tktypes.RawJSON(fmt.Sprintf(`{"amount": 10,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32)))
 
-	_, dc := newTestDomainContext(t, ss, "domain1", true)
-	defer dc.Close(ctx)
+	_, dc := newTestDomainContext(t, ctx, ss, "domain1", true)
+	defer dc.Close()
 
 	// Start with 2 states
-	tx1states, err := dc.UpsertStates(ctx,
+	tx1states, err := dc.UpsertStates(
 		&components.StateUpsert{ID: stateID1, SchemaID: schemaID, Data: data1, CreatedBy: &transactionID1},
 		&components.StateUpsert{ID: stateID2, SchemaID: schemaID, Data: data2, CreatedBy: &transactionID1},
 	)
 	require.NoError(t, err)
 	assert.Len(t, tx1states, 2)
 
-	_, states, err := dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().Query())
+	_, states, err := dc.FindAvailableStates(schemaID, query.NewQueryBuilder().Query())
 	require.NoError(t, err)
 	assert.Len(t, states, 2)
-	_, states, err = dc.FindAvailableNullifiers(ctx, schemaID, query.NewQueryBuilder().Query())
+	_, states, err = dc.FindAvailableNullifiers(schemaID, query.NewQueryBuilder().Query())
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 
 	// Attach a nullifier to the first state
-	err = dc.UpsertNullifiers(ctx,
+	err = dc.UpsertNullifiers(
 		&components.NullifierUpsert{State: stateID1, ID: nullifier1},
 	)
 	require.NoError(t, err)
 
 	// Cannot attach another nullifier without a reset
-	err = dc.UpsertNullifiers(ctx,
+	err = dc.UpsertNullifiers(
 		&components.NullifierUpsert{State: stateID1, ID: nullifier2},
 	)
 	assert.Regexp(t, "PD010127", err)
 
-	_, states, err = dc.FindAvailableNullifiers(ctx, schemaID, query.NewQueryBuilder().Query())
+	_, states, err = dc.FindAvailableNullifiers(schemaID, query.NewQueryBuilder().Query())
 	require.NoError(t, err)
 	require.Len(t, states, 1)
 	require.NotNil(t, states[0].Nullifier)
 	assert.Equal(t, nullifier1, states[0].Nullifier.ID)
 
 	// Flush the states to the database
-	syncFlushContext(t, ctx, dc)
+	syncFlushContext(t, dc)
 
 	// Confirm still 2 states and 1 nullifier
-	_, states, err = dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().Query())
+	_, states, err = dc.FindAvailableStates(schemaID, query.NewQueryBuilder().Query())
 	require.NoError(t, err)
 	assert.Len(t, states, 2)
-	_, states, err = dc.FindAvailableNullifiers(ctx, schemaID, query.NewQueryBuilder().Query())
+	_, states, err = dc.FindAvailableNullifiers(schemaID, query.NewQueryBuilder().Query())
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 	require.NotNil(t, states[0].Nullifier)
 	assert.Equal(t, nullifier1, states[0].Nullifier.ID)
 
-	syncFlushContext(t, ctx, dc)
+	syncFlushContext(t, dc)
 
 	// Mark both states confirmed
 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*components.StateSpend{},
@@ -497,23 +497,23 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 
 	// Mark the first state as "spending"
 	transactionID2 := uuid.New()
-	err = dc.AddStateLocks(ctx,
+	err = dc.AddStateLocks(
 		&components.StateLock{Type: components.StateLockTypeSpend.Enum(), State: stateID1, Transaction: transactionID2},
 	)
 	assert.NoError(t, err)
 
 	// Confirm no more nullifiers available
-	_, states, err = dc.FindAvailableNullifiers(ctx, schemaID, query.NewQueryBuilder().Query())
+	_, states, err = dc.FindAvailableNullifiers(schemaID, query.NewQueryBuilder().Query())
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 
 	// Reset transaction to unlock
-	dc.ResetTransactions(ctx, transactionID2)
-	_, states, err = dc.FindAvailableNullifiers(ctx, schemaID, query.NewQueryBuilder().Query())
+	dc.ResetTransactions(transactionID2)
+	_, states, err = dc.FindAvailableNullifiers(schemaID, query.NewQueryBuilder().Query())
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 
-	syncFlushContext(t, ctx, dc)
+	syncFlushContext(t, dc)
 
 	// Spend the state associated with nullifier
 	transactionID3 := uuid.New()
@@ -524,10 +524,10 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	require.NoError(t, err)
 
 	// reset the domain context so we're working from the db
-	dc.Reset(ctx)
+	dc.Reset()
 
 	// Confirm no more nullifiers available
-	_, states, err = dc.FindAvailableNullifiers(ctx, schemaID, query.NewQueryBuilder().Query())
+	_, states, err = dc.FindAvailableNullifiers(schemaID, query.NewQueryBuilder().Query())
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 
@@ -535,14 +535,14 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	// Note - this is only allowed when the state is loaded into the context for creation, as otherwise:
 	// - queries within the context before the nullifier is flushed would not return the nullifier
 	// - the creation of the nullifier in the DB might fail due to the state not existing
-	err = dc.UpsertNullifiers(ctx, &components.NullifierUpsert{State: stateID2, ID: nullifier2})
+	err = dc.UpsertNullifiers(&components.NullifierUpsert{State: stateID2, ID: nullifier2})
 	assert.Regexp(t, "PD010126", err)
-	_, err = dc.UpsertStates(ctx, &components.StateUpsert{ID: stateID2, SchemaID: schemaID, Data: data2, CreatedBy: &transactionID1})
+	_, err = dc.UpsertStates(&components.StateUpsert{ID: stateID2, SchemaID: schemaID, Data: data2, CreatedBy: &transactionID1})
 	require.NoError(t, err)
-	err = dc.UpsertNullifiers(ctx, &components.NullifierUpsert{State: stateID2, ID: nullifier2})
+	err = dc.UpsertNullifiers(&components.NullifierUpsert{State: stateID2, ID: nullifier2})
 	require.NoError(t, err)
 
-	_, states, err = dc.FindAvailableNullifiers(ctx, schemaID, query.NewQueryBuilder().Query())
+	_, states, err = dc.FindAvailableNullifiers(schemaID, query.NewQueryBuilder().Query())
 	require.NoError(t, err)
 	require.Len(t, states, 1)
 	require.NotNil(t, states[0].Nullifier)
@@ -574,49 +574,49 @@ func TestDomainContextFlushErrorCapture(t *testing.T) {
 
 	ss.abiSchemaCache.Set(schemaCacheKey("domain1", schemas[0].ID()), schemas[0])
 
-	_, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	_, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
 	data1 := fmt.Sprintf(`{"amount": 100, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))
 	tx1 := uuid.New()
-	_, err = dc.UpsertStates(ctx, genWidget(t, schemas[0].ID(), &tx1, data1))
+	_, err = dc.UpsertStates(genWidget(t, schemas[0].ID(), &tx1, data1))
 	require.NoError(t, err)
 
 	flushed := make(chan error)
-	err = dc.InitiateFlush(ctx, func(err error) {
+	err = dc.InitiateFlush(func(err error) {
 		flushed <- err
 	})
 	require.NoError(t, err)
 	assert.Regexp(t, "pop", <-flushed)
 
-	_, _, err = dc.FindAvailableStates(ctx, schemas[0].ID(), nil)
+	_, _, err = dc.FindAvailableStates(schemas[0].ID(), nil)
 	assert.Regexp(t, "PD010119.*pop", err) // needs resetp
 
-	_, _, err = dc.FindAvailableNullifiers(ctx, schemas[0].ID(), nil)
+	_, _, err = dc.FindAvailableNullifiers(schemas[0].ID(), nil)
 	assert.Regexp(t, "PD010119.*pop", err) // needs reset
 
-	_, err = dc.mergeUnFlushedApplyLocks(ctx, schemas[0], nil, nil, false)
+	_, err = dc.mergeUnFlushedApplyLocks(schemas[0], nil, nil, false)
 	assert.Regexp(t, "PD010119.*pop", err) // needs reset
 
-	_, err = dc.UpsertStates(ctx, genWidget(t, schemas[0].ID(), &tx1, data1))
+	_, err = dc.UpsertStates(genWidget(t, schemas[0].ID(), &tx1, data1))
 	assert.Regexp(t, "PD010119.*pop", err) // needs reset
 
-	err = dc.UpsertNullifiers(ctx)
+	err = dc.UpsertNullifiers()
 	assert.Regexp(t, "PD010119.*pop", err) // needs reset
 
-	err = dc.AddStateLocks(ctx, &components.StateLock{})
+	err = dc.AddStateLocks(&components.StateLock{})
 	assert.Regexp(t, "PD010119.*pop", err) // needs reset
 
-	err = dc.InitiateFlush(ctx, func(err error) {})
+	err = dc.InitiateFlush(func(err error) {})
 	assert.Regexp(t, "pop", err) // the original error as it's a flush
 
-	dc.Reset(ctx)
+	dc.Reset()
 
-	err = dc.checkResetInitUnFlushed(ctx)
+	err = dc.checkResetInitUnFlushed()
 	require.NoError(t, err)
 
-	dc.Close(ctx)
-	err = dc.UpsertNullifiers(ctx)
+	dc.Close()
+	err = dc.UpsertNullifiers()
 	assert.Regexp(t, "PD010122", err) // closed
 
 }
@@ -630,43 +630,43 @@ func TestDCMergeUnFlushedWhileFlushing(t *testing.T) {
 	require.NoError(t, err)
 	ss.abiSchemaCache.Set(schemaCacheKey("domain1", schema.ID()), schema)
 
-	contractAddress, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	contractAddress, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
 	s1, err := schema.ProcessState(ctx, contractAddress, tktypes.RawJSON(fmt.Sprintf(
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
 		tktypes.RandHex(32))), nil, dc.customHashFunction)
 	require.NoError(t, err)
 	tx1 := uuid.New()
-	_, err = dc.UpsertStates(ctx, &components.StateUpsert{ID: s1.ID, SchemaID: schema.ID(), Data: s1.Data, CreatedBy: &tx1})
+	_, err = dc.UpsertStates(&components.StateUpsert{ID: s1.ID, SchemaID: schema.ID(), Data: s1.Data, CreatedBy: &tx1})
 	require.NoError(t, err)
 
 	// Fake a flush transition
 	dc.flushing = dc.unFlushed
 
 	// We'll merge in creating
-	states, err := dc.mergeUnFlushedApplyLocks(ctx, schema, []*components.State{}, &query.QueryJSON{
+	states, err := dc.mergeUnFlushedApplyLocks(schema, []*components.State{}, &query.QueryJSON{
 		Sort: []string{".created"},
 	}, false /* no nullifier required */)
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 
 	// Unless we require a nullifier
-	states, err = dc.mergeUnFlushedApplyLocks(ctx, schema, []*components.State{}, &query.QueryJSON{
+	states, err = dc.mergeUnFlushedApplyLocks(schema, []*components.State{}, &query.QueryJSON{
 		Sort: []string{".created"},
 	}, true /* nullifier required */)
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 
 	// But we can have an unflushed nullifier
-	err = dc.UpsertNullifiers(ctx, &components.NullifierUpsert{ID: tktypes.RandBytes(32), State: s1.ID})
+	err = dc.UpsertNullifiers(&components.NullifierUpsert{ID: tktypes.RandBytes(32), State: s1.ID})
 	require.NoError(t, err)
 
 	// Fake a flush transition
 	dc.flushing.stateNullifiers = append(dc.flushing.stateNullifiers, dc.unFlushed.stateNullifiers...)
 
 	// And then it will return the state
-	states, err = dc.mergeUnFlushedApplyLocks(ctx, schema, []*components.State{}, &query.QueryJSON{
+	states, err = dc.mergeUnFlushedApplyLocks(schema, []*components.State{}, &query.QueryJSON{
 		Sort: []string{".created"},
 	}, true /* nullifier required */)
 	require.NoError(t, err)
@@ -687,8 +687,8 @@ func TestDSIMergeUnFlushedMultipleSchemas(t *testing.T) {
 	require.NoError(t, err)
 	ss.abiSchemaCache.Set(schemaCacheKey("domain1", schema2.ID()), schema2)
 
-	contractAddress, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	contractAddress, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
 	s1, err := schema1.ProcessState(ctx, contractAddress, tktypes.RawJSON(fmt.Sprintf(
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
@@ -702,7 +702,7 @@ func TestDSIMergeUnFlushedMultipleSchemas(t *testing.T) {
 	dc.creatingStates[s1.ID.String()] = s1
 	dc.creatingStates[s2.ID.String()] = s2
 
-	states, err := dc.mergeUnFlushedApplyLocks(ctx, schema1, []*components.State{},
+	states, err := dc.mergeUnFlushedApplyLocks(schema1, []*components.State{},
 		query.NewQueryBuilder().Sort(".created").Query(), false)
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
@@ -719,8 +719,8 @@ func TestDSIMergeUnFlushedBadDBRecord(t *testing.T) {
 	require.NoError(t, err)
 	ss.abiSchemaCache.Set(schemaCacheKey("domain1", schema1.ID()), schema1)
 
-	contractAddress, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	contractAddress, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
 	s1, err := schema1.ProcessState(ctx, contractAddress, tktypes.RawJSON(fmt.Sprintf(
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
@@ -729,7 +729,7 @@ func TestDSIMergeUnFlushedBadDBRecord(t *testing.T) {
 
 	dc.creatingStates[s1.ID.String()] = s1
 
-	_, err = dc.mergeUnFlushedApplyLocks(ctx, schema1, []*components.State{
+	_, err = dc.mergeUnFlushedApplyLocks(schema1, []*components.State{
 		{ID: tktypes.RandBytes(32), Data: tktypes.RawJSON("wrong")},
 	}, query.NewQueryBuilder().Sort(".created").Query(), false)
 	assert.Regexp(t, "PD010116", err)
@@ -745,8 +745,8 @@ func TestDCMergeUnFlushedWhileFlushingDedup(t *testing.T) {
 	require.NoError(t, err)
 	ss.abiSchemaCache.Set(schemaCacheKey("domain1", schema.ID()), schema)
 
-	contractAddress, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	contractAddress, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
 	// Add a first state that will be included in the query
 	s1, err := schema.ProcessState(ctx, contractAddress, tktypes.RawJSON(fmt.Sprintf(
@@ -754,7 +754,7 @@ func TestDCMergeUnFlushedWhileFlushingDedup(t *testing.T) {
 		tktypes.RandHex(32))), nil, dc.customHashFunction)
 	require.NoError(t, err)
 	tx1 := uuid.New()
-	_, err = dc.UpsertStates(ctx, &components.StateUpsert{ID: s1.ID, SchemaID: schema.ID(), Data: s1.Data, CreatedBy: &tx1})
+	_, err = dc.UpsertStates(&components.StateUpsert{ID: s1.ID, SchemaID: schema.ID(), Data: s1.Data, CreatedBy: &tx1})
 	require.NoError(t, err)
 
 	// We add a second state, that will be excluded from the query due to a spending lock
@@ -762,15 +762,15 @@ func TestDCMergeUnFlushedWhileFlushingDedup(t *testing.T) {
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
 		tktypes.RandHex(32))), nil, dc.customHashFunction)
 	require.NoError(t, err)
-	_, err = dc.UpsertStates(ctx, &components.StateUpsert{ID: s2.ID, SchemaID: schema.ID(), Data: s2.Data, CreatedBy: &tx1})
+	_, err = dc.UpsertStates(&components.StateUpsert{ID: s2.ID, SchemaID: schema.ID(), Data: s2.Data, CreatedBy: &tx1})
 	require.NoError(t, err)
-	err = dc.AddStateLocks(ctx, &components.StateLock{Type: components.StateLockTypeSpend.Enum(), State: s2.ID, Transaction: tx1})
+	err = dc.AddStateLocks(&components.StateLock{Type: components.StateLockTypeSpend.Enum(), State: s2.ID, Transaction: tx1})
 	require.NoError(t, err)
 
 	// Fake a flush transition
 	dc.flushing = dc.unFlushed
 
-	spending, _, _, err := dc.getUnFlushedSpends(ctx)
+	spending, _, _, err := dc.getUnFlushedSpends()
 	require.NoError(t, err)
 	assert.Len(t, spending, 1)
 
@@ -780,7 +780,7 @@ func TestDCMergeUnFlushedWhileFlushingDedup(t *testing.T) {
 	assert.Equal(t, s1.ID, inTheFlush.State.ID)
 	dc.stateLock.Unlock()
 
-	states, err := dc.mergeUnFlushedApplyLocks(ctx, schema, []*components.State{
+	states, err := dc.mergeUnFlushedApplyLocks(schema, []*components.State{
 		inTheFlush.State,
 	}, &query.QueryJSON{
 		Sort: []string{".created"},
@@ -799,18 +799,18 @@ func TestDCMergeUnFlushedEvalError(t *testing.T) {
 	require.NoError(t, err)
 	ss.abiSchemaCache.Set(schemaCacheKey("domain1", schema.ID()), schema)
 
-	contractAddress, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	contractAddress, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
 	s1, err := schema.ProcessState(ctx, contractAddress, tktypes.RawJSON(fmt.Sprintf(
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
 		tktypes.RandHex(32))), nil, dc.customHashFunction)
 	require.NoError(t, err)
 	tx1 := uuid.New()
-	_, err = dc.UpsertStates(ctx, &components.StateUpsert{ID: s1.ID, SchemaID: schema.ID(), Data: s1.Data, CreatedBy: &tx1})
+	_, err = dc.UpsertStates(&components.StateUpsert{ID: s1.ID, SchemaID: schema.ID(), Data: s1.Data, CreatedBy: &tx1})
 	require.NoError(t, err)
 
-	_, err = dc.mergeUnFlushedApplyLocks(ctx, schema, []*components.State{},
+	_, err = dc.mergeUnFlushedApplyLocks(schema, []*components.State{},
 		query.NewQueryBuilder().Equal("wrong", "any").Query(), false)
 	assert.Regexp(t, "PD010700", err)
 
@@ -825,8 +825,8 @@ func TestDCMergedInMemoryMatchesRecoverLabelsFail(t *testing.T) {
 	require.NoError(t, err)
 	ss.abiSchemaCache.Set(schemaCacheKey("domain1", schema.ID()), schema)
 
-	contractAddress, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	contractAddress, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
 	s1, err := schema.ProcessState(ctx, contractAddress, tktypes.RawJSON(fmt.Sprintf(
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
@@ -838,7 +838,7 @@ func TestDCMergedInMemoryMatchesRecoverLabelsFail(t *testing.T) {
 	dc.flushing = dc.ss.writer.newWriteOp("domain1", contractAddress)
 	dc.flushing.states = append(dc.flushing.states, s1)
 
-	_, err = dc.mergeInMemoryMatches(ctx, schema, []*components.State{
+	_, err = dc.mergeInMemoryMatches(schema, []*components.State{
 		s1.State,
 	}, []*components.StateWithLabels{}, nil)
 	assert.Regexp(t, "PD010116", err)
@@ -854,8 +854,8 @@ func TestDCMergedInMemoryMatchesSortFail(t *testing.T) {
 	require.NoError(t, err)
 	ss.abiSchemaCache.Set(schemaCacheKey("domain1", schema.ID()), schema)
 
-	contractAddress, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	contractAddress, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
 	s1, err := schema.ProcessState(ctx, contractAddress, tktypes.RawJSON(fmt.Sprintf(
 		`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
@@ -866,7 +866,7 @@ func TestDCMergedInMemoryMatchesSortFail(t *testing.T) {
 	dc.flushing = dc.ss.writer.newWriteOp("domain1", contractAddress)
 	dc.flushing.states = append(dc.flushing.states, s1)
 
-	_, err = dc.mergeInMemoryMatches(ctx, schema, []*components.State{
+	_, err = dc.mergeInMemoryMatches(schema, []*components.State{
 		s1.State,
 	}, []*components.StateWithLabels{}, query.NewQueryBuilder().Sort("wrong").Query())
 	assert.Regexp(t, "PD010700", err)
@@ -881,19 +881,19 @@ func TestDCFindBadQueryAndInsertBadValue(t *testing.T) {
 	require.NoError(t, err)
 	ss.abiSchemaCache.Set(schemaCacheKey("domain1", schema.ID()), schema)
 
-	_, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	_, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
 	schemaID := schema.ID()
 	assert.Equal(t, "type=FakeCoin(bytes32 salt,address owner,uint256 amount),labels=[owner,amount]", schema.Signature())
 
-	_, _, err = dc.FindAvailableStates(ctx, schemaID, query.NewQueryBuilder().Sort("wrong").Query())
+	_, _, err = dc.FindAvailableStates(schemaID, query.NewQueryBuilder().Sort("wrong").Query())
 	assert.Regexp(t, "PD010700", err)
 
-	_, _, err = dc.FindAvailableNullifiers(ctx, schemaID, query.NewQueryBuilder().Sort("wrong").Query())
+	_, _, err = dc.FindAvailableNullifiers(schemaID, query.NewQueryBuilder().Sort("wrong").Query())
 	assert.Regexp(t, "PD010700", err)
 
-	_, err = dc.UpsertStates(ctx, &components.StateUpsert{
+	_, err = dc.UpsertStates(&components.StateUpsert{
 		SchemaID: schemaID, Data: tktypes.RawJSON(`"wrong"`),
 	})
 	assert.Regexp(t, "FF22038", err)
@@ -907,10 +907,10 @@ func TestDCUpsertStatesFailSchemaLookup(t *testing.T) {
 
 	db.ExpectQuery("SELECT.*schema").WillReturnError(fmt.Errorf("pop"))
 
-	_, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	_, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
-	_, err := dc.UpsertStates(ctx, &components.StateUpsert{
+	_, err := dc.UpsertStates(&components.StateUpsert{
 		ID:       tktypes.RandBytes(32),
 		SchemaID: tktypes.Bytes32(tktypes.RandBytes(32)),
 	})
@@ -923,22 +923,22 @@ func TestDCResetWithMixedTxns(t *testing.T) {
 	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
-	_, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	_, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
 	state1 := tktypes.HexBytes("state1")
 	transactionID1 := uuid.New()
-	err := dc.AddStateLocks(ctx,
+	err := dc.AddStateLocks(
 		&components.StateLock{State: state1, Type: components.StateLockTypeRead.Enum(), Transaction: transactionID1})
 	require.NoError(t, err)
 
 	state2 := tktypes.HexBytes("state2")
 	transactionID2 := uuid.New()
-	err = dc.AddStateLocks(ctx,
+	err = dc.AddStateLocks(
 		&components.StateLock{State: state2, Type: components.StateLockTypeSpend.Enum(), Transaction: transactionID2})
 	require.NoError(t, err)
 
-	dc.ResetTransactions(ctx, transactionID1)
+	dc.ResetTransactions(transactionID1)
 
 	assert.Len(t, dc.txLocks, 1)
 	assert.Equal(t, dc.txLocks[0].State, state2)
@@ -949,8 +949,8 @@ func TestCheckEvalGTTimestamp(t *testing.T) {
 	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
-	_, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	_, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
 	jq := query.NewQueryBuilder().GreaterThan(".created", 1726545933211347000).Limit(10).Sort(".created").Query()
 
@@ -989,13 +989,14 @@ func TestDCClearExistingFlushCtxCancelled(t *testing.T) {
 	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
-	_, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
-
 	closedCtx, cancelCtx := context.WithCancel(ctx)
 	cancelCtx()
+
+	_, dc := newTestDomainContext(t, closedCtx, ss, "domain1", false)
+	defer dc.Close()
+
 	dc.flushing = &writeOperation{flushed: make(chan struct{})}
-	err := dc.clearExistingFlush(closedCtx)
+	err := dc.clearExistingFlush()
 	assert.Regexp(t, "PD010301", err)
 
 }

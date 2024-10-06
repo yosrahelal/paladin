@@ -88,20 +88,20 @@ func makeWidgets(t *testing.T, ctx context.Context, ss *stateManager, domainName
 	return states
 }
 
-func syncFlushContext(t *testing.T, ctx context.Context, dc components.DomainContext) {
+func syncFlushContext(t *testing.T, dc components.DomainContext) {
 	flushed := make(chan error)
-	err := dc.InitiateFlush(ctx, func(err error) { flushed <- err })
+	err := dc.InitiateFlush(func(err error) { flushed <- err })
 	require.NoError(t, err)
 	err = <-flushed
 	require.NoError(t, err)
 }
 
-func newTestDomainContext(t *testing.T, ss *stateManager, name string, customHashFunction bool) (tktypes.EthAddress, *domainContext) {
+func newTestDomainContext(t *testing.T, ctx context.Context, ss *stateManager, name string, customHashFunction bool) (tktypes.EthAddress, *domainContext) {
 	md := componentmocks.NewDomain(t)
 	md.On("Name").Return(name)
 	md.On("CustomHashFunction").Return(customHashFunction)
 	contractAddress := tktypes.RandAddress()
-	dc := ss.NewDomainContext(ss.bgCtx, md, *contractAddress)
+	dc := ss.NewDomainContext(ctx, md, *contractAddress)
 	return *contractAddress, dc.(*domainContext)
 }
 
@@ -118,8 +118,8 @@ func TestStateLockingQuery(t *testing.T) {
 	require.NoError(t, err)
 	schemaID := schema.ID()
 
-	contractAddress, dc := newTestDomainContext(t, ss, "domain1", false)
-	defer dc.Close(ctx)
+	contractAddress, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
+	defer dc.Close()
 
 	widgets := makeWidgets(t, ctx, ss, "domain1", contractAddress, schemaID, []string{
 		`{"size": 11111, "color": "red",  "price": 100}`,
@@ -190,11 +190,11 @@ func TestStateLockingQuery(t *testing.T) {
 
 	// add a new state only within the domain context
 	txID1 := uuid.New()
-	contextStates, err := dc.UpsertStates(ctx,
+	contextStates, err := dc.UpsertStates(
 		genWidget(t, schemaID, &txID1, `{"size": 66666, "color": "blue", "price": 600}`))
 	require.NoError(t, err)
 	widgets = append(widgets, contextStates...)
-	syncFlushContext(t, ctx, dc)
+	syncFlushContext(t, dc)
 
 	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4, 5) // added 5
 	checkQuery(all, StateStatusAvailable, 1, 2, 4)    // unchanged
@@ -205,7 +205,7 @@ func TestStateLockingQuery(t *testing.T) {
 
 	// lock the unconfirmed one for spending
 	txID2 := uuid.New()
-	err = dc.AddStateLocks(ctx, &components.StateLock{
+	err = dc.AddStateLocks(&components.StateLock{
 		Type:        components.StateLockTypeSpend.Enum(),
 		Transaction: txID2,
 		State:       widgets[5].ID,
@@ -220,7 +220,7 @@ func TestStateLockingQuery(t *testing.T) {
 	checkQuery(all, seqQual, 1, 2, 4)                 // removed 5
 
 	// cancel that spend lock
-	dc.ResetTransactions(ctx, txID2)
+	dc.ResetTransactions(txID2)
 
 	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
 	checkQuery(all, StateStatusAvailable, 1, 2, 4)    // unchanged
@@ -238,7 +238,7 @@ func TestStateLockingQuery(t *testing.T) {
 	require.NoError(t, err)
 
 	// reset the domain context - does not matter now
-	dc.Reset(ctx)
+	dc.Reset()
 
 	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
 	checkQuery(all, StateStatusAvailable, 1, 2, 4, 5) // added 5
@@ -251,7 +251,7 @@ func TestStateLockingQuery(t *testing.T) {
 	// Note we have to re-supply the data here, so that the domain context can
 	// have it in memory for queries
 	txID13 := uuid.New()
-	_, err = dc.UpsertStates(ctx, &components.StateUpsert{
+	_, err = dc.UpsertStates(&components.StateUpsert{
 		ID:        widgets[3].ID,
 		SchemaID:  widgets[3].Schema,
 		Data:      widgets[3].Data,

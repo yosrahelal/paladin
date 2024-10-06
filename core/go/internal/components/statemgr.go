@@ -71,6 +71,7 @@ type DomainContextInfo struct {
 // We can then continue to build the next set of flushable operations, while the first set is
 // still flushing (a simple pipeline approach).
 type DomainContext interface {
+	context.Context
 
 	// Get the ID, domain and address of this domain context
 	Info() DomainContextInfo
@@ -81,11 +82,11 @@ type DomainContext interface {
 	// 2) We deliberately return states that are locked to a transaction (but not spent yet) - which means the
 	//    result of the any assemble that uses those states, will be a transaction that must
 	//    be on the same transaction where those states are locked.
-	FindAvailableStates(ctx context.Context, schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*State, error)
+	FindAvailableStates(schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*State, error)
 
 	// FindAvailableNullifiers is similar to FindAvailableStates, but for domains that leverage
 	// nullifiers to record spending.
-	FindAvailableNullifiers(ctx context.Context, schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*State, error)
+	FindAvailableNullifiers(schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*State, error)
 
 	// AddStateLocks updates the in-memory state of the domain context, to record a set of locks
 	// that affect queries on available states and nullifiers.
@@ -95,7 +96,7 @@ type DomainContext interface {
 	// - Read locks just mark the relationship for later processing
 	//
 	// This is an in-memory record that will be lost on Reset, and can be deleted using ClearTransaction
-	AddStateLocks(ctx context.Context, locks ...*StateLock) (err error)
+	AddStateLocks(locks ...*StateLock) (err error)
 
 	// UpsertStates creates or updates states.
 	// They are available immediately within the domain for return in FindAvailableStates
@@ -104,14 +105,14 @@ type DomainContext interface {
 	// the specified transaction using an in-memory lock.
 	//
 	// States will be written to the DB on the next flush (the associated lock is not)
-	UpsertStates(ctx context.Context, states ...*StateUpsert) (s []*State, err error)
+	UpsertStates(states ...*StateUpsert) (s []*State, err error)
 
 	// UpsertNullifiers creates nullifier records associated with states.
 	// Nullifiers are an alternate state identifier (separate from the state ID) that can be used
 	// when recording spent states.
 	//
 	// Nullifiers will be written to the DB on the next flush
-	UpsertNullifiers(ctx context.Context, nullifiers ...*NullifierUpsert) error
+	UpsertNullifiers(nullifiers ...*NullifierUpsert) error
 
 	// Call this to remove all locks associated with individual transactions without clearing the whole state.
 	// For example if a notification has been received that the transaction is either confirmed, or rejected.
@@ -119,7 +120,7 @@ type DomainContext interface {
 	// This only affects in memory state.
 	//
 	// No dependency analysis is done by this function call - that is the responsibility of the caller.
-	ResetTransactions(ctx context.Context, transactionID ...uuid.UUID)
+	ResetTransactions(transactionID ...uuid.UUID)
 
 	// Return a complete copy of the current set of locks being managed in this context
 	// Mainly for debugging (lots of memory is copied) so any case this function is used on a critical path
@@ -130,7 +131,7 @@ type DomainContext interface {
 	// Reset restores the world to the current state of the database, clearing any errors
 	// from failed flush, all un-flushed writes, and all in-memory state locks.
 	// It does not wait for an in-progress flush to complete
-	Reset(ctx context.Context)
+	Reset()
 
 	// Flush moves the un-flushed set into flushing status, queueing to a DB writer to batch write
 	// to the database.
@@ -143,10 +144,10 @@ type DomainContext interface {
 	//
 	// The supplied callback will be called once all writes up to the point of this call have
 	// been flushed to the database - for success or failure.
-	InitiateFlush(ctx context.Context, cb func(error)) error
+	InitiateFlush(cb func(error)) error
 
 	// Removes the domain context from the state manager, and prevents any further use
-	Close(ctx context.Context)
+	Close()
 }
 
 type State struct {

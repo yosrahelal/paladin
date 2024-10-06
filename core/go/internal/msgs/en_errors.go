@@ -245,6 +245,8 @@ var (
 	MsgDomainTransactionWasNotADeployment     = ffe("PD011648", "Transaction %s did not result in a deployment")
 	MsgDomainRequestNotInFlight               = ffe("PD011649", "State query context '%s' not in-flight")
 	MsgDomainInvalidStateID                   = ffe("PD011650", "Invalid state ID '%s'")
+	MsgDomainInvalidStates                    = ffe("PD011651", "Invalid states")
+	MsgDomainInvalidResponseToValidate        = ffe("PD011652", "Invalid response to validation")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownRunMode = ffe("PD011700", "Unknown run mode '%s'")
