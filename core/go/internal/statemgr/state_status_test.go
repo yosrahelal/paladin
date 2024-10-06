@@ -203,7 +203,7 @@ func TestStateLockingQuery(t *testing.T) {
 	checkQuery(all, seqQual, 1, 2, 4)                 // removed 5
 
 	// cancel that spend lock
-	dc.ClearTransactions(ctx, txID2)
+	dc.ResetTransactions(ctx, txID2)
 
 	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
 	checkQuery(all, StateStatusAvailable, 1, 2, 4)    // unchanged

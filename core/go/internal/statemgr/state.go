@@ -158,16 +158,12 @@ func (ss *stateManager) findAvailableNullifiers(
 	contractAddress tktypes.EthAddress,
 	schemaID tktypes.Bytes32,
 	jq *query.QueryJSON,
-	statesWithNullifiers []tktypes.HexBytes,
 	spendingStates []tktypes.HexBytes,
-	spentNullifiers []tktypes.HexBytes,
+	spendingNullifiers []tktypes.HexBytes,
 ) (schema components.Schema, s []*components.State, err error) {
 	return ss.findStatesCommon(ctx, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
 		db := ss.p.DB()
 		hasNullifier := db.Where(`"Nullifier"."id" IS NOT NULL`)
-		if len(statesWithNullifiers) > 0 {
-			hasNullifier = hasNullifier.Or(`"Nullifier"."id" IN(?)`, statesWithNullifiers)
-		}
 
 		q = q.Joins("Confirmed", db.Select("transaction")).
 			Joins("Nullifier", db.Select(`"Nullifier"."id"`)).
@@ -177,8 +173,8 @@ func (ss *stateManager) findAvailableNullifiers(
 		if len(spendingStates) > 0 {
 			q = q.Not(`"states"."id" IN(?)`, spendingStates)
 		}
-		if len(spentNullifiers) > 0 {
-			q = q.Not(`"Nullifier"."id" IN(?)"`, spentNullifiers)
+		if len(spendingNullifiers) > 0 {
+			q = q.Not(`"Nullifier"."id" IN(?)`, spendingNullifiers)
 		}
 
 		// Scope to only unspent

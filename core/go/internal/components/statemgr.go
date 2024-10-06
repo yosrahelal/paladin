@@ -104,7 +104,7 @@ type DomainContext interface {
 	// when recording spent states.
 	//
 	// Nullifiers will be written to the DB on the next flush
-	UpsertNullifiers(ctx context.Context, nullifiers ...*StateNullifier) error
+	UpsertNullifiers(ctx context.Context, nullifiers ...*NullifierUpsert) error
 
 	// Call this to remove all locks associated with individual transactions without clearing the whole state.
 	// For example if a notification has been received that the transaction is either confirmed, or rejected.
@@ -112,7 +112,7 @@ type DomainContext interface {
 	// This only affects in memory state.
 	//
 	// No dependency analysis is done by this function call - that is the responsibility of the caller.
-	ClearTransactions(ctx context.Context, transactionID ...uuid.UUID)
+	ResetTransactions(ctx context.Context, transactionID ...uuid.UUID)
 
 	// Return a complete copy of the current set of locks being managed in this context
 	// Mainly for debugging (lots of memory is copied) so any case this function is used on a critical path
@@ -247,6 +247,11 @@ type StateNullifier struct {
 	ID         tktypes.HexBytes `json:"id"              gorm:"primaryKey"`
 	State      tktypes.HexBytes `json:"-"`
 	Spent      *StateSpend      `json:"spent,omitempty" gorm:"foreignKey:state;references:id;"`
+}
+
+type NullifierUpsert struct {
+	ID    tktypes.HexBytes `json:"id"              gorm:"primaryKey"`
+	State tktypes.HexBytes `json:"-"`
 }
 
 type Schema interface {
