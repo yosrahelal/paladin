@@ -397,6 +397,7 @@ type blockWriterBatch struct {
 	blocks         []*BlockInfoJSONRPC
 	summaries      []string
 	receipts       [][]*TXReceiptJSONRPC
+	receiptResults []error
 	timeoutContext context.Context
 	timeoutCancel  func()
 }
@@ -434,6 +435,7 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 			blockIndex := len(batch.blocks)
 			batch.blocks = append(batch.blocks, toDispatch)
 			batch.receipts = append(batch.receipts, nil)
+			batch.receiptResults = append(batch.receiptResults, nil)
 			batch.summaries = append(batch.summaries, fmt.Sprintf("%s/%d", toDispatch.Hash.String(), toDispatch.Number))
 			batch.wg.Add(1)
 			batch.lock.Unlock()
@@ -446,9 +448,9 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 			log.L(ctx).Debugf("Flushing block indexing batch: %s", batch.summaries)
 			batch.wg.Wait()
 			// Check we got all the results, or we have to reset
-			for _, r := range batch.receipts {
-				if r == nil {
-					log.L(ctx).Errorf("Block indexer requires reset after failing to query blocks: %s", batch.summaries)
+			for i, receiptError := range batch.receiptResults {
+				if receiptError != nil {
+					log.L(ctx).Errorf("Block indexer requires reset after failing to query receipts for block %s in batch of %d blocks: %s", batch.blocks[i].Hash, len(batch.blocks), receiptError)
 					go bi.startOrReset()
 					return // We know we need to exit
 				}
@@ -478,19 +480,23 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 
 func (bi *blockIndexer) hydrateBlock(ctx context.Context, batch *blockWriterBatch, blockIndex int) {
 	defer batch.wg.Done()
-	_ = bi.retry.Do(ctx, func(attempt int) (retryable bool, err error) {
+	err := bi.retry.Do(ctx, func(attempt int) (retryable bool, err error) {
 		// We use eth_getBlockReceipts, which takes either a number or a hash (supported by Besu and go-ethereum)
-		rpcErr := bi.wsConn.CallRPC(ctx, &batch.receipts[blockIndex], "eth_getBlockReceipts", batch.blocks[blockIndex].Hash)
-		if rpcErr != nil {
+		err = bi.wsConn.CallRPC(ctx, &batch.receipts[blockIndex], "eth_getBlockReceipts", batch.blocks[blockIndex].Hash)
+		if err != nil && !isNotFound(err) {
 			log.L(ctx).Errorf("Failed to query block %s: %s", batch.summaries[blockIndex], err)
+			return true, err // retry
+		}
+		if batch.receipts[blockIndex] == nil {
 			// If we get a not-found, that's an indication the confirmations are not set correctly,
 			// but there's no point in continuing to retry as a confirmed block should be available
 			// on our connection.
 			// This nil entry in batch.receipts[blockIndex] triggers a reset.
-			return !isNotFound(rpcErr), rpcErr
+			return false, i18n.NewError(ctx, msgs.MsgBlockIndexerConfirmedReceiptNotFound, batch.blocks[blockIndex].Hash)
 		}
 		return false, nil
 	})
+	batch.receiptResults[blockIndex] = err
 }
 
 func (bi *blockIndexer) logToIndexedEvent(l *LogJSONRPC) *IndexedEvent {

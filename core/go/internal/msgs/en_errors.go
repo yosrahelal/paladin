@@ -176,6 +176,7 @@ var (
 	MsgBlockIndexerInvalidEventStreamType   = ffe("PD011306", "Unsupported event stream type: %s")
 	MsgBlockIndexerNoBlocksIndexed          = ffe("PD011308", "No confirmed blocks have yet been indexed")
 	MsgBlockIndexerTransactionReverted      = ffe("PD011309", "Transaction reverted: %s")
+	MsgBlockIndexerConfirmedBlockNotFound   = ffe("PD011310", "Block %s not found on retrieval after detection and requested number of confirmations")
 
 	// EthClient module PD0115XX
 	MsgEthClientInvalidInput            = ffe("PD011500", "Unable to convert to ABI function input (func=%s)")

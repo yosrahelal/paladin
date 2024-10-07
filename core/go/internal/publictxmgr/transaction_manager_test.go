@@ -551,9 +551,6 @@ func TestEngineSuspendResumeRealDB(t *testing.T) {
 	})
 	defer done()
 
-	err := ble.Start()
-	require.NoError(t, err)
-
 	// Mock a gas price
 	chainID, _ := rand.Int(rand.Reader, big.NewInt(100000000000000))
 	m.ethClient.On("GasPrice", mock.Anything).Return(tktypes.MustParseHexUint256("1000000000000000"), nil)
@@ -575,7 +572,7 @@ func TestEngineSuspendResumeRealDB(t *testing.T) {
 	// ... but attempting to get it onto the chain is going to block failing
 	m.ethClient.On("SendRawTransaction", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop")).Maybe()
 
-	_, err = ble.SingleTransactionSubmit(ctx, pubTx)
+	_, err := ble.SingleTransactionSubmit(ctx, pubTx)
 	require.NoError(t, err)
 
 	ticker := time.NewTicker(50 * time.Millisecond)
