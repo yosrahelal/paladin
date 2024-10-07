@@ -128,14 +128,14 @@ func returnNode(t int) func() (*prototk.FindAvailableStatesResponse, error) {
 }
 
 func TestStorage(t *testing.T) {
-	contractAddress := tktypes.RandAddress().Address0xHex()
+	stateQueryConext := tktypes.ShortID()
 
-	storage, smt, err := New(&testDomainCallbacks{returnFunc: returnCustomError}, "test", contractAddress, "root-schema", "node-schema")
+	storage, smt, err := New(&testDomainCallbacks{returnFunc: returnCustomError}, "test", stateQueryConext, "root-schema", "node-schema")
 	assert.EqualError(t, err, "failed to find available states. test error")
 	assert.NotNil(t, storage)
 	assert.Nil(t, smt)
 
-	storage, smt, err = New(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", contractAddress, "root-schema", "node-schema")
+	storage, smt, err = New(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")
 	assert.NoError(t, err)
 	assert.NotNil(t, storage)
 	assert.NotNil(t, smt)
@@ -146,12 +146,12 @@ func TestStorage(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "0x0000000000000000000000000000000000000000000000000000000000000000", root.RootIndex)
 
-	storage, smt, err = New(&testDomainCallbacks{returnFunc: returnBadData}, "test", contractAddress, "root-schema", "node-schema")
+	storage, smt, err = New(&testDomainCallbacks{returnFunc: returnBadData}, "test", stateQueryConext, "root-schema", "node-schema")
 	assert.EqualError(t, err, "failed to unmarshal root node index. invalid character 'b' looking for beginning of value")
 	assert.NotNil(t, storage)
 	assert.Nil(t, smt)
 
-	storage, smt, err = New(&testDomainCallbacks{returnFunc: returnNode(0)}, "test", contractAddress, "root-schema", "node-schema")
+	storage, smt, err = New(&testDomainCallbacks{returnFunc: returnNode(0)}, "test", stateQueryConext, "root-schema", "node-schema")
 	assert.NoError(t, err)
 	assert.NotNil(t, storage)
 	assert.NotNil(t, smt)
@@ -164,51 +164,51 @@ func TestStorage(t *testing.T) {
 }
 
 func TestGetNode(t *testing.T) {
-	contractAddress := tktypes.RandAddress().Address0xHex()
+	stateQueryConext := tktypes.ShortID()
 	idx, _ := node.NewNodeIndexFromBigInt(big.NewInt(1234))
 
-	storage := NewStatesStorage(&testDomainCallbacks{returnFunc: returnCustomError}, "test", contractAddress, "root-schema", "node-schema")
+	storage := NewStatesStorage(&testDomainCallbacks{returnFunc: returnCustomError}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err := storage.GetNode(idx)
 	assert.EqualError(t, err, "failed to find available states. test error")
 
-	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", contractAddress, "root-schema", "node-schema")
+	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err = storage.GetNode(idx)
 	assert.EqualError(t, err, core.ErrNotFound.Error())
 
-	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(1)}, "test", contractAddress, "root-schema", "node-schema")
+	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(1)}, "test", stateQueryConext, "root-schema", "node-schema")
 	n, err := storage.GetNode(idx)
 	assert.NoError(t, err)
 	assert.NotNil(t, n)
 	assert.Equal(t, "6c94440e443d2dd1cae86d38edab44749a05bccfdfb0755c6c5c67315ade9f0a", n.Index().Hex())
 	assert.Equal(t, core.NodeTypeLeaf, n.Type())
 
-	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(2)}, "test", contractAddress, "root-schema", "node-schema")
+	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(2)}, "test", stateQueryConext, "root-schema", "node-schema")
 	n, err = storage.GetNode(idx)
 	assert.NoError(t, err)
 	assert.NotNil(t, n)
 	assert.Empty(t, n.Index())
 	assert.Equal(t, "6c94440e443d2dd1cae86d38edab44749a05bccfdfb0755c6c5c67315ade9f0a", n.LeftChild().Hex())
 
-	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(3)}, "test", contractAddress, "root-schema", "node-schema")
+	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(3)}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err = storage.GetNode(idx)
 	assert.EqualError(t, err, "inputs values not inside Finite Field")
 
-	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(4)}, "test", contractAddress, "root-schema", "node-schema")
+	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(4)}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err = storage.GetNode(idx)
 	assert.EqualError(t, err, "inputs values not inside Finite Field")
 
-	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(5)}, "test", contractAddress, "root-schema", "node-schema")
+	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(5)}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err = storage.GetNode(idx)
 	assert.ErrorContains(t, err, "failed to unmarshal Merkle Tree Node from state json. PD020007: Invalid hex")
 
-	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(6)}, "test", contractAddress, "root-schema", "node-schema")
+	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(6)}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err = storage.GetNode(idx)
 	assert.ErrorContains(t, err, "failed to unmarshal Merkle Tree Node from state json. PD020008: Failed to parse value as 32 byte hex string")
 }
 
 func TestInsertNode(t *testing.T) {
-	contractAddress := tktypes.RandAddress().Address0xHex()
-	storage := NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", contractAddress, "root-schema", "node-schema")
+	stateQueryConext := tktypes.ShortID()
+	storage := NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")
 	assert.NotNil(t, storage)
 	idx, _ := node.NewNodeIndexFromBigInt(big.NewInt(1234))
 	n, _ := node.NewLeafNode(node.NewIndexOnly(idx))

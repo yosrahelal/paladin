@@ -22,7 +22,6 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -36,23 +35,22 @@ type StatesStorage interface {
 }
 
 type statesStorage struct {
-	CoreInterface   plugintk.DomainCallbacks
-	transactionId   string
-	smtName         string
-	contractAddress *ethtypes.Address0xHex
-	rootSchemaId    string
-	nodeSchemaId    string
-	rootNode        core.NodeIndex
-	newNodes        []*prototk.NewLocalState
+	CoreInterface     plugintk.DomainCallbacks
+	smtName           string
+	stateQueryContext string
+	rootSchemaId      string
+	nodeSchemaId      string
+	rootNode          core.NodeIndex
+	newNodes          []*prototk.NewLocalState
 }
 
-func NewStatesStorage(c plugintk.DomainCallbacks, smtName string, contractAddress *ethtypes.Address0xHex, rootSchemaId, nodeSchemaId string) StatesStorage {
+func NewStatesStorage(c plugintk.DomainCallbacks, smtName, stateQueryContext, rootSchemaId, nodeSchemaId string) StatesStorage {
 	return &statesStorage{
-		CoreInterface:   c,
-		smtName:         smtName,
-		contractAddress: contractAddress,
-		rootSchemaId:    rootSchemaId,
-		nodeSchemaId:    nodeSchemaId,
+		CoreInterface:     c,
+		smtName:           smtName,
+		stateQueryContext: stateQueryContext,
+		rootSchemaId:      rootSchemaId,
+		nodeSchemaId:      nodeSchemaId,
 	}
 }
 
@@ -70,9 +68,9 @@ func (s *statesStorage) GetRootNodeIndex() (core.NodeIndex, error) {
 		Equal("smtName", s.smtName)
 
 	res, err := s.CoreInterface.FindAvailableStates(context.Background(), &prototk.FindAvailableStatesRequest{
-		ContractAddress: s.contractAddress.String(),
-		SchemaId:        s.rootSchemaId,
-		QueryJson:       queryBuilder.Query().String(),
+		StateQueryContext: s.stateQueryContext,
+		SchemaId:          s.rootSchemaId,
+		QueryJson:         queryBuilder.Query().String(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to find available states. %s", err)
@@ -105,7 +103,6 @@ func (s *statesStorage) UpsertRootNodeIndex(root core.NodeIndex) error {
 		Id:            &newRoot.RootIndex,
 		SchemaId:      s.rootSchemaId,
 		StateDataJson: string(data),
-		TransactionId: s.transactionId,
 	}
 	s.newNodes = append(s.newNodes, newRootState)
 	s.rootNode = root
@@ -121,9 +118,9 @@ func (s *statesStorage) GetNode(ref core.NodeIndex) (core.Node, error) {
 		Equal("refKey", ref.Hex())
 
 	res, err := s.CoreInterface.FindAvailableStates(context.Background(), &prototk.FindAvailableStatesRequest{
-		ContractAddress: s.contractAddress.String(),
-		SchemaId:        s.nodeSchemaId,
-		QueryJson:       queryBuilder.Query().String(),
+		StateQueryContext: s.stateQueryContext,
+		SchemaId:          s.nodeSchemaId,
+		QueryJson:         queryBuilder.Query().String(),
 	})
 	if err == gorm.ErrRecordNotFound {
 		return nil, core.ErrNotFound
@@ -204,7 +201,6 @@ func (s *statesStorage) InsertNode(n core.Node) error {
 		Id:            &refKey,
 		SchemaId:      s.nodeSchemaId,
 		StateDataJson: string(data),
-		TransactionId: s.transactionId,
 	}
 	s.newNodes = append(s.newNodes, newNodeState)
 	return err

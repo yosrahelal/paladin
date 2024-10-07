@@ -35,6 +35,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
@@ -124,6 +125,23 @@ func waitFor(ctx context.Context, t *testing.T, tb testbed.Testbed, txHash *tkty
 	return tx
 }
 
+func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, noto *Noto, address ethtypes.Address0xHex, jq *query.QueryJSON) []*types.NotoCoinState {
+	if jq == nil {
+		jq = query.NewQueryBuilder().Limit(100).Query()
+	}
+	var notoCoins []*types.NotoCoinState
+	rpcerr := rpc.CallRPC(ctx, &notoCoins, "pstate_queryStates",
+		noto.name,
+		address,
+		noto.coinSchema.Id,
+		jq,
+		"available")
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
+	return notoCoins
+}
+
 func TestNoto(t *testing.T) {
 	ctx := context.Background()
 	log.L(ctx).Infof("TestNoto")
@@ -180,11 +198,10 @@ func TestNoto(t *testing.T) {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err := noto.FindCoins(ctx, notoAddress, "{}")
-	require.NoError(t, err)
+	coins := findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.Len(t, coins, 1)
-	assert.Equal(t, int64(100), coins[0].Amount.Int64())
-	assert.Equal(t, notaryKey, coins[0].Owner.String())
+	assert.Equal(t, int64(100), coins[0].Data.Amount.Int64())
+	assert.Equal(t, notaryKey, coins[0].Data.Owner.String())
 
 	log.L(ctx).Infof("Attempt mint from non-notary (should fail)")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
@@ -199,7 +216,7 @@ func TestNoto(t *testing.T) {
 	require.NotNil(t, rpcerr)
 	assert.ErrorContains(t, rpcerr.Error(), "PD200009")
 
-	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
+	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.NoError(t, err)
 	require.Len(t, coins, 1)
 
@@ -216,7 +233,7 @@ func TestNoto(t *testing.T) {
 	require.NotNil(t, rpcerr)
 	assert.ErrorContains(t, rpcerr.Error(), "PD200005")
 
-	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
+	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.NoError(t, err)
 	require.Len(t, coins, 1)
 
@@ -234,14 +251,14 @@ func TestNoto(t *testing.T) {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
+	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.NoError(t, err)
 	require.Len(t, coins, 2)
 
-	assert.Equal(t, int64(50), coins[0].Amount.Int64())
-	assert.Equal(t, recipient1Key, coins[0].Owner.String())
-	assert.Equal(t, int64(50), coins[1].Amount.Int64())
-	assert.Equal(t, notaryKey, coins[1].Owner.String())
+	assert.Equal(t, int64(50), coins[0].Data.Amount.Int64())
+	assert.Equal(t, recipient1Key, coins[0].Data.Owner.String())
+	assert.Equal(t, int64(50), coins[1].Data.Amount.Int64())
+	assert.Equal(t, notaryKey, coins[1].Data.Owner.String())
 
 	log.L(ctx).Infof("Transfer 50 from recipient1 to recipient2")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
@@ -257,14 +274,14 @@ func TestNoto(t *testing.T) {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
+	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.NoError(t, err)
 	require.Len(t, coins, 2)
 
-	assert.Equal(t, int64(50), coins[0].Amount.Int64())
-	assert.Equal(t, notaryKey, coins[0].Owner.String())
-	assert.Equal(t, int64(50), coins[1].Amount.Int64())
-	assert.Equal(t, recipient2Key, coins[1].Owner.String())
+	assert.Equal(t, int64(50), coins[0].Data.Amount.Int64())
+	assert.Equal(t, notaryKey, coins[0].Data.Owner.String())
+	assert.Equal(t, int64(50), coins[1].Data.Amount.Int64())
+	assert.Equal(t, recipient2Key, coins[1].Data.Owner.String())
 }
 
 func TestNotoApprove(t *testing.T) {
@@ -422,11 +439,11 @@ func TestNotoSelfSubmit(t *testing.T) {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err := noto.FindCoins(ctx, notoAddress, "{}")
+	coins := findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.NoError(t, err)
 	assert.Len(t, coins, 1)
-	assert.Equal(t, int64(100), coins[0].Amount.Int64())
-	assert.Equal(t, notaryKey, coins[0].Owner.String())
+	assert.Equal(t, int64(100), coins[0].Data.Amount.Int64())
+	assert.Equal(t, notaryKey, coins[0].Data.Owner.String())
 
 	log.L(ctx).Infof("Transfer 50 from notary to recipient1")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
@@ -442,14 +459,14 @@ func TestNotoSelfSubmit(t *testing.T) {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
+	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.NoError(t, err)
 	require.Len(t, coins, 2)
 
-	assert.Equal(t, int64(50), coins[0].Amount.Int64())
-	assert.Equal(t, recipient1Key, coins[0].Owner.String())
-	assert.Equal(t, int64(50), coins[1].Amount.Int64())
-	assert.Equal(t, notaryKey, coins[1].Owner.String())
+	assert.Equal(t, int64(50), coins[0].Data.Amount.Int64())
+	assert.Equal(t, recipient1Key, coins[0].Data.Owner.String())
+	assert.Equal(t, int64(50), coins[1].Data.Amount.Int64())
+	assert.Equal(t, notaryKey, coins[1].Data.Owner.String())
 
 	log.L(ctx).Infof("Transfer 50 from recipient1 to recipient2")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
@@ -465,12 +482,12 @@ func TestNotoSelfSubmit(t *testing.T) {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
+	coins = findAvailableCoins(t, ctx, rpc, noto, notoAddress, nil)
 	require.NoError(t, err)
 	require.Len(t, coins, 2)
 
-	assert.Equal(t, int64(50), coins[0].Amount.Int64())
-	assert.Equal(t, notaryKey, coins[0].Owner.String())
-	assert.Equal(t, int64(50), coins[1].Amount.Int64())
-	assert.Equal(t, recipient2Key, coins[1].Owner.String())
+	assert.Equal(t, int64(50), coins[0].Data.Amount.Int64())
+	assert.Equal(t, notaryKey, coins[0].Data.Owner.String())
+	assert.Equal(t, int64(50), coins[1].Data.Amount.Int64())
+	assert.Equal(t, recipient2Key, coins[1].Data.Owner.String())
 }
