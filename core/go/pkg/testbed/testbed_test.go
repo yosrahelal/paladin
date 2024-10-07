@@ -95,7 +95,7 @@ domains:
     config:
       address: any
 log:
-  level: debug	
+  level: info	
 `
 	var conf pldconf.PaladinConfig
 	err := yaml.Unmarshal([]byte(yamlConf), &conf)

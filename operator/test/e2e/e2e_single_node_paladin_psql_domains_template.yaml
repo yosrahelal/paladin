@@ -6,7 +6,7 @@ metadata:
 spec:
   config: |
     log:
-      level: debug
+      level: info
     domains:
       pente:
         plugin:

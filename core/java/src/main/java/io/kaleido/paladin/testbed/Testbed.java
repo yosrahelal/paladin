@@ -149,7 +149,7 @@ public class Testbed implements Closeable {
                 loader:
                   debug: true
                 log:
-                  level: trace
+                  level: info
                 """.formatted(new File(testbedSetup.dbMigrationsDir).getAbsolutePath(), availableRPCPort);
     }
 
