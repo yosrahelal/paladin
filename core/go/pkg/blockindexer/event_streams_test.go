@@ -776,6 +776,99 @@ func TestProcessCatchupEventPageFailRPC(t *testing.T) {
 		},
 	}
 
-	_, err := es.processCatchupEventPage(0, 10000)
+	_, _, err := es.processCatchupEventPage(nil, 0, 10000)
 	assert.Regexp(t, "PD011305", err)
+}
+
+func TestProcessCatchupEventMultiPageRealDB(t *testing.T) {
+	ctx, bi, mRPC, done := newTestBlockIndexer(t)
+	defer done()
+
+	eventSig := tktypes.Bytes32(testABI.Events()["EventA"].SignatureHashBytes())
+
+	allBlocks := []*IndexedBlock{}
+	allTransactions := []*IndexedTransaction{}
+	allEvents := []*IndexedEvent{}
+	for b := 1; b < 14; b++ {
+		blockHash := tktypes.Bytes32(tktypes.RandBytes(32))
+		allBlocks = append(allBlocks, &IndexedBlock{
+			Number: int64(b),
+			Hash:   blockHash,
+		})
+		for tx := 0; tx < 8; tx++ {
+			txHash := tktypes.Bytes32(tktypes.RandBytes(32))
+			allTransactions = append(allTransactions, &IndexedTransaction{
+				Hash:             txHash,
+				BlockNumber:      int64(b),
+				TransactionIndex: int64(tx),
+				From:             tktypes.RandAddress(),
+				To:               tktypes.RandAddress(),
+				Nonce:            0,
+				Result:           TXResult_SUCCESS.Enum(),
+			})
+			txReceipt := &TXReceiptJSONRPC{
+				BlockHash:   blockHash[:],
+				BlockNumber: ethtypes.HexUint64(b),
+			}
+			for li := 0; li < 9; li++ {
+				allEvents = append(allEvents, &IndexedEvent{
+					BlockNumber:      int64(b),
+					TransactionIndex: int64(tx),
+					LogIndex:         int64(li),
+					TransactionHash:  txHash,
+					Signature:        eventSig,
+				})
+				txReceipt.Logs = append(txReceipt.Logs, &LogJSONRPC{
+					TransactionHash:  txHash[:],
+					BlockNumber:      ethtypes.HexUint64(b),
+					TransactionIndex: ethtypes.HexUint64(tx),
+					LogIndex:         ethtypes.HexUint64(li),
+					Topics:           []ethtypes.HexBytes0xPrefix{eventSig[:]},
+					Data:             []byte{}, // "EventA" has no data
+				})
+			}
+			mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", ethtypes.HexBytes0xPrefix(txHash[:])).
+				Run(func(args mock.Arguments) {
+					pTxReceipt := args[1].(**TXReceiptJSONRPC)
+					*pTxReceipt = txReceipt
+				}).
+				Return(nil)
+		}
+	}
+	err := bi.persistence.DB().Table("indexed_blocks").Create(allBlocks).Error
+	require.NoError(t, err)
+	err = bi.persistence.DB().Table("indexed_transactions").Create(allTransactions).Error
+	require.NoError(t, err)
+	err = bi.persistence.DB().Table("indexed_events").Create(allEvents).Error
+	require.NoError(t, err)
+
+	es := &eventStream{
+		bi:            bi,
+		ctx:           ctx,
+		signatureList: []tktypes.Bytes32{eventSig},
+		dispatch:      make(chan *eventDispatch, len(allEvents)),
+		definition: &EventStream{
+			ID: uuid.New(),
+			Sources: []EventStreamSource{{
+				ABI: testABI,
+			}},
+		},
+	}
+
+	go func() {
+		var caughtUp bool
+		var lastEvent *IndexedEvent
+		var err error
+		for !caughtUp {
+			caughtUp, lastEvent, err = es.processCatchupEventPage(lastEvent, 0, 100000000)
+			require.NoError(t, err)
+		}
+	}()
+
+	for i := 0; i < len(allEvents); i++ {
+		d := <-es.dispatch
+		require.Equal(t, allEvents[i].BlockNumber, d.event.BlockNumber)
+		require.Equal(t, allEvents[i].TransactionIndex, d.event.TransactionIndex)
+		require.Equal(t, allEvents[i].LogIndex, d.event.LogIndex)
+	}
 }

@@ -402,6 +402,23 @@ type blockWriterBatch struct {
 	timeoutCancel  func()
 }
 
+func (bi *blockIndexer) dispatchEnrich(ctx context.Context, batch *blockWriterBatch, toDispatch *BlockInfoJSONRPC) {
+	batch.lock.Lock()
+	defer batch.lock.Unlock()
+	blockIndex := len(batch.blocks)
+	batch.blocks = append(batch.blocks, toDispatch)
+	batch.summaries = append(batch.summaries, fmt.Sprintf("%s/%d", toDispatch.Hash.String(), toDispatch.Number))
+	batch.receiptResults = append(batch.receiptResults, nil)
+	if len(toDispatch.Transactions) > 0 {
+		batch.receipts = append(batch.receipts, nil)
+		batch.wg.Add(1) // we need to wait for this to return
+		go bi.hydrateBlock(ctx, batch, blockIndex)
+	} else {
+		// No need to call get receipts for empty blocks
+		batch.receipts = append(batch.receipts, []*TXReceiptJSONRPC{})
+	}
+}
+
 func (bi *blockIndexer) dispatcher(ctx context.Context) {
 	defer close(bi.dispatcherDone)
 
@@ -431,15 +448,7 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 				batch.timeoutContext, batch.timeoutCancel = context.WithTimeout(ctx, bi.batchTimeout)
 			}
 			timeoutContext = batch.timeoutContext
-			batch.lock.Lock()
-			blockIndex := len(batch.blocks)
-			batch.blocks = append(batch.blocks, toDispatch)
-			batch.receipts = append(batch.receipts, nil)
-			batch.receiptResults = append(batch.receiptResults, nil)
-			batch.summaries = append(batch.summaries, fmt.Sprintf("%s/%d", toDispatch.Hash.String(), toDispatch.Number))
-			batch.wg.Add(1)
-			batch.lock.Unlock()
-			go bi.hydrateBlock(ctx, batch, blockIndex)
+			bi.dispatchEnrich(ctx, batch, toDispatch)
 		}
 
 		if batch != nil && (timedOut || (len(batch.blocks) >= bi.batchSize)) {
@@ -486,7 +495,7 @@ func (bi *blockIndexer) hydrateBlock(ctx context.Context, batch *blockWriterBatc
 		if rpcErr != nil || batch.receipts[blockIndex] == nil {
 			var err error = rpcErr
 			retry := true
-			log.L(ctx).Errorf("Failed to query block %s: %s", batch.summaries[blockIndex], rpcErr)
+			log.L(ctx).Errorf("Failed to query block %s: %v", batch.summaries[blockIndex], rpcErr)
 			if err == nil {
 				// TODO: We've seen this with Besu instead of an error, and need to diagnose
 				// Convert to a not found, but DO retry here.

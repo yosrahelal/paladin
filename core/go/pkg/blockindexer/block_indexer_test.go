@@ -1105,3 +1105,16 @@ func TestHydrateBlockBesuNullCase(t *testing.T) {
 	batch.wg.Wait()
 
 }
+
+func TestHydrateBlockNoTransactions(t *testing.T) {
+	ctx, bi, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	// No action on dispatch empty block
+	batch := &blockWriterBatch{}
+	bi.dispatchEnrich(ctx, batch, &BlockInfoJSONRPC{})
+	require.Len(t, batch.receiptResults, 1)
+	require.Nil(t, batch.receiptResults[0])
+	require.Len(t, batch.receipts, 1)
+	require.Empty(t, batch.receipts[0])
+}

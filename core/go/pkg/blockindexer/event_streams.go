@@ -333,6 +333,7 @@ func (es *eventStream) detector() {
 		return
 	}
 
+	var lastCatchupEvent *IndexedEvent
 	var catchUpToBlock *eventStreamBlock
 	for {
 		// we wait to be told about a block from the chain, to see whether that is a block that
@@ -368,12 +369,14 @@ func (es *eventStream) detector() {
 			} else {
 				catchUpToBlockNumber = int64(catchUpToBlock.blockNumber)
 			}
-			caughtUp, err := es.processCatchupEventPage(checkpointBlock, catchUpToBlockNumber)
+			var caughtUp bool
+			caughtUp, lastCatchupEvent, err = es.processCatchupEventPage(lastCatchupEvent, checkpointBlock, catchUpToBlockNumber)
 			if err != nil {
 				log.L(es.ctx).Debugf("exiting during catchup phase")
 				return
 			}
 			if caughtUp {
+				lastCatchupEvent = nil
 				if startupBlock == nil {
 					// Process the deferred notified block, and back to normal operation
 					es.processNotifiedBlock(catchUpToBlock, true)
@@ -509,7 +512,7 @@ func (es *eventStream) runBatch(batch *eventBatch) error {
 
 }
 
-func (es *eventStream) processCatchupEventPage(checkpointBlock int64, catchUpToBlockNumber int64) (caughtUp bool, err error) {
+func (es *eventStream) processCatchupEventPage(lastCatchupEvent *IndexedEvent, checkpointBlock int64, catchUpToBlockNumber int64) (caughtUp bool, lastEvent *IndexedEvent, err error) {
 
 	// We query up to the head of the chain as currently indexed, with a limit on the events
 	// we return for enrichment/processing.
@@ -523,23 +526,32 @@ func (es *eventStream) processCatchupEventPage(checkpointBlock int64, catchUpToB
 	pageSize := es.bi.esCatchUpQueryPageSize
 	var page []*IndexedEvent
 	err = es.bi.retry.Do(es.ctx, func(attempt int) (retryable bool, err error) {
-		return true, es.bi.persistence.DB().
+		db := es.bi.persistence.DB()
+		q := db.
 			Table("indexed_events").
 			Where("signature IN (?)", es.signatureList).
-			Where("block_number > ?", checkpointBlock).
-			Where("block_number < ?", catchUpToBlockNumber).
-			Order("block_number").Order("transaction_index").Order("log_index").
+			Where("block_number < ?", catchUpToBlockNumber)
+		if lastCatchupEvent == nil {
+			q = q.Where("block_number > ?", checkpointBlock)
+		} else {
+			q = q.Where("block_number > ? OR (block_number = ? AND (transaction_index > ? OR (transaction_index = ? AND log_index > ?)))",
+				lastCatchupEvent.BlockNumber, lastCatchupEvent.BlockNumber,
+				lastCatchupEvent.TransactionIndex, lastCatchupEvent.TransactionIndex,
+				lastCatchupEvent.LogIndex,
+			)
+		}
+		return true, q.Order("block_number").Order("transaction_index").Order("log_index").
 			Limit(pageSize).
 			Find(&page).
 			Error
 	})
 	if err != nil {
 		// context cancelled
-		return false, err
+		return false, nil, err
 	}
 	if len(page) == 0 {
 		// nothing to report - we're caught up
-		return true, nil
+		return true, nil, nil
 	}
 	caughtUp = (len(page) < pageSize)
 
@@ -582,12 +594,13 @@ func (es *eventStream) processCatchupEventPage(checkpointBlock int64, catchUpToB
 	}
 	if err != nil {
 		// context cancelled
-		return false, err
+		return false, nil, err
 	}
 
 	// Now reconstruct the final set in the original order, but only where we
 	// successfully extracted the event data
 	for iPage, origEntry := range page {
+		lastEvent = origEntry // need to keep track of the last we saw for the looping round this code
 		eventsForTX := byTxID[origEntry.TransactionHash.String()]
 		for iEvent, event := range eventsForTX {
 			if event.LogIndex == origEntry.LogIndex && event.Data != nil {
@@ -599,6 +612,6 @@ func (es *eventStream) processCatchupEventPage(checkpointBlock int64, catchUpToB
 			}
 		}
 	}
-	return caughtUp, nil
+	return caughtUp, lastEvent, nil
 
 }
