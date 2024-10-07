@@ -47,7 +47,7 @@ jobs:
       # This does not build any docker images, and does not run any dockerized tests.
       # It does run Go/Java/Solidity component and integration tests that use PostgreSQL and Besu
       - name: Build with Gradle
-        run: ./gradlew -PcomposeLogs=true -PverboseTests=true --no-daemon --parallel build
+        run: ./gradlew -PcomposeLogs=true -PverboseTests=true --no-daemon --parallel --max-workers=3 build
   
   image-build:
     runs-on: ubuntu-latest
