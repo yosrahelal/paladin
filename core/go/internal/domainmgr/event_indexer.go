@@ -30,7 +30,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// only safe to us this sorter when you know all receipts have a non-nil on-chain
+// only safe to use this sorter when you know all receipts have a non-nil on-chain
 type receiptsByOnChainOrder []*components.ReceiptInput
 
 func (r receiptsByOnChainOrder) Len() int           { return len(r) }

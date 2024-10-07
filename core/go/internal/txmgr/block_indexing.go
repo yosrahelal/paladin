@@ -56,9 +56,9 @@ func (tm *txManager) blockIndexerPreCommit(
 			// Map to the common format for finalizing transactions whether the make it on chain or not
 			finalizeInfo = append(finalizeInfo, tm.mapBlockchainReceipt(match))
 		case ptxapi.TransactionTypePrivate:
-			log.L(ctx).Infof("Base ledger transaction for private transaction %s FAILED hash=%s block=%d result=%s",
-				match.TransactionID, match.Hash, match.BlockNumber, match.Result)
 			if match.Result.V() != blockindexer.TXResult_SUCCESS {
+				log.L(ctx).Infof("Base ledger transaction for private transaction %s FAILED hash=%s block=%d result=%s",
+					match.TransactionID, match.Hash, match.BlockNumber, match.Result)
 				failedForPrivateTx = append(failedForPrivateTx, match)
 			}
 		}
