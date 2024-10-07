@@ -424,10 +424,10 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 	return &res, nil
 }
 
-func (z *Zeto) updateMerkleTree(tokenName string, stateQueryConext string, output []tktypes.HexUint256) ([]*prototk.NewLocalState, error) {
+func (z *Zeto) updateMerkleTree(tokenName string, stateQueryContext string, output []tktypes.HexUint256) ([]*prototk.NewLocalState, error) {
 	var newStates []*prototk.NewLocalState
 	for _, out := range output {
-		states, err := z.addOutputToMerkleTree(tokenName, stateQueryConext, out)
+		states, err := z.addOutputToMerkleTree(tokenName, stateQueryContext, out)
 		if err != nil {
 			return nil, err
 		}
@@ -436,9 +436,9 @@ func (z *Zeto) updateMerkleTree(tokenName string, stateQueryConext string, outpu
 	return newStates, nil
 }
 
-func (z *Zeto) addOutputToMerkleTree(tokenName string, stateQueryConext string, output tktypes.HexUint256) ([]*prototk.NewLocalState, error) {
-	smtName := smt.MerkleTreeName(tokenName, stateQueryConext)
-	storage, tree, err := smt.New(z.Callbacks, smtName, stateQueryConext, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id)
+func (z *Zeto) addOutputToMerkleTree(tokenName string, stateQueryContext string, output tktypes.HexUint256) ([]*prototk.NewLocalState, error) {
+	smtName := smt.MerkleTreeName(tokenName, stateQueryContext)
+	storage, tree, err := smt.New(z.Callbacks, smtName, stateQueryContext, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Merkle tree for %s: %s", smtName, err)
 	}
@@ -455,8 +455,7 @@ func (z *Zeto) addOutputToMerkleTree(tokenName string, stateQueryConext string, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to add leaf node for %s: %s", output.String(), err)
 	}
-	newStates := storage.GetNewStates()
-	return newStates, nil
+	return storage.GetNewStates(), nil
 }
 
 func encodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {

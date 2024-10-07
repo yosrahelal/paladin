@@ -36,8 +36,8 @@ func init() {
 	}
 }
 
-func New(callbacks plugintk.DomainCallbacks, name string, stateQueryConext string, rootSchemaId, nodeSchemaId string) (StatesStorage, core.SparseMerkleTree, error) {
-	storage := NewStatesStorage(callbacks, name, stateQueryConext, rootSchemaId, nodeSchemaId)
+func New(callbacks plugintk.DomainCallbacks, name string, stateQueryContext string, rootSchemaId, nodeSchemaId string) (StatesStorage, core.SparseMerkleTree, error) {
+	storage := NewStatesStorage(callbacks, name, stateQueryContext, rootSchemaId, nodeSchemaId)
 	mt, err := smt.NewMerkleTree(storage, SMT_HEIGHT_UTXO)
 	if err == nil && mt != nil {
 		storage.(*statesStorage).rootNode = mt.Root()
@@ -45,6 +45,6 @@ func New(callbacks plugintk.DomainCallbacks, name string, stateQueryConext strin
 	return storage, mt, err
 }
 
-func MerkleTreeName(tokenName string, stateQueryConext string) string {
-	return "smt_" + tokenName + "_" + stateQueryConext
+func MerkleTreeName(tokenName string, stateQueryContext string) string {
+	return "smt_" + tokenName + "_" + stateQueryContext
 }

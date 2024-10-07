@@ -241,7 +241,7 @@ func (h *transferHandler) loadBabyJubKey(payload []byte) (*babyjub.PublicKey, er
 	return keyCompressed.Decompress()
 }
 
-func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.ZetoCoin, circuitId, tokenName, stateQueryConext string) ([]byte, error) {
+func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.ZetoCoin, circuitId, tokenName, stateQueryContext string) ([]byte, error) {
 	inputCommitments := make([]string, INPUT_COUNT)
 	inputValueInts := make([]uint64, INPUT_COUNT)
 	inputSalts := make([]string, INPUT_COUNT)
@@ -278,7 +278,7 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 
 	var extras []byte
 	if useNullifiers(circuitId) {
-		proofs, extrasObj, err := h.generateMerkleProofs(tokenName, stateQueryConext, inputCoins)
+		proofs, extrasObj, err := h.generateMerkleProofs(tokenName, stateQueryContext, inputCoins)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate merkle proofs. %s", err)
 		}
@@ -323,9 +323,9 @@ func (h *transferHandler) encodeProof(proof *corepb.SnarkProof) map[string]inter
 	}
 }
 
-func (h *transferHandler) generateMerkleProofs(tokenName string, stateQueryConext string, inputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.ProvingRequestExtras_Nullifiers, error) {
-	smtName := smt.MerkleTreeName(tokenName, stateQueryConext)
-	_, mt, err := smt.New(h.zeto.Callbacks, smtName, stateQueryConext, h.zeto.merkleTreeRootSchema.Id, h.zeto.merkleTreeNodeSchema.Id)
+func (h *transferHandler) generateMerkleProofs(tokenName string, stateQueryContext string, inputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.ProvingRequestExtras_Nullifiers, error) {
+	smtName := smt.MerkleTreeName(tokenName, stateQueryContext)
+	_, mt, err := smt.New(h.zeto.Callbacks, smtName, stateQueryContext, h.zeto.merkleTreeRootSchema.Id, h.zeto.merkleTreeNodeSchema.Id)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create new smt object. %s", err)
 	}
