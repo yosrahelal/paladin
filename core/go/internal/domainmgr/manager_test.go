@@ -212,8 +212,12 @@ func TestGetDomainNotFound(t *testing.T) {
 	_, err := dm.GetDomainByName(ctx, "wrong")
 	assert.Regexp(t, "PD011600", err)
 
-	_, err = dm.getDomainByAddress(ctx, tktypes.MustEthAddress(tktypes.RandHex(20)))
+	_, err = dm.getDomainByAddress(ctx, tktypes.MustEthAddress(tktypes.RandHex(20)), false)
 	assert.Regexp(t, "PD011600", err)
+
+	dc, err := dm.getDomainByAddress(ctx, tktypes.MustEthAddress(tktypes.RandHex(20)), true)
+	assert.NoError(t, err)
+	assert.Nil(t, dc)
 }
 
 func TestGetDomainNotInit(t *testing.T) {
@@ -289,7 +293,7 @@ func TestWaitForDeployDomainNotFound(t *testing.T) {
 	received := make(chan struct{})
 	go func() {
 		_, err := dm.WaitForDeploy(ctx, reqID)
-		assert.Regexp(t, "PD011600", err)
+		assert.Regexp(t, "PD011609", err)
 		close(received)
 	}()
 

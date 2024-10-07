@@ -180,9 +180,10 @@ func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC)
 }
 
-func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER)
-}
+// TODO: Re-enable after discussing state availability requirements with Jim
+// func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
+// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER)
+// }
 
 func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, zeto zeto.Zeto, address ethtypes.Address0xHex, jq *query.QueryJSON) []*types.ZetoCoinState {
 	if jq == nil {

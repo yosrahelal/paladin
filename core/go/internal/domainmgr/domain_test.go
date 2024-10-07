@@ -269,7 +269,7 @@ func TestDomainInitStates(t *testing.T) {
 
 	assert.Nil(t, td.d.initError.Load())
 	assert.True(t, td.tp.initialized.Load())
-	byAddr, err := td.dm.getDomainByAddress(td.ctx, td.d.RegistryAddress())
+	byAddr, err := td.dm.getDomainByAddress(td.ctx, td.d.RegistryAddress(), false)
 	require.NoError(t, err)
 	assert.Equal(t, td.d, byAddr)
 	assert.True(t, td.d.Initialized())
@@ -286,7 +286,7 @@ func TestDomainInitStatesWithEvents(t *testing.T) {
 
 	assert.Nil(t, td.d.initError.Load())
 	assert.True(t, td.tp.initialized.Load())
-	byAddr, err := td.dm.getDomainByAddress(td.ctx, td.d.RegistryAddress())
+	byAddr, err := td.dm.getDomainByAddress(td.ctx, td.d.RegistryAddress(), false)
 	require.NoError(t, err)
 	assert.Equal(t, td.d, byAddr)
 	assert.True(t, td.d.Initialized())
@@ -310,7 +310,7 @@ func TestDoubleRegisterReplaces(t *testing.T) {
 	assert.True(t, tp1.initialized.Load())
 
 	// Check we get the second from all the maps
-	byAddr, err := td.dm.getDomainByAddress(td.ctx, td.tp.d.RegistryAddress())
+	byAddr, err := td.dm.getDomainByAddress(td.ctx, td.tp.d.RegistryAddress(), false)
 	require.NoError(t, err)
 	assert.Same(t, tp1.d, byAddr)
 	byName, err := td.dm.GetDomainByName(td.ctx, "test1")
