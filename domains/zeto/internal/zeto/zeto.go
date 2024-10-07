@@ -40,9 +40,9 @@ import (
 
 //go:embed abis/ZetoFactory.json
 var factoryJSONBytes []byte // From "gradle copySolidity"
-////go:embed abis/IZetoFungibleInitializable.json
+// //go:embed abis/IZetoFungibleInitializable.json
 // var zetoFungibleInitializableABIBytes []byte // From "gradle copySolidity"
-////go:embed abis/IZetoNonFungibleInitializable.json
+// //go:embed abis/IZetoNonFungibleInitializable.json
 // var zetoNonFungibleInitializableABIBytes []byte // From "gradle copySolidity"
 
 type Zeto struct {
