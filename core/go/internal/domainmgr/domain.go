@@ -69,9 +69,10 @@ type domain struct {
 }
 
 type inFlightDomainRequest struct {
+	d    *domain
 	id   string                   // each request gets a unique ID
 	dbTX *gorm.DB                 // only if there's a DB transactions such as when called by block indexer
-	dc   components.DomainContext // might be short lived, or managed externally (by private TX manager)
+	dCtx components.DomainContext // might be short lived, or managed externally (by private TX manager)
 }
 
 func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDomain components.DomainManagerToDomain) *domain {
@@ -86,6 +87,8 @@ func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDo
 
 		schemasByID:        make(map[string]components.Schema),
 		schemasBySignature: make(map[string]components.Schema),
+
+		inFlight: make(map[string]*inFlightDomainRequest),
 	}
 	log.L(dm.bgCtx).Debugf("Domain %s configured. Config: %s", name, tktypes.JSONString(conf.Config))
 	d.ctx, d.cancelCtx = context.WithCancel(log.WithLogField(dm.bgCtx, "domain", d.name))
@@ -215,15 +218,22 @@ func (d *domain) init() {
 }
 
 func (d *domain) newInFlightDomainRequest(dbTX *gorm.DB, dc components.DomainContext) *inFlightDomainRequest {
-	return &inFlightDomainRequest{
+	c := &inFlightDomainRequest{
+		d:    d,
+		dCtx: dc,
 		id:   tktypes.ShortID(),
 		dbTX: dbTX,
-		dc:   dc,
 	}
+	d.inFlightLock.Lock()
+	defer d.inFlightLock.Unlock()
+	d.inFlight[c.id] = c
+	return c
 }
 
-func (i *inFlightDomainRequest) close(ctx context.Context) {
-	i.dc.Close(ctx)
+func (i *inFlightDomainRequest) close() {
+	i.d.inFlightLock.Lock()
+	defer i.d.inFlightLock.Unlock()
+	delete(i.d.inFlight, i.id)
 }
 
 func (d *domain) checkInFlight(ctx context.Context, stateQueryContext string) (*inFlightDomainRequest, error) {
@@ -281,9 +291,9 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 
 	var states []*components.State
 	if req.UseNullifiers != nil && *req.UseNullifiers {
-		_, states, err = c.dc.FindAvailableNullifiers(ctx, schemaID, &query)
+		_, states, err = c.dCtx.FindAvailableNullifiers(schemaID, &query)
 	} else {
-		_, states, err = c.dc.FindAvailableStates(ctx, schemaID, &query)
+		_, states, err = c.dCtx.FindAvailableStates(schemaID, &query)
 	}
 	if err != nil {
 		return nil, err

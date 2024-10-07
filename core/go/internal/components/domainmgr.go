@@ -67,12 +67,14 @@ type DomainSmartContract interface {
 	ConfigBytes() tktypes.HexBytes
 
 	InitTransaction(ctx context.Context, tx *PrivateTransaction) error
-	AssembleTransaction(ctx context.Context, dc DomainContext, tx *PrivateTransaction) error
-	WritePotentialStates(ctx context.Context, dc DomainContext, tx *PrivateTransaction) error
-	LockStates(ctx context.Context, dc DomainContext, tx *PrivateTransaction) error
-	EndorseTransaction(ctx context.Context, dc DomainContext, req *PrivateTransactionEndorseRequest) (*EndorsementResult, error)
+
+	AssembleTransaction(dCtx DomainContext, tx *PrivateTransaction) error
+	WritePotentialStates(dCtx DomainContext, tx *PrivateTransaction) error
+	LockStates(dCtx DomainContext, tx *PrivateTransaction) error
+	EndorseTransaction(dCtx DomainContext, req *PrivateTransactionEndorseRequest) (*EndorsementResult, error)
+	PrepareTransaction(dCtx DomainContext, tx *PrivateTransaction) error
+
 	ResolveDispatch(ctx context.Context, tx *PrivateTransaction) error
-	PrepareTransaction(ctx context.Context, tx *PrivateTransaction) error
 }
 
 type EndorsementResult struct {

@@ -71,7 +71,7 @@ type DomainContextInfo struct {
 // We can then continue to build the next set of flushable operations, while the first set is
 // still flushing (a simple pipeline approach).
 type DomainContext interface {
-	context.Context
+	Ctx() context.Context // easier to mock than embedding the context.Context interface
 
 	// Get the ID, domain and address of this domain context
 	Info() DomainContextInfo
