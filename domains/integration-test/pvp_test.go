@@ -141,19 +141,32 @@ func TestNotoForNoto(t *testing.T) {
 	transferAtom.Execute(ctx).SignAndSend(alice).Wait()
 }
 
-func findAvailableCoins[T any](t *testing.T, ctx context.Context, rpc rpcbackend.Backend, domainName, coinSchemaID string, address ethtypes.Address0xHex, jq *query.QueryJSON) []*T {
+func findAvailableCoins[T any](t *testing.T, ctx context.Context, rpc rpcbackend.Backend, domainName, coinSchemaID string, address ethtypes.Address0xHex, jq *query.QueryJSON, readiness ...func(coins []*T) bool) []*T {
 	if jq == nil {
 		jq = query.NewQueryBuilder().Limit(100).Query()
 	}
 	var states []*T
-	rpcerr := rpc.CallRPC(ctx, &states, "pstate_queryStates",
-		domainName,
-		address,
-		coinSchemaID,
-		jq,
-		"available")
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
+notReady:
+	for {
+		rpcerr := rpc.CallRPC(ctx, &states, "pstate_queryStates",
+			domainName,
+			address,
+			coinSchemaID,
+			jq,
+			"available")
+		if rpcerr != nil {
+			require.NoError(t, rpcerr.Error())
+		}
+		for _, fn := range readiness {
+			if t.Failed() {
+				panic("test failed")
+			}
+			if !fn(states) {
+				time.Sleep(100 * time.Millisecond)
+				continue notReady
+			}
+		}
+		break
 	}
 	return states
 }
@@ -211,12 +224,16 @@ func TestNotoForZeto(t *testing.T) {
 	log.L(ctx).Infof("Mint 10 Zeto to Bob")
 	zeto.Mint(ctx, bob, 10).SignAndSend(notary).Wait()
 
-	notoCoins := findAvailableCoins[nototypes.NotoCoinState](t, ctx, rpc, notoDomain.Name(), notoDomain.CoinSchemaID(), noto.Address, nil)
+	notoCoins := findAvailableCoins[nototypes.NotoCoinState](t, ctx, rpc, notoDomain.Name(), notoDomain.CoinSchemaID(), noto.Address, nil, func(coins []*nototypes.NotoCoinState) bool {
+		return len(coins) >= 1
+	})
 	require.Len(t, notoCoins, 1)
 	assert.Equal(t, int64(10), notoCoins[0].Data.Amount.Int64())
 	assert.Equal(t, aliceKey, notoCoins[0].Data.Owner.String())
 
-	zetoCoins := findAvailableCoins[zetotypes.ZetoCoinState](t, ctx, rpc, zetoDomain.Name(), zetoDomain.CoinSchemaID(), zeto.Address, nil)
+	zetoCoins := findAvailableCoins[zetotypes.ZetoCoinState](t, ctx, rpc, zetoDomain.Name(), zetoDomain.CoinSchemaID(), zeto.Address, nil, func(coins []*zetotypes.ZetoCoinState) bool {
+		return len(coins) >= 1
+	})
 	require.NoError(t, err)
 	require.Len(t, zetoCoins, 1)
 	assert.Equal(t, int64(10), zetoCoins[0].Data.Amount.Int().Int64())
