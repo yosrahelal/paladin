@@ -848,6 +848,22 @@ func TestPrepareTransactionBadData(t *testing.T) {
 	assert.Regexp(t, "FF22040", err)
 }
 
+func TestLoadStatesBadSchema(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
+	defer done()
+
+	psc, tx := doDomainInitAssembleTransactionOK(t, td)
+	tx.Signer = "signer1"
+
+	_, err := psc.loadStates(td.mdc, []*prototk.StateRef{
+		{
+			Id:       tktypes.RandHex(32),
+			SchemaId: "wrong",
+		},
+	})
+	assert.Regexp(t, "PD011614", err)
+}
+
 func TestLoadStatesError(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
 	defer done()

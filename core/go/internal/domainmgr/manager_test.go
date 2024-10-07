@@ -31,6 +31,7 @@ import (
 
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -213,6 +214,14 @@ func TestGetDomainNotFound(t *testing.T) {
 
 	_, err = dm.getDomainByAddress(ctx, tktypes.MustEthAddress(tktypes.RandHex(20)))
 	assert.Regexp(t, "PD011600", err)
+}
+
+func TestGetDomainNotInit(t *testing.T) {
+	td, done := newTestDomain(t, false, &prototk.DomainConfig{})
+	defer done()
+
+	_, err := td.dm.GetDomainByName(td.ctx, td.d.name)
+	assert.Regexp(t, "PD011601", err)
 }
 
 func TestMustParseLoaders(t *testing.T) {

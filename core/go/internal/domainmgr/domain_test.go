@@ -426,6 +426,18 @@ func TestDomainFindAvailableStatesNotInit(t *testing.T) {
 	assert.Regexp(t, "PD011601", err)
 }
 
+func TestDomainFindAvailableStatesBadSchema(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+	_, err := td.d.FindAvailableStates(td.ctx, &prototk.FindAvailableStatesRequest{
+		StateQueryContext: td.c.id,
+		SchemaId:          "12345",
+		QueryJson:         `{}`,
+	})
+	assert.Regexp(t, "PD011641", err)
+}
+
 func TestDomainFindAvailableStatesBadQuery(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
@@ -990,4 +1002,100 @@ func TestMapStateLockType(t *testing.T) {
 	assert.Panics(t, func() {
 		_ = mapStateLockType(components.StateLockType("wrong"))
 	})
+}
+
+func TestDomainValidateStateHashesOK(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td.tp.Functions.ValidateStateHashes = func(ctx context.Context, vshr *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+		assert.Equal(t, stateID1.String(), vshr.States[0].Id)
+		assert.Empty(t, vshr.States[1].Id)
+		return &prototk.ValidateStateHashesResponse{
+			StateIds: []string{stateID1.String(), stateID2.String()},
+		}, nil
+	}
+
+	// no-op
+	validatedIDs, err := td.d.ValidateStateHashes(td.ctx, []*components.FullState{})
+	require.NoError(t, err)
+	assert.Equal(t, []tktypes.HexBytes{}, validatedIDs)
+
+	// Success
+	validatedIDs, err = td.d.ValidateStateHashes(td.ctx, []*components.FullState{
+		{ID: stateID1}, {ID: nil /* mocking domain calculation */},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []tktypes.HexBytes{stateID1, stateID2}, validatedIDs)
+}
+
+func TestDomainValidateStateHashesFail(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td.tp.Functions.ValidateStateHashes = func(ctx context.Context, vshr *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+		return nil, fmt.Errorf("pop")
+	}
+
+	_, err := td.d.ValidateStateHashes(td.ctx, []*components.FullState{{ID: stateID1}})
+	require.Regexp(t, "PD011651.*pop", err)
+}
+
+func TestDomainValidateStateHashesWrongLen(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td.tp.Functions.ValidateStateHashes = func(ctx context.Context, vshr *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+		return &prototk.ValidateStateHashesResponse{
+			StateIds: []string{stateID1.String(), stateID1.String()},
+		}, nil
+	}
+
+	_, err := td.d.ValidateStateHashes(td.ctx, []*components.FullState{{ID: stateID1}})
+	require.Regexp(t, "PD011652", err)
+}
+
+func TestDomainValidateStateHashesMisMatch(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td.tp.Functions.ValidateStateHashes = func(ctx context.Context, vshr *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+		return &prototk.ValidateStateHashesResponse{
+			StateIds: []string{stateID1.String(), stateID1.String() /* should be stateID2 */},
+		}, nil
+	}
+
+	_, err := td.d.ValidateStateHashes(td.ctx, []*components.FullState{{ID: stateID1}, {ID: stateID2}})
+	require.Regexp(t, "PD011652", err)
+}
+
+func TestDomainValidateStateHashesBadHex(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td.tp.Functions.ValidateStateHashes = func(ctx context.Context, vshr *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+		return &prototk.ValidateStateHashesResponse{
+			StateIds: []string{"wrong"},
+		}, nil
+	}
+
+	_, err := td.d.ValidateStateHashes(td.ctx, []*components.FullState{{ID: stateID1}})
+	require.Regexp(t, "PD011652", err)
 }
