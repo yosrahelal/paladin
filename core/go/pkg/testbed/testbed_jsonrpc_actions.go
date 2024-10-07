@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -67,7 +68,10 @@ func (tb *testbed) initRPC() {
 		Add("testbed_prepare", tb.rpcTestbedPrepare()).
 
 		// Performs identity resolution (which in the case of the testbed is just local identities)
-		Add("testbed_resolveVerifier", tb.rpcResolveVerifier())
+		Add("testbed_resolveVerifier", tb.rpcResolveVerifier()).
+
+		// List available states
+		Add("testbed_listAvailableStates", tb.rpcListAvailableStates())
 }
 
 func (tb *testbed) rpcListDomains() rpcserver.RPCHandler {
@@ -389,5 +393,20 @@ func (tb *testbed) rpcResolveVerifier() rpcserver.RPCHandler {
 			return "", err
 		}
 		return verifier, err
+	})
+}
+
+func (tb *testbed) rpcListAvailableStates() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod4(func(ctx context.Context,
+		domain string,
+		contractAddress tktypes.EthAddress,
+		schemaID string,
+		query query.QueryJSON,
+	) (states []*components.State, err error) {
+		err = tb.c.StateManager().RunInDomainContext(domain, contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
+			states, err = dsi.FindAvailableStates(schemaID, &query)
+			return err
+		})
+		return states, err
 	})
 }
