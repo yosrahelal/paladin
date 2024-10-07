@@ -39,6 +39,7 @@ import (
 type orchestratorDepencyMocks struct {
 	allComponents       *componentmocks.AllComponents
 	domainSmartContract *componentmocks.DomainSmartContract
+	domainContext       *componentmocks.DomainContext
 	domainMgr           *componentmocks.DomainManager
 	transportManager    *componentmocks.TransportManager
 	stateStore          *componentmocks.StateManager
@@ -57,6 +58,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	mocks := &orchestratorDepencyMocks{
 		allComponents:       componentmocks.NewAllComponents(t),
 		domainSmartContract: componentmocks.NewDomainSmartContract(t),
+		domainContext:       componentmocks.NewDomainContext(t),
 		domainMgr:           componentmocks.NewDomainManager(t),
 		transportManager:    componentmocks.NewTransportManager(t),
 		stateStore:          componentmocks.NewStateManager(t),
@@ -75,6 +77,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	p, persistenceDone, err := persistence.NewUnitTestPersistence(ctx)
 	require.NoError(t, err)
 	mocks.allComponents.On("Persistence").Return(p).Maybe()
+	mocks.endorsementGatherer.On("DomainContext").Return(mocks.domainContext).Maybe()
 
 	store := privatetxnstore.NewStore(ctx, &pldconf.FlushWriterConfig{}, p)
 	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher, store, mocks.identityResolver)
@@ -86,6 +89,19 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 		persistenceDone()
 	}
 
+}
+
+func waitForChannel[T any](ch chan T) T {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case ret := <-ch:
+			return ret
+		case <-ticker.C:
+			panic("test failed")
+		}
+	}
 }
 
 func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
@@ -116,7 +132,7 @@ func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
 	assert.False(t, testOc.ProcessNewTransaction(ctx, testTx))
 	assert.Equal(t, 1, len(testOc.incompleteTxSProcessMap))
 
-	<-waitForAssemble
+	_ = waitForChannel(waitForAssemble)
 
 	// add again doesn't cause a repeat process of the current stage context
 	assert.False(t, testOc.ProcessNewTransaction(ctx, testTx))

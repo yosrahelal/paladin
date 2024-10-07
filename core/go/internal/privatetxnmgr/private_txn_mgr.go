@@ -130,12 +130,14 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 
 func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context, contractAddr tktypes.EthAddress) (ptmgrtypes.EndorsementGatherer, error) {
 
-	domainAPI, err := p.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
+	domainSmartContract, err := p.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
 	if err != nil {
 		return nil, err
 	}
 	if p.endorsementGatherers[contractAddr.String()] == nil {
-		endorsementGatherer := NewEndorsementGatherer(domainAPI, p.components.KeyManager())
+		// TODO: Consider scope of state in privateTxManager threading model
+		dCtx := p.components.StateManager().NewDomainContext(ctx, domainSmartContract.Domain(), contractAddr)
+		endorsementGatherer := NewEndorsementGatherer(domainSmartContract, dCtx, p.components.KeyManager())
 		p.endorsementGatherers[contractAddr.String()] = endorsementGatherer
 	}
 	return p.endorsementGatherers[contractAddr.String()], nil

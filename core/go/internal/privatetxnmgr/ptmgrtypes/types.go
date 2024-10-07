@@ -167,6 +167,9 @@ type Dispatcher interface {
 }
 
 type EndorsementGatherer interface {
+	// TODO: Consider if this is the right object to hold this
+	DomainContext() components.DomainContext
+
 	//integrate with local signer and domain manager to satisfy the given endorsement request
 	// that may have came from a transaction assembled locally or from another node
 	GatherEndorsement(

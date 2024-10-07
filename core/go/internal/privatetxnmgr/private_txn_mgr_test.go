@@ -922,7 +922,9 @@ func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, pri
 
 type dependencyMocks struct {
 	allComponents       *componentmocks.AllComponents
+	domain              *componentmocks.Domain
 	domainSmartContract *componentmocks.DomainSmartContract
+	domainContext       *componentmocks.DomainContext
 	domainMgr           *componentmocks.DomainManager
 	transportManager    *componentmocks.TransportManager
 	stateStore          *componentmocks.StateManager
@@ -1091,7 +1093,9 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 	ctx := context.Background()
 	mocks := &dependencyMocks{
 		allComponents:       componentmocks.NewAllComponents(t),
+		domain:              componentmocks.NewDomain(t),
 		domainSmartContract: componentmocks.NewDomainSmartContract(t),
+		domainContext:       componentmocks.NewDomainContext(t),
 		domainMgr:           componentmocks.NewDomainManager(t),
 		transportManager:    componentmocks.NewTransportManager(t),
 		stateStore:          componentmocks.NewStateManager(t),
@@ -1109,6 +1113,8 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 	mocks.allComponents.On("EthClientFactory").Return(mocks.ethClientFactory).Maybe()
 	unconnectedRealClient := ethclient.NewUnconnectedRPCClient(ctx, mocks.keyManager, &pldconf.EthClientConfig{}, 0)
 	mocks.ethClientFactory.On("SharedWS").Return(unconnectedRealClient).Maybe()
+	mocks.domainSmartContract.On("Domain").Return(mocks.domain).Maybe()
+	mocks.stateStore.On("NewDomainContext", mock.Anything, mocks.domain, *domainAddress).Return(mocks.domainContext).Maybe()
 
 	e := NewPrivateTransactionMgr(ctx, tktypes.RandHex(16), &pldconf.PrivateTxManagerConfig{
 		Writer: pldconf.FlushWriterConfig{

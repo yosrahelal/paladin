@@ -32,6 +32,7 @@ import (
 type transactionProcessorDepencyMocks struct {
 	allComponents       *componentmocks.AllComponents
 	domainSmartContract *componentmocks.DomainSmartContract
+	domainContext       *componentmocks.DomainContext
 	domainMgr           *componentmocks.DomainManager
 	transportManager    *componentmocks.TransportManager
 	stateStore          *componentmocks.StateManager
@@ -47,6 +48,7 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 	mocks := &transactionProcessorDepencyMocks{
 		allComponents:       componentmocks.NewAllComponents(t),
 		domainSmartContract: componentmocks.NewDomainSmartContract(t),
+		domainContext:       componentmocks.NewDomainContext(t),
 		domainMgr:           componentmocks.NewDomainManager(t),
 		transportManager:    componentmocks.NewTransportManager(t),
 		stateStore:          componentmocks.NewStateManager(t),
@@ -60,6 +62,7 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
 	mocks.allComponents.On("TransportManager").Return(mocks.transportManager).Maybe()
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
+	mocks.endorsementGatherer.On("DomainContext").Return(mocks.domainContext).Maybe()
 
 	tp := NewPaladinTransactionProcessor(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver)
 
