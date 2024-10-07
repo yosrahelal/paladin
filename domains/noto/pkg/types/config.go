@@ -36,7 +36,14 @@ type NotoConfig_V0 struct {
 }
 
 type NotoConfigData_V0 struct {
-	NotaryLookup string `json:"notaryLookup"`
+	NotaryLookup   string              `json:"notaryLookup"`
+	PrivateAddress *tktypes.EthAddress `json:"privateAddress"`
+	PrivateGroup   *PentePrivateGroup  `json:"privateGroup"`
+}
+
+type PentePrivateGroup struct {
+	Salt    tktypes.Bytes32 `json:"salt"`
+	Members []string        `json:"members"`
 }
 
 var NotoConfigABI_V0 = &abi.ParameterArray{

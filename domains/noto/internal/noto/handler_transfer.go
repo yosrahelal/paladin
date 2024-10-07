@@ -319,13 +319,32 @@ func (h *transferHandler) guardTransfer(ctx context.Context, tx *types.ParsedTra
 			EncodedCall:     encodedCall,
 		},
 	}
-	paramsJSON, err := json.Marshal(params)
+
+	transactionType := prototk.PreparedTransaction_PUBLIC
+	functionABI := domain.LoadBuild(notoGuardJSON).ABI.Functions()["onTransfer"]
+	var paramsJSON []byte
+
+	if tx.DomainConfig.DecodedData.PrivateAddress != nil {
+		transactionType = prototk.PreparedTransaction_PRIVATE
+		functionABI = penteInvokeABI("onMint", functionABI.Inputs)
+		penteParams := &PenteInvokeParams{
+			Group:  tx.DomainConfig.DecodedData.PrivateGroup,
+			To:     tx.DomainConfig.DecodedData.PrivateAddress,
+			Inputs: params,
+		}
+		paramsJSON, err = json.Marshal(penteParams)
+	} else {
+		// Note: public guards aren't really useful except in testing
+		// TODO: remove this?
+		paramsJSON, err = json.Marshal(params)
+	}
 	if err != nil {
 		return nil, err
 	}
+
 	return &TransactionWrapper{
-		transactionType: prototk.PreparedTransaction_PUBLIC,
-		functionABI:     domain.LoadBuild(notoGuardJSON).ABI.Functions()["onTransfer"],
+		transactionType: transactionType,
+		functionABI:     functionABI,
 		paramsJSON:      paramsJSON,
 		contractAddress: &tx.DomainConfig.NotaryAddress,
 	}, nil

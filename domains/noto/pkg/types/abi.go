@@ -70,6 +70,8 @@ var NotoABI = abi.ABI{
 type ConstructorParams struct {
 	Notary              string              `json:"notary"`
 	GuardPublicAddress  *tktypes.EthAddress `json:"guardPublicAddress,omitempty"`
+	GuardPrivateAddress *tktypes.EthAddress `json:"guardPrivateAddress,omitempty"`
+	GuardPrivateGroup   *PentePrivateGroup  `json:"guardPrivateGroup,omitempty"`
 	Implementation      string              `json:"implementation"`
 }
 

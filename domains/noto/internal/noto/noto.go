@@ -214,6 +214,8 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 
 	deployData, err := json.Marshal(&types.NotoConfigData_V0{
 		NotaryLookup:   notary.Lookup,
+		PrivateAddress: params.GuardPrivateAddress,
+		PrivateGroup:   params.GuardPrivateGroup,
 	})
 	if err != nil {
 		return nil, err
