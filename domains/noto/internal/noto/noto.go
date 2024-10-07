@@ -258,7 +258,10 @@ func (n *Noto) encodeConfig(config *types.NotoConfigInput_V0) ([]byte, error) {
 }
 
 func (n *Noto) decodeConfig(ctx context.Context, domainConfig []byte) (*types.NotoConfigOutput_V0, error) {
-	configSelector := ethtypes.HexBytes0xPrefix(domainConfig[0:4])
+	var configSelector ethtypes.HexBytes0xPrefix
+	if len(domainConfig) >= 4 {
+		configSelector = ethtypes.HexBytes0xPrefix(domainConfig[0:4])
+	}
 	if configSelector.String() != types.NotoConfigID_V0.String() {
 		return nil, i18n.NewError(ctx, msgs.MsgUnexpectedConfigType, configSelector)
 	}
@@ -288,12 +291,17 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 		return nil, nil, err
 	}
 
+	domainConfig, err := n.decodeConfig(ctx, tx.ContractInfo.ContractConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	abi := types.NotoABI.Functions()[functionABI.Name]
 	handler := n.GetHandler(functionABI.Name)
 	if abi == nil || handler == nil {
 		return nil, nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, functionABI.Name)
 	}
-	params, err := handler.ValidateParams(ctx, tx.FunctionParamsJson)
+	params, err := handler.ValidateParams(ctx, domainConfig, tx.FunctionParamsJson)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -304,11 +312,6 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 	}
 	if tx.FunctionSignature != signature {
 		return nil, nil, i18n.NewError(ctx, msgs.MsgUnexpectedFunctionSignature, functionABI.Name, signature, tx.FunctionSignature)
-	}
-
-	domainConfig, err := n.decodeConfig(ctx, tx.ContractInfo.ContractConfig)
-	if err != nil {
-		return nil, nil, err
 	}
 
 	contractAddress, err := ethtypes.NewAddress(tx.ContractInfo.ContractAddress)
