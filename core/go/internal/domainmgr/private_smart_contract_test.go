@@ -578,8 +578,8 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	// And now prepare
 	err = psc.PrepareTransaction(ctx, tx)
 	require.NoError(t, err)
-	assert.NotNil(t, tx.PreparedTransaction.FunctionABI)
-	assert.NotNil(t, tx.PreparedTransaction.Inputs)
+	assert.NotNil(t, tx.PreparedPublicTransaction.FunctionABI)
+	assert.NotNil(t, tx.PreparedPublicTransaction.Inputs)
 
 	// Confirm the remaining unspent states
 	stillAvailable, err = domain.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{

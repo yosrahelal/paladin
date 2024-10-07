@@ -81,10 +81,12 @@ type PrivateTransaction struct {
 	PreAssembly  *TransactionPreAssembly  // the bit of the assembly phase state that can be retained across re-assembly
 	PostAssembly *TransactionPostAssembly // the bit of the assembly phase state that must be completely discarded on re-assembly
 
-	// DISPATCH PHASE: Once the transaction has reached sufficient confidence of success,
-	// we move on to submitting it to the blockchain.
-	Signer              string
-	PreparedTransaction *EthTransaction
+	// DISPATCH PHASE: Once the transaction has reached sufficient confidence of success, we move on to submission.
+	// Each private transaction may result in a public transaction which should be submitted to the
+	// base ledger, or another private transaction which should go around the transaction loop again.
+	Signer                     string
+	PreparedPublicTransaction  *EthTransaction
+	PreparedPrivateTransaction *PrivateTransaction
 }
 
 // PrivateContractDeploy is a simpler transaction type that constructs new private smart contract instances

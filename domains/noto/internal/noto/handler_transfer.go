@@ -324,6 +324,7 @@ func (h *transferHandler) guardTransfer(ctx context.Context, tx *types.ParsedTra
 		return nil, err
 	}
 	return &TransactionWrapper{
+		transactionType: prototk.PreparedTransaction_PUBLIC,
 		functionABI:     domain.LoadBuild(notoGuardJSON).ABI.Functions()["onTransfer"],
 		paramsJSON:      paramsJSON,
 		contractAddress: &tx.DomainConfig.NotaryAddress,

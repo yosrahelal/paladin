@@ -165,6 +165,7 @@ func pvpNotoNoto(t *testing.T, withGuard bool) {
 		err = json.Unmarshal(decodedJSON, &transferGoldParams)
 		require.NoError(t, err)
 	} else {
+		// Generate a "transferWithApproval" using the same params from the encoded "transfer"
 		transferGoldEncoded, err = notoGold.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferGold.ParamsJSON)
 		require.NoError(t, err)
 		err = json.Unmarshal(transferGold.ParamsJSON, &transferGoldParams)

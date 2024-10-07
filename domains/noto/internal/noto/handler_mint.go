@@ -165,8 +165,9 @@ func (h *mintHandler) baseLedgerMint(ctx context.Context, req *prototk.PrepareTr
 		return nil, err
 	}
 	return &TransactionWrapper{
-		functionABI: h.noto.contractABI.Functions()["mint"],
-		paramsJSON:  paramsJSON,
+		transactionType: prototk.PreparedTransaction_PUBLIC,
+		functionABI:     h.noto.contractABI.Functions()["mint"],
+		paramsJSON:      paramsJSON,
 	}, nil
 }
 
@@ -199,6 +200,7 @@ func (h *mintHandler) guardMint(ctx context.Context, tx *types.ParsedTransaction
 		return nil, err
 	}
 	return &TransactionWrapper{
+		transactionType: prototk.PreparedTransaction_PUBLIC,
 		functionABI:     domain.LoadBuild(notoGuardJSON).ABI.Functions()["onMint"],
 		paramsJSON:      paramsJSON,
 		contractAddress: &tx.DomainConfig.NotaryAddress,

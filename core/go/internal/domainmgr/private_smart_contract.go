@@ -391,15 +391,41 @@ func (dc *domainContract) PrepareTransaction(ctx context.Context, tx *components
 		return err
 	}
 
-	contractAddress := dc.Address()
+	contractAddress := &dc.info.Address
 	if res.Transaction.ContractAddress != nil {
-		contractAddress = *tktypes.MustEthAddress(*res.Transaction.ContractAddress)
+		contractAddress, err = tktypes.ParseEthAddress(*res.Transaction.ContractAddress)
+		if err != nil {
+			return err
+		}
 	}
 
-	tx.PreparedTransaction = &components.EthTransaction{
-		FunctionABI: &functionABI,
-		To:          contractAddress,
-		Inputs:      inputs,
+	if res.Transaction.Type == prototk.PreparedTransaction_PRIVATE {
+		psc, err := dc.dm.GetSmartContractByAddress(ctx, *contractAddress)
+		if err != nil {
+			return err
+		}
+		var functionABI abi.Entry
+		err = json.Unmarshal([]byte(res.Transaction.FunctionAbiJson), &functionABI)
+		if err != nil {
+			return err
+		}
+		tx.PreparedPrivateTransaction = &components.PrivateTransaction{
+			ID: uuid.New(),
+			Inputs: &components.TransactionInputs{
+				Function: &functionABI,
+				To:       *contractAddress,
+				Inputs:   tktypes.RawJSON(res.Transaction.ParamsJson),
+				Domain:   psc.Domain().Name(),
+				From:     tx.Signer,
+				Intent:   tx.Inputs.Intent,
+			},
+		}
+	} else {
+		tx.PreparedPublicTransaction = &components.EthTransaction{
+			FunctionABI: &functionABI,
+			To:          *contractAddress,
+			Inputs:      inputs,
+		}
 	}
 	return nil
 }

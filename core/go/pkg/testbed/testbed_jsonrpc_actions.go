@@ -179,12 +179,11 @@ func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
 	})
 }
 
-func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.PrivateContractInvoke, intent prototk.TransactionSpecification_Intent) (*components.PrivateTransaction, error) {
+func (tb *testbed) newPrivateTransaction(ctx context.Context, invocation tktypes.PrivateContractInvoke, intent prototk.TransactionSpecification_Intent) (components.DomainSmartContract, *components.PrivateTransaction, error) {
 	psc, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, invocation.To)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
 	tx := &components.PrivateTransaction{
 		ID: uuid.New(),
 		Inputs: &components.TransactionInputs{
@@ -196,12 +195,15 @@ func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.Pr
 			Intent:   intent,
 		},
 	}
+	return psc, tx, err
+}
 
+func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.DomainSmartContract, tx *components.PrivateTransaction) error {
 	// First we call init on the smart contract to:
 	// - validate the transaction ABI is understood by the contract
 	// - get an initial list of verifiers that need to be resolved
 	if err := psc.InitTransaction(ctx, tx); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Gather the addresses - in the testbed we assume these all to be local
@@ -210,7 +212,7 @@ func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.Pr
 	for i, v := range tx.PreAssembly.RequiredVerifiers {
 		_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve key %q: %s", v.Lookup, err)
+			return fmt.Errorf("failed to resolve key %q: %s", v.Lookup, err)
 		}
 		tx.PreAssembly.Verifiers[i] = &prototk.ResolvedVerifier{
 			Lookup:       v.Lookup,
@@ -222,31 +224,31 @@ func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.Pr
 
 	// Now call assemble
 	if err := psc.AssembleTransaction(ctx, tx); err != nil {
-		return nil, err
+		return err
 	}
 
 	// The testbed only handles the OK result
 	switch tx.PostAssembly.AssemblyResult {
 	case prototk.AssembleTransactionResponse_OK:
 	default:
-		return nil, fmt.Errorf("assemble result was %s", tx.PostAssembly.AssemblyResult)
+		return fmt.Errorf("assemble result was %s", tx.PostAssembly.AssemblyResult)
 	}
 
 	// The testbed always chooses to take the assemble output and progress to endorse
 	// (no complex sequence selection routine that might result in abandonment).
 	// So just write the states
 	if err := psc.WritePotentialStates(ctx, tx); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Gather signatures
-	if err = tb.gatherSignatures(ctx, tx); err != nil {
-		return nil, err
+	if err := tb.gatherSignatures(ctx, tx); err != nil {
+		return err
 	}
 
 	// Gather endorsements (this would be a distributed activity across nodes in the real engine)
 	if err := tb.gatherEndorsements(ctx, psc, tx); err != nil {
-		return nil, err
+		return err
 	}
 
 	log.L(ctx).Infof("Assembled and endorsed inputs=%d outputs=%d signatures=%d endorsements=%d",
@@ -254,15 +256,25 @@ func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.Pr
 
 	// Pick the signer for the base ledger transaction - now logically we're picking which node would do the prepare + submit phases
 	if err := psc.ResolveDispatch(ctx, tx); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Prepare the transaction
 	if err := psc.PrepareTransaction(ctx, tx); err != nil {
-		return nil, err
+		return err
 	}
 
-	return tx, nil
+	if tx.PreparedPrivateTransaction != nil {
+		nextContract, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, tx.PreparedPrivateTransaction.Inputs.To)
+		if err != nil {
+			return err
+		}
+		return tb.execPrivateTransaction(ctx, nextContract, tx.PreparedPrivateTransaction)
+	} else if tx.Inputs.Intent == prototk.TransactionSpecification_CALL {
+		return tb.execBaseLedgerCall(ctx, tx.Signer, tx.PreparedPublicTransaction)
+	} else {
+		return tb.execBaseLedgerTransaction(ctx, tx.Signer, tx.PreparedPublicTransaction)
+	}
 }
 
 func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) (*tktypes.PrivateContractTransaction, error) {
@@ -290,13 +302,27 @@ func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) (*tktypes.P
 			Data:   []byte(state.Data),
 		}
 	}
-	paramsJSON, err := tx.PreparedTransaction.Inputs.JSON()
-	if err != nil {
-		return nil, err
+
+	var err error
+	var functionABI *abi.Entry
+	var to tktypes.EthAddress
+	var paramsJSON []byte
+	if tx.PreparedPublicTransaction != nil {
+		functionABI = tx.PreparedPublicTransaction.FunctionABI
+		to = tx.PreparedPublicTransaction.To
+		paramsJSON, err = tx.PreparedPublicTransaction.Inputs.JSON()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		functionABI = tx.PreparedPrivateTransaction.Inputs.Function
+		to = tx.PreparedPrivateTransaction.Inputs.To
+		paramsJSON = tx.PreparedPrivateTransaction.Inputs.Inputs
 	}
+
 	return &tktypes.PrivateContractTransaction{
-		FunctionABI:  tx.PreparedTransaction.FunctionABI,
-		To:           tx.PreparedTransaction.To,
+		FunctionABI:  functionABI,
+		To:           to,
 		ParamsJSON:   paramsJSON,
 		InputStates:  inputStates,
 		OutputStates: outputStates,
@@ -311,11 +337,11 @@ func (tb *testbed) rpcTestbedInvoke() rpcserver.RPCHandler {
 		waitForCompletion bool,
 	) (*tktypes.PrivateContractTransaction, error) {
 
-		tx, err := tb.prepareTransaction(ctx, invocation, prototk.TransactionSpecification_SEND_TRANSACTION)
+		psc, tx, err := tb.newPrivateTransaction(ctx, invocation, prototk.TransactionSpecification_SEND_TRANSACTION)
 		if err != nil {
 			return nil, err
 		}
-		err = tb.execBaseLedgerTransaction(ctx, tx.Signer, tx.PreparedTransaction)
+		err = tb.execPrivateTransaction(ctx, psc, tx)
 		if err != nil {
 			return nil, err
 		}
@@ -337,11 +363,11 @@ func (tb *testbed) rpcTestbedPrepare() rpcserver.RPCHandler {
 		invocation tktypes.PrivateContractInvoke,
 	) (*tktypes.PrivateContractTransaction, error) {
 
-		tx, err := tb.prepareTransaction(ctx, invocation, prototk.TransactionSpecification_CALL)
+		psc, tx, err := tb.newPrivateTransaction(ctx, invocation, prototk.TransactionSpecification_CALL)
 		if err != nil {
 			return nil, err
 		}
-		err = tb.execBaseLedgerCall(ctx, tx.Signer, tx.PreparedTransaction)
+		err = tb.execPrivateTransaction(ctx, psc, tx)
 		if err != nil {
 			return nil, err
 		}

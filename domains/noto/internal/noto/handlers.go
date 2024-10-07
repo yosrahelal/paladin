@@ -122,6 +122,7 @@ func (n *Noto) validateOwners(ctx context.Context, tx *types.ParsedTransaction, 
 }
 
 type TransactionWrapper struct {
+	transactionType prototk.PreparedTransaction_TransactionType
 	functionABI     *abi.Entry
 	paramsJSON      []byte
 	contractAddress *tktypes.EthAddress
@@ -139,6 +140,7 @@ func (tw *TransactionWrapper) prepare() (*prototk.PrepareTransactionResponse, er
 	}
 	return &prototk.PrepareTransactionResponse{
 		Transaction: &prototk.PreparedTransaction{
+			Type:            tw.transactionType,
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(tw.paramsJSON),
 			ContractAddress: contractAddress,
