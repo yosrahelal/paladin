@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -144,4 +145,91 @@ func TestPluginRunBadMessages(t *testing.T) {
 	msg, err := req.Wait()
 	require.NoError(t, err)
 	assert.Equal(t, correctID, *msg.Header().CorrelationId)
+}
+
+func TestErrorFromServer(t *testing.T) {
+	ctx, tc, tcDone := newTestController(t)
+	defer tcDone()
+
+	funcs := &DomainAPIFunctions{}
+	waitForCallbacks := make(chan DomainCallbacks, 1)
+	domain := NewDomain(func(callbacks DomainCallbacks) DomainAPI {
+		// Implementation would construct an instance here to start handling the API calls from Paladin,
+		// (rather than passing the callbacks to the test as we do here)
+		waitForCallbacks <- callbacks
+		return &DomainAPIBase{funcs}
+	})
+	defer domain.Stop()
+
+	pluginID := uuid.NewString()
+	tc.fakeDomainController = func(bss grpc.BidiStreamingServer[prototk.DomainMessage, prototk.DomainMessage]) error {
+		for {
+			req, err := bss.Recv()
+			if err != nil {
+				return err
+			}
+			bss.Send(&prototk.DomainMessage{
+				Header: &prototk.Header{
+					PluginId:      req.Header.PluginId,
+					MessageId:     uuid.NewString(),
+					CorrelationId: &req.Header.MessageId,
+					ErrorMessage:  confutil.P("pop"),
+					MessageType:   prototk.Header_ERROR_RESPONSE,
+				},
+			})
+		}
+	}
+
+	domainDone := make(chan struct{})
+	go func() {
+		defer close(domainDone)
+		domain.Run("unix:"+tc.socketFile, pluginID)
+	}()
+	callbacks := <-waitForCallbacks
+
+	_, err := callbacks.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{})
+	assert.Regexp(t, "pop", err)
+}
+
+func TestEmptyErrorFromServer(t *testing.T) {
+	ctx, tc, tcDone := newTestController(t)
+	defer tcDone()
+
+	funcs := &DomainAPIFunctions{}
+	waitForCallbacks := make(chan DomainCallbacks, 1)
+	domain := NewDomain(func(callbacks DomainCallbacks) DomainAPI {
+		// Implementation would construct an instance here to start handling the API calls from Paladin,
+		// (rather than passing the callbacks to the test as we do here)
+		waitForCallbacks <- callbacks
+		return &DomainAPIBase{funcs}
+	})
+	defer domain.Stop()
+
+	pluginID := uuid.NewString()
+	tc.fakeDomainController = func(bss grpc.BidiStreamingServer[prototk.DomainMessage, prototk.DomainMessage]) error {
+		for {
+			req, err := bss.Recv()
+			if err != nil {
+				return err
+			}
+			bss.Send(&prototk.DomainMessage{
+				Header: &prototk.Header{
+					PluginId:      req.Header.PluginId,
+					MessageId:     uuid.NewString(),
+					CorrelationId: &req.Header.MessageId,
+					MessageType:   prototk.Header_ERROR_RESPONSE,
+				},
+			})
+		}
+	}
+
+	domainDone := make(chan struct{})
+	go func() {
+		defer close(domainDone)
+		domain.Run("unix:"+tc.socketFile, pluginID)
+	}()
+	callbacks := <-waitForCallbacks
+
+	_, err := callbacks.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{})
+	assert.Regexp(t, "PD020303", err)
 }

@@ -229,9 +229,10 @@ func TestHandleEventBatch(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
 
 		mc.stateStore.On("WriteStateFinalizations", mock.Anything, mock.Anything, []*components.StateSpend{
-			{DomainName: "test1", State: tktypes.MustParseHexBytes(stateSpent), Transaction: txID},
+			{DomainName: "test1", State: tktypes.MustParseHexBytes(stateSpent), Transaction: txID}, // the SpentStates StateUpdate
 		}, []*components.StateConfirm{
-			{DomainName: "test1", State: tktypes.MustParseHexBytes(stateConfirmed), Transaction: txID},
+			{DomainName: "test1", State: tktypes.MustParseHexBytes(stateConfirmed), Transaction: txID}, // the ConfirmedStates StateUpdate
+			{DomainName: "test1", State: tktypes.MustParseHexBytes(fakeHash1), Transaction: txID},      // the implicit confirm from the NewConfirmedState
 		}).Return(nil, nil)
 
 		mc.stateStore.On("WritePreVerifiedStates", mock.Anything, mock.Anything, "test1", []*components.StateUpsertOutsideContext{
@@ -294,11 +295,12 @@ func TestHandleEventBatch(t *testing.T) {
 					TransactionId: txIDBytes32.String(),
 				},
 			},
-			NewStates: []*prototk.NewLocalState{
+			NewStates: []*prototk.NewConfirmedState{
 				{
 					Id:            &fakeHash1,
 					StateDataJson: `{"color": "blue"}`,
 					SchemaId:      fakeSchema.String(),
+					TransactionId: txIDBytes32.String(),
 				},
 			},
 		}, nil
@@ -586,6 +588,43 @@ func TestHandleEventBatchConfirmBadSchemaID(t *testing.T) {
 	assert.ErrorContains(t, err, "PD011650")
 }
 
+func TestHandleEventBatchNewBadTransactionID(t *testing.T) {
+	batchID := uuid.New()
+	contract1 := tktypes.RandAddress()
+
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+
+	mp, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+
+	mp.Mock.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows(
+		[]string{"address", "domain_address"},
+	).AddRow(contract1, td.d.registryAddress))
+
+	td.tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+		return &prototk.HandleEventBatchResponse{
+			NewStates: []*prototk.NewConfirmedState{
+				{
+					TransactionId: "badnotgood",
+				},
+			},
+		}, nil
+	}
+
+	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
+		BatchID: batchID,
+		Events: []*blockindexer.EventWithData{
+			{
+				IndexedEvent: &blockindexer.IndexedEvent{},
+				Address:      *contract1,
+				Data:         tktypes.RawJSON(`{"result": "success"}`),
+			},
+		},
+	})
+	assert.ErrorContains(t, err, "PD020007")
+}
+
 func TestHandleEventBatchNewBadSchemaID(t *testing.T) {
 	batchID := uuid.New()
 	contract1 := tktypes.RandAddress()
@@ -602,9 +641,10 @@ func TestHandleEventBatchNewBadSchemaID(t *testing.T) {
 
 	td.tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
 		return &prototk.HandleEventBatchResponse{
-			NewStates: []*prototk.NewLocalState{
+			NewStates: []*prototk.NewConfirmedState{
 				{
-					SchemaId: "badnotgood",
+					SchemaId:      "badnotgood",
+					TransactionId: tktypes.RandHex(32),
 				},
 			},
 		}, nil
@@ -640,7 +680,7 @@ func TestHandleEventBatchNewBadStateID(t *testing.T) {
 	stateID := "badnotgood"
 	td.tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
 		return &prototk.HandleEventBatchResponse{
-			NewStates: []*prototk.NewLocalState{
+			NewStates: []*prototk.NewConfirmedState{
 				{
 					Id: &stateID,
 				},
@@ -762,10 +802,11 @@ func TestHandleEventBatchUpsertStateFail(t *testing.T) {
 
 	td.tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
 		return &prototk.HandleEventBatchResponse{
-			NewStates: []*prototk.NewLocalState{
+			NewStates: []*prototk.NewConfirmedState{
 				{
 					SchemaId:      tktypes.RandHex(32),
 					StateDataJson: `{"color": "blue"}`,
+					TransactionId: tktypes.RandHex(32),
 				},
 			},
 		}, nil

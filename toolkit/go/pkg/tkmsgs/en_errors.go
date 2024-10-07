@@ -55,6 +55,7 @@ var (
 	MsgPluginUnsupportedRequest   = ffe("PD020300", "Unsupported request %T")
 	MsgPluginUnexpectedResponse   = ffe("PD020301", "Unexpected response %T (expected %T)")
 	MsgPluginUnimplementedRequest = ffe("PD020302", "Unimplemented plugin request %T")
+	MsgPluginErrorFromServerNoMsg = ffe("PD020303", "Error from server (no detailed message in response)")
 
 	// TLS PD0204XX
 	MsgTLSInvalidCAFile             = ffe("PD020400", "Invalid CA certificates file")

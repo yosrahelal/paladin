@@ -16,14 +16,17 @@ package plugintk
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/inflight"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -257,6 +260,17 @@ func (pr *pluginRun[M]) RequestFromPlugin(ctx context.Context, req PluginMessage
 	res, err := inflight.Wait()
 	if err != nil {
 		l.Infof("[%s] <== CANCELLED [%s]", reqID, inflight.Age())
+		return nil, err
+	}
+	if res.Header().MessageType == prototk.Header_ERROR_RESPONSE {
+		msg := res.Header().ErrorMessage
+		if msg != nil {
+			err = errors.New(*msg)
+		} else {
+			// This is unexpected, but better to handle that give an empty result
+			err = i18n.NewError(ctx, tkmsgs.MsgPluginErrorFromServerNoMsg)
+		}
+		l.Infof("[%s] <== ERROR [%s]: %s", reqID, inflight.Age(), err)
 		return nil, err
 	}
 

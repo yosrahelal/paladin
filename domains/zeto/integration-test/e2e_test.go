@@ -180,7 +180,6 @@ func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC)
 }
 
-// TODO: Re-enable after discussing state availability requirements with Jim
 // func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
 // 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER)
 // }

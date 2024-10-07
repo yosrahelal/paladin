@@ -31,7 +31,7 @@ import (
 
 type StatesStorage interface {
 	core.Storage
-	GetNewStates() []*prototk.NewLocalState
+	GetNewStates() []*prototk.NewConfirmedState
 }
 
 type statesStorage struct {
@@ -41,7 +41,7 @@ type statesStorage struct {
 	rootSchemaId      string
 	nodeSchemaId      string
 	rootNode          core.NodeIndex
-	newNodes          []*prototk.NewLocalState
+	newNodes          []*prototk.NewConfirmedState
 }
 
 func NewStatesStorage(c plugintk.DomainCallbacks, smtName, stateQueryContext, rootSchemaId, nodeSchemaId string) StatesStorage {
@@ -54,7 +54,7 @@ func NewStatesStorage(c plugintk.DomainCallbacks, smtName, stateQueryContext, ro
 	}
 }
 
-func (s *statesStorage) GetNewStates() []*prototk.NewLocalState {
+func (s *statesStorage) GetNewStates() []*prototk.NewConfirmedState {
 	return s.newNodes
 }
 
@@ -99,7 +99,7 @@ func (s *statesStorage) UpsertRootNodeIndex(root core.NodeIndex) error {
 	if err != nil {
 		return fmt.Errorf("failed to upsert root node. %s", err)
 	}
-	newRootState := &prototk.NewLocalState{
+	newRootState := &prototk.NewConfirmedState{
 		Id:            &newRoot.RootIndex,
 		SchemaId:      s.rootSchemaId,
 		StateDataJson: string(data),
@@ -197,7 +197,7 @@ func (s *statesStorage) InsertNode(n core.Node) error {
 		return fmt.Errorf("failed to insert node. %s", err)
 	}
 	refKey := newNode.RefKey.HexString()
-	newNodeState := &prototk.NewLocalState{
+	newNodeState := &prototk.NewConfirmedState{
 		Id:            &refKey,
 		SchemaId:      s.nodeSchemaId,
 		StateDataJson: string(data),

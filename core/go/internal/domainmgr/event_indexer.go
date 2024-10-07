@@ -236,6 +236,8 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 	c := d.newInFlightDomainRequest(dbTX, d.dm.stateStore.NewDomainContext(ctx, d, addr))
 	defer c.close()
 
+	batch.StateQueryContext = c.id
+
 	var res *prototk.HandleEventBatchResponse
 	res, err := d.api.HandleEventBatch(ctx, batch)
 	if err != nil {
@@ -277,6 +279,10 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 				return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, *state.Id)
 			}
 		}
+		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
+		if err != nil {
+			return nil, err
+		}
 		schemaID, err := tktypes.ParseBytes32(state.SchemaId)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidSchemaID, state.SchemaId)
@@ -286,23 +292,24 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 			SchemaID: schemaID,
 			Data:     tktypes.RawJSON(state.StateDataJson),
 		})
+
+		// These have implicit confirmations
+		stateConfirms = append(stateConfirms, &components.StateConfirm{DomainName: d.name, State: id, Transaction: *txUUID})
 	}
 
-	if len(stateSpends) > 0 || len(stateConfirms) > 0 {
-		if err := d.dm.stateStore.WriteStateFinalizations(ctx, dbTX, stateSpends, stateConfirms); err != nil {
-			return nil, err
-		}
-	}
-
+	// Write any new states first
 	if len(newStates) > 0 {
-		// This is an outlier case - we're writing states that are distributed via the blockchain using
-		// encryption, rather than selectively disclosed.
-		// The domain MUST HAVE PRE-VERIFIED these states (we do not call verify again against the domain
-		// for states that reach this path)
+		// These states are trusted as they come from the domain on our local node (no need to go back round VerifyStateHashes for customer hash functions)
 		if _, err := d.dm.stateStore.WritePreVerifiedStates(ctx, dbTX, d.name, newStates); err != nil {
 			return nil, err
 		}
 	}
 
+	// Then any finalizations of those states
+	if len(stateSpends) > 0 || len(stateConfirms) > 0 {
+		if err := d.dm.stateStore.WriteStateFinalizations(ctx, dbTX, stateSpends, stateConfirms); err != nil {
+			return nil, err
+		}
+	}
 	return res, err
 }

@@ -161,7 +161,7 @@ message HandleEventBatchResponse {
   repeated CompletedTransaction transactions_complete = 1; // A list of Paladin transactions that may be considered complete
   repeated StateUpdate spent_states = 2; // A list of states that are now spent
   repeated StateUpdate confirmed_states = 3; // A list of states that are now confirmed (and unspent)
-  repeated NewLocalState new_states = 4; // A list of new states to store (only for events that contain full state data)
+  repeated NewConfirmedState new_states = 4; // A list of new states to store (only for events that contain full state data)
 }
 
 // **VALIDATE_STATE_HASHES** step only happens when custom_state_hash is true in the domain config, and then must be implemented
@@ -235,10 +235,12 @@ message NewState {
   optional string id = 4; // The hash id to uniquely identify this state (a default hashing algorithm will be used by Paladin if omitted)
 }
 
-message NewLocalState {
+// a state generated in the event handler, which will be added immediately locally with an implicit confirmation on the transaction
+message NewConfirmedState {
   string schema_id = 1; // The id from the schema, which must be one of the ones established during the ConfigDomain+InitDomain phase
   string state_data_json = 2; // The data for this state that will be recorded by Paladin, and uniquely identified by Paladin using a hash (which might be additional to any hashing done in a unique way by the domain)
   optional string id = 3; // The hash id to uniquely identify this state (a default hashing algorithm will be used by Paladin if omitted)
+  string transaction_id = 4; // The transaction for with to write the confirmation record of this state
 }
 
 message EndorsableState {
