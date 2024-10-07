@@ -1052,7 +1052,7 @@ func TestGetIndexedTransactionByNonceFail(t *testing.T) {
 
 }
 
-func TestHydrateBlockErrorCases(t *testing.T) {
+func TestHydrateBlockErrorCase(t *testing.T) {
 	ctx, bi, mRPC, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
@@ -1076,6 +1076,32 @@ func TestHydrateBlockErrorCases(t *testing.T) {
 	bi.hydrateBlock(ctx, batch, 0)
 	assert.Nil(t, batch.receipts[0])
 	assert.Regexp(t, "pop", batch.receiptResults[0])
+	batch.wg.Wait()
+
+}
+
+func TestHydrateBlockBesuNullCase(t *testing.T) {
+	ctx, bi, mRPC, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	bi.retry.UTSetMaxAttempts(1)
+
+	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getBlockReceipts", mock.Anything).Return(nil)
+
+	batch := &blockWriterBatch{
+		wg: sync.WaitGroup{},
+		blocks: []*BlockInfoJSONRPC{
+			{Hash: tktypes.RandBytes(32)},
+		},
+		summaries:      []string{"block_0"},
+		receipts:       [][]*TXReceiptJSONRPC{nil},
+		receiptResults: []error{nil},
+	}
+	batch.wg.Add(1)
+
+	bi.hydrateBlock(ctx, batch, 0)
+	assert.Nil(t, batch.receipts[0])
+	assert.Regexp(t, "PD011310", batch.receiptResults[0])
 	batch.wg.Wait()
 
 }

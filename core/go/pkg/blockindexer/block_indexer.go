@@ -480,19 +480,27 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 
 func (bi *blockIndexer) hydrateBlock(ctx context.Context, batch *blockWriterBatch, blockIndex int) {
 	defer batch.wg.Done()
-	err := bi.retry.Do(ctx, func(attempt int) (retryable bool, err error) {
+	err := bi.retry.Do(ctx, func(attempt int) (bool, error) {
 		// We use eth_getBlockReceipts, which takes either a number or a hash (supported by Besu and go-ethereum)
-		err = bi.wsConn.CallRPC(ctx, &batch.receipts[blockIndex], "eth_getBlockReceipts", batch.blocks[blockIndex].Hash)
-		if err != nil && !isNotFound(err) {
-			log.L(ctx).Errorf("Failed to query block %s: %s", batch.summaries[blockIndex], err)
-			return true, err // retry
-		}
-		if batch.receipts[blockIndex] == nil {
-			// If we get a not-found, that's an indication the confirmations are not set correctly,
-			// but there's no point in continuing to retry as a confirmed block should be available
-			// on our connection.
-			// This nil entry in batch.receipts[blockIndex] triggers a reset.
-			return false, i18n.NewError(ctx, msgs.MsgBlockIndexerConfirmedReceiptNotFound, batch.blocks[blockIndex].Hash)
+		rpcErr := bi.wsConn.CallRPC(ctx, &batch.receipts[blockIndex], "eth_getBlockReceipts", batch.blocks[blockIndex].Hash)
+		if rpcErr != nil || batch.receipts[blockIndex] == nil {
+			var err error = rpcErr
+			retry := true
+			log.L(ctx).Errorf("Failed to query block %s: %s", batch.summaries[blockIndex], rpcErr)
+			if err == nil {
+				// TODO: We've seen this with Besu instead of an error, and need to diagnose
+				// Convert to a not found, but DO retry here.
+				log.L(ctx).Warnf("Blockchain node return null from eth_getBlockReceipts")
+				err = i18n.NewError(ctx, msgs.MsgBlockIndexerConfirmedBlockNotFound, batch.blocks[blockIndex].Hash, batch.blocks[blockIndex].Number)
+			} else if isNotFound(err) {
+				// If we get a not-found, that's an indication the confirmations are not set correctly,
+				// but there's no point in continuing to retry as a confirmed block should be available
+				// on our connection.
+				// This nil entry in batch.receipts[blockIndex] triggers a reset.
+				retry = false
+				err = i18n.WrapError(ctx, rpcErr, msgs.MsgBlockIndexerConfirmedBlockNotFound, batch.blocks[blockIndex].Hash, batch.blocks[blockIndex].Number)
+			}
+			return retry, err
 		}
 		return false, nil
 	})
