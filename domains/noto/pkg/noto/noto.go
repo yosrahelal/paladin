@@ -24,6 +24,8 @@ import (
 type Noto interface {
 	plugintk.DomainAPI
 	GetHandler(method string) types.DomainHandler
+	Name() string
+	CoinSchemaID() string
 }
 
 func New(callbacks plugintk.DomainCallbacks) Noto {

@@ -96,6 +96,14 @@ func getEventSignature(ctx context.Context, abi abi.ABI, eventName string) (stri
 	return event.SolString(), nil
 }
 
+func (n *Noto) Name() string {
+	return n.name
+}
+
+func (n *Noto) CoinSchemaID() string {
+	return n.coinSchema.Id
+}
+
 func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
 	err := json.Unmarshal([]byte(req.ConfigJson), &n.config)
 	if err != nil {
