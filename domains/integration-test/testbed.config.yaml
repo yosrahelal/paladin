@@ -27,5 +27,4 @@ signer:
       keys:
         seed:
           encoding: none
-          # DO NOT USE THIS MNEMONIC FOR ANYTHING APART FROM TESTBED TESTING
-          inline: winter unusual genius wall credit poverty fee enlist economy faculty devote door render path sight
+          inline: REPLACED BY GENERATED KEY IN TEST

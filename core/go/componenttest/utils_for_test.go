@@ -50,7 +50,6 @@ import (
 	"github.com/kaleido-io/paladin/transports/grpc/pkg/grpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tyler-smith/go-bip39"
 )
 
 //go:embed abis/SimpleStorage.json
@@ -187,16 +186,6 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 		RegistryAddress: domainRegistryAddress.String(),
 	}
 
-	entropy, _ := bip39.NewEntropy(256)
-	mnemonic, _ := bip39.NewMnemonic(entropy)
-
-	i.conf.Signer.KeyStore.Static.Keys = map[string]pldconf.StaticKeyEntryConfig{
-		"seed": {
-			Encoding: "none",
-			Inline:   mnemonic,
-		},
-	}
-
 	i.conf.NodeName = binding.identity.String()
 	i.conf.Transports = map[string]*pldconf.TransportConfig{
 		"grpc": {
@@ -305,6 +294,11 @@ func testConfig(t *testing.T) pldconf.PaladinConfig {
 	require.NoError(t, err, "Error finding a free port")
 	conf.RPCServer.HTTP.Port = &port
 	conf.RPCServer.HTTP.Address = confutil.P("127.0.0.1")
+
+	conf.Signer.KeyStore.Static.Keys["seed"] = pldconf.StaticKeyEntryConfig{
+		Encoding: "hex",
+		Inline:   tktypes.RandHex(32),
+	}
 
 	return *conf
 

@@ -31,8 +31,21 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
+func HDWalletSeedScopedToTest() *UTInitFunction {
+	seed := tktypes.RandHex(32)
+	return &UTInitFunction{
+		ModifyConfig: func(conf *pldconf.PaladinConfig) {
+			conf.Signer.KeyStore.Static.Keys["seed"] = pldconf.StaticKeyEntryConfig{
+				Encoding: "hex",
+				Inline:   seed,
+			}
+		},
+	}
+}
+
 type Testbed interface {
 	components.AdditionalManager
+	// Use GenerateSeed to get a valid seed
 	StartForTest(configFile string, domains map[string]*TestbedDomain, initFunctions ...*UTInitFunction) (url string, done func(), err error)
 	Components() AllComponents
 }
@@ -90,6 +103,7 @@ func (tb *testbed) Components() AllComponents {
 type AllComponents components.AllComponents
 
 type UTInitFunction struct {
+	ModifyConfig     func(conf *pldconf.PaladinConfig)
 	PreManagerStart  func(c AllComponents) error
 	PostManagerStart func(c AllComponents) error
 }
@@ -146,6 +160,12 @@ func (tb *testbed) StartForTest(configFile string, domains map[string]*TestbedDo
 	var conf *pldconf.PaladinConfig
 	if err = pldconf.ReadAndParseYAMLFile(ctx, configFile, &conf); err != nil {
 		return "", nil, err
+	}
+
+	for _, init := range initFunctions {
+		if init.ModifyConfig != nil {
+			init.ModifyConfig(conf)
+		}
 	}
 
 	conf.DomainManagerConfig.Domains = make(map[string]*pldconf.DomainConfig, len(domains))

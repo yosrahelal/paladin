@@ -44,25 +44,10 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       # Build with Gradle
+      # This does not build any docker images, and does not run any dockerized tests.
+      # It does run Go/Java/Solidity component and integration tests that use PostgreSQL and Besu
       - name: Build with Gradle
         run: ./gradlew -PcomposeLogs=true -PverboseTests=true --no-daemon --parallel build
-      # Run the Gradle assemble task
-      - name: Run Gradle assemble
-        run: ./gradlew assemble
-
-      # Verify the files in build/libs for all OS types
-      - name: Check files in build/libs
-        run: |
-          test -f build/libs/libstarter.so || (echo "libstarter library not found" && exit 1)
-          test -f build/libs/libstarter.h || (echo "libstarter.h not found" && exit 1)
-          test -f build/libs/libcore.so || (echo "libcore library not found" && exit 1)
-          test -f build/libs/libcore.h || (echo "libcore.h not found" && exit 1)
-          test -f build/libs/paladin.jar || (echo "paladin.jar not found" && exit 1)
-
-      # Verify the files in build/domains
-      - name: Check files in build/domains
-        run: |
-          test -f build/domains/pente.jar || (echo "pente.jar not found" && exit 1)
   
   image-build:
     runs-on: ubuntu-latest

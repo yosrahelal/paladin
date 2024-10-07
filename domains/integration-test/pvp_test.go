@@ -57,14 +57,14 @@ type NotoGuardPreparedTransaction struct {
 }
 
 func TestNotoForNoto(t *testing.T) {
-	pvpNotoNoto(t, false)
+	pvpNotoNoto(t, testbed.HDWalletSeedScopedToTest(), false)
 }
 
 func TestNotoForNotoWithGuard(t *testing.T) {
-	pvpNotoNoto(t, true)
+	pvpNotoNoto(t, testbed.HDWalletSeedScopedToTest(), true)
 }
 
-func pvpNotoNoto(t *testing.T, withGuard bool) {
+func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withGuard bool) {
 	ctx := context.Background()
 	log.L(ctx).Infof("TestNotoForNoto (withGuard=%t)", withGuard)
 	domainName := "noto_" + tktypes.RandHex(8)
@@ -75,7 +75,7 @@ func pvpNotoNoto(t *testing.T, withGuard bool) {
 		"noto": helpers.NotoFactoryJSON,
 		"atom": helpers.AtomFactoryJSON,
 	}
-	contracts := deployContracts(ctx, t, notary, contractSource)
+	contracts := deployContracts(ctx, t, hdWalletSeed, notary, contractSource)
 	for name, address := range contracts {
 		log.L(ctx).Infof("%s deployed to %s", name, address)
 	}
@@ -84,7 +84,7 @@ func pvpNotoNoto(t *testing.T, withGuard bool) {
 	_, notoTestbed := newNotoDomain(t, &nototypes.DomainConfig{
 		FactoryAddress: contracts["noto"],
 	})
-	done, tb, rpc := newTestbed(t, map[string]*testbed.TestbedDomain{
+	done, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: notoTestbed,
 	})
 	defer done()
@@ -232,6 +232,9 @@ func pvpNotoNoto(t *testing.T, withGuard bool) {
 func TestNotoForZeto(t *testing.T) {
 	ctx := context.Background()
 	log.L(ctx).Infof("TestNotoForZeto")
+
+	hdWalletSeed := testbed.HDWalletSeedScopedToTest()
+
 	notoDomainName := "noto_" + tktypes.RandHex(8)
 	zetoDomainName := "zeto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Noto domain = %s", notoDomainName)
@@ -242,13 +245,13 @@ func TestNotoForZeto(t *testing.T) {
 		"noto": helpers.NotoFactoryJSON,
 		"atom": helpers.AtomFactoryJSON,
 	}
-	contracts := deployContracts(ctx, t, notary, contractSource)
+	contracts := deployContracts(ctx, t, hdWalletSeed, notary, contractSource)
 	for name, address := range contracts {
 		log.L(ctx).Infof("%s deployed to %s", name, address)
 	}
 
 	log.L(ctx).Infof("Deploying Zeto dependencies")
-	zetoContracts := deployZetoContracts(t, notary)
+	zetoContracts := deployZetoContracts(t, hdWalletSeed, notary)
 	zetoConfig := prepareZetoConfig(t, zetoContracts)
 
 	log.L(ctx).Infof("Initializing testbed")
@@ -256,7 +259,7 @@ func TestNotoForZeto(t *testing.T) {
 		FactoryAddress: contracts["noto"],
 	})
 	zetoDomain, zetoTestbed := newZetoDomain(t, zetoConfig)
-	done, tb, rpc := newTestbed(t, map[string]*testbed.TestbedDomain{
+	done, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		notoDomainName: notoTestbed,
 		zetoDomainName: zetoTestbed,
 	})

@@ -67,9 +67,9 @@ func mapConfig(t *testing.T, config *types.DomainConfig) (m map[string]any) {
 	return m
 }
 
-func deployContracts(ctx context.Context, t *testing.T, contracts map[string][]byte) map[string]string {
+func deployContracts(ctx context.Context, t *testing.T, hdWalletSeed *testbed.UTInitFunction, contracts map[string][]byte) map[string]string {
 	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("../../testbed.config.yaml", map[string]*testbed.TestbedDomain{})
+	url, done, err := tb.StartForTest("../../testbed.config.yaml", map[string]*testbed.TestbedDomain{}, hdWalletSeed)
 	require.NoError(t, err)
 	defer done()
 	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
@@ -100,9 +100,9 @@ func newNotoDomain(t *testing.T, config *types.DomainConfig) (*Noto, *testbed.Te
 	}
 }
 
-func newTestbed(t *testing.T, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
+func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
 	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("../../testbed.config.yaml", domains)
+	url, done, err := tb.StartForTest("../../testbed.config.yaml", domains, hdWalletSeed)
 	assert.NoError(t, err)
 	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
 	return done, tb, rpc
@@ -130,11 +130,13 @@ func TestNoto(t *testing.T) {
 	domainName := "noto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
 
+	hdWalletSeed := testbed.HDWalletSeedScopedToTest()
+
 	log.L(ctx).Infof("Deploying Noto factory")
 	contractSource := map[string][]byte{
 		"factory": notoFactoryJSON,
 	}
-	contracts := deployContracts(ctx, t, contractSource)
+	contracts := deployContracts(ctx, t, hdWalletSeed, contractSource)
 	for name, address := range contracts {
 		log.L(ctx).Infof("%s deployed to %s", name, address)
 	}
@@ -142,7 +144,7 @@ func TestNoto(t *testing.T) {
 	noto, notoTestbed := newNotoDomain(t, &types.DomainConfig{
 		FactoryAddress: contracts["factory"],
 	})
-	done, tb, rpc := newTestbed(t, map[string]*testbed.TestbedDomain{
+	done, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: notoTestbed,
 	})
 	defer done()
@@ -273,11 +275,13 @@ func TestNotoApprove(t *testing.T) {
 	domainName := "noto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
 
+	hdWalletSeed := testbed.HDWalletSeedScopedToTest()
+
 	log.L(ctx).Infof("Deploying Noto factory")
 	contractSource := map[string][]byte{
 		"factory": notoFactoryJSON,
 	}
-	contracts := deployContracts(ctx, t, contractSource)
+	contracts := deployContracts(ctx, t, hdWalletSeed, contractSource)
 	for name, address := range contracts {
 		log.L(ctx).Infof("%s deployed to %s", name, address)
 	}
@@ -285,7 +289,7 @@ func TestNotoApprove(t *testing.T) {
 	noto, notoTestbed := newNotoDomain(t, &types.DomainConfig{
 		FactoryAddress: contracts["factory"],
 	})
-	done, tb, rpc := newTestbed(t, map[string]*testbed.TestbedDomain{
+	done, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: notoTestbed,
 	})
 	defer done()
@@ -373,12 +377,14 @@ func TestNotoSelfSubmit(t *testing.T) {
 	domainName := "noto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
 
+	hdWalletSeed := testbed.HDWalletSeedScopedToTest()
+
 	log.L(ctx).Infof("Deploying Noto factory")
 	contractSource := map[string][]byte{
 		"factory": notoFactoryJSON,
 		"noto":    notoSelfSubmitJSON,
 	}
-	contracts := deployContracts(ctx, t, contractSource)
+	contracts := deployContracts(ctx, t, hdWalletSeed, contractSource)
 	for name, address := range contracts {
 		log.L(ctx).Infof("%s deployed to %s", name, address)
 	}
@@ -389,7 +395,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 	noto, notoTestbed := newNotoDomain(t, &types.DomainConfig{
 		FactoryAddress: factoryAddress.String(),
 	})
-	done, tb, rpc := newTestbed(t, map[string]*testbed.TestbedDomain{
+	done, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: notoTestbed,
 	})
 	defer done()

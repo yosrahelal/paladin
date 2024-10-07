@@ -94,12 +94,12 @@ func prepareDomainConfig(t *testing.T, domainContracts *zetoDomainContracts) *ty
 	return &config
 }
 
-func deployZetoContracts(t *testing.T) *zetoDomainContracts {
+func deployZetoContracts(t *testing.T, hdWalletSeed *testbed.UTInitFunction) *zetoDomainContracts {
 	ctx := context.Background()
 	log.L(ctx).Infof("Deploy Zeto Contracts")
 
 	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{})
+	url, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{}, hdWalletSeed)
 	bi := tb.Components().BlockIndexer()
 	ec := tb.Components().EthClientFactory().HTTPClient()
 	assert.NoError(t, err)
@@ -132,9 +132,9 @@ func newZetoDomain(t *testing.T, config *types.DomainFactoryConfig) (zeto.Zeto, 
 	}
 }
 
-func newTestbed(t *testing.T, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
+func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
 	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("./testbed.config.yaml", domains)
+	url, done, err := tb.StartForTest("./testbed.config.yaml", domains, hdWalletSeed)
 	assert.NoError(t, err)
 	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
 	return done, tb, rpc
@@ -142,6 +142,7 @@ func newTestbed(t *testing.T, domains map[string]*testbed.TestbedDomain) (contex
 
 type zetoDomainTestSuite struct {
 	suite.Suite
+	hdWalletSeed      *testbed.UTInitFunction
 	deployedContracts *zetoDomainContracts
 	domainName        string
 	domain            zeto.Zeto
@@ -150,14 +151,15 @@ type zetoDomainTestSuite struct {
 }
 
 func (s *zetoDomainTestSuite) SetupSuite() {
-	domainContracts := deployZetoContracts(s.T())
+	s.hdWalletSeed = testbed.HDWalletSeedScopedToTest()
+	domainContracts := deployZetoContracts(s.T(), s.hdWalletSeed)
 	s.deployedContracts = domainContracts
 	ctx := context.Background()
 	domainName := "zeto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
 	config := prepareDomainConfig(s.T(), s.deployedContracts)
 	zeto, zetoTestbed := newZetoDomain(s.T(), config)
-	done, _, rpc := newTestbed(s.T(), map[string]*testbed.TestbedDomain{
+	done, _, rpc := newTestbed(s.T(), s.hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: zetoTestbed,
 	})
 	s.domainName = domainName
@@ -267,7 +269,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	}
 
 	// check that we now only have one unspent coin, of value 5
-	coins, err = s.domain.FindCoins(ctx, &zetoAddress, "{}")
+	_, err = s.domain.FindCoins(ctx, &zetoAddress, "{}")
 	require.NoError(t, err)
 	// one for the controller from the failed transaction
 	// one for the controller from the successful transaction as change (value=5)
