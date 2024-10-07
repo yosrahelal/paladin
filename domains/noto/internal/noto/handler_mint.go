@@ -51,13 +51,13 @@ func (h *mintHandler) ValidateParams(ctx context.Context, config *types.NotoConf
 func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	params := tx.Params.(*types.MintParams)
 
-	if req.Transaction.From != tx.DomainConfig.NotaryLookup {
+	if req.Transaction.From != tx.DomainConfig.DecodedData.NotaryLookup {
 		return nil, i18n.NewError(ctx, msgs.MsgMintOnlyNotary)
 	}
 	return &prototk.InitTransactionResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:       tx.DomainConfig.NotaryLookup,
+				Lookup:       tx.DomainConfig.DecodedData.NotaryLookup,
 				Algorithm:    algorithms.ECDSA_SECP256K1,
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
@@ -73,7 +73,7 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.MintParams)
 
-	notary := domain.FindVerifier(tx.DomainConfig.NotaryLookup, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
+	notary := domain.FindVerifier(tx.DomainConfig.DecodedData.NotaryLookup, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
 	if notary == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "notary")
 	}
@@ -118,7 +118,7 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 				AttestationType: prototk.AttestationType_ENDORSE,
 				Algorithm:       algorithms.ECDSA_SECP256K1,
 				VerifierType:    verifiers.ETH_ADDRESS,
-				Parties:         []string{tx.DomainConfig.NotaryLookup},
+				Parties:         []string{tx.DomainConfig.DecodedData.NotaryLookup},
 			},
 		},
 	}, nil

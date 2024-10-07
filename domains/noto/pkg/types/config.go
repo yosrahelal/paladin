@@ -28,16 +28,21 @@ type DomainConfig struct {
 var NotoConfigID_V0 = tktypes.MustParseHexBytes("0x00010000")
 
 type NotoConfig_V0 struct {
-	NotaryLookup  string             `json:"notaryLookup"`
 	NotaryType    tktypes.Bytes32    `json:"notaryType"`
 	NotaryAddress tktypes.EthAddress `json:"notaryAddress"`
 	Variant       tktypes.Bytes32    `json:"variant"`
+	Data          tktypes.HexBytes   `json:"data"`
+	DecodedData   *NotoConfigData_V0 `json:"-"`
+}
+
+type NotoConfigData_V0 struct {
+	NotaryLookup string `json:"notaryLookup"`
 }
 
 var NotoConfigABI_V0 = &abi.ParameterArray{
-	{Name: "notaryLookup", Type: "string"},
 	{Name: "notaryType", Type: "bytes32"},
 	{Name: "notaryAddress", Type: "address"},
+	{Name: "data", Type: "bytes"},
 	{Name: "variant", Type: "bytes32"},
 }
 

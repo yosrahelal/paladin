@@ -44,8 +44,8 @@ type NotoHelper struct {
 func DeployNoto(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domainName, notary string, guard *tktypes.EthAddress) *NotoHelper {
 	var addr tktypes.EthAddress
 	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deploy", domainName, &types.ConstructorParams{
-		Notary:       notary,
-		GuardAddress: guard,
+		Notary:             notary,
+		GuardPublicAddress: guard,
 	})
 	if rpcerr != nil {
 		assert.NoError(t, rpcerr.Error())

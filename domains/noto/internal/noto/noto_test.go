@@ -17,20 +17,23 @@ package noto
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
 
 var encodedConfig = func() []byte {
-	encoded, err := types.NotoConfigABI_V0.EncodeABIDataJSON([]byte(`{
-		"notaryLookup": "notary",
+	configData := tktypes.HexBytes(`{"notaryLookup":"notary"}`)
+	encoded, err := types.NotoConfigABI_V0.EncodeABIDataJSON([]byte(fmt.Sprintf(`{
 		"notaryType": "0x0000000000000000000000000000000000000000000000000000000000000000",
 		"notaryAddress": "0x138baffcdcc3543aad1afd81c71d2182cdf9c8cd",
-		"variant": "0x0000000000000000000000000000000000000000000000000000000000000000"
-	}`))
+		"variant": "0x0000000000000000000000000000000000000000000000000000000000000000",
+		"data": "%s"
+	}`, configData.String())))
 	if err != nil {
 		panic(err)
 	}

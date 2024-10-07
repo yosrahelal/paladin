@@ -50,9 +50,9 @@ export async function deployNotoInstance(
   const abi = AbiCoder.defaultAbiCoder();
   const deployTx = await notoFactory.deploy(
     randomBytes32(),
-    "",
     "0x0000000000000000000000000000000000000000000000000000000000000000",
-    notary
+    notary,
+    "0x"
   );
   const deployReceipt = await deployTx.wait();
   const deployEvent = deployReceipt?.logs.find(

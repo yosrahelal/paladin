@@ -100,7 +100,7 @@ func (h *approveHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 				AttestationType: prototk.AttestationType_ENDORSE,
 				Algorithm:       algorithms.ECDSA_SECP256K1,
 				VerifierType:    verifiers.ETH_ADDRESS,
-				Parties:         []string{tx.DomainConfig.NotaryLookup},
+				Parties:         []string{tx.DomainConfig.DecodedData.NotaryLookup},
 			},
 		},
 	}, nil

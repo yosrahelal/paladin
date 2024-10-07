@@ -63,9 +63,9 @@ type Noto struct {
 type NotoDeployParams struct {
 	Name          string             `json:"name,omitempty"`
 	TransactionID string             `json:"transactionId"`
-	NotaryLookup  string             `json:"notaryLookup"`
 	NotaryType    tktypes.Bytes32    `json:"notaryType"`
 	NotaryAddress tktypes.EthAddress `json:"notaryAddress"`
+	Data          tktypes.HexBytes   `json:"data"`
 }
 
 type NotoMintParams struct {
@@ -201,23 +201,30 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 
 	var notaryType tktypes.Bytes32
 	var notaryAddress *tktypes.EthAddress
-	if params.GuardAddress.IsZero() {
+	if params.GuardPublicAddress.IsZero() {
 		notaryAddress, err = tktypes.ParseEthAddress(notary.Verifier)
 		if err != nil {
 			return nil, err
 		}
 		notaryType = types.NotaryTypeSigner
 	} else {
-		notaryAddress = params.GuardAddress
+		notaryAddress = params.GuardPublicAddress
 		notaryType = types.NotaryTypeContract
+	}
+
+	deployData, err := json.Marshal(&types.NotoConfigData_V0{
+		NotaryLookup:   notary.Lookup,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	deployParams := &NotoDeployParams{
 		Name:          params.Implementation,
 		TransactionID: req.Transaction.TransactionId,
-		NotaryLookup:  notary.Lookup,
 		NotaryType:    notaryType,
 		NotaryAddress: *notaryAddress,
+		Data:          deployData,
 	}
 	paramsJSON, err := json.Marshal(deployParams)
 	if err != nil {
@@ -288,6 +295,10 @@ func (n *Noto) decodeConfig(ctx context.Context, domainConfig []byte) (*types.No
 	}
 	var config types.NotoConfig_V0
 	err = json.Unmarshal(configJSON, &config)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(config.Data, &config.DecodedData)
 	return &config, err
 }
 

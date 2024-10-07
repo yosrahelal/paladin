@@ -55,7 +55,7 @@ func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction,
 	return &prototk.InitTransactionResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:       tx.DomainConfig.NotaryLookup,
+				Lookup:       tx.DomainConfig.DecodedData.NotaryLookup,
 				Algorithm:    algorithms.ECDSA_SECP256K1,
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
@@ -76,7 +76,7 @@ func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction,
 func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.TransferParams)
 
-	notary := domain.FindVerifier(tx.DomainConfig.NotaryLookup, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
+	notary := domain.FindVerifier(tx.DomainConfig.DecodedData.NotaryLookup, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
 	if notary == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "notary")
 	}
@@ -139,7 +139,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 				AttestationType: prototk.AttestationType_ENDORSE,
 				Algorithm:       algorithms.ECDSA_SECP256K1,
 				VerifierType:    verifiers.ETH_ADDRESS,
-				Parties:         []string{tx.DomainConfig.NotaryLookup},
+				Parties:         []string{tx.DomainConfig.DecodedData.NotaryLookup},
 			},
 		}
 	case types.NotoVariantSelfSubmit:
@@ -151,7 +151,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 				Algorithm:       algorithms.ECDSA_SECP256K1,
 				VerifierType:    verifiers.ETH_ADDRESS,
 				PayloadType:     signpayloads.OPAQUE_TO_RSV,
-				Parties:         []string{tx.DomainConfig.NotaryLookup},
+				Parties:         []string{tx.DomainConfig.DecodedData.NotaryLookup},
 			},
 			// Sender will endorse the assembled transaction (by submitting to the ledger)
 			{

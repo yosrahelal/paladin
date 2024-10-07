@@ -20,16 +20,16 @@ contract NotoFactory is Ownable, IPaladinContractRegistry_V0 {
      */
     function deploy(
         bytes32 transactionId,
-        string calldata notaryLookup,
         bytes32 notaryType,
-        address notaryAddress
+        address notaryAddress,
+        bytes calldata data
     ) external {
         _deploy(
             implementations["default"],
             transactionId,
-            notaryLookup,
             notaryType,
-            notaryAddress
+            notaryAddress,
+            data
         );
     }
 
@@ -49,36 +49,36 @@ contract NotoFactory is Ownable, IPaladinContractRegistry_V0 {
     function deployImplementation(
         string calldata name,
         bytes32 transactionId,
-        string calldata notaryLookup,
         bytes32 notaryType,
-        address notaryAddress
+        address notaryAddress,
+        bytes calldata data
     ) external {
         _deploy(
             implementations[name],
             transactionId,
-            notaryLookup,
             notaryType,
-            notaryAddress
+            notaryAddress,
+            data
         );
     }
 
     function _deploy(
         address implementation,
         bytes32 transactionId,
-        string calldata notaryLookup,
         bytes32 notaryType,
-        address notaryAddress
+        address notaryAddress,
+        bytes calldata data
     ) internal {
         address instance = Clones.clone(implementation);
-        bytes memory data = INoto(instance).initialize(
-            notaryLookup,
+        bytes memory config = INoto(instance).initialize(
             notaryType,
-            notaryAddress
+            notaryAddress,
+            data
         );
         emit PaladinRegisterSmartContract_V0(
             transactionId,
             address(instance),
-            data
+            config
         );
     }
 }

@@ -17,9 +17,9 @@ interface INoto {
     );
 
     function initialize(
-        string calldata notaryLookup,
         bytes32 notaryType,
-        address notaryAddress
+        address notaryAddress,
+        bytes calldata data
     ) external returns (bytes memory);
 
     function mint(
