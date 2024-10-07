@@ -216,9 +216,6 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 	})
 	defer done()
 
-	err := ble.Start()
-	require.NoError(t, err)
-
 	// Mock a gas price
 	chainID, _ := rand.Int(rand.Reader, big.NewInt(100000000000000))
 	m.ethClient.On("GasPrice", mock.Anything).Return(tktypes.MustParseHexUint256("1000000000000000"), nil)

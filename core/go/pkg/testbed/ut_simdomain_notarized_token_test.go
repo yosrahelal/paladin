@@ -161,7 +161,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 		var fakeCoinSchemaID string
 		var chainID int64
 
-		fakeCoinSelection := func(ctx context.Context, fromAddr *ethtypes.Address0xHex, contractAddr string, amount *big.Int) ([]*fakeCoinParser, []*prototk.StateRef, *big.Int, error) {
+		fakeCoinSelection := func(ctx context.Context, stateQueryContext string, fromAddr *ethtypes.Address0xHex, amount *big.Int) ([]*fakeCoinParser, []*prototk.StateRef, *big.Int, error) {
 			var lastStateTimestamp int64
 			total := big.NewInt(0)
 			coins := []*fakeCoinParser{}
@@ -185,9 +185,9 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 					}
 				}
 				res, err := callbacks.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-					ContractAddress: contractAddr,
-					SchemaId:        fakeCoinSchemaID,
-					QueryJson:       tktypes.JSONString(jq).String(),
+					StateQueryContext: stateQueryContext,
+					SchemaId:          fakeCoinSchemaID,
+					QueryJson:         tktypes.JSONString(jq).String(),
 				})
 				if err != nil {
 					return nil, nil, nil, err
@@ -417,7 +417,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 				coinsToSpend := []*fakeCoinParser{}
 				stateRefsToSpend := []*prototk.StateRef{}
 				if txInputs.From != "" {
-					coinsToSpend, stateRefsToSpend, toKeep, err = fakeCoinSelection(ctx, fromAddr, req.Transaction.ContractInfo.ContractAddress, amount)
+					coinsToSpend, stateRefsToSpend, toKeep, err = fakeCoinSelection(ctx, req.StateQueryContext, fromAddr, amount)
 					if err != nil {
 						return nil, err
 					}

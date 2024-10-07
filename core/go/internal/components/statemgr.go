@@ -146,6 +146,9 @@ type DomainContext interface {
 	// been flushed to the database - for success or failure.
 	InitiateFlush(cb func(error)) error
 
+	// Convenience function for synchronous flush (mainly for testing)
+	FlushSync() error
+
 	// Removes the domain context from the state manager, and prevents any further use
 	Close()
 }

@@ -536,6 +536,19 @@ func (dc *domainContext) InitiateFlush(asyncCallback func(err error)) error {
 	return nil
 }
 
+func (dc *domainContext) FlushSync() error {
+	flushed := make(chan error)
+	err := dc.InitiateFlush(func(err error) { flushed <- err })
+	if err == nil {
+		select {
+		case err = <-flushed:
+		case <-dc.Done():
+			err = i18n.NewError(dc, msgs.MsgContextCanceled)
+		}
+	}
+	return err
+}
+
 // MUST hold the lock to call this function
 // Simply checks there isn't an un-cleared error that means the caller must reset.
 func (dc *domainContext) checkResetInitUnFlushed() error {

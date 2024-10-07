@@ -185,6 +185,10 @@ func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.Pr
 		return nil, err
 	}
 
+	// Testbed just uses a domain context for the duration of the TX, and flushes before returning
+	dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address())
+	defer dCtx.Close()
+
 	tx := &components.PrivateTransaction{
 		ID: uuid.New(),
 		Inputs: &components.TransactionInputs{
@@ -220,7 +224,7 @@ func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.Pr
 	}
 
 	// Now call assemble
-	if err := psc.AssembleTransaction(ctx, tx); err != nil {
+	if err := psc.AssembleTransaction(dCtx, tx); err != nil {
 		return nil, err
 	}
 
@@ -234,7 +238,7 @@ func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.Pr
 	// The testbed always chooses to take the assemble output and progress to endorse
 	// (no complex sequence selection routine that might result in abandonment).
 	// So just write the states
-	if err := psc.WritePotentialStates(ctx, tx); err != nil {
+	if err := psc.WritePotentialStates(dCtx, tx); err != nil {
 		return nil, err
 	}
 
@@ -244,7 +248,7 @@ func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.Pr
 	}
 
 	// Gather endorsements (this would be a distributed activity across nodes in the real engine)
-	if err := tb.gatherEndorsements(ctx, psc, tx); err != nil {
+	if err := tb.gatherEndorsements(dCtx, psc, tx); err != nil {
 		return nil, err
 	}
 
@@ -257,7 +261,12 @@ func (tb *testbed) prepareTransaction(ctx context.Context, invocation tktypes.Pr
 	}
 
 	// Prepare the transaction
-	if err := psc.PrepareTransaction(ctx, tx); err != nil {
+	if err := psc.PrepareTransaction(dCtx, tx); err != nil {
+		return nil, err
+	}
+
+	// Flush the context
+	if err := dCtx.FlushSync(); err != nil {
 		return nil, err
 	}
 

@@ -4,6 +4,6 @@
     "cSpell.words": [],
     "go.testTimeout": "30s",
     "java.configuration.updateBuildConfiguration": "disabled",
-    "go.testTags": "testdbpostgres"
+    // "go.testTags": "testdbpostgres"
   }
   

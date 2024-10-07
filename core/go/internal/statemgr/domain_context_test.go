@@ -190,7 +190,8 @@ func TestUpsertSchemaAndStates(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, dc.unFlushed.states, 3)
 
-	syncFlushContext(t, dc)
+	err = dc.FlushSync()
+	require.NoError(t, err)
 
 }
 
@@ -997,6 +998,24 @@ func TestDCClearExistingFlushCtxCancelled(t *testing.T) {
 
 	dc.flushing = &writeOperation{flushed: make(chan struct{})}
 	err := dc.clearExistingFlush()
+	assert.Regexp(t, "PD010301", err)
+
+}
+
+func TestDCFlushSyncCtxCancelled(t *testing.T) {
+	ctx, ss, _, _, done := newDBMockStateManager(t)
+	defer done()
+
+	closedCtx, cancelCtx := context.WithCancel(ctx)
+	cancelCtx()
+
+	_, dc := newTestDomainContext(t, closedCtx, ss, "domain1", false)
+	defer dc.Close()
+
+	dc.Context = closedCtx
+	assert.Same(t, closedCtx, dc.Ctx())
+
+	err := dc.FlushSync()
 	assert.Regexp(t, "PD010301", err)
 
 }

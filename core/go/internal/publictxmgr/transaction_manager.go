@@ -156,6 +156,10 @@ func NewPublicTransactionManager(ctx context.Context, conf *pldconf.PublicTxMana
 	}
 }
 
+func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *components.ManagerInitResult, err error) {
+	return &components.ManagerInitResult{}, nil
+}
+
 // Post-init allows the manager to cross-bind to other components, or the Engine
 func (ble *pubTxManager) PostInit(pic components.AllComponents) error {
 	ctx := ble.ctx
@@ -175,13 +179,9 @@ func (ble *pubTxManager) PostInit(pic components.AllComponents) error {
 	log.L(ctx).Debugf("Initialized enterprise transaction handler")
 	ble.balanceManager = balanceManager
 	ble.p = pic.Persistence()
+	ble.submissionWriter = newSubmissionWriter(ble.ctx, ble.p, ble.conf)
 
 	return nil
-}
-
-func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *components.ManagerInitResult, err error) {
-	ble.submissionWriter = newSubmissionWriter(ble.ctx, ble.p, ble.conf)
-	return &components.ManagerInitResult{}, nil
 }
 
 func (ble *pubTxManager) Start() error {
