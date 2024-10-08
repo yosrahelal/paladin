@@ -16,18 +16,16 @@
 package noto
 
 import (
-	"context"
-
 	internal "github.com/kaleido-io/paladin/domains/noto/internal/noto"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type Noto interface {
 	plugintk.DomainAPI
 	GetHandler(method string) types.DomainHandler
-	FindCoins(ctx context.Context, contractAddress *tktypes.EthAddress, query string) ([]*types.NotoCoin, error)
+	Name() string
+	CoinSchemaID() string
 }
 
 func New(callbacks plugintk.DomainCallbacks) Noto {

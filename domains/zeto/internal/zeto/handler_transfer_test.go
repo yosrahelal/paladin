@@ -21,7 +21,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
@@ -355,7 +354,7 @@ func TestGenerateMerkleProofs(t *testing.T) {
 			},
 		},
 	}
-	addr, err := ethtypes.NewAddress("0x1234567890123456789012345678901234567890")
+	addr, err := tktypes.ParseEthAddress("0x1234567890123456789012345678901234567890")
 	assert.NoError(t, err)
 	inputCoins := []*types.ZetoCoin{
 		{
@@ -365,7 +364,8 @@ func TestGenerateMerkleProofs(t *testing.T) {
 			Amount:   tktypes.MustParseHexUint256("0x0f"),
 		},
 	}
-	_, _, err = h.generateMerkleProofs("Zeto_Anon", addr, inputCoins)
+	queryContext := "queryContext"
+	_, _, err = h.generateMerkleProofs("Zeto_Anon", queryContext, addr, inputCoins)
 	assert.EqualError(t, err, "failed to create new smt object. failed to find available states. test error")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
@@ -377,11 +377,11 @@ func TestGenerateMerkleProofs(t *testing.T) {
 			},
 		}, nil
 	}
-	_, _, err = h.generateMerkleProofs("Zeto_Anon", addr, inputCoins)
+	_, _, err = h.generateMerkleProofs("Zeto_Anon", queryContext, addr, inputCoins)
 	assert.EqualError(t, err, "failed to decode owner key. invalid compressed public key length: 2")
 
 	inputCoins[0].OwnerKey = tktypes.MustParseHexBytes("0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025")
-	_, _, err = h.generateMerkleProofs("Zeto_Anon", addr, inputCoins)
+	_, _, err = h.generateMerkleProofs("Zeto_Anon", queryContext, addr, inputCoins)
 	assert.EqualError(t, err, "failed to create new leaf node. inputs values not inside Finite Field")
 
 	inputCoins[0].Salt = tktypes.MustParseHexUint256("0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec")
@@ -402,7 +402,7 @@ func TestGenerateMerkleProofs(t *testing.T) {
 			}, nil
 		}
 	}
-	_, _, err = h.generateMerkleProofs("Zeto_Anon", addr, inputCoins)
+	_, _, err = h.generateMerkleProofs("Zeto_Anon", queryContext, addr, inputCoins)
 	assert.EqualError(t, err, "failed to query the smt DB for leaf node (index=5f5d5e50a650a20986d496e6645ea31770758d924796f0dfc5ac2ad234b03e30). key not found")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
@@ -425,7 +425,7 @@ func TestGenerateMerkleProofs(t *testing.T) {
 			}, nil
 		}
 	}
-	_, _, err = h.generateMerkleProofs("Zeto_Anon", addr, inputCoins)
+	_, _, err = h.generateMerkleProofs("Zeto_Anon", queryContext, addr, inputCoins)
 	assert.EqualError(t, err, "coin (ref=789c99b9a2196addb3ac11567135877e8b86bc9b5f7725808a79757fd36b2a2a) found in the merkle tree but the persisted hash 26e3879b46b15a4ddbaca5d96af1bd2743f67f13f0bb85c40782950a2a700138 (index=3801702a0a958207c485bbf0137ff64327bdf16ad9a5acdb4d5ab1469b87e326) did not match the expected hash 0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f (index=5f5d5e50a650a20986d496e6645ea31770758d924796f0dfc5ac2ad234b03e30)")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
@@ -448,7 +448,7 @@ func TestGenerateMerkleProofs(t *testing.T) {
 			}, nil
 		}
 	}
-	_, _, err = h.generateMerkleProofs("Zeto_Anon", addr, inputCoins)
+	_, _, err = h.generateMerkleProofs("Zeto_Anon", queryContext, addr, inputCoins)
 	assert.NoError(t, err)
 }
 

@@ -21,7 +21,9 @@ import (
 	"sort"
 
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -153,6 +155,7 @@ func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID 
 }
 
 func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
+
 	// First index any domain contract deployments
 	nonDeployEvents, txCompletions, err := d.dm.registrationIndexer(ctx, dbTX, batch)
 	if err != nil {
@@ -165,7 +168,7 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 		return nil, err
 	}
 	for addr, batch := range batchesByAddress {
-		res, err := d.handleEventBatchForContract(ctx, addr, batch)
+		res, err := d.handleEventBatchForContract(ctx, dbTX, addr, batch)
 		if err != nil {
 			return nil, err
 		}
@@ -226,7 +229,14 @@ func (d *domain) recoverTransactionID(ctx context.Context, txIDString string) (*
 	return &txUUID, nil
 }
 
-func (d *domain) handleEventBatchForContract(ctx context.Context, addr tktypes.EthAddress, batch *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB, addr tktypes.EthAddress, batch *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
+
+	// We have a domain context for queries, but we never flush it to DB - as the only updates
+	// we allow in this function are those performed within our dbTX.
+	c := d.newInFlightDomainRequest(dbTX, d.dm.stateStore.NewDomainContext(ctx, d, addr))
+	defer c.close()
+
+	batch.StateQueryContext = c.id
 
 	var res *prototk.HandleEventBatchResponse
 	res, err := d.api.HandleEventBatch(ctx, batch)
@@ -234,62 +244,73 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, addr tktypes.E
 		return nil, err
 	}
 
-	spentStates := make(map[uuid.UUID][]string, len(res.SpentStates))
-	for _, state := range res.SpentStates {
+	stateSpends := make([]*components.StateSpend, len(res.SpentStates))
+	for i, state := range res.SpentStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
 			return nil, err
 		}
-		spentStates[*txUUID] = append(spentStates[*txUUID], state.Id)
+		stateID, err := tktypes.ParseHexBytes(ctx, state.Id)
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
+		}
+		stateSpends[i] = &components.StateSpend{DomainName: d.name, State: stateID, Transaction: *txUUID}
 	}
 
-	confirmedStates := make(map[uuid.UUID][]string, len(res.ConfirmedStates))
-	for _, state := range res.ConfirmedStates {
+	stateConfirms := make([]*components.StateConfirm, len(res.ConfirmedStates))
+	for i, state := range res.ConfirmedStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
 			return nil, err
 		}
-		confirmedStates[*txUUID] = append(confirmedStates[*txUUID], state.Id)
+		stateID, err := tktypes.ParseHexBytes(ctx, state.Id)
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
+		}
+		stateConfirms[i] = &components.StateConfirm{DomainName: d.name, State: stateID, Transaction: *txUUID}
 	}
 
-	newStates := make(map[uuid.UUID][]*components.StateUpsert, len(res.NewStates))
+	newStates := make([]*components.StateUpsertOutsideContext, 0)
 	for _, state := range res.NewStates {
-		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
-		if err != nil {
-			return nil, err
-		}
 		var id tktypes.HexBytes
 		if state.Id != nil {
 			id, err = tktypes.ParseHexBytes(ctx, *state.Id)
 			if err != nil {
-				return nil, err
+				return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, *state.Id)
 			}
 		}
-		newStates[*txUUID] = append(newStates[*txUUID], &components.StateUpsert{
-			ID:       id,
-			SchemaID: state.SchemaId,
-			Data:     tktypes.RawJSON(state.StateDataJson),
-			Creating: true,
+		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
+		if err != nil {
+			return nil, err
+		}
+		schemaID, err := tktypes.ParseBytes32(state.SchemaId)
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidSchemaID, state.SchemaId)
+		}
+		newStates = append(newStates, &components.StateUpsertOutsideContext{
+			ID:              id,
+			SchemaID:        schemaID,
+			ContractAddress: addr,
+			Data:            tktypes.RawJSON(state.StateDataJson),
 		})
+
+		// These have implicit confirmations
+		stateConfirms = append(stateConfirms, &components.StateConfirm{DomainName: d.name, State: id, Transaction: *txUUID})
 	}
 
-	err = d.dm.stateStore.RunInDomainContext(d.name, addr, func(ctx context.Context, dsi components.DomainStateInterface) error {
-		for txID, states := range newStates {
-			if _, err = dsi.UpsertStates(&txID, states); err != nil {
-				return err
-			}
+	// Write any new states first
+	if len(newStates) > 0 {
+		// These states are trusted as they come from the domain on our local node (no need to go back round VerifyStateHashes for customer hash functions)
+		if _, err := d.dm.stateStore.WritePreVerifiedStates(ctx, dbTX, d.name, newStates); err != nil {
+			return nil, err
 		}
-		for txID, states := range spentStates {
-			if err = dsi.MarkStatesSpent(txID, states); err != nil {
-				return err
-			}
+	}
+
+	// Then any finalizations of those states
+	if len(stateSpends) > 0 || len(stateConfirms) > 0 {
+		if err := d.dm.stateStore.WriteStateFinalizations(ctx, dbTX, stateSpends, stateConfirms); err != nil {
+			return nil, err
 		}
-		for txID, states := range confirmedStates {
-			if err = dsi.MarkStatesConfirmed(txID, states); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	}
 	return res, err
 }

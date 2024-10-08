@@ -25,13 +25,13 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	protoz "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -351,9 +351,9 @@ func TestFindCoins(t *testing.T) {
 	z.coinSchema = &prototk.StateSchema{
 		Id: "coin",
 	}
-	addr, _ := ethtypes.NewAddress("0x1234567890123456789012345678901234567890")
-	_, err := z.FindCoins(context.Background(), *addr, "{}")
-	assert.EqualError(t, err, "failed to find available states. find coins error")
+	addr, _ := tktypes.ParseEthAddress("0x1234567890123456789012345678901234567890")
+	_, err := findCoins(context.Background(), z, addr, "{}")
+	assert.EqualError(t, err, "find coins error")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{
@@ -364,7 +364,7 @@ func TestFindCoins(t *testing.T) {
 			},
 		}, nil
 	}
-	res, err := z.FindCoins(context.Background(), *addr, "{}")
+	res, err := findCoins(context.Background(), z, addr, "{}")
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 }
@@ -620,4 +620,19 @@ func TestSign(t *testing.T) {
 	res, err := z.Sign(context.Background(), req)
 	assert.NoError(t, err)
 	assert.Len(t, res.Payload, 36)
+}
+
+func findCoins(ctx context.Context, z *Zeto, contractAddress *tktypes.EthAddress, query string) ([]*types.ZetoCoin, error) {
+	states, err := z.findAvailableStates(ctx, contractAddress.String(), query)
+	if err != nil {
+		return nil, err
+	}
+
+	coins := make([]*types.ZetoCoin, len(states))
+	for i, state := range states {
+		if coins[i], err = z.makeCoin(state.DataJson); err != nil {
+			return nil, err
+		}
+	}
+	return coins, err
 }

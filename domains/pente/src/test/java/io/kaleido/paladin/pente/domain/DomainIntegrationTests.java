@@ -236,11 +236,12 @@ public class DomainIntegrationTests {
                     ), true);
 
             // Validate minted coin
-            List<JsonNode> notoStates = testbed.getRpcClient().request("testbed_listAvailableStates",
+            List<JsonNode> notoStates = testbed.getRpcClient().request("pstate_queryStates",
                     "noto",
                     notoInstanceAddress,
                     notoSchema.id,
-                    null);
+                    null,
+                    "available");
             assertEquals(1, notoStates.size());
             var notoCoin = mapper.convertValue(notoStates.getFirst(), NotoCoin.class);
             assertEquals("1000000", notoCoin.data.amount);

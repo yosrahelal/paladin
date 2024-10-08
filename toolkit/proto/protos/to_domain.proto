@@ -69,8 +69,9 @@ message InitTransactionResponse {
 
 // **ASSEMBLE** step happens after plan, once any verifiers specified as needing pre-emptive resolution by the owning Paladin nodes have been resolved successfully. At this step the state store should be queried to determine if sufficient states exist to execute
 message AssembleTransactionRequest {
-  TransactionSpecification transaction = 1; // The transaction to assemble
-  repeated ResolvedVerifier resolved_verifiers = 2; // A list of transaction signatures/proofs that have been resolved, so the transaction can be assembled
+  string state_query_context = 1; // handle to supply to state queries performed during this call
+  TransactionSpecification transaction = 2; // The transaction to assemble
+  repeated ResolvedVerifier resolved_verifiers = 3; // A list of transaction signatures/proofs that have been resolved, so the transaction can be assembled
 }
 
 message AssembleTransactionResponse {
@@ -110,14 +111,15 @@ message SignResponse {
 
 // **ENDORSE** step happens upon instruction from the attestation plan output from ASSEMBLE
 message EndorseTransactionRequest {
-  AttestationRequest endorsement_request = 1; // The attestation request from the attestation plan
-  ResolvedVerifier endorsement_verifier = 2; // The resolved verifier requested to be used for endorsement
-  TransactionSpecification transaction = 3; // The transaction specified by the user
-  repeated ResolvedVerifier resolved_verifiers = 4; // The list of resovled verifiers
-  repeated EndorsableState inputs = 5; // Input states for the transaction
-  repeated EndorsableState reads = 6; // States relied upon by the transaction, that are not actually consumed
-  repeated EndorsableState outputs = 7; // Output states for the transaction
-  repeated AttestationResult signatures = 8; // All SIGN attestation results (required from submitting node before endorsement)
+  string state_query_context = 1; // handle to supply to state queries performed during this call
+  AttestationRequest endorsement_request = 2; // The attestation request from the attestation plan
+  ResolvedVerifier endorsement_verifier = 3; // The resolved verifier requested to be used for endorsement
+  TransactionSpecification transaction = 4; // The transaction specified by the user
+  repeated ResolvedVerifier resolved_verifiers = 5; // The list of resovled verifiers
+  repeated EndorsableState inputs = 6; // Input states for the transaction
+  repeated EndorsableState reads = 7; // States relied upon by the transaction, that are not actually consumed
+  repeated EndorsableState outputs = 8; // Output states for the transaction
+  repeated AttestationResult signatures = 9; // All SIGN attestation results (required from submitting node before endorsement)
 }
 
 message EndorseTransactionResponse {
@@ -133,13 +135,14 @@ message EndorseTransactionResponse {
 
 // **PREPARE** step for a transaction 
 message PrepareTransactionRequest {
-  TransactionSpecification transaction = 1; // The transaction specified by the user
-  repeated EndorsableState input_states = 2; // The list of input states
-  repeated EndorsableState read_states = 3; // The list of read states
-  repeated EndorsableState output_states = 4; // The list of output states
-  repeated AttestationResult attestation_result = 5; // The results of any proofs/attestations that came out of the endorsement phase
-  repeated ResolvedVerifier resolved_verifiers = 6; // A list of transaction signatures/proofs that have been resolved
-  optional string extra_data = 7; // Any extra data that was included in the transaction assembly
+  string state_query_context = 1; // handle to supply to state queries performed during this call
+  TransactionSpecification transaction = 2; // The transaction specified by the user
+  repeated EndorsableState input_states = 3; // The list of input states
+  repeated EndorsableState read_states = 4; // The list of read states
+  repeated EndorsableState output_states = 5; // The list of output states
+  repeated AttestationResult attestation_result = 6; // The results of any proofs/attestations that came out of the endorsement phase
+  repeated ResolvedVerifier resolved_verifiers = 7; // A list of transaction signatures/proofs that have been resolved
+  optional string extra_data = 8; // Any extra data that was included in the transaction assembly
 }
 
 message PrepareTransactionResponse {
@@ -149,23 +152,34 @@ message PrepareTransactionResponse {
 // **EVENTS** handler called with batches of blockchain events that match an event signature and contract address registered by this domain
 
 message HandleEventBatchRequest {
-  string batch_id = 1; // A unique identifier for this batch
-  ContractInfo contract_info = 2; // The configuration of the contract that emitted the batch of events
-  repeated OnChainEvent events = 3; // The list of events from the block indexer
+  string state_query_context = 1; // handle to supply to state queries performed during this call
+  string batch_id = 2; // A unique identifier for this batch
+  ContractInfo contract_info = 3; // The configuration of the contract that emitted the batch of events
+  repeated OnChainEvent events = 4; // The list of events from the block indexer
 }
 
 message HandleEventBatchResponse {
   repeated CompletedTransaction transactions_complete = 1; // A list of Paladin transactions that may be considered complete
   repeated StateUpdate spent_states = 2; // A list of states that are now spent
   repeated StateUpdate confirmed_states = 3; // A list of states that are now confirmed (and unspent)
-  repeated NewLocalState new_states = 4; // A list of new states to store (only for events that contain full state data)
+  repeated NewConfirmedState new_states = 4; // A list of new states to store (only for events that contain full state data)
+}
+
+// **VALIDATE_STATE_HASHES** step only happens when custom_state_hash is true in the domain config, and then must be implemented
+message ValidateStateHashesRequest {
+  repeated EndorsableState states = 1; // set of states with either empty IDs to calculate, or with an ID to validate
+}
+
+message ValidateStateHashesResponse {
+  repeated string state_ids = 1; // the validates ids in the same order as the states supplied (if any states were invalid, return an error instead)
 }
 
 message DomainConfig {
-  repeated string abi_state_schemas_json = 1; // A list of Schema definitions (in ABI parameter format) the domain requires for all state types it interacts with
-  BaseLedgerSubmitConfig base_ledger_submit_config = 2; // Describe the requirements of this domain for how submission happens
-  string abi_events_json = 3; // ABI events that the domain will process for state updates
-  map<string, int32> signing_algorithms = 4; // A list of supported signing algorithms with the minimum key lengths for each algorithm
+  bool custom_hash_function = 1; // If true then the ValidateStateHashes function must be implemeted, and all states must come with a pre-caclculated ID
+  repeated string abi_state_schemas_json = 2; // A list of Schema definitions (in ABI parameter format) the domain requires for all state types it interacts with
+  BaseLedgerSubmitConfig base_ledger_submit_config = 3; // Describe the requirements of this domain for how submission happens
+  string abi_events_json = 4; // ABI events that the domain will process for state updates
+  map<string, int32> signing_algorithms = 5; // A list of supported signing algorithms with the minimum key lengths for each algorithm
 }
 
 message BaseLedgerSubmitConfig {
@@ -227,11 +241,12 @@ message NewState {
   optional string id = 4; // The hash id to uniquely identify this state (a default hashing algorithm will be used by Paladin if omitted)
 }
 
-message NewLocalState {
+// a state generated in the event handler, which will be added immediately locally with an implicit confirmation on the transaction
+message NewConfirmedState {
   string schema_id = 1; // The id from the schema, which must be one of the ones established during the ConfigDomain+InitDomain phase
   string state_data_json = 2; // The data for this state that will be recorded by Paladin, and uniquely identified by Paladin using a hash (which might be additional to any hashing done in a unique way by the domain)
-  string transaction_id = 3; // The UUID for the transaction generated by the Paladin node
-  optional string id = 4; // The hash id to uniquely identify this state (a default hashing algorithm will be used by Paladin if omitted)
+  optional string id = 3; // The hash id to uniquely identify this state (a default hashing algorithm will be used by Paladin if omitted)
+  string transaction_id = 4; // The transaction for with to write the confirmation record of this state
 }
 
 message EndorsableState {

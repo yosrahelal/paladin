@@ -2,7 +2,8 @@
     "window.title": "${activeEditorShort}${separator}Paladin Core (${rootName})${separator}${profileName}",
     "go.testTimeout": "30s",
     "cSpell.words": [
-        "Upsert"
+        "Upsert",
+        "Upserts"
     ],
-    // "go.testTags": "testdbpostgres"
+    "go.testTags": "testdbpostgres"
 }

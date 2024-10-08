@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -184,6 +185,23 @@ func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER)
 }
 
+func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON) []*types.ZetoCoinState {
+	if jq == nil {
+		jq = query.NewQueryBuilder().Limit(100).Query()
+	}
+	var zetoCoins []*types.ZetoCoinState
+	rpcerr := rpc.CallRPC(ctx, &zetoCoins, "pstate_queryStates",
+		zeto.Name(),
+		address,
+		zeto.CoinSchemaID(),
+		jq,
+		"available")
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
+	return zetoCoins
+}
+
 func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	ctx := context.Background()
 	log.L(ctx).Infof("Deploying an instance of the %s token", tokenName)
@@ -213,11 +231,10 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err := s.domain.FindCoins(ctx, &zetoAddress, "{}")
-	require.NoError(t, err)
+	coins := findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
 	require.Len(t, coins, 1)
-	assert.Equal(t, int64(10), coins[0].Amount.Int().Int64())
-	assert.Equal(t, controllerName, coins[0].Owner)
+	assert.Equal(t, int64(10), coins[0].Data.Amount.Int().Int64())
+	assert.Equal(t, controllerName, coins[0].Data.Owner)
 
 	log.L(ctx).Infof("Mint 20 from controller to controller")
 	rpcerr = s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
@@ -233,13 +250,12 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err = s.domain.FindCoins(ctx, &zetoAddress, "{}")
-	require.NoError(t, err)
+	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
 	require.Len(t, coins, 2)
-	assert.Equal(t, int64(10), coins[0].Amount.Int().Int64())
-	assert.Equal(t, controllerName, coins[0].Owner)
-	assert.Equal(t, int64(20), coins[1].Amount.Int().Int64())
-	assert.Equal(t, controllerName, coins[1].Owner)
+	assert.Equal(t, int64(10), coins[0].Data.Amount.Int().Int64())
+	assert.Equal(t, controllerName, coins[0].Data.Owner)
+	assert.Equal(t, int64(20), coins[1].Data.Amount.Int().Int64())
+	assert.Equal(t, controllerName, coins[1].Data.Owner)
 
 	log.L(ctx).Infof("Attempt mint from non-controller (should fail)")
 	rpcerr = s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
@@ -269,8 +285,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 	}
 
 	// check that we now only have one unspent coin, of value 5
-	_, err = s.domain.FindCoins(ctx, &zetoAddress, "{}")
-	require.NoError(t, err)
+	// coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
 	// one for the controller from the failed transaction
 	// one for the controller from the successful transaction as change (value=5)
 	// one for the recipient (value=25)

@@ -26,49 +26,134 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func (ss *stateStore) PersistState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, data tktypes.RawJSON, id tktypes.HexBytes) (*components.StateWithLabels, error) {
+func (ss *stateManager) WritePreVerifiedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*components.StateUpsertOutsideContext) ([]*components.State, error) {
 
-	schema, err := ss.GetSchema(ctx, domainName, schemaID, true)
+	d, err := ss.domainManager.GetDomainByName(ctx, domainName)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := schema.ProcessState(ctx, contractAddress, data, id)
-	if err != nil {
-		return nil, err
-	}
-
-	op := ss.writer.newWriteOp(s.State.DomainName, contractAddress)
-	op.states = []*components.StateWithLabels{s}
-	ss.writer.queue(ctx, op)
-	return s, op.flush(ctx)
+	return ss.processInsertStates(ctx, dbTX, d, states)
 }
 
-func (ss *stateStore) GetState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID string, failNotFound, withLabels bool) (*components.State, error) {
-	id, err := tktypes.ParseBytes32Ctx(ctx, stateID)
+func (ss *stateManager) WriteReceivedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*components.StateUpsertOutsideContext) ([]*components.State, error) {
+
+	d, err := ss.domainManager.GetDomainByName(ctx, domainName)
 	if err != nil {
 		return nil, err
 	}
 
+	if d.CustomHashFunction() {
+		dStates := make([]*components.FullState, len(states))
+		for i, s := range states {
+			dStates[i] = &components.FullState{
+				ID:     s.ID,
+				Schema: s.SchemaID,
+				Data:   s.Data,
+			}
+		}
+		ids, err := d.ValidateStateHashes(ctx, dStates)
+		if err != nil {
+			// Whole batch fails if any state in the batch is invalid
+			return nil, err
+		}
+		for i, s := range states {
+			// The domain is responsible for generating any missing IDs
+			s.ID = ids[i]
+		}
+	}
+
+	return ss.processInsertStates(ctx, dbTX, d, states)
+}
+
+func (ss *stateManager) processInsertStates(ctx context.Context, dbTX *gorm.DB, d components.Domain, inStates []*components.StateUpsertOutsideContext) (processedStates []*components.State, err error) {
+
+	processedStates = make([]*components.State, len(inStates))
+	for i, inState := range inStates {
+		schema, err := ss.GetSchema(ctx, d.Name(), inState.SchemaID, true)
+		if err != nil {
+			return nil, err
+		}
+
+		s, err := schema.ProcessState(ctx, inState.ContractAddress, inState.Data, inState.ID, d.CustomHashFunction())
+		if err != nil {
+			return nil, err
+		}
+		processedStates[i] = s.State
+	}
+
+	// Write them directly
+	if err = ss.writeStates(ctx, dbTX, processedStates); err != nil {
+		return nil, err
+	}
+
+	return processedStates, nil
+}
+
+func (ss *stateManager) writeStates(ctx context.Context, dbTX *gorm.DB, states []*components.State) (err error) {
+	var labels []*components.StateLabel
+	var int64Labels []*components.StateInt64Label
+	for _, s := range states {
+		labels = append(labels, s.Labels...)
+		int64Labels = append(int64Labels, s.Int64Labels...)
+	}
+
+	if len(states) > 0 {
+		err = dbTX.
+			Table("states").
+			WithContext(ctx).
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "id"}},
+				DoNothing: true, // immutable
+			}).
+			Omit("Labels", "Int64Labels", "Confirmed", "Spent"). // we do this ourselves below
+			Create(states).
+			Error
+	}
+	if err == nil && len(labels) > 0 {
+		err = dbTX.
+			Table("state_labels").
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}, {Name: "label"}},
+				DoNothing: true, // immutable
+			}).
+			Create(labels).
+			Error
+	}
+	if err == nil && len(int64Labels) > 0 {
+		err = dbTX.
+			Table("state_int64_labels").
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}, {Name: "label"}},
+				DoNothing: true, // immutable
+			}).
+			Create(int64Labels).
+			Error
+	}
+	return err
+}
+
+func (ss *stateManager) GetState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID tktypes.HexBytes, failNotFound, withLabels bool) (*components.State, error) {
 	q := ss.p.DB().Table("states")
 	if withLabels {
 		q = q.Preload("Labels").Preload("Int64Labels")
 	}
 	var states []*components.State
-	err = q.
+	err := q.
 		Where("domain_name = ?", domainName).
 		Where("contract_address = ?", contractAddress).
-		Where("id = ?", id).
+		Where("id = ?", stateID).
 		Limit(1).
 		Find(&states).
 		Error
 	if err == nil && len(states) == 0 && failNotFound {
-		return nil, i18n.NewError(ctx, msgs.MsgStateNotFound, id)
+		return nil, i18n.NewError(ctx, msgs.MsgStateNotFound, stateID)
 	}
 	return states[0], err
 }
@@ -76,8 +161,8 @@ func (ss *stateStore) GetState(ctx context.Context, domainName string, contractA
 // Built in fields all start with "." as that prevents them
 // clashing with variable names in ABI structs ($ and _ are valid leading chars there)
 var baseStateFields = map[string]filters.FieldResolver{
-	".id":      filters.HexBytesField("id"),
-	".created": filters.TimestampField("created"),
+	".id":      filters.HexBytesField(`"states"."id"`),
+	".created": filters.TimestampField(`"states"."created"`),
 }
 
 func addStateBaseLabels(labelValues filters.PassthroughValueSet, id tktypes.HexBytes, createdAt tktypes.Timestamp) filters.PassthroughValueSet {
@@ -104,7 +189,7 @@ func (ft trackingLabelSet) ResolverFor(fieldName string) filters.FieldResolver {
 	return nil
 }
 
-func (ss *stateStore) labelSetFor(schema components.Schema) *trackingLabelSet {
+func (ss *stateManager) labelSetFor(schema components.Schema) *trackingLabelSet {
 	tls := trackingLabelSet{labels: make(map[string]*schemaLabelInfo), used: make(map[string]*schemaLabelInfo)}
 	for _, fi := range schema.(labelInfoAccess).labelInfo() {
 		tls.labels[fi.label] = fi
@@ -112,82 +197,90 @@ func (ss *stateStore) labelSetFor(schema components.Schema) *trackingLabelSet {
 	return &tls
 }
 
-func (ss *stateStore) FindStates(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID string, query *query.QueryJSON, status StateStatusQualifier) (s []*components.State, err error) {
+func (ss *stateManager) FindStates(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, query *query.QueryJSON, status StateStatusQualifier) (s []*components.State, err error) {
 	_, s, err = ss.findStates(ctx, domainName, contractAddress, schemaID, query, status)
 	return s, err
 }
 
-func (ss *stateStore) findStates(
+func (ss *stateManager) findStates(
 	ctx context.Context,
 	domainName string,
 	contractAddress tktypes.EthAddress,
-	schemaID string,
+	schemaID tktypes.Bytes32,
 	jq *query.QueryJSON,
 	status StateStatusQualifier,
 	excluded ...tktypes.HexBytes,
 ) (schema components.Schema, s []*components.State, err error) {
-	return ss.findStatesCommon(ctx, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
-		db := ss.p.DB()
-		q = q.Joins("Confirmed", db.Select("transaction")).
-			Joins("Spent", db.Select("transaction")).
-			Joins("Locked", db.Select("transaction"))
+	db := ss.p.DB()
+	whereClause, isPlainDB := status.whereClause(db)
+	if isPlainDB {
+		return ss.findStatesCommon(ctx, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
+			q = q.Joins("Confirmed", db.Select("transaction")).
+				Joins("Spent", db.Select("transaction"))
 
-		if len(excluded) > 0 {
-			q = q.Not("id IN(?)", excluded)
+			if len(excluded) > 0 {
+				q = q.Not(`"states"."id" IN(?)`, excluded)
+			}
+
+			// Scope the query based on the status qualifier
+			q = q.Where(whereClause)
+			return q
+		})
+	}
+
+	// We need to run it against the specified domain context
+	var dc components.DomainContext
+	dcID, err := uuid.Parse(string(status))
+	if err == nil {
+		if dc = ss.GetDomainContext(ctx, dcID); dc == nil {
+			err = i18n.NewError(ctx, msgs.MsgStateDomainContextNotActive, dcID)
 		}
-
-		// Scope the query based on the status qualifier
-		q = q.Where(status.whereClause(db))
-		return q
-	})
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return dc.FindAvailableStates(schemaID, jq)
 }
 
-func (ss *stateStore) findAvailableNullifiers(
+func (ss *stateManager) findAvailableNullifiers(
 	ctx context.Context,
 	domainName string,
 	contractAddress tktypes.EthAddress,
-	schemaID string,
+	schemaID tktypes.Bytes32,
 	jq *query.QueryJSON,
-	statesWithNullifiers []tktypes.HexBytes,
 	spendingStates []tktypes.HexBytes,
-	spentNullifiers []tktypes.HexBytes,
+	spendingNullifiers []tktypes.HexBytes,
 ) (schema components.Schema, s []*components.State, err error) {
 	return ss.findStatesCommon(ctx, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
 		db := ss.p.DB()
-		hasNullifier := db.Where("nullifier IS NOT NULL")
-		if len(statesWithNullifiers) > 0 {
-			hasNullifier = hasNullifier.Or("id IN(?)", statesWithNullifiers)
-		}
+		hasNullifier := db.Where(`"Nullifier"."id" IS NOT NULL`)
 
 		q = q.Joins("Confirmed", db.Select("transaction")).
-			Joins("Locked", db.Select("transaction")).
-			Joins("Nullifier", db.Select("nullifier")).
+			Joins("Nullifier", db.Select(`"Nullifier"."id"`)).
 			Joins("Nullifier.Spent", db.Select("transaction")).
 			Where(hasNullifier)
 
 		if len(spendingStates) > 0 {
-			q = q.Not("id IN(?)", spendingStates)
+			q = q.Not(`"states"."id" IN(?)`, spendingStates)
 		}
-		if len(spentNullifiers) > 0 {
-			q = q.Not("nullifier IN(?)", spentNullifiers)
+		if len(spendingNullifiers) > 0 {
+			q = q.Not(`"Nullifier"."id" IN(?)`, spendingNullifiers)
 		}
 
 		// Scope to only unspent
 		q = q.Where(`"Nullifier__Spent"."transaction" IS NULL`).
-			Where(`"Locked"."spending" IS NOT TRUE`).
 			Where(db.
-				Or(`"Confirmed"."transaction" IS NOT NULL`).
-				Or(`"Locked"."creating" = TRUE`),
+				Or(`"Confirmed"."transaction" IS NOT NULL`),
 			)
 		return q
 	})
 }
 
-func (ss *stateStore) findStatesCommon(
+func (ss *stateManager) findStatesCommon(
 	ctx context.Context,
 	domainName string,
 	contractAddress tktypes.EthAddress,
-	schemaID string,
+	schemaID tktypes.Bytes32,
 	jq *query.QueryJSON,
 	addQuery func(q *gorm.DB) *gorm.DB,
 ) (schema components.Schema, s []*components.State, err error) {
@@ -215,7 +308,7 @@ func (ss *stateStore) findStatesCommon(
 		if fi.labelType == labelTypeInt64 || fi.labelType == labelTypeBool {
 			typeMod = "int64_"
 		}
-		q = q.Joins(fmt.Sprintf("INNER JOIN state_%[1]slabels AS %[2]s ON %[2]s.state = id AND %[2]s.label = ?", typeMod, fi.virtualColumn), fi.label)
+		q = q.Joins(fmt.Sprintf(`INNER JOIN state_%[1]slabels AS %[2]s ON %[2]s.state = "states"."id" AND %[2]s.label = ?`, typeMod, fi.virtualColumn), fi.label)
 	}
 
 	q = q.Where("states.domain_name = ?", domainName).
@@ -229,57 +322,4 @@ func (ss *stateStore) findStatesCommon(
 		return nil, nil, q.Error
 	}
 	return schema, states, nil
-}
-
-func (ss *stateStore) MarkConfirmed(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID string, transactionID uuid.UUID) error {
-	id, err := tktypes.ParseHexBytes(ctx, stateID)
-	if err != nil {
-		return err
-	}
-
-	op := ss.writer.newWriteOp(domainName, contractAddress)
-	op.stateConfirms = []*components.StateConfirm{
-		{DomainName: domainName, State: id, Transaction: transactionID},
-	}
-
-	ss.writer.queue(ctx, op)
-	return op.flush(ctx)
-}
-
-func (ss *stateStore) MarkSpent(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID string, transactionID uuid.UUID) error {
-	id, err := tktypes.ParseHexBytes(ctx, stateID)
-	if err != nil {
-		return err
-	}
-
-	op := ss.writer.newWriteOp(domainName, contractAddress)
-	op.stateSpends = []*components.StateSpend{
-		{DomainName: domainName, State: id, Transaction: transactionID},
-	}
-
-	ss.writer.queue(ctx, op)
-	return op.flush(ctx)
-}
-
-func (ss *stateStore) MarkLocked(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID string, transactionID uuid.UUID, creating, spending bool) error {
-	id, err := tktypes.ParseHexBytes(ctx, stateID)
-	if err != nil {
-		return err
-	}
-
-	op := ss.writer.newWriteOp(domainName, contractAddress)
-	op.stateLocks = []*components.StateLock{
-		{DomainName: domainName, State: id, Transaction: transactionID, Creating: creating, Spending: spending},
-	}
-
-	ss.writer.queue(ctx, op)
-	return op.flush(ctx)
-}
-
-func (ss *stateStore) ResetTransaction(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, transactionID uuid.UUID) error {
-	op := ss.writer.newWriteOp(domainName, contractAddress)
-	op.transactionLockDeletes = []uuid.UUID{transactionID}
-
-	ss.writer.queue(ctx, op)
-	return op.flush(ctx)
 }

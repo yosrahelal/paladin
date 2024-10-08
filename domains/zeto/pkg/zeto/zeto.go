@@ -16,18 +16,16 @@
 package zeto
 
 import (
-	"context"
-
 	internal "github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type Zeto interface {
 	plugintk.DomainAPI
 	GetHandler(method string) types.DomainHandler
-	FindCoins(ctx context.Context, contractAddress *tktypes.EthAddress, query string) ([]*types.ZetoCoin, error)
+	Name() string
+	CoinSchemaID() string
 }
 
 func New(callbacks plugintk.DomainCallbacks) Zeto {

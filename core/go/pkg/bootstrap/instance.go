@@ -114,12 +114,15 @@ func (i *instance) run() RC {
 	// Start it up
 	err = cm.Init()
 	if err == nil {
-		err = cm.StartComponents()
-	}
-	if err == nil {
+		// Managers start first - so they are ready to process
 		err = cm.StartManagers()
 	}
 	if err == nil {
+		// Components next - meaning things like blockchain events start streaming in
+		err = cm.StartComponents()
+	}
+	if err == nil {
+		// Then finally the front door is opened
 		err = cm.CompleteStart()
 	}
 	if err != nil {

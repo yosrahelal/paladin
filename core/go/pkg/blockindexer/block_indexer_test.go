@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1049,4 +1050,71 @@ func TestGetIndexedTransactionByNonceFail(t *testing.T) {
 	_, err := bi.GetIndexedTransactionByNonce(ctx, tktypes.EthAddress(tktypes.RandBytes(20)), 12345)
 	assert.Regexp(t, "pop", err)
 
+}
+
+func TestHydrateBlockErrorCase(t *testing.T) {
+	ctx, bi, mRPC, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	bi.retry.UTSetMaxAttempts(1)
+
+	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getBlockReceipts", mock.Anything).Return(
+		rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop")),
+	)
+
+	batch := &blockWriterBatch{
+		wg: sync.WaitGroup{},
+		blocks: []*BlockInfoJSONRPC{
+			{Hash: tktypes.RandBytes(32)},
+		},
+		summaries:      []string{"block_0"},
+		receipts:       [][]*TXReceiptJSONRPC{nil},
+		receiptResults: []error{nil},
+	}
+	batch.wg.Add(1)
+
+	bi.hydrateBlock(ctx, batch, 0)
+	assert.Nil(t, batch.receipts[0])
+	assert.Regexp(t, "pop", batch.receiptResults[0])
+	batch.wg.Wait()
+
+}
+
+func TestHydrateBlockBesuNullCase(t *testing.T) {
+	ctx, bi, mRPC, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	bi.retry.UTSetMaxAttempts(1)
+
+	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getBlockReceipts", mock.Anything).Return(nil)
+
+	batch := &blockWriterBatch{
+		wg: sync.WaitGroup{},
+		blocks: []*BlockInfoJSONRPC{
+			{Hash: tktypes.RandBytes(32)},
+		},
+		summaries:      []string{"block_0"},
+		receipts:       [][]*TXReceiptJSONRPC{nil},
+		receiptResults: []error{nil},
+	}
+	batch.wg.Add(1)
+
+	bi.hydrateBlock(ctx, batch, 0)
+	assert.Nil(t, batch.receipts[0])
+	assert.Regexp(t, "PD011310", batch.receiptResults[0])
+	batch.wg.Wait()
+
+}
+
+func TestHydrateBlockNoTransactions(t *testing.T) {
+	ctx, bi, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	// No action on dispatch empty block
+	batch := &blockWriterBatch{}
+	bi.dispatchEnrich(ctx, batch, &BlockInfoJSONRPC{})
+	require.Len(t, batch.receiptResults, 1)
+	require.Nil(t, batch.receiptResults[0])
+	require.Len(t, batch.receipts, 1)
+	require.Empty(t, batch.receipts[0])
 }

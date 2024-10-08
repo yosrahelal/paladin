@@ -61,7 +61,7 @@ db:
     dsn:           ":memory:"
     autoMigrate:   true
     migrationsDir: ../db/migrations/sqlite
-    debugQueries:  true
+    debugQueries:  false
 blockchain:
   http:
     url: http://localhost:8545
@@ -167,9 +167,9 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 	// Coarse grained black box test of the core component manager
 	// no mocking although it does use a simple domain implementation that exists solely for testing
 	// and is loaded directly through go function calls via the unit test plugin loader
-	// (as opposed to compiling as a sepraate shared library)
+	// (as opposed to compiling as a separate shared library)
 	// Even though the domain is a fake, the test does deploy a real contract to the blockchain and the domain
-	// manager does communicate with it via the grpc inteface.
+	// manager does communicate with it via the grpc interface.
 	// The bootstrap code that is the entry point to the java side is not tested here, we bootstrap the component manager by hand
 
 	ctx := context.Background()

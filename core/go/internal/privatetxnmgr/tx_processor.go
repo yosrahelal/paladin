@@ -148,7 +148,7 @@ func (ts *PaladinTxProcessor) assembleTransaction(ctx context.Context) {
 	// this could be other parties that have potential to attempt to spend the same state(s) as this transaction is assembled to spend
 	// or parties that could potentially spend the output states of this transaction
 	// or parties that will be needed to endorse or notarize this transaction
-	err := ts.domainAPI.AssembleTransaction(ctx, ts.transaction)
+	err := ts.domainAPI.AssembleTransaction(ts.endorsementGatherer.DomainContext(), ts.transaction)
 	if err != nil {
 		log.L(ctx).Errorf("AssembleTransaction failed: %s", err)
 		return
@@ -179,7 +179,7 @@ func (ts *PaladinTxProcessor) assembleTransaction(ctx context.Context) {
 		// added to a sequence.
 		// Currently, the sequencer waits for endorsement before giving us that confidence so we are forced to write the potential states here.
 
-		err := ts.domainAPI.WritePotentialStates(ctx, ts.transaction)
+		err := ts.domainAPI.WritePotentialStates(ts.endorsementGatherer.DomainContext(), ts.transaction)
 		if err != nil {
 			//TODO better error message
 			errorMessage := fmt.Sprintf("Failed to write potential states: %s", err)
@@ -614,7 +614,7 @@ out:
 
 func (ts *PaladinTxProcessor) PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error) {
 
-	prepError := ts.domainAPI.PrepareTransaction(ctx, ts.transaction)
+	prepError := ts.domainAPI.PrepareTransaction(ts.endorsementGatherer.DomainContext(), ts.transaction)
 	if prepError != nil {
 		log.L(ctx).Errorf("Error preparing transaction: %s", prepError)
 		return nil, prepError

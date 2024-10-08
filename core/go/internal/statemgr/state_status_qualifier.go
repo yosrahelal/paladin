@@ -34,7 +34,6 @@ type StateStatusQualifier string
 const StateStatusAvailable = "available"
 const StateStatusConfirmed = "confirmed"
 const StateStatusUnconfirmed = "unconfirmed"
-const StateStatusLocked = "locked"
 const StateStatusSpent = "spent"
 const StateStatusAll = "all"
 
@@ -44,7 +43,6 @@ func (q *StateStatusQualifier) UnmarshalText(b []byte) error {
 	case StateStatusAvailable,
 		StateStatusConfirmed,
 		StateStatusUnconfirmed,
-		StateStatusLocked,
 		StateStatusSpent,
 		StateStatusAll:
 		*q = StateStatusQualifier(text)
@@ -58,41 +56,33 @@ func (q *StateStatusQualifier) UnmarshalText(b []byte) error {
 	return nil
 }
 
-func (q StateStatusQualifier) whereClause(db *gorm.DB /* must be the DB not the query */) *gorm.DB {
+// Only called for one of the static qualifiers - not for a domain context
+func (q StateStatusQualifier) whereClause(db *gorm.DB /* must be the DB not the query */) (*gorm.DB, bool) {
 	switch q {
 	case StateStatusAvailable:
 		return db.
-			Where(`"Spent"."transaction" IS NULL`).   // not already spent
-			Where(`"Locked"."spending" IS NOT TRUE`). // not being spent - catches null case
-			Where(db.
-				Or(`"Confirmed"."transaction" IS NOT NULL`). // confirmed by the blockchain
-				Or(`"Locked"."creating" = TRUE`),            // being minted on a transaction
-			)
+				Where(`"Spent"."transaction" IS NULL`).
+				Where(`"Confirmed"."transaction" IS NOT NULL`),
+			true
 	case StateStatusConfirmed:
 		return db.
-			Where(`"Confirmed"."transaction" IS NOT NULL`).
-			Where(`"Spent"."transaction" IS NULL`)
+				Where(`"Confirmed"."transaction" IS NOT NULL`).
+				Where(`"Spent"."transaction" IS NULL`),
+			true
 	case StateStatusUnconfirmed:
 		return db.
-			Where(`"Confirmed"."transaction" IS NULL`)
-	case StateStatusLocked:
-		return db.
-			Where(`"Locked"."transaction" IS NOT NULL`)
+				Where(`"Confirmed"."transaction" IS NULL`),
+			true
 	case StateStatusSpent:
 		return db.
-			Where(`"Spent"."transaction" IS NOT NULL`)
+				Where(`"Spent"."transaction" IS NOT NULL`),
+			true
 	case StateStatusAll:
-		return db.Where("TRUE")
+		return db.Where("TRUE"),
+			true
 	default:
-		// Querying in the context of a transaction, gives you only states locked specifically into
-		// that transaction - NOT the ones available for that transaction to use.
-		//
-		// The assembler routine provides that facility to domains during the assemble call using
-		// in-memory state as well as database state.
-		//
-		// TODO: Determine if we need to move the JSON/RPC call to be the more obvious thing
-		//       of the same thing as the assembler (once we've implemented that)
-		return db.
-			Where(`"Locked"."transaction" = ?`, q)
+		// This is a domain context query - so the caller should pass it to the appropriate domain context
+		// rather than just executing the query directly against the DB
+		return nil, false
 	}
 }

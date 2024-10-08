@@ -195,6 +195,12 @@ func TestDomainRequestsOK(t *testing.T) {
 				Verifier: "verifier1",
 			}, nil
 		},
+		ValidateStateHashes: func(ctx context.Context, vshr *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+			assert.Equal(t, "state1_in", vshr.States[0].Id)
+			return &prototk.ValidateStateHashesResponse{
+				StateIds: []string{"state1_out"},
+			}, nil
+		},
 	}
 
 	tdm := &testDomainManager{
@@ -327,6 +333,12 @@ func TestDomainRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "verifier1", string(gvr.Verifier))
+
+	vshr, err := domainAPI.ValidateStateHashes(ctx, &prototk.ValidateStateHashesRequest{
+		States: []*prototk.EndorsableState{{Id: "state1_in"}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "state1_out", vshr.StateIds[0])
 
 	callbacks := <-waitForCallbacks
 

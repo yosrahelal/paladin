@@ -121,7 +121,7 @@ public class Testbed implements Closeable {
                     dsn:           ":memory:"
                     autoMigrate:   true
                     migrationsDir: %s
-                    debugQueries:  true
+                    debugQueries:  false
                 signer:
                   keyDerivation:
                     type: bip32

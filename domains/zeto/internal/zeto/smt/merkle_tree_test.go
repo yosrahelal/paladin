@@ -18,7 +18,7 @@ package smt
 import (
 	"testing"
 
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -29,5 +29,6 @@ func TestPackageInit(t *testing.T) {
 }
 
 func TestMerkleTreeName(t *testing.T) {
-	assert.Equal(t, "smt_test1_0x1234567890123456789012345678901234567890", MerkleTreeName("test1", ethtypes.MustNewAddress("0x1234567890123456789012345678901234567890")))
+	address, _ := tktypes.ParseEthAddress("0xe12c416382988005ace9b2e2f9a8a904d8be961c")
+	assert.Equal(t, "smt_test1_0xe12c416382988005ace9b2e2f9a8a904d8be961c", MerkleTreeName("test1", address))
 }

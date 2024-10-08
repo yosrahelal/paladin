@@ -88,4 +88,9 @@ public class TestDomain extends DomainInstance {
     protected CompletableFuture<ToDomain.GetVerifierResponse> getVerifier(ToDomain.GetVerifierRequest request) {
         return CompletableFuture.failedFuture(new UnsupportedOperationException());
     }
+
+    @Override
+    protected CompletableFuture<ToDomain.ValidateStateHashesResponse> validateStateHashes(ToDomain.ValidateStateHashesRequest request) {
+        return CompletableFuture.failedFuture(new UnsupportedOperationException());
+    }
 }

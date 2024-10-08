@@ -22,7 +22,6 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -31,31 +30,30 @@ import (
 
 type StatesStorage interface {
 	core.Storage
-	GetNewStates() []*prototk.NewLocalState
+	GetNewStates() []*prototk.NewConfirmedState
 }
 
 type statesStorage struct {
-	CoreInterface   plugintk.DomainCallbacks
-	transactionId   string
-	smtName         string
-	contractAddress *ethtypes.Address0xHex
-	rootSchemaId    string
-	nodeSchemaId    string
-	rootNode        core.NodeIndex
-	newNodes        []*prototk.NewLocalState
+	CoreInterface     plugintk.DomainCallbacks
+	smtName           string
+	stateQueryContext string
+	rootSchemaId      string
+	nodeSchemaId      string
+	rootNode          core.NodeIndex
+	newNodes          []*prototk.NewConfirmedState
 }
 
-func NewStatesStorage(c plugintk.DomainCallbacks, smtName string, contractAddress *ethtypes.Address0xHex, rootSchemaId, nodeSchemaId string) StatesStorage {
+func NewStatesStorage(c plugintk.DomainCallbacks, smtName, stateQueryContext, rootSchemaId, nodeSchemaId string) StatesStorage {
 	return &statesStorage{
-		CoreInterface:   c,
-		smtName:         smtName,
-		contractAddress: contractAddress,
-		rootSchemaId:    rootSchemaId,
-		nodeSchemaId:    nodeSchemaId,
+		CoreInterface:     c,
+		smtName:           smtName,
+		stateQueryContext: stateQueryContext,
+		rootSchemaId:      rootSchemaId,
+		nodeSchemaId:      nodeSchemaId,
 	}
 }
 
-func (s *statesStorage) GetNewStates() []*prototk.NewLocalState {
+func (s *statesStorage) GetNewStates() []*prototk.NewConfirmedState {
 	return s.newNodes
 }
 
@@ -69,9 +67,9 @@ func (s *statesStorage) GetRootNodeIndex() (core.NodeIndex, error) {
 		Equal("smtName", s.smtName)
 
 	res, err := s.CoreInterface.FindAvailableStates(context.Background(), &prototk.FindAvailableStatesRequest{
-		ContractAddress: s.contractAddress.String(),
-		SchemaId:        s.rootSchemaId,
-		QueryJson:       queryBuilder.Query().String(),
+		StateQueryContext: s.stateQueryContext,
+		SchemaId:          s.rootSchemaId,
+		QueryJson:         queryBuilder.Query().String(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to find available states. %s", err)
@@ -104,12 +102,14 @@ func (s *statesStorage) UpsertRootNodeIndex(root core.NodeIndex) error {
 	if err != nil {
 		return fmt.Errorf("failed to upsert root node. %s", err)
 	}
-	id := newRoot.RootIndex.HexString0xPrefix()
-	newRootState := &prototk.NewLocalState{
-		Id:            &id,
+	hash, err := newRoot.Hash()
+	if err != nil {
+		return fmt.Errorf("failed to hash root node. %s", err)
+	}
+	newRootState := &prototk.NewConfirmedState{
+		Id:            &hash,
 		SchemaId:      s.rootSchemaId,
 		StateDataJson: string(data),
-		TransactionId: s.transactionId,
 	}
 	s.newNodes = append(s.newNodes, newRootState)
 	s.rootNode = root
@@ -125,9 +125,9 @@ func (s *statesStorage) GetNode(ref core.NodeIndex) (core.Node, error) {
 		Equal("refKey", ref.Hex())
 
 	res, err := s.CoreInterface.FindAvailableStates(context.Background(), &prototk.FindAvailableStatesRequest{
-		ContractAddress: s.contractAddress.String(),
-		SchemaId:        s.nodeSchemaId,
-		QueryJson:       queryBuilder.Query().String(),
+		StateQueryContext: s.stateQueryContext,
+		SchemaId:          s.nodeSchemaId,
+		QueryJson:         queryBuilder.Query().String(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to find available states. %s", err)
@@ -198,12 +198,14 @@ func (s *statesStorage) InsertNode(n core.Node) error {
 	if err != nil {
 		return fmt.Errorf("failed to insert node. %s", err)
 	}
-	refKey := newNode.RefKey.HexString0xPrefix()
-	newNodeState := &prototk.NewLocalState{
-		Id:            &refKey,
+	hash, err := newNode.Hash()
+	if err != nil {
+		return fmt.Errorf("failed to hash merkle tree node. %s", err)
+	}
+	newNodeState := &prototk.NewConfirmedState{
+		Id:            &hash,
 		SchemaId:      s.nodeSchemaId,
 		StateDataJson: string(data),
-		TransactionId: s.transactionId,
 	}
 	s.newNodes = append(s.newNodes, newNodeState)
 	return err

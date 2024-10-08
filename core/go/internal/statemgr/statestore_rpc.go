@@ -25,18 +25,18 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func (ss *stateStore) RPCModule() *rpcserver.RPCModule {
+func (ss *stateManager) RPCModule() *rpcserver.RPCModule {
 	return ss.rpcModule
 }
 
-func (ss *stateStore) initRPC() {
+func (ss *stateManager) initRPC() {
 	ss.rpcModule = rpcserver.NewRPCModule("pstate").
 		Add("pstate_listSchemas", ss.rpcListSchema()).
 		Add("pstate_storeState", ss.rpcStoreState()).
 		Add("pstate_queryStates", ss.rpcQuery())
 }
 
-func (ss *stateStore) rpcListSchema() rpcserver.RPCHandler {
+func (ss *stateManager) rpcListSchema() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		domain string,
 	) ([]components.Schema, error) {
@@ -44,27 +44,33 @@ func (ss *stateStore) rpcListSchema() rpcserver.RPCHandler {
 	})
 }
 
-func (ss *stateStore) rpcStoreState() rpcserver.RPCHandler {
+func (ss *stateManager) rpcStoreState() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod4(func(ctx context.Context,
 		domain string,
 		contractAddress tktypes.EthAddress,
-		schema string,
+		schema tktypes.Bytes32,
 		data tktypes.RawJSON,
 	) (*components.State, error) {
 		var state *components.State
-		newState, err := ss.PersistState(ctx, domain, contractAddress, schema, data, nil)
+		newStates, err := ss.WriteReceivedStates(ctx, ss.p.DB(), domain, []*components.StateUpsertOutsideContext{
+			{
+				ContractAddress: contractAddress,
+				SchemaID:        schema,
+				Data:            data,
+			},
+		})
 		if err == nil {
-			state = newState.State
+			state = newStates[0]
 		}
 		return state, err
 	})
 }
 
-func (ss *stateStore) rpcQuery() rpcserver.RPCHandler {
+func (ss *stateManager) rpcQuery() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod5(func(ctx context.Context,
 		domain string,
 		contractAddress tktypes.EthAddress,
-		schema string,
+		schema tktypes.Bytes32,
 		query query.QueryJSON,
 		status StateStatusQualifier,
 	) ([]*components.State, error) {

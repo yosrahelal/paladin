@@ -86,6 +86,14 @@ func New(callbacks plugintk.DomainCallbacks) *Zeto {
 	}
 }
 
+func (z *Zeto) Name() string {
+	return z.name
+}
+
+func (z *Zeto) CoinSchemaID() string {
+	return z.coinSchema.Id
+}
+
 func (z *Zeto) getAlgoZetoSnarkBJJ() string {
 	return zetosigner.AlgoDomainZetoSnarkBJJ(z.name)
 }
@@ -131,6 +139,7 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 
 	return &prototk.ConfigureDomainResponse{
 		DomainConfig: &prototk.DomainConfig{
+			CustomHashFunction:  true,
 			AbiStateSchemasJson: schemas,
 			BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
 				SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
@@ -306,21 +315,6 @@ func (z *Zeto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 	}, handler, nil
 }
 
-func (z *Zeto) FindCoins(ctx context.Context, contractAddress *tktypes.EthAddress, query string) ([]*types.ZetoCoin, error) {
-	states, err := z.findAvailableStates(ctx, contractAddress.String(), query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find available states. %s", err)
-	}
-
-	coins := make([]*types.ZetoCoin, len(states))
-	for i, state := range states {
-		if coins[i], err = z.makeCoin(state.DataJson); err != nil {
-			return nil, err
-		}
-	}
-	return coins, err
-}
-
 func (z *Zeto) registerEventSignatures(eventAbis abi.ABI) {
 	for _, event := range eventAbis.Events() {
 		switch event.Name {
@@ -347,6 +341,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 	if err := json.Unmarshal(j, domainConfig); err != nil {
 		return nil, err
 	}
+
 	contractAddress, err := tktypes.ParseEthAddress(req.ContractInfo.ContractAddress)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse contract address. %s", err)
@@ -358,11 +353,11 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 		var err error
 		switch ev.SoliditySignature {
 		case z.mintSignature:
-			err = z.handleMintEvent(ctx, ev, domainConfig.TokenName, *contractAddress, &res)
+			err = z.handleMintEvent(ctx, ev, domainConfig.TokenName, req.StateQueryContext, contractAddress, &res)
 		case z.transferSignature:
-			err = z.handleTransferEvent(ctx, ev, domainConfig.TokenName, *contractAddress, &res)
+			err = z.handleTransferEvent(ctx, ev, domainConfig.TokenName, req.StateQueryContext, contractAddress, &res)
 		case z.transferWithEncSignature:
-			err = z.handleTransferWithEncryptionEvent(ctx, ev, domainConfig.TokenName, *contractAddress, &res)
+			err = z.handleTransferWithEncryptionEvent(ctx, ev, domainConfig.TokenName, req.StateQueryContext, contractAddress, &res)
 		}
 		if err != nil {
 			errors = append(errors, err.Error())
@@ -394,7 +389,7 @@ func (z *Zeto) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.Sig
 	}, nil
 }
 
-func (z *Zeto) handleMintEvent(ctx context.Context, ev *prototk.OnChainEvent, tokenName string, contractAddress tktypes.EthAddress, res *prototk.HandleEventBatchResponse) error {
+func (z *Zeto) handleMintEvent(ctx context.Context, ev *prototk.OnChainEvent, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress, res *prototk.HandleEventBatchResponse) error {
 	var mint MintEvent
 	if err := json.Unmarshal([]byte(ev.DataJson), &mint); err == nil {
 		txID := decodeTransactionData(mint.Data)
@@ -408,7 +403,7 @@ func (z *Zeto) handleMintEvent(ctx context.Context, ev *prototk.OnChainEvent, to
 		})
 		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, mint.Outputs)...)
 		if tokenName == constants.TOKEN_ANON_NULLIFIER {
-			newStates, err := z.updateMerkleTree(txID, tokenName, contractAddress, mint.Outputs)
+			newStates, err := z.updateMerkleTree(txID, tokenName, stateQueryContext, contractAddress, mint.Outputs)
 			if err != nil {
 				return fmt.Errorf("failed to update merkle tree for the UTXOMint event. %s", err)
 			}
@@ -420,7 +415,7 @@ func (z *Zeto) handleMintEvent(ctx context.Context, ev *prototk.OnChainEvent, to
 	return nil
 }
 
-func (z *Zeto) handleTransferEvent(ctx context.Context, ev *prototk.OnChainEvent, tokenName string, contractAddress tktypes.EthAddress, res *prototk.HandleEventBatchResponse) error {
+func (z *Zeto) handleTransferEvent(ctx context.Context, ev *prototk.OnChainEvent, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress, res *prototk.HandleEventBatchResponse) error {
 	var transfer TransferEvent
 	if err := json.Unmarshal([]byte(ev.DataJson), &transfer); err == nil {
 		txID := decodeTransactionData(transfer.Data)
@@ -435,7 +430,7 @@ func (z *Zeto) handleTransferEvent(ctx context.Context, ev *prototk.OnChainEvent
 		res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
 		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
 		if tokenName == constants.TOKEN_ANON_NULLIFIER {
-			newStates, err := z.updateMerkleTree(txID, tokenName, contractAddress, transfer.Outputs)
+			newStates, err := z.updateMerkleTree(txID, tokenName, stateQueryContext, contractAddress, transfer.Outputs)
 			if err != nil {
 				return fmt.Errorf("failed to update merkle tree for the UTXOTransfer event. %s", err)
 			}
@@ -447,7 +442,7 @@ func (z *Zeto) handleTransferEvent(ctx context.Context, ev *prototk.OnChainEvent
 	return nil
 }
 
-func (z *Zeto) handleTransferWithEncryptionEvent(ctx context.Context, ev *prototk.OnChainEvent, tokenName string, contractAddress tktypes.EthAddress, res *prototk.HandleEventBatchResponse) error {
+func (z *Zeto) handleTransferWithEncryptionEvent(ctx context.Context, ev *prototk.OnChainEvent, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress, res *prototk.HandleEventBatchResponse) error {
 	var transfer TransferWithEncryptedValuesEvent
 	if err := json.Unmarshal([]byte(ev.DataJson), &transfer); err == nil {
 		txID := decodeTransactionData(transfer.Data)
@@ -462,7 +457,7 @@ func (z *Zeto) handleTransferWithEncryptionEvent(ctx context.Context, ev *protot
 		res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
 		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
 		if tokenName == constants.TOKEN_ANON_NULLIFIER {
-			newStates, err := z.updateMerkleTree(txID, tokenName, contractAddress, transfer.Outputs)
+			newStates, err := z.updateMerkleTree(txID, tokenName, stateQueryContext, contractAddress, transfer.Outputs)
 			if err != nil {
 				return fmt.Errorf("failed to update merkle tree for the UTXOTransfer event. %s", err)
 			}
@@ -474,10 +469,10 @@ func (z *Zeto) handleTransferWithEncryptionEvent(ctx context.Context, ev *protot
 	return nil
 }
 
-func (z *Zeto) updateMerkleTree(txID tktypes.HexBytes, tokenName string, address tktypes.EthAddress, output []tktypes.HexUint256) ([]*prototk.NewLocalState, error) {
-	var newStates []*prototk.NewLocalState
+func (z *Zeto) updateMerkleTree(txID tktypes.HexBytes, tokenName string, stateQueryContext string, contractAddress *tktypes.EthAddress, output []tktypes.HexUint256) ([]*prototk.NewConfirmedState, error) {
+	var newStates []*prototk.NewConfirmedState
 	for _, out := range output {
-		states, err := z.addOutputToMerkleTree(txID, tokenName, address, out)
+		states, err := z.addOutputToMerkleTree(txID, tokenName, stateQueryContext, contractAddress, out)
 		if err != nil {
 			return nil, err
 		}
@@ -486,9 +481,9 @@ func (z *Zeto) updateMerkleTree(txID tktypes.HexBytes, tokenName string, address
 	return newStates, nil
 }
 
-func (z *Zeto) addOutputToMerkleTree(txID tktypes.HexBytes, tokenName string, address tktypes.EthAddress, output tktypes.HexUint256) ([]*prototk.NewLocalState, error) {
-	smtName := smt.MerkleTreeName(tokenName, address.Address0xHex())
-	storage, tree, err := smt.New(z.Callbacks, smtName, address.Address0xHex(), z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id)
+func (z *Zeto) addOutputToMerkleTree(txID tktypes.HexBytes, tokenName string, stateQueryContext string, contractAddress *tktypes.EthAddress, output tktypes.HexUint256) ([]*prototk.NewConfirmedState, error) {
+	smtName := smt.MerkleTreeName(tokenName, contractAddress)
+	storage, tree, err := smt.New(z.Callbacks, smtName, stateQueryContext, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Merkle tree for %s: %s", smtName, err)
 	}
@@ -551,4 +546,8 @@ func formatErrors(errors []string) string {
 		msg = fmt.Sprintf("%s. [%d]%s", msg, i, err)
 	}
 	return msg
+}
+
+func (z *Zeto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+	panic("TODO: Must implement once receiving states from other nodes with zeto")
 }

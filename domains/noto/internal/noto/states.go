@@ -84,7 +84,7 @@ func (n *Noto) makeNewState(coin *types.NotoCoin, distributionList []string) (*p
 	}, nil
 }
 
-func (n *Noto) prepareInputs(ctx context.Context, contractAddress string, owner *tktypes.EthAddress, amount *tktypes.HexUint256) ([]*types.NotoCoin, []*prototk.StateRef, *big.Int, error) {
+func (n *Noto) prepareInputs(ctx context.Context, stateQueryContext string, owner *tktypes.EthAddress, amount *tktypes.HexUint256) ([]*types.NotoCoin, []*prototk.StateRef, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
 	stateRefs := []*prototk.StateRef{}
@@ -101,7 +101,7 @@ func (n *Noto) prepareInputs(ctx context.Context, contractAddress string, owner 
 		}
 
 		log.L(ctx).Debugf("State query: %s", queryBuilder.Query())
-		states, err := n.findAvailableStates(ctx, contractAddress, queryBuilder.Query().String())
+		states, err := n.findAvailableStates(ctx, stateQueryContext, queryBuilder.Query().String())
 
 		if err != nil {
 			return nil, nil, nil, err
@@ -141,11 +141,11 @@ func (n *Noto) prepareOutputs(notaryName, ownerName string, ownerAddress *tktype
 	return []*types.NotoCoin{newCoin}, []*prototk.NewState{newState}, err
 }
 
-func (n *Noto) findAvailableStates(ctx context.Context, contractAddress, query string) ([]*prototk.StoredState, error) {
+func (n *Noto) findAvailableStates(ctx context.Context, stateQueryContext, query string) ([]*prototk.StoredState, error) {
 	req := &prototk.FindAvailableStatesRequest{
-		ContractAddress: contractAddress,
-		SchemaId:        n.coinSchema.Id,
-		QueryJson:       query,
+		StateQueryContext: stateQueryContext,
+		SchemaId:          n.coinSchema.Id,
+		QueryJson:         query,
 	}
 	res, err := n.Callbacks.FindAvailableStates(ctx, req)
 	if err != nil {

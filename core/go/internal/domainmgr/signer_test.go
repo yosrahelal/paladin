@@ -31,13 +31,15 @@ func TestDomainGetVerifierOk(t *testing.T) {
 		"domain:test1:algo1": 32,
 	}
 
-	ctx, dm, tp, done := newTestDomain(t, false, conf, mockSchemas())
+	td, done := newTestDomain(t, false, conf, mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
-	tp.d.conf.AllowSigning = true
+	dm := td.dm
+	tp := td.tp
+	td.d.conf.AllowSigning = true
 
-	keyLen, err := dm.GetSigner().GetMinimumKeyLen(ctx, "domain:test1:algo1")
+	keyLen, err := dm.GetSigner().GetMinimumKeyLen(td.ctx, "domain:test1:algo1")
 	require.NoError(t, err)
 	assert.Equal(t, 32, keyLen)
 
@@ -49,7 +51,7 @@ func TestDomainGetVerifierOk(t *testing.T) {
 			Verifier: "verifier1",
 		}, nil
 	}
-	verifier, err := dm.GetSigner().GetVerifier(ctx, "domain:test1:algo1", "domain:test1:verifier_type", []byte("private key"))
+	verifier, err := dm.GetSigner().GetVerifier(td.ctx, "domain:test1:algo1", "domain:test1:verifier_type", []byte("private key"))
 	require.NoError(t, err)
 	assert.Equal(t, "verifier1", verifier)
 
@@ -62,7 +64,7 @@ func TestDomainGetVerifierOk(t *testing.T) {
 			Payload: []byte("signed"),
 		}, nil
 	}
-	signature, err := dm.GetSigner().Sign(ctx, "domain:test1:algo1", "domain:test1:payload_type", []byte("private key"), []byte("payload"))
+	signature, err := dm.GetSigner().Sign(td.ctx, "domain:test1:algo1", "domain:test1:payload_type", []byte("private key"), []byte("payload"))
 	require.NoError(t, err)
 	assert.Equal(t, "signed", string(signature))
 }
@@ -73,30 +75,32 @@ func TestDomainGetVerifierErrors(t *testing.T) {
 		"domain:test1:algo1": 32,
 	}
 
-	ctx, dm, tp, done := newTestDomain(t, false, conf, mockSchemas())
+	td, done := newTestDomain(t, false, conf, mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
+	dm := td.dm
+	tp := td.tp
 
-	_, err := dm.GetSigner().GetMinimumKeyLen(ctx, "domain:test2:algo1")
+	_, err := dm.GetSigner().GetMinimumKeyLen(td.ctx, "domain:test2:algo1")
 	assert.Regexp(t, "PD011600", err)
 
-	_, err = dm.GetSigner().GetMinimumKeyLen(ctx, "domain:test1:algo2")
+	_, err = dm.GetSigner().GetMinimumKeyLen(td.ctx, "domain:test1:algo2")
 	assert.Regexp(t, "PD011643", err)
 
-	tp.d.conf.AllowSigning = true
+	td.d.conf.AllowSigning = true
 
-	_, err = dm.GetSigner().GetMinimumKeyLen(ctx, "domain:test1:algo2")
+	_, err = dm.GetSigner().GetMinimumKeyLen(td.ctx, "domain:test1:algo2")
 	assert.Regexp(t, "PD011644", err)
 
 	tp.Functions.GetVerifier = func(ctx context.Context, req *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error) {
 		return nil, fmt.Errorf("pop")
 	}
-	_, err = dm.GetSigner().GetVerifier(ctx, "domain:test1:algo1", "domain:test1:verifier_type", []byte("private key"))
+	_, err = dm.GetSigner().GetVerifier(td.ctx, "domain:test1:algo1", "domain:test1:verifier_type", []byte("private key"))
 	assert.Regexp(t, "pop", err)
 
 	tp.Functions.Sign = func(ctx context.Context, req *prototk.SignRequest) (*prototk.SignResponse, error) {
 		return nil, fmt.Errorf("pop")
 	}
-	_, err = dm.GetSigner().Sign(ctx, "domain:test1:algo1", "domain:test1:payload_type", []byte("private key"), []byte("payload"))
+	_, err = dm.GetSigner().Sign(td.ctx, "domain:test1:algo1", "domain:test1:payload_type", []byte("private key"), []byte("payload"))
 	assert.Regexp(t, "pop", err)
 }

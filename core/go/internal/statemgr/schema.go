@@ -24,6 +24,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -59,9 +60,10 @@ func schemaCacheKey(domainName string, id tktypes.Bytes32) string {
 	return domainName + "/" + id.String()
 }
 
-func (ss *stateStore) persistSchemas(schemas []*components.SchemaPersisted) error {
-	return ss.p.DB().
+func (ss *stateManager) persistSchemas(ctx context.Context, dbTX *gorm.DB, schemas []*components.SchemaPersisted) error {
+	return dbTX.
 		Table("schemas").
+		WithContext(ctx).
 		Clauses(clause.OnConflict{
 			Columns: []clause.Column{
 				{Name: "domain_name"},
@@ -73,15 +75,11 @@ func (ss *stateStore) persistSchemas(schemas []*components.SchemaPersisted) erro
 		Error
 }
 
-func (ss *stateStore) GetSchema(ctx context.Context, domainName, schemaID string, failNotFound bool) (components.Schema, error) {
-	id, err := tktypes.ParseBytes32Ctx(ctx, schemaID)
-	if err != nil {
-		return nil, err
-	}
-	return ss.getSchemaByID(ctx, domainName, id, failNotFound)
+func (ss *stateManager) GetSchema(ctx context.Context, domainName string, schemaID tktypes.Bytes32, failNotFound bool) (components.Schema, error) {
+	return ss.getSchemaByID(ctx, domainName, schemaID, failNotFound)
 }
 
-func (ss *stateStore) getSchemaByID(ctx context.Context, domainName string, schemaID tktypes.Bytes32, failNotFound bool) (components.Schema, error) {
+func (ss *stateManager) getSchemaByID(ctx context.Context, domainName string, schemaID tktypes.Bytes32, failNotFound bool) (components.Schema, error) {
 
 	cacheKey := schemaCacheKey(domainName, schemaID)
 	s, cached := ss.abiSchemaCache.Get(cacheKey)
@@ -118,7 +116,7 @@ func (ss *stateStore) getSchemaByID(ctx context.Context, domainName string, sche
 	return s, nil
 }
 
-func (ss *stateStore) ListSchemas(ctx context.Context, domainName string) (results []components.Schema, err error) {
+func (ss *stateManager) ListSchemas(ctx context.Context, domainName string) (results []components.Schema, err error) {
 	var ids []*idOnly
 	err = ss.p.DB().
 		Table("schemas").
@@ -138,7 +136,7 @@ func (ss *stateStore) ListSchemas(ctx context.Context, domainName string) (resul
 	return results, nil
 }
 
-func (ss *stateStore) EnsureABISchemas(ctx context.Context, domainName string, defs []*abi.Parameter) ([]components.Schema, error) {
+func (ss *stateManager) EnsureABISchemas(ctx context.Context, dbTX *gorm.DB, domainName string, defs []*abi.Parameter) ([]components.Schema, error) {
 	if len(defs) == 0 {
 		return nil, nil
 	}
@@ -155,5 +153,5 @@ func (ss *stateStore) EnsureABISchemas(ctx context.Context, domainName string, d
 		toFlush[i] = s.SchemaPersisted
 	}
 
-	return prepared, ss.persistSchemas(toFlush)
+	return prepared, ss.persistSchemas(ctx, dbTX, toFlush)
 }
