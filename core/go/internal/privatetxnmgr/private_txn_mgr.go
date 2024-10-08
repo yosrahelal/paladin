@@ -63,7 +63,7 @@ func (p *privateTxManager) PreInit(c components.PreInitComponents) (*components.
 func (p *privateTxManager) PostInit(c components.AllComponents) error {
 	p.components = c
 	p.store = privatetxnstore.NewStore(p.ctx, &p.config.Writer, c.Persistence())
-	return p.components.TransportManager().RegisterClient(p.ctx, p)
+	return nil
 }
 
 func (p *privateTxManager) Start() error {
