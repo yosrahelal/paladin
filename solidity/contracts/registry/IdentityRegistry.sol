@@ -57,7 +57,7 @@ contract IdentityRegistry {
             rootIdentity.name,
             rootIdentity.owner
         );
-    }
+
         // Root identity is created
         identities[0] = Identity(0, new bytes32[](0), "root", msg.sender);
     }
