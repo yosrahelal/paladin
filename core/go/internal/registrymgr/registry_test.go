@@ -124,9 +124,13 @@ func TestRecordAndResolveInformation(t *testing.T) {
 	assert.Regexp(t, "PD012101", err)
 
 	entry1 := &prototk.UpsertTransportDetails{
-		Node:             "node1",
-		Transport:        "grpc",
-		TransportDetails: "things and stuff",
+		TransportDetails: []*prototk.TransportDetails{
+			{
+				Node:      "node1",
+				Transport: "grpc",
+				Details:   "things and stuff",
+			},
+		},
 	}
 
 	mc.db.ExpectQuery("SELECT.*registry_transport_details").WillReturnRows(sqlmock.NewRows([]string{}))
@@ -147,17 +151,21 @@ func TestRecordAndResolveInformation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, transports, 1)
 	assert.Equal(t, components.RegistryNodeTransportEntry{
-		Node:             "node1",
-		Registry:         registryID.String(),
-		Transport:        "grpc",
-		TransportDetails: "things and stuff",
+		Node:      "node1",
+		Registry:  registryID.String(),
+		Transport: "grpc",
+		Details:   "things and stuff",
 	}, *transports[0])
 
 	// Upsert second entry
 	entry2 := &prototk.UpsertTransportDetails{
-		Node:             "node1",
-		Transport:        "websockets",
-		TransportDetails: "more things and stuff",
+		TransportDetails: []*prototk.TransportDetails{
+			{
+				Node:      "node1",
+				Transport: "websockets",
+				Details:   "more things and stuff",
+			},
+		},
 	}
 
 	mc.db.ExpectExec("INSERT.*registry_transport_details").WillReturnResult(driver.ResultNoRows)

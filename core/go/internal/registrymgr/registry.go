@@ -29,6 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -89,37 +90,62 @@ func (r *registry) init() {
 }
 
 func (r *registry) UpsertTransportDetails(ctx context.Context, req *prototk.UpsertTransportDetails) (*prototk.UpsertTransportDetailsResponse, error) {
-
-	if req.Node == "" || req.Transport == "" {
-		return nil, i18n.NewError(ctx, msgs.MsgRegistryInvalidEntry)
+	var postCommit func()
+	err := r.rm.persistence.DB().Transaction(func(tx *gorm.DB) (err error) {
+		postCommit, err = r.upsertTransportDetailsBatch(ctx, r.rm.persistence.DB(), req.TransportDetails)
+		return err
+	})
+	if err != nil {
+		return nil, err
 	}
+	postCommit()
+	return &prototk.UpsertTransportDetailsResponse{}, nil
+}
 
-	existingEntries, _ := r.rm.GetNodeTransports(ctx, req.Node)
-	deDuped := make([]*components.RegistryNodeTransportEntry, 0, len(existingEntries))
-	for _, existing := range existingEntries {
-		if existing.Registry != r.id.String() || existing.Node != req.Node || existing.Transport != req.Transport {
-			deDuped = append(deDuped, existing)
+func (r *registry) upsertTransportDetailsBatch(ctx context.Context, dbTX *gorm.DB, protoEntries []*prototk.TransportDetails) (func(), error) {
+
+	updatedNodes := make(map[string]bool)
+	entries := make([]*components.RegistryNodeTransportEntry, len(protoEntries))
+	for i, req := range protoEntries {
+		if req.Node == "" || req.Transport == "" {
+			return nil, i18n.NewError(ctx, msgs.MsgRegistryInvalidEntry)
+		}
+		updatedNodes[req.Node] = true
+		entries[i] = &components.RegistryNodeTransportEntry{
+			Registry:  r.id.String(),
+			Node:      req.Node,
+			Transport: req.Transport,
+			Details:   req.Details,
 		}
 	}
-	entry := append(deDuped, &components.RegistryNodeTransportEntry{
-		Registry:         r.id.String(),
-		Node:             req.Node,
-		Transport:        req.Transport,
-		TransportDetails: req.TransportDetails,
-	})
 
 	// Store entry in database
-	r.rm.persistence.DB().Clauses(clause.OnConflict{
-		UpdateAll: true,
-	}).Table("registry_transport_details").Create(entry)
-
-	// If the entry is present in cache, update it
-	_, present := r.rm.registryCache.Get(req.Node)
-	if present {
-		r.rm.registryCache.Set(req.Node, entry)
+	err := dbTX.
+		WithContext(ctx).
+		Table("registry_transport_details").
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "registry"},
+				{Name: "node"},
+				{Name: "transport"},
+			},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"details", // we replace any existing entry
+			}),
+		}).
+		Create(entries).
+		Error
+	if err != nil {
+		return nil, err
 	}
 
-	return &prototk.UpsertTransportDetailsResponse{}, nil
+	// return a post-commit callback to update the cache
+	return func() {
+		for node := range updatedNodes {
+			// The cache is by node, and we only have complete entries - so just invalid the cache
+			r.rm.registryCache.Delete(node)
+		}
+	}, nil
 }
 
 func (r *registry) close() {

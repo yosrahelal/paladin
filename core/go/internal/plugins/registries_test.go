@@ -112,6 +112,12 @@ func TestRegistryRequestsOK(t *testing.T) {
 		ConfigureRegistry: func(ctx context.Context, cdr *prototk.ConfigureRegistryRequest) (*prototk.ConfigureRegistryResponse, error) {
 			return &prototk.ConfigureRegistryResponse{}, nil
 		},
+		RegistryEventBatch: func(ctx context.Context, rebr *prototk.RegistryEventBatchRequest) (*prototk.RegistryEventBatchResponse, error) {
+			assert.Equal(t, "batch1", rebr.BatchId)
+			return &prototk.RegistryEventBatchResponse{
+				TransportDetails: []*prototk.TransportDetails{{Node: "node1"}},
+			}, nil
+		},
 	}
 
 	trm := &testRegistryManager{
@@ -122,7 +128,7 @@ func TestRegistryRequestsOK(t *testing.T) {
 			}),
 		},
 		upsertTransportDetails: func(ctx context.Context, req *prototk.UpsertTransportDetails) (*prototk.UpsertTransportDetailsResponse, error) {
-			assert.Equal(t, "node1", req.Node)
+			assert.Equal(t, "node1", req.TransportDetails[0].Node)
 			return &prototk.UpsertTransportDetailsResponse{}, nil
 		},
 	}
@@ -142,6 +148,12 @@ func TestRegistryRequestsOK(t *testing.T) {
 	_, err := registryAPI.ConfigureRegistry(ctx, &prototk.ConfigureRegistryRequest{})
 	require.NoError(t, err)
 
+	rebr, err := registryAPI.RegistryEventBatch(ctx, &prototk.RegistryEventBatchRequest{
+		BatchId: "batch1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "node1", rebr.TransportDetails[0].Node)
+
 	// This is the point the registry manager would call us to say the registry is initialized
 	// (once it's happy it's updated its internal state)
 	registryAPI.Initialized()
@@ -150,7 +162,7 @@ func TestRegistryRequestsOK(t *testing.T) {
 	callbacks := <-waitForCallbacks
 
 	utr, err := callbacks.UpsertTransportDetails(ctx, &prototk.UpsertTransportDetails{
-		Node: "node1",
+		TransportDetails: []*prototk.TransportDetails{{Node: "node1"}},
 	})
 	require.NoError(t, err)
 	assert.NotNil(t, utr)

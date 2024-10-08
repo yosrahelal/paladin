@@ -26,6 +26,7 @@ import (
 
 type RegistryAPI interface {
 	ConfigureRegistry(context.Context, *prototk.ConfigureRegistryRequest) (*prototk.ConfigureRegistryResponse, error)
+	RegistryEventBatch(context.Context, *prototk.RegistryEventBatchRequest) (*prototk.RegistryEventBatchResponse, error)
 }
 
 type RegistryCallbacks interface {
@@ -117,6 +118,10 @@ func (th *registryHandler) RequestToPlugin(ctx context.Context, iReq PluginMessa
 		resMsg := &prototk.RegistryMessage_ConfigureRegistryRes{}
 		resMsg.ConfigureRegistryRes, err = th.api.ConfigureRegistry(ctx, input.ConfigureRegistry)
 		res.ResponseFromRegistry = resMsg
+	case *prototk.RegistryMessage_RegistryEventBatch:
+		resMsg := &prototk.RegistryMessage_RegistryEventBatchRes{}
+		resMsg.RegistryEventBatchRes, err = th.api.RegistryEventBatch(ctx, input.RegistryEventBatch)
+		res.ResponseFromRegistry = resMsg
 	default:
 		err = i18n.NewError(ctx, tkmsgs.MsgPluginUnsupportedRequest, input)
 	}
@@ -135,7 +140,8 @@ func (dh *registryHandler) UpsertTransportDetails(ctx context.Context, req *prot
 }
 
 type RegistryAPIFunctions struct {
-	ConfigureRegistry func(context.Context, *prototk.ConfigureRegistryRequest) (*prototk.ConfigureRegistryResponse, error)
+	ConfigureRegistry  func(context.Context, *prototk.ConfigureRegistryRequest) (*prototk.ConfigureRegistryResponse, error)
+	RegistryEventBatch func(context.Context, *prototk.RegistryEventBatchRequest) (*prototk.RegistryEventBatchResponse, error)
 }
 
 type RegistryAPIBase struct {
@@ -144,4 +150,8 @@ type RegistryAPIBase struct {
 
 func (tb *RegistryAPIBase) ConfigureRegistry(ctx context.Context, req *prototk.ConfigureRegistryRequest) (*prototk.ConfigureRegistryResponse, error) {
 	return callPluginImpl(ctx, req, tb.Functions.ConfigureRegistry)
+}
+
+func (tb *RegistryAPIBase) RegistryEventBatch(ctx context.Context, req *prototk.RegistryEventBatchRequest) (*prototk.RegistryEventBatchResponse, error) {
+	return callPluginImpl(ctx, req, tb.Functions.RegistryEventBatch)
 }

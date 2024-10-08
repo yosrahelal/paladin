@@ -25,10 +25,10 @@ import (
 )
 
 type RegistryNodeTransportEntry struct {
-	Node             string `gorm:"primaryKey"`
-	Registry         string `gorm:"primaryKey"`
-	Transport        string `gorm:"primaryKey"`
-	TransportDetails string
+	Node      string `gorm:"primaryKey"`
+	Registry  string `gorm:"primaryKey"`
+	Transport string `gorm:"primaryKey"`
+	Details   string
 }
 
 type RegistryManagerToRegistry interface {

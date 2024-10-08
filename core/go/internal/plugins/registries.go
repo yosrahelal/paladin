@@ -90,3 +90,18 @@ func (br *RegistryBridge) ConfigureRegistry(ctx context.Context, req *prototk.Co
 	)
 	return
 }
+
+func (br *RegistryBridge) RegistryEventBatch(ctx context.Context, req *prototk.RegistryEventBatchRequest) (res *prototk.RegistryEventBatchResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.RegistryMessage]) {
+			dm.Message().RequestToRegistry = &prototk.RegistryMessage_RegistryEventBatch{RegistryEventBatch: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.RegistryMessage]) bool {
+			if r, ok := dm.Message().ResponseFromRegistry.(*prototk.RegistryMessage_RegistryEventBatchRes); ok {
+				res = r.RegistryEventBatchRes
+			}
+			return res != nil
+		},
+	)
+	return
+}

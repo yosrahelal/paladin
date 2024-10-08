@@ -120,10 +120,12 @@ message RegistryMessage {
 
   oneof request_to_registry {
     ConfigureRegistryRequest configure_registry =                   1010;
+    RegistryEventBatchRequest registry_event_batch =                1020;
   }
 
   oneof response_from_registry {
     ConfigureRegistryResponse configure_registry_res =              1011;
+    RegistryEventBatchResponse registry_event_batch_res =           1021;
   }
 
   // Request/reply exchanges initiated by the transport, to the paladin node

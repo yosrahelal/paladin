@@ -92,6 +92,23 @@ func TestRegistryFunction_ConfigureRegistry(t *testing.T) {
 	})
 }
 
+func TestRegistryFunction_RegistryEventBatch(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupRegistryTests(t)
+	defer done()
+
+	// RegistryEventBatch - paladin to registry
+	funcs.RegistryEventBatch = func(ctx context.Context, cdr *prototk.RegistryEventBatchRequest) (*prototk.RegistryEventBatchResponse, error) {
+		return &prototk.RegistryEventBatchResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.RegistryMessage) {
+		req.RequestToRegistry = &prototk.RegistryMessage_RegistryEventBatch{
+			RegistryEventBatch: &prototk.RegistryEventBatchRequest{},
+		}
+	}, func(res *prototk.RegistryMessage) {
+		assert.IsType(t, &prototk.RegistryMessage_RegistryEventBatchRes{}, res.ResponseFromRegistry)
+	})
+}
+
 func TestRegistryRequestError(t *testing.T) {
 	_, exerciser, _, _, _, done := setupRegistryTests(t)
 	defer done()
