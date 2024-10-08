@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
@@ -70,14 +71,14 @@ func (m *mockSigner) Sign(ctx context.Context, algorithm string, payloadType str
 }
 
 func newTestHDWalletKeyManager(t *testing.T) (*simpleKeyManager, func()) {
-	kmgr, err := NewSimpleTestKeyManager(context.Background(), &signerapi.Config{
-		KeyDerivation: signerapi.KeyDerivationConfig{
-			Type: signerapi.KeyDerivationTypeBIP32,
+	kmgr, err := NewSimpleTestKeyManager(context.Background(), &signerapi.ConfigNoExt{
+		KeyDerivation: pldconf.KeyDerivationConfig{
+			Type: pldconf.KeyDerivationTypeBIP32,
 		},
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
-			Static: signerapi.StaticKeyStorageConfig{
-				Keys: map[string]signerapi.StaticKeyEntryConfig{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
+			Static: pldconf.StaticKeyStoreConfig{
+				Keys: map[string]pldconf.StaticKeyEntryConfig{
 					"seed": {
 						Encoding: "hex",
 						Inline:   tktypes.RandHex(32),
@@ -91,26 +92,26 @@ func newTestHDWalletKeyManager(t *testing.T) (*simpleKeyManager, func()) {
 }
 
 func TestSimpleKeyManagerInitFail(t *testing.T) {
-	_, err := NewSimpleTestKeyManager(context.Background(), &signerapi.Config{
-		KeyDerivation: signerapi.KeyDerivationConfig{
-			Type: signerapi.KeyDerivationTypeBIP32,
+	_, err := NewSimpleTestKeyManager(context.Background(), &signerapi.ConfigNoExt{
+		KeyDerivation: pldconf.KeyDerivationConfig{
+			Type: pldconf.KeyDerivationTypeBIP32,
 		},
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
 		},
 	})
 	assert.Regexp(t, "PD020818", err)
 }
 
 func TestSimpleKeyManagerPassThoroughInMemSigner(t *testing.T) {
-	sm, err := NewSimpleTestKeyManager(context.Background(), &signerapi.Config{
-		KeyDerivation: signerapi.KeyDerivationConfig{
-			Type: signerapi.KeyDerivationTypeBIP32,
+	sm, err := NewSimpleTestKeyManager(context.Background(), &signerapi.ConfigNoExt{
+		KeyDerivation: pldconf.KeyDerivationConfig{
+			Type: pldconf.KeyDerivationTypeBIP32,
 		},
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
-			Static: signerapi.StaticKeyStorageConfig{
-				Keys: map[string]signerapi.StaticKeyEntryConfig{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
+			Static: pldconf.StaticKeyStoreConfig{
+				Keys: map[string]pldconf.StaticKeyEntryConfig{
 					"seed": {
 						Encoding: "hex",
 						Inline:   tktypes.RandHex(32),
@@ -145,9 +146,9 @@ func TestGenerateIndexes(t *testing.T) {
 
 func TestKeyManagerResolveFail(t *testing.T) {
 
-	kmgr, err := NewSimpleTestKeyManager(context.Background(), &signerapi.Config{
-		KeyStore: signerapi.KeyStoreConfig{
-			Type: signerapi.KeyStoreTypeStatic,
+	kmgr, err := NewSimpleTestKeyManager(context.Background(), &signerapi.ConfigNoExt{
+		KeyStore: pldconf.KeyStoreConfig{
+			Type: pldconf.KeyStoreTypeStatic,
 		},
 	})
 	require.NoError(t, err)

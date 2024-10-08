@@ -88,6 +88,19 @@ func TestDomainCallback_EncodeData(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestDomainCallback_DecodeData(t *testing.T) {
+	ctx, _, _, callbacks, inOutMap, done := setupDomainTests(t)
+	defer done()
+
+	inOutMap[fmt.Sprintf("%T", &prototk.DomainMessage_DecodeData{})] = func(dm *prototk.DomainMessage) {
+		dm.ResponseToDomain = &prototk.DomainMessage_DecodeDataRes{
+			DecodeDataRes: &prototk.DecodeDataResponse{},
+		}
+	}
+	_, err := callbacks.DecodeData(ctx, &prototk.DecodeDataRequest{})
+	require.NoError(t, err)
+}
+
 func TestDomainCallback_RecoverSigner(t *testing.T) {
 	ctx, _, _, callbacks, inOutMap, done := setupDomainTests(t)
 	defer done()
@@ -285,6 +298,23 @@ func TestDomainFunction_GetVerifier(t *testing.T) {
 		}
 	}, func(res *prototk.DomainMessage) {
 		assert.IsType(t, &prototk.DomainMessage_GetVerifierRes{}, res.ResponseFromDomain)
+	})
+}
+
+func TestDomainFunction_ValidateStateHashes(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// ValidateStateHashes - paladin to domain
+	funcs.ValidateStateHashes = func(ctx context.Context, cdr *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+		return &prototk.ValidateStateHashesResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_ValidateStateHashes{
+			ValidateStateHashes: &prototk.ValidateStateHashesRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_ValidateStateHashesRes{}, res.ResponseFromDomain)
 	})
 }
 

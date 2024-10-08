@@ -17,7 +17,6 @@ package io.kaleido.paladin.pente.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.ByteString;
@@ -145,11 +144,12 @@ public class PenteDomain extends DomainInstance {
 
             var resolvedVerifiers = getResolvedEndorsers(params.group().salt(), params.group().members(), request.getResolvedVerifiersList());
             var onchainConfBuilder = new ByteArrayOutputStream();
-            onchainConfBuilder.write(PenteConfiguration.intToBytes4(PenteConfiguration.PenteConfigID_Endorsement_V0));
-            onchainConfBuilder.write(PenteConfiguration.abiEncoder_Endorsement_V0(
+            onchainConfBuilder.write(PenteConfiguration.intToBytes4(PenteConfiguration.PenteConfigID_V0));
+            onchainConfBuilder.write(PenteConfiguration.abiEncoder_Config_V0(
                     params.evmVersion(),
                     resolvedVerifiers.size(),
-                    resolvedVerifiers
+                    resolvedVerifiers,
+                    params.externalCallsEnabled()
             ).getBytes());
             var response = ToDomain.PrepareDeployResponse.newBuilder();
             var newPrivacyGroupABIJson = config.getFactoryContractABI().getABIEntry("function", "newPrivacyGroup").toJSON(false);
@@ -183,18 +183,46 @@ public class PenteDomain extends DomainInstance {
         }
     }
 
+    private List<PenteConfiguration.TransactionExternalCall> parseExternalCalls(PenteTransaction.EVMExecutionResult execResult) throws Exception {
+        var externalCallEventABI = config.getExternalCallABI().getABIEntry("event", "PenteExternalCall").toJSON(false);
+        var externalCalls = new ArrayList<PenteConfiguration.TransactionExternalCall>();
+        for (var log : execResult.logs()) {
+            if (log.getTopics().getFirst().equals(config.getExternalCallTopic())) {
+                var decodedEvent = decodeData(FromDomain.DecodeDataRequest.newBuilder().
+                        setEncodingType(FromDomain.EncodingType.EVENT_DATA).
+                        setDefinition(externalCallEventABI).
+                        addAllTopics(log.getTopics().stream().map(t -> ByteString.copyFrom(t.toArray())).toList()).
+                        setData(ByteString.copyFrom(log.getData().toArray())).
+                        build()).get();
+                var externalCall = new ObjectMapper().readValue(
+                        decodedEvent.getBody(),
+                        PenteConfiguration.TransactionExternalCall.class);
+                externalCalls.add(externalCall);
+            }
+        }
+        return externalCalls;
+    }
+
+    private String buildExtraData(PenteTransaction.EVMExecutionResult execResult) throws Exception {
+        return new ObjectMapper().writeValueAsString(
+                new PenteConfiguration.TransactionExtraData(
+                        new Address(execResult.contractAddress().toArray()),
+                        parseExternalCalls(execResult)));
+    }
+
     @Override
     protected CompletableFuture<ToDomain.AssembleTransactionResponse> assembleTransaction(ToDomain.AssembleTransactionRequest request) {
         try {
             var tx = new PenteTransaction(this, request.getTransaction());
 
             // Execution throws an EVMExecutionException if fails
-            var accountLoader = new AssemblyAccountLoader(request.getTransaction().getContractAddress());
+            var accountLoader = new AssemblyAccountLoader(request.getStateQueryContext());
             var execResult = tx.executeEVM(config.getChainId(), tx.getFromVerifier(request.getResolvedVerifiersList()), accountLoader);
             var result = ToDomain.AssembleTransactionResponse.newBuilder();
-            var assembledTransaction = tx.buildAssembledTransaction(execResult.evm(), accountLoader);
+            var assembledTransaction = tx.buildAssembledTransaction(execResult.evm(), accountLoader, buildExtraData(execResult));
             result.setAssemblyResult(ToDomain.AssembleTransactionResponse.Result.OK);
             result.setAssembledTransaction(assembledTransaction);
+
 
             // Just like a base Eth transaction, we sign the encoded transaction.
             // However, we do not package the signature back up in any RLP encoded way
@@ -322,7 +350,8 @@ public class PenteDomain extends DomainInstance {
             var endorsementPayload = tx.eip712TypedDataEndorsementPayload(
                 request.getInputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
                 request.getReadsList().stream().map(ToDomain.EndorsableState::getId).toList(),
-                request.getOutputsList().stream().map(ToDomain.EndorsableState::getId).toList()
+                request.getOutputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
+                parseExternalCalls(execResult)
             );
 
             // Ok - we are happy to add our endorsement signature
@@ -344,23 +373,24 @@ public class PenteDomain extends DomainInstance {
     @Override
     protected CompletableFuture<ToDomain.PrepareTransactionResponse> prepareTransaction(ToDomain.PrepareTransactionRequest request) {
         try {
-            var inputIds = request.getInputStatesList().stream().map(ToDomain.EndorsableState::getId).toList();
-            var readIds = request.getReadStatesList().stream().map(ToDomain.EndorsableState::getId).toList();
-            var outputIds = request.getOutputStatesList().stream().map(ToDomain.EndorsableState::getId).toList();
+            var signatures = request.getAttestationResultList().stream().
+                    filter(r -> r.getAttestationType() == ToDomain.AttestationType.ENDORSE).
+                    toList();
+            var extraData = new ObjectMapper().readValue(
+                    request.getExtraData(),
+                    PenteConfiguration.TransactionExtraData.class);
 
             var params = new HashMap<String, Object>(){{
                 put("txId", request.getTransaction().getTransactionId());
                 put("inputs", request.getInputStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
                 put("reads", request.getReadStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
                 put("outputs", request.getOutputStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
-                put("signatures", request.getAttestationResultList().stream().
-                        filter(r -> r.getAttestationType() == ToDomain.AttestationType.ENDORSE).
-                        map(r -> JsonHex.wrap(r.getPayload().toByteArray())).
-                        toList()
+                put("externalCalls", extraData.externalCalls());
+                put("signatures", signatures.stream().map(r -> JsonHex.wrap(r.getPayload().toByteArray())).toList()
                 );
             }};
             var transitionFunctionABI = config.getPrivacyGroupABI().getABIEntry("function", "transition").toJSON(false);
-            var preparedTx = ToDomain.BaseLedgerTransaction.newBuilder().
+            var preparedTx = ToDomain.PreparedTransaction.newBuilder().
                     setFunctionAbiJson(transitionFunctionABI).
                     setParamsJson(new ObjectMapper().writeValueAsString(params));
             var result = ToDomain.PrepareTransactionResponse.newBuilder().setTransaction(preparedTx);
@@ -374,10 +404,9 @@ public class PenteDomain extends DomainInstance {
     protected CompletableFuture<ToDomain.HandleEventBatchResponse> handleEventBatch(ToDomain.HandleEventBatchRequest request) {
         try {
             var mapper = new ObjectMapper();
-            List<EventWithData> events = mapper.readerForListOf(EventWithData.class).readValue(request.getJsonEvents());
-            for (var event : events) {
-                if (config.getTransferSignature().equals(event.soliditySignature)) {
-                    var transfer = mapper.convertValue(event.data, UTXOTransferJSON.class);
+            for (var event : request.getEventsList()) {
+                if (config.getTransferSignature().equals(event.getSoliditySignature())) {
+                    var transfer = mapper.readValue(event.getDataJson(), UTXOTransferJSON.class);
                     var inputs = Arrays.stream(transfer.inputs).map(id -> ToDomain.StateUpdate.newBuilder()
                             .setId(id.to0xHex())
                             .setTransactionId(transfer.txId.to0xHex())
@@ -387,12 +416,15 @@ public class PenteDomain extends DomainInstance {
                             .setTransactionId(transfer.txId.to0xHex())
                             .build()).toList();
                     var result = ToDomain.HandleEventBatchResponse.newBuilder()
-                            .addTransactionsComplete(transfer.txId.to0xHex())
+                            .addTransactionsComplete(ToDomain.CompletedTransaction.newBuilder()
+                                    .setTransactionId(transfer.txId.to0xHex())
+                                    .setLocation(event.getLocation())
+                                    .build())
                             .addAllSpentStates(inputs)
                             .addAllConfirmedStates(outputs);
                     return CompletableFuture.completedFuture(result.build());
                 } else {
-                    throw new Exception("Unknown signature: " + event.soliditySignature);
+                    throw new Exception("Unknown signature: " + event.getSoliditySignature());
                 }
             }
             return CompletableFuture.completedFuture(null);
@@ -412,6 +444,12 @@ public class PenteDomain extends DomainInstance {
     protected CompletableFuture<ToDomain.GetVerifierResponse> getVerifier(ToDomain.GetVerifierRequest request) {
         // Pente currently only uses SECP256K1 cryptography, which is fully supported by the built-in
         // Paladin signing module without any extension requirements.
+        return CompletableFuture.failedFuture(new UnsupportedOperationException());
+    }
+
+    @Override
+    protected CompletableFuture<ToDomain.ValidateStateHashesResponse> validateStateHashes(ToDomain.ValidateStateHashesRequest request) {
+        // Pente uses the standard state hash generation of Paladin, so this function is not called per the spec
         return CompletableFuture.failedFuture(new UnsupportedOperationException());
     }
 
@@ -438,10 +476,10 @@ public class PenteDomain extends DomainInstance {
     /** during assembly we load available states from the Paladin state store */
     class AssemblyAccountLoader implements AccountLoader {
         private final HashMap<org.hyperledger.besu.datatypes.Address, FromDomain.StoredState> loadedAccountStates = new HashMap<>();
-        private final String contractAddress;
+        private final String stateQueryContext;
 
-        AssemblyAccountLoader(String contractAddress) {
-            this.contractAddress = contractAddress;
+        AssemblyAccountLoader(String stateQueryContext) {
+            this.stateQueryContext = stateQueryContext;
         }
 
         public Optional<PersistedAccount> load(org.hyperledger.besu.datatypes.Address address) throws IOException {
@@ -451,7 +489,7 @@ public class PenteDomain extends DomainInstance {
                         isEqual("address", address.toString()).
                         json();
                 var response = findAvailableStates(FromDomain.FindAvailableStatesRequest.newBuilder().
-                        setContractAddress(this.contractAddress).
+                        setStateQueryContext(stateQueryContext).
                         setSchemaId(config.schemaId_AccountStateLatest()).
                         setQueryJson(queryJson).
                         build()).get();

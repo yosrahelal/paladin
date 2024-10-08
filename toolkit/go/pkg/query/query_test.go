@@ -54,7 +54,7 @@ const (
 func TestQuery(t *testing.T) {
 	expectedQuery := `{
         "limit": 10,
-        "sort": ["field1","field2"],
+        "sort": ["field1 DESC","field2"],
         "eq": [
             { "field": "field1", "value": "value1" },
             { "field": "field12", "value": "value12", "not": true, "caseInsensitive": true }
@@ -91,7 +91,7 @@ func TestQuery(t *testing.T) {
 
 	query := NewQueryBuilder().
 		Limit(10).
-		Sort("field1").Sort("field2").
+		Sort("field1 DESC").Sort("field2").
 		Equal("field1", "value1", CaseSensitive).
 		NotEqual("field2", "value2").
 		Like("field3", "some value").

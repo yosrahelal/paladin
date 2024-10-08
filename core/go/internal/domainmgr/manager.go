@@ -25,11 +25,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/statestore"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
@@ -51,20 +51,19 @@ var eventSolSig_PaladinRegisterSmartContract_V0 = mustParseEventSoliditySignatur
 
 // var eventSig_PaladinPrivateTransaction_V0 = mustParseEventSignature(iPaladinContractABI, "PaladinPrivateTransaction_V0")
 
-func NewDomainManager(bgCtx context.Context, conf *config.DomainManagerConfig) components.DomainManager {
+func NewDomainManager(bgCtx context.Context, conf *pldconf.DomainManagerConfig) components.DomainManager {
 	allDomains := []string{}
 	for name := range conf.Domains {
 		allDomains = append(allDomains, name)
 	}
 	log.L(bgCtx).Infof("Domains configured: %v", allDomains)
 	return &domainManager{
-		bgCtx:             bgCtx,
-		conf:              conf,
-		domainsByName:     make(map[string]*domain),
-		domainsByAddress:  make(map[tktypes.EthAddress]*domain),
-		contractWaiter:    inflight.NewInflightManager[uuid.UUID, *PrivateSmartContract](uuid.Parse),
-		transactionWaiter: inflight.NewInflightManager[uuid.UUID, any](uuid.Parse),
-		contractCache:     cache.NewCache[tktypes.EthAddress, *domainContract](&conf.DomainManager.ContractCache, config.ContractCacheDefaults),
+		bgCtx:            bgCtx,
+		conf:             conf,
+		domainsByName:    make(map[string]*domain),
+		domainsByAddress: make(map[tktypes.EthAddress]*domain),
+		privateTxWaiter:  inflight.NewInflightManager[uuid.UUID, *components.ReceiptInput](uuid.Parse),
+		contractCache:    cache.NewCache[tktypes.EthAddress, *domainContract](&conf.DomainManager.ContractCache, pldconf.ContractCacheDefaults),
 	}
 }
 
@@ -72,9 +71,11 @@ type domainManager struct {
 	bgCtx context.Context
 	mux   sync.Mutex
 
-	conf             *config.DomainManagerConfig
+	conf             *pldconf.DomainManagerConfig
 	persistence      persistence.Persistence
-	stateStore       statestore.StateStore
+	stateStore       components.StateManager
+	privateTxManager components.PrivateTxManager
+	txManager        components.TXManager
 	blockIndexer     blockindexer.BlockIndexer
 	ethClientFactory ethclient.EthClientFactory
 	domainSigner     *domainSigner
@@ -82,9 +83,8 @@ type domainManager struct {
 	domainsByName    map[string]*domain
 	domainsByAddress map[tktypes.EthAddress]*domain
 
-	contractWaiter    *inflight.InflightManager[uuid.UUID, *PrivateSmartContract]
-	transactionWaiter *inflight.InflightManager[uuid.UUID, any]
-	contractCache     cache.Cache[tktypes.EthAddress, *domainContract]
+	privateTxWaiter *inflight.InflightManager[uuid.UUID, *components.ReceiptInput]
+	contractCache   cache.Cache[tktypes.EthAddress, *domainContract]
 }
 
 type event_PaladinRegisterSmartContract_V0 struct {
@@ -95,24 +95,26 @@ type event_PaladinRegisterSmartContract_V0 struct {
 }
 
 func (dm *domainManager) PreInit(pic components.PreInitComponents) (*components.ManagerInitResult, error) {
-	dm.persistence = pic.Persistence()
-	dm.stateStore = pic.StateStore()
-	dm.ethClientFactory = pic.EthClientFactory()
-	dm.blockIndexer = pic.BlockIndexer()
-
-	// Register ourselves as a signing on the key manager
-	dm.domainSigner = &domainSigner{dm: dm}
-	pic.KeyManager().AddInMemorySigner("domain", dm.domainSigner)
-
-	for name, d := range dm.conf.Domains {
-		if _, err := tktypes.ParseEthAddress(d.RegistryAddress); err != nil {
-			return nil, i18n.WrapError(dm.bgCtx, err, msgs.MsgDomainRegistryAddressInvalid, d.RegistryAddress, name)
-		}
-	}
 	return &components.ManagerInitResult{}, nil
 }
 
 func (dm *domainManager) PostInit(c components.AllComponents) error {
+	dm.stateStore = c.StateManager()
+	dm.txManager = c.TxManager()
+	dm.privateTxManager = c.PrivateTxManager()
+	dm.persistence = c.Persistence()
+	dm.ethClientFactory = c.EthClientFactory()
+	dm.blockIndexer = c.BlockIndexer()
+
+	// Register ourselves as a signing on the key manager
+	dm.domainSigner = &domainSigner{dm: dm}
+	c.KeyManager().AddInMemorySigner("domain", dm.domainSigner)
+
+	for name, d := range dm.conf.Domains {
+		if _, err := tktypes.ParseEthAddress(d.RegistryAddress); err != nil {
+			return i18n.WrapError(dm.bgCtx, err, msgs.MsgDomainRegistryAddressInvalid, d.RegistryAddress, name)
+		}
+	}
 	return nil
 }
 
@@ -138,8 +140,8 @@ func (dm *domainManager) cleanupDomain(d *domain) {
 	delete(dm.domainsByAddress, *d.RegistryAddress())
 }
 
-func (dm *domainManager) ConfiguredDomains() map[string]*config.PluginConfig {
-	pluginConf := make(map[string]*config.PluginConfig)
+func (dm *domainManager) ConfiguredDomains() map[string]*pldconf.PluginConfig {
+	pluginConf := make(map[string]*pldconf.PluginConfig)
 	for name, conf := range dm.conf.Domains {
 		pluginConf[name] = &conf.Plugin
 	}
@@ -174,8 +176,16 @@ func (dm *domainManager) DomainRegistered(name string, toDomain components.Domai
 	return d, nil
 }
 
+// fails if domain is not yet initialized (note external endpoints of Paladin do not open up until all domains initialized)
 func (dm *domainManager) GetDomainByName(ctx context.Context, name string) (components.Domain, error) {
-	return dm.getDomainByName(ctx, name)
+	domain, err := dm.getDomainByName(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if err := domain.checkInit(ctx); err != nil {
+		return nil, err
+	}
+	return domain, nil
 }
 
 func (dm *domainManager) getDomainByName(ctx context.Context, name string) (*domain, error) {
@@ -191,7 +201,7 @@ func (dm *domainManager) getDomainByName(ctx context.Context, name string) (*dom
 func (dm *domainManager) WaitForDeploy(ctx context.Context, txID uuid.UUID) (components.DomainSmartContract, error) {
 	// Waits for the event that confirms a smart contract has been deployed (or a context timeout)
 	// using the transaction ID of the deploy transaction
-	req := dm.contractWaiter.AddInflight(ctx, txID)
+	req := dm.privateTxWaiter.AddInflight(ctx, txID)
 	defer req.Cancel()
 
 	dc, err := dm.dbGetSmartContract(ctx, dm.persistence.DB(), func(db *gorm.DB) *gorm.DB { return db.Where("deploy_tx = ?", txID) })
@@ -209,19 +219,25 @@ func (dm *domainManager) GetSigner() signerapi.InMemorySigner {
 	return dm.domainSigner
 }
 
-func (dm *domainManager) waitAndEnrich(ctx context.Context, req *inflight.InflightRequest[uuid.UUID, *PrivateSmartContract]) (components.DomainSmartContract, error) {
+func (dm *domainManager) waitAndEnrich(ctx context.Context, req *inflight.InflightRequest[uuid.UUID, *components.ReceiptInput]) (components.DomainSmartContract, error) {
 	// wait until the event gets indexed (or the context expires)
-	def, err := req.Wait()
+	receipt, err := req.Wait()
 	if err != nil {
 		return nil, err
 	}
-	return dm.enrichContractWithDomain(ctx, def)
+
+	if receipt.ContractAddress == nil {
+		log.L(ctx).Errorf("Waiter expected a contract deployment: %+v", receipt)
+		return nil, i18n.NewError(ctx, msgs.MsgDomainTransactionWasNotADeployment, receipt.TransactionID)
+	}
+
+	return dm.GetSmartContractByAddress(ctx, *receipt.ContractAddress)
 }
 
 func (dm *domainManager) WaitForTransaction(ctx context.Context, txID uuid.UUID) error {
 	// Waits for the event that confirms a transaction has been processed (or a context timeout)
 	// using the ID of the transaction
-	req := dm.transactionWaiter.AddInflight(ctx, txID)
+	req := dm.privateTxWaiter.AddInflight(ctx, txID)
 	defer req.Cancel()
 	_, err := req.Wait()
 	return err
@@ -233,13 +249,13 @@ func (dm *domainManager) setDomainAddress(d *domain) {
 	dm.domainsByAddress[*d.RegistryAddress()] = d
 }
 
-func (dm *domainManager) getDomainByAddress(ctx context.Context, addr *tktypes.EthAddress) (d *domain, _ error) {
+func (dm *domainManager) getDomainByAddress(ctx context.Context, addr *tktypes.EthAddress, nilOnNotFound bool) (d *domain, _ error) {
 	dm.mux.Lock()
 	defer dm.mux.Unlock()
 	if addr != nil {
 		d = dm.domainsByAddress[*addr]
 	}
-	if d == nil {
+	if d == nil && !nilOnNotFound {
 		return nil, i18n.NewError(ctx, msgs.MsgDomainNotFound, addr)
 	}
 	return d, nil
@@ -274,19 +290,25 @@ func (dm *domainManager) dbGetSmartContract(ctx context.Context, tx *gorm.DB, se
 	if err != nil || len(contracts) == 0 {
 		return nil, err
 	}
-	return dm.enrichContractWithDomain(ctx, contracts[0])
 
+	// At this point it's possible we have a matching smart contract in our DB, for which we
+	// no longer recognize the domain registry (as it's not one that is configured an longer)
+	dc, err := dm.enrichContractWithDomain(ctx, contracts[0], true)
+	if err == nil && dc == nil {
+		log.L(ctx).Warnf("Lookup of smart contract '%s' that is stored in the DB for domain registry '%s' that is no longer configured on this node", contracts[0].Address, contracts[0].RegistryAddress)
+	}
+	return dc, nil
 }
 
-func (dm *domainManager) enrichContractWithDomain(ctx context.Context, def *PrivateSmartContract) (*domainContract, error) {
+func (dm *domainManager) enrichContractWithDomain(ctx context.Context, contract *PrivateSmartContract, nilOnNotFound bool) (*domainContract, error) {
 
 	// Get the domain by address
-	d, err := dm.getDomainByAddress(ctx, &def.RegistryAddress)
-	if err != nil {
+	d, err := dm.getDomainByAddress(ctx, &contract.RegistryAddress, nilOnNotFound)
+	if d == nil || err != nil {
 		return nil, err
 	}
 
-	return d.newSmartContract(def), nil
+	return d.newSmartContract(contract), nil
 }
 
 // If an embedded ABI is broken, we don't even run the tests / start the runtime

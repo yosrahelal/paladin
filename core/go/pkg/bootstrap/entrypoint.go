@@ -19,8 +19,8 @@ import "sync/atomic"
 
 var running atomic.Pointer[instance]
 
-func Run(grpcTarget, loaderUUID, configFile, engineName string) RC {
-	inst := newInstance(grpcTarget, loaderUUID, configFile, engineName)
+func Run(grpcTarget, loaderUUID, configFile, runMode string) RC {
+	inst := newInstance(grpcTarget, loaderUUID, configFile, runMode)
 	if !running.CompareAndSwap(nil, inst) {
 		panic("double started")
 	}

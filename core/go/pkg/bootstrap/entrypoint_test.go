@@ -22,32 +22,27 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/componentmgr"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestConfig(t *testing.T, mockers ...func(mockCM *componentmocks.ComponentManager, mockEngine *componentmocks.Engine)) (socketFile, loaderUUID, configFile string, done func()) {
+func setupTestConfig(t *testing.T, mockers ...func(mockCM *componentmocks.ComponentManager)) (socketFile, loaderUUID, configFile string, done func()) {
 	id := uuid.New()
 	origCMFactory := componentManagerFactory
 	mockCM := componentmocks.NewComponentManager(t)
-	componentManagerFactory = func(bgCtx context.Context, grpcTarget string, instanceUUID uuid.UUID, conf *config.PaladinConfig, engine components.Engine) componentmgr.ComponentManager {
+	componentManagerFactory = func(bgCtx context.Context, grpcTarget string, instanceUUID uuid.UUID, conf *pldconf.PaladinConfig, additionalManagers ...components.AdditionalManager) componentmgr.ComponentManager {
 		assert.Equal(t, id, instanceUUID)
 		assert.Equal(t, "http://localhost:8545", conf.Blockchain.HTTP.URL)
 		return mockCM
 	}
-	mockEngine := componentmocks.NewEngine(t)
-	origEngineFactory := engineFactory
-	engineFactory = func(ctx context.Context, engineName string) (components.Engine, error) {
-		assert.Equal(t, "unittest", engineName)
-		return mockEngine, nil
-	}
 	for _, mocker := range mockers {
-		mocker(mockCM, mockEngine)
+		mocker(mockCM)
 	}
 	configFile = path.Join(t.TempDir(), "paladin.conf.yaml")
 	err := os.WriteFile(configFile, []byte(`{
@@ -55,7 +50,6 @@ func setupTestConfig(t *testing.T, mockers ...func(mockCM *componentmocks.Compon
 	}`), 0664)
 	require.NoError(t, err)
 	return path.Join(t.TempDir(), "socket.file"), id.String(), configFile, func() {
-		engineFactory = origEngineFactory
 		componentManagerFactory = origCMFactory
 	}
 }
@@ -63,7 +57,7 @@ func setupTestConfig(t *testing.T, mockers ...func(mockCM *componentmocks.Compon
 func TestEntrypointOK(t *testing.T) {
 
 	cmStarted := make(chan struct{})
-	socketFile, loaderUUID, configFile, done := setupTestConfig(t, func(mockCM *componentmocks.ComponentManager, mockEngine *componentmocks.Engine) {
+	socketFile, loaderUUID, configFile, done := setupTestConfig(t, func(mockCM *componentmocks.ComponentManager) {
 		mockCM.On("Init").Return(nil)
 		mockCM.On("StartComponents").Return(nil)
 		mockCM.On("StartManagers").Return(nil)
@@ -79,18 +73,28 @@ func TestEntrypointOK(t *testing.T) {
 		defer func() {
 			completed <- recover()
 		}()
-		Run(socketFile, loaderUUID, configFile, "unittest")
+		Run(socketFile, loaderUUID, configFile, "testbed")
 	}()
 
 	<-cmStarted
 
 	// Double start should panic
 	assert.Panics(t, func() {
-		Run(socketFile, loaderUUID, configFile, "unittest")
+		Run(socketFile, loaderUUID, configFile, "testbed")
 	})
 
 	Stop()
 	err := <-completed
 	assert.Nil(t, err)
+
+}
+
+func TestEntrypointBadMode(t *testing.T) {
+
+	socketFile, loaderUUID, configFile, done := setupTestConfig(t, func(mockCM *componentmocks.ComponentManager) {})
+	defer done()
+
+	rc := Run(socketFile, loaderUUID, configFile, "wrong")
+	require.Equal(t, RC_FAIL, rc)
 
 }

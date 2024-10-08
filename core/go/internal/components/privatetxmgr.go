@@ -18,7 +18,7 @@ package components
 import (
 	"context"
 
-	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type PrivateTxEventSubscriber func(event PrivateTxEvent)
@@ -40,6 +40,7 @@ type PrivateTxStatus struct {
 
 type PrivateTxManager interface {
 	ManagerLifecycle
+	TransportClient
 
 	//Synchronous functions to submit a new private transaction
 	HandleNewTx(ctx context.Context, tx *PrivateTransaction) error
@@ -50,7 +51,5 @@ type PrivateTxManager interface {
 	// in the meantime, this is handy for some blackish box testing
 	Subscribe(ctx context.Context, subscriber PrivateTxEventSubscriber)
 
-	ReceiveTransportMessage(context.Context, *TransportMessage)
-
-	NotifyConfirmed(ctx context.Context, confirms []*PublicTxMatch) (completed map[uuid.UUID]bool, err error)
+	NotifyFailedPublicTx(ctx context.Context, dbTX *gorm.DB, confirms []*PublicTxMatch) error
 }

@@ -20,9 +20,10 @@ import (
 	_ "embed"
 	"testing"
 
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
+	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
@@ -30,16 +31,21 @@ import (
 //go:embed abis/NotoFactory.json
 var NotoFactoryJSON []byte
 
+//go:embed abis/INoto.json
+var NotoInterfaceJSON []byte
+
 type NotoHelper struct {
 	t       *testing.T
 	rpc     rpcbackend.Backend
-	Address ethtypes.Address0xHex
+	Address *tktypes.EthAddress
+	ABI     abi.ABI
 }
 
-func DeployNoto(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domainName, notary string) *NotoHelper {
-	var addr ethtypes.Address0xHex
+func DeployNoto(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domainName, notary string, guard *tktypes.EthAddress) *NotoHelper {
+	var addr tktypes.EthAddress
 	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deploy", domainName, &types.ConstructorParams{
-		Notary: notary,
+		Notary:             notary,
+		GuardPublicAddress: guard,
 	})
 	if rpcerr != nil {
 		assert.NoError(t, rpcerr.Error())
@@ -47,38 +53,28 @@ func DeployNoto(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domai
 	return &NotoHelper{
 		t:       t,
 		rpc:     rpc,
-		Address: addr,
+		Address: &addr,
+		ABI:     domain.LoadBuild(NotoInterfaceJSON).ABI,
 	}
 }
 
-func (n *NotoHelper) Mint(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
+func (n *NotoHelper) Mint(ctx context.Context, to string, amount int64) *DomainTransactionHelper {
 	fn := types.NotoABI.Functions()["mint"]
-	return NewDomainTransactionHelper(ctx, n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.MintParams{
+	return NewDomainTransactionHelper(ctx, n.t, n.rpc, n.Address, fn, toJSON(n.t, &types.MintParams{
 		To:     to,
-		Amount: ethtypes.NewHexIntegerU64(amount),
+		Amount: tktypes.Int64ToInt256(amount),
 	}))
 }
 
-func (n *NotoHelper) Transfer(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
+func (n *NotoHelper) Transfer(ctx context.Context, to string, amount int64) *DomainTransactionHelper {
 	fn := types.NotoABI.Functions()["transfer"]
-	return NewDomainTransactionHelper(ctx, n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.TransferParams{
+	return NewDomainTransactionHelper(ctx, n.t, n.rpc, n.Address, fn, toJSON(n.t, &types.TransferParams{
 		To:     to,
-		Amount: ethtypes.NewHexIntegerU64(amount),
+		Amount: tktypes.Int64ToInt256(amount),
 	}))
 }
 
-func (n *NotoHelper) TransferWithApproval(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
-	fn := types.NotoABI.Functions()["transferWithApproval"]
-	return NewDomainTransactionHelper(ctx, n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.TransferParams{
-		To:     to,
-		Amount: ethtypes.NewHexIntegerU64(amount),
-	}))
-}
-
-func (n *NotoHelper) ApproveTransfer(ctx context.Context, delegate ethtypes.Address0xHex, call []byte) *DomainTransactionHelper {
+func (n *NotoHelper) ApproveTransfer(ctx context.Context, params *types.ApproveParams) *DomainTransactionHelper {
 	fn := types.NotoABI.Functions()["approveTransfer"]
-	return NewDomainTransactionHelper(ctx, n.t, n.rpc, tktypes.EthAddress(n.Address), fn, toJSON(n.t, &types.ApproveParams{
-		Delegate: delegate,
-		Call:     call,
-	}))
+	return NewDomainTransactionHelper(ctx, n.t, n.rpc, n.Address, fn, toJSON(n.t, params))
 }

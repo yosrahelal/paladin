@@ -23,8 +23,9 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
@@ -54,8 +55,8 @@ func newTestPlugin(registryFuncs *plugintk.RegistryAPIFunctions) *testPlugin {
 }
 
 func newTestRegistry(t *testing.T, extraSetup ...func(mc *mockComponents)) (context.Context, *registryManager, *testPlugin, *mockComponents, func()) {
-	ctx, rm, mc, done := newTestRegistryManager(t, false, &config.RegistryManagerConfig{
-		Registries: map[string]*config.RegistryConfig{
+	ctx, rm, mc, done := newTestRegistryManager(t, false, &pldconf.RegistryManagerConfig{
+		Registries: map[string]*pldconf.RegistryConfig{
 			"test1": {
 				Config: map[string]any{"some": "conf"},
 			},

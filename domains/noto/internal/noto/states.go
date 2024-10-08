@@ -78,13 +78,13 @@ func (n *Noto) makeNewState(coin *types.NotoCoin, distributionList []string) (*p
 		return nil, err
 	}
 	return &prototk.NewState{
-		SchemaId:        n.coinSchema.Id,
-		StateDataJson:   string(coinJSON),
-		DistibutionList: distributionList,
+		SchemaId:         n.coinSchema.Id,
+		StateDataJson:    string(coinJSON),
+		DistributionList: distributionList,
 	}, nil
 }
 
-func (n *Noto) prepareInputs(ctx context.Context, contractAddress string, owner ethtypes.Address0xHex, amount *ethtypes.HexInteger) ([]*types.NotoCoin, []*prototk.StateRef, *big.Int, error) {
+func (n *Noto) prepareInputs(ctx context.Context, stateQueryContext string, owner *tktypes.EthAddress, amount *tktypes.HexUint256) ([]*types.NotoCoin, []*prototk.StateRef, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
 	stateRefs := []*prototk.StateRef{}
@@ -101,7 +101,7 @@ func (n *Noto) prepareInputs(ctx context.Context, contractAddress string, owner 
 		}
 
 		log.L(ctx).Debugf("State query: %s", queryBuilder.Query())
-		states, err := n.findAvailableStates(ctx, contractAddress, queryBuilder.Query().String())
+		states, err := n.findAvailableStates(ctx, stateQueryContext, queryBuilder.Query().String())
 
 		if err != nil {
 			return nil, nil, nil, err
@@ -115,21 +115,21 @@ func (n *Noto) prepareInputs(ctx context.Context, contractAddress string, owner 
 			if err != nil {
 				return nil, nil, nil, i18n.NewError(ctx, msgs.MsgInvalidStateData, state.Id, err)
 			}
-			total = total.Add(total, coin.Amount.BigInt())
+			total = total.Add(total, coin.Amount.Int())
 			stateRefs = append(stateRefs, &prototk.StateRef{
 				SchemaId: state.SchemaId,
 				Id:       state.Id,
 			})
 			coins = append(coins, coin)
-			log.L(ctx).Debugf("Selecting coin %s value=%s total=%s required=%s)", state.Id, coin.Amount.BigInt().Text(10), total.Text(10), amount.BigInt().Text(10))
-			if total.Cmp(amount.BigInt()) >= 0 {
+			log.L(ctx).Debugf("Selecting coin %s value=%s total=%s required=%s)", state.Id, coin.Amount.Int().Text(10), total.Text(10), amount.Int().Text(10))
+			if total.Cmp(amount.Int()) >= 0 {
 				return coins, stateRefs, total, nil
 			}
 		}
 	}
 }
 
-func (n *Noto) prepareOutputs(notaryName, ownerName string, ownerAddress ethtypes.Address0xHex, amount *ethtypes.HexInteger) ([]*types.NotoCoin, []*prototk.NewState, error) {
+func (n *Noto) prepareOutputs(notaryName, ownerName string, ownerAddress *tktypes.EthAddress, amount *tktypes.HexUint256) ([]*types.NotoCoin, []*prototk.NewState, error) {
 	// Always produce a single coin for the entire output amount
 	// TODO: make this configurable
 	newCoin := &types.NotoCoin{
@@ -141,11 +141,11 @@ func (n *Noto) prepareOutputs(notaryName, ownerName string, ownerAddress ethtype
 	return []*types.NotoCoin{newCoin}, []*prototk.NewState{newState}, err
 }
 
-func (n *Noto) findAvailableStates(ctx context.Context, contractAddress, query string) ([]*prototk.StoredState, error) {
+func (n *Noto) findAvailableStates(ctx context.Context, stateQueryContext, query string) ([]*prototk.StoredState, error) {
 	req := &prototk.FindAvailableStatesRequest{
-		ContractAddress: contractAddress,
-		SchemaId:        n.coinSchema.Id,
-		QueryJson:       query,
+		StateQueryContext: stateQueryContext,
+		SchemaId:          n.coinSchema.Id,
+		QueryJson:         query,
 	}
 	res, err := n.Callbacks.FindAvailableStates(ctx, req)
 	if err != nil {
@@ -191,7 +191,7 @@ func (n *Noto) encodeTransferUnmasked(ctx context.Context, contract *ethtypes.Ad
 	})
 }
 
-func (n *Noto) encodeTransferMasked(ctx context.Context, contract *ethtypes.Address0xHex, inputs, outputs []interface{}, data ethtypes.HexBytes0xPrefix) (ethtypes.HexBytes0xPrefix, error) {
+func (n *Noto) encodeTransferMasked(ctx context.Context, contract *ethtypes.Address0xHex, inputs, outputs []interface{}, data tktypes.HexBytes) (ethtypes.HexBytes0xPrefix, error) {
 	return eip712.EncodeTypedDataV4(ctx, &eip712.TypedData{
 		Types:       NotoTransferMaskedTypeSet,
 		PrimaryType: "Transfer",

@@ -40,6 +40,10 @@ configurations {
         canBeConsumed = true
         canBeResolved = false
     }
+    libnoto {
+        canBeConsumed = true
+        canBeResolved = false
+    }
 }
 
 dependencies {
@@ -55,6 +59,7 @@ task copySolidity(type: Copy) {
         include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
         include 'contracts/domains/noto/Noto.sol/Noto.json'
         include 'contracts/domains/noto/NotoSelfSubmit.sol/NotoSelfSubmit.json'
+        include 'contracts/private/interfaces/INotoGuard.sol/INotoGuard.json'
     }
     into 'internal/noto/abis'
 
@@ -63,7 +68,7 @@ task copySolidity(type: Copy) {
     includeEmptyDirs = false
 }
 
-task test(type: Exec, dependsOn: [":core:go:makeMocks"]) {
+task test(type: Exec, dependsOn: [":core:go:makeMocks", copySolidity]) {
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
     inputs.files(goFiles)
@@ -82,16 +87,16 @@ task test(type: Exec, dependsOn: [":core:go:makeMocks"]) {
     }
     args "-test.gocoverdir=${projectDir}/coverage"
 
-    dependsOn copySolidity
     dependsOn ':testinfra:startTestInfra'
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
-task buildGo{
-    // TODO: implement buildGo task
-    doFirst() {
-        println ":domain:noto buildGo task not implemented"
-    }
+task buildGo(type: GoLib, dependsOn: [":toolkit:go:protoc", copySolidity]) {
+    inputs.files(configurations.coreGo)
+    inputs.files(configurations.toolkitGo)
+    baseName "noto"
+    sources goFiles
+    mainFile 'noto.go'
 }
 
 task build {
@@ -109,5 +114,6 @@ task assemble {
 }
 
 dependencies {
+    libnoto files(buildGo)
     goSource files(goFiles, copySolidity)
 }

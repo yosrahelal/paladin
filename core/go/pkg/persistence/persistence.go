@@ -21,6 +21,7 @@ import (
 
 	// Import pq driver
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"gorm.io/gorm"
 )
@@ -35,21 +36,7 @@ const (
 	TypeSQLite   = "sqlite"
 )
 
-type Config struct {
-	Type     string         `json:"type"`
-	Postgres PostgresConfig `json:"postgres"`
-	SQLite   SQLiteConfig   `json:"sqlite"`
-}
-
-type PostgresConfig struct {
-	SQLDBConfig `json:",inline"`
-}
-
-type SQLiteConfig struct {
-	SQLDBConfig `json:",inline"`
-}
-
-func NewPersistence(ctx context.Context, conf *Config) (Persistence, error) {
+func NewPersistence(ctx context.Context, conf *pldconf.DBConfig) (Persistence, error) {
 	switch conf.Type {
 	case "", TypeSQLite: // default
 		return newSQLiteProvider(ctx, conf)

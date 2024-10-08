@@ -25,9 +25,9 @@ import (
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	proto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"github.com/tyler-smith/go-bip39"
 )
@@ -41,21 +41,37 @@ type hdWalletPathEntry struct {
 	Index uint64
 }
 
-func (sm *signingModule[C]) initHDWallet(ctx context.Context, conf *signerapi.KeyDerivationConfig) (err error) {
-	bip44Prefix := confutil.StringNotEmpty(conf.BIP44Prefix, *signerapi.KeyDerivationDefaults.BIP44Prefix)
+func configToKeyResolutionRequest(k *pldconf.SigningKeyConfigEntry) *proto.ResolveKeyRequest {
+	keyReq := &proto.ResolveKeyRequest{
+		Name:       k.Name,
+		Index:      k.Index,
+		Attributes: k.Attributes,
+		Path:       []*proto.ResolveKeyPathSegment{},
+	}
+	for _, p := range k.Path {
+		keyReq.Path = append(keyReq.Path, &proto.ResolveKeyPathSegment{
+			Name:  p.Name,
+			Index: p.Index,
+		})
+	}
+	return keyReq
+}
+
+func (sm *signingModule[C]) initHDWallet(ctx context.Context, conf *pldconf.KeyDerivationConfig) (err error) {
+	bip44Prefix := confutil.StringNotEmpty(conf.BIP44Prefix, *pldconf.KeyDerivationDefaults.BIP44Prefix)
 	bip44Prefix = strings.ReplaceAll(bip44Prefix, " ", "")
 	sm.hd = &hdDerivation[C]{
 		sm:                    sm,
 		bip44Prefix:           bip44Prefix,
 		bip44DirectResolution: conf.BIP44DirectResolution,
-		bip44HardenedSegments: confutil.IntMin(conf.BIP44HardenedSegments, 0, *signerapi.KeyDerivationDefaults.BIP44HardenedSegments),
+		bip44HardenedSegments: confutil.IntMin(conf.BIP44HardenedSegments, 0, *pldconf.KeyDerivationDefaults.BIP44HardenedSegments),
 	}
-	seedKeyPath := signerapi.KeyDerivationDefaults.SeedKeyPath
+	seedKeyPath := pldconf.KeyDerivationDefaults.SeedKeyPath
 	if conf.SeedKeyPath.Name != "" {
 		seedKeyPath = conf.SeedKeyPath
 	}
 	// Note we don't have any way to store the resolved keyHandle, so we resolve it every time we start
-	seed, _, err := sm.keyStore.FindOrCreateLoadableKey(ctx, seedKeyPath.ToKeyResolutionRequest(), sm.new32ByteRandomSeed)
+	seed, _, err := sm.keyStore.FindOrCreateLoadableKey(ctx, configToKeyResolutionRequest(&seedKeyPath), sm.new32ByteRandomSeed)
 	if err != nil {
 		return err
 	}

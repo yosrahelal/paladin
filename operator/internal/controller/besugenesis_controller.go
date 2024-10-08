@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
@@ -55,14 +56,12 @@ func (r *BesuGenesisReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Generate a name for the Besu resources
 	name := generateBesuGenesisName(req.Name)
-	namespace := req.Namespace
 
 	// Fetch the BesuGenesis instance
 	var genesis corev1alpha1.BesuGenesis
 	if err := r.Get(ctx, req.NamespacedName, &genesis); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("BesuGenesis resource deleted, deleting related resources")
-			r.deleteGenesisConfigMap(ctx, namespace, name)
 
 			return ctrl.Result{}, nil
 		}
@@ -105,6 +104,8 @@ func (r *BesuGenesisReconciler) createConfigMap(ctx context.Context, genesis *co
 		if err != nil || !ready {
 			return nil, ready, err
 		}
+		controllerutil.SetControllerReference(genesis, newMap, r.Scheme)
+
 		err = r.Create(ctx, newMap)
 		if err != nil {
 			return nil, false, err
@@ -283,15 +284,6 @@ func (r *BesuGenesisReconciler) wrapGenesisInConfigMap(genesis *corev1alpha1.Bes
 // this is for generating unique names for the resources
 func generateBesuGenesisName(n string) string {
 	return fmt.Sprintf("besu-%s-genesis", n)
-}
-
-func (r *BesuGenesisReconciler) deleteGenesisConfigMap(ctx context.Context, namespace, name string) error {
-	var foundMap corev1.ConfigMap
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &foundMap)
-	if err == nil {
-		return r.Delete(ctx, &foundMap)
-	}
-	return err
 }
 
 func nearestIntegerAboveZero(v float64) int {

@@ -16,7 +16,10 @@
 package zetosigner
 
 import (
-	pb "github.com/kaleido-io/paladin/core/pkg/proto"
+	"fmt"
+
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
+	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -27,17 +30,24 @@ func decodeProvingRequest(payload []byte) (*pb.ProvingRequest, interface{}, erro
 	if err != nil {
 		return nil, nil, err
 	}
-	if inputs.CircuitId == "anon_enc" || inputs.CircuitId == "anon_enc_nullifier" {
+	if inputs.CircuitId == constants.CIRCUIT_ANON_ENC {
 		encExtras := pb.ProvingRequestExtras_Encryption{
 			EncryptionNonce: "",
 		}
 		if len(inputs.Extras) > 0 {
 			err := proto.Unmarshal(inputs.Extras, &encExtras)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, fmt.Errorf("failed to unmarshal proving request extras for circuit %s. %s", inputs.CircuitId, err)
 			}
 		}
 		return &inputs, &encExtras, nil
+	} else if inputs.CircuitId == constants.CIRCUIT_ANON_NULLIFIER {
+		var nullifierExtras pb.ProvingRequestExtras_Nullifiers
+		err := proto.Unmarshal(inputs.Extras, &nullifierExtras)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to unmarshal proving request extras for circuit %s. %s", inputs.CircuitId, err)
+		}
+		return &inputs, &nullifierExtras, nil
 	}
 	return &inputs, nil, nil
 }

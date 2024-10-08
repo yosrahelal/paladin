@@ -24,30 +24,33 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/pkg/config"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/httpserver"
+
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*config.TxManagerConfig, *mockComponents)) (context.Context, string, *txManager, func()) {
+func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*pldconf.TxManagerConfig, *mockComponents)) (context.Context, string, *txManager, func()) {
 	ctx, txm, txmDone := newTestTransactionManager(t, true, init...)
 
-	rpcServer, err := rpcserver.NewRPCServer(ctx, &rpcserver.Config{
-		HTTP: rpcserver.HTTPEndpointConfig{
-			Config: httpserver.Config{
+	rpcServer, err := rpcserver.NewRPCServer(ctx, &pldconf.RPCServerConfig{
+		HTTP: pldconf.RPCServerConfigHTTP{
+			HTTPServerConfig: pldconf.HTTPServerConfig{
 				Port:            confutil.P(0),
 				ShutdownTimeout: confutil.P("0"),
 			},
 		},
-		WS: rpcserver.WSEndpointConfig{Disabled: true},
+		WS: pldconf.RPCServerConfigWS{Disabled: true},
 	})
 	require.NoError(t, err)
 
@@ -74,7 +77,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	)
 	defer done()
 
-	rpcClient, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{URL: url})
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
 	require.NoError(t, err)
 
 	sampleABI := abi.ABI{
@@ -193,12 +196,15 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	blockNumber1 := int64(12345)
 	err = tmr.FinalizeTransactions(ctx, tmr.p.DB(), []*components.ReceiptInput{
 		{
-			TransactionID:   tx1ID,
-			ReceiptType:     components.RT_Success,
-			TransactionHash: &txHash1,
-			BlockNumber:     &blockNumber1,
+			TransactionID: tx1ID,
+			ReceiptType:   components.RT_Success,
+			OnChain: tktypes.OnChainLocation{
+				Type:            tktypes.OnChainTransaction,
+				TransactionHash: txHash1,
+				BlockNumber:     blockNumber1,
+			},
 		},
-	}, false)
+	})
 	require.NoError(t, err)
 
 	// We should get that back with full
@@ -229,13 +235,16 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	err = tmr.FinalizeTransactions(ctx, tmr.p.DB(), []*components.ReceiptInput{
 		{
-			TransactionID:   tx2ID,
-			ReceiptType:     components.RT_FailedOnChainWithRevertData,
-			TransactionHash: &txHash2,
-			BlockNumber:     &blockNumber2,
-			RevertData:      revertData,
+			TransactionID: tx2ID,
+			ReceiptType:   components.RT_FailedOnChainWithRevertData,
+			OnChain: tktypes.OnChainLocation{
+				Type:            tktypes.OnChainTransaction,
+				TransactionHash: txHash2,
+				BlockNumber:     blockNumber2,
+			},
+			RevertData: revertData,
 		},
-	}, false)
+	})
 	require.NoError(t, err)
 
 	// Ask for the receipt directly
@@ -283,7 +292,7 @@ func TestPublicTransactionPassthroughQueries(t *testing.T) {
 	)
 	defer done()
 
-	rpcClient, err := rpcclient.NewHTTPClient(ctx, &rpcclient.HTTPConfig{URL: url})
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
 	require.NoError(t, err)
 
 	// Simple query
@@ -346,4 +355,24 @@ func TestPublicTransactionPassthroughQueries(t *testing.T) {
 	err = rpcClient.CallRPC(ctx, &txn, "ptx_getPublicTransactionByHash", txHash)
 	require.NoError(t, err)
 	assert.Equal(t, sampleTxns[0], txn)
+}
+
+func TestIdentityResolvePassthroughQueries(t *testing.T) {
+
+	ctx, url, _, done := newTestTransactionManagerWithRPC(t,
+		func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.identityResolver.On("ResolveVerifier", mock.Anything, "lookup1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+				Return("0x6f4b36e614cf32a20f4c2146d9db4c59a699ea65", nil)
+		},
+	)
+	defer done()
+
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
+	require.NoError(t, err)
+
+	var verifier string
+	err = rpcClient.CallRPC(ctx, &verifier, "ptx_resolveVerifier", "lookup1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	require.NoError(t, err)
+	assert.Equal(t, "0x6f4b36e614cf32a20f4c2146d9db4c59a699ea65", verifier)
+
 }

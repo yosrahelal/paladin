@@ -29,15 +29,16 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -75,7 +76,7 @@ type pubTxManager struct {
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 
-	conf             *config.PublicTxManagerConfig
+	conf             *pldconf.PublicTxManagerConfig
 	thMetrics        *publicTxEngineMetrics
 	p                persistence.Persistence
 	bIndexer         blockindexer.BlockIndexer
@@ -124,7 +125,7 @@ type txActivityRecords struct {
 	records []ptxapi.TransactionActivityRecord
 }
 
-func NewPublicTransactionManager(ctx context.Context, conf *config.PublicTxManagerConfig) components.PublicTxManager {
+func NewPublicTransactionManager(ctx context.Context, conf *pldconf.PublicTxManagerConfig) components.PublicTxManager {
 	log.L(ctx).Debugf("Creating new enterprise transaction handler")
 
 	gasPriceClient := NewGasPriceClient(ctx, conf)
@@ -141,18 +142,22 @@ func NewPublicTransactionManager(ctx context.Context, conf *config.PublicTxManag
 		gasPriceClient:              gasPriceClient,
 		inFlightOrchestratorStale:   make(chan bool, 1),
 		signingAddressesPausedUntil: make(map[tktypes.EthAddress]time.Time),
-		maxInflight:                 confutil.IntMin(conf.Manager.MaxInFlightOrchestrators, 1, *config.PublicTxManagerDefaults.Manager.MaxInFlightOrchestrators),
-		orchestratorSwapTimeout:     confutil.DurationMin(conf.Manager.OrchestratorSwapTimeout, 0, *config.PublicTxManagerDefaults.Manager.OrchestratorSwapTimeout),
-		orchestratorStaleTimeout:    confutil.DurationMin(conf.Manager.OrchestratorStaleTimeout, 0, *config.PublicTxManagerDefaults.Manager.OrchestratorStaleTimeout),
-		orchestratorIdleTimeout:     confutil.DurationMin(conf.Manager.OrchestratorIdleTimeout, 0, *config.PublicTxManagerDefaults.Manager.OrchestratorIdleTimeout),
-		enginePollingInterval:       confutil.DurationMin(conf.Manager.Interval, 50*time.Millisecond, *config.PublicTxManagerDefaults.Manager.Interval),
-		nonceCacheTimeout:           confutil.DurationMin(conf.Manager.NonceCacheTimeout, 0, *config.PublicTxManagerDefaults.Manager.NonceCacheTimeout),
+		maxInflight:                 confutil.IntMin(conf.Manager.MaxInFlightOrchestrators, 1, *pldconf.PublicTxManagerDefaults.Manager.MaxInFlightOrchestrators),
+		orchestratorSwapTimeout:     confutil.DurationMin(conf.Manager.OrchestratorSwapTimeout, 0, *pldconf.PublicTxManagerDefaults.Manager.OrchestratorSwapTimeout),
+		orchestratorStaleTimeout:    confutil.DurationMin(conf.Manager.OrchestratorStaleTimeout, 0, *pldconf.PublicTxManagerDefaults.Manager.OrchestratorStaleTimeout),
+		orchestratorIdleTimeout:     confutil.DurationMin(conf.Manager.OrchestratorIdleTimeout, 0, *pldconf.PublicTxManagerDefaults.Manager.OrchestratorIdleTimeout),
+		enginePollingInterval:       confutil.DurationMin(conf.Manager.Interval, 50*time.Millisecond, *pldconf.PublicTxManagerDefaults.Manager.Interval),
+		nonceCacheTimeout:           confutil.DurationMin(conf.Manager.NonceCacheTimeout, 0, *pldconf.PublicTxManagerDefaults.Manager.NonceCacheTimeout),
 		retry:                       retry.NewRetryIndefinite(&conf.Manager.Retry),
 		gasPriceIncreaseMax:         gasPriceIncreaseMax,
-		gasPriceIncreasePercent:     confutil.Int(conf.GasPrice.IncreasePercentage, *config.PublicTxManagerDefaults.GasPrice.IncreasePercentage),
-		activityRecordCache:         cache.NewCache[string, *txActivityRecords](&conf.Manager.ActivityRecords.Config, &config.PublicTxManagerDefaults.Manager.ActivityRecords.Config),
-		maxActivityRecordsPerTx:     confutil.Int(conf.Manager.ActivityRecords.RecordsPerTransaction, *config.PublicTxManagerDefaults.Manager.ActivityRecords.RecordsPerTransaction),
+		gasPriceIncreasePercent:     confutil.Int(conf.GasPrice.IncreasePercentage, *pldconf.PublicTxManagerDefaults.GasPrice.IncreasePercentage),
+		activityRecordCache:         cache.NewCache[string, *txActivityRecords](&conf.Manager.ActivityRecords.CacheConfig, &pldconf.PublicTxManagerDefaults.Manager.ActivityRecords.CacheConfig),
+		maxActivityRecordsPerTx:     confutil.Int(conf.Manager.ActivityRecords.RecordsPerTransaction, *pldconf.PublicTxManagerDefaults.Manager.ActivityRecords.RecordsPerTransaction),
 	}
+}
+
+func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *components.ManagerInitResult, err error) {
+	return &components.ManagerInitResult{}, nil
 }
 
 // Post-init allows the manager to cross-bind to other components, or the Engine
@@ -174,12 +179,9 @@ func (ble *pubTxManager) PostInit(pic components.AllComponents) error {
 	log.L(ctx).Debugf("Initialized enterprise transaction handler")
 	ble.balanceManager = balanceManager
 	ble.p = pic.Persistence()
+	ble.submissionWriter = newSubmissionWriter(ble.ctx, ble.p, ble.conf)
 
 	return nil
-}
-
-func (ble *pubTxManager) PreInit(pic components.PreInitComponents) (result *components.ManagerInitResult, err error) {
-	return &components.ManagerInitResult{}, nil
 }
 
 func (ble *pubTxManager) Start() error {
@@ -203,7 +205,7 @@ func (ble *pubTxManager) Start() error {
 		go ble.engineLoop()
 	}
 	ble.MarkInFlightOrchestratorsStale()
-	ble.submissionWriter = newSubmissionWriter(ctx, ble.p, ble.conf)
+	ble.submissionWriter.Start()
 	log.L(ctx).Infof("Started enterprise transaction handler")
 	return nil
 }
@@ -802,16 +804,15 @@ func (pte *pubTxManager) GetPublicTransactionForHash(ctx context.Context, dbTX *
 
 }
 
+// note this function guarantees the return order of the matches corresponds to the input order
 func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, dbTX *gorm.DB, itxs []*blockindexer.IndexedTransactionNotify) ([]*components.PublicTxMatch, error) {
 
 	// Do a DB query in the TX to reverse lookup the TX details we need to match/update the completed status
 	// and return the list that matched (which is very possibly none as we only track transactions submitted
 	// via our node to the network).
-	txiByHash := make(map[tktypes.Bytes32]*blockindexer.IndexedTransactionNotify)
 	txHashes := make([]tktypes.Bytes32, len(itxs))
 	for i, itx := range itxs {
 		txHashes[i] = itx.Hash
-		txiByHash[itx.Hash] = itx
 	}
 	var lookups []*bindingsMatchingSubmission
 	err := dbTX.
@@ -825,30 +826,35 @@ func (pte *pubTxManager) MatchUpdateConfirmedTransactions(ctx context.Context, d
 		return nil, err
 	}
 
-	// Correlate our results with the inputs to build:
-	// - the result to return so the Paladin tx manager knows the linkage
-	// - the insert we will do in this DB transaction of all the completion records
-	results := make([]*components.PublicTxMatch, len(lookups))
-	completions := make([]*DBPublicTxnCompletion, len(lookups))
-	for i, match := range lookups {
-		txi := txiByHash[match.Submission.TransactionHash]
-		results[i] = &components.PublicTxMatch{
-			PaladinTXReference: components.PaladinTXReference{
-				TransactionID:   match.Transaction,
-				TransactionType: match.TransactionType,
-			},
-			IndexedTransactionNotify: txi,
-		}
-		completions[i] = &DBPublicTxnCompletion{
-			SignerNonce:     match.Submission.SignerNonce,
-			TransactionHash: match.Submission.TransactionHash,
-			Success:         txi.Result.V() == blockindexer.TXResult_SUCCESS,
-			RevertData:      txi.RevertReason,
+	// Correlate our results with the inputs to build - we guarantee to insert and return
+	// the results in the original order
+	results := make([]*components.PublicTxMatch, 0, len(lookups))
+	completions := make([]*DBPublicTxnCompletion, 0, len(lookups))
+	for _, txi := range itxs {
+		for _, match := range lookups {
+			if txi.Hash.Equals(&match.Submission.TransactionHash) {
+				// matched results in the order of the inputs
+				results = append(results, &components.PublicTxMatch{
+					PaladinTXReference: components.PaladinTXReference{
+						TransactionID:   match.Transaction,
+						TransactionType: match.TransactionType,
+					},
+					IndexedTransactionNotify: txi,
+				})
+				// completions to insert, in the order of the inputs
+				completions = append(completions, &DBPublicTxnCompletion{
+					SignerNonce:     match.SignerNonce,
+					TransactionHash: txi.Hash,
+					Success:         txi.Result.V() == blockindexer.TXResult_SUCCESS,
+					RevertData:      txi.RevertReason,
+				})
+				break
+			}
 		}
 	}
 
 	if len(completions) > 0 {
-		// We have some contracts to persist
+		// We have some completions to persis - in the same order as the confirmations that came in
 		err := dbTX.
 			Table("public_completions").
 			Clauses(clause.OnConflict{

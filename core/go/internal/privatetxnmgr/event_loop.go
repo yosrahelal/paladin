@@ -22,13 +22,14 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -95,9 +96,10 @@ type Orchestrator struct {
 	nodeID              string
 	domainAPI           components.DomainSmartContract
 	sequencer           ptmgrtypes.Sequencer
-	components          components.PreInitComponentsAndManagers
+	components          components.AllComponents
 	endorsementGatherer ptmgrtypes.EndorsementGatherer
 	publisher           ptmgrtypes.Publisher
+	identityResolver    components.IdentityResolver
 
 	store privatetxnstore.Store
 }
@@ -106,32 +108,33 @@ func NewOrchestrator(
 	ctx context.Context,
 	nodeID string,
 	contractAddress tktypes.EthAddress,
-	oc *config.PrivateTxManagerOrchestratorConfig,
-	allComponents components.PreInitComponentsAndManagers,
+	oc *pldconf.PrivateTxManagerOrchestratorConfig,
+	allComponents components.AllComponents,
 	domainAPI components.DomainSmartContract,
 	sequencer ptmgrtypes.Sequencer,
 	endorsementGatherer ptmgrtypes.EndorsementGatherer,
 	publisher ptmgrtypes.Publisher,
 	store privatetxnstore.Store,
+	identityResolver components.IdentityResolver,
 ) *Orchestrator {
 
 	newOrchestrator := &Orchestrator{
 		ctx:                  log.WithLogField(ctx, "role", fmt.Sprintf("orchestrator-%s", contractAddress)),
 		initiated:            time.Now(),
 		contractAddress:      contractAddress,
-		evalInterval:         confutil.DurationMin(oc.EvaluationInterval, 1*time.Millisecond, *config.PrivateTxManagerDefaults.Orchestrator.EvaluationInterval),
-		maxConcurrentProcess: confutil.Int(oc.MaxConcurrentProcess, *config.PrivateTxManagerDefaults.Orchestrator.MaxConcurrentProcess),
+		evalInterval:         confutil.DurationMin(oc.EvaluationInterval, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Orchestrator.EvaluationInterval),
+		maxConcurrentProcess: confutil.Int(oc.MaxConcurrentProcess, *pldconf.PrivateTxManagerDefaults.Orchestrator.MaxConcurrentProcess),
 		state:                OrchestratorStateNew,
 		stateEntryTime:       time.Now(),
 
 		incompleteTxSProcessMap: make(map[string]ptmgrtypes.TxProcessor),
-		persistenceRetryTimeout: confutil.DurationMin(oc.PersistenceRetryTimeout, 1*time.Millisecond, *config.PrivateTxManagerDefaults.Orchestrator.PersistenceRetryTimeout),
+		persistenceRetryTimeout: confutil.DurationMin(oc.PersistenceRetryTimeout, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Orchestrator.PersistenceRetryTimeout),
 
-		staleTimeout:                 confutil.DurationMin(oc.StaleTimeout, 1*time.Millisecond, *config.PrivateTxManagerDefaults.Orchestrator.StaleTimeout),
+		staleTimeout:                 confutil.DurationMin(oc.StaleTimeout, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Orchestrator.StaleTimeout),
 		processedTxIDs:               make(map[string]bool),
 		orchestrationEvalRequestChan: make(chan bool, 1),
 		stopProcess:                  make(chan bool, 1),
-		pendingEvents:                make(chan ptmgrtypes.PrivateTransactionEvent, *config.PrivateTxManagerDefaults.Orchestrator.MaxPendingEvents),
+		pendingEvents:                make(chan ptmgrtypes.PrivateTransactionEvent, *pldconf.PrivateTxManagerDefaults.Orchestrator.MaxPendingEvents),
 		nodeID:                       nodeID,
 		domainAPI:                    domainAPI,
 		sequencer:                    sequencer,
@@ -139,6 +142,7 @@ func NewOrchestrator(
 		endorsementGatherer:          endorsementGatherer,
 		publisher:                    publisher,
 		store:                        store,
+		identityResolver:             identityResolver,
 	}
 
 	newOrchestrator.sequencer = sequencer
@@ -179,6 +183,10 @@ func (oc *Orchestrator) handleEvent(ctx context.Context, event ptmgrtypes.Privat
 		transactionProccessor.HandleTransactionRevertedEvent(ctx, event)
 	case *ptmgrtypes.TransactionDelegatedEvent:
 		transactionProccessor.HandleTransactionDelegatedEvent(ctx, event)
+	case *ptmgrtypes.ResolveVerifierResponseEvent:
+		transactionProccessor.HandleResolveVerifierResponseEvent(ctx, event)
+	case *ptmgrtypes.ResolveVerifierErrorEvent:
+		transactionProccessor.HandleResolveVerifierErrorEvent(ctx, event)
 	default:
 		log.L(ctx).Warnf("Unknown event type: %T", event)
 	}
@@ -227,7 +235,7 @@ func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *component
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.publisher, oc.endorsementGatherer)
+			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.publisher, oc.endorsementGatherer, oc.identityResolver)
 		}
 		oc.incompleteTxSProcessMap[tx.ID.String()].Init(ctx)
 		oc.pendingEvents <- &ptmgrtypes.TransactionSubmittedEvent{
@@ -254,6 +262,7 @@ func (oc *Orchestrator) HandleEvent(ctx context.Context, event ptmgrtypes.Privat
 }
 
 func (oc *Orchestrator) Start(c context.Context) (done <-chan struct{}, err error) {
+	oc.store.Start()
 	oc.orchestratorLoopDone = make(chan struct{})
 	go oc.evaluationLoop()
 	oc.TriggerOrchestratorEvaluation()
@@ -294,7 +303,7 @@ func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status co
 
 // synchronously prepare and dispatch all given transactions to their associated signing address
 func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTransactions ptmgrtypes.DispatchableTransactions) error {
-
+	log.L(ctx).Debug("DispatchTransactions")
 	//prepare all transactions then dispatch them
 
 	// array of sequences with space for one per signing address
@@ -304,7 +313,8 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 	}
 
 	completed := false // and include whether we committed the DB transaction or not
-	for _, transactionIDs := range dispatchableTransactions {
+	for signingAddress, transactionIDs := range dispatchableTransactions {
+		log.L(ctx).Debugf("DispatchTransactions: %d transactions for signingAddress %s", len(transactionIDs), signingAddress)
 
 		preparedTransactions := make([]*components.PrivateTransaction, len(transactionIDs))
 
@@ -313,7 +323,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		}
 
 		for i, transactionID := range transactionIDs {
-			// prepare all trasnsactions for the given transaction IDs
+			// prepare all transactions for the given transaction IDs
 
 			sequence.PrivateTransactionDispatches[i] = &privatetxnstore.DispatchPersisted{
 				PrivateTransactionID: transactionID,
@@ -327,11 +337,14 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 			}
 
 			preparedTransaction, err := txProcessor.PrepareTransaction(ctx)
-
 			if err != nil {
 				log.L(ctx).Errorf("Error preparing transaction: %s", err)
 				//TODO this is a really bad time to be getting an error.  need to think carefully about how to handle this
 				return err
+			}
+			if preparedTransaction.PreparedPublicTransaction == nil {
+				// TODO: add handling
+				panic("private transactions triggering private transactions currently supported only in testbed")
 			}
 			preparedTransactions[i] = preparedTransaction
 		}
@@ -339,7 +352,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		preparedTransactionPayloads := make([]*components.EthTransaction, len(preparedTransactions))
 
 		for j, preparedTransaction := range preparedTransactions {
-			preparedTransactionPayloads[j] = preparedTransaction.PreparedTransaction
+			preparedTransactionPayloads[j] = preparedTransaction.PreparedPublicTransaction
 		}
 
 		//Now we have the payloads, we can prepare the submission
@@ -348,6 +361,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 
 		publicTXs := make([]*components.PublicTxSubmission, len(preparedTransactions))
 		for i, pt := range preparedTransactions {
+			log.L(ctx).Debugf("DispatchTransactions: creating PublicTxSubmission from %s", pt.Signer)
 			publicTXs[i] = &components.PublicTxSubmission{
 				Bindings: []*components.PaladinTXReference{{TransactionID: pt.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
 				PublicTxInput: ptxapi.PublicTxInput{
@@ -357,10 +371,10 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 				},
 			}
 			var req ethclient.ABIFunctionRequestBuilder
-			abiFn, err := ec.ABIFunction(ctx, pt.PreparedTransaction.FunctionABI)
+			abiFn, err := ec.ABIFunction(ctx, pt.PreparedPublicTransaction.FunctionABI)
 			if err == nil {
 				req = abiFn.R(ctx)
-				err = req.Input(pt.PreparedTransaction.Inputs).BuildCallData()
+				err = req.Input(pt.PreparedPublicTransaction.Inputs).BuildCallData()
 			}
 			if err != nil {
 				return err

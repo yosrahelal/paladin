@@ -23,11 +23,12 @@ import (
 	"time"
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"gorm.io/gorm"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -64,6 +65,7 @@ type Operation[T Writeable[R], R any] interface {
 type BatchHandler[T Writeable[R], R any] func(ctx context.Context, tx *gorm.DB, values []T) ([]Result[R], error)
 
 type Writer[T Writeable[R], R any] interface {
+	Start()                                                      // the routines do not run until this is called
 	Queue(ctx context.Context, value T) Operation[T, R]          // add an operation to be executed
 	QueueWithFlush(ctx context.Context, value T) Operation[T, R] // USE WITH CARE - causes write that picks up this operation to close its batch as soon as it picks this up
 	Shutdown()                                                   // waits for all in process work to complete, then shuts down
@@ -92,7 +94,7 @@ type writer[T Writeable[R], R any] struct {
 	writerId     string
 	batchTimeout time.Duration
 	batchMaxSize int
-	workerCount  uint32
+	workerCount  int
 	workQueues   []chan *op[T, R]
 	workersDone  []chan struct{}
 }
@@ -109,8 +111,8 @@ func NewWriter[T Writeable[R], R any](
 	bgCtx context.Context,
 	handler BatchHandler[T, R],
 	p persistence.Persistence,
-	conf *config.FlushWriterConfig,
-	defaults *config.FlushWriterConfig,
+	conf *pldconf.FlushWriterConfig,
+	defaults *pldconf.FlushWriterConfig,
 ) Writer[T, R] {
 	workerCount := confutil.IntMin(conf.WorkerCount, 1, *defaults.WorkerCount)
 	batchMaxSize := confutil.IntMin(conf.BatchMaxSize, 1, *defaults.BatchMaxSize)
@@ -119,20 +121,23 @@ func NewWriter[T Writeable[R], R any](
 		p:            p,
 		writerId:     tktypes.ShortID(), // so logs distinguish these writers from any others
 		handler:      handler,
-		workerCount:  (uint32)(workerCount),
+		workerCount:  workerCount,
 		batchTimeout: batchTimeout,
 		batchMaxSize: batchMaxSize,
-		workersDone:  make([]chan struct{}, workerCount),
-		workQueues:   make([]chan *op[T, R], workerCount),
 	}
 	w.bgCtx, w.cancelCtx = context.WithCancel(bgCtx)
-	log.L(bgCtx).Debugf("Starting %d workers for writer %s", workerCount, w.writerId)
-	for i := 0; i < workerCount; i++ {
+	return w
+}
+
+func (w *writer[T, R]) Start() {
+	log.L(w.bgCtx).Debugf("Starting %d workers for writer %s", w.workerCount, w.writerId)
+	w.workersDone = make([]chan struct{}, w.workerCount)
+	w.workQueues = make([]chan *op[T, R], w.workerCount)
+	for i := 0; i < w.workerCount; i++ {
 		w.workersDone[i] = make(chan struct{})
-		w.workQueues[i] = make(chan *op[T, R], batchMaxSize)
+		w.workQueues[i] = make(chan *op[T, R], w.batchMaxSize)
 		go w.worker(i)
 	}
-	return w
 }
 
 func (w *writer[T, R]) Queue(ctx context.Context, value T) Operation[T, R] {
@@ -175,7 +180,7 @@ func (w *writer[T, R]) queue(ctx context.Context, value T, flush bool) *op[T, R]
 	// threads writing state updates, and threads writing new states.
 	h := fnv.New32a() // simple non-cryptographic hash algo
 	_, _ = h.Write([]byte(op.writeKey))
-	routine := h.Sum32() % w.workerCount
+	routine := h.Sum32() % uint32(w.workerCount)
 	log.L(ctx).Debugf("Queuing write operation %s to writer_%s_%.4d", w.writerId, op.id, routine)
 	select {
 	case w.workQueues[routine] <- op: // it's queued

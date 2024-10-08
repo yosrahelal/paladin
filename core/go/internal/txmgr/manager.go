@@ -18,8 +18,9 @@ package txmgr
 import (
 	"context"
 
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
@@ -27,24 +28,26 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func NewTXManager(ctx context.Context, conf *config.TxManagerConfig) components.TXManager {
+func NewTXManager(ctx context.Context, conf *pldconf.TxManagerConfig) components.TXManager {
 	return &txManager{
-		abiCache: cache.NewCache[tktypes.Bytes32, *ptxapi.StoredABI](&conf.ABI.Cache, &config.TxManagerDefaults.ABI.Cache),
+		abiCache: cache.NewCache[tktypes.Bytes32, *ptxapi.StoredABI](&conf.ABI.Cache, &pldconf.TxManagerDefaults.ABI.Cache),
 	}
 }
 
 type txManager struct {
-	p            persistence.Persistence
-	publicTxMgr  components.PublicTxManager
-	privateTxMgr components.PrivateTxManager
-	abiCache     cache.Cache[tktypes.Bytes32, *ptxapi.StoredABI]
-	rpcModule    *rpcserver.RPCModule
+	p                persistence.Persistence
+	publicTxMgr      components.PublicTxManager
+	privateTxMgr     components.PrivateTxManager
+	identityResolver components.IdentityResolver
+	abiCache         cache.Cache[tktypes.Bytes32, *ptxapi.StoredABI]
+	rpcModule        *rpcserver.RPCModule
 }
 
 func (tm *txManager) PostInit(c components.AllComponents) error {
 	tm.p = c.Persistence()
 	tm.publicTxMgr = c.PublicTxManager()
 	tm.privateTxMgr = c.PrivateTxManager()
+	tm.identityResolver = c.IdentityResolver()
 	return nil
 }
 

@@ -20,26 +20,32 @@ import (
 	"fmt"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 )
 
-func NewEndorsementGatherer(psc components.DomainSmartContract, keyMgr ethclient.KeyManager) ptmgrtypes.EndorsementGatherer {
+func NewEndorsementGatherer(psc components.DomainSmartContract, dCtx components.DomainContext, keyMgr ethclient.KeyManager) ptmgrtypes.EndorsementGatherer {
 	return &endorsementGatherer{
 		psc:    psc,
+		dCtx:   dCtx,
 		keyMgr: keyMgr,
 	}
 }
 
 type endorsementGatherer struct {
 	psc    components.DomainSmartContract
+	dCtx   components.DomainContext
 	keyMgr ethclient.KeyManager
+}
+
+func (e *endorsementGatherer) DomainContext() components.DomainContext {
+	return e.dCtx
 }
 
 func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, partyName string, endorsementRequest *prototk.AttestationRequest) (*prototk.AttestationResult, *string, error) {
@@ -50,7 +56,7 @@ func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transaction
 		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, errorMessage)
 	}
 	// Invoke the domain
-	endorseRes, err := e.psc.EndorseTransaction(ctx, &components.PrivateTransactionEndorseRequest{
+	endorseRes, err := e.psc.EndorseTransaction(e.dCtx, &components.PrivateTransactionEndorseRequest{
 		TransactionSpecification: transactionSpecification,
 		Verifiers:                verifiers,
 		Signatures:               signatures,

@@ -31,11 +31,12 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/inflight"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
@@ -97,7 +98,7 @@ type blockIndexer struct {
 	dispatcherDone             chan struct{}
 }
 
-func NewBlockIndexer(ctx context.Context, config *config.BlockIndexerConfig, wsConfig *rpcclient.WSConfig, persistence persistence.Persistence) (_ BlockIndexer, err error) {
+func NewBlockIndexer(ctx context.Context, config *pldconf.BlockIndexerConfig, wsConfig *pldconf.WSClientConfig, persistence persistence.Persistence) (_ BlockIndexer, err error) {
 
 	blockListener, err := newBlockListener(ctx, config, wsConfig)
 	if err != nil {
@@ -107,21 +108,21 @@ func NewBlockIndexer(ctx context.Context, config *config.BlockIndexerConfig, wsC
 	return newBlockIndexer(ctx, config, persistence, blockListener)
 }
 
-func newBlockIndexer(ctx context.Context, conf *config.BlockIndexerConfig, persistence persistence.Persistence, blockListener *blockListener) (bi *blockIndexer, err error) {
+func newBlockIndexer(ctx context.Context, conf *pldconf.BlockIndexerConfig, persistence persistence.Persistence, blockListener *blockListener) (bi *blockIndexer, err error) {
 	bi = &blockIndexer{
 		parentCtxForReset:          ctx, // stored for startOrResetProcessing
 		persistence:                persistence,
 		wsConn:                     blockListener.wsConn,
 		blockListener:              blockListener,
-		requiredConfirmations:      confutil.IntMin(conf.RequiredConfirmations, 0, *config.BlockIndexerDefaults.RequiredConfirmations),
+		requiredConfirmations:      confutil.IntMin(conf.RequiredConfirmations, 0, *pldconf.BlockIndexerDefaults.RequiredConfirmations),
 		retry:                      blockListener.retry,
-		batchSize:                  confutil.IntMin(conf.CommitBatchSize, 1, *config.BlockIndexerDefaults.CommitBatchSize),
-		batchTimeout:               confutil.DurationMin(conf.CommitBatchTimeout, 0, *config.BlockIndexerDefaults.CommitBatchTimeout),
+		batchSize:                  confutil.IntMin(conf.CommitBatchSize, 1, *pldconf.BlockIndexerDefaults.CommitBatchSize),
+		batchTimeout:               confutil.DurationMin(conf.CommitBatchTimeout, 0, *pldconf.BlockIndexerDefaults.CommitBatchTimeout),
 		txWaiters:                  inflight.NewInflightManager[tktypes.Bytes32, *IndexedTransaction](tktypes.ParseBytes32),
 		eventStreams:               make(map[uuid.UUID]*eventStream),
 		eventStreamsHeadSet:        make(map[uuid.UUID]*eventStream),
-		esBlockDispatchQueueLength: confutil.IntMin(conf.EventStreams.BlockDispatchQueueLength, 0, *config.EventStreamDefaults.BlockDispatchQueueLength),
-		esCatchUpQueryPageSize:     confutil.IntMin(conf.EventStreams.CatchUpQueryPageSize, 0, *config.EventStreamDefaults.CatchUpQueryPageSize),
+		esBlockDispatchQueueLength: confutil.IntMin(conf.EventStreams.BlockDispatchQueueLength, 0, *pldconf.EventStreamDefaults.BlockDispatchQueueLength),
+		esCatchUpQueryPageSize:     confutil.IntMin(conf.EventStreams.CatchUpQueryPageSize, 0, *pldconf.EventStreamDefaults.CatchUpQueryPageSize),
 		dispatcherTap:              make(chan struct{}, 1),
 	}
 	bi.highestConfirmedBlock.Store(-1)
@@ -242,7 +243,7 @@ func (bi *blockIndexer) GetBlockListenerHeight(ctx context.Context) (confirmed u
 	return bi.blockListener.getHighestBlock(ctx)
 }
 
-func (bi *blockIndexer) setFromBlock(ctx context.Context, conf *config.BlockIndexerConfig) error {
+func (bi *blockIndexer) setFromBlock(ctx context.Context, conf *pldconf.BlockIndexerConfig) error {
 	var vUntyped interface{}
 	if conf.FromBlock == nil {
 		vUntyped = "latest"
@@ -396,8 +397,26 @@ type blockWriterBatch struct {
 	blocks         []*BlockInfoJSONRPC
 	summaries      []string
 	receipts       [][]*TXReceiptJSONRPC
+	receiptResults []error
 	timeoutContext context.Context
 	timeoutCancel  func()
+}
+
+func (bi *blockIndexer) dispatchEnrich(ctx context.Context, batch *blockWriterBatch, toDispatch *BlockInfoJSONRPC) {
+	batch.lock.Lock()
+	defer batch.lock.Unlock()
+	blockIndex := len(batch.blocks)
+	batch.blocks = append(batch.blocks, toDispatch)
+	batch.summaries = append(batch.summaries, fmt.Sprintf("%s/%d", toDispatch.Hash.String(), toDispatch.Number))
+	batch.receiptResults = append(batch.receiptResults, nil)
+	if len(toDispatch.Transactions) > 0 {
+		batch.receipts = append(batch.receipts, nil)
+		batch.wg.Add(1) // we need to wait for this to return
+		go bi.hydrateBlock(ctx, batch, blockIndex)
+	} else {
+		// No need to call get receipts for empty blocks
+		batch.receipts = append(batch.receipts, []*TXReceiptJSONRPC{})
+	}
 }
 
 func (bi *blockIndexer) dispatcher(ctx context.Context) {
@@ -429,14 +448,7 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 				batch.timeoutContext, batch.timeoutCancel = context.WithTimeout(ctx, bi.batchTimeout)
 			}
 			timeoutContext = batch.timeoutContext
-			batch.lock.Lock()
-			blockIndex := len(batch.blocks)
-			batch.blocks = append(batch.blocks, toDispatch)
-			batch.receipts = append(batch.receipts, nil)
-			batch.summaries = append(batch.summaries, fmt.Sprintf("%s/%d", toDispatch.Hash.String(), toDispatch.Number))
-			batch.wg.Add(1)
-			batch.lock.Unlock()
-			go bi.hydrateBlock(ctx, batch, blockIndex)
+			bi.dispatchEnrich(ctx, batch, toDispatch)
 		}
 
 		if batch != nil && (timedOut || (len(batch.blocks) >= bi.batchSize)) {
@@ -445,9 +457,9 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 			log.L(ctx).Debugf("Flushing block indexing batch: %s", batch.summaries)
 			batch.wg.Wait()
 			// Check we got all the results, or we have to reset
-			for _, r := range batch.receipts {
-				if r == nil {
-					log.L(ctx).Errorf("Block indexer requires reset after failing to query blocks: %s", batch.summaries)
+			for i, receiptError := range batch.receiptResults {
+				if receiptError != nil {
+					log.L(ctx).Errorf("Block indexer requires reset after failing to query receipts for block %s in batch of %d blocks: %s", batch.blocks[i].Hash, len(batch.blocks), receiptError)
 					go bi.startOrReset()
 					return // We know we need to exit
 				}
@@ -477,19 +489,31 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 
 func (bi *blockIndexer) hydrateBlock(ctx context.Context, batch *blockWriterBatch, blockIndex int) {
 	defer batch.wg.Done()
-	_ = bi.retry.Do(ctx, func(attempt int) (retryable bool, err error) {
+	err := bi.retry.Do(ctx, func(attempt int) (bool, error) {
 		// We use eth_getBlockReceipts, which takes either a number or a hash (supported by Besu and go-ethereum)
 		rpcErr := bi.wsConn.CallRPC(ctx, &batch.receipts[blockIndex], "eth_getBlockReceipts", batch.blocks[blockIndex].Hash)
-		if rpcErr != nil {
-			log.L(ctx).Errorf("Failed to query block %s: %s", batch.summaries[blockIndex], err)
-			// If we get a not-found, that's an indication the confirmations are not set correctly,
-			// but there's no point in continuing to retry as a confirmed block should be available
-			// on our connection.
-			// This nil entry in batch.receipts[blockIndex] triggers a reset.
-			return !isNotFound(rpcErr), rpcErr
+		if rpcErr != nil || batch.receipts[blockIndex] == nil {
+			var err error = rpcErr
+			retry := true
+			log.L(ctx).Errorf("Failed to query block %s: %v", batch.summaries[blockIndex], rpcErr)
+			if err == nil {
+				// TODO: We've seen this with Besu instead of an error, and need to diagnose
+				// Convert to a not found, but DO retry here.
+				log.L(ctx).Warnf("Blockchain node return null from eth_getBlockReceipts")
+				err = i18n.NewError(ctx, msgs.MsgBlockIndexerConfirmedBlockNotFound, batch.blocks[blockIndex].Hash, batch.blocks[blockIndex].Number)
+			} else if isNotFound(err) {
+				// If we get a not-found, that's an indication the confirmations are not set correctly,
+				// but there's no point in continuing to retry as a confirmed block should be available
+				// on our connection.
+				// This nil entry in batch.receipts[blockIndex] triggers a reset.
+				retry = false
+				err = i18n.WrapError(ctx, rpcErr, msgs.MsgBlockIndexerConfirmedBlockNotFound, batch.blocks[blockIndex].Hash, batch.blocks[blockIndex].Number)
+			}
+			return retry, err
 		}
 		return false, nil
 	})
+	batch.receiptResults[blockIndex] = err
 }
 
 func (bi *blockIndexer) logToIndexedEvent(l *LogJSONRPC) *IndexedEvent {

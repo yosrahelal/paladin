@@ -1,0 +1,67 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Values.operator.name }}
+  namespace: {{ .Values.operator.namespace }}
+rules:
+- apiGroups:
+  - core.paladin.io
+  resources:
+  - smartcontracts
+  - besus
+  - paladins
+  - besugeneses
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - core.paladin.io
+  resources:
+  - smartcontracts/status
+  - besus/status
+  - paladins/status
+  - besugeneses/status
+  verbs:
+  - get
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  verbs:
+  - get
+  - list
+  - create
+  - delete
+  - update
+  - patch
+  - watch
+- apiGroups:
+  - ""  # core
+  resources:
+  - services
+  - configmaps
+  - secrets
+  - persistentvolumeclaims
+  verbs:
+  - get
+  - list
+  - create
+  - delete
+  - update
+  - patch
+  - watch
+- apiGroups:
+  - "policy"
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - get
+  - list
+  - create
+  - delete
+  - update
+  - patch
+  - watch

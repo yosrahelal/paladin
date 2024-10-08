@@ -21,10 +21,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -34,22 +35,25 @@ type transportManager struct {
 	bgCtx context.Context
 	mux   sync.Mutex
 
-	conf            *config.TransportManagerConfig
+	conf            *pldconf.TransportManagerConfig
 	localNodeName   string
 	registryManager components.RegistryManager
-	engine          components.Engine
 
 	transportsByID   map[uuid.UUID]*transport
 	transportsByName map[string]*transport
+
+	destinations    map[string]components.TransportClient
+	destinationsMux sync.RWMutex
 }
 
-func NewTransportManager(bgCtx context.Context, conf *config.TransportManagerConfig) components.TransportManager {
+func NewTransportManager(bgCtx context.Context, conf *pldconf.TransportManagerConfig) components.TransportManager {
 	return &transportManager{
 		bgCtx:            bgCtx,
 		conf:             conf,
 		localNodeName:    conf.NodeName,
 		transportsByID:   make(map[uuid.UUID]*transport),
 		transportsByName: make(map[string]*transport),
+		destinations:     make(map[string]components.TransportClient),
 	}
 }
 
@@ -65,7 +69,6 @@ func (tm *transportManager) PostInit(c components.AllComponents) error {
 	// plugin manager starts, and thus before any domain would have started any go-routine
 	// that could have cached a nil value in memory.
 	tm.registryManager = c.RegistryManager()
-	tm.engine = c.Engine()
 	return nil
 }
 
@@ -84,6 +87,18 @@ func (tm *transportManager) Stop() {
 
 }
 
+func (tm *transportManager) RegisterClient(ctx context.Context, client components.TransportClient) error {
+	tm.destinationsMux.Lock()
+	defer tm.destinationsMux.Unlock()
+	if _, found := tm.destinations[client.Destination()]; found {
+		log.L(ctx).Errorf("Client already registered for destination %s", client.Destination())
+		return i18n.NewError(tm.bgCtx, msgs.MsgTransportClientAlreadyRegistered, client.Destination())
+	}
+	tm.destinations[client.Destination()] = client
+	return nil
+
+}
+
 func (tm *transportManager) cleanupTransport(t *transport) {
 	// must not hold the transport lock when running this
 	t.close()
@@ -91,8 +106,8 @@ func (tm *transportManager) cleanupTransport(t *transport) {
 	delete(tm.transportsByName, t.name)
 }
 
-func (tm *transportManager) ConfiguredTransports() map[string]*config.PluginConfig {
-	pluginConf := make(map[string]*config.PluginConfig)
+func (tm *transportManager) ConfiguredTransports() map[string]*pldconf.PluginConfig {
+	pluginConf := make(map[string]*pldconf.PluginConfig)
 	for name, conf := range tm.conf.Transports {
 		pluginConf[name] = &conf.Plugin
 	}
@@ -184,8 +199,13 @@ func (tm *transportManager) Send(ctx context.Context, msg *components.TransportM
 	if msg.CorrelationID != nil {
 		correlID = confutil.P(msg.CorrelationID.String())
 	}
+	var zeroUUID uuid.UUID
+	if msg.MessageID == zeroUUID {
+		msg.MessageID = uuid.New()
+	}
 	err = transport.send(ctx, &prototk.Message{
-		MessageId:     uuid.New().String(),
+		MessageType:   msg.MessageType,
+		MessageId:     msg.MessageID.String(),
 		CorrelationId: correlID,
 		Destination:   msg.Destination.String(),
 		ReplyTo:       msg.ReplyTo.String(),

@@ -22,12 +22,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -36,16 +37,17 @@ import (
 )
 
 type orchestratorDepencyMocks struct {
-	allComponents        *componentmocks.AllComponents
-	domainStateInterface *componentmocks.DomainStateInterface
-	domainSmartContract  *componentmocks.DomainSmartContract
-	domainMgr            *componentmocks.DomainManager
-	transportManager     *componentmocks.TransportManager
-	stateStore           *componentmocks.StateStore
-	keyManager           *componentmocks.KeyManager
-	sequencer            *privatetxnmgrmocks.Sequencer
-	endorsementGatherer  *privatetxnmgrmocks.EndorsementGatherer
-	publisher            *privatetxnmgrmocks.Publisher
+	allComponents       *componentmocks.AllComponents
+	domainSmartContract *componentmocks.DomainSmartContract
+	domainContext       *componentmocks.DomainContext
+	domainMgr           *componentmocks.DomainManager
+	transportManager    *componentmocks.TransportManager
+	stateStore          *componentmocks.StateManager
+	keyManager          *componentmocks.KeyManager
+	sequencer           *privatetxnmgrmocks.Sequencer
+	endorsementGatherer *privatetxnmgrmocks.EndorsementGatherer
+	publisher           *privatetxnmgrmocks.Publisher
+	identityResolver    *componentmocks.IdentityResolver
 }
 
 func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress *tktypes.EthAddress) (*Orchestrator, *orchestratorDepencyMocks, func()) {
@@ -54,18 +56,19 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	}
 
 	mocks := &orchestratorDepencyMocks{
-		allComponents:        componentmocks.NewAllComponents(t),
-		domainStateInterface: componentmocks.NewDomainStateInterface(t),
-		domainSmartContract:  componentmocks.NewDomainSmartContract(t),
-		domainMgr:            componentmocks.NewDomainManager(t),
-		transportManager:     componentmocks.NewTransportManager(t),
-		stateStore:           componentmocks.NewStateStore(t),
-		keyManager:           componentmocks.NewKeyManager(t),
-		sequencer:            privatetxnmgrmocks.NewSequencer(t),
-		endorsementGatherer:  privatetxnmgrmocks.NewEndorsementGatherer(t),
-		publisher:            privatetxnmgrmocks.NewPublisher(t),
+		allComponents:       componentmocks.NewAllComponents(t),
+		domainSmartContract: componentmocks.NewDomainSmartContract(t),
+		domainContext:       componentmocks.NewDomainContext(t),
+		domainMgr:           componentmocks.NewDomainManager(t),
+		transportManager:    componentmocks.NewTransportManager(t),
+		stateStore:          componentmocks.NewStateManager(t),
+		keyManager:          componentmocks.NewKeyManager(t),
+		sequencer:           privatetxnmgrmocks.NewSequencer(t),
+		endorsementGatherer: privatetxnmgrmocks.NewEndorsementGatherer(t),
+		publisher:           privatetxnmgrmocks.NewPublisher(t),
+		identityResolver:    componentmocks.NewIdentityResolver(t),
 	}
-	mocks.allComponents.On("StateStore").Return(mocks.stateStore).Maybe()
+	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
 	mocks.allComponents.On("TransportManager").Return(mocks.transportManager).Maybe()
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
@@ -74,9 +77,10 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	p, persistenceDone, err := persistence.NewUnitTestPersistence(ctx)
 	require.NoError(t, err)
 	mocks.allComponents.On("Persistence").Return(p).Maybe()
+	mocks.endorsementGatherer.On("DomainContext").Return(mocks.domainContext).Maybe()
 
-	store := privatetxnstore.NewStore(ctx, &config.FlushWriterConfig{}, p)
-	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &config.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher, store)
+	store := privatetxnstore.NewStore(ctx, &pldconf.FlushWriterConfig{}, p)
+	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher, store, mocks.identityResolver)
 	ocDone, err := o.Start(ctx)
 	require.NoError(t, err)
 
@@ -87,6 +91,19 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 
 }
 
+func waitForChannel[T any](ch chan T) T {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case ret := <-ch:
+			return ret
+		case <-ticker.C:
+			panic("test failed")
+		}
+	}
+}
+
 func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
 	ctx := context.Background()
 
@@ -94,7 +111,8 @@ func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
 
 	newTxID := uuid.New()
 	testTx := &components.PrivateTransaction{
-		ID: newTxID,
+		ID:          newTxID,
+		PreAssembly: &components.TransactionPreAssembly{},
 	}
 
 	waitForAssemble := make(chan bool, 1)
@@ -114,7 +132,7 @@ func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
 	assert.False(t, testOc.ProcessNewTransaction(ctx, testTx))
 	assert.Equal(t, 1, len(testOc.incompleteTxSProcessMap))
 
-	<-waitForAssemble
+	_ = waitForChannel(waitForAssemble)
 
 	// add again doesn't cause a repeat process of the current stage context
 	assert.False(t, testOc.ProcessNewTransaction(ctx, testTx))

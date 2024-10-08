@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,14 +28,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/mocks/rpcclientmocks"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tlsconf"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -107,13 +108,13 @@ func testParseABI(abiJSON []byte) abi.ABI {
 }
 
 func newTestBlockIndexer(t *testing.T) (context.Context, *blockIndexer, *rpcclientmocks.WSClient, func()) {
-	return newTestBlockIndexerConf(t, &config.BlockIndexerConfig{
+	return newTestBlockIndexerConf(t, &pldconf.BlockIndexerConfig{
 		CommitBatchSize: confutil.P(1), // makes testing simpler
-		FromBlock:       tktypes.RawJSON(`0`),
+		FromBlock:       json.RawMessage(`0`),
 	})
 }
 
-func newTestBlockIndexerConf(t *testing.T, config *config.BlockIndexerConfig) (context.Context, *blockIndexer, *rpcclientmocks.WSClient, func()) {
+func newTestBlockIndexerConf(t *testing.T, config *pldconf.BlockIndexerConfig) (context.Context, *blockIndexer, *rpcclientmocks.WSClient, func()) {
 	logrus.SetLevel(logrus.DebugLevel)
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
@@ -135,7 +136,7 @@ func newTestBlockIndexerConf(t *testing.T, config *config.BlockIndexerConfig) (c
 	}
 }
 
-func newMockBlockIndexer(t *testing.T, config *config.BlockIndexerConfig) (context.Context, *blockIndexer, *rpcclientmocks.WSClient, *mockpersistence.SQLMockProvider, func()) {
+func newMockBlockIndexer(t *testing.T, config *pldconf.BlockIndexerConfig) (context.Context, *blockIndexer, *rpcclientmocks.WSClient, *mockpersistence.SQLMockProvider, func()) {
 	ctx, bl, mRPC, done := newTestBlockListener(t)
 
 	p, err := mockpersistence.NewSQLMockProvider()
@@ -269,10 +270,10 @@ func mockBlocksRPCCallsDynamic(mRPC *rpcclientmocks.WSClient, dynamic func(args 
 }
 
 func TestNewBlockIndexerBadTLS(t *testing.T) {
-	_, err := NewBlockIndexer(context.Background(), &config.BlockIndexerConfig{}, &rpcclient.WSConfig{
-		HTTPConfig: rpcclient.HTTPConfig{
+	_, err := NewBlockIndexer(context.Background(), &pldconf.BlockIndexerConfig{}, &pldconf.WSClientConfig{
+		HTTPClientConfig: pldconf.HTTPClientConfig{
 			URL: "wss://localhost:8546",
-			TLS: tlsconf.Config{
+			TLS: pldconf.TLSConfig{
 				CAFile: t.TempDir(),
 			},
 		},
@@ -286,10 +287,10 @@ func TestNewBlockIndexerRestoreCheckpointFail(t *testing.T) {
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows([]string{}))
 
-	wsConf := &rpcclient.WSConfig{HTTPConfig: rpcclient.HTTPConfig{URL: "ws://localhost:8546"}}
+	wsConf := &pldconf.WSClientConfig{HTTPClientConfig: pldconf.HTTPClientConfig{URL: "ws://localhost:8546"}}
 
 	cancelledCtx, cancelCtx := context.WithCancel(context.Background())
-	bi, err := NewBlockIndexer(cancelledCtx, &config.BlockIndexerConfig{}, wsConf, p.P)
+	bi, err := NewBlockIndexer(cancelledCtx, &pldconf.BlockIndexerConfig{}, wsConf, p.P)
 	require.NoError(t, err)
 	cancelCtx()
 
@@ -808,53 +809,53 @@ func TestBlockIndexerStartFromBlock(t *testing.T) {
 	require.NoError(t, err)
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows([]string{}))
-	_, err = newBlockIndexer(ctx, &config.BlockIndexerConfig{
-		FromBlock: tktypes.RawJSON(`"pending"`),
+	_, err = newBlockIndexer(ctx, &pldconf.BlockIndexerConfig{
+		FromBlock: json.RawMessage(`"pending"`),
 	}, p.P, bl)
 	assert.Regexp(t, "PD011300.*pending", err)
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows([]string{}))
-	bi, err := newBlockIndexer(ctx, &config.BlockIndexerConfig{
-		FromBlock: tktypes.RawJSON(`"latest"`),
+	bi, err := newBlockIndexer(ctx, &pldconf.BlockIndexerConfig{
+		FromBlock: json.RawMessage(`"latest"`),
 	}, p.P, bl)
 	require.NoError(t, err)
 	assert.Nil(t, bi.fromBlock)
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows([]string{}))
-	bi, err = newBlockIndexer(ctx, &config.BlockIndexerConfig{
-		FromBlock: tktypes.RawJSON(`null`),
+	bi, err = newBlockIndexer(ctx, &pldconf.BlockIndexerConfig{
+		FromBlock: json.RawMessage(`null`),
 	}, p.P, bl)
 	require.NoError(t, err)
 	assert.Nil(t, bi.fromBlock)
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows([]string{}))
-	bi, err = newBlockIndexer(ctx, &config.BlockIndexerConfig{}, p.P, bl)
+	bi, err = newBlockIndexer(ctx, &pldconf.BlockIndexerConfig{}, p.P, bl)
 	require.NoError(t, err)
 	assert.Nil(t, bi.fromBlock)
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows([]string{}))
-	bi, err = newBlockIndexer(ctx, &config.BlockIndexerConfig{
-		FromBlock: tktypes.RawJSON(`123`),
+	bi, err = newBlockIndexer(ctx, &pldconf.BlockIndexerConfig{
+		FromBlock: json.RawMessage(`123`),
 	}, p.P, bl)
 	require.NoError(t, err)
 	assert.Equal(t, ethtypes.HexUint64(123), *bi.fromBlock)
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows([]string{}))
-	bi, err = newBlockIndexer(ctx, &config.BlockIndexerConfig{
-		FromBlock: tktypes.RawJSON(`"0x7b"`),
+	bi, err = newBlockIndexer(ctx, &pldconf.BlockIndexerConfig{
+		FromBlock: json.RawMessage(`"0x7b"`),
 	}, p.P, bl)
 	require.NoError(t, err)
 	assert.Equal(t, ethtypes.HexUint64(123), *bi.fromBlock)
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows([]string{}))
-	_, err = newBlockIndexer(ctx, &config.BlockIndexerConfig{
-		FromBlock: tktypes.RawJSON(`!!! bad JSON`),
+	_, err = newBlockIndexer(ctx, &pldconf.BlockIndexerConfig{
+		FromBlock: json.RawMessage(`!!! bad JSON`),
 	}, p.P, bl)
 	assert.Regexp(t, "PD011300", err)
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows([]string{}))
-	_, err = newBlockIndexer(ctx, &config.BlockIndexerConfig{
-		FromBlock: tktypes.RawJSON(`false`),
+	_, err = newBlockIndexer(ctx, &pldconf.BlockIndexerConfig{
+		FromBlock: json.RawMessage(`false`),
 	}, p.P, bl)
 	assert.Regexp(t, "PD011300", err)
 }
@@ -871,13 +872,13 @@ func TestBlockIndexerBadStream(t *testing.T) {
 	}).AddRow(
 		uuid.New().String(), `!!!bad JSON`,
 	))
-	_, err = newBlockIndexer(ctx, &config.BlockIndexerConfig{}, p.P, bl)
+	_, err = newBlockIndexer(ctx, &pldconf.BlockIndexerConfig{}, p.P, bl)
 	assert.Regexp(t, "PD011303", err)
 }
 
 func TestGetIndexedTransactionByHashErrors(t *testing.T) {
 
-	ctx, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*indexed_transactions").WillReturnRows(sqlmock.NewRows([]string{}))
@@ -987,7 +988,7 @@ func TestBlockIndexerWaitForTransactionRevert(t *testing.T) {
 
 func TestWaitForTransactionErrorCases(t *testing.T) {
 
-	ctx, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*indexed_transactions").WillReturnError(fmt.Errorf("pop"))
@@ -999,7 +1000,7 @@ func TestWaitForTransactionErrorCases(t *testing.T) {
 
 func TestDecodeTransactionEventsFail(t *testing.T) {
 
-	ctx, bi, _, p, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	p.Mock.ExpectQuery("SELECT.*indexed_events").WillReturnError(fmt.Errorf("pop"))
@@ -1011,7 +1012,7 @@ func TestDecodeTransactionEventsFail(t *testing.T) {
 
 func TestWaitForTransactionSuccessGetReceiptFail(t *testing.T) {
 
-	ctx, bi, mRPC, _, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	ctx, bi, mRPC, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", mock.Anything).Return(
@@ -1025,7 +1026,7 @@ func TestWaitForTransactionSuccessGetReceiptFail(t *testing.T) {
 
 func TestWaitForTransactionSuccessGetReceiptFallback(t *testing.T) {
 
-	ctx, bi, mRPC, _, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	ctx, bi, mRPC, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getTransactionReceipt", mock.Anything).Run(
@@ -1041,7 +1042,7 @@ func TestWaitForTransactionSuccessGetReceiptFallback(t *testing.T) {
 
 func TestGetIndexedTransactionByNonceFail(t *testing.T) {
 
-	ctx, bi, _, mdb, done := newMockBlockIndexer(t, &config.BlockIndexerConfig{})
+	ctx, bi, _, mdb, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
 	mdb.Mock.ExpectQuery("SELECT.*indexed_transactions").WillReturnError(fmt.Errorf("pop"))
@@ -1049,4 +1050,71 @@ func TestGetIndexedTransactionByNonceFail(t *testing.T) {
 	_, err := bi.GetIndexedTransactionByNonce(ctx, tktypes.EthAddress(tktypes.RandBytes(20)), 12345)
 	assert.Regexp(t, "pop", err)
 
+}
+
+func TestHydrateBlockErrorCase(t *testing.T) {
+	ctx, bi, mRPC, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	bi.retry.UTSetMaxAttempts(1)
+
+	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getBlockReceipts", mock.Anything).Return(
+		rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, fmt.Errorf("pop")),
+	)
+
+	batch := &blockWriterBatch{
+		wg: sync.WaitGroup{},
+		blocks: []*BlockInfoJSONRPC{
+			{Hash: tktypes.RandBytes(32)},
+		},
+		summaries:      []string{"block_0"},
+		receipts:       [][]*TXReceiptJSONRPC{nil},
+		receiptResults: []error{nil},
+	}
+	batch.wg.Add(1)
+
+	bi.hydrateBlock(ctx, batch, 0)
+	assert.Nil(t, batch.receipts[0])
+	assert.Regexp(t, "pop", batch.receiptResults[0])
+	batch.wg.Wait()
+
+}
+
+func TestHydrateBlockBesuNullCase(t *testing.T) {
+	ctx, bi, mRPC, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	bi.retry.UTSetMaxAttempts(1)
+
+	mRPC.On("CallRPC", mock.Anything, mock.Anything, "eth_getBlockReceipts", mock.Anything).Return(nil)
+
+	batch := &blockWriterBatch{
+		wg: sync.WaitGroup{},
+		blocks: []*BlockInfoJSONRPC{
+			{Hash: tktypes.RandBytes(32)},
+		},
+		summaries:      []string{"block_0"},
+		receipts:       [][]*TXReceiptJSONRPC{nil},
+		receiptResults: []error{nil},
+	}
+	batch.wg.Add(1)
+
+	bi.hydrateBlock(ctx, batch, 0)
+	assert.Nil(t, batch.receipts[0])
+	assert.Regexp(t, "PD011310", batch.receiptResults[0])
+	batch.wg.Wait()
+
+}
+
+func TestHydrateBlockNoTransactions(t *testing.T) {
+	ctx, bi, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	// No action on dispatch empty block
+	batch := &blockWriterBatch{}
+	bi.dispatchEnrich(ctx, batch, &BlockInfoJSONRPC{})
+	require.Len(t, batch.receiptResults, 1)
+	require.Nil(t, batch.receiptResults[0])
+	require.Len(t, batch.receipts, 1)
+	require.Empty(t, batch.receipts[0])
 }

@@ -24,14 +24,16 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/noto"
-	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
+	nototypes "github.com/kaleido-io/paladin/domains/noto/pkg/types"
+	zetotypes "github.com/kaleido-io/paladin/domains/zeto/pkg/types"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zeto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
 
-func mapConfig(t *testing.T, config *types.DomainConfig) (m map[string]any) {
+func mapConfig(t *testing.T, config any) (m map[string]any) {
 	configJSON, err := json.Marshal(&config)
 	assert.NoError(t, err)
 	err = json.Unmarshal(configJSON, &m)
@@ -39,17 +41,17 @@ func mapConfig(t *testing.T, config *types.DomainConfig) (m map[string]any) {
 	return m
 }
 
-func newTestbed(t *testing.T, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
+func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
 	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("./testbed.config.yaml", domains)
+	url, done, err := tb.StartForTest("./testbed.config.yaml", domains, hdWalletSeed)
 	assert.NoError(t, err)
 	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
 	return done, tb, rpc
 }
 
-func deployContracts(ctx context.Context, t *testing.T, deployer string, contracts map[string][]byte) map[string]string {
+func deployContracts(ctx context.Context, t *testing.T, hdWalletSeed *testbed.UTInitFunction, deployer string, contracts map[string][]byte) map[string]string {
 	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{})
+	url, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{}, hdWalletSeed)
 	assert.NoError(t, err)
 	defer done()
 	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
@@ -68,14 +70,31 @@ func deployContracts(ctx context.Context, t *testing.T, deployer string, contrac
 	return deployed
 }
 
-func newNotoDomain(t *testing.T, config *types.DomainConfig) (*noto.Noto, *testbed.TestbedDomain) {
-	var domain noto.Noto
-	return &domain, &testbed.TestbedDomain{
+func newNotoDomain(t *testing.T, config *nototypes.DomainConfig) (chan noto.Noto, *testbed.TestbedDomain) {
+	waitForDomain := make(chan noto.Noto, 1)
+	tbd := &testbed.TestbedDomain{
 		Config: mapConfig(t, config),
 		Plugin: plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
-			domain = noto.New(callbacks)
+			domain := noto.New(callbacks)
+			waitForDomain <- domain
 			return domain
 		}),
 		RegistryAddress: tktypes.MustEthAddress(config.FactoryAddress),
 	}
+	return waitForDomain, tbd
+}
+
+func newZetoDomain(t *testing.T, config *zetotypes.DomainFactoryConfig) (chan zeto.Zeto, *testbed.TestbedDomain) {
+	waitForDomain := make(chan zeto.Zeto, 1)
+	tbd := &testbed.TestbedDomain{
+		Config: mapConfig(t, config),
+		Plugin: plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
+			domain := zeto.New(callbacks)
+			waitForDomain <- domain
+			return domain
+		}),
+		RegistryAddress: tktypes.MustEthAddress(config.FactoryAddress),
+		AllowSigning:    true,
+	}
+	return waitForDomain, tbd
 }

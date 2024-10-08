@@ -25,8 +25,9 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -142,8 +143,8 @@ func (hGpc *HybridGasPriceClient) DeleteCache(ctx context.Context) {
 	hGpc.gasPriceCache.Delete("gasPrice")
 }
 
-func NewGasPriceClient(ctx context.Context, conf *config.PublicTxManagerConfig) GasPriceClient {
-	gasPriceCache := cache.NewCache[string, *fftypes.JSONAny](&conf.GasPrice.Cache, &config.PublicTxManagerDefaults.GasPrice.Cache)
+func NewGasPriceClient(ctx context.Context, conf *pldconf.PublicTxManagerConfig) GasPriceClient {
+	gasPriceCache := cache.NewCache[string, *fftypes.JSONAny](&conf.GasPrice.Cache, &pldconf.PublicTxManagerDefaults.GasPrice.Cache)
 	log.L(ctx).Debugf("Gas price cache size: %d", gasPriceCache.Capacity())
 	gasPriceClient := &HybridGasPriceClient{}
 	// initialize gas oracle

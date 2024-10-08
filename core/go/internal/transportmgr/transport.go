@@ -22,9 +22,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
@@ -37,7 +38,7 @@ type transport struct {
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 
-	conf *config.TransportConfig
+	conf *pldconf.TransportConfig
 	tm   *transportManager
 	id   uuid.UUID
 	name string
@@ -50,7 +51,7 @@ type transport struct {
 	initDone  chan struct{}
 }
 
-func (tm *transportManager) newTransport(id uuid.UUID, name string, conf *config.TransportConfig, toTransport components.TransportManagerToTransport) *transport {
+func (tm *transportManager) newTransport(id uuid.UUID, name string, conf *pldconf.TransportConfig, toTransport components.TransportManagerToTransport) *transport {
 	t := &transport{
 		tm:        tm,
 		conf:      conf,
@@ -166,12 +167,26 @@ func (t *transport) ReceiveMessage(ctx context.Context, req *prototk.ReceiveMess
 	}
 	transportMessage := &components.TransportMessage{
 		MessageID:     msgID,
+		MessageType:   msg.MessageType,
 		CorrelationID: pCorrelID,
 		Destination:   tktypes.PrivateIdentityLocator(msg.Destination),
 		ReplyTo:       tktypes.PrivateIdentityLocator(msg.ReplyTo),
 		Payload:       msg.Payload,
 	}
-	t.tm.engine.ReceiveTransportMessage(ctx, transportMessage)
+	t.tm.destinationsMux.RLock()
+	defer t.tm.destinationsMux.RUnlock()
+	localDestination, err := tktypes.PrivateIdentityLocator(msg.Destination).Identity(ctx)
+	if err != nil {
+		log.L(ctx).Errorf("Error resolving destination: %s", err)
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTransportInvalidDestinationReceived, msg.Destination)
+	}
+	receiver, found := t.tm.destinations[localDestination]
+	if !found {
+		log.L(ctx).Errorf("Destination not found: %s", msg.Destination)
+		return nil, i18n.NewError(ctx, msgs.MsgTransportDestinationNotFound, msg.Destination)
+	}
+
+	receiver.ReceiveTransportMessage(ctx, transportMessage)
 
 	return &prototk.ReceiveMessageResponse{}, nil
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -28,6 +29,7 @@ type TransactionInputs struct {
 	To       tktypes.EthAddress
 	Function *abi.Entry
 	Inputs   tktypes.RawJSON
+	Intent   prototk.TransactionSpecification_Intent
 }
 
 type TransactionPreAssembly struct {
@@ -63,6 +65,7 @@ type TransactionPostAssembly struct {
 	AttestationPlan       []*prototk.AttestationRequest
 	Signatures            []*prototk.AttestationResult
 	Endorsements          []*prototk.AttestationResult
+	ExtraData             *string
 }
 
 // PrivateTransaction is the critical exchange object between the engine and the domain manager,
@@ -79,10 +82,13 @@ type PrivateTransaction struct {
 	PreAssembly  *TransactionPreAssembly  // the bit of the assembly phase state that can be retained across re-assembly
 	PostAssembly *TransactionPostAssembly // the bit of the assembly phase state that must be completely discarded on re-assembly
 
-	// DISPATCH PHASE: Once the transaction has reached sufficient confidence of success,
-	// we move on to submitting it to the blockchain.
-	Signer              string
-	PreparedTransaction *EthTransaction
+	// DISPATCH PHASE: Once the transaction has reached sufficient confidence of success, we move on to submission.
+	// Each private transaction may result in a public transaction which should be submitted to the
+	// base ledger, or another private transaction which should go around the transaction loop again.
+	Signer                     string
+	PreparedPublicTransaction  *EthTransaction
+	PreparedPrivateTransaction *ptxapi.TransactionInput
+	PreparedTransactionIntent  prototk.TransactionSpecification_Intent
 }
 
 // PrivateContractDeploy is a simpler transaction type that constructs new private smart contract instances

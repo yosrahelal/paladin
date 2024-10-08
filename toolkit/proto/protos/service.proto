@@ -55,6 +55,7 @@ message DomainMessage {
     HandleEventBatchRequest     handle_event_batch =        1090;
     SignRequest                 sign =                      1100;
     GetVerifierRequest          get_verifier =              1110;
+    ValidateStateHashesRequest  validate_state_hashes =     1120;
   }
 
   oneof response_from_domain {
@@ -69,19 +70,22 @@ message DomainMessage {
     HandleEventBatchResponse    handle_event_batch_res =    1091;
     SignResponse                sign_res =                  1101;
     GetVerifierResponse         get_verifier_res =          1111;
+    ValidateStateHashesResponse validate_state_hashes_res = 1121;
   }
 
   // Request/reply exchanges initiated by the domain, to the paladin node
   oneof request_from_domain {
     FindAvailableStatesRequest  find_available_states =     2010;
     EncodeDataRequest           encode_data =               2020;
-    RecoverSignerRequest        recover_signer =            2030;
+    DecodeDataRequest           decode_data =               2030;
+    RecoverSignerRequest        recover_signer =            2040;
   }
 
   oneof response_to_domain {
     FindAvailableStatesResponse find_available_states_res = 2011;
     EncodeDataResponse          encode_data_res =           2021;
-    RecoverSignerResponse       recover_signer_res =        2031;
+    DecodeDataResponse          decode_data_res =           2031;
+    RecoverSignerResponse       recover_signer_res =        2041;
   }
     
 }

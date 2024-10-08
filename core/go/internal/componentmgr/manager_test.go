@@ -23,17 +23,14 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/config"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
-	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -44,33 +41,33 @@ func TestInitOK(t *testing.T) {
 
 	// We build a config that allows us to get through init successfully, as should be possible
 	// (anything that can't do this should have a separate Start() phase).
-	testConfig := &config.PaladinConfig{
-		TransportManagerConfig: config.TransportManagerConfig{
+	testConfig := &pldconf.PaladinConfig{
+		TransportManagerConfig: pldconf.TransportManagerConfig{
 			NodeName: "node1",
 		},
-		DB: persistence.Config{
+		DB: pldconf.DBConfig{
 			Type: "sqlite",
-			SQLite: persistence.SQLiteConfig{
-				SQLDBConfig: persistence.SQLDBConfig{
+			SQLite: pldconf.SQLiteConfig{
+				SQLDBConfig: pldconf.SQLDBConfig{
 					DSN:           ":memory:",
 					AutoMigrate:   confutil.P(true),
 					MigrationsDir: "../../db/migrations/sqlite",
 				},
 			},
 		},
-		Blockchain: ethclient.Config{
-			HTTP: rpcclient.HTTPConfig{
+		Blockchain: pldconf.EthClientConfig{
+			HTTP: pldconf.HTTPClientConfig{
 				URL: "http://localhost:8545", // we won't actually connect this test, just check the config
 			},
 		},
-		Signer: signerapi.Config{
-			KeyDerivation: signerapi.KeyDerivationConfig{
-				Type: signerapi.KeyDerivationTypeBIP32,
+		Signer: pldconf.SignerConfig{
+			KeyDerivation: pldconf.KeyDerivationConfig{
+				Type: pldconf.KeyDerivationTypeBIP32,
 			},
-			KeyStore: signerapi.KeyStoreConfig{
+			KeyStore: pldconf.KeyStoreConfig{
 				Type: "static",
-				Static: signerapi.StaticKeyStorageConfig{
-					Keys: map[string]signerapi.StaticKeyEntryConfig{
+				Static: pldconf.StaticKeyStoreConfig{
+					Keys: map[string]pldconf.StaticKeyEntryConfig{
 						"seed": {
 							Encoding: "hex",
 							Inline:   "dfaf68b749c53672e5fa8e0b41514f9efd033ba6aa3add3b8b07f92e66f0e64a",
@@ -79,23 +76,24 @@ func TestInitOK(t *testing.T) {
 				},
 			},
 		},
-		RPCServer: rpcserver.Config{
-			HTTP: rpcserver.HTTPEndpointConfig{Disabled: true},
-			WS:   rpcserver.WSEndpointConfig{Disabled: true},
+		RPCServer: pldconf.RPCServerConfig{
+			HTTP: pldconf.RPCServerConfigHTTP{Disabled: true},
+			WS:   pldconf.RPCServerConfigWS{Disabled: true},
 		},
 	}
 
-	mockEngine := componentmocks.NewEngine(t)
-	mockEngine.On("EngineName").Return("utengine")
-	mockEngine.On("Init", mock.Anything).Return(&components.ManagerInitResult{}, nil)
-	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), testConfig, mockEngine).(*componentManager)
+	mockExtraManager := componentmocks.NewAdditionalManager(t)
+	mockExtraManager.On("Name").Return("unittest_manager")
+	mockExtraManager.On("PreInit", mock.Anything).Return(&components.ManagerInitResult{}, nil)
+	mockExtraManager.On("PostInit", mock.Anything).Return(nil)
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), testConfig, mockExtraManager).(*componentManager)
 	err := cm.Init()
 	require.NoError(t, err)
 
 	assert.NotNil(t, cm.KeyManager())
 	assert.NotNil(t, cm.EthClientFactory())
 	assert.NotNil(t, cm.Persistence())
-	assert.NotNil(t, cm.StateStore())
+	assert.NotNil(t, cm.StateManager())
 	assert.NotNil(t, cm.RPCServer())
 	assert.NotNil(t, cm.BlockIndexer())
 	assert.NotNil(t, cm.DomainManager())
@@ -105,7 +103,7 @@ func TestInitOK(t *testing.T) {
 	assert.NotNil(t, cm.PrivateTxManager())
 	assert.NotNil(t, cm.PublicTxManager())
 	assert.NotNil(t, cm.TxManager())
-	assert.NotNil(t, cm.Engine())
+	assert.NotNil(t, cm.IdentityResolver())
 
 	cm.Stop()
 
@@ -169,8 +167,9 @@ func TestStartOK(t *testing.T) {
 	mockTxManager.On("Start").Return(nil)
 	mockTxManager.On("Stop").Return()
 
-	mockStateStore := componentmocks.NewStateStore(t)
-	mockStateStore.On("RPCModule").Return(rpcserver.NewRPCModule("utss"))
+	mockStateManager := componentmocks.NewStateManager(t)
+	mockStateManager.On("Start").Return(nil)
+	mockStateManager.On("Stop").Return()
 
 	mockRPCServer := componentmocks.NewRPCServer(t)
 	mockRPCServer.On("Start").Return(nil)
@@ -179,12 +178,12 @@ func TestStartOK(t *testing.T) {
 	mockRPCServer.On("HTTPAddr").Return(&net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8545})
 	mockRPCServer.On("WSAddr").Return(&net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8546})
 
-	mockEngine := componentmocks.NewEngine(t)
-	mockEngine.On("Start").Return(nil)
-	mockEngine.On("EngineName").Return("unittest_engine")
-	mockEngine.On("Stop").Return()
+	mockExtraManager := componentmocks.NewAdditionalManager(t)
+	mockExtraManager.On("Start").Return(nil)
+	mockExtraManager.On("Name").Return("unittest_manager")
+	mockExtraManager.On("Stop").Return()
 
-	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &config.PaladinConfig{}, mockEngine).(*componentManager)
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &pldconf.PaladinConfig{}, mockExtraManager).(*componentManager)
 	cm.ethClientFactory = mockEthClientFactory
 	cm.initResults = map[string]*components.ManagerInitResult{
 		"utengine": {
@@ -198,12 +197,12 @@ func TestStartOK(t *testing.T) {
 	cm.domainManager = mockDomainManager
 	cm.transportManager = mockTransportManager
 	cm.registryManager = mockRegistryManager
-	cm.stateStore = mockStateStore
+	cm.stateManager = mockStateManager
 	cm.rpcServer = mockRPCServer
 	cm.publicTxManager = mockPublicTxManager
 	cm.privateTxManager = mockPrivateTxManager
 	cm.txManager = mockTxManager
-	cm.engine = mockEngine
+	cm.additionalManagers = append(cm.additionalManagers, mockExtraManager)
 
 	err := cm.StartComponents()
 	require.NoError(t, err)
@@ -217,7 +216,7 @@ func TestStartOK(t *testing.T) {
 }
 
 func TestBuildInternalEventStreamsPreCommitPostCommit(t *testing.T) {
-	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &config.PaladinConfig{}, nil).(*componentManager)
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &pldconf.PaladinConfig{}, nil).(*componentManager)
 	handler := func(ctx context.Context, dbTX *gorm.DB, blocks []*blockindexer.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
 		return nil, nil
 	}
@@ -236,7 +235,7 @@ func TestBuildInternalEventStreamsPreCommitPostCommit(t *testing.T) {
 }
 
 func TestErrorWrapping(t *testing.T) {
-	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &config.PaladinConfig{}, nil).(*componentManager)
+	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &pldconf.PaladinConfig{}, nil).(*componentManager)
 
 	mockKeyManager := componentmocks.NewKeyManager(t)
 	mockEthClientFactory := componentmocks.NewEthClientFactory(t)

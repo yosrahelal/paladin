@@ -28,8 +28,9 @@ import (
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/iden3/go-rapidsnark/types"
 	"github.com/iden3/go-rapidsnark/witness/v2"
-	pb "github.com/kaleido-io/paladin/core/pkg/proto"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
+	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -122,7 +123,7 @@ func TestSnarkProve(t *testing.T) {
 	bobPubKey := EncodeBabyJubJubPublicKey(bob.PublicKey)
 
 	req := pb.ProvingRequest{
-		CircuitId: "anon",
+		CircuitId: constants.CIRCUIT_ANON,
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
 			InputValues:      inputValueInts,
@@ -209,7 +210,7 @@ func TestConcurrentSnarkProofGeneration(t *testing.T) {
 	bobPubKey := EncodeBabyJubJubPublicKey(bob.PublicKey)
 
 	req := pb.ProvingRequest{
-		CircuitId: "anon",
+		CircuitId: constants.CIRCUIT_ANON,
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
 			InputValues:      inputValueInts,
@@ -311,7 +312,7 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 	alice := NewKeypair()
 
 	req := pb.ProvingRequest{
-		CircuitId: "anon",
+		CircuitId: constants.CIRCUIT_ANON,
 		Common:    &pb.ProvingRequestCommon{},
 	}
 	payload, err := proto.Marshal(&req)
@@ -320,7 +321,7 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 	assert.ErrorContains(t, err, "input commitments are required")
 
 	req = pb.ProvingRequest{
-		CircuitId: "anon",
+		CircuitId: constants.CIRCUIT_ANON,
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: []string{"input1", "input2"},
 		},
@@ -331,7 +332,7 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 	assert.ErrorContains(t, err, "input values are required")
 
 	req = pb.ProvingRequest{
-		CircuitId: "anon",
+		CircuitId: constants.CIRCUIT_ANON,
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: []string{"input1", "input2"},
 			InputValues:      []uint64{30, 40},
@@ -343,7 +344,7 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 	assert.ErrorContains(t, err, "input salts are required")
 
 	req = pb.ProvingRequest{
-		CircuitId: "anon",
+		CircuitId: constants.CIRCUIT_ANON,
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: []string{"input1", "input2"},
 			InputValues:      []uint64{30, 40},
@@ -356,7 +357,7 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 	assert.ErrorContains(t, err, "output values are required")
 
 	req = pb.ProvingRequest{
-		CircuitId: "anon",
+		CircuitId: constants.CIRCUIT_ANON,
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: []string{"input1", "input2"},
 			InputValues:      []uint64{30, 40},
@@ -370,7 +371,7 @@ func TestSnarkProveErrorInputs(t *testing.T) {
 	assert.ErrorContains(t, err, "output owner keys are required")
 
 	req = pb.ProvingRequest{
-		CircuitId: "anon",
+		CircuitId: constants.CIRCUIT_ANON,
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: []string{"input1", "input2"},
 			InputValues:      []uint64{30, 40},
@@ -418,7 +419,7 @@ func TestSnarkProveErrorLoadcircuits(t *testing.T) {
 	bobPubKey := EncodeBabyJubJubPublicKey(bob.PublicKey)
 
 	req := pb.ProvingRequest{
-		CircuitId: "anon",
+		CircuitId: constants.CIRCUIT_ANON,
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
 			InputValues:      inputValueInts,
@@ -464,7 +465,7 @@ func TestSnarkProveErrorGenerateProof(t *testing.T) {
 	outputValueInts := []uint64{outputValues[0].Uint64(), outputValues[1].Uint64()}
 
 	req := pb.ProvingRequest{
-		CircuitId: "anon",
+		CircuitId: constants.CIRCUIT_ANON,
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
 			InputValues:      inputValueInts,
@@ -514,7 +515,7 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 	bobPubKey := EncodeBabyJubJubPublicKey(bob.PublicKey)
 
 	req := pb.ProvingRequest{
-		CircuitId: "anon",
+		CircuitId: constants.CIRCUIT_ANON,
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: []string{"input1", "input2"},
 			InputValues:      inputValueInts,
@@ -531,7 +532,7 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 	assert.ErrorContains(t, err, "failed to parse input commitment")
 
 	req = pb.ProvingRequest{
-		CircuitId: "anon",
+		CircuitId: constants.CIRCUIT_ANON,
 		Common: &pb.ProvingRequestCommon{
 			InputCommitments: inputCommitments,
 			InputValues:      inputValueInts,
@@ -586,14 +587,15 @@ func TestSerializeProofResponse(t *testing.T) {
 			},
 			C: []string{"c"},
 		},
-		PubSignals: []string{"1", "2", "3", "4"},
+		PubSignals: []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"},
 	}
-	publicInputs := map[string]string{
-		"encryptedValues": "1,2,3,4",
-	}
-	bytes, err := serializeProofResponse("anon_enc", &snark, publicInputs)
-	require.NoError(t, err)
-	assert.Equal(t, 64, len(bytes))
+	bytes, err := serializeProofResponse(constants.CIRCUIT_ANON_ENC, &snark)
+	assert.NoError(t, err)
+	assert.Equal(t, 86, len(bytes))
+
+	bytes, err = serializeProofResponse(constants.CIRCUIT_ANON_NULLIFIER, &snark)
+	assert.NoError(t, err)
+	assert.Equal(t, 66, len(bytes))
 }
 
 func TestZKPProverInvalidAlgos(t *testing.T) {

@@ -80,6 +80,15 @@ func (br *domainBridge) RequestReply(ctx context.Context, reqMsg plugintk.Plugin
 				}
 			},
 		)
+	case *prototk.DomainMessage_DecodeData:
+		return callManagerImpl(ctx, req.DecodeData,
+			br.manager.DecodeData,
+			func(resMsg *prototk.DomainMessage, res *prototk.DecodeDataResponse) {
+				resMsg.ResponseToDomain = &prototk.DomainMessage_DecodeDataRes{
+					DecodeDataRes: res,
+				}
+			},
+		)
 	case *prototk.DomainMessage_RecoverSigner:
 		return callManagerImpl(ctx, req.RecoverSigner,
 			br.manager.RecoverSigner,
@@ -252,6 +261,21 @@ func (br *domainBridge) GetVerifier(ctx context.Context, req *prototk.GetVerifie
 		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
 			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_GetVerifierRes); ok {
 				res = r.GetVerifierRes
+			}
+			return res != nil
+		},
+	)
+	return
+}
+
+func (br *domainBridge) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (res *prototk.ValidateStateHashesResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_ValidateStateHashes{ValidateStateHashes: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_ValidateStateHashesRes); ok {
+				res = r.ValidateStateHashesRes
 			}
 			return res != nil
 		},

@@ -19,7 +19,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
@@ -34,7 +35,7 @@ type DomainManagerToDomain interface {
 // Domain manager is the boundary between the paladin core / testbed and the domains
 type DomainManager interface {
 	ManagerLifecycle
-	ConfiguredDomains() map[string]*config.PluginConfig
+	ConfiguredDomains() map[string]*pldconf.PluginConfig
 	DomainRegistered(name string, toDomain DomainManagerToDomain) (fromDomain plugintk.DomainCallbacks, err error)
 	GetDomainByName(ctx context.Context, name string) (Domain, error)
 	GetSmartContractByAddress(ctx context.Context, addr tktypes.EthAddress) (DomainSmartContract, error)
@@ -49,9 +50,14 @@ type Domain interface {
 	Name() string
 	RegistryAddress() *tktypes.EthAddress
 	Configuration() *prototk.DomainConfig
+	CustomHashFunction() bool
 
 	InitDeploy(ctx context.Context, tx *PrivateContractDeploy) error
 	PrepareDeploy(ctx context.Context, tx *PrivateContractDeploy) error
+
+	// The state manager calls this when states are received for a domain that has a custom hash function.
+	// Any nil IDs should be filled in, and any mis-matched IDs should result in an error
+	ValidateStateHashes(ctx context.Context, states []*FullState) ([]tktypes.HexBytes, error)
 }
 
 // External interface for other components to call against a private smart contract
@@ -61,12 +67,14 @@ type DomainSmartContract interface {
 	ConfigBytes() tktypes.HexBytes
 
 	InitTransaction(ctx context.Context, tx *PrivateTransaction) error
-	AssembleTransaction(ctx context.Context, tx *PrivateTransaction) error
-	WritePotentialStates(ctx context.Context, tx *PrivateTransaction) error
-	LockStates(ctx context.Context, tx *PrivateTransaction) error
-	EndorseTransaction(ctx context.Context, req *PrivateTransactionEndorseRequest) (*EndorsementResult, error)
+
+	AssembleTransaction(dCtx DomainContext, tx *PrivateTransaction) error
+	WritePotentialStates(dCtx DomainContext, tx *PrivateTransaction) error
+	LockStates(dCtx DomainContext, tx *PrivateTransaction) error
+	EndorseTransaction(dCtx DomainContext, req *PrivateTransactionEndorseRequest) (*EndorsementResult, error)
+	PrepareTransaction(dCtx DomainContext, tx *PrivateTransaction) error
+
 	ResolveDispatch(ctx context.Context, tx *PrivateTransaction) error
-	PrepareTransaction(ctx context.Context, tx *PrivateTransaction) error
 }
 
 type EndorsementResult struct {

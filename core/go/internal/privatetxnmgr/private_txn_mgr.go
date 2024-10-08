@@ -20,18 +20,19 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
+
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
@@ -44,7 +45,7 @@ import (
 type privateTxManager struct {
 	ctx                  context.Context
 	ctxCancel            func()
-	config               *config.PrivateTxManagerConfig
+	config               *pldconf.PrivateTxManagerConfig
 	orchestrators        map[string]*Orchestrator
 	endorsementGatherers map[string]ptmgrtypes.EndorsementGatherer
 	components           components.AllComponents
@@ -62,17 +63,18 @@ func (p *privateTxManager) PreInit(c components.PreInitComponents) (*components.
 func (p *privateTxManager) PostInit(c components.AllComponents) error {
 	p.components = c
 	p.store = privatetxnstore.NewStore(p.ctx, &p.config.Writer, c.Persistence())
-	return nil
+	return p.components.TransportManager().RegisterClient(p.ctx, p)
 }
 
 func (p *privateTxManager) Start() error {
+	p.store.Start()
 	return nil
 }
 
 func (p *privateTxManager) Stop() {
 }
 
-func NewPrivateTransactionMgr(ctx context.Context, nodeID string, config *config.PrivateTxManagerConfig) components.PrivateTxManager {
+func NewPrivateTransactionMgr(ctx context.Context, nodeID string, config *pldconf.PrivateTxManagerConfig) components.PrivateTxManager {
 	p := &privateTxManager{
 		config:               config,
 		orchestrators:        make(map[string]*Orchestrator),
@@ -80,7 +82,7 @@ func NewPrivateTransactionMgr(ctx context.Context, nodeID string, config *config
 		nodeID:               nodeID,
 		subscribers:          make([]components.PrivateTxEventSubscriber, 0),
 	}
-	p.ctx, p.ctxCancel = context.WithCancel(context.Background())
+	p.ctx, p.ctxCancel = context.WithCancel(ctx)
 	return p
 }
 
@@ -110,6 +112,7 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 				endorsementGatherer,
 				publisher,
 				p.store,
+				p.components.IdentityResolver(),
 			)
 		orchestratorDone, err := p.orchestrators[contractAddr.String()].Start(ctx)
 		if err != nil {
@@ -127,12 +130,14 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 
 func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context, contractAddr tktypes.EthAddress) (ptmgrtypes.EndorsementGatherer, error) {
 
-	domainAPI, err := p.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
+	domainSmartContract, err := p.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
 	if err != nil {
 		return nil, err
 	}
 	if p.endorsementGatherers[contractAddr.String()] == nil {
-		endorsementGatherer := NewEndorsementGatherer(domainAPI, p.components.KeyManager())
+		// TODO: Consider scope of state in privateTxManager threading model
+		dCtx := p.components.StateManager().NewDomainContext(p.ctx /* background context */, domainSmartContract.Domain(), contractAddr)
+		endorsementGatherer := NewEndorsementGatherer(domainSmartContract, dCtx, p.components.KeyManager())
 		p.endorsementGatherers[contractAddr.String()] = endorsementGatherer
 	}
 	return p.endorsementGatherers[contractAddr.String()], nil
@@ -167,23 +172,8 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.Priva
 		return err
 	}
 
-	//Resolve keys synchronously so that we can return an error if any key resolution fails
-	keyMgr := p.components.KeyManager()
 	if tx.PreAssembly == nil {
 		return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "PreAssembly is nil")
-	}
-	tx.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.PreAssembly.RequiredVerifiers))
-	for i, v := range tx.PreAssembly.RequiredVerifiers {
-		_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
-		if err != nil {
-			return i18n.WrapError(ctx, err, msgs.MsgKeyResolutionFailed, v.Lookup, v.Algorithm)
-		}
-		tx.PreAssembly.Verifiers[i] = &prototk.ResolvedVerifier{
-			Lookup:       v.Lookup,
-			Algorithm:    v.Algorithm,
-			Verifier:     verifier,
-			VerifierType: v.VerifierType,
-		}
 	}
 
 	oc, err := p.getOrchestratorForContract(ctx, contractAddr, domainAPI)
@@ -374,7 +364,7 @@ func (p *privateTxManager) HandleNewEvent(ctx context.Context, event ptmgrtypes.
 	}
 }
 
-func (p *privateTxManager) HandleEndorsementRequest(ctx context.Context, messagePayload []byte) {
+func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, messagePayload []byte, replyTo tktypes.PrivateIdentityLocator) {
 	endorsementRequest := &pbEngine.EndorsementRequest{}
 	err := proto.Unmarshal(messagePayload, endorsementRequest)
 	if err != nil {
@@ -499,7 +489,9 @@ func (p *privateTxManager) HandleEndorsementRequest(ctx context.Context, message
 
 	err = p.components.TransportManager().Send(ctx, &components.TransportMessage{
 		MessageType: "EndorsementResponse",
+		ReplyTo:     tktypes.PrivateIdentityLocator(p.nodeID),
 		Payload:     endorsementResponseBytes,
+		Destination: replyTo,
 	})
 	if err != nil {
 		log.L(ctx).Errorf("Failed to send endorsement response: %s", err)
@@ -507,12 +499,12 @@ func (p *privateTxManager) HandleEndorsementRequest(ctx context.Context, message
 	}
 }
 
-func (p *privateTxManager) HandleEndorsementResponse(ctx context.Context, messagePayload []byte) {
+func (p *privateTxManager) handleEndorsementResponse(ctx context.Context, messagePayload []byte) {
 
 	endorsementResponse := &pbEngine.EndorsementResponse{}
 	err := proto.Unmarshal(messagePayload, endorsementResponse)
 	if err != nil {
-		log.L(ctx).Errorf("Failed to unmarshal endorsement request: %s", err)
+		log.L(ctx).Errorf("Failed to unmarshal endorsementResponse: %s", err)
 		return
 	}
 	contractAddressString := endorsementResponse.ContractAddress
@@ -540,23 +532,6 @@ func (p *privateTxManager) HandleEndorsementResponse(ctx context.Context, messag
 
 }
 
-func (p *privateTxManager) ReceiveTransportMessage(ctx context.Context, message *components.TransportMessage) {
-	//TODO this need to become an ultra low latency, non blocking, handover to the event loop thread.
-	// need some thought on how to handle errors, retries, buffering, swapping idle orchestrators in and out of memory etc...
-
-	//Send the event to the orchestrator for the contract and any transaction manager for the signing key
-	messagePayload := message.Payload
-
-	switch message.MessageType {
-	case "EndorsementRequest":
-		go p.HandleEndorsementRequest(ctx, messagePayload)
-	case "EndorsementResponse":
-		go p.HandleEndorsementResponse(ctx, messagePayload)
-	default:
-		log.L(ctx).Errorf("Unknown message type: %s", message.MessageType)
-	}
-}
-
 // For now, this is here to help with testing but it seems like it could be useful thing to have
 // in the future if we want to have an eventing interface but at such time we would need to put more effort
 // into the reliabilty of the event delivery or maybe there is only a consumer of the event and it is responsible
@@ -577,12 +552,22 @@ func (p *privateTxManager) publishToSubscribers(ctx context.Context, event compo
 	}
 }
 
-func (p *privateTxManager) NotifyConfirmed(ctx context.Context, confirms []*components.PublicTxMatch) (completed map[uuid.UUID]bool, err error) {
-	// TODO: We have processing we need to do here, particularly for failures
-	// For now, we just ack everything as "done" driving a receipt to be recorded
-	completed = make(map[uuid.UUID]bool)
-	for _, confirm := range confirms {
-		completed[confirm.TransactionID] = true
+func (p *privateTxManager) NotifyFailedPublicTx(ctx context.Context, dbTX *gorm.DB, failures []*components.PublicTxMatch) error {
+	// TODO: We have processing we need to do here to resubmit
+	// For now, we directly raise a failure receipt for them back with the main transaction manager
+	privateFailureReceipts := make([]*components.ReceiptInput, len(failures))
+	for i, tx := range failures {
+		privateFailureReceipts[i] = &components.ReceiptInput{
+			ReceiptType:   components.RT_FailedOnChainWithRevertData,
+			TransactionID: tx.TransactionID,
+			OnChain: tktypes.OnChainLocation{
+				Type:             tktypes.OnChainTransaction,
+				TransactionHash:  tx.Hash,
+				BlockNumber:      tx.BlockNumber,
+				TransactionIndex: tx.BlockNumber,
+			},
+			RevertData: tx.RevertReason,
+		}
 	}
-	return completed, nil
+	return p.components.TxManager().FinalizeTransactions(ctx, dbTX, privateFailureReceipts)
 }

@@ -26,10 +26,11 @@ import (
 	// Import pq driver
 	migratedb "github.com/golang-migrate/migrate/v4/database"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 )
 
-var PostgresDefaults = &SQLDBConfig{
+var PostgresDefaults = &pldconf.SQLDBConfig{
 	MaxOpenConns:    confutil.P(100),
 	MaxIdleConns:    confutil.P(100),
 	ConnMaxIdleTime: confutil.P("60s"),
@@ -39,7 +40,7 @@ var PostgresDefaults = &SQLDBConfig{
 
 type postgresProvider struct{}
 
-func newPostgresProvider(ctx context.Context, conf *Config) (p Persistence, err error) {
+func newPostgresProvider(ctx context.Context, conf *pldconf.DBConfig) (p Persistence, err error) {
 	return NewSQLProvider(ctx, &postgresProvider{}, &conf.Postgres.SQLDBConfig, PostgresDefaults)
 }
 

@@ -22,6 +22,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +31,7 @@ func TestCorsWrapperDisabled(t *testing.T) {
 	hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("CalledServer", "true")
 	})
-	s := httptest.NewServer(WrapCorsIfEnabled(context.Background(), hf, &CORSConfig{}))
+	s := httptest.NewServer(WrapCorsIfEnabled(context.Background(), hf, &pldconf.CORSConfig{}))
 
 	req, err := http.NewRequest(http.MethodOptions, s.URL, nil)
 	require.NoError(t, err)
@@ -47,7 +48,7 @@ func TestCorsWrapperEnabledWildcardPreflight(t *testing.T) {
 	hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("CalledServer", "true")
 	})
-	s := httptest.NewServer(WrapCorsIfEnabled(context.Background(), hf, &CORSConfig{
+	s := httptest.NewServer(WrapCorsIfEnabled(context.Background(), hf, &pldconf.CORSConfig{
 		Enabled: true,
 		Debug:   true,
 	}))
@@ -69,7 +70,7 @@ func TestCorsWrapperEnabledHostOk(t *testing.T) {
 	hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("CalledServer", "true")
 	})
-	s := httptest.NewServer(WrapCorsIfEnabled(context.Background(), hf, &CORSConfig{
+	s := httptest.NewServer(WrapCorsIfEnabled(context.Background(), hf, &pldconf.CORSConfig{
 		Enabled:        true,
 		Debug:          true,
 		AllowedOrigins: []string{"https://some.example"},
@@ -89,7 +90,7 @@ func TestCorsWrapperEnabledHostFail(t *testing.T) {
 	hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("CalledServer", "true")
 	})
-	s := httptest.NewServer(WrapCorsIfEnabled(context.Background(), hf, &CORSConfig{
+	s := httptest.NewServer(WrapCorsIfEnabled(context.Background(), hf, &pldconf.CORSConfig{
 		Enabled:        true,
 		Debug:          true,
 		AllowedOrigins: []string{"https://some.example"},

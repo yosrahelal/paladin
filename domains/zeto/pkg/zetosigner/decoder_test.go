@@ -18,16 +18,18 @@ package zetosigner
 import (
 	"testing"
 
-	pb "github.com/kaleido-io/paladin/core/pkg/proto"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
+	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
+	protosigner "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
 
-func TestDecodeProvingRequest(t *testing.T) {
+func TestDecodeProvingRequest_AnonEnc(t *testing.T) {
 	common := pb.ProvingRequestCommon{}
 	req := &pb.ProvingRequest{
-		CircuitId: "anon_enc",
+		CircuitId: constants.CIRCUIT_ANON_ENC,
 		Common:    &common,
 	}
 	bytes, err := proto.Marshal(req)
@@ -50,16 +52,65 @@ func TestDecodeProvingRequest(t *testing.T) {
 	assert.Equal(t, "123456", extras.(*pb.ProvingRequestExtras_Encryption).EncryptionNonce)
 }
 
+func TestDecodeProvingRequest_AnonNullifier(t *testing.T) {
+	common := pb.ProvingRequestCommon{}
+	req := &pb.ProvingRequest{
+		CircuitId: constants.CIRCUIT_ANON_NULLIFIER,
+		Common:    &common,
+	}
+	encExtras := &pb.ProvingRequestExtras_Nullifiers{
+		Root: "123456",
+		MerkleProofs: []*pb.MerkleProof{
+			{
+				Nodes: []string{"1", "2", "3"},
+			},
+		},
+		Enabled: []bool{true},
+	}
+	var err error
+	req.Extras, err = proto.Marshal(encExtras)
+	assert.NoError(t, err)
+
+	bytes, err := proto.Marshal(req)
+	assert.NoError(t, err)
+
+	signReq := &protosigner.SignRequest{
+		Payload: bytes,
+	}
+
+	bytes, err = proto.Marshal(req)
+	assert.NoError(t, err)
+	signReq.Payload = bytes
+	_, extras, err := decodeProvingRequest(signReq.Payload)
+	assert.NoError(t, err)
+	assert.Equal(t, "123456", extras.(*pb.ProvingRequestExtras_Nullifiers).Root)
+}
+
 func TestDecodeProvingRequest_Fail(t *testing.T) {
 	common := pb.ProvingRequestCommon{}
 	req := &pb.ProvingRequest{
-		CircuitId: "anon_enc",
+		CircuitId: constants.CIRCUIT_ANON_ENC,
 		Common:    &common,
 		Extras:    []byte("invalid"),
 	}
 	bytes, err := proto.Marshal(req)
 	require.NoError(t, err)
 
+	signReq := &protosigner.SignRequest{
+		Payload: bytes,
+	}
+	_, _, err = decodeProvingRequest(signReq.Payload)
+	assert.ErrorContains(t, err, "failed to unmarshal proving request extras for circuit anon_enc")
+
+	req.CircuitId = constants.CIRCUIT_ANON_NULLIFIER
+	bytes, err = proto.Marshal(req)
+	assert.NoError(t, err)
+
+	signReq = &protosigner.SignRequest{
+		Payload: bytes,
+	}
+	_, _, err = decodeProvingRequest(signReq.Payload)
+	assert.ErrorContains(t, err, "failed to unmarshal proving request extras for circuit anon_nullifier")
 	_, _, err = decodeProvingRequest(bytes)
 	assert.ErrorContains(t, err, "cannot parse invalid wire-format data")
 }

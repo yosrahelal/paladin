@@ -22,16 +22,40 @@ import (
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/iden3/go-iden3-crypto/babyjub"
-	"github.com/iden3/go-iden3-crypto/poseidon"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 var INPUT_COUNT = 2
 var OUTPUT_COUNT = 2
+
+func getStateSchemas() ([]string, error) {
+	var schemas []string
+	coinJSON, err := json.Marshal(types.ZetoCoinABI)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal Zeto Coin schema abi. %s", err)
+	}
+	schemas = append(schemas, string(coinJSON))
+
+	smtRootJSON, err := json.Marshal(smt.MerkleTreeRootABI)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal Merkle Tree Root schema abi. %s", err)
+	}
+	schemas = append(schemas, string(smtRootJSON))
+
+	smtNodeJSON, err := json.Marshal(smt.MerkleTreeNodeABI)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal Merkle Tree Node schema abi. %s", err)
+	}
+	schemas = append(schemas, string(smtNodeJSON))
+
+	return schemas, nil
+}
 
 func (n *Zeto) makeCoin(stateData string) (*types.ZetoCoin, error) {
 	coin := &types.ZetoCoin{}
@@ -44,13 +68,19 @@ func (z *Zeto) makeNewState(coin *types.ZetoCoin) (*pb.NewState, error) {
 	if err != nil {
 		return nil, err
 	}
+	hash, err := coin.Hash()
+	if err != nil {
+		return nil, err
+	}
+	hashStr := hash.String()
 	return &pb.NewState{
+		Id:            &hashStr,
 		SchemaId:      z.coinSchema.Id,
 		StateDataJson: string(coinJSON),
 	}, nil
 }
 
-func (z *Zeto) prepareInputs(ctx context.Context, contractAddress, owner string, amount *ethtypes.HexInteger) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, error) {
+func (z *Zeto) prepareInputs(ctx context.Context, stateQueryContext, owner string, amount *tktypes.HexUint256) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
 	stateRefs := []*pb.StateRef{}
@@ -64,7 +94,7 @@ func (z *Zeto) prepareInputs(ctx context.Context, contractAddress, owner string,
 		if lastStateTimestamp > 0 {
 			queryBuilder.GreaterThan(".created", lastStateTimestamp)
 		}
-		states, err := z.findAvailableStates(ctx, contractAddress, queryBuilder.Query().String())
+		states, err := z.findAvailableStates(ctx, stateQueryContext, queryBuilder.Query().String())
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -77,13 +107,13 @@ func (z *Zeto) prepareInputs(ctx context.Context, contractAddress, owner string,
 			if err != nil {
 				return nil, nil, nil, fmt.Errorf("coin %s is invalid: %s", state.Id, err)
 			}
-			total = total.Add(total, coin.Amount.BigInt())
+			total = total.Add(total, coin.Amount.Int())
 			stateRefs = append(stateRefs, &pb.StateRef{
 				SchemaId: state.SchemaId,
 				Id:       state.Id,
 			})
 			coins = append(coins, coin)
-			if total.Cmp(amount.BigInt()) >= 0 {
+			if total.Cmp(amount.Int()) >= 0 {
 				return coins, stateRefs, total, nil
 			}
 			if len(stateRefs) >= INPUT_COUNT {
@@ -93,29 +123,19 @@ func (z *Zeto) prepareInputs(ctx context.Context, contractAddress, owner string,
 	}
 }
 
-func (z *Zeto) addHash(newCoin *types.ZetoCoin, ownerKey *babyjub.PublicKey) error {
-	commitment, err := poseidon.Hash([]*big.Int{
-		newCoin.Amount.BigInt(),
-		newCoin.Salt.BigInt(),
-		ownerKey.X,
-		ownerKey.Y,
-	})
-	if err != nil {
-		return err
-	}
-	newCoin.Hash = (*ethtypes.HexInteger)(commitment)
+func (z *Zeto) addHash(_ *types.ZetoCoin, _ *babyjub.PublicKey) error {
 	return nil
 }
 
-func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount *ethtypes.HexInteger) ([]*types.ZetoCoin, []*pb.NewState, error) {
+func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount *tktypes.HexUint256) ([]*types.ZetoCoin, []*pb.NewState, error) {
 	// Always produce a single coin for the entire output amount
 	// TODO: make this configurable
 	salt := crypto.NewSalt()
-	keyCompressed := ownerKey.Compress()
+	compressedKeyStr := zetosigner.EncodeBabyJubJubPublicKey(ownerKey)
 	newCoin := &types.ZetoCoin{
-		Salt:     (*ethtypes.HexInteger)(salt),
+		Salt:     (*tktypes.HexUint256)(salt),
 		Owner:    owner,
-		OwnerKey: keyCompressed[:],
+		OwnerKey: tktypes.MustParseHexBytes(compressedKeyStr),
 		Amount:   amount,
 	}
 	if err := z.addHash(newCoin, ownerKey); err != nil {
@@ -126,11 +146,11 @@ func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount 
 	return []*types.ZetoCoin{newCoin}, []*pb.NewState{newState}, err
 }
 
-func (z *Zeto) findAvailableStates(ctx context.Context, contractAddress, query string) ([]*pb.StoredState, error) {
+func (z *Zeto) findAvailableStates(ctx context.Context, stateQueryContext, query string) ([]*pb.StoredState, error) {
 	req := &pb.FindAvailableStatesRequest{
-		ContractAddress: contractAddress,
-		SchemaId:        z.coinSchema.Id,
-		QueryJson:       query,
+		StateQueryContext: stateQueryContext,
+		SchemaId:          z.coinSchema.Id,
+		QueryJson:         query,
 	}
 	res, err := z.Callbacks.FindAvailableStates(ctx, req)
 	if err != nil {

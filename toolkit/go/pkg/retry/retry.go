@@ -21,7 +21,8 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 )
@@ -33,18 +34,18 @@ type Retry struct {
 	maxAttempts  int
 }
 
-func NewRetryIndefinite(conf *Config) *Retry {
+func NewRetryIndefinite(conf *pldconf.RetryConfig) *Retry {
 	return &Retry{
-		initialDelay: confutil.DurationMin(conf.InitialDelay, 0, *Defaults.InitialDelay),
-		maxDelay:     confutil.DurationMin(conf.MaxDelay, 0, *Defaults.MaxDelay),
-		factor:       confutil.Float64Min(conf.Factor, 1.0, *Defaults.Factor),
+		initialDelay: confutil.DurationMin(conf.InitialDelay, 0, *pldconf.RetryDefaults.InitialDelay),
+		maxDelay:     confutil.DurationMin(conf.MaxDelay, 0, *pldconf.RetryDefaults.MaxDelay),
+		factor:       confutil.Float64Min(conf.Factor, 1.0, *pldconf.RetryDefaults.Factor),
 	}
 }
 
-func NewRetryLimited(conf *ConfigWithMax) *Retry {
-	base := NewRetryIndefinite(&conf.Config)
-	base.maxAttempts = confutil.IntMin(conf.MaxAttempts, 0, *Defaults.MaxAttempts)
-	base.maxDelay = confutil.DurationMin(conf.MaxDelay, 0, *Defaults.MaxDelay)
+func NewRetryLimited(conf *pldconf.RetryConfigWithMax) *Retry {
+	base := NewRetryIndefinite(&conf.RetryConfig)
+	base.maxAttempts = confutil.IntMin(conf.MaxAttempts, 0, *pldconf.RetryDefaults.MaxAttempts)
+	base.maxDelay = confutil.DurationMin(conf.MaxDelay, 0, *pldconf.RetryDefaults.MaxDelay)
 	return base
 }
 

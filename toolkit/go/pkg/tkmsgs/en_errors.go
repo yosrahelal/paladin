@@ -51,16 +51,11 @@ var (
 	// Inflight PD0201XX
 	MsgInflightRequestCancelled = ffe("PD020100", "Request cancelled after %s")
 
-	// Config PD0202XX
-	MsgConfigFileMissing               = ffe("PD020200", "Config file not found at path: %s")
-	MsgConfigFileReadError             = ffe("PD020201", "Failed to read config file %s with error: %s")
-	MsgConfigFileParseError            = ffe("PD020202", "Failed to parse config file %s with error: %s")
-	MsgConfigFileMissingMandatoryValue = ffe("PD020203", "Mandatory config field %s missing ")
-
 	// Plugin PD0203XX
 	MsgPluginUnsupportedRequest   = ffe("PD020300", "Unsupported request %T")
 	MsgPluginUnexpectedResponse   = ffe("PD020301", "Unexpected response %T (expected %T)")
 	MsgPluginUnimplementedRequest = ffe("PD020302", "Unimplemented plugin request %T")
+	MsgPluginErrorFromServerNoMsg = ffe("PD020303", "Error from server (no detailed message in response)")
 
 	// TLS PD0204XX
 	MsgTLSInvalidCAFile             = ffe("PD020400", "Invalid CA certificates file")

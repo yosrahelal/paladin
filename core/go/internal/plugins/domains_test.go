@@ -22,12 +22,14 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/pkg/config"
-	"github.com/kaleido-io/paladin/toolkit/pkg/confutil"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -39,6 +41,7 @@ type testDomainManager struct {
 	domainRegistered    func(name string, toDomain components.DomainManagerToDomain) (fromDomain plugintk.DomainCallbacks, err error)
 	findAvailableStates func(context.Context, *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error)
 	encodeData          func(context.Context, *prototk.EncodeDataRequest) (*prototk.EncodeDataResponse, error)
+	decodeData          func(context.Context, *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error)
 	recoverSigner       func(context.Context, *prototk.RecoverSignerRequest) (*prototk.RecoverSignerResponse, error)
 }
 
@@ -48,6 +51,10 @@ func (tp *testDomainManager) FindAvailableStates(ctx context.Context, req *proto
 
 func (tp *testDomainManager) EncodeData(ctx context.Context, req *prototk.EncodeDataRequest) (*prototk.EncodeDataResponse, error) {
 	return tp.encodeData(ctx, req)
+}
+
+func (tp *testDomainManager) DecodeData(ctx context.Context, req *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error) {
+	return tp.decodeData(ctx, req)
 }
 
 func (tp *testDomainManager) RecoverSigner(ctx context.Context, req *prototk.RecoverSignerRequest) (*prototk.RecoverSignerResponse, error) {
@@ -67,10 +74,10 @@ func domainHeaderAccessor(msg *prototk.DomainMessage) *prototk.Header {
 
 func (tp *testDomainManager) mock(t *testing.T) *componentmocks.DomainManager {
 	mdm := componentmocks.NewDomainManager(t)
-	pluginMap := make(map[string]*config.PluginConfig)
+	pluginMap := make(map[string]*pldconf.PluginConfig)
 	for name := range tp.domains {
-		pluginMap[name] = &config.PluginConfig{
-			Type:    config.LibraryTypeCShared.Enum(),
+		pluginMap[name] = &pldconf.PluginConfig{
+			Type:    string(tktypes.LibraryTypeCShared),
 			Library: "/tmp/not/applicable",
 		}
 	}
@@ -165,7 +172,7 @@ func TestDomainRequestsOK(t *testing.T) {
 		PrepareTransaction: func(ctx context.Context, ptr *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
 			assert.Equal(t, "tx2_prepare", ptr.Transaction.TransactionId)
 			return &prototk.PrepareTransactionResponse{
-				Transaction: &prototk.BaseLedgerTransaction{
+				Transaction: &prototk.PreparedTransaction{
 					ParamsJson: `{"test": "value"}`,
 				},
 			}, nil
@@ -173,7 +180,7 @@ func TestDomainRequestsOK(t *testing.T) {
 		HandleEventBatch: func(ctx context.Context, hebr *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
 			assert.Equal(t, "batch1", hebr.BatchId)
 			return &prototk.HandleEventBatchResponse{
-				TransactionsComplete: []string{"tx1"},
+				TransactionsComplete: []*prototk.CompletedTransaction{{TransactionId: "tx1"}},
 			}, nil
 		},
 		Sign: func(ctx context.Context, sr *prototk.SignRequest) (*prototk.SignResponse, error) {
@@ -186,6 +193,12 @@ func TestDomainRequestsOK(t *testing.T) {
 			assert.Equal(t, "algo1", gvr.Algorithm)
 			return &prototk.GetVerifierResponse{
 				Verifier: "verifier1",
+			}, nil
+		},
+		ValidateStateHashes: func(ctx context.Context, vshr *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+			assert.Equal(t, "state1_in", vshr.States[0].Id)
+			return &prototk.ValidateStateHashesResponse{
+				StateIds: []string{"state1_out"},
 			}, nil
 		},
 	}
@@ -217,6 +230,13 @@ func TestDomainRequestsOK(t *testing.T) {
 		assert.Equal(t, edr.Body, "some input data")
 		return &prototk.EncodeDataResponse{
 			Data: []byte("some output data"),
+		}, nil
+	}
+
+	tdm.decodeData = func(ctx context.Context, edr *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error) {
+		assert.Equal(t, edr.Data, []byte("some input data"))
+		return &prototk.DecodeDataResponse{
+			Body: "some output data",
 		}, nil
 	}
 
@@ -300,7 +320,7 @@ func TestDomainRequestsOK(t *testing.T) {
 		BatchId: "batch1",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"tx1"}, heb.TransactionsComplete)
+	assert.Equal(t, "tx1", heb.TransactionsComplete[0].TransactionId)
 
 	sr, err := domainAPI.Sign(ctx, &prototk.SignRequest{
 		Algorithm: "algo1",
@@ -313,6 +333,12 @@ func TestDomainRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "verifier1", string(gvr.Verifier))
+
+	vshr, err := domainAPI.ValidateStateHashes(ctx, &prototk.ValidateStateHashesRequest{
+		States: []*prototk.EndorsableState{{Id: "state1_in"}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "state1_out", vshr.StateIds[0])
 
 	callbacks := <-waitForCallbacks
 
@@ -327,6 +353,12 @@ func TestDomainRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "some output data", string(edr.Data))
+
+	ddr, err := callbacks.DecodeData(ctx, &prototk.DecodeDataRequest{
+		Data: []byte("some input data"),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "some output data", string(ddr.Body))
 
 	rsr, err := callbacks.RecoverSigner(ctx, &prototk.RecoverSignerRequest{
 		Algorithm: "some algo",

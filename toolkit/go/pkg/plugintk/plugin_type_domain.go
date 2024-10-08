@@ -36,11 +36,13 @@ type DomainAPI interface {
 	HandleEventBatch(context.Context, *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error)
 	Sign(context.Context, *prototk.SignRequest) (*prototk.SignResponse, error)
 	GetVerifier(context.Context, *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error)
+	ValidateStateHashes(context.Context, *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error)
 }
 
 type DomainCallbacks interface {
 	FindAvailableStates(context.Context, *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error)
 	EncodeData(context.Context, *prototk.EncodeDataRequest) (*prototk.EncodeDataResponse, error)
+	DecodeData(context.Context, *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error)
 	RecoverSigner(ctx context.Context, req *prototk.RecoverSignerRequest) (*prototk.RecoverSignerResponse, error)
 }
 
@@ -169,6 +171,10 @@ func (dp *domainHandler) RequestToPlugin(ctx context.Context, iReq PluginMessage
 		resMsg := &prototk.DomainMessage_GetVerifierRes{}
 		resMsg.GetVerifierRes, err = dp.api.GetVerifier(ctx, input.GetVerifier)
 		res.ResponseFromDomain = resMsg
+	case *prototk.DomainMessage_ValidateStateHashes:
+		resMsg := &prototk.DomainMessage_ValidateStateHashesRes{}
+		resMsg.ValidateStateHashesRes, err = dp.api.ValidateStateHashes(ctx, input.ValidateStateHashes)
+		res.ResponseFromDomain = resMsg
 	default:
 		err = i18n.NewError(ctx, tkmsgs.MsgPluginUnsupportedRequest, input)
 	}
@@ -197,6 +203,17 @@ func (dp *domainHandler) EncodeData(ctx context.Context, req *prototk.EncodeData
 	})
 }
 
+func (dp *domainHandler) DecodeData(ctx context.Context, req *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error) {
+	res, err := dp.proxy.RequestFromPlugin(ctx, dp.Wrap(&prototk.DomainMessage{
+		RequestFromDomain: &prototk.DomainMessage_DecodeData{
+			DecodeData: req,
+		},
+	}))
+	return responseToPluginAs(ctx, res, err, func(msg *prototk.DomainMessage_DecodeDataRes) *prototk.DecodeDataResponse {
+		return msg.DecodeDataRes
+	})
+}
+
 func (dp *domainHandler) RecoverSigner(ctx context.Context, req *prototk.RecoverSignerRequest) (*prototk.RecoverSignerResponse, error) {
 	res, err := dp.proxy.RequestFromPlugin(ctx, dp.Wrap(&prototk.DomainMessage{
 		RequestFromDomain: &prototk.DomainMessage_RecoverSigner{
@@ -220,6 +237,7 @@ type DomainAPIFunctions struct {
 	HandleEventBatch    func(context.Context, *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error)
 	Sign                func(context.Context, *prototk.SignRequest) (*prototk.SignResponse, error)
 	GetVerifier         func(context.Context, *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error)
+	ValidateStateHashes func(context.Context, *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error)
 }
 
 type DomainAPIBase struct {
@@ -268,4 +286,8 @@ func (db *DomainAPIBase) Sign(ctx context.Context, req *prototk.SignRequest) (*p
 
 func (db *DomainAPIBase) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error) {
 	return callPluginImpl(ctx, req, db.Functions.GetVerifier)
+}
+
+func (db *DomainAPIBase) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+	return callPluginImpl(ctx, req, db.Functions.ValidateStateHashes)
 }

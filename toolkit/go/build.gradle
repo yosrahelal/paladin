@@ -177,33 +177,10 @@ task checkCoverage(type: GoCheckCoverage, dependsOn: [aggregateCoverage]) {
     maxGap = maxCoverageBarGap
 }
 
-task buildStarterLibrary(type:Exec, dependsOn:[goGet]) {
-    workingDir '.'
-
-    def libName;
-    if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-        libName = "libstarter.dll"
-    } else if (Os.isFamily(Os.FAMILY_MAC)) {
-        libName = "libstarter.dylib"
-    } else {
-        libName = "libstarter.so"
-    }
-
-    // Updated paths for outputs
-    def outputDir = "${buildDir}/libs"
-    def outputLib = "${outputDir}/${libName}"
-    def outputHeader = "${outputDir}/libstarter.h"
-
-    inputs.files(goFiles)
-    outputs.files(outputLib, outputHeader)
-
-    environment("CGO_ENABLED", "1")
-
-    executable 'go'
-    args 'build'
-    args '-o', outputLib
-    args '-buildmode=c-shared'
-    args './domainstarter'
+task buildStarterLibrary(type:GoLib, dependsOn:[goGet]) {
+    baseName "starter"
+    sources goFiles
+    mainFile './domainstarter'
 }
 
 task build {

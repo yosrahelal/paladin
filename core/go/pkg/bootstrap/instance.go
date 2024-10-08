@@ -25,30 +25,22 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/componentmgr"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/config"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
-
-var engineFactory = func(ctx context.Context, engineName string) (components.Engine, error) {
-	switch engineName {
-	case "testbed":
-		return testbed.NewTestBed(), nil
-	default:
-		return nil, i18n.NewError(ctx, msgs.MsgEntrypointUnknownEngine, engineName)
-	}
-}
 
 var componentManagerFactory = componentmgr.NewComponentManager
 
 type instance struct {
 	grpcTarget string
-	engineName string
 	loaderUUID string
 	configFile string
+	runMode    string
 
 	ctx       context.Context
 	cancelCtx context.CancelFunc
@@ -64,12 +56,12 @@ const (
 	RC_FAIL RC = 1
 )
 
-func newInstance(grpcTarget, loaderUUID, configFile, engineName string) *instance {
+func newInstance(grpcTarget, loaderUUID, configFile, runMode string) *instance {
 	i := &instance{
 		grpcTarget: grpcTarget,
 		loaderUUID: loaderUUID,
 		configFile: configFile,
-		engineName: engineName,
+		runMode:    runMode,
 		signals:    make(chan os.Signal),
 		done:       make(chan struct{}),
 	}
@@ -99,31 +91,38 @@ func (i *instance) run() RC {
 		return RC_FAIL
 	}
 
-	var conf config.PaladinConfig
-	if err = config.ReadAndParseYAMLFile(i.ctx, i.configFile, &conf); err != nil {
+	var conf pldconf.PaladinConfig
+	if err = pldconf.ReadAndParseYAMLFile(i.ctx, i.configFile, &conf); err != nil {
 		log.L(i.ctx).Error(err.Error())
 		return RC_FAIL
 	}
 
-	engine, err := engineFactory(i.ctx, i.engineName)
-	if err != nil {
-		log.L(i.ctx).Error(err.Error())
+	var additionalManagers []components.AdditionalManager
+	switch i.runMode {
+	case "testbed":
+		additionalManagers = append(additionalManagers, testbed.NewTestBed())
+	case "engine":
+	default:
+		log.L(i.ctx).Error(i18n.NewError(i.ctx, msgs.MsgEntrypointUnknownRunMode, i.runMode))
 		return RC_FAIL
 	}
 
-	cm := componentManagerFactory(i.ctx, i.grpcTarget, id, &conf, engine)
+	cm := componentManagerFactory(i.ctx, i.grpcTarget, id, &conf, additionalManagers...)
 	// From this point need to ensure we stop the component manager
 	defer cm.Stop()
 
 	// Start it up
 	err = cm.Init()
 	if err == nil {
-		err = cm.StartComponents()
-	}
-	if err == nil {
+		// Managers start first - so they are ready to process
 		err = cm.StartManagers()
 	}
 	if err == nil {
+		// Components next - meaning things like blockchain events start streaming in
+		err = cm.StartComponents()
+	}
+	if err == nil {
+		// Then finally the front door is opened
 		err = cm.CompleteStart()
 	}
 	if err != nil {

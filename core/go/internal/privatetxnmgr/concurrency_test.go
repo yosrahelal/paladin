@@ -25,6 +25,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
+
 	pb "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -205,7 +206,7 @@ func TestConcurrentSequencing(t *testing.T) {
 	// check that all transactions are dispatched to the same node
 	// unless there is a break in the chain long enough for the previous transactions to be confirmed
 	ctx := context.Background()
-	log.SetLevel("debug")
+	// log.SetLevel("debug")
 
 	node1ID := uuid.New().String()
 	node2ID := uuid.New().String()
