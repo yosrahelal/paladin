@@ -25,7 +25,6 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
-	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/domains/noto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -259,7 +258,10 @@ func (n *Noto) encodeConfig(config *types.NotoConfigInput_V0) ([]byte, error) {
 }
 
 func (n *Noto) decodeConfig(ctx context.Context, domainConfig []byte) (*types.NotoConfigOutput_V0, error) {
-	configSelector := ethtypes.HexBytes0xPrefix(domainConfig[0:4])
+	var configSelector ethtypes.HexBytes0xPrefix
+	if len(domainConfig) >= 4 {
+		configSelector = ethtypes.HexBytes0xPrefix(domainConfig[0:4])
+	}
 	if configSelector.String() != types.NotoConfigID_V0.String() {
 		return nil, i18n.NewError(ctx, msgs.MsgUnexpectedConfigType, configSelector)
 	}
@@ -289,12 +291,17 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 		return nil, nil, err
 	}
 
+	domainConfig, err := n.decodeConfig(ctx, tx.ContractInfo.ContractConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	abi := types.NotoABI.Functions()[functionABI.Name]
 	handler := n.GetHandler(functionABI.Name)
 	if abi == nil || handler == nil {
 		return nil, nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, functionABI.Name)
 	}
-	params, err := handler.ValidateParams(ctx, tx.FunctionParamsJson)
+	params, err := handler.ValidateParams(ctx, domainConfig, tx.FunctionParamsJson)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -307,12 +314,7 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 		return nil, nil, i18n.NewError(ctx, msgs.MsgUnexpectedFunctionSignature, functionABI.Name, signature, tx.FunctionSignature)
 	}
 
-	domainConfig, err := n.decodeConfig(ctx, tx.ContractConfig)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	contractAddress, err := ethtypes.NewAddress(tx.ContractAddress)
+	contractAddress, err := ethtypes.NewAddress(tx.ContractInfo.ContractAddress)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -429,28 +431,29 @@ func (n *Noto) parseStatesFromEvent(txID tktypes.HexBytes, states []tktypes.Byte
 }
 
 func (n *Noto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
-	var events []*blockindexer.EventWithData
-	if err := json.Unmarshal([]byte(req.JsonEvents), &events); err != nil {
-		return nil, err
-	}
-
 	var res prototk.HandleEventBatchResponse
-	for _, ev := range events {
+	for _, ev := range req.Events {
 		switch ev.SoliditySignature {
 		case n.transferSignature:
 			var transfer NotoTransfer_Event
-			if err := json.Unmarshal(ev.Data, &transfer); err == nil {
+			if err := json.Unmarshal([]byte(ev.DataJson), &transfer); err == nil {
 				txID := n.decodeTransactionData(transfer.Data)
-				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
+				res.TransactionsComplete = append(res.TransactionsComplete, &prototk.CompletedTransaction{
+					TransactionId: txID.String(),
+					Location:      ev.Location,
+				})
 				res.SpentStates = append(res.SpentStates, n.parseStatesFromEvent(txID, transfer.Inputs)...)
 				res.ConfirmedStates = append(res.ConfirmedStates, n.parseStatesFromEvent(txID, transfer.Outputs)...)
 			}
 
 		case n.approvedSignature:
 			var approved NotoApproved_Event
-			if err := json.Unmarshal(ev.Data, &approved); err == nil {
+			if err := json.Unmarshal([]byte(ev.DataJson), &approved); err == nil {
 				txID := n.decodeTransactionData(approved.Data)
-				res.TransactionsComplete = append(res.TransactionsComplete, txID.String())
+				res.TransactionsComplete = append(res.TransactionsComplete, &prototk.CompletedTransaction{
+					TransactionId: txID.String(),
+					Location:      ev.Location,
+				})
 			}
 		}
 	}

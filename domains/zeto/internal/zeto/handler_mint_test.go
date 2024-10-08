@@ -30,19 +30,19 @@ import (
 func TestMintValidateParams(t *testing.T) {
 	h := mintHandler{}
 	ctx := context.Background()
-	_, err := h.ValidateParams(ctx, "bad json")
+	_, err := h.ValidateParams(ctx, nil, "bad json")
 	assert.EqualError(t, err, "invalid character 'b' looking for beginning of value")
 
-	_, err = h.ValidateParams(ctx, "{}")
+	_, err = h.ValidateParams(ctx, nil, "{}")
 	assert.EqualError(t, err, "parameter 'to' is required")
 
-	_, err = h.ValidateParams(ctx, "{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":0}")
+	_, err = h.ValidateParams(ctx, nil, "{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":0}")
 	assert.EqualError(t, err, "parameter 'amount' must be greater than 0")
 
-	_, err = h.ValidateParams(ctx, "{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":-10}")
+	_, err = h.ValidateParams(ctx, nil, "{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":-10}")
 	assert.EqualError(t, err, "parameter 'amount' must be greater than 0")
 
-	params, err := h.ValidateParams(ctx, "{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":10}")
+	params, err := h.ValidateParams(ctx, nil, "{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":10}")
 	assert.NoError(t, err)
 	assert.Equal(t, "0x1234567890123456789012345678901234567890", params.(*types.MintParams).To)
 	assert.Equal(t, "0x0a", params.(*types.MintParams).Amount.String())
@@ -106,7 +106,7 @@ func TestMintAssemble(t *testing.T) {
 		},
 	}
 	_, err = h.Assemble(ctx, tx, req)
-	assert.EqualError(t, err, "expected 32 bytes in hex string, got 20")
+	assert.EqualError(t, err, "failed to decode recipient public key. invalid compressed public key length: 20")
 
 	privKey := babyjub.NewRandPrivKey()
 	pubKey := privKey.Public()

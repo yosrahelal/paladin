@@ -20,24 +20,28 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
 type mintHandler struct {
 	zeto *Zeto
 }
 
-func (h *mintHandler) ValidateParams(ctx context.Context, params string) (interface{}, error) {
+func (h *mintHandler) ValidateParams(ctx context.Context, config *types.DomainInstanceConfig, params string) (interface{}, error) {
 	var mintParams types.MintParams
 	if err := json.Unmarshal([]byte(params), &mintParams); err != nil {
 		return nil, err
 	}
 	if mintParams.To == "" {
 		return nil, fmt.Errorf("parameter 'to' is required")
+	}
+	if mintParams.Amount == nil {
+		return nil, fmt.Errorf("parameter 'amount' is required")
 	}
 	if mintParams.Amount.Int().Sign() != 1 {
 		return nil, fmt.Errorf("parameter 'amount' must be greater than 0")
@@ -67,13 +71,9 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 		return nil, fmt.Errorf("failed to resolve: %s", params.To)
 	}
 
-	var recipientKeyCompressed babyjub.PublicKeyComp
-	if err := recipientKeyCompressed.UnmarshalText([]byte(resolvedRecipient.Verifier)); err != nil {
-		return nil, err
-	}
-	recipientKey, err := recipientKeyCompressed.Decompress()
+	recipientKey, err := zetosigner.DecodeBabyJubJubPublicKey(resolvedRecipient.Verifier)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode recipient public key. %s", err)
 	}
 
 	_, outputStates, err := h.zeto.prepareOutputs(params.To, recipientKey, params.Amount)
@@ -89,9 +89,8 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 			{
 				Name:            "submitter",
 				AttestationType: pb.AttestationType_ENDORSE,
-				Algorithm:       h.zeto.getAlgoZetoSnarkBJJ(),
-				VerifierType:    zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
-				PayloadType:     zetosigner.PAYLOAD_DOMAIN_ZETO_SNARK,
+				Algorithm:       algorithms.ECDSA_SECP256K1,
+				VerifierType:    verifiers.ETH_ADDRESS,
 				Parties:         []string{tx.Transaction.From},
 			},
 		},

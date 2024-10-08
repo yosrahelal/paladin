@@ -19,9 +19,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
 )
+
+// ABI encoded config:
+// types.NotoConfigInput_V0{NotaryLookup: "notary"})
+var encodedConfig = ethtypes.MustNewHexBytes0xPrefix("0x00010000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000066e6f746172790000000000000000000000000000000000000000000000000000")
 
 func TestConfigureDomainBadConfig(t *testing.T) {
 	n := &Noto{}
@@ -75,6 +80,9 @@ func TestInitTransactionBadFunction(t *testing.T) {
 	n := &Noto{}
 	_, err := n.InitTransaction(context.Background(), &prototk.InitTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
+			ContractInfo: &prototk.ContractInfo{
+				ContractConfig: encodedConfig,
+			},
 			FunctionAbiJson: `{"name": "does-not-exist"}`,
 		},
 	})
@@ -85,6 +93,9 @@ func TestInitTransactionBadParams(t *testing.T) {
 	n := &Noto{}
 	_, err := n.InitTransaction(context.Background(), &prototk.InitTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
+			ContractInfo: &prototk.ContractInfo{
+				ContractConfig: encodedConfig,
+			},
 			FunctionAbiJson:    `{"name": "transfer"}`,
 			FunctionParamsJson: "!!wrong",
 		},
@@ -96,6 +107,9 @@ func TestInitTransactionMissingTo(t *testing.T) {
 	n := &Noto{}
 	_, err := n.InitTransaction(context.Background(), &prototk.InitTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
+			ContractInfo: &prototk.ContractInfo{
+				ContractConfig: encodedConfig,
+			},
 			FunctionAbiJson:    `{"name": "transfer"}`,
 			FunctionParamsJson: "{}",
 		},
@@ -107,6 +121,9 @@ func TestInitTransactionMissingAmount(t *testing.T) {
 	n := &Noto{}
 	_, err := n.InitTransaction(context.Background(), &prototk.InitTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
+			ContractInfo: &prototk.ContractInfo{
+				ContractConfig: encodedConfig,
+			},
 			FunctionAbiJson:    `{"name": "transfer"}`,
 			FunctionParamsJson: `{"to": "recipient"}`,
 		},
@@ -118,6 +135,9 @@ func TestInitTransactionBadSignature(t *testing.T) {
 	n := &Noto{}
 	_, err := n.InitTransaction(context.Background(), &prototk.InitTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
+			ContractInfo: &prototk.ContractInfo{
+				ContractConfig: encodedConfig,
+			},
 			FunctionAbiJson:    `{"name": "transfer"}`,
 			FunctionParamsJson: `{"to": "recipient", "amount": 1}`,
 		},

@@ -14,6 +14,7 @@
  */
 
 import org.apache.tools.ant.taskdefs.condition.Os
+import org.apache.tools.ant.filters.LineContains
 
 ext {
     goFiles = fileTree(".") {
@@ -23,6 +24,14 @@ ext {
     goFilesE2E = fileTree(".") {
         include "integration-test/**/*.go"
     }
+    targetCoverage = 92
+    maxCoverageBarGap = 1
+    coveragePackages = [
+        "github.com/kaleido-io/paladin/domains/zeto/internal/...",
+        "github.com/kaleido-io/paladin/domains/zeto/pkg/types",
+        "github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner",
+    ]
+
     zetoVersion = "v0.0.5"
     zetoHost = "hyperledger-labs"
     zkpOut = "${projectDir}/zkp"
@@ -42,6 +51,20 @@ configurations {
     coreGo {
         canBeConsumed = false
         canBeResolved = true
+    }
+
+    // Consumable configurations
+    goSource {
+        canBeConsumed = true
+        canBeResolved = false
+    }
+    zetoArtifacts {
+        canBeConsumed = true
+        canBeResolved = false
+    }
+    poseidonArtifacts {
+        canBeConsumed = true
+        canBeResolved = false
     }
 }
 
@@ -133,6 +156,7 @@ task extractZetoArtifacts(type: Copy, dependsOn: [protoc, downloadZetoProver, do
 }
 
 task copySolidity(type: Copy, dependsOn: [protoc, ":solidity:compile", extractZetoArtifacts]) {
+    inputs.files(configurations.contractCompile)
     from fileTree(configurations.contractCompile.asPath) {
         include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
     }
@@ -150,7 +174,8 @@ task copySolidity(type: Copy, dependsOn: [protoc, ":solidity:compile", extractZe
 }
 
 task copySolidityForTest(type: Copy, dependsOn: [extractZetoArtifacts, generatePoseidonArtifacts, ":solidity:compile"]) {
-    from fileTree("${rootDir}/solidity/artifacts") {
+    inputs.files(configurations.contractCompile)
+    from fileTree(configurations.contractCompile.asPath) {
         include 'contracts/domains/zeto/ZetoFactory.sol/ZetoFactory.json'
     }
     from fileTree("${zkpOut}/artifacts/contracts") {
@@ -183,44 +208,49 @@ task testE2E(type: Exec, dependsOn: [protoc, copySolidity, copySolidityForTest, 
     workingDir '.'
     executable 'go'
     args 'test'
-    args '-v'
     args './integration-test'
-    args '-cover'
-    args '-covermode=atomic'
-    args '-timeout=300s'
     if (project.findProperty('verboseTests') == 'true') {
         args '-v'
     }
-    args "-test.gocoverdir=${projectDir}/coverage"
 
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
 }
 
-task test(type: Exec, dependsOn: [protoc, ":core:go:makeMocks"]) {
-
+task unitTests(type: Exec, dependsOn: [protoc, ":core:go:makeMocks"]) {
     inputs.files(configurations.toolkitGo)
     inputs.files(configurations.coreGo)
     inputs.files(goFiles)
     outputs.dir('coverage')
 
+    def packages = project.properties["coveragePackages"].join(",")
+
     workingDir '.'
     executable 'go'
     args 'test'
-    args '-v'
     args './internal/...'
     args './pkg/...'
     args '-cover'
     args '-covermode=atomic'
     args '-timeout=30s'
+    args "-coverpkg=${packages}"
+    args '-coverprofile=coverage.txt'
     if (project.findProperty('verboseTests') == 'true') {
         args '-v'
     }
-    args "-coverprofile"
-    args "${projectDir}/coverage.txt"
 
     dependsOn copySolidity
     dependsOn ':testinfra:startTestInfra'
     helpers.dumpLogsOnFailure(it, ':testinfra:startTestInfra')
+}
+
+task checkCoverage(type: GoCheckCoverage, dependsOn: [unitTests]) {
+    coverageFile('coverage.txt')
+    target = targetCoverage
+    maxGap = maxCoverageBarGap
+}
+
+task test {
+    finalizedBy checkCoverage
 }
 
 task buildGo {
@@ -229,7 +259,6 @@ task buildGo {
         println ":domain:zeto buildGo task not implemented"
     }
 }
-
 
 task build {
     dependsOn test
@@ -246,4 +275,10 @@ task clean(type: Delete) {
 
 task assemble {
     dependsOn buildGo
+}
+
+dependencies {
+    goSource files(goFiles, copySolidity)
+    zetoArtifacts files(extractZetoArtifacts)
+    poseidonArtifacts files(generatePoseidonArtifacts)
 }

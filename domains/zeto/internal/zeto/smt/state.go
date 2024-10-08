@@ -21,8 +21,8 @@ import (
 )
 
 type MerkleTreeRoot struct {
-	SmtName   string `json:"smtName"`
-	RootIndex string `json:"rootIndex"`
+	SmtName   string          `json:"smtName"`
+	RootIndex tktypes.Bytes32 `json:"rootIndex"`
 }
 
 var MerkleTreeRootABI = &abi.Parameter{
