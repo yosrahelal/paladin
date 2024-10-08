@@ -17,7 +17,7 @@ package types
 
 import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 var NotoABI = abi.ABI{
@@ -38,39 +38,56 @@ var NotoABI = abi.ABI{
 		},
 	},
 	{
-		Name: "transferWithApproval",
-		Type: abi.Function,
-		Inputs: abi.ParameterArray{
-			{Name: "to", Type: "string"},
-			{Name: "amount", Type: "uint256"},
-		},
-	},
-	{
 		Name: "approveTransfer",
 		Type: abi.Function,
 		Inputs: abi.ParameterArray{
+			{
+				Name:         "inputs",
+				Type:         "tuple[]",
+				InternalType: "struct FullState[]",
+				Components: abi.ParameterArray{
+					{Name: "id", Type: "bytes"},
+					{Name: "schema", Type: "bytes32"},
+					{Name: "data", Type: "bytes"},
+				},
+			},
+			{
+				Name:         "outputs",
+				Type:         "tuple[]",
+				InternalType: "struct FullState[]",
+				Components: abi.ParameterArray{
+					{Name: "id", Type: "bytes"},
+					{Name: "schema", Type: "bytes32"},
+					{Name: "data", Type: "bytes"},
+				},
+			},
+			{Name: "data", Type: "bytes"},
 			{Name: "delegate", Type: "address"},
-			{Name: "call", Type: "bytes"}, // assumed to be an encoded "transferWithApproval"
 		},
 	},
 }
 
 type ConstructorParams struct {
-	Notary         string `json:"notary"`
-	Implementation string `json:"implementation"`
+	Notary              string              `json:"notary"`
+	GuardPublicAddress  *tktypes.EthAddress `json:"guardPublicAddress,omitempty"`
+	GuardPrivateAddress *tktypes.EthAddress `json:"guardPrivateAddress,omitempty"`
+	GuardPrivateGroup   *PentePrivateGroup  `json:"guardPrivateGroup,omitempty"`
+	Implementation      string              `json:"implementation"`
 }
 
 type MintParams struct {
-	To     string               `json:"to"`
-	Amount *ethtypes.HexInteger `json:"amount"`
+	To     string              `json:"to"`
+	Amount *tktypes.HexUint256 `json:"amount"`
 }
 
 type TransferParams struct {
-	To     string               `json:"to"`
-	Amount *ethtypes.HexInteger `json:"amount"`
+	To     string              `json:"to"`
+	Amount *tktypes.HexUint256 `json:"amount"`
 }
 
 type ApproveParams struct {
-	Delegate ethtypes.Address0xHex     `json:"delegate"`
-	Call     ethtypes.HexBytes0xPrefix `json:"call"`
+	Inputs   []*tktypes.FullState `json:"inputs"`
+	Outputs  []*tktypes.FullState `json:"outputs"`
+	Data     tktypes.HexBytes     `json:"data"`
+	Delegate *tktypes.EthAddress  `json:"delegate"`
 }

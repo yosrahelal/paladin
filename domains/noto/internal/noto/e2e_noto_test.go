@@ -67,9 +67,9 @@ func mapConfig(t *testing.T, config *types.DomainConfig) (m map[string]any) {
 	return m
 }
 
-func deployContracts(ctx context.Context, t *testing.T, contracts map[string][]byte) map[string]string {
+func deployContracts(ctx context.Context, t *testing.T, hdWalletSeed *testbed.UTInitFunction, contracts map[string][]byte) map[string]string {
 	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("../../testbed.config.yaml", map[string]*testbed.TestbedDomain{})
+	url, done, err := tb.StartForTest("../../testbed.config.yaml", map[string]*testbed.TestbedDomain{}, hdWalletSeed)
 	require.NoError(t, err)
 	defer done()
 	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
@@ -100,9 +100,9 @@ func newNotoDomain(t *testing.T, config *types.DomainConfig) (*Noto, *testbed.Te
 	}
 }
 
-func newTestbed(t *testing.T, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
+func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
 	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("../../testbed.config.yaml", domains)
+	url, done, err := tb.StartForTest("../../testbed.config.yaml", domains, hdWalletSeed)
 	assert.NoError(t, err)
 	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
 	return done, tb, rpc
@@ -130,11 +130,13 @@ func TestNoto(t *testing.T) {
 	domainName := "noto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
 
+	hdWalletSeed := testbed.HDWalletSeedScopedToTest()
+
 	log.L(ctx).Infof("Deploying Noto factory")
 	contractSource := map[string][]byte{
 		"factory": notoFactoryJSON,
 	}
-	contracts := deployContracts(ctx, t, contractSource)
+	contracts := deployContracts(ctx, t, hdWalletSeed, contractSource)
 	for name, address := range contracts {
 		log.L(ctx).Infof("%s deployed to %s", name, address)
 	}
@@ -142,7 +144,7 @@ func TestNoto(t *testing.T) {
 	noto, notoTestbed := newNotoDomain(t, &types.DomainConfig{
 		FactoryAddress: contracts["factory"],
 	})
-	done, tb, rpc := newTestbed(t, map[string]*testbed.TestbedDomain{
+	done, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: notoTestbed,
 	})
 	defer done()
@@ -155,7 +157,7 @@ func TestNoto(t *testing.T) {
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Deploying an instance of Noto")
-	var notoAddress ethtypes.Address0xHex
+	var notoAddress tktypes.EthAddress
 	rpcerr := rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
 		domainName, &types.ConstructorParams{
 			Notary: notaryName,
@@ -169,101 +171,101 @@ func TestNoto(t *testing.T) {
 	var invokeResult tktypes.PrivateContractTransaction
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     notaryName,
-		To:       tktypes.EthAddress(notoAddress),
+		To:       notoAddress,
 		Function: *types.NotoABI.Functions()["mint"],
 		Inputs: toJSON(t, &types.MintParams{
 			To:     notaryName,
-			Amount: ethtypes.NewHexInteger64(100),
+			Amount: tktypes.Int64ToInt256(100),
 		}),
 	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err := noto.FindCoins(ctx, notoAddress, "{}")
+	coins, err := noto.FindCoins(ctx, &notoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 1)
-	assert.Equal(t, int64(100), coins[0].Amount.Int64())
+	assert.Equal(t, int64(100), coins[0].Amount.Int().Int64())
 	assert.Equal(t, notaryKey, coins[0].Owner.String())
 
 	log.L(ctx).Infof("Attempt mint from non-notary (should fail)")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     recipient1Name,
-		To:       tktypes.EthAddress(notoAddress),
+		To:       notoAddress,
 		Function: *types.NotoABI.Functions()["mint"],
 		Inputs: toJSON(t, &types.MintParams{
 			To:     recipient1Name,
-			Amount: ethtypes.NewHexInteger64(100),
+			Amount: tktypes.Int64ToInt256(100),
 		}),
 	}, true)
 	require.NotNil(t, rpcerr)
 	assert.ErrorContains(t, rpcerr.Error(), "PD200009")
 
-	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
+	coins, err = noto.FindCoins(ctx, &notoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 1)
 
 	log.L(ctx).Infof("Transfer 150 from notary (should fail)")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     notaryName,
-		To:       tktypes.EthAddress(notoAddress),
+		To:       notoAddress,
 		Function: *types.NotoABI.Functions()["transfer"],
 		Inputs: toJSON(t, &types.TransferParams{
 			To:     recipient1Name,
-			Amount: ethtypes.NewHexInteger64(150),
+			Amount: tktypes.Int64ToInt256(150),
 		}),
 	}, true)
 	require.NotNil(t, rpcerr)
 	assert.ErrorContains(t, rpcerr.Error(), "PD200005")
 
-	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
+	coins, err = noto.FindCoins(ctx, &notoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 1)
 
 	log.L(ctx).Infof("Transfer 50 from notary to recipient1")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     notaryName,
-		To:       tktypes.EthAddress(notoAddress),
+		To:       notoAddress,
 		Function: *types.NotoABI.Functions()["transfer"],
 		Inputs: toJSON(t, &types.TransferParams{
 			To:     recipient1Name,
-			Amount: ethtypes.NewHexInteger64(50),
+			Amount: tktypes.Int64ToInt256(50),
 		}),
 	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
+	coins, err = noto.FindCoins(ctx, &notoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 2)
 
-	assert.Equal(t, int64(50), coins[0].Amount.Int64())
+	assert.Equal(t, int64(50), coins[0].Amount.Int().Int64())
 	assert.Equal(t, recipient1Key, coins[0].Owner.String())
-	assert.Equal(t, int64(50), coins[1].Amount.Int64())
+	assert.Equal(t, int64(50), coins[1].Amount.Int().Int64())
 	assert.Equal(t, notaryKey, coins[1].Owner.String())
 
 	log.L(ctx).Infof("Transfer 50 from recipient1 to recipient2")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     recipient1Name,
-		To:       tktypes.EthAddress(notoAddress),
+		To:       notoAddress,
 		Function: *types.NotoABI.Functions()["transfer"],
 		Inputs: toJSON(t, &types.TransferParams{
 			To:     recipient2Name,
-			Amount: ethtypes.NewHexInteger64(50),
+			Amount: tktypes.Int64ToInt256(50),
 		}),
 	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
+	coins, err = noto.FindCoins(ctx, &notoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 2)
 
-	assert.Equal(t, int64(50), coins[0].Amount.Int64())
+	assert.Equal(t, int64(50), coins[0].Amount.Int().Int64())
 	assert.Equal(t, notaryKey, coins[0].Owner.String())
-	assert.Equal(t, int64(50), coins[1].Amount.Int64())
+	assert.Equal(t, int64(50), coins[1].Amount.Int().Int64())
 	assert.Equal(t, recipient2Key, coins[1].Owner.String())
 }
 
@@ -273,19 +275,21 @@ func TestNotoApprove(t *testing.T) {
 	domainName := "noto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
 
+	hdWalletSeed := testbed.HDWalletSeedScopedToTest()
+
 	log.L(ctx).Infof("Deploying Noto factory")
 	contractSource := map[string][]byte{
 		"factory": notoFactoryJSON,
 	}
-	contracts := deployContracts(ctx, t, contractSource)
+	contracts := deployContracts(ctx, t, hdWalletSeed, contractSource)
 	for name, address := range contracts {
 		log.L(ctx).Infof("%s deployed to %s", name, address)
 	}
 
-	_, notoTestbed := newNotoDomain(t, &types.DomainConfig{
+	noto, notoTestbed := newNotoDomain(t, &types.DomainConfig{
 		FactoryAddress: contracts["factory"],
 	})
-	done, tb, rpc := newTestbed(t, map[string]*testbed.TestbedDomain{
+	done, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: notoTestbed,
 	})
 	defer done()
@@ -294,7 +298,7 @@ func TestNotoApprove(t *testing.T) {
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Deploying an instance of Noto")
-	var notoAddress ethtypes.Address0xHex
+	var notoAddress tktypes.EthAddress
 	rpcerr := rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
 		domainName, &types.ConstructorParams{
 			Notary: notaryName,
@@ -308,11 +312,11 @@ func TestNotoApprove(t *testing.T) {
 	var invokeResult tktypes.PrivateContractTransaction
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     notaryName,
-		To:       tktypes.EthAddress(notoAddress),
+		To:       notoAddress,
 		Function: *types.NotoABI.Functions()["mint"],
 		Inputs: toJSON(t, &types.MintParams{
 			To:     notaryName,
-			Amount: ethtypes.NewHexInteger64(100),
+			Amount: tktypes.Int64ToInt256(100),
 		}),
 	}, true)
 	if rpcerr != nil {
@@ -323,28 +327,48 @@ func TestNotoApprove(t *testing.T) {
 	var prepared tktypes.PrivateContractTransaction
 	rpcerr = rpc.CallRPC(ctx, &prepared, "testbed_prepare", &tktypes.PrivateContractInvoke{
 		From:     notaryName,
-		To:       tktypes.EthAddress(notoAddress),
-		Function: *types.NotoABI.Functions()["transferWithApproval"],
+		To:       notoAddress,
+		Function: *types.NotoABI.Functions()["transfer"],
 		Inputs: toJSON(t, &types.TransferParams{
 			To:     recipient1Name,
-			Amount: ethtypes.NewHexInteger64(50),
+			Amount: tktypes.Int64ToInt256(50),
 		}),
 	})
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
+
+	var transferParams NotoTransferParams
+	err = json.Unmarshal(prepared.ParamsJSON, &transferParams)
+	require.NoError(t, err)
+
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     notaryName,
-		To:       tktypes.EthAddress(notoAddress),
+		To:       notoAddress,
 		Function: *types.NotoABI.Functions()["approveTransfer"],
 		Inputs: toJSON(t, &types.ApproveParams{
-			Delegate: *ethtypes.MustNewAddress(recipient1Key),
-			Call:     prepared.EncodedCall,
+			Inputs:   prepared.InputStates,
+			Outputs:  prepared.OutputStates,
+			Data:     transferParams.Data,
+			Delegate: tktypes.MustEthAddress(recipient1Key),
 		}),
 	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
+
+	log.L(ctx).Infof("Claim 50 using approval")
+	eth := tb.Components().EthClientFactory().HTTPClient()
+	abiClient, err := eth.ABI(ctx, noto.contractABI)
+	assert.NoError(t, err)
+	transferWithApproval, err := abiClient.Function(ctx, "transferWithApproval")
+	assert.NoError(t, err)
+	_, err = transferWithApproval.R(ctx).
+		Signer(recipient1Name).
+		To((*ethtypes.Address0xHex)(&notoAddress)).
+		Input(transferParams).
+		SignAndSend()
+	assert.NoError(t, err)
 }
 
 func TestNotoSelfSubmit(t *testing.T) {
@@ -353,12 +377,14 @@ func TestNotoSelfSubmit(t *testing.T) {
 	domainName := "noto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
 
+	hdWalletSeed := testbed.HDWalletSeedScopedToTest()
+
 	log.L(ctx).Infof("Deploying Noto factory")
 	contractSource := map[string][]byte{
 		"factory": notoFactoryJSON,
 		"noto":    notoSelfSubmitJSON,
 	}
-	contracts := deployContracts(ctx, t, contractSource)
+	contracts := deployContracts(ctx, t, hdWalletSeed, contractSource)
 	for name, address := range contracts {
 		log.L(ctx).Infof("%s deployed to %s", name, address)
 	}
@@ -369,7 +395,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 	noto, notoTestbed := newNotoDomain(t, &types.DomainConfig{
 		FactoryAddress: factoryAddress.String(),
 	})
-	done, tb, rpc := newTestbed(t, map[string]*testbed.TestbedDomain{
+	done, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: notoTestbed,
 	})
 	defer done()
@@ -395,7 +421,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 	waitFor(ctx, t, tb, txHash, err)
 
 	log.L(ctx).Infof("Deploying an instance of Noto")
-	var notoAddress ethtypes.Address0xHex
+	var notoAddress tktypes.EthAddress
 	rpcerr := rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
 		domainName, &types.ConstructorParams{
 			Notary:         notaryName,
@@ -411,66 +437,66 @@ func TestNotoSelfSubmit(t *testing.T) {
 	var invokeResult tktypes.PrivateContractTransaction
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     notaryName,
-		To:       tktypes.EthAddress(notoAddress),
+		To:       notoAddress,
 		Function: *types.NotoABI.Functions()["mint"],
 		Inputs: toJSON(t, &types.MintParams{
 			To:     notaryName,
-			Amount: ethtypes.NewHexInteger64(100),
+			Amount: tktypes.Int64ToInt256(100),
 		}),
 	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err := noto.FindCoins(ctx, notoAddress, "{}")
+	coins, err := noto.FindCoins(ctx, &notoAddress, "{}")
 	require.NoError(t, err)
 	assert.Len(t, coins, 1)
-	assert.Equal(t, int64(100), coins[0].Amount.Int64())
+	assert.Equal(t, int64(100), coins[0].Amount.Int().Int64())
 	assert.Equal(t, notaryKey, coins[0].Owner.String())
 
 	log.L(ctx).Infof("Transfer 50 from notary to recipient1")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     notaryName,
-		To:       tktypes.EthAddress(notoAddress),
+		To:       notoAddress,
 		Function: *types.NotoABI.Functions()["transfer"],
 		Inputs: toJSON(t, &types.TransferParams{
 			To:     recipient1Name,
-			Amount: ethtypes.NewHexInteger64(50),
+			Amount: tktypes.Int64ToInt256(50),
 		}),
 	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
+	coins, err = noto.FindCoins(ctx, &notoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 2)
 
-	assert.Equal(t, int64(50), coins[0].Amount.Int64())
+	assert.Equal(t, int64(50), coins[0].Amount.Int().Int64())
 	assert.Equal(t, recipient1Key, coins[0].Owner.String())
-	assert.Equal(t, int64(50), coins[1].Amount.Int64())
+	assert.Equal(t, int64(50), coins[1].Amount.Int().Int64())
 	assert.Equal(t, notaryKey, coins[1].Owner.String())
 
 	log.L(ctx).Infof("Transfer 50 from recipient1 to recipient2")
 	rpcerr = rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
 		From:     recipient1Name,
-		To:       tktypes.EthAddress(notoAddress),
+		To:       notoAddress,
 		Function: *types.NotoABI.Functions()["transfer"],
 		Inputs: toJSON(t, &types.TransferParams{
 			To:     recipient2Name,
-			Amount: ethtypes.NewHexInteger64(50),
+			Amount: tktypes.Int64ToInt256(50),
 		}),
 	}, true)
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
 
-	coins, err = noto.FindCoins(ctx, notoAddress, "{}")
+	coins, err = noto.FindCoins(ctx, &notoAddress, "{}")
 	require.NoError(t, err)
 	require.Len(t, coins, 2)
 
-	assert.Equal(t, int64(50), coins[0].Amount.Int64())
+	assert.Equal(t, int64(50), coins[0].Amount.Int().Int64())
 	assert.Equal(t, notaryKey, coins[0].Owner.String())
-	assert.Equal(t, int64(50), coins[1].Amount.Int64())
+	assert.Equal(t, int64(50), coins[1].Amount.Int().Int64())
 	assert.Equal(t, recipient2Key, coins[1].Owner.String())
 }

@@ -197,7 +197,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 			require.NoError(t, err)
 			tx := args[1].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
-			tx.PreparedTransaction = &components.EthTransaction{
+			tx.PreparedPublicTransaction = &components.EthTransaction{
 				FunctionABI: testABI[0],
 				To:          *domainAddress,
 				Inputs:      cv,
@@ -364,7 +364,7 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 			require.NoError(t, err)
 			tx := args[1].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
-			tx.PreparedTransaction = &components.EthTransaction{
+			tx.PreparedPublicTransaction = &components.EthTransaction{
 				FunctionABI: testABI[0],
 				To:          *domainAddress,
 				Inputs:      cv,
@@ -524,7 +524,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 			require.NoError(t, err)
 			tx := args[1].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
-			tx.PreparedTransaction = &components.EthTransaction{
+			tx.PreparedPublicTransaction = &components.EthTransaction{
 				FunctionABI: testABI[0],
 				To:          *domainAddress,
 				Inputs:      cv,

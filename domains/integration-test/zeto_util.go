@@ -70,12 +70,12 @@ type implementationInfo struct {
 	WithdrawVerifier string `json:"withdrawVerifier"`
 }
 
-func deployZetoContracts(t *testing.T, controller string) *zetoDomainContracts {
+func deployZetoContracts(t *testing.T, hdWalletSeed *testbed.UTInitFunction, controller string) *zetoDomainContracts {
 	ctx := context.Background()
 	log.L(ctx).Infof("Deploy Zeto Contracts")
 
 	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{})
+	url, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{}, hdWalletSeed)
 	bi := tb.Components().BlockIndexer()
 	ec := tb.Components().EthClientFactory().HTTPClient()
 	assert.NoError(t, err)
