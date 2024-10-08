@@ -25,7 +25,7 @@ import (
 )
 
 type ZetoCoinState struct {
-	ID              tktypes.Bytes32    `json:"id"`
+	ID              tktypes.HexUint256 `json:"id"`
 	Created         tktypes.Timestamp  `json:"created"`
 	ContractAddress tktypes.EthAddress `json:"contractAddress"`
 	Data            ZetoCoin           `json:"data"`

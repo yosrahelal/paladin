@@ -444,7 +444,7 @@ func (z *Zeto) addOutputToMerkleTree(txID tktypes.HexBytes, tokenName string, st
 	for _, state := range newStates {
 		state.TransactionId = txID.String()
 	}
-	return storage.GetNewStates(), nil
+	return newStates, nil
 }
 
 func encodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {
