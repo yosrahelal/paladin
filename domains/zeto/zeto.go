@@ -12,21 +12,33 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
-package zeto
+package main
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
+	"C"
+)
+import (
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
+	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 )
 
-func TestGetHandler(t *testing.T) {
-	z := &Zeto{
-		name: "test1",
-	}
-	assert.NotNil(t, z.GetHandler("mint"))
-	assert.NotNil(t, z.GetHandler("transfer"))
-	assert.NotNil(t, z.GetHandler("lockProof"))
-	assert.Nil(t, z.GetHandler("bad"))
+var ple = plugintk.NewPluginLibraryEntrypoint(func() plugintk.PluginBase {
+	return plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
+		return zeto.New(callbacks)
+	})
+})
+
+//export Run
+func Run(grpcTargetPtr, pluginUUIDPtr *C.char) int {
+	return ple.Run(
+		C.GoString(grpcTargetPtr),
+		C.GoString(pluginUUIDPtr),
+	)
 }
+
+//export Stop
+func Stop(pluginUUIDPtr *C.char) {
+	ple.Stop(C.GoString(pluginUUIDPtr))
+}
+
+func main() {}
