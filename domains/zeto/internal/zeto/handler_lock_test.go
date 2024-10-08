@@ -60,7 +60,7 @@ func TestLockValidateParams(t *testing.T) {
 
 	h.zeto.config.DomainContracts.Implementations[0].Abi = "[{\"inputs\": [{\"internalType\": \"uint256[2]\",\"name\": \"inputs\",\"type\": \"uint256[2]\"}],\"name\": \"transfer\",\"outputs\": [],\"type\": \"function\"}]"
 	lockParams := types.LockParams{
-		Delegate: *tktypes.RandAddress(),
+		Delegate: tktypes.RandAddress(),
 		Call:     tktypes.HexBytes([]byte("bad call")),
 	}
 	jsonBytes, err := json.Marshal(lockParams)
@@ -78,7 +78,7 @@ func TestLockValidateParams(t *testing.T) {
 	bytes, err := transfer.EncodeCallDataValues(params)
 	assert.NoError(t, err)
 	lockParams = types.LockParams{
-		Delegate: *tktypes.RandAddress(),
+		Delegate: tktypes.RandAddress(),
 		Call:     tktypes.HexBytes(bytes),
 	}
 	jsonBytes, err = json.Marshal(lockParams)
@@ -97,7 +97,7 @@ func TestLocktInit(t *testing.T) {
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
 		Params: &types.LockParams{
-			Delegate: *tktypes.RandAddress(),
+			Delegate: tktypes.RandAddress(),
 			Call:     tktypes.HexBytes([]byte{0x01, 0x02, 0x03}),
 		},
 	}
@@ -119,7 +119,7 @@ func TestLockAssemble(t *testing.T) {
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
 		Params: &types.LockParams{
-			Delegate: *tktypes.RandAddress(),
+			Delegate: tktypes.RandAddress(),
 			Call:     tktypes.HexBytes([]byte{0x01, 0x02, 0x03}),
 		},
 		Transaction: &prototk.TransactionSpecification{},
@@ -139,7 +139,7 @@ func TestLockEndorse(t *testing.T) {
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
 		Params: &types.LockParams{
-			Delegate: *tktypes.RandAddress(),
+			Delegate: tktypes.RandAddress(),
 			Call:     tktypes.HexBytes([]byte{0x01, 0x02, 0x03}),
 		},
 	}
@@ -169,7 +169,7 @@ func TestLockPrepare(t *testing.T) {
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
 		Params: &types.LockParams{
-			Delegate: *tktypes.RandAddress(),
+			Delegate: tktypes.RandAddress(),
 			Call:     tktypes.HexBytes([]byte{0x01, 0x02, 0x03}),
 		},
 		DomainConfig: &types.DomainInstanceConfig{
@@ -195,7 +195,7 @@ func TestLockPrepare(t *testing.T) {
 	bytes, err := transfer.EncodeCallDataValues(params)
 	assert.NoError(t, err)
 	tx.Params = &types.LockParams{
-		Delegate: *tktypes.RandAddress(),
+		Delegate: tktypes.RandAddress(),
 		Call:     tktypes.HexBytes(bytes),
 	}
 	_, err = h.Prepare(ctx, tx, req)
