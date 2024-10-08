@@ -211,7 +211,7 @@ func TestOrchestratorHandleEvents(t *testing.T) {
 			mockTxProcessor.On("GetStatus", mock.Anything).Return(ptmgrtypes.TxProcessorActive).Maybe()
 			mockTxProcessor.On(tt.handlerName, mock.Anything, tt.event).Run(func(args mock.Arguments) {
 				waitForAction <- true
-			}).Return()
+			}).Return(nil)
 
 			testOc.incompleteTxSProcessMap[newTxID.String()] = mockTxProcessor
 			testOc.pendingEvents <- tt.event

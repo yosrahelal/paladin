@@ -15,6 +15,12 @@
 
 package ptmgrtypes
 
+/*
+   This package defines interfaces that are used within the privatetxnmgr package
+   They are defined in a separate package to avoid circular dependencies between the privatetxnmgr package mocks.
+   All interfaces of privatetxnmgr intended to be consumed by other packages should be defined in components package
+*/
+
 import (
 	"context"
 	"time"
@@ -102,7 +108,7 @@ type Sequencer interface {
 	/*
 		HandleTransactionAssembledEvent needs to be called whenever a transaction has been assembled by any node in the network, including the local node.
 	*/
-	HandleTransactionAssembledEvent(ctx context.Context, event *pbSequence.TransactionAssembledEvent) error
+	HandleTransactionAssembledEvent(ctx context.Context, event *pbSequence.TransactionAssembledEvent)
 
 	/*
 		HandleTransactionEndorsedEvent needs to be called whenever a the endorsement rules for the given domain have been satisfied for a given transaction.
@@ -137,7 +143,13 @@ type Sequencer interface {
 	/*
 		AssignTransaction is an instruction for the given transaction to be managed by this sequencer
 	*/
-	AssignTransaction(ctx context.Context, transactionID string) error
+	AssignTransaction(ctx context.Context, transactionID string)
+
+	/*
+		RemoveTransaction is an instruction for the given transaction to be no longer be managed by this sequencer
+		A re-assembled version ( with the same ID ) of the transaction may be assigned to the sequencer at a later time.
+	*/
+	RemoveTransaction(ctx context.Context, transactionID string) error
 
 	/*
 		ApproveEndorsement is a synchronous check of whether a given transaction could be endorsed by the local node. It asks the question:
@@ -207,15 +219,15 @@ type TxProcessor interface {
 	GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error)
 	GetStatus(ctx context.Context) TxProcessorStatus
 
-	HandleTransactionSubmittedEvent(ctx context.Context, event *TransactionSubmittedEvent)
-	HandleTransactionAssembledEvent(ctx context.Context, event *TransactionAssembledEvent)
-	HandleTransactionSignedEvent(ctx context.Context, event *TransactionSignedEvent)
-	HandleTransactionEndorsedEvent(ctx context.Context, event *TransactionEndorsedEvent)
-	HandleTransactionDispatchedEvent(ctx context.Context, event *TransactionDispatchedEvent)
-	HandleTransactionConfirmedEvent(ctx context.Context, event *TransactionConfirmedEvent)
-	HandleTransactionRevertedEvent(ctx context.Context, event *TransactionRevertedEvent)
-	HandleTransactionDelegatedEvent(ctx context.Context, event *TransactionDelegatedEvent)
-	HandleResolveVerifierResponseEvent(ctx context.Context, event *ResolveVerifierResponseEvent)
-	HandleResolveVerifierErrorEvent(ctx context.Context, event *ResolveVerifierErrorEvent)
+	HandleTransactionSubmittedEvent(ctx context.Context, event *TransactionSubmittedEvent) error
+	HandleTransactionAssembledEvent(ctx context.Context, event *TransactionAssembledEvent) error
+	HandleTransactionSignedEvent(ctx context.Context, event *TransactionSignedEvent) error
+	HandleTransactionEndorsedEvent(ctx context.Context, event *TransactionEndorsedEvent) error
+	HandleTransactionDispatchedEvent(ctx context.Context, event *TransactionDispatchedEvent) error
+	HandleTransactionConfirmedEvent(ctx context.Context, event *TransactionConfirmedEvent) error
+	HandleTransactionRevertedEvent(ctx context.Context, event *TransactionRevertedEvent) error
+	HandleTransactionDelegatedEvent(ctx context.Context, event *TransactionDelegatedEvent) error
+	HandleResolveVerifierResponseEvent(ctx context.Context, event *ResolveVerifierResponseEvent) error
+	HandleResolveVerifierErrorEvent(ctx context.Context, event *ResolveVerifierErrorEvent) error
 	PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error)
 }
