@@ -27,7 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -68,10 +68,8 @@ func (tb *testbed) initRPC() {
 		Add("testbed_prepare", tb.rpcTestbedPrepare()).
 
 		// Performs identity resolution (which in the case of the testbed is just local identities)
-		Add("testbed_resolveVerifier", tb.rpcResolveVerifier()).
+		Add("testbed_resolveVerifier", tb.rpcResolveVerifier())
 
-		// List available states
-		Add("testbed_listAvailableStates", tb.rpcListAvailableStates())
 }
 
 func (tb *testbed) rpcListDomains() rpcserver.RPCHandler {
@@ -188,6 +186,7 @@ func (tb *testbed) newPrivateTransaction(ctx context.Context, invocation tktypes
 	if err != nil {
 		return nil, nil, err
 	}
+
 	tx := &components.PrivateTransaction{
 		ID: uuid.New(),
 		Inputs: &components.TransactionInputs{
@@ -203,6 +202,11 @@ func (tb *testbed) newPrivateTransaction(ctx context.Context, invocation tktypes
 }
 
 func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.DomainSmartContract, tx *components.PrivateTransaction) error {
+
+	// Testbed just uses a domain context for the duration of the TX, and flushes before returning
+	dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address())
+	defer dCtx.Close()
+
 	// First we call init on the smart contract to:
 	// - validate the transaction ABI is understood by the contract
 	// - get an initial list of verifiers that need to be resolved
@@ -227,7 +231,7 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	}
 
 	// Now call assemble
-	if err := psc.AssembleTransaction(ctx, tx); err != nil {
+	if err := psc.AssembleTransaction(dCtx, tx); err != nil {
 		return err
 	}
 
@@ -241,7 +245,7 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	// The testbed always chooses to take the assemble output and progress to endorse
 	// (no complex sequence selection routine that might result in abandonment).
 	// So just write the states
-	if err := psc.WritePotentialStates(ctx, tx); err != nil {
+	if err := psc.WritePotentialStates(dCtx, tx); err != nil {
 		return err
 	}
 
@@ -251,7 +255,7 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	}
 
 	// Gather endorsements (this would be a distributed activity across nodes in the real engine)
-	if err := tb.gatherEndorsements(ctx, psc, tx); err != nil {
+	if err := tb.gatherEndorsements(dCtx, psc, tx); err != nil {
 		return err
 	}
 
@@ -264,20 +268,39 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	}
 
 	// Prepare the transaction
-	if err := psc.PrepareTransaction(ctx, tx); err != nil {
+	if err := psc.PrepareTransaction(dCtx, tx); err != nil {
 		return err
 	}
 
-	if tx.PreparedPrivateTransaction != nil {
-		nextContract, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, tx.PreparedPrivateTransaction.Inputs.To)
+	// Flush the context
+	if err := dCtx.FlushSync(); err != nil {
+		return err
+	}
+
+	if tx.PreparedPrivateTransaction != nil && tx.PreparedPrivateTransaction.To != nil {
+		nextContract, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, *tx.PreparedPrivateTransaction.To)
 		if err != nil {
 			return err
 		}
-		return tb.execPrivateTransaction(ctx, nextContract, tx.PreparedPrivateTransaction)
+		return tb.execPrivateTransaction(ctx, nextContract, mapDirectlyToInternalPrivateTX(tx.PreparedPrivateTransaction, tx.Inputs.Intent))
 	} else if tx.Inputs.Intent == prototk.TransactionSpecification_CALL {
 		return tb.execBaseLedgerCall(ctx, tx.Signer, tx.PreparedPublicTransaction)
 	} else {
 		return tb.execBaseLedgerTransaction(ctx, tx.Signer, tx.PreparedPublicTransaction)
+	}
+}
+
+func mapDirectlyToInternalPrivateTX(etx *ptxapi.TransactionInput, intent prototk.TransactionSpecification_Intent) *components.PrivateTransaction {
+	return &components.PrivateTransaction{
+		ID: uuid.New(),
+		Inputs: &components.TransactionInputs{
+			Domain:   etx.Domain,
+			From:     etx.From,
+			To:       *etx.To,
+			Function: etx.ABI[0],
+			Inputs:   etx.Data,
+			Intent:   intent,
+		},
 	}
 }
 
@@ -319,9 +342,9 @@ func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) (*tktypes.P
 			return nil, err
 		}
 	} else {
-		functionABI = tx.PreparedPrivateTransaction.Inputs.Function
-		to = tx.PreparedPrivateTransaction.Inputs.To
-		paramsJSON = tx.PreparedPrivateTransaction.Inputs.Inputs
+		functionABI = tx.PreparedPrivateTransaction.ABI[0]
+		to = *tx.PreparedPrivateTransaction.To
+		paramsJSON = tx.PreparedPrivateTransaction.Data
 	}
 
 	return &tktypes.PrivateContractTransaction{
@@ -393,20 +416,5 @@ func (tb *testbed) rpcResolveVerifier() rpcserver.RPCHandler {
 			return "", err
 		}
 		return verifier, err
-	})
-}
-
-func (tb *testbed) rpcListAvailableStates() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod4(func(ctx context.Context,
-		domain string,
-		contractAddress tktypes.EthAddress,
-		schemaID string,
-		query query.QueryJSON,
-	) (states []*components.State, err error) {
-		err = tb.c.StateManager().RunInDomainContext(domain, contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
-			states, err = dsi.FindAvailableStates(schemaID, &query)
-			return err
-		})
-		return states, err
 	})
 }

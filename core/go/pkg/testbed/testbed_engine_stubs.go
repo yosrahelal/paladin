@@ -149,7 +149,7 @@ func toEndorsableList(states []*components.FullState) []*prototk.EndorsableState
 	return endorsableList
 }
 
-func (tb *testbed) gatherEndorsements(ctx context.Context, psc components.DomainSmartContract, tx *components.PrivateTransaction) error {
+func (tb *testbed) gatherEndorsements(dCtx components.DomainContext, psc components.DomainSmartContract, tx *components.PrivateTransaction) error {
 
 	keyMgr := tb.c.KeyManager()
 	attestations := []*prototk.AttestationResult{}
@@ -157,12 +157,12 @@ func (tb *testbed) gatherEndorsements(ctx context.Context, psc components.Domain
 		if ar.AttestationType == prototk.AttestationType_ENDORSE {
 			for _, partyName := range ar.Parties {
 				// Look up the endorser
-				keyHandle, verifier, err := keyMgr.ResolveKey(ctx, partyName, ar.Algorithm, ar.VerifierType)
+				keyHandle, verifier, err := keyMgr.ResolveKey(dCtx.Ctx(), partyName, ar.Algorithm, ar.VerifierType)
 				if err != nil {
 					return fmt.Errorf("failed to resolve (local in testbed case) endorser for %s (algorithm=%s): %s", partyName, ar.Algorithm, err)
 				}
 				// Invoke the domain
-				endorseRes, err := psc.EndorseTransaction(ctx, &components.PrivateTransactionEndorseRequest{
+				endorseRes, err := psc.EndorseTransaction(dCtx, &components.PrivateTransactionEndorseRequest{
 					TransactionSpecification: tx.PreAssembly.TransactionSpecification,
 					Verifiers:                tx.PreAssembly.Verifiers,
 					Signatures:               tx.PostAssembly.Signatures,
@@ -194,7 +194,7 @@ func (tb *testbed) gatherEndorsements(ctx context.Context, psc components.Domain
 					return fmt.Errorf("reverted: %s", revertReason)
 				case prototk.EndorseTransactionResponse_SIGN:
 					// Build the signature
-					signaturePayload, err := keyMgr.Sign(ctx, &signerproto.SignRequest{
+					signaturePayload, err := keyMgr.Sign(dCtx.Ctx(), &signerproto.SignRequest{
 						KeyHandle:   keyHandle,
 						Algorithm:   ar.Algorithm,
 						Payload:     endorseRes.Payload,

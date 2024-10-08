@@ -216,7 +216,7 @@ public class PenteDomain extends DomainInstance {
             var tx = new PenteTransaction(this, request.getTransaction());
 
             // Execution throws an EVMExecutionException if fails
-            var accountLoader = new AssemblyAccountLoader(request.getTransaction().getContractInfo().getContractAddress());
+            var accountLoader = new AssemblyAccountLoader(request.getStateQueryContext());
             var execResult = tx.executeEVM(config.getChainId(), tx.getFromVerifier(request.getResolvedVerifiersList()), accountLoader);
             var result = ToDomain.AssembleTransactionResponse.newBuilder();
             var assembledTransaction = tx.buildAssembledTransaction(execResult.evm(), accountLoader, buildExtraData(execResult));
@@ -447,6 +447,12 @@ public class PenteDomain extends DomainInstance {
         return CompletableFuture.failedFuture(new UnsupportedOperationException());
     }
 
+    @Override
+    protected CompletableFuture<ToDomain.ValidateStateHashesResponse> validateStateHashes(ToDomain.ValidateStateHashesRequest request) {
+        // Pente uses the standard state hash generation of Paladin, so this function is not called per the spec
+        return CompletableFuture.failedFuture(new UnsupportedOperationException());
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     record EventWithData(
             @JsonProperty
@@ -470,10 +476,10 @@ public class PenteDomain extends DomainInstance {
     /** during assembly we load available states from the Paladin state store */
     class AssemblyAccountLoader implements AccountLoader {
         private final HashMap<org.hyperledger.besu.datatypes.Address, FromDomain.StoredState> loadedAccountStates = new HashMap<>();
-        private final String contractAddress;
+        private final String stateQueryContext;
 
-        AssemblyAccountLoader(String contractAddress) {
-            this.contractAddress = contractAddress;
+        AssemblyAccountLoader(String stateQueryContext) {
+            this.stateQueryContext = stateQueryContext;
         }
 
         public Optional<PersistedAccount> load(org.hyperledger.besu.datatypes.Address address) throws IOException {
@@ -483,7 +489,7 @@ public class PenteDomain extends DomainInstance {
                         isEqual("address", address.toString()).
                         json();
                 var response = findAvailableStates(FromDomain.FindAvailableStatesRequest.newBuilder().
-                        setContractAddress(this.contractAddress).
+                        setStateQueryContext(stateQueryContext).
                         setSchemaId(config.schemaId_AccountStateLatest()).
                         setQueryJson(queryJson).
                         build()).get();

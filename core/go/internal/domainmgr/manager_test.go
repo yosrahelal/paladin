@@ -31,6 +31,7 @@ import (
 
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -38,28 +39,26 @@ import (
 )
 
 type mockComponents struct {
-	db                   sqlmock.Sqlmock
-	ethClient            *componentmocks.EthClient
-	ethClientFactory     *componentmocks.EthClientFactory
-	stateStore           *componentmocks.StateManager
-	domainStateInterface *componentmocks.DomainStateInterface
-	blockIndexer         *componentmocks.BlockIndexer
-	keyManager           *componentmocks.KeyManager
-	txManager            *componentmocks.TXManager
-	privateTxManager     *componentmocks.PrivateTxManager
+	db               sqlmock.Sqlmock
+	ethClient        *componentmocks.EthClient
+	ethClientFactory *componentmocks.EthClientFactory
+	stateStore       *componentmocks.StateManager
+	blockIndexer     *componentmocks.BlockIndexer
+	keyManager       *componentmocks.KeyManager
+	txManager        *componentmocks.TXManager
+	privateTxManager *componentmocks.PrivateTxManager
 }
 
 func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManagerConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *domainManager, *mockComponents, func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	mc := &mockComponents{
-		blockIndexer:         componentmocks.NewBlockIndexer(t),
-		stateStore:           componentmocks.NewStateManager(t),
-		domainStateInterface: componentmocks.NewDomainStateInterface(t),
-		ethClientFactory:     componentmocks.NewEthClientFactory(t),
-		keyManager:           componentmocks.NewKeyManager(t),
-		txManager:            componentmocks.NewTXManager(t),
-		privateTxManager:     componentmocks.NewPrivateTxManager(t),
+		blockIndexer:     componentmocks.NewBlockIndexer(t),
+		stateStore:       componentmocks.NewStateManager(t),
+		ethClientFactory: componentmocks.NewEthClientFactory(t),
+		keyManager:       componentmocks.NewKeyManager(t),
+		txManager:        componentmocks.NewTXManager(t),
+		privateTxManager: componentmocks.NewPrivateTxManager(t),
 	}
 
 	// Blockchain stuff is always mocked
@@ -76,15 +75,14 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManager
 
 	var p persistence.Persistence
 	var err error
+	var realStateManager components.StateManager
 	var pDone func()
 	if realDB {
 		p, pDone, err = persistence.NewUnitTestPersistence(ctx)
 		require.NoError(t, err)
-		realStateManager := statemgr.NewStateManager(ctx, &pldconf.StateStoreConfig{}, p)
+		realStateManager = statemgr.NewStateManager(ctx, &pldconf.StateStoreConfig{}, p)
 		componentMocks.On("StateManager").Return(realStateManager)
 		_, _ = realStateManager.PreInit(componentMocks)
-		_ = realStateManager.PostInit(componentMocks)
-		_ = realStateManager.Start()
 	} else {
 		mp, err := mockpersistence.NewSQLMockProvider()
 		require.NoError(t, err)
@@ -94,18 +92,6 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManager
 			require.NoError(t, mp.Mock.ExpectationsWereMet())
 		}
 		componentMocks.On("StateManager").Return(mc.stateStore)
-		mridc := mc.stateStore.On("RunInDomainContext", mock.Anything, mock.Anything, mock.Anything)
-		mridc.Run(func(args mock.Arguments) {
-			mridc.Return((args[2].(components.DomainContextFunction))(
-				ctx, mc.domainStateInterface,
-			))
-		}).Maybe()
-		mridcf := mc.stateStore.On("RunInDomainContextFlush", mock.Anything, mock.Anything, mock.Anything)
-		mridcf.Run(func(args mock.Arguments) {
-			mridcf.Return((args[2].(components.DomainContextFunction))(
-				ctx, mc.domainStateInterface,
-			))
-		}).Maybe()
 	}
 	componentMocks.On("Persistence").Return(p)
 
@@ -118,6 +104,12 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManager
 	require.NoError(t, err)
 	err = dm.PostInit(componentMocks)
 	require.NoError(t, err)
+
+	if realDB {
+		componentMocks.On("DomainManager").Return(dm)
+		_ = realStateManager.PostInit(componentMocks)
+		_ = realStateManager.Start()
+	}
 
 	err = dm.Start()
 	require.NoError(t, err)
@@ -220,8 +212,20 @@ func TestGetDomainNotFound(t *testing.T) {
 	_, err := dm.GetDomainByName(ctx, "wrong")
 	assert.Regexp(t, "PD011600", err)
 
-	_, err = dm.getDomainByAddress(ctx, tktypes.MustEthAddress(tktypes.RandHex(20)))
+	_, err = dm.getDomainByAddress(ctx, tktypes.MustEthAddress(tktypes.RandHex(20)), false)
 	assert.Regexp(t, "PD011600", err)
+
+	dc, err := dm.getDomainByAddress(ctx, tktypes.MustEthAddress(tktypes.RandHex(20)), true)
+	assert.NoError(t, err)
+	assert.Nil(t, dc)
+}
+
+func TestGetDomainNotInit(t *testing.T) {
+	td, done := newTestDomain(t, false, &prototk.DomainConfig{})
+	defer done()
+
+	_, err := td.dm.GetDomainByName(td.ctx, td.d.name)
+	assert.Regexp(t, "PD011601", err)
 }
 
 func TestMustParseLoaders(t *testing.T) {
@@ -289,7 +293,7 @@ func TestWaitForDeployDomainNotFound(t *testing.T) {
 	received := make(chan struct{})
 	go func() {
 		_, err := dm.WaitForDeploy(ctx, reqID)
-		assert.Regexp(t, "PD011600", err)
+		assert.Regexp(t, "PD011609", err)
 		close(received)
 	}()
 

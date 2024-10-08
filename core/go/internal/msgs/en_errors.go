@@ -91,10 +91,19 @@ var (
 	MsgStateLabelFieldNotUnique       = ffe("PD010115", "Label field with index %d has a duplicate name '%s'")
 	MsgStateInvalidValue              = ffe("PD010116", "Invalid value")
 	MsgStateInvalidQualifier          = ffe("PD010117", "Status must be one of 'available','confirmed','unconfirmed','spent','locked','all' or the UUID of a transaction")
-	MsgStateLockConflictUnexpected    = ffe("PD010118", "Pending lock for transaction %s found when attempting to lock to transaction %s")
-	MsgStateFlushFailedDomainReset    = ffe("PD010119", "Flush of state for domain %s has failed, and the domain has been reset")
+	MsgStateLockCreateNotInContext    = ffe("PD010118", "Cannot mark a creating lock for state %s as it was not added in this context")
+	MsgStateFlushFailedDomainReset    = ffe("PD010119", "Flush of state for domain %s contract %s has failed. The domain context must be reset")
 	MsgStateSpendConflictUnexpected   = ffe("PD010120", "Pending spend for transaction %s found when attempting to spend from transaction %s")
 	MsgStateConfirmConflictUnexpected = ffe("PD010121", "Pending confirmation for transaction %s found when attempting to confirm from transaction %s")
+	MsgStateDomainContextClosed       = ffe("PD010122", "Domain context has been closed")
+	MsgStateDomainContextNotActive    = ffe("PD010123", "There is no domain context with UUID %s active")
+	MsgStateLockNoTransaction         = ffe("PD010124", "Transaction missing from state lock")
+	MsgStateLockNoState               = ffe("PD010125", "State missing from state lock")
+	MsgStateNullifierStateNotInCtx    = ffe("PD010126", "State %s referred to by nullifier %s has not previously been added to the context")
+	MsgStateNullifierConflict         = ffe("PD010127", "State %s already has nullifier %s associated in this context")
+	MsgStateInvalidCalculatingHash    = ffe("PD010128", "Failed to generate hash as state is invalid")
+	MsgStateHashMismatch              = ffe("PD010129", "The supplied state ID '%s' does not match the state hash '%s'")
+	MsgStateIDMissing                 = ffe("PD010130", "The state id must be supplied for this domain")
 
 	// Persistence PD0102XX
 	MsgPersistenceInvalidType         = ffe("PD010200", "Invalid persistence type: %s")
@@ -167,6 +176,7 @@ var (
 	MsgBlockIndexerInvalidEventStreamType   = ffe("PD011306", "Unsupported event stream type: %s")
 	MsgBlockIndexerNoBlocksIndexed          = ffe("PD011308", "No confirmed blocks have yet been indexed")
 	MsgBlockIndexerTransactionReverted      = ffe("PD011309", "Transaction reverted: %s")
+	MsgBlockIndexerConfirmedBlockNotFound   = ffe("PD011310", "Block %s (%d) not found on retrieval after detection and requested number of confirmations")
 
 	// EthClient module PD0115XX
 	MsgEthClientInvalidInput            = ffe("PD011500", "Unable to convert to ABI function input (func=%s)")
@@ -226,7 +236,7 @@ var (
 	MsgDomainABIRecoverRequestSignature       = ffe("PD011638", "Invalid signature")
 	MsgDomainABIEncodingTypedDataInvalid      = ffe("PD011639", "EIP-712 typed data V4 encoding request invalid")
 	MsgDomainABIEncodingTypedDataFail         = ffe("PD011640", "EIP-712 typed data V4 encoding request failed")
-	MsgDomainErrorParsingAddress              = ffe("PD011641", "Error parsing address")
+	MsgDomainInvalidSchemaID                  = ffe("PD011641", "Invalid schema ID '%s'")
 	MsgDomainInvalidEvents                    = ffe("PD011642", "Events ABI is invalid")
 	MsgDomainSigningDisabled                  = ffe("PD011643", "Domain signing it not enabled for domain '%s'")
 	MsgDomainSigningAlgorithmNotSupported     = ffe("PD011644", "Domain '%s' has not registered algorithm '%s'")
@@ -234,6 +244,10 @@ var (
 	MsgDomainABIDecodingRequestFail           = ffe("PD011646", "ABI decoding request failed")
 	MsgDomainABIDecodingRequestInvalidType    = ffe("PD011647", "ABI decoding request is of invalid type '%s'")
 	MsgDomainTransactionWasNotADeployment     = ffe("PD011648", "Transaction %s did not result in a deployment")
+	MsgDomainRequestNotInFlight               = ffe("PD011649", "State query context '%s' not in-flight")
+	MsgDomainInvalidStateID                   = ffe("PD011650", "Invalid state ID '%s'")
+	MsgDomainInvalidStates                    = ffe("PD011651", "Invalid states")
+	MsgDomainInvalidResponseToValidate        = ffe("PD011652", "Invalid response to validation")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownRunMode = ffe("PD011700", "Unknown run mode '%s'")

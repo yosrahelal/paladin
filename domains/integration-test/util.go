@@ -70,27 +70,31 @@ func deployContracts(ctx context.Context, t *testing.T, hdWalletSeed *testbed.UT
 	return deployed
 }
 
-func newNotoDomain(t *testing.T, config *nototypes.DomainConfig) (*noto.Noto, *testbed.TestbedDomain) {
-	var domain noto.Noto
-	return &domain, &testbed.TestbedDomain{
+func newNotoDomain(t *testing.T, config *nototypes.DomainConfig) (chan noto.Noto, *testbed.TestbedDomain) {
+	waitForDomain := make(chan noto.Noto, 1)
+	tbd := &testbed.TestbedDomain{
 		Config: mapConfig(t, config),
 		Plugin: plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
-			domain = noto.New(callbacks)
+			domain := noto.New(callbacks)
+			waitForDomain <- domain
 			return domain
 		}),
 		RegistryAddress: tktypes.MustEthAddress(config.FactoryAddress),
 	}
+	return waitForDomain, tbd
 }
 
-func newZetoDomain(t *testing.T, config *zetotypes.DomainFactoryConfig) (*zeto.Zeto, *testbed.TestbedDomain) {
-	var domain zeto.Zeto
-	return &domain, &testbed.TestbedDomain{
+func newZetoDomain(t *testing.T, config *zetotypes.DomainFactoryConfig) (chan zeto.Zeto, *testbed.TestbedDomain) {
+	waitForDomain := make(chan zeto.Zeto, 1)
+	tbd := &testbed.TestbedDomain{
 		Config: mapConfig(t, config),
 		Plugin: plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
-			domain = zeto.New(callbacks)
+			domain := zeto.New(callbacks)
+			waitForDomain <- domain
 			return domain
 		}),
 		RegistryAddress: tktypes.MustEthAddress(config.FactoryAddress),
 		AllowSigning:    true,
 	}
+	return waitForDomain, tbd
 }

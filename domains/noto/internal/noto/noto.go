@@ -51,6 +51,7 @@ func NewNoto(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
 type Noto struct {
 	Callbacks plugintk.DomainCallbacks
 
+	name              string
 	config            types.DomainConfig
 	chainID           int64
 	coinSchema        *prototk.StateSchema
@@ -119,6 +120,14 @@ func getEventSignature(ctx context.Context, abi abi.ABI, eventName string) (stri
 	return event.SolString(), nil
 }
 
+func (n *Noto) Name() string {
+	return n.name
+}
+
+func (n *Noto) CoinSchemaID() string {
+	return n.coinSchema.Id
+}
+
 func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {
 	err := json.Unmarshal([]byte(req.ConfigJson), &n.config)
 	if err != nil {
@@ -128,6 +137,7 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	factory := domain.LoadBuild(notoFactoryJSON)
 	contract := domain.LoadBuild(notoInterfaceJSON)
 
+	n.name = req.Name
 	n.chainID = req.ChainId
 	n.factoryABI = factory.ABI
 	n.contractABI = contract.ABI
@@ -407,21 +417,6 @@ func (n *Noto) gatherCoins(ctx context.Context, inputs, outputs []*prototk.Endor
 	}, nil
 }
 
-func (n *Noto) FindCoins(ctx context.Context, contractAddress *tktypes.EthAddress, query string) ([]*types.NotoCoin, error) {
-	states, err := n.findAvailableStates(ctx, contractAddress.String(), query)
-	if err != nil {
-		return nil, err
-	}
-
-	coins := make([]*types.NotoCoin, len(states))
-	for i, state := range states {
-		if coins[i], err = n.unmarshalCoin(state.DataJson); err != nil {
-			return nil, err
-		}
-	}
-	return coins, err
-}
-
 func (n *Noto) encodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {
 	txID, err := tktypes.ParseHexBytes(ctx, transaction.TransactionId)
 	if err != nil {
@@ -491,5 +486,9 @@ func (n *Noto) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.Sig
 }
 
 func (n *Noto) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error) {
+	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
+}
+
+func (n *Noto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }

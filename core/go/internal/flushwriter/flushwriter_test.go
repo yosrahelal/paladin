@@ -56,6 +56,7 @@ func newTestWriter(t *testing.T, conf *pldconf.FlushWriterConfig, handler BatchH
 	p, err := mockpersistence.NewSQLMockProvider()
 	require.NoError(t, err)
 	w := NewWriter(ctx, handler, p.P, conf, testDefaults)
+	w.Start()
 	return ctx, w.(*writer[*testWritable, *testResult]), p.Mock, func() {
 		panicked := recover()
 		if panicked != nil {

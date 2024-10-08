@@ -267,3 +267,18 @@ func (br *domainBridge) GetVerifier(ctx context.Context, req *prototk.GetVerifie
 	)
 	return
 }
+
+func (br *domainBridge) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (res *prototk.ValidateStateHashesResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_ValidateStateHashes{ValidateStateHashes: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_ValidateStateHashesRes); ok {
+				res = r.ValidateStateHashesRes
+			}
+			return res != nil
+		},
+	)
+	return
+}

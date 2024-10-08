@@ -32,6 +32,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -62,6 +63,16 @@ type domain struct {
 
 	initError atomic.Pointer[error]
 	initDone  chan struct{}
+
+	inFlight     map[string]*inFlightDomainRequest
+	inFlightLock sync.Mutex
+}
+
+type inFlightDomainRequest struct {
+	d    *domain
+	id   string                   // each request gets a unique ID
+	dbTX *gorm.DB                 // only if there's a DB transactions such as when called by block indexer
+	dCtx components.DomainContext // might be short lived, or managed externally (by private TX manager)
 }
 
 func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDomain components.DomainManagerToDomain) *domain {
@@ -76,6 +87,8 @@ func (dm *domainManager) newDomain(name string, conf *pldconf.DomainConfig, toDo
 
 		schemasByID:        make(map[string]components.Schema),
 		schemasBySignature: make(map[string]components.Schema),
+
+		inFlight: make(map[string]*inFlightDomainRequest),
 	}
 	log.L(dm.bgCtx).Debugf("Domain %s configured. Config: %s", name, tktypes.JSONString(conf.Config))
 	d.ctx, d.cancelCtx = context.WithCancel(log.WithLogField(dm.bgCtx, "domain", d.name))
@@ -102,7 +115,7 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 	var schemas []components.Schema
 	if len(abiSchemas) > 0 {
 		var err error
-		schemas, err = d.dm.stateStore.EnsureABISchemas(d.ctx, d.name, abiSchemas)
+		schemas, err = d.dm.stateStore.EnsureABISchemas(d.ctx, d.dm.persistence.DB(), d.name, abiSchemas)
 		if err != nil {
 			return nil, err
 		}
@@ -111,11 +124,11 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 	// Build the schema IDs to send back in the init
 	schemasProto := make([]*prototk.StateSchema, len(schemas))
 	for i, s := range schemas {
-		schemaID := s.IDString()
-		d.schemasByID[schemaID] = s
+		schemaID := s.ID()
+		d.schemasByID[schemaID.String()] = s
 		d.schemasBySignature[s.Signature()] = s
 		schemasProto[i] = &prototk.StateSchema{
-			Id:        schemaID,
+			Id:        schemaID.String(),
 			Signature: s.Signature(),
 		}
 	}
@@ -204,6 +217,38 @@ func (d *domain) init() {
 	}
 }
 
+func (d *domain) newInFlightDomainRequest(dbTX *gorm.DB, dc components.DomainContext) *inFlightDomainRequest {
+	c := &inFlightDomainRequest{
+		d:    d,
+		dCtx: dc,
+		id:   tktypes.ShortID(),
+		dbTX: dbTX,
+	}
+	d.inFlightLock.Lock()
+	defer d.inFlightLock.Unlock()
+	d.inFlight[c.id] = c
+	return c
+}
+
+func (i *inFlightDomainRequest) close() {
+	i.d.inFlightLock.Lock()
+	defer i.d.inFlightLock.Unlock()
+	delete(i.d.inFlight, i.id)
+}
+
+func (d *domain) checkInFlight(ctx context.Context, stateQueryContext string) (*inFlightDomainRequest, error) {
+	if err := d.checkInit(ctx); err != nil {
+		return nil, err
+	}
+	d.inFlightLock.Lock()
+	defer d.inFlightLock.Unlock()
+	c := d.inFlight[stateQueryContext]
+	if c == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgDomainRequestNotInFlight, stateQueryContext)
+	}
+	return c, nil
+}
+
 func (d *domain) checkInit(ctx context.Context) error {
 	if !d.initialized.Load() {
 		return i18n.NewError(ctx, msgs.MsgDomainNotInitialized)
@@ -229,29 +274,27 @@ func (d *domain) Configuration() *prototk.DomainConfig {
 
 // Domain callback to query the state store
 func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvailableStatesRequest) (*prototk.FindAvailableStatesResponse, error) {
-	if err := d.checkInit(ctx); err != nil {
+	c, err := d.checkInFlight(ctx, req.StateQueryContext)
+	if err != nil {
 		return nil, err
 	}
 
 	var query query.QueryJSON
-	err := json.Unmarshal([]byte(req.QueryJson), &query)
-	if err != nil {
+	if err = json.Unmarshal([]byte(req.QueryJson), &query); err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidQueryJSON)
 	}
-	addr, err := tktypes.ParseEthAddress(req.ContractAddress)
+
+	schemaID, err := tktypes.ParseBytes32(req.SchemaId)
 	if err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainErrorParsingAddress)
+		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidSchemaID, req.SchemaId)
 	}
 
 	var states []*components.State
-	err = d.dm.stateStore.RunInDomainContext(d.name, *addr, func(ctx context.Context, dsi components.DomainStateInterface) (err error) {
-		if req.UseNullifiers != nil && *req.UseNullifiers {
-			states, err = dsi.FindAvailableNullifiers(req.SchemaId, &query)
-		} else {
-			states, err = dsi.FindAvailableStates(req.SchemaId, &query)
-		}
-		return err
-	})
+	if req.UseNullifiers != nil && *req.UseNullifiers {
+		_, states, err = c.dCtx.FindAvailableNullifiers(schemaID, &query)
+	} else {
+		_, states, err = c.dCtx.FindAvailableStates(schemaID, &query)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -263,19 +306,33 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 			SchemaId: s.Schema.String(),
 			StoredAt: s.Created.UnixNano(),
 			DataJson: string(s.Data),
+			Locks:    []*prototk.StateLock{},
 		}
-		if s.Locked != nil {
-			pbStates[i].Lock = &prototk.StateLock{
-				Transaction: s.Locked.Transaction.String(),
-				Creating:    s.Locked.Creating,
-				Spending:    s.Locked.Spending,
-			}
+		for _, l := range s.Locks {
+			pbStates[i].Locks = append(pbStates[i].Locks, &prototk.StateLock{
+				Type:        mapStateLockType(l.Type.V()),
+				Transaction: l.Transaction.String(),
+			})
 		}
 	}
 	return &prototk.FindAvailableStatesResponse{
 		States: pbStates,
 	}, nil
 
+}
+
+func mapStateLockType(t components.StateLockType) prototk.StateLock_StateLockType {
+	switch t {
+	case components.StateLockTypeCreate:
+		return prototk.StateLock_CREATE
+	case components.StateLockTypeSpend:
+		return prototk.StateLock_SPEND
+	case components.StateLockTypeRead:
+		return prototk.StateLock_READ
+	default:
+		// Unit test covers all valid types and we only use this in fully controlled code
+		panic(fmt.Errorf("invalid type: %s", t))
+	}
 }
 
 func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataRequest) (*prototk.EncodeDataResponse, error) {
@@ -536,4 +593,48 @@ func (d *domain) sign(ctx context.Context, algorithm string, payloadType string,
 		return nil, err
 	}
 	return res.Payload, nil
+}
+
+func (d *domain) toEndorsableList(states []*components.FullState) []*prototk.EndorsableState {
+	endorsableList := make([]*prototk.EndorsableState, len(states))
+	for i, input := range states {
+		endorsableList[i] = &prototk.EndorsableState{
+			Id:            input.ID.String(),
+			SchemaId:      input.Schema.String(),
+			StateDataJson: string(input.Data),
+		}
+	}
+	return endorsableList
+}
+
+func (d *domain) CustomHashFunction() bool {
+	// note config assured to be non-nil by GetDomainByName() not returning a domain until init complete
+	return d.config.CustomHashFunction
+}
+
+func (d *domain) ValidateStateHashes(ctx context.Context, states []*components.FullState) ([]tktypes.HexBytes, error) {
+	if len(states) == 0 {
+		return []tktypes.HexBytes{}, nil
+	}
+	validateRes, err := d.api.ValidateStateHashes(d.ctx, &prototk.ValidateStateHashesRequest{
+		States: d.toEndorsableList(states),
+	})
+	if err != nil {
+		return nil, i18n.WrapError(d.ctx, err, msgs.MsgDomainInvalidStates)
+	}
+	validResponse := len(validateRes.StateIds) == len(states)
+	hexIDs := make([]tktypes.HexBytes, len(states))
+	for i := 0; i < len(states) && validResponse; i++ {
+		hexID, err := tktypes.ParseHexBytes(ctx, validateRes.StateIds[i])
+		if err != nil || len(hexID) == 0 {
+			return nil, i18n.WrapError(d.ctx, err, msgs.MsgDomainInvalidResponseToValidate)
+		}
+		hexIDs[i] = hexID
+		// If a state ID was supplied on the way in, it must be returned unchanged
+		validResponse = states[i].ID == nil || states[i].ID.Equals(hexID)
+	}
+	if !validResponse {
+		return nil, i18n.NewError(d.ctx, msgs.MsgDomainInvalidResponseToValidate)
+	}
+	return hexIDs, nil
 }

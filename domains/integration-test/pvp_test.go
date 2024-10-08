@@ -22,10 +22,13 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/log"
+	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	"github.com/kaleido-io/paladin/domains/integration-test/helpers"
 	nototypes "github.com/kaleido-io/paladin/domains/noto/pkg/types"
+	zetotypes "github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
@@ -229,6 +232,36 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withGuard b
 	}
 }
 
+func findAvailableCoins[T any](t *testing.T, ctx context.Context, rpc rpcbackend.Backend, domainName, coinSchemaID string, address *tktypes.EthAddress, jq *query.QueryJSON, readiness ...func(coins []*T) bool) []*T {
+	if jq == nil {
+		jq = query.NewQueryBuilder().Limit(100).Query()
+	}
+	var states []*T
+notReady:
+	for {
+		rpcerr := rpc.CallRPC(ctx, &states, "pstate_queryStates",
+			domainName,
+			address,
+			coinSchemaID,
+			jq,
+			"available")
+		if rpcerr != nil {
+			require.NoError(t, rpcerr.Error())
+		}
+		for _, fn := range readiness {
+			if t.Failed() {
+				panic("test failed")
+			}
+			if !fn(states) {
+				time.Sleep(100 * time.Millisecond)
+				continue notReady
+			}
+		}
+		break
+	}
+	return states
+}
+
 func TestNotoForZeto(t *testing.T) {
 	ctx := context.Background()
 	log.L(ctx).Infof("TestNotoForZeto")
@@ -255,15 +288,17 @@ func TestNotoForZeto(t *testing.T) {
 	zetoConfig := prepareZetoConfig(t, zetoContracts)
 
 	log.L(ctx).Infof("Initializing testbed")
-	notoDomain, notoTestbed := newNotoDomain(t, &nototypes.DomainConfig{
+	waitForNoto, notoTestbed := newNotoDomain(t, &nototypes.DomainConfig{
 		FactoryAddress: contracts["noto"],
 	})
-	zetoDomain, zetoTestbed := newZetoDomain(t, zetoConfig)
+	waitForZeto, zetoTestbed := newZetoDomain(t, zetoConfig)
 	done, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		notoDomainName: notoTestbed,
 		zetoDomainName: zetoTestbed,
 	})
 	defer done()
+	notoDomain := <-waitForNoto
+	zetoDomain := <-waitForZeto
 
 	_, aliceKey, err := tb.Components().KeyManager().ResolveKey(ctx, alice, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
@@ -283,17 +318,20 @@ func TestNotoForZeto(t *testing.T) {
 	log.L(ctx).Infof("Mint 10 Zeto to Bob")
 	zeto.Mint(ctx, bob, 10).SignAndSend(notary).Wait()
 
-	notoCoins, err := (*notoDomain).FindCoins(ctx, noto.Address, "{}")
-	require.NoError(t, err)
+	notoCoins := findAvailableCoins[nototypes.NotoCoinState](t, ctx, rpc, notoDomain.Name(), notoDomain.CoinSchemaID(), noto.Address, nil, func(coins []*nototypes.NotoCoinState) bool {
+		return len(coins) >= 1
+	})
 	require.Len(t, notoCoins, 1)
-	assert.Equal(t, int64(10), notoCoins[0].Amount.Int().Int64())
-	assert.Equal(t, aliceKey, notoCoins[0].Owner.String())
+	assert.Equal(t, int64(10), notoCoins[0].Data.Amount.Int().Int64())
+	assert.Equal(t, aliceKey, notoCoins[0].Data.Owner.String())
 
-	zetoCoins, err := (*zetoDomain).FindCoins(ctx, zeto.Address, "{}")
+	zetoCoins := findAvailableCoins[zetotypes.ZetoCoinState](t, ctx, rpc, zetoDomain.Name(), zetoDomain.CoinSchemaID(), zeto.Address, nil, func(coins []*zetotypes.ZetoCoinState) bool {
+		return len(coins) >= 1
+	})
 	require.NoError(t, err)
 	require.Len(t, zetoCoins, 1)
-	assert.Equal(t, int64(10), zetoCoins[0].Amount.Int().Int64())
-	assert.Equal(t, bob, zetoCoins[0].Owner) // TODO: this should really be bob's key, not by name
+	assert.Equal(t, int64(10), zetoCoins[0].Data.Amount.Int().Int64())
+	assert.Equal(t, bob, zetoCoins[0].Data.Owner) // TODO: this should really be bob's key, not by name
 
 	// TODO: this should be a Pente private contract, instead of a base ledger contract
 	log.L(ctx).Infof("Propose a trade of 1 Noto for 1 Zeto")
@@ -385,19 +423,19 @@ func TestNotoForZeto(t *testing.T) {
 	// TODO: better way to wait for events to be indexed after Atom execution
 	time.Sleep(3 * time.Second)
 
-	notoCoins, err = (*notoDomain).FindCoins(ctx, noto.Address, "{}")
+	notoCoins = findAvailableCoins[nototypes.NotoCoinState](t, ctx, rpc, notoDomain.Name(), notoDomain.CoinSchemaID(), noto.Address, nil)
 	require.NoError(t, err)
 	require.Len(t, notoCoins, 2)
-	assert.Equal(t, int64(1), notoCoins[0].Amount.Int().Int64())
-	assert.Equal(t, bobKey, notoCoins[0].Owner.String())
-	assert.Equal(t, int64(9), notoCoins[1].Amount.Int().Int64())
-	assert.Equal(t, aliceKey, notoCoins[1].Owner.String())
+	assert.Equal(t, int64(1), notoCoins[0].Data.Amount.Int().Int64())
+	assert.Equal(t, bobKey, notoCoins[0].Data.Owner.String())
+	assert.Equal(t, int64(9), notoCoins[1].Data.Amount.Int().Int64())
+	assert.Equal(t, aliceKey, notoCoins[1].Data.Owner.String())
 
-	zetoCoins, err = (*zetoDomain).FindCoins(ctx, zeto.Address, "{}")
+	zetoCoins = findAvailableCoins[zetotypes.ZetoCoinState](t, ctx, rpc, zetoDomain.Name(), zetoDomain.CoinSchemaID(), zeto.Address, nil)
 	require.NoError(t, err)
 	require.Len(t, zetoCoins, 2)
-	assert.Equal(t, int64(1), zetoCoins[0].Amount.Int().Int64())
-	assert.Equal(t, alice, zetoCoins[0].Owner)
-	assert.Equal(t, int64(9), zetoCoins[1].Amount.Int().Int64())
-	assert.Equal(t, bob, zetoCoins[1].Owner)
+	assert.Equal(t, int64(1), zetoCoins[0].Data.Amount.Int().Int64())
+	assert.Equal(t, alice, zetoCoins[0].Data.Owner)
+	assert.Equal(t, int64(9), zetoCoins[1].Data.Amount.Int().Int64())
+	assert.Equal(t, bob, zetoCoins[1].Data.Owner)
 }

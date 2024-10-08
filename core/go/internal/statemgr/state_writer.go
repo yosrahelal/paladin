@@ -19,7 +19,6 @@ package statemgr
 import (
 	"context"
 
-	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/flushwriter"
@@ -31,32 +30,42 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
+// Each domain context can have up to two of these
+// - one active
+// - one flushing
+// the rotation and is protected by the stateLock of the parent stateContext
 type writeOperation struct {
-	id                     string
-	domainKey              string
-	writerOp               flushwriter.Operation[*writeOperation, *noResult]
-	states                 []*components.StateWithLabels
-	stateConfirms          []*components.StateConfirm
-	stateSpends            []*components.StateSpend
-	stateLocks             []*components.StateLock
-	stateNullifiers        []*components.StateNullifier
-	transactionLockDeletes []uuid.UUID
+	id          string
+	domainKey   string
+	writerOp    flushwriter.Operation[*writeOperation, *noResult]
+	flushResult error
+	flushed     chan struct{}
+	// States and state nullifiers can be flushed to persistence, although
+	// are only available for consumption outside of a DomainContext
+	// with creation locks once they are confirmed via the blockchain.
+	states          []*components.StateWithLabels
+	stateNullifiers []*components.StateNullifier
 }
 
 type noResult struct{}
 
 type stateWriter struct {
-	w flushwriter.Writer[*writeOperation, *noResult]
+	ss *stateManager
+	w  flushwriter.Writer[*writeOperation, *noResult]
 }
 
 func (wo *writeOperation) WriteKey() string {
 	return wo.domainKey
 }
 
-func newStateWriter(bgCtx context.Context, ss *stateStore, conf *pldconf.FlushWriterConfig) *stateWriter {
-	sw := &stateWriter{}
+func newStateWriter(bgCtx context.Context, ss *stateManager, conf *pldconf.FlushWriterConfig) *stateWriter {
+	sw := &stateWriter{ss: ss}
 	sw.w = flushwriter.NewWriter(bgCtx, sw.runBatch, ss.p, conf, &pldconf.StateWriterConfigDefaults)
 	return sw
+}
+
+func (sw *stateWriter) start() {
+	sw.w.Start()
 }
 
 func (op *writeOperation) flush(ctx context.Context) error {
@@ -79,105 +88,25 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 
 	// Build lists of things to insert (we are insert only)
 	var states []*components.State
-	var labels []*components.StateLabel
-	var int64Labels []*components.StateInt64Label
-	var stateConfirms []*components.StateConfirm
-	var stateSpends []*components.StateSpend
 	var stateLocks []*components.StateLock
 	var stateNullifiers []*components.StateNullifier
-	var transactionLockDeletes []uuid.UUID
 	for _, op := range values {
 		for _, s := range op.states {
 			states = append(states, s.State)
-			labels = append(labels, s.State.Labels...)
-			int64Labels = append(int64Labels, s.State.Int64Labels...)
-		}
-		if len(op.stateConfirms) > 0 {
-			stateConfirms = append(stateConfirms, op.stateConfirms...)
-		}
-		if len(op.stateSpends) > 0 {
-			stateSpends = append(stateSpends, op.stateSpends...)
-		}
-		if len(op.stateLocks) > 0 {
-			stateLocks = append(stateLocks, op.stateLocks...)
 		}
 		if len(op.stateNullifiers) > 0 {
 			stateNullifiers = append(stateNullifiers, op.stateNullifiers...)
 		}
-		if len(op.transactionLockDeletes) > 0 {
-			transactionLockDeletes = append(transactionLockDeletes, op.transactionLockDeletes...)
-		}
 	}
-	log.L(ctx).Debugf("Writing state batch states=%d confirms=%d spends=%d locks=%d nullifiers=%d seqLockDeletes=%d labels=%d int64Labels=%d",
-		len(states), len(stateConfirms), len(stateSpends), len(stateLocks), len(stateNullifiers), len(transactionLockDeletes), len(labels), len(int64Labels))
+	log.L(ctx).Debugf("Writing state batch states=%d locks=%d nullifiers=%d ",
+		len(states), len(stateLocks), len(stateNullifiers))
 
 	var err error
+
 	if len(states) > 0 {
-		err = tx.
-			Table("states").
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "id"}},
-				DoNothing: true, // immutable
-			}).
-			Omit("Labels", "Int64Labels", "Confirmed", "Spent", "Locked"). // we do this ourselves below
-			Create(states).
-			Error
+		err = sw.ss.writeStates(ctx, tx, states)
 	}
-	if err == nil && len(stateConfirms) > 0 {
-		err = tx.
-			Table("state_confirms").
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}},
-				DoNothing: true, // immutable
-			}).
-			Create(stateConfirms).
-			Error
-	}
-	if err == nil && len(labels) > 0 {
-		err = tx.
-			Table("state_labels").
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}, {Name: "label"}},
-				DoNothing: true, // immutable
-			}).
-			Create(labels).
-			Error
-	}
-	if err == nil && len(int64Labels) > 0 {
-		err = tx.
-			Table("state_int64_labels").
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}, {Name: "label"}},
-				DoNothing: true, // immutable
-			}).
-			Create(int64Labels).
-			Error
-	}
-	if err == nil && len(stateSpends) > 0 {
-		err = tx.
-			Table("state_spends").
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}},
-				DoNothing: true, // immutable
-			}).
-			Create(stateSpends).
-			Error
-	}
-	if err == nil && len(stateLocks) > 0 {
-		err = tx.
-			Table("state_locks").
-			Clauses(clause.OnConflict{
-				Columns: []clause.Column{{Name: "domain_name"}, {Name: "state"}},
-				// locks can move to another transaction
-				DoUpdates: clause.AssignmentColumns([]string{
-					"transaction",
-					"spending",
-					"creating",
-				}),
-			}).
-			Create(stateLocks).
-			Error
-	}
+
 	if err == nil && len(stateNullifiers) > 0 {
 		err = tx.
 			Table("state_nullifiers").
@@ -185,13 +114,6 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 				DoNothing: true, // immutable
 			}).
 			Create(stateNullifiers).
-			Error
-	}
-	if err == nil && len(transactionLockDeletes) > 0 {
-		// locks can be removed
-		err = tx.
-			Table("state_locks").
-			Delete(&components.State{}, `"transaction" IN (?)`, transactionLockDeletes).
 			Error
 	}
 	// We don't actually provide any result, so just build an array of nil results

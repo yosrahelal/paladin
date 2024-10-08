@@ -38,18 +38,26 @@ type PublicTransactionsSubmit func(tx *gorm.DB) (publicTxID []string, err error)
 
 type Store interface {
 	//We persist multiple sequences in a single call, one for each signing address
+	Start()
 	PersistDispatchBatch(ctx context.Context, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch) error
 	Close()
 }
 
 type store struct {
-	writer flushwriter.Writer[*dispatchSequenceOperation, *noResult]
+	started bool
+	writer  flushwriter.Writer[*dispatchSequenceOperation, *noResult]
 }
 
 func NewStore(ctx context.Context, conf *pldconf.FlushWriterConfig, p persistence.Persistence) Store {
 	s := &store{}
 	s.writer = flushwriter.NewWriter(ctx, s.runBatch, p, conf, &WriterConfigDefaults)
 	return s
+}
+
+func (s *store) Start() {
+	if !s.started {
+		s.writer.Start()
+	}
 }
 
 func (s *store) Close() {

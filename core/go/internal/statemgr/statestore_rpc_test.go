@@ -34,8 +34,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestRPCServer(t *testing.T) (context.Context, *stateStore, rpcclient.Client, func()) {
-	ctx, ss, ssDone := newDBTestStateManager(t)
+func newTestRPCServer(t *testing.T) (context.Context, *stateManager, rpcclient.Client, *mockComponents, func()) {
+	ctx, ss, m, ssDone := newDBTestStateManager(t)
 
 	s, err := rpcserver.NewRPCServer(ctx, &pldconf.RPCServerConfig{
 		HTTP: pldconf.RPCServerConfigHTTP{
@@ -51,7 +51,7 @@ func newTestRPCServer(t *testing.T) (context.Context, *stateStore, rpcclient.Cli
 
 	c := rpcclient.WrapRestyClient(resty.New().SetBaseURL(fmt.Sprintf("http://%s", s.HTTPAddr())))
 
-	return ctx, ss, c, func() { s.Stop(); ssDone() }
+	return ctx, ss, c, m, func() { s.Stop(); ssDone() }
 
 }
 
@@ -63,15 +63,17 @@ func jsonTestLog(t *testing.T, desc string, f interface{}) {
 
 func TestRPC(t *testing.T) {
 
-	ctx, ss, c, done := newTestRPCServer(t)
+	ctx, ss, c, m, done := newTestRPCServer(t)
 	defer done()
+
+	_ = mockDomain(t, m, "domain1", false)
 
 	var abiParam abi.Parameter
 	err := json.Unmarshal([]byte(widgetABI), &abiParam)
 	assert.NoError(t, err)
 	schema, err := newABISchema(ctx, "domain1", &abiParam)
 	assert.NoError(t, err)
-	err = ss.persistSchemas([]*components.SchemaPersisted{schema.SchemaPersisted})
+	err = ss.persistSchemas(ctx, ss.p.DB(), []*components.SchemaPersisted{schema.SchemaPersisted})
 	assert.NoError(t, err)
 
 	var schemas []*components.SchemaPersisted

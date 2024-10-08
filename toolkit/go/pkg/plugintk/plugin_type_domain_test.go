@@ -301,6 +301,23 @@ func TestDomainFunction_GetVerifier(t *testing.T) {
 	})
 }
 
+func TestDomainFunction_ValidateStateHashes(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// ValidateStateHashes - paladin to domain
+	funcs.ValidateStateHashes = func(ctx context.Context, cdr *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+		return &prototk.ValidateStateHashesResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_ValidateStateHashes{
+			ValidateStateHashes: &prototk.ValidateStateHashesRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_ValidateStateHashesRes{}, res.ResponseFromDomain)
+	})
+}
+
 func TestDomainRequestError(t *testing.T) {
 	_, exerciser, _, _, _, done := setupDomainTests(t)
 	defer done()
