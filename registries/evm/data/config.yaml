@@ -1,0 +1,25 @@
+api:
+  port: 9300
+persistence:
+  type: sqlite
+  sqlite:
+    uri:           ":memory:"
+    autoMigrate:   true
+    migrationsDir: ../kata/db/migrations/sqlite
+    debugQueries:  true
+eth:
+    http:
+      url: http://localhost:8545
+    ws:
+        url: ws://localhost:8546
+        initialConnectAttempts: 25
+keys:
+    keyDerivation:
+      type: bip32
+    keyStore:
+      type: static
+      static:
+        keys:
+          seed:
+            encoding: none
+            inline: polar mechanic crouch jungle field room dry sure machine brisk seed bulk student total ethics
