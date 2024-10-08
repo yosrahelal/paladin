@@ -253,11 +253,12 @@ task test {
     finalizedBy checkCoverage
 }
 
-task buildGo {
-    // TODO: implement buildGo task
-    doFirst() {
-        println ":domain:zeto buildGo task not implemented"
-    }
+task buildGo(type: GoLib, dependsOn: [":toolkit:go:protoc", copySolidity]) {
+    inputs.files(configurations.coreGo)
+    inputs.files(configurations.toolkitGo)
+    baseName "zeto"
+    sources goFiles
+    mainFile 'zeto.go'
 }
 
 task build {
