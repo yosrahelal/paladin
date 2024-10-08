@@ -91,8 +91,8 @@ func (r *registry) init() {
 
 func (r *registry) UpsertTransportDetails(ctx context.Context, req *prototk.UpsertTransportDetails) (*prototk.UpsertTransportDetailsResponse, error) {
 	var postCommit func()
-	err := r.rm.persistence.DB().Transaction(func(tx *gorm.DB) (err error) {
-		postCommit, err = r.upsertTransportDetailsBatch(ctx, r.rm.persistence.DB(), req.TransportDetails)
+	err := r.rm.persistence.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+		postCommit, err = r.upsertTransportDetailsBatch(ctx, dbTX, req.TransportDetails)
 		return err
 	})
 	if err != nil {
@@ -120,23 +120,25 @@ func (r *registry) upsertTransportDetailsBatch(ctx context.Context, dbTX *gorm.D
 	}
 
 	// Store entry in database
-	err := dbTX.
-		WithContext(ctx).
-		Table("registry_transport_details").
-		Clauses(clause.OnConflict{
-			Columns: []clause.Column{
-				{Name: "registry"},
-				{Name: "node"},
-				{Name: "transport"},
-			},
-			DoUpdates: clause.AssignmentColumns([]string{
-				"details", // we replace any existing entry
-			}),
-		}).
-		Create(entries).
-		Error
-	if err != nil {
-		return nil, err
+	if len(entries) > 0 {
+		err := dbTX.
+			WithContext(ctx).
+			Table("registry_transport_details").
+			Clauses(clause.OnConflict{
+				Columns: []clause.Column{
+					{Name: "registry"},
+					{Name: "node"},
+					{Name: "transport"},
+				},
+				DoUpdates: clause.AssignmentColumns([]string{
+					"details", // we replace any existing entry
+				}),
+			}).
+			Create(entries).
+			Error
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// return a post-commit callback to update the cache

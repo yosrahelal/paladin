@@ -128,7 +128,10 @@ func (rm *registryManager) GetNodeTransports(ctx context.Context, node string) (
 	}
 
 	// Load from database
-	rm.persistence.DB().Table("registry_transport_details").Where("node = ?", node).Find(&transports)
+	err := rm.persistence.DB().Table("registry_transport_details").Where("node = ?", node).Find(&transports).Error
+	if err != nil {
+		return nil, err
+	}
 	if len(transports) > 0 {
 		// Set cache
 		rm.registryCache.Set(node, transports)

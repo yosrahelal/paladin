@@ -17,7 +17,7 @@ package registrymgr
 
 import (
 	"context"
-	"database/sql/driver"
+	"fmt"
 	"sync/atomic"
 	"testing"
 
@@ -54,8 +54,8 @@ func newTestPlugin(registryFuncs *plugintk.RegistryAPIFunctions) *testPlugin {
 	}
 }
 
-func newTestRegistry(t *testing.T, extraSetup ...func(mc *mockComponents)) (context.Context, *registryManager, *testPlugin, *mockComponents, func()) {
-	ctx, rm, mc, done := newTestRegistryManager(t, false, &pldconf.RegistryManagerConfig{
+func newTestRegistry(t *testing.T, realDB bool, extraSetup ...func(mc *mockComponents)) (context.Context, *registryManager, *testPlugin, *mockComponents, func()) {
+	ctx, rm, mc, done := newTestRegistryManager(t, realDB, &pldconf.RegistryManagerConfig{
 		Registries: map[string]*pldconf.RegistryConfig{
 			"test1": {
 				Config: map[string]any{"some": "conf"},
@@ -90,7 +90,7 @@ func registerTestRegistry(t *testing.T, rm *registryManager, tp *testPlugin) {
 
 func TestDoubleRegisterReplaces(t *testing.T) {
 
-	_, rm, tp0, _, done := newTestRegistry(t)
+	_, rm, tp0, _, done := newTestRegistry(t, false)
 	defer done()
 	assert.Nil(t, tp0.r.initError.Load())
 	assert.True(t, tp0.initialized.Load())
@@ -110,17 +110,19 @@ func TestDoubleRegisterReplaces(t *testing.T) {
 
 }
 
-func TestRecordAndResolveInformation(t *testing.T) {
-	ctx, rm, tp, mc, done := newTestRegistry(t)
+func TestUpsertTransportDetailsRealDBok(t *testing.T) {
+	ctx, rm, tp, _, done := newTestRegistry(t, true)
 	defer done()
-
-	mc.db.ExpectQuery("SELECT.*registry_transport_details").WillReturnRows(sqlmock.NewRows([]string{}))
 
 	_, err := rm.GetNodeTransports(ctx, "node1")
 	assert.Regexp(t, "PD012100", err)
 
 	// Upsert bad entry
-	_, err = tp.r.UpsertTransportDetails(ctx, &prototk.UpsertTransportDetails{})
+	_, err = tp.r.UpsertTransportDetails(ctx, &prototk.UpsertTransportDetails{
+		TransportDetails: []*prototk.TransportDetails{
+			{ /* missing Node */ },
+		},
+	})
 	assert.Regexp(t, "PD012101", err)
 
 	entry1 := &prototk.UpsertTransportDetails{
@@ -133,18 +135,10 @@ func TestRecordAndResolveInformation(t *testing.T) {
 		},
 	}
 
-	mc.db.ExpectQuery("SELECT.*registry_transport_details").WillReturnRows(sqlmock.NewRows([]string{}))
-
-	mc.db.ExpectExec("INSERT.*registry_transport_details").WillReturnResult(driver.ResultNoRows)
-
 	// Upsert first entry
 	res, err := tp.r.UpsertTransportDetails(ctx, entry1)
 	require.NoError(t, err)
 	assert.NotNil(t, res)
-
-	mc.db.ExpectQuery("SELECT.*registry_transport_details").WillReturnRows(sqlmock.NewRows([]string{"node", "registry", "transport", "transport_details"}).AddRow(
-		"node1", registryID, "grpc", "things and stuff",
-	))
 
 	// Check we get it
 	transports, err := rm.GetNodeTransports(ctx, "node1")
@@ -168,8 +162,6 @@ func TestRecordAndResolveInformation(t *testing.T) {
 		},
 	}
 
-	mc.db.ExpectExec("INSERT.*registry_transport_details").WillReturnResult(driver.ResultNoRows)
-
 	// Upsert second entry
 	res, err = tp.r.UpsertTransportDetails(ctx, entry2)
 	require.NoError(t, err)
@@ -177,8 +169,6 @@ func TestRecordAndResolveInformation(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, res)
 	assert.Len(t, transports, 2)
-
-	mc.db.ExpectExec("INSERT.*registry_transport_details").WillReturnResult(driver.ResultNoRows)
 
 	// Upsert first entry again
 	res, err = tp.r.UpsertTransportDetails(ctx, entry1)
@@ -188,4 +178,64 @@ func TestRecordAndResolveInformation(t *testing.T) {
 	assert.NotNil(t, res)
 	assert.Len(t, transports, 2)
 
+}
+
+func TestUpsertTransportDetailsInsertFail(t *testing.T) {
+	ctx, _, tp, m, done := newTestRegistry(t, false)
+	defer done()
+
+	m.db.ExpectBegin()
+	m.db.ExpectExec("INSERT.*registry_transport_details").WillReturnError(fmt.Errorf("pop"))
+
+	_, err := tp.r.UpsertTransportDetails(ctx, &prototk.UpsertTransportDetails{
+		TransportDetails: []*prototk.TransportDetails{
+			{
+				Node:      "node1",
+				Transport: "websockets",
+				Details:   "more things and stuff",
+			},
+		},
+	})
+	assert.Regexp(t, "pop", err)
+
+}
+
+func TestGetNodeTransportsCache(t *testing.T) {
+	ctx, rm, _, m, done := newTestRegistry(t, false)
+	defer done()
+
+	m.db.ExpectQuery("SELECT.*registry_transport_details").WillReturnRows(sqlmock.NewRows([]string{
+		"node", "registry", "transport", "details",
+	}).AddRow(
+		"node1", "test1", "websockets", "things and stuff",
+	))
+
+	expected := []*components.RegistryNodeTransportEntry{
+		{
+			Node:      "node1",
+			Registry:  "test1",
+			Transport: "websockets",
+			Details:   "things and stuff",
+		},
+	}
+
+	transports, err := rm.GetNodeTransports(ctx, "node1")
+	require.NoError(t, err)
+	assert.Equal(t, expected, transports)
+
+	// Re-do from cache
+	transports, err = rm.GetNodeTransports(ctx, "node1")
+	require.NoError(t, err)
+	assert.Equal(t, expected, transports)
+
+}
+
+func TestGetNodeTransportsErr(t *testing.T) {
+	ctx, rm, _, m, done := newTestRegistry(t, false)
+	defer done()
+
+	m.db.ExpectQuery("SELECT.*registry_transport_details").WillReturnError(fmt.Errorf("pop"))
+
+	_, err := rm.GetNodeTransports(ctx, "node1")
+	require.Regexp(t, "pop", err)
 }
