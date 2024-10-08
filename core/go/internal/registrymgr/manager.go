@@ -24,6 +24,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
@@ -37,6 +38,7 @@ type registryManager struct {
 	conf *pldconf.RegistryManagerConfig
 
 	persistence   persistence.Persistence
+	blockIndexer  blockindexer.BlockIndexer
 	registryCache cache.Cache[string, []*components.RegistryNodeTransportEntry]
 
 	registriesByID   map[uuid.UUID]*registry
@@ -59,7 +61,10 @@ func (rm *registryManager) PreInit(pic components.PreInitComponents) (*component
 	return &components.ManagerInitResult{}, nil
 }
 
-func (rm *registryManager) PostInit(c components.AllComponents) error { return nil }
+func (rm *registryManager) PostInit(c components.AllComponents) error {
+	rm.blockIndexer = c.BlockIndexer()
+	return nil
+}
 
 func (rm *registryManager) Start() error { return nil }
 

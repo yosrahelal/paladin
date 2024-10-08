@@ -18,17 +18,21 @@ package registrymgr
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync/atomic"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -48,6 +52,9 @@ type registry struct {
 
 	initError atomic.Pointer[error]
 	initDone  chan struct{}
+
+	config      *prototk.RegistryConfig
+	eventStream *blockindexer.EventStream
 }
 
 func (rm *registryManager) newRegistry(id uuid.UUID, name string, conf *pldconf.RegistryConfig, toRegistry components.RegistryManagerToRegistry) *registry {
@@ -72,10 +79,14 @@ func (r *registry) init() {
 	err := r.initRetry.Do(r.ctx, func(attempt int) (bool, error) {
 		// Send the configuration to the registry for processing
 		confJSON, _ := json.Marshal(&r.conf.Config)
-		_, err := r.api.ConfigureRegistry(r.ctx, &prototk.ConfigureRegistryRequest{
+		res, err := r.api.ConfigureRegistry(r.ctx, &prototk.ConfigureRegistryRequest{
 			Name:       r.name,
 			ConfigJson: string(confJSON),
 		})
+		if err == nil {
+			r.config = res.RegistryConfig
+			err = r.configureEventStream(r.ctx)
+		}
 		return true, err
 	})
 	if err != nil {
@@ -89,6 +100,48 @@ func (r *registry) init() {
 	}
 }
 
+func (r *registry) configureEventStream(ctx context.Context) error {
+
+	if len(r.config.EventSources) == 0 {
+		return nil
+	}
+
+	stream := &blockindexer.EventStream{
+		Type:    blockindexer.EventStreamTypeInternal.Enum(),
+		Sources: []blockindexer.EventStreamSource{},
+	}
+
+	for i, es := range r.config.EventSources {
+
+		contractAddr, err := tktypes.ParseEthAddress(es.ContractAddress)
+		if err != nil {
+			return i18n.WrapError(ctx, err, msgs.MsgRegistryInvalidEventSource, i)
+		}
+
+		var eventsABI abi.ABI
+		if err := json.Unmarshal([]byte(es.AbiEventsJson), &eventsABI); err != nil {
+			return i18n.WrapError(ctx, err, msgs.MsgRegistryInvalidEventSource, i)
+		}
+
+		stream.Sources = append(stream.Sources, blockindexer.EventStreamSource{
+			Address: contractAddr,
+			ABI:     eventsABI,
+		})
+	}
+
+	streamHash, err := stream.Sources.Hash(ctx)
+	if err != nil {
+		return err
+	}
+	stream.Name = fmt.Sprintf("registry_%s_%s", r.name, streamHash)
+
+	r.eventStream, err = r.rm.blockIndexer.AddEventStream(ctx, &blockindexer.InternalEventStream{
+		Definition: stream,
+		Handler:    r.handleEventBatch,
+	})
+	return err
+}
+
 func (r *registry) UpsertTransportDetails(ctx context.Context, req *prototk.UpsertTransportDetails) (*prototk.UpsertTransportDetailsResponse, error) {
 	var postCommit func()
 	err := r.rm.persistence.DB().Transaction(func(dbTX *gorm.DB) (err error) {
@@ -100,6 +153,38 @@ func (r *registry) UpsertTransportDetails(ctx context.Context, req *prototk.Upse
 	}
 	postCommit()
 	return &prototk.UpsertTransportDetailsResponse{}, nil
+}
+
+func (r *registry) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
+
+	// Build the proto version of these events
+	events := make([]*prototk.OnChainEvent, len(batch.Events))
+	for i, be := range batch.Events {
+		events[i] = &prototk.OnChainEvent{
+			Location: &prototk.OnChainEventLocation{
+				TransactionHash:  be.TransactionHash.String(),
+				BlockNumber:      be.BlockNumber,
+				TransactionIndex: be.TransactionIndex,
+				LogIndex:         be.LogIndex,
+			},
+			Signature:         be.Signature.String(),
+			SoliditySignature: be.SoliditySignature,
+			DataJson:          string(be.Data),
+		}
+	}
+
+	// Push them down synchronously to the registry to parse
+	res, err := r.api.RegistryEventBatch(ctx, &prototk.RegistryEventBatchRequest{
+		BatchId: batch.BatchID.String(),
+		Events:  events,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Upsert any transport details that are detected by the registry
+	return r.upsertTransportDetailsBatch(ctx, dbTX, res.TransportDetails)
+
 }
 
 func (r *registry) upsertTransportDetailsBatch(ctx context.Context, dbTX *gorm.DB, protoEntries []*prototk.TransportDetails) (func(), error) {

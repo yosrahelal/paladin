@@ -35,14 +35,18 @@ import (
 )
 
 type mockComponents struct {
-	db sqlmock.Sqlmock
+	db           sqlmock.Sqlmock
+	blockIndexer *componentmocks.BlockIndexer
 }
 
 func newTestRegistryManager(t *testing.T, realDB bool, conf *pldconf.RegistryManagerConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *registryManager, *mockComponents, func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
-	mc := &mockComponents{}
+	mc := &mockComponents{
+		blockIndexer: componentmocks.NewBlockIndexer(t),
+	}
 	componentMocks := componentmocks.NewAllComponents(t)
+	componentMocks.On("BlockIndexer").Return(mc.blockIndexer).Maybe()
 
 	var p persistence.Persistence
 	var err error

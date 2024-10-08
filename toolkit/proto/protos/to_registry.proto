@@ -30,7 +30,7 @@ message ConfigureRegistryResponse {
 }
 
 message RegistryConfig {
-  string abi_events_json = 1; // ABI events that the registry listens to from the chain
+  repeated RegistryEventSource event_sources = 1;
 }
 
 message RegistryEventBatchRequest {
@@ -40,4 +40,9 @@ message RegistryEventBatchRequest {
 
 message RegistryEventBatchResponse {
   repeated TransportDetails transport_details = 1; // transport details to upsert as idempotently with this event batch
+}
+
+message RegistryEventSource {
+  string contract_address = 1; // the contract address to listen to
+  string abi_events_json = 2; // ABI events that the registry listens to from the chain
 }

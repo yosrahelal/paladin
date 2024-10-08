@@ -54,21 +54,29 @@ func newTestPlugin(registryFuncs *plugintk.RegistryAPIFunctions) *testPlugin {
 	}
 }
 
-func newTestRegistry(t *testing.T, realDB bool, extraSetup ...func(mc *mockComponents)) (context.Context, *registryManager, *testPlugin, *mockComponents, func()) {
+func newTestRegistry(t *testing.T, realDB bool, extraSetup ...func(mc *mockComponents, regConf *prototk.RegistryConfig)) (context.Context, *registryManager, *testPlugin, *mockComponents, func()) {
+	regConf := &prototk.RegistryConfig{}
+
 	ctx, rm, mc, done := newTestRegistryManager(t, realDB, &pldconf.RegistryManagerConfig{
 		Registries: map[string]*pldconf.RegistryConfig{
 			"test1": {
 				Config: map[string]any{"some": "conf"},
 			},
 		},
-	}, extraSetup...)
+	}, func(mc *mockComponents) {
+		for _, fn := range extraSetup {
+			fn(mc, regConf)
+		}
+	})
 
 	tp := newTestPlugin(nil)
 	tp.Functions = &plugintk.RegistryAPIFunctions{
 		ConfigureRegistry: func(ctx context.Context, ctr *prototk.ConfigureRegistryRequest) (*prototk.ConfigureRegistryResponse, error) {
 			assert.Equal(t, "test1", ctr.Name)
 			assert.JSONEq(t, `{"some":"conf"}`, ctr.ConfigJson)
-			return &prototk.ConfigureRegistryResponse{}, nil
+			return &prototk.ConfigureRegistryResponse{
+				RegistryConfig: regConf,
+			}, nil
 		},
 	}
 
