@@ -173,15 +173,14 @@ func (s *zetoDomainTestSuite) TearDownSuite() {
 	s.done()
 }
 
-// func (s *zetoDomainTestSuite) TestZeto_Anon() {
-// s.testZetoFungible(s.T(), constants.TOKEN_ANON)
-// }
+func (s *zetoDomainTestSuite) TestZeto_Anon() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON)
+}
 
-// func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
-// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC)
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC)
+}
 
-// TODO: Re-enable as part of resolving https://github.com/kaleido-io/paladin/issues/280
 func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER)
 }
