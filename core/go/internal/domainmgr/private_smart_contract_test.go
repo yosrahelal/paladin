@@ -26,11 +26,13 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
@@ -846,6 +848,88 @@ func TestPrepareTransactionBadData(t *testing.T) {
 
 	err := psc.PrepareTransaction(td.mdc, tx)
 	assert.Regexp(t, "FF22040", err)
+}
+
+func TestPrepareTransactionPrivateResult(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
+	defer done()
+
+	psc, tx := doDomainInitAssembleTransactionOK(t, td)
+	tx.Signer = "signer1"
+
+	contractAddr := tktypes.RandAddress()
+	td.dm.contractCache.Set(*contractAddr, psc)
+
+	td.tp.Functions.PrepareTransaction = func(ctx context.Context, ptr *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
+		return &prototk.PrepareTransactionResponse{
+			Transaction: &prototk.PreparedTransaction{
+				Type:            prototk.PreparedTransaction_PRIVATE,
+				FunctionAbiJson: fakeDownstreamPrivateABI,
+				ParamsJson:      `{"thing": "something else"}`,
+				ContractAddress: confutil.P(contractAddr.String()),
+			},
+		}, nil
+	}
+
+	err := psc.PrepareTransaction(td.mdc, tx)
+	require.NoError(t, err)
+	assert.Equal(t, ptxapi.Transaction{
+		IdempotencyKey: fmt.Sprintf("%s_doTheNextThing", tx.ID),
+		Type:           ptxapi.TransactionTypePrivate.Enum(),
+		Function:       "doTheNextThing(string)",
+		From:           tx.Signer,
+		To:             contractAddr,
+		Data:           tktypes.RawJSON(`{"thing": "something else"}`),
+		Domain:         psc.Domain().Name(),
+	}, tx.PreparedPrivateTransaction.Transaction)
+}
+
+func TestPrepareTransactionPrivateBadAddr(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
+	defer done()
+
+	psc, tx := doDomainInitAssembleTransactionOK(t, td)
+	tx.Signer = "signer1"
+
+	td.tp.Functions.PrepareTransaction = func(ctx context.Context, ptr *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
+		return &prototk.PrepareTransactionResponse{
+			Transaction: &prototk.PreparedTransaction{
+				Type:            prototk.PreparedTransaction_PRIVATE,
+				FunctionAbiJson: fakeDownstreamPrivateABI,
+				ParamsJson:      `{"thing": "something else"}`,
+				ContractAddress: confutil.P("wrong"),
+			},
+		}, nil
+	}
+
+	err := psc.PrepareTransaction(td.mdc, tx)
+	require.Regexp(t, "bad address", err)
+}
+
+func TestPrepareTransactionUnknownContract(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight, func(mc *mockComponents) {
+		mc.db.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows([]string{}))
+	})
+	defer done()
+
+	psc, tx := doDomainInitAssembleTransactionOK(t, td)
+	tx.Signer = "signer1"
+
+	contractAddr := tktypes.RandAddress()
+
+	td.tp.Functions.PrepareTransaction = func(ctx context.Context, ptr *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
+		return &prototk.PrepareTransactionResponse{
+			Transaction: &prototk.PreparedTransaction{
+				Type:            prototk.PreparedTransaction_PRIVATE,
+				FunctionAbiJson: fakeDownstreamPrivateABI,
+				ParamsJson:      `{"thing": "something else"}`,
+				ContractAddress: confutil.P(contractAddr.String()),
+			},
+		}, nil
+	}
+
+	err := psc.PrepareTransaction(td.mdc, tx)
+	require.Regexp(t, "PD011609", err)
 }
 
 func TestLoadStatesBadSchema(t *testing.T) {

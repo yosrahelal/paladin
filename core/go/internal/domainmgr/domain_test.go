@@ -132,6 +132,17 @@ const fakeCoinEventsABI = `[{
 	]
 }]`
 
+const fakeDownstreamPrivateABI = `{
+	"type": "function",
+    "name": "doTheNextThing",
+	"inputs": [
+		{
+			"name": "thing",
+			"type": "string"
+		}
+	]
+}`
+
 type fakeState struct {
 	Salt   tktypes.Bytes32      `json:"salt"`
 	Owner  tktypes.EthAddress   `json:"owner"`

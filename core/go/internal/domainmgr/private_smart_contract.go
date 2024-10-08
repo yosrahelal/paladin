@@ -18,6 +18,7 @@ package domainmgr
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -26,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -419,26 +421,23 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *
 		}
 	}
 
+	tx.PreparedTransactionIntent = tx.Inputs.Intent
 	if res.Transaction.Type == prototk.PreparedTransaction_PRIVATE {
 		psc, err := dc.dm.GetSmartContractByAddress(dCtx.Ctx(), *contractAddress)
 		if err != nil {
 			return err
 		}
-		var functionABI abi.Entry
-		err = json.Unmarshal([]byte(res.Transaction.FunctionAbiJson), &functionABI)
-		if err != nil {
-			return err
-		}
-		tx.PreparedPrivateTransaction = &components.PrivateTransaction{
-			ID: uuid.New(),
-			Inputs: &components.TransactionInputs{
-				Function: &functionABI,
-				To:       *contractAddress,
-				Inputs:   tktypes.RawJSON(res.Transaction.ParamsJson),
-				Domain:   psc.Domain().Name(),
-				From:     tx.Signer,
-				Intent:   tx.Inputs.Intent,
+		tx.PreparedPrivateTransaction = &ptxapi.TransactionInput{
+			Transaction: ptxapi.Transaction{
+				IdempotencyKey: fmt.Sprintf("%s_%s", tx.ID, functionABI.Name),
+				Type:           ptxapi.TransactionTypePrivate.Enum(),
+				Function:       functionABI.String(),
+				From:           tx.Signer,
+				To:             contractAddress,
+				Data:           tktypes.RawJSON(res.Transaction.ParamsJson),
+				Domain:         psc.Domain().Name(),
 			},
+			ABI: abi.ABI{&functionABI},
 		}
 	} else {
 		tx.PreparedPublicTransaction = &components.EthTransaction{
