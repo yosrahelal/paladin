@@ -61,7 +61,7 @@ db:
     dsn:           ":memory:"
     autoMigrate:   true
     migrationsDir: ../db/migrations/sqlite
-    debugQueries:  true
+    debugQueries:  false
 blockchain:
   http:
     url: http://localhost:8545

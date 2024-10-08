@@ -168,7 +168,7 @@ func TestErrorFromServer(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			bss.Send(&prototk.DomainMessage{
+			_ = bss.Send(&prototk.DomainMessage{
 				Header: &prototk.Header{
 					PluginId:      req.Header.PluginId,
 					MessageId:     uuid.NewString(),
@@ -212,7 +212,7 @@ func TestEmptyErrorFromServer(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			bss.Send(&prototk.DomainMessage{
+			_ = bss.Send(&prototk.DomainMessage{
 				Header: &prototk.Header{
 					PluginId:      req.Header.PluginId,
 					MessageId:     uuid.NewString(),

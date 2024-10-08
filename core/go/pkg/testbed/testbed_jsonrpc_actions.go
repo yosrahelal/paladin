@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -276,16 +277,30 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 		return err
 	}
 
-	if tx.PreparedPrivateTransaction != nil {
-		nextContract, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, tx.PreparedPrivateTransaction.Inputs.To)
+	if tx.PreparedPrivateTransaction != nil && tx.PreparedPrivateTransaction.To != nil {
+		nextContract, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, *tx.PreparedPrivateTransaction.To)
 		if err != nil {
 			return err
 		}
-		return tb.execPrivateTransaction(ctx, nextContract, tx.PreparedPrivateTransaction)
+		return tb.execPrivateTransaction(ctx, nextContract, mapDirectlyToInternalPrivateTX(tx.PreparedPrivateTransaction, tx.Inputs.Intent))
 	} else if tx.Inputs.Intent == prototk.TransactionSpecification_CALL {
 		return tb.execBaseLedgerCall(ctx, tx.Signer, tx.PreparedPublicTransaction)
 	} else {
 		return tb.execBaseLedgerTransaction(ctx, tx.Signer, tx.PreparedPublicTransaction)
+	}
+}
+
+func mapDirectlyToInternalPrivateTX(etx *ptxapi.TransactionInput, intent prototk.TransactionSpecification_Intent) *components.PrivateTransaction {
+	return &components.PrivateTransaction{
+		ID: uuid.New(),
+		Inputs: &components.TransactionInputs{
+			Domain:   etx.Domain,
+			From:     etx.From,
+			To:       *etx.To,
+			Function: etx.ABI[0],
+			Inputs:   etx.Data,
+			Intent:   intent,
+		},
 	}
 }
 
@@ -327,9 +342,9 @@ func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) (*tktypes.P
 			return nil, err
 		}
 	} else {
-		functionABI = tx.PreparedPrivateTransaction.Inputs.Function
-		to = tx.PreparedPrivateTransaction.Inputs.To
-		paramsJSON = tx.PreparedPrivateTransaction.Inputs.Inputs
+		functionABI = tx.PreparedPrivateTransaction.ABI[0]
+		to = *tx.PreparedPrivateTransaction.To
+		paramsJSON = tx.PreparedPrivateTransaction.Data
 	}
 
 	return &tktypes.PrivateContractTransaction{
