@@ -141,7 +141,7 @@ func TestTransferAssemble(t *testing.T) {
 	h.zeto.Callbacks = testCallbacks
 	req.ResolvedVerifiers[1].Verifier = "0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922"
 	_, err = h.Assemble(ctx, tx, req)
-	assert.EqualError(t, err, "failed to prepare inputs. test error")
+	assert.EqualError(t, err, "failed to prepare inputs. failed to query the state store for available coins. test error")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{

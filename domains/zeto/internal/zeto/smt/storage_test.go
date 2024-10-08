@@ -163,6 +163,17 @@ func TestStorage(t *testing.T) {
 	assert.NotEmpty(t, idx)
 }
 
+func TestUpsertRootNodeIndex(t *testing.T) {
+	stateQueryConext := tktypes.ShortID()
+	storage, _, _ := New(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")
+	assert.NotNil(t, storage)
+	idx, _ := node.NewNodeIndexFromBigInt(big.NewInt(1234))
+	err := storage.UpsertRootNodeIndex(idx)
+	assert.NoError(t, err)
+	assert.Equal(t, "d204000000000000000000000000000000000000000000000000000000000000", storage.(*statesStorage).rootNode.Hex())
+	assert.Equal(t, 2, len(storage.(*statesStorage).newNodes))
+}
+
 func TestGetNode(t *testing.T) {
 	stateQueryConext := tktypes.ShortID()
 	idx, _ := node.NewNodeIndexFromBigInt(big.NewInt(1234))
