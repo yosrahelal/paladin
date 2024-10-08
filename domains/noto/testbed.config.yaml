@@ -19,7 +19,7 @@ blockchain:
     url: ws://localhost:8546
     initialConnectAttempts: 25
 log:
-  level: debug
+  level: info
 signer:
   keyDerivation:
     type: "bip32"
@@ -29,5 +29,4 @@ signer:
       keys:
         seed:
           encoding: none
-          # DO NOT USE THIS MNEMONIC FOR ANYTHING APART FROM TESTBED TESTING
-          inline: crush album arena load jazz fortune cost payment crazy produce employ rug peanut shoulder knife
+          inline: REPLACED BY GENERATED KEY IN TEST

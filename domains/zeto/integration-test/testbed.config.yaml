@@ -27,7 +27,7 @@ blockchain:
     url: ws://localhost:8546
     initialConnectAttempts: 25
 log:
-  level: debug
+  level: info
 signer:
   keyDerivation:
     type: 'bip32'
@@ -37,5 +37,4 @@ signer:
       keys:
         seed:
           encoding: none
-          # DO NOT USE THIS MNEMONIC FOR ANYTHING APART FROM TESTBED TESTING
-          inline: rubber glove aspect crop reason inside put atom skull kiss quality van labor elegant about
+          inline: REPLACED BY GENERATED KEY IN TEST

@@ -211,7 +211,7 @@ func (z *Zeto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	}
 
 	return &prototk.PrepareDeployResponse{
-		Transaction: &prototk.BaseLedgerTransaction{
+		Transaction: &prototk.PreparedTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
 		},
@@ -313,21 +313,6 @@ func (z *Zeto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 		DomainConfig:    domainConfig,
 		Params:          params,
 	}, handler, nil
-}
-
-func (z *Zeto) FindCoins(ctx context.Context, stateQueryContext, query string) ([]*types.ZetoCoin, error) {
-	states, err := z.findAvailableStates(ctx, stateQueryContext, query)
-	if err != nil {
-		return nil, err
-	}
-
-	coins := make([]*types.ZetoCoin, len(states))
-	for i, state := range states {
-		if coins[i], err = z.makeCoin(state.DataJson); err != nil {
-			return nil, err
-		}
-	}
-	return coins, err
 }
 
 func (z *Zeto) registerEventSignatures(eventAbis abi.ABI) {

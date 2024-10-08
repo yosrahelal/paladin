@@ -656,7 +656,7 @@ func TestDomainPrepareDeployInvokeTX(t *testing.T) {
 	td.tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 		assert.Same(t, tx.TransactionSpecification, pdr.Transaction)
 		return &prototk.PrepareDeployResponse{
-			Transaction: &prototk.BaseLedgerTransaction{
+			Transaction: &prototk.PreparedTransaction{
 				FunctionAbiJson: fakeCoinFactoryNewInstanceABI,
 				ParamsJson: `{
 				  "notary": "` + pdr.ResolvedVerifiers[0].Verifier + `",
@@ -802,7 +802,7 @@ func TestDomainPrepareInvokeBadParams(t *testing.T) {
 
 	td.tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 		return &prototk.PrepareDeployResponse{
-			Transaction: &prototk.BaseLedgerTransaction{
+			Transaction: &prototk.PreparedTransaction{
 				FunctionAbiJson: fakeCoinFactoryNewInstanceABI,
 				ParamsJson:      `{"missing":"expected things"}`,
 			},
@@ -843,7 +843,7 @@ func TestDomainPrepareInvokeABIInvalid(t *testing.T) {
 
 	td.tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 		return &prototk.PrepareDeployResponse{
-			Transaction: &prototk.BaseLedgerTransaction{
+			Transaction: &prototk.PreparedTransaction{
 				FunctionAbiJson: `!!!wrong`,
 			},
 		}, nil
@@ -863,7 +863,7 @@ func TestDomainPrepareInvokeAndDeploy(t *testing.T) {
 
 	td.tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 		return &prototk.PrepareDeployResponse{
-			Transaction: &prototk.BaseLedgerTransaction{
+			Transaction: &prototk.PreparedTransaction{
 				FunctionAbiJson: fakeCoinFactoryNewInstanceABI,
 				ParamsJson:      `{}`,
 			},

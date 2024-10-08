@@ -38,7 +38,6 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
@@ -84,7 +83,7 @@ func baseMocks(t *testing.T) *mocksAndTestControl {
 }
 
 func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig)) (context.Context, *pubTxManager, *mocksAndTestControl, func()) {
-	log.SetLevel("debug")
+	// log.SetLevel("debug")
 	ctx := context.Background()
 	conf := &pldconf.PublicTxManagerConfig{
 		Manager: pldconf.PublicTxManagerManagerConfig{

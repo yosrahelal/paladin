@@ -17,7 +17,6 @@ package types
 
 import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -29,9 +28,9 @@ type NotoCoinState struct {
 }
 
 type NotoCoin struct {
-	Salt   string                `json:"salt"`
-	Owner  ethtypes.Address0xHex `json:"owner"`
-	Amount *ethtypes.HexInteger  `json:"amount"`
+	Salt   string              `json:"salt"`
+	Owner  *tktypes.EthAddress `json:"owner"`
+	Amount *tktypes.HexUint256 `json:"amount"`
 }
 
 var NotoCoinABI = &abi.Parameter{

@@ -206,7 +206,7 @@ func TestConcurrentSequencing(t *testing.T) {
 	// check that all transactions are dispatched to the same node
 	// unless there is a break in the chain long enough for the previous transactions to be confirmed
 	ctx := context.Background()
-	log.SetLevel("debug")
+	// log.SetLevel("debug")
 
 	node1ID := uuid.New().String()
 	node2ID := uuid.New().String()

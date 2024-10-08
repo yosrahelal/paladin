@@ -29,7 +29,9 @@ type PrivateContractInvoke struct {
 }
 
 type PrivateContractTransaction struct {
-	EncodedCall  []byte       `json:"encodedCall"`
+	FunctionABI  *abi.Entry   `json:"functionABI"`
+	To           EthAddress   `json:"to"`
+	ParamsJSON   RawJSON      `json:"inputs"`
 	InputStates  []*FullState `json:"inputStates"`
 	OutputStates []*FullState `json:"outputStates"`
 	ReadStates   []*FullState `json:"readStates"`

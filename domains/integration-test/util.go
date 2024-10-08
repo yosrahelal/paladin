@@ -41,17 +41,17 @@ func mapConfig(t *testing.T, config any) (m map[string]any) {
 	return m
 }
 
-func newTestbed(t *testing.T, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
+func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
 	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("./testbed.config.yaml", domains)
+	url, done, err := tb.StartForTest("./testbed.config.yaml", domains, hdWalletSeed)
 	assert.NoError(t, err)
 	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
 	return done, tb, rpc
 }
 
-func deployContracts(ctx context.Context, t *testing.T, deployer string, contracts map[string][]byte) map[string]string {
+func deployContracts(ctx context.Context, t *testing.T, hdWalletSeed *testbed.UTInitFunction, deployer string, contracts map[string][]byte) map[string]string {
 	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{})
+	url, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{}, hdWalletSeed)
 	assert.NoError(t, err)
 	defer done()
 	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))

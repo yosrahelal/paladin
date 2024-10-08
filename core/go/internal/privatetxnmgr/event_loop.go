@@ -337,11 +337,14 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 			}
 
 			preparedTransaction, err := txProcessor.PrepareTransaction(ctx)
-
 			if err != nil {
 				log.L(ctx).Errorf("Error preparing transaction: %s", err)
 				//TODO this is a really bad time to be getting an error.  need to think carefully about how to handle this
 				return err
+			}
+			if preparedTransaction.PreparedPublicTransaction == nil {
+				// TODO: add handling
+				panic("private transactions triggering private transactions currently supported only in testbed")
 			}
 			preparedTransactions[i] = preparedTransaction
 		}
@@ -349,7 +352,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		preparedTransactionPayloads := make([]*components.EthTransaction, len(preparedTransactions))
 
 		for j, preparedTransaction := range preparedTransactions {
-			preparedTransactionPayloads[j] = preparedTransaction.PreparedTransaction
+			preparedTransactionPayloads[j] = preparedTransaction.PreparedPublicTransaction
 		}
 
 		//Now we have the payloads, we can prepare the submission
@@ -368,10 +371,10 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 				},
 			}
 			var req ethclient.ABIFunctionRequestBuilder
-			abiFn, err := ec.ABIFunction(ctx, pt.PreparedTransaction.FunctionABI)
+			abiFn, err := ec.ABIFunction(ctx, pt.PreparedPublicTransaction.FunctionABI)
 			if err == nil {
 				req = abiFn.R(ctx)
-				err = req.Input(pt.PreparedTransaction.Inputs).BuildCallData()
+				err = req.Input(pt.PreparedPublicTransaction.Inputs).BuildCallData()
 			}
 			if err != nil {
 				return err

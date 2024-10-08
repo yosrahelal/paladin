@@ -93,6 +93,7 @@ func (dc *domainContract) InitTransaction(ctx context.Context, tx *components.Pr
 		FunctionParamsJson: string(paramsJSON),
 		FunctionSignature:  txi.Function.SolString(), // we use the proprietary "Solidity inspired" form that is very specific, including param names and nested struct defs
 		BaseBlock:          int64(confirmedBlockHeight),
+		Intent:             txi.Intent,
 	}
 	// Do the request with the domain
 	res, err := dc.api.InitTransaction(ctx, &prototk.InitTransactionRequest{
@@ -394,6 +395,7 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *
 		ReadStates:        dc.d.toEndorsableList(postAssembly.ReadStates),
 		OutputStates:      dc.d.toEndorsableList(postAssembly.OutputStates),
 		AttestationResult: dc.allAttestations(tx),
+		ResolvedVerifiers: preAssembly.Verifiers,
 		ExtraData:         postAssembly.ExtraData,
 	})
 	if err != nil {
@@ -409,10 +411,41 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *
 		return err
 	}
 
-	tx.PreparedTransaction = &components.EthTransaction{
-		FunctionABI: &functionABI,
-		To:          dc.Address(),
-		Inputs:      inputs,
+	contractAddress := &dc.info.Address
+	if res.Transaction.ContractAddress != nil {
+		contractAddress, err = tktypes.ParseEthAddress(*res.Transaction.ContractAddress)
+		if err != nil {
+			return err
+		}
+	}
+
+	if res.Transaction.Type == prototk.PreparedTransaction_PRIVATE {
+		psc, err := dc.dm.GetSmartContractByAddress(dCtx.Ctx(), *contractAddress)
+		if err != nil {
+			return err
+		}
+		var functionABI abi.Entry
+		err = json.Unmarshal([]byte(res.Transaction.FunctionAbiJson), &functionABI)
+		if err != nil {
+			return err
+		}
+		tx.PreparedPrivateTransaction = &components.PrivateTransaction{
+			ID: uuid.New(),
+			Inputs: &components.TransactionInputs{
+				Function: &functionABI,
+				To:       *contractAddress,
+				Inputs:   tktypes.RawJSON(res.Transaction.ParamsJson),
+				Domain:   psc.Domain().Name(),
+				From:     tx.Signer,
+				Intent:   tx.Inputs.Intent,
+			},
+		}
+	} else {
+		tx.PreparedPublicTransaction = &components.EthTransaction{
+			FunctionABI: &functionABI,
+			To:          *contractAddress,
+			Inputs:      inputs,
+		}
 	}
 	return nil
 }

@@ -3,6 +3,7 @@ import org.gradle.api.DefaultTask
 import org.gradle.api.file.FileCollection
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.TaskAction
 import org.gradle.process.ExecResult
@@ -19,10 +20,10 @@ class GoLib extends DefaultTask {
     FileCollection sources
 
     @Internal
-    String outputDir
+    File outputDir
 
-    @Internal
-    String outputLib
+    @OutputFile
+    File outputLib
 
     @Internal
     String outputHeader
@@ -38,7 +39,7 @@ class GoLib extends DefaultTask {
     void baseName(String baseName) {
         this.baseName = baseName
 
-        def libName;
+        String libName
         if (Os.isFamily(Os.FAMILY_WINDOWS)) {
             libName = "lib${baseName}.dll"
         } else if (Os.isFamily(Os.FAMILY_MAC)) {
@@ -48,8 +49,8 @@ class GoLib extends DefaultTask {
         }
 
         // Updated paths for outputs
-        outputDir = "${getProject().layout.buildDirectory.dir("libs").get().asFile.getAbsolutePath()}"
-        outputLib = "${outputDir}/${libName}"
+        outputDir = project.layout.buildDirectory.dir("libs").get().asFile
+        outputLib = new File(outputDir, libName)
         outputHeader = "${outputDir}/lib${libName}.h"
 
         outputs.files(outputLib, outputHeader)
