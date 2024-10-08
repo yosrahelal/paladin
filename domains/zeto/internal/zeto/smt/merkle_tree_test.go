@@ -18,6 +18,7 @@ package smt
 import (
 	"testing"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -28,5 +29,6 @@ func TestPackageInit(t *testing.T) {
 }
 
 func TestMerkleTreeName(t *testing.T) {
-	assert.Equal(t, "smt_test1_ID_FROM_PALADIN", MerkleTreeName("test1", "ID_FROM_PALADIN"))
+	address, _ := tktypes.ParseEthAddress("0xe12c416382988005ace9b2e2f9a8a904d8be961c")
+	assert.Equal(t, "smt_test1_0xe12c416382988005ace9b2e2f9a8a904d8be961c", MerkleTreeName("test1", address))
 }

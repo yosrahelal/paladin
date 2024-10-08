@@ -342,6 +342,11 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 		return nil, err
 	}
 
+	contractAddress, err := tktypes.ParseEthAddress(req.ContractInfo.ContractAddress)
+	if err != nil {
+		return nil, err
+	}
+
 	var res prototk.HandleEventBatchResponse
 	for _, ev := range req.Events {
 		switch ev.SoliditySignature {
@@ -355,7 +360,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				})
 				res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, mint.Outputs)...)
 				if domainConfig.TokenName == constants.TOKEN_ANON_NULLIFIER {
-					newStates, err := z.updateMerkleTree(txID, domainConfig.TokenName, req.StateQueryContext, mint.Outputs)
+					newStates, err := z.updateMerkleTree(txID, domainConfig.TokenName, req.StateQueryContext, contractAddress, mint.Outputs)
 					if err != nil {
 						return nil, err
 					}
@@ -375,7 +380,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
 				res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
 				if domainConfig.TokenName == constants.TOKEN_ANON_NULLIFIER {
-					newStates, err := z.updateMerkleTree(txID, domainConfig.TokenName, req.StateQueryContext, transfer.Outputs)
+					newStates, err := z.updateMerkleTree(txID, domainConfig.TokenName, req.StateQueryContext, contractAddress, transfer.Outputs)
 					if err != nil {
 						return nil, err
 					}
@@ -395,7 +400,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 				res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
 				res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
 				if domainConfig.TokenName == constants.TOKEN_ANON_NULLIFIER {
-					newStates, err := z.updateMerkleTree(txID, domainConfig.TokenName, req.StateQueryContext, transfer.Outputs)
+					newStates, err := z.updateMerkleTree(txID, domainConfig.TokenName, req.StateQueryContext, contractAddress, transfer.Outputs)
 					if err != nil {
 						return nil, err
 					}
@@ -409,10 +414,10 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 	return &res, nil
 }
 
-func (z *Zeto) updateMerkleTree(txID tktypes.HexBytes, tokenName string, stateQueryContext string, output []tktypes.HexUint256) ([]*prototk.NewConfirmedState, error) {
+func (z *Zeto) updateMerkleTree(txID tktypes.HexBytes, tokenName string, stateQueryContext string, contractAddress *tktypes.EthAddress, output []tktypes.HexUint256) ([]*prototk.NewConfirmedState, error) {
 	var newStates []*prototk.NewConfirmedState
 	for _, out := range output {
-		states, err := z.addOutputToMerkleTree(txID, tokenName, stateQueryContext, out)
+		states, err := z.addOutputToMerkleTree(txID, tokenName, stateQueryContext, contractAddress, out)
 		if err != nil {
 			return nil, err
 		}
@@ -421,8 +426,8 @@ func (z *Zeto) updateMerkleTree(txID tktypes.HexBytes, tokenName string, stateQu
 	return newStates, nil
 }
 
-func (z *Zeto) addOutputToMerkleTree(txID tktypes.HexBytes, tokenName string, stateQueryContext string, output tktypes.HexUint256) ([]*prototk.NewConfirmedState, error) {
-	smtName := smt.MerkleTreeName(tokenName, stateQueryContext)
+func (z *Zeto) addOutputToMerkleTree(txID tktypes.HexBytes, tokenName string, stateQueryContext string, contractAddress *tktypes.EthAddress, output tktypes.HexUint256) ([]*prototk.NewConfirmedState, error) {
+	smtName := smt.MerkleTreeName(tokenName, contractAddress)
 	storage, tree, err := smt.New(z.Callbacks, smtName, stateQueryContext, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Merkle tree for %s: %s", smtName, err)
@@ -444,7 +449,7 @@ func (z *Zeto) addOutputToMerkleTree(txID tktypes.HexBytes, tokenName string, st
 	for _, state := range newStates {
 		state.TransactionId = txID.String()
 	}
-	return storage.GetNewStates(), nil
+	return newStates, nil
 }
 
 func encodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {

@@ -20,6 +20,7 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 const SMT_HEIGHT_UTXO = 64
@@ -45,6 +46,6 @@ func New(callbacks plugintk.DomainCallbacks, name string, stateQueryContext stri
 	return storage, mt, err
 }
 
-func MerkleTreeName(tokenName string, stateQueryContext string) string {
-	return "smt_" + tokenName + "_" + stateQueryContext
+func MerkleTreeName(tokenName string, domainInstanceContract *tktypes.EthAddress) string {
+	return "smt_" + tokenName + "_" + domainInstanceContract.String()
 }

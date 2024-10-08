@@ -181,17 +181,16 @@ func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC)
 }
 
-// TODO: Re-enable as part of resolving https://github.com/kaleido-io/paladin/issues/280
-// func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
-// 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER)
-// }
+func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER)
+}
 
 func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON) []*types.ZetoCoinState {
 	if jq == nil {
 		jq = query.NewQueryBuilder().Limit(100).Query()
 	}
-	var notoCoins []*types.ZetoCoinState
-	rpcerr := rpc.CallRPC(ctx, &notoCoins, "pstate_queryStates",
+	var zetoCoins []*types.ZetoCoinState
+	rpcerr := rpc.CallRPC(ctx, &zetoCoins, "pstate_queryStates",
 		zeto.Name(),
 		address,
 		zeto.CoinSchemaID(),
@@ -200,7 +199,7 @@ func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backen
 	if rpcerr != nil {
 		require.NoError(t, rpcerr.Error())
 	}
-	return notoCoins
+	return zetoCoins
 }
 
 func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {

@@ -237,9 +237,10 @@ func TestHandleEventBatch(t *testing.T) {
 
 		mc.stateStore.On("WritePreVerifiedStates", mock.Anything, mock.Anything, "test1", []*components.StateUpsertOutsideContext{
 			{
-				ID:       tktypes.MustParseHexBytes(fakeHash1),
-				Data:     tktypes.RawJSON(`{"color": "blue"}`),
-				SchemaID: fakeSchema,
+				ID:              tktypes.MustParseHexBytes(fakeHash1),
+				Data:            tktypes.RawJSON(`{"color": "blue"}`),
+				ContractAddress: *contract2,
+				SchemaID:        fakeSchema,
 			},
 		}).Return(nil, nil)
 

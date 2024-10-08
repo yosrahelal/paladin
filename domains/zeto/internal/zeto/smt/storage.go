@@ -99,8 +99,12 @@ func (s *statesStorage) UpsertRootNodeIndex(root core.NodeIndex) error {
 	if err != nil {
 		return fmt.Errorf("failed to upsert root node. %s", err)
 	}
+	hash, err := newRoot.Hash()
+	if err != nil {
+		return fmt.Errorf("failed to hash root node. %s", err)
+	}
 	newRootState := &prototk.NewConfirmedState{
-		Id:            &newRoot.RootIndex,
+		Id:            &hash,
 		SchemaId:      s.rootSchemaId,
 		StateDataJson: string(data),
 	}
@@ -196,9 +200,12 @@ func (s *statesStorage) InsertNode(n core.Node) error {
 	if err != nil {
 		return fmt.Errorf("failed to insert node. %s", err)
 	}
-	refKey := newNode.RefKey.HexString()
+	hash, err := newNode.Hash()
+	if err != nil {
+		return fmt.Errorf("failed to hash merkle tree node. %s", err)
+	}
 	newNodeState := &prototk.NewConfirmedState{
-		Id:            &refKey,
+		Id:            &hash,
 		SchemaId:      s.nodeSchemaId,
 		StateDataJson: string(data),
 	}
