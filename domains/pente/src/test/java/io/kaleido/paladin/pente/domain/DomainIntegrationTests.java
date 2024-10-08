@@ -167,6 +167,7 @@ public class DomainIntegrationTests {
                         new HashMap<>()
                 )
         )) {
+
             PenteConfiguration.GroupTupleJSON groupInfo = new PenteConfiguration.GroupTupleJSON(
                     groupSalt,
                     new String[]{"notary"}
@@ -256,9 +257,6 @@ public class DomainIntegrationTests {
 //                                put("amount", 1);
 //                            }}
 //                    ), true);
-        } catch(Throwable e) {
-            LOGGER.error("Test failed with exception", e);
-            throw new RuntimeException(e);
         }
     }
 }
