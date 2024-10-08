@@ -20,12 +20,15 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.kaleido.paladin.Main;
 import io.kaleido.paladin.pente.domain.PenteConfiguration.GroupTupleJSON;
 import io.kaleido.paladin.testbed.Testbed;
 import io.kaleido.paladin.toolkit.JsonABI;
 import io.kaleido.paladin.toolkit.JsonHex;
 import io.kaleido.paladin.toolkit.PrivateContractInvoke;
 import io.kaleido.paladin.toolkit.ResourceLoader;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -36,6 +39,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class DomainIntegrationTests {
+
+    private static final Logger LOGGER = LogManager.getLogger(DomainIntegrationTests.class);
 
     private final Testbed.Setup testbedSetup = new Testbed.Setup("../../core/go/db/migrations/sqlite", 5000);
 
@@ -251,6 +256,9 @@ public class DomainIntegrationTests {
 //                                put("amount", 1);
 //                            }}
 //                    ), true);
+        } catch(Throwable e) {
+            LOGGER.error("Test failed with exception", e);
+            throw new RuntimeException(e);
         }
     }
 }

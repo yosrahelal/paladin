@@ -175,7 +175,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	}
 	i.ctx = log.WithLogField(context.Background(), "instance", binding.identity.String())
 
-	i.conf.Log.Level = confutil.P("trace")
+	i.conf.Log.Level = confutil.P("info")
 	i.conf.DomainManagerConfig.Domains = make(map[string]*pldconf.DomainConfig, 1)
 	i.conf.DomainManagerConfig.Domains["domain1"] = &pldconf.DomainConfig{
 		Plugin: pldconf.PluginConfig{
@@ -280,7 +280,6 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 
 func testConfig(t *testing.T) pldconf.PaladinConfig {
 	ctx := context.Background()
-	log.SetLevel("debug")
 
 	var conf *pldconf.PaladinConfig
 	err := pldconf.ReadAndParseYAMLFile(ctx, "../test/config/sqlite.memory.config.yaml", &conf)
@@ -294,6 +293,7 @@ func testConfig(t *testing.T) pldconf.PaladinConfig {
 	require.NoError(t, err, "Error finding a free port")
 	conf.RPCServer.HTTP.Port = &port
 	conf.RPCServer.HTTP.Address = confutil.P("127.0.0.1")
+	conf.Log.Level = confutil.P("info")
 
 	conf.Signer.KeyStore.Static.Keys["seed"] = pldconf.StaticKeyEntryConfig{
 		Encoding: "hex",

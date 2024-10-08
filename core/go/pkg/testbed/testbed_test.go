@@ -23,7 +23,6 @@ import (
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tyler-smith/go-bip39"
@@ -32,7 +31,7 @@ import (
 
 func writeTestConfig(t *testing.T) (configFile string) {
 	ctx := context.Background()
-	log.SetLevel("debug")
+	// log.SetLevel("debug")
 
 	var conf *pldconf.PaladinConfig
 	err := pldconf.ReadAndParseYAMLFile(ctx, "../../test/config/sqlite.memory.config.yaml", &conf)
