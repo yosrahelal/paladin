@@ -55,7 +55,7 @@ func newTestPlugin(transportFuncs *plugintk.TransportAPIFunctions) *testPlugin {
 }
 
 func newTestTransport(t *testing.T, extraSetup ...func(mc *mockComponents)) (context.Context, *transportManager, *testPlugin, func()) {
-	log.SetLevel("trace")
+	log.SetLevel("debug")
 
 	ctx, tm, _, done := newTestTransportManager(t, &pldconf.TransportManagerConfig{
 		NodeName: "node1",
