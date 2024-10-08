@@ -41,6 +41,9 @@ var notoFactoryJSON []byte
 //go:embed abis/INoto.json
 var notoInterfaceJSON []byte
 
+//go:embed abis/INotoGuard.json
+var notoGuardJSON []byte
+
 func NewNoto(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
 	return &Noto{Callbacks: callbacks}
 }
@@ -58,10 +61,31 @@ type Noto struct {
 }
 
 type NotoDeployParams struct {
-	Name          string                    `json:"name,omitempty"`
-	TransactionID string                    `json:"transactionId"`
-	Notary        string                    `json:"notary"`
-	Config        ethtypes.HexBytes0xPrefix `json:"config"`
+	Name          string             `json:"name,omitempty"`
+	TransactionID string             `json:"transactionId"`
+	NotaryType    tktypes.Bytes32    `json:"notaryType"`
+	NotaryAddress tktypes.EthAddress `json:"notaryAddress"`
+	Data          tktypes.HexBytes   `json:"data"`
+}
+
+type NotoMintParams struct {
+	Outputs   []string         `json:"outputs"`
+	Signature tktypes.HexBytes `json:"signature"`
+	Data      tktypes.HexBytes `json:"data"`
+}
+
+type NotoTransferParams struct {
+	Inputs    []string         `json:"inputs"`
+	Outputs   []string         `json:"outputs"`
+	Signature tktypes.HexBytes `json:"signature"`
+	Data      tktypes.HexBytes `json:"data"`
+}
+
+type NotoApproveTransferParams struct {
+	Delegate  *tktypes.EthAddress `json:"delegate"`
+	TXHash    tktypes.HexBytes    `json:"txhash"`
+	Signature tktypes.HexBytes    `json:"signature"`
+	Data      tktypes.HexBytes    `json:"data"`
 }
 
 type NotoTransfer_Event struct {
@@ -174,10 +198,25 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	if notary == nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "notary")
 	}
-	config := &types.NotoConfigInput_V0{
-		NotaryLookup: notary.Lookup,
+
+	var notaryType tktypes.Bytes32
+	var notaryAddress *tktypes.EthAddress
+	if params.GuardPublicAddress.IsZero() {
+		notaryAddress, err = tktypes.ParseEthAddress(notary.Verifier)
+		if err != nil {
+			return nil, err
+		}
+		notaryType = types.NotaryTypeSigner
+	} else {
+		notaryAddress = params.GuardPublicAddress
+		notaryType = types.NotaryTypeContract
 	}
-	configABI, err := n.encodeConfig(config)
+
+	deployData, err := json.Marshal(&types.NotoConfigData_V0{
+		NotaryLookup:   notary.Lookup,
+		PrivateAddress: params.GuardPrivateAddress,
+		PrivateGroup:   params.GuardPrivateGroup,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -185,8 +224,9 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	deployParams := &NotoDeployParams{
 		Name:          params.Implementation,
 		TransactionID: req.Transaction.TransactionId,
-		Notary:        notary.Verifier,
-		Config:        configABI,
+		NotaryType:    notaryType,
+		NotaryAddress: *notaryAddress,
+		Data:          deployData,
 	}
 	paramsJSON, err := json.Marshal(deployParams)
 	if err != nil {
@@ -202,11 +242,11 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	}
 
 	return &prototk.PrepareDeployResponse{
-		Transaction: &prototk.BaseLedgerTransaction{
+		Transaction: &prototk.PreparedTransaction{
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(paramsJSON),
 		},
-		Signer: &config.NotaryLookup,
+		Signer: &notary.Lookup,
 	}, nil
 }
 
@@ -242,30 +282,12 @@ func (n *Noto) PrepareTransaction(ctx context.Context, req *prototk.PrepareTrans
 	return handler.Prepare(ctx, tx, req)
 }
 
-func (n *Noto) encodeConfig(config *types.NotoConfigInput_V0) ([]byte, error) {
-	configJSON, err := json.Marshal(config)
-	if err != nil {
-		return nil, err
-	}
-	encodedConfig, err := types.NotoConfigInputABI_V0.EncodeABIDataJSON(configJSON)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]byte, 0, len(types.NotoConfigID_V0)+len(encodedConfig))
-	result = append(result, types.NotoConfigID_V0...)
-	result = append(result, encodedConfig...)
-	return result, nil
-}
-
-func (n *Noto) decodeConfig(ctx context.Context, domainConfig []byte) (*types.NotoConfigOutput_V0, error) {
-	var configSelector ethtypes.HexBytes0xPrefix
-	if len(domainConfig) >= 4 {
-		configSelector = ethtypes.HexBytes0xPrefix(domainConfig[0:4])
-	}
+func (n *Noto) decodeConfig(ctx context.Context, domainConfig []byte) (*types.NotoConfig_V0, error) {
+	configSelector := ethtypes.HexBytes0xPrefix(domainConfig[0:4])
 	if configSelector.String() != types.NotoConfigID_V0.String() {
 		return nil, i18n.NewError(ctx, msgs.MsgUnexpectedConfigType, configSelector)
 	}
-	configValues, err := types.NotoConfigOutputABI_V0.DecodeABIDataCtx(ctx, domainConfig[4:], 0)
+	configValues, err := types.NotoConfigABI_V0.DecodeABIDataCtx(ctx, domainConfig[4:], 0)
 	if err != nil {
 		return nil, err
 	}
@@ -273,8 +295,12 @@ func (n *Noto) decodeConfig(ctx context.Context, domainConfig []byte) (*types.No
 	if err != nil {
 		return nil, err
 	}
-	var config types.NotoConfigOutput_V0
+	var config types.NotoConfig_V0
 	err = json.Unmarshal(configJSON, &config)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(config.Data, &config.DecodedData)
 	return &config, err
 }
 
@@ -306,7 +332,7 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 		return nil, nil, err
 	}
 
-	signature, _, err := abi.SolidityDefCtx(ctx)
+	signature, err := abi.SolidityStringCtx(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -357,7 +383,7 @@ func (n *Noto) parseCoinList(ctx context.Context, label string, states []*protot
 			SchemaId: state.SchemaId,
 			Id:       state.Id,
 		}
-		total = total.Add(total, coins[i].Amount.BigInt())
+		total = total.Add(total, coins[i].Amount.Int())
 	}
 	return coins, refs, total, nil
 }
@@ -381,7 +407,7 @@ func (n *Noto) gatherCoins(ctx context.Context, inputs, outputs []*prototk.Endor
 	}, nil
 }
 
-func (n *Noto) FindCoins(ctx context.Context, contractAddress ethtypes.Address0xHex, query string) ([]*types.NotoCoin, error) {
+func (n *Noto) FindCoins(ctx context.Context, contractAddress *tktypes.EthAddress, query string) ([]*types.NotoCoin, error) {
 	states, err := n.findAvailableStates(ctx, contractAddress.String(), query)
 	if err != nil {
 		return nil, err

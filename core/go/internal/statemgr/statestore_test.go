@@ -25,7 +25,6 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,7 +53,6 @@ func newDBTestStateManager(t *testing.T) (context.Context, *stateStore, func()) 
 
 func newDBMockStateManager(t *testing.T) (context.Context, *stateStore, sqlmock.Sqlmock, func()) {
 	ctx := context.Background()
-	log.SetLevel("debug")
 	p, err := mockpersistence.NewSQLMockProvider()
 	require.NoError(t, err)
 	ss := NewStateManager(ctx, &pldconf.StateStoreConfig{}, p.P)

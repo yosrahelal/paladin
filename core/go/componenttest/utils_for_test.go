@@ -50,7 +50,6 @@ import (
 	"github.com/kaleido-io/paladin/transports/grpc/pkg/grpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tyler-smith/go-bip39"
 )
 
 //go:embed abis/SimpleStorage.json
@@ -176,7 +175,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	}
 	i.ctx = log.WithLogField(context.Background(), "instance", binding.identity.String())
 
-	i.conf.Log.Level = confutil.P("trace")
+	i.conf.Log.Level = confutil.P("info")
 	i.conf.DomainManagerConfig.Domains = make(map[string]*pldconf.DomainConfig, 1)
 	i.conf.DomainManagerConfig.Domains["domain1"] = &pldconf.DomainConfig{
 		Plugin: pldconf.PluginConfig{
@@ -185,16 +184,6 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 		},
 		Config:          map[string]any{"some": "config"},
 		RegistryAddress: domainRegistryAddress.String(),
-	}
-
-	entropy, _ := bip39.NewEntropy(256)
-	mnemonic, _ := bip39.NewMnemonic(entropy)
-
-	i.conf.Signer.KeyStore.Static.Keys = map[string]pldconf.StaticKeyEntryConfig{
-		"seed": {
-			Encoding: "none",
-			Inline:   mnemonic,
-		},
 	}
 
 	i.conf.NodeName = binding.identity.String()
@@ -291,7 +280,6 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 
 func testConfig(t *testing.T) pldconf.PaladinConfig {
 	ctx := context.Background()
-	log.SetLevel("debug")
 
 	var conf *pldconf.PaladinConfig
 	err := pldconf.ReadAndParseYAMLFile(ctx, "../test/config/sqlite.memory.config.yaml", &conf)
@@ -305,6 +293,12 @@ func testConfig(t *testing.T) pldconf.PaladinConfig {
 	require.NoError(t, err, "Error finding a free port")
 	conf.RPCServer.HTTP.Port = &port
 	conf.RPCServer.HTTP.Address = confutil.P("127.0.0.1")
+	conf.Log.Level = confutil.P("info")
+
+	conf.Signer.KeyStore.Static.Keys["seed"] = pldconf.StaticKeyEntryConfig{
+		Encoding: "hex",
+		Inline:   tktypes.RandHex(32),
+	}
 
 	return *conf
 

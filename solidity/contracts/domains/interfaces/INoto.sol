@@ -17,8 +17,9 @@ interface INoto {
     );
 
     function initialize(
-        address notary,
-        bytes memory config
+        bytes32 notaryType,
+        address notaryAddress,
+        bytes calldata data
     ) external returns (bytes memory);
 
     function mint(
