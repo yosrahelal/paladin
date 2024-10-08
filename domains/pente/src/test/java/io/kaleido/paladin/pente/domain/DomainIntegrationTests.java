@@ -163,7 +163,7 @@ public class DomainIntegrationTests {
                 new Testbed.ConfigDomain(
                         "noto",
                         notoFactoryAddress,
-                        new Testbed.ConfigPlugin("c-shared", "libnoto.dylib", ""),
+                        new Testbed.ConfigPlugin("c-shared", "noto", ""),
                         new HashMap<>()
                 )
         )) {
