@@ -16,9 +16,6 @@
 package zeto
 
 import (
-	"context"
-
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	internal "github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
@@ -27,7 +24,8 @@ import (
 type Zeto interface {
 	plugintk.DomainAPI
 	GetHandler(method string) types.DomainHandler
-	FindCoins(ctx context.Context, contractAddress ethtypes.Address0xHex, query string) ([]*types.ZetoCoin, error)
+	Name() string
+	CoinSchemaID() string
 }
 
 func New(callbacks plugintk.DomainCallbacks) Zeto {

@@ -121,7 +121,7 @@ public class Testbed implements Closeable {
                     dsn:           ":memory:"
                     autoMigrate:   true
                     migrationsDir: %s
-                    debugQueries:  true
+                    debugQueries:  false
                 signer:
                   keyDerivation:
                     type: bip32
@@ -149,7 +149,7 @@ public class Testbed implements Closeable {
                 loader:
                   debug: true
                 log:
-                  level: trace
+                  level: info
                 """.formatted(new File(testbedSetup.dbMigrationsDir).getAbsolutePath(), availableRPCPort);
     }
 

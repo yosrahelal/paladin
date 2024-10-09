@@ -5,13 +5,13 @@ db:
     dsn: ':memory:'
     autoMigrate: true
     migrationsDir: './db/migrations/sqlite'
-    debugQueries: true
+    debugQueries: false
   # PostgreSQL is not used, but provided here for convenient switching (you need to create the DB)
   postgres:
     dsn: 'postgres://postgres:my-secret@localhost:5432/testbed?sslmode=disable'
     autoMigrate: true
     migrationsDir: './db/migrations/postgres'
-    debugQueries: true
+    debugQueries: false
 grpc:
   shutdownTimeout: 0s
 rpcServer:
@@ -36,6 +36,5 @@ signer:
       keys:
         seed:
           encoding: none
-          # DO NOT USE THIS MNEMONIC FOR ANYTHING APART FROM TESTBED TESTING
-          inline: worth race crush harbor atom race scrub quit glimpse solution style adapt catalog cheese nothing
+          inline: REPLACED BY GENERATED KEY IN TEST
     

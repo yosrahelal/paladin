@@ -27,22 +27,38 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPersistStateMissingSchema(t *testing.T) {
-	ctx, ss, db, done := newDBMockStateManager(t)
+	ctx, ss, db, m, done := newDBMockStateManager(t)
 	defer done()
 
+	_ = mockDomain(t, m, "domain1", false)
+
+	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
-	contractAddress := tktypes.RandAddress()
-	_, err := ss.PersistState(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("test")).String(), nil, nil)
+	upserts := []*components.StateUpsertOutsideContext{
+		{
+			ContractAddress: *tktypes.RandAddress(),
+			SchemaID:        tktypes.Bytes32Keccak(([]byte)("test")),
+		},
+	}
+
+	_, err := ss.WritePreVerifiedStates(ctx, ss.p.DB(), "domain1", upserts)
+	assert.Regexp(t, "PD010106", err)
+
+	_, err = ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", upserts)
 	assert.Regexp(t, "PD010106", err)
 }
 
 func TestPersistStateInvalidState(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateManager(t)
+	ctx, ss, _, m, done := newDBMockStateManager(t)
 	defer done()
+
+	_ = mockDomain(t, m, "domain1", false)
 
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
 	cacheKey := schemaCacheKey("domain1", schemaID)
@@ -50,71 +66,44 @@ func TestPersistStateInvalidState(t *testing.T) {
 		definition: &abi.Parameter{},
 	})
 
-	contractAddress := tktypes.RandAddress()
-	_, err := ss.PersistState(ctx, "domain1", *contractAddress, schemaID.String(), nil, nil)
+	upserts := []*components.StateUpsertOutsideContext{
+		{
+			ContractAddress: *tktypes.RandAddress(),
+			SchemaID:        schemaID,
+		},
+	}
+
+	_, err := ss.WritePreVerifiedStates(ctx, ss.p.DB(), "domain1", upserts)
+	assert.Regexp(t, "PD010116", err)
+
+	_, err = ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", upserts)
 	assert.Regexp(t, "PD010116", err)
 }
 
 func TestGetStateMissing(t *testing.T) {
-	ctx, ss, db, done := newDBMockStateManager(t)
+	ctx, ss, db, _, done := newDBMockStateManager(t)
 	defer done()
 
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.GetState(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("state1")).String(), true, false)
+	_, err := ss.GetState(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("state1")).Bytes(), true, false)
 	assert.Regexp(t, "PD010112", err)
 }
 
-func TestGetStateBadID(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateManager(t)
-	defer done()
-
-	contractAddress := tktypes.RandAddress()
-	_, err := ss.GetState(ctx, "domain1", *contractAddress, "bad id", true, false)
-	assert.Regexp(t, "PD020007", err)
-}
-
-func TestMarkConfirmedBadID(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateManager(t)
-	defer done()
-
-	contractAddress := tktypes.RandAddress()
-	err := ss.MarkConfirmed(ctx, "domain1", *contractAddress, "bad id", uuid.New())
-	assert.Regexp(t, "PD020007", err)
-}
-
-func TestMarkSpentBadID(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateManager(t)
-	defer done()
-
-	contractAddress := tktypes.RandAddress()
-	err := ss.MarkSpent(ctx, "domain1", *contractAddress, "bad id", uuid.New())
-	assert.Regexp(t, "PD020007", err)
-}
-
-func TestMarkLockedBadID(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateManager(t)
-	defer done()
-
-	contractAddress := tktypes.RandAddress()
-	err := ss.MarkLocked(ctx, "domain1", *contractAddress, "bad id", uuid.New(), false, false)
-	assert.Regexp(t, "PD020007", err)
-}
-
 func TestFindStatesMissingSchema(t *testing.T) {
-	ctx, ss, db, done := newDBMockStateManager(t)
+	ctx, ss, db, _, done := newDBMockStateManager(t)
 	defer done()
 
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindStates(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("schema1")).String(), &query.QueryJSON{}, "all")
+	_, err := ss.FindStates(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("schema1")), &query.QueryJSON{}, "all")
 	assert.Regexp(t, "PD010106", err)
 }
 
 func TestFindStatesBadQuery(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateManager(t)
+	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
@@ -124,7 +113,7 @@ func TestFindStatesBadQuery(t *testing.T) {
 	})
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID.String(), &query.QueryJSON{
+	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID, &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				Equal: []*query.OpSingleVal{
@@ -138,7 +127,7 @@ func TestFindStatesBadQuery(t *testing.T) {
 }
 
 func TestFindStatesFail(t *testing.T) {
-	ctx, ss, db, done := newDBMockStateManager(t)
+	ctx, ss, db, _, done := newDBMockStateManager(t)
 	defer done()
 
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
@@ -151,7 +140,7 @@ func TestFindStatesFail(t *testing.T) {
 	db.ExpectQuery("SELECT.*created").WillReturnError(fmt.Errorf("pop"))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID.String(), &query.QueryJSON{
+	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID, &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				GreaterThan: []*query.OpSingleVal{
@@ -162,6 +151,80 @@ func TestFindStatesFail(t *testing.T) {
 			},
 		},
 	}, "all")
+	assert.Regexp(t, "pop", err)
+
+}
+
+func TestFindStatesUnknownContext(t *testing.T) {
+	ctx, ss, _, _, done := newDBMockStateManager(t)
+	defer done()
+
+	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
+	contractAddress := tktypes.RandAddress()
+	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID, &query.QueryJSON{
+		Statements: query.Statements{
+			Ops: query.Ops{
+				GreaterThan: []*query.OpSingleVal{
+					{Op: query.Op{
+						Field: ".created",
+					}, Value: tktypes.RawJSON(fmt.Sprintf("%d", time.Now().UnixNano()))},
+				},
+			},
+		},
+	}, StateStatusQualifier(uuid.NewString()))
+	assert.Regexp(t, "PD010123", err)
+
+}
+
+func TestWritePreVerifiedStateInvalidDomain(t *testing.T) {
+	ctx, ss, _, m, done := newDBMockStateManager(t)
+	defer done()
+
+	m.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(nil, fmt.Errorf("not found"))
+
+	_, err := ss.WritePreVerifiedStates(ctx, ss.p.DB(), "domain1", []*components.StateUpsertOutsideContext{})
+	assert.Regexp(t, "not found", err)
+
+	_, err = ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", []*components.StateUpsertOutsideContext{})
+	assert.Regexp(t, "not found", err)
+
+}
+
+func TestWriteReceivedStatesValidateHashFail(t *testing.T) {
+	ctx, ss, _, m, done := newDBMockStateManager(t)
+	defer done()
+
+	md := mockDomain(t, m, "domain1", true)
+	md.On("ValidateStateHashes", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+
+	_, err := ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", []*components.StateUpsertOutsideContext{
+		{ID: tktypes.RandBytes(32), SchemaID: tktypes.Bytes32(tktypes.RandBytes(32)),
+			Data: tktypes.RawJSON(fmt.Sprintf(
+				`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
+				tktypes.RandHex(32)))},
+	})
+	assert.Regexp(t, "pop", err)
+
+}
+func TestWriteReceivedStatesValidateHashOkInsertFail(t *testing.T) {
+	ctx, ss, db, m, done := newDBMockStateManager(t)
+	defer done()
+
+	db.ExpectExec("INSERT.*states").WillReturnError(fmt.Errorf("pop"))
+
+	schema1, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
+	require.NoError(t, err)
+	ss.abiSchemaCache.Set(schemaCacheKey("domain1", schema1.ID()), schema1)
+
+	md := mockDomain(t, m, "domain1", true)
+	stateID1 := tktypes.RandBytes(32)
+	md.On("ValidateStateHashes", mock.Anything, mock.Anything).Return([]tktypes.HexBytes{stateID1}, nil)
+
+	_, err = ss.WriteReceivedStates(ctx, ss.p.DB(), "domain1", []*components.StateUpsertOutsideContext{
+		{SchemaID: schema1.ID(), Data: tktypes.RawJSON(fmt.Sprintf(
+			`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`,
+			tktypes.RandHex(32)))},
+	})
 	assert.Regexp(t, "pop", err)
 
 }

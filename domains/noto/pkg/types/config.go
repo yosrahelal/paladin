@@ -17,7 +17,6 @@ package types
 
 import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -26,32 +25,41 @@ type DomainConfig struct {
 	FactoryAddress string `json:"factoryAddress"`
 }
 
-var NotoConfigID_V0 = ethtypes.MustNewHexBytes0xPrefix("0x00010000")
+var NotoConfigID_V0 = tktypes.MustParseHexBytes("0x00010000")
 
-type NotoConfigInput_V0 struct {
-	NotaryLookup string `json:"notaryLookup"`
+type NotoConfig_V0 struct {
+	NotaryType    tktypes.Bytes32    `json:"notaryType"`
+	NotaryAddress tktypes.EthAddress `json:"notaryAddress"`
+	Variant       tktypes.Bytes32    `json:"variant"`
+	Data          tktypes.HexBytes   `json:"data"`
+	DecodedData   *NotoConfigData_V0 `json:"-"`
 }
 
-var NotoConfigInputABI_V0 = &abi.ParameterArray{
-	{Name: "notaryLookup", Type: "string"},
+type NotoConfigData_V0 struct {
+	NotaryLookup   string              `json:"notaryLookup"`
+	PrivateAddress *tktypes.EthAddress `json:"privateAddress"`
+	PrivateGroup   *PentePrivateGroup  `json:"privateGroup"`
 }
 
-type NotoConfigOutput_V0 struct {
-	NotaryLookup  string          `json:"notaryLookup"`
-	NotaryAddress string          `json:"notaryAddress"`
-	Variant       tktypes.Bytes32 `json:"variant"`
+type PentePrivateGroup struct {
+	Salt    tktypes.Bytes32 `json:"salt"`
+	Members []string        `json:"members"`
 }
 
-var NotoConfigOutputABI_V0 = &abi.ParameterArray{
-	{Name: "notaryLookup", Type: "string"},
+var NotoConfigABI_V0 = &abi.ParameterArray{
+	{Name: "notaryType", Type: "bytes32"},
 	{Name: "notaryAddress", Type: "address"},
+	{Name: "data", Type: "bytes"},
 	{Name: "variant", Type: "bytes32"},
 }
 
-var NotoTransactionData_V0 = ethtypes.MustNewHexBytes0xPrefix("0x00010000")
+var NotoTransactionData_V0 = tktypes.MustParseHexBytes("0x00010000")
 
-type DomainHandler = domain.DomainHandler[NotoConfigOutput_V0]
-type ParsedTransaction = domain.ParsedTransaction[NotoConfigOutput_V0]
+type DomainHandler = domain.DomainHandler[NotoConfig_V0]
+type ParsedTransaction = domain.ParsedTransaction[NotoConfig_V0]
 
-var NotoVariantDefault = "0x0000000000000000000000000000000000000000000000000000000000000000"
-var NotoVariantSelfSubmit = "0x0000000000000000000000000000000000000000000000000000000000000001"
+var NotaryTypeSigner = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000000")
+var NotaryTypeContract = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000001")
+
+var NotoVariantDefault = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000000")
+var NotoVariantSelfSubmit = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000001")

@@ -27,48 +27,40 @@ import (
 )
 
 func TestGetSchemaNotFoundNil(t *testing.T) {
-	ctx, ss, mdb, done := newDBMockStateManager(t)
+	ctx, ss, mdb, _, done := newDBMockStateManager(t)
 	defer done()
 
 	mdb.ExpectQuery("SELECT.*schemas").WillReturnRows(sqlmock.NewRows([]string{}))
 
-	s, err := ss.GetSchema(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("test")).String(), false)
+	s, err := ss.GetSchema(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("test")), false)
 	require.NoError(t, err)
 	assert.Nil(t, s)
 }
 
 func TestGetSchemaNotFoundError(t *testing.T) {
-	ctx, ss, mdb, done := newDBMockStateManager(t)
+	ctx, ss, mdb, _, done := newDBMockStateManager(t)
 	defer done()
 
 	mdb.ExpectQuery("SELECT.*schemas").WillReturnRows(sqlmock.NewRows([]string{}))
 
-	_, err := ss.GetSchema(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("test")).String(), true)
+	_, err := ss.GetSchema(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("test")), true)
 	assert.Regexp(t, "PD010106", err)
 }
 
 func TestGetSchemaInvalidType(t *testing.T) {
-	ctx, ss, mdb, done := newDBMockStateManager(t)
+	ctx, ss, mdb, _, done := newDBMockStateManager(t)
 	defer done()
 
 	mdb.ExpectQuery("SELECT.*schemas").WillReturnRows(sqlmock.NewRows(
 		[]string{"type"},
 	).AddRow("wrong"))
 
-	_, err := ss.GetSchema(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("test")).String(), true)
+	_, err := ss.GetSchema(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("test")), true)
 	assert.Regexp(t, "PD010103.*wrong", err)
 }
 
-func TestGetSchemaInvalidID(t *testing.T) {
-	ctx, ss, _, done := newDBMockStateManager(t)
-	defer done()
-
-	_, err := ss.GetSchema(ctx, "domain1", "wrong", true)
-	assert.Regexp(t, "PD020007", err)
-}
-
 func TestListSchemasListIDsFail(t *testing.T) {
-	ctx, ss, mdb, done := newDBMockStateManager(t)
+	ctx, ss, mdb, _, done := newDBMockStateManager(t)
 	defer done()
 
 	mdb.ExpectQuery("SELECT").WillReturnError(fmt.Errorf("pop"))
@@ -78,7 +70,7 @@ func TestListSchemasListIDsFail(t *testing.T) {
 }
 
 func TestListSchemasGetFullSchemaFail(t *testing.T) {
-	ctx, ss, mdb, done := newDBMockStateManager(t)
+	ctx, ss, mdb, _, done := newDBMockStateManager(t)
 	defer done()
 
 	id := tktypes.Bytes32Keccak(([]byte)("test"))

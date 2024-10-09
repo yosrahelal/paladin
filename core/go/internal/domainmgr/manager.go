@@ -176,8 +176,16 @@ func (dm *domainManager) DomainRegistered(name string, toDomain components.Domai
 	return d, nil
 }
 
+// fails if domain is not yet initialized (note external endpoints of Paladin do not open up until all domains initialized)
 func (dm *domainManager) GetDomainByName(ctx context.Context, name string) (components.Domain, error) {
-	return dm.getDomainByName(ctx, name)
+	domain, err := dm.getDomainByName(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if err := domain.checkInit(ctx); err != nil {
+		return nil, err
+	}
+	return domain, nil
 }
 
 func (dm *domainManager) getDomainByName(ctx context.Context, name string) (*domain, error) {
@@ -241,13 +249,13 @@ func (dm *domainManager) setDomainAddress(d *domain) {
 	dm.domainsByAddress[*d.RegistryAddress()] = d
 }
 
-func (dm *domainManager) getDomainByAddress(ctx context.Context, addr *tktypes.EthAddress) (d *domain, _ error) {
+func (dm *domainManager) getDomainByAddress(ctx context.Context, addr *tktypes.EthAddress, nilOnNotFound bool) (d *domain, _ error) {
 	dm.mux.Lock()
 	defer dm.mux.Unlock()
 	if addr != nil {
 		d = dm.domainsByAddress[*addr]
 	}
-	if d == nil {
+	if d == nil && !nilOnNotFound {
 		return nil, i18n.NewError(ctx, msgs.MsgDomainNotFound, addr)
 	}
 	return d, nil
@@ -282,15 +290,21 @@ func (dm *domainManager) dbGetSmartContract(ctx context.Context, tx *gorm.DB, se
 	if err != nil || len(contracts) == 0 {
 		return nil, err
 	}
-	return dm.enrichContractWithDomain(ctx, contracts[0])
 
+	// At this point it's possible we have a matching smart contract in our DB, for which we
+	// no longer recognize the domain registry (as it's not one that is configured an longer)
+	dc, err := dm.enrichContractWithDomain(ctx, contracts[0], true)
+	if err == nil && dc == nil {
+		log.L(ctx).Warnf("Lookup of smart contract '%s' that is stored in the DB for domain registry '%s' that is no longer configured on this node", contracts[0].Address, contracts[0].RegistryAddress)
+	}
+	return dc, nil
 }
 
-func (dm *domainManager) enrichContractWithDomain(ctx context.Context, contract *PrivateSmartContract) (*domainContract, error) {
+func (dm *domainManager) enrichContractWithDomain(ctx context.Context, contract *PrivateSmartContract, nilOnNotFound bool) (*domainContract, error) {
 
 	// Get the domain by address
-	d, err := dm.getDomainByAddress(ctx, &contract.RegistryAddress)
-	if err != nil {
+	d, err := dm.getDomainByAddress(ctx, &contract.RegistryAddress, nilOnNotFound)
+	if d == nil || err != nil {
 		return nil, err
 	}
 

@@ -62,7 +62,7 @@ func newABISchema(ctx context.Context, domainName string, def *abi.Parameter) (*
 		as.SchemaPersisted.Signature, err = as.FullSignature(ctx)
 	}
 	if err == nil {
-		as.ID = tktypes.Bytes32Keccak([]byte(as.SchemaPersisted.Signature))
+		as.SchemaPersisted.ID = tktypes.Bytes32Keccak([]byte(as.SchemaPersisted.Signature))
 	}
 	if err != nil {
 		return nil, err
@@ -89,8 +89,8 @@ func (as *abiSchema) Type() components.SchemaType {
 	return components.SchemaTypeABI
 }
 
-func (as *abiSchema) IDString() string {
-	return as.SchemaPersisted.ID.String()
+func (as *abiSchema) ID() tktypes.Bytes32 {
+	return as.SchemaPersisted.ID
 }
 
 func (as *abiSchema) Signature() string {
@@ -325,9 +325,17 @@ func (as *abiSchema) parseStateData(ctx context.Context, data tktypes.RawJSON) (
 
 // Take the state, parse the value into the type tree of this schema, and from that
 // build the label values to store in the DB for comparison appropriate to the type.
-func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, id tktypes.HexBytes) (*components.StateWithLabels, error) {
+func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, id tktypes.HexBytes, customHashFunction bool) (*components.StateWithLabels, error) {
 
+	// We need to re-serialize the data according to the ABI to:
+	// - Ensure it's valid
+	// - Remove anything that is not part of the schema
+	// - Standardize formatting of all the data elements so domains do not need to worry
+	var jsonData []byte
 	psd, err := as.parseStateData(ctx, data)
+	if err == nil {
+		jsonData, err = tktypes.StandardABISerializer().SerializeJSONCtx(ctx, psd.cv)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +347,14 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 	// Implementations MUST ensure:
 	// - The hash contains everything in the state that needs to be proved
 	// - The hash is deterministic and reproducible by anyone with access to the unmasked state data
-	if id == nil {
+	//
+	// Note this function only validates Paladin-default hashes, when customHashFunction is true
+	// the caller must have pre-verified the hash
+	if customHashFunction {
+		if id == nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgStateIDMissing)
+		}
+	} else {
 		// When Paladin is designated to create that hash, it uses a EIP-712 Typed Data V4 hash as this has
 		// the characteristics of:
 		// - Well proven and Ethereum standardized algorithm for hashing a complex structure
@@ -347,19 +362,13 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 		// - Only containing the data that is described in the associated the ABI
 		var hash ethtypes.HexBytes0xPrefix
 		hash, err = eip712.HashStruct(ctx, as.primaryType, psd.jsonTree, as.typeSet)
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgStateInvalidCalculatingHash)
+		}
+		if id != nil && !id.Equals(tktypes.HexBytes(hash)) {
+			return nil, i18n.NewError(ctx, msgs.MsgStateHashMismatch, id, hash)
+		}
 		id = tktypes.HexBytes(hash)
-	}
-
-	// We need to re-serialize the data according to the ABI to:
-	// - Ensure it's valid
-	// - Remove anything that is not part of the schema
-	// - Standardize formatting of all the data elements so domains do not need to worry
-	var jsonData []byte
-	if err == nil {
-		jsonData, err = tktypes.StandardABISerializer().SerializeJSONCtx(ctx, psd.cv)
-	}
-	if err != nil {
-		return nil, err
 	}
 
 	for i := range psd.labels {
@@ -377,7 +386,7 @@ func (as *abiSchema) ProcessState(ctx context.Context, contractAddress tktypes.E
 			ID:              id,
 			Created:         now,
 			DomainName:      as.DomainName,
-			Schema:          as.ID,
+			Schema:          as.SchemaPersisted.ID,
 			ContractAddress: contractAddress,
 			Data:            jsonData,
 			Labels:          psd.labels,

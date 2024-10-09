@@ -36,6 +36,7 @@ type DomainAPI interface {
 	HandleEventBatch(context.Context, *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error)
 	Sign(context.Context, *prototk.SignRequest) (*prototk.SignResponse, error)
 	GetVerifier(context.Context, *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error)
+	ValidateStateHashes(context.Context, *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error)
 }
 
 type DomainCallbacks interface {
@@ -170,6 +171,10 @@ func (dp *domainHandler) RequestToPlugin(ctx context.Context, iReq PluginMessage
 		resMsg := &prototk.DomainMessage_GetVerifierRes{}
 		resMsg.GetVerifierRes, err = dp.api.GetVerifier(ctx, input.GetVerifier)
 		res.ResponseFromDomain = resMsg
+	case *prototk.DomainMessage_ValidateStateHashes:
+		resMsg := &prototk.DomainMessage_ValidateStateHashesRes{}
+		resMsg.ValidateStateHashesRes, err = dp.api.ValidateStateHashes(ctx, input.ValidateStateHashes)
+		res.ResponseFromDomain = resMsg
 	default:
 		err = i18n.NewError(ctx, tkmsgs.MsgPluginUnsupportedRequest, input)
 	}
@@ -232,6 +237,7 @@ type DomainAPIFunctions struct {
 	HandleEventBatch    func(context.Context, *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error)
 	Sign                func(context.Context, *prototk.SignRequest) (*prototk.SignResponse, error)
 	GetVerifier         func(context.Context, *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error)
+	ValidateStateHashes func(context.Context, *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error)
 }
 
 type DomainAPIBase struct {
@@ -280,4 +286,8 @@ func (db *DomainAPIBase) Sign(ctx context.Context, req *prototk.SignRequest) (*p
 
 func (db *DomainAPIBase) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error) {
 	return callPluginImpl(ctx, req, db.Functions.GetVerifier)
+}
+
+func (db *DomainAPIBase) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+	return callPluginImpl(ctx, req, db.Functions.ValidateStateHashes)
 }

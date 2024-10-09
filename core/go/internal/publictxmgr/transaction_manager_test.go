@@ -38,7 +38,6 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
@@ -84,7 +83,7 @@ func baseMocks(t *testing.T) *mocksAndTestControl {
 }
 
 func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...func(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig)) (context.Context, *pubTxManager, *mocksAndTestControl, func()) {
-	log.SetLevel("debug")
+	// log.SetLevel("debug")
 	ctx := context.Background()
 	conf := &pldconf.PublicTxManagerConfig{
 		Manager: pldconf.PublicTxManagerManagerConfig{
@@ -215,9 +214,6 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 		conf.Manager.OrchestratorIdleTimeout = confutil.P("1ms")
 	})
 	defer done()
-
-	err := ble.Start()
-	require.NoError(t, err)
 
 	// Mock a gas price
 	chainID, _ := rand.Int(rand.Reader, big.NewInt(100000000000000))
@@ -554,9 +550,6 @@ func TestEngineSuspendResumeRealDB(t *testing.T) {
 	})
 	defer done()
 
-	err := ble.Start()
-	require.NoError(t, err)
-
 	// Mock a gas price
 	chainID, _ := rand.Int(rand.Reader, big.NewInt(100000000000000))
 	m.ethClient.On("GasPrice", mock.Anything).Return(tktypes.MustParseHexUint256("1000000000000000"), nil)
@@ -578,7 +571,7 @@ func TestEngineSuspendResumeRealDB(t *testing.T) {
 	// ... but attempting to get it onto the chain is going to block failing
 	m.ethClient.On("SendRawTransaction", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop")).Maybe()
 
-	_, err = ble.SingleTransactionSubmit(ctx, pubTx)
+	_, err := ble.SingleTransactionSubmit(ctx, pubTx)
 	require.NoError(t, err)
 
 	ticker := time.NewTicker(50 * time.Millisecond)

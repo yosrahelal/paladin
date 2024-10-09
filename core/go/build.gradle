@@ -454,5 +454,5 @@ task assemble {
 
 dependencies {
     libcore files(buildSharedLibrary)
-    goSource files(goFiles, protoc, copyContracts)
+    goSource files(goFilesBuildOnly, protoc, copyContracts)
 }

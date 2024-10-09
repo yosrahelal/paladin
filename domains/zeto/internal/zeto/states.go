@@ -80,7 +80,7 @@ func (z *Zeto) makeNewState(coin *types.ZetoCoin) (*pb.NewState, error) {
 	}, nil
 }
 
-func (z *Zeto) prepareInputs(ctx context.Context, contractAddress, owner string, amount *tktypes.HexUint256) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, error) {
+func (z *Zeto) prepareInputs(ctx context.Context, stateQueryContext, owner string, amount *tktypes.HexUint256) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
 	stateRefs := []*pb.StateRef{}
@@ -94,9 +94,9 @@ func (z *Zeto) prepareInputs(ctx context.Context, contractAddress, owner string,
 		if lastStateTimestamp > 0 {
 			queryBuilder.GreaterThan(".created", lastStateTimestamp)
 		}
-		states, err := z.findAvailableStates(ctx, contractAddress, queryBuilder.Query().String())
+		states, err := z.findAvailableStates(ctx, stateQueryContext, queryBuilder.Query().String())
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, fmt.Errorf("failed to query the state store for available coins. %s", err)
 		}
 		if len(states) == 0 {
 			return nil, nil, nil, fmt.Errorf("insufficient funds (available=%s)", total.Text(10))
@@ -123,10 +123,6 @@ func (z *Zeto) prepareInputs(ctx context.Context, contractAddress, owner string,
 	}
 }
 
-func (z *Zeto) addHash(_ *types.ZetoCoin, _ *babyjub.PublicKey) error {
-	return nil
-}
-
 func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount *tktypes.HexUint256) ([]*types.ZetoCoin, []*pb.NewState, error) {
 	// Always produce a single coin for the entire output amount
 	// TODO: make this configurable
@@ -138,19 +134,16 @@ func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount 
 		OwnerKey: tktypes.MustParseHexBytes(compressedKeyStr),
 		Amount:   amount,
 	}
-	if err := z.addHash(newCoin, ownerKey); err != nil {
-		return nil, nil, err
-	}
 
 	newState, err := z.makeNewState(newCoin)
 	return []*types.ZetoCoin{newCoin}, []*pb.NewState{newState}, err
 }
 
-func (z *Zeto) findAvailableStates(ctx context.Context, contractAddress, query string) ([]*pb.StoredState, error) {
+func (z *Zeto) findAvailableStates(ctx context.Context, stateQueryContext, query string) ([]*pb.StoredState, error) {
 	req := &pb.FindAvailableStatesRequest{
-		ContractAddress: contractAddress,
-		SchemaId:        z.coinSchema.Id,
-		QueryJson:       query,
+		StateQueryContext: stateQueryContext,
+		SchemaId:          z.coinSchema.Id,
+		QueryJson:         query,
 	}
 	res, err := z.Callbacks.FindAvailableStates(ctx, req)
 	if err != nil {

@@ -17,16 +17,31 @@ package noto
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
 
-// ABI encoded config:
-// types.NotoConfigInput_V0{NotaryLookup: "notary"})
-var encodedConfig = ethtypes.MustNewHexBytes0xPrefix("0x00010000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000066e6f746172790000000000000000000000000000000000000000000000000000")
+var encodedConfig = func() []byte {
+	configData := tktypes.HexBytes(`{"notaryLookup":"notary"}`)
+	encoded, err := types.NotoConfigABI_V0.EncodeABIDataJSON([]byte(fmt.Sprintf(`{
+		"notaryType": "0x0000000000000000000000000000000000000000000000000000000000000000",
+		"notaryAddress": "0x138baffcdcc3543aad1afd81c71d2182cdf9c8cd",
+		"variant": "0x0000000000000000000000000000000000000000000000000000000000000000",
+		"data": "%s"
+	}`, configData.String())))
+	if err != nil {
+		panic(err)
+	}
+	var result []byte
+	result = append(result, types.NotoConfigID_V0...)
+	result = append(result, encoded...)
+	return result
+}()
 
 func TestConfigureDomainBadConfig(t *testing.T) {
 	n := &Noto{}

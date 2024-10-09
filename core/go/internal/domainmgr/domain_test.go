@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
@@ -131,6 +132,17 @@ const fakeCoinEventsABI = `[{
 	]
 }]`
 
+const fakeDownstreamPrivateABI = `{
+	"type": "function",
+    "name": "doTheNextThing",
+	"inputs": [
+		{
+			"name": "thing",
+			"type": "string"
+		}
+	]
+}`
+
 type fakeState struct {
 	Salt   tktypes.Bytes32      `json:"salt"`
 	Owner  tktypes.EthAddress   `json:"owner"`
@@ -150,6 +162,16 @@ type testPlugin struct {
 	stateSchemas []*prototk.StateSchema
 }
 
+type testDomainContext struct {
+	ctx             context.Context
+	mdc             *componentmocks.DomainContext
+	dm              *domainManager
+	d               *domain
+	tp              *testPlugin
+	c               *inFlightDomainRequest
+	contractAddress tktypes.EthAddress
+}
+
 func (tp *testPlugin) Initialized() {
 	tp.initialized.Store(true)
 }
@@ -162,9 +184,9 @@ func newTestPlugin(domainFuncs *plugintk.DomainAPIFunctions) *testPlugin {
 	}
 }
 
-func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *domainManager, *testPlugin, func()) {
+func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig, extraSetup ...func(mc *mockComponents)) (*testDomainContext, func()) {
 
-	ctx, dm, mc, done := newTestDomainManager(t, realDB, &pldconf.DomainManagerConfig{
+	ctx, dm, mc, dmDone := newTestDomainManager(t, realDB, &pldconf.DomainManagerConfig{
 		Domains: map[string]*pldconf.DomainConfig{
 			"test1": {
 				Config:          map[string]any{"some": "conf"},
@@ -191,16 +213,43 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 	}
 
 	registerTestDomain(t, dm, tp)
-	return ctx, dm, tp, done
+
+	var c *inFlightDomainRequest
+	var mdc *componentmocks.DomainContext
+	addr := *tktypes.RandAddress()
+	if realDB {
+		dCtx := dm.stateStore.NewDomainContext(ctx, tp.d, addr)
+		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), dCtx)
+	} else {
+		mdc = componentmocks.NewDomainContext(t)
+		mdc.On("Ctx").Return(ctx).Maybe()
+		mdc.On("Close").Return()
+		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), mdc)
+		mc.stateStore.On("NewDomainContext", mock.Anything, tp.d, mock.Anything).Return(mdc).Maybe()
+	}
+
+	return &testDomainContext{
+			ctx:             ctx,
+			dm:              dm,
+			d:               tp.d,
+			tp:              tp,
+			c:               c,
+			mdc:             mdc,
+			contractAddress: addr,
+		}, func() {
+			c.close()
+			c.dCtx.Close()
+			dmDone()
+		}
 }
 
 func registerTestDomain(t *testing.T, dm *domainManager, tp *testPlugin) {
 	_, err := dm.DomainRegistered("test1", tp)
 	require.NoError(t, err)
 
-	da, err := dm.GetDomainByName(context.Background(), "test1")
+	da, err := dm.getDomainByName(context.Background(), "test1")
 	require.NoError(t, err)
-	tp.d = da.(*domain)
+	tp.d = da
 	tp.d.initRetry.UTSetMaxAttempts(1)
 	<-tp.d.initDone
 }
@@ -219,23 +268,23 @@ func goodDomainConf() *prototk.DomainConfig {
 
 func mockSchemas(schemas ...components.Schema) func(mc *mockComponents) {
 	return func(mc *mockComponents) {
-		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return(schemas, nil)
+		mc.stateStore.On("EnsureABISchemas", mock.Anything, mock.Anything, "test1", mock.Anything).Return(schemas, nil)
 	}
 }
 
 func TestDomainInitStates(t *testing.T) {
 
 	domainConf := goodDomainConf()
-	ctx, dm, tp, done := newTestDomain(t, true, domainConf)
+	td, done := newTestDomain(t, true, domainConf)
 	defer done()
 
-	assert.Nil(t, tp.d.initError.Load())
-	assert.True(t, tp.initialized.Load())
-	byAddr, err := dm.getDomainByAddress(ctx, tp.d.RegistryAddress())
+	assert.Nil(t, td.d.initError.Load())
+	assert.True(t, td.tp.initialized.Load())
+	byAddr, err := td.dm.getDomainByAddress(td.ctx, td.d.RegistryAddress(), false)
 	require.NoError(t, err)
-	assert.Equal(t, tp.d, byAddr)
-	assert.True(t, tp.d.Initialized())
-	assert.NotNil(t, tp.d.Configuration().BaseLedgerSubmitConfig)
+	assert.Equal(t, td.d, byAddr)
+	assert.True(t, td.d.Initialized())
+	assert.NotNil(t, td.d.Configuration().BaseLedgerSubmitConfig)
 
 }
 
@@ -243,69 +292,69 @@ func TestDomainInitStatesWithEvents(t *testing.T) {
 
 	domainConf := goodDomainConf()
 	domainConf.AbiEventsJson = fakeCoinEventsABI
-	ctx, dm, tp, done := newTestDomain(t, true, domainConf)
+	td, done := newTestDomain(t, true, domainConf)
 	defer done()
 
-	assert.Nil(t, tp.d.initError.Load())
-	assert.True(t, tp.initialized.Load())
-	byAddr, err := dm.getDomainByAddress(ctx, tp.d.RegistryAddress())
+	assert.Nil(t, td.d.initError.Load())
+	assert.True(t, td.tp.initialized.Load())
+	byAddr, err := td.dm.getDomainByAddress(td.ctx, td.d.RegistryAddress(), false)
 	require.NoError(t, err)
-	assert.Equal(t, tp.d, byAddr)
-	assert.True(t, tp.d.Initialized())
-	assert.NotNil(t, tp.d.Configuration().BaseLedgerSubmitConfig)
+	assert.Equal(t, td.d, byAddr)
+	assert.True(t, td.d.Initialized())
+	assert.NotNil(t, td.d.Configuration().BaseLedgerSubmitConfig)
 
 }
 
 func TestDoubleRegisterReplaces(t *testing.T) {
 
 	domainConf := goodDomainConf()
-	ctx, dm, tp0, done := newTestDomain(t, true, domainConf)
+	td, done := newTestDomain(t, true, domainConf)
 	defer done()
-	assert.Nil(t, tp0.d.initError.Load())
-	assert.True(t, tp0.initialized.Load())
+	assert.Nil(t, td.tp.d.initError.Load())
+	assert.True(t, td.tp.initialized.Load())
 
 	// Register again
 	tp1 := newTestPlugin(nil)
-	tp1.Functions = tp0.Functions
-	registerTestDomain(t, dm, tp1)
+	tp1.Functions = td.tp.Functions
+	registerTestDomain(t, td.dm, tp1)
 	assert.Nil(t, tp1.d.initError.Load())
 	assert.True(t, tp1.initialized.Load())
 
 	// Check we get the second from all the maps
-	byAddr, err := dm.getDomainByAddress(ctx, tp0.d.RegistryAddress())
+	byAddr, err := td.dm.getDomainByAddress(td.ctx, td.tp.d.RegistryAddress(), false)
 	require.NoError(t, err)
 	assert.Same(t, tp1.d, byAddr)
-	byName, err := dm.GetDomainByName(ctx, "test1")
+	byName, err := td.dm.GetDomainByName(td.ctx, "test1")
 	require.NoError(t, err)
 	assert.Same(t, tp1.d, byName)
 
 }
 
 func TestDomainInitBadSchemas(t *testing.T) {
-	_, _, tp, done := newTestDomain(t, false, &prototk.DomainConfig{
+	td, done := newTestDomain(t, false, &prototk.DomainConfig{
 		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
 		AbiStateSchemasJson: []string{
 			`!!! Wrong`,
 		},
 	})
 	defer done()
-	assert.Regexp(t, "PD011602", *tp.d.initError.Load())
-	assert.False(t, tp.initialized.Load())
+	assert.Regexp(t, "PD011602", *td.d.initError.Load())
+	assert.False(t, td.tp.initialized.Load())
 }
 
 func TestDomainInitBadEventsJSON(t *testing.T) {
-	_, _, tp, done := newTestDomain(t, false, &prototk.DomainConfig{
+	td, done := newTestDomain(t, false, &prototk.DomainConfig{
 		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
 		AbiStateSchemasJson:    []string{},
 		AbiEventsJson:          `!!! Wrong`,
 	})
 	defer done()
-	assert.Regexp(t, "PD011642", *tp.d.initError.Load())
-	assert.False(t, tp.initialized.Load())
+	assert.Regexp(t, "PD011642", *td.d.initError.Load())
+	assert.False(t, td.tp.initialized.Load())
 }
 
 func TestDomainInitBadEventsABI(t *testing.T) {
-	_, _, tp, done := newTestDomain(t, false, &prototk.DomainConfig{
+	td, done := newTestDomain(t, false, &prototk.DomainConfig{
 		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
 		AbiStateSchemasJson:    []string{},
 		AbiEventsJson: `[
@@ -317,12 +366,12 @@ func TestDomainInitBadEventsABI(t *testing.T) {
 		]`,
 	})
 	defer done()
-	assert.Regexp(t, "FF22025", *tp.d.initError.Load())
-	assert.False(t, tp.initialized.Load())
+	assert.Regexp(t, "FF22025", *td.d.initError.Load())
+	assert.False(t, td.tp.initialized.Load())
 }
 
 func TestDomainInitStreamFail(t *testing.T) {
-	_, _, tp, done := newTestDomain(t, false, &prototk.DomainConfig{
+	td, done := newTestDomain(t, false, &prototk.DomainConfig{
 		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
 		AbiStateSchemasJson:    []string{},
 		AbiEventsJson:          fakeCoinEventsABI,
@@ -330,22 +379,22 @@ func TestDomainInitStreamFail(t *testing.T) {
 		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
-	assert.EqualError(t, *tp.d.initError.Load(), "pop")
-	assert.False(t, tp.initialized.Load())
+	assert.EqualError(t, *td.d.initError.Load(), "pop")
+	assert.False(t, td.tp.initialized.Load())
 }
 
 func TestDomainInitFactorySchemaStoreFail(t *testing.T) {
-	_, _, tp, done := newTestDomain(t, false, &prototk.DomainConfig{
+	td, done := newTestDomain(t, false, &prototk.DomainConfig{
 		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
 		AbiStateSchemasJson: []string{
 			fakeCoinStateSchema,
 		},
 	}, func(mc *mockComponents) {
-		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return(nil, fmt.Errorf("pop"))
+		mc.stateStore.On("EnsureABISchemas", mock.Anything, mock.Anything, "test1", mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
-	assert.Regexp(t, "pop", *tp.d.initError.Load())
-	assert.False(t, tp.initialized.Load())
+	assert.Regexp(t, "pop", *td.d.initError.Load())
+	assert.False(t, td.tp.initialized.Load())
 }
 
 func TestDomainConfigureFail(t *testing.T) {
@@ -369,62 +418,80 @@ func TestDomainConfigureFail(t *testing.T) {
 	_, err := dm.DomainRegistered("test1", tp)
 	require.NoError(t, err)
 
-	da, err := dm.GetDomainByName(ctx, "test1")
+	d, err := dm.getDomainByName(ctx, "test1")
 	require.NoError(t, err)
 
-	d := da.(*domain)
 	d.initRetry.UTSetMaxAttempts(1)
 	<-d.initDone
 	assert.Regexp(t, "pop", *d.initError.Load())
 }
 
 func TestDomainFindAvailableStatesNotInit(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, &prototk.DomainConfig{})
+	td, done := newTestDomain(t, false, &prototk.DomainConfig{})
 	defer done()
-	assert.NotNil(t, *tp.d.initError.Load())
-	_, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{SchemaId: "12345"})
+	assert.NotNil(t, *td.d.initError.Load())
+	_, err := td.d.FindAvailableStates(td.ctx, &prototk.FindAvailableStatesRequest{
+		StateQueryContext: td.c.id,
+		SchemaId:          "12345",
+	})
 	assert.Regexp(t, "PD011601", err)
 }
 
-func TestDomainFindAvailableStatesBadQuery(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+func TestDomainFindAvailableStatesBadSchema(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
-	_, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		SchemaId:  "12345",
-		QueryJson: `!!!{ wrong`,
-	})
-	assert.Regexp(t, "PD011608", err)
-}
-
-func TestDomainFindAvailableStatesBadAddress(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
-	defer done()
-	assert.Nil(t, tp.d.initError.Load())
-	_, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		SchemaId:        "12345",
-		ContractAddress: "0x",
-		QueryJson:       `{}`,
+	assert.Nil(t, td.d.initError.Load())
+	_, err := td.d.FindAvailableStates(td.ctx, &prototk.FindAvailableStatesRequest{
+		StateQueryContext: td.c.id,
+		SchemaId:          "12345",
+		QueryJson:         `{}`,
 	})
 	assert.Regexp(t, "PD011641", err)
 }
 
+func TestDomainFindAvailableStatesBadQuery(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+	_, err := td.d.FindAvailableStates(td.ctx, &prototk.FindAvailableStatesRequest{
+		StateQueryContext: td.c.id,
+		SchemaId:          "12345",
+		QueryJson:         `!!!{ wrong`,
+	})
+	assert.Regexp(t, "PD011608", err)
+}
+
+func TestDomainFindAvailableStatesBadQStateQueryContext(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+	_, err := td.d.FindAvailableStates(td.ctx, &prototk.FindAvailableStatesRequest{
+		StateQueryContext: "wrong",
+		SchemaId:          "12345",
+		QueryJson:         `{}`,
+	})
+	assert.Regexp(t, "PD011649", err)
+}
+
 func TestDomainFindAvailableStatesFail(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), func(mc *mockComponents) {
-		mc.stateStore.On("EnsureABISchemas", mock.Anything, "test1", mock.Anything).Return([]components.Schema{}, nil)
-		mc.domainStateInterface.On("FindAvailableStates", "12345", mock.Anything).Return(nil, fmt.Errorf("pop"))
+	td, done := newTestDomain(t, false, goodDomainConf(), func(mc *mockComponents) {
+		mc.stateStore.On("EnsureABISchemas", mock.Anything, mock.Anything, "test1", mock.Anything).Return([]components.Schema{}, nil)
 	})
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
-	_, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		ContractAddress: tktypes.RandAddress().String(),
-		SchemaId:        "12345",
-		QueryJson:       `{}`,
+
+	schemaID := tktypes.Bytes32(tktypes.RandBytes(32))
+	td.mdc.On("FindAvailableStates", schemaID, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
+
+	assert.Nil(t, td.d.initError.Load())
+	_, err := td.d.FindAvailableStates(td.ctx, &prototk.FindAvailableStatesRequest{
+		StateQueryContext: td.c.id,
+		SchemaId:          schemaID.String(),
+		QueryJson:         `{}`,
 	})
 	assert.Regexp(t, "pop", err)
 }
 
-func storeState(t *testing.T, dm *domainManager, tp *testPlugin, contractAddress tktypes.EthAddress, txID uuid.UUID, amount *ethtypes.HexInteger) *fakeState {
+func storeTestState(t *testing.T, td *testDomainContext, txID uuid.UUID, amount *ethtypes.HexInteger) *fakeState {
 	state := &fakeState{
 		Salt:   tktypes.Bytes32(tktypes.RandBytes(32)),
 		Owner:  tktypes.EthAddress(tktypes.RandBytes(20)),
@@ -433,34 +500,28 @@ func storeState(t *testing.T, dm *domainManager, tp *testPlugin, contractAddress
 	stateJSON, err := json.Marshal(state)
 	require.NoError(t, err)
 
-	err = dm.stateStore.RunInDomainContextFlush("test1", contractAddress, func(ctx context.Context, dsi components.DomainStateInterface) error {
-		newStates, err := dsi.UpsertStates(&txID, []*components.StateUpsert{
-			{
-				SchemaID: tp.stateSchemas[0].Id,
-				Data:     stateJSON,
-				Creating: true,
-			},
-		})
-		assert.Len(t, newStates, 1)
-		return err
+	// Call the real statestore
+	_, err = td.c.dCtx.UpsertStates(&components.StateUpsert{
+		SchemaID:  tktypes.MustParseBytes32(td.tp.stateSchemas[0].Id),
+		Data:      stateJSON,
+		CreatedBy: &txID,
 	})
 	require.NoError(t, err)
 	return state
 }
 
 func TestDomainFindAvailableStatesOK(t *testing.T) {
-	ctx, dm, tp, done := newTestDomain(t, true /* use real state store for this one */, goodDomainConf())
+	td, done := newTestDomain(t, true /* use real state store for this one */, goodDomainConf())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
 	txID := uuid.New()
-	contractAddress := tktypes.RandAddress()
-	state1 := storeState(t, dm, tp, *contractAddress, txID, ethtypes.NewHexIntegerU64(100000000))
+	state1 := storeTestState(t, td, txID, ethtypes.NewHexIntegerU64(100000000))
 
 	// Filter match
-	states, err := tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		ContractAddress: contractAddress.String(),
-		SchemaId:        tp.stateSchemas[0].Id,
+	states, err := td.d.FindAvailableStates(td.ctx, &prototk.FindAvailableStatesRequest{
+		StateQueryContext: td.c.id,
+		SchemaId:          td.tp.stateSchemas[0].Id,
 		QueryJson: `{
 		  "eq": [
 		    { "field": "owner", "value": "` + state1.Owner.String() + `" }
@@ -471,9 +532,9 @@ func TestDomainFindAvailableStatesOK(t *testing.T) {
 	assert.Len(t, states.States, 1)
 
 	// Filter miss
-	states, err = tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		ContractAddress: contractAddress.String(),
-		SchemaId:        tp.stateSchemas[0].Id,
+	states, err = td.d.FindAvailableStates(td.ctx, &prototk.FindAvailableStatesRequest{
+		StateQueryContext: td.c.id,
+		SchemaId:          td.tp.stateSchemas[0].Id,
 		QueryJson: `{
 		  "eq": [
 		    { "field": "owner", "value": "` + tktypes.EthAddress(tktypes.RandBytes(20)).String() + `" }
@@ -485,9 +546,9 @@ func TestDomainFindAvailableStatesOK(t *testing.T) {
 
 	// Nullifier miss
 	useNullifiers := true
-	states, err = tp.d.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
-		ContractAddress: contractAddress.String(),
-		SchemaId:        tp.stateSchemas[0].Id,
+	states, err = td.d.FindAvailableStates(td.ctx, &prototk.FindAvailableStatesRequest{
+		StateQueryContext: td.c.id,
+		SchemaId:          td.tp.stateSchemas[0].Id,
 		QueryJson: `{
 		  "eq": [
 		    { "field": "owner", "value": "` + state1.Owner.String() + `" }
@@ -500,12 +561,12 @@ func TestDomainFindAvailableStatesOK(t *testing.T) {
 }
 
 func TestDomainInitDeployOK(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
 	txID := uuid.MustParse("53BA5DD6-B708-444D-A2FA-50578B974FB7")
-	tp.Functions.InitDeploy = func(ctx context.Context, idr *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error) {
+	td.tp.Functions.InitDeploy = func(ctx context.Context, idr *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error) {
 		defer done()
 		assert.Equal(t, "0x53ba5dd6b708444da2fa50578b974fb700000000000000000000000000000000", idr.Transaction.TransactionId)
 		assert.JSONEq(t, `{
@@ -524,7 +585,7 @@ func TestDomainInitDeployOK(t *testing.T) {
 		}, nil
 	}
 
-	domain := tp.d
+	domain := td.d
 	tx := &components.PrivateContractDeploy{
 		ID: txID,
 		Inputs: tktypes.RawJSON(`{
@@ -533,38 +594,38 @@ func TestDomainInitDeployOK(t *testing.T) {
 		  "symbol": "TKN1"
 		}`),
 	}
-	err := domain.InitDeploy(ctx, tx)
+	err := domain.InitDeploy(td.ctx, tx)
 	require.NoError(t, err)
 	assert.Len(t, tx.RequiredVerifiers, 1)
 
 }
 
 func TestDomainInitDeployMissingInput(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
 	txID := uuid.MustParse("53BA5DD6-B708-444D-A2FA-50578B974FB7")
-	domain := tp.d
+	domain := td.d
 	tx := &components.PrivateContractDeploy{
 		ID: txID,
 	}
-	err := domain.InitDeploy(ctx, tx)
+	err := domain.InitDeploy(td.ctx, tx)
 	assert.Regexp(t, "PD011620", err)
 	assert.Nil(t, tx.RequiredVerifiers)
 }
 
 func TestDomainInitDeployError(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
 	txID := uuid.MustParse("53BA5DD6-B708-444D-A2FA-50578B974FB7")
-	tp.Functions.InitDeploy = func(ctx context.Context, idr *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error) {
+	td.tp.Functions.InitDeploy = func(ctx context.Context, idr *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error) {
 		return nil, fmt.Errorf("pop")
 	}
 
-	domain := tp.d
+	domain := td.d
 	tx := &components.PrivateContractDeploy{
 		ID: txID,
 		Inputs: tktypes.RawJSON(`{
@@ -573,7 +634,7 @@ func TestDomainInitDeployError(t *testing.T) {
 		  "symbol": "TKN1"
 		}`),
 	}
-	err := domain.InitDeploy(ctx, tx)
+	err := domain.InitDeploy(td.ctx, tx)
 	assert.Regexp(t, "pop", err)
 	assert.Nil(t, tx.RequiredVerifiers)
 }
@@ -596,17 +657,17 @@ func goodTXForDeploy() *components.PrivateContractDeploy {
 }
 
 func TestDomainPrepareDeployInvokeTX(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
-	domain := tp.d
+	domain := td.d
 	tx := goodTXForDeploy()
 
-	tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
+	td.tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 		assert.Same(t, tx.TransactionSpecification, pdr.Transaction)
 		return &prototk.PrepareDeployResponse{
-			Transaction: &prototk.BaseLedgerTransaction{
+			Transaction: &prototk.PreparedTransaction{
 				FunctionAbiJson: fakeCoinFactoryNewInstanceABI,
 				ParamsJson: `{
 				  "notary": "` + pdr.ResolvedVerifiers[0].Verifier + `",
@@ -616,7 +677,7 @@ func TestDomainPrepareDeployInvokeTX(t *testing.T) {
 		}, nil
 	}
 
-	err := domain.PrepareDeploy(ctx, tx)
+	err := domain.PrepareDeploy(td.ctx, tx)
 	require.NoError(t, err)
 	assert.Nil(t, tx.DeployTransaction)
 	assert.Equal(t, "newInstance", tx.InvokeTransaction.FunctionABI.Name)
@@ -626,14 +687,14 @@ func TestDomainPrepareDeployInvokeTX(t *testing.T) {
 }
 
 func TestDomainPrepareDeployDeployTXWithSigner(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
-	domain := tp.d
+	domain := td.d
 	tx := goodTXForDeploy()
 
-	tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
+	td.tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 		assert.Same(t, tx.TransactionSpecification, pdr.Transaction)
 		return &prototk.PrepareDeployResponse{
 			Deploy: &prototk.BaseLedgerDeployTransaction{
@@ -647,7 +708,7 @@ func TestDomainPrepareDeployDeployTXWithSigner(t *testing.T) {
 		}, nil
 	}
 
-	err := domain.PrepareDeploy(ctx, tx)
+	err := domain.PrepareDeploy(td.ctx, tx)
 	require.NoError(t, err)
 	assert.Nil(t, tx.InvokeTransaction)
 	assert.Equal(t, abi.Constructor, tx.DeployTransaction.ConstructorABI.Type)
@@ -656,62 +717,62 @@ func TestDomainPrepareDeployDeployTXWithSigner(t *testing.T) {
 }
 
 func TestDomainPrepareDeployMissingInput(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
-	domain := tp.d
+	domain := td.d
 	tx := &components.PrivateContractDeploy{
 		ID: uuid.New(),
 	}
-	err := domain.PrepareDeploy(ctx, tx)
+	err := domain.PrepareDeploy(td.ctx, tx)
 	assert.Regexp(t, "PD011621", err)
 	assert.Nil(t, tx.RequiredVerifiers)
 }
 
 func TestDomainPrepareDeployError(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
-	domain := tp.d
+	domain := td.d
 	tx := goodTXForDeploy()
-	tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
+	td.tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 		return nil, fmt.Errorf("pop")
 	}
 
-	err := domain.PrepareDeploy(ctx, tx)
+	err := domain.PrepareDeploy(td.ctx, tx)
 	assert.Regexp(t, "pop", err)
 }
 
 func TestDomainPrepareDeployMissingSigner(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
-	domain := tp.d
+	domain := td.d
 	tx := goodTXForDeploy()
-	tp.d.config.BaseLedgerSubmitConfig.SubmitMode = prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION
+	td.d.config.BaseLedgerSubmitConfig.SubmitMode = prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION
 
-	tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
+	td.tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 		return &prototk.PrepareDeployResponse{
 			Deploy: &prototk.BaseLedgerDeployTransaction{},
 		}, nil
 	}
 
-	err := domain.PrepareDeploy(ctx, tx)
+	err := domain.PrepareDeploy(td.ctx, tx)
 	assert.Regexp(t, "PD011622", err)
 }
 
 func TestDomainPrepareDeployBadParams(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
-	domain := tp.d
+	domain := td.d
 	tx := goodTXForDeploy()
 
-	tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
+	td.tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 		return &prototk.PrepareDeployResponse{
 			Deploy: &prototk.BaseLedgerDeployTransaction{
 				ConstructorAbiJson: fakeCoinFactoryConstructorABI,
@@ -720,58 +781,58 @@ func TestDomainPrepareDeployBadParams(t *testing.T) {
 		}, nil
 	}
 
-	err := domain.PrepareDeploy(ctx, tx)
+	err := domain.PrepareDeploy(td.ctx, tx)
 	assert.Regexp(t, "FF22040", err)
 }
 
 func TestDomainPrepareDeployDefaultConstructor(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
-	domain := tp.d
+	domain := td.d
 	tx := goodTXForDeploy()
 
-	tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
+	td.tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 		return &prototk.PrepareDeployResponse{
 			Deploy: &prototk.BaseLedgerDeployTransaction{},
 		}, nil
 	}
 
-	err := domain.PrepareDeploy(ctx, tx)
+	err := domain.PrepareDeploy(td.ctx, tx)
 	require.NoError(t, err)
 }
 
 func TestDomainPrepareInvokeBadParams(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
-	domain := tp.d
+	domain := td.d
 	tx := goodTXForDeploy()
 
-	tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
+	td.tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 		return &prototk.PrepareDeployResponse{
-			Transaction: &prototk.BaseLedgerTransaction{
+			Transaction: &prototk.PreparedTransaction{
 				FunctionAbiJson: fakeCoinFactoryNewInstanceABI,
 				ParamsJson:      `{"missing":"expected things"}`,
 			},
 		}, nil
 	}
 
-	err := domain.PrepareDeploy(ctx, tx)
+	err := domain.PrepareDeploy(td.ctx, tx)
 	assert.Regexp(t, "FF22040", err)
 }
 
 func TestDomainPrepareDeployABIInvalid(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
-	domain := tp.d
+	domain := td.d
 	tx := goodTXForDeploy()
 
-	tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
+	td.tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 		return &prototk.PrepareDeployResponse{
 			Deploy: &prototk.BaseLedgerDeployTransaction{
 				ConstructorAbiJson: `!!!wrong`,
@@ -779,41 +840,41 @@ func TestDomainPrepareDeployABIInvalid(t *testing.T) {
 		}, nil
 	}
 
-	err := domain.PrepareDeploy(ctx, tx)
+	err := domain.PrepareDeploy(td.ctx, tx)
 	assert.Regexp(t, "PD011605", err)
 }
 
 func TestDomainPrepareInvokeABIInvalid(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
-	domain := tp.d
+	domain := td.d
 	tx := goodTXForDeploy()
 
-	tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
+	td.tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 		return &prototk.PrepareDeployResponse{
-			Transaction: &prototk.BaseLedgerTransaction{
+			Transaction: &prototk.PreparedTransaction{
 				FunctionAbiJson: `!!!wrong`,
 			},
 		}, nil
 	}
 
-	err := domain.PrepareDeploy(ctx, tx)
+	err := domain.PrepareDeploy(td.ctx, tx)
 	assert.Regexp(t, "PD011605", err)
 }
 
 func TestDomainPrepareInvokeAndDeploy(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	assert.Nil(t, tp.d.initError.Load())
+	assert.Nil(t, td.d.initError.Load())
 
-	domain := tp.d
+	domain := td.d
 	tx := goodTXForDeploy()
 
-	tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
+	td.tp.Functions.PrepareDeploy = func(ctx context.Context, pdr *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 		return &prototk.PrepareDeployResponse{
-			Transaction: &prototk.BaseLedgerTransaction{
+			Transaction: &prototk.PreparedTransaction{
 				FunctionAbiJson: fakeCoinFactoryNewInstanceABI,
 				ParamsJson:      `{}`,
 			},
@@ -823,14 +884,15 @@ func TestDomainPrepareInvokeAndDeploy(t *testing.T) {
 		}, nil
 	}
 
-	err := domain.PrepareDeploy(ctx, tx)
+	err := domain.PrepareDeploy(td.ctx, tx)
 	assert.Regexp(t, "PD011611", err)
 }
 
 func TestEncodeABIDataFailCases(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	d := tp.d
+	d := td.d
+	ctx := td.ctx
 
 	_, err := d.EncodeData(ctx, &prototk.EncodeDataRequest{
 		EncodingType: prototk.EncodingType(42),
@@ -882,9 +944,10 @@ func TestEncodeABIDataFailCases(t *testing.T) {
 }
 
 func TestDecodeABIDataFailCases(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	d := tp.d
+	d := td.d
+	ctx := td.ctx
 
 	_, err := d.DecodeData(ctx, &prototk.DecodeDataRequest{
 		EncodingType: prototk.EncodingType(42),
@@ -926,9 +989,10 @@ func TestDecodeABIDataFailCases(t *testing.T) {
 }
 
 func TestRecoverSignerFailCases(t *testing.T) {
-	ctx, _, tp, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
-	d := tp.d
+	d := td.d
+	ctx := td.ctx
 
 	_, err := d.RecoverSigner(ctx, &prototk.RecoverSignerRequest{
 		Algorithm: "not supported",
@@ -940,4 +1004,109 @@ func TestRecoverSignerFailCases(t *testing.T) {
 		Signature:   ([]byte)("not a signature RSV"),
 	})
 	assert.Regexp(t, "PD011638", err)
+}
+
+func TestMapStateLockType(t *testing.T) {
+	for _, pldType := range components.StateLockType("").Options() {
+		assert.NotNil(t, mapStateLockType(components.StateLockType(pldType)))
+	}
+	assert.Panics(t, func() {
+		_ = mapStateLockType(components.StateLockType("wrong"))
+	})
+}
+
+func TestDomainValidateStateHashesOK(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td.tp.Functions.ValidateStateHashes = func(ctx context.Context, vshr *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+		assert.Equal(t, stateID1.String(), vshr.States[0].Id)
+		assert.Empty(t, vshr.States[1].Id)
+		return &prototk.ValidateStateHashesResponse{
+			StateIds: []string{stateID1.String(), stateID2.String()},
+		}, nil
+	}
+
+	// no-op
+	validatedIDs, err := td.d.ValidateStateHashes(td.ctx, []*components.FullState{})
+	require.NoError(t, err)
+	assert.Equal(t, []tktypes.HexBytes{}, validatedIDs)
+
+	// Success
+	validatedIDs, err = td.d.ValidateStateHashes(td.ctx, []*components.FullState{
+		{ID: stateID1}, {ID: nil /* mocking domain calculation */},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []tktypes.HexBytes{stateID1, stateID2}, validatedIDs)
+}
+
+func TestDomainValidateStateHashesFail(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td.tp.Functions.ValidateStateHashes = func(ctx context.Context, vshr *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+		return nil, fmt.Errorf("pop")
+	}
+
+	_, err := td.d.ValidateStateHashes(td.ctx, []*components.FullState{{ID: stateID1}})
+	require.Regexp(t, "PD011651.*pop", err)
+}
+
+func TestDomainValidateStateHashesWrongLen(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td.tp.Functions.ValidateStateHashes = func(ctx context.Context, vshr *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+		return &prototk.ValidateStateHashesResponse{
+			StateIds: []string{stateID1.String(), stateID1.String()},
+		}, nil
+	}
+
+	_, err := td.d.ValidateStateHashes(td.ctx, []*components.FullState{{ID: stateID1}})
+	require.Regexp(t, "PD011652", err)
+}
+
+func TestDomainValidateStateHashesMisMatch(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td.tp.Functions.ValidateStateHashes = func(ctx context.Context, vshr *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+		return &prototk.ValidateStateHashesResponse{
+			StateIds: []string{stateID1.String(), stateID1.String() /* should be stateID2 */},
+		}, nil
+	}
+
+	_, err := td.d.ValidateStateHashes(td.ctx, []*components.FullState{{ID: stateID1}, {ID: stateID2}})
+	require.Regexp(t, "PD011652", err)
+}
+
+func TestDomainValidateStateHashesBadHex(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	td.tp.Functions.ValidateStateHashes = func(ctx context.Context, vshr *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+		return &prototk.ValidateStateHashesResponse{
+			StateIds: []string{"wrong"},
+		}, nil
+	}
+
+	_, err := td.d.ValidateStateHashes(td.ctx, []*components.FullState{{ID: stateID1}})
+	require.Regexp(t, "PD011652", err)
 }

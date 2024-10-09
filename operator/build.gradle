@@ -155,12 +155,14 @@ task cleanCluster(type: Exec) {
 task clean {
     dependsOn cleanCluster
 }
-// Default 'build' task
-task build {
-    dependsOn docker
-}
 
 // Existing 'make' task
 task make(type: Exec, dependsOn: [copySolidity]) {
     executable 'make'
+}
+
+task build {
+    // Default 'build' task just builds as part of the main Paladin build.
+    // The operator primary build and test is all docker, and runs in separate builds
+    dependsOn make
 }

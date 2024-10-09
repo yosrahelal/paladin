@@ -24,6 +24,13 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
+type ZetoCoinState struct {
+	ID              tktypes.HexUint256 `json:"id"`
+	Created         tktypes.Timestamp  `json:"created"`
+	ContractAddress tktypes.EthAddress `json:"contractAddress"`
+	Data            ZetoCoin           `json:"data"`
+}
+
 type ZetoCoin struct {
 	Salt     *tktypes.HexUint256 `json:"salt"`
 	Owner    string              `json:"owner"`

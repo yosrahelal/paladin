@@ -22,41 +22,38 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"gorm.io/gorm"
 )
 
 type StatesStorage interface {
 	core.Storage
-	GetNewStates() []*prototk.NewLocalState
+	GetNewStates() []*prototk.NewConfirmedState
 }
 
 type statesStorage struct {
-	CoreInterface   plugintk.DomainCallbacks
-	transactionId   string
-	smtName         string
-	contractAddress *ethtypes.Address0xHex
-	rootSchemaId    string
-	nodeSchemaId    string
-	rootNode        core.NodeIndex
-	newNodes        []*prototk.NewLocalState
+	CoreInterface     plugintk.DomainCallbacks
+	smtName           string
+	stateQueryContext string
+	rootSchemaId      string
+	nodeSchemaId      string
+	rootNode          core.NodeIndex
+	newNodes          []*prototk.NewConfirmedState
 }
 
-func NewStatesStorage(c plugintk.DomainCallbacks, smtName string, contractAddress *ethtypes.Address0xHex, rootSchemaId, nodeSchemaId string) StatesStorage {
+func NewStatesStorage(c plugintk.DomainCallbacks, smtName, stateQueryContext, rootSchemaId, nodeSchemaId string) StatesStorage {
 	return &statesStorage{
-		CoreInterface:   c,
-		smtName:         smtName,
-		contractAddress: contractAddress,
-		rootSchemaId:    rootSchemaId,
-		nodeSchemaId:    nodeSchemaId,
+		CoreInterface:     c,
+		smtName:           smtName,
+		stateQueryContext: stateQueryContext,
+		rootSchemaId:      rootSchemaId,
+		nodeSchemaId:      nodeSchemaId,
 	}
 }
 
-func (s *statesStorage) GetNewStates() []*prototk.NewLocalState {
+func (s *statesStorage) GetNewStates() []*prototk.NewConfirmedState {
 	return s.newNodes
 }
 
@@ -70,9 +67,9 @@ func (s *statesStorage) GetRootNodeIndex() (core.NodeIndex, error) {
 		Equal("smtName", s.smtName)
 
 	res, err := s.CoreInterface.FindAvailableStates(context.Background(), &prototk.FindAvailableStatesRequest{
-		ContractAddress: s.contractAddress.String(),
-		SchemaId:        s.rootSchemaId,
-		QueryJson:       queryBuilder.Query().String(),
+		StateQueryContext: s.stateQueryContext,
+		SchemaId:          s.rootSchemaId,
+		QueryJson:         queryBuilder.Query().String(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to find available states. %s", err)
@@ -88,24 +85,31 @@ func (s *statesStorage) GetRootNodeIndex() (core.NodeIndex, error) {
 		return nil, fmt.Errorf("failed to unmarshal root node index. %s", err)
 	}
 
-	idx, err := node.NewNodeIndexFromHex(root.RootIndex)
+	idx, err := node.NewNodeIndexFromHex(root.RootIndex.HexString())
 	return idx, err
 }
 
 func (s *statesStorage) UpsertRootNodeIndex(root core.NodeIndex) error {
+	bytes, err := tktypes.ParseBytes32(root.Hex())
+	if err != nil {
+		return fmt.Errorf("failed to parse root node index. %s", err)
+	}
 	newRoot := &MerkleTreeRoot{
 		SmtName:   s.smtName,
-		RootIndex: "0x" + root.Hex(),
+		RootIndex: bytes,
 	}
 	data, err := json.Marshal(newRoot)
 	if err != nil {
 		return fmt.Errorf("failed to upsert root node. %s", err)
 	}
-	newRootState := &prototk.NewLocalState{
-		Id:            &newRoot.RootIndex,
+	hash, err := newRoot.Hash()
+	if err != nil {
+		return fmt.Errorf("failed to hash root node. %s", err)
+	}
+	newRootState := &prototk.NewConfirmedState{
+		Id:            &hash,
 		SchemaId:      s.rootSchemaId,
 		StateDataJson: string(data),
-		TransactionId: s.transactionId,
 	}
 	s.newNodes = append(s.newNodes, newRootState)
 	s.rootNode = root
@@ -121,13 +125,11 @@ func (s *statesStorage) GetNode(ref core.NodeIndex) (core.Node, error) {
 		Equal("refKey", ref.Hex())
 
 	res, err := s.CoreInterface.FindAvailableStates(context.Background(), &prototk.FindAvailableStatesRequest{
-		ContractAddress: s.contractAddress.String(),
-		SchemaId:        s.nodeSchemaId,
-		QueryJson:       queryBuilder.Query().String(),
+		StateQueryContext: s.stateQueryContext,
+		SchemaId:          s.nodeSchemaId,
+		QueryJson:         queryBuilder.Query().String(),
 	})
-	if err == gorm.ErrRecordNotFound {
-		return nil, core.ErrNotFound
-	} else if err != nil {
+	if err != nil {
 		return nil, fmt.Errorf("failed to find available states. %s", err)
 	}
 	if len(res.States) == 0 {
@@ -145,7 +147,7 @@ func (s *statesStorage) GetNode(ref core.NodeIndex) (core.Node, error) {
 	case core.NodeTypeLeaf:
 		idx, err1 := node.NewNodeIndexFromHex(n.Index.HexString())
 		if err1 != nil {
-			return nil, fmt.Errorf("failed to create lead node index. %s", err1)
+			return nil, fmt.Errorf("failed to create leaf node index. %s", err1)
 		}
 		v := node.NewIndexOnly(idx)
 		newNode, err = node.NewLeafNode(v)
@@ -165,32 +167,29 @@ func (s *statesStorage) GetNode(ref core.NodeIndex) (core.Node, error) {
 
 func (s *statesStorage) InsertNode(n core.Node) error {
 	// we clone the node so that the value properties are not saved
-	refKeyBytes, err := tktypes.ParseBytes32(n.Ref().Hex())
+	refBytes, err := tktypes.ParseBytes32(n.Ref().Hex())
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to parse node reference. %s", err)
 	}
 	newNode := &MerkleTreeNode{
-		RefKey: refKeyBytes,
+		RefKey: refBytes,
 		Type:   tktypes.HexBytes([]byte{n.Type().ToByte()}),
 	}
 	if n.Type() == core.NodeTypeBranch {
-		left := n.LeftChild().Hex()
-		leftBytes, err := tktypes.ParseBytes32(left)
-		if err != nil {
-			return err
+		leftBytes, err1 := tktypes.ParseBytes32(n.LeftChild().Hex())
+		if err1 != nil {
+			return fmt.Errorf("failed to parse left child node reference. %s", err1)
+		}
+		rightBytes, err2 := tktypes.ParseBytes32(n.RightChild().Hex())
+		if err2 != nil {
+			return fmt.Errorf("failed to parse right child node reference. %s", err2)
 		}
 		newNode.LeftChild = leftBytes
-		right := n.RightChild().Hex()
-		rightBytes, err := tktypes.ParseBytes32(right)
-		if err != nil {
-			return err
-		}
 		newNode.RightChild = rightBytes
 	} else if n.Type() == core.NodeTypeLeaf {
-		idx := n.Index().Hex()
-		idxBytes, err := tktypes.ParseBytes32(idx)
+		idxBytes, err := tktypes.ParseBytes32(n.Index().Hex())
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to parse leaf node index. %s", err)
 		}
 		newNode.Index = idxBytes
 	}
@@ -199,12 +198,14 @@ func (s *statesStorage) InsertNode(n core.Node) error {
 	if err != nil {
 		return fmt.Errorf("failed to insert node. %s", err)
 	}
-	refKey := newNode.RefKey.HexString()
-	newNodeState := &prototk.NewLocalState{
-		Id:            &refKey,
+	hash, err := newNode.Hash()
+	if err != nil {
+		return fmt.Errorf("failed to hash merkle tree node. %s", err)
+	}
+	newNodeState := &prototk.NewConfirmedState{
+		Id:            &hash,
 		SchemaId:      s.nodeSchemaId,
 		StateDataJson: string(data),
-		TransactionId: s.transactionId,
 	}
 	s.newNodes = append(s.newNodes, newNodeState)
 	return err
