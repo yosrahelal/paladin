@@ -30,7 +30,7 @@ type BesuGenesisSpec struct {
 	// Note only modelled fields of the genesis are supported, so check besugenesis.GenesisJSON for support of the field you wish to modify
 	Base string `json:"base,omitempty"`
 	// The chain ID - must not change after creation without chain reset
-	ChainID uint64 `json:"chainId"`
+	ChainID uint64 `json:"chainID"`
 	// The initial gas limit - must not change after creation without chain reset (node config be used to increase gas limit incrementally in new blocks)
 	GasLimit uint64 `json:"gasLimit"`
 	// +kubebuilder:validation:Enum=qbft
