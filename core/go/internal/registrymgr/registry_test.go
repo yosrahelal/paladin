@@ -17,18 +17,23 @@ package registrymgr
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"sync/atomic"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -246,4 +251,165 @@ func TestGetNodeTransportsErr(t *testing.T) {
 
 	_, err := rm.GetNodeTransports(ctx, "node1")
 	require.Regexp(t, "pop", err)
+}
+
+func TestRegistryWithEventStreams(t *testing.T) {
+	es := &blockindexer.EventStream{ID: uuid.New()}
+
+	_, _, tp, _, done := newTestRegistry(t, false, func(mc *mockComponents, regConf *prototk.RegistryConfig) {
+		a := abi.ABI{
+			{
+				Type: abi.Event,
+				Name: "Registered",
+				Inputs: abi.ParameterArray{
+					{Name: "node", Type: "string"},
+					{Name: "details", Type: "string"},
+				},
+			},
+		}
+		addr := tktypes.RandAddress()
+
+		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.MatchedBy(func(ies *blockindexer.InternalEventStream) bool {
+			require.Len(t, ies.Definition.Sources, 1)
+			assert.JSONEq(t, tktypes.JSONString(a).String(), tktypes.JSONString(ies.Definition.Sources[0].ABI).String())
+			assert.Equal(t, addr, ies.Definition.Sources[0].Address)
+			return true
+		})).Return(es, nil)
+
+		regConf.EventSources = []*prototk.RegistryEventSource{
+			{
+				ContractAddress: addr.String(),
+				AbiEventsJson:   tktypes.JSONString(a).Pretty(),
+			},
+		}
+	})
+	defer done()
+
+	assert.Equal(t, es, tp.r.eventStream)
+
+}
+
+func TestConfigureEventStreamBadEventABI(t *testing.T) {
+	ctx, _, tp, _, done := newTestRegistry(t, false)
+	defer done()
+
+	tp.r.config = &prototk.RegistryConfig{
+		EventSources: []*prototk.RegistryEventSource{
+			{
+				AbiEventsJson: `{!!! wrong `,
+			},
+		},
+	}
+	err := tp.r.configureEventStream(ctx)
+	assert.Regexp(t, "PD012103", err)
+
+}
+
+func TestConfigureEventStreamBadEventContractAddr(t *testing.T) {
+	ctx, _, tp, _, done := newTestRegistry(t, false)
+	defer done()
+
+	tp.r.config = &prototk.RegistryConfig{
+		EventSources: []*prototk.RegistryEventSource{
+			{
+				ContractAddress: "wrong",
+			},
+		},
+	}
+	err := tp.r.configureEventStream(ctx)
+	assert.Regexp(t, "PD012103", err)
+
+}
+
+func TestConfigureEventStreamBadEventABITypes(t *testing.T) {
+	ctx, _, tp, _, done := newTestRegistry(t, false)
+	defer done()
+
+	tp.r.config = &prototk.RegistryConfig{
+		EventSources: []*prototk.RegistryEventSource{
+			{
+				AbiEventsJson: `[{"type":"event","inputs":[{"type":"badness"}]}]`,
+			},
+		},
+	}
+	err := tp.r.configureEventStream(ctx)
+	assert.Regexp(t, "FF22025", err)
+
+}
+
+func TestHandleEventBatchOk(t *testing.T) {
+
+	ctx, _, tp, _, done := newTestRegistry(t, false, func(mc *mockComponents, regConf *prototk.RegistryConfig) {
+		mc.db.ExpectExec("INSERT.*registry_transport_details").WillReturnResult(driver.ResultNoRows)
+	})
+	defer done()
+
+	batch := &blockindexer.EventDeliveryBatch{
+		StreamID:   uuid.New(),
+		StreamName: "registry_1",
+		BatchID:    uuid.New(),
+		Events: []*blockindexer.EventWithData{
+			{
+				IndexedEvent: &blockindexer.IndexedEvent{
+					BlockNumber:      12345,
+					TransactionIndex: 10,
+					LogIndex:         20,
+					TransactionHash:  tktypes.Bytes32(tktypes.RandBytes(32)),
+					Signature:        tktypes.Bytes32(tktypes.RandBytes(32)),
+				},
+				SoliditySignature: "event1()",
+				Address:           *tktypes.RandAddress(),
+				Data:              []byte("some data"),
+			},
+		},
+	}
+
+	tp.Functions.RegistryEventBatch = func(ctx context.Context, rebr *prototk.RegistryEventBatchRequest) (*prototk.RegistryEventBatchResponse, error) {
+		assert.Equal(t, batch.BatchID.String(), rebr.BatchId)
+		assert.Equal(t, "event1()", rebr.Events[0].SoliditySignature)
+		return &prototk.RegistryEventBatchResponse{
+			TransportDetails: []*prototk.TransportDetails{
+				{
+					Node:      "node1",
+					Transport: "websockets",
+					Details:   "some details",
+				},
+			},
+		}, nil
+	}
+
+	res, err := tp.r.handleEventBatch(ctx, tp.r.rm.persistence.DB(), batch)
+	require.NoError(t, err)
+	assert.NotNil(t, res)
+
+}
+
+func TestHandleEventBatchError(t *testing.T) {
+
+	ctx, _, tp, _, done := newTestRegistry(t, false)
+	defer done()
+
+	batch := &blockindexer.EventDeliveryBatch{
+		BatchID: uuid.New(),
+		Events: []*blockindexer.EventWithData{{
+			IndexedEvent: &blockindexer.IndexedEvent{
+				BlockNumber:      12345,
+				TransactionIndex: 10,
+				LogIndex:         20,
+				TransactionHash:  tktypes.Bytes32(tktypes.RandBytes(32)),
+				Signature:        tktypes.Bytes32(tktypes.RandBytes(32)),
+			},
+			SoliditySignature: "event1()",
+			Address:           *tktypes.RandAddress(),
+			Data:              []byte("some data"),
+		}},
+	}
+
+	tp.Functions.RegistryEventBatch = func(ctx context.Context, rebr *prototk.RegistryEventBatchRequest) (*prototk.RegistryEventBatchResponse, error) {
+		return nil, fmt.Errorf("pop")
+	}
+
+	_, err := tp.r.handleEventBatch(ctx, tp.r.rm.persistence.DB(), batch)
+	require.Regexp(t, "pop", err)
+
 }

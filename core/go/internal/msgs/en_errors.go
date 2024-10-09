@@ -316,7 +316,7 @@ var (
 	MsgRegistryNodeEntiresNotFound = ffe("PD012100", "No entries found for node '%s'")
 	MsgRegistryInvalidEntry        = ffe("PD012101", "Invalid entry")
 	MsgRegistryNotFound            = ffe("PD012102", "Registry %q not found")
-	MsgRegistryInvalidEventSource  = ffe("PD012103", "Events source %s is invalid")
+	MsgRegistryInvalidEventSource  = ffe("PD012103", "Events source %d is invalid")
 
 	// TxMgr module PD0122XX
 	MsgTxMgrQueryLimitRequired           = ffe("PD012200", "limit is required on all queries")

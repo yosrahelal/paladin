@@ -100,7 +100,7 @@ func (r *registry) init() {
 	}
 }
 
-func (r *registry) configureEventStream(ctx context.Context) error {
+func (r *registry) configureEventStream(ctx context.Context) (err error) {
 
 	if len(r.config.EventSources) == 0 {
 		return nil
@@ -113,9 +113,12 @@ func (r *registry) configureEventStream(ctx context.Context) error {
 
 	for i, es := range r.config.EventSources {
 
-		contractAddr, err := tktypes.ParseEthAddress(es.ContractAddress)
-		if err != nil {
-			return i18n.WrapError(ctx, err, msgs.MsgRegistryInvalidEventSource, i)
+		var contractAddr *tktypes.EthAddress
+		if es.ContractAddress != "" {
+			contractAddr, err = tktypes.ParseEthAddress(es.ContractAddress)
+			if err != nil {
+				return i18n.WrapError(ctx, err, msgs.MsgRegistryInvalidEventSource, i)
+			}
 		}
 
 		var eventsABI abi.ABI
