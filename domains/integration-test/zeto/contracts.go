@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package integrationtest
+package zeto
 
 import (
 	"context"
@@ -31,7 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-type zetoDomainContracts struct {
+type ZetoDomainContracts struct {
 	factoryAddress       *tktypes.EthAddress
 	factoryAbi           abi.ABI
 	deployedContracts    map[string]*tktypes.EthAddress
@@ -40,19 +40,20 @@ type zetoDomainContracts struct {
 }
 
 type cloneableContract struct {
-	circuitId string
-	verifier  string
+	circuitId     string
+	verifier      string
+	batchVerifier string
 }
 
-func newZetoDomainContracts() *zetoDomainContracts {
+func newZetoDomainContracts() *ZetoDomainContracts {
 	factory := domain.LoadBuildLinked(helpers.ZetoFactoryJSON, map[string]*tktypes.EthAddress{})
 
-	return &zetoDomainContracts{
+	return &ZetoDomainContracts{
 		factoryAbi: factory.ABI,
 	}
 }
 
-func deployDomainContracts(ctx context.Context, rpc rpcbackend.Backend, deployer string, config *domainConfig) (*zetoDomainContracts, error) {
+func deployDomainContracts(ctx context.Context, rpc rpcbackend.Backend, deployer string, config *domainConfig) (*ZetoDomainContracts, error) {
 	if len(config.DomainContracts.Implementations) == 0 {
 		return nil, fmt.Errorf("no implementations specified for factory contract")
 	}
@@ -87,8 +88,9 @@ func findCloneableContracts(config *domainConfig) map[string]cloneableContract {
 	for _, contract := range config.DomainContracts.Implementations {
 		if contract.Cloneable {
 			cloneableContracts[contract.Name] = cloneableContract{
-				circuitId: contract.CircuitId,
-				verifier:  contract.Verifier,
+				circuitId:     contract.CircuitId,
+				verifier:      contract.Verifier,
+				batchVerifier: contract.BatchVerifier,
 			}
 		}
 	}
@@ -145,7 +147,7 @@ func deployBytecode(ctx context.Context, rpc rpcbackend.Backend, deployer string
 	return tktypes.MustEthAddress(addr), nil
 }
 
-func configureFactoryContract(ctx context.Context, ec ethclient.EthClient, bi blockindexer.BlockIndexer, deployer string, domainContracts *zetoDomainContracts) error {
+func configureFactoryContract(ctx context.Context, ec ethclient.EthClient, bi blockindexer.BlockIndexer, deployer string, domainContracts *ZetoDomainContracts) error {
 	abiFunc, err := ec.ABIFunction(ctx, domainContracts.factoryAbi.Functions()["registerImplementation"])
 	if err != nil {
 		return err
@@ -162,9 +164,10 @@ func configureFactoryContract(ctx context.Context, ec ethclient.EthClient, bi bl
 	return nil
 }
 
-func registerImpl(ctx context.Context, name string, domainContracts *zetoDomainContracts, abiFunc ethclient.ABIFunctionClient, deployer string, addr *tktypes.EthAddress, bi blockindexer.BlockIndexer) error {
+func registerImpl(ctx context.Context, name string, domainContracts *ZetoDomainContracts, abiFunc ethclient.ABIFunctionClient, deployer string, addr *tktypes.EthAddress, bi blockindexer.BlockIndexer) error {
 	log.L(ctx).Infof("Registering implementation %s", name)
 	verifierName := domainContracts.cloneableContracts[name].verifier
+	batchVerifierName := domainContracts.cloneableContracts[name].batchVerifier
 	implAddr, ok := domainContracts.deployedContracts[name]
 	if !ok {
 		return fmt.Errorf("implementation contract %s not found among the deployed contracts", name)
@@ -172,6 +175,10 @@ func registerImpl(ctx context.Context, name string, domainContracts *zetoDomainC
 	verifierAddr, ok := domainContracts.deployedContracts[verifierName]
 	if !ok {
 		return fmt.Errorf("verifier contract %s not found among the deployed contracts", verifierName)
+	}
+	batchVerifierAddr, ok := domainContracts.deployedContracts[batchVerifierName]
+	if !ok {
+		return fmt.Errorf("batch verifier contract %s not found among the deployed contracts", batchVerifierName)
 	}
 	depositVerifierAddr, ok := domainContracts.deployedContracts["Groth16Verifier_CheckHashesValue"]
 	if !ok {
@@ -181,13 +188,19 @@ func registerImpl(ctx context.Context, name string, domainContracts *zetoDomainC
 	if !ok {
 		return fmt.Errorf("withdraw verifier contract not found among the deployed contracts")
 	}
+	batchWithdrawVerifierAddr, ok := domainContracts.deployedContracts["Groth16Verifier_CheckInputsOutputsValueBatch"]
+	if !ok {
+		return fmt.Errorf("batch withdraw verifier contract not found among the deployed contracts")
+	}
 	params := &setImplementationParams{
 		Name: name,
 		Implementation: implementationInfo{
-			Implementation:   implAddr.String(),
-			Verifier:         verifierAddr.String(),
-			DepositVerifier:  depositVerifierAddr.String(),
-			WithdrawVerifier: withdrawVerifierAddr.String(),
+			Implementation:        implAddr.String(),
+			Verifier:              verifierAddr.String(),
+			BatchVerifier:         batchVerifierAddr.String(),
+			DepositVerifier:       depositVerifierAddr.String(),
+			WithdrawVerifier:      withdrawVerifierAddr.String(),
+			BatchWithdrawVerifier: batchWithdrawVerifierAddr.String(),
 		},
 	}
 	txHash, err := abiFunc.R(ctx).

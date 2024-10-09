@@ -24,11 +24,11 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
+	testZeto "github.com/kaleido-io/paladin/domains/integration-test/zeto"
 	internalZeto "github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zeto"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -36,7 +36,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -44,13 +43,10 @@ var (
 	recipient1Name = "recipient1"
 )
 
-//go:embed config-for-deploy.yaml
-var testZetoConfigYaml []byte
-
 type zetoDomainTestSuite struct {
 	suite.Suite
 	hdWalletSeed      *testbed.UTInitFunction
-	deployedContracts *zetoDomainContracts
+	deployedContracts *testZeto.ZetoDomainContracts
 	domainName        string
 	domain            zeto.Zeto
 	rpc               rpcbackend.Backend
@@ -59,12 +55,12 @@ type zetoDomainTestSuite struct {
 
 func (s *zetoDomainTestSuite) SetupSuite() {
 	s.hdWalletSeed = testbed.HDWalletSeedScopedToTest()
-	domainContracts := deployZetoContracts(s.T(), s.hdWalletSeed)
+	domainContracts := testZeto.DeployZetoContracts(s.T(), s.hdWalletSeed, "./config-for-deploy.yaml", controllerName)
 	s.deployedContracts = domainContracts
 	ctx := context.Background()
 	domainName := "zeto_" + tktypes.RandHex(8)
 	log.L(ctx).Infof("Domain name = %s", domainName)
-	config := prepareDomainConfig(s.T(), s.deployedContracts)
+	config := testZeto.PrepareZetoConfig(s.T(), s.deployedContracts, "../zkp")
 	zeto, zetoTestbed := newZetoDomain(s.T(), config)
 	done, _, rpc := newTestbed(s.T(), s.hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: zetoTestbed,
@@ -221,65 +217,6 @@ func mapConfig(t *testing.T, config *types.DomainFactoryConfig) (m map[string]an
 	err = json.Unmarshal(configJSON, &m)
 	require.NoError(t, err)
 	return m
-}
-
-func prepareDomainConfig(t *testing.T, domainContracts *zetoDomainContracts) *types.DomainFactoryConfig {
-	config := types.DomainFactoryConfig{
-		SnarkProver: zetosigner.SnarkProverConfig{
-			CircuitsDir:    "../zkp",
-			ProvingKeysDir: "../zkp",
-		},
-		DomainContracts: types.DomainConfigContracts{
-			Factory: &types.DomainContract{
-				ContractAddress: domainContracts.factoryAddress.String(),
-			},
-		},
-	}
-
-	var impls []*types.DomainContract
-	for name, implContract := range domainContracts.cloneableContracts {
-		abiJSON, err := json.Marshal(domainContracts.deployedContractAbis[name])
-		require.NoError(t, err)
-		contract := types.DomainContract{
-			Name:            name,
-			CircuitId:       implContract.circuitId,
-			ContractAddress: domainContracts.deployedContracts[name].String(),
-			Abi:             tktypes.RawJSON(abiJSON).String(),
-		}
-		impls = append(impls, &contract)
-	}
-	config.DomainContracts.Implementations = impls
-
-	factoryAbiJSON, err := json.Marshal(domainContracts.factoryAbi)
-	assert.NoError(t, err)
-	config.DomainContracts.Factory.Abi = tktypes.RawJSON(factoryAbiJSON).String()
-	config.FactoryAddress = domainContracts.factoryAddress.String()
-	return &config
-}
-
-func deployZetoContracts(t *testing.T, hdWalletSeed *testbed.UTInitFunction) *zetoDomainContracts {
-	ctx := context.Background()
-	log.L(ctx).Infof("Deploy Zeto Contracts")
-
-	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{}, hdWalletSeed)
-	bi := tb.Components().BlockIndexer()
-	ec := tb.Components().EthClientFactory().HTTPClient()
-	assert.NoError(t, err)
-	defer done()
-	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
-
-	var config domainConfig
-	err = yaml.Unmarshal(testZetoConfigYaml, &config)
-	assert.NoError(t, err)
-
-	deployedContracts, err := deployDomainContracts(ctx, rpc, controllerName, &config)
-	assert.NoError(t, err)
-
-	err = configureFactoryContract(ctx, ec, bi, controllerName, deployedContracts)
-	assert.NoError(t, err)
-
-	return deployedContracts
 }
 
 func newZetoDomain(t *testing.T, config *types.DomainFactoryConfig) (zeto.Zeto, *testbed.TestbedDomain) {

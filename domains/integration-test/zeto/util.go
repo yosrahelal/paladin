@@ -13,12 +13,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package integrationtest
+package zeto
 
 import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/go-resty/resty/v2"
@@ -33,9 +34,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-//go:embed config-for-deploy.yaml
-var testZetoConfigYaml []byte
-
 type domainConfig struct {
 	DomainContracts domainContracts `yaml:"contracts"`
 }
@@ -48,6 +46,7 @@ type domainContracts struct {
 type domainContract struct {
 	Name           string         `yaml:"name"`
 	Verifier       string         `yaml:"verifier"`
+	BatchVerifier  string         `yaml:"batchVerifier"`
 	CircuitId      string         `yaml:"circuitId"`
 	AbiAndBytecode abiAndBytecode `yaml:"abiAndBytecode"`
 	Libraries      []string       `yaml:"libraries"`
@@ -64,18 +63,21 @@ type setImplementationParams struct {
 }
 
 type implementationInfo struct {
-	Implementation   string `json:"implementation"`
-	Verifier         string `json:"verifier"`
-	DepositVerifier  string `json:"depositVerifier"`
-	WithdrawVerifier string `json:"withdrawVerifier"`
+	Implementation        string `json:"implementation"`
+	Verifier              string `json:"verifier"`
+	BatchVerifier         string `json:"batchVerifier"`
+	DepositVerifier       string `json:"depositVerifier"`
+	WithdrawVerifier      string `json:"withdrawVerifier"`
+	BatchWithdrawVerifier string `json:"batchWithdrawVerifier"`
 }
 
-func deployZetoContracts(t *testing.T, hdWalletSeed *testbed.UTInitFunction, controller string) *zetoDomainContracts {
+func DeployZetoContracts(t *testing.T, hdWalletSeed *testbed.UTInitFunction, configFile string, controller string) *ZetoDomainContracts {
 	ctx := context.Background()
 	log.L(ctx).Infof("Deploy Zeto Contracts")
 
 	tb := testbed.NewTestBed()
 	url, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{}, hdWalletSeed)
+	assert.NoError(t, err)
 	bi := tb.Components().BlockIndexer()
 	ec := tb.Components().EthClientFactory().HTTPClient()
 	assert.NoError(t, err)
@@ -83,6 +85,8 @@ func deployZetoContracts(t *testing.T, hdWalletSeed *testbed.UTInitFunction, con
 	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
 
 	var config domainConfig
+	testZetoConfigYaml, err := os.ReadFile(configFile)
+	assert.NoError(t, err)
 	err = yaml.Unmarshal(testZetoConfigYaml, &config)
 	assert.NoError(t, err)
 
@@ -95,11 +99,11 @@ func deployZetoContracts(t *testing.T, hdWalletSeed *testbed.UTInitFunction, con
 	return deployedContracts
 }
 
-func prepareZetoConfig(t *testing.T, domainContracts *zetoDomainContracts) *zetotypes.DomainFactoryConfig {
+func PrepareZetoConfig(t *testing.T, domainContracts *ZetoDomainContracts, zkpDir string) *zetotypes.DomainFactoryConfig {
 	config := zetotypes.DomainFactoryConfig{
 		SnarkProver: zetosigner.SnarkProverConfig{
-			CircuitsDir:    "../../domains/zeto/zkp",
-			ProvingKeysDir: "../../domains/zeto/zkp",
+			CircuitsDir:    zkpDir,
+			ProvingKeysDir: zkpDir,
 		},
 		DomainContracts: zetotypes.DomainConfigContracts{
 			Factory: &zetotypes.DomainContract{
