@@ -533,11 +533,11 @@ func TestSerializeProofResponse(t *testing.T) {
 			},
 			C: []string{"c"},
 		},
-		PubSignals: []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"},
+		PubSignals: []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"},
 	}
 	bytes, err := serializeProofResponse(constants.CIRCUIT_ANON_ENC, &snark)
 	assert.NoError(t, err)
-	assert.Equal(t, 86, len(bytes))
+	assert.Equal(t, 118, len(bytes))
 
 	bytes, err = serializeProofResponse(constants.CIRCUIT_ANON_NULLIFIER, &snark)
 	assert.NoError(t, err)

@@ -29,7 +29,7 @@ func TestAssembleInputsAnonEnc(t *testing.T) {
 	key := core.KeyEntry{}
 	privateInputs, err := assembleInputs_anon_enc(&inputs, nil, &key)
 	assert.NoError(t, err)
-	assert.Equal(t, 9, len(privateInputs))
+	assert.Equal(t, 10, len(privateInputs))
 }
 
 func TestAssembleInputsAnonNullifier(t *testing.T) {
