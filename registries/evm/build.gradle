@@ -13,13 +13,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+ext {
+    goFiles = fileTree(".") {
+        include "internal/**/*.go"
+        include "pkg/**/*.go"
+        include "main.go"
+    }
+}
+
 configurations {
+    // Resolvable configurations
+    toolkitGo {
+        canBeConsumed = false
+        canBeResolved = true
+    }
     compiledContracts {
         canBeConsumed = false
+        canBeResolved = true
     }
 }
 
 dependencies {
+    toolkitGo project(path: ":toolkit:go", configuration: "goSource")
     compiledContracts project(path: ":solidity", configuration: "compiledContracts")
 }
 
@@ -28,18 +43,53 @@ task copyContracts(type: Copy) {
     from fileTree(configurations.compiledContracts.asPath) {
         include 'contracts/registry/IdentityRegistry.sol/IdentityRegistry.json'
     }
-    into 'identity/abis'
+    into 'internal/evmregistry/abis'
 
     // Flatten all paths into the destination folder
     eachFile { path = name }
     includeEmptyDirs = false
 }
 
-task clean(type: Delete) {
-    delete 'abis'
+task lint(type: Exec, dependsOn: [":installGolangCILint",copyContracts]) {
+    workingDir '.'
+
+    helpers.lockResource(it, "lint.lock")
+    inputs.files(configurations.toolkitGo)
+    inputs.files(goFiles);
+    environment 'GOGC', '20'
+
+    executable "golangci-lint"
+    args 'run'
+    args '-v'
+    args '--color=always'
+    args '--timeout', '5m'
+}
+
+task test(type: Exec, dependsOn: [copyContracts]) {
+    inputs.files(configurations.toolkitGo)
+    inputs.files(goFiles)
+    outputs.dir('coverage')
+
+    workingDir '.'
+    executable 'go'
+    args 'test'
+    args './internal/...'
+    args '-cover'
+    args '-covermode=atomic'
+    args '-timeout=30s'
+    if (project.findProperty('verboseTests') == 'true') {
+        args '-v'
+    }    
+    args "-test.gocoverdir=${projectDir}/coverage"
+
+    dependsOn ':testinfra:startTestInfra'
 }
 
 task build {
-       dependsOn tasks.copyContracts
-       dependsOn ':testinfra:startTestInfra'
+    dependsOn lint
+    dependsOn test
+}
+
+task clean(type: Delete) {
+    delete 'coverage'
 }

@@ -26,13 +26,13 @@ import (
 var registered sync.Once
 var ffe = func(key, translation string, statusHint ...int) i18n.ErrorMessageKey {
 	registered.Do(func() {
-		i18n.RegisterPrefix("PD04", "Paladin Static Registry")
+		i18n.RegisterPrefix("PD06", "Paladin EVM Registry")
 	})
 	return i18n.FFE(language.AmericanEnglish, key, translation, statusHint...)
 }
 
 var (
-	// Generic PD0400XX
-	MsgInvalidRegistryConfig = ffe("PD040001", "Invalid registry configuration")
-	MsgFunctionUnsupported   = ffe("PD040002", "Function not supported")
+	// Generic PD0600XX
+	MsgInvalidRegistryConfig = ffe("PD060001", "Invalid registry configuration")
+	MsgInvalidRegistryEvent  = ffe("PD060002", "Invalid registry event %+v")
 )

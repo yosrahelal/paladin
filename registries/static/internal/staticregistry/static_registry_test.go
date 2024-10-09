@@ -137,7 +137,7 @@ func TestRegistryEventBatch(t *testing.T) {
 	callbacks := &testCallbacks{}
 	transport := staticRegistryFactory(callbacks).(*staticRegistry)
 	_, err := transport.RegistryEventBatch(context.Background(), &prototk.RegistryEventBatchRequest{})
-	assert.Regexp(t, "PD040003", err)
+	assert.Regexp(t, "PD040002", err)
 
 }
 

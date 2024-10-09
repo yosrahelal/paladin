@@ -17,7 +17,7 @@ contract IdentityRegistry {
     }
 
     event IdentityRegistered (
-        bytes32 parentIndentityHash,
+        bytes32 parentIdentityHash,
         bytes32 identityHash,
         string name,
         address owner
