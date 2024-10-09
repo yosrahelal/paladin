@@ -17,8 +17,13 @@ package pldconf
 import "github.com/kaleido-io/paladin/config/pkg/confutil"
 
 type PrivateTxManagerConfig struct {
-	Writer       FlushWriterConfig                  `json:"writer"`
-	Orchestrator PrivateTxManagerOrchestratorConfig `json:"orchestrator"`
+	Writer           FlushWriterConfig                  `json:"writer"`
+	Orchestrator     PrivateTxManagerOrchestratorConfig `json:"orchestrator"`
+	StateDistributer StateDistributerConfig             `json:"stateDistributer"`
+}
+
+type StateDistributerConfig struct {
+	Writer FlushWriterConfig `json:"writer"`
 }
 
 var PrivateTxManagerDefaults = &PrivateTxManagerConfig{

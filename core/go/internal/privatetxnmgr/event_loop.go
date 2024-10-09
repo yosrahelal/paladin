@@ -100,8 +100,8 @@ type Orchestrator struct {
 	endorsementGatherer ptmgrtypes.EndorsementGatherer
 	publisher           ptmgrtypes.Publisher
 	identityResolver    components.IdentityResolver
-
-	store privatetxnstore.Store
+	store               privatetxnstore.Store
+	stateDistributer    ptmgrtypes.StateDistributer
 }
 
 func NewOrchestrator(
@@ -116,6 +116,7 @@ func NewOrchestrator(
 	publisher ptmgrtypes.Publisher,
 	store privatetxnstore.Store,
 	identityResolver components.IdentityResolver,
+	stateDistributer ptmgrtypes.StateDistributer,
 ) *Orchestrator {
 
 	newOrchestrator := &Orchestrator{
@@ -143,6 +144,7 @@ func NewOrchestrator(
 		publisher:                    publisher,
 		store:                        store,
 		identityResolver:             identityResolver,
+		stateDistributer:             stateDistributer,
 	}
 
 	newOrchestrator.sequencer = sequencer
@@ -320,6 +322,8 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		DispatchSequences: make([]*privatetxnstore.DispatchSequence, 0, len(dispatchableTransactions)),
 	}
 
+	stateDistributions := make([]*ptmgrtypes.StateDistribution, 0)
+
 	completed := false // and include whether we committed the DB transaction or not
 	for signingAddress, transactionIDs := range dispatchableTransactions {
 		log.L(ctx).Debugf("DispatchTransactions: %d transactions for signingAddress %s", len(transactionIDs), signingAddress)
@@ -355,6 +359,8 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 				panic("private transactions triggering private transactions currently supported only in testbed")
 			}
 			preparedTransactions[i] = preparedTransaction
+
+			stateDistributions = append(stateDistributions, txProcessor.GetStateDistributions(ctx)...)
 		}
 
 		preparedTransactionPayloads := make([]*components.EthTransaction, len(preparedTransactions))
@@ -406,7 +412,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		dispatchBatch.DispatchSequences = append(dispatchBatch.DispatchSequences, sequence)
 	}
 
-	err := oc.store.PersistDispatchBatch(ctx, oc.contractAddress, dispatchBatch)
+	err := oc.store.PersistDispatchBatch(ctx, oc.contractAddress, dispatchBatch, stateDistributions)
 	if err != nil {
 		log.L(ctx).Errorf("Error persisting batch: %s", err)
 		return err
@@ -422,6 +428,8 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 			}
 		}
 	}
+	//now that the DB write has been persisted, we can trigger the in-memory state distribution
+	oc.stateDistributer.DistributeStates(ctx, stateDistributions)
 
 	return nil
 

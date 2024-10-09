@@ -49,9 +49,17 @@ to atomically allocate and record the nonce under that same transaction.
 // the submit will happen on the user transaction manager's flush writer context so
 // that it can be co-ordinated with the user transaction submission
 // do we have any other checkpoints (e.g. on delegate?)
+type StateDistributionPersisted struct {
+	ID              string `json:"id"`
+	StateID         string `json:"stateID"`
+	IdentityLocator string `json:"identityLocator"`
+	DomainName      string `json:"domainName"`
+	ContractAddress string `json:"contractAddress"`
+}
 type dispatchSequenceOperation struct {
-	contractAddress tktypes.EthAddress
-	dispatches      []*DispatchSequence
+	contractAddress    tktypes.EthAddress
+	dispatches         []*DispatchSequence
+	stateDistributions []*StateDistributionPersisted
 }
 
 func (dso *dispatchSequenceOperation) WriteKey() string {
@@ -83,6 +91,7 @@ func (s *store) runBatch(ctx context.Context, dbTX *gorm.DB, values []*dispatchS
 
 	for _, op := range values {
 		//for each batchSequence operation, call the public transaction manager to allocate a nonce
+		//and persist the intent to send the states to the distribution list.
 		for _, dispatchSequenceOp := range op.dispatches {
 			// Call the public transaction manager to allocate nonces for all transactions in the sequence
 			// and persist them to the database under the current transaction
@@ -133,6 +142,29 @@ func (s *store) runBatch(ctx context.Context, dbTX *gorm.DB, values []*dispatchS
 				return nil, err
 			}
 
+		}
+
+		if len(op.stateDistributions) == 0 {
+			log.L(ctx).Debug("No state distributions to persist")
+			continue
+		}
+
+		log.L(ctx).Debugf("Writing state distributions %d", len(op.stateDistributions))
+		err := dbTX.
+			Table("state_distributions").
+			Clauses(clause.OnConflict{
+				Columns: []clause.Column{
+					{Name: "state_id"},
+					{Name: "identity_locator"},
+				},
+				DoNothing: true, // immutable
+			}).
+			Create(op.stateDistributions).
+			Error
+
+		if err != nil {
+			log.L(ctx).Errorf("Error persisting state distributions: %s", err)
+			return nil, err
 		}
 	}
 

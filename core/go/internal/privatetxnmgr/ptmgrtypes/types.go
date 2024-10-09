@@ -203,6 +203,7 @@ type ContentionResolver interface {
 type TransportWriter interface {
 	// Provided to the sequencer to allow it to send messages to other nodes in the network
 	SendDelegateTransactionMessage(ctx context.Context, transactionId string, delegateNodeId string) error
+	SendState(ctx context.Context, stateId string, schemaId string, stateDataJson string, party string) error
 }
 
 type TxProcessorStatus int
@@ -213,6 +214,17 @@ const (
 	TxProcessorResume
 	TxProcessorRemove
 )
+
+// A StateDistribution is an intent to send private data for a given state to a remote party
+type StateDistribution struct {
+	ID              string
+	StateID         string
+	IdentityLocator string
+	Domain          string
+	ContractAddress string
+	SchemaID        string
+	StateDataJson   string
+}
 
 type TxProcessor interface {
 	Init(ctx context.Context)
@@ -230,4 +242,20 @@ type TxProcessor interface {
 	HandleResolveVerifierResponseEvent(ctx context.Context, event *ResolveVerifierResponseEvent) error
 	HandleResolveVerifierErrorEvent(ctx context.Context, event *ResolveVerifierErrorEvent) error
 	PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error)
+	GetStateDistributions(ctx context.Context) []*StateDistribution
+}
+
+/*
+StateDistributer is a component that is responsible for distributing state to remote parties
+
+	it runs in its own goroutine and periodically sends states to the intended recipients
+	until each recipient has acknowledged receipt of the state.
+
+	This operates on in-memory data but will initialise from persistent storage on startup
+*/
+type StateDistributer interface {
+	Start(ctx context.Context) error
+	Stop(ctx context.Context)
+	AcknowledgeState(ctx context.Context, stateID string)
+	DistributeStates(ctx context.Context, stateDistributions []*StateDistribution)
 }

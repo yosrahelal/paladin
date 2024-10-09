@@ -48,6 +48,7 @@ type orchestratorDepencyMocks struct {
 	endorsementGatherer *privatetxnmgrmocks.EndorsementGatherer
 	publisher           *privatetxnmgrmocks.Publisher
 	identityResolver    *componentmocks.IdentityResolver
+	stateDistributer    *privatetxnmgrmocks.StateDistributer
 }
 
 func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress *tktypes.EthAddress) (*Orchestrator, *orchestratorDepencyMocks, func()) {
@@ -67,6 +68,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 		endorsementGatherer: privatetxnmgrmocks.NewEndorsementGatherer(t),
 		publisher:           privatetxnmgrmocks.NewPublisher(t),
 		identityResolver:    componentmocks.NewIdentityResolver(t),
+		stateDistributer:    privatetxnmgrmocks.NewStateDistributer(t),
 	}
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
@@ -80,7 +82,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	mocks.endorsementGatherer.On("DomainContext").Return(mocks.domainContext).Maybe()
 
 	store := privatetxnstore.NewStore(ctx, &pldconf.FlushWriterConfig{}, p)
-	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher, store, mocks.identityResolver)
+	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher, store, mocks.identityResolver, mocks.stateDistributer)
 	ocDone, err := o.Start(ctx)
 	require.NoError(t, err)
 

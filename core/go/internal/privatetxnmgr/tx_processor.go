@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
@@ -691,4 +692,36 @@ func (ts *PaladinTxProcessor) requestVerifierResolution(ctx context.Context) err
 	}
 	return nil
 
+}
+
+func (ts *PaladinTxProcessor) GetStateDistributions(ctx context.Context) []*ptmgrtypes.StateDistribution {
+	log.L(ctx).Debug("PaladinTxProcessor:GetStateDistributions")
+
+	stateDistributions := make([]*ptmgrtypes.StateDistribution, 0)
+	if ts.transaction.PostAssembly == nil {
+		log.L(ctx).Error("PostAssembly is nil")
+		return stateDistributions
+	}
+	if ts.transaction.PostAssembly.OutputStates == nil {
+		log.L(ctx).Debug("OutputStates is nil")
+		return stateDistributions
+	}
+	for stateIndex, outputState := range ts.transaction.PostAssembly.OutputStates {
+		//need the output state for the state ID and need the outputStatePotential for the distribution list
+		outputStatePotential := ts.transaction.PostAssembly.OutputStatesPotential[stateIndex]
+
+		for _, party := range outputStatePotential.DistributionList {
+			stateDistributions = append(stateDistributions, &ptmgrtypes.StateDistribution{
+				ID:              uuid.New().String(),
+				StateID:         outputState.ID.String(),
+				IdentityLocator: party,
+				Domain:          ts.domainAPI.Domain().Name(),
+				ContractAddress: ts.transaction.Inputs.To.String(),
+				SchemaID:        outputState.Schema.String(),
+				StateDataJson:   string(outputState.Data), // the state data json is available on both but we take it
+				// from the outputState to make sure it is the same json that was used to generate the hash
+			})
+		}
+	}
+	return stateDistributions
 }

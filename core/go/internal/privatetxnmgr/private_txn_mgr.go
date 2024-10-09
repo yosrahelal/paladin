@@ -53,6 +53,7 @@ type privateTxManager struct {
 	subscribers          []components.PrivateTxEventSubscriber
 	subscribersLock      sync.Mutex
 	store                privatetxnstore.Store
+	stateDistributer     ptmgrtypes.StateDistributer
 }
 
 // Init implements Engine.
@@ -63,15 +64,25 @@ func (p *privateTxManager) PreInit(c components.PreInitComponents) (*components.
 func (p *privateTxManager) PostInit(c components.AllComponents) error {
 	p.components = c
 	p.store = privatetxnstore.NewStore(p.ctx, &p.config.Writer, c.Persistence())
+	p.stateDistributer = NewStateDistributer(
+		p.ctx,
+		p.nodeID,
+		p.components.TransportManager(),
+		p.components.StateManager(),
+		p.components.Persistence(),
+		&p.config.StateDistributer.Writer)
 	return p.components.TransportManager().RegisterClient(p.ctx, p)
 }
 
 func (p *privateTxManager) Start() error {
 	p.store.Start()
+	p.stateDistributer.Start(p.ctx)
 	return nil
 }
 
 func (p *privateTxManager) Stop() {
+	p.stateDistributer.Stop(p.ctx)
+
 }
 
 func NewPrivateTransactionMgr(ctx context.Context, nodeID string, config *pldconf.PrivateTxManagerConfig) components.PrivateTxManager {
@@ -93,7 +104,7 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 		seq := NewSequencer(
 			p.nodeID,
 			publisher,
-			NewTransportWriter(p.nodeID, p.components.TransportManager()),
+			NewTransportWriter(domainAPI.Domain().Name(), &contractAddr, p.nodeID, p.components.TransportManager()),
 		)
 		endorsementGatherer, err := p.getEndorsementGathererForContract(ctx, contractAddr)
 		if err != nil {
@@ -113,6 +124,7 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 				publisher,
 				p.store,
 				p.components.IdentityResolver(),
+				p.stateDistributer,
 			)
 		orchestratorDone, err := p.orchestrators[contractAddr.String()].Start(ctx)
 		if err != nil {
@@ -241,8 +253,8 @@ func (p *privateTxManager) deploymentLoop(ctx context.Context, domain components
 
 func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain components.Domain, tx *components.PrivateContractDeploy) (*tktypes.EthAddress, error) {
 
-	// TODO there is a lot of common code between this and the Dispatch function in the orchestrator. shoud really move some of it into a common place
-	// and use that as an operatunity to refactor to be more readable
+	// TODO there is a lot of common code between this and the Dispatch function in the orchestrator. should really move some of it into a common place
+	// and use that as an opportunity to refactor to be more readable
 
 	err := domain.PrepareDeploy(ctx, tx)
 	if err != nil {
@@ -317,7 +329,7 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 	}
 
 	// as this is a deploy we specify the null address
-	err = p.store.PersistDispatchBatch(ctx, tktypes.EthAddress{}, dispatchBatch)
+	err = p.store.PersistDispatchBatch(ctx, tktypes.EthAddress{}, dispatchBatch, nil)
 	if err != nil {
 		log.L(ctx).Errorf("Error persisting batch: %s", err)
 		return nil, err
