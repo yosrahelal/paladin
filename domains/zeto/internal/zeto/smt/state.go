@@ -16,7 +16,6 @@
 package smt
 
 import (
-	"context"
 	"crypto/sha256"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -24,18 +23,14 @@ import (
 )
 
 type MerkleTreeRoot struct {
-	SmtName   string `json:"smtName"`
-	RootIndex string `json:"rootIndex"`
+	SmtName   string          `json:"smtName"`
+	RootIndex tktypes.Bytes32 `json:"rootIndex"`
 }
 
 func (m *MerkleTreeRoot) Hash() (string, error) {
 	h := sha256.New()
 	h.Write([]byte(m.SmtName))
-	bytes, err := tktypes.ParseHexBytes(context.Background(), m.RootIndex)
-	if err != nil {
-		return "", err
-	}
-	h.Write(bytes)
+	h.Write(m.RootIndex.Bytes())
 	return tktypes.Bytes32(h.Sum(nil)).HexString(), nil
 }
 
