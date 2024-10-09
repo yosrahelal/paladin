@@ -35,4 +35,5 @@ var (
 	// Generic PD0400XX
 	MsgInvalidRegistryConfig     = ffe("PD040001", "Invalid registry configuration")
 	MsgInvalidEntryNodeTransport = ffe("PD040002", "Invalid entry for node '%s' transport '%s'")
+	MsgFunctionUnsupported       = ffe("PD040003", "Function not supported")
 )

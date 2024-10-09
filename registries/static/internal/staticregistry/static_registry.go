@@ -67,7 +67,13 @@ func (r *staticRegistry) ConfigureRegistry(ctx context.Context, req *prototk.Con
 		}
 	}
 
-	return &prototk.ConfigureRegistryResponse{}, nil
+	return &prototk.ConfigureRegistryResponse{
+		RegistryConfig: &prototk.RegistryConfig{},
+	}, nil
+}
+
+func (r *staticRegistry) RegistryEventBatch(ctx context.Context, req *prototk.RegistryEventBatchRequest) (*prototk.RegistryEventBatchResponse, error) {
+	return nil, i18n.NewError(ctx, msgs.MsgFunctionUnsupported)
 }
 
 func (r *staticRegistry) registerNodeTransport(ctx context.Context, nodeName, transportName string, transportRecordUnparsed tktypes.RawJSON) error {
@@ -89,9 +95,13 @@ func (r *staticRegistry) registerNodeTransport(ctx context.Context, nodeName, tr
 		transportDetails = transportRecordUnparsed.String()
 	}
 	_, err = r.callbacks.UpsertTransportDetails(ctx, &prototk.UpsertTransportDetails{
-		Node:             nodeName,
-		Transport:        transportName,
-		TransportDetails: transportDetails,
+		TransportDetails: []*prototk.TransportDetails{
+			{
+				Node:      nodeName,
+				Transport: transportName,
+				Details:   transportDetails,
+			},
+		},
 	})
 	return err
 }

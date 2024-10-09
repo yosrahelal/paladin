@@ -64,7 +64,7 @@ func (ir *identityResolver) PreInit(c components.PreInitComponents) (*components
 func (ir *identityResolver) PostInit(c components.AllComponents) error {
 	ir.keyManager = c.KeyManager()
 	ir.transportManager = c.TransportManager()
-	return nil
+	return c.TransportManager().RegisterClient(ir.bgCtx, ir)
 }
 
 func (ir *identityResolver) Start() error {

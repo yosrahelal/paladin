@@ -55,9 +55,9 @@ func TestRegistryStringEntry(t *testing.T) {
 
 	callbacks := &testCallbacks{
 		upsertTransportDetails: func(ctx context.Context, req *prototk.UpsertTransportDetails) (*prototk.UpsertTransportDetailsResponse, error) {
-			assert.Equal(t, "node1", req.Node)
-			assert.Equal(t, "transport1", req.Transport)
-			assert.Equal(t, "these are directly the details of the transport", req.TransportDetails)
+			assert.Equal(t, "node1", req.TransportDetails[0].Node)
+			assert.Equal(t, "transport1", req.TransportDetails[0].Transport)
+			assert.Equal(t, "these are directly the details of the transport", req.TransportDetails[0].Details)
 			return &prototk.UpsertTransportDetailsResponse{}, nil
 		},
 	}
@@ -82,9 +82,9 @@ func TestRegistryObjectEntry(t *testing.T) {
 
 	callbacks := &testCallbacks{
 		upsertTransportDetails: func(ctx context.Context, req *prototk.UpsertTransportDetails) (*prototk.UpsertTransportDetailsResponse, error) {
-			assert.Equal(t, "node1", req.Node)
-			assert.Equal(t, "transport1", req.Transport)
-			assert.JSONEq(t, `{"endpoint": "dns:///127.0.0.1:12345", "issuers": "certificate\ndata\nhere"}`, req.TransportDetails)
+			assert.Equal(t, "node1", req.TransportDetails[0].Node)
+			assert.Equal(t, "transport1", req.TransportDetails[0].Transport)
+			assert.JSONEq(t, `{"endpoint": "dns:///127.0.0.1:12345", "issuers": "certificate\ndata\nhere"}`, req.TransportDetails[0].Details)
 			return &prototk.UpsertTransportDetailsResponse{}, nil
 		},
 	}
@@ -129,6 +129,15 @@ func TestRegistryUpsertFail(t *testing.T) {
 		}`,
 	})
 	assert.Regexp(t, "pop", err)
+
+}
+
+func TestRegistryEventBatch(t *testing.T) {
+
+	callbacks := &testCallbacks{}
+	transport := staticRegistryFactory(callbacks).(*staticRegistry)
+	_, err := transport.RegistryEventBatch(context.Background(), &prototk.RegistryEventBatchRequest{})
+	assert.Regexp(t, "PD040003", err)
 
 }
 
