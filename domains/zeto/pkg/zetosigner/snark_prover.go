@@ -230,8 +230,10 @@ func serializeProofResponse(circuitId string, proof *types.ZKProof) ([]byte, err
 	publicInputs := make(map[string]string)
 	switch circuitId {
 	case constants.CIRCUIT_ANON_ENC:
-		publicInputs["encryptedValues"] = strings.Join(proof.PubSignals[0:4], ",")
-		publicInputs["encryptionNonce"] = proof.PubSignals[8]
+		// TODO: these offset maths assume OUTPUT_COUNT = 2
+		publicInputs["ecdhPublicKey"] = strings.Join(proof.PubSignals[0:2], ",")
+		publicInputs["encryptedValues"] = strings.Join(proof.PubSignals[2:10], ",")
+		publicInputs["encryptionNonce"] = proof.PubSignals[14]
 	case constants.CIRCUIT_ANON_NULLIFIER:
 		publicInputs["nullifiers"] = strings.Join(proof.PubSignals[:2], ",")
 		publicInputs["root"] = proof.PubSignals[2]

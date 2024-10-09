@@ -158,7 +158,7 @@ func TestStorage(t *testing.T) {
 	assert.Equal(t, "1234567890123456789012345678901234567890123456789012345678901234", storage.(*statesStorage).rootNode.Hex())
 
 	assert.Empty(t, storage.(*statesStorage).GetNewStates())
-	idx, err := storage.(*statesStorage).GetRootNodeIndex()
+	idx, err := storage.(*statesStorage).GetRootNodeRef()
 	assert.NoError(t, err)
 	assert.NotEmpty(t, idx)
 }
@@ -168,7 +168,7 @@ func TestUpsertRootNodeIndex(t *testing.T) {
 	storage, _, _ := New(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")
 	assert.NotNil(t, storage)
 	idx, _ := node.NewNodeIndexFromBigInt(big.NewInt(1234))
-	err := storage.UpsertRootNodeIndex(idx)
+	err := storage.UpsertRootNodeRef(idx)
 	assert.NoError(t, err)
 	assert.Equal(t, "d204000000000000000000000000000000000000000000000000000000000000", storage.(*statesStorage).rootNode.Hex())
 	assert.Equal(t, 2, len(storage.(*statesStorage).newNodes))

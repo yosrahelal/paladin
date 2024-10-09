@@ -27,6 +27,7 @@ type domainContracts struct {
 type domainContract struct {
 	Name           string         `yaml:"name"`
 	Verifier       string         `yaml:"verifier"`
+	BatchVerifier  string         `yaml:"batchVerifier"`
 	CircuitId      string         `yaml:"circuitId"`
 	AbiAndBytecode abiAndBytecode `yaml:"abiAndBytecode"`
 	Libraries      []string       `yaml:"libraries"`
@@ -43,8 +44,10 @@ type setImplementationParams struct {
 }
 
 type implementationInfo struct {
-	Implementation   string `json:"implementation"`
-	Verifier         string `json:"verifier"`
-	DepositVerifier  string `json:"depositVerifier"`
-	WithdrawVerifier string `json:"withdrawVerifier"`
+	Implementation        string `json:"implementation"`
+	Verifier              string `json:"verifier"`
+	BatchVerifier         string `json:"batchVerifier"`
+	DepositVerifier       string `json:"depositVerifier"`
+	WithdrawVerifier      string `json:"withdrawVerifier"`
+	BatchWithdrawVerifier string `json:"batchWithdrawVerifier"`
 }

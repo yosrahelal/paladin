@@ -1,11 +1,13 @@
 package zetosigner
 
 import (
+	"crypto/rand"
 	"fmt"
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
+	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/key"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 )
 
@@ -34,6 +36,15 @@ func assembleInputs_anon_enc(inputs *commonWitnessInputs, extras *pb.ProvingRequ
 	} else {
 		nonce = crypto.NewEncryptionNonce()
 	}
+	// TODO: right now we generate the ephemeral key pair and throw away the private key,
+	// need more thought on if more management of the key is needed
+	randomBytes := make([]byte, 32)
+	_, err := rand.Read(randomBytes)
+	if err != nil {
+		panic(fmt.Errorf("failed to generate random bytes for encryption key. %s", err))
+	}
+	ephemeralKey := key.NewKeyEntryFromPrivateKeyBytes([32]byte(randomBytes))
+
 	witnessInputs := map[string]interface{}{
 		"inputCommitments":      inputs.inputCommitments,
 		"inputValues":           inputs.inputValues,
@@ -44,6 +55,7 @@ func assembleInputs_anon_enc(inputs *commonWitnessInputs, extras *pb.ProvingRequ
 		"outputSalts":           inputs.outputSalts,
 		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
 		"encryptionNonce":       nonce,
+		"ecdhPrivateKey":        ephemeralKey.PrivateKeyForZkp,
 	}
 	return witnessInputs, nil
 }

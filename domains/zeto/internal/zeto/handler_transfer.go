@@ -209,6 +209,7 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		"data":    data,
 	}
 	if tx.DomainConfig.TokenName == constants.TOKEN_ANON_ENC {
+		params["ecdhPublicKey"] = strings.Split(proofRes.PublicInputs["ecdhPublicKey"], ",")
 		params["encryptionNonce"] = proofRes.PublicInputs["encryptionNonce"]
 		params["encryptedValues"] = strings.Split(proofRes.PublicInputs["encryptedValues"], ",")
 	} else if tx.DomainConfig.TokenName == constants.TOKEN_ANON_NULLIFIER {

@@ -8,18 +8,33 @@ contracts:
     - name: Groth16Verifier_Anon
       abiAndBytecode:
         path: ./abis/Groth16Verifier_Anon.json
+    - name: Groth16Verifier_AnonBatch
+      abiAndBytecode:
+        path: ./abis/Groth16Verifier_AnonBatch.json
     - name: Groth16Verifier_AnonEnc
       abiAndBytecode:
         path: ./abis/Groth16Verifier_AnonEnc.json
+    - name: Groth16Verifier_AnonEncBatch
+      abiAndBytecode:
+        path: ./abis/Groth16Verifier_AnonEncBatch.json
     - name: Groth16Verifier_AnonNullifier
       abiAndBytecode:
         path: ./abis/Groth16Verifier_AnonNullifier.json
+    - name: Groth16Verifier_AnonNullifierBatch
+      abiAndBytecode:
+        path: ./abis/Groth16Verifier_AnonNullifierBatch.json
+    # for the deposit transaction
     - name: Groth16Verifier_CheckHashesValue
       abiAndBytecode:
         path: ./abis/Groth16Verifier_CheckHashesValue.json
+    # for the withdraw transaction
     - name: Groth16Verifier_CheckInputsOutputsValue
       abiAndBytecode:
         path: ./abis/Groth16Verifier_CheckInputsOutputsValue.json
+    # for the withdraw transaction with batch inputs
+    - name: Groth16Verifier_CheckInputsOutputsValueBatch
+      abiAndBytecode:
+        path: ./abis/Groth16Verifier_CheckInputsOutputsValueBatch.json
     - name: PoseidonUnit2L
       abiAndBytecode:
         path: ./abis/Poseidon2.json
@@ -31,18 +46,21 @@ contracts:
         path: ./abis/SmtLib.json
     - name: Zeto_Anon
       verifier: Groth16Verifier_Anon
+      batchVerifier: Groth16Verifier_AnonBatch
       circuitId: anon
       cloneable: true
       abiAndBytecode:
         path: ./abis/Zeto_Anon.json
     - name: Zeto_AnonEnc
       verifier: Groth16Verifier_AnonEnc
+      batchVerifier: Groth16Verifier_AnonEncBatch
       circuitId: anon_enc
       cloneable: true
       abiAndBytecode:
         path: ./abis/Zeto_AnonEnc.json
     - name: Zeto_AnonNullifier
       verifier: Groth16Verifier_AnonNullifier
+      batchVerifier: Groth16Verifier_AnonNullifierBatch
       circuitId: anon_nullifier
       cloneable: true
       abiAndBytecode:

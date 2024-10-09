@@ -47,100 +47,6 @@ var (
 //go:embed config-for-deploy.yaml
 var testZetoConfigYaml []byte
 
-func toJSON(t *testing.T, v any) []byte {
-	result, err := json.Marshal(v)
-	require.NoError(t, err)
-	return result
-}
-
-func mapConfig(t *testing.T, config *types.DomainFactoryConfig) (m map[string]any) {
-	configJSON, err := json.Marshal(&config)
-	require.NoError(t, err)
-	err = json.Unmarshal(configJSON, &m)
-	require.NoError(t, err)
-	return m
-}
-
-func prepareDomainConfig(t *testing.T, domainContracts *zetoDomainContracts) *types.DomainFactoryConfig {
-	config := types.DomainFactoryConfig{
-		SnarkProver: zetosigner.SnarkProverConfig{
-			CircuitsDir:    "../zkp",
-			ProvingKeysDir: "../zkp",
-		},
-		DomainContracts: types.DomainConfigContracts{
-			Factory: &types.DomainContract{
-				ContractAddress: domainContracts.factoryAddress.String(),
-			},
-		},
-	}
-
-	var impls []*types.DomainContract
-	for name, implContract := range domainContracts.cloneableContracts {
-		abiJSON, err := json.Marshal(domainContracts.deployedContractAbis[name])
-		require.NoError(t, err)
-		contract := types.DomainContract{
-			Name:            name,
-			CircuitId:       implContract.circuitId,
-			ContractAddress: domainContracts.deployedContracts[name].String(),
-			Abi:             tktypes.RawJSON(abiJSON).String(),
-		}
-		impls = append(impls, &contract)
-	}
-	config.DomainContracts.Implementations = impls
-
-	factoryAbiJSON, err := json.Marshal(domainContracts.factoryAbi)
-	assert.NoError(t, err)
-	config.DomainContracts.Factory.Abi = tktypes.RawJSON(factoryAbiJSON).String()
-	config.FactoryAddress = domainContracts.factoryAddress.String()
-	return &config
-}
-
-func deployZetoContracts(t *testing.T, hdWalletSeed *testbed.UTInitFunction) *zetoDomainContracts {
-	ctx := context.Background()
-	log.L(ctx).Infof("Deploy Zeto Contracts")
-
-	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{}, hdWalletSeed)
-	bi := tb.Components().BlockIndexer()
-	ec := tb.Components().EthClientFactory().HTTPClient()
-	assert.NoError(t, err)
-	defer done()
-	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
-
-	var config domainConfig
-	err = yaml.Unmarshal(testZetoConfigYaml, &config)
-	assert.NoError(t, err)
-
-	deployedContracts, err := deployDomainContracts(ctx, rpc, controllerName, &config)
-	assert.NoError(t, err)
-
-	err = configureFactoryContract(ctx, ec, bi, controllerName, deployedContracts)
-	assert.NoError(t, err)
-
-	return deployedContracts
-}
-
-func newZetoDomain(t *testing.T, config *types.DomainFactoryConfig) (zeto.Zeto, *testbed.TestbedDomain) {
-	var domain internalZeto.Zeto
-	return &domain, &testbed.TestbedDomain{
-		Config: mapConfig(t, config),
-		Plugin: plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
-			domain.Callbacks = callbacks
-			return &domain
-		}),
-		RegistryAddress: tktypes.MustEthAddress(config.FactoryAddress),
-		AllowSigning:    true,
-	}
-}
-
-func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
-	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("./testbed.config.yaml", domains, hdWalletSeed)
-	assert.NoError(t, err)
-	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
-	return done, tb, rpc
-}
-
 type zetoDomainTestSuite struct {
 	suite.Suite
 	hdWalletSeed      *testbed.UTInitFunction
@@ -183,23 +89,6 @@ func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
 
 func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
 	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER)
-}
-
-func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON) []*types.ZetoCoinState {
-	if jq == nil {
-		jq = query.NewQueryBuilder().Limit(100).Query()
-	}
-	var zetoCoins []*types.ZetoCoinState
-	rpcerr := rpc.CallRPC(ctx, &zetoCoins, "pstate_queryStates",
-		zeto.Name(),
-		address,
-		zeto.CoinSchemaID(),
-		jq,
-		"available")
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
-	return zetoCoins
 }
 
 func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
@@ -301,4 +190,115 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 
 func TestZetoDomainTestSuite(t *testing.T) {
 	suite.Run(t, new(zetoDomainTestSuite))
+}
+
+func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON) []*types.ZetoCoinState {
+	if jq == nil {
+		jq = query.NewQueryBuilder().Limit(100).Query()
+	}
+	var zetoCoins []*types.ZetoCoinState
+	rpcerr := rpc.CallRPC(ctx, &zetoCoins, "pstate_queryStates",
+		zeto.Name(),
+		address,
+		zeto.CoinSchemaID(),
+		jq,
+		"available")
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
+	return zetoCoins
+}
+
+func toJSON(t *testing.T, v any) []byte {
+	result, err := json.Marshal(v)
+	require.NoError(t, err)
+	return result
+}
+
+func mapConfig(t *testing.T, config *types.DomainFactoryConfig) (m map[string]any) {
+	configJSON, err := json.Marshal(&config)
+	require.NoError(t, err)
+	err = json.Unmarshal(configJSON, &m)
+	require.NoError(t, err)
+	return m
+}
+
+func prepareDomainConfig(t *testing.T, domainContracts *zetoDomainContracts) *types.DomainFactoryConfig {
+	config := types.DomainFactoryConfig{
+		SnarkProver: zetosigner.SnarkProverConfig{
+			CircuitsDir:    "../zkp",
+			ProvingKeysDir: "../zkp",
+		},
+		DomainContracts: types.DomainConfigContracts{
+			Factory: &types.DomainContract{
+				ContractAddress: domainContracts.factoryAddress.String(),
+			},
+		},
+	}
+
+	var impls []*types.DomainContract
+	for name, implContract := range domainContracts.cloneableContracts {
+		abiJSON, err := json.Marshal(domainContracts.deployedContractAbis[name])
+		require.NoError(t, err)
+		contract := types.DomainContract{
+			Name:            name,
+			CircuitId:       implContract.circuitId,
+			ContractAddress: domainContracts.deployedContracts[name].String(),
+			Abi:             tktypes.RawJSON(abiJSON).String(),
+		}
+		impls = append(impls, &contract)
+	}
+	config.DomainContracts.Implementations = impls
+
+	factoryAbiJSON, err := json.Marshal(domainContracts.factoryAbi)
+	assert.NoError(t, err)
+	config.DomainContracts.Factory.Abi = tktypes.RawJSON(factoryAbiJSON).String()
+	config.FactoryAddress = domainContracts.factoryAddress.String()
+	return &config
+}
+
+func deployZetoContracts(t *testing.T, hdWalletSeed *testbed.UTInitFunction) *zetoDomainContracts {
+	ctx := context.Background()
+	log.L(ctx).Infof("Deploy Zeto Contracts")
+
+	tb := testbed.NewTestBed()
+	url, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{}, hdWalletSeed)
+	bi := tb.Components().BlockIndexer()
+	ec := tb.Components().EthClientFactory().HTTPClient()
+	assert.NoError(t, err)
+	defer done()
+	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
+
+	var config domainConfig
+	err = yaml.Unmarshal(testZetoConfigYaml, &config)
+	assert.NoError(t, err)
+
+	deployedContracts, err := deployDomainContracts(ctx, rpc, controllerName, &config)
+	assert.NoError(t, err)
+
+	err = configureFactoryContract(ctx, ec, bi, controllerName, deployedContracts)
+	assert.NoError(t, err)
+
+	return deployedContracts
+}
+
+func newZetoDomain(t *testing.T, config *types.DomainFactoryConfig) (zeto.Zeto, *testbed.TestbedDomain) {
+	var domain internalZeto.Zeto
+	return &domain, &testbed.TestbedDomain{
+		Config: mapConfig(t, config),
+		Plugin: plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
+			domain.Callbacks = callbacks
+			return &domain
+		}),
+		RegistryAddress: tktypes.MustEthAddress(config.FactoryAddress),
+		AllowSigning:    true,
+	}
+}
+
+func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
+	tb := testbed.NewTestBed()
+	url, done, err := tb.StartForTest("./testbed.config.yaml", domains, hdWalletSeed)
+	assert.NoError(t, err)
+	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
+	return done, tb, rpc
 }

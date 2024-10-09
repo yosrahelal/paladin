@@ -42,8 +42,9 @@ type zetoDomainContracts struct {
 }
 
 type cloneableContract struct {
-	circuitId string
-	verifier  string
+	circuitId     string
+	verifier      string
+	batchVerifier string
 }
 
 func newZetoDomainContracts() *zetoDomainContracts {
@@ -89,8 +90,9 @@ func findCloneableContracts(config *domainConfig) map[string]cloneableContract {
 	for _, contract := range config.DomainContracts.Implementations {
 		if contract.Cloneable {
 			cloneableContracts[contract.Name] = cloneableContract{
-				circuitId: contract.CircuitId,
-				verifier:  contract.Verifier,
+				circuitId:     contract.CircuitId,
+				verifier:      contract.Verifier,
+				batchVerifier: contract.BatchVerifier,
 			}
 		}
 	}
@@ -167,6 +169,7 @@ func configureFactoryContract(ctx context.Context, ec ethclient.EthClient, bi bl
 func registerImpl(ctx context.Context, name string, domainContracts *zetoDomainContracts, abiFunc ethclient.ABIFunctionClient, deployer string, addr *tktypes.EthAddress, bi blockindexer.BlockIndexer) error {
 	log.L(ctx).Infof("Registering implementation %s", name)
 	verifierName := domainContracts.cloneableContracts[name].verifier
+	batchVerifierName := domainContracts.cloneableContracts[name].batchVerifier
 	implAddr, ok := domainContracts.deployedContracts[name]
 	if !ok {
 		return fmt.Errorf("implementation contract %s not found among the deployed contracts", name)
@@ -174,6 +177,10 @@ func registerImpl(ctx context.Context, name string, domainContracts *zetoDomainC
 	verifierAddr, ok := domainContracts.deployedContracts[verifierName]
 	if !ok {
 		return fmt.Errorf("verifier contract %s not found among the deployed contracts", verifierName)
+	}
+	batchVerifierAddr, ok := domainContracts.deployedContracts[batchVerifierName]
+	if !ok {
+		return fmt.Errorf("batch verifier contract %s not found among the deployed contracts", batchVerifierName)
 	}
 	depositVerifierAddr, ok := domainContracts.deployedContracts["Groth16Verifier_CheckHashesValue"]
 	if !ok {
@@ -183,13 +190,19 @@ func registerImpl(ctx context.Context, name string, domainContracts *zetoDomainC
 	if !ok {
 		return fmt.Errorf("withdraw verifier contract not found among the deployed contracts")
 	}
+	batchWithdrawVerifierAddr, ok := domainContracts.deployedContracts["Groth16Verifier_CheckInputsOutputsValueBatch"]
+	if !ok {
+		return fmt.Errorf("batch withdraw verifier contract not found among the deployed contracts")
+	}
 	params := &setImplementationParams{
 		Name: name,
 		Implementation: implementationInfo{
-			Implementation:   implAddr.String(),
-			Verifier:         verifierAddr.String(),
-			DepositVerifier:  depositVerifierAddr.String(),
-			WithdrawVerifier: withdrawVerifierAddr.String(),
+			Implementation:        implAddr.String(),
+			Verifier:              verifierAddr.String(),
+			BatchVerifier:         batchVerifierAddr.String(),
+			DepositVerifier:       depositVerifierAddr.String(),
+			WithdrawVerifier:      withdrawVerifierAddr.String(),
+			BatchWithdrawVerifier: batchWithdrawVerifierAddr.String(),
 		},
 	}
 	txHash, err := abiFunc.R(ctx).
