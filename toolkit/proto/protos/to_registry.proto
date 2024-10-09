@@ -33,13 +33,14 @@ message RegistryConfig {
   repeated RegistryEventSource event_sources = 1;
 }
 
-message RegistryEventBatchRequest {
+message HandleRegistryEventsRequest {
   string batch_id = 2; // A unique identifier for this batch
   repeated OnChainEvent events = 4; // The list of events from the block indexer
 }
 
-message RegistryEventBatchResponse {
-  repeated TransportDetails transport_details = 1; // transport details to upsert as idempotently with this event batch
+message HandleRegistryEventsResponse {
+  repeated RegistryEntity entities = 1; // Upserts to entities
+  repeated RegistryProperty properties = 2; // Upserts to properties
 }
 
 message RegistryEventSource {

@@ -39,7 +39,7 @@ type testRegistryManager struct {
 	registries         map[string]plugintk.Plugin
 	registryRegistered func(name string, id uuid.UUID, toRegistry components.RegistryManagerToRegistry) (fromRegistry plugintk.RegistryCallbacks, err error)
 
-	upsertTransportDetails func(ctx context.Context, req *prototk.UpsertTransportDetails) (*prototk.UpsertTransportDetailsResponse, error)
+	upsertRegistryRecords func(ctx context.Context, req *prototk.UpsertRegistryRecordsRequest) (*prototk.UpsertRegistryRecordsResponse, error)
 }
 
 func registryConnectFactory(ctx context.Context, client prototk.PluginControllerClient) (grpc.BidiStreamingClient[prototk.RegistryMessage, prototk.RegistryMessage], error) {
@@ -71,8 +71,8 @@ func (tp *testRegistryManager) mock(t *testing.T) *componentmocks.RegistryManage
 	return mdm
 }
 
-func (tdm *testRegistryManager) UpsertTransportDetails(ctx context.Context, req *prototk.UpsertTransportDetails) (*prototk.UpsertTransportDetailsResponse, error) {
-	return tdm.upsertTransportDetails(ctx, req)
+func (tdm *testRegistryManager) UpsertRegistryRecords(ctx context.Context, req *prototk.UpsertRegistryRecordsRequest) (*prototk.UpsertRegistryRecordsResponse, error) {
+	return tdm.upsertRegistryRecords(ctx, req)
 }
 
 func newTestRegistryPluginManager(t *testing.T, setup *testManagers) (context.Context, *pluginManager, func()) {
@@ -112,10 +112,10 @@ func TestRegistryRequestsOK(t *testing.T) {
 		ConfigureRegistry: func(ctx context.Context, cdr *prototk.ConfigureRegistryRequest) (*prototk.ConfigureRegistryResponse, error) {
 			return &prototk.ConfigureRegistryResponse{}, nil
 		},
-		RegistryEventBatch: func(ctx context.Context, rebr *prototk.RegistryEventBatchRequest) (*prototk.RegistryEventBatchResponse, error) {
+		HandleRegistryEvents: func(ctx context.Context, rebr *prototk.HandleRegistryEventsRequest) (*prototk.HandleRegistryEventsResponse, error) {
 			assert.Equal(t, "batch1", rebr.BatchId)
-			return &prototk.RegistryEventBatchResponse{
-				TransportDetails: []*prototk.TransportDetails{{Node: "node1"}},
+			return &prototk.HandleRegistryEventsResponse{
+				Entities: []*prototk.RegistryEntity{{Name: "node1"}},
 			}, nil
 		},
 	}
@@ -127,9 +127,9 @@ func TestRegistryRequestsOK(t *testing.T) {
 				return &plugintk.RegistryAPIBase{Functions: registryFunctions}
 			}),
 		},
-		upsertTransportDetails: func(ctx context.Context, req *prototk.UpsertTransportDetails) (*prototk.UpsertTransportDetailsResponse, error) {
-			assert.Equal(t, "node1", req.TransportDetails[0].Node)
-			return &prototk.UpsertTransportDetailsResponse{}, nil
+		upsertRegistryRecords: func(ctx context.Context, req *prototk.UpsertRegistryRecordsRequest) (*prototk.UpsertRegistryRecordsResponse, error) {
+			assert.Equal(t, "node1", req.Entities[0].Name)
+			return &prototk.UpsertRegistryRecordsResponse{}, nil
 		},
 	}
 	trm.registryRegistered = func(name string, id uuid.UUID, toRegistry components.RegistryManagerToRegistry) (plugintk.RegistryCallbacks, error) {
@@ -148,11 +148,11 @@ func TestRegistryRequestsOK(t *testing.T) {
 	_, err := registryAPI.ConfigureRegistry(ctx, &prototk.ConfigureRegistryRequest{})
 	require.NoError(t, err)
 
-	rebr, err := registryAPI.RegistryEventBatch(ctx, &prototk.RegistryEventBatchRequest{
+	rebr, err := registryAPI.HandleRegistryEvents(ctx, &prototk.HandleRegistryEventsRequest{
 		BatchId: "batch1",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "node1", rebr.TransportDetails[0].Node)
+	assert.Equal(t, "node1", rebr.Entities[0].Name)
 
 	// This is the point the registry manager would call us to say the registry is initialized
 	// (once it's happy it's updated its internal state)
@@ -161,8 +161,8 @@ func TestRegistryRequestsOK(t *testing.T) {
 
 	callbacks := <-waitForCallbacks
 
-	utr, err := callbacks.UpsertTransportDetails(ctx, &prototk.UpsertTransportDetails{
-		TransportDetails: []*prototk.TransportDetails{{Node: "node1"}},
+	utr, err := callbacks.UpsertRegistryRecords(ctx, &prototk.UpsertRegistryRecordsRequest{
+		Entities: []*prototk.RegistryEntity{{Name: "node1"}},
 	})
 	require.NoError(t, err)
 	assert.NotNil(t, utr)

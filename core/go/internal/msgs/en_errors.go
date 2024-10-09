@@ -314,9 +314,10 @@ var (
 
 	// RegistryManager module PD0121XX
 	MsgRegistryNodeEntiresNotFound = ffe("PD012100", "No entries found for node '%s'")
-	MsgRegistryInvalidEntry        = ffe("PD012101", "Invalid entry")
-	MsgRegistryNotFound            = ffe("PD012102", "Registry %q not found")
-	MsgRegistryInvalidEventSource  = ffe("PD012103", "Events source %d is invalid")
+	MsgRegistryNotFound            = ffe("PD012101", "Registry %q not found")
+	MsgRegistryInvalidEventSource  = ffe("PD012102", "Events source %d is invalid")
+	MsgRegistryInvalidEntityID     = ffe("PD012103", "Invalid entity ID '%s'")
+	MsgRegistryInvalidEntityName   = ffe("PD012104", "Invalid entity name '%s'")
 
 	// TxMgr module PD0122XX
 	MsgTxMgrQueryLimitRequired           = ffe("PD012200", "limit is required on all queries")

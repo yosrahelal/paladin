@@ -145,17 +145,17 @@ func (r *registry) configureEventStream(ctx context.Context) (err error) {
 	return err
 }
 
-func (r *registry) UpsertTransportDetails(ctx context.Context, req *prototk.UpsertTransportDetails) (*prototk.UpsertTransportDetailsResponse, error) {
+func (r *registry) UpsertRegistryRecords(ctx context.Context, req *prototk.UpsertRegistryRecordsRequest) (*prototk.UpsertRegistryRecordsResponse, error) {
 	var postCommit func()
 	err := r.rm.persistence.DB().Transaction(func(dbTX *gorm.DB) (err error) {
-		postCommit, err = r.upsertTransportDetailsBatch(ctx, dbTX, req.TransportDetails)
+		postCommit, err = r.upsertRegistryRecords(ctx, dbTX, req.Entities, req.Properties)
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
 	postCommit()
-	return &prototk.UpsertTransportDetailsResponse{}, nil
+	return &prototk.UpsertRegistryRecordsResponse{}, nil
 }
 
 func (r *registry) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
@@ -177,7 +177,7 @@ func (r *registry) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *b
 	}
 
 	// Push them down synchronously to the registry to parse
-	res, err := r.api.RegistryEventBatch(ctx, &prototk.RegistryEventBatchRequest{
+	res, err := r.api.HandleRegistryEvents(ctx, &prototk.HandleRegistryEventsRequest{
 		BatchId: batch.BatchID.String(),
 		Events:  events,
 	})
@@ -186,55 +186,143 @@ func (r *registry) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *b
 	}
 
 	// Upsert any transport details that are detected by the registry
-	return r.upsertTransportDetailsBatch(ctx, dbTX, res.TransportDetails)
+	return r.upsertRegistryRecords(ctx, dbTX, res.Entities, res.Properties)
 
 }
 
-func (r *registry) upsertTransportDetailsBatch(ctx context.Context, dbTX *gorm.DB, protoEntries []*prototk.TransportDetails) (func(), error) {
+func (r *registry) upsertRegistryRecords(ctx context.Context, dbTX *gorm.DB, protoEntities []*prototk.RegistryEntity, protoProps []*prototk.RegistryProperty) (func(), error) {
 
-	updatedNodes := make(map[string]bool)
-	entries := make([]*components.RegistryNodeTransportEntry, len(protoEntries))
-	for i, req := range protoEntries {
-		if req.Node == "" || req.Transport == "" {
-			return nil, i18n.NewError(ctx, msgs.MsgRegistryInvalidEntry)
+	dbEntities := make([]*DBEntity, len(protoEntities))
+	for i, protoEntity := range protoEntities {
+		// The registry plugin code is responsible for ensuring these rules are followed
+		// before pushing any data to the registry manager.
+		// If the registry detects any data that is invalid according to these rules
+		// published in their underlying store (such as the blockchain) it must
+		// exclude it and act appropriately.
+		// Otherwise the registry plugin will receive failures, and it might then stall indexing the
+		// its event source in a failure loop with the registry manager.
+
+		// The ID must be parsable as Hex bytes - this could be a 16 byte UUID formatted as plain hex,
+		// or it could (more likely) be a hash of the parent_id and the name of the entry meaning
+		// it is unique within the whole registry scope.
+		entityID, err := tktypes.ParseHexBytes(ctx, protoEntity.Id)
+		if err != nil || len(entityID) == 0 {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgRegistryInvalidEntityID, protoEntity.Id)
 		}
-		updatedNodes[req.Node] = true
-		entries[i] = &components.RegistryNodeTransportEntry{
-			Registry:  r.id.String(),
-			Node:      req.Node,
-			Transport: req.Transport,
-			Details:   req.Details,
+
+		// Names must meet the criteria that is set out in tktypes.PrivateIdentityLocator for use
+		// as a node name. That is not to say this is the only use of entities, but applying this
+		// common rule to all entity names ensures we meet the criteria of node names.
+		nodeName, err := tktypes.PrivateIdentityLocator(protoEntity.Name).Node(ctx, false)
+		if err != nil || nodeName != protoEntity.Name {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgRegistryInvalidEntityName, protoEntity.Name)
 		}
+
+		dbe := &DBEntity{
+			Registry: r.name,
+			ID:       entityID,
+			Name:     protoEntity.Name,
+			Active:   protoEntity.Active,
+		}
+		if protoEntity.Location != nil {
+			dbe.BlockNumber = &protoEntity.Location.BlockNumber
+			dbe.TransactionIndex = &protoEntity.Location.LogIndex
+			dbe.LogIndex = &protoEntity.Location.LogIndex
+		}
+		dbEntities[i] = dbe
 	}
 
-	// Store entry in database
-	if len(entries) > 0 {
-		err := dbTX.
+	dbProps := make([]*DBProperty, len(protoProps))
+	for i, protoProp := range protoProps {
+
+		// DB will check for relationship to entity, but we need to parse the ID consistently into bytes
+		entityID, err := tktypes.ParseHexBytes(ctx, protoProp.EntityId)
+		if err != nil || len(entityID) == 0 {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgRegistryInvalidEntityID, protoProp.EntityId)
+		}
+
+		// Much more relaxed here about what goes into a property name and value
+		// Any restrictions on that are down to the registry plugin alone.
+		// Note all properties are stored and filtered as text - there is no
+		// concept of an integer-sorted property (none of the complexity we support
+		// with schema typing in the state store)
+		dbp := &DBProperty{
+			Registry: r.name,
+			EntityID: entityID,
+			Name:     protoProp.Name,
+			Active:   protoProp.Active,
+			Value:    protoProp.Value,
+		}
+		if protoProp.Location != nil {
+			dbp.BlockNumber = &protoProp.Location.BlockNumber
+			dbp.TransactionIndex = &protoProp.Location.LogIndex
+			dbp.LogIndex = &protoProp.Location.LogIndex
+		}
+		dbProps[i] = dbp
+	}
+
+	var err error
+
+	if len(dbEntities) > 0 {
+		err = dbTX.
 			WithContext(ctx).
-			Table("registry_transport_details").
+			Table("registry_entities").
 			Clauses(clause.OnConflict{
 				Columns: []clause.Column{
 					{Name: "registry"},
-					{Name: "node"},
-					{Name: "transport"},
+					{Name: "id"},
 				},
 				DoUpdates: clause.AssignmentColumns([]string{
-					"details", // we replace any existing entry
+					"updated",
+					"active", // this is the primary thing that can actually be mutated
+					"block_number",
+					"transaction_index",
+					"log_index",
 				}),
+				Where: clause.Where{
+					// protect against a theoretical issue that could exist with plugins that they
+					// don't protect against this sufficiently in the ID generation
+					Exprs: []clause.Expression{clause.Eq{Column: "parent_id", Value: "EXCLUDED.parent_id"}},
+				},
 			}).
-			Create(entries).
+			Create(dbEntities).
 			Error
-		if err != nil {
-			return nil, err
-		}
 	}
 
-	// return a post-commit callback to update the cache
+	if len(dbProps) > 0 {
+		err = dbTX.
+			WithContext(ctx).
+			Table("registry_properties").
+			Clauses(clause.OnConflict{
+				Columns: []clause.Column{
+					{Name: "registry"},
+					{Name: "entity_id"},
+					{Name: "name"},
+				},
+				DoUpdates: clause.AssignmentColumns([]string{
+					"updated",
+					"active",
+					"value",
+					"block_number",
+					"transaction_index",
+					"log_index",
+				}),
+			}).
+			Create(dbProps).
+			Error
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
 	return func() {
-		for node := range updatedNodes {
-			// The cache is by node, and we only have complete entries - so just invalid the cache
-			r.rm.registryCache.Delete(node)
-		}
+		// It's a lot of work to determine which parts of the node transport cache are affected,
+		// as the upserts above happen simply by storing properties that might/might-not match
+		// queries that resolve node transports to names.
+		//
+		// So instead we just zap the whole cache when we have an update.
+		r.rm.transportDetailsCache.Clear()
 	}, nil
 }
 

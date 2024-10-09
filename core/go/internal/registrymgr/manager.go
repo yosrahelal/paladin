@@ -29,6 +29,7 @@ import (
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 )
 
 type registryManager struct {
@@ -37,9 +38,12 @@ type registryManager struct {
 
 	conf *pldconf.RegistryManagerConfig
 
-	persistence   persistence.Persistence
-	blockIndexer  blockindexer.BlockIndexer
-	registryCache cache.Cache[string, []*components.RegistryNodeTransportEntry]
+	persistence  persistence.Persistence
+	blockIndexer blockindexer.BlockIndexer
+
+	// Due to the high frequency of calls to the registry for node details, we maintain
+	// a cache of resolved nodes by name - which is a global index, across all registries.
+	transportDetailsCache cache.Cache[string, []*components.RegistryNodeTransportEntry]
 
 	registriesByID   map[uuid.UUID]*registry
 	registriesByName map[string]*registry
@@ -47,11 +51,11 @@ type registryManager struct {
 
 func NewRegistryManager(bgCtx context.Context, conf *pldconf.RegistryManagerConfig) components.RegistryManager {
 	return &registryManager{
-		bgCtx:            bgCtx,
-		conf:             conf,
-		registriesByID:   make(map[uuid.UUID]*registry),
-		registriesByName: make(map[string]*registry),
-		registryCache:    cache.NewCache[string, []*components.RegistryNodeTransportEntry](&conf.RegistryManager.RegistryCache, pldconf.RegistryCacheDefaults),
+		bgCtx:                 bgCtx,
+		conf:                  conf,
+		registriesByID:        make(map[uuid.UUID]*registry),
+		registriesByName:      make(map[string]*registry),
+		transportDetailsCache: cache.NewCache[string, []*components.RegistryNodeTransportEntry](&conf.RegistryManager.RegistryCache, pldconf.RegistryCacheDefaults),
 	}
 }
 
@@ -127,21 +131,28 @@ func (rm *registryManager) RegistryRegistered(name string, id uuid.UUID, toRegis
 
 func (rm *registryManager) GetNodeTransports(ctx context.Context, node string) ([]*components.RegistryNodeTransportEntry, error) {
 	// Check cache
-	transports, present := rm.registryCache.Get(node)
+	transports, present := rm.transportDetailsCache.Get(node)
 	if present {
 		return transports, nil
 	}
 
-	// Load from database
-	err := rm.persistence.DB().Table("registry_transport_details").Where("node = ?", node).Find(&transports).Error
-	if err != nil {
-		return nil, err
-	}
+	panic("TODO")
+
 	if len(transports) > 0 {
 		// Set cache
-		rm.registryCache.Set(node, transports)
+		rm.transportDetailsCache.Set(node, transports)
 		return transports, nil
 	}
 
 	return nil, i18n.NewError(ctx, msgs.MsgRegistryNodeEntiresNotFound, node)
+}
+
+// GetEntityProperties implements components.RegistryManager.
+func (rm *registryManager) GetEntityProperties(ctx context.Context, registry string, entityId string) ([]*components.RegistryProperty, error) {
+	panic("unimplemented")
+}
+
+// QueryEntities implements components.RegistryManager.
+func (rm *registryManager) QueryEntities(ctx context.Context, registry string, jq *query.QueryJSON) ([]*components.RegistryEntityWithProperties, error) {
+	panic("unimplemented")
 }
