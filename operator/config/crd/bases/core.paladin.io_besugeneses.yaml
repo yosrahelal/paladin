@@ -50,7 +50,7 @@ spec:
                 description: Block period can be in seconds (s) or milliseconds -
                   cannot be changed once set (used in genesis generation)
                 type: string
-              chainId:
+              chainID:
                 description: The chain ID - must not change after creation without
                   chain reset
                 format: int64
@@ -79,7 +79,7 @@ spec:
                 type: array
             required:
             - blockPeriod
-            - chainId
+            - chainID
             - consensus
             - gasLimit
             - initialValidators

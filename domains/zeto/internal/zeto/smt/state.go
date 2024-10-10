@@ -16,13 +16,22 @@
 package smt
 
 import (
+	"crypto/sha256"
+
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type MerkleTreeRoot struct {
-	SmtName   string `json:"smtName"`
-	RootIndex string `json:"rootIndex"`
+	SmtName   string          `json:"smtName"`
+	RootIndex tktypes.Bytes32 `json:"rootIndex"`
+}
+
+func (m *MerkleTreeRoot) Hash() (string, error) {
+	h := sha256.New()
+	h.Write([]byte(m.SmtName))
+	h.Write(m.RootIndex.Bytes())
+	return tktypes.Bytes32(h.Sum(nil)).HexString(), nil
 }
 
 var MerkleTreeRootABI = &abi.Parameter{
@@ -40,6 +49,16 @@ type MerkleTreeNode struct {
 	Type       tktypes.HexBytes `json:"type"`
 	LeftChild  tktypes.Bytes32  `json:"leftChild"`
 	RightChild tktypes.Bytes32  `json:"rightChild"`
+}
+
+func (m *MerkleTreeNode) Hash() (string, error) {
+	h := sha256.New()
+	h.Write(m.RefKey.Bytes())
+	h.Write(m.Index.Bytes())
+	h.Write([]byte(m.Type))
+	h.Write(m.LeftChild.Bytes())
+	h.Write(m.RightChild.Bytes())
+	return tktypes.Bytes32(h.Sum(nil)).HexString(), nil
 }
 
 var MerkleTreeNodeABI = &abi.Parameter{

@@ -288,9 +288,10 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidSchemaID, state.SchemaId)
 		}
 		newStates = append(newStates, &components.StateUpsertOutsideContext{
-			ID:       id,
-			SchemaID: schemaID,
-			Data:     tktypes.RawJSON(state.StateDataJson),
+			ID:              id,
+			SchemaID:        schemaID,
+			ContractAddress: addr,
+			Data:            tktypes.RawJSON(state.StateDataJson),
 		})
 
 		// These have implicit confirmations
