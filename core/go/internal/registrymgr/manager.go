@@ -160,12 +160,20 @@ func (rm *registryManager) GetNodeTransports(ctx context.Context, node string) (
 		return transports, nil
 	}
 
-	panic("TODO")
-
-	if len(transports) > 0 {
-		// Set cache
-		rm.transportDetailsCache.Set(node, transports)
-		return transports, nil
+	for regName, r := range rm.registriesByName {
+		tl := rm.registryTransportLookups[regName]
+		if tl != nil {
+			regTransports, err := tl.getNodeTransports(ctx, rm.p.DB() /* no TX needed */, r, node)
+			if err != nil {
+				return nil, err
+			}
+			// we only return entries from a single registry (we do not merge transports across registries)
+			// the requiredPrefix allows node partitioning across registries.
+			if len(regTransports) > 0 {
+				rm.transportDetailsCache.Set(node, regTransports)
+				return regTransports, nil
+			}
+		}
 	}
 
 	return nil, i18n.NewError(ctx, msgs.MsgRegistryNodeEntiresNotFound, node)

@@ -73,6 +73,13 @@ type RegistryTransportsConfig struct {
 	// This will match a property called "transport.grpc" as the transport
 	// details for the grpc transport.
 	PropertyRegexp string `json:"propertyRegexp"`
+
+	// Optionally add entries here to map from the name of a transport as stored in
+	// the registry, to the name in your local configuration.
+	// This allows you to use different configurations (MTLS certs etc.)
+	// for different private node networks that all use the same logical
+	// transport name.
+	TransportMap map[string]string
 }
 
 var RegistryTransportsDefaults = &RegistryTransportsConfig{

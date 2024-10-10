@@ -60,18 +60,19 @@ func newTestPlugin(registryFuncs *plugintk.RegistryAPIFunctions) *testPlugin {
 	}
 }
 
-func newTestRegistry(t *testing.T, realDB bool, extraSetup ...func(mc *mockComponents, regConf *prototk.RegistryConfig)) (context.Context, *registryManager, *testPlugin, *mockComponents, func()) {
-	regConf := &prototk.RegistryConfig{}
-
-	ctx, rm, mc, done := newTestRegistryManager(t, realDB, &pldconf.RegistryManagerConfig{
+func newTestRegistry(t *testing.T, realDB bool, extraSetup ...func(mc *mockComponents, conf *pldconf.RegistryManagerConfig, regConf *prototk.RegistryConfig)) (context.Context, *registryManager, *testPlugin, *mockComponents, func()) {
+	conf := &pldconf.RegistryManagerConfig{
 		Registries: map[string]*pldconf.RegistryConfig{
 			"test1": {
 				Config: map[string]any{"some": "conf"},
 			},
 		},
-	}, func(mc *mockComponents) {
+	}
+	regConf := &prototk.RegistryConfig{}
+
+	ctx, rm, mc, done := newTestRegistryManager(t, realDB, conf, func(mc *mockComponents) {
 		for _, fn := range extraSetup {
-			fn(mc, regConf)
+			fn(mc, conf, regConf)
 		}
 	})
 
@@ -143,6 +144,16 @@ func randPropFor(id string) *prototk.RegistryProperty {
 		EntryId:  id,
 		Name:     fmt.Sprintf("prop_%s", tktypes.RandHex(5)),
 		Value:    fmt.Sprintf("val_%s", tktypes.RandHex(5)),
+		Active:   true,
+		Location: randChainInfo(),
+	}
+}
+
+func newPropFor(id, name, value string) *prototk.RegistryProperty {
+	return &prototk.RegistryProperty{
+		EntryId:  id,
+		Name:     name,
+		Value:    value,
 		Active:   true,
 		Location: randChainInfo(),
 	}
@@ -404,7 +415,7 @@ func TestGetEntryPropertiesQueryFail(t *testing.T) {
 func TestRegistryWithEventStreams(t *testing.T) {
 	es := &blockindexer.EventStream{ID: uuid.New()}
 
-	_, _, tp, _, done := newTestRegistry(t, false, func(mc *mockComponents, regConf *prototk.RegistryConfig) {
+	_, _, tp, _, done := newTestRegistry(t, false, func(mc *mockComponents, conf *pldconf.RegistryManagerConfig, regConf *prototk.RegistryConfig) {
 		a := abi.ABI{
 			{
 				Type: abi.Event,
@@ -487,7 +498,7 @@ func TestConfigureEventStreamBadEventABITypes(t *testing.T) {
 
 func TestHandleEventBatchOk(t *testing.T) {
 
-	ctx, _, tp, _, done := newTestRegistry(t, false, func(mc *mockComponents, regConf *prototk.RegistryConfig) {
+	ctx, _, tp, _, done := newTestRegistry(t, false, func(mc *mockComponents, conf *pldconf.RegistryManagerConfig, regConf *prototk.RegistryConfig) {
 		mc.db.ExpectExec("INSERT.*reg_entries").WillReturnResult(driver.ResultNoRows)
 	})
 	defer done()

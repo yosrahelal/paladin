@@ -35,18 +35,20 @@ import (
 )
 
 type mockComponents struct {
-	db           sqlmock.Sqlmock
-	blockIndexer *componentmocks.BlockIndexer
+	noInit        bool
+	db            sqlmock.Sqlmock
+	allComponents *componentmocks.AllComponents
+	blockIndexer  *componentmocks.BlockIndexer
 }
 
 func newTestRegistryManager(t *testing.T, realDB bool, conf *pldconf.RegistryManagerConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *registryManager, *mockComponents, func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	mc := &mockComponents{
-		blockIndexer: componentmocks.NewBlockIndexer(t),
+		blockIndexer:  componentmocks.NewBlockIndexer(t),
+		allComponents: componentmocks.NewAllComponents(t),
 	}
-	componentMocks := componentmocks.NewAllComponents(t)
-	componentMocks.On("BlockIndexer").Return(mc.blockIndexer).Maybe()
+	mc.allComponents.On("BlockIndexer").Return(mc.blockIndexer).Maybe()
 
 	var p persistence.Persistence
 	var err error
@@ -63,7 +65,7 @@ func newTestRegistryManager(t *testing.T, realDB bool, conf *pldconf.RegistryMan
 			require.NoError(t, mp.Mock.ExpectationsWereMet())
 		}
 	}
-	componentMocks.On("Persistence").Return(p)
+	mc.allComponents.On("Persistence").Return(p)
 
 	for _, fn := range extraSetup {
 		fn(mc)
@@ -71,15 +73,17 @@ func newTestRegistryManager(t *testing.T, realDB bool, conf *pldconf.RegistryMan
 
 	rm := NewRegistryManager(ctx, conf)
 
-	initData, err := rm.PreInit(componentMocks)
-	require.NoError(t, err)
-	assert.NotNil(t, initData)
+	if !mc.noInit {
+		initData, err := rm.PreInit(mc.allComponents)
+		require.NoError(t, err)
+		assert.NotNil(t, initData)
 
-	err = rm.PostInit(componentMocks)
-	require.NoError(t, err)
+		err = rm.PostInit(mc.allComponents)
+		require.NoError(t, err)
 
-	err = rm.Start()
-	require.NoError(t, err)
+		err = rm.Start()
+		require.NoError(t, err)
+	}
 
 	return ctx, rm.(*registryManager), mc, func() {
 		cancelCtx()

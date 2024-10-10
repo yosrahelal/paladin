@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
@@ -34,19 +35,27 @@ type transportLookup struct {
 	regName           string
 	requiredPrefix    string
 	hierarchySplitter string
+	transportNameMap  map[string]string
 	propertyRegexp    *regexp.Regexp
 }
 
 func newTransportLookup(ctx context.Context, regName string, conf *pldconf.RegistryTransportsConfig) (tl *transportLookup, err error) {
 	tl = &transportLookup{
 		regName:           regName,
-		requiredPrefix:    conf.RequiredPrefix,
-		hierarchySplitter: conf.HierarchySplitter,
+		requiredPrefix:    confutil.StringNotEmpty(&conf.RequiredPrefix, pldconf.RegistryTransportsDefaults.RequiredPrefix),
+		hierarchySplitter: confutil.StringNotEmpty(&conf.HierarchySplitter, pldconf.RegistryTransportsDefaults.HierarchySplitter),
+		transportNameMap:  map[string]string{},
 	}
 
-	tl.propertyRegexp, err = regexp.Compile(conf.PropertyRegexp)
+	tl.propertyRegexp, err = regexp.Compile(
+		confutil.StringNotEmpty(&conf.PropertyRegexp, pldconf.RegistryTransportsDefaults.PropertyRegexp),
+	)
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgRegistryTransportPropertyRegexp, regName)
+	}
+
+	for k, v := range conf.TransportMap {
+		tl.transportNameMap[k] = v
 	}
 
 	return tl, nil
@@ -99,13 +108,18 @@ func (tl *transportLookup) getNodeTransports(ctx context.Context, dbTX *gorm.DB,
 	for k, v := range entry.Properties {
 		subMatch := tl.propertyRegexp.FindStringSubmatch(k)
 		if len(subMatch) != 2 {
-			log.L(ctx).Debug("Property '%s' does not match regexp '%s'", k, tl.propertyRegexp)
+			log.L(ctx).Debugf("Property '%s' does not match regexp '%s'", k, tl.propertyRegexp)
 			continue
+		}
+		transportName := subMatch[1]
+		mappedName := tl.transportNameMap[transportName]
+		if mappedName != "" {
+			transportName = mappedName
 		}
 		transports = append(transports, &components.RegistryNodeTransportEntry{
 			Node:      fullLookup,
 			Registry:  tl.regName,
-			Transport: subMatch[1],
+			Transport: transportName,
 			Details:   v,
 		})
 	}

@@ -461,7 +461,7 @@ func (r *registry) GetEntryProperties(ctx context.Context, dbTX *gorm.DB, fActiv
 		q = q.Where("active IS TRUE")
 	}
 
-	err := q.Find(&dbProps).Error
+	err := q.Order("name").Find(&dbProps).Error
 	if err != nil {
 		return nil, err
 	}
