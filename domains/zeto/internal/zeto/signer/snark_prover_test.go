@@ -543,6 +543,20 @@ func TestSerializeProofResponse(t *testing.T) {
 	bytes, err = serializeProofResponse(constants.CIRCUIT_ANON_NULLIFIER, &snark)
 	assert.NoError(t, err)
 	assert.Equal(t, 66, len(bytes))
+
+	snark.PubSignals = []string{
+		"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
+		"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
+		"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
+		"1", "2", "3"}
+	bytes, err = serializeProofResponse(constants.CIRCUIT_ANON_ENC_BATCH, &snark)
+	assert.NoError(t, err)
+	assert.Equal(t, 202, len(bytes))
+
+	snark.PubSignals = []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"}
+	bytes, err = serializeProofResponse(constants.CIRCUIT_ANON_NULLIFIER_BATCH, &snark)
+	assert.NoError(t, err)
+	assert.Equal(t, 84, len(bytes))
 }
 
 func TestZKPProverInvalidAlgos(t *testing.T) {
@@ -575,4 +589,19 @@ func TestZKPProverInvalidAlgos(t *testing.T) {
 	keyLen, err := prover.GetMinimumKeyLen(ctx, zetosignerapi.AlgoDomainZetoSnarkBJJ("zeto"))
 	require.NoError(t, err)
 	assert.Equal(t, 32, keyLen)
+}
+
+func TestGetCircuitId(t *testing.T) {
+	inputs := &pb.ProvingRequest{
+		CircuitId: constants.CIRCUIT_ANON_ENC,
+		Common: &pb.ProvingRequestCommon{
+			InputCommitments: []string{"input1", "input2"},
+		},
+	}
+	circuitId := getCircuitId(inputs)
+	assert.Equal(t, constants.CIRCUIT_ANON_ENC, circuitId)
+
+	inputs.Common.InputCommitments = []string{"input1", "input2", "input3"}
+	circuitId = getCircuitId(inputs)
+	assert.Equal(t, constants.CIRCUIT_ANON_ENC_BATCH, circuitId)
 }

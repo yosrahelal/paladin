@@ -78,17 +78,19 @@ func TestPrepareInputs(t *testing.T) {
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{
 			States: []*prototk.StoredState{
-				{
-					Id:       "state-1",
-					DataJson: "{\"amount\": \"10\"}",
-				},
-				{
-					Id:       "state-2",
-					DataJson: "{\"amount\": \"10\"}",
-				},
+				{Id: "state-1", DataJson: "{\"amount\": \"10\"}"},
+				{Id: "state-2", DataJson: "{\"amount\": \"10\"}"},
+				{Id: "state-3", DataJson: "{\"amount\": \"10\"}"},
+				{Id: "state-4", DataJson: "{\"amount\": \"10\"}"},
+				{Id: "state-5", DataJson: "{\"amount\": \"10\"}"},
+				{Id: "state-6", DataJson: "{\"amount\": \"10\"}"},
+				{Id: "state-7", DataJson: "{\"amount\": \"10\"}"},
+				{Id: "state-8", DataJson: "{\"amount\": \"10\"}"},
+				{Id: "state-9", DataJson: "{\"amount\": \"10\"}"},
+				{Id: "state-10", DataJson: "{\"amount\": \"10\"}"},
 			},
 		}, nil
 	}
-	_, _, _, err = zeto.prepareInputs(ctx, stateQueryContext, "Alice", tktypes.Uint64ToUint256(100))
+	_, _, _, err = zeto.prepareInputs(ctx, stateQueryContext, "Alice", tktypes.Uint64ToUint256(200))
 	assert.EqualError(t, err, "could not find suitable coins")
 }

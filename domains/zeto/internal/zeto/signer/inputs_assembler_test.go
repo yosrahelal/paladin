@@ -34,9 +34,9 @@ func TestAssembleInputsAnonEnc(t *testing.T) {
 
 func TestAssembleInputsAnonNullifier(t *testing.T) {
 	inputs := commonWitnessInputs{
-		inputCommitments: []*big.Int{big.NewInt(1), big.NewInt(2)},
-		inputValues:      []*big.Int{big.NewInt(3), big.NewInt(4)},
-		inputSalts:       []*big.Int{big.NewInt(5), big.NewInt(6)},
+		inputCommitments: []*big.Int{big.NewInt(1), big.NewInt(2), big.NewInt(3), big.NewInt(0)},
+		inputValues:      []*big.Int{big.NewInt(3), big.NewInt(4), big.NewInt(5), big.NewInt(0)},
+		inputSalts:       []*big.Int{big.NewInt(5), big.NewInt(6), big.NewInt(7), big.NewInt(0)},
 	}
 	privKey, pubKey, zkpKey := newKeypair()
 	key := core.KeyEntry{
@@ -50,6 +50,9 @@ func TestAssembleInputsAnonNullifier(t *testing.T) {
 	privateInputs, err := assembleInputs_anon_nullifier(&inputs, &extras, &key)
 	assert.NoError(t, err)
 	assert.Equal(t, 12, len(privateInputs))
+	assert.Equal(t, "123", privateInputs["root"].(*big.Int).Text(16))
+	assert.Len(t, privateInputs["nullifiers"], 4)
+	assert.Equal(t, "0", privateInputs["nullifiers"].([]*big.Int)[3].Text(10))
 }
 
 func TestAssembleInputsAnonEnc_fail(t *testing.T) {
