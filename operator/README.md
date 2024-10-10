@@ -33,7 +33,7 @@ The **Paladin Operator** is a Kubernetes operator designed to manage Paladin nod
 
 Before you begin, ensure you have the following installed:
 
-- **Go** version **v1.21.0+**
+- **Go** version **v1.22+**
 - **Docker** version **17.03+**
 - **Gradle** version **6.0+**
 - **kubectl** version **v1.11.3+**
@@ -50,7 +50,7 @@ Before you begin, ensure you have the following installed:
 For convenience, you can run the entire setup with a single Gradle command:
 
 ```sh
-gradle e2e
+gradle deploy
 ```
 
 This command performs all the necessary steps to deploy the Paladin Operator and create a functional Paladin node:
