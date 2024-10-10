@@ -20,7 +20,7 @@ import (
 	"context"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
+	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -45,11 +45,11 @@ type DispatchBatch struct {
 
 // PersistDispatches persists the dispatches to the store and coordinates with the public transaction manager
 // to submit public transactions.
-func (s *store) PersistDispatchBatch(ctx context.Context, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*ptmgrtypes.StateDistribution) error {
+func (s *store) PersistDispatchBatch(ctx context.Context, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*statedistribution.StateDistribution) error {
 
-	stateDistributionsPersisted := make([]*StateDistributionPersisted, 0, len(stateDistributions))
+	stateDistributionsPersisted := make([]*statedistribution.StateDistributionPersisted, 0, len(stateDistributions))
 	for _, stateDistribution := range stateDistributions {
-		stateDistributionsPersisted = append(stateDistributionsPersisted, &StateDistributionPersisted{
+		stateDistributionsPersisted = append(stateDistributionsPersisted, &statedistribution.StateDistributionPersisted{
 			ID:              stateDistribution.ID,
 			StateID:         stateDistribution.StateID,
 			IdentityLocator: stateDistribution.IdentityLocator,

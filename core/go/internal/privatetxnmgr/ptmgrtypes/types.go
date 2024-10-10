@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	pbSequence "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -215,17 +216,6 @@ const (
 	TxProcessorRemove
 )
 
-// A StateDistribution is an intent to send private data for a given state to a remote party
-type StateDistribution struct {
-	ID              string
-	StateID         string
-	IdentityLocator string
-	Domain          string
-	ContractAddress string
-	SchemaID        string
-	StateDataJson   string
-}
-
 type TxProcessor interface {
 	Init(ctx context.Context)
 	GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error)
@@ -242,20 +232,5 @@ type TxProcessor interface {
 	HandleResolveVerifierResponseEvent(ctx context.Context, event *ResolveVerifierResponseEvent) error
 	HandleResolveVerifierErrorEvent(ctx context.Context, event *ResolveVerifierErrorEvent) error
 	PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error)
-	GetStateDistributions(ctx context.Context) []*StateDistribution
-}
-
-/*
-StateDistributer is a component that is responsible for distributing state to remote parties
-
-	it runs in its own goroutine and periodically sends states to the intended recipients
-	until each recipient has acknowledged receipt of the state.
-
-	This operates on in-memory data but will initialise from persistent storage on startup
-*/
-type StateDistributer interface {
-	Start(ctx context.Context) error
-	Stop(ctx context.Context)
-	AcknowledgeState(ctx context.Context, stateID string)
-	DistributeStates(ctx context.Context, stateDistributions []*StateDistribution)
+	GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution
 }

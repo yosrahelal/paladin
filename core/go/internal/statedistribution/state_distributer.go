@@ -21,8 +21,6 @@ import (
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -30,14 +28,14 @@ import (
 
 const RETRY_TIMEOUT = 5 * time.Second
 
-func NewStateDistributer(ctx context.Context, nodeID string, transportManager components.TransportManager, stateManager components.StateManager, persistence persistence.Persistence, conf *pldconf.StateDistributerConfig) ptmgrtypes.StateDistributer {
+func NewStateDistributer(ctx context.Context, nodeID string, transportManager components.TransportManager, stateManager components.StateManager, persistence persistence.Persistence, conf *pldconf.StateDistributerConfig) StateDistributer {
 	sd := &stateDistributer{
 		persistence:      persistence,
 		stopChan:         make(chan struct{}),
-		inputChan:        make(chan *ptmgrtypes.StateDistribution),
+		inputChan:        make(chan *StateDistribution),
 		retryChan:        make(chan string),
 		acknowledgedChan: make(chan string),
-		pendingMap:       make(map[string]*ptmgrtypes.StateDistribution),
+		pendingMap:       make(map[string]*StateDistribution),
 		stateManager:     stateManager,
 		transportManager: transportManager,
 		nodeID:           nodeID,
@@ -48,14 +46,48 @@ func NewStateDistributer(ctx context.Context, nodeID string, transportManager co
 	return sd
 }
 
+type StateDistributionPersisted struct {
+	ID              string `json:"id"`
+	StateID         string `json:"stateID"`
+	IdentityLocator string `json:"identityLocator"`
+	DomainName      string `json:"domainName"`
+	ContractAddress string `json:"contractAddress"`
+}
+
+// A StateDistribution is an intent to send private data for a given state to a remote party
+type StateDistribution struct {
+	ID              string
+	StateID         string
+	IdentityLocator string
+	Domain          string
+	ContractAddress string
+	SchemaID        string
+	StateDataJson   string
+}
+
+/*
+StateDistributer is a component that is responsible for distributing state to remote parties
+
+	it runs in its own goroutine and periodically sends states to the intended recipients
+	until each recipient has acknowledged receipt of the state.
+
+	This operates on in-memory data but will initialise from persistent storage on startup
+*/
+type StateDistributer interface {
+	Start(ctx context.Context) error
+	Stop(ctx context.Context)
+	AcknowledgeState(ctx context.Context, stateID string)
+	DistributeStates(ctx context.Context, stateDistributions []*StateDistribution)
+}
+
 type stateDistributer struct {
 	persistence           persistence.Persistence
 	stateManager          components.StateManager
 	stopChan              chan struct{}
-	inputChan             chan *ptmgrtypes.StateDistribution
+	inputChan             chan *StateDistribution
 	retryChan             chan string
 	acknowledgedChan      chan string
-	pendingMap            map[string]*ptmgrtypes.StateDistribution
+	pendingMap            map[string]*StateDistribution
 	acknowledgementWriter *acknowledgementWriter
 	receivedStateWriter   *receivedStateWriter
 	transportManager      components.TransportManager
@@ -70,7 +102,7 @@ func (sd *stateDistributer) Start(ctx context.Context) error {
 		return err
 	}
 
-	var stateDistributions []privatetxnstore.StateDistributionPersisted
+	var stateDistributions []StateDistributionPersisted
 	err = sd.persistence.DB().Table("state_distributions").
 		Select("state_distributions.*").
 		Joins("LEFT JOIN state_distribution_acknowledgments ON state_distributions.id = state_distribution_acknowledgments.state_distribution").
@@ -90,7 +122,7 @@ func (sd *stateDistributer) Start(ctx context.Context) error {
 			continue
 		}
 
-		sd.inputChan <- &ptmgrtypes.StateDistribution{
+		sd.inputChan <- &StateDistribution{
 			ID:              stateDistribution.ID,
 			StateID:         stateDistribution.StateID,
 			IdentityLocator: stateDistribution.IdentityLocator,

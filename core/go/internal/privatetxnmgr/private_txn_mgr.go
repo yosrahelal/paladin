@@ -54,7 +54,7 @@ type privateTxManager struct {
 	subscribers          []components.PrivateTxEventSubscriber
 	subscribersLock      sync.Mutex
 	store                privatetxnstore.Store
-	stateDistributer     ptmgrtypes.StateDistributer
+	stateDistributer     statedistribution.StateDistributer
 }
 
 // Init implements Engine.

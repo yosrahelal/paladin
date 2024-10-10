@@ -21,21 +21,20 @@ import (
 	"time"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
 )
 
-func (sd *stateDistributer) DistributeStates(ctx context.Context, stateDistributions []*ptmgrtypes.StateDistribution) {
+func (sd *stateDistributer) DistributeStates(ctx context.Context, stateDistributions []*StateDistribution) {
 	log.L(ctx).Debugf("stateDistributer:DistributeStates %d state distributions", len(stateDistributions))
 	for _, stateDistribution := range stateDistributions {
 		sd.inputChan <- stateDistribution
 	}
 }
 
-func (sd *stateDistributer) sendState(ctx context.Context, stateDistribution *ptmgrtypes.StateDistribution) {
+func (sd *stateDistributer) sendState(ctx context.Context, stateDistribution *StateDistribution) {
 	log.L(ctx).Debugf("stateDistributer:sendState %s %s %s %s %s %s", stateDistribution.Domain, stateDistribution.ContractAddress, stateDistribution.SchemaID, stateDistribution.StateID, stateDistribution.IdentityLocator, stateDistribution.ID)
 
 	stateProducedEvent := &pb.StateProducedEvent{

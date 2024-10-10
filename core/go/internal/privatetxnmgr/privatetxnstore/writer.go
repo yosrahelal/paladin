@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -45,21 +46,14 @@ domain instances and run the database update for the dispatch and call the basel
 to atomically allocate and record the nonce under that same transaction.
 */
 
-// TODO do we need any other type of write other than dispatch?
 // the submit will happen on the user transaction manager's flush writer context so
 // that it can be co-ordinated with the user transaction submission
 // do we have any other checkpoints (e.g. on delegate?)
-type StateDistributionPersisted struct {
-	ID              string `json:"id"`
-	StateID         string `json:"stateID"`
-	IdentityLocator string `json:"identityLocator"`
-	DomainName      string `json:"domainName"`
-	ContractAddress string `json:"contractAddress"`
-}
+
 type dispatchSequenceOperation struct {
 	contractAddress    tktypes.EthAddress
 	dispatches         []*DispatchSequence
-	stateDistributions []*StateDistributionPersisted
+	stateDistributions []*statedistribution.StateDistributionPersisted
 }
 
 func (dso *dispatchSequenceOperation) WriteKey() string {

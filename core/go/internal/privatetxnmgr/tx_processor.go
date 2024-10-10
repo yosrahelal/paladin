@@ -25,6 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
+	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	engineProto "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
 
@@ -694,10 +695,10 @@ func (ts *PaladinTxProcessor) requestVerifierResolution(ctx context.Context) err
 
 }
 
-func (ts *PaladinTxProcessor) GetStateDistributions(ctx context.Context) []*ptmgrtypes.StateDistribution {
+func (ts *PaladinTxProcessor) GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution {
 	log.L(ctx).Debug("PaladinTxProcessor:GetStateDistributions")
 
-	stateDistributions := make([]*ptmgrtypes.StateDistribution, 0)
+	stateDistributions := make([]*statedistribution.StateDistribution, 0)
 	if ts.transaction.PostAssembly == nil {
 		log.L(ctx).Error("PostAssembly is nil")
 		return stateDistributions
@@ -711,7 +712,7 @@ func (ts *PaladinTxProcessor) GetStateDistributions(ctx context.Context) []*ptmg
 		outputStatePotential := ts.transaction.PostAssembly.OutputStatesPotential[stateIndex]
 
 		for _, party := range outputStatePotential.DistributionList {
-			stateDistributions = append(stateDistributions, &ptmgrtypes.StateDistribution{
+			stateDistributions = append(stateDistributions, &statedistribution.StateDistribution{
 				ID:              uuid.New().String(),
 				StateID:         outputState.ID.String(),
 				IdentityLocator: party,
