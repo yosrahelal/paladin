@@ -1,2 +1,2 @@
-DROP TABLE registry_property;
+DROP TABLE reg_props;
 DROP TABLE reg_entries;
