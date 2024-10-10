@@ -1,30 +1,39 @@
 BEGIN;
 
-CREATE TABLE registry_entities (
+CREATE TABLE reg_entries (
     "registry"           VARCHAR NOT NULL,
     "id"                 VARCHAR NOT NULL,
+    "parent_id"          VARCHAR,
     "name"               VARCHAR NOT NULL,
-    "parent_id"          VARCHAR NOT NULL, -- empty string for root entry (not null)
+    "created"            BIGINT  NOT NULL,
+    "updated"            BIGINT  NOT NULL,
     "active"             BOOLEAN NOT NULL,
+    "tx_hash"            VARCHAR,
     "block_number"       BIGINT,
-    "transaction_index"  INT,
+    "tx_index"           INT,
     "log_index"          INT,
-    PRIMARY KEY ("registry", "id")
+    PRIMARY KEY ("registry", "id"),
+    FOREIGN KEY ("registry", "parent_id") REFERENCES reg_entries ("registry", "id") ON DELETE CASCADE
 );
 
 -- The name is scoped uniquely within the parent
-CREATE UNIQUE INDEX registry_entities_name ON registry_entities("registry", "name", "parent_id");
+CREATE UNIQUE INDEX reg_entries_name ON reg_entries("registry", "name", "parent_id") WHERE "parent_id" IS NOT NULL;
+CREATE UNIQUE INDEX reg_entries_root_name ON reg_entries("registry", "name") WHERE "parent_id" IS NULL;
 
-CREATE TABLE registry_properties (
-    "entity_id"          VARCHAR NOT NULL,
+CREATE TABLE reg_props (
+    "registry"           VARCHAR NOT NULL,
+    "entry_id"           VARCHAR NOT NULL,
     "name"               VARCHAR NOT NULL,
-    'value'              VARCHAR NOT NULL,
+    "value"              VARCHAR NOT NULL,
+    "created"            BIGINT  NOT NULL,
+    "updated"            BIGINT  NOT NULL,
     "active"             BOOLEAN NOT NULL,
+    "tx_hash"            VARCHAR,
     "block_number"       BIGINT,
-    "transaction_index"  INT,
+    "tx_index"           INT,
     "log_index"          INT,
-    PRIMARY KEY ("registry", "entity_id", "name"),
-    FOREIGN KEY ("registry", "entity_id") REFERENCES registry_entities ("registry", "id") ON DELETE CASCADE
+    PRIMARY KEY ("registry", "entry_id", "name"),
+    FOREIGN KEY ("registry", "entry_id") REFERENCES reg_entries ("registry", "id") ON DELETE CASCADE
 );
 
 -- We deliberately do NOT index the values. The values will be large in most cases.

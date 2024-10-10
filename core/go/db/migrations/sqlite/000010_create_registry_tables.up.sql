@@ -1,32 +1,37 @@
-CREATE TABLE registry_entities (
+CREATE TABLE reg_entries (
     "registry"           TEXT    NOT NULL,
     "id"                 TEXT    NOT NULL,
+    "parent_id"          TEXT,
     "name"               TEXT    NOT NULL,
-    "parent_id"          TEXT    NOT NULL, -- empty string for root entry (not null)
     "created"            BIGINT  NOT NULL,
     "updated"            BIGINT  NOT NULL,
     "active"             BOOLEAN NOT NULL,
+    "tx_hash"            TEXT,
     "block_number"       BIGINT,
-    "transaction_index"  INT,
+    "tx_index"           INT,
     "log_index"          INT,
-    PRIMARY KEY ("registry", "id")
+    PRIMARY KEY ("registry", "id"),
+    FOREIGN KEY ("registry", "parent_id") REFERENCES reg_entries ("registry", "id") ON DELETE CASCADE
 );
 
 -- The name is scoped uniquely within the parent
-CREATE UNIQUE INDEX registry_entities_name ON registry_entities("registry", "name", "parent_id");
+CREATE UNIQUE INDEX reg_entries_name ON reg_entries("registry", "name", "parent_id") WHERE "parent_id" NOT NULL;
+CREATE UNIQUE INDEX reg_entries_root_name ON reg_entries("registry", "name") WHERE "parent_id" IS NULL;
 
-CREATE TABLE registry_properties (
-    "entity_id"          TEXT    NOT NULL,
+
+CREATE TABLE reg_props (
+    "entry_id"           TEXT    NOT NULL,
     "name"               TEXT    NOT NULL,
     "created"            BIGINT  NOT NULL,
     "updated"            BIGINT  NOT NULL,
     "active"             BOOLEAN NOT NULL,
-    'value'              TEXT    NOT NULL,
+    "value"              TEXT    NOT NULL,
+    "tx_hash"            TEXT,
     "block_number"       BIGINT,
-    "transaction_index"  INT,
+    "tx_index"           INT,
     "log_index"          INT,
-    PRIMARY KEY ("registry", "entity_id", "name"),
-    FOREIGN KEY ("registry", "entity_id") REFERENCES registry_entities ("registry", "id") ON DELETE CASCADE
+    PRIMARY KEY ("registry", "entry_id", "name"),
+    FOREIGN KEY ("registry", "entry_id") REFERENCES reg_entries ("registry", "id") ON DELETE CASCADE
 );
 
 -- We deliberately do NOT index the values. The values will be large in most cases.

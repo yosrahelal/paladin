@@ -17,12 +17,15 @@ package registrymgr
 
 import (
 	"context"
+	"crypto/rand"
+	"fmt"
+	"math/big"
 	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -121,24 +124,40 @@ func TestUpsertTransportDetailsRealDBok(t *testing.T) {
 	ctx, rm, tp, _, done := newTestRegistry(t, true)
 	defer done()
 
-	_, err := rm.GetNodeTransports(ctx, "node1")
-	assert.Regexp(t, "PD012100", err)
+	r, err := rm.GetRegistry(ctx, "test1")
+	require.NoError(t, err)
+	db := rm.persistence.DB()
 
-	// Insert and entry that resolves successfully as a node
-	rootEntry1 := &prototk.RegistryEntity{
-		Id:     tktypes.RandHex(32),
-		Name:   "node1",
-		Active: true,
+	randID := func() string { return tktypes.RandHex(32) }
+	randInt := func() int64 {
+		i, _ := rand.Int(rand.Reader, big.NewInt(10^9))
+		return i.Int64()
 	}
-	rootEntry1Props1 := &prototk.RegistryProperty{
-		EntityId: rootEntry1.Id,
-		Name:     "transport:grpc",
-		Active:   true,
-		Value:    `{"endpoint": "and other things"}`,
+	randChainInfo := func() *prototk.OnChainEventLocation {
+		return &prototk.OnChainEventLocation{
+			TransactionHash: tktypes.RandHex(32),
+			BlockNumber:     randInt(), TransactionIndex: randInt(), LogIndex: randInt(),
+		}
 	}
+	randPropFor := func(id string) *prototk.RegistryProperty {
+		return &prototk.RegistryProperty{
+			EntryId:  id,
+			Name:     fmt.Sprintf("prop_%s", tktypes.RandHex(5)),
+			Value:    fmt.Sprintf("val_%s", tktypes.RandHex(5)),
+			Active:   true,
+			Location: randChainInfo(),
+		}
+	}
+
+	// Insert a root entry
+	rootEntry1 := &prototk.RegistryEntry{Id: randID(), Name: "entry1", Location: randChainInfo(), Active: true}
+	rootEntry1Props1 := randPropFor(rootEntry1.Id)
+	rootEntry2 := &prototk.RegistryEntry{Id: randID(), Name: "entry2", Location: randChainInfo(), Active: true}
+	rootEntry2Props1 := randPropFor(rootEntry2.Id)
+	rootEntry2Props2 := randPropFor(rootEntry2.Id)
 	upsert1 := &prototk.UpsertRegistryRecordsRequest{
-		Entities:   []*prototk.RegistryEntity{rootEntry1},
-		Properties: []*prototk.RegistryProperty{rootEntry1Props1},
+		Entries:    []*prototk.RegistryEntry{rootEntry1, rootEntry2},
+		Properties: []*prototk.RegistryProperty{rootEntry1Props1, rootEntry2Props1, rootEntry2Props2},
 	}
 
 	// Upsert first entry
@@ -146,44 +165,108 @@ func TestUpsertTransportDetailsRealDBok(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, res)
 
-	// Check we get it
-	transports, err := rm.GetNodeTransports(ctx, "node1")
+	// Test getting all the entries with props
+	entries, err := r.QueryEntriesWithProps(ctx, db, "active", query.NewQueryBuilder().Query())
 	require.NoError(t, err)
-	assert.Len(t, transports, 1)
-	assert.Equal(t, components.RegistryNodeTransportEntry{
-		Node:      "node1",
-		Registry:  registryID.String(),
-		Transport: "grpc",
-		Details:   "things and stuff",
-	}, *transports[0])
+	require.Len(t, entries, 2)
+	assert.Equal(t, rootEntry1.Id, entries[0].ID.HexString())
+	require.Len(t, entries[0].Properties, 1)
+	require.Equal(t, rootEntry1Props1.Value, entries[0].Properties[rootEntry1Props1.Name])
+	assert.Equal(t, rootEntry2.Id, entries[1].ID.HexString())
+	require.Len(t, entries[1].Properties, 2)
+	require.Equal(t, rootEntry2Props1.Value, entries[1].Properties[rootEntry2Props1.Name])
+	require.Equal(t, rootEntry2Props2.Value, entries[1].Properties[rootEntry2Props2.Name])
 
-	// // Upsert second entry
-	// entry2 := &prototk.UpsertTransportDetails{
-	// 	TransportDetails: []*prototk.TransportDetails{
-	// 		{
-	// 			Node:      "node1",
-	// 			Transport: "websockets",
-	// 			Details:   "more things and stuff",
-	// 		},
-	// 	},
-	// }
+	// Test on a non-null field
+	entries, err = r.QueryEntriesWithProps(ctx, db, "active",
+		query.NewQueryBuilder().NotNull(rootEntry2Props2.Name).Query(),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, rootEntry2.Id, entries[0].ID.HexString())
+	require.Len(t, entries, 1)
+	require.Len(t, entries[0].Properties, 2)
+	require.Equal(t, rootEntry2Props1.Value, entries[0].Properties[rootEntry2Props1.Name])
+	require.Equal(t, rootEntry2Props2.Value, entries[0].Properties[rootEntry2Props2.Name])
 
-	// // Upsert second entry
-	// res, err = tp.r.UpsertTransportDetails(ctx, entry2)
-	// require.NoError(t, err)
-	// transports, err = rm.GetNodeTransports(ctx, "node1")
-	// require.NoError(t, err)
-	// assert.NotNil(t, res)
-	// assert.Len(t, transports, 2)
+	// Test on an equal field
+	entries, err = r.QueryEntriesWithProps(ctx, db, "active",
+		query.NewQueryBuilder().Equal(rootEntry1Props1.Name, rootEntry1Props1.Value).Query(),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, rootEntry1.Id, entries[0].ID.HexString())
+	require.Len(t, entries, 1)
+	require.Len(t, entries[0].Properties, 1)
+	require.Equal(t, rootEntry1Props1.Value, entries[0].Properties[rootEntry1Props1.Name])
 
-	// // Upsert first entry again
-	// res, err = tp.r.UpsertTransportDetails(ctx, entry1)
-	// require.NoError(t, err)
-	// transports, err = rm.GetNodeTransports(ctx, "node1")
-	// require.NoError(t, err)
-	// assert.NotNil(t, res)
-	// assert.Len(t, transports, 2)
+	// Add a child entry - checking it's allowed to have the same name without replacing
+	root1ChildEntry1 := &prototk.RegistryEntry{Id: randID(), Name: "entry1", ParentId: rootEntry1.Id, Location: randChainInfo(), Active: true}
+	res, err = tp.r.UpsertRegistryRecords(ctx, &prototk.UpsertRegistryRecordsRequest{
+		Entries: []*prototk.RegistryEntry{root1ChildEntry1},
+	})
+	require.NoError(t, err)
+	assert.NotNil(t, res)
 
+	// Find children and check sorting fields
+	children, err := r.QueryEntries(ctx, db, "active", query.NewQueryBuilder().Equal(
+		".parentId", rootEntry1.Id,
+	).Sort("-.created", "-.updated").Query())
+	require.NoError(t, err)
+	require.Len(t, children, 1)
+	require.Equal(t, root1ChildEntry1.Id, children[0].ID.HexString())
+
+	// Make an entry inactive - this does NOT affect child entries (responsibility
+	// is on the registry plugin to do this if it wishes).
+	rootEntry2.Active = false                      // make entry inactive
+	rootEntry2Props2.Active = false                // make one prop inactive
+	rootEntry2Props3 := randPropFor(rootEntry2.Id) // add prop as active
+	res, err = tp.r.UpsertRegistryRecords(ctx, &prototk.UpsertRegistryRecordsRequest{
+		Entries:    []*prototk.RegistryEntry{rootEntry2},
+		Properties: []*prototk.RegistryProperty{rootEntry2Props2, rootEntry2Props3},
+	})
+	require.NoError(t, err)
+	assert.NotNil(t, res)
+
+	// Check not returned from normal query
+	entries, err = r.QueryEntriesWithProps(ctx, db, "active",
+		query.NewQueryBuilder().Null(".parentId").Query())
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, rootEntry1.Id, entries[0].ID.HexString())
+
+	// Check returned from cherry pick with any
+	entries, err = r.QueryEntriesWithProps(ctx, db, "any",
+		query.NewQueryBuilder().Equal(".name", rootEntry2.Name).Query())
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, rootEntry2.Id, entries[0].ID.HexString())
+	assert.False(t, entries[0].Active)
+	// ... but here the props are the active props still (prop 2 excluded)
+	require.Len(t, entries[0].Properties, 2)
+	require.Equal(t, rootEntry2Props1.Value, entries[0].Properties[rootEntry2Props1.Name])
+	require.Equal(t, rootEntry2Props3.Value, entries[0].Properties[rootEntry2Props3.Name])
+
+	// Check returned from cherry pick with inactive
+	entries, err = r.QueryEntriesWithProps(ctx, db, "inactive",
+		query.NewQueryBuilder().Equal(".id", rootEntry2.Id).Query())
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, rootEntry2.Id, entries[0].ID.HexString())
+
+	// Can get the complete prop set
+	allProps, err := r.GetEntryProperties(ctx, db, "any", tktypes.MustParseHexBytes(rootEntry2.Id))
+	require.NoError(t, err)
+	propsMap := filteredPropsMap(allProps, tktypes.MustParseHexBytes(rootEntry2.Id))
+	require.Len(t, propsMap, 3)
+	require.Equal(t, rootEntry2Props1.Value, propsMap[rootEntry2Props1.Name])
+	require.Equal(t, rootEntry2Props2.Value, propsMap[rootEntry2Props2.Name])
+	require.Equal(t, rootEntry2Props3.Value, propsMap[rootEntry2Props3.Name])
+
+	// Can get just the inactive props set
+	allProps, err = r.GetEntryProperties(ctx, db, "inactive", tktypes.MustParseHexBytes(rootEntry2.Id))
+	require.NoError(t, err)
+	propsMap = filteredPropsMap(allProps, tktypes.MustParseHexBytes(rootEntry2.Id))
+	require.Len(t, propsMap, 1)
+	require.Equal(t, rootEntry2Props2.Value, propsMap[rootEntry2Props2.Name])
 }
 
 // func TestUpsertTransportDetailsInsertFail(t *testing.T) {

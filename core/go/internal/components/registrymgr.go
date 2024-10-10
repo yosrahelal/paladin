@@ -38,7 +38,7 @@ type RegistryNodeTransportEntry struct {
 }
 
 // An entity within a registry with its current properties
-type RegistryEntity struct {
+type RegistryEntry struct {
 	Registry         string              `json:"registry"`           // the registry that maintains this record
 	ID               tktypes.HexBytes    `json:"id"`                 // unique within the registry, across all records in the hierarchy
 	Name             string              `json:"name"`               // unique across entries with the same parent, within the particular registry
@@ -49,7 +49,7 @@ type RegistryEntity struct {
 
 type RegistryProperty struct {
 	Registry         string              `json:"registry"` // the registry that maintains this record
-	EntityID         tktypes.HexBytes    `json:"entityId"` // the ID of the entity that owns this record within the registry
+	EntryID          tktypes.HexBytes    `json:"entityId"` // the ID of the entity that owns this record within the registry
 	Name             string              `json:"name"`     // unique across entries with the same parent, within the particular registry
 	Value            string              `json:"value"`    // unique across entries with the same parent, within the particular registry
 	*OnChainLocation `json:",omitempty"` // only included if the registry uses blockchain indexing
@@ -66,9 +66,9 @@ type OnChainLocation struct {
 	LogIndex         int64 `json:"logIndex"`
 }
 
-type RegistryEntityWithProperties struct {
-	*RegistryEntity `json:",inline"`
-	Properties      map[string]string `json:"properties"` // all properties are name=value string pairs
+type RegistryEntryWithProperties struct {
+	*RegistryEntry `json:",inline"`
+	Properties     map[string]string `json:"properties"` // all properties are name=value string pairs
 }
 
 type RegistryManagerToRegistry interface {
@@ -105,7 +105,7 @@ func (af ActiveFilter) Options() []string {
 }
 
 type Registry interface {
-	QueryEntities(ctx context.Context, dbTX *gorm.DB, fActive ActiveFilter, jq *query.QueryJSON) ([]*RegistryEntity, error)
-	QueryEntitiesWithProps(ctx context.Context, dbTX *gorm.DB, fActive ActiveFilter, jq *query.QueryJSON) ([]*RegistryEntityWithProperties, error)
-	GetEntityProperties(ctx context.Context, dbTX *gorm.DB, fActive ActiveFilter, entityIDs ...tktypes.HexBytes) ([]*RegistryProperty, error)
+	QueryEntries(ctx context.Context, dbTX *gorm.DB, fActive ActiveFilter, jq *query.QueryJSON) ([]*RegistryEntry, error)
+	QueryEntriesWithProps(ctx context.Context, dbTX *gorm.DB, fActive ActiveFilter, jq *query.QueryJSON) ([]*RegistryEntryWithProperties, error)
+	GetEntryProperties(ctx context.Context, dbTX *gorm.DB, fActive ActiveFilter, entityIDs ...tktypes.HexBytes) ([]*RegistryProperty, error)
 }

@@ -115,7 +115,7 @@ func TestRegistryRequestsOK(t *testing.T) {
 		HandleRegistryEvents: func(ctx context.Context, rebr *prototk.HandleRegistryEventsRequest) (*prototk.HandleRegistryEventsResponse, error) {
 			assert.Equal(t, "batch1", rebr.BatchId)
 			return &prototk.HandleRegistryEventsResponse{
-				Entities: []*prototk.RegistryEntity{{Name: "node1"}},
+				Entries: []*prototk.RegistryEntry{{Name: "node1"}},
 			}, nil
 		},
 	}
@@ -128,7 +128,7 @@ func TestRegistryRequestsOK(t *testing.T) {
 			}),
 		},
 		upsertRegistryRecords: func(ctx context.Context, req *prototk.UpsertRegistryRecordsRequest) (*prototk.UpsertRegistryRecordsResponse, error) {
-			assert.Equal(t, "node1", req.Entities[0].Name)
+			assert.Equal(t, "node1", req.Entries[0].Name)
 			return &prototk.UpsertRegistryRecordsResponse{}, nil
 		},
 	}
@@ -152,7 +152,7 @@ func TestRegistryRequestsOK(t *testing.T) {
 		BatchId: "batch1",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "node1", rebr.Entities[0].Name)
+	assert.Equal(t, "node1", rebr.Entries[0].Name)
 
 	// This is the point the registry manager would call us to say the registry is initialized
 	// (once it's happy it's updated its internal state)
@@ -162,7 +162,7 @@ func TestRegistryRequestsOK(t *testing.T) {
 	callbacks := <-waitForCallbacks
 
 	utr, err := callbacks.UpsertRegistryRecords(ctx, &prototk.UpsertRegistryRecordsRequest{
-		Entities: []*prototk.RegistryEntity{{Name: "node1"}},
+		Entries: []*prototk.RegistryEntry{{Name: "node1"}},
 	})
 	require.NoError(t, err)
 	assert.NotNil(t, utr)

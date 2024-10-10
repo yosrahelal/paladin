@@ -19,7 +19,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-type DBEntity struct {
+type DBEntry struct {
 	Registry         string            `gorm:"column:registry;primaryKey"`
 	ID               tktypes.HexBytes  `gorm:"column:id;primaryKey"`
 	Name             string            `gorm:"column:name"`
@@ -27,28 +27,30 @@ type DBEntity struct {
 	Updated          tktypes.Timestamp `gorm:"column:updated;autoUpdateTime:nano"`
 	Active           bool              `gorm:"column:active"`
 	ParentID         tktypes.HexBytes  `gorm:"column:parent_id"`
+	TransactionHash  *tktypes.Bytes32  `gorm:"column:tx_hash"`
 	BlockNumber      *int64            `gorm:"column:block_number"`
-	TransactionIndex *int64            `gorm:"column:transaction_index"`
+	TransactionIndex *int64            `gorm:"column:tx_index"`
 	LogIndex         *int64            `gorm:"column:log_index"`
 }
 
-func (dbe DBEntity) TableName() string {
-	return "registry_entities"
+func (dbe DBEntry) TableName() string {
+	return "reg_entries"
 }
 
 type DBProperty struct {
-	Registry         string            `gorm:"column:id;primaryKey"`
-	EntityID         tktypes.HexBytes  `gorm:"column:entity_id;primaryKey"`
+	Registry         string            `gorm:"column:registry;primaryKey"`
+	EntryID          tktypes.HexBytes  `gorm:"column:entry_id;primaryKey"`
 	Name             string            `gorm:"column:name;primaryKey"`
 	Created          tktypes.Timestamp `gorm:"column:created;autoCreateTime:nano"`
 	Updated          tktypes.Timestamp `gorm:"column:updated;autoUpdateTime:nano"`
 	Active           bool              `gorm:"column:active"`
 	Value            string            `gorm:"column:value"`
+	TransactionHash  *tktypes.Bytes32  `gorm:"column:tx_hash"`
 	BlockNumber      *int64            `gorm:"column:block_number"`
-	TransactionIndex *int64            `gorm:"column:transaction_index"`
+	TransactionIndex *int64            `gorm:"column:tx_index"`
 	LogIndex         *int64            `gorm:"column:log_index"`
 }
 
 func (dbe DBProperty) TableName() string {
-	return "registry_properties"
+	return "reg_props"
 }

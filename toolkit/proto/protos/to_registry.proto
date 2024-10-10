@@ -39,7 +39,7 @@ message HandleRegistryEventsRequest {
 }
 
 message HandleRegistryEventsResponse {
-  repeated RegistryEntity entities = 1; // Upserts to entities
+  repeated RegistryEntry entries = 1; // Upserts to entities
   repeated RegistryProperty properties = 2; // Upserts to properties
 }
 

@@ -116,7 +116,7 @@ func TestRegistryRegisteredNotFound(t *testing.T) {
 	defer done()
 
 	_, err := dm.RegistryRegistered("unknown", uuid.New(), nil)
-	assert.Regexp(t, "PD012102", err)
+	assert.Regexp(t, "PD012101", err)
 }
 
 func TestConfigureRegistryFail(t *testing.T) {

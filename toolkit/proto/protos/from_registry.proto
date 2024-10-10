@@ -20,13 +20,13 @@ package io.kaleido.paladin.toolkit;
 import "on_chain_events.proto";
 
 message UpsertRegistryRecordsRequest {
-  repeated RegistryEntity entities = 1;
+  repeated RegistryEntry entries = 1;
   repeated RegistryProperty properties = 2;
 }
 
 message UpsertRegistryRecordsResponse {}
 
-message RegistryEntity {
+message RegistryEntry {
   string id = 1; // The id must be unique within this registry
   string name = 2; // The name must be unique within the scope
   string parent_id = 3; // The id of the parent record, or the empty string if this is a root record
@@ -35,7 +35,7 @@ message RegistryEntity {
 }
 
 message RegistryProperty {
-  string entity_id = 1; // The parent entity - must already exist, but can be created in the same payload
+  string entry_id = 1; // The parent entry - must already exist, but can be created in the same payload
   string name = 2; // The property name
   string value = 3; // The property value - always stored and queried as a string
   bool   active = 4; // Queries against the registry will by default ignore all inactive records

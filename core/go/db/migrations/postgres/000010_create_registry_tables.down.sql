@@ -1,6 +1,6 @@
 BEGIN;
 
 DROP TABLE registry_property;
-DROP TABLE registry_entities;
+DROP TABLE reg_entries;
 
 COMMIT;
