@@ -2,12 +2,13 @@
 VERSION ?= 0.0.1
 
 CLUSTER_NAME ?= paladin
-NAMESPACE ?= paladin
+NAMESPACE ?= default
 
 # IMAGE_TAG_BASE defines the docker.io namespace and part of the image name for remote images.
-IMAGE_TAG_BASE ?= paladin.io/operator-go
-IMG ?= $(IMAGE_TAG_BASE):$(VERSION)
-BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
+IMAGE_TAG_BASE ?= paladin.io/paladin-operator
+OPERATOR_IMG ?= $(IMAGE_TAG_BASE):$(VERSION)
+BUNDLE_OPERATOR_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
+PALADIN_IMG ?= paladin:test 
 
 # USE_IMAGE_DIGESTS defines if images are resolved via tags or digests
 USE_IMAGE_DIGESTS ?= false
@@ -111,8 +112,8 @@ kind-start:	## Create a Kind cluster.
 
 .PHONY: kind-promote
 kind-promote: kind-start ## Load Docker images into Kind cluster.
-	$(KIND_CLUSTER) load docker-image paladin-operator:latest --name "${CLUSTER_NAME}"
-	$(KIND_CLUSTER) load docker-image paladin:test --name "${CLUSTER_NAME}"
+	$(KIND_CLUSTER) load docker-image ${OPERATOR_IMG} --name "${CLUSTER_NAME}"
+	$(KIND_CLUSTER) load docker-image ${PALADIN_IMG} --name "${CLUSTER_NAME}"
 	$(KIND_CLUSTER) load docker-image postgres:latest --name "${CLUSTER_NAME}"
 	$(KIND_CLUSTER) load docker-image hyperledger/besu:latest --name "${CLUSTER_NAME}"
 
@@ -131,34 +132,44 @@ run: manifests generate fmt vet ## Run controller locally.
 
 .PHONY: docker-build
 docker-build: ## Build Docker image for manager.
-	$(CONTAINER_TOOL) build -f Dockerfile -t ${IMG} ..
+	$(CONTAINER_TOOL) build -f Dockerfile -t ${OPERATOR_IMG} ..
 
 .PHONY: docker-load
 docker-load: docker-build ## Load Docker image into Kind.
-	$(KIND_CLUSTER) load docker-image ${IMG} --name ${CLUSTER_NAME}
+	$(KIND_CLUSTER) load docker-image ${OPERATOR_IMG} --name ${CLUSTER_NAME}
 
 .PHONY: docker-push
 docker-push: ## Push Docker image to registry.
-	$(CONTAINER_TOOL) push ${IMG}
+	$(CONTAINER_TOOL) push ${OPERATOR_IMG}
 
 .PHONY: docker-buildx
 docker-buildx: ## Build and push Docker image for cross-platform support.
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
 	- $(CONTAINER_TOOL) buildx create --name paladin-builder
 	$(CONTAINER_TOOL) buildx use paladin-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${OPERATOR_IMG} -f Dockerfile.cross .
 	- $(CONTAINER_TOOL) buildx rm paladin-builder
 	rm Dockerfile.cross
 
+KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
+.PHONY: kustomize
+kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary. If wrong version is installed, it will be removed before downloading.
+$(KUSTOMIZE): $(LOCALBIN)
+	@if test -x $(LOCALBIN)/kustomize && ! $(LOCALBIN)/kustomize version | grep -q $(KUSTOMIZE_VERSION); then \
+		echo "$(LOCALBIN)/kustomize version is not expected $(KUSTOMIZE_VERSION). Removing it before installing."; \
+		rm -rf $(LOCALBIN)/kustomize; \
+	fi
+	test -s $(LOCALBIN)/kustomize || { curl -Ss $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN); }
+
 .PHONY: build-installer
-build-installer: manifests generate ## Build consolidated installer YAML.
+build-installer: manifests generate kustomize ## Build consolidated installer YAML.
 	mkdir -p dist
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${OPERATOR_IMG}
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 
 ##@ Helm Chart - Deployment
 .PHONY: build-crds
-build-crds: manifests helmify ## Build CRDs using helmify.
+build-crds: manifests kustomize helmify ## Build CRDs using helmify.
 	$(KUSTOMIZE) build config/default | $(HELMIFY) ${CHART_PATH_CRD}
 	find ${CHART_PATH_CRD}/templates/ -type f ! \( -name '*-crd.yaml' -o -name '_helpers.tpl' \) -exec rm -f {} +
 	rm -f ${CHART_PATH_CRD}/values.yaml
@@ -178,7 +189,7 @@ helm-template: ## Install operator using Helm.
 
 .PHONY: helm-install
 helm-install: ## Install operator using Helm.
-	$(HELM) upgrade --install ${CHART_NAME_OPERATOR} ${CHART_PATH_OPERATOR} -n ${NAMESPACE} --create-namespace --set operator.namespace=${NAMESPACE}
+	$(HELM) upgrade --install ${CHART_NAME_OPERATOR} ${CHART_PATH_OPERATOR} -n ${NAMESPACE} --create-namespace --set operator.namespace=${NAMESPACE} --set operator.image.repository=${IMAGE_TAG_BASE} --set operator.image.tag=${VERSION}
 
 .PHONY: helm-uninstall
 helm-uninstall: ## Uninstall operator using Helm.
@@ -188,24 +199,6 @@ helm-uninstall: ## Uninstall operator using Helm.
 .PHONY: helm-pause
 helm-pause: ## Pause the operator (set replica count to 0).
 	$(HELM) upgrade --install ${CHART_NAME_OPERATOR} ${CHART_PATH_OPERATOR} -n ${NAMESPACE} --create-namespace --set operator.namespace=${NAMESPACE} --set replicaCount=0
-
-##@ Kustomize - Deployment
-.PHONY: kustomize-install
-kustomize-install: manifests ## Install CRDs using Kustomize.
-	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f -
-
-.PHONY: kustomize-uninstall
-kustomize-uninstall: manifests ## Uninstall CRDs using Kustomize.
-	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=true -f -
-
-.PHONY: kustomize-deploy
-kustomize-deploy: manifests ## Deploy controller using Kustomize.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
-
-.PHONY: kustomize-undeploy
-kustomize-undeploy: ## Undeploy controller using Kustomize.
-	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=true -f -
 
 ##@ Dependencies
 LOCALBIN ?= $(shell pwd)/bin
@@ -235,7 +228,7 @@ $(HELMIFY): $(LOCALBIN)
 .PHONY: crd-ref-docs
 crd-ref-docs: $(CRD_REF_DOCS) ## Install crd-ref-docs locally if necessary.
 $(CRD_REF_DOCS): $(LOCALBIN)
-	test -s $(LOCALBIN)/crd-ref-docs || GOBIN=$(LOCALBIN) go install github.com/elastic/crd-ref-docs@v0.0.9
+	test -s $(LOCALBIN)/crd-ref-docs || GOBIN=$(LOCALBIN) go install github.com/elastic/crd-ref-docs@latest
 
 ##@ Dev Helpers
 .PHONY: update-crds
@@ -283,5 +276,11 @@ delete-node: delete-node-paladin delete-genesis delete-node-besu  ## Delete all 
 	@echo "All instances have been deleted."
 
 ##@ Cleanup
+DELETE_CLUSTER ?= false
 .PHONY: clean
 clean: delete-node helm-uninstall uninstall-crds ## Clean up all resources.
+	@if [ "$(DELETE_CLUSTER)" = "true" ]; then \
+		$(MAKE) kind-delete; \
+	else \
+		echo "Skipping Kind cluster deletion. Use DELETE_CLUSTER=true to delete it."; \
+	fi

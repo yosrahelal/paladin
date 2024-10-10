@@ -25,6 +25,13 @@ dependencies {
     contractCompile project(path: ":solidity", configuration: "compiledContracts")
 }
 
+ext {
+    namespace = project.hasProperty('namespace') ? project.namespace : 'default' // Default namespace is 'default' 
+    deleteCluster = project.hasProperty('deleteCluster') ? project.deleteCluster.toBoolean() : false // By default, do not delete the cluster
+    buildPaladin = project.hasProperty('buildPaladin') ? project.buildPaladin == 'true' : true // Default is to build Paladin
+    buildOperator = project.hasProperty('buildOperator') ? project.buildOperator == 'true' : true // Default is to build the operator
+}
+
 task copySolidity(type: Copy) {
     inputs.files(configurations.contractCompile)
     from fileTree(configurations.contractCompile.asPath) {
@@ -41,12 +48,25 @@ task copySolidity(type: Copy) {
 // Task to build the Paladin image from the parent project
 task buildPaladinImage {
     dependsOn ':docker' // Builds the Paladin image in the parent project
+    
+    onlyIf {
+        buildPaladin
+    }
 }
 
 // Task to build the operator Docker image
-task docker(type: Exec, dependsOn: buildPaladinImage) {
+task docker(type: Exec) {
     executable 'make'
     args 'docker-build'
+}
+
+// Task to build the Paladin image from the parent project
+task buildOperatorImage {
+    dependsOn ':operator:docker' // Builds the Paladin image in the parent project
+    
+    onlyIf {
+        buildPaladin
+    }
 }
 
 // Task to start the Kind cluster
@@ -58,14 +78,15 @@ task startKindCluster(type: Exec) {
 // Task to load images into the Kind cluster
 task promoteKindImages(type: Exec, dependsOn: [
     startKindCluster,
-    docker
+    buildPaladinImage,
+    buildOperatorImage
 ]) {
     executable 'make'
     args 'kind-promote'
 }
 
 // Task to install Helm CRDs
-task installCrds(type: Exec) {
+task installCrds(type: Exec, dependsOn: [startKindCluster]){
     executable 'make'
     args 'install-crds'
 }
@@ -74,13 +95,14 @@ task installCrds(type: Exec) {
 task installOperator(type: Exec, dependsOn: [installCrds, promoteKindImages]) {
     executable 'make'
     args 'helm-install'
+    args "NAMESPACE=${namespace}"
 }
 
 // Task to verify the operator is running in the 'paladin' namespace
 task verifyOperator(dependsOn: installOperator) {
     doLast {
         println 'Waiting for operator deployment to become ready...'
-        def process = ['kubectl', 'wait', '--for=condition=available', 'deployment/paladin-operator', '-n', 'paladin', '--timeout=60s'].execute()
+        def process = ['kubectl', 'wait', '--for=condition=available', 'deployment/paladin-operator', '-n', "${namespace}", '--timeout=60s'].execute()
         process.waitFor()
         def output = process.in.text.trim()
         def errorOutput = process.err.text.trim()
@@ -99,13 +121,21 @@ task verifyOperator(dependsOn: installOperator) {
 task createNode(type: Exec, dependsOn: verifyOperator) {
     executable 'make'
     args 'create-node'
+    args "NAMESPACE=${namespace}"
+}
+
+// The 'deplay' runs the whole flow
+task deploy(dependsOn: createNode) {
+    doLast {
+        println 'Deplopy setup completed. Operator is running in the paladin namespace.'
+    }
 }
 
 // The 'e2e' task runs the whole flow
-task e2e(dependsOn: createNode) {
+task e2e(dependsOn: deploy) {
     doLast {
-        println 'E2E setup completed. Operator is running in the paladin namespace.'
-    }
+        println 'TODO: Run E2E tests'
+     }
 }
 
 // Task to run E2E tests (if needed)
@@ -118,6 +148,8 @@ task runE2ETests(type: Exec, dependsOn: e2e) {
 task cleanCluster(type: Exec) {
     executable 'make'
     args 'clean'
+    args "NAMESPACE=${namespace}"
+    args "DELETE_CLUSTER=${deleteCluster}"
 }
 
 task clean {

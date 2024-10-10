@@ -6,7 +6,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: testnet
 spec:
-  chainId: 1337
+  chainID: 1337
   gasLimit: 700000000
   consensus: qbft
   blockPeriod: 100ms
