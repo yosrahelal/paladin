@@ -24,13 +24,13 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/keystores"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signers"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 )
 
-// SigningModule provides functions for the signerapilbuf request/reply functions from the signerapil interface defined
+// SigningModule provides functions for the signerapi request/reply functions from the signerapil interface defined
 // in signing_module.
 // This module can be wrapped and loaded into the core Paladin runtime as an embedded module called directly
 // within the runtime, or wrapped in a remote process connected over a transport like HTTP, WebSockets, gRPC etc.
@@ -64,7 +64,7 @@ type signingModule[C signerapi.ExtensibleConfig] struct {
 // This "pkg/signer" go code module is the building block to build your sophisticated remote
 // signer on top of only needing to implement the specifics to your particular system.
 //
-// Note that the interface is signerapilbuf, so you can also use this code as inspiration to build
+// Note that the interface is signerapi, so you can also use this code as inspiration to build
 // your own signing module in a different language (like Java), but be aware that if you wish
 // to support ZKP proof generation based tokens you will need to consider the ability to
 // host and execute WASM code.
