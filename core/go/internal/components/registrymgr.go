@@ -66,9 +66,12 @@ type OnChainLocation struct {
 	LogIndex         int64 `json:"logIndex"`
 }
 
+// A convenience structure that gives a snapshot of the whole entity, with all it's properties.
+// Alternatively you can list the full RegistryProperty (with the provenance information) separately.
 type RegistryEntryWithProperties struct {
 	*RegistryEntry `json:",inline"`
-	Properties     map[string]string `json:"properties"` // all properties are name=value string pairs
+	// With this convenience object all of the properties are flattened into a name=value string map
+	Properties map[string]string `json:"properties"`
 }
 
 type RegistryManagerToRegistry interface {

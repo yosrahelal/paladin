@@ -69,7 +69,7 @@ contract IdentityRegistry {
         // Ensure sender owns parent identity
         require(identities[parentIdentityHash].owner == msg.sender, "Forbidden");
 
-        // Calculate identiy has based on its name and the hash of the parent identity
+        // Calculate identiy hash based on its name and the hash of the parent identity
         bytes32 hash = sha256(abi.encodePacked(parentIdentityHash, name));
 
         // Ensure each child has a unique name
