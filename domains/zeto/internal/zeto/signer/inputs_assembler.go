@@ -79,6 +79,11 @@ func assembleInputs_anon_nullifier(inputs *commonWitnessInputs, extras *pb.Provi
 	// calculate the nullifiers for the input UTXOs
 	nullifiers := make([]*big.Int, len(inputs.inputCommitments))
 	for i := 0; i < len(inputs.inputCommitments); i++ {
+		// if the input commitment is 0, as a filler, the nullifier is 0
+		if inputs.inputCommitments[i].Cmp(big.NewInt(0)) == 0 {
+			nullifiers[i] = big.NewInt(0)
+			continue
+		}
 		nullifier, err := CalculateNullifier(inputs.inputValues[i], inputs.inputSalts[i], keyEntry.PrivateKeyForZkp)
 		if err != nil {
 			return nil, fmt.Errorf("failed to calculate nullifier. %s", err)

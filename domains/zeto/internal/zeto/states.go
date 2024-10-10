@@ -31,8 +31,8 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-var INPUT_COUNT = 2
-var OUTPUT_COUNT = 2
+var MAX_INPUT_COUNT = 10
+var MAX_OUTPUT_COUNT = 10
 
 func getStateSchemas() ([]string, error) {
 	var schemas []string
@@ -116,7 +116,7 @@ func (z *Zeto) prepareInputs(ctx context.Context, stateQueryContext, owner strin
 			if total.Cmp(amount.Int()) >= 0 {
 				return coins, stateRefs, total, nil
 			}
-			if len(stateRefs) >= INPUT_COUNT {
+			if len(stateRefs) >= MAX_INPUT_COUNT {
 				return nil, nil, nil, fmt.Errorf("could not find suitable coins")
 			}
 		}

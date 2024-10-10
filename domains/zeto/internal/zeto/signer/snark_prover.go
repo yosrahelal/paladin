@@ -118,18 +118,20 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 		return nil, err
 	}
 
+	circuitId := getCircuitId(inputs)
+
 	// obtain a slot for the proof generation for this specific circuit
 	// check whether this is a controlling channel
 	sp.circuitsWorkerIndexChanRWLock.RLock()
-	ccChan, chanelFound := sp.circuitsWorkerIndexChan[inputs.CircuitId]
+	ccChan, chanelFound := sp.circuitsWorkerIndexChan[circuitId]
 	sp.circuitsWorkerIndexChanRWLock.RUnlock()
 	if !chanelFound {
 		// if not found, obtain the W&R lock and check again before initializing
 		sp.circuitsWorkerIndexChanRWLock.Lock()
-		ccChan, chanelFound = sp.circuitsWorkerIndexChan[inputs.CircuitId]
+		ccChan, chanelFound = sp.circuitsWorkerIndexChan[circuitId]
 		if !chanelFound {
 			ccChan = make(chan *int, sp.workerPerCircuit) // init token channel
-			sp.circuitsWorkerIndexChan[inputs.CircuitId] = ccChan
+			sp.circuitsWorkerIndexChan[circuitId] = ccChan
 			for i := 0; i < sp.workerPerCircuit; i++ {
 				ccChan <- confutil.P(i) // add all tokens
 			}
@@ -148,7 +150,7 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 		return nil, errors.New("context cancelled")
 	}
 
-	workerID := fmt.Sprintf("%s-%d", inputs.CircuitId, workerIndex)
+	workerID := fmt.Sprintf("%s-%d", circuitId, workerIndex)
 	// Perform proof generation
 	// Read lock to check the cache
 	sp.proverCacheRWLock.RLock()
@@ -163,7 +165,7 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 		if circuit == nil || provingKey == nil {
 			// the generated WASM instance can only generate one proof at a time, circuitsWorkerIndexChan is used to ensure only 1 proof request
 			// is served per WASM instance at any given time
-			c, p, err := sp.circuitLoader(inputs.CircuitId, sp.zkpProverConfig)
+			c, p, err := sp.circuitLoader(circuitId, sp.zkpProverConfig)
 			if err != nil {
 				return nil, err
 			}
@@ -174,7 +176,7 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 		}
 		sp.proverCacheRWLock.Unlock()
 	}
-	wtns, err := calculateWitness(inputs.CircuitId, inputs.Common, extras, keyEntry, circuit)
+	wtns, err := calculateWitness(circuitId, inputs.Common, extras, keyEntry, circuit)
 	if err != nil {
 		return nil, err
 	}
@@ -184,12 +186,20 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 		return nil, err
 	}
 
-	proofBytes, err := serializeProofResponse(inputs.CircuitId, proof)
+	proofBytes, err := serializeProofResponse(circuitId, proof)
 	if err != nil {
 		return nil, err
 	}
 
 	return proofBytes, nil
+}
+
+func getCircuitId(inputs *pb.ProvingRequest) string {
+	circuitId := inputs.CircuitId
+	if len(inputs.Common.InputCommitments) > 2 {
+		circuitId += "_batch"
+	}
+	return circuitId
 }
 
 func validateInputs(inputs *pb.ProvingRequestCommon) error {
@@ -231,13 +241,19 @@ func serializeProofResponse(circuitId string, proof *types.ZKProof) ([]byte, err
 	publicInputs := make(map[string]string)
 	switch circuitId {
 	case constants.CIRCUIT_ANON_ENC:
-		// TODO: these offset maths assume OUTPUT_COUNT = 2
 		publicInputs["ecdhPublicKey"] = strings.Join(proof.PubSignals[0:2], ",")
 		publicInputs["encryptedValues"] = strings.Join(proof.PubSignals[2:10], ",")
 		publicInputs["encryptionNonce"] = proof.PubSignals[14]
+	case constants.CIRCUIT_ANON_ENC_BATCH:
+		publicInputs["ecdhPublicKey"] = strings.Join(proof.PubSignals[0:2], ",")
+		publicInputs["encryptedValues"] = strings.Join(proof.PubSignals[2:42], ",")
+		publicInputs["encryptionNonce"] = proof.PubSignals[62]
 	case constants.CIRCUIT_ANON_NULLIFIER:
 		publicInputs["nullifiers"] = strings.Join(proof.PubSignals[:2], ",")
 		publicInputs["root"] = proof.PubSignals[2]
+	case constants.CIRCUIT_ANON_NULLIFIER_BATCH:
+		publicInputs["nullifiers"] = strings.Join(proof.PubSignals[:10], ",")
+		publicInputs["root"] = proof.PubSignals[10]
 	}
 
 	res := pb.ProvingResponse{
@@ -256,14 +272,14 @@ func calculateWitness(circuitId string, commonInputs *pb.ProvingRequestCommon, e
 
 	var witnessInputs map[string]any
 	switch circuitId {
-	case constants.CIRCUIT_ANON:
+	case constants.CIRCUIT_ANON, constants.CIRCUIT_ANON_BATCH:
 		witnessInputs = assembleInputs_anon(inputs, keyEntry)
-	case constants.CIRCUIT_ANON_ENC:
+	case constants.CIRCUIT_ANON_ENC, constants.CIRCUIT_ANON_ENC_BATCH:
 		witnessInputs, err = assembleInputs_anon_enc(inputs, extras.(*pb.ProvingRequestExtras_Encryption), keyEntry)
 		if err != nil {
 			return nil, fmt.Errorf("failed to assemble private inputs for witness calculation. %s", err)
 		}
-	case constants.CIRCUIT_ANON_NULLIFIER:
+	case constants.CIRCUIT_ANON_NULLIFIER, constants.CIRCUIT_ANON_NULLIFIER_BATCH:
 		witnessInputs, err = assembleInputs_anon_nullifier(inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
 		if err != nil {
 			return nil, fmt.Errorf("failed to assemble private inputs for witness calculation. %s", err)

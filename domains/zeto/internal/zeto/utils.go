@@ -18,5 +18,15 @@ package zeto
 import "github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 
 func useNullifiers(circuitId string) bool {
-	return circuitId == constants.CIRCUIT_ANON_NULLIFIER
+	return circuitId == constants.CIRCUIT_ANON_NULLIFIER || circuitId == constants.CIRCUIT_ANON_NULLIFIER_BATCH
+}
+
+// the Zeto implementations support two input/output sizes for the circuits: 2 and 10,
+// if the input or output size is larger than 2, then the batch circuit is used with
+// input/output size 10
+func getInputSize(sizeOfEndorsableStates int) int {
+	if sizeOfEndorsableStates <= 2 {
+		return 2
+	}
+	return 10
 }
