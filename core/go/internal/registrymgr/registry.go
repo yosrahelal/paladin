@@ -215,7 +215,7 @@ func (r *registry) upsertRegistryRecords(ctx context.Context, dbTX *gorm.DB, pro
 		if protoEntry.ParentId != "" {
 			parentID, err = tktypes.ParseHexBytes(ctx, protoEntry.ParentId)
 			if err != nil || len(parentID) == 0 {
-				return nil, i18n.WrapError(ctx, err, msgs.MsgRegistryInvalidParentID, protoEntry.Id)
+				return nil, i18n.WrapError(ctx, err, msgs.MsgRegistryInvalidParentID, protoEntry.ParentId)
 			}
 		}
 
@@ -370,6 +370,10 @@ func (dfs *dynamicFieldSet) ResolverFor(propName string) filters.FieldResolver {
 
 func (r *registry) QueryEntries(ctx context.Context, dbTX *gorm.DB, fActive components.ActiveFilter, jq *query.QueryJSON) ([]*components.RegistryEntry, error) {
 
+	if jq.Limit == nil || *jq.Limit == 0 {
+		return nil, i18n.NewError(ctx, msgs.MsgRegistryQueryLimitRequired)
+	}
+
 	dfs := &dynamicFieldSet{propIndexes: make(map[string]int)}
 
 	q := filters.BuildGORM(ctx, jq,
@@ -511,17 +515,19 @@ func (r *registry) QueryEntriesWithProps(ctx context.Context, dbTX *gorm.DB, fAc
 		entryIDs[i] = e.ID
 	}
 
-	entryProps, err := r.GetEntryProperties(ctx, dbTX, components.ActiveFilterActive /* still active props regardless of filter on active for entry */, entryIDs...)
-	if err != nil {
-		return nil, err
-	}
-
 	withProps := make([]*components.RegistryEntryWithProperties, len(entries))
-	for i, e := range entries {
-		withProps[i] = &components.RegistryEntryWithProperties{
-			RegistryEntry: e,
-			Properties:    filteredPropsMap(entryProps, e.ID),
+	if len(entryIDs) > 0 {
+		entryProps, err := r.GetEntryProperties(ctx, dbTX, components.ActiveFilterActive /* still active props regardless of filter on active for entry */, entryIDs...)
+		if err != nil {
+			return nil, err
 		}
+		for i, e := range entries {
+			withProps[i] = &components.RegistryEntryWithProperties{
+				RegistryEntry: e,
+				Properties:    filteredPropsMap(entryProps, e.ID),
+			}
+		}
+
 	}
 
 	return withProps, nil

@@ -320,6 +320,7 @@ var (
 	MsgRegistryInvalidEntryName    = ffe("PD012104", "Invalid entry name '%s'")
 	MsgRegistryInvalidPropertyName = ffe("PD012105", "Invalid property name '%s'")
 	MsgRegistryInvalidParentID     = ffe("PD012106", "Invalid parent ID '%s'")
+	MsgRegistryQueryLimitRequired  = ffe("PD012107", "Limit is required on all queries")
 
 	// TxMgr module PD0122XX
 	MsgTxMgrQueryLimitRequired           = ffe("PD012200", "limit is required on all queries")

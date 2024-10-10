@@ -139,3 +139,13 @@ func TestConfigureRegistryFail(t *testing.T) {
 	registerTestRegistry(t, tm, tp)
 	assert.Regexp(t, "pop", *tp.r.initError.Load())
 }
+
+func TestGetRegistryNotFound(t *testing.T) {
+	ctx, dm, _, done := newTestRegistryManager(t, false, &pldconf.RegistryManagerConfig{
+		Registries: map[string]*pldconf.RegistryConfig{},
+	})
+	defer done()
+
+	_, err := dm.GetRegistry(ctx, "unknown")
+	assert.Regexp(t, "PD012101", err)
+}

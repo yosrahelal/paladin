@@ -18,19 +18,23 @@ package registrymgr
 import (
 	"context"
 	"crypto/rand"
+	"database/sql/driver"
 	"fmt"
 	"math/big"
 	"sync/atomic"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/toolkit/pkg/query"
-
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -120,34 +124,37 @@ func TestDoubleRegisterReplaces(t *testing.T) {
 
 }
 
-func TestUpsertTransportDetailsRealDBok(t *testing.T) {
+func randID() string { return tktypes.RandHex(32) }
+
+func randInt() int64 {
+	i, _ := rand.Int(rand.Reader, big.NewInt(10^9))
+	return i.Int64()
+}
+
+func randChainInfo() *prototk.OnChainEventLocation {
+	return &prototk.OnChainEventLocation{
+		TransactionHash: tktypes.RandHex(32),
+		BlockNumber:     randInt(), TransactionIndex: randInt(), LogIndex: randInt(),
+	}
+}
+
+func randPropFor(id string) *prototk.RegistryProperty {
+	return &prototk.RegistryProperty{
+		EntryId:  id,
+		Name:     fmt.Sprintf("prop_%s", tktypes.RandHex(5)),
+		Value:    fmt.Sprintf("val_%s", tktypes.RandHex(5)),
+		Active:   true,
+		Location: randChainInfo(),
+	}
+}
+
+func TestUpsertRegistryRecordsRealDBok(t *testing.T) {
 	ctx, rm, tp, _, done := newTestRegistry(t, true)
 	defer done()
 
 	r, err := rm.GetRegistry(ctx, "test1")
 	require.NoError(t, err)
 	db := rm.persistence.DB()
-
-	randID := func() string { return tktypes.RandHex(32) }
-	randInt := func() int64 {
-		i, _ := rand.Int(rand.Reader, big.NewInt(10^9))
-		return i.Int64()
-	}
-	randChainInfo := func() *prototk.OnChainEventLocation {
-		return &prototk.OnChainEventLocation{
-			TransactionHash: tktypes.RandHex(32),
-			BlockNumber:     randInt(), TransactionIndex: randInt(), LogIndex: randInt(),
-		}
-	}
-	randPropFor := func(id string) *prototk.RegistryProperty {
-		return &prototk.RegistryProperty{
-			EntryId:  id,
-			Name:     fmt.Sprintf("prop_%s", tktypes.RandHex(5)),
-			Value:    fmt.Sprintf("val_%s", tktypes.RandHex(5)),
-			Active:   true,
-			Location: randChainInfo(),
-		}
-	}
 
 	// Insert a root entry
 	rootEntry1 := &prototk.RegistryEntry{Id: randID(), Name: "entry1", Location: randChainInfo(), Active: true}
@@ -166,7 +173,7 @@ func TestUpsertTransportDetailsRealDBok(t *testing.T) {
 	assert.NotNil(t, res)
 
 	// Test getting all the entries with props
-	entries, err := r.QueryEntriesWithProps(ctx, db, "active", query.NewQueryBuilder().Query())
+	entries, err := r.QueryEntriesWithProps(ctx, db, "active", query.NewQueryBuilder().Limit(100).Query())
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
 	assert.Equal(t, rootEntry1.Id, entries[0].ID.HexString())
@@ -179,7 +186,7 @@ func TestUpsertTransportDetailsRealDBok(t *testing.T) {
 
 	// Test on a non-null field
 	entries, err = r.QueryEntriesWithProps(ctx, db, "active",
-		query.NewQueryBuilder().NotNull(rootEntry2Props2.Name).Query(),
+		query.NewQueryBuilder().NotNull(rootEntry2Props2.Name).Limit(100).Query(),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, rootEntry2.Id, entries[0].ID.HexString())
@@ -190,7 +197,7 @@ func TestUpsertTransportDetailsRealDBok(t *testing.T) {
 
 	// Test on an equal field
 	entries, err = r.QueryEntriesWithProps(ctx, db, "active",
-		query.NewQueryBuilder().Equal(rootEntry1Props1.Name, rootEntry1Props1.Value).Query(),
+		query.NewQueryBuilder().Equal(rootEntry1Props1.Name, rootEntry1Props1.Value).Limit(100).Query(),
 	)
 	require.NoError(t, err)
 	assert.Equal(t, rootEntry1.Id, entries[0].ID.HexString())
@@ -209,7 +216,7 @@ func TestUpsertTransportDetailsRealDBok(t *testing.T) {
 	// Find children and check sorting fields
 	children, err := r.QueryEntries(ctx, db, "active", query.NewQueryBuilder().Equal(
 		".parentId", rootEntry1.Id,
-	).Sort("-.created", "-.updated").Query())
+	).Sort("-.created", "-.updated").Limit(100).Query())
 	require.NoError(t, err)
 	require.Len(t, children, 1)
 	require.Equal(t, root1ChildEntry1.Id, children[0].ID.HexString())
@@ -228,14 +235,14 @@ func TestUpsertTransportDetailsRealDBok(t *testing.T) {
 
 	// Check not returned from normal query
 	entries, err = r.QueryEntriesWithProps(ctx, db, "active",
-		query.NewQueryBuilder().Null(".parentId").Query())
+		query.NewQueryBuilder().Null(".parentId").Limit(100).Query())
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Equal(t, rootEntry1.Id, entries[0].ID.HexString())
 
 	// Check returned from cherry pick with any
 	entries, err = r.QueryEntriesWithProps(ctx, db, "any",
-		query.NewQueryBuilder().Equal(".name", rootEntry2.Name).Query())
+		query.NewQueryBuilder().Equal(".name", rootEntry2.Name).Limit(100).Query())
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Equal(t, rootEntry2.Id, entries[0].ID.HexString())
@@ -247,7 +254,7 @@ func TestUpsertTransportDetailsRealDBok(t *testing.T) {
 
 	// Check returned from cherry pick with inactive
 	entries, err = r.QueryEntriesWithProps(ctx, db, "inactive",
-		query.NewQueryBuilder().Equal(".id", rootEntry2.Id).Query())
+		query.NewQueryBuilder().Equal(".id", rootEntry2.Id).Limit(100).Query())
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Equal(t, rootEntry2.Id, entries[0].ID.HexString())
@@ -269,31 +276,296 @@ func TestUpsertTransportDetailsRealDBok(t *testing.T) {
 	require.Equal(t, rootEntry2Props2.Value, propsMap[rootEntry2Props2.Name])
 }
 
-// func TestUpsertTransportDetailsInsertFail(t *testing.T) {
-// 	ctx, _, tp, m, done := newTestRegistry(t, false)
-// 	defer done()
+func TestUpsertRegistryRecordsInsertBadID(t *testing.T) {
+	ctx, _, tp, m, done := newTestRegistry(t, false)
+	defer done()
 
-// 	m.db.ExpectBegin()
-// 	m.db.ExpectExec("INSERT.*registry_transport_details").WillReturnError(fmt.Errorf("pop"))
+	m.db.ExpectBegin()
 
-// 	_, err := tp.r.UpsertTransportDetails(ctx, &prototk.UpsertTransportDetails{
-// 		TransportDetails: []*prototk.TransportDetails{
-// 			{
-// 				Node:      "node1",
-// 				Transport: "websockets",
-// 				Details:   "more things and stuff",
-// 			},
-// 		},
-// 	})
-// 	assert.Regexp(t, "pop", err)
+	entry1 := &prototk.RegistryEntry{Id: "not hex", Name: "entry1", Active: true}
+	_, err := tp.r.UpsertRegistryRecords(ctx, &prototk.UpsertRegistryRecordsRequest{
+		Entries: []*prototk.RegistryEntry{entry1},
+	})
+	assert.Regexp(t, "PD012103.*not hex", err)
+}
 
-// }
+func TestUpsertRegistryRecordsInsertBadParentID(t *testing.T) {
+	ctx, _, tp, m, done := newTestRegistry(t, false)
+	defer done()
+
+	m.db.ExpectBegin()
+
+	entry1 := &prototk.RegistryEntry{Id: randID(), ParentId: "not hex", Name: "entry1", Active: true}
+	_, err := tp.r.UpsertRegistryRecords(ctx, &prototk.UpsertRegistryRecordsRequest{
+		Entries: []*prototk.RegistryEntry{entry1},
+	})
+	assert.Regexp(t, "PD012106.*not hex", err)
+}
+
+func TestUpsertRegistryRecordsInsertBadName(t *testing.T) {
+	ctx, _, tp, m, done := newTestRegistry(t, false)
+	defer done()
+
+	m.db.ExpectBegin()
+
+	entry1 := &prototk.RegistryEntry{Id: randID(), Name: "not valid", Active: true}
+	_, err := tp.r.UpsertRegistryRecords(ctx, &prototk.UpsertRegistryRecordsRequest{
+		Entries: []*prototk.RegistryEntry{entry1},
+	})
+	assert.Regexp(t, "PD012104.*not valid", err)
+}
+
+func TestUpsertRegistryRecordsInsertPropBadEntryID(t *testing.T) {
+	ctx, _, tp, m, done := newTestRegistry(t, false)
+	defer done()
+
+	m.db.ExpectBegin()
+
+	_, err := tp.r.UpsertRegistryRecords(ctx, &prototk.UpsertRegistryRecordsRequest{
+		Properties: []*prototk.RegistryProperty{
+			{EntryId: "not valid"},
+		},
+	})
+	assert.Regexp(t, "PD012103.*not valid", err)
+}
+
+func TestUpsertRegistryRecordsInsertPropBadName(t *testing.T) {
+	ctx, _, tp, m, done := newTestRegistry(t, false)
+	defer done()
+
+	m.db.ExpectBegin()
+
+	_, err := tp.r.UpsertRegistryRecords(ctx, &prototk.UpsertRegistryRecordsRequest{
+		Properties: []*prototk.RegistryProperty{
+			{EntryId: randID(), Name: "not valid"},
+		},
+	})
+	assert.Regexp(t, "PD012105.*not valid", err)
+}
+
+func TestUpsertRegistryRecordsInsertEntryFail(t *testing.T) {
+	ctx, _, tp, m, done := newTestRegistry(t, false)
+	defer done()
+
+	m.db.ExpectBegin()
+	m.db.ExpectExec("INSERT.*reg_entries").WillReturnError(fmt.Errorf("pop"))
+
+	entry1 := &prototk.RegistryEntry{Id: randID(), Name: "entry1", Active: true}
+	_, err := tp.r.UpsertRegistryRecords(ctx, &prototk.UpsertRegistryRecordsRequest{
+		Entries: []*prototk.RegistryEntry{entry1},
+	})
+	assert.Regexp(t, "pop", err)
+}
+
+func TestUpsertRegistryRecordsInsertPropFail(t *testing.T) {
+	ctx, _, tp, m, done := newTestRegistry(t, false)
+	defer done()
+
+	m.db.ExpectBegin()
+	m.db.ExpectExec("INSERT.*reg_props").WillReturnError(fmt.Errorf("pop"))
+
+	_, err := tp.r.UpsertRegistryRecords(ctx, &prototk.UpsertRegistryRecordsRequest{
+		Properties: []*prototk.RegistryProperty{randPropFor(randID())},
+	})
+	assert.Regexp(t, "pop", err)
+}
+
+func TestQueryEntriesQueryNoLimit(t *testing.T) {
+	ctx, _, tp, _, done := newTestRegistry(t, false)
+	defer done()
+
+	_, err := tp.r.QueryEntriesWithProps(ctx, tp.r.rm.persistence.DB(), "active", query.NewQueryBuilder().Query())
+	assert.Regexp(t, "PD012107", err)
+}
+
+func TestQueryEntriesQueryFail(t *testing.T) {
+	ctx, _, tp, m, done := newTestRegistry(t, false)
+	defer done()
+
+	m.db.ExpectQuery("SELECT.*reg_entries").WillReturnError(fmt.Errorf("pop"))
+
+	_, err := tp.r.QueryEntries(ctx, tp.r.rm.persistence.DB(), "active", query.NewQueryBuilder().Limit(100).Query())
+	assert.Regexp(t, "pop", err)
+}
+
+func TestGetEntryPropertiesQueryFail(t *testing.T) {
+	ctx, _, tp, m, done := newTestRegistry(t, false)
+	defer done()
+
+	m.db.ExpectQuery("SELECT.*reg_entries").WillReturnRows(sqlmock.
+		NewRows([]string{"id"}).
+		AddRow(tktypes.HexBytes(tktypes.RandBytes(32))))
+	m.db.ExpectQuery("SELECT.*reg_props").WillReturnError(fmt.Errorf("pop"))
+
+	_, err := tp.r.QueryEntriesWithProps(ctx, tp.r.rm.persistence.DB(), "active", query.NewQueryBuilder().Limit(100).Query())
+	assert.Regexp(t, "pop", err)
+}
+
+func TestRegistryWithEventStreams(t *testing.T) {
+	es := &blockindexer.EventStream{ID: uuid.New()}
+
+	_, _, tp, _, done := newTestRegistry(t, false, func(mc *mockComponents, regConf *prototk.RegistryConfig) {
+		a := abi.ABI{
+			{
+				Type: abi.Event,
+				Name: "Registered",
+				Inputs: abi.ParameterArray{
+					{Name: "node", Type: "string"},
+					{Name: "details", Type: "string"},
+				},
+			},
+		}
+		addr := tktypes.RandAddress()
+
+		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.MatchedBy(func(ies *blockindexer.InternalEventStream) bool {
+			require.Len(t, ies.Definition.Sources, 1)
+			assert.JSONEq(t, tktypes.JSONString(a).String(), tktypes.JSONString(ies.Definition.Sources[0].ABI).String())
+			assert.Equal(t, addr, ies.Definition.Sources[0].Address)
+			return true
+		})).Return(es, nil)
+
+		regConf.EventSources = []*prototk.RegistryEventSource{
+			{
+				ContractAddress: addr.String(),
+				AbiEventsJson:   tktypes.JSONString(a).Pretty(),
+			},
+		}
+	})
+	defer done()
+
+	assert.Equal(t, es, tp.r.eventStream)
+
+}
+
+func TestConfigureEventStreamBadEventABI(t *testing.T) {
+	ctx, _, tp, _, done := newTestRegistry(t, false)
+	defer done()
+
+	tp.r.config = &prototk.RegistryConfig{
+		EventSources: []*prototk.RegistryEventSource{
+			{
+				AbiEventsJson: `{!!! wrong `,
+			},
+		},
+	}
+	err := tp.r.configureEventStream(ctx)
+	assert.Regexp(t, "PD012102", err)
+
+}
+
+func TestConfigureEventStreamBadEventContractAddr(t *testing.T) {
+	ctx, _, tp, _, done := newTestRegistry(t, false)
+	defer done()
+
+	tp.r.config = &prototk.RegistryConfig{
+		EventSources: []*prototk.RegistryEventSource{
+			{
+				ContractAddress: "wrong",
+			},
+		},
+	}
+	err := tp.r.configureEventStream(ctx)
+	assert.Regexp(t, "PD012102", err)
+
+}
+
+func TestConfigureEventStreamBadEventABITypes(t *testing.T) {
+	ctx, _, tp, _, done := newTestRegistry(t, false)
+	defer done()
+
+	tp.r.config = &prototk.RegistryConfig{
+		EventSources: []*prototk.RegistryEventSource{
+			{
+				AbiEventsJson: `[{"type":"event","inputs":[{"type":"badness"}]}]`,
+			},
+		},
+	}
+	err := tp.r.configureEventStream(ctx)
+	assert.Regexp(t, "FF22025", err)
+
+}
+
+func TestHandleEventBatchOk(t *testing.T) {
+
+	ctx, _, tp, _, done := newTestRegistry(t, false, func(mc *mockComponents, regConf *prototk.RegistryConfig) {
+		mc.db.ExpectExec("INSERT.*reg_entries").WillReturnResult(driver.ResultNoRows)
+	})
+	defer done()
+
+	batch := &blockindexer.EventDeliveryBatch{
+		StreamID:   uuid.New(),
+		StreamName: "registry_1",
+		BatchID:    uuid.New(),
+		Events: []*blockindexer.EventWithData{
+			{
+				IndexedEvent: &blockindexer.IndexedEvent{
+					BlockNumber:      12345,
+					TransactionIndex: 10,
+					LogIndex:         20,
+					TransactionHash:  tktypes.Bytes32(tktypes.RandBytes(32)),
+					Signature:        tktypes.Bytes32(tktypes.RandBytes(32)),
+				},
+				SoliditySignature: "event1()",
+				Address:           *tktypes.RandAddress(),
+				Data:              []byte("some data"),
+			},
+		},
+	}
+
+	tp.Functions.HandleRegistryEvents = func(ctx context.Context, rebr *prototk.HandleRegistryEventsRequest) (*prototk.HandleRegistryEventsResponse, error) {
+		assert.Equal(t, batch.BatchID.String(), rebr.BatchId)
+		assert.Equal(t, "event1()", rebr.Events[0].SoliditySignature)
+		return &prototk.HandleRegistryEventsResponse{
+			Entries: []*prototk.RegistryEntry{
+				{
+					Id:   randID(),
+					Name: "node1",
+				},
+			},
+		}, nil
+	}
+
+	res, err := tp.r.handleEventBatch(ctx, tp.r.rm.persistence.DB(), batch)
+	require.NoError(t, err)
+	assert.NotNil(t, res)
+
+}
+
+func TestHandleEventBatchError(t *testing.T) {
+
+	ctx, _, tp, _, done := newTestRegistry(t, false)
+	defer done()
+
+	batch := &blockindexer.EventDeliveryBatch{
+		BatchID: uuid.New(),
+		Events: []*blockindexer.EventWithData{{
+			IndexedEvent: &blockindexer.IndexedEvent{
+				BlockNumber:      12345,
+				TransactionIndex: 10,
+				LogIndex:         20,
+				TransactionHash:  tktypes.Bytes32(tktypes.RandBytes(32)),
+				Signature:        tktypes.Bytes32(tktypes.RandBytes(32)),
+			},
+			SoliditySignature: "event1()",
+			Address:           *tktypes.RandAddress(),
+			Data:              []byte("some data"),
+		}},
+	}
+
+	tp.Functions.HandleRegistryEvents = func(ctx context.Context, rebr *prototk.HandleRegistryEventsRequest) (*prototk.HandleRegistryEventsResponse, error) {
+		return nil, fmt.Errorf("pop")
+	}
+
+	_, err := tp.r.handleEventBatch(ctx, tp.r.rm.persistence.DB(), batch)
+	require.Regexp(t, "pop", err)
+
+}
 
 // func TestGetNodeTransportsCache(t *testing.T) {
 // 	ctx, rm, _, m, done := newTestRegistry(t, false)
 // 	defer done()
 
-// 	m.db.ExpectQuery("SELECT.*registry_transport_details").WillReturnRows(sqlmock.NewRows([]string{
+// 	m.db.ExpectQuery("SELECT.*registry_entries").WillReturnRows(sqlmock.NewRows([]string{
 // 		"node", "registry", "transport", "details",
 // 	}).AddRow(
 // 		"node1", "test1", "websockets", "things and stuff",
@@ -323,169 +595,8 @@ func TestUpsertTransportDetailsRealDBok(t *testing.T) {
 // 	ctx, rm, _, m, done := newTestRegistry(t, false)
 // 	defer done()
 
-// 	m.db.ExpectQuery("SELECT.*registry_transport_details").WillReturnError(fmt.Errorf("pop"))
+// 	m.db.ExpectQuery("SELECT.*registry_entries").WillReturnError(fmt.Errorf("pop"))
 
 // 	_, err := rm.GetNodeTransports(ctx, "node1")
 // 	require.Regexp(t, "pop", err)
-// }
-
-// func TestRegistryWithEventStreams(t *testing.T) {
-// 	es := &blockindexer.EventStream{ID: uuid.New()}
-
-// 	_, _, tp, _, done := newTestRegistry(t, false, func(mc *mockComponents, regConf *prototk.RegistryConfig) {
-// 		a := abi.ABI{
-// 			{
-// 				Type: abi.Event,
-// 				Name: "Registered",
-// 				Inputs: abi.ParameterArray{
-// 					{Name: "node", Type: "string"},
-// 					{Name: "details", Type: "string"},
-// 				},
-// 			},
-// 		}
-// 		addr := tktypes.RandAddress()
-
-// 		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.MatchedBy(func(ies *blockindexer.InternalEventStream) bool {
-// 			require.Len(t, ies.Definition.Sources, 1)
-// 			assert.JSONEq(t, tktypes.JSONString(a).String(), tktypes.JSONString(ies.Definition.Sources[0].ABI).String())
-// 			assert.Equal(t, addr, ies.Definition.Sources[0].Address)
-// 			return true
-// 		})).Return(es, nil)
-
-// 		regConf.EventSources = []*prototk.RegistryEventSource{
-// 			{
-// 				ContractAddress: addr.String(),
-// 				AbiEventsJson:   tktypes.JSONString(a).Pretty(),
-// 			},
-// 		}
-// 	})
-// 	defer done()
-
-// 	assert.Equal(t, es, tp.r.eventStream)
-
-// }
-
-// func TestConfigureEventStreamBadEventABI(t *testing.T) {
-// 	ctx, _, tp, _, done := newTestRegistry(t, false)
-// 	defer done()
-
-// 	tp.r.config = &prototk.RegistryConfig{
-// 		EventSources: []*prototk.RegistryEventSource{
-// 			{
-// 				AbiEventsJson: `{!!! wrong `,
-// 			},
-// 		},
-// 	}
-// 	err := tp.r.configureEventStream(ctx)
-// 	assert.Regexp(t, "PD012103", err)
-
-// }
-
-// func TestConfigureEventStreamBadEventContractAddr(t *testing.T) {
-// 	ctx, _, tp, _, done := newTestRegistry(t, false)
-// 	defer done()
-
-// 	tp.r.config = &prototk.RegistryConfig{
-// 		EventSources: []*prototk.RegistryEventSource{
-// 			{
-// 				ContractAddress: "wrong",
-// 			},
-// 		},
-// 	}
-// 	err := tp.r.configureEventStream(ctx)
-// 	assert.Regexp(t, "PD012103", err)
-
-// }
-
-// func TestConfigureEventStreamBadEventABITypes(t *testing.T) {
-// 	ctx, _, tp, _, done := newTestRegistry(t, false)
-// 	defer done()
-
-// 	tp.r.config = &prototk.RegistryConfig{
-// 		EventSources: []*prototk.RegistryEventSource{
-// 			{
-// 				AbiEventsJson: `[{"type":"event","inputs":[{"type":"badness"}]}]`,
-// 			},
-// 		},
-// 	}
-// 	err := tp.r.configureEventStream(ctx)
-// 	assert.Regexp(t, "FF22025", err)
-
-// }
-
-// func TestHandleEventBatchOk(t *testing.T) {
-
-// 	ctx, _, tp, _, done := newTestRegistry(t, false, func(mc *mockComponents, regConf *prototk.RegistryConfig) {
-// 		mc.db.ExpectExec("INSERT.*registry_transport_details").WillReturnResult(driver.ResultNoRows)
-// 	})
-// 	defer done()
-
-// 	batch := &blockindexer.EventDeliveryBatch{
-// 		StreamID:   uuid.New(),
-// 		StreamName: "registry_1",
-// 		BatchID:    uuid.New(),
-// 		Events: []*blockindexer.EventWithData{
-// 			{
-// 				IndexedEvent: &blockindexer.IndexedEvent{
-// 					BlockNumber:      12345,
-// 					TransactionIndex: 10,
-// 					LogIndex:         20,
-// 					TransactionHash:  tktypes.Bytes32(tktypes.RandBytes(32)),
-// 					Signature:        tktypes.Bytes32(tktypes.RandBytes(32)),
-// 				},
-// 				SoliditySignature: "event1()",
-// 				Address:           *tktypes.RandAddress(),
-// 				Data:              []byte("some data"),
-// 			},
-// 		},
-// 	}
-
-// 	tp.Functions.RegistryEventBatch = func(ctx context.Context, rebr *prototk.RegistryEventBatchRequest) (*prototk.RegistryEventBatchResponse, error) {
-// 		assert.Equal(t, batch.BatchID.String(), rebr.BatchId)
-// 		assert.Equal(t, "event1()", rebr.Events[0].SoliditySignature)
-// 		return &prototk.RegistryEventBatchResponse{
-// 			TransportDetails: []*prototk.TransportDetails{
-// 				{
-// 					Node:      "node1",
-// 					Transport: "websockets",
-// 					Details:   "some details",
-// 				},
-// 			},
-// 		}, nil
-// 	}
-
-// 	res, err := tp.r.handleEventBatch(ctx, tp.r.rm.persistence.DB(), batch)
-// 	require.NoError(t, err)
-// 	assert.NotNil(t, res)
-
-// }
-
-// func TestHandleEventBatchError(t *testing.T) {
-
-// 	ctx, _, tp, _, done := newTestRegistry(t, false)
-// 	defer done()
-
-// 	batch := &blockindexer.EventDeliveryBatch{
-// 		BatchID: uuid.New(),
-// 		Events: []*blockindexer.EventWithData{{
-// 			IndexedEvent: &blockindexer.IndexedEvent{
-// 				BlockNumber:      12345,
-// 				TransactionIndex: 10,
-// 				LogIndex:         20,
-// 				TransactionHash:  tktypes.Bytes32(tktypes.RandBytes(32)),
-// 				Signature:        tktypes.Bytes32(tktypes.RandBytes(32)),
-// 			},
-// 			SoliditySignature: "event1()",
-// 			Address:           *tktypes.RandAddress(),
-// 			Data:              []byte("some data"),
-// 		}},
-// 	}
-
-// 	tp.Functions.RegistryEventBatch = func(ctx context.Context, rebr *prototk.RegistryEventBatchRequest) (*prototk.RegistryEventBatchResponse, error) {
-// 		return nil, fmt.Errorf("pop")
-// 	}
-
-// 	_, err := tp.r.handleEventBatch(ctx, tp.r.rm.persistence.DB(), batch)
-// 	require.Regexp(t, "pop", err)
-
 // }
