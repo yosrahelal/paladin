@@ -212,11 +212,11 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 		},
 	}
 
-	nodesConfig := make(map[string]*static.NodeStaticEntry)
+	nodesConfig := make(map[string]*static.StaticEntry)
 	for _, peerNode := range peerNodes {
-		nodesConfig[peerNode.identity.String()] = &static.NodeStaticEntry{
-			Transports: map[string]tktypes.RawJSON{
-				"grpc": tktypes.JSONString(
+		nodesConfig[peerNode.identity.String()] = &static.StaticEntry{
+			Properties: map[string]tktypes.RawJSON{
+				"transport.grpc": tktypes.JSONString(
 					grpc.PublishedTransportDetails{
 						Endpoint: fmt.Sprintf("dns:///%s:%d", peerNodes[0].address, peerNodes[0].port),
 						Issuers:  peerNodes[0].cert,
@@ -233,7 +233,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 				Library: "loaded/via/unit/test/loader",
 			},
 			Config: map[string]any{
-				"nodes": nodesConfig,
+				"entries": nodesConfig,
 			},
 		},
 	}
