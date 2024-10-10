@@ -21,6 +21,7 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/registries/static/internal/msgs"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -93,6 +94,7 @@ func (r *staticRegistry) recurseBuildUpsert(ctx context.Context, req *prototk.Up
 		Id:       entryID.String(),
 		Name:     name,
 		ParentId: parentID.String(),
+		Active:   true,
 	}
 	properties := make([]*prototk.RegistryProperty, 0, len(inEntry.Properties))
 	for propName, jsonValue := range inEntry.Properties {
@@ -114,6 +116,7 @@ func (r *staticRegistry) recurseBuildUpsert(ctx context.Context, req *prototk.Up
 			strValue = jsonValue.String()
 		}
 
+		log.L(ctx).Infof("Registering %s prop=%s (parentId=%s)", entry.Name, propName, parentID)
 		properties = append(properties, &prototk.RegistryProperty{
 			EntryId: entry.Id,
 			Name:    propName,

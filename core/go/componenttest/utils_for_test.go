@@ -228,7 +228,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 				Library: "loaded/via/unit/test/loader",
 			},
 			Config: map[string]any{
-				"nodes": nodesConfig,
+				"entries": nodesConfig,
 			},
 		},
 	}
