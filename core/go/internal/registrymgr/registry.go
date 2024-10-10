@@ -148,7 +148,7 @@ func (r *registry) configureEventStream(ctx context.Context) (err error) {
 
 func (r *registry) UpsertRegistryRecords(ctx context.Context, req *prototk.UpsertRegistryRecordsRequest) (*prototk.UpsertRegistryRecordsResponse, error) {
 	var postCommit func()
-	err := r.rm.persistence.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+	err := r.rm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
 		postCommit, err = r.upsertRegistryRecords(ctx, dbTX, req.Entries, req.Properties)
 		return err
 	})

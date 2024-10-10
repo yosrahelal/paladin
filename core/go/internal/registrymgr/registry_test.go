@@ -154,7 +154,7 @@ func TestUpsertRegistryRecordsRealDBok(t *testing.T) {
 
 	r, err := rm.GetRegistry(ctx, "test1")
 	require.NoError(t, err)
-	db := rm.persistence.DB()
+	db := rm.p.DB()
 
 	// Insert a root entry
 	rootEntry1 := &prototk.RegistryEntry{Id: randID(), Name: "entry1", Location: randChainInfo(), Active: true}
@@ -374,7 +374,7 @@ func TestQueryEntriesQueryNoLimit(t *testing.T) {
 	ctx, _, tp, _, done := newTestRegistry(t, false)
 	defer done()
 
-	_, err := tp.r.QueryEntriesWithProps(ctx, tp.r.rm.persistence.DB(), "active", query.NewQueryBuilder().Query())
+	_, err := tp.r.QueryEntriesWithProps(ctx, tp.r.rm.p.DB(), "active", query.NewQueryBuilder().Query())
 	assert.Regexp(t, "PD012107", err)
 }
 
@@ -384,7 +384,7 @@ func TestQueryEntriesQueryFail(t *testing.T) {
 
 	m.db.ExpectQuery("SELECT.*reg_entries").WillReturnError(fmt.Errorf("pop"))
 
-	_, err := tp.r.QueryEntries(ctx, tp.r.rm.persistence.DB(), "active", query.NewQueryBuilder().Limit(100).Query())
+	_, err := tp.r.QueryEntries(ctx, tp.r.rm.p.DB(), "active", query.NewQueryBuilder().Limit(100).Query())
 	assert.Regexp(t, "pop", err)
 }
 
@@ -397,7 +397,7 @@ func TestGetEntryPropertiesQueryFail(t *testing.T) {
 		AddRow(tktypes.HexBytes(tktypes.RandBytes(32))))
 	m.db.ExpectQuery("SELECT.*reg_props").WillReturnError(fmt.Errorf("pop"))
 
-	_, err := tp.r.QueryEntriesWithProps(ctx, tp.r.rm.persistence.DB(), "active", query.NewQueryBuilder().Limit(100).Query())
+	_, err := tp.r.QueryEntriesWithProps(ctx, tp.r.rm.p.DB(), "active", query.NewQueryBuilder().Limit(100).Query())
 	assert.Regexp(t, "pop", err)
 }
 
@@ -525,7 +525,7 @@ func TestHandleEventBatchOk(t *testing.T) {
 		}, nil
 	}
 
-	res, err := tp.r.handleEventBatch(ctx, tp.r.rm.persistence.DB(), batch)
+	res, err := tp.r.handleEventBatch(ctx, tp.r.rm.p.DB(), batch)
 	require.NoError(t, err)
 	assert.NotNil(t, res)
 
@@ -556,47 +556,7 @@ func TestHandleEventBatchError(t *testing.T) {
 		return nil, fmt.Errorf("pop")
 	}
 
-	_, err := tp.r.handleEventBatch(ctx, tp.r.rm.persistence.DB(), batch)
+	_, err := tp.r.handleEventBatch(ctx, tp.r.rm.p.DB(), batch)
 	require.Regexp(t, "pop", err)
 
 }
-
-// func TestGetNodeTransportsCache(t *testing.T) {
-// 	ctx, rm, _, m, done := newTestRegistry(t, false)
-// 	defer done()
-
-// 	m.db.ExpectQuery("SELECT.*registry_entries").WillReturnRows(sqlmock.NewRows([]string{
-// 		"node", "registry", "transport", "details",
-// 	}).AddRow(
-// 		"node1", "test1", "websockets", "things and stuff",
-// 	))
-
-// 	expected := []*components.RegistryNodeTransportEntry{
-// 		{
-// 			Node:      "node1",
-// 			Registry:  "test1",
-// 			Transport: "websockets",
-// 			Details:   "things and stuff",
-// 		},
-// 	}
-
-// 	transports, err := rm.GetNodeTransports(ctx, "node1")
-// 	require.NoError(t, err)
-// 	assert.Equal(t, expected, transports)
-
-// 	// Re-do from cache
-// 	transports, err = rm.GetNodeTransports(ctx, "node1")
-// 	require.NoError(t, err)
-// 	assert.Equal(t, expected, transports)
-
-// }
-
-// func TestGetNodeTransportsErr(t *testing.T) {
-// 	ctx, rm, _, m, done := newTestRegistry(t, false)
-// 	defer done()
-
-// 	m.db.ExpectQuery("SELECT.*registry_entries").WillReturnError(fmt.Errorf("pop"))
-
-// 	_, err := rm.GetNodeTransports(ctx, "node1")
-// 	require.Regexp(t, "pop", err)
-// }

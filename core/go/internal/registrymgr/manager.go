@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
@@ -37,8 +38,11 @@ type registryManager struct {
 
 	conf *pldconf.RegistryManagerConfig
 
-	persistence  persistence.Persistence
+	p            persistence.Persistence
 	blockIndexer blockindexer.BlockIndexer
+
+	// We provide a high level of customization of how the nodes are looked up in the registry
+	registryTransportLookups map[string]*transportLookup
 
 	// Due to the high frequency of calls to the registry for node details, we maintain
 	// a cache of resolved nodes by name - which is a global index, across all registries.
@@ -50,16 +54,26 @@ type registryManager struct {
 
 func NewRegistryManager(bgCtx context.Context, conf *pldconf.RegistryManagerConfig) components.RegistryManager {
 	return &registryManager{
-		bgCtx:                 bgCtx,
-		conf:                  conf,
-		registriesByID:        make(map[uuid.UUID]*registry),
-		registriesByName:      make(map[string]*registry),
-		transportDetailsCache: cache.NewCache[string, []*components.RegistryNodeTransportEntry](&conf.RegistryManager.RegistryCache, pldconf.RegistryCacheDefaults),
+		bgCtx:                    bgCtx,
+		conf:                     conf,
+		registriesByID:           make(map[uuid.UUID]*registry),
+		registriesByName:         make(map[string]*registry),
+		registryTransportLookups: make(map[string]*transportLookup),
+		transportDetailsCache:    cache.NewCache[string, []*components.RegistryNodeTransportEntry](&conf.RegistryManager.RegistryCache, pldconf.RegistryCacheDefaults),
 	}
 }
 
-func (rm *registryManager) PreInit(pic components.PreInitComponents) (*components.ManagerInitResult, error) {
-	rm.persistence = pic.Persistence()
+func (rm *registryManager) PreInit(pic components.PreInitComponents) (_ *components.ManagerInitResult, err error) {
+	rm.p = pic.Persistence()
+
+	// For each of the registries, parse the transport lookup semantics
+	for regName, regConf := range rm.conf.Registries {
+		if confutil.Bool(regConf.Transports.Enabled, *pldconf.RegistryTransportsDefaults.Enabled) {
+			if rm.registryTransportLookups[regName], err = newTransportLookup(rm.bgCtx, regName, &regConf.Transports); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	return &components.ManagerInitResult{}, nil
 }
