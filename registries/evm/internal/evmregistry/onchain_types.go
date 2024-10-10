@@ -31,15 +31,24 @@ type SolidityBuild struct {
 type identityRegistryContractDefinition struct {
 	abi                         abi.ABI
 	identityRegisteredSignature tktypes.Bytes32
+	propertySetSignature        tktypes.Bytes32
 }
 
-const expectedSoliditySignature = "event IdentityRegistered(bytes32 parentIdentityHash, bytes32 identityHash, string name, address owner)"
+const identityRegisteredEventSolSig = "event IdentityRegistered(bytes32 parentIdentityHash, bytes32 identityHash, string name, address owner)"
 
 type IdentityRegisteredEvent struct {
 	ParentIdentityHash tktypes.Bytes32    `json:"parentIdentityHash"`
 	IdentityHash       tktypes.Bytes32    `json:"identityHash"`
-	Name               tktypes.Bytes32    `json:"name"`
+	Name               string             `json:"name"`
 	Owner              tktypes.EthAddress `json:"owner"`
+}
+
+const propertySetEventSolSig = "event PropertySet(bytes32 identityHash, string name, string value)"
+
+type PropertySetEvent struct {
+	IdentityHash tktypes.Bytes32 `json:"identityHash"`
+	Name         string          `json:"name"`
+	Value        string          `json:"value"`
 }
 
 func mustLoadIdentityRegistryContractDetail(buildOutput []byte) *identityRegistryContractDefinition {
@@ -49,15 +58,21 @@ func mustLoadIdentityRegistryContractDetail(buildOutput []byte) *identityRegistr
 		panic(err)
 	}
 
-	identityRegisteredEvent := build.ABI.Events()["IdentityRegistered"]
-
 	// We require the event not to have changed in it's signature (or our type parsing will fail)
-	if identityRegisteredEvent.SolString() != expectedSoliditySignature {
+
+	identityRegisteredEvent := build.ABI.Events()["IdentityRegistered"]
+	if identityRegisteredEvent.SolString() != identityRegisteredEventSolSig {
 		panic(fmt.Sprintf("contract signature has changed: %s", identityRegisteredEvent.SolString()))
+	}
+
+	propertySetEvent := build.ABI.Events()["PropertySet"]
+	if propertySetEvent.SolString() != propertySetEventSolSig {
+		panic(fmt.Sprintf("contract signature has changed: %s", propertySetEvent.SolString()))
 	}
 
 	return &identityRegistryContractDefinition{
 		abi:                         build.ABI,
 		identityRegisteredSignature: tktypes.Bytes32(identityRegisteredEvent.SignatureHashBytes()),
+		propertySetSignature:        tktypes.Bytes32(propertySetEvent.SignatureHashBytes()),
 	}
 }

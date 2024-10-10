@@ -18,7 +18,6 @@ package evmregistry
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	_ "embed"
 
@@ -88,74 +87,118 @@ func (r *evmRegistry) ConfigureRegistry(ctx context.Context, req *prototk.Config
 	}, nil
 }
 
-func (r *evmRegistry) registerNodeTransport(ctx context.Context, nodeName, transportName string, transportRecordUnparsed tktypes.RawJSON) error {
-	var untyped any
-	err := json.Unmarshal(transportRecordUnparsed, &untyped)
-	if err != nil {
-		return i18n.WrapError(ctx, err, msgs.MsgInvalidRegistryConfig, nodeName, transportName)
+func (r *evmRegistry) handleIdentityRegistered(ctx context.Context, inEvent *prototk.OnChainEvent) (*prototk.RegistryEntry, []*prototk.RegistryProperty, error) {
+	// We should be able to parse this
+	var parsedEvent IdentityRegisteredEvent
+	if err := json.Unmarshal([]byte(inEvent.DataJson), &parsedEvent); err != nil {
+		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgInvalidRegistryEvent, inEvent.Location)
 	}
 
-	// We let the config contain structured JSON (well YAML in it's original form before it was passed as JSON to us)
-	// Or we let the config contain a string
-	var transportDetails string
-	switch v := untyped.(type) {
-	case string:
-		// it's already a string - so it's our details directly
-		transportDetails = v
-	default:
-		// otherwise we preserve the JSON
-		transportDetails = transportRecordUnparsed.String()
+	// Check rules that the server will return errors for and we need to discard before hand
+	// as the on-chain smart contract does not reject these.
+	if err := tktypes.ValidateSafeCharsStartEndAlphaNum(ctx, parsedEvent.Name, tktypes.DefaultNameMaxLen, "name"); err != nil {
+		log.L(ctx).Warnf("Discarding %s event due to invalid entity name (%d/%d/%d): %s",
+			inEvent.SoliditySignature, inEvent.Location.BlockNumber, inEvent.Location.TransactionIndex, inEvent.Location.LogIndex, err)
+		// Not an error in our code
+		return nil, nil, nil
 	}
-	_, err = r.callbacks.UpsertTransportDetails(ctx, &prototk.UpsertTransportDetails{
-		TransportDetails: []*prototk.TransportDetails{
+
+	entryID := parsedEvent.IdentityHash.String()
+
+	parentID := ""
+	if !parsedEvent.Owner.IsZero() {
+		parentID = parsedEvent.Owner.String()
+	}
+
+	return &prototk.RegistryEntry{
+			Id:       entryID,
+			ParentId: parentID,
+			Name:     parsedEvent.Name,
+			Active:   true,
+			Location: inEvent.Location,
+		}, []*prototk.RegistryProperty{
 			{
-				Node:      nodeName,
-				Transport: transportName,
-				Details:   transportDetails,
+				EntryId:  entryID,
+				Name:     "owner", // reserved name for property
+				Value:    parsedEvent.Owner.String(),
+				Active:   true,
+				Location: inEvent.Location,
 			},
-		},
-	})
-	return err
+		}, nil
+
 }
 
-func (r *evmRegistry) RegistryEventBatch(ctx context.Context, req *prototk.RegistryEventBatchRequest) (*prototk.RegistryEventBatchResponse, error) {
+func (r *evmRegistry) handlePropertySet(ctx context.Context, inEvent *prototk.OnChainEvent) (*prototk.RegistryProperty, error) {
+	// We should be able to parse this
+	var parsedEvent PropertySetEvent
+	if err := json.Unmarshal([]byte(inEvent.DataJson), &parsedEvent); err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgInvalidRegistryEvent, inEvent.Location)
+	}
+
+	// Check rules that the server will return errors for and we need to discard before hand
+	// as the on-chain smart contract does not reject these.
+	if err := tktypes.ValidateSafeCharsStartEndAlphaNum(ctx, parsedEvent.Name, tktypes.DefaultNameMaxLen, "name"); err != nil {
+		log.L(ctx).Warnf("Discarding %s event due to invalid property name (%d/%d/%d): %s",
+			inEvent.SoliditySignature, inEvent.Location.BlockNumber, inEvent.Location.TransactionIndex, inEvent.Location.LogIndex, err)
+		// Not an error in our code
+		return nil, nil
+	}
+
+	// Cannot change the "owner" property
+	if parsedEvent.Name == "owner" {
+		log.L(ctx).Warnf("Discarding %s event due attempting to set 'owner' property (%d/%d/%d)",
+			inEvent.SoliditySignature, inEvent.Location.BlockNumber, inEvent.Location.TransactionIndex, inEvent.Location.LogIndex)
+		// Not an error in our code
+		return nil, nil
+	}
+
+	return &prototk.RegistryProperty{
+		EntryId:  parsedEvent.IdentityHash.String(),
+		Name:     parsedEvent.Name,
+		Value:    parsedEvent.Value,
+		Active:   true,
+		Location: inEvent.Location,
+	}, nil
+}
+
+func (r *evmRegistry) HandleRegistryEvents(ctx context.Context, req *prototk.HandleRegistryEventsRequest) (*prototk.HandleRegistryEventsResponse, error) {
+
+	entries := []*prototk.RegistryEntry{}
+	properties := []*prototk.RegistryProperty{}
 
 	// Parse all the events
-	parsedEvents := make([]*prototk.TransportDetails, 0, len(req.Events))
 	for _, inEvent := range req.Events {
 		inSig, err := tktypes.ParseBytes32(inEvent.Signature)
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgInvalidRegistryEvent, inEvent.Location)
 		}
-		if !contractDetail.identityRegisteredSignature.Equals(&inSig) {
-			log.L(ctx).Debugf("Discarding event (not IdentityRegistered): %s", inEvent.SoliditySignature)
+		switch {
+		case contractDetail.identityRegisteredSignature.Equals(&inSig):
+			regEntry, regProps, err := r.handleIdentityRegistered(ctx, inEvent)
+			if err != nil {
+				return nil, err
+			}
+			if regEntry != nil {
+				entries = append(entries, regEntry)
+				properties = append(properties, regProps...)
+			}
+		case contractDetail.propertySetSignature.Equals(&inSig):
+			newProp, err := r.handlePropertySet(ctx, inEvent)
+			if err != nil {
+				return nil, err
+			}
+			if newProp != nil {
+				properties = append(properties, newProp)
+			}
+		default:
+			log.L(ctx).Infof("Discarding event unhandled by registry (%d/%d/%d): %s",
+				inEvent.Location.BlockNumber, inEvent.Location.TransactionIndex, inEvent.Location.LogIndex, inEvent.SoliditySignature)
 			continue
 		}
-
-		// We should be able to parse this
-		var parsedEvent IdentityRegisteredEvent
-		if err := json.Unmarshal([]byte(inEvent.DataJson), &parsedEvent); err != nil {
-			return nil, i18n.WrapError(ctx, err, msgs.MsgInvalidRegistryEvent, inEvent.Location)
-		}
-
-		// We only look at the root entries
-		if !parsedEvent.ParentIdentityHash.IsZero() {
-			log.L(ctx).Debugf("Discarding IdentityRegistered for non-root identity: %+v", parsedEvent)
-			continue
-		}
-
-		// Check the node is a valid identity string - as Solidity does not enforce this
-		if _, err = tktypes.PrivateIdentityLocator(fmt.Sprintf("anything@%s", parsedEvent.Name)).Node(ctx, false); err != nil {
-			log.L(ctx).Warnf("Discarding IdentityRegistered due to INVALID node name for Paladin: %+v", parsedEvent)
-			continue
-		}
-
-		// parsedEvents = append(parsedEvents, &prototk.TransportDetails{
-		// 	Node: ,
-		// })
 	}
 
-	// We only consider root events interesting
-
-	return &prototk.RegistryEventBatchResponse{}, nil
+	return &prototk.HandleRegistryEventsResponse{
+		Entries:    entries,
+		Properties: properties,
+	}, nil
 }

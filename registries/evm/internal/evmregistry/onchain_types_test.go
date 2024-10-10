@@ -39,6 +39,21 @@ func TestDetectsContractChangeAtBuildTime(t *testing.T) {
 		}))
 	})
 
+	assert.PanicsWithValue(t, "contract signature has changed: event PropertySet(address different)", func() {
+		mustLoadIdentityRegistryContractDetail(tktypes.JSONString(SolidityBuild{
+			ABI: abi.ABI{
+				contractDetail.abi.Events()["IdentityRegistered"],
+				{
+					Type: abi.Event,
+					Name: "PropertySet",
+					Inputs: abi.ParameterArray{
+						{Name: "different", Type: "address"},
+					},
+				},
+			},
+		}))
+	})
+
 }
 
 func TestBreaksIfBuildIsBroken(t *testing.T) {
