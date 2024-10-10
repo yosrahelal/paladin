@@ -360,8 +360,6 @@ func TestPrivateTransactionsMintThenTransfer(t *testing.T) {
 		"Transaction did not receive a receipt",
 	)
 
-	assert.Fail(t, "failing test so that we get the logs")
-
 }
 
 func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
