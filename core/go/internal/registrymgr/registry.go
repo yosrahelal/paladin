@@ -26,11 +26,12 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
@@ -241,11 +242,14 @@ func (r *registry) upsertRegistryRecords(ctx context.Context, dbTX *gorm.DB, pro
 			return nil, i18n.WrapError(ctx, err, msgs.MsgRegistryInvalidEntityID, protoProp.EntityId)
 		}
 
-		// Much more relaxed here about what goes into a property name and value
-		// Any restrictions on that are down to the registry plugin alone.
-		// Note all properties are stored and filtered as text - there is no
-		// concept of an integer-sorted property (none of the complexity we support
-		// with schema typing in the state store)
+		// We require the names of properties to conform to rules, so that we can distinguish
+		// these properties from our ".id", ".created", ".updated" properties.
+		// Note as above it is the registry plugin's responsibility to handle cases where a
+		// value that does not conform is published to it (by logging and discarding it etc.)
+		if err := tktypes.ValidateSafeCharsStartEndAlphaNum(ctx, protoProp.Name, tktypes.DefaultNameMaxLen, protoProp.Name); err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgRegistryInvalidPropertyName, protoProp.Name)
+		}
+
 		dbp := &DBProperty{
 			Registry: r.name,
 			EntityID: entityID,
@@ -324,6 +328,186 @@ func (r *registry) upsertRegistryRecords(ctx context.Context, dbTX *gorm.DB, pro
 		// So instead we just zap the whole cache when we have an update.
 		r.rm.transportDetailsCache.Clear()
 	}, nil
+}
+
+type dynamicFieldSet struct {
+	props       []string
+	propIndexes map[string]int
+}
+
+// Track which fields are used in the query, as we create a dynamic join for each
+func (dfs *dynamicFieldSet) ResolverFor(propName string) filters.FieldResolver {
+	switch propName {
+	case ".id":
+		return filters.HexBytesField(`"registry_entities"."id"`)
+	case ".created":
+		return filters.TimestampField(`"registry_entities"."created"`)
+	case ".updated":
+		return filters.TimestampField(`"registry_entities"."updated"`)
+	}
+
+	idx, exists := dfs.propIndexes[propName]
+	if !exists {
+		idx = len(dfs.props)
+		dfs.propIndexes[propName] = idx
+		dfs.props = append(dfs.props, propName)
+	}
+	return filters.StringField(fmt.Sprintf("p%d.value", idx))
+}
+
+func (r *registry) QueryEntities(ctx context.Context, dbTX *gorm.DB, fActive components.ActiveFilter, jq *query.QueryJSON) ([]*components.RegistryEntity, error) {
+
+	dfs := &dynamicFieldSet{propIndexes: make(map[string]int)}
+
+	q := filters.BuildGORM(ctx, jq,
+		dbTX.WithContext(ctx).
+			Table("registry_entities").
+			Where(`"registry_entities"."registry" = ?`, r.name),
+		dfs)
+
+	switch fActive {
+	case components.ActiveFilterAny: // no filter
+	case components.ActiveFilterInactive:
+		q = q.Where(`"registry_entities"."active" IS FALSE`)
+	case components.ActiveFilterActive:
+		fallthrough
+	default:
+		q = q.Where(`"registry_entities"."active" IS TRUE`)
+	}
+
+	// After BuildGORM completes, dfs will have a list of all the fields used in the query.
+	// We create a join to a virtual column for each.
+	for idx, prop := range dfs.props {
+		q = q.Joins(fmt.Sprintf(
+			// The property might not exist, so LEFT JOIN (assured to be zero or one),
+			// this will give us NULL for unset properties.
+			`LEFT JOIN registry_properties AS p%[1]d `+
+				`ON p%[1]d.registry = ? `+
+				`ON p%[1]d.active IS TRUE `+ // only select on active props, regardless of active query on entity
+				`ON p%[1]d.entity_id = "registry_entities"."id" `+
+				`AND p%[1]d.name = ?`, idx),
+			r.name,
+			prop)
+	}
+
+	var dbEntities []*DBEntity
+	err := q.Find(&dbEntities).Error
+	if err != nil {
+		return nil, err
+	}
+
+	entities := make([]*components.RegistryEntity, len(dbEntities))
+	for i, dbe := range dbEntities {
+		entity := &components.RegistryEntity{
+			Registry: dbe.Registry,
+			ID:       dbe.ID,
+			Name:     dbe.Name,
+		}
+		// Return nil (not empty) for parent string here - this avoids DB index complexity with null values
+		if len(dbe.ParentID) > 0 {
+			entity.ParentID = dbe.ParentID
+		}
+		// Return active if explicitly included in query
+		if fActive != components.ActiveFilterActive {
+			entity.ActiveFlag = &components.ActiveFlag{Active: dbe.Active}
+		}
+		// For block info, our insert logic ensures if one is set they are all set
+		if dbe.BlockNumber != nil {
+			entity.OnChainLocation = &components.OnChainLocation{
+				BlockNumber:      *dbe.BlockNumber,
+				TransactionIndex: *dbe.TransactionIndex,
+				LogIndex:         *dbe.TransactionIndex,
+			}
+		}
+		entities[i] = entity
+	}
+
+	return entities, nil
+
+}
+
+func (r *registry) GetEntityProperties(ctx context.Context, dbTX *gorm.DB, fActive components.ActiveFilter, entityIDs ...tktypes.HexBytes) ([]*components.RegistryProperty, error) {
+
+	var dbProps []*DBProperty
+	q := dbTX.WithContext(ctx).
+		Table("registry_properties").
+		Where("registry = ?", r.name).
+		Where("entity_id IN (?)", entityIDs)
+
+	switch fActive {
+	case components.ActiveFilterAny: // no filter
+	case components.ActiveFilterInactive:
+		q = q.Where("active IS FALSE")
+	case components.ActiveFilterActive:
+		fallthrough
+	default:
+		q = q.Where("active IS TRUE")
+	}
+
+	err := q.Find(&dbProps).Error
+	if err != nil {
+		return nil, err
+	}
+
+	props := make([]*components.RegistryProperty, len(dbProps))
+	for i, dbp := range dbProps {
+		prop := &components.RegistryProperty{
+			Registry: dbp.Registry,
+			EntityID: dbp.EntityID,
+			Name:     dbp.Name,
+			Value:    dbp.Value,
+		}
+		// Return active if the query was anything apart from the active query
+		if fActive != components.ActiveFilterActive {
+			prop.ActiveFlag = &components.ActiveFlag{Active: dbp.Active}
+		}
+		// For block info, our insert logic ensures if one is set they are all set
+		if dbp.BlockNumber != nil {
+			prop.OnChainLocation = &components.OnChainLocation{
+				BlockNumber:      *dbp.BlockNumber,
+				TransactionIndex: *dbp.TransactionIndex,
+				LogIndex:         *dbp.TransactionIndex,
+			}
+		}
+		props[i] = prop
+	}
+
+	return props, nil
+
+}
+
+func (r *registry) QueryEntitiesWithProps(ctx context.Context, dbTX *gorm.DB, fActive components.ActiveFilter, jq *query.QueryJSON) ([]*components.RegistryEntityWithProperties, error) {
+
+	entities, err := r.QueryEntities(ctx, dbTX, fActive, jq)
+	if err != nil {
+		return nil, err
+	}
+
+	entityIDs := make([]tktypes.HexBytes, len(entities))
+	for i, e := range entities {
+		entityIDs[i] = e.ID
+	}
+
+	entityProps, err := r.GetEntityProperties(ctx, dbTX, components.ActiveFilterActive /* still active props regardless of filter on active for entity */, entityIDs...)
+	if err != nil {
+		return nil, err
+	}
+
+	withProps := make([]*components.RegistryEntityWithProperties, len(entities))
+	for i, e := range entities {
+		props := make(map[string]string)
+		for _, p := range entityProps {
+			if p.EntityID.Equals(e.ID) {
+				props[p.Name] = p.Value
+			}
+		}
+		withProps[i] = &components.RegistryEntityWithProperties{
+			RegistryEntity: e,
+			Properties:     props,
+		}
+	}
+
+	return withProps, nil
 }
 
 func (r *registry) close() {

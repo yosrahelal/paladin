@@ -19,10 +19,12 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 // Special mapped type of record used by the transport plugin to route to nodes.
@@ -37,19 +39,25 @@ type RegistryNodeTransportEntry struct {
 
 // An entity within a registry with its current properties
 type RegistryEntity struct {
-	Registry         string           `json:"registry"`           // the registry that maintains this record
-	ID               string           `json:"id"`                 // unique within the registry, across all records in the hierarchy
-	Name             string           `json:"name"`               // unique across entries with the same parent, within the particular registry
-	ParentID         string           `json:"parentId,omitempty"` // will be the empty string for a root record, otherwise will be a reference to another entity in the same registry
-	*OnChainLocation `json:",inline"` // only included if the registry uses blockchain indexing
+	Registry         string              `json:"registry"`           // the registry that maintains this record
+	ID               tktypes.HexBytes    `json:"id"`                 // unique within the registry, across all records in the hierarchy
+	Name             string              `json:"name"`               // unique across entries with the same parent, within the particular registry
+	ParentID         tktypes.HexBytes    `json:"parentId,omitempty"` // nil a root record, otherwise will be a reference to another entity in the same registry
+	*OnChainLocation `json:",omitempty"` // only included if the registry uses blockchain indexing
+	*ActiveFlag      `json:",omitempty"` // only returned from queries that explicitly look for inactive entries
 }
 
 type RegistryProperty struct {
-	Registry         string           `json:"registry"` // the registry that maintains this record
-	EntityID         string           `json:"entityId"` // the ID of the entity that owns this record within the registry
-	Name             string           `json:"name"`     // unique across entries with the same parent, within the particular registry
-	Value            string           `json:"value"`    // unique across entries with the same parent, within the particular registry
-	*OnChainLocation `json:",inline"` // only included if the registry uses blockchain indexing
+	Registry         string              `json:"registry"` // the registry that maintains this record
+	EntityID         tktypes.HexBytes    `json:"entityId"` // the ID of the entity that owns this record within the registry
+	Name             string              `json:"name"`     // unique across entries with the same parent, within the particular registry
+	Value            string              `json:"value"`    // unique across entries with the same parent, within the particular registry
+	*OnChainLocation `json:",omitempty"` // only included if the registry uses blockchain indexing
+	*ActiveFlag      `json:",omitempty"` // only returned from queries that explicitly look for inactive entries
+}
+
+type ActiveFlag struct {
+	Active bool `json:"active"`
 }
 
 type OnChainLocation struct {
@@ -59,8 +67,8 @@ type OnChainLocation struct {
 }
 
 type RegistryEntityWithProperties struct {
-	RegistryEntity
-	Properties map[string]string `json:"properties"` // all properties are name=value string pairs
+	*RegistryEntity `json:",inline"`
+	Properties      map[string]string `json:"properties"` // all properties are name=value string pairs
 }
 
 type RegistryManagerToRegistry interface {
@@ -73,6 +81,31 @@ type RegistryManager interface {
 	ConfiguredRegistries() map[string]*pldconf.PluginConfig
 	RegistryRegistered(name string, id uuid.UUID, toRegistry RegistryManagerToRegistry) (fromRegistry plugintk.RegistryCallbacks, err error)
 	GetNodeTransports(ctx context.Context, node string) ([]*RegistryNodeTransportEntry, error)
-	QueryEntities(ctx context.Context, registry string, jq *query.QueryJSON) ([]*RegistryEntityWithProperties, error)
-	GetEntityProperties(ctx context.Context, registry, entityId string) ([]*RegistryProperty, error)
+	GetRegistry(ctx context.Context, name string) (Registry, error)
+}
+
+type ActiveFilter string
+
+const (
+	ActiveFilterActive   ActiveFilter = "active"
+	ActiveFilterInactive ActiveFilter = "inactive"
+	ActiveFilterAny      ActiveFilter = "any"
+)
+
+func (af ActiveFilter) Enum() tktypes.Enum[ActiveFilter] {
+	return tktypes.Enum[ActiveFilter](af)
+}
+
+func (af ActiveFilter) Options() []string {
+	return []string{
+		string(ActiveFilterActive),
+		string(ActiveFilterInactive),
+		string(ActiveFilterAny),
+	}
+}
+
+type Registry interface {
+	QueryEntities(ctx context.Context, dbTX *gorm.DB, fActive ActiveFilter, jq *query.QueryJSON) ([]*RegistryEntity, error)
+	QueryEntitiesWithProps(ctx context.Context, dbTX *gorm.DB, fActive ActiveFilter, jq *query.QueryJSON) ([]*RegistryEntityWithProperties, error)
+	GetEntityProperties(ctx context.Context, dbTX *gorm.DB, fActive ActiveFilter, entityIDs ...tktypes.HexBytes) ([]*RegistryProperty, error)
 }

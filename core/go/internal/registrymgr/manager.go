@@ -29,7 +29,6 @@ import (
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 )
 
 type registryManager struct {
@@ -129,6 +128,17 @@ func (rm *registryManager) RegistryRegistered(name string, id uuid.UUID, toRegis
 	return t, nil
 }
 
+func (rm *registryManager) GetRegistry(ctx context.Context, name string) (components.Registry, error) {
+	rm.mux.Lock()
+	defer rm.mux.Unlock()
+
+	r := rm.registriesByName[name]
+	if r == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgRegistryNotFound, name)
+	}
+	return r, nil
+}
+
 func (rm *registryManager) GetNodeTransports(ctx context.Context, node string) ([]*components.RegistryNodeTransportEntry, error) {
 	// Check cache
 	transports, present := rm.transportDetailsCache.Get(node)
@@ -145,14 +155,4 @@ func (rm *registryManager) GetNodeTransports(ctx context.Context, node string) (
 	}
 
 	return nil, i18n.NewError(ctx, msgs.MsgRegistryNodeEntiresNotFound, node)
-}
-
-// GetEntityProperties implements components.RegistryManager.
-func (rm *registryManager) GetEntityProperties(ctx context.Context, registry string, entityId string) ([]*components.RegistryProperty, error) {
-	panic("unimplemented")
-}
-
-// QueryEntities implements components.RegistryManager.
-func (rm *registryManager) QueryEntities(ctx context.Context, registry string, jq *query.QueryJSON) ([]*components.RegistryEntityWithProperties, error) {
-	panic("unimplemented")
 }
