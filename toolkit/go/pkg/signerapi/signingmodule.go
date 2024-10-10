@@ -21,83 +21,83 @@ import (
 
 type ResolveKeyRequest struct {
 	// a name assured to be unique at this path
-	Name string
+	Name string `json:"name"`
 
 	// a unique index managed by the key manager assured to be unique at this path. Used for key derivation (BIP32). Should not be used for direct mapping.
-	Index               uint64
-	Attributes          map[string]string
-	Path                []*ResolveKeyPathSegment
-	RequiredIdentifiers []*PublicKeyIdentifierType
+	Index               uint64                     `json:"index"`
+	Attributes          map[string]string          `json:"attributes"`
+	Path                []*ResolveKeyPathSegment   `json:"path"`
+	RequiredIdentifiers []*PublicKeyIdentifierType `json:"requiredIdentifiers"`
 }
 
 type ResolveKeyResponse struct {
-	KeyHandle   string
-	Identifiers []*PublicKeyIdentifier
+	KeyHandle   string                 `json:"keyHandle"`
+	Identifiers []*PublicKeyIdentifier `json:"identifiers"`
 }
 
 type SignRequest struct {
 	// the key handle as returned by a previoius Resolve call (potentially a very long time ago)
-	KeyHandle string
+	KeyHandle string `json:"keyHandle"`
 
 	// identifier for the signing engine and algorithm to use in signing. Examples: "ecdsa:secp256k1" or "domain:zeto:circuit1"
-	Algorithm string
+	Algorithm string `json:"algorithm"`
 
 	// describes the input and output payload combination to the signer. Example: "opaque:rsv" or "groth16:zeto"
-	PayloadType string
+	PayloadType string `json:"payloadType"`
 
 	// the input payload to process according to the algorithm
-	Payload tktypes.HexBytes
+	Payload tktypes.HexBytes `json:"payload"`
 }
 
 type SignResponse struct {
 	// an set of bytes appropriate to the Paladin signing algorithm spec used
-	Payload tktypes.HexBytes
+	Payload tktypes.HexBytes `json:"payload"`
 }
 
 type ListKeysRequest struct {
 	// the maximum number of records to return
-	Limit int
+	Limit int `json:"limit"`
 
 	// the "next" string from a previous call, or empty
-	Continue string
+	Continue string `json:"continue"`
 }
 
 type ListKeysResponse struct {
 	// any length less than the limit will cause the caller to assume there might be more records
-	Items []*ListKeyEntry
+	Items []*ListKeyEntry `json:"items"`
 
 	// non empty string to support pagination when the are potentially more records
-	Next string
+	Next string `json:"next"`
 }
 
 type ResolveKeyPathSegment struct {
 	// the name of the path segment (folder)
-	Name string
+	Name string `json:"name"`
 
 	// a unique index managed by the key manager assured to be unique at this level in the path. Used for key derivation (BIP32). Should not be used for direct mapping.
-	Index uint64
+	Index uint64 `json:"index"`
 }
 
 type ListKeyEntry struct {
-	Name        string
-	KeyHandle   string
-	Attributes  map[string]string
-	Path        []*ListKeyPathSegment
-	Identifiers []*PublicKeyIdentifier
+	Name        string                 `json:"name"`
+	KeyHandle   string                 `json:"keyHandle"`
+	Attributes  map[string]string      `json:"attributes"`
+	Path        []*ListKeyPathSegment  `json:"path"`
+	Identifiers []*PublicKeyIdentifier `json:"identifiers"`
 }
 
 // The only discoverable item for a path segment is the name, but it is an object for future extensibility
 type ListKeyPathSegment struct {
-	Name string
+	Name string `json:"name"`
 }
 
 type PublicKeyIdentifierType struct {
-	Algorithm    string
-	VerifierType string
+	Algorithm    string `json:"algorithm"`
+	VerifierType string `json:"verifierType"`
 }
 
 type PublicKeyIdentifier struct {
-	Algorithm    string
-	VerifierType string
-	Verifier     string
+	Algorithm    string `json:"algorithm"`
+	VerifierType string `json:"verifierType"`
+	Verifier     string `json:"verifier"`
 }
