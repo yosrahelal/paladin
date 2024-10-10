@@ -21,7 +21,7 @@ import (
 
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -66,8 +66,8 @@ func TestMintInit(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, res.RequiredVerifiers, 1)
 	assert.Equal(t, "Alice", res.RequiredVerifiers[0].Lookup)
-	assert.Equal(t, zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, res.RequiredVerifiers[0].VerifierType)
-	assert.Equal(t, zetosigner.AlgoDomainZetoSnarkBJJ("test1"), res.RequiredVerifiers[0].Algorithm)
+	assert.Equal(t, zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, res.RequiredVerifiers[0].VerifierType)
+	assert.Equal(t, zetosignerapi.AlgoDomainZetoSnarkBJJ("test1"), res.RequiredVerifiers[0].Algorithm)
 }
 
 func TestMintAssemble(t *testing.T) {
@@ -99,8 +99,8 @@ func TestMintAssemble(t *testing.T) {
 		ResolvedVerifiers: []*prototk.ResolvedVerifier{
 			{
 				Lookup:       "Alice",
-				Algorithm:    zetosigner.AlgoDomainZetoSnarkBJJ("test1"),
-				VerifierType: zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+				Algorithm:    zetosignerapi.AlgoDomainZetoSnarkBJJ("test1"),
+				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 				Verifier:     "0x1234567890123456789012345678901234567890",
 			},
 		},

@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zetosigner
+package zetosignerapi
 
 import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"

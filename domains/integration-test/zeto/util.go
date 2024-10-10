@@ -26,7 +26,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	zetotypes "github.com/kaleido-io/paladin/domains/zeto/pkg/types"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -101,7 +101,7 @@ func DeployZetoContracts(t *testing.T, hdWalletSeed *testbed.UTInitFunction, con
 
 func PrepareZetoConfig(t *testing.T, domainContracts *ZetoDomainContracts, zkpDir string) *zetotypes.DomainFactoryConfig {
 	config := zetotypes.DomainFactoryConfig{
-		SnarkProver: zetosigner.SnarkProverConfig{
+		SnarkProver: zetosignerapi.SnarkProverConfig{
 			CircuitsDir:    zkpDir,
 			ProvingKeysDir: zkpDir,
 		},

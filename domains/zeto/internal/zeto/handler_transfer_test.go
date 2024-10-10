@@ -24,7 +24,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -65,7 +65,7 @@ func TestTransferInit(t *testing.T) {
 	assert.Len(t, req.RequiredVerifiers, 2)
 	assert.Equal(t, "Bob", req.RequiredVerifiers[0].Lookup)
 	assert.Equal(t, h.zeto.getAlgoZetoSnarkBJJ(), req.RequiredVerifiers[0].Algorithm)
-	assert.Equal(t, zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.RequiredVerifiers[0].VerifierType)
+	assert.Equal(t, zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.RequiredVerifiers[0].VerifierType)
 	assert.Equal(t, "Alice", req.RequiredVerifiers[1].Lookup)
 }
 
@@ -108,7 +108,7 @@ func TestTransferAssemble(t *testing.T) {
 				Lookup:       "Alice",
 				Verifier:     "0x1234567890123456789012345678901234567890",
 				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
-				VerifierType: zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
 		},
 		Transaction: txSpec,
@@ -124,7 +124,7 @@ func TestTransferAssemble(t *testing.T) {
 		Lookup:       "Alice",
 		Verifier:     "0x1234567890123456789012345678901234567890",
 		Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
-		VerifierType: zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+		VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 	})
 	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "failed to load sender public key. expected 32 bytes in hex string, got 20")
@@ -253,7 +253,7 @@ func TestTransferPrepare(t *testing.T) {
 	_, err := h.Prepare(ctx, tx, req)
 	assert.EqualError(t, err, "did not find 'sender' attestation")
 
-	at := zetosigner.PAYLOAD_DOMAIN_ZETO_SNARK
+	at := zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK
 	req.AttestationResult = []*prototk.AttestationResult{
 		{
 			Name:            "sender",

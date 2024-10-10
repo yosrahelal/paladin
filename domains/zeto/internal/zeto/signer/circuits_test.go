@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zetosigner
+package signer
 
 import (
 	_ "embed"
@@ -21,6 +21,7 @@ import (
 	"path"
 	"testing"
 
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,7 +46,7 @@ func TestLoadCircuit(t *testing.T) {
 	err = os.WriteFile(path.Join(tmpDir, "test.zkey"), []byte("test"), 0644)
 	require.NoError(t, err)
 
-	config := &SnarkProverConfig{}
+	config := &zetosignerapi.SnarkProverConfig{}
 	config.CircuitsDir = tmpDir
 	config.ProvingKeysDir = tmpDir
 
@@ -69,7 +70,7 @@ func TestLoadCircuitFail(t *testing.T) {
 	err = os.WriteFile(path.Join(tmpDir, "test_js", "test.wasm"), mockWASMModule(), 0644)
 	require.NoError(t, err)
 
-	config := &SnarkProverConfig{}
+	config := &zetosignerapi.SnarkProverConfig{}
 	_, _, err = loadCircuit("test", config)
 	assert.EqualError(t, err, "circuits root must be set via the configuration file")
 
@@ -81,7 +82,7 @@ func TestLoadCircuitFail(t *testing.T) {
 func TestLoadCircuitFailRead(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	config := &SnarkProverConfig{}
+	config := &zetosignerapi.SnarkProverConfig{}
 	config.CircuitsDir = tmpDir
 	config.ProvingKeysDir = tmpDir
 
@@ -96,7 +97,7 @@ func TestLoadCircuitFailReadZKey(t *testing.T) {
 	err = os.WriteFile(path.Join(tmpDir, "test_js", "test.wasm"), mockWASMModule(), 0644)
 	require.NoError(t, err)
 
-	config := &SnarkProverConfig{}
+	config := &zetosignerapi.SnarkProverConfig{}
 	config.CircuitsDir = tmpDir
 	config.ProvingKeysDir = tmpDir
 

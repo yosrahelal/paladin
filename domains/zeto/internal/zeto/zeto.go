@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -95,7 +96,7 @@ func (z *Zeto) CoinSchemaID() string {
 }
 
 func (z *Zeto) getAlgoZetoSnarkBJJ() string {
-	return zetosigner.AlgoDomainZetoSnarkBJJ(z.name)
+	return zetosignerapi.AlgoDomainZetoSnarkBJJ(z.name)
 }
 
 func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomainRequest) (*prototk.ConfigureDomainResponse, error) {

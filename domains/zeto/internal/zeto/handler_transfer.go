@@ -30,6 +30,7 @@ import (
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -61,12 +62,12 @@ func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction,
 			{
 				Lookup:       tx.Transaction.From,
 				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
-				VerifierType: zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
 			{
 				Lookup:       params.To,
 				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
-				VerifierType: zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
 		},
 	}, nil
@@ -75,11 +76,11 @@ func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction,
 func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.TransferParams)
 
-	resolvedSender := domain.FindVerifier(tx.Transaction.From, h.zeto.getAlgoZetoSnarkBJJ(), zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
+	resolvedSender := domain.FindVerifier(tx.Transaction.From, h.zeto.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
 	if resolvedSender == nil {
 		return nil, fmt.Errorf("failed to resolve: %s", tx.Transaction.From)
 	}
-	resolvedRecipient := domain.FindVerifier(params.To, h.zeto.getAlgoZetoSnarkBJJ(), zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
+	resolvedRecipient := domain.FindVerifier(params.To, h.zeto.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
 	if resolvedRecipient == nil {
 		return nil, fmt.Errorf("failed to resolve: %s", params.To)
 	}
@@ -131,8 +132,8 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 				Name:            "sender",
 				AttestationType: pb.AttestationType_SIGN,
 				Algorithm:       h.zeto.getAlgoZetoSnarkBJJ(),
-				VerifierType:    zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
-				PayloadType:     zetosigner.PAYLOAD_DOMAIN_ZETO_SNARK,
+				VerifierType:    zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+				PayloadType:     zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK,
 				Payload:         payloadBytes,
 				Parties:         []string{tx.Transaction.From},
 			},
