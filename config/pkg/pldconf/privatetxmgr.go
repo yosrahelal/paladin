@@ -23,7 +23,7 @@ type PrivateTxManagerConfig struct {
 }
 
 type StateDistributerConfig struct {
-	Writer FlushWriterConfig `json:"writer"`
+	AcknowledgementWriter FlushWriterConfig `json:"acknowledgementWriter"`
 }
 
 var PrivateTxManagerDefaults = &PrivateTxManagerConfig{

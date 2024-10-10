@@ -20,10 +20,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
@@ -31,14 +29,12 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 const RETRY_TIMEOUT = 5 * time.Second
 const STATE_DISTRIBUTER_DESTINATION = "state-distributer"
 
-func NewStateDistributer(ctx context.Context, nodeID string, transportManager components.TransportManager, stateManager components.StateManager, persistence persistence.Persistence, conf *pldconf.FlushWriterConfig) ptmgrtypes.StateDistributer {
+func NewStateDistributer(ctx context.Context, nodeID string, transportManager components.TransportManager, stateManager components.StateManager, persistence persistence.Persistence, conf *pldconf.StateDistributerConfig) ptmgrtypes.StateDistributer {
 	sd := &stateDistributer{
 		persistence:      persistence,
 		stopChan:         make(chan struct{}),
@@ -50,64 +46,29 @@ func NewStateDistributer(ctx context.Context, nodeID string, transportManager co
 		transportManager: transportManager,
 		nodeID:           nodeID,
 	}
-	sd.writer = flushwriter.NewWriter(ctx, sd.runBatch, sd.persistence, conf, &pldconf.StateDistributerAcknowledgementWriterConfigDefaults)
+	sd.acknowledgementWriter = NewAcknowledgementWriter(ctx, sd.persistence, &conf.AcknowledgementWriter)
+
 	return sd
 }
 
-type stateDistributionAcknowledgementWriteOperation struct {
-	stateDistributionID string
+type receivedStateWriteOperation struct {
+	DomainName      string
+	ContractAddress *tktypes.EthAddress
+	SchemaID        tktypes.Bytes32
+	StateDataJson   string
 }
 
 type stateDistributer struct {
-	persistence      persistence.Persistence
-	stateManager     components.StateManager
-	stopChan         chan struct{}
-	inputChan        chan *ptmgrtypes.StateDistribution
-	retryChan        chan string
-	acknowledgedChan chan string
-	pendingMap       map[string]*ptmgrtypes.StateDistribution
-	writer           flushwriter.Writer[*stateDistributionAcknowledgementWriteOperation, *noResult]
-	transportManager components.TransportManager
-	nodeID           string
-}
-
-func (sda *stateDistributionAcknowledgementWriteOperation) WriteKey() string {
-	//no ordering requiriements so just assign a worker at random for each write
-	return sda.stateDistributionID
-}
-
-type noResult struct{}
-
-type stateDistributionAcknowledgement struct {
-	StateDistribution string `json:"stateDistribution" gorm:"column:state_distribution"`
-	ID                string `json:"id" gorm:"column:id"`
-}
-
-func (sd *stateDistributer) runBatch(ctx context.Context, tx *gorm.DB, values []*stateDistributionAcknowledgementWriteOperation) ([]flushwriter.Result[*noResult], error) {
-	log.L(ctx).Debugf("stateDistributer:runBatch %d state distributions", len(values))
-
-	acknowledgements := make([]*stateDistributionAcknowledgement, 0, len(values))
-	for _, value := range values {
-		acknowledgements = append(acknowledgements, &stateDistributionAcknowledgement{
-			StateDistribution: value.stateDistributionID,
-			ID:                uuid.New().String(),
-		})
-	}
-
-	err := tx.
-		Table("state_distribution_acknowledgments").
-		Clauses(clause.OnConflict{
-			DoNothing: true, // immutable
-		}).
-		Create(acknowledgements).
-		Error
-	if err != nil {
-		log.L(ctx).Errorf("Error persisting state distribution acknowledgements: %s", err)
-	}
-
-	// We don't actually provide any result, so just build an array of nil results
-	return make([]flushwriter.Result[*noResult], len(values)), err
-
+	persistence           persistence.Persistence
+	stateManager          components.StateManager
+	stopChan              chan struct{}
+	inputChan             chan *ptmgrtypes.StateDistribution
+	retryChan             chan string
+	acknowledgedChan      chan string
+	pendingMap            map[string]*ptmgrtypes.StateDistribution
+	acknowledgementWriter *acknowledgementWriter
+	transportManager      components.TransportManager
+	nodeID                string
 }
 
 func (sd *stateDistributer) Start(ctx context.Context) error {
@@ -149,7 +110,7 @@ func (sd *stateDistributer) Start(ctx context.Context) error {
 		}
 	}
 
-	sd.writer.Start()
+	sd.acknowledgementWriter.Start()
 
 	go func() {
 		log.L(ctx).Info("stateDistributer:Loop starting loop")
@@ -165,9 +126,7 @@ func (sd *stateDistributer) Start(ctx context.Context) error {
 				_, stillPending := sd.pendingMap[stateDistributionID]
 				if stillPending {
 					log.L(ctx).Debugf("stateDistributer:Loop processing acknowledgment %s", stateDistributionID)
-					sd.writer.Queue(ctx, &stateDistributionAcknowledgementWriteOperation{
-						stateDistributionID: stateDistributionID,
-					})
+
 					delete(sd.pendingMap, stateDistributionID)
 				} else {
 					log.L(ctx).Debugf("stateDistributer:Loop already recieved acknowledgment %s", stateDistributionID)
@@ -357,6 +316,10 @@ func (sd *stateDistributer) handleStateAcknowledgedEvent(ctx context.Context, me
 		log.L(ctx).Errorf("Failed to unmarshal StateAcknowledgedEvent: %s", err)
 		return
 	}
+	sd.acknowledgementWriter.Queue(ctx, stateAcknowledgedEvent.DistributionId)
+	// no need to wait for the flush to complete, we can just stop the in memory loop from retrying
+	// worst case scenario, we crash before this is written to the DB, we do some redundant retries after a restart
+	// but waiting for the flush here is not going to prevent that
 	sd.acknowledgedChan <- stateAcknowledgedEvent.DistributionId
 
 }
