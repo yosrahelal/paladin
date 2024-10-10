@@ -47,15 +47,9 @@ func NewStateDistributer(ctx context.Context, nodeID string, transportManager co
 		nodeID:           nodeID,
 	}
 	sd.acknowledgementWriter = NewAcknowledgementWriter(ctx, sd.persistence, &conf.AcknowledgementWriter)
+	sd.receivedStateWriter = NewReceivedStateWriter(ctx, stateManager, persistence, &conf.ReceivedStateWriter)
 
 	return sd
-}
-
-type receivedStateWriteOperation struct {
-	DomainName      string
-	ContractAddress *tktypes.EthAddress
-	SchemaID        tktypes.Bytes32
-	StateDataJson   string
 }
 
 type stateDistributer struct {
@@ -67,6 +61,7 @@ type stateDistributer struct {
 	acknowledgedChan      chan string
 	pendingMap            map[string]*ptmgrtypes.StateDistribution
 	acknowledgementWriter *acknowledgementWriter
+	receivedStateWriter   *receivedStateWriter
 	transportManager      components.TransportManager
 	nodeID                string
 }
@@ -111,6 +106,7 @@ func (sd *stateDistributer) Start(ctx context.Context) error {
 	}
 
 	sd.acknowledgementWriter.Start()
+	sd.receivedStateWriter.Start()
 
 	go func() {
 		log.L(ctx).Info("stateDistributer:Loop starting loop")
@@ -129,7 +125,7 @@ func (sd *stateDistributer) Start(ctx context.Context) error {
 
 					delete(sd.pendingMap, stateDistributionID)
 				} else {
-					log.L(ctx).Debugf("stateDistributer:Loop already recieved acknowledgment %s", stateDistributionID)
+					log.L(ctx).Debugf("stateDistributer:Loop already received acknowledgment %s", stateDistributionID)
 
 				}
 				//if we didn't find it in the map, it was already acknowledged
@@ -172,7 +168,7 @@ func (sd *stateDistributer) DistributeStates(ctx context.Context, stateDistribut
 }
 
 func (sd *stateDistributer) sendState(ctx context.Context, stateDistribution *ptmgrtypes.StateDistribution) {
-	log.L(ctx).Debugf("stateDistributer:sendState %s", stateDistribution.ID)
+	log.L(ctx).Debugf("stateDistributer:sendState %s %s %s %s %s %s", stateDistribution.Domain, stateDistribution.ContractAddress, stateDistribution.SchemaID, stateDistribution.StateID, stateDistribution.IdentityLocator, stateDistribution.ID)
 
 	stateProducedEvent := &pb.StateProducedEvent{
 		DomainName:      stateDistribution.Domain,
@@ -276,15 +272,7 @@ func (sd *stateDistributer) handleStateProducedEvent(ctx context.Context, messag
 		return
 	}
 
-	//TODO use a flush writer to batch these up and write them to the state store
-
-	_, err = sd.stateManager.WriteReceivedStates(ctx, sd.persistence.DB(), stateProducedEvent.DomainName, []*components.StateUpsertOutsideContext{
-		{
-			ContractAddress: *tktypes.MustEthAddress(stateProducedEvent.ContractAddress),
-			SchemaID:        tktypes.MustParseBytes32(stateProducedEvent.SchemaId),
-			Data:            tktypes.RawJSON(stateProducedEvent.StateDataJson),
-		},
-	})
+	err = sd.receivedStateWriter.QueueAndWait(ctx, stateProducedEvent.DomainName, *tktypes.MustEthAddress(stateProducedEvent.ContractAddress), tktypes.MustParseBytes32(stateProducedEvent.SchemaId), tktypes.RawJSON(stateProducedEvent.StateDataJson))
 	if err != nil {
 		log.L(ctx).Errorf("Error writing state: %s", err)
 		//don't send the acknowledgement, with a bit of luck, the sender will retry and we will get it next time

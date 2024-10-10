@@ -35,7 +35,7 @@ var TxManagerDefaults = &TxManagerConfig{
 	},
 }
 
-var StateDistributerAcknowledgementWriterConfigDefaults = FlushWriterConfig{
+var StateDistributerWriterConfigDefaults = FlushWriterConfig{
 	WorkerCount:  confutil.P(10),
 	BatchTimeout: confutil.P("25ms"),
 	BatchMaxSize: confutil.P(100),

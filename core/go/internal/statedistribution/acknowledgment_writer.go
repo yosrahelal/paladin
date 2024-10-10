@@ -38,7 +38,7 @@ type acknowledgementWriter struct {
 
 func NewAcknowledgementWriter(ctx context.Context, persistence persistence.Persistence, conf *pldconf.FlushWriterConfig) *acknowledgementWriter {
 	aw := &acknowledgementWriter{}
-	aw.flushWriter = flushwriter.NewWriter(ctx, aw.runBatch, persistence, conf, &pldconf.StateDistributerAcknowledgementWriterConfigDefaults)
+	aw.flushWriter = flushwriter.NewWriter(ctx, aw.runBatch, persistence, conf, &pldconf.StateDistributerWriterConfigDefaults)
 	return aw
 }
 

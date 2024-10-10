@@ -24,6 +24,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
+	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
@@ -64,13 +65,13 @@ func (p *privateTxManager) PreInit(c components.PreInitComponents) (*components.
 func (p *privateTxManager) PostInit(c components.AllComponents) error {
 	p.components = c
 	p.store = privatetxnstore.NewStore(p.ctx, &p.config.Writer, c.Persistence())
-	p.stateDistributer = NewStateDistributer(
+	p.stateDistributer = statedistribution.NewStateDistributer(
 		p.ctx,
 		p.nodeID,
 		p.components.TransportManager(),
 		p.components.StateManager(),
 		p.components.Persistence(),
-		&p.config.StateDistributer.Writer)
+		&p.config.StateDistributer)
 	return p.components.TransportManager().RegisterClient(p.ctx, p)
 }
 
