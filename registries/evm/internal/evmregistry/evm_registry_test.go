@@ -108,10 +108,11 @@ func TestHandleEventBatchOk(t *testing.T) {
 			require.Len(t, req.Properties, 2)
 
 			require.Equal(t, &prototk.RegistryProperty{
-				EntryId: identityRegistered.IdentityHash.String(),
-				Name:    "owner",
-				Value:   identityRegistered.Owner.String(),
-				Active:  true,
+				EntryId:        identityRegistered.IdentityHash.String(),
+				Name:           "$owner",
+				Value:          identityRegistered.Owner.String(),
+				PluginReserved: true,
+				Active:         true,
 				Location: &prototk.OnChainEventLocation{
 					TransactionHash:  txHash1,
 					BlockNumber:      100,
@@ -278,36 +279,6 @@ func TestHandleEventBatchPropBadName(t *testing.T) {
 		IdentityHash: tktypes.Bytes32(tktypes.RandBytes(32)),
 		Name:         "___ wrong",
 		Value:        `{"endpoint":"details"}`,
-	}
-
-	callbacks := &testCallbacks{}
-
-	transport := evmRegistryFactory(callbacks).(*evmRegistry)
-	res, err := transport.HandleRegistryEvents(transport.bgCtx, &prototk.HandleRegistryEventsRequest{
-		BatchId: uuid.New().String(),
-		Events: []*prototk.OnChainEvent{
-			{
-				Location:          &prototk.OnChainEventLocation{TransactionHash: txHash, BlockNumber: 200, TransactionIndex: 20, LogIndex: 10},
-				Signature:         contractDetail.propertySetSignature.String(),
-				SoliditySignature: propertySetEventSolSig,
-				DataJson:          tktypes.JSONString(&propSet).Pretty(),
-			},
-		},
-	})
-	require.NoError(t, err)
-	require.Empty(t, res.Entries)
-	require.Empty(t, res.Properties)
-
-}
-
-func TestHandleEventBatchSetOwner(t *testing.T) {
-
-	txHash := tktypes.Bytes32(tktypes.RandBytes(32)).String()
-
-	propSet := PropertySetEvent{
-		IdentityHash: tktypes.Bytes32(tktypes.RandBytes(32)),
-		Name:         "owner",
-		Value:        `attempt to set owner prop`,
 	}
 
 	callbacks := &testCallbacks{}

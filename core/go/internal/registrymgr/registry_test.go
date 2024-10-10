@@ -159,6 +159,12 @@ func newPropFor(id, name, value string) *prototk.RegistryProperty {
 	}
 }
 
+func newSystemPropFor(id, name, value string) *prototk.RegistryProperty {
+	prop := newPropFor(id, name, value)
+	prop.PluginReserved = true
+	return prop
+}
+
 func TestUpsertRegistryRecordsRealDBok(t *testing.T) {
 	ctx, rm, tp, _, done := newTestRegistry(t, true)
 	defer done()
@@ -169,13 +175,14 @@ func TestUpsertRegistryRecordsRealDBok(t *testing.T) {
 
 	// Insert a root entry
 	rootEntry1 := &prototk.RegistryEntry{Id: randID(), Name: "entry1", Location: randChainInfo(), Active: true}
+	rootEntry1SysProp := newSystemPropFor(rootEntry1.Id, "$owner", tktypes.RandAddress().String())
 	rootEntry1Props1 := randPropFor(rootEntry1.Id)
 	rootEntry2 := &prototk.RegistryEntry{Id: randID(), Name: "entry2", Location: randChainInfo(), Active: true}
 	rootEntry2Props1 := randPropFor(rootEntry2.Id)
 	rootEntry2Props2 := randPropFor(rootEntry2.Id)
 	upsert1 := &prototk.UpsertRegistryRecordsRequest{
 		Entries:    []*prototk.RegistryEntry{rootEntry1, rootEntry2},
-		Properties: []*prototk.RegistryProperty{rootEntry1Props1, rootEntry2Props1, rootEntry2Props2},
+		Properties: []*prototk.RegistryProperty{rootEntry1Props1, rootEntry2Props1, rootEntry2Props2, rootEntry1SysProp},
 	}
 
 	// Upsert first entry
@@ -188,7 +195,8 @@ func TestUpsertRegistryRecordsRealDBok(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
 	assert.Equal(t, rootEntry1.Id, entries[0].ID.HexString())
-	require.Len(t, entries[0].Properties, 1)
+	require.Len(t, entries[0].Properties, 2)
+	require.Equal(t, rootEntry1SysProp.Value, entries[0].Properties[rootEntry1SysProp.Name])
 	require.Equal(t, rootEntry1Props1.Value, entries[0].Properties[rootEntry1Props1.Name])
 	assert.Equal(t, rootEntry2.Id, entries[1].ID.HexString())
 	require.Len(t, entries[1].Properties, 2)
@@ -213,8 +221,16 @@ func TestUpsertRegistryRecordsRealDBok(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, rootEntry1.Id, entries[0].ID.HexString())
 	require.Len(t, entries, 1)
-	require.Len(t, entries[0].Properties, 1)
+	require.Len(t, entries[0].Properties, 2)
+	require.Equal(t, rootEntry1SysProp.Value, entries[0].Properties[rootEntry1SysProp.Name])
 	require.Equal(t, rootEntry1Props1.Value, entries[0].Properties[rootEntry1Props1.Name])
+
+	// Search on the system prop
+	entries, err = r.QueryEntriesWithProps(ctx, db, "active",
+		query.NewQueryBuilder().Equal("$owner", rootEntry1SysProp.Value).Limit(100).Query(),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, rootEntry1.Id, entries[0].ID.HexString())
 
 	// Add a child entry - checking it's allowed to have the same name without replacing
 	root1ChildEntry1 := &prototk.RegistryEntry{Id: randID(), Name: "entry1", ParentId: rootEntry1.Id, Location: randChainInfo(), Active: true}
@@ -352,6 +368,20 @@ func TestUpsertRegistryRecordsInsertPropBadName(t *testing.T) {
 		},
 	})
 	assert.Regexp(t, "PD012105.*not valid", err)
+}
+
+func TestUpsertRegistryRecordsInsertPropBadPrefixNonReserved(t *testing.T) {
+	ctx, _, tp, m, done := newTestRegistry(t, false)
+	defer done()
+
+	m.db.ExpectBegin()
+
+	_, err := tp.r.UpsertRegistryRecords(ctx, &prototk.UpsertRegistryRecordsRequest{
+		Properties: []*prototk.RegistryProperty{
+			{EntryId: randID(), Name: "$anything", PluginReserved: false},
+		},
+	})
+	assert.Regexp(t, "PD012109.*\\$anything", err)
 }
 
 func TestUpsertRegistryRecordsInsertEntryFail(t *testing.T) {

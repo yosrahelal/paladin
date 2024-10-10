@@ -28,7 +28,7 @@ message UpsertRegistryRecordsResponse {}
 
 message RegistryEntry {
   string id = 1; // The id must be unique within this registry
-  string name = 2; // The name must be unique within the scope
+  string name = 2; // The name must be unique within the scope, and a valid Paladin name string
   string parent_id = 3; // The id of the parent record, or the empty string if this is a root record
   bool   active = 4; // Queries against the registry will by default ignore all inactive records
   optional OnChainEventLocation location = 5; // Recorded for provenance if provided
@@ -36,8 +36,9 @@ message RegistryEntry {
 
 message RegistryProperty {
   string entry_id = 1; // The parent entry - must already exist, but can be created in the same payload
-  string name = 2; // The property name
+  string name = 2; // The property name. Must be a valid Paladin name string, unless plugin_reserved=true in which case it must be a valid Palidin name string prefixed with "$"
   string value = 3; // The property value - always stored and queried as a string
   bool   active = 4; // Queries against the registry will by default ignore all inactive records
-  optional OnChainEventLocation location = 5; // Recorded for provenance if provided
+  bool   plugin_reserved = 5; // Allows a registry plugin to claim reserved property names like "$owner" that cannot clash with either Palading reserved ones like ".created", or user one
+  optional OnChainEventLocation location = 6; // Recorded for provenance if provided
 }

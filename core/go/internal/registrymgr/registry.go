@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"github.com/google/uuid"
@@ -252,11 +253,18 @@ func (r *registry) upsertRegistryRecords(ctx context.Context, dbTX *gorm.DB, pro
 			return nil, i18n.WrapError(ctx, err, msgs.MsgRegistryInvalidEntryID, protoProp.EntryId)
 		}
 
+		// Plugin reserved property names must start with $, which is not valid in the name so we
+		// cut it before checking the rest of the string.
+		nameToCheck, hasReservedPrefix := strings.CutPrefix(protoProp.Name, "$")
+		if protoProp.PluginReserved != hasReservedPrefix {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgRegistryDollarPrefixReserved, protoProp.Name, protoProp.PluginReserved)
+		}
+
 		// We require the names of properties to conform to rules, so that we can distinguish
 		// these properties from our ".id", ".created", ".updated" properties.
 		// Note as above it is the registry plugin's responsibility to handle cases where a
 		// value that does not conform is published to it (by logging and discarding it etc.)
-		if err := tktypes.ValidateSafeCharsStartEndAlphaNum(ctx, protoProp.Name, tktypes.DefaultNameMaxLen, "name"); err != nil {
+		if err := tktypes.ValidateSafeCharsStartEndAlphaNum(ctx, nameToCheck, tktypes.DefaultNameMaxLen, "name"); err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgRegistryInvalidPropertyName, protoProp.Name)
 		}
 

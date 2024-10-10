@@ -118,11 +118,12 @@ func (r *evmRegistry) handleIdentityRegistered(ctx context.Context, inEvent *pro
 			Location: inEvent.Location,
 		}, []*prototk.RegistryProperty{
 			{
-				EntryId:  entryID,
-				Name:     "owner", // reserved name for property
-				Value:    parsedEvent.Owner.String(),
-				Active:   true,
-				Location: inEvent.Location,
+				EntryId:        entryID,
+				Name:           "$owner", // note $ prefix for reserved name
+				Value:          parsedEvent.Owner.String(),
+				PluginReserved: true, // allows us to publish with $ prefix (avoiding name clash with any property name)
+				Active:         true,
+				Location:       inEvent.Location,
 			},
 		}, nil
 
@@ -140,14 +141,6 @@ func (r *evmRegistry) handlePropertySet(ctx context.Context, inEvent *prototk.On
 	if err := tktypes.ValidateSafeCharsStartEndAlphaNum(ctx, parsedEvent.Name, tktypes.DefaultNameMaxLen, "name"); err != nil {
 		log.L(ctx).Warnf("Discarding %s event due to invalid property name (%d/%d/%d): %s",
 			inEvent.SoliditySignature, inEvent.Location.BlockNumber, inEvent.Location.TransactionIndex, inEvent.Location.LogIndex, err)
-		// Not an error in our code
-		return nil, nil
-	}
-
-	// Cannot change the "owner" property
-	if parsedEvent.Name == "owner" {
-		log.L(ctx).Warnf("Discarding %s event due attempting to set 'owner' property (%d/%d/%d)",
-			inEvent.SoliditySignature, inEvent.Location.BlockNumber, inEvent.Location.TransactionIndex, inEvent.Location.LogIndex)
 		// Not an error in our code
 		return nil, nil
 	}
