@@ -11,6 +11,8 @@ rules:
   - besus
   - paladins
   - besugeneses
+  - paladinregistries
+  - paladindomains
   verbs:
   - get
   - list
@@ -24,6 +26,8 @@ rules:
   - besus/status
   - paladins/status
   - besugeneses/status
+  - paladinregistries/status
+  - paladindomains/status
   verbs:
   - get
   - patch

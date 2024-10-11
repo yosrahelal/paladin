@@ -196,12 +196,13 @@ task deploy(dependsOn: [createNode, verifyBesu, verifyPaladin]) {
 }
 
 // The 'e2e' task runs the whole flow
-task testE2E(type: Exec) {
+task e2e(type: Exec, dependsOn: [copySolidity, deploy]) {
     executable 'make'
     args 'test-e2e'
     args "NAMESPACE=${namespace}"
     args "CLUSTER_NAME=${clusterName}"
 }
+
  
 // Task to clean up resources
 task cleanCluster(type: Exec) {

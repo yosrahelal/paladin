@@ -149,13 +149,6 @@ func GetProjectDir() (string, error) {
 	return wd, nil
 }
 
-func KubectlApplyYAML(yaml string) error {
-	cmd := exec.Command("kubectl", "apply", "-f", "-")
-	cmd.Stdin = strings.NewReader(yaml)
-	_, err := Run(cmd)
-	return err
-}
-
 type TestDeployer struct {
 	RPC  rpcclient.Client
 	From string
