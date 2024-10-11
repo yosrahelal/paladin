@@ -241,7 +241,7 @@ func TestErrorWrapping(t *testing.T) {
 	mockEthClientFactory := componentmocks.NewEthClientFactory(t)
 
 	assert.Regexp(t, "PD010000.*pop", cm.addIfOpened("key_manager", mockKeyManager, errors.New("pop"), msgs.MsgComponentKeyManagerInitError))
-	assert.Regexp(t, "PD010017.*pop", cm.addIfStarted("engine", mockEthClientFactory, errors.New("pop"), msgs.MsgComponentEngineInitError))
+	assert.Regexp(t, "PD010002.*pop", cm.addIfStarted("eth_client", mockEthClientFactory, errors.New("pop"), msgs.MsgComponentEthClientInitError))
 	assert.Regexp(t, "PD010008.*pop", cm.wrapIfErr(errors.New("pop"), msgs.MsgComponentBlockIndexerInitError))
 
 }

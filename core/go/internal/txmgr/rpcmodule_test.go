@@ -135,7 +135,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
 	require.NoError(t, err)
 	assert.Len(t, txns, 1)
-	assert.Equal(t, tx1ID, txns[0].ID)
+	assert.Equal(t, tx1ID, *txns[0].ID)
 	assert.Equal(t, tx0ID, txns[0].DependsOn[0])
 	assert.Equal(t, `{"0":"12345"}`, txns[0].Data.String())
 	assert.Equal(t, "(uint256)", txns[0].Function)
@@ -192,11 +192,11 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	var tx2 *ptxapi.TransactionFull
 	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransaction", tx2ID, true)
 	require.NoError(t, err)
-	assert.Equal(t, tx2ID, tx2.ID)
+	assert.Equal(t, tx2ID, *tx2.ID)
 	assert.Equal(t, "set(uint256)", tx2.Function)
 	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransaction", tx2ID, false)
 	require.NoError(t, err)
-	assert.Equal(t, tx2ID, tx2.ID)
+	assert.Equal(t, tx2ID, *tx2.ID)
 
 	// Submit again and check we get the right error with the ID
 	err = rpcClient.CallRPC(ctx, &txIDs, "ptx_sendTransactions", []*ptxapi.TransactionInput{tx2Input})
@@ -238,7 +238,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	err = rpcClient.CallRPC(ctx, &pendingTransactionFull, "ptx_queryPendingTransactions", query.NewQueryBuilder().Limit(100).Query(), true)
 	require.NoError(t, err)
 	require.Len(t, pendingTransactionFull, 1)
-	require.Equal(t, tx2ID, pendingTransactionFull[0].ID)
+	require.Equal(t, tx2ID, *pendingTransactionFull[0].ID)
 	require.Len(t, pendingTransactionFull[0].DependsOn, 1)
 	var pendingTransactions []*ptxapi.Transaction
 	err = rpcClient.CallRPC(ctx, &pendingTransactions, "ptx_queryPendingTransactions", query.NewQueryBuilder().Limit(100).Query(), false)

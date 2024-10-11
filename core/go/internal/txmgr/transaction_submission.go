@@ -232,11 +232,11 @@ func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.Transac
 		if err != nil {
 			return nil, err
 		}
-		txIDs[i] = tx.ID
+		txIDs[i] = *tx.ID
 		if tx.Type.V() == ptxapi.TransactionTypePublic {
 			publicTxs = append(publicTxs, &components.PublicTxSubmission{
 				// Public transaction bound 1:1 with our parent transaction
-				Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: ptxapi.TransactionTypePublic.Enum()}},
+				Bindings: []*components.PaladinTXReference{{TransactionID: *tx.ID, TransactionType: ptxapi.TransactionTypePublic.Enum()}},
 				PublicTxInput: ptxapi.PublicTxInput{
 					From: tx.From,
 					To:   tx.To,
@@ -287,13 +287,13 @@ func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.Transac
 		if tx.Type.V() == ptxapi.TransactionTypePrivate {
 			if tx.To == nil {
 				err = tm.privateTxMgr.HandleDeployTx(ctx, &components.PrivateContractDeploy{
-					ID:     tx.ID,
+					ID:     *tx.ID,
 					Domain: tx.Domain,
 					Inputs: txi.inputs,
 				})
 			} else {
 				err = tm.privateTxMgr.HandleNewTx(ctx, &components.PrivateTransaction{
-					ID: tx.ID,
+					ID: *tx.ID,
 					Inputs: &components.TransactionInputs{
 						Domain:   tx.Domain,
 						From:     tx.From,
@@ -343,7 +343,8 @@ type txInsertInfo struct {
 }
 
 func (tm *txManager) resolveNewTransaction(ctx context.Context, tx *ptxapi.TransactionInput) (*txInsertInfo, error) {
-	tx.ID = uuid.New()
+	txID := uuid.New()
+	tx.ID = &txID
 
 	switch tx.Transaction.Type.V() {
 	case ptxapi.TransactionTypePrivate, ptxapi.TransactionTypePublic:
@@ -381,7 +382,7 @@ func (tm *txManager) insertTransactions(ctx context.Context, dbTX *gorm.DB, txis
 
 		// TODO: Flush writer for singleton transactions vs batch
 		ptxs[i] = &persistedTransaction{
-			ID:             tx.ID,
+			ID:             *tx.ID,
 			IdempotencyKey: notEmptyOrNull(tx.IdempotencyKey),
 			Type:           tx.Type,
 			ABIReference:   txi.fn.abiReference,
@@ -393,7 +394,7 @@ func (tm *txManager) insertTransactions(ctx context.Context, dbTX *gorm.DB, txis
 		}
 		for _, d := range tx.DependsOn {
 			transactionDeps = append(transactionDeps, &transactionDep{
-				Transaction: tx.ID,
+				Transaction: *tx.ID,
 				DependsOn:   d,
 			})
 		}

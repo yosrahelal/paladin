@@ -39,7 +39,7 @@ var transactionFilters = filters.FieldMap{
 
 func mapPersistedTXBase(pt *persistedTransaction) *ptxapi.Transaction {
 	res := &ptxapi.Transaction{
-		ID:             pt.ID,
+		ID:             &pt.ID,
 		Created:        pt.Created,
 		IdempotencyKey: stringOrEmpty(pt.IdempotencyKey),
 		Type:           pt.Type,
@@ -128,14 +128,14 @@ func (tm *txManager) queryTransactionsFullTx(ctx context.Context, jq *query.Quer
 func (tm *txManager) mergePublicTransactions(ctx context.Context, dbTX *gorm.DB, txs []*ptxapi.TransactionFull) ([]*ptxapi.TransactionFull, error) {
 	txIDs := make([]uuid.UUID, len(txs))
 	for i, tx := range txs {
-		txIDs[i] = tx.ID
+		txIDs[i] = *tx.ID
 	}
 	pubTxByTX, err := tm.publicTxMgr.QueryPublicTxForTransactions(ctx, dbTX, txIDs, nil)
 	if err != nil {
 		return nil, err
 	}
 	for _, tx := range txs {
-		tx.Public = pubTxByTX[tx.ID]
+		tx.Public = pubTxByTX[*tx.ID]
 	}
 	return txs, nil
 
