@@ -26,11 +26,11 @@ spec:
     - jsonPath: .status.contractAddress
       name: Contract
       type: string
+    - jsonPath: .status.transactionHash
+      name: TxHash
+      type: string
     - jsonPath: .status.failureMessage
       name: Failure
-      type: string
-    - jsonPath: .status.transactionHash
-      name: Hash
       type: string
     name: v1alpha1
     schema:

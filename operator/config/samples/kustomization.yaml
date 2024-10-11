@@ -6,4 +6,5 @@ resources:
 - core_v1alpha1_smartcontractdeployment_registry.yaml
 - core_v1alpha1_smartcontractdeployment_noto.yaml
 - core_v1alpha1_smartcontractdeployment_pente.yaml
+- core_v1alpha1_paladinregistry.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples
