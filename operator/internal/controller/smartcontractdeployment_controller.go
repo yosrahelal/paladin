@@ -61,7 +61,7 @@ func (r *SmartContractDeploymentReconciler) Reconcile(ctx context.Context, req c
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
-		log.Error(err, "Failed to get Paladin resource")
+		log.Error(err, "Failed to get SmartContractDeployment resource")
 		return ctrl.Result{}, err
 	}
 

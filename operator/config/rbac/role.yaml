@@ -9,6 +9,7 @@ rules:
   resources:
   - besugeneses
   - besus
+  - paladinregistries
   - paladins
   - smartcontractdeployments
   verbs:
@@ -24,6 +25,7 @@ rules:
   resources:
   - besugeneses/finalizers
   - besus/finalizers
+  - paladinregistries/finalizers
   - paladins/finalizers
   - smartcontractdeployments/finalizers
   verbs:
@@ -33,6 +35,7 @@ rules:
   resources:
   - besugeneses/status
   - besus/status
+  - paladinregistries/status
   - paladins/status
   - smartcontractdeployments/status
   verbs:

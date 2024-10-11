@@ -18,8 +18,12 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -37,21 +41,70 @@ type PaladinRegistryReconciler struct {
 // +kubebuilder:rbac:groups=core.paladin.io,resources=paladinregistries/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core.paladin.io,resources=paladinregistries/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the PaladinRegistry object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
 func (r *PaladinRegistryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	log := log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	// Fetch the PaladinRegistry instance
+	var reg corev1alpha1.PaladinRegistry
+	if err := r.Get(ctx, req.NamespacedName, &reg); err != nil {
+		if errors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		log.Error(err, "Failed to get PaladinRegistry registry")
+		return ctrl.Result{}, err
+	}
+
+	if reg.Spec.Type == corev1alpha1.RegistryTypeEVM {
+		if reg.Spec.EVM.ContractAddress != "" {
+			// do we have a fixed contract address?
+			if reg.Status.ContractAddress != reg.Spec.EVM.ContractAddress {
+				reg.Status.ContractAddress = reg.Spec.EVM.ContractAddress
+				reg.Status.Status = corev1alpha1.RegistryStatusAvailable
+				return r.updateStatusAndRequeue(ctx, &reg)
+			}
+		} else if reg.Spec.EVM.SmartContractDeployment != "" {
+			if reg.Status.Status == "" {
+				reg.Status.Status = corev1alpha1.RegistryStatusPending
+				return r.updateStatusAndRequeue(ctx, &reg)
+			}
+			if reg.Status.Status != corev1alpha1.RegistryStatusAvailable {
+				return r.trackContractDeploymentAndRequeue(ctx, &reg)
+			}
+		} else {
+			return ctrl.Result{}, fmt.Errorf("missing contractAddress or smartContractDeployment")
+		}
+	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *PaladinRegistryReconciler) updateStatusAndRequeue(ctx context.Context, reg *corev1alpha1.PaladinRegistry) (ctrl.Result, error) {
+	if err := r.Status().Update(ctx, reg); err != nil {
+		log.FromContext(ctx).Error(err, "Failed to update Paladin registry status")
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{Requeue: true}, nil // Run again immediately to submit
+}
+
+func (r *PaladinRegistryReconciler) trackContractDeploymentAndRequeue(ctx context.Context, reg *corev1alpha1.PaladinRegistry) (ctrl.Result, error) {
+
+	var scd corev1alpha1.SmartContractDeployment
+	err := r.Get(ctx, types.NamespacedName{Name: reg.Spec.EVM.SmartContractDeployment, Namespace: reg.Namespace}, &scd)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.FromContext(ctx).Info("Waiting for creation of smart contract deployment '%s'", scd)
+			return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+		}
+		return ctrl.Result{}, err
+	}
+	if scd.Status.ContractAddress == "" {
+		log.FromContext(ctx).Info("Waiting for successful deployment of smart contract deployment '%s'", scd)
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	}
+
+	reg.Status.ContractAddress = scd.Status.ContractAddress
+	reg.Status.Status = corev1alpha1.RegistryStatusAvailable
+	return r.updateStatusAndRequeue(ctx, reg)
 }
 
 // SetupWithManager sets up the controller with the Manager.

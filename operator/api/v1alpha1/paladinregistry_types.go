@@ -20,26 +20,47 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+type RegistryType string
+
+const (
+	RegistryTypeEVM RegistryType = "evm"
+)
 
 // PaladinRegistrySpec defines the desired state of PaladinRegistry
 type PaladinRegistrySpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of PaladinRegistry. Edit paladinregistry_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// +kubebuilder:validation:Enum=evm
+	// +kubebuilder:default=evm
+	Type RegistryType `json:"type"`
+	// Config specific to EVM based registry
+	EVM EVMRegistryConfig `json:"evm,omitempty"`
 }
+
+type EVMRegistryConfig struct {
+	// Reference to a SmartContractDeployment CR that is used to deploy the registry
+	SmartContractDeployment string `json:"smartContractDeployment,omitempty"`
+	// If you have separately deployed the registry, supply the registry address directly
+	ContractAddress string `json:"contractAddress,omitempty"`
+}
+
+type RegistryStatus string
+
+const (
+	RegistryStatusPending   RegistryStatus = "Pending"
+	RegistryStatusAvailable RegistryStatus = "Available"
+)
 
 // PaladinRegistryStatus defines the observed state of PaladinRegistry
 type PaladinRegistryStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	Status          RegistryStatus `json:"status"`
+	ContractAddress string         `json:"contractAddress,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+//+kubebuilder:resource:shortName="reg"
+//+kubebuilder:printcolumn:name="Type",type="string",JSONPath=`.spec.type`
+//+kubebuilder:printcolumn:name="Status",type="string",JSONPath=`.status.status`
+//+kubebuilder:printcolumn:name="Contract",type="string",JSONPath=`.status.contractAddress`
 
 // PaladinRegistry is the Schema for the paladinregistries API
 type PaladinRegistry struct {
