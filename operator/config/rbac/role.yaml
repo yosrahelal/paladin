@@ -10,7 +10,7 @@ rules:
   - besugeneses
   - besus
   - paladins
-  - smartcontracts
+  - smartcontractdeployents
   verbs:
   - create
   - delete
@@ -25,7 +25,7 @@ rules:
   - besugeneses/finalizers
   - besus/finalizers
   - paladins/finalizers
-  - smartcontracts/finalizers
+  - smartcontractdeployents/finalizers
   verbs:
   - update
 - apiGroups:
@@ -34,7 +34,7 @@ rules:
   - besugeneses/status
   - besus/status
   - paladins/status
-  - smartcontracts/status
+  - smartcontractdeployents/status
   verbs:
   - get
   - patch

@@ -1,27 +1,23 @@
-# permissions for end users to edit smartcontracts.
+# permissions for end users to view smartcontractdeployents.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
     app.kubernetes.io/name: operator-go
     app.kubernetes.io/managed-by: kustomize
-  name: smartcontract-editor-role
+  name: smartcontractdeployent-viewer-role
 rules:
 - apiGroups:
   - core.paladin.io
   resources:
-  - smartcontracts
+  - smartcontractdeployents
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - core.paladin.io
   resources:
-  - smartcontracts/status
+  - smartcontractdeployents/status
   verbs:
   - get

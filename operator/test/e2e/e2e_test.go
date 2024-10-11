@@ -190,13 +190,13 @@ var _ = Describe("controller", Ordered, func() {
 			deployer := utils.TestDeployer{RPC: rpc, From: "deployerKey"}
 
 			By("deploying the pente factory")
-			_, err = deployer.DeploySmartContractBytecode(ctx, penteFactoryBuild, []any{})
+			_, err = deployer.DeploySmartContractDelpoymentBytecode(ctx, penteFactoryBuild, []any{})
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 			// penteFactoryAddr := receipt.ContractAddress
 			// By("recording pente factory deployed at " + penteFactoryAddr.String())
 
 			By("deploying the noto factory")
-			_, err = deployer.DeploySmartContractBytecode(ctx, notoFactoryBuild, []any{})
+			_, err = deployer.DeploySmartContractDelpoymentBytecode(ctx, notoFactoryBuild, []any{})
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 			// notoFactoryAddr := receipt.ContractAddress
 			// By("recording noto factory deployed at " + notoFactoryAddr.String())

@@ -733,3 +733,7 @@ func (r *PaladinReconciler) getLabels(node *corev1alpha1.Paladin, extraLabels ..
 func generatePaladinName(n string) string {
 	return fmt.Sprintf("paladin-%s", n)
 }
+
+func generatePaladinServiceHostname(nodeName, namespace string) string {
+	return fmt.Sprintf("%s.%s.svc.cluster.local", generatePaladinName(nodeName), namespace)
+}

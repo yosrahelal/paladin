@@ -4,20 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
-  name: smartcontracts.core.paladin.io
+  name: smartcontractdeployents.core.paladin.io
 spec:
   group: core.paladin.io
   names:
-    kind: SmartContract
-    listKind: SmartContractList
-    plural: smartcontracts
+    kind: SmartContractDelpoyment
+    listKind: SmartContractDelpoymentList
+    plural: smartcontractdeployents
     singular: smartcontract
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: SmartContract is the Schema for the smartcontracts API
+        description: SmartContractDelpoyment is the Schema for the smartcontractdeployents API
         properties:
           apiVersion:
             description: |-
@@ -37,15 +37,15 @@ spec:
           metadata:
             type: object
           spec:
-            description: SmartContractSpec defines the desired state of SmartContract
+            description: SmartContractDelpoymentSpec defines the desired state of SmartContractDelpoyment
             properties:
               foo:
-                description: Foo is an example field of SmartContract. Edit smartcontract_types.go
+                description: Foo is an example field of SmartContractDelpoyment. Edit smartcontractdeployent_types.go
                   to remove/update
                 type: string
             type: object
           status:
-            description: SmartContractStatus defines the observed state of SmartContract
+            description: SmartContractDelpoymentStatus defines the observed state of SmartContractDelpoyment
             properties:
               transactionStatus:
                 description: |-
