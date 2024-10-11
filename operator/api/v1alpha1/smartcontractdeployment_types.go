@@ -69,8 +69,8 @@ type SmartContractDeploymentStatus struct {
 //+kubebuilder:printcolumn:name="Status",type="string",JSONPath=`.status.transactionStatus`
 //+kubebuilder:printcolumn:name="TransactionID",type="string",JSONPath=`.status.transactionID`
 //+kubebuilder:printcolumn:name="Contract",type="string",JSONPath=`.status.contractAddress`
+//+kubebuilder:printcolumn:name="TxHash",type="string",JSONPath=`.status.transactionHash`
 //+kubebuilder:printcolumn:name="Failure",type="string",JSONPath=`.status.failureMessage`
-//+kubebuilder:printcolumn:name="Hash",type="string",JSONPath=`.status.transactionHash`
 
 // SmartContractDeployment is the Schema for the smartcontractdeployments API
 type SmartContractDeployment struct {
