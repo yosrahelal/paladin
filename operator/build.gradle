@@ -46,19 +46,22 @@ def verifyResource(String namespace, String resourceType, String resourceName, S
     def existsCommand = ["kubectl", "wait", "--for=create", "${resourceType}", "${resourceName}", "-n", namespace, "--timeout=${timeoutSeconds}s"]
     def existsProcess = existsCommand.execute()
     existsProcess.waitFor()
+    println "Creation Output: ${existsProcess.text}"
 
     if (existsProcess.exitValue() != 0) {
         printClusterStatus(namespace)
-        throw new Exception("Resource ${resourceName} ${resourceType} was not created within the expected time.")
+        throw new Exception("Resource ${resourceType}/${resourceName} (${namespace}) was not created within the expected time.")
     }
 
     // Wait for resource to meet expected condition
     def waitCommand = ["kubectl", "wait", "--for=${condition}", "${resourceType}", "${resourceName}", "-n", namespace, "--timeout=${timeoutSeconds}s"]
     def waitProcess = waitCommand.execute()
     waitProcess.waitFor()
-    if (existsProcess.exitValue() != 0) {
+    println "Wait Output: ${waitProcess.text}"
+
+    if (waitProcess.exitValue() != 0) { // Fix: existsProcess -> waitProcess
         printClusterStatus(namespace)
-        throw new Exception("${resourceName} ${resourceType} did not become ready in the expected time.")
+        throw new Exception("Resource ${resourceType}/${resourceName} (${namespace}) was not ready in the expected time.")
     }
     printClusterStatus(namespace)
 }
