@@ -123,6 +123,10 @@ func (r *PaladinReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.Paladin{}).
+		Watches(&corev1alpha1.PaladinDomain{},
+			// re-run the label selector on every Paladin node,
+			reconcileAll[corev1alpha1.Paladin, *corev1alpha1.PaladinList](r.Client),
+			reconcileEveryChange()). // every time the domain list changes
 		Complete(r)
 }
 
