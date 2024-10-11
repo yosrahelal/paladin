@@ -25,13 +25,22 @@ type ResolveKeyRequest struct {
 
 	// a unique index managed by the key manager assured to be unique at this path. Used for key derivation (BIP32). Should not be used for direct mapping.
 	Index               uint64                     `json:"index"`
+
+	// Attributes passed to the signing module during key resolution
 	Attributes          map[string]string          `json:"attributes"`
+
+	// Hierarchical path to the key split into segments
 	Path                []*ResolveKeyPathSegment   `json:"path"`
+
+	// Required identifiers for the resolved key
 	RequiredIdentifiers []*PublicKeyIdentifierType `json:"requiredIdentifiers"`
 }
 
 type ResolveKeyResponse struct {
+	// Maps this internal key representation down to the key material
 	KeyHandle   string                 `json:"keyHandle"`
+
+	// Resolved public key information
 	Identifiers []*PublicKeyIdentifier `json:"identifiers"`
 }
 
@@ -79,10 +88,19 @@ type ResolveKeyPathSegment struct {
 }
 
 type ListKeyEntry struct {
-	Name        string                 `json:"name"`
-	KeyHandle   string                 `json:"keyHandle"`
-	Attributes  map[string]string      `json:"attributes"`
-	Path        []*ListKeyPathSegment  `json:"path"`
+	// The part of the key identifier representing this key
+	Name string `json:"name"`
+
+	// Maps this internal key representation down to the key material
+	KeyHandle string `json:"keyHandle"`
+
+	// Attributes passed to the signing module during key resolution
+	Attributes map[string]string `json:"attributes"`
+
+	// Hierarchical path to the key split into segments
+	Path []*ListKeyPathSegment `json:"path"`
+
+	// Public key information
 	Identifiers []*PublicKeyIdentifier `json:"identifiers"`
 }
 
@@ -92,12 +110,20 @@ type ListKeyPathSegment struct {
 }
 
 type PublicKeyIdentifierType struct {
-	Algorithm    string `json:"algorithm"`
+	// The curve on which the key material has been generated
+	Algorithm string `json:"algorithm"`
+
+	// The representation to which the public key material is encoded
 	VerifierType string `json:"verifierType"`
 }
 
 type PublicKeyIdentifier struct {
-	Algorithm    string `json:"algorithm"`
+	// The curve on which the key material has been generated
+	Algorithm string `json:"algorithm"`
+
+	// The representation to which the public key material is encoded
 	VerifierType string `json:"verifierType"`
-	Verifier     string `json:"verifier"`
+
+	// The public key encoded in the form of the Verifier type (for example, a 0x address)
+	Verifier string `json:"verifier"`
 }
