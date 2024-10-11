@@ -10,6 +10,6 @@ spec:
   smartContractDeployment: noto
   plugin:
     type: c-shared
-    library: domains/noto    
+    library: /app/domains/libnoto.so
   configJSON: |
     {}
