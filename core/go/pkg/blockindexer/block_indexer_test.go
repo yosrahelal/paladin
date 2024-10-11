@@ -34,6 +34,7 @@ import (
 
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/sirupsen/logrus"
@@ -383,9 +384,15 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 		assert.Equal(t, blocks[i].Hash.String(), indexedBlock.Hash.String())
 
 		// Get the transaction
-		indexedTX, err := bi.GetIndexedTransactionByHash(ctx, tktypes.Bytes32(receipts[blocks[i].Hash.String()][0].TransactionHash))
+		txHash := tktypes.Bytes32(receipts[blocks[i].Hash.String()][0].TransactionHash)
+		indexedTX, err := bi.GetIndexedTransactionByHash(ctx, txHash)
 		require.NoError(t, err)
 		assert.Equal(t, receipts[blocks[i].Hash.String()][0].TransactionHash.String(), indexedTX.Hash.String())
+
+		// Query the transaction
+		txs, err := bi.QueryTransactions(ctx, query.NewQueryBuilder().Equal("hash", txHash).Limit(1).Query())
+		require.NoError(t, err)
+		require.Len(t, txs, 1)
 
 		// Get by nonce
 		indexedTX, err = bi.GetIndexedTransactionByNonce(ctx, *indexedTX.From, indexedTX.Nonce)
