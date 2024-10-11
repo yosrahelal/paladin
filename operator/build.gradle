@@ -32,9 +32,22 @@ ext {
     buildOperator = project.hasProperty('buildOperator') ? project.buildOperator == 'true' : true // Default is to build the operator
 }
 
+task registryContractDeployCRSample(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/IdentityRegistry.json", "registry"
+}
+
+task penteContractDeployCRSample(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/PenteFactory.json", "pente"
+}
+
+task notoContractDeployCRSample(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/NotoFactory.json", "noto"
+}
+
 task copySolidity(type: Copy) {
     inputs.files(configurations.contractCompile)
     from fileTree(configurations.contractCompile.asPath) {
+        include 'contracts/registry/IdentityRegistry.sol/IdentityRegistry.json'
         include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
         include 'contracts/domains/pente/PenteFactory.sol/PenteFactory.json'
     }
@@ -43,6 +56,12 @@ task copySolidity(type: Copy) {
     // Flatten all paths into the destination folder
     eachFile { path = name }
     includeEmptyDirs = false
+
+    finalizedBy [
+        registryContractDeployCRSample,
+        penteContractDeployCRSample,
+        notoContractDeployCRSample,
+    ]
 }
 
 // Task to build the Paladin image from the parent project

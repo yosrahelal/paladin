@@ -111,9 +111,12 @@ func (r *SmartContractDeploymentReconciler) submitTransactionAndRequeue(ctx cont
 	if err := json.Unmarshal([]byte(scd.Spec.ABI), &a); err != nil {
 		return ctrl.Result{}, fmt.Errorf("invalid ABI: %s", err)
 	}
+	bytecode, err := tktypes.ParseHexBytes(ctx, scd.Spec.Bytecode)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("invalid bytecode: %s", err)
+	}
 
-	var txn *ptxapi.Transaction
-	err := paladinRPC.CallRPC(ctx, &txn, "ptx_sendTransaction", &ptxapi.TransactionInput{
+	tx := &ptxapi.TransactionInput{
 		Transaction: ptxapi.Transaction{
 			IdempotencyKey: scd.Status.IdempotencyKey,
 			Type:           tktypes.Enum[ptxapi.TransactionType](scd.Spec.TxType),
@@ -121,7 +124,13 @@ func (r *SmartContractDeploymentReconciler) submitTransactionAndRequeue(ctx cont
 			From:           scd.Spec.DeployKey,
 			Data:           data,
 		},
-	})
+		ABI:      a,
+		Bytecode: bytecode,
+	}
+	log.FromContext(ctx).Info(tktypes.JSONString(tx).Pretty())
+
+	var txn *ptxapi.Transaction
+	err = paladinRPC.CallRPC(ctx, &txn, "ptx_sendTransaction", tx)
 	if err != nil {
 		if strings.Contains(err.Error(), "PD012220") {
 			log.FromContext(ctx).Info(fmt.Sprintf("recovering TX by idempotencyKey: %s", err))
@@ -185,7 +194,10 @@ func (r *SmartContractDeploymentReconciler) getPaladinRPC(ctx context.Context, s
 		log.Info(fmt.Sprintf("Waiting for paladin node '%s' to become available to deploy", scd.Spec.DeployNode))
 		return nil, nil
 	}
-	url := fmt.Sprintf("http://%s:8548", generatePaladinServiceHostname(scd.Spec.DeployNode, scd.Namespace))
+	url, err := getPaladinURLEndpoint(ctx, r.Client, scd.Spec.DeployNode, scd.Namespace)
+	if err != nil {
+		return nil, err
+	}
 	return rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
 
 }

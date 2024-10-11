@@ -20,3 +20,12 @@ spec:
     - name: signer-1
       secret: node1.keys
       type: autoHDWallet
+  service:
+    type: NodePort
+    ports:
+    - name: rpc-http
+      port: 8548
+      nodePort: 31548 # see paladin-kind.yaml
+    - name: rpc-ws
+      port: 8549
+      nodePort: 31549 # see paladin-kind.yaml

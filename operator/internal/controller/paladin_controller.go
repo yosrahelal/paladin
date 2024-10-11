@@ -24,6 +24,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/tyler-smith/go-bip39"
@@ -736,4 +737,26 @@ func generatePaladinName(n string) string {
 
 func generatePaladinServiceHostname(nodeName, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", generatePaladinName(nodeName), namespace)
+}
+
+func getPaladinURLEndpoint(ctx context.Context, c client.Client, name, namespace string) (string, error) {
+	if os.Getenv("USE_NODEPORTS_IN_DEBUGGER") == "true" {
+		// Running outside of kubernetes, so we require a nodeport to be defined and exposed from Kind
+		var svc corev1.Service
+		err := c.Get(ctx, types.NamespacedName{Name: generatePaladinName(name), Namespace: namespace}, &svc)
+		if err != nil {
+			return "", fmt.Errorf("failed to find service for node: %s", err)
+		}
+		for _, p := range svc.Spec.Ports {
+			if p.Name == "rpc-http" {
+				if p.NodePort == 0 {
+					return "", fmt.Errorf("cannot use nodePort for %s rpc-http port as not set", generatePaladinName(name))
+				}
+				return fmt.Sprintf("http://localhost:%d", p.NodePort), nil
+			}
+		}
+		return "", fmt.Errorf("did not find rpc-http port")
+	}
+	// standard path
+	return fmt.Sprintf("http://%s:8548", generatePaladinServiceHostname(name, namespace)), nil
 }

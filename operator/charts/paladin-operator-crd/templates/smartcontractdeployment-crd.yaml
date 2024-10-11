@@ -64,6 +64,7 @@ spec:
                 description: JSON parameter data (array, object, or empty if no params)
                 type: string
               txType:
+                default: public
                 description: Type of transaction to submit to Paladin
                 enum:
                 - public

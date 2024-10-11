@@ -26,6 +26,7 @@ type SmartContractDeploymentSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// +kubebuilder:validation:Enum=public;private
+	// +kubebuilder:default=public
 	// Type of transaction to submit to Paladin
 	TxType string `json:"txType"`
 	// The ABI of the smart contract - provides the constructor parameter definition
