@@ -17,7 +17,6 @@ package privatetxnmgr
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
@@ -87,8 +86,9 @@ func (tw *transportWriter) SendState(ctx context.Context, stateId string, schema
 	err = tw.transportManager.Send(ctx, &components.TransportMessage{
 		MessageType: "StateProducedEvent",
 		Payload:     stateProducedEventBytes,
-		Destination: tktypes.PrivateIdentityLocator(fmt.Sprintf("%s@%s", PRIVATE_TX_MANAGER_DESTINATION, targetNode)),
-		ReplyTo:     tktypes.PrivateIdentityLocator(fmt.Sprintf("%s@%s", PRIVATE_TX_MANAGER_DESTINATION, tw.nodeID)),
+		Component:   PRIVATE_TX_MANAGER_DESTINATION,
+		Node:        targetNode,
+		ReplyTo:     tw.nodeID,
 	})
 	if err != nil {
 		log.L(ctx).Errorf("Error sending state produced event: %s", err)

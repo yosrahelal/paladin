@@ -17,12 +17,10 @@ package statedistribution
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
 	pb "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -49,8 +47,9 @@ func (sd *stateDistributer) sendStateAcknowledgement(ctx context.Context, domain
 	err = sd.transportManager.Send(ctx, &components.TransportMessage{
 		MessageType: "StateAcknowledgedEvent",
 		Payload:     stateAcknowledgedEventBytes,
-		Destination: tktypes.PrivateIdentityLocator(fmt.Sprintf("%s@%s", STATE_DISTRIBUTER_DESTINATION, distributingNode)),
-		ReplyTo:     tktypes.PrivateIdentityLocator(fmt.Sprintf("%s@%s", STATE_DISTRIBUTER_DESTINATION, sd.nodeID)),
+		Node:        distributingNode,
+		Component:   STATE_DISTRIBUTER_DESTINATION,
+		ReplyTo:     sd.nodeID,
 	})
 	if err != nil {
 		log.L(ctx).Errorf("Error sending state produced event: %s", err)

@@ -17,7 +17,6 @@ package statedistribution
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -61,8 +60,9 @@ func (sd *stateDistributer) sendState(ctx context.Context, stateDistribution *St
 	err = sd.transportManager.Send(ctx, &components.TransportMessage{
 		MessageType: "StateProducedEvent",
 		Payload:     stateProducedEventBytes,
-		Destination: tktypes.PrivateIdentityLocator(fmt.Sprintf("%s@%s", STATE_DISTRIBUTER_DESTINATION, targetNode)),
-		ReplyTo:     tktypes.PrivateIdentityLocator(fmt.Sprintf("%s@%s", STATE_DISTRIBUTER_DESTINATION, sd.nodeID)),
+		Node:        targetNode,
+		Component:   STATE_DISTRIBUTER_DESTINATION,
+		ReplyTo:     sd.nodeID,
 	})
 	if err != nil {
 		log.L(ctx).Errorf("Error sending state produced event: %s", err)

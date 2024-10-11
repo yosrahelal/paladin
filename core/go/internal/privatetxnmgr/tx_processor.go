@@ -549,8 +549,9 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 		}
 		err = ts.components.TransportManager().Send(ctx, &components.TransportMessage{
 			MessageType: "EndorsementRequest",
-			Destination: tktypes.PrivateIdentityLocator(party),
-			ReplyTo:     tktypes.PrivateIdentityLocator(ts.nodeID),
+			Node:        partyNode,
+			Component:   PRIVATE_TX_MANAGER_DESTINATION,
+			ReplyTo:     ts.nodeID,
 			Payload:     endorsementRequestBytes,
 		})
 		if err != nil {

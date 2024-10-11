@@ -34,16 +34,10 @@ func (sd *stateDistributer) Destination() string {
 func (sd *stateDistributer) ReceiveTransportMessage(ctx context.Context, message *components.TransportMessage) {
 	log.L(ctx).Debugf("stateDistributer:ReceiveTransportMessage")
 	messagePayload := message.Payload
-	replyToDestination := message.ReplyTo
 
 	switch message.MessageType {
 	case "StateProducedEvent":
-		//Not sure this message really needs to come into the private tx manager, just to be forwarded to the state store.
-		distributingNode, err := replyToDestination.Node(ctx, false)
-		if err != nil {
-			log.L(ctx).Errorf("Error getting node for party %s", replyToDestination)
-			return
-		}
+		distributingNode := message.ReplyTo
 		go sd.handleStateProducedEvent(ctx, messagePayload, distributingNode)
 	case "StateAcknowledgedEvent":
 		go sd.handleStateAcknowledgedEvent(ctx, message.Payload)

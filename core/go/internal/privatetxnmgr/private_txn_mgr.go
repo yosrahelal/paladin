@@ -377,7 +377,7 @@ func (p *privateTxManager) HandleNewEvent(ctx context.Context, event ptmgrtypes.
 	}
 }
 
-func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, messagePayload []byte, replyTo tktypes.PrivateIdentityLocator) {
+func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, messagePayload []byte, replyTo string) {
 	endorsementRequest := &pbEngine.EndorsementRequest{}
 	err := proto.Unmarshal(messagePayload, endorsementRequest)
 	if err != nil {
@@ -502,9 +502,10 @@ func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, message
 
 	err = p.components.TransportManager().Send(ctx, &components.TransportMessage{
 		MessageType: "EndorsementResponse",
-		ReplyTo:     tktypes.PrivateIdentityLocator(p.nodeID),
+		ReplyTo:     p.nodeID,
 		Payload:     endorsementResponseBytes,
-		Destination: replyTo,
+		Node:        replyTo,
+		Component:   PRIVATE_TX_MANAGER_DESTINATION,
 	})
 	if err != nil {
 		log.L(ctx).Errorf("Failed to send endorsement response: %s", err)
