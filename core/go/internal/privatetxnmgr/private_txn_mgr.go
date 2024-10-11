@@ -72,12 +72,15 @@ func (p *privateTxManager) PostInit(c components.AllComponents) error {
 		p.components.StateManager(),
 		p.components.Persistence(),
 		&p.config.StateDistributer)
+	err := p.stateDistributer.Start(p.ctx)
+	if err != nil {
+		return err
+	}
 	return p.components.TransportManager().RegisterClient(p.ctx, p)
 }
 
 func (p *privateTxManager) Start() error {
 	p.store.Start()
-	p.stateDistributer.Start(p.ctx)
 	return nil
 }
 
@@ -393,7 +396,7 @@ func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, message
 
 	endorsementGatherer, err := p.getEndorsementGathererForContract(ctx, *contractAddress)
 	if err != nil {
-		log.L(ctx).Errorf("Failed to get endorsement gathere for contract address %s: %s", contractAddressString, err)
+		log.L(ctx).Errorf("Failed to get endorsement gatherer for contract address %s: %s", contractAddressString, err)
 		return
 	}
 
