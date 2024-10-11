@@ -1,13 +1,15 @@
 apiVersion: core.paladin.io/v1alpha1
-kind: PaladinRegistry
+kind: PaladinDomain
 metadata:
   labels:
     app.kubernetes.io/name: operator-go
     app.kubernetes.io/managed-by: kustomize
-  name: evm-registry
+    paladin.io/domain-name: zeto
+  name: zeto
 spec:
-  type: evm
-  evm:
-    smartContractDeployment: registry
+  smartContractDeployment: zeto
+  plugin:
+    type: c-shared
+    library: domains/zeto    
   configJSON: |
     {}

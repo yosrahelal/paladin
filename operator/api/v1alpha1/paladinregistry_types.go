@@ -33,6 +33,8 @@ type PaladinRegistrySpec struct {
 	Type RegistryType `json:"type"`
 	// Config specific to EVM based registry
 	EVM EVMRegistryConfig `json:"evm,omitempty"`
+	// JSON configuration specific to the individual registry
+	ConfigJSON string `json:"configJSON"`
 }
 
 type EVMRegistryConfig struct {

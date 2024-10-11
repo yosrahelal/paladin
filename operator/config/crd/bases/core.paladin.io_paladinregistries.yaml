@@ -51,6 +51,9 @@ spec:
           spec:
             description: PaladinRegistrySpec defines the desired state of PaladinRegistry
             properties:
+              configJSON:
+                description: JSON configuration specific to the individual registry
+                type: string
               evm:
                 description: Config specific to EVM based registry
                 properties:
@@ -69,6 +72,7 @@ spec:
                 - evm
                 type: string
             required:
+            - configJSON
             - type
             type: object
           status:

@@ -92,13 +92,13 @@ func (r *PaladinRegistryReconciler) trackContractDeploymentAndRequeue(ctx contex
 	err := r.Get(ctx, types.NamespacedName{Name: reg.Spec.EVM.SmartContractDeployment, Namespace: reg.Namespace}, &scd)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			log.FromContext(ctx).Info("Waiting for creation of smart contract deployment '%s'", scd)
+			log.FromContext(ctx).Info(fmt.Sprintf("Waiting for creation of smart contract deployment '%s'", scd.Name))
 			return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 		}
 		return ctrl.Result{}, err
 	}
 	if scd.Status.ContractAddress == "" {
-		log.FromContext(ctx).Info("Waiting for successful deployment of smart contract deployment '%s'", scd)
+		log.FromContext(ctx).Info(fmt.Sprintf("Waiting for successful deployment of smart contract deployment '%s'", scd.Name))
 		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 

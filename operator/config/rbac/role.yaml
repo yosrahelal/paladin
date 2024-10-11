@@ -9,6 +9,7 @@ rules:
   resources:
   - besugeneses
   - besus
+  - paladindomains
   - paladinregistries
   - paladins
   - smartcontractdeployments
@@ -25,6 +26,7 @@ rules:
   resources:
   - besugeneses/finalizers
   - besus/finalizers
+  - paladindomains/finalizers
   - paladinregistries/finalizers
   - paladins/finalizers
   - smartcontractdeployments/finalizers
@@ -35,6 +37,7 @@ rules:
   resources:
   - besugeneses/status
   - besus/status
+  - paladindomains/status
   - paladinregistries/status
   - paladins/status
   - smartcontractdeployments/status

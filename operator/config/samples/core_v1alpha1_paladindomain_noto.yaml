@@ -1,13 +1,15 @@
 apiVersion: core.paladin.io/v1alpha1
-kind: PaladinRegistry
+kind: PaladinDomain
 metadata:
   labels:
     app.kubernetes.io/name: operator-go
     app.kubernetes.io/managed-by: kustomize
-  name: evm-registry
+    paladin.io/domain-name: noto
+  name: noto
 spec:
-  type: evm
-  evm:
-    smartContractDeployment: registry
+  smartContractDeployment: noto
+  plugin:
+    type: c-shared
+    library: domains/noto    
   configJSON: |
     {}
