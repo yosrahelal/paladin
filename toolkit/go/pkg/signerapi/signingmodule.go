@@ -110,19 +110,19 @@ type ListKeyPathSegment struct {
 }
 
 type PublicKeyIdentifierType struct {
-	// The curve on which the key material has been generated
+	// The curve on which the key material has been generated (for predefined constants refer to the toolkit/go/pkg/algorithms package)
 	Algorithm string `json:"algorithm"`
 
-	// The representation to which the public key material is encoded
+	// The representation to which the public key material is encoded (for predefined constants refer to the toolkit/go/pkg/verifiers package)
 	VerifierType string `json:"verifierType"`
 }
 
 type PublicKeyIdentifier struct {
-	// The curve on which the key material has been generated
+	// The curve on which the key material has been generated (for predefined constants refer to the toolkit/go/pkg/algorithms package)
 	Algorithm string `json:"algorithm"`
 
-	// The representation to which the public key material is encoded
-	VerifierType string `json:"verifierType"`
+	// The representation to which the public key material is encoded (for predefined constants refer to the toolkit/go/pkg/verifiers package)
+	VerifierType string `json:"verifierType"` 
 
 	// The public key encoded in the form of the Verifier type (for example, a 0x address)
 	Verifier string `json:"verifier"`
