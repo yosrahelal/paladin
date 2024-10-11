@@ -20,7 +20,10 @@ import (
 	"context"
 	"sort"
 
+	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,13 +36,15 @@ import (
 func mergeServicePorts(svcSpec *corev1.ServiceSpec, requiredPorts []corev1.ServicePort) {
 	portsByName := map[string]*corev1.ServicePort{}
 	for _, providedPort := range svcSpec.Ports {
-		portsByName[providedPort.Name] = &providedPort
+		tmpPort := providedPort
+		portsByName[providedPort.Name] = &tmpPort
 	}
 	for _, requiredPort := range requiredPorts {
 		providedPort, isProvided := portsByName[requiredPort.Name]
 		if !isProvided {
 			// Just use our definition
-			portsByName[requiredPort.Name] = &requiredPort
+			tmpPort := requiredPort
+			portsByName[requiredPort.Name] = &tmpPort
 		} else {
 			// We own the target port number and protocol always
 			providedPort.TargetPort = requiredPort.TargetPort
@@ -115,4 +120,23 @@ func reconcileAll[CR any, ListType CRList[CR]](c client.Client) handler.EventHan
 		}
 		return requests
 	})
+}
+
+func setCondition(
+	conditions *[]metav1.Condition,
+	conditionType corev1alpha1.ConditionType,
+	status metav1.ConditionStatus,
+	reason corev1alpha1.ConditionReason,
+	message string,
+) {
+	condition := metav1.Condition{
+		Type:               string(conditionType),
+		Status:             status,
+		Reason:             string(reason),
+		Message:            message,
+		LastTransitionTime: metav1.Now(),
+	}
+
+	// Update or append the condition
+	meta.SetStatusCondition(conditions, condition)
 }
