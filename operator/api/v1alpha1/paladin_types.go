@@ -86,20 +86,6 @@ type SecretBackedSigner struct {
 // TODO: move to apiserver
 type StatusReason string
 
-// PaladinStatus defines the observed state of Paladin
-type PaladinStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-
-	// TODO: What fields should be here?
-	// Here are some ideas, but this means the operator will have to track the state of the pod as well (which is not ideal)
-	// IP        string `json:"ip,omitempty"`
-	// Name      string `json:"name,omitempty"`
-	// Namespace string `json:"namespace,omitempty"`
-
-	// Important: Run "make" to regenerate code after modifying this file
-	Status string `json:"Status,omitempty"`
-}
-
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
@@ -108,8 +94,8 @@ type Paladin struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   PaladinSpec   `json:"spec,omitempty"`
-	Status PaladinStatus `json:"status,omitempty"`
+	Spec   PaladinSpec `json:"spec,omitempty"`
+	Status Status      `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true

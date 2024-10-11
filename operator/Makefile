@@ -110,12 +110,13 @@ kind-start:	## Create a Kind cluster.
 	fi
 	$(KUBECTL) version
 
+# $(CONTAINER_TOOL) images -q postgres:latest || $(CONTAINER_TOOL) pull postgres:latest
+# $(CONTAINER_TOOL) images -q hyperledger/besu:latest || $(CONTAINER_TOOL) pull hyperledger/besu:latest
 .PHONY: kind-promote
 kind-promote: kind-start ## Load Docker images into Kind cluster.
+	echo "Loading images into Kind cluster..."
 	$(KIND_CLUSTER) load docker-image ${OPERATOR_IMG} --name "${CLUSTER_NAME}"
 	$(KIND_CLUSTER) load docker-image ${PALADIN_IMG} --name "${CLUSTER_NAME}"
-	$(KIND_CLUSTER) load docker-image postgres:latest --name "${CLUSTER_NAME}"
-	$(KIND_CLUSTER) load docker-image hyperledger/besu:latest --name "${CLUSTER_NAME}"
 
 .PHONY: kind-delete
 kind-delete:	## Delete the Kind cluster.

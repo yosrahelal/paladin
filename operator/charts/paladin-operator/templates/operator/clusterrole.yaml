@@ -26,6 +26,8 @@ rules:
   - besugeneses/status
   verbs:
   - get
+  - patch
+  - update
 - apiGroups:
   - apps
   resources:
