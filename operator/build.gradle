@@ -40,7 +40,7 @@ def printClusterStatus(String namespace) {
     println getAllProcess.in.text.trim()
 } 
 
-def verifyResource(String namespace, String resourceType, String resourceName, String condition, int timeoutSeconds = 60) {
+def verifyResourceCreated(String namespace, String resourceType, String resourceName, int timeoutSeconds = 60) {
     
     // Wait for resource creation
     def existsCommand = ["kubectl", "wait", "--for=create", "${resourceType}", "${resourceName}", "-n", namespace, "--timeout=${timeoutSeconds}s"]
@@ -52,6 +52,9 @@ def verifyResource(String namespace, String resourceType, String resourceName, S
         printClusterStatus(namespace)
         throw new Exception("Resource ${resourceType}/${resourceName} (${namespace}) was not created within the expected time.")
     }
+}
+
+def verifyResourceReady(String namespace, String resourceType, String resourceName, String condition, int timeoutSeconds = 60) {
 
     // Wait for resource to meet expected condition
     def waitCommand = ["kubectl", "wait", "--for=${condition}", "${resourceType}", "${resourceName}", "-n", namespace, "--timeout=${timeoutSeconds}s"]
@@ -59,7 +62,7 @@ def verifyResource(String namespace, String resourceType, String resourceName, S
     waitProcess.waitFor()
     println "Wait Output: ${waitProcess.text}"
 
-    if (waitProcess.exitValue() != 0) { // Fix: existsProcess -> waitProcess
+    if (waitProcess.exitValue() != 0) {
         printClusterStatus(namespace)
         throw new Exception("Resource ${resourceType}/${resourceName} (${namespace}) was not ready in the expected time.")
     }
@@ -135,7 +138,7 @@ task installOperator(type: Exec, dependsOn: [installCrds, promoteKindImages]) {
 task verifyOperator(dependsOn: installOperator) {
     doLast {
         println 'Waiting for operator deployment to become ready...'
-        verifyResource(namespace, 'deployment', 'paladin-operator', 'condition=available')
+        verifyResourceReady(namespace, 'deployment', 'paladin-operator', 'condition=available')
     }
 }
 
@@ -150,7 +153,9 @@ task createNode(type: Exec, dependsOn: verifyOperator) {
 task verifyBesu(dependsOn: createNode) {
     doLast {
         println 'Waiting for besu statefulSet to become ready...'
-        verifyResource(namespace, 'statefulset', 'besu-node1', 'jsonpath=.status.readyReplicas=1', 120)
+
+        verifyResourceCreated(namespace, 'statefulset', 'besu-node1', 120)
+        verifyResourceReady(namespace, 'statefulset', 'besu-node1', 'jsonpath=.status.readyReplicas=1', 60)
     }
 }
 
@@ -158,7 +163,9 @@ task verifyBesu(dependsOn: createNode) {
 task verifyPaladin(dependsOn: createNode) {
     doLast {
         println 'Waiting for paladin statefulSet to become ready...'
-        verifyResource(namespace, 'statefulset', 'paladin-node1', 'jsonpath=.status.readyReplicas=1', 120)
+
+        verifyResourceCreated(namespace, 'statefulset', 'paladin-node1', 120)
+        verifyResourceReady(namespace, 'statefulset', 'paladin-node1', 'jsonpath=.status.readyReplicas=1', 60)
     }
 }
 
