@@ -204,9 +204,7 @@ func TestStartOK(t *testing.T) {
 	cm.txManager = mockTxManager
 	cm.additionalManagers = append(cm.additionalManagers, mockExtraManager)
 
-	err := cm.StartComponents()
-	require.NoError(t, err)
-	err = cm.StartManagers()
+	err := cm.StartManagers()
 	require.NoError(t, err)
 	err = cm.CompleteStart()
 	require.NoError(t, err)

@@ -127,7 +127,6 @@ func (r *SmartContractDeploymentReconciler) submitTransactionAndRequeue(ctx cont
 		ABI:      a,
 		Bytecode: bytecode,
 	}
-	log.FromContext(ctx).Info(tktypes.JSONString(tx).Pretty())
 
 	var txn *ptxapi.Transaction
 	err = paladinRPC.CallRPC(ctx, &txn, "ptx_sendTransaction", tx)
