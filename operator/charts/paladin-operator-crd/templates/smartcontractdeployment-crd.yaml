@@ -1,7 +1,7 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: smartcontractdeployents.core.paladin.io
+  name: smartcontractdeployments.core.paladin.io
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
   labels:
@@ -9,16 +9,19 @@ metadata:
 spec:
   group: core.paladin.io
   names:
-    kind: SmartContractDelpoyment
-    listKind: SmartContractDelpoymentList
-    plural: smartcontractdeployents
-    singular: smartcontract
+    kind: SmartContractDeployment
+    listKind: SmartContractDeploymentList
+    plural: smartcontractdeployments
+    shortNames:
+    - scd
+    singular: smartcontractdeployment
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: SmartContractDelpoyment is the Schema for the smartcontractdeployents API
+        description: SmartContractDeployment is the Schema for the smartcontractdeployments
+          API
         properties:
           apiVersion:
             description: |-
@@ -38,20 +41,54 @@ spec:
           metadata:
             type: object
           spec:
-            description: SmartContractDelpoymentSpec defines the desired state of SmartContractDelpoyment
+            description: SmartContractDeploymentSpec defines the desired state of SmartContractDeployment
             properties:
-              foo:
-                description: Foo is an example field of SmartContractDelpoyment. Edit smartcontractdeployent_types.go
-                  to remove/update
+              abi:
+                description: The ABI of the smart contract - provides the constructor
+                  parameter definition
                 type: string
+              bytecode:
+                description: The bytecode of the smart contract
+                type: string
+              deployKey:
+                description: Reference to the signing key to use to deploy
+                type: string
+              deployNode:
+                description: The node to use to deploy - reference to a PaladinNode
+                  CR
+                type: string
+              domain:
+                description: Domain for private transactions
+                type: string
+              paramsJSON:
+                description: JSON parameter data (array, object, or empty if no params)
+                type: string
+              txType:
+                description: Type of transaction to submit to Paladin
+                enum:
+                - public
+                - private
+                type: string
+            required:
+            - abi
+            - bytecode
+            - deployKey
+            - deployNode
+            - txType
             type: object
           status:
-            description: SmartContractDelpoymentStatus defines the observed state of SmartContractDelpoyment
+            description: SmartContractDeploymentStatus defines the observed state of
+              SmartContractDeployment
             properties:
+              contractAddress:
+                type: string
+              failureMessage:
+                type: string
+              idempotencyKey:
+                type: string
+              transactionID:
+                type: string
               transactionStatus:
-                description: |-
-                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-                  Important: Run "make" to regenerate code after modifying this file
                 type: string
             type: object
         type: object

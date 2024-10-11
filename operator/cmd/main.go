@@ -133,11 +133,11 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Paladin")
 		os.Exit(1)
 	}
-	if err = (&controller.SmartContractDelpoymentReconciler{
+	if err = (&controller.SmartContractDeploymentReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "SmartContractDelpoyment")
+		setupLog.Error(err, "unable to create controller", "controller", "SmartContractDeployment")
 		os.Exit(1)
 	}
 	if err = (&controller.BesuReconciler{

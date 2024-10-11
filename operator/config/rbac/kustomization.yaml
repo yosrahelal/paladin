@@ -24,8 +24,8 @@ resources:
 - besugenesis_viewer_role.yaml
 - besu_editor_role.yaml
 - besu_viewer_role.yaml
-- smartcontractdeployent_editor_role.yaml
-- smartcontractdeployent_viewer_role.yaml
+- smartcontractdeployment_editor_role.yaml
+- smartcontractdeployment_viewer_role.yaml
 - paladin_editor_role.yaml
 - paladin_viewer_role.yaml
 

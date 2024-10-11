@@ -18,7 +18,9 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -32,27 +34,28 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-// SmartContractDelpoymentReconciler reconciles a SmartContractDelpoyment object
-type SmartContractDelpoymentReconciler struct {
+// SmartContractDeploymentReconciler reconciles a SmartContractDeployment object
+type SmartContractDeploymentReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=core.paladin.io,resources=smartcontractdeployents,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core.paladin.io,resources=smartcontractdeployents/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=core.paladin.io,resources=smartcontractdeployents/finalizers,verbs=update
+//+kubebuilder:rbac:groups=core.paladin.io,resources=smartcontractdeployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core.paladin.io,resources=smartcontractdeployments/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=core.paladin.io,resources=smartcontractdeployments/finalizers,verbs=update
 
-func (r *SmartContractDelpoymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *SmartContractDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	// TODO: Add an admission webhook to make the bytecode and ABI immutable
 
-	// Fetch the SmartContractDelpoyment instance
-	var scd corev1alpha1.SmartContractDelpoyment
+	// Fetch the SmartContractDeployment instance
+	var scd corev1alpha1.SmartContractDeployment
 	if err := r.Get(ctx, req.NamespacedName, &scd); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -63,6 +66,7 @@ func (r *SmartContractDelpoymentReconciler) Reconcile(ctx context.Context, req c
 
 	// If we don't have an idempotency key, then create one and re-reconcile
 	if scd.Status.IdempotencyKey == "" {
+		scd.Status.TransactionStatus = corev1alpha1.TransactionStatusSubmitting
 		scd.Status.IdempotencyKey = fmt.Sprintf("k8s.%s.%d", scd.Name, scd.CreationTimestamp.UnixMilli())
 		return r.updateStatusAndRequeue(ctx, &scd)
 	}
@@ -71,20 +75,25 @@ func (r *SmartContractDelpoymentReconciler) Reconcile(ctx context.Context, req c
 	paladinRPC, err := r.getPaladinRPC(ctx, &scd)
 	if err != nil {
 		return ctrl.Result{}, err
-	}
-	if paladinRPC == "" {
+	} else if paladinRPC == nil {
 		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 
-	// If we don't have a transactionID to track, then submit
-	if scd.Status.TransactionID == nil {
-		return scd.submitTransactionAndRequeue(ctx, &scd, paladinRPC)
+	// If we don't have a transactionID to track, then submit (moves us to Pending)
+	if scd.Status.TransactionID == "" {
+		return r.submitTransactionAndRequeue(ctx, &scd, paladinRPC)
 	}
 
+	// If we don't have a result
+	if scd.Status.TransactionStatus == corev1alpha1.TransactionStatusPending {
+		return r.trackTransactionAndRequeue(ctx, &scd, paladinRPC)
+	}
+
+	// Nothing left to do
 	return ctrl.Result{}, nil
 }
 
-func (r *SmartContractDelpoymentReconciler) updateStatusAndRequeue(ctx context.Context, scd *corev1alpha1.SmartContractDelpoyment) (ctrl.Result, error) {
+func (r *SmartContractDeploymentReconciler) updateStatusAndRequeue(ctx context.Context, scd *corev1alpha1.SmartContractDeployment) (ctrl.Result, error) {
 	if err := r.Status().Update(ctx, scd); err != nil {
 		log.FromContext(ctx).Error(err, "Failed to update smart contract deployment status")
 		return ctrl.Result{}, err
@@ -92,13 +101,16 @@ func (r *SmartContractDelpoymentReconciler) updateStatusAndRequeue(ctx context.C
 	return ctrl.Result{Requeue: true}, nil // Run again immediately to submit
 }
 
-func (r *SmartContractDelpoymentReconciler) submitTransactionAndRequeue(ctx context.Context, scd *corev1alpha1.SmartContractDelpoyment, paladinRPC rpcclient.Client) (ctrl.Result, error) {
+func (r *SmartContractDeploymentReconciler) submitTransactionAndRequeue(ctx context.Context, scd *corev1alpha1.SmartContractDeployment, paladinRPC rpcclient.Client) (ctrl.Result, error) {
 
 	var data tktypes.RawJSON
 	if scd.Spec.ParamsJSON == "" {
 		data = tktypes.RawJSON(scd.Spec.ParamsJSON)
 	}
 	var a abi.ABI
+	if err := json.Unmarshal([]byte(scd.Spec.ABI), &a); err != nil {
+		return ctrl.Result{}, fmt.Errorf("invalid ABI: %s", err)
+	}
 
 	var txn *ptxapi.Transaction
 	err := paladinRPC.CallRPC(ctx, &txn, "ptx_sendTransaction", &ptxapi.TransactionInput{
@@ -111,12 +123,55 @@ func (r *SmartContractDelpoymentReconciler) submitTransactionAndRequeue(ctx cont
 		},
 	})
 	if err != nil {
-
+		if strings.Contains(err.Error(), "PD012220") {
+			log.FromContext(ctx).Info(fmt.Sprintf("recovering TX by idempotencyKey: %s", err))
+			return r.queryTxByIdempotencyKeyAndRequeue(ctx, scd, paladinRPC)
+		}
+		return ctrl.Result{}, err
 	}
+	scd.Status.TransactionID = txn.ID.String()
+	scd.Status.TransactionStatus = corev1alpha1.TransactionStatusPending
+	return r.updateStatusAndRequeue(ctx, scd)
 
 }
 
-func (r *SmartContractDelpoymentReconciler) getPaladinURL(ctx context.Context, scd *corev1alpha1.SmartContractDelpoyment) (rpcclient.Client, error) {
+func (r *SmartContractDeploymentReconciler) queryTxByIdempotencyKeyAndRequeue(ctx context.Context, scd *corev1alpha1.SmartContractDeployment, paladinRPC rpcclient.Client) (ctrl.Result, error) {
+	var txns []*ptxapi.Transaction
+	err := paladinRPC.CallRPC(ctx, &txns, "ptx_queryTransactions",
+		query.NewQueryBuilder().Equal("idempotencyKey", scd.Status.IdempotencyKey).Limit(1))
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if len(txns) == 0 {
+		return ctrl.Result{}, fmt.Errorf("failed to query transaction with idempotencyKey '%s' after PD012220 error", scd.Status.IdempotencyKey)
+	}
+	scd.Status.TransactionID = txns[0].ID.String()
+	scd.Status.TransactionStatus = corev1alpha1.TransactionStatusPending
+	return r.updateStatusAndRequeue(ctx, scd)
+}
+
+func (r *SmartContractDeploymentReconciler) trackTransactionAndRequeue(ctx context.Context, scd *corev1alpha1.SmartContractDeployment, paladinRPC rpcclient.Client) (ctrl.Result, error) {
+	var txReceipt *ptxapi.TransactionReceipt
+	err := paladinRPC.CallRPC(ctx, &txReceipt, "ptx_getTransactionReceipt", scd.Status.TransactionID)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if txReceipt == nil {
+		return ctrl.Result{
+			RequeueAfter: 1 * time.Second,
+		}, nil
+	}
+	if txReceipt.Success && txReceipt.ContractAddress != nil {
+		scd.Status.TransactionStatus = corev1alpha1.TransactionStatusSuccess
+		scd.Status.ContractAddress = txReceipt.ContractAddress.String()
+	} else {
+		scd.Status.TransactionStatus = corev1alpha1.TransactionStatusFailed
+		scd.Status.FailureMessage = txReceipt.FailureMessage
+	}
+	return r.updateStatusAndRequeue(ctx, scd)
+}
+
+func (r *SmartContractDeploymentReconciler) getPaladinRPC(ctx context.Context, scd *corev1alpha1.SmartContractDeployment) (rpcclient.Client, error) {
 
 	log := log.FromContext(ctx)
 	var node corev1alpha1.Paladin
@@ -136,8 +191,8 @@ func (r *SmartContractDelpoymentReconciler) getPaladinURL(ctx context.Context, s
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *SmartContractDelpoymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *SmartContractDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1alpha1.SmartContractDelpoyment{}).
+		For(&corev1alpha1.SmartContractDeployment{}).
 		Complete(r)
 }

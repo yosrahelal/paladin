@@ -17,12 +17,11 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/google/uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// SmartContractDelpoymentSpec defines the desired state of SmartContractDelpoyment
-type SmartContractDelpoymentSpec struct {
+// SmartContractDeploymentSpec defines the desired state of SmartContractDeployment
+type SmartContractDeploymentSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
@@ -38,52 +37,52 @@ type SmartContractDelpoymentSpec struct {
 	// Reference to the signing key to use to deploy
 	DeployKey string `json:"deployKey"`
 	// Domain for private transactions
-	Domain string `json:"domain"`
-	// JSON parameter data
-	ParamsJSON string `json:"paramsJSON"`
+	Domain string `json:"domain,omitempty"`
+	// JSON parameter data (array, object, or empty if no params)
+	ParamsJSON string `json:"paramsJSON,omitempty"`
 }
 
 type TransactionStatus string
 
 const (
-	TransactionStatusPending  TransactionStatus = "Pending"
-	TransactionStatusSuccess  TransactionStatus = "Success"
-	TransactionStatusFailed   TransactionStatus = "Failed"
-	TransactionStatusRejected TransactionStatus = "Rejected"
+	TransactionStatusSubmitting TransactionStatus = "Submitting"
+	TransactionStatusPending    TransactionStatus = "Pending"
+	TransactionStatusSuccess    TransactionStatus = "Success"
+	TransactionStatusFailed     TransactionStatus = "Failed"
+	TransactionStatusRejected   TransactionStatus = "Rejected"
 )
 
-// SmartContractDelpoymentStatus defines the observed state of SmartContractDelpoyment
-type SmartContractDelpoymentStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+// SmartContractDeploymentStatus defines the observed state of SmartContractDeployment
+type SmartContractDeploymentStatus struct {
 	TransactionStatus TransactionStatus `json:"transactionStatus,omitempty"`
-
-	IdempotencyKey string     `json:"idempotencyKey,omitempty"`
-	TransactionID  *uuid.UUID `json:"transactionID,omitempty"`
+	IdempotencyKey    string            `json:"idempotencyKey,omitempty"`
+	TransactionID     string            `json:"transactionID,omitempty"`
+	ContractAddress   string            `json:"contractAddress,omitempty"`
+	FailureMessage    string            `json:"failureMessage,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:resource:shortName="scd"
 
-// SmartContractDelpoyment is the Schema for the smartcontractdeployents API
-type SmartContractDelpoyment struct {
+// SmartContractDeployment is the Schema for the smartcontractdeployments API
+type SmartContractDeployment struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   SmartContractDelpoymentSpec   `json:"spec,omitempty"`
-	Status SmartContractDelpoymentStatus `json:"status,omitempty"`
+	Spec   SmartContractDeploymentSpec   `json:"spec,omitempty"`
+	Status SmartContractDeploymentStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// SmartContractDelpoymentList contains a list of SmartContractDelpoyment
-type SmartContractDelpoymentList struct {
+// SmartContractDeploymentList contains a list of SmartContractDeployment
+type SmartContractDeploymentList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []SmartContractDelpoyment `json:"items"`
+	Items           []SmartContractDeployment `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&SmartContractDelpoyment{}, &SmartContractDelpoymentList{})
+	SchemeBuilder.Register(&SmartContractDeployment{}, &SmartContractDeploymentList{})
 }

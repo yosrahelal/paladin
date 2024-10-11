@@ -1,9 +1,9 @@
 apiVersion: core.paladin.io/v1alpha1
-kind: SmartContractDelpoyment
+kind: SmartContractDeployment
 metadata:
   labels:
     app.kubernetes.io/name: operator-go
     app.kubernetes.io/managed-by: kustomize
-  name: smartcontractdeployent-sample
+  name: smartcontractdeployment-sample
 spec:
   # TODO(user): Add fields here
