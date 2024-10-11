@@ -267,13 +267,15 @@ func (cm *componentManager) startBlockIndexer() (err error) {
 
 func (cm *componentManager) StartManagers() (err error) {
 
-	// start the eth client before any managers
+	// start the eth client before any managers - this connects the WebSocket, and gathers the ChainID
 	err = cm.ethClientFactory.Start()
 	err = cm.addIfStarted("eth_client", cm.ethClientFactory, err, msgs.MsgComponentEthClientStartError)
 
 	// start the managers
-	err = cm.stateManager.Start()
-	err = cm.addIfStarted("state_manager", cm.stateManager, err, msgs.MsgComponentStateManagerStartError)
+	if err == nil {
+		err = cm.stateManager.Start()
+		err = cm.addIfStarted("state_manager", cm.stateManager, err, msgs.MsgComponentStateManagerStartError)
+	}
 
 	if err == nil {
 		err = cm.domainManager.Start()
