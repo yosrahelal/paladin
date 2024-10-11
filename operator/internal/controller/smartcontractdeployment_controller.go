@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
@@ -128,8 +129,8 @@ func (r *SmartContractDeploymentReconciler) submitTransactionAndRequeue(ctx cont
 		Bytecode: bytecode,
 	}
 
-	var txn *ptxapi.Transaction
-	err = paladinRPC.CallRPC(ctx, &txn, "ptx_sendTransaction", tx)
+	var txID uuid.UUID
+	err = paladinRPC.CallRPC(ctx, &txID, "ptx_sendTransaction", tx)
 	if err != nil {
 		if strings.Contains(err.Error(), "PD012220") {
 			log.FromContext(ctx).Info(fmt.Sprintf("recovering TX by idempotencyKey: %s", err))
@@ -137,7 +138,7 @@ func (r *SmartContractDeploymentReconciler) submitTransactionAndRequeue(ctx cont
 		}
 		return ctrl.Result{}, err
 	}
-	scd.Status.TransactionID = txn.ID.String()
+	scd.Status.TransactionID = txID.String()
 	scd.Status.TransactionStatus = corev1alpha1.TransactionStatusPending
 	return r.updateStatusAndRequeue(ctx, scd)
 
@@ -169,9 +170,17 @@ func (r *SmartContractDeploymentReconciler) trackTransactionAndRequeue(ctx conte
 			RequeueAfter: 1 * time.Second,
 		}, nil
 	}
-	if txReceipt.Success && txReceipt.ContractAddress != nil {
-		scd.Status.TransactionStatus = corev1alpha1.TransactionStatusSuccess
-		scd.Status.ContractAddress = txReceipt.ContractAddress.String()
+	if txReceipt.TransactionHash != nil {
+		scd.Status.TransactionHash = txReceipt.TransactionHash.String()
+	}
+	if txReceipt.Success {
+		if txReceipt.ContractAddress == nil {
+			scd.Status.TransactionStatus = corev1alpha1.TransactionStatusFailed
+			scd.Status.FailureMessage = "transaction did not result in contract deployment"
+		} else {
+			scd.Status.TransactionStatus = corev1alpha1.TransactionStatusSuccess
+			scd.Status.ContractAddress = txReceipt.ContractAddress.String()
+		}
 	} else {
 		scd.Status.TransactionStatus = corev1alpha1.TransactionStatusFailed
 		scd.Status.FailureMessage = txReceipt.FailureMessage

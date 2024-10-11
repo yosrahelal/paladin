@@ -16,7 +16,23 @@ spec:
     singular: smartcontractdeployment
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.transactionStatus
+      name: Status
+      type: string
+    - jsonPath: .status.transactionID
+      name: TransactionID
+      type: string
+    - jsonPath: .status.contractAddress
+      name: Contract
+      type: string
+    - jsonPath: .status.failureMessage
+      name: Failure
+      type: string
+    - jsonPath: .status.transactionHash
+      name: Hash
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: SmartContractDeployment is the Schema for the smartcontractdeployments
@@ -86,6 +102,8 @@ spec:
               failureMessage:
                 type: string
               idempotencyKey:
+                type: string
+              transactionHash:
                 type: string
               transactionID:
                 type: string
