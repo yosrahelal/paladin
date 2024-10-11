@@ -154,6 +154,7 @@ func TestTransferAssemble(t *testing.T) {
 	}
 	res, err := h.Assemble(ctx, tx, req)
 	assert.NoError(t, err)
+	assert.Len(t, res.AssembledTransaction.InputStates, 1)
 	assert.Len(t, res.AssembledTransaction.OutputStates, 2) // one for the receiver Alice, one for self as change
 	var coin1 types.ZetoCoin
 	err = json.Unmarshal([]byte(res.AssembledTransaction.OutputStates[0].StateDataJson), &coin1)
@@ -166,6 +167,26 @@ func TestTransferAssemble(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "Bob", coin2.Owner)
 	assert.Equal(t, "0x06", coin2.Amount.String())
+
+	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
+		return &prototk.FindAvailableStatesResponse{
+			States: []*prototk.StoredState{
+				{
+					DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x04\"}",
+				},
+				{
+					DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x04\"}",
+				},
+				{
+					DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0a\"}",
+				},
+			},
+		}, nil
+	}
+	res, err = h.Assemble(ctx, tx, req)
+	assert.NoError(t, err)
+	assert.Len(t, res.AssembledTransaction.InputStates, 3)
+	assert.Len(t, res.AssembledTransaction.OutputStates, 2) // one for the receiver Alice, one for self as change
 
 	tx.DomainConfig.TokenName = constants.TOKEN_ANON_NULLIFIER
 	tx.DomainConfig.CircuitId = constants.CIRCUIT_ANON_NULLIFIER

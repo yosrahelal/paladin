@@ -234,6 +234,10 @@ func TestAssembleTransaction(t *testing.T) {
 	z.coinSchema = &prototk.StateSchema{
 		Id: "coin",
 	}
+
+	assert.Equal(t, "z1", z.Name())
+	assert.Equal(t, "coin", z.CoinSchemaID())
+
 	req := &prototk.AssembleTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
 			TransactionId:      "0x1234",

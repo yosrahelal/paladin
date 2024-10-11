@@ -16,6 +16,7 @@
 package types
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -43,7 +44,7 @@ func (z *ZetoCoin) Hash() (*tktypes.HexUint256, error) {
 	if z.hash == nil {
 		ownerKey, err := zetosigner.DecodeBabyJubJubPublicKey(z.OwnerKey.HexString())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to decode babyjubjub key. %s", err)
 		}
 		commitment, err := poseidon.Hash([]*big.Int{
 			z.Amount.Int(),

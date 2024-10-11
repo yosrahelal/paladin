@@ -16,18 +16,13 @@
 package zetosigner
 
 import (
-	"github.com/iden3/go-iden3-crypto/babyjub"
-	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/signer"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func EncodeBabyJubJubPublicKey(pubKey *babyjub.PublicKey) string {
-	return signer.EncodeBabyJubJubPublicKey(pubKey)
-}
-
-func DecodeBabyJubJubPublicKey(pubKeyHex string) (*babyjub.PublicKey, error) {
-	return signer.DecodeBabyJubJubPublicKey(pubKeyHex)
-}
-
-func NewBabyJubJubPrivateKey(privateKey []byte) (*babyjub.PrivateKey, error) {
-	return signer.NewBabyJubJubPrivateKey(privateKey)
+func TestNewBabyJubJubPrivateKey(t *testing.T) {
+	privateKey, err := NewBabyJubJubPrivateKey([]byte("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"))
+	assert.NoError(t, err)
+	assert.NotNil(t, privateKey)
 }

@@ -13,21 +13,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zetosigner
+package types
 
 import (
-	"github.com/iden3/go-iden3-crypto/babyjub"
-	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/signer"
+	"testing"
+
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/assert"
 )
 
-func EncodeBabyJubJubPublicKey(pubKey *babyjub.PublicKey) string {
-	return signer.EncodeBabyJubJubPublicKey(pubKey)
-}
-
-func DecodeBabyJubJubPublicKey(pubKeyHex string) (*babyjub.PublicKey, error) {
-	return signer.DecodeBabyJubJubPublicKey(pubKeyHex)
-}
-
-func NewBabyJubJubPrivateKey(privateKey []byte) (*babyjub.PrivateKey, error) {
-	return signer.NewBabyJubJubPrivateKey(privateKey)
+func TestCoinHash(t *testing.T) {
+	coin := &ZetoCoin{
+		OwnerKey: tktypes.MustParseHexBytes("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+	}
+	_, err := coin.Hash()
+	assert.EqualError(t, err, "failed to decode babyjubjub key. p.y >= Q")
 }
