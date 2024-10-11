@@ -18,7 +18,6 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // PaladinDomainSpec defines the desired state of PaladinDomain
@@ -84,14 +83,10 @@ type PaladinDomainList struct {
 	Items           []PaladinDomain `json:"items"`
 }
 
-// implements CRList
-func (l *PaladinDomainList) ItemsArray() []PaladinDomain {
-	return l.Items
-}
-
-// implements CRList
-func (l *PaladinDomainList) AsObject(pi *PaladinDomain) client.Object {
-	return pi
+var PaladinDomainCRMap = CRMap[PaladinDomain, *PaladinDomain, *PaladinDomainList]{
+	NewList:  func() *PaladinDomainList { return new(PaladinDomainList) },
+	ItemsFor: func(list *PaladinDomainList) []PaladinDomain { return list.Items },
+	AsObject: func(item *PaladinDomain) *PaladinDomain { return item },
 }
 
 func init() {

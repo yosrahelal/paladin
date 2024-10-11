@@ -20,6 +20,16 @@ spec:
     - name: signer-1
       secret: node1.keys
       type: autoHDWallet
+  domains:
+    - labelSelector:
+        matchLabels:
+          paladin.io/domain-name: noto
+    - labelSelector:
+        matchLabels:
+          paladin.io/domain-name: zeto          
+    - labelSelector:
+        matchLabels:
+          paladin.io/domain-name: pente
   service:
     type: NodePort
     ports:

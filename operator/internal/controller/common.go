@@ -84,33 +84,26 @@ func reconcileEveryChange() builder.Predicates {
 	})
 }
 
-// Having our CR list objects conform to this interface helps us implement generic
-// functions like reconcileAll
-type CRList[CR any] interface {
-	client.ObjectList
-	ItemsArray() []CR                // pointer to the .Items array
-	AsObject(item *CR) client.Object // cast the pointer to an item to a client.Object to get the name/namespace
-}
-
 // This helper reconciles all objects in the current namespace
-func reconcileAll[CR any, ListType CRList[CR]](c client.Client) handler.EventHandler {
+// The generics are horrible - but the k8s for the interface relations make it tough to re-use
+func reconcileAll[CR any, PCR client.Object, CRL client.ObjectList](lf corev1alpha1.CRMap[CR, PCR, CRL], c client.Client) handler.EventHandler {
 	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
 		ns := object.GetNamespace()
 
-		var l ListType
+		l := lf.NewList()
 		err := c.List(ctx, l, client.InNamespace(ns))
 		if err != nil {
 			return nil
 		}
 
-		items := l.ItemsArray()
+		items := lf.ItemsFor(l)
 		if len(items) < 1 {
 			return nil
 		}
 		requests := make([]reconcile.Request, len(items))
 
 		for i, item := range items {
-			obj := l.AsObject(&item)
+			obj := lf.AsObject(&item)
 			requests[i] = reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name:      obj.GetName(),
@@ -120,6 +113,29 @@ func reconcileAll[CR any, ListType CRList[CR]](c client.Client) handler.EventHan
 		}
 		return requests
 	})
+}
+
+// Helpful function if you're running label selectors and generating config, so you need to avoid
+// duplicates and also thrashing servers by non-deterministically generating config files.
+func deDupAndSortInLocalNS[CR any, PCR client.Object, CRL client.ObjectList](lf corev1alpha1.CRMap[CR, PCR, CRL], unsorted CRL) []*CR {
+
+	unsortedList := lf.ItemsFor(unsorted)
+	uniqueEntries := make(map[string]*CR, len(unsortedList))
+	uniqueNames := make([]string, 0, len(unsortedList))
+	for _, e := range unsortedList {
+		localName := lf.AsObject(&e).GetName()
+		if _, isDup := uniqueEntries[localName]; !isDup {
+			uniqueNames = append(uniqueNames, localName)
+			uniqueEntries[localName] = &e
+		}
+	}
+	sort.Strings(uniqueNames)
+	sorted := make([]*CR, len(uniqueNames))
+	for i, localName := range uniqueNames {
+		sorted[i] = uniqueEntries[localName]
+	}
+	return sorted
+
 }
 
 func setCondition(

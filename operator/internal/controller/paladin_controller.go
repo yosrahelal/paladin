@@ -142,8 +142,7 @@ func (r *PaladinReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.Paladin{}).
 		Watches(&corev1alpha1.PaladinDomain{},
-			// re-run the label selector on every Paladin node,
-			reconcileAll[corev1alpha1.Paladin, *corev1alpha1.PaladinList](r.Client),
+			reconcileAll(corev1alpha1.PaladinDomainCRMap, r.Client), // re-run the label selector on every Paladin node,
 			reconcileEveryChange()). // every time the domain list changes
 		Complete(r)
 }
@@ -527,8 +526,13 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 		return "", err
 	}
 
-	// Signer config needs merging
+	// Merge k8s definitions of signers with the supplied config
 	if err := r.generatePaladinSigners(ctx, node, &pldConf); err != nil {
+		return "", err
+	}
+
+	// Merge k8s CR label references to domains, with the supplied static config
+	if err := r.generatePaladinDomains(ctx, node, &pldConf); err != nil {
 		return "", err
 	}
 
@@ -643,6 +647,57 @@ func (r *PaladinReconciler) generatePaladinSigners(ctx context.Context, node *co
 		pldSigner.KeyStore.Type = pldconf.KeyStoreTypeStatic
 		pldSigner.KeyStore.Static.File = fmt.Sprintf("/keystores/%s/keys.yaml", s.Name)
 
+	}
+
+	return nil
+}
+
+func (r *PaladinReconciler) generatePaladinDomains(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig) error {
+
+	// Use all the label selectors we have to get a deterministically sorted list of CRs
+	allResults := corev1alpha1.PaladinDomainList{}
+	for i, s := range node.Spec.Domains {
+		var results corev1alpha1.PaladinDomainList
+		selector, err := metav1.LabelSelectorAsSelector(&s.LabelSelector)
+		if err == nil {
+			err = r.List(ctx, &results, client.MatchingLabelsSelector{Selector: selector})
+		}
+		if err != nil {
+			return fmt.Errorf("error using label selector at position %d of domains: %s", i, err)
+		}
+		allResults.Items = append(allResults.Items, results.Items...)
+	}
+	sortedResults := deDupAndSortInLocalNS(corev1alpha1.PaladinDomainCRMap, &allResults)
+
+	// Now go through the list sorting out the config
+	if pldConf.Domains == nil {
+		pldConf.Domains = make(map[string]*pldconf.DomainConfig)
+	}
+	for _, domain := range sortedResults {
+		if domain.Status.Status != corev1alpha1.RegistryStatusAvailable {
+			log.FromContext(ctx).Info(fmt.Sprintf("configJSON for domain '%s' not ready yet: %s", domain.Name, domain.Status.Status))
+			continue // skip it - but continue trying others
+		}
+
+		var domainConf map[string]any
+		if err := json.Unmarshal([]byte(domain.Spec.ConfigJSON), &domainConf); err != nil {
+			log.FromContext(ctx).Error(err, fmt.Sprintf("configJSON for domain '%s' cannot be parsed (skipping)", domain.Name))
+			continue // skip it - but continue trying others
+		}
+
+		// A domain is either wholely defined in the static config of the node,
+		// or wholely defined by reference to the CR attached.
+		// We do not attempt to merge
+		pldConf.Domains[domain.Name] = &pldconf.DomainConfig{
+			Plugin: pldconf.PluginConfig{
+				Type:    domain.Spec.Plugin.Type,
+				Library: domain.Spec.Plugin.Library,
+				Class:   domain.Spec.Plugin.Class,
+			},
+			Config:          domainConf,
+			RegistryAddress: domain.Status.RegistryAddress,
+			AllowSigning:    domain.Spec.AllowSigning,
+		}
 	}
 
 	return nil

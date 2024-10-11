@@ -82,6 +82,12 @@ type PaladinRegistryList struct {
 	Items           []PaladinRegistry `json:"items"`
 }
 
+var PaladinRegistryCRMap = CRMap[PaladinRegistry, *PaladinRegistry, *PaladinRegistryList]{
+	NewList:  func() *PaladinRegistryList { return new(PaladinRegistryList) },
+	ItemsFor: func(list *PaladinRegistryList) []PaladinRegistry { return list.Items },
+	AsObject: func(item *PaladinRegistry) *PaladinRegistry { return item },
+}
+
 func init() {
 	SchemeBuilder.Register(&PaladinRegistry{}, &PaladinRegistryList{})
 }

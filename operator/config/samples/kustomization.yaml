@@ -8,6 +8,6 @@ resources:
 - core_v1alpha1_smartcontractdeployment_pente.yaml
 - core_v1alpha1_paladinregistry.yaml
 - core_v1alpha1_paladindomain_noto.yaml
-- core_v1alpha1_paladindomain_zeto.yaml
 - core_v1alpha1_paladindomain_pente.yaml
+# - core_v1alpha1_paladindomain_zeto.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

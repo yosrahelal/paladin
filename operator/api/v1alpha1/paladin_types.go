@@ -19,7 +19,6 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // PaladinSpec defines the desired state of Paladin
@@ -113,14 +112,10 @@ type PaladinList struct {
 	Items           []Paladin `json:"items"`
 }
 
-// implements CRList
-func (l *PaladinList) ItemsArray() []Paladin {
-	return l.Items
-}
-
-// implements CRList
-func (l *PaladinList) AsObject(pi *Paladin) client.Object {
-	return pi
+var PaladinCRMap = CRMap[Paladin, *Paladin, *PaladinList]{
+	NewList:  func() *PaladinList { return new(PaladinList) },
+	ItemsFor: func(list *PaladinList) []Paladin { return list.Items },
+	AsObject: func(item *Paladin) *Paladin { return item },
 }
 
 func init() {
