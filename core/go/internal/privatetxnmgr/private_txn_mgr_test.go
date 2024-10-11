@@ -29,7 +29,6 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/mocks/statedistributionmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
@@ -941,7 +940,6 @@ type dependencyMocks struct {
 	ethClientFactory    *componentmocks.EthClientFactory
 	publicTxManager     components.PublicTxManager /* could be fake or mock */
 	identityResolver    *componentmocks.IdentityResolver
-	stateDistributer    *statedistributionmocks.StateDistributer
 }
 
 // For Black box testing we return components.PrivateTxManager

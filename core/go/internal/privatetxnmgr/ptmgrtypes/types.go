@@ -150,7 +150,7 @@ type Sequencer interface {
 		RemoveTransaction is an instruction for the given transaction to be no longer be managed by this sequencer
 		A re-assembled version ( with the same ID ) of the transaction may be assigned to the sequencer at a later time.
 	*/
-	RemoveTransaction(ctx context.Context, transactionID string) error
+	RemoveTransaction(ctx context.Context, transactionID string)
 
 	/*
 		ApproveEndorsement is a synchronous check of whether a given transaction could be endorsed by the local node. It asks the question:

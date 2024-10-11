@@ -423,7 +423,7 @@ func (s *sequencer) HandleTransactionDelegatedEvent(ctx context.Context, event *
 	return nil
 }
 
-func (s *sequencer) RemoveTransaction(ctx context.Context, txnID string) error {
+func (s *sequencer) RemoveTransaction(ctx context.Context, txnID string) {
 	log.L(ctx).Infof("RemoveTransaction: %s", txnID)
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -446,7 +446,6 @@ func (s *sequencer) RemoveTransaction(ctx context.Context, txnID string) error {
 
 	//then forget about the transaction
 	delete(s.unconfirmedTransactionsByID, txnID)
-	return nil
 }
 
 func (s *sequencer) AssignTransaction(ctx context.Context, txnID string) {

@@ -253,11 +253,12 @@ func TestSequencerTransitiveRemoteDependency(t *testing.T) {
 		OutputStateId: []string{stateIDB.String()},
 	})
 
-	node1Sequencer.HandleTransactionDelegatedEvent(ctx, &pb.TransactionDelegatedEvent{
+	err := node1Sequencer.HandleTransactionDelegatedEvent(ctx, &pb.TransactionDelegatedEvent{
 		TransactionId:    txn2ID.String(),
 		DelegatingNodeId: remoteNode2Id,
 		DelegateNodeId:   remotenode1ID,
 	})
+	assert.NoError(t, err)
 
 	//Third transaction (the spender of the output of the second transaction) is assembled on the local node
 	node1Sequencer.HandleTransactionAssembledEvent(ctx, &pb.TransactionAssembledEvent{
@@ -274,7 +275,7 @@ func TestSequencerTransitiveRemoteDependency(t *testing.T) {
 	node1Sequencer.AssignTransaction(ctx, txn3ID.String())
 
 	//We shouldn't see any dispatch, from the local sequencer, even when both transactions are endorsed
-	err := node1Sequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
+	err = node1Sequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
 		TransactionId: txn1ID.String(),
 	})
 	require.NoError(t, err)
@@ -338,13 +339,15 @@ func TestSequencerTransitiveRemoteDependencyTiming(t *testing.T) {
 	node1Sequencer.AssignTransaction(ctx, txn3ID.String())
 
 	//We shouldn't see any dispatch, from the local sequencer, even when both transactions are endorsed
-	node1Sequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
+	err := node1Sequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
 		TransactionId: txn1ID.String(),
 	})
+	assert.NoError(t, err)
 
-	node1Sequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
+	err = node1Sequencer.HandleTransactionEndorsedEvent(ctx, &pb.TransactionEndorsedEvent{
 		TransactionId: txn2ID.String(),
 	})
+	assert.NoError(t, err)
 
 	//Now a 4th node comes along and delegates txn4 (which has a dependency on txn3)
 	// this 4th node (remoteNode3) is in the same possition as the local node was.
