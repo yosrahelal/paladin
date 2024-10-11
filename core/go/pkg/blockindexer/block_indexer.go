@@ -40,6 +40,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 )
@@ -98,6 +99,7 @@ type blockIndexer struct {
 	dispatcherTap              chan struct{}
 	processorDone              chan struct{}
 	dispatcherDone             chan struct{}
+	rpcModule                  *rpcserver.RPCModule
 }
 
 func NewBlockIndexer(ctx context.Context, config *pldconf.BlockIndexerConfig, wsConfig *pldconf.WSClientConfig, persistence persistence.Persistence) (_ BlockIndexer, err error) {
