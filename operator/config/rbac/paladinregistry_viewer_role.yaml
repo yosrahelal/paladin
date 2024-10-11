@@ -1,16 +1,16 @@
-# permissions for end users to view smartcontracts.
+# permissions for end users to view paladinregistries.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
     app.kubernetes.io/name: operator-go
     app.kubernetes.io/managed-by: kustomize
-  name: smartcontract-viewer-role
+  name: paladinregistry-viewer-role
 rules:
 - apiGroups:
   - core.paladin.io
   resources:
-  - smartcontracts
+  - paladinregistries
   verbs:
   - get
   - list
@@ -18,6 +18,6 @@ rules:
 - apiGroups:
   - core.paladin.io
   resources:
-  - smartcontracts/status
+  - paladinregistries/status
   verbs:
   - get

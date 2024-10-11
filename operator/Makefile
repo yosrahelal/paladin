@@ -232,9 +232,6 @@ $(CRD_REF_DOCS): $(LOCALBIN)
 	test -s $(LOCALBIN)/crd-ref-docs || GOBIN=$(LOCALBIN) go install github.com/elastic/crd-ref-docs@latest
 
 ##@ Dev Helpers
-.PHONY: update-crds
-update-crds: manifests generate ## Update CRDs in the cluster.
-	$(KUBECTL) apply -k config/crd
 
 .PHONY: generate-reference-docs
 generate-reference-docs: crd-ref-docs ## Generate API reference documentation.

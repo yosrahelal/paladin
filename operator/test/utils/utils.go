@@ -161,7 +161,7 @@ type TestDeployer struct {
 	From string
 }
 
-func (td *TestDeployer) DeploySmartContractBytecode(ctx context.Context, buildJSON string, params any) (receipt *ptxapi.TransactionReceipt, err error) {
+func (td *TestDeployer) DeploySmartContractDeploymentBytecode(ctx context.Context, buildJSON string, params any) (receipt *ptxapi.TransactionReceipt, err error) {
 	type buildDefinition struct {
 		Bytecode tktypes.HexBytes `json:"bytecode"`
 		ABI      abi.ABI          `json:"abi"`

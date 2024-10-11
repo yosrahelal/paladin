@@ -121,8 +121,6 @@ func deplyDomainRegistry(t *testing.T) *tktypes.EthAddress {
 	cmTmp := componentmgr.NewComponentManager(context.Background(), grpcTarget, uuid.New(), &tmpConf)
 	err = cmTmp.Init()
 	require.NoError(t, err)
-	err = cmTmp.StartComponents()
-	require.NoError(t, err)
 	domainRegistryAddress := domains.DeploySmartContract(t, cmTmp.BlockIndexer(), cmTmp.EthClientFactory())
 
 	cmTmp.Stop()
@@ -238,9 +236,6 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	cm := componentmgr.NewComponentManager(i.ctx, i.grpcTarget, i.id, i.conf)
 	// Start it up
 	err = cm.Init()
-	require.NoError(t, err)
-
-	err = cm.StartComponents()
 	require.NoError(t, err)
 
 	err = cm.StartManagers()

@@ -564,3 +564,16 @@ func TestInsertTransactionOkDefaultConstructor(t *testing.T) {
 	})
 	assert.NoError(t, err)
 }
+
+func TestCheckIdempotencyKeyNoOverrideErrIfFail(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.db.ExpectQuery("SELECT.*transactions").WillReturnError(fmt.Errorf("crackle"))
+	})
+	defer done()
+
+	// Default public constructor invoke
+	err := txm.checkIdempotencyKeys(ctx, fmt.Errorf("pop"), false, []*ptxapi.TransactionInput{{Transaction: ptxapi.Transaction{
+		IdempotencyKey: "idem1",
+	}}})
+	assert.Regexp(t, "pop", err)
+}

@@ -1,9 +1,11 @@
 apiVersion: core.paladin.io/v1alpha1
-kind: SmartContract
+kind: PaladinRegistry
 metadata:
   labels:
     app.kubernetes.io/name: operator-go
     app.kubernetes.io/managed-by: kustomize
-  name: smartcontract-sample
+  name: evm-registry
 spec:
-  # TODO(user): Add fields here
+  type: evm
+  evm:
+    smartContractDeployment: registry

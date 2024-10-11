@@ -29,6 +29,7 @@ import (
 func (tm *txManager) buildRPCModule() {
 	tm.rpcModule = rpcserver.NewRPCModule("ptx").
 		Add("ptx_sendTransaction", tm.rpcSendTransaction()).
+		Add("ptx_sendTransactions", tm.rpcSendTransactions()).
 		Add("ptx_getTransaction", tm.rpcGetTransaction()).
 		Add("ptx_queryTransactions", tm.rpcQueryTransactions()).
 		Add("ptx_queryPendingTransactions", tm.rpcQueryPendingTransactions()).
@@ -50,6 +51,14 @@ func (tm *txManager) rpcSendTransaction() rpcserver.RPCHandler {
 		tx ptxapi.TransactionInput,
 	) (*uuid.UUID, error) {
 		return tm.sendTransaction(ctx, &tx)
+	})
+}
+
+func (tm *txManager) rpcSendTransactions() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		txs []*ptxapi.TransactionInput,
+	) ([]uuid.UUID, error) {
+		return tm.sendTransactions(ctx, txs)
 	})
 }
 
