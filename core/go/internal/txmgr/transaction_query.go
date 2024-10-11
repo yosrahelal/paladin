@@ -27,13 +27,14 @@ import (
 )
 
 var transactionFilters = filters.FieldMap{
-	"id":           filters.UUIDField("id"),
-	"created":      filters.TimestampField("created"),
-	"abiReference": filters.TimestampField("abi_ref"),
-	"functionName": filters.StringField("fn_name"),
-	"domain":       filters.StringField("domain"),
-	"from":         filters.StringField("from"),
-	"to":           filters.HexBytesField("to"),
+	"id":             filters.UUIDField("id"),
+	"idempotencyKey": filters.StringField("idempotency_key"),
+	"created":        filters.TimestampField("created"),
+	"abiReference":   filters.TimestampField("abi_ref"),
+	"functionName":   filters.StringField("fn_name"),
+	"domain":         filters.StringField("domain"),
+	"from":           filters.StringField("from"),
+	"to":             filters.HexBytesField("to"),
 }
 
 func mapPersistedTXBase(pt *persistedTransaction) *ptxapi.Transaction {

@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -28,6 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 )
@@ -262,8 +264,10 @@ func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.Transac
 	}
 
 	// Do in-transaction processing for our tables, and the public tables
+	insertedOK := false
 	err = tm.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
 		err = tm.insertTransactions(ctx, dbTX, txis)
+		insertedOK = (err == nil)
 		if err == nil && publicBatch != nil {
 			err = publicBatch.Submit(ctx, dbTX)
 		}
@@ -271,7 +275,7 @@ func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.Transac
 		return err
 	})
 	if err != nil {
-		return nil, err
+		return nil, tm.checkIdempotencyKeys(ctx, err, insertedOK, txs)
 	}
 	// From this point on we're committed, and need to tell the public tx manager as such
 	committed = true
@@ -305,6 +309,31 @@ func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.Transac
 		}
 	}
 	return txIDs, err
+}
+
+// Will either return the original error, or will return a special idempotency key error that can be used by the caller
+// to determine that they need to ask for the existing transactions (rather than fail)
+func (tm *txManager) checkIdempotencyKeys(ctx context.Context, origErr error, insertedOK bool, txis []*ptxapi.TransactionInput) error {
+	idempotencyKeys := make([]any, 0, len(txis))
+	for _, tx := range txis {
+		if tx.IdempotencyKey != "" {
+			idempotencyKeys = append(idempotencyKeys, tx.IdempotencyKey)
+		}
+	}
+	if !insertedOK && len(idempotencyKeys) > 0 {
+		existingTxs, lookupErr := tm.queryTransactions(ctx, query.NewQueryBuilder().In("idempotencyKey", idempotencyKeys).Limit(len(idempotencyKeys)).Query(), false)
+		if lookupErr != nil {
+			log.L(ctx).Errorf("Failed to query for existing idempotencyKeys after insert error (returning original error): %s", lookupErr)
+		} else if (len(existingTxs)) > 0 {
+			msgInfo := make([]string, len(existingTxs))
+			for i, tx := range existingTxs {
+				msgInfo[i] = fmt.Sprintf("%s=%s", tx.IdempotencyKey, tx.ID)
+			}
+			log.L(ctx).Errorf("Overriding insertion error with idempotencyKey error. origErr: %s", origErr)
+			return i18n.NewError(ctx, msgs.MsgTxMgrIdempotencyKeyClash, strings.Join(msgInfo, ","))
+		}
+	}
+	return origErr
 }
 
 type txInsertInfo struct {
@@ -373,8 +402,8 @@ func (tm *txManager) insertTransactions(ctx context.Context, dbTX *gorm.DB, txis
 	err := dbTX.
 		WithContext(ctx).
 		Table("transactions").
-		Create(ptxs).
 		Omit("TransactionDeps").
+		Create(ptxs).
 		Error
 	if err == nil && len(transactionDeps) > 0 {
 		err = dbTX.

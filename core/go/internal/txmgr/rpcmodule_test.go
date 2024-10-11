@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
@@ -66,11 +67,21 @@ func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*pldconf.TxMana
 
 }
 
+func mockPublicSubmitTxOkOrReject(t *testing.T) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mockSubmissionBatch := componentmocks.NewPublicTxBatch(t)
+		mockSubmissionBatch.On("Rejected").Return([]components.PublicTxRejected{})
+		mockSubmissionBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
+		mockSubmissionBatch.On("Completed", mock.Anything, mock.Anything).Return(nil)
+		mc.publicTxMgr.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockSubmissionBatch, nil)
+	}
+}
+
 func TestPublicTransactionLifecycle(t *testing.T) {
 
 	var publicTxns map[uuid.UUID][]*ptxapi.PublicTx
 	ctx, url, tmr, done := newTestTransactionManagerWithRPC(t,
-		mockPublicSubmitTxOk(t),
+		mockPublicSubmitTxOkOrReject(t),
 		mockQueryPublicTxForTransactions(func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error) {
 			return publicTxns, nil
 		}),
@@ -163,8 +174,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	assert.Nil(t, abiNotFound)
 
 	// Submit in a public invoke using that same ABI referring to the function
-	var tx2ID uuid.UUID
-	err = rpcClient.CallRPC(ctx, &tx2ID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+	tx2Input := &ptxapi.TransactionInput{
 		DependsOn: []uuid.UUID{tx1ID},
 		Transaction: ptxapi.Transaction{
 			ABIReference:   &abiHash,
@@ -174,8 +184,11 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 			Function:       "set(uint256)",
 			To:             tktypes.MustEthAddress(tktypes.RandHex(20)),
 		},
-	})
+	}
+	var txIDs []uuid.UUID
+	err = rpcClient.CallRPC(ctx, &txIDs, "ptx_sendTransactions", []*ptxapi.TransactionInput{tx2Input})
 	assert.NoError(t, err)
+	tx2ID := txIDs[0]
 	var tx2 *ptxapi.TransactionFull
 	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransaction", tx2ID, true)
 	require.NoError(t, err)
@@ -184,6 +197,10 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransaction", tx2ID, false)
 	require.NoError(t, err)
 	assert.Equal(t, tx2ID, tx2.ID)
+
+	// Submit again and check we get the right error with the ID
+	err = rpcClient.CallRPC(ctx, &txIDs, "ptx_sendTransactions", []*ptxapi.TransactionInput{tx2Input})
+	assert.Regexp(t, fmt.Sprintf("PD012220.*tx2=%s", tx2ID), err)
 
 	// Null on not found is the consistent ethereum pattern
 	var txNotFound *ptxapi.Transaction
