@@ -1125,3 +1125,11 @@ func TestHydrateBlockNoTransactions(t *testing.T) {
 	require.Len(t, batch.receipts, 1)
 	require.Empty(t, batch.receipts[0])
 }
+
+func TestQueryTransactionsNoLimit(t *testing.T) {
+	ctx, bi, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	_, err := bi.QueryTransactions(ctx, query.NewQueryBuilder().Query())
+	assert.Regexp(t, "PD011311", err)
+}

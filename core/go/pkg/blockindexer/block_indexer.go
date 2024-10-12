@@ -94,6 +94,7 @@ type blockIndexer struct {
 	eventStreamsLock           sync.Mutex
 	esBlockDispatchQueueLength int
 	esCatchUpQueryPageSize     int
+	started                    bool
 	dispatcherTap              chan struct{}
 	processorDone              chan struct{}
 	dispatcherDone             chan struct{}
@@ -157,7 +158,13 @@ func (bi *blockIndexer) Start(internalStreams ...*InternalEventStream) error {
 
 func (bi *blockIndexer) AddEventStream(ctx context.Context, stream *InternalEventStream) (*EventStream, error) {
 	es, err := bi.upsertInternalEventStream(ctx, stream)
-	if err == nil {
+
+	// Can be called before start as managers start before the block indexer
+	bi.stateLock.Lock()
+	started := bi.started
+	bi.stateLock.Unlock()
+
+	if started && err == nil {
 		bi.startEventStream(es)
 	}
 	return es.definition, err
@@ -182,6 +189,7 @@ func (bi *blockIndexer) startOrReset() {
 	bi.processorDone = make(chan struct{})
 	bi.dispatcherDone = make(chan struct{})
 	bi.cancelFunc = cancelFunc
+	bi.started = true
 	bi.stateLock.Unlock()
 
 	go bi.startup(runCtx)
@@ -210,25 +218,29 @@ func (bi *blockIndexer) startup(runCtx context.Context) {
 
 func (bi *blockIndexer) Stop() {
 	bi.stateLock.Lock()
+	wasStarted := bi.started
 	processorDone := bi.processorDone
 	dispatcherDone := bi.dispatcherDone
 	cancelCtx := bi.cancelFunc
+	bi.started = false
 	bi.stateLock.Unlock()
 
-	bi.eventStreamsLock.Lock()
-	for _, es := range bi.eventStreams {
-		es.stop()
-	}
-	bi.eventStreamsLock.Unlock()
+	if wasStarted {
+		bi.eventStreamsLock.Lock()
+		for _, es := range bi.eventStreams {
+			es.stop()
+		}
+		bi.eventStreamsLock.Unlock()
 
-	if cancelCtx != nil {
-		cancelCtx()
-	}
-	if processorDone != nil {
-		<-processorDone
-	}
-	if dispatcherDone != nil {
-		<-dispatcherDone
+		if cancelCtx != nil {
+			cancelCtx()
+		}
+		if processorDone != nil {
+			<-processorDone
+		}
+		if dispatcherDone != nil {
+			<-dispatcherDone
+		}
 	}
 }
 
@@ -500,7 +512,7 @@ func (bi *blockIndexer) hydrateBlock(ctx context.Context, batch *blockWriterBatc
 			if err == nil {
 				// TODO: We've seen this with Besu instead of an error, and need to diagnose
 				// Convert to a not found, but DO retry here.
-				log.L(ctx).Warnf("Blockchain node return null from eth_getBlockReceipts")
+				log.L(ctx).Warnf("Blockchain node returned null from eth_getBlockReceipts")
 				err = i18n.NewError(ctx, msgs.MsgBlockIndexerConfirmedBlockNotFound, batch.blocks[blockIndex].Hash, batch.blocks[blockIndex].Number)
 			} else if isNotFound(err) {
 				// If we get a not-found, that's an indication the confirmations are not set correctly,
