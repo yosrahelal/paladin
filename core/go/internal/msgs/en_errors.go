@@ -256,7 +256,7 @@ var (
 	// PrivTxMgr PD0118XX
 	MsgDomainNotProvided              = ffe("PD011800", "Domain not found in the transaction input")
 	MsgPrivateTxManagerInternalError  = ffe("PD011801", "Unexpected error in engine %s")
-	MsgPrivateTxManagerAssembleError  = ffe("PD011802", "Error assembling transaction")
+	MsgPrivateTxManagerAssembleError  = ffe("PD011802", "Error assembling transaction: %s")
 	MsgPrivateTxManagerParseFailed    = ffe("PD011803", "Failed to parse message")
 	MsgPrivateTxManagerInvalidMessage = ffe("PD011804", "Invalid message received from transport")
 	MsgSequencerInternalError         = ffe("PD011805", "Sequencer internal error %s, ")
@@ -268,6 +268,7 @@ var (
 	MsgContractAddressNotProvided     = ffe("PD011811", "Contract address (To) not found in the transaction input")
 	MsgPrivTxMgrPublicTxFail          = ffe("PD011812", "Public transaction rejected")
 	MsgResolveVerifierRemoteFailed    = ffe("PD011813", "Failed to resolve verifier on remote node with lookup %s algorithm %s: Error %s")
+	MsgPrivateTxManagerAssembleRevert = ffe("PD011814", "Domain reverted transaction on assemble")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")

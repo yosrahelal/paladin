@@ -54,6 +54,7 @@ type dispatchSequenceOperation struct {
 	contractAddress    tktypes.EthAddress
 	dispatches         []*DispatchSequence
 	stateDistributions []*statedistribution.StateDistributionPersisted
+	finalizer          *TransactionFinalizer
 }
 
 func (dso *dispatchSequenceOperation) WriteKey() string {
@@ -83,7 +84,14 @@ func (s *store) runBatch(ctx context.Context, dbTX *gorm.DB, values []*dispatchS
 	// However, this is
 	// Build lists of things to insert (we are insert only)
 
+	finalizers := make([]*TransactionFinalizer, 0)
+
 	for _, op := range values {
+
+		if op.finalizer != nil {
+			finalizers = append(finalizers, op.finalizer)
+		}
+
 		//for each batchSequence operation, call the public transaction manager to allocate a nonce
 		//and persist the intent to send the states to the distribution list.
 		for _, dispatchSequenceOp := range op.dispatches {
@@ -158,6 +166,18 @@ func (s *store) runBatch(ctx context.Context, dbTX *gorm.DB, values []*dispatchS
 
 		if err != nil {
 			log.L(ctx).Errorf("Error persisting state distributions: %s", err)
+			return nil, err
+		}
+	}
+
+	// If we have any finalizers, we need to call them now
+	//big assumption here that all operations in the batch have the same `contractAddress` which happens to be a safe
+	// assumption at time of coding because WriteKey returns the contract address
+	// but probably should consider a less brittle way to codify this assertion
+	if len(finalizers) > 0 {
+		err := s.writeTransactionFinalizerBatch(ctx, dbTX, values[0].contractAddress, finalizers)
+		if err != nil {
+			log.L(ctx).Errorf("Error persisting finalizers: %s", err)
 			return nil, err
 		}
 	}

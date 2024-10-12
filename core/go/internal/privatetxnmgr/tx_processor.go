@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	engineProto "github.com/kaleido-io/paladin/core/pkg/proto/engine"
@@ -37,7 +38,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver) ptmgrtypes.TxProcessor {
+func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, store privatetxnstore.Store) ptmgrtypes.TxProcessor {
 	return &PaladinTxProcessor{
 		stageErrorRetry:     10 * time.Second,
 		sequencer:           sequencer,
@@ -49,6 +50,7 @@ func NewPaladinTransactionProcessor(ctx context.Context, transaction *components
 		transaction:         transaction,
 		status:              "new",
 		identityResolver:    identityResolver,
+		store:               store,
 	}
 }
 
@@ -64,6 +66,7 @@ type PaladinTxProcessor struct {
 	status              string
 	latestEvent         string
 	identityResolver    components.IdentityResolver
+	store               privatetxnstore.Store
 }
 
 func (ts *PaladinTxProcessor) Init(ctx context.Context) {
@@ -125,10 +128,31 @@ func (ts *PaladinTxProcessor) isReadyToAssemble(ctx context.Context) bool {
 
 }
 
-func (ts *PaladinTxProcessor) revertTransaction(ctx context.Context, err error) {
-	log.L(ctx).Errorf("Reverting transaction %s: %s", ts.transaction.ID.String(), err)
-	//TODO this needs to update the transaction as reverted and flush that to the txmgr database
+func (ts *PaladinTxProcessor) revertTransaction(ctx context.Context, revertReason string) {
+	log.L(ctx).Errorf("Reverting transaction %s: %s", ts.transaction.ID.String(), revertReason)
+	//update the transaction as reverted and flush that to the txmgr database
 	// so that the user can see that it is reverted and so that we stop retrying to assemble and endorse it
+
+	ts.store.QueueTransactionFinalize(
+		ctx,
+		ts.domainAPI.Address(),
+		&privatetxnstore.TransactionFinalizer{
+			FailureMessage: revertReason,
+			TransactionID:  ts.transaction.ID,
+		},
+		func(ctx context.Context) {
+			//we are not on the main event loop thread so can't update in memory state here.
+			// need to go back into the event loop
+			log.L(ctx).Infof("Transaction %s finalize committed", ts.transaction.ID.String())
+			go ts.publisher.PublishTransactionFinalizedEvent(ctx, ts.transaction.ID.String())
+		},
+		func(ctx context.Context, rollbackErr error) {
+			//we are not on the main event loop thread so can't update in memory state here.
+			// need to go back into the event loop
+			log.L(ctx).Errorf("Transaction %s finalize rolled back: %s", ts.transaction.ID.String(), rollbackErr)
+			go ts.publisher.PublishTransactionFinalizeError(ctx, ts.transaction.ID.String(), revertReason, rollbackErr)
+		},
+	)
 }
 
 func (ts *PaladinTxProcessor) HandleVerifierResolvedEvent(ctx context.Context, event *ptmgrtypes.ResolveVerifierResponseEvent) error {
@@ -172,13 +196,19 @@ func (ts *PaladinTxProcessor) assembleTransaction(ctx context.Context) {
 	err := ts.domainAPI.AssembleTransaction(ts.endorsementGatherer.DomainContext(), ts.transaction)
 	if err != nil {
 		log.L(ctx).Errorf("AssembleTransaction failed: %s", err)
-		ts.revertTransaction(ctx, err)
+		ts.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), err.Error()))
 		return
 	}
 	if ts.transaction.PostAssembly == nil {
 		// This is most likely a programming error in the domain
 		log.L(ctx).Errorf("PostAssembly is nil. Should never have reached this stage without a PostAssembly")
-		ts.revertTransaction(ctx, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "AssembleTransaction returned nil PostAssembly"))
+		ts.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), "AssembleTransaction returned nil PostAssembly"))
+		return
+	}
+	if ts.transaction.PostAssembly.AssemblyResult == prototk.AssembleTransactionResponse_REVERT {
+		// Not sure if any domains actually use this but it is a valid response to indicate failure
+		log.L(ctx).Errorf("AssemblyResult is AssembleTransactionResponse_REVERT")
+		ts.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleRevert)))
 		return
 	}
 	ts.status = "assembled"
@@ -202,12 +232,12 @@ func (ts *PaladinTxProcessor) assembleTransaction(ctx context.Context) {
 
 		err := ts.domainAPI.WritePotentialStates(ts.endorsementGatherer.DomainContext(), ts.transaction)
 		if err != nil {
-			//Any error from WritePotentialStates is likely to be caused by an invalid initiliase or assemble of the transaction
+			//Any error from WritePotentialStates is likely to be caused by an invalid init or assemble of the transaction
 			// which ist most likely a programming error in the domain or the domain manager or privateTxManager
 			// not much we can do other than revert the transaction with an internal error
 			errorMessage := fmt.Sprintf("Failed to write potential states: %s", err)
 			log.L(ctx).Error(errorMessage)
-			ts.revertTransaction(ctx, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage))
+			ts.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage))
 			return
 		}
 	}
@@ -363,6 +393,21 @@ func (ts *PaladinTxProcessor) HandleResolveVerifierErrorEvent(ctx context.Contex
 	//it is possible that this identity was valid when the transaction was assembled but is no longer valid
 	// all we can do it try to re-assemble the transaction
 	ts.reassembleTransaction(ctx)
+	return nil
+}
+
+func (ts *PaladinTxProcessor) HandleTransactionFinalizedEvent(ctx context.Context, event *ptmgrtypes.TransactionFinalizedEvent) error {
+	ts.latestEvent = "HandleTransactionFinalizedEvent"
+	log.L(ctx).Debug("HandleTransactionFinalizedEvent")
+	return nil
+}
+
+func (ts *PaladinTxProcessor) HandleTransactionFinalizeError(ctx context.Context, event *ptmgrtypes.TransactionFinalizeError) error {
+	ts.latestEvent = "HandleTransactionFinalizeError"
+	log.L(ctx).Errorf("Failed to finalize transaction %s: %s", ts.transaction.ID, event.ErrorMessage)
+
+	//try again
+	ts.revertTransaction(ctx, event.ErrorMessage)
 	return nil
 }
 

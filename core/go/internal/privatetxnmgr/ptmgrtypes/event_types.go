@@ -102,6 +102,16 @@ type ResolveVerifierErrorEvent struct {
 	ErrorMessage *string
 }
 
+type TransactionFinalizedEvent struct {
+	PrivateTransactionEventBase
+}
+
+type TransactionFinalizeError struct {
+	PrivateTransactionEventBase
+	RevertReason string // reason we were trying to finalize the transaction
+	ErrorMessage string // reason the transaction could not be finalized
+}
+
 // Replies are correlated to the corresponding request and not necessarily to a specific transaction and/or contract
 type PrivateTransactionReplyBase struct {
 	RequestID string

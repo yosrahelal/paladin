@@ -63,7 +63,17 @@ func transactionReceiptCondition(t *testing.T, ctx context.Context, txID uuid.UU
 		require.NoError(t, err)
 		return txFull.Receipt != nil && (!isDeploy || txFull.Receipt.ContractAddress != nil)
 	}
+}
 
+func transactionRevertedCondition(t *testing.T, ctx context.Context, txID uuid.UUID, rpcClient rpcclient.Client) func() bool {
+	//for the given transaction ID, return a function that can be used in an assert.Eventually to check if the transaction has been reverted
+	return func() bool {
+		txFull := ptxapi.TransactionFull{}
+		err := rpcClient.CallRPC(ctx, &txFull, "ptx_getTransaction", txID, true)
+		require.NoError(t, err)
+		return txFull.Receipt != nil &&
+			!txFull.Receipt.Success
+	}
 }
 
 func transactionLatencyThreshold(t *testing.T) time.Duration {

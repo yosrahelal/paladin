@@ -170,6 +170,8 @@ type Publisher interface {
 	PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult, revertReason *string) error
 	PublishResolveVerifierResponseEvent(ctx context.Context, transactionId string, lookup, algorithm, verifier, verifierType string)
 	PublishResolveVerifierErrorEvent(ctx context.Context, transactionId string, lookup, algorithm, errorMessage string)
+	PublishTransactionFinalizedEvent(ctx context.Context, transactionId string)
+	PublishTransactionFinalizeError(ctx context.Context, transactionId string, revertReason string, err error)
 }
 
 // Map of signing address to an ordered list of transaction IDs that are ready to be dispatched by that signing address
@@ -231,6 +233,9 @@ type TxProcessor interface {
 	HandleTransactionDelegatedEvent(ctx context.Context, event *TransactionDelegatedEvent) error
 	HandleResolveVerifierResponseEvent(ctx context.Context, event *ResolveVerifierResponseEvent) error
 	HandleResolveVerifierErrorEvent(ctx context.Context, event *ResolveVerifierErrorEvent) error
+	HandleTransactionFinalizedEvent(ctx context.Context, event *TransactionFinalizedEvent) error
+	HandleTransactionFinalizeError(ctx context.Context, event *TransactionFinalizeError) error
+
 	PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error)
 	GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution
 }

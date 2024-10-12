@@ -17,13 +17,17 @@ package privatetxnmgr
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
+	"github.com/kaleido-io/paladin/core/mocks/privatetxnstoremocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -42,6 +46,7 @@ type transactionProcessorDepencyMocks struct {
 	endorsementGatherer *privatetxnmgrmocks.EndorsementGatherer
 	publisher           *privatetxnmgrmocks.Publisher
 	identityResolver    *componentmocks.IdentityResolver
+	store               *privatetxnstoremocks.Store
 }
 
 func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context, transaction *components.PrivateTransaction) (*PaladinTxProcessor, *transactionProcessorDepencyMocks) {
@@ -58,14 +63,17 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 		endorsementGatherer: privatetxnmgrmocks.NewEndorsementGatherer(t),
 		publisher:           privatetxnmgrmocks.NewPublisher(t),
 		identityResolver:    componentmocks.NewIdentityResolver(t),
+		store:               privatetxnstoremocks.NewStore(t),
 	}
+	contractAddress := tktypes.RandAddress()
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
 	mocks.allComponents.On("TransportManager").Return(mocks.transportManager).Maybe()
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.endorsementGatherer.On("DomainContext").Return(mocks.domainContext).Maybe()
+	mocks.domainSmartContract.On("Address").Return(*contractAddress).Maybe()
 
-	tp := NewPaladinTransactionProcessor(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver)
+	tp := NewPaladinTransactionProcessor(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.store)
 
 	return tp.(*PaladinTxProcessor), mocks
 }
@@ -94,4 +102,69 @@ func TestTransactionProcessorHandleTransactionSubmittedEvent(t *testing.T) {
 		},
 	})
 	assert.NoError(t, err)
+}
+
+func TestTransactionProcessorAssembleRevert(t *testing.T) {
+	ctx := context.Background()
+	newTxID := uuid.New()
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
+		PreAssembly: &components.TransactionPreAssembly{
+			RequiredVerifiers: []*prototk.ResolveVerifierRequest{}, // empty list so that we are immediately ready to assemble
+		},
+	}
+	tp, dependencyMocks := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
+
+	dependencyMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(1).(*components.PrivateTransaction)
+
+		tx.PostAssembly = &components.TransactionPostAssembly{
+			AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
+		}
+	}).Return(nil).Once()
+
+	dependencyMocks.store.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	err := tp.HandleTransactionSubmittedEvent(ctx, &ptmgrtypes.TransactionSubmittedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			TransactionID: newTxID.String(),
+		},
+	})
+	assert.NoError(t, err) //the event was successfully handled and part of that handling was to revert the transaction so there is no error
+
+}
+
+func TestTransactionProcessorAssembleError(t *testing.T) {
+	ctx := context.Background()
+	newTxID := uuid.New()
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
+		PreAssembly: &components.TransactionPreAssembly{
+			RequiredVerifiers: []*prototk.ResolveVerifierRequest{}, // empty list so that we are immediately ready to assemble
+		},
+	}
+
+	tp, dependencyMocks := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
+
+	testRevertReason := "test revert reason"
+	dependencyMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(1).(*components.PrivateTransaction)
+
+		tx.PostAssembly = &components.TransactionPostAssembly{
+			AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
+		}
+	}).Return(errors.New(testRevertReason)).Once()
+
+	matchTransactionFinalizer := func(f *privatetxnstore.TransactionFinalizer) bool {
+		return f.TransactionID == newTxID && strings.Contains(f.FailureMessage, testRevertReason)
+	}
+
+	dependencyMocks.store.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.MatchedBy(matchTransactionFinalizer), mock.Anything, mock.Anything).Return()
+
+	err := tp.HandleTransactionSubmittedEvent(ctx, &ptmgrtypes.TransactionSubmittedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			TransactionID: newTxID.String(),
+		},
+	})
+	assert.NoError(t, err) //the event was successfully handled and part of that handling was to revert the transaction so there is no error
+
 }

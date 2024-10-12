@@ -21,6 +21,7 @@ import (
 
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 
@@ -41,16 +42,20 @@ type Store interface {
 	//We persist multiple sequences in a single call, one for each signing address
 	Start()
 	PersistDispatchBatch(ctx context.Context, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*statedistribution.StateDistribution) error
+	QueueTransactionFinalize(ctx context.Context, contractAddress tktypes.EthAddress, finalizer *TransactionFinalizer, onCommit func(context.Context), onRollback func(context.Context, error))
 	Close()
 }
 
 type store struct {
 	started bool
 	writer  flushwriter.Writer[*dispatchSequenceOperation, *noResult]
+	txMgr   components.TXManager
 }
 
-func NewStore(ctx context.Context, conf *pldconf.FlushWriterConfig, p persistence.Persistence) Store {
-	s := &store{}
+func NewStore(ctx context.Context, conf *pldconf.FlushWriterConfig, p persistence.Persistence, txMgr components.TXManager) Store {
+	s := &store{
+		txMgr: txMgr,
+	}
 	s.writer = flushwriter.NewWriter(ctx, s.runBatch, p, conf, &WriterConfigDefaults)
 	return s
 }

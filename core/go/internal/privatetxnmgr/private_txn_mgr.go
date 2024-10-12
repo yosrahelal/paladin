@@ -64,7 +64,7 @@ func (p *privateTxManager) PreInit(c components.PreInitComponents) (*components.
 
 func (p *privateTxManager) PostInit(c components.AllComponents) error {
 	p.components = c
-	p.store = privatetxnstore.NewStore(p.ctx, &p.config.Writer, c.Persistence())
+	p.store = privatetxnstore.NewStore(p.ctx, &p.config.Writer, c.Persistence(), c.TxManager())
 	p.stateDistributer = statedistribution.NewStateDistributer(
 		p.ctx,
 		p.nodeID,

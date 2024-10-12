@@ -159,8 +159,18 @@ func NewOrchestrator(
 func (oc *Orchestrator) getTransactionProcessor(txID string) ptmgrtypes.TxProcessor {
 	oc.incompleteTxProcessMapMutex.Lock()
 	defer oc.incompleteTxProcessMapMutex.Unlock()
-	//TODO if the transaction is not in memory, we need to load it from the database
-	return oc.incompleteTxSProcessMap[txID]
+	transactionProcessor, ok := oc.incompleteTxSProcessMap[txID]
+	if !ok {
+		log.L(oc.ctx).Errorf("Transaction processor not found for transaction ID %s", txID)
+		return nil
+	}
+	return transactionProcessor
+}
+
+func (oc *Orchestrator) removeTransactionProcessor(txID string) {
+	oc.incompleteTxProcessMapMutex.Lock()
+	defer oc.incompleteTxProcessMapMutex.Unlock()
+	delete(oc.incompleteTxSProcessMap, txID)
 }
 
 func (oc *Orchestrator) handleEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
@@ -168,29 +178,48 @@ func (oc *Orchestrator) handleEvent(ctx context.Context, event ptmgrtypes.Privat
 	// find (or create) the transaction processor for that transaction
 	// and pass the event to it
 	transactionID := event.GetTransactionID()
-	transactionProccessor := oc.getTransactionProcessor(transactionID)
+	transactionProcessor := oc.getTransactionProcessor(transactionID)
+	if transactionProcessor == nil {
+		//What has happened here is either:
+		// a) we don't know about this transaction yet, which is possible if we have just restarted
+		// and not yet completed the initialization from the database but in the interim, we have received
+		// a transport message from another node concerning this transaction
+		// b) the transaction has been completed and removed from memory
+		// in case of (a) we ignore it and rely on the fact that we will send out request for data that we need once
+		// we have completed the initialization from the database
+		// in case of (b) we ignore it because an event for a completed transaction is redundant.
+		// most likely it is a tardy response for something we timed out waiting for and failed or retried successfully
+		log.L(ctx).Warnf("Received an event for a transaction that is not in flight %s", transactionID)
+		return
+	}
 	var err error
 	switch event := event.(type) {
 	case *ptmgrtypes.TransactionSubmittedEvent:
-		err = transactionProccessor.HandleTransactionSubmittedEvent(ctx, event)
+		err = transactionProcessor.HandleTransactionSubmittedEvent(ctx, event)
 	case *ptmgrtypes.TransactionAssembledEvent:
-		err = transactionProccessor.HandleTransactionAssembledEvent(ctx, event)
+		err = transactionProcessor.HandleTransactionAssembledEvent(ctx, event)
 	case *ptmgrtypes.TransactionSignedEvent:
-		err = transactionProccessor.HandleTransactionSignedEvent(ctx, event)
+		err = transactionProcessor.HandleTransactionSignedEvent(ctx, event)
 	case *ptmgrtypes.TransactionEndorsedEvent:
-		err = transactionProccessor.HandleTransactionEndorsedEvent(ctx, event)
+		err = transactionProcessor.HandleTransactionEndorsedEvent(ctx, event)
 	case *ptmgrtypes.TransactionDispatchedEvent:
-		err = transactionProccessor.HandleTransactionDispatchedEvent(ctx, event)
+		err = transactionProcessor.HandleTransactionDispatchedEvent(ctx, event)
 	case *ptmgrtypes.TransactionConfirmedEvent:
-		err = transactionProccessor.HandleTransactionConfirmedEvent(ctx, event)
+		err = transactionProcessor.HandleTransactionConfirmedEvent(ctx, event)
 	case *ptmgrtypes.TransactionRevertedEvent:
-		err = transactionProccessor.HandleTransactionRevertedEvent(ctx, event)
+		err = transactionProcessor.HandleTransactionRevertedEvent(ctx, event)
 	case *ptmgrtypes.TransactionDelegatedEvent:
-		err = transactionProccessor.HandleTransactionDelegatedEvent(ctx, event)
+		err = transactionProcessor.HandleTransactionDelegatedEvent(ctx, event)
 	case *ptmgrtypes.ResolveVerifierResponseEvent:
-		err = transactionProccessor.HandleResolveVerifierResponseEvent(ctx, event)
+		err = transactionProcessor.HandleResolveVerifierResponseEvent(ctx, event)
 	case *ptmgrtypes.ResolveVerifierErrorEvent:
-		err = transactionProccessor.HandleResolveVerifierErrorEvent(ctx, event)
+		err = transactionProcessor.HandleResolveVerifierErrorEvent(ctx, event)
+	case *ptmgrtypes.TransactionFinalizedEvent:
+		err = transactionProcessor.HandleTransactionFinalizedEvent(ctx, event)
+		oc.removeTransactionProcessor(transactionID)
+	case *ptmgrtypes.TransactionFinalizeError:
+		err = transactionProcessor.HandleTransactionFinalizeError(ctx, event)
+
 	default:
 		log.L(ctx).Warnf("Unknown event type: %T", event)
 	}
@@ -198,7 +227,7 @@ func (oc *Orchestrator) handleEvent(ctx context.Context, event ptmgrtypes.Privat
 		// Any expected errors like assembly failed or endorsement failed should have been handled by the transaction processor
 		// Any errors that get back here mean that event has not been fully applied and we rely on the
 		// event being re-sent, most likely after the transaction processor re-sends an async request
-		// because it has detected a stale transaction that has timedout waiting for a response
+		// because it has detected a stale transaction that has timed out waiting for a response
 		log.L(ctx).Errorf("Error handling %T event: %s ", event, err.Error())
 	}
 }
@@ -246,7 +275,7 @@ func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *component
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.publisher, oc.endorsementGatherer, oc.identityResolver)
+			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.store)
 		}
 		oc.incompleteTxSProcessMap[tx.ID.String()].Init(ctx)
 		oc.pendingEvents <- &ptmgrtypes.TransactionSubmittedEvent{
@@ -257,18 +286,6 @@ func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *component
 }
 
 func (oc *Orchestrator) HandleEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
-	//TODO Better
-	oc.incompleteTxProcessMapMutex.Lock()
-	defer oc.incompleteTxProcessMapMutex.Unlock()
-	txProc := oc.incompleteTxSProcessMap[event.GetTransactionID()]
-	if txProc == nil {
-
-		// TODO we have an event for a transaction that we have swapped out of memory.  Need to reload the transaction from the database before we can proces this event
-		// and we need to do this in a way that doesn't exceed the maxConcurrentProcess and doesn't allow events from a runaway remote node to cause a noisy neighbor problem for events
-		// from the local node
-		panic("Transaction not found")
-
-	}
 	oc.pendingEvents <- event
 }
 

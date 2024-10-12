@@ -119,3 +119,25 @@ func (p *publisher) PublishResolveVerifierErrorEvent(ctx context.Context, transa
 	}
 	p.privateTxManager.HandleNewEvent(ctx, event)
 }
+
+func (p *publisher) PublishTransactionFinalizedEvent(ctx context.Context, transactionId string) {
+	event := &ptmgrtypes.TransactionFinalizedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
+		},
+	}
+	p.privateTxManager.HandleNewEvent(ctx, event)
+}
+
+func (p *publisher) PublishTransactionFinalizeError(ctx context.Context, transactionId string, revertReason string, err error) {
+	event := &ptmgrtypes.TransactionFinalizeError{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
+		},
+		RevertReason: revertReason,
+		ErrorMessage: err.Error(),
+	}
+	p.privateTxManager.HandleNewEvent(ctx, event)
+}

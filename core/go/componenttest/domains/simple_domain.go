@@ -47,6 +47,10 @@ var simpleDomainBuild []byte // comes from Hardhat build
 //go:embed abis/SimpleToken.json
 var simpleTokenBuild []byte // comes from Hardhat build
 
+const (
+	SimpleDomainInsufficientFundsError = "SDE0001"
+)
+
 func toJSONString(t *testing.T, v interface{}) string {
 	b, err := json.Marshal(v)
 	assert.NoError(t, err)
@@ -264,7 +268,7 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				}
 				states := res.States
 				if len(states) == 0 {
-					return nil, nil, nil, fmt.Errorf("insufficient funds (available=%s)", total.Text(10))
+					return nil, nil, nil, fmt.Errorf("%s: insufficient funds (available=%s)", SimpleDomainInsufficientFundsError, total.Text(10))
 				}
 				for _, state := range states {
 					lastStateTimestamp = state.StoredAt

@@ -182,6 +182,12 @@ task makeMocks(type: Mockery, dependsOn: [":installMockery", protoc, goGet]) {
         outputDir 'mocks/privatetxnmgrmocks'
     }
     mock {
+        inputDir 'internal/privatetxnmgr/privatetxnstore'
+        includeAll true
+        outputPackage 'privatetxnstoremocks'
+        outputDir 'mocks/privatetxnstoremocks'
+    }
+    mock {
         inputDir 'internal/components'
         includeAll true
         outputPackage 'componentmocks'

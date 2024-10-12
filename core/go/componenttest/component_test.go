@@ -352,13 +352,91 @@ func TestPrivateTransactionsMintThenTransfer(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.NotEqual(t, uuid.UUID{}, tx1ID)
+	assert.NotEqual(t, uuid.UUID{}, tx2ID)
 	assert.Eventually(t,
 		transactionReceiptCondition(t, ctx, tx2ID, rpcClient, false),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
 		"Transaction did not receive a receipt",
 	)
+
+}
+
+func TestPrivateTransactionRevertedAssembleFailed(t *testing.T) {
+	// Invoke a transaction that will fail to assemble
+	// in this case, we use the simple token domain and attempt to transfer from a wallet that has no tokens
+
+	ctx := context.Background()
+	instance := newInstanceForComponentTesting(t, deplyDomainRegistry(t), nil, nil)
+	rpcClient := instance.client
+
+	var dplyTxID uuid.UUID
+	err := rpcClient.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+		ABI: *domains.SimpleTokenConstructorABI(),
+		Transaction: ptxapi.Transaction{
+			IdempotencyKey: "deploy1",
+			Type:           ptxapi.TransactionTypePrivate.Enum(),
+			Domain:         "domain1",
+			From:           "wallets.org1.aaaaaa",
+			Data: tktypes.RawJSON(`{
+					"notary": "domain1.contract1.notary",
+					"name": "FakeToken1",
+					"symbol": "FT1"
+				}`),
+		},
+	})
+	require.NoError(t, err)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, dplyTxID, rpcClient, true),
+		transactionLatencyThreshold(t)+5*time.Second, //TODO deploy transaction seems to take longer than expected
+		100*time.Millisecond,
+		"Deploy transaction did not receive a receipt",
+	)
+
+	var dplyTxFull ptxapi.TransactionFull
+	err = rpcClient.CallRPC(ctx, &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
+	require.NoError(t, err)
+	require.NotNil(t, dplyTxFull.Receipt)
+	require.True(t, dplyTxFull.Receipt.Success)
+	require.NotNil(t, dplyTxFull.Receipt.ContractAddress)
+	contractAddress := dplyTxFull.Receipt.ContractAddress
+
+	// Start a private transaction - Transfer from alice to bob but we expect that alice can't afford this
+	// however, that wont be known until the transaction is assembled which is asynchronous so the initial submission
+	// should succeed
+	var tx1ID uuid.UUID
+	err = rpcClient.CallRPC(ctx, &tx1ID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+		ABI: *domains.SimpleTokenTransferABI(),
+		Transaction: ptxapi.Transaction{
+			To:             contractAddress,
+			Domain:         "domain1",
+			IdempotencyKey: "tx2",
+			Type:           ptxapi.TransactionTypePrivate.Enum(),
+			From:           "wallets.org1.bbbbbb",
+			Data: tktypes.RawJSON(`{
+				"from": "wallets.org1.bbbbbb",
+				"to": "wallets.org1.aaaaaa",
+				"amount": "123000000000000000000"
+			}`),
+		},
+	})
+
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.UUID{}, tx1ID)
+	assert.Eventually(t,
+		transactionRevertedCondition(t, ctx, tx1ID, rpcClient),
+		transactionLatencyThreshold(t),
+		100*time.Millisecond,
+		"Transaction did not revert",
+	)
+
+	var txFull ptxapi.TransactionFull
+	err = rpcClient.CallRPC(ctx, &txFull, "ptx_getTransaction", tx1ID, true)
+	require.NoError(t, err)
+	require.NotNil(t, txFull.Receipt)
+	assert.False(t, txFull.Receipt.Success)
+	assert.Regexp(t, domains.SimpleDomainInsufficientFundsError, txFull.Receipt.FailureMessage)
+	assert.Regexp(t, "PD011802", txFull.Receipt.FailureMessage)
 
 }
 
