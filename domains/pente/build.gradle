@@ -37,10 +37,8 @@ jar {
     from {
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
-    from {
-        // TODO: Ask Andrew how I can sub-select this
-        // I only want "contracts/domains/pente/PenteFactory.sol/PenteFactory.json"
-        configurations.compiledContracts.collect { it.isDirectory() ? it : zipTree(it) }
+    from(configurations.compiledContracts) {
+        include 'contracts/domains/pente/PenteFactory.sol/PenteFactory.json'
     }
 
     from sourceSets.main.output

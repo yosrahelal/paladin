@@ -720,7 +720,7 @@ func (r *PaladinReconciler) generatePaladinRegistries(ctx context.Context, node 
 
 	// Use all the label selectors we have to get a deterministically sorted list of CRs
 	allResults := corev1alpha1.PaladinRegistryList{}
-	for i, s := range node.Spec.Domains {
+	for i, s := range node.Spec.Registries {
 		var results corev1alpha1.PaladinRegistryList
 		selector, err := metav1.LabelSelectorAsSelector(&s.LabelSelector)
 		if err == nil {

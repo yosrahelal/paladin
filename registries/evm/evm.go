@@ -12,17 +12,33 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-package static
+package main
 
 import (
-	"context"
-
-	"github.com/kaleido-io/paladin/registries/static/internal/staticregistry"
+	"C"
+)
+import (
+	"github.com/kaleido-io/paladin/registries/evm/internal/evmregistry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 )
 
-func NewPlugin(ctx context.Context) plugintk.PluginBase {
-	return staticregistry.NewPlugin()
+var ple = plugintk.NewPluginLibraryEntrypoint(func() plugintk.PluginBase {
+	return plugintk.NewRegistry(func(callbacks plugintk.RegistryCallbacks) plugintk.RegistryAPI {
+		return evmregistry.NewEVMRegistry(callbacks)
+	})
+})
+
+//export Run
+func Run(grpcTargetPtr, pluginUUIDPtr *C.char) int {
+	return ple.Run(
+		C.GoString(grpcTargetPtr),
+		C.GoString(pluginUUIDPtr),
+	)
 }
 
-type StaticEntry staticregistry.StaticEntry
+//export Stop
+func Stop(pluginUUIDPtr *C.char) {
+	ple.Stop(C.GoString(pluginUUIDPtr))
+}
+
+func main() {}
