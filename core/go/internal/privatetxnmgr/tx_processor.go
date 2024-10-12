@@ -126,6 +126,7 @@ func (ts *PaladinTxProcessor) isReadyToAssemble(ctx context.Context) bool {
 }
 
 func (ts *PaladinTxProcessor) revertTransaction(ctx context.Context, err error) {
+	log.L(ctx).Errorf("Reverting transaction %s: %s", ts.transaction.ID.String(), err)
 	//TODO this needs to update the transaction as reverted and flush that to the txmgr database
 	// so that the user can see that it is reverted and so that we stop retrying to assemble and endorse it
 }
@@ -181,6 +182,9 @@ func (ts *PaladinTxProcessor) assembleTransaction(ctx context.Context) {
 		return
 	}
 	ts.status = "assembled"
+	if ts.transaction.PostAssembly.Signatures == nil {
+		ts.transaction.PostAssembly.Signatures = make([]*prototk.AttestationResult, 0)
+	}
 	// inform the sequencer that the transaction has been assembled
 	ts.sequencer.HandleTransactionAssembledEvent(ctx, &sequence.TransactionAssembledEvent{
 		TransactionId: ts.transaction.ID.String(),
@@ -341,9 +345,10 @@ func (ts *PaladinTxProcessor) HandleResolveVerifierResponseEvent(ctx context.Con
 	}
 	// assuming that the order of resolved verifiers in .PreAssembly.Verifiers does not need to match the order of .PreAssembly.RequiredVerifiers
 	ts.transaction.PreAssembly.Verifiers = append(ts.transaction.PreAssembly.Verifiers, &prototk.ResolvedVerifier{
-		Lookup:    *event.Lookup,
-		Algorithm: *event.Algorithm,
-		Verifier:  *event.Verifier,
+		Lookup:       *event.Lookup,
+		Algorithm:    *event.Algorithm,
+		Verifier:     *event.Verifier,
+		VerifierType: *event.VerifierType,
 	})
 
 	if ts.isReadyToAssemble(ctx) {
@@ -685,7 +690,7 @@ func (ts *PaladinTxProcessor) requestVerifierResolution(ctx context.Context) err
 			v.VerifierType,
 			func(ctx context.Context, verifier string) {
 				//response event needs to be handled by the orchestrator so that the dispatch to a handling thread is done in fairness to all other in flight transactions
-				ts.publisher.PublishResolveVerifierResponseEvent(ctx, ts.transaction.ID.String(), v.Lookup, v.Algorithm, verifier)
+				ts.publisher.PublishResolveVerifierResponseEvent(ctx, ts.transaction.ID.String(), v.Lookup, v.Algorithm, verifier, v.VerifierType)
 			},
 			func(ctx context.Context, err error) {
 				ts.publisher.PublishResolveVerifierErrorEvent(ctx, ts.transaction.ID.String(), v.Lookup, v.Algorithm, err.Error())
