@@ -19,8 +19,26 @@ configurations {
 }
 
 jar {
-    archiveBaseName = 'pente'
-    archiveVersion = ''
+    dependsOn 'classes'  // Ensure the classes are compiled before creating the JAR
+
+    if (project.hasProperty('jarVersion')) {
+        archiveVersion = project.jarVersion
+    } else {
+        archiveVersion = ''
+    }
+
+    archiveBaseName = 'pente'  // Base name of the JAR, the version will be added to this
+
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+
+    from sourceSets.main.output
+
+    // Exclude signature files from dependencies
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 assemble.dependsOn jar
