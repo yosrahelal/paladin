@@ -24,6 +24,7 @@ configurations {
 
 jar {
     dependsOn 'classes'  // Ensure the classes are compiled before creating the JAR
+    dependsOn ':solidity:compile'
 
     if (project.hasProperty('jarVersion')) {
         archiveVersion = project.jarVersion
