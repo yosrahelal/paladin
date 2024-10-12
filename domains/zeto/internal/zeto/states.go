@@ -136,6 +136,7 @@ func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount 
 	}
 
 	newState, err := z.makeNewState(newCoin)
+	newState.DistributionList = append(newState.DistributionList, owner)
 	return []*types.ZetoCoin{newCoin}, []*pb.NewState{newState}, err
 }
 
