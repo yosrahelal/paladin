@@ -66,6 +66,76 @@ spec:
                       used to deploy the registry
                     type: string
                 type: object
+              plugin:
+                description: Details of the plugin to load for the domain
+                properties:
+                  class:
+                    description: For Java only, the name of the class to load from
+                      the Jar
+                    type: string
+                  library:
+                    description: The location of the library - do not include the
+                      "lib" prefix or the ".so" suffix for shared libraries
+                    type: string
+                  type:
+                    description: The library type to load
+                    enum:
+                    - c-shared
+                    - jar
+                    type: string
+                required:
+                - library
+                - type
+                type: object
+              transports:
+                description: Optionally adjust how the transport configuration works
+                properties:
+                  enabled:
+                    default: true
+                    description: If true, then this registry will be used for lookup
+                      of node transports
+                    type: boolean
+                  hierarchySplitter:
+                    description: |-
+                      By default the whole node name must match a root entry in the registry.
+                      If a hierarchySplitter is provided (such as ".") then the supplied node
+                      name will be split into path parts and each entry in the hierarchy
+                      will be resolved in order, from the root down to the leaf.
+                    type: string
+                  propertyRegexp:
+                    description: |-
+                      If a node is found, then each property name will be applied to this
+                      regular expression, and if it matches then the value of the property
+                      will be considered a set of transport details.
+
+                      The transport name must be extracted as a match group.
+
+                      For example the default is:
+                        propertyRegexp: "^transport.(.*)$"
+
+                      This will match a property called "transport.grpc" as the transport
+                      details for the grpc transport.
+                    type: string
+                  requiredPrefix:
+                    description: |-
+                      Prefix if set that will be matched and cut from any supplied lookup
+                      node name before performing a lookup. If it does not match (or matches
+                      the whole lookup) then this registry will not be used to lookup the node.
+                      This allows multiple registries to be used safely for different
+                      private node connectivity networks without any possibility
+                      of clashing node names.
+                    type: string
+                  transportMap:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Optionally add entries here to map from the name of a transport as stored in
+                      the registry, to the name in your local configuration.
+                      This allows you to use different configurations (MTLS certs etc.)
+                      for different private node networks that all use the same logical
+                      transport name.
+                    type: object
+                type: object
               type:
                 default: evm
                 enum:
@@ -73,6 +143,7 @@ spec:
                 type: string
             required:
             - configJSON
+            - plugin
             - type
             type: object
           status:

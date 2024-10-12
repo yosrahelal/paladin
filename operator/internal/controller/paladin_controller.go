@@ -54,6 +54,13 @@ type PaladinReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+// allows generic functions by giving a mapping between the types and interfaces for the CR
+var PaladinCRMap = CRMap[corev1alpha1.Paladin, *corev1alpha1.Paladin, *corev1alpha1.PaladinList]{
+	NewList:  func() *corev1alpha1.PaladinList { return new(corev1alpha1.PaladinList) },
+	ItemsFor: func(list *corev1alpha1.PaladinList) []corev1alpha1.Paladin { return list.Items },
+	AsObject: func(item *corev1alpha1.Paladin) *corev1alpha1.Paladin { return item },
+}
+
 //+kubebuilder:rbac:groups=core.paladin.io,resources=paladins,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core.paladin.io,resources=paladins/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=core.paladin.io,resources=paladins/finalizers,verbs=update
@@ -141,9 +148,10 @@ func (r *PaladinReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.Paladin{}).
-		Watches(&corev1alpha1.PaladinDomain{},
-			reconcileAll(corev1alpha1.PaladinCRMap, r.Client), // re-run the label selector on every Paladin node,
-			reconcileEveryChange()).                           // every time the domain list changes
+		// reconcile all paladin nodes, for any change to any domain
+		Watches(&corev1alpha1.PaladinDomain{}, reconcileAll(PaladinCRMap, r.Client), reconcileEveryChange()).
+		// reconcile all paladin nodes, for any change to any registry
+		Watches(&corev1alpha1.PaladinRegistry{}, reconcileAll(PaladinCRMap, r.Client), reconcileEveryChange()).
 		Complete(r)
 }
 
@@ -536,6 +544,11 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 		return "", err
 	}
 
+	// Merge k8s CR label references to registries, with the supplied static config
+	if err := r.generatePaladinRegistries(ctx, node, &pldConf); err != nil {
+		return "", err
+	}
+
 	// Bind to the a local besu node if we've been configured with one
 	if node.Spec.BesuNode != "" {
 		pldConf.Blockchain.HTTP.URL = fmt.Sprintf("http://%s:8545", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
@@ -667,14 +680,14 @@ func (r *PaladinReconciler) generatePaladinDomains(ctx context.Context, node *co
 		}
 		allResults.Items = append(allResults.Items, results.Items...)
 	}
-	sortedResults := deDupAndSortInLocalNS(corev1alpha1.PaladinDomainCRMap, &allResults)
+	sortedResults := deDupAndSortInLocalNS(PaladinDomainCRMap, &allResults)
 
 	// Now go through the list sorting out the config
 	if pldConf.Domains == nil {
 		pldConf.Domains = make(map[string]*pldconf.DomainConfig)
 	}
 	for _, domain := range sortedResults {
-		if domain.Status.Status != corev1alpha1.RegistryStatusAvailable {
+		if domain.Status.Status != corev1alpha1.DomainStatusAvailable {
 			log.FromContext(ctx).Info(fmt.Sprintf("configJSON for domain '%s' not ready yet: %s", domain.Name, domain.Status.Status))
 			continue // skip it - but continue trying others
 		}
@@ -697,6 +710,65 @@ func (r *PaladinReconciler) generatePaladinDomains(ctx context.Context, node *co
 			Config:          domainConf,
 			RegistryAddress: domain.Status.RegistryAddress,
 			AllowSigning:    domain.Spec.AllowSigning,
+		}
+	}
+
+	return nil
+}
+
+func (r *PaladinReconciler) generatePaladinRegistries(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig) error {
+
+	// Use all the label selectors we have to get a deterministically sorted list of CRs
+	allResults := corev1alpha1.PaladinRegistryList{}
+	for i, s := range node.Spec.Domains {
+		var results corev1alpha1.PaladinRegistryList
+		selector, err := metav1.LabelSelectorAsSelector(&s.LabelSelector)
+		if err == nil {
+			err = r.List(ctx, &results, client.MatchingLabelsSelector{Selector: selector})
+		}
+		if err != nil {
+			return fmt.Errorf("error using label selector at position %d of domains: %s", i, err)
+		}
+		allResults.Items = append(allResults.Items, results.Items...)
+	}
+	sortedResults := deDupAndSortInLocalNS(PaladinRegistryCRMap, &allResults)
+
+	// Now go through the list sorting out the config
+	if pldConf.Registries == nil {
+		pldConf.Registries = make(map[string]*pldconf.RegistryConfig)
+	}
+	for _, reg := range sortedResults {
+		if reg.Status.Status != corev1alpha1.RegistryStatusAvailable {
+			log.FromContext(ctx).Info(fmt.Sprintf("configJSON for registry '%s' not ready yet: %s", reg.Name, reg.Status.Status))
+			continue // skip it - but continue trying others
+		}
+
+		var registryConf map[string]any
+		if err := json.Unmarshal([]byte(reg.Spec.ConfigJSON), &registryConf); err != nil {
+			log.FromContext(ctx).Error(err, fmt.Sprintf("configJSON for registry '%s' cannot be parsed (skipping)", reg.Name))
+			continue // skip it - but continue trying others
+		}
+		if reg.Spec.Type == corev1alpha1.RegistryTypeEVM {
+			registryConf["configAddress"] = reg.Status.ContractAddress
+		}
+
+		// A domain is either wholely defined in the static config of the node,
+		// or wholely defined by reference to the CR attached.
+		// We do not attempt to merge
+		pldConf.Registries[reg.Name] = &pldconf.RegistryConfig{
+			Plugin: pldconf.PluginConfig{
+				Type:    reg.Spec.Plugin.Type,
+				Library: reg.Spec.Plugin.Library,
+				Class:   reg.Spec.Plugin.Class,
+			},
+			Transports: pldconf.RegistryTransportsConfig{
+				Enabled:           &reg.Spec.Transports.Enabled,
+				RequiredPrefix:    reg.Spec.Transports.RequiredPrefix,
+				HierarchySplitter: reg.Spec.Transports.HierarchySplitter,
+				PropertyRegexp:    reg.Spec.Transports.PropertyRegexp,
+				TransportMap:      reg.Spec.Transports.TransportMap,
+			},
+			Config: registryConf,
 		}
 	}
 

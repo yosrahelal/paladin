@@ -45,14 +45,27 @@ type PaladinSpec struct {
 
 	// A list of domains to merge into the configuration, and rebuild the config of paladin when this list changes
 	Domains []DomainReference `json:"domains"`
+
+	// A list of registries to merge into the configuration, and rebuild the config of paladin when this list changes
+	Registries []RegistryReference `json:"registries"`
+}
+
+type LabelReference struct {
+	// Label selectors provide a flexible many-to-many mapping between nodes and domains in a namespace.
+	// The domain CRs you reference must be labelled to match. For example you could use a label like "paladin.io/domain-name" to select by name.
+	LabelSelector metav1.LabelSelector `json:"labelSelector"`
 }
 
 // Each domain reference can select one or more domains to include via label selectors
 // Most common to use a simple one-reference-per-domain approach.
 type DomainReference struct {
-	// Label selectors provide a flexible many-to-many mapping between nodes and domains in a namespace.
-	// The domain CRs you reference must be labelled to match. For example you could use a label like "paladin.io/domain-name" to select by name.
-	LabelSelector metav1.LabelSelector `json:"labelSelector"`
+	LabelReference `json:",inline"`
+}
+
+// Each registry reference can select one or more domains to include via label selectors
+// Most common to use a simple one-reference-per-domain approach.
+type RegistryReference struct {
+	LabelReference `json:",inline"`
 }
 
 const DBMode_EmbeddedSQLite = "embeddedSQLite"
@@ -110,12 +123,6 @@ type PaladinList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Paladin `json:"items"`
-}
-
-var PaladinCRMap = CRMap[Paladin, *Paladin, *PaladinList]{
-	NewList:  func() *PaladinList { return new(PaladinList) },
-	ItemsFor: func(list *PaladinList) []Paladin { return list.Items },
-	AsObject: func(item *Paladin) *Paladin { return item },
 }
 
 func init() {

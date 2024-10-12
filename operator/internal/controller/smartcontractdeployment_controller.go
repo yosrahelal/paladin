@@ -46,6 +46,15 @@ type SmartContractDeploymentReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+// allows generic functions by giving a mapping between the types and interfaces for the CR
+var SmartContractDeploymentCRMap = CRMap[corev1alpha1.SmartContractDeployment, *corev1alpha1.SmartContractDeployment, *corev1alpha1.SmartContractDeploymentList]{
+	NewList: func() *corev1alpha1.SmartContractDeploymentList { return new(corev1alpha1.SmartContractDeploymentList) },
+	ItemsFor: func(list *corev1alpha1.SmartContractDeploymentList) []corev1alpha1.SmartContractDeployment {
+		return list.Items
+	},
+	AsObject: func(item *corev1alpha1.SmartContractDeployment) *corev1alpha1.SmartContractDeployment { return item },
+}
+
 //+kubebuilder:rbac:groups=core.paladin.io,resources=smartcontractdeployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core.paladin.io,resources=smartcontractdeployments/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=core.paladin.io,resources=smartcontractdeployments/finalizers,verbs=update

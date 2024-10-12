@@ -33,6 +33,10 @@ type PaladinRegistrySpec struct {
 	Type RegistryType `json:"type"`
 	// Config specific to EVM based registry
 	EVM EVMRegistryConfig `json:"evm,omitempty"`
+	// Optionally adjust how the transport configuration works
+	Transports RegistryTransportsConfig `json:"transports,omitempty"`
+	// Details of the plugin to load for the domain
+	Plugin PluginConfig `json:"plugin"`
 	// JSON configuration specific to the individual registry
 	ConfigJSON string `json:"configJSON"`
 }
@@ -42,6 +46,46 @@ type EVMRegistryConfig struct {
 	SmartContractDeployment string `json:"smartContractDeployment,omitempty"`
 	// If you have separately deployed the registry, supply the registry address directly
 	ContractAddress string `json:"contractAddress,omitempty"`
+}
+
+type RegistryTransportsConfig struct {
+	// +kubebuilder:default=true
+	// If true, then this registry will be used for lookup of node transports
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Prefix if set that will be matched and cut from any supplied lookup
+	// node name before performing a lookup. If it does not match (or matches
+	// the whole lookup) then this registry will not be used to lookup the node.
+	// This allows multiple registries to be used safely for different
+	// private node connectivity networks without any possibility
+	// of clashing node names.
+	RequiredPrefix string `json:"requiredPrefix,omitempty"`
+
+	// By default the whole node name must match a root entry in the registry.
+	// If a hierarchySplitter is provided (such as ".") then the supplied node
+	// name will be split into path parts and each entry in the hierarchy
+	// will be resolved in order, from the root down to the leaf.
+	HierarchySplitter string `json:"hierarchySplitter,omitempty"`
+
+	// If a node is found, then each property name will be applied to this
+	// regular expression, and if it matches then the value of the property
+	// will be considered a set of transport details.
+	//
+	// The transport name must be extracted as a match group.
+	//
+	// For example the default is:
+	//   propertyRegexp: "^transport.(.*)$"
+	//
+	// This will match a property called "transport.grpc" as the transport
+	// details for the grpc transport.
+	PropertyRegexp string `json:"propertyRegexp,omitempty"`
+
+	// Optionally add entries here to map from the name of a transport as stored in
+	// the registry, to the name in your local configuration.
+	// This allows you to use different configurations (MTLS certs etc.)
+	// for different private node networks that all use the same logical
+	// transport name.
+	TransportMap map[string]string `json:"transportMap,omitempty"`
 }
 
 type RegistryStatus string
@@ -80,12 +124,6 @@ type PaladinRegistryList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PaladinRegistry `json:"items"`
-}
-
-var PaladinRegistryCRMap = CRMap[PaladinRegistry, *PaladinRegistry, *PaladinRegistryList]{
-	NewList:  func() *PaladinRegistryList { return new(PaladinRegistryList) },
-	ItemsFor: func(list *PaladinRegistryList) []PaladinRegistry { return list.Items },
-	AsObject: func(item *PaladinRegistry) *PaladinRegistry { return item },
 }
 
 func init() {

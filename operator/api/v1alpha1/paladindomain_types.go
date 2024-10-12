@@ -55,8 +55,8 @@ const (
 
 // PaladinDomainStatus defines the observed state of PaladinDomain
 type PaladinDomainStatus struct {
-	Status          RegistryStatus `json:"status"`
-	RegistryAddress string         `json:"registryAddress,omitempty"`
+	Status          DomainStatus `json:"status"`
+	RegistryAddress string       `json:"registryAddress,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -76,17 +76,13 @@ type PaladinDomain struct {
 	Status PaladinDomainStatus `json:"status,omitempty"`
 }
 
+//+kubebuilder:object:root=true
+
 // PaladinDomainList contains a list of PaladinDomain
 type PaladinDomainList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PaladinDomain `json:"items"`
-}
-
-var PaladinDomainCRMap = CRMap[PaladinDomain, *PaladinDomain, *PaladinDomainList]{
-	NewList:  func() *PaladinDomainList { return new(PaladinDomainList) },
-	ItemsFor: func(list *PaladinDomainList) []PaladinDomain { return list.Items },
-	AsObject: func(item *PaladinDomain) *PaladinDomain { return item },
 }
 
 func init() {

@@ -63,12 +63,6 @@ type BesuList struct {
 	Items           []Besu `json:"items"`
 }
 
-var BesuCRMap = CRMap[Besu, *Besu, *BesuList]{
-	NewList:  func() *BesuList { return new(BesuList) },
-	ItemsFor: func(list *BesuList) []Besu { return list.Items },
-	AsObject: func(item *Besu) *Besu { return item },
-}
-
 func init() {
 	SchemeBuilder.Register(&Besu{}, &BesuList{})
 }

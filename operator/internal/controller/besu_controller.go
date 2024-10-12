@@ -56,6 +56,13 @@ type BesuReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+// allows generic functions by giving a mapping between the types and interfaces for the CR
+var BesuCRMap = CRMap[corev1alpha1.Besu, *corev1alpha1.Besu, *corev1alpha1.BesuList]{
+	NewList:  func() *corev1alpha1.BesuList { return new(corev1alpha1.BesuList) },
+	ItemsFor: func(list *corev1alpha1.BesuList) []corev1alpha1.Besu { return list.Items },
+	AsObject: func(item *corev1alpha1.Besu) *corev1alpha1.Besu { return item },
+}
+
 // +kubebuilder:rbac:groups=core.paladin.io,resources=besus,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core.paladin.io,resources=besus/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core.paladin.io,resources=besus/finalizers,verbs=update

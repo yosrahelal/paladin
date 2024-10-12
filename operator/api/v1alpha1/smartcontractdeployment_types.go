@@ -90,12 +90,6 @@ type SmartContractDeploymentList struct {
 	Items           []SmartContractDeployment `json:"items"`
 }
 
-var SmartContractDeploymentCRMap = CRMap[SmartContractDeployment, *SmartContractDeployment, *SmartContractDeploymentList]{
-	NewList:  func() *SmartContractDeploymentList { return new(SmartContractDeploymentList) },
-	ItemsFor: func(list *SmartContractDeploymentList) []SmartContractDeployment { return list.Items },
-	AsObject: func(item *SmartContractDeployment) *SmartContractDeployment { return item },
-}
-
 func init() {
 	SchemeBuilder.Register(&SmartContractDeployment{}, &SmartContractDeploymentList{})
 }

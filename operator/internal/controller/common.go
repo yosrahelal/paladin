@@ -33,6 +33,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+// This mapping object for each CR type between the CR, pointer to the CR, and
+// list of items for the CR, lets us build generic functions.
+type CRMap[CR any, PCR client.Object, CRL client.ObjectList] struct {
+	NewList  func() CRL
+	ItemsFor func(list CRL) []CR
+	AsObject func(item *CR) PCR
+}
+
 func mergeServicePorts(svcSpec *corev1.ServiceSpec, requiredPorts []corev1.ServicePort) {
 	portsByName := map[string]*corev1.ServicePort{}
 	for _, providedPort := range svcSpec.Ports {
@@ -86,7 +94,7 @@ func reconcileEveryChange() builder.Predicates {
 
 // This helper reconciles all objects in the current namespace
 // The generics are horrible - but the k8s for the interface relations make it tough to re-use
-func reconcileAll[CR any, PCR client.Object, CRL client.ObjectList](lf corev1alpha1.CRMap[CR, PCR, CRL], c client.Client) handler.EventHandler {
+func reconcileAll[CR any, PCR client.Object, CRL client.ObjectList](lf CRMap[CR, PCR, CRL], c client.Client) handler.EventHandler {
 	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
 		ns := object.GetNamespace()
 
@@ -117,7 +125,7 @@ func reconcileAll[CR any, PCR client.Object, CRL client.ObjectList](lf corev1alp
 
 // Helpful function if you're running label selectors and generating config, so you need to avoid
 // duplicates and also thrashing servers by non-deterministically generating config files.
-func deDupAndSortInLocalNS[CR any, PCR client.Object, CRL client.ObjectList](lf corev1alpha1.CRMap[CR, PCR, CRL], unsorted CRL) []*CR {
+func deDupAndSortInLocalNS[CR any, PCR client.Object, CRL client.ObjectList](lf CRMap[CR, PCR, CRL], unsorted CRL) []*CR {
 
 	unsortedList := lf.ItemsFor(unsorted)
 	uniqueEntries := make(map[string]*CR, len(unsortedList))

@@ -37,6 +37,13 @@ type PaladinDomainReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+// allows generic functions by giving a mapping between the types and interfaces for the CR
+var PaladinDomainCRMap = CRMap[corev1alpha1.PaladinDomain, *corev1alpha1.PaladinDomain, *corev1alpha1.PaladinDomainList]{
+	NewList:  func() *corev1alpha1.PaladinDomainList { return new(corev1alpha1.PaladinDomainList) },
+	ItemsFor: func(list *corev1alpha1.PaladinDomainList) []corev1alpha1.PaladinDomain { return list.Items },
+	AsObject: func(item *corev1alpha1.PaladinDomain) *corev1alpha1.PaladinDomain { return item },
+}
+
 // +kubebuilder:rbac:groups=core.paladin.io,resources=paladindomains,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core.paladin.io,resources=paladindomains/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core.paladin.io,resources=paladindomains/finalizers,verbs=update
@@ -55,12 +62,12 @@ func (r *PaladinDomainReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	if domain.Status.Status == "" {
-		domain.Status.Status = corev1alpha1.RegistryStatusPending
+		domain.Status.Status = corev1alpha1.DomainStatusPending
 		return r.updateStatusAndRequeue(ctx, &domain)
-	} else if domain.Status.Status == corev1alpha1.RegistryStatusPending {
+	} else if domain.Status.Status == corev1alpha1.DomainStatusPending {
 		if domain.Spec.RegistryAddress != "" {
 			domain.Status.RegistryAddress = domain.Spec.RegistryAddress
-			domain.Status.Status = corev1alpha1.RegistryStatusAvailable
+			domain.Status.Status = corev1alpha1.DomainStatusAvailable
 			return r.updateStatusAndRequeue(ctx, &domain)
 		} else if domain.Spec.SmartContractDeployment != "" {
 			return r.trackContractDeploymentAndRequeue(ctx, &domain)
@@ -98,7 +105,7 @@ func (r *PaladinDomainReconciler) trackContractDeploymentAndRequeue(ctx context.
 	}
 
 	domain.Status.RegistryAddress = scd.Status.ContractAddress
-	domain.Status.Status = corev1alpha1.RegistryStatusAvailable
+	domain.Status.Status = corev1alpha1.DomainStatusAvailable
 	return r.updateStatusAndRequeue(ctx, domain)
 }
 

@@ -30,6 +30,10 @@ spec:
     - labelSelector:
         matchLabels:
           paladin.io/domain-name: pente
+  registries:
+    - labelSelector:
+        matchLabels:
+          paladin.io/registry-name: evm-registry
   service:
     type: NodePort
     ports:
