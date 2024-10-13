@@ -53,16 +53,23 @@ func (s *syncPoints) QueueTransactionFinalize(ctx context.Context, contractAddre
 
 }
 
-func (s *syncPoints) writeFinalizeOperations(ctx context.Context, dbTX *gorm.DB, contractAddress tktypes.EthAddress, finalizeOperations []*finalizeOperation) error {
-	receipts := make([]*components.ReceiptInput, len(finalizeOperations))
-	for i, op := range finalizeOperations {
-		receipts[i] = &components.ReceiptInput{
-			ReceiptType:     components.RT_FailedWithMessage,
-			ContractAddress: &contractAddress,
-			TransactionID:   op.TransactionID,
-			FailureMessage:  op.FailureMessage,
+func (s *syncPoints) writeFinalizeOperations(ctx context.Context, dbTX *gorm.DB, finalizeOperationsByContractAddress map[tktypes.EthAddress][]*finalizeOperation) error {
+
+	for contractAddress, finalizeOperations := range finalizeOperationsByContractAddress {
+		receipts := make([]*components.ReceiptInput, len(finalizeOperations))
+		for i, op := range finalizeOperations {
+			receipts[i] = &components.ReceiptInput{
+				ReceiptType:     components.RT_FailedWithMessage,
+				ContractAddress: &contractAddress,
+				TransactionID:   op.TransactionID,
+				FailureMessage:  op.FailureMessage,
+			}
+		}
+
+		err := s.txMgr.FinalizeTransactions(ctx, dbTX, receipts)
+		if err != nil {
+			return err
 		}
 	}
-
-	return s.txMgr.FinalizeTransactions(ctx, dbTX, receipts)
+	return nil
 }

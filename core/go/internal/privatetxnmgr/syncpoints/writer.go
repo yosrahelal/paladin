@@ -62,12 +62,12 @@ type noResult struct{}
 
 func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*syncPointOperation) ([]flushwriter.Result[*noResult], error) {
 
-	finalizeOperations := make([]*finalizeOperation, 0, len(values))
+	finalizeOperations := make(map[tktypes.EthAddress][]*finalizeOperation)
 	dispatchOperations := make([]*dispatchOperation, 0, len(values))
 
 	for _, op := range values {
 		if op.finalizeOperation != nil {
-			finalizeOperations = append(finalizeOperations, op.finalizeOperation)
+			finalizeOperations[op.contractAddress] = append(finalizeOperations[op.contractAddress], op.finalizeOperation)
 		}
 		if op.dispatchOperation != nil {
 			dispatchOperations = append(dispatchOperations, op.dispatchOperation)
@@ -79,7 +79,7 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*sync
 	// assumption at time of coding because WriteKey returns the contract address
 	// but probably should consider a less brittle way to codify this assertion
 	if len(finalizeOperations) > 0 {
-		err := s.writeFinalizeOperations(ctx, dbTX, values[0].contractAddress, finalizeOperations)
+		err := s.writeFinalizeOperations(ctx, dbTX, finalizeOperations)
 		if err != nil {
 			log.L(ctx).Errorf("Error persisting finalizers: %s", err)
 			return nil, err
