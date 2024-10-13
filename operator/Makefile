@@ -19,6 +19,8 @@ OPERATOR_SDK_VERSION ?= v1.37.0
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.29.0
 
+CERT_MANAGER_VERSION = v1.16.1
+
 # Tool Binaries and Versions
 KUBECTL ?= kubectl
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
@@ -107,8 +109,9 @@ test-e2e: ## Run e2e tests with Kind.
 kind-start:	## Create a Kind cluster.
 	if ! $(KIND_CLUSTER) get clusters | grep -q "^${CLUSTER_NAME}$$"; then \
 		$(KIND_CLUSTER) create cluster --name "${CLUSTER_NAME}" --config paladin-kind.yaml; \
-	fi
-	$(KUBECTL) version
+	fi; \
+	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml > /dev/null; \
+	kubectl wait deployment.apps/cert-manager-webhook --for condition=Available --namespace cert-manager --timeout 5m
 
 # $(CONTAINER_TOOL) images -q postgres:latest || $(CONTAINER_TOOL) pull postgres:latest
 # $(CONTAINER_TOOL) images -q hyperledger/besu:latest || $(CONTAINER_TOOL) pull hyperledger/besu:latest

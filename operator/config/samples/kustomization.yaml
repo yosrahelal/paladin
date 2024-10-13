@@ -1,5 +1,6 @@
 ## Append samples of your project ##
 resources:
+- cert_issuer_selfsigned.yaml
 - core_v1alpha1_paladin.yaml
 - core_v1alpha1_besu.yaml
 - core_v1alpha1_besugenesis.yaml
