@@ -4,15 +4,14 @@ ARG NODE_VERSION=20.17.0
 ARG PROTO_VERSION=28.2
 ARG GO_VERSION=1.22.7
 ARG GO_MIGRATE_VERSION=4.18.1
-ARG GRADLE_VERSION=8.4
 ARG WASMER_VERSION=4.3.7
 
 # Additional JVM selection options
 ARG JVM_TYPE=hotspot
 ARG JVM_HEAP=normal
 
-# Stage 1: Builder
-FROM ubuntu:24.04 AS builder   
+# Stage 1: Builder base for all the sub-builds
+FROM ubuntu:24.04 AS base-builder   
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -22,7 +21,6 @@ ARG JVM_HEAP
 ARG NODE_VERSION
 ARG PROTO_VERSION
 ARG GO_VERSION
-ARG GRADLE_VERSION
 ARG WASMER_VERSION
 
 # Set environment variables
@@ -66,12 +64,6 @@ RUN GO_ARCH=$( if [ "$TARGETARCH" = "arm64" ]; then echo -n "arm64"; else echo -
     curl -sLo - https://go.dev/dl/go${GO_VERSION}.${TARGETOS}-${GO_ARCH}.tar.gz | \
     tar -C /usr/local -xzf -
 
-# Install Gradle
-RUN curl -sLo gradle-${GRADLE_VERSION}-bin.zip https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip && \
-    unzip gradle-${GRADLE_VERSION}-bin.zip -d /usr/local && \
-    rm gradle-${GRADLE_VERSION}-bin.zip && \
-    ln -s /usr/local/gradle-* /usr/local/gradle
-
 # Install Wasmer (which includes libwasmer.so)
 RUN WASMER_ARCH=$( if [ "$TARGETARCH" = "arm64" ]; then echo -n "aarch64"; else echo -n "amd64"; fi  ) && \
     mkdir -p /usr/local/wasmer && \
@@ -91,17 +83,48 @@ ENV PATH=$PATH:/usr/local/wasmer/bin
 # Set the working directory
 WORKDIR /app
 
-# Copy project files (check .dockerignore for details of what goes up)
-COPY . .
+# Copy in a set of thing before the first gradle command that are less likely to change
+COPY gradle gradle
+COPY gradlew build.gradle ./
+COPY settings.gradle go.work.sum ./
+COPY buildSrc buildSrc
+COPY solidity solidity
+COPY config config
+COPY toolkit/proto toolkit/proto
+COPY toolkit toolkit
+
+# We have to use a special minimal go.work for this
+COPY go.work.base go.work
 
 # Set Go CGO environment variables
 ENV CGO_ENABLED=1
 ENV CC=gcc
 
-# Assemble executables/artifacts
-RUN gradle --no-daemon --parallel assemble
+# This minimal set of commands primes the build with some slower things that accellerate rebuilds:
+# - Installing gradle with the wrapper
+# - Compiling the groovy buildSrc
+# - Installing a bunch of base Go pre-reqs
+RUN ./gradlew --no-daemon --parallel :toolkit:go:assemble :solidity:compile
 
-# Stage 2: Runtime
+# Stage 2... Full build - currently core/zeto/noto/core are all cop-req'd together
+# (If we untangle this we can get more parallelism and less re-build in our docker build)
+FROM base-builder AS full-builder
+COPY go.work go.work
+COPY core/go core/go
+COPY core/java core/java
+COPY toolkit/java toolkit/java
+COPY domains/pente domains/pente
+COPY domains/zeto domains/zeto
+COPY domains/noto domains/noto
+COPY domains/integration-test domains/integration-test
+COPY registries/static registries/static
+COPY registries/evm registries/evm
+COPY transports/grpc transports/grpc
+COPY testinfra testinfra
+COPY operator operator
+RUN ./gradlew --no-daemon --parallel assemble
+
+# Stage 3: Pull together runtime
 FROM ubuntu:24.04 AS runtime
 
 ARG TARGETOS
@@ -136,13 +159,13 @@ RUN GO_MIRGATE_ARCH=$( if [ "$TARGETARCH" = "arm64" ]; then echo -n "arm64"; els
     tar -C /usr/local/bin -xzf - migrate
 
 # Copy Wasmer shared libraries to the runtime container
-COPY --from=builder /usr/local/wasmer/lib/libwasmer.so /usr/local/wasmer/lib/libwasmer.so
+COPY --from=full-builder /usr/local/wasmer/lib/libwasmer.so /usr/local/wasmer/lib/libwasmer.so
 
 # Copy the build artifacts from the builder stage
-COPY --from=builder /app/build /app
+COPY --from=full-builder /app/build /app
 
 # Copy the db migration files
-COPY --from=builder /app/core/go/db /app/db
+COPY --from=full-builder /app/core/go/db /app/db
 
 # Add tools we installed to the path
 ENV PATH=$PATH:/usr/local/java/bin

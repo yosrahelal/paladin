@@ -12,7 +12,7 @@ def domains = [
 
 def registries = [
     'registries/static/build/libs',
-    'registries/static/build/libs',
+    'registries/evm/build/libs',
 ]
 
 def transports = [
