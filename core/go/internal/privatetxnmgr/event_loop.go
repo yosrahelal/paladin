@@ -84,7 +84,7 @@ type Orchestrator struct {
 	orchestrationEvalRequestChan chan bool
 	stopProcess                  chan bool // a channel to tell the current orchestrator to stop processing all events and mark itself as to be deleted
 
-	// Metrics provided for fairness control in the controler
+	// Metrics provided for fairness control in the controller
 	totalCompleted int64 // total number of transaction completed since initiated
 	state          OrchestratorState
 	stateEntryTime time.Time // when the orchestrator entered the current state
@@ -262,7 +262,7 @@ func (oc *Orchestrator) evaluationLoop() {
 			// TODO: trigger parent loop for removal
 			return
 		}
-		// TODO while we have woken up, iterate through all transactions in memory and check if any are stale or completed and query the database for any in flight transactions that need to be brougt into memory
+		// TODO while we have woken up, iterate through all transactions in memory and check if any are stale or completed and query the database for any in flight transactions that need to be brought into memory
 	}
 }
 

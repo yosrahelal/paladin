@@ -125,7 +125,6 @@ func (ts *PaladinTxProcessor) isReadyToAssemble(ctx context.Context) bool {
 	}
 	log.L(ctx).Infof("Transaction %s not ready to assemble. PreAssembly is nil", ts.transaction.ID.String())
 	return false
-
 }
 
 func (ts *PaladinTxProcessor) revertTransaction(ctx context.Context, revertReason string) {
@@ -474,6 +473,7 @@ func (ts *PaladinTxProcessor) requestSignatures(ctx context.Context) {
 		}
 	}
 }
+
 func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party string, attRequest *prototk.AttestationRequest) {
 
 	partyLocator := tktypes.PrivateIdentityLocator(party)
@@ -741,7 +741,6 @@ func (ts *PaladinTxProcessor) requestVerifierResolution(ctx context.Context) err
 		)
 	}
 	return nil
-
 }
 
 func (ts *PaladinTxProcessor) GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution {

@@ -41,6 +41,7 @@ type txManager struct {
 	identityResolver components.IdentityResolver
 	abiCache         cache.Cache[tktypes.Bytes32, *ptxapi.StoredABI]
 	rpcModule        *rpcserver.RPCModule
+	debugRpcModule   *rpcserver.RPCModule
 }
 
 func (tm *txManager) PostInit(c components.AllComponents) error {
