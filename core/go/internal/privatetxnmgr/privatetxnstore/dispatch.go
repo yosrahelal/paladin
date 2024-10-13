@@ -83,7 +83,7 @@ func (s *store) PersistDispatchBatch(ctx context.Context, contractAddress tktype
 	return err
 }
 
-func (s *store) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB, contractAddress tktypes.EthAddress, dispatchOperations []*dispatchOperation) error {
+func (s *store) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB, dispatchOperations []*dispatchOperation) error {
 
 	// For each operation in the batch, we need to call the baseledger transaction manager to allocate its nonce
 	// which it can only guaranteed to be gapless and unique if it is done during the database transaction that inserts the dispatch record.

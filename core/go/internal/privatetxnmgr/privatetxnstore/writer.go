@@ -87,7 +87,7 @@ func (s *store) runBatch(ctx context.Context, dbTX *gorm.DB, values []*syncPoint
 	}
 
 	if len(dispatchOperations) > 0 {
-		err := s.writeDispatchOperations(ctx, dbTX, values[0].contractAddress, dispatchOperations)
+		err := s.writeDispatchOperations(ctx, dbTX, dispatchOperations)
 		if err != nil {
 			log.L(ctx).Errorf("Error persisting finalizers: %s", err)
 			return nil, err
