@@ -48,12 +48,46 @@ type PaladinSpec struct {
 
 	// A list of registries to merge into the configuration, and rebuild the config of paladin when this list changes
 	Registries []RegistryReference `json:"registries"`
+
+	// Transports are configured individually on each node, as they reference security details specific to that node
+	Transports []TransportConfig `json:"transports"`
 }
 
 type LabelReference struct {
 	// Label selectors provide a flexible many-to-many mapping between nodes and domains in a namespace.
 	// The domain CRs you reference must be labelled to match. For example you could use a label like "paladin.io/domain-name" to select by name.
 	LabelSelector metav1.LabelSelector `json:"labelSelector"`
+}
+
+type TransportConfig struct {
+	Name string `json:"name"`
+	// Plugin configuration for loading the transport
+	Plugin PluginConfig `json:"plugin"`
+	// JSON configuration specific to the individual transport
+	ConfigJSON string `json:"configJSON"`
+	// TLS configuration to use for this secret
+	TLS TLSConfig `json:"tls,omitempty"`
+	// The port number to listen on this transport
+	Ports []corev1.ServicePort `json:"ports"`
+}
+
+type TLSConfig struct {
+	// Secret name is required
+	SecretName string `json:"secretName"`
+	// If specified then a cert-manager.io/v1 Certificate will be created for the internal DNS names of the service.
+	// If you define multiple transports that share a secret, then only specify this on one.
+	CertName string `json:"certName"`
+	// Issuer for the certificate if a certificateName is specified (note cluster issuer can be used with a custom certSpecTemplate)
+	// +kubebuilder:default=selfsigned-issuer
+	Issuer string `json:"issuer,omitempty"`
+	// Additional DNS names to add to the definition (for external hostnames) when using automatic cert-manager
+	AdditionalDNSNames []string `json:"additionalDNSNames,omitempty"`
+	// Go template for the YAML spec of the issuer CR, which will have access to the inserts when building:
+	// {{.nodeName}} {{.dnsNames}} {{.secretName}} {{.issuer}}
+	// Where .nodeName is that placed in the config
+	// This approach allows us to avoid a build-time dependency on the CertManager CRs, while letting you
+	// customize things like the algorithm.
+	CertSpecTemplate string `json:"certSpecTemplate,omitempty"`
 }
 
 // Each domain reference can select one or more domains to include via label selectors

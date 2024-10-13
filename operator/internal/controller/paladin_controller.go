@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"crypto/rand"
@@ -25,7 +26,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"text/template"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/tyler-smith/go-bip39"
 	appsv1 "k8s.io/api/apps/v1"
@@ -34,7 +37,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -98,7 +103,7 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}()
 
 	// Create ConfigMap
-	configSum, _, err := r.createConfigMap(ctx, &node, name)
+	configSum, tlsSecrets, _, err := r.createConfigMap(ctx, &node, name)
 	if err != nil {
 		log.Error(err, "Failed to create Paladin config map")
 		setCondition(&node.Status.Conditions, corev1alpha1.ConditionCM, metav1.ConditionFalse, corev1alpha1.ReasonCMCreationFailed, err.Error())
@@ -123,7 +128,7 @@ func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	log.Info("Created Paladin pod disruption budget", "Name", name)
 
 	// Create StatefulSet
-	ss, err := r.createStatefulSet(ctx, &node, name, configSum)
+	ss, err := r.createStatefulSet(ctx, &node, name, tlsSecrets, configSum)
 	if err != nil {
 		log.Error(err, "Failed to create Paladin StatefulSet")
 		setCondition(&node.Status.Conditions, corev1alpha1.ConditionSS, metav1.ConditionFalse, corev1alpha1.ReasonSSCreationFailed, err.Error())
@@ -155,7 +160,7 @@ func (r *PaladinReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PaladinReconciler) createStatefulSet(ctx context.Context, node *corev1alpha1.Paladin, name, configSum string) (*appsv1.StatefulSet, error) {
+func (r *PaladinReconciler) createStatefulSet(ctx context.Context, node *corev1alpha1.Paladin, name string, tlsSecrets []string, configSum string) (*appsv1.StatefulSet, error) {
 	statefulSet := r.generateStatefulSetTemplate(node, name, configSum)
 	if err := controllerutil.SetControllerReference(node, statefulSet, r.Scheme); err != nil {
 		return nil, err
@@ -178,6 +183,8 @@ func (r *PaladinReconciler) createStatefulSet(ctx context.Context, node *corev1a
 	}
 
 	r.addKeystoreSecretMounts(statefulSet, node.Spec.SecretBackedSigners)
+
+	r.addTLSSecretMounts(statefulSet, tlsSecrets)
 
 	// Check if the StatefulSet already exists, create if not
 	var foundStatefulSet appsv1.StatefulSet
@@ -433,6 +440,24 @@ func (r *PaladinReconciler) addKeystoreSecretMounts(ss *appsv1.StatefulSet, sign
 	}
 }
 
+func (r *PaladinReconciler) addTLSSecretMounts(ss *appsv1.StatefulSet, tlsSecrets []string) {
+	paladinContainer := &ss.Spec.Template.Spec.Containers[0]
+	for tlsIdx, tlsSecretName := range tlsSecrets {
+		paladinContainer.VolumeMounts = append(paladinContainer.VolumeMounts, corev1.VolumeMount{
+			Name:      fmt.Sprintf("cert%.3d", tlsIdx),
+			MountPath: fmt.Sprintf("/cert%.3d", tlsIdx),
+		})
+		ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: fmt.Sprintf("cert%.3d", tlsIdx),
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: tlsSecretName,
+				},
+			},
+		})
+	}
+}
+
 func (r *PaladinReconciler) addPaladinDBSecret(ctx context.Context, ss *appsv1.StatefulSet, secretName string) error {
 	_, _, err := r.retrieveUsernamePasswordSecret(ctx, ss.Namespace, secretName)
 	if err != nil {
@@ -456,45 +481,46 @@ func (r *PaladinReconciler) addPaladinDBSecret(ctx context.Context, ss *appsv1.S
 	return nil
 }
 
-func (r *PaladinReconciler) createConfigMap(ctx context.Context, node *corev1alpha1.Paladin, name string) (string, *corev1.ConfigMap, error) {
-	configSum, configMap, err := r.generateConfigMap(ctx, node, name)
+func (r *PaladinReconciler) createConfigMap(ctx context.Context, node *corev1alpha1.Paladin, name string) (string, []string, *corev1.ConfigMap, error) {
+	configSum, tlsSecrets, configMap, err := r.generateConfigMap(ctx, node, name)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	if err := controllerutil.SetControllerReference(node, configMap, r.Scheme); err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	var foundConfigMap corev1.ConfigMap
 	if err := r.Get(ctx, types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, &foundConfigMap); err != nil && errors.IsNotFound(err) {
 		err = r.Create(ctx, configMap)
 		if err != nil {
-			return "", nil, err
+			return "", nil, nil, err
 		}
 		setCondition(&node.Status.Conditions, corev1alpha1.ConditionCM, metav1.ConditionTrue, corev1alpha1.ReasonCMCreated, fmt.Sprintf("Name: %s", configMap.Name))
 	} else if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	} else {
 		foundConfigMap.Data = configMap.Data
 		if err := r.Update(ctx, &foundConfigMap); err != nil {
-			return "", nil, err
+			return "", nil, nil, err
 		}
 		setCondition(&node.Status.Conditions, corev1alpha1.ConditionCM, metav1.ConditionTrue, corev1alpha1.ReasonCMUpdated, fmt.Sprintf("Name: %s", configMap.Name))
 		configMap = &foundConfigMap
 	}
-	return configSum, configMap, nil
+	return configSum, tlsSecrets, configMap, nil
 }
 
 // generatePaladinConfigMapTemplate generates a ConfigMap for the Paladin configuration
-func (r *PaladinReconciler) generateConfigMap(ctx context.Context, node *corev1alpha1.Paladin, name string) (string, *corev1.ConfigMap, error) {
-	pldConfigYAML, err := r.generatePaladinConfig(ctx, node, name)
+func (r *PaladinReconciler) generateConfigMap(ctx context.Context, node *corev1alpha1.Paladin, name string) (string, []string, *corev1.ConfigMap, error) {
+	pldConfigYAML, tlsSecrets, err := r.generatePaladinConfig(ctx, node, name)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	configSum := md5.New()
 	configSum.Write([]byte(pldConfigYAML))
 	configSumHex := hex.EncodeToString(configSum.Sum(nil))
 	return configSumHex,
+		tlsSecrets,
 		&corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
@@ -509,12 +535,12 @@ func (r *PaladinReconciler) generateConfigMap(ctx context.Context, node *corev1a
 }
 
 // generatePaladinConfig converts the Paladin CR spec to a Paladin YAML configuration
-func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *corev1alpha1.Paladin, name string) (string, error) {
+func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *corev1alpha1.Paladin, name string) (string, []string, error) {
 	var pldConf pldconf.PaladinConfig
 	if node.Spec.Config != nil {
 		err := yaml.Unmarshal([]byte(*node.Spec.Config), &pldConf)
 		if err != nil {
-			return "", fmt.Errorf("paladinConfigYAML is invalid: %s", err)
+			return "", nil, fmt.Errorf("paladinConfigYAML is invalid: %s", err)
 		}
 	}
 
@@ -531,22 +557,27 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 
 	// DB needs merging from user config and our config
 	if err := r.generatePaladinDBConfig(ctx, node, &pldConf, name); err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	// Merge k8s definitions of signers with the supplied config
 	if err := r.generatePaladinSigners(ctx, node, &pldConf); err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	// Merge k8s CR label references to domains, with the supplied static config
 	if err := r.generatePaladinDomains(ctx, node, &pldConf); err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	// Merge k8s CR label references to registries, with the supplied static config
 	if err := r.generatePaladinRegistries(ctx, node, &pldConf); err != nil {
-		return "", err
+		return "", nil, err
+	}
+
+	tlsSecrets, err := r.generatePaladinTransports(ctx, node, &pldConf)
+	if err != nil {
+		return "", nil, err
 	}
 
 	// Bind to the a local besu node if we've been configured with one
@@ -555,7 +586,7 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 		pldConf.Blockchain.WS.URL = fmt.Sprintf("ws://%s:8546", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
 	}
 	b, _ := yaml.Marshal(&pldConf)
-	return string(b), nil
+	return string(b), tlsSecrets, nil
 }
 
 func (r *PaladinReconciler) generatePaladinDBConfig(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig, name string) error {
@@ -702,11 +733,7 @@ func (r *PaladinReconciler) generatePaladinDomains(ctx context.Context, node *co
 		// or wholely defined by reference to the CR attached.
 		// We do not attempt to merge
 		pldConf.Domains[domain.Name] = &pldconf.DomainConfig{
-			Plugin: pldconf.PluginConfig{
-				Type:    domain.Spec.Plugin.Type,
-				Library: domain.Spec.Plugin.Library,
-				Class:   domain.Spec.Plugin.Class,
-			},
+			Plugin:          r.mapPluginConfig(domain.Spec.Plugin),
 			Config:          domainConf,
 			RegistryAddress: domain.Status.RegistryAddress,
 			AllowSigning:    domain.Spec.AllowSigning,
@@ -714,6 +741,14 @@ func (r *PaladinReconciler) generatePaladinDomains(ctx context.Context, node *co
 	}
 
 	return nil
+}
+
+func (r *PaladinReconciler) mapPluginConfig(in corev1alpha1.PluginConfig) pldconf.PluginConfig {
+	return pldconf.PluginConfig{
+		Type:    in.Type,
+		Library: in.Library,
+		Class:   in.Class,
+	}
 }
 
 func (r *PaladinReconciler) generatePaladinRegistries(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig) error {
@@ -756,11 +791,7 @@ func (r *PaladinReconciler) generatePaladinRegistries(ctx context.Context, node 
 		// or wholely defined by reference to the CR attached.
 		// We do not attempt to merge
 		pldConf.Registries[reg.Name] = &pldconf.RegistryConfig{
-			Plugin: pldconf.PluginConfig{
-				Type:    reg.Spec.Plugin.Type,
-				Library: reg.Spec.Plugin.Library,
-				Class:   reg.Spec.Plugin.Class,
-			},
+			Plugin: r.mapPluginConfig(reg.Spec.Plugin),
 			Transports: pldconf.RegistryTransportsConfig{
 				Enabled:           &reg.Spec.Transports.Enabled,
 				RequiredPrefix:    reg.Spec.Transports.RequiredPrefix,
@@ -773,6 +804,115 @@ func (r *PaladinReconciler) generatePaladinRegistries(ctx context.Context, node 
 	}
 
 	return nil
+}
+
+func (r *PaladinReconciler) generatePaladinTransports(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig) ([]string, error) {
+	var availableTLSSecrets []string
+	for _, transport := range node.Spec.Transports {
+
+		var transportConf map[string]any
+		if err := json.Unmarshal([]byte(transport.ConfigJSON), &transportConf); err != nil {
+			log.FromContext(ctx).Error(err, fmt.Sprintf("configJSON for transport '%s' cannot be parsed (skipping)", transport.Name))
+			continue // skip it - but continue trying others
+		}
+
+		// See if the secret is available
+		var secret corev1.Secret
+		err := r.Get(ctx, types.NamespacedName{Name: transport.TLS.SecretName, Namespace: node.Namespace}, &secret)
+		if err == nil {
+			// The secret is there - all good we can continue
+		} else if errors.IsNotFound(err) {
+			if transport.TLS.CertName != "" {
+				// We need to ensure we have sent the issuance request
+				if err := r.createCertificate(ctx, node, pldConf, &transport.TLS); err != nil {
+					return nil, err
+				}
+			}
+			// We return an error here to force a re-reconcile while we wait for the certificate
+			return nil, fmt.Errorf("waiting for secret '%s' to be available for transport '%s'", transport.TLS.SecretName, transport.Name)
+		} else {
+			return nil, fmt.Errorf("failed to lookup secret for transport %s: %s", transport.Name, err)
+		}
+
+		tlsIdx := len(availableTLSSecrets)
+		availableTLSSecrets = append(availableTLSSecrets, secret.Name)
+		transportConf["tls"] = &pldconf.TLSConfig{
+			Enabled:    true,
+			ClientAuth: true,
+			CertFile:   fmt.Sprintf("/cert%.3d/tls.crt", tlsIdx),
+			KeyFile:    fmt.Sprintf("/cert%.3d/tls.key", tlsIdx),
+		}
+
+		// It's available, add it to our config
+		if pldConf.Transports == nil {
+			pldConf.Transports = make(map[string]*pldconf.TransportConfig)
+		}
+		pldConf.Transports[transport.Name] = &pldconf.TransportConfig{
+			Plugin: r.mapPluginConfig(transport.Plugin),
+			Config: transportConf,
+		}
+
+	}
+
+	return availableTLSSecrets, nil
+}
+
+func (r *PaladinReconciler) createCertificate(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig, tlsConf *corev1alpha1.TLSConfig) error {
+
+	var certUnstructured unstructured.Unstructured
+	certUnstructured.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "cert-manager.io",
+		Version: "v1",
+		Kind:    "Certificate",
+	})
+	err := r.Client.Get(ctx, types.NamespacedName{Name: tlsConf.CertName, Namespace: node.Namespace}, &certUnstructured)
+	if err == nil {
+		// already exists - we do not support modifying it currently
+		return nil
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+
+	certUnstructured.SetName(tlsConf.CertName)
+	certUnstructured.SetNamespace(node.Namespace)
+	certUnstructured.SetLabels(r.getLabels(node))
+
+	// Build the DNS name for the node
+	dnsNames := append([]string{generatePaladinServiceHostname(node.Name, node.Namespace)}, tlsConf.AdditionalDNSNames...)
+
+	// We use a template to generate it
+	const defaultTemplate = `commonName: {{ .nodeName }}
+secretName: {{ .secretName }}
+dnsNames: {{ .dnsNames | toJson }}
+issuerRef:
+  kind: Issuer
+  name: {{ .issuer }}
+`
+	specTemplate := defaultTemplate
+	if tlsConf.CertSpecTemplate != "" {
+		specTemplate = tlsConf.CertSpecTemplate
+	}
+	template, err := template.New("").Option("missingkey=error").Funcs(sprig.FuncMap()).Parse(specTemplate)
+	if err != nil {
+		return fmt.Errorf("invalid certSpecTemplate: %s", err)
+	}
+	yamlBuff := new(bytes.Buffer)
+	err = template.Execute(yamlBuff, map[string]any{
+		"nodeName":   pldConf.NodeName,
+		"secretName": tlsConf.SecretName,
+		"dnsNames":   dnsNames,
+		"issuer":     tlsConf.Issuer,
+	})
+	var yamlMap map[string]any
+	if err == nil {
+		err = yaml.Unmarshal(yamlBuff.Bytes(), &yamlMap)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to execute certSpecTemplate: %s", err)
+	}
+	certUnstructured.Object["spec"] = yamlMap
+	return r.Create(ctx, &certUnstructured)
+
 }
 
 func (r *PaladinReconciler) generateBIP39SeedSecretIfNotExist(ctx context.Context, node *corev1alpha1.Paladin, name string) error {
@@ -826,6 +966,9 @@ func (r *PaladinReconciler) createService(ctx context.Context, node *corev1alpha
 	if err := controllerutil.SetControllerReference(node, svc, r.Scheme); err != nil {
 		return svc, err
 	}
+	for _, transport := range node.Spec.Transports {
+		svc.Spec.Ports = append(svc.Spec.Ports, transport.Ports...)
+	}
 
 	var foundSvc corev1.Service
 	if err := r.Get(ctx, types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}, &foundSvc); err != nil && errors.IsNotFound(err) {
@@ -837,7 +980,8 @@ func (r *PaladinReconciler) createService(ctx context.Context, node *corev1alpha
 	} else if err != nil {
 		return svc, err
 	}
-	return svc, nil
+	foundSvc.Spec = svc.Spec
+	return &foundSvc, r.Update(ctx, &foundSvc)
 }
 
 // generateServiceTemplate generates a ConfigMap for the Paladin configuration
