@@ -208,6 +208,13 @@ func TestGRPCTransport_DirectCertVerification_OK(t *testing.T) {
 		<-received
 	}
 
+	details, err := plugin1.GetLocalDetails(ctx, &prototk.GetLocalDetailsRequest{})
+	require.NoError(t, err)
+	var pubDetails PublishedTransportDetails
+	err = json.Unmarshal([]byte(details.TransportDetails), &pubDetails)
+	require.NoError(t, err)
+	require.Contains(t, pubDetails.Issuers, "CERTIFICATE")
+
 }
 
 func TestGRPCTransport_DirectCertVerificationWithKeyRotation_OK(t *testing.T) {

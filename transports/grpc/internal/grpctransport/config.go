@@ -21,6 +21,8 @@ import (
 )
 
 type Config struct {
+	// optional remote hostname to return in local transport details
+	ExternalHostname *string `json:"externalHostname"`
 	// address to listen on
 	Address *string `json:"address"`
 	// port to listen on
