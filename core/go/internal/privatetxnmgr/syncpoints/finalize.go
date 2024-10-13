@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package privatetxnstore
+package syncpoints
 
 import (
 	"context"
@@ -34,7 +34,7 @@ type finalizeOperation struct {
 }
 
 // QueueTransactionFinalize
-func (s *store) QueueTransactionFinalize(ctx context.Context, contractAddress tktypes.EthAddress, transactionID uuid.UUID, failureMessage string, onCommit func(context.Context), onRollback func(context.Context, error)) {
+func (s *syncPoints) QueueTransactionFinalize(ctx context.Context, contractAddress tktypes.EthAddress, transactionID uuid.UUID, failureMessage string, onCommit func(context.Context), onRollback func(context.Context, error)) {
 
 	op := s.writer.Queue(ctx, &syncPointOperation{
 		contractAddress: contractAddress,
@@ -53,7 +53,7 @@ func (s *store) QueueTransactionFinalize(ctx context.Context, contractAddress tk
 
 }
 
-func (s *store) writeFinalizeOperations(ctx context.Context, dbTX *gorm.DB, contractAddress tktypes.EthAddress, finalizeOperations []*finalizeOperation) error {
+func (s *syncPoints) writeFinalizeOperations(ctx context.Context, dbTX *gorm.DB, contractAddress tktypes.EthAddress, finalizeOperations []*finalizeOperation) error {
 	receipts := make([]*components.ReceiptInput, len(finalizeOperations))
 	for i, op := range finalizeOperations {
 		receipts[i] = &components.ReceiptInput{

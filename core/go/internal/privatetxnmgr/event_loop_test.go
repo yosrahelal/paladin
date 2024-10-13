@@ -24,8 +24,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
 	"github.com/kaleido-io/paladin/core/mocks/statedistributionmocks"
@@ -86,8 +86,8 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	mocks.endorsementGatherer.On("DomainContext").Return(mocks.domainContext).Maybe()
 	mocks.domainSmartContract.On("Address").Return(*domainAddress).Maybe()
 
-	store := privatetxnstore.NewStore(ctx, &pldconf.FlushWriterConfig{}, p, mocks.txManager)
-	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher, store, mocks.identityResolver, mocks.stateDistributer)
+	syncPoints := syncpoints.NewSyncPoints(ctx, &pldconf.FlushWriterConfig{}, p, mocks.txManager)
+	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer)
 	ocDone, err := o.Start(ctx)
 	require.NoError(t, err)
 

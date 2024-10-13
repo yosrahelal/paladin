@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package privatetxnstore
+package syncpoints
 
 import (
 	"context"
@@ -39,11 +39,11 @@ var WriterConfigDefaults = pldconf.FlushWriterConfig{
 
 type PublicTransactionsSubmit func(tx *gorm.DB) (publicTxID []string, err error)
 
-// Store is the interface for all private transaction manager's integration with persistent resources
+// SyncPoints is the interface for all private transaction manager's integration with persistent resources
 // this includes writing to the database tables that private transaction manager owns as well as
 // calling syncpoint APIs on other components like the TxManager and PublicTxManager
 // All of the persistence here is offloaded to worker threads for performance reasons
-type Store interface {
+type SyncPoints interface {
 	Start()
 
 	// PersistDispatchSequence takes a DispatchBatch and for each sequence in the batch, it integrates
@@ -60,26 +60,26 @@ type Store interface {
 	Close()
 }
 
-type store struct {
+type syncPoints struct {
 	started bool
 	writer  flushwriter.Writer[*syncPointOperation, *noResult]
 	txMgr   components.TXManager
 }
 
-func NewStore(ctx context.Context, conf *pldconf.FlushWriterConfig, p persistence.Persistence, txMgr components.TXManager) Store {
-	s := &store{
+func NewSyncPoints(ctx context.Context, conf *pldconf.FlushWriterConfig, p persistence.Persistence, txMgr components.TXManager) SyncPoints {
+	s := &syncPoints{
 		txMgr: txMgr,
 	}
 	s.writer = flushwriter.NewWriter(ctx, s.runBatch, p, conf, &WriterConfigDefaults)
 	return s
 }
 
-func (s *store) Start() {
+func (s *syncPoints) Start() {
 	if !s.started {
 		s.writer.Start()
 	}
 }
 
-func (s *store) Close() {
+func (s *syncPoints) Close() {
 	s.writer.Shutdown()
 }

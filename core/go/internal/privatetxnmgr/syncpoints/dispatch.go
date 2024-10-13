@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package privatetxnstore
+package syncpoints
 
 import (
 	"context"
@@ -55,9 +55,9 @@ type DispatchBatch struct {
 	DispatchSequences []*DispatchSequence
 }
 
-// PersistDispatches persists the dispatches to the store and coordinates with the public transaction manager
+// PersistDispatches persists the dispatches to the database and coordinates with the public transaction manager
 // to submit public transactions.
-func (s *store) PersistDispatchBatch(ctx context.Context, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*statedistribution.StateDistribution) error {
+func (s *syncPoints) PersistDispatchBatch(ctx context.Context, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*statedistribution.StateDistribution) error {
 
 	stateDistributionsPersisted := make([]*statedistribution.StateDistributionPersisted, 0, len(stateDistributions))
 	for _, stateDistribution := range stateDistributions {
@@ -83,7 +83,7 @@ func (s *store) PersistDispatchBatch(ctx context.Context, contractAddress tktype
 	return err
 }
 
-func (s *store) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB, dispatchOperations []*dispatchOperation) error {
+func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB, dispatchOperations []*dispatchOperation) error {
 
 	// For each operation in the batch, we need to call the baseledger transaction manager to allocate its nonce
 	// which it can only guaranteed to be gapless and unique if it is done during the database transaction that inserts the dispatch record.

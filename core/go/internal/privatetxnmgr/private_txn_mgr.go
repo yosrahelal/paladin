@@ -22,8 +22,8 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	"gorm.io/gorm"
 
@@ -53,7 +53,7 @@ type privateTxManager struct {
 	nodeID               string
 	subscribers          []components.PrivateTxEventSubscriber
 	subscribersLock      sync.Mutex
-	store                privatetxnstore.Store
+	syncPoints           syncpoints.SyncPoints
 	stateDistributer     statedistribution.StateDistributer
 }
 
@@ -64,7 +64,7 @@ func (p *privateTxManager) PreInit(c components.PreInitComponents) (*components.
 
 func (p *privateTxManager) PostInit(c components.AllComponents) error {
 	p.components = c
-	p.store = privatetxnstore.NewStore(p.ctx, &p.config.Writer, c.Persistence(), c.TxManager())
+	p.syncPoints = syncpoints.NewSyncPoints(p.ctx, &p.config.Writer, c.Persistence(), c.TxManager())
 	p.stateDistributer = statedistribution.NewStateDistributer(
 		p.ctx,
 		p.nodeID,
@@ -80,7 +80,7 @@ func (p *privateTxManager) PostInit(c components.AllComponents) error {
 }
 
 func (p *privateTxManager) Start() error {
-	p.store.Start()
+	p.syncPoints.Start()
 	return nil
 }
 
@@ -126,7 +126,7 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 				seq,
 				endorsementGatherer,
 				publisher,
-				p.store,
+				p.syncPoints,
 				p.components.IdentityResolver(),
 				p.stateDistributer,
 			)
@@ -307,8 +307,8 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 	}
 
 	//transactions are always dispatched as a sequence, even if only a sequence of one
-	sequence := &privatetxnstore.DispatchSequence{
-		PrivateTransactionDispatches: []*privatetxnstore.DispatchPersisted{
+	sequence := &syncpoints.DispatchSequence{
+		PrivateTransactionDispatches: []*syncpoints.DispatchPersisted{
 			{
 				PrivateTransactionID: tx.ID.String(),
 			},
@@ -326,14 +326,14 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 		return nil, i18n.WrapError(ctx, pubBatch.Rejected()[0].RejectedError(), msgs.MsgPrivTxMgrPublicTxFail)
 	}
 
-	dispatchBatch := &privatetxnstore.DispatchBatch{
-		DispatchSequences: []*privatetxnstore.DispatchSequence{
+	dispatchBatch := &syncpoints.DispatchBatch{
+		DispatchSequences: []*syncpoints.DispatchSequence{
 			sequence,
 		},
 	}
 
 	// as this is a deploy we specify the null address
-	err = p.store.PersistDispatchBatch(ctx, tktypes.EthAddress{}, dispatchBatch, nil)
+	err = p.syncPoints.PersistDispatchBatch(ctx, tktypes.EthAddress{}, dispatchBatch, nil)
 	if err != nil {
 		log.L(ctx).Errorf("Error persisting batch: %s", err)
 		return nil, err

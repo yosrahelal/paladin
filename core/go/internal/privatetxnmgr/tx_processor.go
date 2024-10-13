@@ -24,8 +24,8 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	engineProto "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	signerproto "github.com/kaleido-io/paladin/toolkit/pkg/prototk/signer"
@@ -38,7 +38,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, store privatetxnstore.Store) ptmgrtypes.TxProcessor {
+func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, syncPoints syncpoints.SyncPoints) ptmgrtypes.TxProcessor {
 	return &PaladinTxProcessor{
 		stageErrorRetry:     10 * time.Second,
 		sequencer:           sequencer,
@@ -50,7 +50,7 @@ func NewPaladinTransactionProcessor(ctx context.Context, transaction *components
 		transaction:         transaction,
 		status:              "new",
 		identityResolver:    identityResolver,
-		store:               store,
+		syncPoints:          syncPoints,
 	}
 }
 
@@ -66,7 +66,7 @@ type PaladinTxProcessor struct {
 	status              string
 	latestEvent         string
 	identityResolver    components.IdentityResolver
-	store               privatetxnstore.Store
+	syncPoints          syncpoints.SyncPoints
 }
 
 func (ts *PaladinTxProcessor) Init(ctx context.Context) {
@@ -133,7 +133,7 @@ func (ts *PaladinTxProcessor) revertTransaction(ctx context.Context, revertReaso
 	//update the transaction as reverted and flush that to the txmgr database
 	// so that the user can see that it is reverted and so that we stop retrying to assemble and endorse it
 
-	ts.store.QueueTransactionFinalize(
+	ts.syncPoints.QueueTransactionFinalize(
 		ctx,
 		ts.domainAPI.Address(),
 		ts.transaction.ID,

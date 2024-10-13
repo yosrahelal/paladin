@@ -26,8 +26,8 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
@@ -101,7 +101,7 @@ type Orchestrator struct {
 	endorsementGatherer ptmgrtypes.EndorsementGatherer
 	publisher           ptmgrtypes.Publisher
 	identityResolver    components.IdentityResolver
-	store               privatetxnstore.Store
+	syncPoints          syncpoints.SyncPoints
 	stateDistributer    statedistribution.StateDistributer
 }
 
@@ -115,7 +115,7 @@ func NewOrchestrator(
 	sequencer ptmgrtypes.Sequencer,
 	endorsementGatherer ptmgrtypes.EndorsementGatherer,
 	publisher ptmgrtypes.Publisher,
-	store privatetxnstore.Store,
+	syncPoints syncpoints.SyncPoints,
 	identityResolver components.IdentityResolver,
 	stateDistributer statedistribution.StateDistributer,
 ) *Orchestrator {
@@ -143,7 +143,7 @@ func NewOrchestrator(
 		components:                   allComponents,
 		endorsementGatherer:          endorsementGatherer,
 		publisher:                    publisher,
-		store:                        store,
+		syncPoints:                   syncPoints,
 		identityResolver:             identityResolver,
 		stateDistributer:             stateDistributer,
 	}
@@ -275,7 +275,7 @@ func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *component
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.store)
+			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.syncPoints)
 		}
 		oc.incompleteTxSProcessMap[tx.ID.String()].Init(ctx)
 		oc.pendingEvents <- &ptmgrtypes.TransactionSubmittedEvent{
@@ -290,7 +290,7 @@ func (oc *Orchestrator) HandleEvent(ctx context.Context, event ptmgrtypes.Privat
 }
 
 func (oc *Orchestrator) Start(c context.Context) (done <-chan struct{}, err error) {
-	oc.store.Start()
+	oc.syncPoints.Start()
 	oc.orchestratorLoopDone = make(chan struct{})
 	go oc.evaluationLoop()
 	oc.TriggerOrchestratorEvaluation()
@@ -336,8 +336,8 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 
 	// array of sequences with space for one per signing address
 	// dispatchableTransactions is a map of signing address to transaction IDs so we can group by signing address
-	dispatchBatch := &privatetxnstore.DispatchBatch{
-		DispatchSequences: make([]*privatetxnstore.DispatchSequence, 0, len(dispatchableTransactions)),
+	dispatchBatch := &syncpoints.DispatchBatch{
+		DispatchSequences: make([]*syncpoints.DispatchSequence, 0, len(dispatchableTransactions)),
 	}
 
 	stateDistributions := make([]*statedistribution.StateDistribution, 0)
@@ -348,14 +348,14 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 
 		preparedTransactions := make([]*components.PrivateTransaction, len(transactionIDs))
 
-		sequence := &privatetxnstore.DispatchSequence{
-			PrivateTransactionDispatches: make([]*privatetxnstore.DispatchPersisted, len(transactionIDs)),
+		sequence := &syncpoints.DispatchSequence{
+			PrivateTransactionDispatches: make([]*syncpoints.DispatchPersisted, len(transactionIDs)),
 		}
 
 		for i, transactionID := range transactionIDs {
 			// prepare all transactions for the given transaction IDs
 
-			sequence.PrivateTransactionDispatches[i] = &privatetxnstore.DispatchPersisted{
+			sequence.PrivateTransactionDispatches[i] = &syncpoints.DispatchPersisted{
 				PrivateTransactionID: transactionID,
 			}
 
@@ -430,7 +430,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		dispatchBatch.DispatchSequences = append(dispatchBatch.DispatchSequences, sequence)
 	}
 
-	err := oc.store.PersistDispatchBatch(ctx, oc.contractAddress, dispatchBatch, stateDistributions)
+	err := oc.syncPoints.PersistDispatchBatch(ctx, oc.contractAddress, dispatchBatch, stateDistributions)
 	if err != nil {
 		log.L(ctx).Errorf("Error persisting batch: %s", err)
 		return err

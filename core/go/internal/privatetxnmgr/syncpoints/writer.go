@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package privatetxnstore
+package syncpoints
 
 import (
 	"context"
@@ -60,7 +60,7 @@ func (dso *syncPointOperation) WriteKey() string {
 
 type noResult struct{}
 
-func (s *store) runBatch(ctx context.Context, dbTX *gorm.DB, values []*syncPointOperation) ([]flushwriter.Result[*noResult], error) {
+func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*syncPointOperation) ([]flushwriter.Result[*noResult], error) {
 
 	finalizeOperations := make([]*finalizeOperation, 0, len(values))
 	dispatchOperations := make([]*dispatchOperation, 0, len(values))

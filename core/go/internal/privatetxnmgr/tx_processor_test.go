@@ -26,7 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
-	"github.com/kaleido-io/paladin/core/mocks/privatetxnstoremocks"
+	"github.com/kaleido-io/paladin/core/mocks/prvtxsyncpointsmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -45,7 +45,7 @@ type transactionProcessorDepencyMocks struct {
 	endorsementGatherer *privatetxnmgrmocks.EndorsementGatherer
 	publisher           *privatetxnmgrmocks.Publisher
 	identityResolver    *componentmocks.IdentityResolver
-	store               *privatetxnstoremocks.Store
+	syncPoints          *prvtxsyncpointsmocks.SyncPoints
 }
 
 func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context, transaction *components.PrivateTransaction) (*PaladinTxProcessor, *transactionProcessorDepencyMocks) {
@@ -62,7 +62,7 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 		endorsementGatherer: privatetxnmgrmocks.NewEndorsementGatherer(t),
 		publisher:           privatetxnmgrmocks.NewPublisher(t),
 		identityResolver:    componentmocks.NewIdentityResolver(t),
-		store:               privatetxnstoremocks.NewStore(t),
+		syncPoints:          prvtxsyncpointsmocks.NewSyncPoints(t),
 	}
 	contractAddress := tktypes.RandAddress()
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
@@ -72,7 +72,7 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 	mocks.endorsementGatherer.On("DomainContext").Return(mocks.domainContext).Maybe()
 	mocks.domainSmartContract.On("Address").Return(*contractAddress).Maybe()
 
-	tp := NewPaladinTransactionProcessor(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.store)
+	tp := NewPaladinTransactionProcessor(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.syncPoints)
 
 	return tp.(*PaladinTxProcessor), mocks
 }
@@ -122,7 +122,7 @@ func TestTransactionProcessorAssembleRevert(t *testing.T) {
 		}
 	}).Return(nil).Once()
 
-	dependencyMocks.store.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	dependencyMocks.syncPoints.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	err := tp.HandleTransactionSubmittedEvent(ctx, &ptmgrtypes.TransactionSubmittedEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
 			TransactionID: newTxID.String(),
@@ -157,7 +157,7 @@ func TestTransactionProcessorAssembleError(t *testing.T) {
 		re := regexp.MustCompile(".*" + regexp.QuoteMeta(testRevertReason) + ".*")
 		return re.MatchString(s)
 	}
-	dependencyMocks.store.On("QueueTransactionFinalize", mock.Anything, mock.Anything, newTxID, mock.MatchedBy(matchRevertReason), mock.Anything, mock.Anything).Return()
+	dependencyMocks.syncPoints.On("QueueTransactionFinalize", mock.Anything, mock.Anything, newTxID, mock.MatchedBy(matchRevertReason), mock.Anything, mock.Anything).Return()
 
 	err := tp.HandleTransactionSubmittedEvent(ctx, &ptmgrtypes.TransactionSubmittedEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
