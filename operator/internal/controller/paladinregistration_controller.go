@@ -23,6 +23,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -31,6 +32,7 @@ import (
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
@@ -92,14 +94,22 @@ func (r *PaladinRegistrationReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
+	// We wait till the registry CR is ready first
+	registryAddr, err := r.getRegistryAddress(ctx, &reg)
+	if err != nil {
+		return ctrl.Result{}, err
+	} else if registryAddr == nil {
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil // we're waiting
+	}
+
 	// First reconcile until we've submitting the registration tx
 	regTx := newTransactionReconcile(r.Client,
 		"reg."+reg.Name,
 		reg.Spec.RegistryAdminNode /* for the root entry */, reg.Namespace,
 		&reg.Status.RegistrationTx,
-		func() (bool, *ptxapi.TransactionInput, error) { return r.buildRegistrationTX(ctx, &reg) },
+		func() (bool, *ptxapi.TransactionInput, error) { return r.buildRegistrationTX(ctx, &reg, registryAddr) },
 	)
-	err := regTx.reconcile(ctx)
+	err = regTx.reconcile(ctx)
 	if err != nil {
 		return ctrl.Result{}, err
 	} else if regTx.statusChanged {
@@ -116,7 +126,9 @@ func (r *PaladinRegistrationReconciler) Reconcile(ctx context.Context, req ctrl.
 			"reg."+reg.Name+"."+transportName,
 			reg.Spec.Node /* the node owns their transports */, reg.Namespace,
 			&reg.Status.RegistrationTx,
-			func() (bool, *ptxapi.TransactionInput, error) { return r.buildTransportTX(ctx, &reg, transportName) },
+			func() (bool, *ptxapi.TransactionInput, error) {
+				return r.buildTransportTX(ctx, &reg, registryAddr, transportName)
+			},
 		)
 		err := regTx.reconcile(ctx)
 		if err != nil {
@@ -142,7 +154,27 @@ func (r *PaladinRegistrationReconciler) updateStatusAndRequeue(ctx context.Conte
 	return ctrl.Result{Requeue: true}, nil // Run again immediately to submit
 }
 
-func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context, reg *corev1alpha1.PaladinRegistration) (bool, *ptxapi.TransactionInput, error) {
+func (r *PaladinRegistrationReconciler) getRegistryAddress(ctx context.Context, reg *corev1alpha1.PaladinRegistration) (*tktypes.EthAddress, error) {
+
+	// Get the registry CR for the address
+	var registry corev1alpha1.PaladinRegistry
+	err := r.Get(ctx, types.NamespacedName{Name: reg.Spec.Registry, Namespace: reg.Namespace}, &registry)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if registry.Status.ContractAddress == "" {
+		log.FromContext(ctx).Info("waiting for registry address")
+		return nil, nil
+	}
+
+	return tktypes.ParseEthAddress(registry.Status.ContractAddress)
+
+}
+
+func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context, reg *corev1alpha1.PaladinRegistration, registryAddr *tktypes.EthAddress) (bool, *ptxapi.TransactionInput, error) {
 
 	// We ask the node its name, so we know what to register it as
 	regNodeRPC, err := getPaladinRPC(ctx, r.Client, reg.Spec.Node, reg.Namespace)
@@ -171,6 +203,7 @@ func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context,
 	return true, &ptxapi.TransactionInput{
 		Transaction: ptxapi.Transaction{
 			Type:     ptxapi.TransactionTypePublic.Enum(),
+			To:       registryAddr,
 			Function: registryABI.Functions()["registerIdentity"].String(),
 			From:     reg.Spec.RegistryAdminKey, // registry admin registers the root entry for the node
 			Data:     tktypes.JSONString(registration),
@@ -179,7 +212,7 @@ func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context,
 	}, nil
 }
 
-func (r *PaladinRegistrationReconciler) buildTransportTX(ctx context.Context, reg *corev1alpha1.PaladinRegistration, transportName string) (bool, *ptxapi.TransactionInput, error) {
+func (r *PaladinRegistrationReconciler) buildTransportTX(ctx context.Context, reg *corev1alpha1.PaladinRegistration, registryAddr *tktypes.EthAddress, transportName string) (bool, *ptxapi.TransactionInput, error) {
 
 	// Get the details from the node
 	regNodeRPC, err := getPaladinRPC(ctx, r.Client, reg.Spec.Node, reg.Namespace)
@@ -190,12 +223,32 @@ func (r *PaladinRegistrationReconciler) buildTransportTX(ctx context.Context, re
 	if err := regNodeRPC.CallRPC(ctx, &transportDetails, "transport_localTransportDetails", transportName); err != nil || transportDetails == "" {
 		return false, nil, err
 	}
+	var nodeName string
+	if err := regNodeRPC.CallRPC(ctx, &nodeName, "transport_nodeName"); err != nil || nodeName == "" {
+		return false, nil, err
+	}
 
 	// We also wait until this node has indexed the registration of the root node,
 	// and use that to extract the hash
+	type registryEntry struct {
+		ID       string `json:"id"`
+		Name     string `json:"name"`
+		ParentID string `json:"parentId"`
+	}
+	var entries []*registryEntry
+	if err := regNodeRPC.CallRPC(ctx, &entries, "registry_queryEntries", reg.Spec.Registry,
+		query.NewQueryBuilder().Equal(".name", nodeName).Null(".parentId").Limit(1).Query(),
+		"active",
+	); err != nil {
+		return false, nil, err
+	}
+	if len(entries) == 0 {
+		log.FromContext(ctx).Info("waiting for registration to be indexed by node")
+		return false, nil, nil
+	}
 
 	property := map[string]any{
-		"identityHash": nodeEntryHash.String(),
+		"identityHash": entries[0].ID,
 		"name":         fmt.Sprintf("transport.%s", transportName),
 		"value":        transportDetails,
 	}
@@ -203,9 +256,10 @@ func (r *PaladinRegistrationReconciler) buildTransportTX(ctx context.Context, re
 	return true, &ptxapi.TransactionInput{
 		Transaction: ptxapi.Transaction{
 			Type:     ptxapi.TransactionTypePublic.Enum(),
+			To:       registryAddr,
 			Function: registryABI.Functions()["setIdentityProperty"].String(),
 			From:     reg.Spec.RegistryAdminKey, // registry admin registers the root entry for the node
-			Data:     tktypes.JSONString(registration),
+			Data:     tktypes.JSONString(property),
 		},
 		ABI: registryABI,
 	}, nil

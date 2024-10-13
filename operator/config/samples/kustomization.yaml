@@ -11,5 +11,5 @@ resources:
 - core_v1alpha1_paladindomain_noto.yaml
 - core_v1alpha1_paladindomain_pente.yaml
 # - core_v1alpha1_paladindomain_zeto.yaml
-- core_v1alpha1_paladinregistration.yaml
+- core_v1alpha1_paladinregistration_node1.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples
