@@ -136,10 +136,8 @@ func (ts *PaladinTxProcessor) revertTransaction(ctx context.Context, revertReaso
 	ts.store.QueueTransactionFinalize(
 		ctx,
 		ts.domainAPI.Address(),
-		&privatetxnstore.TransactionFinalizer{
-			FailureMessage: revertReason,
-			TransactionID:  ts.transaction.ID,
-		},
+		ts.transaction.ID,
+		revertReason,
 		func(ctx context.Context) {
 			//we are not on the main event loop thread so can't update in memory state here.
 			// need to go back into the event loop

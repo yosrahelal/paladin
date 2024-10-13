@@ -19,6 +19,7 @@ package privatetxnstore
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -38,17 +39,30 @@ var WriterConfigDefaults = pldconf.FlushWriterConfig{
 
 type PublicTransactionsSubmit func(tx *gorm.DB) (publicTxID []string, err error)
 
+// Store is the interface for all private transaction manager's integration with persistent resources
+// this includes writing to the database tables that private transaction manager owns as well as
+// calling syncpoint APIs on other components like the TxManager and PublicTxManager
+// All of the persistence here is offloaded to worker threads for performance reasons
 type Store interface {
-	//We persist multiple sequences in a single call, one for each signing address
 	Start()
+
+	// PersistDispatchSequence takes a DispatchBatch and for each sequence in the batch, it integrates
+	// with the PublicTxManager to record the transactions in its persistence store and also writes the dispatch
+	// to the PrivateTxnManager's persistence store in the same database transaction
+	// Although the actual persistence is offloaded to the flushwriter, this method is synchronous and will block until the
+	// dispatch sequence is written to the database
 	PersistDispatchBatch(ctx context.Context, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*statedistribution.StateDistribution) error
-	QueueTransactionFinalize(ctx context.Context, contractAddress tktypes.EthAddress, finalizer *TransactionFinalizer, onCommit func(context.Context), onRollback func(context.Context, error))
+
+	// QueueTransactionFinalize integrates with TxManager to mark a transaction as finalized with the given formatter revert reason
+	// this is an async operation so it can safely be called from the orchestrator event loop thread
+	// the onCommit and onRollback callbacks are called, on a separate goroutine when the transaction is committed or rolled back
+	QueueTransactionFinalize(ctx context.Context, contractAddress tktypes.EthAddress, transactionID uuid.UUID, failureMessage string, onCommit func(context.Context), onRollback func(context.Context, error))
 	Close()
 }
 
 type store struct {
 	started bool
-	writer  flushwriter.Writer[*dispatchSequenceOperation, *noResult]
+	writer  flushwriter.Writer[*syncPointOperation, *noResult]
 	txMgr   components.TXManager
 }
 

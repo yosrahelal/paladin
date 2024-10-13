@@ -18,12 +18,11 @@ package privatetxnmgr
 import (
 	"context"
 	"errors"
-	"strings"
+	"regexp"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/privatetxnstore"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
@@ -123,7 +122,7 @@ func TestTransactionProcessorAssembleRevert(t *testing.T) {
 		}
 	}).Return(nil).Once()
 
-	dependencyMocks.store.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	dependencyMocks.store.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	err := tp.HandleTransactionSubmittedEvent(ctx, &ptmgrtypes.TransactionSubmittedEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
 			TransactionID: newTxID.String(),
@@ -154,11 +153,11 @@ func TestTransactionProcessorAssembleError(t *testing.T) {
 		}
 	}).Return(errors.New(testRevertReason)).Once()
 
-	matchTransactionFinalizer := func(f *privatetxnstore.TransactionFinalizer) bool {
-		return f.TransactionID == newTxID && strings.Contains(f.FailureMessage, testRevertReason)
+	matchRevertReason := func(s string) bool {
+		re := regexp.MustCompile(".*" + regexp.QuoteMeta(testRevertReason) + ".*")
+		return re.MatchString(s)
 	}
-
-	dependencyMocks.store.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.MatchedBy(matchTransactionFinalizer), mock.Anything, mock.Anything).Return()
+	dependencyMocks.store.On("QueueTransactionFinalize", mock.Anything, mock.Anything, newTxID, mock.MatchedBy(matchRevertReason), mock.Anything, mock.Anything).Return()
 
 	err := tp.HandleTransactionSubmittedEvent(ctx, &ptmgrtypes.TransactionSubmittedEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{

@@ -28,17 +28,20 @@ import (
 // a transaction finalization operation is an update to the transaction managers tables
 // to record a failed transaction.  nothing gets written to any tables owned by the private transaction manager
 // but the write is coordinated by our flush writer to minimize the number of database transactions
-type TransactionFinalizer struct {
+type finalizeOperation struct {
 	TransactionID  uuid.UUID
 	FailureMessage string
 }
 
 // QueueTransactionFinalize
-func (s *store) QueueTransactionFinalize(ctx context.Context, contractAddress tktypes.EthAddress, finalizer *TransactionFinalizer, onCommit func(context.Context), onRollback func(context.Context, error)) {
+func (s *store) QueueTransactionFinalize(ctx context.Context, contractAddress tktypes.EthAddress, transactionID uuid.UUID, failureMessage string, onCommit func(context.Context), onRollback func(context.Context, error)) {
 
-	op := s.writer.Queue(ctx, &dispatchSequenceOperation{
+	op := s.writer.Queue(ctx, &syncPointOperation{
 		contractAddress: contractAddress,
-		finalizer:       finalizer,
+		finalizeOperation: &finalizeOperation{
+			TransactionID:  transactionID,
+			FailureMessage: failureMessage,
+		},
 	})
 	go func() {
 		if _, err := op.WaitFlushed(ctx); err != nil {
@@ -50,14 +53,14 @@ func (s *store) QueueTransactionFinalize(ctx context.Context, contractAddress tk
 
 }
 
-func (s *store) writeTransactionFinalizerBatch(ctx context.Context, dbTX *gorm.DB, contractAddress tktypes.EthAddress, finalizers []*TransactionFinalizer) error {
-	receipts := make([]*components.ReceiptInput, len(finalizers))
-	for i, finalizer := range finalizers {
+func (s *store) writeFinalizeOperations(ctx context.Context, dbTX *gorm.DB, contractAddress tktypes.EthAddress, finalizeOperations []*finalizeOperation) error {
+	receipts := make([]*components.ReceiptInput, len(finalizeOperations))
+	for i, op := range finalizeOperations {
 		receipts[i] = &components.ReceiptInput{
 			ReceiptType:     components.RT_FailedWithMessage,
 			ContractAddress: &contractAddress,
-			TransactionID:   finalizer.TransactionID,
-			FailureMessage:  finalizer.FailureMessage,
+			TransactionID:   op.TransactionID,
+			FailureMessage:  op.FailureMessage,
 		}
 	}
 
