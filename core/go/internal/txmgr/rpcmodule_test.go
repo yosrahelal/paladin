@@ -380,6 +380,8 @@ func TestIdentityResolvePassthroughQueries(t *testing.T) {
 		func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.identityResolver.On("ResolveVerifier", mock.Anything, "lookup1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
 				Return("0x6f4b36e614cf32a20f4c2146d9db4c59a699ea65", nil)
+			mc.keyManager.On("ResolveKey", mock.Anything, "key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+				Return("keyhandle1", "0x880cd7e34bd3457e32352a2610c8ca737f2e2378", nil)
 		},
 	)
 	defer done()
@@ -391,5 +393,9 @@ func TestIdentityResolvePassthroughQueries(t *testing.T) {
 	err = rpcClient.CallRPC(ctx, &verifier, "ptx_resolveVerifier", "lookup1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 	assert.Equal(t, "0x6f4b36e614cf32a20f4c2146d9db4c59a699ea65", verifier)
+
+	err = rpcClient.CallRPC(ctx, &verifier, "ptx_resolveLocalVerifier", "key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	require.NoError(t, err)
+	assert.Equal(t, "0x880cd7e34bd3457e32352a2610c8ca737f2e2378", verifier)
 
 }

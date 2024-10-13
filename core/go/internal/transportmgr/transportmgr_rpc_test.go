@@ -37,8 +37,13 @@ func TestRPCLocalDetails(t *testing.T) {
 	rpc, rpcDone := newTestRPCServer(t, ctx, tm)
 	defer rpcDone()
 
+	var nodeName string
+	err := rpc.CallRPC(ctx, &nodeName, "transport_nodeName")
+	require.NoError(t, err)
+	assert.Equal(t, "node1", nodeName)
+
 	var localTransports []string
-	err := rpc.CallRPC(ctx, &localTransports, "transport_localTransports")
+	err = rpc.CallRPC(ctx, &localTransports, "transport_localTransports")
 	require.NoError(t, err)
 	assert.Equal(t, []string{tp.t.name}, localTransports)
 

@@ -28,8 +28,16 @@ func (tm *transportManager) RPCModule() *rpcserver.RPCModule {
 
 func (tm *transportManager) initRPC() {
 	tm.rpcModule = rpcserver.NewRPCModule("transport").
+		Add("transport_nodeName", tm.rpcNodeName()).
 		Add("transport_localTransports", tm.rpcLocalTransports()).
 		Add("transport_localTransportDetails", tm.rpcLocalTransportDetails())
+}
+
+func (tm *transportManager) rpcNodeName() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod0(func(ctx context.Context,
+	) (string, error) {
+		return tm.localNodeName, nil
+	})
 }
 
 func (tm *transportManager) rpcLocalTransports() rpcserver.RPCHandler {

@@ -10,6 +10,7 @@ rules:
   - besugeneses
   - besus
   - paladindomains
+  - paladinregistrations
   - paladinregistries
   - paladins
   - smartcontractdeployments
@@ -27,6 +28,7 @@ rules:
   - besugeneses/finalizers
   - besus/finalizers
   - paladindomains/finalizers
+  - paladinregistrations/finalizers
   - paladinregistries/finalizers
   - paladins/finalizers
   - smartcontractdeployments/finalizers
@@ -38,6 +40,7 @@ rules:
   - besugeneses/status
   - besus/status
   - paladindomains/status
+  - paladinregistrations/status
   - paladinregistries/status
   - paladins/status
   - smartcontractdeployments/status

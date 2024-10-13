@@ -43,6 +43,7 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_storeABI", tm.rpcStoreABI()).
 		Add("ptx_getStoredABI", tm.rpcGetStoredABI()).
 		Add("ptx_queryStoredABIs", tm.rpcQueryStoredABIs()).
+		Add("ptx_resolveLocalVerifier", tm.rpcResolveLocalVerifier()).
 		Add("ptx_resolveVerifier", tm.rpcResolveVerifier())
 }
 
@@ -176,6 +177,17 @@ func (tm *txManager) rpcQueryStoredABIs() rpcserver.RPCHandler {
 		query query.QueryJSON,
 	) ([]*ptxapi.StoredABI, error) {
 		return tm.queryABIs(ctx, &query)
+	})
+}
+
+func (tm *txManager) rpcResolveLocalVerifier() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod3(func(ctx context.Context,
+		keyName string,
+		algorithm string,
+		verifierType string,
+	) (string, error) {
+		_, verifier, err := tm.keyManager.ResolveKey(ctx, keyName, algorithm, verifierType)
+		return verifier, err
 	})
 }
 

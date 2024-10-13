@@ -748,7 +748,10 @@ spec:
                 items:
                   properties:
                     configJSON:
-                      description: JSON configuration specific to the individual transport
+                      description: |-
+                        JSON configuration specific to the individual transport.
+                        The "tls" root section of the config will be automatically populated from the k8s secret.
+                        The "externalHostname" property will be automatically set to the internal k8s hostname, unless it is already set in the configJSON
                       type: string
                     name:
                       type: string

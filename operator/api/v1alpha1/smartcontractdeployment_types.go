@@ -53,14 +53,18 @@ const (
 	TransactionStatusRejected   TransactionStatus = "Rejected"
 )
 
-// SmartContractDeploymentStatus defines the observed state of SmartContractDeployment
-type SmartContractDeploymentStatus struct {
+type TransactionSubmission struct {
 	TransactionStatus TransactionStatus `json:"transactionStatus,omitempty"`
 	IdempotencyKey    string            `json:"idempotencyKey,omitempty"`
 	TransactionID     string            `json:"transactionID,omitempty"`
-	ContractAddress   string            `json:"contractAddress,omitempty"`
 	FailureMessage    string            `json:"failureMessage,omitempty"`
 	TransactionHash   string            `json:"transactionHash,omitempty"`
+}
+
+// SmartContractDeploymentStatus defines the observed state of SmartContractDeployment
+type SmartContractDeploymentStatus struct {
+	TransactionSubmission `json:",inline"`
+	ContractAddress       string `json:"contractAddress,omitempty"`
 }
 
 //+kubebuilder:object:root=true
