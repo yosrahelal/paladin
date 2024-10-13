@@ -396,6 +396,9 @@ func (cm *componentManager) registerRPCModules() {
 			cm.rpcServer.Register(rpcMod)
 		}
 	}
+	// We handle block indexer separately (doesn't fit the internal ManagerLifecycle model
+	// as it's currently a standalone re-usable component)
+	cm.rpcServer.Register(cm.BlockIndexer().RPCModule())
 }
 
 func (cm *componentManager) Stop() {

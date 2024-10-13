@@ -136,6 +136,7 @@ func TestStartOK(t *testing.T) {
 	mockBlockIndexer := componentmocks.NewBlockIndexer(t)
 	mockBlockIndexer.On("Start").Return(nil)
 	mockBlockIndexer.On("GetBlockListenerHeight", mock.Anything).Return(uint64(12345), nil)
+	mockBlockIndexer.On("RPCModule").Return(nil)
 	mockBlockIndexer.On("Stop").Return()
 
 	mockPluginManager := componentmocks.NewPluginManager(t)

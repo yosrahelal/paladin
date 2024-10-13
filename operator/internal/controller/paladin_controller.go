@@ -842,6 +842,9 @@ func (r *PaladinReconciler) generatePaladinTransports(ctx context.Context, node 
 			CertFile:   fmt.Sprintf("/cert%.3d/tls.crt", tlsIdx),
 			KeyFile:    fmt.Sprintf("/cert%.3d/tls.key", tlsIdx),
 		}
+		if transportConf["externalHostname"] == nil {
+			transportConf["externalHostname"] = generatePaladinServiceHostname(node.Name, node.Namespace)
+		}
 
 		// It's available, add it to our config
 		if pldConf.Transports == nil {

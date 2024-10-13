@@ -63,6 +63,7 @@ type BlockIndexer interface {
 	WaitForTransactionAnyResult(ctx context.Context, hash tktypes.Bytes32) (*IndexedTransaction, error)
 	GetBlockListenerHeight(ctx context.Context) (highest uint64, err error)
 	GetConfirmedBlockHeight(ctx context.Context) (confirmed uint64, err error)
+	RPCModule() *rpcserver.RPCModule
 }
 
 // Processes blocks from a configure baseline block (0 for example), up until it

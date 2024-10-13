@@ -63,7 +63,9 @@ type TransportConfig struct {
 	Name string `json:"name"`
 	// Plugin configuration for loading the transport
 	Plugin PluginConfig `json:"plugin"`
-	// JSON configuration specific to the individual transport
+	// JSON configuration specific to the individual transport.
+	// The "tls" root section of the config will be automatically populated from the k8s secret.
+	// The "externalHostname" property will be automatically set to the internal k8s hostname, unless it is already set in the configJSON
 	ConfigJSON string `json:"configJSON"`
 	// TLS configuration to use for this secret
 	TLS TLSConfig `json:"tls,omitempty"`
