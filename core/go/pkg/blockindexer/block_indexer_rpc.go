@@ -19,6 +19,7 @@ package blockindexer
 import (
 	"context"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -29,23 +30,26 @@ func (bi *blockIndexer) RPCModule() *rpcserver.RPCModule {
 
 func (bi *blockIndexer) initRPC() {
 	bi.rpcModule = rpcserver.NewRPCModule("bidx").
-		Add("bidx_GetIndexedBlockByNumber", bi.rpcGetIndexedBlockByNumber()).
-		Add("bidx_GetIndexedBlockByNumber", bi.rpcGetIndexedTransactionByHash()).
-		Add("bidx_GetIndexedTransactionByNonce", bi.rpcGetIndexedTransactionByNonce()).
-		Add("bidx_GetBlockTransactionsByNumber", bi.rpcGetBlockTransactionsByNumber()).
-		Add("bidx_GetTransactionEventsByHash", bi.rpcGetTransactionEventsByHash()).
-		Add("bidx_ListTransactionEvents", bi.rpcListTransactionEvents())
+		Add("bidx_getBlockByNumber", bi.rpcGetBlockByNumber()).
+		Add("bidx_getTransactionByHash", bi.rpcGetTransactionByHash()).
+		Add("bidx_getTransactionByNonce", bi.rpcGetTransactionByNonce()).
+		Add("bidx_getBlockTransactionsByNumber", bi.rpcGetBlockTransactionsByNumber()).
+		Add("bidx_getTransactionEventsByHash", bi.rpcGetTransactionEventsByHash()).
+		Add("bidx_queryIndexedBlocks", bi.rpcQueryIndexedBlocks()).
+		Add("bidx_queryIndexedTransactions", bi.rpcQueryIndexedTransactions()).
+		Add("bidx_queryIndexedEvents", bi.rpcQueryIndexedEvents()).
+		Add("bidx_getConfirmedBlockHeight", bi.rpcGetConfirmedBlockHeight())
 }
 
-func (bi *blockIndexer) rpcGetIndexedBlockByNumber() rpcserver.RPCHandler {
+func (bi *blockIndexer) rpcGetBlockByNumber() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
-		number uint64,
+		number tktypes.HexUint64,
 	) (*IndexedBlock, error) {
-		return bi.GetIndexedBlockByNumber(ctx, number)
+		return bi.GetIndexedBlockByNumber(ctx, number.Uint64())
 	})
 }
 
-func (bi *blockIndexer) rpcGetIndexedTransactionByHash() rpcserver.RPCHandler {
+func (bi *blockIndexer) rpcGetTransactionByHash() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		hash tktypes.Bytes32,
 	) (*IndexedTransaction, error) {
@@ -53,20 +57,20 @@ func (bi *blockIndexer) rpcGetIndexedTransactionByHash() rpcserver.RPCHandler {
 	})
 }
 
-func (bi *blockIndexer) rpcGetIndexedTransactionByNonce() rpcserver.RPCHandler {
+func (bi *blockIndexer) rpcGetTransactionByNonce() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		from tktypes.EthAddress,
-		nonce uint64,
+		nonce tktypes.HexUint64,
 	) (*IndexedTransaction, error) {
-		return bi.GetIndexedTransactionByNonce(ctx, from, nonce)
+		return bi.GetIndexedTransactionByNonce(ctx, from, nonce.Uint64())
 	})
 }
 
 func (bi *blockIndexer) rpcGetBlockTransactionsByNumber() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
-		blockNumber int64,
+		blockNumber tktypes.HexUint64,
 	) ([]*IndexedTransaction, error) {
-		return bi.GetBlockTransactionsByNumber(ctx, blockNumber)
+		return bi.GetBlockTransactionsByNumber(ctx, int64(blockNumber.Uint64()))
 	})
 }
 
@@ -78,21 +82,33 @@ func (bi *blockIndexer) rpcGetTransactionEventsByHash() rpcserver.RPCHandler {
 	})
 }
 
-func (bi *blockIndexer) rpcListTransactionEvents() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod5(func(ctx context.Context,
-		lastBlock int64,
-		lastIndex,
-		limit int,
-		withTransaction,
-		withBlock bool,
-	) ([]*IndexedEvent, error) {
-		return bi.ListTransactionEvents(ctx, lastBlock, lastIndex, limit, withTransaction, withBlock)
-	})
-}
-
 func (bi *blockIndexer) rpcGetConfirmedBlockHeight() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod0(func(ctx context.Context,
 	) (uint64, error) {
 		return bi.GetConfirmedBlockHeight(ctx)
+	})
+}
+
+func (bi *blockIndexer) rpcQueryIndexedBlocks() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		jq query.QueryJSON,
+	) ([]*IndexedBlock, error) {
+		return bi.QueryIndexedBlocks(ctx, &jq)
+	})
+}
+
+func (bi *blockIndexer) rpcQueryIndexedTransactions() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		jq query.QueryJSON,
+	) ([]*IndexedTransaction, error) {
+		return bi.QueryIndexedTransactions(ctx, &jq)
+	})
+}
+
+func (bi *blockIndexer) rpcQueryIndexedEvents() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		jq query.QueryJSON,
+	) ([]*IndexedEvent, error) {
+		return bi.QueryIndexedEvents(ctx, &jq)
 	})
 }

@@ -168,15 +168,15 @@ func testBlockArray(t *testing.T, l int, knownAddress ...ethtypes.Address0xHex) 
 			to = emitAddr1
 		}
 		txHash := ethtypes.MustNewHexBytes0xPrefix(tktypes.RandHex(32))
+		tx := &PartialTransactionInfo{
+			Hash:  txHash,
+			From:  ethtypes.MustNewAddress(tktypes.RandHex(20)),
+			Nonce: ethtypes.HexUint64(i),
+		}
 		blocks[i] = &BlockInfoJSONRPC{
-			Number: ethtypes.HexUint64(i),
-			Hash:   ethtypes.MustNewHexBytes0xPrefix(tktypes.RandHex(32)),
-			Transactions: []*PartialTransactionInfo{
-				{
-					Hash:  txHash,
-					Nonce: ethtypes.HexUint64(i),
-				},
-			},
+			Number:       ethtypes.HexUint64(i),
+			Hash:         ethtypes.MustNewHexBytes0xPrefix(tktypes.RandHex(32)),
+			Transactions: []*PartialTransactionInfo{tx},
 		}
 		eventBData, err := testABI[1].Inputs.EncodeABIDataValues(map[string]interface{}{
 			"intParam1": i + 1000000,
@@ -193,7 +193,7 @@ func testBlockArray(t *testing.T, l int, knownAddress ...ethtypes.Address0xHex) 
 		receipts[blocks[i].Hash.String()] = []*TXReceiptJSONRPC{
 			{
 				TransactionHash: txHash,
-				From:            ethtypes.MustNewAddress(tktypes.RandHex(20)),
+				From:            tx.From,
 				To:              to,
 				ContractAddress: contractAddress,
 				BlockNumber:     blocks[i].Number,
@@ -383,6 +383,12 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, blocks[i].Hash.String(), indexedBlock.Hash.String())
 
+		// Query the block
+		qBlocks, err := bi.QueryIndexedBlocks(ctx, query.NewQueryBuilder().Equal("number", blocks[i].Number).Limit(1).Query())
+		require.NoError(t, err)
+		require.Len(t, qBlocks, 1)
+		require.Equal(t, blocks[i].Hash.String(), qBlocks[0].Hash.String())
+
 		// Get the transaction
 		txHash := tktypes.Bytes32(receipts[blocks[i].Hash.String()][0].TransactionHash)
 		indexedTX, err := bi.GetIndexedTransactionByHash(ctx, txHash)
@@ -390,9 +396,10 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 		assert.Equal(t, receipts[blocks[i].Hash.String()][0].TransactionHash.String(), indexedTX.Hash.String())
 
 		// Query the transaction
-		txs, err := bi.QueryTransactions(ctx, query.NewQueryBuilder().Equal("hash", txHash).Limit(1).Query())
+		txs, err := bi.QueryIndexedTransactions(ctx, query.NewQueryBuilder().Equal("hash", txHash).Limit(1).Query())
 		require.NoError(t, err)
 		require.Len(t, txs, 1)
+		require.Equal(t, txHash, txs[0].Hash)
 
 		// Get by nonce
 		indexedTX, err = bi.GetIndexedTransactionByNonce(ctx, *indexedTX.From, indexedTX.Nonce)
@@ -418,6 +425,13 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 		}
 		assert.NotNil(t, tx0.From)
 		assert.NotEqual(t, tktypes.EthAddress{}, *tx0.From)
+
+		// Query the events
+		events, err := bi.QueryIndexedEvents(ctx, query.NewQueryBuilder().
+			Equal("blockNumber", blocks[i].Number).Limit(1).Query())
+		require.NoError(t, err)
+		require.Len(t, events, 3)
+		require.Equal(t, blocks[i].Number.Uint64(), uint64(events[0].BlockNumber))
 
 		// Decode events
 		decodedEvents, err := bi.DecodeTransactionEvents(ctx, tktypes.Bytes32(tx0.TransactionHash), testABI)
@@ -1126,10 +1140,16 @@ func TestHydrateBlockNoTransactions(t *testing.T) {
 	require.Empty(t, batch.receipts[0])
 }
 
-func TestQueryTransactionsNoLimit(t *testing.T) {
+func TestQueryNoLimit(t *testing.T) {
 	ctx, bi, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
 
-	_, err := bi.QueryTransactions(ctx, query.NewQueryBuilder().Query())
+	_, err := bi.QueryIndexedBlocks(ctx, query.NewQueryBuilder().Query())
+	assert.Regexp(t, "PD011311", err)
+
+	_, err = bi.QueryIndexedTransactions(ctx, query.NewQueryBuilder().Query())
+	assert.Regexp(t, "PD011311", err)
+
+	_, err = bi.QueryIndexedEvents(ctx, query.NewQueryBuilder().Query())
 	assert.Regexp(t, "PD011311", err)
 }

@@ -54,7 +54,9 @@ type BlockIndexer interface {
 	GetIndexedTransactionByNonce(ctx context.Context, from tktypes.EthAddress, nonce uint64) (*IndexedTransaction, error)
 	GetBlockTransactionsByNumber(ctx context.Context, blockNumber int64) ([]*IndexedTransaction, error)
 	GetTransactionEventsByHash(ctx context.Context, hash tktypes.Bytes32) ([]*IndexedEvent, error)
-	QueryTransactions(ctx context.Context, jq *query.QueryJSON) ([]*IndexedTransaction, error)
+	QueryIndexedBlocks(ctx context.Context, jq *query.QueryJSON) ([]*IndexedBlock, error)
+	QueryIndexedEvents(ctx context.Context, jq *query.QueryJSON) ([]*IndexedEvent, error)
+	QueryIndexedTransactions(ctx context.Context, jq *query.QueryJSON) ([]*IndexedTransaction, error)
 	ListTransactionEvents(ctx context.Context, lastBlock int64, lastIndex, limit int, withTransaction, withBlock bool) ([]*IndexedEvent, error)
 	DecodeTransactionEvents(ctx context.Context, hash tktypes.Bytes32, abi abi.ABI) ([]*EventWithData, error)
 	WaitForTransactionSuccess(ctx context.Context, hash tktypes.Bytes32, errorABI abi.ABI) (*IndexedTransaction, error)
@@ -136,6 +138,7 @@ func newBlockIndexer(ctx context.Context, conf *pldconf.BlockIndexerConfig, pers
 	if err := bi.loadEventStreams(ctx); err != nil {
 		return nil, err
 	}
+	bi.initRPC()
 	return bi, nil
 }
 
@@ -981,7 +984,22 @@ func (bi *blockIndexer) matchLog(ctx context.Context, abi abi.ABI, in *LogJSONRP
 	return false
 }
 
-func (bi *blockIndexer) QueryTransactions(ctx context.Context, jq *query.QueryJSON) ([]*IndexedTransaction, error) {
+func (bi *blockIndexer) QueryIndexedBlocks(ctx context.Context, jq *query.QueryJSON) ([]*IndexedBlock, error) {
+
+	if jq.Limit == nil || *jq.Limit == 0 {
+		return nil, i18n.NewError(ctx, msgs.MsgBlockIndexerLimitRequired)
+	}
+	db := bi.persistence.DB()
+	q := db.Table("indexed_blocks").WithContext(ctx)
+	if jq != nil {
+		q = filters.BuildGORM(ctx, jq, q, IndexedBlockFilters)
+	}
+	var results []*IndexedBlock
+	err := q.Find(&results).Error
+	return results, err
+}
+
+func (bi *blockIndexer) QueryIndexedTransactions(ctx context.Context, jq *query.QueryJSON) ([]*IndexedTransaction, error) {
 
 	if jq.Limit == nil || *jq.Limit == 0 {
 		return nil, i18n.NewError(ctx, msgs.MsgBlockIndexerLimitRequired)
@@ -992,6 +1010,21 @@ func (bi *blockIndexer) QueryTransactions(ctx context.Context, jq *query.QueryJS
 		q = filters.BuildGORM(ctx, jq, q, IndexedTransactionFilters)
 	}
 	var results []*IndexedTransaction
+	err := q.Find(&results).Error
+	return results, err
+}
+
+func (bi *blockIndexer) QueryIndexedEvents(ctx context.Context, jq *query.QueryJSON) ([]*IndexedEvent, error) {
+
+	if jq.Limit == nil || *jq.Limit == 0 {
+		return nil, i18n.NewError(ctx, msgs.MsgBlockIndexerLimitRequired)
+	}
+	db := bi.persistence.DB()
+	q := db.Table("indexed_events").WithContext(ctx)
+	if jq != nil {
+		q = filters.BuildGORM(ctx, jq, q, IndexedEventFilters)
+	}
+	var results []*IndexedEvent
 	err := q.Find(&results).Error
 	return results, err
 }
