@@ -212,6 +212,8 @@ func (krc *keyResolutionContext) ResolveKey(identifier, algorithm, verifierType 
 			return nil, err
 		}
 		if verifier != nil {
+			log.L(krc.ctx).Infof("Resolved key (cached): identifier=%s algorithm=%s verifierType=%s keyHandle=%s verifier=%s",
+				identifier, algorithm, verifierType, mapping.KeyHandle, verifier.Verifier)
 			// We have everything we need - no need to bother the signing module
 			return &components.KeyMappingAndVerifier{
 				KeyMappingWithPath: mapping,
@@ -294,6 +296,7 @@ func (krc *keyResolutionContext) ResolveKey(identifier, algorithm, verifierType 
 	// If we resolved a path, then in post-commit we will add the verifiers
 	if dbPath != nil {
 		dbPath.verifiers = append(dbPath.verifiers, result.Verifier)
+		dbPath.mapping = result.KeyMappingWithPath
 	} else {
 		// otherwise we can it them now
 		krc.km.verifierCache.Set(verifierCacheKey(identifier, algorithm, verifierType), result.Verifier)
