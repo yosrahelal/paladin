@@ -44,10 +44,6 @@ var PaladinDomainCRMap = CRMap[corev1alpha1.PaladinDomain, *corev1alpha1.Paladin
 	AsObject: func(item *corev1alpha1.PaladinDomain) *corev1alpha1.PaladinDomain { return item },
 }
 
-// +kubebuilder:rbac:groups=core.paladin.io,resources=paladindomains,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core.paladin.io,resources=paladindomains/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=core.paladin.io,resources=paladindomains/finalizers,verbs=update
-
 func (r *PaladinDomainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 

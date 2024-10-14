@@ -66,10 +66,6 @@ var PaladinCRMap = CRMap[corev1alpha1.Paladin, *corev1alpha1.Paladin, *corev1alp
 	AsObject: func(item *corev1alpha1.Paladin) *corev1alpha1.Paladin { return item },
 }
 
-//+kubebuilder:rbac:groups=core.paladin.io,resources=paladins,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core.paladin.io,resources=paladins/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=core.paladin.io,resources=paladins/finalizers,verbs=update
-
 // Reconcile implements the logic when a Paladin resource is created, updated, or deleted
 func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
@@ -585,8 +581,8 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 		pldConf.Blockchain.HTTP.URL = fmt.Sprintf("http://%s:8545", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
 		pldConf.Blockchain.WS.URL = fmt.Sprintf("ws://%s:8546", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
 	}
-	b, _ := yaml.Marshal(&pldConf)
-	return string(b), tlsSecrets, nil
+	b, err := yaml.Marshal(&pldConf)
+	return string(b), tlsSecrets, err
 }
 
 func (r *PaladinReconciler) generatePaladinDBConfig(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig, name string) error {
@@ -914,6 +910,11 @@ issuerRef:
 		return fmt.Errorf("failed to execute certSpecTemplate: %s", err)
 	}
 	certUnstructured.Object["spec"] = yamlMap
+
+	if err := controllerutil.SetControllerReference(node, &certUnstructured, r.Scheme); err != nil {
+		return err
+	}
+
 	return r.Create(ctx, &certUnstructured)
 
 }
