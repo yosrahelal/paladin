@@ -25,16 +25,28 @@ var ZetoABI = abi.ABI{
 		Name: "mint",
 		Type: abi.Function,
 		Inputs: abi.ParameterArray{
-			{Name: "to", Type: "string"},
-			{Name: "amount", Type: "uint256"},
+			{
+				Name: "mints",
+				Type: "tuple[]",
+				Components: abi.ParameterArray{
+					{Name: "to", Type: "string"},
+					{Name: "amount", Type: "uint256"},
+				},
+			},
 		},
 	},
 	{
 		Name: "transfer",
 		Type: abi.Function,
 		Inputs: abi.ParameterArray{
-			{Name: "to", Type: "string"},
-			{Name: "amount", Type: "uint256"},
+			{
+				Name: "transfers",
+				Type: "tuple[]",
+				Components: abi.ParameterArray{
+					{Name: "to", Type: "string"},
+					{Name: "amount", Type: "uint256"},
+				},
+			},
 		},
 	},
 	{
@@ -61,11 +73,14 @@ type DeployParams struct {
 }
 
 type MintParams struct {
-	To     string              `json:"to"`
-	Amount *tktypes.HexUint256 `json:"amount"`
+	Mints []*TransferParamEntry `json:"mints"`
 }
 
 type TransferParams struct {
+	Transfers []*TransferParamEntry `json:"transfers"`
+}
+
+type TransferParamEntry struct {
 	To     string              `json:"to"`
 	Amount *tktypes.HexUint256 `json:"amount"`
 }

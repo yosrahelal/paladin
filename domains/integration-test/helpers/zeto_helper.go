@@ -53,7 +53,7 @@ func DeployZeto(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domai
 
 func (n *ZetoHelper) Mint(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
 	fn := types.ZetoABI.Functions()["mint"]
-	return NewDomainTransactionHelper(ctx, n.t, n.rpc, n.Address, fn, toJSON(n.t, &types.MintParams{
+	return NewDomainTransactionHelper(ctx, n.t, n.rpc, n.Address, fn, toJSON(n.t, &types.TransferParamEntry{
 		To:     to,
 		Amount: tktypes.Uint64ToUint256(amount),
 	}))
@@ -61,7 +61,7 @@ func (n *ZetoHelper) Mint(ctx context.Context, to string, amount uint64) *Domain
 
 func (n *ZetoHelper) Transfer(ctx context.Context, to string, amount uint64) *DomainTransactionHelper {
 	fn := types.ZetoABI.Functions()["transfer"]
-	return NewDomainTransactionHelper(ctx, n.t, n.rpc, n.Address, fn, toJSON(n.t, &types.TransferParams{
+	return NewDomainTransactionHelper(ctx, n.t, n.rpc, n.Address, fn, toJSON(n.t, &types.TransferParamEntry{
 		To:     to,
 		Amount: tktypes.Uint64ToUint256(amount),
 	}))

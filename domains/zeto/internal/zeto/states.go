@@ -22,10 +22,11 @@ import (
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
-	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -80,32 +81,38 @@ func (z *Zeto) makeNewState(coin *types.ZetoCoin) (*pb.NewState, error) {
 	}, nil
 }
 
-func (z *Zeto) prepareInputs(ctx context.Context, stateQueryContext, owner string, amount *tktypes.HexUint256) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, error) {
+func (z *Zeto) prepareInputs(ctx context.Context, stateQueryContext, sender string, params []*types.TransferParamEntry) ([]*types.ZetoCoin, []*pb.StateRef, *big.Int, *big.Int, error) {
 	var lastStateTimestamp int64
 	total := big.NewInt(0)
 	stateRefs := []*pb.StateRef{}
 	coins := []*types.ZetoCoin{}
+
+	expectedTotal := big.NewInt(0)
+	for _, param := range params {
+		expectedTotal = expectedTotal.Add(expectedTotal, param.Amount.Int())
+	}
+
 	for {
 		queryBuilder := query.NewQueryBuilder().
 			Limit(10).
 			Sort(".created").
-			Equal("owner", owner)
+			Equal("owner", sender)
 
 		if lastStateTimestamp > 0 {
 			queryBuilder.GreaterThan(".created", lastStateTimestamp)
 		}
 		states, err := z.findAvailableStates(ctx, stateQueryContext, queryBuilder.Query().String())
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to query the state store for available coins. %s", err)
+			return nil, nil, nil, nil, fmt.Errorf("failed to query the state store for available coins. %s", err)
 		}
 		if len(states) == 0 {
-			return nil, nil, nil, fmt.Errorf("insufficient funds (available=%s)", total.Text(10))
+			return nil, nil, nil, nil, fmt.Errorf("insufficient funds (available=%s)", total.Text(10))
 		}
 		for _, state := range states {
 			lastStateTimestamp = state.StoredAt
 			coin, err := z.makeCoin(state.DataJson)
 			if err != nil {
-				return nil, nil, nil, fmt.Errorf("coin %s is invalid: %s", state.Id, err)
+				return nil, nil, nil, nil, fmt.Errorf("coin %s is invalid: %s", state.Id, err)
 			}
 			total = total.Add(total, coin.Amount.Int())
 			stateRefs = append(stateRefs, &pb.StateRef{
@@ -113,30 +120,47 @@ func (z *Zeto) prepareInputs(ctx context.Context, stateQueryContext, owner strin
 				Id:       state.Id,
 			})
 			coins = append(coins, coin)
-			if total.Cmp(amount.Int()) >= 0 {
-				return coins, stateRefs, total, nil
+			if total.Cmp(expectedTotal) >= 0 {
+				remainder := total.Sub(total, expectedTotal)
+				return coins, stateRefs, total, remainder, nil
 			}
 			if len(stateRefs) >= MAX_INPUT_COUNT {
-				return nil, nil, nil, fmt.Errorf("could not find suitable coins")
+				return nil, nil, nil, nil, fmt.Errorf("could not find enough coins to fulfill the transfer amount total")
 			}
 		}
 	}
 }
 
-func (z *Zeto) prepareOutputs(owner string, ownerKey *babyjub.PublicKey, amount *tktypes.HexUint256) ([]*types.ZetoCoin, []*pb.NewState, error) {
-	// Always produce a single coin for the entire output amount
-	// TODO: make this configurable
-	salt := crypto.NewSalt()
-	compressedKeyStr := zetosigner.EncodeBabyJubJubPublicKey(ownerKey)
-	newCoin := &types.ZetoCoin{
-		Salt:     (*tktypes.HexUint256)(salt),
-		Owner:    owner,
-		OwnerKey: tktypes.MustParseHexBytes(compressedKeyStr),
-		Amount:   amount,
-	}
+func (z *Zeto) prepareOutputs(params []*types.TransferParamEntry, resolvedVerifiers []*pb.ResolvedVerifier) ([]*types.ZetoCoin, []*pb.NewState, error) {
+	var coins []*types.ZetoCoin
+	var newStates []*pb.NewState
+	for _, param := range params {
+		resolvedRecipient := domain.FindVerifier(param.To, z.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, resolvedVerifiers)
+		if resolvedRecipient == nil {
+			return nil, nil, fmt.Errorf("failed to resolve: %s", param.To)
+		}
+		recipientKey, err := loadBabyJubKey([]byte(resolvedRecipient.Verifier))
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed load receiver public key. %s", err)
+		}
 
-	newState, err := z.makeNewState(newCoin)
-	return []*types.ZetoCoin{newCoin}, []*pb.NewState{newState}, err
+		salt := crypto.NewSalt()
+		compressedKeyStr := zetosigner.EncodeBabyJubJubPublicKey(recipientKey)
+		newCoin := &types.ZetoCoin{
+			Salt:     (*tktypes.HexUint256)(salt),
+			Owner:    param.To,
+			OwnerKey: tktypes.MustParseHexBytes(compressedKeyStr),
+			Amount:   param.Amount,
+		}
+
+		newState, err := z.makeNewState(newCoin)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create new state. %s", err)
+		}
+		coins = append(coins, newCoin)
+		newStates = append(newStates, newState)
+	}
+	return coins, newStates, nil
 }
 
 func (z *Zeto) findAvailableStates(ctx context.Context, stateQueryContext, query string) ([]*pb.StoredState, error) {

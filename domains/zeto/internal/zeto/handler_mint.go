@@ -21,10 +21,8 @@ import (
 	"fmt"
 
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
@@ -38,46 +36,36 @@ func (h *mintHandler) ValidateParams(ctx context.Context, config *types.DomainIn
 	if err := json.Unmarshal([]byte(params), &mintParams); err != nil {
 		return nil, err
 	}
-	if mintParams.To == "" {
-		return nil, fmt.Errorf("parameter 'to' is required")
+
+	if err := validateTransferParams(mintParams.Mints); err != nil {
+		return nil, err
 	}
-	if mintParams.Amount == nil {
-		return nil, fmt.Errorf("parameter 'amount' is required")
-	}
-	if mintParams.Amount.Int().Sign() != 1 {
-		return nil, fmt.Errorf("parameter 'amount' must be greater than 0")
-	}
-	return &mintParams, nil
+
+	return mintParams.Mints, nil
 }
 
 func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *pb.InitTransactionRequest) (*pb.InitTransactionResponse, error) {
-	params := tx.Params.(*types.MintParams)
+	params := tx.Params.([]*types.TransferParamEntry)
 
-	return &pb.InitTransactionResponse{
-		RequiredVerifiers: []*pb.ResolveVerifierRequest{
-			{
-				Lookup:       params.To,
-				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
-				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
-			},
-		},
-	}, nil
+	res := &pb.InitTransactionResponse{
+		RequiredVerifiers: []*pb.ResolveVerifierRequest{},
+	}
+	for _, param := range params {
+		verifier := &pb.ResolveVerifierRequest{
+			Lookup:       param.To,
+			Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
+			VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+		}
+		res.RequiredVerifiers = append(res.RequiredVerifiers, verifier)
+	}
+
+	return res, nil
 }
 
 func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
-	params := tx.Params.(*types.MintParams)
+	params := tx.Params.([]*types.TransferParamEntry)
 
-	resolvedRecipient := domain.FindVerifier(params.To, h.zeto.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
-	if resolvedRecipient == nil {
-		return nil, fmt.Errorf("failed to resolve: %s", params.To)
-	}
-
-	recipientKey, err := zetosigner.DecodeBabyJubJubPublicKey(resolvedRecipient.Verifier)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode recipient public key. %s", err)
-	}
-
-	_, outputStates, err := h.zeto.prepareOutputs(params.To, recipientKey, params.Amount)
+	_, outputStates, err := h.zeto.prepareOutputs(params, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}

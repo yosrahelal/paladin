@@ -15,7 +15,16 @@
 
 package zeto
 
-import "github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
+import (
+	"context"
+	"fmt"
+
+	"github.com/iden3/go-iden3-crypto/babyjub"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+)
 
 func useNullifiers(circuitId string) bool {
 	return circuitId == constants.CIRCUIT_ANON_NULLIFIER || circuitId == constants.CIRCUIT_ANON_NULLIFIER_BATCH
@@ -29,4 +38,52 @@ func getInputSize(sizeOfEndorsableStates int) int {
 		return 2
 	}
 	return 10
+}
+
+func loadBabyJubKey(payload []byte) (*babyjub.PublicKey, error) {
+	var keyCompressed babyjub.PublicKeyComp
+	if err := keyCompressed.UnmarshalText(payload); err != nil {
+		return nil, err
+	}
+	return keyCompressed.Decompress()
+}
+
+func validateTransferParams(params []*types.TransferParamEntry) error {
+	if len(params) == 0 {
+		return fmt.Errorf("no transfer parameters provided")
+	}
+	for _, param := range params {
+		if param.To == "" {
+			return fmt.Errorf("parameter 'to' is required")
+		}
+		if param.Amount == nil {
+			return fmt.Errorf("parameter 'amount' is required")
+		}
+		if param.Amount.Int().Sign() != 1 {
+			return fmt.Errorf("parameter 'amount' must be greater than 0")
+		}
+	}
+	return nil
+}
+
+func encodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {
+	txID, err := tktypes.ParseHexBytes(ctx, transaction.TransactionId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse transaction id. %s", err)
+	}
+	var data []byte
+	data = append(data, types.ZetoTransactionData_V0...)
+	data = append(data, txID...)
+	return data, nil
+}
+
+func decodeTransactionData(data tktypes.HexBytes) (txID tktypes.HexBytes) {
+	if len(data) < 4 {
+		return nil
+	}
+	dataPrefix := data[0:4]
+	if dataPrefix.String() != types.ZetoTransactionData_V0.String() {
+		return nil
+	}
+	return data[4:]
 }

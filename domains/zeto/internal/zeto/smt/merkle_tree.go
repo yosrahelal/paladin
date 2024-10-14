@@ -19,7 +19,6 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
-	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -37,13 +36,9 @@ func init() {
 	}
 }
 
-func New(callbacks plugintk.DomainCallbacks, name string, stateQueryContext string, rootSchemaId, nodeSchemaId string) (StatesStorage, core.SparseMerkleTree, error) {
-	storage := NewStatesStorage(callbacks, name, stateQueryContext, rootSchemaId, nodeSchemaId)
+func NewSmt(storage StatesStorage) (core.SparseMerkleTree, error) {
 	mt, err := smt.NewMerkleTree(storage, SMT_HEIGHT_UTXO)
-	if err == nil && mt != nil {
-		storage.(*statesStorage).rootNode = mt.Root()
-	}
-	return storage, mt, err
+	return mt, err
 }
 
 func MerkleTreeName(tokenName string, domainInstanceContract *tktypes.EthAddress) string {

@@ -24,7 +24,6 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
-	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
@@ -48,63 +47,63 @@ func (h *transferHandler) ValidateParams(ctx context.Context, config *types.Doma
 	if err := json.Unmarshal([]byte(params), &transferParams); err != nil {
 		return nil, err
 	}
-	if transferParams.To == "" {
-		return nil, fmt.Errorf("parameter 'to' is required")
+
+	if err := validateTransferParams(transferParams.Transfers); err != nil {
+		return nil, err
 	}
-	return &transferParams, nil
+
+	return transferParams.Transfers, nil
 }
 
 func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *pb.InitTransactionRequest) (*pb.InitTransactionResponse, error) {
-	params := tx.Params.(*types.TransferParams)
+	params := tx.Params.([]*types.TransferParamEntry)
 
-	return &pb.InitTransactionResponse{
+	res := &pb.InitTransactionResponse{
 		RequiredVerifiers: []*pb.ResolveVerifierRequest{
 			{
 				Lookup:       tx.Transaction.From,
 				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
 				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
-			{
-				Lookup:       params.To,
-				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
-				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
-			},
 		},
-	}, nil
+	}
+	for _, param := range params {
+		res.RequiredVerifiers = append(res.RequiredVerifiers, &pb.ResolveVerifierRequest{
+			Lookup:       param.To,
+			Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
+			VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+		})
+	}
+
+	return res, nil
 }
 
 func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
-	params := tx.Params.(*types.TransferParams)
+	params := tx.Params.([]*types.TransferParamEntry)
 
 	resolvedSender := domain.FindVerifier(tx.Transaction.From, h.zeto.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
 	if resolvedSender == nil {
 		return nil, fmt.Errorf("failed to resolve: %s", tx.Transaction.From)
 	}
-	resolvedRecipient := domain.FindVerifier(params.To, h.zeto.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
-	if resolvedRecipient == nil {
-		return nil, fmt.Errorf("failed to resolve: %s", params.To)
-	}
 
-	senderKey, err := h.loadBabyJubKey([]byte(resolvedSender.Verifier))
-	if err != nil {
-		return nil, fmt.Errorf("failed to load sender public key. %s", err)
-	}
-	recipientKey, err := h.loadBabyJubKey([]byte(resolvedRecipient.Verifier))
-	if err != nil {
-		return nil, fmt.Errorf("failed load receiver public key. %s", err)
-	}
-
-	inputCoins, inputStates, total, err := h.zeto.prepareInputs(ctx, req.StateQueryContext, tx.Transaction.From, params.Amount)
+	inputCoins, inputStates, _, remainder, err := h.zeto.prepareInputs(ctx, req.StateQueryContext, tx.Transaction.From, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare inputs. %s", err)
 	}
-	outputCoins, outputStates, err := h.zeto.prepareOutputs(params.To, recipientKey, params.Amount)
+	outputCoins, outputStates, err := h.zeto.prepareOutputs(params, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare outputs. %s", err)
 	}
-	if total.Cmp(params.Amount.Int()) == 1 {
-		remainder := big.NewInt(0).Sub(total, params.Amount.Int())
-		returnedCoins, returnedStates, err := h.zeto.prepareOutputs(tx.Transaction.From, senderKey, (*tktypes.HexUint256)(remainder))
+	if remainder.Sign() > 0 {
+		// add the remainder as an output to the sender themselves
+		remainderHex := tktypes.HexUint256(*remainder)
+		remainderParams := []*types.TransferParamEntry{
+			{
+				To:     tx.Transaction.From,
+				Amount: &remainderHex,
+			},
+		}
+		returnedCoins, returnedStates, err := h.zeto.prepareOutputs(remainderParams, req.ResolvedVerifiers)
 		if err != nil {
 			return nil, fmt.Errorf("failed to prepare outputs for change coins. %s", err)
 		}
@@ -240,14 +239,6 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 	}, nil
 }
 
-func (h *transferHandler) loadBabyJubKey(payload []byte) (*babyjub.PublicKey, error) {
-	var keyCompressed babyjub.PublicKeyComp
-	if err := keyCompressed.UnmarshalText(payload); err != nil {
-		return nil, err
-	}
-	return keyCompressed.Decompress()
-}
-
 func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.ZetoCoin, circuitId, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress) ([]byte, error) {
 	inputSize := getInputSize(len(inputCoins))
 	inputCommitments := make([]string, inputSize)
@@ -333,7 +324,8 @@ func (h *transferHandler) encodeProof(proof *corepb.SnarkProof) map[string]inter
 
 func (h *transferHandler) generateMerkleProofs(tokenName string, stateQueryContext string, contractAddress *tktypes.EthAddress, inputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.ProvingRequestExtras_Nullifiers, error) {
 	smtName := smt.MerkleTreeName(tokenName, contractAddress)
-	_, mt, err := smt.New(h.zeto.Callbacks, smtName, stateQueryContext, h.zeto.merkleTreeRootSchema.Id, h.zeto.merkleTreeNodeSchema.Id)
+	storage := smt.NewStatesStorage(h.zeto.Callbacks, smtName, stateQueryContext, h.zeto.merkleTreeRootSchema.Id, h.zeto.merkleTreeNodeSchema.Id)
+	mt, err := smt.NewSmt(storage)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create new smt object. %s", err)
 	}
