@@ -1,0 +1,86 @@
+/*
+ * Copyright © 2024 Kaleido, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+package keymanager
+
+import (
+	"context"
+	"testing"
+
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
+	"github.com/sirupsen/logrus"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+type mockComponents struct {
+	c  *componentmocks.AllComponents
+	db sqlmock.Sqlmock
+}
+
+func newTestKeyManager(t *testing.T, realDB bool, conf *pldconf.KeyManagerConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *keyManager, *mockComponents, func()) {
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	oldLevel := logrus.GetLevel()
+	logrus.SetLevel(logrus.TraceLevel)
+
+	mc := &mockComponents{c: componentmocks.NewAllComponents(t)}
+	componentMocks := mc.c
+
+	var p persistence.Persistence
+	var pDone func()
+	var err error
+	if realDB {
+		p, pDone, err = persistence.NewUnitTestPersistence(ctx)
+		require.NoError(t, err)
+	} else {
+		mp, err := mockpersistence.NewSQLMockProvider()
+		require.NoError(t, err)
+		p = mp.P
+		mc.db = mp.Mock
+		pDone = func() {
+			require.NoError(t, mp.Mock.ExpectationsWereMet())
+		}
+	}
+	componentMocks.On("Persistence").Return(p)
+
+	km := NewKeyManager(ctx, conf)
+
+	ir, err := km.PreInit(mc.c)
+	require.NoError(t, err)
+	assert.NotNil(t, ir)
+
+	err = km.PostInit(mc.c)
+	require.NoError(t, err)
+
+	err = km.Start()
+	require.NoError(t, err)
+
+	return ctx, km.(*keyManager), mc, func() {
+		logrus.SetLevel(oldLevel)
+		cancelCtx()
+		km.Stop()
+		pDone()
+	}
+}
+
+func TestStartStop(t *testing.T) {
+	_, _, _, done := newTestKeyManager(t, false, &pldconf.KeyManagerConfig{})
+	defer done()
+}
