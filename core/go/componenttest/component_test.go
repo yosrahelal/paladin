@@ -573,20 +573,45 @@ func TestResolveIdentityFromRemoteNode(t *testing.T) {
 	t.Logf("Alice address: %s", aliceAddress)
 
 	instance2 := newInstanceForComponentTesting(t, domainRegistryAddress, bobNodeConfig, []*nodeConfiguration{aliceNodeConfig})
-
-	bobIdentity := "wallets.org2.bob@" + instance2.id.String()
+	client2 := instance2.client
+	bobUnqualifiedIdentity := "wallets.org2.bob"
+	bobIdentity := bobUnqualifiedIdentity + "@" + instance2.id.String()
 	bobAddress := instance2.resolveEthereumAddress(bobIdentity)
 	t.Logf("Bob address: %s", bobAddress)
 
-	// send JSON RPC message to node 1 to deploy a private contract
-	var verifier string
-	err := client1.CallRPC(ctx, &verifier, "ptx_resolveVerifier",
+	// send JSON RPC message to node 1 to resolve a verifier on node 2
+	var verifierResult1 string
+	var verifierResult2 string
+	var verifierResult3 string
+	err := client1.CallRPC(ctx, &verifierResult1, "ptx_resolveVerifier",
 		bobIdentity,
 		algorithms.ECDSA_SECP256K1,
 		verifiers.ETH_ADDRESS,
 	)
 	require.NoError(t, err)
-	require.NotNil(t, verifier)
+	require.NotNil(t, verifierResult1)
+
+	// resolve the same verifier on node 2 directly
+	err = client2.CallRPC(ctx, &verifierResult2, "ptx_resolveVerifier",
+		bobIdentity,
+		algorithms.ECDSA_SECP256K1,
+		verifiers.ETH_ADDRESS,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, verifierResult2)
+
+	// resolve the same verifier on node 2 directly using the unqualified identity
+	err = client2.CallRPC(ctx, &verifierResult3, "ptx_resolveVerifier",
+		bobUnqualifiedIdentity,
+		algorithms.ECDSA_SECP256K1,
+		verifiers.ETH_ADDRESS,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, verifierResult3)
+
+	// all 3 results should be the same
+	assert.Equal(t, verifierResult1, verifierResult2)
+	assert.Equal(t, verifierResult1, verifierResult3)
 
 }
 

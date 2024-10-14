@@ -99,12 +99,16 @@ func (ir *identityResolver) ResolveVerifierAsync(ctx context.Context, lookup str
 	atIndex := strings.Index(lookup, "@")
 
 	if atIndex == -1 || lookup[atIndex+1:] == ir.nodeID {
-		// this is an asyncronous call because the key manager may need to call out to a remote signer in order to
-		// resovle the key (e.g. if this is the first time this key has been referenced)
-		// its a one and done go routine so no need for additional concurency controls
+		// this is an asynchronous call because the key manager may need to call out to a remote signer in order to
+		// resolve the key (e.g. if this is the first time this key has been referenced)
+		// its a one and done go routine so no need for additional concurrency controls
 		// we just need to be careful not to update the transaction object on this other thread
 		go func() {
-			_, verifier, err := ir.keyManager.ResolveKey(ctx, lookup, algorithm, verifierType)
+			unqualifiedLookup, err := tktypes.PrivateIdentityLocator(lookup).Identity(ctx)
+			var verifier string
+			if err == nil {
+				_, verifier, err = ir.keyManager.ResolveKey(ctx, unqualifiedLookup, algorithm, verifierType)
+			}
 			if err != nil {
 				log.L(ctx).Errorf("Failed to resolve local signer for %s (algorithm=%s, verifierType=%s): %s", lookup, algorithm, verifierType, err)
 				failed(ctx, err)
@@ -231,7 +235,11 @@ func (ir *identityResolver) handleResolveVerifierRequest(ctx context.Context, me
 
 	// contractAddress and transactionID in the request message are simply used to populate the response
 	// so that the requesting node can correlate the response with the transaction that needs it
-	_, verifier, err := ir.keyManager.ResolveKey(ctx, resolveVerifierRequest.Lookup, resolveVerifierRequest.Algorithm, resolveVerifierRequest.VerifierType)
+	unqualifiedLookup, err := tktypes.PrivateIdentityLocator(resolveVerifierRequest.Lookup).Identity(ctx)
+	var verifier string
+	if err == nil {
+		_, verifier, err = ir.keyManager.ResolveKey(ctx, unqualifiedLookup, resolveVerifierRequest.Algorithm, resolveVerifierRequest.VerifierType)
+	}
 	if err == nil {
 		resolveVerifierResponse := &pbIdentityResolver.ResolveVerifierResponse{
 			Lookup:       resolveVerifierRequest.Lookup,
