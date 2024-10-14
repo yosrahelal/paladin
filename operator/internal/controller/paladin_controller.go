@@ -812,6 +812,12 @@ func (r *PaladinReconciler) generatePaladinTransports(ctx context.Context, node 
 			continue // skip it - but continue trying others
 		}
 
+		if transport.TLS.SecretName == "" {
+			// No TLS config - we can skip this one
+			// TODO: Is this acceptable?
+			continue
+		}
+
 		// See if the secret is available
 		var secret corev1.Secret
 		err := r.Get(ctx, types.NamespacedName{Name: transport.TLS.SecretName, Namespace: node.Namespace}, &secret)
@@ -978,7 +984,7 @@ func (r *PaladinReconciler) createService(ctx context.Context, node *corev1alpha
 	if err := r.Get(ctx, types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}, &foundSvc); err != nil && errors.IsNotFound(err) {
 		err = r.Create(ctx, svc)
 		if err != nil {
-			return svc, err
+			return svc, fmt.Errorf("failed to create service: %s", err)
 		}
 		setCondition(&node.Status.Conditions, corev1alpha1.ConditionSVC, metav1.ConditionTrue, corev1alpha1.ReasonSVCCreated, fmt.Sprintf("Name: %s", name))
 	} else if err != nil {

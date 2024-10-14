@@ -51,14 +51,20 @@ var _ = Describe("PaladinRegistration Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: corev1alpha1.PaladinRegistrationSpec{
+						Registry:          "evm-registry",
+						RegistryAdminNode: "node1",
+						RegistryAdminKey:  "deployKey",
+						Node:              "node1",
+						NodeKey:           "registryAdmin",
+						Transports:        []string{"grpc"},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &corev1alpha1.PaladinRegistration{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())

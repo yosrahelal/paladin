@@ -51,7 +51,11 @@ var _ = Describe("PaladinDomain Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: corev1alpha1.PaladinDomainSpec{
+						Plugin: corev1alpha1.PluginConfig{
+							Type: "c-shared",
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
