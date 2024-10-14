@@ -62,6 +62,8 @@ db:
     autoMigrate:   true
     migrationsDir: ../db/migrations/sqlite
     debugQueries:  false
+blockIndexer:
+  fromBlock: latest
 blockchain:
   http:
     url: http://localhost:8545
@@ -246,7 +248,7 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 		"Transaction did not receive a receipt",
 	)
 
-	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(2).Query(), true)
 	require.NoError(t, err)
 	assert.Len(t, txns, 2)
 

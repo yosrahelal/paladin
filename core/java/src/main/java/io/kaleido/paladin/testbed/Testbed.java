@@ -141,6 +141,8 @@ public class Testbed implements Closeable {
                     shutdownTimeout: 0s
                 grpc:
                     shutdownTimeout: 0s
+                blockIndexer:
+                  fromBlock: latest
                 blockchain:
                    http:
                      url: http://localhost:8545
