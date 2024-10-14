@@ -4,6 +4,7 @@ ARG NODE_VERSION=20.17.0
 ARG PROTO_VERSION=28.2
 ARG GO_VERSION=1.22.7
 ARG GO_MIGRATE_VERSION=4.18.1
+ARG GRADLE_VERSION=8.5
 ARG WASMER_VERSION=4.3.7
 
 # Additional JVM selection options
@@ -21,6 +22,7 @@ ARG JVM_HEAP
 ARG NODE_VERSION
 ARG PROTO_VERSION
 ARG GO_VERSION
+ARG GRADLE_VERSION
 ARG WASMER_VERSION
 
 # Set environment variables
@@ -64,6 +66,12 @@ RUN GO_ARCH=$( if [ "$TARGETARCH" = "arm64" ]; then echo -n "arm64"; else echo -
     curl -sLo - https://go.dev/dl/go${GO_VERSION}.${TARGETOS}-${GO_ARCH}.tar.gz | \
     tar -C /usr/local -xzf -
 
+# Install Gradle
+RUN curl -sLo gradle-${GRADLE_VERSION}-bin.zip https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip && \
+    unzip gradle-${GRADLE_VERSION}-bin.zip -d /usr/local && \
+    rm gradle-${GRADLE_VERSION}-bin.zip && \
+    ln -s /usr/local/gradle-* /usr/local/gradle
+
 # Install Wasmer (which includes libwasmer.so)
 RUN WASMER_ARCH=$( if [ "$TARGETARCH" = "arm64" ]; then echo -n "aarch64"; else echo -n "amd64"; fi  ) && \
     mkdir -p /usr/local/wasmer && \
@@ -84,10 +92,9 @@ ENV PATH=$PATH:/usr/local/wasmer/bin
 WORKDIR /app
 
 # Initialize gradle and build tasks
-COPY gradle gradle
-COPY gradlew build.gradle settings.gradle ./
+COPY build.gradle settings.gradle ./
 COPY buildSrc buildSrc
-RUN ./gradlew --no-daemon --parallel :buildSrc:jar
+RUN gradle --no-daemon --parallel :buildSrc:jar
 
 # Copy in a set of thing before the first gradle command that are less likely to change
 COPY solidity solidity
@@ -107,7 +114,7 @@ ENV CC=gcc
 # - Installing gradle with the wrapper
 # - Compiling the groovy buildSrc
 # - Installing a bunch of base Go pre-reqs
-RUN ./gradlew --no-daemon --parallel :toolkit:go:assemble :solidity:compile
+RUN gradle --no-daemon --parallel :toolkit:go:assemble :solidity:compile
 
 # Stage 2... Full build - currently core/zeto/noto/core are all cop-req'd together
 # (If we untangle this we can get more parallelism and less re-build in our docker build)
@@ -125,7 +132,7 @@ COPY registries/evm registries/evm
 COPY transports/grpc transports/grpc
 COPY testinfra testinfra
 COPY operator operator
-RUN ./gradlew --no-daemon --parallel assemble
+RUN gradle --no-daemon --parallel assemble
 
 # Stage 3: Pull together runtime
 FROM ubuntu:24.04 AS runtime
