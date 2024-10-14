@@ -246,12 +246,12 @@ generate-reference-docs: crd-ref-docs ## Generate API reference documentation.
 
 .PHONY: create-node
 create-node: # TODO: more complete startup check
-	kubectl apply -n default -k config/samples; \
-	kubectl wait paladins.core.paladin.io/node1 --for jsonpath='{.status.phase}=Completed' --namespace default --timeout 5m
+	kubectl apply -n ${NAMESPACE} -k config/samples; \
+	kubectl wait paladins.core.paladin.io/node1 --for jsonpath='{.status.phase}=Completed' --namespace ${NAMESPACE} --timeout 5m
 
 .PHONY: delete-node
 delete-node:
-	kubectl delete -n default -k config/samples
+	kubectl delete -n ${NAMESPACE} -k config/samples || true
 
 ##@ Cleanup
 DELETE_CLUSTER ?= false
