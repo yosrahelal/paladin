@@ -18,11 +18,54 @@ package components
 import (
 	"context"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
+	"gorm.io/gorm"
 )
+
+type KeyMapping struct {
+	Identifier string `json:"identifier"` // the full identifier used to look up this key (including "." separators)
+	Wallet     string `json:"wallet"`     // the name of the wallet containing this key
+	KeyHandle  string `json:"keyHandle"`  // the handle within the wallet containing the key
+}
+
+type KeyMappingWithPath struct {
+	*KeyMapping `json:",inline"`
+	Path        []*KeyPathSegment `json:"path"` // the full path including the leaf that is the identifier
+}
+
+type KeyMappingAndVerifier struct {
+	*KeyMappingWithPath `json:",inline"`
+	Verifier            *KeyVerifier `json:"verifier"`
+}
+
+type KeyVerifierWithKeyRef struct {
+	*KeyVerifier `json:",inline"`
+	Algorithm    string `json:"algorithm"`
+}
+
+type KeyVerifier struct {
+	Verifier  string `json:"verifier"`
+	Type      string `json:"type"`
+	Algorithm string `json:"algorithm"`
+}
+
+type KeyPathSegment struct {
+	Name  string `json:"name"`
+	Index int64  `json:"index"`
+}
+
+type KeyResolutionContext interface {
+	ResolveKey(identifier, algorithm, verifierType string) (mapping *KeyMappingAndVerifier, err error)
+	PostCommit() // must be called in a post-commit callback if the DB TX commits
+	Close()      // must be called in a defer (for panic handling) for any opened key resolution context
+}
 
 type KeyManager interface {
 	ManagerLifecycle
-	ResolveKey(ctx context.Context, identifier, algorithm, verifierType string) (keyHandle, verifier string, err error)
-	Sign(ctx context.Context, req *signerapi.SignRequest) (*signerapi.SignResponse, error)
+
+	// Note resolving a key is a persistent activity that requires a database transaction to be managed by the caller.
+	// To avoid deadlock when resolving multiple keys in the same DB transaction, the caller is responsible for using the same
+	// resolution context for all calls that occur within the same DB tx.
+	NewKeyResolutionContext(ctx context.Context, dbTX *gorm.DB) KeyResolutionContext
+
+	Sign(ctx context.Context, mapping *KeyMappingAndVerifier, algorithm, payloadType string, payload []byte) ([]byte, error)
 }

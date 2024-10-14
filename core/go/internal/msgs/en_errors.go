@@ -130,6 +130,14 @@ var (
 	MsgTransactionSerializeError       = ffe("PD010402", "Failed to serialise transaction response.")
 	MsgTransactionInvalidTransactionID = ffe("PD010403", "The provided ID %s cannot be parsed into a valid UUID due to %s")
 
+	// Key manager PD0105XX
+	MsgKeyManagerInvalidIdentifier       = ffe("PD010500", "Invalid key identifier: '%s'")
+	MsgKeyManagerNoWalletMatch           = ffe("PD010501", "No configured wallet has a keySelector that matches '%s'")
+	MsgKeyManagerOptimisticRetry         = ffe("PD010502", "Retry after allocation race for identifier '%s'")
+	MsgKeyManagerWalletNotConfigured     = ffe("PD010503", "No wallet called '%s' is configured on this node")
+	MsgKeyManagerKeyHandleNonDeterminism = ffe("PD010504", "Signing module for wallet '%s' returned key handle '%s' from key resolution of verifier %s, mismatching key handle '%s' returned previously the same key")
+	MsgKeyManagerInvalidResolveResponse  = ffe("PD010505", "Signing module for wallet '%s' returned invalid response")
+
 	// Comms bus PD0106XX
 	MsgDestinationNotFound     = ffe("PD010600", "Destination not found: %s")
 	MsgHandlerError            = ffe("PD010601", "Error from message handler")

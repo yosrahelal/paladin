@@ -17,28 +17,41 @@ package keymanager
 
 import (
 	"context"
+	"sync"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 )
 
 type keyManager struct {
 	bgCtx context.Context
 
-	conf      *pldconf.KeyManagerConfig
-	rpcModule *rpcserver.RPCModule
+	conf            *pldconf.KeyManagerConfig
+	rpcModule       *rpcserver.RPCModule
+	identifierCache cache.Cache[string, *components.KeyMappingWithPath]
+	verifierCache   cache.Cache[string, *components.KeyVerifier]
+	wallets         []*wallet
+
+	allocLock        sync.Mutex
+	allocPathsLocked map[string]*keyResolutionContext
 
 	p persistence.Persistence
 }
 
 func NewKeyManager(bgCtx context.Context, conf *pldconf.KeyManagerConfig) components.KeyManager {
 	return &keyManager{
-		bgCtx: bgCtx,
-		conf:  conf,
+		bgCtx:            bgCtx,
+		conf:             conf,
+		identifierCache:  cache.NewCache[string, *components.KeyMappingWithPath](&conf.IdentifierCache, &pldconf.KeyManagerDefaults.IdentifierCache),
+		verifierCache:    cache.NewCache[string, *components.KeyVerifier](&conf.VerifierCache, &pldconf.KeyManagerDefaults.VerifierCache),
+		allocPathsLocked: make(map[string]*keyResolutionContext),
 	}
 }
 
@@ -60,10 +73,48 @@ func (tm *keyManager) Start() error {
 func (tm *keyManager) Stop() {
 }
 
-func (km *keyManager) ResolveKey(ctx context.Context, identifier string, algorithm string, verifierType string) (keyHandle string, verifier string, err error) {
+func (km *keyManager) Sign(ctx context.Context, mapping *components.KeyMappingAndVerifier, algorithm, payloadType string, payload []byte) ([]byte, error) {
 	panic("unimplemented")
 }
 
-func (km *keyManager) Sign(ctx context.Context, req *signerapi.SignRequest) (*signerapi.SignResponse, error) {
-	panic("unimplemented")
+func (km *keyManager) lockPathOrGetOwner(krc *keyResolutionContext, path string) *keyResolutionContext {
+	km.allocLock.Lock()
+	defer km.allocLock.Unlock()
+	existingLock := km.allocPathsLocked[path]
+	if existingLock != nil {
+		return existingLock
+	}
+	km.allocPathsLocked[path] = krc
+	return nil
+}
+
+func (km *keyManager) lockPath(krc *keyResolutionContext, path string) error {
+	ctx := krc.ctx
+	for {
+		lockingKRC := km.lockPathOrGetOwner(krc, path)
+		if lockingKRC != nil {
+			log.L(ctx).Debugf("key resolution context %s locked path %s", krc.id, path)
+			return nil
+		}
+		// There is contention on this path - wait until the lock is released, and try to get it again
+		log.L(ctx).Debugf("key resolution context %s locking on %s for path %s", krc.id, lockingKRC.id, path)
+		select {
+		case <-lockingKRC.done:
+			log.L(ctx).Debugf("key resolution context %s unlocked by %s for path %s", krc.id, lockingKRC.id, path)
+		case <-ctx.Done():
+			log.L(ctx).Debugf("key resolution context %s cancelled while waiting unlocked by %s for path %s", krc.id, lockingKRC.id, path)
+			return i18n.NewError(ctx, msgs.MsgContextCanceled)
+		}
+	}
+}
+
+func (km *keyManager) unlockPaths(krc *keyResolutionContext, paths map[string]bool) {
+	km.allocLock.Lock()
+	defer km.allocLock.Unlock()
+
+	// We will have locks on all the parent paths
+	for path := range paths {
+		log.L(krc.ctx).Debugf("key resolution context %s unlocked path %s", krc.id, path)
+		delete(km.allocPathsLocked, path)
+	}
 }

@@ -18,11 +18,27 @@ package pldconf
 import "github.com/kaleido-io/paladin/config/pkg/confutil"
 
 type KeyManagerConfig struct {
-	Cache CacheConfig `json:"cache"`
+	IdentifierCache CacheConfig     `json:"identifierCache"`
+	VerifierCache   CacheConfig     `json:"verifierCache"`
+	Wallets         []*WalletConfig `json:"wallets"` // ordered list
+}
+
+type WalletConfig struct {
+	KeySelector string        `json:"keySelector"`
+	SignerType  string        `json:"signerType"`
+	Signer      *SignerConfig `json:"signer"` // embedded only
+}
+
+var WalletDefaults = &WalletConfig{
+	KeySelector: `.*`,       // catch-all
+	SignerType:  "embedded", // uses the embedded signing module running in the Paladin process
 }
 
 var KeyManagerDefaults = &KeyManagerConfig{
-	Cache: CacheConfig{
+	IdentifierCache: CacheConfig{
+		Capacity: confutil.P(1000),
+	},
+	VerifierCache: CacheConfig{
 		Capacity: confutil.P(1000),
 	},
 }
