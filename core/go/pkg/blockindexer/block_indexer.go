@@ -212,6 +212,7 @@ func (bi *blockIndexer) startup(runCtx context.Context) {
 			close(bi.processorDone)
 			return
 		}
+		log.L(bi.parentCtxForReset).Infof("Block indexer queried 'latest' starting block from chain nextBlock=%d", highestBlock)
 		bi.stateLock.Lock()
 		bi.nextBlock = (*ethtypes.HexUint64)(&highestBlock)
 		bi.stateLock.Unlock()
@@ -264,12 +265,12 @@ func (bi *blockIndexer) GetBlockListenerHeight(ctx context.Context) (confirmed u
 
 func (bi *blockIndexer) setFromBlock(ctx context.Context, conf *pldconf.BlockIndexerConfig) error {
 	var vUntyped interface{}
-	if conf.FromBlock == nil {
-		vUntyped = "latest"
-	} else {
-		if err := json.Unmarshal(conf.FromBlock, &vUntyped); err != nil {
-			return i18n.WrapError(ctx, err, msgs.MsgBlockIndexerInvalidFromBlock, conf.FromBlock)
-		}
+	fromBlock := conf.FromBlock
+	if fromBlock == nil {
+		fromBlock = pldconf.BlockIndexerDefaults.FromBlock
+	}
+	if err := json.Unmarshal(fromBlock, &vUntyped); err != nil {
+		return i18n.WrapError(ctx, err, msgs.MsgBlockIndexerInvalidFromBlock, conf.FromBlock)
 	}
 	switch vTyped := vUntyped.(type) {
 	case string:
@@ -286,9 +287,6 @@ func (bi *blockIndexer) setFromBlock(ctx context.Context, conf *pldconf.BlockInd
 	case float64:
 		uint64Val := uint64(vTyped)
 		bi.fromBlock = (*ethtypes.HexUint64)(&uint64Val)
-		return nil
-	case nil:
-		bi.fromBlock = nil // same as "latest"
 		return nil
 	default:
 		return i18n.NewError(ctx, msgs.MsgBlockIndexerInvalidFromBlock, conf.FromBlock)
@@ -313,6 +311,7 @@ func (bi *blockIndexer) restoreCheckpoint() error {
 	}
 	switch {
 	case len(blocks) > 0:
+		log.L(bi.parentCtxForReset).Infof("Block indexer restarting from checkpoint fromBlock=%s", bi.fromBlock)
 		nextBlock := ethtypes.HexUint64(blocks[0].Number + 1)
 		bi.nextBlock = &nextBlock
 		bi.highestConfirmedBlock.Store(blocks[0].Number)

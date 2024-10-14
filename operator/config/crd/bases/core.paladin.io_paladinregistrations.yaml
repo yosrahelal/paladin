@@ -11,10 +11,16 @@ spec:
     kind: PaladinRegistration
     listKind: PaladinRegistrationList
     plural: paladinregistrations
+    shortNames:
+    - reg
     singular: paladinregistration
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.publishCount
+      name: Published
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: PaladinRegistration is the Schema for the paladinregistrations
@@ -74,6 +80,8 @@ spec:
           status:
             description: PaladinRegistrationStatus defines the observed state of PaladinRegistration
             properties:
+              publishCount:
+                type: integer
               publishTxs:
                 additionalProperties:
                   properties:
@@ -103,6 +111,7 @@ spec:
                     type: string
                 type: object
             required:
+            - publishCount
             - publishTxs
             - registrationTx
             type: object

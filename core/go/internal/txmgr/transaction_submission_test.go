@@ -108,13 +108,19 @@ func mockInsertABIAndTransactionOK(conf *pldconf.TxManagerConfig, mc *mockCompon
 	mc.db.ExpectCommit()
 }
 
-func mockPublicSubmitTxOk(t *testing.T) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+func mockPublicSubmitWithDataTxOk(t *testing.T) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mockSubmissionBatch := componentmocks.NewPublicTxBatch(t)
 		mockSubmissionBatch.On("Rejected").Return([]components.PublicTxRejected{})
 		mockSubmissionBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
 		mockSubmissionBatch.On("Completed", mock.Anything, true).Return(nil)
-		mc.publicTxMgr.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockSubmissionBatch, nil)
+		mc.publicTxMgr.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockSubmissionBatch, nil).
+			Run(func(args mock.Arguments) {
+				publicTxs := args[1].([]*components.PublicTxSubmission)
+				for _, tx := range publicTxs {
+					require.NotEmpty(t, tx.Data)
+				}
+			})
 	}
 }
 
@@ -149,7 +155,7 @@ func mockGetPublicTransactionForHash(cb func(hash tktypes.Bytes32) (*ptxapi.Publ
 }
 
 func TestResolveFunctionHexInputOK(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitTxOk(t))
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitWithDataTxOk(t))
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
@@ -205,7 +211,7 @@ func TestResolveFunctionUnsupportedInput(t *testing.T) {
 }
 
 func TestResolveFunctionPlainNameOK(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitTxOk(t))
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitWithDataTxOk(t))
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
@@ -292,7 +298,7 @@ func TestSendTransactionPrivateInvokeFail(t *testing.T) {
 }
 
 func TestResolveFunctionOnlyOneToMatch(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitTxOk(t))
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitWithDataTxOk(t))
 	defer done()
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
@@ -551,7 +557,7 @@ func TestInsertTransactionPublicTxPrepareReject(t *testing.T) {
 }
 
 func TestInsertTransactionOkDefaultConstructor(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitTxOk(t))
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABIAndTransactionOK, mockPublicSubmitWithDataTxOk(t))
 	defer done()
 
 	// Default public constructor invoke
@@ -576,4 +582,18 @@ func TestCheckIdempotencyKeyNoOverrideErrIfFail(t *testing.T) {
 		IdempotencyKey: "idem1",
 	}}})
 	assert.Regexp(t, "pop", err)
+}
+
+func TestGetPublicTxDataErrors(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false)
+	defer done()
+
+	_, err := txm.getPublicTxData(ctx, &abi.Entry{Type: abi.Event}, nil, nil)
+	assert.Regexp(t, "PD011929", err)
+
+	_, err = txm.getPublicTxData(ctx, &abi.Entry{Type: abi.Constructor, Inputs: abi.ParameterArray{
+		{Type: "wrong"},
+	}}, nil, nil)
+	assert.Regexp(t, "FF22041", err)
+
 }

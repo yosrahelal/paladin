@@ -38,12 +38,15 @@ type PaladinRegistrationSpec struct {
 
 // PaladinRegistrationStatus defines the observed state of PaladinRegistration
 type PaladinRegistrationStatus struct {
+	PublishCount   int                              `json:"publishCount"`
 	RegistrationTx TransactionSubmission            `json:"registrationTx"`
 	PublishTxs     map[string]TransactionSubmission `json:"publishTxs"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+//+kubebuilder:resource:shortName="reg"
+//+kubebuilder:printcolumn:name="Published",type="string",JSONPath=`.status.publishCount`
 
 // PaladinRegistration is the Schema for the paladinregistrations API
 type PaladinRegistration struct {

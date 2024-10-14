@@ -52,6 +52,32 @@ func TestBadConfigJSON(t *testing.T) {
 
 }
 
+func TestMissingContractAddress(t *testing.T) {
+
+	callbacks := &testCallbacks{}
+	transport := NewEVMRegistry(callbacks).(*evmRegistry)
+	_, err := transport.ConfigureRegistry(transport.bgCtx, &prototk.ConfigureRegistryRequest{
+		Name:       "grpc",
+		ConfigJson: `{}`,
+	})
+	require.Regexp(t, "PD060003", err)
+
+}
+
+func TestZeroContractAddress(t *testing.T) {
+
+	callbacks := &testCallbacks{}
+	transport := NewEVMRegistry(callbacks).(*evmRegistry)
+	_, err := transport.ConfigureRegistry(transport.bgCtx, &prototk.ConfigureRegistryRequest{
+		Name: "grpc",
+		ConfigJson: `{
+		  "contractAddress": "0x0000000000000000000000000000000000000000"
+		}`,
+	})
+	require.Regexp(t, "PD060003", err)
+
+}
+
 func TestGoodConfigJSON(t *testing.T) {
 
 	addr := tktypes.RandAddress()

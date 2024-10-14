@@ -784,7 +784,7 @@ func (r *PaladinReconciler) generatePaladinRegistries(ctx context.Context, node 
 			continue // skip it - but continue trying others
 		}
 		if reg.Spec.Type == corev1alpha1.RegistryTypeEVM {
-			registryConf["configAddress"] = reg.Status.ContractAddress
+			registryConf["contractAddress"] = reg.Status.ContractAddress
 		}
 
 		// A domain is either wholely defined in the static config of the node,

@@ -12,7 +12,7 @@ spec:
     listKind: PaladinRegistryList
     plural: paladinregistries
     shortNames:
-    - reg
+    - registry
     singular: paladinregistry
   scope: Namespaced
   versions:

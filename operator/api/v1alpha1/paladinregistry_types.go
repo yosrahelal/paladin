@@ -103,7 +103,7 @@ type PaladinRegistryStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-//+kubebuilder:resource:shortName="reg"
+//+kubebuilder:resource:shortName="registry"
 //+kubebuilder:printcolumn:name="Type",type="string",JSONPath=`.spec.type`
 //+kubebuilder:printcolumn:name="Status",type="string",JSONPath=`.status.status`
 //+kubebuilder:printcolumn:name="Contract",type="string",JSONPath=`.status.contractAddress`

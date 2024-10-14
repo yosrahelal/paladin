@@ -168,14 +168,14 @@ func (tm *txManager) parseInputs(
 	txType tktypes.Enum[ptxapi.TransactionType],
 	data tktypes.RawJSON,
 	bytecode tktypes.HexBytes,
-) (jsonData tktypes.RawJSON, err error) {
+) (cv *abi.ComponentValue, jsonData tktypes.RawJSON, err error) {
 
 	if (e.Type != abi.Constructor || txType.V() != ptxapi.TransactionTypePublic) && len(bytecode) != 0 {
-		return nil, i18n.NewError(ctx, msgs.MsgTxMgrBytecodeNonPublicConstructor, txType.V(), e.String())
+		return nil, nil, i18n.NewError(ctx, msgs.MsgTxMgrBytecodeNonPublicConstructor, txType.V(), e.String())
 	} else if e.Type == abi.Constructor && len(bytecode) == 0 && txType == ptxapi.TransactionTypePublic.Enum() {
 		// We don't support supplying bytecode for public transactions precompiled ahead of the constructor
 		// inputs, you must split the contract code out into bytecode
-		return nil, i18n.NewError(ctx, msgs.MsgTxMgrBytecodeAndHexData, e.String())
+		return nil, nil, i18n.NewError(ctx, msgs.MsgTxMgrBytecodeAndHexData, e.String())
 	}
 
 	// TODO: Resolve domain for private TX
@@ -185,10 +185,9 @@ func (tm *txManager) parseInputs(
 		d := json.NewDecoder(bytes.NewReader(data.Bytes()))
 		d.UseNumber()
 		if err := d.Decode(&iDecoded); err != nil {
-			return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidInputData, e.String())
+			return nil, nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidInputData, e.String())
 		}
 	}
-	var cv *abi.ComponentValue
 	switch decoded := iDecoded.(type) {
 	case nil:
 		cv, err = tm.parseDataBytes(ctx, e, []byte{})
@@ -202,12 +201,13 @@ func (tm *txManager) parseInputs(
 	case map[string]interface{}, []interface{}:
 		cv, err = e.Inputs.ParseExternalDataCtx(ctx, decoded)
 	default:
-		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidInputDataType, iDecoded)
+		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidInputDataType, iDecoded)
 	}
 	if err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidInputData, e.String())
+		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidInputData, e.String())
 	}
-	return tktypes.StandardABISerializer().SerializeJSONCtx(ctx, cv)
+	jsonData, err = tktypes.StandardABISerializer().SerializeJSONCtx(ctx, cv)
+	return
 }
 
 func (tm *txManager) sendTransaction(ctx context.Context, tx *ptxapi.TransactionInput) (*uuid.UUID, error) {
@@ -228,18 +228,21 @@ func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.Transac
 	txis := make([]*txInsertInfo, len(txs))
 	txIDs = make([]uuid.UUID, len(txs))
 	for i, tx := range txs {
-		txis[i], err = tm.resolveNewTransaction(ctx, tx)
+		txi, err := tm.resolveNewTransaction(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
+		txis[i] = txi
 		txIDs[i] = *tx.ID
 		if tx.Type.V() == ptxapi.TransactionTypePublic {
 			publicTxs = append(publicTxs, &components.PublicTxSubmission{
 				// Public transaction bound 1:1 with our parent transaction
 				Bindings: []*components.PaladinTXReference{{TransactionID: *tx.ID, TransactionType: ptxapi.TransactionTypePublic.Enum()}},
 				PublicTxInput: ptxapi.PublicTxInput{
-					From: tx.From,
-					To:   tx.To,
+					From:            tx.From,
+					To:              tx.To,
+					Data:            txi.publicTxData,
+					PublicTxOptions: tx.PublicTxOptions,
 				},
 			})
 		}
@@ -301,6 +304,7 @@ func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.Transac
 						Function: txi.fn.definition,
 						Inputs:   txi.inputs,
 					},
+					PublicTxOptions: tx.PublicTxOptions,
 				})
 			}
 			if err != nil {
@@ -337,9 +341,10 @@ func (tm *txManager) checkIdempotencyKeys(ctx context.Context, origErr error, in
 }
 
 type txInsertInfo struct {
-	tx     *ptxapi.TransactionInput
-	fn     *resolvedFunction
-	inputs tktypes.RawJSON
+	tx           *ptxapi.TransactionInput
+	fn           *resolvedFunction
+	publicTxData []byte
+	inputs       tktypes.RawJSON
 }
 
 func (tm *txManager) resolveNewTransaction(ctx context.Context, tx *ptxapi.TransactionInput) (*txInsertInfo, error) {
@@ -362,16 +367,46 @@ func (tm *txManager) resolveNewTransaction(ctx context.Context, tx *ptxapi.Trans
 		return nil, err
 	}
 
-	normalizedJSON, err := tm.parseInputs(ctx, fn.definition, tx.Type, tx.Data, tx.Bytecode)
+	var publicTxData []byte
+	cv, normalizedJSON, err := tm.parseInputs(ctx, fn.definition, tx.Type, tx.Data, tx.Bytecode)
+	if err == nil && tx.Type.V() == ptxapi.TransactionTypePublic {
+		publicTxData, err = tm.getPublicTxData(ctx, fn.definition, tx.Bytecode, cv)
+	}
 	if err != nil {
 		return nil, err
 	}
 
 	return &txInsertInfo{
-		tx:     tx,
-		fn:     fn,
-		inputs: normalizedJSON,
+		tx:           tx,
+		fn:           fn,
+		publicTxData: publicTxData,
+		inputs:       normalizedJSON,
 	}, nil
+}
+
+func (tm *txManager) getPublicTxData(ctx context.Context, fnDef *abi.Entry, bytecode []byte, cv *abi.ComponentValue) ([]byte, error) {
+	switch fnDef.Type {
+	case abi.Function:
+		return fnDef.EncodeCallDataCtx(ctx, cv)
+	case abi.Constructor:
+		// Encode the parameters after the bytecode
+		var paramBytes []byte
+		buff := bytes.NewBuffer(make([]byte, 0, len(bytecode)))
+		_, err := buff.Write(bytecode)
+		if err == nil {
+			paramBytes, err = cv.EncodeABIDataCtx(ctx)
+		}
+		if err == nil {
+			_, err = buff.Write(paramBytes)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return buff.Bytes(), nil
+	default:
+		// This is unexpected - earlier processing should have prevented this
+		return nil, i18n.NewError(ctx, msgs.MsgInvalidTransactionType)
+	}
 }
 
 func (tm *txManager) insertTransactions(ctx context.Context, dbTX *gorm.DB, txis []*txInsertInfo) error {

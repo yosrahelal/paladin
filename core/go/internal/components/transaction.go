@@ -89,6 +89,8 @@ type PrivateTransaction struct {
 	PreparedPublicTransaction  *EthTransaction
 	PreparedPrivateTransaction *ptxapi.TransactionInput
 	PreparedTransactionIntent  prototk.TransactionSpecification_Intent
+
+	PublicTxOptions ptxapi.PublicTxOptions
 }
 
 // PrivateContractDeploy is a simpler transaction type that constructs new private smart contract instances

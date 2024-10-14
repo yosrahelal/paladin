@@ -428,7 +428,7 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 
 		// Query the events
 		events, err := bi.QueryIndexedEvents(ctx, query.NewQueryBuilder().
-			Equal("blockNumber", blocks[i].Number).Limit(1).Query())
+			Equal("blockNumber", blocks[i].Number).Limit(3).Query())
 		require.NoError(t, err)
 		require.Len(t, events, 3)
 		require.Equal(t, blocks[i].Number.Uint64(), uint64(events[0].BlockNumber))
@@ -843,16 +843,15 @@ func TestBlockIndexerStartFromBlock(t *testing.T) {
 	assert.Nil(t, bi.fromBlock)
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows([]string{}))
-	bi, err = newBlockIndexer(ctx, &pldconf.BlockIndexerConfig{
+	_, err = newBlockIndexer(ctx, &pldconf.BlockIndexerConfig{
 		FromBlock: json.RawMessage(`null`),
 	}, p.P, bl)
-	require.NoError(t, err)
-	assert.Nil(t, bi.fromBlock)
+	require.Regexp(t, "PD011300", err)
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows([]string{}))
 	bi, err = newBlockIndexer(ctx, &pldconf.BlockIndexerConfig{}, p.P, bl)
 	require.NoError(t, err)
-	assert.Nil(t, bi.fromBlock)
+	assert.Equal(t, uint64(0), bi.fromBlock.Uint64())
 
 	p.Mock.ExpectQuery("SELECT.*event_streams").WillReturnRows(sqlmock.NewRows([]string{}))
 	bi, err = newBlockIndexer(ctx, &pldconf.BlockIndexerConfig{

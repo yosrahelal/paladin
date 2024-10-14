@@ -83,15 +83,18 @@ ENV PATH=$PATH:/usr/local/wasmer/bin
 # Set the working directory
 WORKDIR /app
 
-# Copy in a set of thing before the first gradle command that are less likely to change
+# Initialize gradle and build tasks
 COPY gradle gradle
-COPY gradlew build.gradle ./
-COPY settings.gradle go.work.sum ./
+COPY gradlew build.gradle settings.gradle ./
 COPY buildSrc buildSrc
+RUN ./gradlew --no-daemon --parallel :buildSrc:jar
+
+# Copy in a set of thing before the first gradle command that are less likely to change
 COPY solidity solidity
 COPY config config
 COPY toolkit/proto toolkit/proto
 COPY toolkit toolkit
+COPY go.work.sum ./
 
 # We have to use a special minimal go.work for this
 COPY go.work.base go.work

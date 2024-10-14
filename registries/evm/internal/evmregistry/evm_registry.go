@@ -66,6 +66,10 @@ func (r *evmRegistry) ConfigureRegistry(ctx context.Context, req *prototk.Config
 		return nil, i18n.WrapError(ctx, err, msgs.MsgInvalidRegistryConfig)
 	}
 
+	if r.conf.ContractAddress == nil || r.conf.ContractAddress.IsZero() {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgMissingContractAddress)
+	}
+
 	// Currently the configuration is static other than the contract address.
 	//
 	// The default behavior registry is as follows (code extension and future config enhancements will allow customization of this)
