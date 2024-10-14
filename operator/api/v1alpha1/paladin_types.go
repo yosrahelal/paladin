@@ -142,6 +142,7 @@ type StatusReason string
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Phase",type="string",JSONPath=`.status.phase`
 
 // Paladin is the Schema for the paladin API
 type Paladin struct {

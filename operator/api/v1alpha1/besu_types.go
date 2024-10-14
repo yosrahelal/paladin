@@ -44,6 +44,7 @@ type BesuSpec struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Phase",type="string",JSONPath=`.status.phase`
 
 // Besu is the Schema for the besus API
 type Besu struct {
