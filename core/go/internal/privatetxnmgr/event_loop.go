@@ -438,12 +438,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 	completed = true
 	for signingAddress, sequence := range dispatchableTransactions {
 		for _, privateTransactionID := range sequence {
-			err := oc.publisher.PublishTransactionDispatchedEvent(ctx, privateTransactionID, uint64(0) /*TODO*/, signingAddress)
-
-			if err != nil {
-				//TODO think about how best to handle this error
-				log.L(ctx).Errorf("Error publishing event: %s", err)
-			}
+			oc.publisher.PublishTransactionDispatchedEvent(ctx, privateTransactionID, uint64(0) /*TODO*/, signingAddress)
 		}
 	}
 	//now that the DB write has been persisted, we can trigger the in-memory state distribution

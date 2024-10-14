@@ -416,8 +416,8 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 	keyHandle, verifier, err := ts.components.KeyManager().ResolveKey(ctx, partyName, attRequest.Algorithm, attRequest.VerifierType)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to resolve local signer for %s (algorithm=%s): %s", partyName, attRequest.Algorithm, err)
-
-		//TODO return nil, err
+		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerResolveError), partyName, attRequest.Algorithm, err.Error())
+		return
 	}
 	// TODO this could be calling out to a remote signer, should we be doing these in parallel?
 	signaturePayload, err := ts.components.KeyManager().Sign(ctx, &signerproto.SignRequest{
@@ -433,7 +433,7 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 	}
 	log.L(ctx).Debugf("payload: %x signed %x by %s (%s)", attRequest.Payload, signaturePayload.Payload, partyName, verifier)
 
-	if err = ts.publisher.PublishTransactionSignedEvent(ctx,
+	ts.publisher.PublishTransactionSignedEvent(ctx,
 		ts.transaction.ID.String(),
 		&prototk.AttestationResult{
 			Name:            attRequest.Name,
@@ -447,10 +447,7 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 			Payload:     signaturePayload.Payload,
 			PayloadType: &attRequest.PayloadType,
 		},
-	); err != nil {
-		log.L(ctx).Errorf("failed to public event for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, attRequest.Algorithm, err)
-		//TODO return error
-	}
+	)
 }
 
 func (ts *PaladinTxProcessor) requestSignatures(ctx context.Context) {
@@ -517,15 +514,11 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 			//TODO specific error message
 			//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError)
 		}
-		if err = ts.publisher.PublishTransactionEndorsedEvent(ctx,
+		ts.publisher.PublishTransactionEndorsedEvent(ctx,
 			ts.transaction.ID.String(),
 			endorsement,
 			revertReason,
-		); err != nil {
-			log.L(ctx).Errorf("Failed to publish endorsement event for party %s: %s", party, err)
-			return
-			//TODO specific error message
-		}
+		)
 
 	} else {
 		// This is a remote party, so we need to send an endorsement request to the remote node
@@ -607,9 +600,8 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 			Payload:     endorsementRequestBytes,
 		})
 		if err != nil {
-			//TODO need better error handling here.  Should we retry? Should we fail the transaction? Should we try sending the other requests?
 			log.L(ctx).Errorf("Failed to send endorsement request to party %s: %s", party, err)
-			//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError)
+			ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerEndorsementRequestError), party, err.Error())
 		}
 	}
 }
@@ -640,11 +632,11 @@ func (ts *PaladinTxProcessor) requestEndorsements(ctx context.Context) {
 		case prototk.AttestationType_GENERATE_PROOF:
 			errorMessage := "AttestationType_GENERATE_PROOF is not implemented yet"
 			log.L(ctx).Error(errorMessage)
-			//TODO return nil, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
+			ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
 		default:
 			errorMessage := fmt.Sprintf("Unsupported attestation type: %s", attRequest.AttestationType)
 			log.L(ctx).Error(errorMessage)
-			//TODO return nil, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
+			ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
 		}
 
 	}

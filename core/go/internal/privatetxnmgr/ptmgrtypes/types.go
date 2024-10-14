@@ -100,11 +100,10 @@ type Sequencer interface {
 
 type Publisher interface {
 	//Service for sending messages and events within the local node
-	//TODO TBD - should these functions return errors?  If so, how should the caller deal with them?
-	PublishTransactionBlockedEvent(ctx context.Context, transactionId string) error
-	PublishTransactionDispatchedEvent(ctx context.Context, transactionId string, nonce uint64, signingAddress string) error
-	PublishTransactionSignedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult) error
-	PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult, revertReason *string) error
+	PublishTransactionBlockedEvent(ctx context.Context, transactionId string)
+	PublishTransactionDispatchedEvent(ctx context.Context, transactionId string, nonce uint64, signingAddress string)
+	PublishTransactionSignedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult)
+	PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult, revertReason *string)
 	PublishResolveVerifierResponseEvent(ctx context.Context, transactionId string, lookup, algorithm, verifier, verifierType string)
 	PublishResolveVerifierErrorEvent(ctx context.Context, transactionId string, lookup, algorithm, errorMessage string)
 	PublishTransactionFinalizedEvent(ctx context.Context, transactionId string)

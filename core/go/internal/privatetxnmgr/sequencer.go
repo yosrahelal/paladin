@@ -164,17 +164,12 @@ func (s *sequencer) delegate(ctx context.Context, transactionId string, delegate
 	return nil
 }
 
-func (s *sequencer) blockTransaction(ctx context.Context, transactionId string, blockedBy []blockingTransaction) error {
+func (s *sequencer) blockTransaction(ctx context.Context, transactionId string, blockedBy []blockingTransaction) {
 	s.blockedTransactions = append(s.blockedTransactions, &blockedTransaction{
 		transactionID: transactionId,
 		blockedBy:     blockedBy,
 	})
-	err := s.publisher.PublishTransactionBlockedEvent(ctx, transactionId)
-	if err != nil {
-		log.L(ctx).Errorf("Error publishing transaction blocked event: %s", err)
-		return err
-	}
-	return nil
+	s.publisher.PublishTransactionBlockedEvent(ctx, transactionId)
 }
 
 func (s *sequencer) delegateIfAppropriate(ctx context.Context, transaction *transaction) (bool, error) {
@@ -205,12 +200,7 @@ func (s *sequencer) delegateIfAppropriate(ctx context.Context, transaction *tran
 		// we have a dependency on transactions from multiple nodes
 		// we can't delegate this transaction to multiple nodes, so we need to wait for the dependencies to be resolved
 		log.L(ctx).Debugf("Transaction %s is blocked by transactions from multiple nodes %v", transaction.id, keys)
-		err := s.blockTransaction(ctx, transaction.id, blockedBy)
-
-		if err != nil {
-			log.L(ctx).Errorf("Error blocking transaction: %s", err)
-			return false, err
-		}
+		s.blockTransaction(ctx, transaction.id, blockedBy)
 		return true, nil
 	}
 	if len(keys) == 1 && keys[0] != s.nodeID {
