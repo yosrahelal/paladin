@@ -26,7 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -246,5 +246,12 @@ func TestMismatchedChainID(t *testing.T) {
 	require.NoError(t, err)
 	err = ecf.Start()
 	assert.Regexp(t, "PD011512", err)
+
+}
+
+func TestSharedWSBeforeStart(t *testing.T) {
+	assert.PanicsWithValue(t, "call to SharedWS() before Start", func() {
+		_ = (&ethClientFactory{}).SharedWS()
+	})
 
 }

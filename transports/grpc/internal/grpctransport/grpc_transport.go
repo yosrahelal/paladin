@@ -19,9 +19,11 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net"
 	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -48,11 +50,13 @@ type grpcTransport struct {
 	bgCtx     context.Context
 	callbacks plugintk.TransportCallbacks
 
-	name         string
-	listener     net.Listener
-	grpcServer   *grpc.Server
-	serverDone   chan struct{}
-	peerVerifier *tlsVerifier
+	name             string
+	listener         net.Listener
+	grpcServer       *grpc.Server
+	serverDone       chan struct{}
+	peerVerifier     *tlsVerifier
+	externalHostname string
+	localCertificate *tls.Certificate
 
 	conf                Config
 	connLock            sync.Cond
@@ -69,10 +73,10 @@ type outboundConn struct {
 }
 
 func NewPlugin(ctx context.Context) plugintk.PluginBase {
-	return plugintk.NewTransport(grpcTransportFactory)
+	return plugintk.NewTransport(NewGRPCTransport)
 }
 
-func grpcTransportFactory(callbacks plugintk.TransportCallbacks) plugintk.TransportAPI {
+func NewGRPCTransport(callbacks plugintk.TransportCallbacks) plugintk.TransportAPI {
 	return &grpcTransport{
 		bgCtx:               context.Background(),
 		callbacks:           callbacks,
@@ -93,11 +97,13 @@ func (t *grpcTransport) ConfigureTransport(ctx context.Context, req *prototk.Con
 		return nil, i18n.WrapError(ctx, err, msgs.MsgInvalidTransportConfig)
 	}
 
-	listenAddr := confutil.StringOrEmpty(t.conf.Address, "")
-	if t.conf.Port == nil || listenAddr == "" {
+	listenAddrNoPort := confutil.StringOrEmpty(t.conf.Address, "")
+	if t.conf.Port == nil || listenAddrNoPort == "" {
 		return nil, i18n.NewError(ctx, msgs.MsgListenerPortAndAddressRequired)
 	}
-	listenAddr = fmt.Sprintf("%s:%d", listenAddr, *t.conf.Port)
+	listenAddr := fmt.Sprintf("%s:%d", listenAddrNoPort, *t.conf.Port)
+
+	t.externalHostname = confutil.StringNotEmpty(t.conf.ExternalHostname, listenAddrNoPort)
 
 	var subjectMatchRegex *regexp.Regexp
 	certSubjectMatcher := confutil.StringOrEmpty(t.conf.CertSubjectMatcher, "")
@@ -110,10 +116,12 @@ func (t *grpcTransport) ConfigureTransport(ctx context.Context, req *prototk.Con
 	// We only support mutual-TLS in this transport (with direct trust of certificates via registry, or use of a CA)
 	t.conf.TLS.Enabled = true
 	t.conf.TLS.ClientAuth = true // Note if this is unset the ClientCAs will not be configured
-	baseTLSConfig, err := tlsconf.BuildTLSConfig(ctx, &t.conf.TLS, tlsconf.ServerType)
+	tlsDetail, err := tlsconf.BuildTLSConfigExt(ctx, &t.conf.TLS, tlsconf.ServerType)
 	if err != nil {
 		return nil, err
 	}
+	baseTLSConfig := tlsDetail.TLSConfig
+	t.localCertificate = tlsDetail.Certificate
 
 	directCertVerification := confutil.Bool(t.conf.DirectCertVerification, *ConfigDefaults.DirectCertVerification)
 	baseTLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
@@ -331,4 +339,27 @@ func (t *grpcTransport) SendMessage(ctx context.Context, req *prototk.SendMessag
 		return nil, err
 	}
 	return &prototk.SendMessageResponse{}, nil
+}
+
+func (t *grpcTransport) GetLocalDetails(ctx context.Context, req *prototk.GetLocalDetailsRequest) (*prototk.GetLocalDetailsResponse, error) {
+
+	certList := t.localCertificate.Certificate
+	issuersText := new(strings.Builder)
+	for _, cert := range certList {
+		_ = pem.Encode(issuersText, &pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: cert,
+		})
+	}
+
+	localDetails := &PublishedTransportDetails{
+		Endpoint: fmt.Sprintf("dns:///%s:%d", t.externalHostname, *t.conf.Port),
+		Issuers:  issuersText.String(),
+	}
+	jsonDetails, _ := json.Marshal(&localDetails)
+
+	return &prototk.GetLocalDetailsResponse{
+		TransportDetails: string(jsonDetails),
+	}, nil
+
 }

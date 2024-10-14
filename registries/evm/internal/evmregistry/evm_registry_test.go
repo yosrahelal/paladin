@@ -43,7 +43,7 @@ func TestPluginLifecycle(t *testing.T) {
 func TestBadConfigJSON(t *testing.T) {
 
 	callbacks := &testCallbacks{}
-	transport := evmRegistryFactory(callbacks).(*evmRegistry)
+	transport := NewEVMRegistry(callbacks).(*evmRegistry)
 	_, err := transport.ConfigureRegistry(transport.bgCtx, &prototk.ConfigureRegistryRequest{
 		Name:       "grpc",
 		ConfigJson: `{!!!!`,
@@ -52,12 +52,38 @@ func TestBadConfigJSON(t *testing.T) {
 
 }
 
+func TestMissingContractAddress(t *testing.T) {
+
+	callbacks := &testCallbacks{}
+	transport := NewEVMRegistry(callbacks).(*evmRegistry)
+	_, err := transport.ConfigureRegistry(transport.bgCtx, &prototk.ConfigureRegistryRequest{
+		Name:       "grpc",
+		ConfigJson: `{}`,
+	})
+	require.Regexp(t, "PD060003", err)
+
+}
+
+func TestZeroContractAddress(t *testing.T) {
+
+	callbacks := &testCallbacks{}
+	transport := NewEVMRegistry(callbacks).(*evmRegistry)
+	_, err := transport.ConfigureRegistry(transport.bgCtx, &prototk.ConfigureRegistryRequest{
+		Name: "grpc",
+		ConfigJson: `{
+		  "contractAddress": "0x0000000000000000000000000000000000000000"
+		}`,
+	})
+	require.Regexp(t, "PD060003", err)
+
+}
+
 func TestGoodConfigJSON(t *testing.T) {
 
 	addr := tktypes.RandAddress()
 
 	callbacks := &testCallbacks{}
-	transport := evmRegistryFactory(callbacks).(*evmRegistry)
+	transport := NewEVMRegistry(callbacks).(*evmRegistry)
 	res, err := transport.ConfigureRegistry(transport.bgCtx, &prototk.ConfigureRegistryRequest{
 		Name: "grpc",
 		ConfigJson: fmt.Sprintf(`{
@@ -138,7 +164,7 @@ func TestHandleEventBatchOk(t *testing.T) {
 		},
 	}
 
-	transport := evmRegistryFactory(callbacks).(*evmRegistry)
+	transport := NewEVMRegistry(callbacks).(*evmRegistry)
 	_, err := transport.HandleRegistryEvents(transport.bgCtx, &prototk.HandleRegistryEventsRequest{
 		BatchId: uuid.New().String(),
 		Events: []*prototk.OnChainEvent{
@@ -165,7 +191,7 @@ func TestHandleEventBadIdentityRegistered(t *testing.T) {
 	txHash := tktypes.Bytes32(tktypes.RandBytes(32)).String()
 	callbacks := &testCallbacks{}
 
-	transport := evmRegistryFactory(callbacks).(*evmRegistry)
+	transport := NewEVMRegistry(callbacks).(*evmRegistry)
 	_, err := transport.HandleRegistryEvents(transport.bgCtx, &prototk.HandleRegistryEventsRequest{
 		BatchId: uuid.New().String(),
 		Events: []*prototk.OnChainEvent{
@@ -186,7 +212,7 @@ func TestHandleEventBadSetProperty(t *testing.T) {
 	txHash := tktypes.Bytes32(tktypes.RandBytes(32)).String()
 	callbacks := &testCallbacks{}
 
-	transport := evmRegistryFactory(callbacks).(*evmRegistry)
+	transport := NewEVMRegistry(callbacks).(*evmRegistry)
 	_, err := transport.HandleRegistryEvents(transport.bgCtx, &prototk.HandleRegistryEventsRequest{
 		BatchId: uuid.New().String(),
 		Events: []*prototk.OnChainEvent{
@@ -206,7 +232,7 @@ func TestHandleEventBadSig(t *testing.T) {
 
 	callbacks := &testCallbacks{}
 
-	transport := evmRegistryFactory(callbacks).(*evmRegistry)
+	transport := NewEVMRegistry(callbacks).(*evmRegistry)
 	_, err := transport.HandleRegistryEvents(transport.bgCtx, &prototk.HandleRegistryEventsRequest{
 		BatchId: uuid.New().String(),
 		Events: []*prototk.OnChainEvent{
@@ -223,7 +249,7 @@ func TestHandleEventUnknownSig(t *testing.T) {
 	txHash := tktypes.Bytes32(tktypes.RandBytes(32)).String()
 	callbacks := &testCallbacks{}
 
-	transport := evmRegistryFactory(callbacks).(*evmRegistry)
+	transport := NewEVMRegistry(callbacks).(*evmRegistry)
 	res, err := transport.HandleRegistryEvents(transport.bgCtx, &prototk.HandleRegistryEventsRequest{
 		BatchId: uuid.New().String(),
 		Events: []*prototk.OnChainEvent{
@@ -253,7 +279,7 @@ func TestHandleEventBadEntryName(t *testing.T) {
 		Owner:              *tktypes.RandAddress(),
 	}
 
-	transport := evmRegistryFactory(callbacks).(*evmRegistry)
+	transport := NewEVMRegistry(callbacks).(*evmRegistry)
 	res, err := transport.HandleRegistryEvents(transport.bgCtx, &prototk.HandleRegistryEventsRequest{
 		BatchId: uuid.New().String(),
 		Events: []*prototk.OnChainEvent{
@@ -283,7 +309,7 @@ func TestHandleEventBatchPropBadName(t *testing.T) {
 
 	callbacks := &testCallbacks{}
 
-	transport := evmRegistryFactory(callbacks).(*evmRegistry)
+	transport := NewEVMRegistry(callbacks).(*evmRegistry)
 	res, err := transport.HandleRegistryEvents(transport.bgCtx, &prototk.HandleRegistryEventsRequest{
 		BatchId: uuid.New().String(),
 		Events: []*prototk.OnChainEvent{

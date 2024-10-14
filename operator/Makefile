@@ -19,6 +19,8 @@ OPERATOR_SDK_VERSION ?= v1.37.0
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.29.0
 
+CERT_MANAGER_VERSION = v1.16.1
+
 # Tool Binaries and Versions
 KUBECTL ?= kubectl
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
@@ -107,15 +109,17 @@ test-e2e: ## Run e2e tests with Kind.
 kind-start:	## Create a Kind cluster.
 	if ! $(KIND_CLUSTER) get clusters | grep -q "^${CLUSTER_NAME}$$"; then \
 		$(KIND_CLUSTER) create cluster --name "${CLUSTER_NAME}" --config paladin-kind.yaml; \
-	fi
-	$(KUBECTL) version
+	fi; \
+	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml > /dev/null; \
+	kubectl wait deployment.apps/cert-manager-webhook --for condition=Available --namespace cert-manager --timeout 5m
 
+# $(CONTAINER_TOOL) images -q postgres:latest || $(CONTAINER_TOOL) pull postgres:latest
+# $(CONTAINER_TOOL) images -q hyperledger/besu:latest || $(CONTAINER_TOOL) pull hyperledger/besu:latest
 .PHONY: kind-promote
 kind-promote: kind-start ## Load Docker images into Kind cluster.
+	echo "Loading images into Kind cluster..."
 	$(KIND_CLUSTER) load docker-image ${OPERATOR_IMG} --name "${CLUSTER_NAME}"
 	$(KIND_CLUSTER) load docker-image ${PALADIN_IMG} --name "${CLUSTER_NAME}"
-	$(KIND_CLUSTER) load docker-image postgres:latest --name "${CLUSTER_NAME}"
-	$(KIND_CLUSTER) load docker-image hyperledger/besu:latest --name "${CLUSTER_NAME}"
 
 .PHONY: kind-delete
 kind-delete:	## Delete the Kind cluster.
@@ -231,9 +235,6 @@ $(CRD_REF_DOCS): $(LOCALBIN)
 	test -s $(LOCALBIN)/crd-ref-docs || GOBIN=$(LOCALBIN) go install github.com/elastic/crd-ref-docs@latest
 
 ##@ Dev Helpers
-.PHONY: update-crds
-update-crds: manifests generate ## Update CRDs in the cluster.
-	$(KUBECTL) apply -k config/crd
 
 .PHONY: generate-reference-docs
 generate-reference-docs: crd-ref-docs ## Generate API reference documentation.
@@ -243,37 +244,14 @@ generate-reference-docs: crd-ref-docs ## Generate API reference documentation.
 
 ##@ Paladin Operator Instances
 
-.PHONY: create-node-besu
-create-node-besu: ## Create a Besu Node instance.
-	$(KUBECTL) apply -f config/samples/core_v1alpha1_besu.yaml -n ${NAMESPACE}
-
-.PHONY: create-genesis
-create-genesis: ## Create a Besu Genesis instance.
-	$(KUBECTL) apply -f config/samples/core_v1alpha1_besugenesis.yaml -n ${NAMESPACE}
-
-.PHONY: create-node-paladin
-create-node-paladin: ## Create a Paladin Node instance.
-	$(KUBECTL) apply -f config/samples/core_v1alpha1_paladin.yaml -n ${NAMESPACE}
-
 .PHONY: create-node
-create-node: create-node-besu create-genesis create-node-paladin ## Create all instances.
-	@echo "All instances have been created."
+create-node: # TODO: more complete startup check
+	kubectl apply -n ${NAMESPACE} -k config/samples; \
+	kubectl wait paladins.core.paladin.io/node1 --for jsonpath='{.status.phase}=Completed' --namespace ${NAMESPACE} --timeout 5m
 
 .PHONY: delete-node
-delete-node-paladin: ## Delete the Paladin Node instance.
-	$(KUBECTL) delete -f config/samples/core_v1alpha1_paladin.yaml -n ${NAMESPACE} || true
-
-.PHONY: delete-genesis
-delete-genesis: ## Delete the Besu Genesis instance.
-	$(KUBECTL) delete -f config/samples/core_v1alpha1_besugenesis.yaml -n ${NAMESPACE} || true
-
-.PHONY: delete-node-besu
-delete-node-besu: ## Delete the Besu Node instance.
-	$(KUBECTL) delete -f config/samples/core_v1alpha1_besu.yaml -n ${NAMESPACE} || true
-
-.PHONY: delete-node
-delete-node: delete-node-paladin delete-genesis delete-node-besu  ## Delete all instances.
-	@echo "All instances have been deleted."
+delete-node:
+	kubectl delete -n ${NAMESPACE} -k config/samples || true
 
 ##@ Cleanup
 DELETE_CLUSTER ?= false

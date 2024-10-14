@@ -38,13 +38,12 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 )
 
 type ComponentManager interface {
 	components.AllComponents
 	Init() error
-	StartComponents() error
 	StartManagers() error
 	CompleteStart() error
 	Stop()
@@ -249,16 +248,9 @@ func (cm *componentManager) Init() (err error) {
 	return err
 }
 
-func (cm *componentManager) StartComponents() (err error) {
-
-	// start the eth client
-	err = cm.ethClientFactory.Start()
-	err = cm.addIfStarted("eth_client", cm.ethClientFactory, err, msgs.MsgComponentEthClientStartError)
-
+func (cm *componentManager) startBlockIndexer() (err error) {
 	// start the block indexer
-	if err == nil {
-		cm.internalEventStreams, err = cm.buildInternalEventStreams()
-	}
+	cm.internalEventStreams, err = cm.buildInternalEventStreams()
 	if err == nil {
 		err = cm.blockIndexer.Start(cm.internalEventStreams...)
 		err = cm.addIfStarted("block_indexer", cm.blockIndexer, err, msgs.MsgComponentBlockIndexerStartError)
@@ -275,9 +267,15 @@ func (cm *componentManager) StartComponents() (err error) {
 
 func (cm *componentManager) StartManagers() (err error) {
 
+	// start the eth client before any managers - this connects the WebSocket, and gathers the ChainID
+	err = cm.ethClientFactory.Start()
+	err = cm.addIfStarted("eth_client", cm.ethClientFactory, err, msgs.MsgComponentEthClientStartError)
+
 	// start the managers
-	err = cm.stateManager.Start()
-	err = cm.addIfStarted("state_manager", cm.stateManager, err, msgs.MsgComponentStateManagerStartError)
+	if err == nil {
+		err = cm.stateManager.Start()
+		err = cm.addIfStarted("state_manager", cm.stateManager, err, msgs.MsgComponentStateManagerStartError)
+	}
 
 	if err == nil {
 		err = cm.domainManager.Start()
@@ -328,6 +326,11 @@ func (cm *componentManager) CompleteStart() error {
 	// Wait for the plugins to all start
 	err := cm.pluginManager.WaitForInit(cm.bgCtx)
 	err = cm.wrapIfErr(err, msgs.MsgComponentWaitPluginStartError)
+
+	// then start the block indexer
+	if err == nil {
+		err = cm.startBlockIndexer()
+	}
 
 	// start the RPC server last
 	if err == nil {
@@ -393,6 +396,9 @@ func (cm *componentManager) registerRPCModules() {
 			cm.rpcServer.Register(rpcMod)
 		}
 	}
+	// We handle block indexer separately (doesn't fit the internal ManagerLifecycle model
+	// as it's currently a standalone re-usable component)
+	cm.rpcServer.Register(cm.BlockIndexer().RPCModule())
 }
 
 func (cm *componentManager) Stop() {
