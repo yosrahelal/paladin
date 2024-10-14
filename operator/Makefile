@@ -244,37 +244,14 @@ generate-reference-docs: crd-ref-docs ## Generate API reference documentation.
 
 ##@ Paladin Operator Instances
 
-.PHONY: create-node-besu
-create-node-besu: ## Create a Besu Node instance.
-	$(KUBECTL) apply -f test/e2e/e2e_single_node_besu.yaml -n ${NAMESPACE}
-
-.PHONY: create-genesis
-create-genesis: ## Create a Besu Genesis instance.
-	$(KUBECTL) apply -f test/e2e/e2e_single_node_besugenesis.yaml -n ${NAMESPACE}
-
-.PHONY: create-node-paladin
-create-node-paladin: ## Create a Paladin Node instance.
-	$(KUBECTL) apply -f test/e2e/e2e_single_node_paladin_psql_nodomains.yaml -n ${NAMESPACE}
-
 .PHONY: create-node
-create-node: create-node-besu create-genesis create-node-paladin ## Create all instances.
-	@echo "All instances have been created."
-
-.PHONY: delete-node-paladin
-delete-node-paladin: ## Delete the Paladin Node instance.
-	$(KUBECTL) delete -f test/e2e/e2e_single_node_paladin_psql_nodomains.yaml -n ${NAMESPACE} || true
-
-.PHONY: delete-genesis
-delete-genesis: ## Delete the Besu Genesis instance.
-	$(KUBECTL) delete -f test/e2e/e2e_single_node_besugenesis.yaml -n ${NAMESPACE} || true
-
-.PHONY: delete-node-besu
-delete-node-besu: ## Delete the Besu Node instance.
-	$(KUBECTL) delete -f test/e2e/e2e_single_node_besu.yaml -n ${NAMESPACE} || true
+create-node: # TODO: more complete startup check
+	kubectl apply -n default -k config/samples; \
+	kubectl wait paladins.core.paladin.io/node1 --for jsonpath='{.status.phase}=Completed' --namespace default --timeout 5m
 
 .PHONY: delete-node
-delete-node: delete-node-paladin delete-genesis delete-node-besu  ## Delete all instances.
-	@echo "All instances have been deleted."
+delete-node:
+	kubectl delete -n default -k config/samples
 
 ##@ Cleanup
 DELETE_CLUSTER ?= false
