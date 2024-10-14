@@ -134,7 +134,8 @@ func deDupAndSortInLocalNS[CR any, PCR client.Object, CRL client.ObjectList](lf 
 		localName := lf.AsObject(&e).GetName()
 		if _, isDup := uniqueEntries[localName]; !isDup {
 			uniqueNames = append(uniqueNames, localName)
-			uniqueEntries[localName] = &e
+			t := e
+			uniqueEntries[localName] = &t
 		}
 	}
 	sort.Strings(uniqueNames)

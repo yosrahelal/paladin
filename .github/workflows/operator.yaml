@@ -6,14 +6,14 @@ on:
       - main
     paths:
       - 'operator/**'
-  # pull_request:
-  #   paths:
-  #     - 'operator/**'
+  pull_request:
+    paths:
+      - 'operator/**'
   workflow_dispatch:
 
 
 jobs:
-  build:
+  operator-build:
     runs-on: ubuntu-latest
     env:
       CLUSTER_NAME: paladin
@@ -40,19 +40,15 @@ jobs:
       #   working-directory: operator
       #   run: make test
 
-      # - name: End-to-End Tests
-      #   working-directory: operator
-      #   run: make test-e2e
-
       - name: Create Kubernetes Kind Cluster
         uses: helm/kind-action@v1
         with:
           install_only: true # only install kind, the cluster creation is managed by the deploy step
           ignore_failed_clean: true
 
-      - name: Deploy Operator
+      - name: E2E Operator
         working-directory: operator
-        run: gradle deploy -PclusterName=${{ env.CLUSTER_NAME }} -Pnamespace=${{ env.NAMESPACE }} 
+        run: gradle e2e -PclusterName=${{ env.CLUSTER_NAME }} -Pnamespace=${{ env.NAMESPACE }} 
 
       - name: Uninstall Operator
         working-directory: operator

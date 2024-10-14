@@ -44,10 +44,6 @@ var PaladinRegistryCRMap = CRMap[corev1alpha1.PaladinRegistry, *corev1alpha1.Pal
 	AsObject: func(item *corev1alpha1.PaladinRegistry) *corev1alpha1.PaladinRegistry { return item },
 }
 
-// +kubebuilder:rbac:groups=core.paladin.io,resources=paladinregistries,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core.paladin.io,resources=paladinregistries/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=core.paladin.io,resources=paladinregistries/finalizers,verbs=update
-
 func (r *PaladinRegistryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
