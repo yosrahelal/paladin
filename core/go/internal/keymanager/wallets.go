@@ -20,11 +20,14 @@ import (
 	"regexp"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type wallet struct {
@@ -33,8 +36,38 @@ type wallet struct {
 	signingModule signer.SigningModule
 }
 
+func (km *keyManager) newWallet(ctx context.Context, walletConf *pldconf.WalletConfig) (w *wallet, err error) {
+
+	w = &wallet{
+		name: walletConf.Name,
+	}
+
+	if err := tktypes.ValidateSafeCharsStartEndAlphaNum(ctx, w.name, tktypes.DefaultNameMaxLen, "name"); err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerInvalidConfig, w.name)
+	}
+
+	w.keySelector, err = regexp.Compile(confutil.StringNotEmpty(&walletConf.KeySelector, pldconf.WalletDefaults.KeySelector))
+	if err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerInvalidKeySelector, w.name)
+	}
+
+	signerType := confutil.StringNotEmpty(&walletConf.SignerType, pldconf.WalletDefaults.SignerType)
+	if signerType != pldconf.WalletSignerTypeEmbedded {
+		// Until we support remoting of the signer API over HTTP/WebSockets etc.
+		return nil, i18n.NewError(ctx, msgs.MsgKeyManagerInvalidWalletSignerType, signerType, w.name)
+	}
+
+	w.signingModule, err = signer.NewSigningModule(ctx, (*signerapi.ConfigNoExt)(walletConf.Signer))
+	if err != nil {
+		return nil, i18n.WrapError(ctx, err, msgs.MsgKeyManagerEmbeddedSignerFailInit, w.name)
+	}
+
+	return w, nil
+
+}
+
 func (km *keyManager) selectWallet(ctx context.Context, identifier string) (*wallet, error) {
-	for i, w := range km.wallets {
+	for i, w := range km.walletsOrdered {
 		if w.keySelector.MatchString(identifier) {
 			log.L(ctx).Infof("identifier %s matched by wallet %d (%s)", identifier, i, w.name)
 			return w, nil
@@ -44,12 +77,11 @@ func (km *keyManager) selectWallet(ctx context.Context, identifier string) (*wal
 }
 
 func (km *keyManager) getWalletByName(ctx context.Context, walletName string) (*wallet, error) {
-	for _, w := range km.wallets {
-		if w.name == walletName {
-			return w, nil
-		}
+	w := km.walletsByName[walletName]
+	if w == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgKeyManagerWalletNotConfigured, walletName)
 	}
-	return nil, i18n.NewError(ctx, msgs.MsgKeyManagerWalletNotConfigured, walletName)
+	return w, nil
 }
 
 func (w *wallet) resolveKeyAndVerifier(ctx context.Context, mapping *components.KeyMappingWithPath, algorithm, verifierType string) (*components.KeyMappingAndVerifier, error) {
@@ -98,4 +130,18 @@ func (w *wallet) resolveKeyAndVerifier(ctx context.Context, mapping *components.
 		},
 	}, nil
 
+}
+
+func (w *wallet) sign(ctx context.Context, mapping *components.KeyMappingAndVerifier, algorithm, payloadType string, payload []byte) ([]byte, error) {
+	log.L(ctx).Infof("Wallet '%s' signing %d bytes with keyHandle=%s algorithm=%s payloadType=%s", w.name, len(payload), mapping.KeyHandle, mapping.Verifier.Algorithm, payloadType)
+	res, err := w.signingModule.Sign(ctx, &signerapi.SignRequest{
+		KeyHandle:   mapping.KeyHandle,
+		Algorithm:   mapping.Verifier.Algorithm,
+		PayloadType: payloadType,
+		Payload:     payload,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return res.Payload, nil
 }

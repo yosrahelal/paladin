@@ -37,7 +37,8 @@ type keyManager struct {
 	rpcModule       *rpcserver.RPCModule
 	identifierCache cache.Cache[string, *components.KeyMappingWithPath]
 	verifierCache   cache.Cache[string, *components.KeyVerifier]
-	wallets         []*wallet
+	walletsOrdered  []*wallet
+	walletsByName   map[string]*wallet
 
 	allocLock        sync.Mutex
 	allocPathsLocked map[string]*keyResolutionContext
@@ -52,6 +53,7 @@ func NewKeyManager(bgCtx context.Context, conf *pldconf.KeyManagerConfig) compon
 		identifierCache:  cache.NewCache[string, *components.KeyMappingWithPath](&conf.IdentifierCache, &pldconf.KeyManagerDefaults.IdentifierCache),
 		verifierCache:    cache.NewCache[string, *components.KeyVerifier](&conf.VerifierCache, &pldconf.KeyManagerDefaults.VerifierCache),
 		allocPathsLocked: make(map[string]*keyResolutionContext),
+		walletsByName:    make(map[string]*wallet),
 	}
 }
 
@@ -61,20 +63,37 @@ func (km *keyManager) PreInit(pic components.PreInitComponents) (*components.Man
 	}, nil
 }
 
-func (tm *keyManager) PostInit(c components.AllComponents) error {
-	tm.p = c.Persistence()
+func (km *keyManager) PostInit(c components.AllComponents) error {
+	km.p = c.Persistence()
+
+	for _, walletConf := range km.conf.Wallets {
+		w, err := km.newWallet(km.bgCtx, walletConf)
+		if err != nil {
+			return err
+		}
+		if km.walletsByName[w.name] != nil {
+			return i18n.NewError(km.bgCtx, msgs.MsgKeyManagerDuplicateName, w.name)
+		}
+		km.walletsByName[w.name] = w
+		km.walletsOrdered = append(km.walletsOrdered, w)
+	}
+
 	return nil
 }
 
-func (tm *keyManager) Start() error {
+func (km *keyManager) Start() error {
 	return nil
 }
 
-func (tm *keyManager) Stop() {
+func (km *keyManager) Stop() {
 }
 
 func (km *keyManager) Sign(ctx context.Context, mapping *components.KeyMappingAndVerifier, algorithm, payloadType string, payload []byte) ([]byte, error) {
-	panic("unimplemented")
+	w, err := km.getWalletByName(ctx, mapping.Wallet)
+	if err != nil {
+		return nil, err
+	}
+	return w.sign(ctx, mapping, algorithm, payloadType, payload)
 }
 
 func (km *keyManager) lockPathOrGetOwner(krc *keyResolutionContext, path string) *keyResolutionContext {
@@ -92,7 +111,7 @@ func (km *keyManager) lockPath(krc *keyResolutionContext, path string) error {
 	ctx := krc.ctx
 	for {
 		lockingKRC := km.lockPathOrGetOwner(krc, path)
-		if lockingKRC != nil {
+		if lockingKRC == nil {
 			log.L(ctx).Debugf("key resolution context %s locked path %s", krc.id, path)
 			return nil
 		}

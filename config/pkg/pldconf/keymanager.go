@@ -24,14 +24,19 @@ type KeyManagerConfig struct {
 }
 
 type WalletConfig struct {
+	Name        string        `json:"name"`
 	KeySelector string        `json:"keySelector"`
 	SignerType  string        `json:"signerType"`
 	Signer      *SignerConfig `json:"signer"` // embedded only
 }
 
+const (
+	WalletSignerTypeEmbedded string = "embedded"
+)
+
 var WalletDefaults = &WalletConfig{
-	KeySelector: `.*`,       // catch-all
-	SignerType:  "embedded", // uses the embedded signing module running in the Paladin process
+	KeySelector: `.*`,                     // catch-all
+	SignerType:  WalletSignerTypeEmbedded, // uses the embedded signing module running in the Paladin process
 }
 
 var KeyManagerDefaults = &KeyManagerConfig{

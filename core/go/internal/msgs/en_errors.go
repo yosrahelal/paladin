@@ -137,6 +137,11 @@ var (
 	MsgKeyManagerWalletNotConfigured     = ffe("PD010503", "No wallet called '%s' is configured on this node")
 	MsgKeyManagerKeyHandleNonDeterminism = ffe("PD010504", "Signing module for wallet '%s' returned key handle '%s' from key resolution of verifier %s, mismatching key handle '%s' returned previously the same key")
 	MsgKeyManagerInvalidResolveResponse  = ffe("PD010505", "Signing module for wallet '%s' returned invalid response")
+	MsgKeyManagerInvalidWalletSignerType = ffe("PD010506", "Invalid signer type '%s' configured for wallet '%s'")
+	MsgKeyManagerEmbeddedSignerFailInit  = ffe("PD010507", "Initialization of embedded signer for wallet '%s' failed")
+	MsgKeyManagerInvalidConfig           = ffe("PD010508", "Configuration for wallet '%s' invalid")
+	MsgKeyManagerDuplicateName           = ffe("PD010509", "Duplicate wallet name '%s'")
+	MsgKeyManagerInvalidKeySelector      = ffe("PD010510", "Key selector for wallet '%s' invalid")
 
 	// Comms bus PD0106XX
 	MsgDestinationNotFound     = ffe("PD010600", "Destination not found: %s")

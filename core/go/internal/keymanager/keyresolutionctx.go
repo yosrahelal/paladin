@@ -48,7 +48,6 @@ type keyResolutionContext struct {
 	rootPath      *resolvedDBPath
 	resolvedPaths map[string]*resolvedDBPath
 	lockedPaths   map[string]bool
-	committed     bool
 	done          chan struct{}
 }
 
@@ -79,6 +78,7 @@ func (krc *keyResolutionContext) getOrCreateIdentifierPath(identifier string) (r
 		if err != nil {
 			return nil, err
 		}
+		parent = resolved
 	}
 	return resolved, nil
 }
@@ -101,7 +101,7 @@ func (krc *keyResolutionContext) resolvePathSegment(parent *resolvedDBPath, segm
 	err := krc.dbTX.WithContext(krc.ctx).
 		Where("path = ?", path).
 		Find(&pathList).Error
-	if err == nil {
+	if err != nil {
 		return nil, err
 	}
 	if len(pathList) > 0 {
@@ -121,13 +121,13 @@ func (krc *keyResolutionContext) resolvePathSegment(parent *resolvedDBPath, segm
 	// Find or create in the DB
 	var dbPath *DBKeyPath
 
-	if parent.nextIndex != nil {
+	if parent.nextIndex == nil {
 		// Get the highest index on the parent so far written to the DB
 		err = krc.dbTX.WithContext(krc.ctx).
 			Where("parent = ?", parent.path).
-			Order("index DESC").
-			Find(&pathList).
+			Order(`"index" DESC`).
 			Limit(1).
+			Find(&pathList).
 			Error
 		if err != nil {
 			return nil, err
@@ -173,8 +173,8 @@ func (krc *keyResolutionContext) getStoredVerifier(identifier, algorithm, verifi
 	}
 	var verifiers []*DBKeyVerifier
 	err := krc.dbTX.WithContext(krc.ctx).
-		Where("identifier = ?", identifier).
-		Where("algorithm = ?", algorithm).
+		Where(`"identifier" = ?`, identifier).
+		Where(`"algorithm" = ?`, algorithm).
 		Where(`"type" = ?`, verifierType).
 		Limit(1).
 		Find(&verifiers).
@@ -239,7 +239,7 @@ func (krc *keyResolutionContext) ResolveKey(identifier, algorithm, verifierType 
 		// if it already existed) ... so do a query.
 		var mappings []*DBKeyMapping
 		err = krc.dbTX.WithContext(krc.ctx).
-			Where("identifier = ?").
+			Where(`"identifier" = ?`, identifier).
 			Limit(1).
 			Find(&mappings).
 			Error
@@ -260,7 +260,7 @@ func (krc *keyResolutionContext) ResolveKey(identifier, algorithm, verifierType 
 		} else {
 			mapping = &components.KeyMappingWithPath{
 				KeyMapping: &components.KeyMapping{
-					Identifier: mappings[0].Identifier,
+					Identifier: identifier,
 				},
 				Path: dbPath.pathSegments(),
 			}
@@ -313,7 +313,6 @@ func (krc *keyResolutionContext) PostCommit() {
 	krc.l.Lock()
 	defer krc.l.Unlock()
 
-	krc.committed = true
 	for _, p := range krc.resolvedPaths {
 		// set the verifiers first, as we look them up 2nd
 		for _, v := range p.verifiers {
@@ -324,17 +323,26 @@ func (krc *keyResolutionContext) PostCommit() {
 			krc.km.identifierCache.Set(p.path, p.mapping)
 		}
 	}
+	// Ensure we're cancelled
+	krc.cleanup()
 }
 
-func (krc *keyResolutionContext) Close() {
+func (krc *keyResolutionContext) Cancel() {
 	krc.l.Lock()
 	defer krc.l.Unlock()
 
-	if len(krc.lockedPaths) > 0 {
-		krc.km.unlockPaths(krc, krc.lockedPaths)
+	krc.cleanup()
+}
+
+func (krc *keyResolutionContext) cleanup() {
+	if krc.done != nil {
+		if len(krc.lockedPaths) > 0 {
+			krc.km.unlockPaths(krc, krc.lockedPaths)
+		}
+		// All other KRCs waiting on us will wake up and race to grab the lock on the parent context of their choosing
+		close(krc.done)
+		krc.done = nil
 	}
-	// All other KRCs waiting on us will wake up and race to grab the lock on the parent context of their choosing
-	close(krc.done)
 }
 
 func (resolved *resolvedDBPath) pathSegments() []*components.KeyPathSegment {

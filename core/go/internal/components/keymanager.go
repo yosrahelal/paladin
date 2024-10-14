@@ -55,8 +55,8 @@ type KeyPathSegment struct {
 
 type KeyResolutionContext interface {
 	ResolveKey(identifier, algorithm, verifierType string) (mapping *KeyMappingAndVerifier, err error)
-	PostCommit() // must be called in a post-commit callback if the DB TX commits
-	Close()      // must be called in a defer (for panic handling) for any opened key resolution context
+	Cancel()     // must be called if PostCommit() is not going to be called
+	PostCommit() // must be called AFTER the transaction commits on success
 }
 
 type KeyManager interface {
