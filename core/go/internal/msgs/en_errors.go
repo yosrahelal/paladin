@@ -269,6 +269,7 @@ var (
 	MsgPrivTxMgrPublicTxFail          = ffe("PD011812", "Public transaction rejected")
 	MsgResolveVerifierRemoteFailed    = ffe("PD011813", "Failed to resolve verifier on remote node with lookup %s algorithm %s: Error %s")
 	MsgPrivateTxManagerAssembleRevert = ffe("PD011814", "Domain reverted transaction on assemble")
+	MsgPrivateTxManagerSignError      = ffe("PD011815", "Failed to sign for party %s (verifier=%s,algorithm=%s): %s")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")

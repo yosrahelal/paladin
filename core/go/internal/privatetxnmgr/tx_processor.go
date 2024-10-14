@@ -65,6 +65,7 @@ type PaladinTxProcessor struct {
 	endorsementGatherer ptmgrtypes.EndorsementGatherer
 	status              string
 	latestEvent         string
+	latestError         string
 	identityResolver    components.IdentityResolver
 	syncPoints          syncpoints.SyncPoints
 }
@@ -78,8 +79,10 @@ func (ts *PaladinTxProcessor) GetStatus(ctx context.Context) ptmgrtypes.TxProces
 
 func (ts *PaladinTxProcessor) GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error) {
 	return components.PrivateTxStatus{
-		TxID:   ts.transaction.ID.String(),
-		Status: ts.status,
+		TxID:        ts.transaction.ID.String(),
+		Status:      ts.status,
+		LatestEvent: ts.latestEvent,
+		LatestError: ts.latestError,
 	}, nil
 }
 
@@ -425,7 +428,8 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 	})
 	if err != nil {
 		log.L(ctx).Errorf("failed to sign for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, attRequest.Algorithm, err)
-		//TODO return nil, err
+		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerSignError), partyName, verifier, attRequest.Algorithm, err.Error())
+		return
 	}
 	log.L(ctx).Debugf("payload: %x signed %x by %s (%s)", attRequest.Payload, signaturePayload.Payload, partyName, verifier)
 
