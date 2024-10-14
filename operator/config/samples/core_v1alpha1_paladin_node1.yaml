@@ -20,3 +20,43 @@ spec:
     - name: signer-1
       secret: node1.keys
       type: autoHDWallet
+  domains:
+    - labelSelector:
+        matchLabels:
+          paladin.io/domain-name: noto
+    - labelSelector:
+        matchLabels:
+          paladin.io/domain-name: zeto          
+    - labelSelector:
+        matchLabels:
+          paladin.io/domain-name: pente
+  registries:
+    - labelSelector:
+        matchLabels:
+          paladin.io/registry-name: evm-registry
+  transports:
+    - name: grpc
+      plugin:
+        type: c-shared
+        library: /app/transports/libgrpc.so
+      configJSON: |
+        {
+          "port": 9000,
+          "address": "0.0.0.0"
+        }
+      ports:
+      - name: transport-grpc
+        port: 9000
+        targetPort: 9000
+      tls:
+        secretName: paladin-node1-mtls
+        certName: paladin-node1-mtls
+  service:
+    type: NodePort
+    ports:
+    - name: rpc-http
+      port: 8548
+      nodePort: 31548 # see paladin-kind.yaml
+    - name: rpc-ws
+      port: 8549
+      nodePort: 31549 # see paladin-kind.yaml

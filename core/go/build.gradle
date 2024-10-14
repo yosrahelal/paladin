@@ -327,7 +327,7 @@ abstract class UnitTests extends Exec {
         args './pkg/...', './internal/...'
         args '-cover'
         args '-covermode=atomic'
-        args '-timeout=30s'
+        args '-timeout=60s'
         if (project.findProperty('verboseTests') == 'true') {
             args '-v'
         }

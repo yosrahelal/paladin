@@ -21,6 +21,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	_ "embed"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -122,7 +123,9 @@ func deplyDomainRegistry(t *testing.T) *tktypes.EthAddress {
 	cmTmp := componentmgr.NewComponentManager(context.Background(), grpcTarget, uuid.New(), &tmpConf)
 	err = cmTmp.Init()
 	require.NoError(t, err)
-	err = cmTmp.StartComponents()
+	err = cmTmp.StartManagers()
+	require.NoError(t, err)
+	err = cmTmp.CompleteStart()
 	require.NoError(t, err)
 	domainRegistryAddress := domains.DeploySmartContract(t, cmTmp.BlockIndexer(), cmTmp.EthClientFactory())
 
@@ -181,6 +184,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	i.ctx = log.WithLogField(i.ctx, "node-name", binding.name)
 
 	i.conf.Log.Level = confutil.P("info")
+	i.conf.BlockIndexer.FromBlock = json.RawMessage(`"latest"`)
 	i.conf.DomainManagerConfig.Domains = make(map[string]*pldconf.DomainConfig, 1)
 	i.conf.DomainManagerConfig.Domains["domain1"] = &pldconf.DomainConfig{
 		Plugin: pldconf.PluginConfig{
@@ -249,9 +253,6 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	err = cm.Init()
 	require.NoError(t, err)
 
-	err = cm.StartComponents()
-	require.NoError(t, err)
-
 	err = cm.StartManagers()
 	require.NoError(t, err)
 
@@ -300,8 +301,12 @@ func testConfig(t *testing.T) pldconf.PaladinConfig {
 
 	port, err := getFreePort()
 	require.NoError(t, err, "Error finding a free port")
+	conf.GRPC.ShutdownTimeout = confutil.P("0s")
+	conf.RPCServer.HTTP.ShutdownTimeout = confutil.P("0s")
 	conf.RPCServer.HTTP.Port = &port
 	conf.RPCServer.HTTP.Address = confutil.P("127.0.0.1")
+	conf.RPCServer.WS.ShutdownTimeout = confutil.P("0s")
+	conf.RPCServer.WS.Disabled = true
 	conf.Log.Level = confutil.P("info")
 
 	conf.Signer.KeyStore.Static.Keys["seed"] = pldconf.StaticKeyEntryConfig{

@@ -30,6 +30,7 @@ import (
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 )
 
 type registryManager struct {
@@ -40,6 +41,7 @@ type registryManager struct {
 
 	p            persistence.Persistence
 	blockIndexer blockindexer.BlockIndexer
+	rpcModule    *rpcserver.RPCModule
 
 	// We provide a high level of customization of how the nodes are looked up in the registry
 	registryTransportLookups map[string]*transportLookup
@@ -74,8 +76,10 @@ func (rm *registryManager) PreInit(pic components.PreInitComponents) (_ *compone
 			}
 		}
 	}
-
-	return &components.ManagerInitResult{}, nil
+	rm.initRPC()
+	return &components.ManagerInitResult{
+		RPCModules: []*rpcserver.RPCModule{rm.rpcModule},
+	}, nil
 }
 
 func (rm *registryManager) PostInit(c components.AllComponents) error {
@@ -151,6 +155,17 @@ func (rm *registryManager) GetRegistry(ctx context.Context, name string) (compon
 		return nil, i18n.NewError(ctx, msgs.MsgRegistryNotFound, name)
 	}
 	return r, nil
+}
+
+func (rm *registryManager) getRegistryNames() []string {
+	rm.mux.Lock()
+	defer rm.mux.Unlock()
+
+	registryNames := make([]string, 0, len(rm.registriesByName))
+	for registryName := range rm.registriesByName {
+		registryNames = append(registryNames, registryName)
+	}
+	return registryNames
 }
 
 func (rm *registryManager) GetNodeTransports(ctx context.Context, node string) ([]*components.RegistryNodeTransportEntry, error) {
