@@ -55,7 +55,7 @@ func (tm *txManager) PostInit(c components.AllComponents) error {
 func (tm *txManager) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
 	tm.buildRPCModule()
 	return &components.ManagerInitResult{
-		RPCModules:       []*rpcserver.RPCModule{tm.rpcModule},
+		RPCModules:       []*rpcserver.RPCModule{tm.rpcModule, tm.debugRpcModule},
 		PreCommitHandler: tm.blockIndexerPreCommit,
 	}, nil
 }
