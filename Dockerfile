@@ -145,7 +145,7 @@ RUN apt-get update && apt-get install -y \
 
 # Set environment variables
 ENV LANG=C.UTF-8
-ENV LD_LIBRARY_PATH=/app/libs:/usr/local/wasmer/lib:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/app/libs:/usr/local/wasmer/lib
 
 # Set the working directory
 WORKDIR /app
