@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# Do not add signoff for merge commits
+if [ "$2" = "merge" ]; then
+  exit 0
+fi
+
+# Automatically sign off the commit
+GIT_AUTHOR_NAME=$(git config user.name)
+GIT_AUTHOR_EMAIL=$(git config user.email)
+signoff="Signed-off-by: $GIT_AUTHOR_NAME <$GIT_AUTHOR_EMAIL>"
+
+# Insert the signoff line at the end of the commit message if it's not already there
+if ! grep -q "$signoff" "$1"; then
+  echo "\n$signoff" >> "$1"
+fi

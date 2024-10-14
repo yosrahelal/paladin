@@ -24,60 +24,60 @@ import (
 
 type QueryJSON struct {
 	Statements
-	Limit *int     `json:"limit,omitempty"`
-	Sort  []string `json:"sort,omitempty"`
+	Limit *int     `docstruct:"QueryJSON" json:"limit,omitempty"`
+	Sort  []string `docstruct:"QueryJSON" json:"sort,omitempty"`
 }
 
 // Note if ItemsResultTyped below might be preferred for new APIs (if you are able to adopt always-return {items:[]} style)
 type FilterResultsWithCount struct {
-	Count int64       `json:"count"`
-	Total *int64      `json:"total,omitempty"` // omitted if a count was not calculated (AlwaysPaginate enabled, and count not specified)
-	Items interface{} `json:"items"`
+	Count int64       `docstruct:"FilterResultsWithCount" json:"count"`
+	Total *int64      `docstruct:"FilterResultsWithCount" json:"total,omitempty"` // omitted if a count was not calculated (AlwaysPaginate enabled, and count not specified)
+	Items interface{} `docstruct:"FilterResultsWithCount" json:"items"`
 }
 
 type ItemsResultTyped[T any] struct {
-	Count int    `json:"count"`
-	Total *int64 `json:"total,omitempty"` // omitted if a count was not calculated (AlwaysPaginate enabled, and count not specified)
-	Items []T    `json:"items"`
+	Count int    `docstruct:"ItemsResultTyped" json:"count"`
+	Total *int64 `docstruct:"ItemsResultTyped" json:"total,omitempty"` // omitted if a count was not calculated (AlwaysPaginate enabled, and count not specified)
+	Items []T    `docstruct:"ItemsResultTyped" json:"items"`
 }
 
 type Op struct {
-	Not             bool   `json:"not,omitempty"`
-	CaseInsensitive bool   `json:"caseInsensitive,omitempty"`
-	Field           string `json:"field,omitempty"`
+	Not             bool   `docstruct:"Op" json:"not,omitempty"`
+	CaseInsensitive bool   `docstruct:"Op" json:"caseInsensitive,omitempty"`
+	Field           string `docstruct:"Op" json:"field,omitempty"`
 }
 
 type OpSingleVal struct {
 	Op
-	Value tktypes.RawJSON `json:"value,omitempty"`
+	Value tktypes.RawJSON `docstruct:"OpSingleVal" json:"value,omitempty"`
 }
 
 type OpMultiVal struct {
 	Op
-	Values []tktypes.RawJSON `json:"values,omitempty"`
+	Values []tktypes.RawJSON `docstruct:"OpMultiVal" json:"values,omitempty"`
 }
 
 type Statements struct {
-	Or []*Statements `json:"or,omitempty"`
+	Or []*Statements `docstruct:"Statements" json:"or,omitempty"`
 	Ops
 }
 
 type Ops struct {
-	Equal              []*OpSingleVal `json:"equal,omitempty"`
-	Eq                 []*OpSingleVal `json:"eq,omitempty"`  // short name
-	NEq                []*OpSingleVal `json:"neq,omitempty"` // negated short name
-	Like               []*OpSingleVal `json:"like,omitempty"`
-	LessThan           []*OpSingleVal `json:"lessThan,omitempty"`
-	LT                 []*OpSingleVal `json:"lt,omitempty"` // short name
-	LessThanOrEqual    []*OpSingleVal `json:"lessThanOrEqual,omitempty"`
-	LTE                []*OpSingleVal `json:"lte,omitempty"` // short name
-	GreaterThan        []*OpSingleVal `json:"greaterThan,omitempty"`
-	GT                 []*OpSingleVal `json:"gt,omitempty"` // short name
-	GreaterThanOrEqual []*OpSingleVal `json:"greaterThanOrEqual,omitempty"`
-	GTE                []*OpSingleVal `json:"gte,omitempty"` // short name
-	In                 []*OpMultiVal  `json:"in,omitempty"`
-	NIn                []*OpMultiVal  `json:"nin,omitempty"` // negated short name
-	Null               []*Op          `json:"null,omitempty"`
+	Equal              []*OpSingleVal `docstruct:"Ops" json:"equal,omitempty"`
+	Eq                 []*OpSingleVal `docstruct:"Ops" json:"eq,omitempty"`  // short name
+	NEq                []*OpSingleVal `docstruct:"Ops" json:"neq,omitempty"` // negated short name
+	Like               []*OpSingleVal `docstruct:"Ops" json:"like,omitempty"`
+	LessThan           []*OpSingleVal `docstruct:"Ops" json:"lessThan,omitempty"`
+	LT                 []*OpSingleVal `docstruct:"Ops" json:"lt,omitempty"` // short name
+	LessThanOrEqual    []*OpSingleVal `docstruct:"Ops" json:"lessThanOrEqual,omitempty"`
+	LTE                []*OpSingleVal `docstruct:"Ops" json:"lte,omitempty"` // short name
+	GreaterThan        []*OpSingleVal `docstruct:"Ops" json:"greaterThan,omitempty"`
+	GT                 []*OpSingleVal `docstruct:"Ops" json:"gt,omitempty"` // short name
+	GreaterThanOrEqual []*OpSingleVal `docstruct:"Ops" json:"greaterThanOrEqual,omitempty"`
+	GTE                []*OpSingleVal `docstruct:"Ops" json:"gte,omitempty"` // short name
+	In                 []*OpMultiVal  `docstruct:"Ops" json:"in,omitempty"`
+	NIn                []*OpMultiVal  `docstruct:"Ops" json:"nin,omitempty"` // negated short name
+	Null               []*Op          `docstruct:"Ops" json:"null,omitempty"`
 }
 
 func (jq *QueryJSON) String() string {

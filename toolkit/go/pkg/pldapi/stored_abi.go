@@ -30,6 +30,6 @@ import (
 // and query of associated ABI details, like devDocs, contract name, times etc.
 // However, this record is intended to stay unchanged and deliberately thin
 type StoredABI struct {
-	Hash tktypes.Bytes32 `json:"hash,omitempty"`
-	ABI  abi.ABI         `json:"abi,omitempty"`
+	Hash tktypes.Bytes32 `docstruct:"StoredABI" json:"hash,omitempty"`
+	ABI  abi.ABI         `docstruct:"StoredABI" json:"abi,omitempty"`
 }

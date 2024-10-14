@@ -127,4 +127,8 @@ var (
 	MsgSigningEmptyPayload                      = ffe("PD020825", "No payload supplied for signing")
 	MsgSigningInvalidDomainAlgorithmNoPrefix    = ffe("PD020826", "Invalid domain algorithm (no 'domain:' prefix): %s")
 	MsgSigningNoDomainRegisteredWithModule      = ffe("PD020827", "Domain '%s' has not been registered in this signing module")
+
+	// Reference markdown PD0209XX
+	MsgReferenceMarkdownMissing = ffe("PD020900", "Reference markdown file missing: '%s'")
+	MsgFieldDescriptionMissing  = ffe("PD020901", "Missing description for field '%s' in struct '%s'")
 )
