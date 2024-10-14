@@ -130,8 +130,9 @@ COPY domains/integration-test domains/integration-test
 COPY registries/static registries/static
 COPY registries/evm registries/evm
 COPY transports/grpc transports/grpc
-COPY testinfra testinfra
-COPY operator operator
+# No build of these two, but we need to go.mod to make the go.work valid
+COPY testinfra/go.mod testinfra/go.mod
+COPY operator/go.mod operator/go.mod
 RUN gradle --no-daemon --parallel assemble
 
 # Stage 3: Pull together runtime
