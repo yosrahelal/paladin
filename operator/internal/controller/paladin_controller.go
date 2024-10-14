@@ -803,7 +803,7 @@ func (r *PaladinReconciler) generatePaladinRegistries(ctx context.Context, node 
 }
 
 func (r *PaladinReconciler) generatePaladinTransports(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig) ([]string, error) {
-	var availableTLSSecrets []string
+	availableTLSSecrets := []string{}
 	for _, transport := range node.Spec.Transports {
 
 		var transportConf map[string]any
