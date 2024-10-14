@@ -57,6 +57,13 @@ type SyncPoints interface {
 	// this is an async operation so it can safely be called from the orchestrator event loop thread
 	// the onCommit and onRollback callbacks are called, on a separate goroutine when the transaction is committed or rolled back
 	QueueTransactionFinalize(ctx context.Context, contractAddress tktypes.EthAddress, transactionID uuid.UUID, failureMessage string, onCommit func(context.Context), onRollback func(context.Context, error))
+
+	// DelegateTransaction writes a record to the local database recording that the given transaction has been delegated to the given delegate
+	// then triggers a reliable cross node handshake to transmit that delegation to the delegate node and record their acknowledgement
+	QueueDelegation(ctx context.Context, contractAddress tktypes.EthAddress, transactionID uuid.UUID, delegateNodeID string, onCommit func(context.Context), onRollback func(context.Context, error))
+
+	// DelegateTransaction writes a record to the local database recording that we have received acknowledgement from the delegate node
+	QueueDelegationAck(ctx context.Context, contractAddress tktypes.EthAddress, delegationID uuid.UUID, onCommit func(context.Context), onRollback func(context.Context, error))
 	Close()
 }
 

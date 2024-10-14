@@ -46,12 +46,17 @@ to atomically allocate and record the nonce under that same transaction.
 
 // a syncPointOperation is either a dispatch (handover to public transaction manager)
 // or a finalizer (handover to TxManager to mark a transaction as reverted)
-// never both.  We probably could make the mutual exclusive nature more explicit by using interfaces but its not worth the added complexity
+// or a delegate (intent to handover to a remote coordinator)
+// or receipt of an acknowledgement from a remote coordinator
+// or a receipt of a delegation from a remote assembler
+// but never more than one of these.  We probably could make the mutually exclusive nature more explicit by using interfaces but its not worth the added complexity
 
 type syncPointOperation struct {
-	contractAddress   tktypes.EthAddress
-	finalizeOperation *finalizeOperation
-	dispatchOperation *dispatchOperation
+	contractAddress        tktypes.EthAddress
+	finalizeOperation      *finalizeOperation
+	dispatchOperation      *dispatchOperation
+	delegateOperation      *delegateOperation
+	delegationAckOperation *delegationAckOperation
 }
 
 func (dso *syncPointOperation) WriteKey() string {
@@ -64,6 +69,8 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*sync
 
 	finalizeOperations := make(map[tktypes.EthAddress][]*finalizeOperation)
 	dispatchOperations := make([]*dispatchOperation, 0, len(values))
+	delegateOperations := make([]*delegateOperation, 0, len(values))
+	delegationAckOperations := make([]*delegationAckOperation, 0, len(values))
 
 	for _, op := range values {
 		if op.finalizeOperation != nil {
@@ -71,6 +78,12 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*sync
 		}
 		if op.dispatchOperation != nil {
 			dispatchOperations = append(dispatchOperations, op.dispatchOperation)
+		}
+		if op.delegateOperation != nil {
+			delegateOperations = append(delegateOperations, op.delegateOperation)
+		}
+		if op.delegationAckOperation != nil {
+			delegationAckOperations = append(delegationAckOperations, op.delegationAckOperation)
 		}
 	}
 
@@ -90,6 +103,22 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*sync
 		err := s.writeDispatchOperations(ctx, dbTX, dispatchOperations)
 		if err != nil {
 			log.L(ctx).Errorf("Error persisting finalizers: %s", err)
+			return nil, err
+		}
+	}
+
+	if len(delegateOperations) > 0 {
+		err := s.writeDelegateOperations(ctx, dbTX, delegateOperations)
+		if err != nil {
+			log.L(ctx).Errorf("Error persisting delegateOperations: %s", err)
+			return nil, err
+		}
+	}
+
+	if len(delegationAckOperations) > 0 {
+		err := s.writeDelegationAckOperations(ctx, dbTX, delegationAckOperations)
+		if err != nil {
+			log.L(ctx).Errorf("Error persisting delegationAckOperations: %s", err)
 			return nil, err
 		}
 	}
