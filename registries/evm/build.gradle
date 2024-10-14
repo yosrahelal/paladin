@@ -91,7 +91,7 @@ task test(type: Exec, dependsOn: [copyContracts]) {
     dependsOn ':testinfra:startTestInfra'
 }
 
-task buildGo(type: GoLib, dependsOn: []) {
+task buildGo(type: GoLib, dependsOn: [copyContracts]) {
     inputs.files(configurations.toolkitGo)
     baseName "evm"
     sources goFiles
