@@ -273,6 +273,8 @@ var (
 	MsgPrivateTxManagerResolveError            = ffe("PD011815", "Failed to resolve local signer for party %s (verifier=%s,algorithm=%s): %s")
 	MsgPrivateTxManagerSignError               = ffe("PD011816", "Failed to sign for party %s (verifier=%s,algorithm=%s): %s")
 	MsgPrivateTxManagerEndorsementRequestError = ffe("PD011817", "Failed to request endorsement from %s: %s")
+	MsgPrivateTxManagerResolveDispatchError    = ffe("PD011818", "Failed to resolve dispatcher: %s")
+	MsgPrivateTxManagerPrepareError            = ffe("PD011819", "Failed to prepare transaction dispatch to base ledger: %s")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")

@@ -87,16 +87,14 @@ func (ts *PaladinTxProcessor) GetTxStatus(ctx context.Context) (components.Priva
 }
 
 func (ts *PaladinTxProcessor) HandleTransactionSubmittedEvent(ctx context.Context, event *ptmgrtypes.TransactionSubmittedEvent) error {
+	log.L(ctx).Debug("PaladinTxProcessor:HandleTransactionSubmittedEvent")
+
 	ts.latestEvent = "HandleTransactionSubmittedEvent"
 	// if the transaction is ready to be assembled, go ahead and do that otherwise, we assume some future event will trigger that
 	if ts.isReadyToAssemble(ctx) {
 		ts.assembleTransaction(ctx)
 	} else {
-		err := ts.requestVerifierResolution(ctx)
-		if err != nil {
-			log.L(ctx).Errorf("Failed to request verifier resolution: %s", err)
-			return err
-		}
+		ts.requestVerifierResolution(ctx)
 	}
 	return nil
 }
@@ -304,6 +302,7 @@ func (ts *PaladinTxProcessor) HandleTransactionEndorsedEvent(ctx context.Context
 			err := ts.domainAPI.ResolveDispatch(ctx, ts.transaction)
 			if err != nil {
 				log.L(ctx).Errorf("Failed to resolve dispatch for transaction %s: %s", ts.transaction.ID.String(), err)
+				ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerResolveDispatchError), err.Error())
 				return err
 			}
 
@@ -312,7 +311,9 @@ func (ts *PaladinTxProcessor) HandleTransactionEndorsedEvent(ctx context.Context
 				Signer:        ts.transaction.Signer,
 			})
 			if err != nil {
-				log.L(ctx).Errorf("Failed to publish transaction dispatch resolved event: %s", err)
+				errorMessage := fmt.Sprintf("Failed to publish transaction dispatch resolved event: %s", err)
+				log.L(ctx).Error(errorMessage)
+				ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
 				return err
 			}
 
@@ -321,7 +322,9 @@ func (ts *PaladinTxProcessor) HandleTransactionEndorsedEvent(ctx context.Context
 				TransactionId: ts.transaction.ID.String(),
 			})
 			if err != nil {
-				log.L(ctx).Errorf("Failed to publish transaction endorsed event: %s", err)
+				errorMessage := fmt.Sprintf("Failed to publish transaction endorsed event: %s", err)
+				log.L(ctx).Error(errorMessage)
+				ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
 				return err
 			}
 		}
@@ -359,14 +362,17 @@ func (ts *PaladinTxProcessor) HandleResolveVerifierResponseEvent(ctx context.Con
 
 	if event.Lookup == nil {
 		log.L(ctx).Error("Lookup is nil")
+		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInvalidEventMissingField), "Lookup")
 		return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInvalidEventMissingField, "Lookup")
 	}
 	if event.Algorithm == nil {
 		log.L(ctx).Error("Algorithm is nil")
+		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInvalidEventMissingField), "Algorithm")
 		return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInvalidEventMissingField, "Algorithm")
 	}
 	if event.Verifier == nil {
 		log.L(ctx).Error("Verifier is nil")
+		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInvalidEventMissingField), "Verifier")
 		return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInvalidEventMissingField, "Verifier")
 	}
 
@@ -691,6 +697,7 @@ func (ts *PaladinTxProcessor) PrepareTransaction(ctx context.Context) (*componen
 	prepError := ts.domainAPI.PrepareTransaction(ts.endorsementGatherer.DomainContext(), ts.transaction)
 	if prepError != nil {
 		log.L(ctx).Errorf("Error preparing transaction: %s", prepError)
+		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerPrepareError), prepError.Error())
 		return nil, prepError
 	}
 	return ts.transaction, nil
@@ -716,7 +723,7 @@ func stateIDs(states []*components.FullState) []string {
 	return stateIDs
 }
 
-func (ts *PaladinTxProcessor) requestVerifierResolution(ctx context.Context) error {
+func (ts *PaladinTxProcessor) requestVerifierResolution(ctx context.Context) {
 
 	if ts.transaction.PreAssembly.Verifiers == nil {
 		ts.transaction.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, 0, len(ts.transaction.PreAssembly.RequiredVerifiers))
@@ -736,7 +743,6 @@ func (ts *PaladinTxProcessor) requestVerifierResolution(ctx context.Context) err
 			},
 		)
 	}
-	return nil
 }
 
 func (ts *PaladinTxProcessor) GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution {
