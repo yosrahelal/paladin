@@ -372,13 +372,23 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		//Now we have the payloads, we can prepare the submission
 		publicTransactionEngine := oc.components.PublicTxManager()
 
+		signers := make([]string, len(preparedTransactions))
+		for i, pt := range preparedTransactions {
+			signers[i] = pt.Signer
+		}
+		keyMgr := oc.components.KeyManager()
+		resolvedAddrs, err := keyMgr.ResolveEthAddressBatchNewDatabaseTX(ctx, signers)
+		if err != nil {
+			return err
+		}
+
 		publicTXs := make([]*components.PublicTxSubmission, len(preparedTransactions))
 		for i, pt := range preparedTransactions {
 			log.L(ctx).Debugf("DispatchTransactions: creating PublicTxSubmission from %s", pt.Signer)
 			publicTXs[i] = &components.PublicTxSubmission{
 				Bindings: []*components.PaladinTXReference{{TransactionID: pt.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
 				PublicTxInput: ptxapi.PublicTxInput{
-					From:            pt.Signer,
+					From:            resolvedAddrs[i],
 					To:              &oc.contractAddress,
 					PublicTxOptions: ptxapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
 				},

@@ -203,9 +203,9 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 	// defer style processing like all the code that uses us in anger should
 	// do, ensuring we either commit or cancel.
 	testResolveOne := func(identifier string) string {
-		resolved, err := km.ResolveKeyNewDatabaseTX(ctx, identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+		resolved, err := km.ResolveEthAddressBatchNewDatabaseTX(ctx, []string{identifier})
 		require.NoError(t, err)
-		return resolved.Verifier.Verifier
+		return resolved[0].String()
 	}
 
 	wg := new(sync.WaitGroup)

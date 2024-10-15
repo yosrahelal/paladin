@@ -26,10 +26,13 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"gorm.io/gorm"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
 type keyManager struct {
@@ -153,11 +156,39 @@ func (km *keyManager) AddInMemorySigner(prefix string, signer signerapi.InMemory
 
 // Convenience function
 func (km *keyManager) ResolveKeyNewDatabaseTX(ctx context.Context, identifier, algorithm, verifierType string) (resolvedKey *components.KeyMappingAndVerifier, err error) {
+	resolvedKeys, err := km.ResolveBatchNewDatabaseTX(ctx, algorithm, verifierType, []string{identifier})
+	if err != nil {
+		return nil, err
+	}
+	return resolvedKeys[0], nil
+}
+
+func (km *keyManager) ResolveEthAddressBatchNewDatabaseTX(ctx context.Context, identifiers []string) (ethAddresses []*tktypes.EthAddress, err error) {
+	ethAddresses = make([]*tktypes.EthAddress, len(identifiers))
+	resolvedKeys, err := km.ResolveBatchNewDatabaseTX(ctx, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, identifiers)
+	for i := 0; i < len(identifiers); i++ {
+		if err == nil {
+			ethAddresses[i], err = tktypes.ParseEthAddress(resolvedKeys[i].Verifier.Verifier)
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return ethAddresses, nil
+}
+
+// Convenience function
+func (km *keyManager) ResolveBatchNewDatabaseTX(ctx context.Context, algorithm, verifierType string, identifiers []string) (resolvedKeys []*components.KeyMappingAndVerifier, err error) {
+	resolvedKeys = make([]*components.KeyMappingAndVerifier, len(identifiers))
 	krc := km.NewKeyResolutionContext(ctx)
 	committed := false
 	defer func() { krc.Close(committed) }()
 	err = km.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
-		resolvedKey, err = krc.KeyResolver(dbTX).ResolveKey(identifier, algorithm, verifierType)
+		for i, identifier := range identifiers {
+			if err == nil {
+				resolvedKeys[i], err = krc.KeyResolver(dbTX).ResolveKey(identifier, algorithm, verifierType)
+			}
+		}
 		if err == nil {
 			err = krc.PreCommit()
 		}

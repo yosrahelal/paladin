@@ -266,12 +266,17 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 
 	publicTransactionEngine := p.components.PublicTxManager()
 
+	keyMgr := p.components.KeyManager()
+	resolvedAddrs, err := keyMgr.ResolveEthAddressBatchNewDatabaseTX(ctx, []string{tx.Signer})
+	if err != nil {
+		return nil, err
+	}
+
 	publicTXs := []*components.PublicTxSubmission{
 		{
-
 			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
 			PublicTxInput: ptxapi.PublicTxInput{
-				From:            tx.Signer,
+				From:            resolvedAddrs[0],
 				To:              &tx.InvokeTransaction.To,
 				PublicTxOptions: ptxapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
 			},

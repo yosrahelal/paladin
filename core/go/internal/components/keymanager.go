@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 )
 
@@ -75,6 +76,12 @@ type KeyManager interface {
 	// Convenience function in code where there isn't already a database transaction, and we're happy to create a
 	// new one just to scope the lookup (cannot be called safely within a containing DB transaction)
 	ResolveKeyNewDatabaseTX(ctx context.Context, identifier, algorithm, verifierType string) (resolvedKey *KeyMappingAndVerifier, err error)
+
+	// Convenience to resolve a whole set in one new DB transaction
+	ResolveBatchNewDatabaseTX(ctx context.Context, algorithm, verifierType string, identifiers []string) (resolvedKey []*KeyMappingAndVerifier, err error)
+
+	// Convenience when all you want is the EthAddress, and to know the reverse lookup will later be possible
+	ResolveEthAddressBatchNewDatabaseTX(ctx context.Context, identifiers []string) (ethAddresses []*tktypes.EthAddress, err error)
 
 	// Domains register their signers during PostCommit
 	AddInMemorySigner(prefix string, signer signerapi.InMemorySigner)
