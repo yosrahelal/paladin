@@ -66,10 +66,6 @@ var PaladinCRMap = CRMap[corev1alpha1.Paladin, *corev1alpha1.Paladin, *corev1alp
 	AsObject: func(item *corev1alpha1.Paladin) *corev1alpha1.Paladin { return item },
 }
 
-//+kubebuilder:rbac:groups=core.paladin.io,resources=paladins,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core.paladin.io,resources=paladins/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=core.paladin.io,resources=paladins/finalizers,verbs=update
-
 // Reconcile implements the logic when a Paladin resource is created, updated, or deleted
 func (r *PaladinReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
@@ -585,8 +581,8 @@ func (r *PaladinReconciler) generatePaladinConfig(ctx context.Context, node *cor
 		pldConf.Blockchain.HTTP.URL = fmt.Sprintf("http://%s:8545", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
 		pldConf.Blockchain.WS.URL = fmt.Sprintf("ws://%s:8546", generateBesuServiceHostname(node.Spec.BesuNode, node.Namespace))
 	}
-	b, _ := yaml.Marshal(&pldConf)
-	return string(b), tlsSecrets, nil
+	b, err := yaml.Marshal(&pldConf)
+	return string(b), tlsSecrets, err
 }
 
 func (r *PaladinReconciler) generatePaladinDBConfig(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig, name string) error {
@@ -807,13 +803,19 @@ func (r *PaladinReconciler) generatePaladinRegistries(ctx context.Context, node 
 }
 
 func (r *PaladinReconciler) generatePaladinTransports(ctx context.Context, node *corev1alpha1.Paladin, pldConf *pldconf.PaladinConfig) ([]string, error) {
-	var availableTLSSecrets []string
+	availableTLSSecrets := []string{}
 	for _, transport := range node.Spec.Transports {
 
 		var transportConf map[string]any
 		if err := json.Unmarshal([]byte(transport.ConfigJSON), &transportConf); err != nil {
 			log.FromContext(ctx).Error(err, fmt.Sprintf("configJSON for transport '%s' cannot be parsed (skipping)", transport.Name))
 			continue // skip it - but continue trying others
+		}
+
+		if transport.TLS.SecretName == "" {
+			// No TLS config - we can skip this one
+			// TODO: Is this acceptable?
+			continue
 		}
 
 		// See if the secret is available
@@ -914,6 +916,11 @@ issuerRef:
 		return fmt.Errorf("failed to execute certSpecTemplate: %s", err)
 	}
 	certUnstructured.Object["spec"] = yamlMap
+
+	if err := controllerutil.SetControllerReference(node, &certUnstructured, r.Scheme); err != nil {
+		return err
+	}
+
 	return r.Create(ctx, &certUnstructured)
 
 }
@@ -977,7 +984,7 @@ func (r *PaladinReconciler) createService(ctx context.Context, node *corev1alpha
 	if err := r.Get(ctx, types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}, &foundSvc); err != nil && errors.IsNotFound(err) {
 		err = r.Create(ctx, svc)
 		if err != nil {
-			return svc, err
+			return svc, fmt.Errorf("failed to create service: %s", err)
 		}
 		setCondition(&node.Status.Conditions, corev1alpha1.ConditionSVC, metav1.ConditionTrue, corev1alpha1.ReasonSVCCreated, fmt.Sprintf("Name: %s", name))
 	} else if err != nil {

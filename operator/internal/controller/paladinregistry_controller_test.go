@@ -51,7 +51,17 @@ var _ = Describe("PaladinRegistry Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: corev1alpha1.PaladinRegistrySpec{
+						Type: corev1alpha1.RegistryTypeEVM,
+						EVM: corev1alpha1.EVMRegistryConfig{
+							SmartContractDeployment: "registry",
+						},
+						Plugin: corev1alpha1.PluginConfig{
+							Type:    "c-shared",
+							Library: "/app/registries/libevm.so",
+						},
+						ConfigJSON: "{}",
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}

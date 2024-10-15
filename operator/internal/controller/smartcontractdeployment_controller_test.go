@@ -51,6 +51,9 @@ var _ = Describe("SmartContractDeployment Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
+					Spec: corev1alpha1.SmartContractDeploymentSpec{
+						TxType: "public",
+					},
 					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())

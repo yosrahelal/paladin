@@ -53,10 +53,6 @@ var BesuGenesisCRMap = CRMap[corev1alpha1.BesuGenesis, *corev1alpha1.BesuGenesis
 	AsObject: func(item *corev1alpha1.BesuGenesis) *corev1alpha1.BesuGenesis { return item },
 }
 
-// +kubebuilder:rbac:groups=core.paladin.io,resources=besugeneses,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core.paladin.io,resources=besugeneses/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=core.paladin.io,resources=besugeneses/finalizers,verbs=update
-
 // Reconcile implements the logic when a BesuGenesis resource is created, updated, or deleted
 func (r *BesuGenesisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)

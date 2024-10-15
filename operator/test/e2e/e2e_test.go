@@ -40,21 +40,9 @@ var notoFactoryBuild string
 
 var _ = Describe("controller", Ordered, func() {
 	BeforeAll(func() {
-		// TODO: Move to gradle (if needed)
-		By("installing prometheus operator")
-		Expect(utils.InstallPrometheusOperator()).To(Succeed())
-
-		By("installing the cert-manager")
-		Expect(utils.InstallCertManager()).To(Succeed())
-
 	})
 
 	AfterAll(func() {
-		By("uninstalling the Prometheus manager bundle")
-		utils.UninstallPrometheusOperator()
-
-		By("uninstalling the cert-manager bundle")
-		utils.UninstallCertManager()
 	})
 
 	Context("Paladin Single Node", func() {

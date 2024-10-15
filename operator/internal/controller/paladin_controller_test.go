@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -43,8 +44,12 @@ var _ = Describe("Paladin Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		node := &corev1alpha1.Paladin{}
-
+		node := &corev1alpha1.Paladin{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      resourceName,
+				Namespace: "default",
+			},
+		}
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind Node")
 			err := k8sClient.Get(ctx, typeNamespacedName, node)
@@ -65,6 +70,45 @@ var _ = Describe("Paladin Controller", func() {
 								Name:   "signer-1",
 								Secret: "node1.keys",
 								Type:   "autoHDWallet",
+							},
+						},
+						Transports: []corev1alpha1.TransportConfig{
+							{
+								Name: "grpc",
+								Plugin: corev1alpha1.PluginConfig{
+									Type:    "c-shared",
+									Library: "/app/transports/libgrpc.so",
+								},
+								Ports: []corev1.ServicePort{
+									{
+										Name:     "transport-grpc",
+										Port:     9000,
+										Protocol: corev1.ProtocolTCP,
+									},
+								},
+								ConfigJSON: `{"port": 9000,"address": "0.0.0.0"}`,
+							},
+						},
+						Domains: []corev1alpha1.DomainReference{
+							{
+								LabelReference: corev1alpha1.LabelReference{
+									LabelSelector: metav1.LabelSelector{
+										MatchLabels: map[string]string{
+											"paladin.io/domain-name": "noto",
+										},
+									},
+								},
+							},
+						},
+						Registries: []corev1alpha1.RegistryReference{
+							{
+								LabelReference: corev1alpha1.LabelReference{
+									LabelSelector: metav1.LabelSelector{
+										MatchLabels: map[string]string{
+											"paladin.io/registry-name": "evm-registry",
+										},
+									},
+								},
 							},
 						},
 					},
