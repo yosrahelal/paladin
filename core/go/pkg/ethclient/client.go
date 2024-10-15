@@ -35,36 +35,44 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"golang.org/x/crypto/sha3"
 )
 
-// Higher level client interface to the base Ethereum ledger for TX submission.
-// See blockindexer package for the events side, including WaitForTransaction()
+// Low level EthClient helpers for submission
 type EthClient interface {
 	Close()
+	ChainID() int64
+
+	GasPrice(ctx context.Context) (gasPrice *tktypes.HexUint256, err error)
+	GetBalance(ctx context.Context, address tktypes.EthAddress, block string) (balance *tktypes.HexUint256, err error)
+	GetTransactionReceipt(ctx context.Context, txHash string) (*TransactionReceiptResponse, error)
+
+	EstimateGasNoResolve(ctx context.Context, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error)
+	CallContractNoResolve(ctx context.Context, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error)
+	GetTransactionCount(ctx context.Context, fromAddr tktypes.EthAddress) (transactionCount *tktypes.HexUint64, err error)
+	BuildRawTransactionNoResolve(ctx context.Context, txVersion EthTXVersion, from *ResolvedSigner, tx *ethsigner.Transaction, opts ...CallOption) (tktypes.HexBytes, error)
+}
+
+// Higher level client interface to the base Ethereum ledger for TX submission.
+// Not used by Paladin as we have the publicTxMgr
+type EthClientWithKeyManager interface {
+	EthClient
+
 	ABI(ctx context.Context, a abi.ABI) (ABIClient, error)
 	ABIJSON(ctx context.Context, abiJson []byte) (ABIClient, error)
 	ABIFunction(ctx context.Context, functionABI *abi.Entry) (_ ABIFunctionClient, err error)
 	ABIConstructor(ctx context.Context, constructorABI *abi.Entry, bytecode tktypes.HexBytes) (_ ABIFunctionClient, err error)
 	MustABIJSON(abiJson []byte) ABIClient
-	ChainID() int64
 
 	// Below are raw functions that the ABI() above provides wrappers for
-	GasPrice(ctx context.Context) (gasPrice *tktypes.HexUint256, err error)
-	GetBalance(ctx context.Context, address tktypes.EthAddress, block string) (balance *tktypes.HexUint256, err error)
-	EstimateGasNoResolve(ctx context.Context, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error)
-	EstimateGas(ctx context.Context, from *string, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error)
-	GetTransactionCount(ctx context.Context, fromAddr tktypes.EthAddress) (transactionCount *tktypes.HexUint64, err error)
-	GetTransactionReceipt(ctx context.Context, txHash string) (*TransactionReceiptResponse, error)
-	CallContractNoResolve(ctx context.Context, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error)
 	CallContract(ctx context.Context, from *string, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error)
+	EstimateGas(ctx context.Context, from *string, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error)
 	BuildRawTransaction(ctx context.Context, txVersion EthTXVersion, from string, tx *ethsigner.Transaction, opts ...CallOption) (tktypes.HexBytes, error)
-	BuildRawTransactionNoResolve(ctx context.Context, txVersion EthTXVersion, from *ResolvedSigner, tx *ethsigner.Transaction, opts ...CallOption) (tktypes.HexBytes, error)
 	SendRawTransaction(ctx context.Context, rawTX tktypes.HexBytes) (*tktypes.Bytes32, error)
 }
 
