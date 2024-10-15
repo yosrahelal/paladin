@@ -46,6 +46,7 @@ type transactionProcessorDepencyMocks struct {
 	publisher           *privatetxnmgrmocks.Publisher
 	identityResolver    *componentmocks.IdentityResolver
 	syncPoints          *prvtxsyncpointsmocks.SyncPoints
+	transportWriter     *privatetxnmgrmocks.TransportWriter
 }
 
 func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context, transaction *components.PrivateTransaction) (*PaladinTxProcessor, *transactionProcessorDepencyMocks) {
@@ -63,6 +64,7 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 		publisher:           privatetxnmgrmocks.NewPublisher(t),
 		identityResolver:    componentmocks.NewIdentityResolver(t),
 		syncPoints:          prvtxsyncpointsmocks.NewSyncPoints(t),
+		transportWriter:     privatetxnmgrmocks.NewTransportWriter(t),
 	}
 	contractAddress := tktypes.RandAddress()
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
@@ -72,7 +74,7 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 	mocks.endorsementGatherer.On("DomainContext").Return(mocks.domainContext).Maybe()
 	mocks.domainSmartContract.On("Address").Return(*contractAddress).Maybe()
 
-	tp := NewPaladinTransactionProcessor(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.syncPoints)
+	tp := NewPaladinTransactionProcessor(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.syncPoints, mocks.transportWriter)
 
 	return tp.(*PaladinTxProcessor), mocks
 }

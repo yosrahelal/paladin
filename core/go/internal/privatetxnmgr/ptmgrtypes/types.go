@@ -143,6 +143,7 @@ type TransportWriter interface {
 	// Provided to the sequencer to allow it to send messages to other nodes in the network
 	SendDelegateTransactionMessage(ctx context.Context, transactionId string, delegateNodeId string) error
 	SendState(ctx context.Context, stateId string, schemaId string, stateDataJson string, party string) error
+	SendDelegationRequest(ctx context.Context, delegationId string, delegateNodeId string, transaction *components.PrivateTransaction) error
 }
 
 type TxProcessorStatus int
@@ -160,6 +161,7 @@ type TxProcessor interface {
 	GetStatus(ctx context.Context) TxProcessorStatus
 
 	HandleTransactionSubmittedEvent(ctx context.Context, event *TransactionSubmittedEvent) error
+	HandleTransactionSwappedInEvent(ctx context.Context, event *TransactionSwappedInEvent) error
 	HandleTransactionAssembledEvent(ctx context.Context, event *TransactionAssembledEvent) error
 	HandleTransactionSignedEvent(ctx context.Context, event *TransactionSignedEvent) error
 	HandleTransactionEndorsedEvent(ctx context.Context, event *TransactionEndorsedEvent) error

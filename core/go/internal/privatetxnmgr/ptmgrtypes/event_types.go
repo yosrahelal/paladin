@@ -49,6 +49,11 @@ type TransactionSubmittedEvent struct {
 	PrivateTransactionEventBase
 }
 
+// existing Transaction has been loaded into memory
+type TransactionSwappedInEvent struct {
+	PrivateTransactionEventBase
+}
+
 type TransactionAssembledEvent struct {
 	PrivateTransactionEventBase
 	sequence.TransactionAssembledEvent

@@ -17,6 +17,7 @@ package privatetxnmgr
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -104,11 +105,12 @@ func NewPrivateTransactionMgr(ctx context.Context, nodeID string, config *pldcon
 func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contractAddr tktypes.EthAddress, domainAPI components.DomainSmartContract) (oc *Orchestrator, err error) {
 
 	if p.orchestrators[contractAddr.String()] == nil {
+		transportWriter := NewTransportWriter(domainAPI.Domain().Name(), &contractAddr, p.nodeID, p.components.TransportManager())
 		publisher := NewPublisher(p, contractAddr.String())
 		seq := NewSequencer(
 			p.nodeID,
 			publisher,
-			NewTransportWriter(domainAPI.Domain().Name(), &contractAddr, p.nodeID, p.components.TransportManager()),
+			transportWriter,
 		)
 		endorsementGatherer, err := p.getEndorsementGathererForContract(ctx, contractAddr)
 		if err != nil {
@@ -129,6 +131,7 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 				p.syncPoints,
 				p.components.IdentityResolver(),
 				p.stateDistributer,
+				transportWriter,
 			)
 		orchestratorDone, err := p.orchestrators[contractAddr.String()].Start(ctx)
 		if err != nil {
@@ -199,6 +202,43 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.Priva
 	queued := oc.ProcessNewTransaction(ctx, tx)
 	if queued {
 		log.L(ctx).Debugf("Transaction with ID %s queued in database", tx.ID)
+	}
+	return nil
+}
+
+func (p *privateTxManager) validateDelegatedTransaction(ctx context.Context, tx *components.PrivateTransaction) error {
+	log.L(ctx).Debugf("Validating delegated transaction: %v", tx)
+	if tx.Inputs == nil || tx.Inputs.Domain == "" {
+		return i18n.NewError(ctx, msgs.MsgDomainNotProvided)
+	}
+
+	emptyAddress := tktypes.EthAddress{}
+	if tx.Inputs.To == emptyAddress {
+		return i18n.NewError(ctx, msgs.MsgContractAddressNotProvided)
+	}
+
+	if tx.PreAssembly == nil {
+		return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "PreAssembly is nil")
+	}
+	return nil
+
+}
+
+func (p *privateTxManager) handleDelegatedTransaction(ctx context.Context, tx *components.PrivateTransaction) error {
+	log.L(ctx).Debugf("Handling delegated transaction: %v", tx)
+
+	contractAddr := tx.Inputs.To
+	domainAPI, err := p.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
+	if err != nil {
+		return err
+	}
+	oc, err := p.getOrchestratorForContract(ctx, contractAddr, domainAPI)
+	if err != nil {
+		return err
+	}
+	queued := oc.ProcessInFlightTransaction(ctx, tx)
+	if queued {
+		log.L(ctx).Debugf("Delegated Transaction with ID %s queued in database", tx.ID)
 	}
 	return nil
 }
@@ -514,6 +554,39 @@ func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, message
 		log.L(ctx).Errorf("Failed to send endorsement response: %s", err)
 		return
 	}
+}
+
+func (p *privateTxManager) handleDelegationRequest(ctx context.Context, messagePayload []byte, replyTo string) {
+	delegationRequest := &pbEngine.DelegationRequest{}
+	err := proto.Unmarshal(messagePayload, delegationRequest)
+	if err != nil {
+		log.L(ctx).Errorf("Failed to unmarshal delegation request: %s", err)
+		return
+	}
+
+	transaction := new(components.PrivateTransaction)
+	err = json.Unmarshal(delegationRequest.PrivateTransaction, &transaction)
+
+	//before persisting the transaction, we validate it and send a rejection message if it is invalid
+	if err == nil {
+		err = p.validateDelegatedTransaction(ctx, transaction)
+	}
+	if err != nil {
+		log.L(ctx).Errorf("Failed to validate delegated transaction: %s", err)
+		//TODO send a negative acknowledgement
+		return
+	}
+
+	//TODO persist the delegated transaction and only continue once it has been persisted
+
+	err = p.handleDelegatedTransaction(ctx, transaction)
+	if err != nil {
+		log.L(ctx).Errorf("Failed to handle delegated transaction: %s", err)
+		// do not send an ack and let the sender retry
+		return
+	}
+
+	//TODO send an ack
 }
 
 func (p *privateTxManager) handleEndorsementResponse(ctx context.Context, messagePayload []byte) {

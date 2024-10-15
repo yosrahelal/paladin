@@ -232,8 +232,8 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 			Properties: map[string]tktypes.RawJSON{
 				"transport.grpc": tktypes.JSONString(
 					grpc.PublishedTransportDetails{
-						Endpoint: fmt.Sprintf("dns:///%s:%d", peerNodes[0].address, peerNodes[0].port),
-						Issuers:  peerNodes[0].cert,
+						Endpoint: fmt.Sprintf("dns:///%s:%d", peerNode.address, peerNode.port),
+						Issuers:  peerNode.cert,
 					},
 				),
 			},
@@ -254,7 +254,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 
 	//uncomment for debugging
 	//i.conf.DB.SQLite.DSN = "./sql." + i.name + ".db"
-	//i.conf.Log.Level = confutil.P("debug")
+	i.conf.Log.Level = confutil.P("debug")
 
 	var pl plugins.UnitTestPluginLoader
 

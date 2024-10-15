@@ -423,8 +423,13 @@ func (s *sequencer) RemoveTransaction(ctx context.Context, txnID string) {
 			delete(s.stateSpenders, inputState)
 		}
 	}
+	transaction, found := s.unconfirmedTransactionsByID[txnID]
+	if !found {
+		log.L(ctx).Debugf("Transaction %s already removed", txnID)
+		return
+	}
 	//any other transactions that were speculatively spending the output states of the transaction will need to be re-assembled
-	for _, outputState := range s.unconfirmedTransactionsByID[txnID].outputStateIDs {
+	for _, outputState := range transaction.outputStateIDs {
 		spender, found := s.stateSpenders[outputState]
 		if found {
 			s.invalidTransactions = append(s.invalidTransactions, spender)

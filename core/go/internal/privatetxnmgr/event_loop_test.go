@@ -51,6 +51,7 @@ type orchestratorDepencyMocks struct {
 	identityResolver    *componentmocks.IdentityResolver
 	stateDistributer    *statedistributionmocks.StateDistributer
 	txManager           *componentmocks.TXManager
+	transportWriter     *privatetxnmgrmocks.TransportWriter
 }
 
 func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress *tktypes.EthAddress) (*Orchestrator, *orchestratorDepencyMocks, func()) {
@@ -72,6 +73,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 		identityResolver:    componentmocks.NewIdentityResolver(t),
 		stateDistributer:    statedistributionmocks.NewStateDistributer(t),
 		txManager:           componentmocks.NewTXManager(t),
+		transportWriter:     privatetxnmgrmocks.NewTransportWriter(t),
 	}
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
@@ -87,7 +89,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	mocks.domainSmartContract.On("Address").Return(*domainAddress).Maybe()
 
 	syncPoints := syncpoints.NewSyncPoints(ctx, &pldconf.FlushWriterConfig{}, p, mocks.txManager)
-	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer)
+	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer, mocks.transportWriter)
 	ocDone, err := o.Start(ctx)
 	require.NoError(t, err)
 
@@ -164,6 +166,13 @@ func TestOrchestratorHandleEvents(t *testing.T) {
 			name:        "TransactionSubmittedEvent",
 			handlerName: "HandleTransactionSubmittedEvent",
 			event: &ptmgrtypes.TransactionSubmittedEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
+		{
+			name:        "TransactionSwappedInEvent",
+			handlerName: "HandleTransactionSwappedInEvent",
+			event: &ptmgrtypes.TransactionSwappedInEvent{
 				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
 			},
 		},

@@ -103,6 +103,7 @@ type Orchestrator struct {
 	identityResolver    components.IdentityResolver
 	syncPoints          syncpoints.SyncPoints
 	stateDistributer    statedistribution.StateDistributer
+	transportWriter     ptmgrtypes.TransportWriter
 }
 
 func NewOrchestrator(
@@ -118,6 +119,7 @@ func NewOrchestrator(
 	syncPoints syncpoints.SyncPoints,
 	identityResolver components.IdentityResolver,
 	stateDistributer statedistribution.StateDistributer,
+	transportWriter ptmgrtypes.TransportWriter,
 ) *Orchestrator {
 
 	newOrchestrator := &Orchestrator{
@@ -146,6 +148,7 @@ func NewOrchestrator(
 		syncPoints:                   syncPoints,
 		identityResolver:             identityResolver,
 		stateDistributer:             stateDistributer,
+		transportWriter:              transportWriter,
 	}
 
 	newOrchestrator.sequencer = sequencer
@@ -196,6 +199,8 @@ func (oc *Orchestrator) handleEvent(ctx context.Context, event ptmgrtypes.Privat
 	switch event := event.(type) {
 	case *ptmgrtypes.TransactionSubmittedEvent:
 		err = transactionProcessor.HandleTransactionSubmittedEvent(ctx, event)
+	case *ptmgrtypes.TransactionSwappedInEvent:
+		err = transactionProcessor.HandleTransactionSwappedInEvent(ctx, event)
 	case *ptmgrtypes.TransactionAssembledEvent:
 		err = transactionProcessor.HandleTransactionAssembledEvent(ctx, event)
 	case *ptmgrtypes.TransactionSignedEvent:
@@ -275,10 +280,38 @@ func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *component
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.syncPoints)
+			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.syncPoints, oc.transportWriter)
 		}
 		oc.incompleteTxSProcessMap[tx.ID.String()].Init(ctx)
 		oc.pendingEvents <- &ptmgrtypes.TransactionSubmittedEvent{
+			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
+		}
+	}
+	return false
+}
+
+func (oc *Orchestrator) ProcessInFlightTransaction(ctx context.Context, tx *components.PrivateTransaction) (queued bool) {
+	log.L(ctx).Infof("Processing in flight transaction %s", tx.ID)
+	//a transaction that already has had some processing done on it
+	// currently the only case this can happen is a transaction delegated from another node
+	// but maybe in future, inflight transactions being coordinated locally could be swapped out of memory when they are blocked and/or if we are at max concurrency
+	oc.incompleteTxProcessMapMutex.Lock()
+	defer oc.incompleteTxProcessMapMutex.Unlock()
+	_, alreadyInMemory := oc.incompleteTxSProcessMap[tx.ID.String()]
+	if alreadyInMemory {
+		log.L(ctx).Warnf("Transaction %s already in memory. Ignoring", tx.ID)
+		return false
+	}
+	if oc.incompleteTxSProcessMap[tx.ID.String()] == nil {
+		if len(oc.incompleteTxSProcessMap) >= oc.maxConcurrentProcess {
+			// TODO: decide how this map is managed, it shouldn't track the entire lifecycle
+			// tx processing pool is full, queue the item
+			return true
+		} else {
+			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.syncPoints, oc.transportWriter)
+		}
+		oc.incompleteTxSProcessMap[tx.ID.String()].Init(ctx)
+		oc.pendingEvents <- &ptmgrtypes.TransactionSwappedInEvent{
 			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
 		}
 	}
