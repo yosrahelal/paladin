@@ -438,9 +438,11 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *
 	} else {
 		tx.PreparedPublicTransaction = &ptxapi.TransactionInput{
 			Transaction: ptxapi.Transaction{
-				From: tx.Signer,
-				To:   contractAddress,
-				Data: tktypes.RawJSON(res.Transaction.ParamsJson),
+				Type:     ptxapi.TransactionTypePublic.Enum(),
+				Function: functionABI.String(),
+				From:     tx.Signer,
+				To:       contractAddress,
+				Data:     tktypes.RawJSON(res.Transaction.ParamsJson),
 			},
 			ABI: abi.ABI{&functionABI},
 		}

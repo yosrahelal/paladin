@@ -273,7 +273,7 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 		_, err := tb.ExecBaseLedgerCall(ctx, tx.Signer, tx.PreparedPublicTransaction)
 		return err
 	} else {
-		_, err := tb.execBaseLedgerTransaction(ctx, tx.Signer, tx.PreparedPublicTransaction)
+		_, err := tb.ExecTransactionSync(ctx, tx.PreparedPublicTransaction)
 		return err
 	}
 }
@@ -318,17 +318,13 @@ func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) (*tktypes.P
 		}
 	}
 
-	var err error
 	var functionABI *abi.Entry
 	var to tktypes.EthAddress
-	var paramsJSON []byte
+	var paramsJSON tktypes.RawJSON
 	if tx.PreparedPublicTransaction != nil {
-		functionABI = tx.PreparedPublicTransaction.FunctionABI
-		to = tx.PreparedPublicTransaction.To
-		paramsJSON, err = tx.PreparedPublicTransaction.Inputs.JSON()
-		if err != nil {
-			return nil, err
-		}
+		functionABI = tx.PreparedPublicTransaction.ABI[0]
+		to = *tx.PreparedPublicTransaction.To
+		paramsJSON = tx.PreparedPublicTransaction.Data
 	} else {
 		functionABI = tx.PreparedPrivateTransaction.ABI[0]
 		to = *tx.PreparedPrivateTransaction.To

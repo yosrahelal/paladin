@@ -415,7 +415,20 @@ func TestNotoSelfSubmit(t *testing.T) {
 		ABI: notoFactory.ABI,
 	})
 
-	tb.ExecBaseLedgerCall(ctx, notaryName, &components.EthTransaction{})
+	query, err := tb.ExecBaseLedgerCall(ctx, notaryName, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type:     ptxapi.TransactionTypePublic.Enum(),
+			To:       factoryAddress,
+			Function: notoFactory.ABI.Functions()["getImplementation"].String(),
+			From:     notaryName,
+			Data: tktypes.JSONString(map[string]any{
+				"name": "selfsubmit",
+			}),
+		},
+		ABI: notoFactory.ABI,
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{}`, string(tktypes.JSONString(query)))
 
 	log.L(ctx).Infof("Deploying an instance of Noto")
 	var notoAddress tktypes.EthAddress
