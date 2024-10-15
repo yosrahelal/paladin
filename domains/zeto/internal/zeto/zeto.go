@@ -549,5 +549,14 @@ func formatErrors(errors []string) string {
 }
 
 func (z *Zeto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
-	panic("TODO: Must implement once receiving states from other nodes with zeto")
+	var validIds []string
+	for _, state := range req.States {
+		if state.SchemaId == z.coinSchema.Id {
+			fmt.Printf("Validating state, data='%s'\n", state.StateDataJson)
+			validIds = append(validIds, state.Id)
+		}
+	}
+	return &prototk.ValidateStateHashesResponse{
+		StateIds: validIds,
+	}, nil
 }
