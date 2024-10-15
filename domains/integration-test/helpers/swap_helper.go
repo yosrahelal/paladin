@@ -36,7 +36,7 @@ var SwapJSON []byte
 type SwapHelper struct {
 	t       *testing.T
 	tb      testbed.Testbed
-	eth     ethclient.EthClient
+	eth     ethclient.EthClientWithKeyManager
 	Address *tktypes.EthAddress
 	ABI     abi.ABI
 }
@@ -61,11 +61,11 @@ func DeploySwap(
 	ctx context.Context,
 	t *testing.T,
 	tb testbed.Testbed,
+	eth ethclient.EthClientWithKeyManager,
 	signer string,
 	input *TradeRequestInput,
 ) *SwapHelper {
 	build := domain.LoadBuild(SwapJSON)
-	eth := tb.Components().EthClientFactory().HTTPClient()
 	builder := deployBuilder(ctx, t, eth, build.ABI, build.Bytecode).
 		Input(toJSON(t, map[string]any{"inputData": input}))
 	deploy := NewTransactionHelper(ctx, t, tb, builder).SignAndSend(signer).Wait()

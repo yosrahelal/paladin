@@ -37,7 +37,7 @@ var NotoTrackerJSON []byte
 type NotoTrackerHelper struct {
 	t       *testing.T
 	tb      testbed.Testbed
-	eth     ethclient.EthClient
+	eth     ethclient.EthClientWithKeyManager
 	Address *tktypes.EthAddress
 	ABI     abi.ABI
 }
@@ -46,10 +46,10 @@ func DeployTracker(
 	ctx context.Context,
 	t *testing.T,
 	tb testbed.Testbed,
+	eth ethclient.EthClientWithKeyManager,
 	signer string,
 ) *NotoTrackerHelper {
 	build := domain.LoadBuild(NotoTrackerJSON)
-	eth := tb.Components().EthClientFactory().HTTPClient()
 	builder := deployBuilder(ctx, t, eth, build.ABI, build.Bytecode).Input(map[string]any{
 		"name":   "NotoTracker",
 		"symbol": "NOTO",

@@ -42,7 +42,7 @@ type AtomFactoryHelper struct {
 	t           *testing.T
 	tb          testbed.Testbed
 	rpc         rpcbackend.Backend
-	eth         ethclient.EthClient
+	eth         ethclient.EthClientWithKeyManager
 	Address     *tktypes.EthAddress
 	FactoryABI  abi.ABI
 	InstanceABI abi.ABI
@@ -51,7 +51,7 @@ type AtomFactoryHelper struct {
 type AtomHelper struct {
 	t           *testing.T
 	tb          testbed.Testbed
-	eth         ethclient.EthClient
+	eth         ethclient.EthClientWithKeyManager
 	Address     *tktypes.EthAddress
 	InstanceABI abi.ABI
 }
@@ -69,17 +69,20 @@ func InitAtom(
 	t *testing.T,
 	tb testbed.Testbed,
 	rpc rpcbackend.Backend,
+	eth ethclient.EthClientWithKeyManager,
 	address string,
 ) *AtomFactoryHelper {
-	return &AtomFactoryHelper{
+	a := &AtomFactoryHelper{
 		t:           t,
 		tb:          tb,
 		rpc:         rpc,
-		eth:         tb.Components().EthClientFactory().HTTPClient(),
+		eth:         eth,
 		Address:     tktypes.MustEthAddress(address),
 		FactoryABI:  domain.LoadBuild(AtomFactoryJSON).ABI,
 		InstanceABI: domain.LoadBuild(AtomJSON).ABI,
 	}
+
+	return a
 }
 
 func (a *AtomFactoryHelper) Create(ctx context.Context, signer string, operations []*AtomOperation) *AtomHelper {

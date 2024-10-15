@@ -22,6 +22,7 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
@@ -54,6 +55,15 @@ type SentTransaction struct {
 type SentDomainTransaction struct {
 	t      *testing.T
 	result chan any
+}
+
+func NewEthClientShareTestbedKeys(t *testing.T, ctx context.Context, tb testbed.Testbed, conf *pldconf.PaladinConfig) ethclient.EthClientWithKeyManager {
+	ecf, err := ethclient.NewEthClientFactoryWithKeyManager(ctx, tb.EthClientKeyManagerShim(), &conf.Blockchain)
+	if err == nil {
+		err = ecf.Start()
+	}
+	require.NoError(t, err)
+	return ecf.HTTPClient()
 }
 
 func NewTransactionHelper(ctx context.Context, t *testing.T, tb testbed.Testbed, builder ethclient.ABIFunctionRequestBuilder) *TransactionHelper {
@@ -155,4 +165,20 @@ func toJSON(t *testing.T, v any) []byte {
 	result, err := json.Marshal(v)
 	assert.NoError(t, err)
 	return result
+}
+
+func deployBuilder(ctx context.Context, t *testing.T, eth ethclient.EthClientWithKeyManager, abi abi.ABI, bytecode []byte) ethclient.ABIFunctionRequestBuilder {
+	abiClient, err := eth.ABI(ctx, abi)
+	assert.NoError(t, err)
+	construct, err := abiClient.Constructor(ctx, bytecode)
+	assert.NoError(t, err)
+	return construct.R(ctx)
+}
+
+func functionBuilder(ctx context.Context, t *testing.T, eth ethclient.EthClientWithKeyManager, abi abi.ABI, functionName string) ethclient.ABIFunctionRequestBuilder {
+	abiClient, err := eth.ABI(ctx, abi)
+	assert.NoError(t, err)
+	fn, err := abiClient.Function(ctx, functionName)
+	assert.NoError(t, err)
+	return fn.R(ctx)
 }

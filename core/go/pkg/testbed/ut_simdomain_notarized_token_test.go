@@ -607,7 +607,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 	confFile := writeTestConfig(t)
 	factoryContractAddress := deploySmartContract(t, confFile)
 	tb := NewTestBed()
-	url, done, err := tb.StartForTest(confFile, map[string]*TestbedDomain{
+	url, _, done, err := tb.StartForTest(confFile, map[string]*TestbedDomain{
 		"domain1": {
 			Plugin:          fakeCoinDomain,
 			Config:          map[string]any{"some": "config"},
@@ -664,7 +664,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 func deploySmartContract(t *testing.T, confFile string) *tktypes.EthAddress {
 	ctx := context.Background()
 	tb := NewTestBed()
-	_, done, err := tb.StartForTest(confFile, nil)
+	_, _, done, err := tb.StartForTest(confFile, nil)
 	require.NoError(t, err)
 	defer done()
 

@@ -87,22 +87,24 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withGuard b
 	_, notoTestbed := newNotoDomain(t, &nototypes.DomainConfig{
 		FactoryAddress: contracts["noto"],
 	})
-	done, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
+	done, conf, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		domainName: notoTestbed,
 	})
 	defer done()
+	ec := helpers.NewEthClientShareTestbedKeys(t, ctx, tb, conf)
+	defer ec.Close()
 
 	aliceKey, err := tb.ResolveKey(ctx, alice, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 	bobKey, err := tb.ResolveKey(ctx, bob, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 
-	atomFactory := helpers.InitAtom(t, tb, rpc, contracts["atom"])
+	atomFactory := helpers.InitAtom(t, tb, rpc, ec, contracts["atom"])
 
 	var guard *helpers.NotoTrackerHelper
 	var guardAddress *tktypes.EthAddress
 	if withGuard {
-		guard = helpers.DeployTracker(ctx, t, tb, notary)
+		guard = helpers.DeployTracker(ctx, t, tb, ec, notary)
 		guardAddress = guard.Address
 	}
 
@@ -119,7 +121,7 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withGuard b
 
 	// TODO: this should be a Pente private contract, instead of a base ledger contract
 	log.L(ctx).Infof("Propose a trade of 1 gold for 10 silver")
-	swap := helpers.DeploySwap(ctx, t, tb, alice, &helpers.TradeRequestInput{
+	swap := helpers.DeploySwap(ctx, t, tb, ec, alice, &helpers.TradeRequestInput{
 		Holder1:       aliceKey.Verifier.Verifier,
 		TokenAddress1: notoGold.Address,
 		TokenValue1:   tktypes.Int64ToInt256(1),
@@ -292,11 +294,14 @@ func TestNotoForZeto(t *testing.T) {
 		FactoryAddress: contracts["noto"],
 	})
 	waitForZeto, zetoTestbed := newZetoDomain(t, zetoConfig)
-	done, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
+	done, conf, tb, rpc := newTestbed(t, hdWalletSeed, map[string]*testbed.TestbedDomain{
 		notoDomainName: notoTestbed,
 		zetoDomainName: zetoTestbed,
 	})
 	defer done()
+	ec := helpers.NewEthClientShareTestbedKeys(t, ctx, tb, conf)
+	defer ec.Close()
+
 	notoDomain := <-waitForNoto
 	zetoDomain := <-waitForZeto
 
@@ -305,7 +310,7 @@ func TestNotoForZeto(t *testing.T) {
 	bobKey, err := tb.ResolveKey(ctx, bob, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 
-	atomFactory := helpers.InitAtom(t, tb, rpc, contracts["atom"])
+	atomFactory := helpers.InitAtom(t, tb, rpc, ec, contracts["atom"])
 
 	log.L(ctx).Infof("Deploying Noto and Zeto")
 	noto := helpers.DeployNoto(ctx, t, rpc, notoDomainName, notary, nil)
@@ -318,14 +323,14 @@ func TestNotoForZeto(t *testing.T) {
 	log.L(ctx).Infof("Mint 10 Zeto to Bob")
 	zeto.Mint(ctx, bob, 10).SignAndSend(notary).Wait()
 
-	notoCoins := findAvailableCoins[nototypes.NotoCoinState](t, ctx, rpc, notoDomain.Name(), notoDomain.CoinSchemaID(), noto.Address, nil, func(coins []*nototypes.NotoCoinState) bool {
+	notoCoins := findAvailableCoins(t, ctx, rpc, notoDomain.Name(), notoDomain.CoinSchemaID(), noto.Address, nil, func(coins []*nototypes.NotoCoinState) bool {
 		return len(coins) >= 1
 	})
 	require.Len(t, notoCoins, 1)
 	assert.Equal(t, int64(10), notoCoins[0].Data.Amount.Int().Int64())
-	assert.Equal(t, aliceKey, notoCoins[0].Data.Owner.String())
+	assert.Equal(t, aliceKey.Verifier.Verifier, notoCoins[0].Data.Owner.String())
 
-	zetoCoins := findAvailableCoins[zetotypes.ZetoCoinState](t, ctx, rpc, zetoDomain.Name(), zetoDomain.CoinSchemaID(), zeto.Address, nil, func(coins []*zetotypes.ZetoCoinState) bool {
+	zetoCoins := findAvailableCoins(t, ctx, rpc, zetoDomain.Name(), zetoDomain.CoinSchemaID(), zeto.Address, nil, func(coins []*zetotypes.ZetoCoinState) bool {
 		return len(coins) >= 1
 	})
 	require.NoError(t, err)
@@ -335,7 +340,7 @@ func TestNotoForZeto(t *testing.T) {
 
 	// TODO: this should be a Pente private contract, instead of a base ledger contract
 	log.L(ctx).Infof("Propose a trade of 1 Noto for 1 Zeto")
-	swap := helpers.DeploySwap(ctx, t, tb, alice, &helpers.TradeRequestInput{
+	swap := helpers.DeploySwap(ctx, t, tb, ec, alice, &helpers.TradeRequestInput{
 		Holder1:       aliceKey.Verifier.Verifier,
 		TokenAddress1: noto.Address,
 		TokenValue1:   tktypes.Int64ToInt256(1),
