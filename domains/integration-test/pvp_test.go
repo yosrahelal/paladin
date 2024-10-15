@@ -92,9 +92,9 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withGuard b
 	})
 	defer done()
 
-	_, aliceKey, err := tb.Components().KeyManager().ResolveKey(ctx, alice, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	aliceKey, err := tb.ResolveKey(ctx, alice, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
-	_, bobKey, err := tb.Components().KeyManager().ResolveKey(ctx, bob, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	bobKey, err := tb.ResolveKey(ctx, bob, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 
 	atomFactory := helpers.InitAtom(t, tb, rpc, contracts["atom"])
@@ -120,11 +120,11 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withGuard b
 	// TODO: this should be a Pente private contract, instead of a base ledger contract
 	log.L(ctx).Infof("Propose a trade of 1 gold for 10 silver")
 	swap := helpers.DeploySwap(ctx, t, tb, alice, &helpers.TradeRequestInput{
-		Holder1:       aliceKey,
+		Holder1:       aliceKey.Verifier.Verifier,
 		TokenAddress1: notoGold.Address,
 		TokenValue1:   tktypes.Int64ToInt256(1),
 
-		Holder2:       bobKey,
+		Holder2:       bobKey.Verifier.Verifier,
 		TokenAddress2: notoSilver.Address,
 		TokenValue2:   tktypes.Int64ToInt256(10),
 	})
@@ -227,8 +227,8 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withGuard b
 	transferAtom.Execute(ctx).SignAndSend(alice).Wait()
 
 	if withGuard {
-		assert.Equal(t, int64(9), guard.GetBalance(ctx, aliceKey))
-		assert.Equal(t, int64(1), guard.GetBalance(ctx, bobKey))
+		assert.Equal(t, int64(9), guard.GetBalance(ctx, aliceKey.Verifier.Verifier))
+		assert.Equal(t, int64(1), guard.GetBalance(ctx, bobKey.Verifier.Verifier))
 	}
 }
 
@@ -300,9 +300,9 @@ func TestNotoForZeto(t *testing.T) {
 	notoDomain := <-waitForNoto
 	zetoDomain := <-waitForZeto
 
-	_, aliceKey, err := tb.Components().KeyManager().ResolveKey(ctx, alice, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	aliceKey, err := tb.ResolveKey(ctx, alice, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
-	_, bobKey, err := tb.Components().KeyManager().ResolveKey(ctx, bob, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	bobKey, err := tb.ResolveKey(ctx, bob, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 
 	atomFactory := helpers.InitAtom(t, tb, rpc, contracts["atom"])
@@ -336,11 +336,11 @@ func TestNotoForZeto(t *testing.T) {
 	// TODO: this should be a Pente private contract, instead of a base ledger contract
 	log.L(ctx).Infof("Propose a trade of 1 Noto for 1 Zeto")
 	swap := helpers.DeploySwap(ctx, t, tb, alice, &helpers.TradeRequestInput{
-		Holder1:       aliceKey,
+		Holder1:       aliceKey.Verifier.Verifier,
 		TokenAddress1: noto.Address,
 		TokenValue1:   tktypes.Int64ToInt256(1),
 
-		Holder2:       bobKey,
+		Holder2:       bobKey.Verifier.Verifier,
 		TokenAddress2: zeto.Address,
 		TokenValue2:   tktypes.Int64ToInt256(1),
 	})
@@ -353,7 +353,7 @@ func TestNotoForZeto(t *testing.T) {
 	require.NoError(t, err)
 	transferZetoEncoded, err := transferZeto.FunctionABI.EncodeCallDataJSONCtx(ctx, transferZeto.ParamsJSON)
 	require.NoError(t, err)
-	zeto.LockProof(ctx, tktypes.MustEthAddress(bobKey), transferZetoEncoded).SignAndSend(bob, false).Wait()
+	zeto.LockProof(ctx, tktypes.MustEthAddress(bobKey.Verifier.Verifier), transferZetoEncoded).SignAndSend(bob, false).Wait()
 
 	// TODO: this should actually be a Pente state transition
 	log.L(ctx).Infof("Prepare the trade execute")

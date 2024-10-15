@@ -419,7 +419,11 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 		}
 
 		// Check the DB for a verifier for this existing mapping.
-		v, err := kr.getStoredVerifier(dbTX /* assured non-nil here */, identifier, algorithm, verifierType)
+		var v *components.KeyVerifier
+		dbTX, err := kr.krc.getDBTX()
+		if err == nil {
+			v, err = kr.getStoredVerifier(dbTX, identifier, algorithm, verifierType)
+		}
 		if err != nil {
 			return nil, err
 		}

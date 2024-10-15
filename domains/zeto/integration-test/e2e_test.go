@@ -101,8 +101,6 @@ func deployZetoContracts(t *testing.T, hdWalletSeed *testbed.UTInitFunction) *ze
 
 	tb := testbed.NewTestBed()
 	url, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{}, hdWalletSeed)
-	bi := tb.Components().BlockIndexer()
-	ec := tb.Components().EthClientFactory().HTTPClient()
 	assert.NoError(t, err)
 	defer done()
 	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
@@ -114,7 +112,7 @@ func deployZetoContracts(t *testing.T, hdWalletSeed *testbed.UTInitFunction) *ze
 	deployedContracts, err := deployDomainContracts(ctx, rpc, controllerName, &config)
 	assert.NoError(t, err)
 
-	err = configureFactoryContract(ctx, ec, bi, controllerName, deployedContracts)
+	err = configureFactoryContract(ctx, tb, controllerName, deployedContracts)
 	assert.NoError(t, err)
 
 	return deployedContracts
@@ -268,7 +266,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
 		}),
 	}, false)
 	require.NotNil(t, rpcerr)
-	assert.Regexp(t, "failed to send base ledger transaction: PD011513: Reverted: 0x118cdaa.*", rpcerr.Error())
+	assert.Regexp(t, "PD011513: Reverted: 0x118cdaa.*", rpcerr.Error())
 
 	log.L(ctx).Infof("Transfer 25 from controller to recipient1")
 	rpcerr = s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{

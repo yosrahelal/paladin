@@ -156,19 +156,3 @@ func toJSON(t *testing.T, v any) []byte {
 	assert.NoError(t, err)
 	return result
 }
-
-func deployBuilder(ctx context.Context, t *testing.T, eth ethclient.EthClient, abi abi.ABI, bytecode []byte) ethclient.ABIFunctionRequestBuilder {
-	abiClient, err := eth.ABI(ctx, abi)
-	assert.NoError(t, err)
-	construct, err := abiClient.Constructor(ctx, bytecode)
-	assert.NoError(t, err)
-	return construct.R(ctx)
-}
-
-func functionBuilder(ctx context.Context, t *testing.T, eth ethclient.EthClient, abi abi.ABI, functionName string) ethclient.ABIFunctionRequestBuilder {
-	abiClient, err := eth.ABI(ctx, abi)
-	assert.NoError(t, err)
-	fn, err := abiClient.Function(ctx, functionName)
-	assert.NoError(t, err)
-	return fn.R(ctx)
-}
