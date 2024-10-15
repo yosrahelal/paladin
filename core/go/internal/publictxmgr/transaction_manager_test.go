@@ -32,6 +32,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/ethclientmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
@@ -54,8 +55,8 @@ type mocksAndTestControl struct {
 	allComponents       *componentmocks.AllComponents
 	db                  sqlmock.Sqlmock // unless realDB
 	keyManager          components.KeyManager
-	ethClientFactory    *componentmocks.EthClientFactory
-	ethClient           *componentmocks.EthClient
+	ethClientFactory    *ethclientmocks.EthClientFactory
+	ethClient           *ethclientmocks.EthClient
 	blockIndexer        *componentmocks.BlockIndexer
 	txManager           *componentmocks.TXManager
 }
@@ -69,8 +70,8 @@ const mockBaseNonce = 103342
 func baseMocks(t *testing.T) *mocksAndTestControl {
 	mocks := &mocksAndTestControl{
 		allComponents:    componentmocks.NewAllComponents(t),
-		ethClientFactory: componentmocks.NewEthClientFactory(t),
-		ethClient:        componentmocks.NewEthClient(t),
+		ethClientFactory: ethclientmocks.NewEthClientFactory(t),
+		ethClient:        ethclientmocks.NewEthClient(t),
 		blockIndexer:     componentmocks.NewBlockIndexer(t),
 		txManager:        componentmocks.NewTXManager(t),
 	}

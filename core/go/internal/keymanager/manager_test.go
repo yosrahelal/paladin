@@ -130,12 +130,12 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 			km.verifierByIdentityCache.Clear()
 		}
 
-		var krc components.KeyResolutionContext
-		err := km.p.DB().Transaction(func(tx *gorm.DB) error {
-			krc = km.NewKeyResolutionContext(ctx, tx)
+		krc := km.NewKeyResolutionContext(ctx)
+		err := km.p.DB().Transaction(func(dbTX *gorm.DB) error {
+			kr := krc.KeyResolver(dbTX)
 
 			// one key out of the blue
-			resolved1, err := krc.ResolveKey("bob.keys.blue.42", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+			resolved1, err := kr.ResolveKey("bob.keys.blue.42", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 			require.NoError(t, err)
 			assert.Equal(t, algorithms.ECDSA_SECP256K1, resolved1.Verifier.Algorithm)
 			assert.Equal(t, verifiers.ETH_ADDRESS, resolved1.Verifier.Type)
@@ -152,7 +152,7 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 			assert.Equal(t, addr.String(), resolved1.Verifier.Verifier)
 
 			// a root key, after we've already allocated a key under it
-			resolved2, err := krc.ResolveKey("bob", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+			resolved2, err := kr.ResolveKey("bob", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 			require.NoError(t, err)
 			assert.Equal(t, algorithms.ECDSA_SECP256K1, resolved2.Verifier.Algorithm)
 			assert.Equal(t, verifiers.ETH_ADDRESS, resolved2.Verifier.Type)
@@ -160,7 +160,7 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 
 			// keys at a nested layer
 			for i := 0; i < 10; i++ {
-				resolved, err := krc.ResolveKey(fmt.Sprintf("bob.keys.red.%d", i), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				resolved, err := kr.ResolveKey(fmt.Sprintf("bob.keys.red.%d", i), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 				require.NoError(t, err)
 				assert.Equal(t, algorithms.ECDSA_SECP256K1, resolved.Verifier.Algorithm)
 				assert.Equal(t, verifiers.ETH_ADDRESS, resolved.Verifier.Type)
@@ -169,7 +169,7 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 
 			// same keys backwards
 			for i := 9; i >= 0; i-- {
-				resolved, err := krc.ResolveKey(fmt.Sprintf("bob.keys.red.%d", i), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				resolved, err := kr.ResolveKey(fmt.Sprintf("bob.keys.red.%d", i), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 				require.NoError(t, err)
 				assert.Equal(t, algorithms.ECDSA_SECP256K1, resolved.Verifier.Algorithm)
 				assert.Equal(t, verifiers.ETH_ADDRESS, resolved.Verifier.Type)
@@ -178,7 +178,7 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 
 			// keys under a different root
 			for i := 0; i < 10; i++ {
-				resolved, err := krc.ResolveKey(fmt.Sprintf("sally.%d", i), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				resolved, err := kr.ResolveKey(fmt.Sprintf("sally.%d", i), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 				require.NoError(t, err)
 				assert.Equal(t, algorithms.ECDSA_SECP256K1, resolved.Verifier.Algorithm)
 				assert.Equal(t, verifiers.ETH_ADDRESS, resolved.Verifier.Type)
@@ -188,7 +188,7 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 			return krc.PreCommit()
 		})
 		require.NoError(t, err)
-		krc.Close(true)
+		krc.Close(true) // note a cheat in this unit test to not have a defer on this in a sub-function
 	}
 
 	// Sub-test two - concurrent resolution with a consistent outcome
@@ -203,19 +203,9 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 	// defer style processing like all the code that uses us in anger should
 	// do, ensuring we either commit or cancel.
 	testResolveOne := func(identifier string) string {
-		var krc components.KeyResolutionContext
-		var result string
-		defer func() { krc.Close(result != "") }()
-		// DB TX for each UUID to hammer things a little
-		err := km.p.DB().Transaction(func(tx *gorm.DB) error {
-			krc = km.NewKeyResolutionContext(ctx, tx)
-			resolved, err := krc.ResolveKey(identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
-			require.NoError(t, err)
-			result = resolved.Verifier.Verifier
-			return krc.PreCommit()
-		})
+		resolved, err := km.ResolveKeyNewDatabaseTX(ctx, identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 		require.NoError(t, err)
-		return result
+		return resolved.Verifier.Verifier
 	}
 
 	wg := new(sync.WaitGroup)
@@ -243,14 +233,13 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 		}
 	}
 
-	testResolveMulti := func(doResolve func(krc components.KeyResolutionContext)) {
-		var krc components.KeyResolutionContext
+	testResolveMulti := func(doResolve func(kr components.KeyResolver)) {
+		krc := km.NewKeyResolutionContext(ctx)
 		committed := false
 		defer func() { krc.Close(committed) }()
 		// DB TX for each UUID to hammer things a little
-		err := km.p.DB().Transaction(func(tx *gorm.DB) error {
-			krc = km.NewKeyResolutionContext(ctx, tx)
-			doResolve(krc)
+		err := km.p.DB().Transaction(func(dbTX *gorm.DB) error {
+			doResolve(krc.KeyResolver(dbTX))
 			return krc.PreCommit()
 		})
 		require.NoError(t, err)
@@ -264,34 +253,34 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 		wg.Add(3)
 		go func() {
 			defer wg.Done()
-			testResolveMulti(func(krc components.KeyResolutionContext) {
-				_, err := krc.ResolveKey(fmt.Sprintf("path.to.A.%d", i+1000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+			testResolveMulti(func(kr components.KeyResolver) {
+				_, err := kr.ResolveKey(fmt.Sprintf("path.to.A.%d", i+1000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 				require.NoError(t, err)
-				_, err = krc.ResolveKey(fmt.Sprintf("path.to.B.%d", i+1000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				_, err = kr.ResolveKey(fmt.Sprintf("path.to.B.%d", i+1000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 				require.NoError(t, err)
-				_, err = krc.ResolveKey(fmt.Sprintf("path.to.C.%d", i+1000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
-				require.NoError(t, err)
-			})
-		}()
-		go func() {
-			defer wg.Done()
-			testResolveMulti(func(krc components.KeyResolutionContext) {
-				_, err := krc.ResolveKey(fmt.Sprintf("path.to.B.%d", i+2000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
-				require.NoError(t, err)
-				_, err = krc.ResolveKey(fmt.Sprintf("path.to.C.%d", i+2000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
-				require.NoError(t, err)
-				_, err = krc.ResolveKey(fmt.Sprintf("path.to.A.%d", i+2000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				_, err = kr.ResolveKey(fmt.Sprintf("path.to.C.%d", i+1000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 				require.NoError(t, err)
 			})
 		}()
 		go func() {
 			defer wg.Done()
-			testResolveMulti(func(krc components.KeyResolutionContext) {
-				_, err := krc.ResolveKey(fmt.Sprintf("path.to.C.%d", i+3000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+			testResolveMulti(func(kr components.KeyResolver) {
+				_, err := kr.ResolveKey(fmt.Sprintf("path.to.B.%d", i+2000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 				require.NoError(t, err)
-				_, err = krc.ResolveKey(fmt.Sprintf("path.to.B.%d", i+3000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				_, err = kr.ResolveKey(fmt.Sprintf("path.to.C.%d", i+2000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 				require.NoError(t, err)
-				_, err = krc.ResolveKey(fmt.Sprintf("path.to.A.%d", i+3000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				_, err = kr.ResolveKey(fmt.Sprintf("path.to.A.%d", i+2000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				require.NoError(t, err)
+			})
+		}()
+		go func() {
+			defer wg.Done()
+			testResolveMulti(func(lr components.KeyResolver) {
+				_, err := lr.ResolveKey(fmt.Sprintf("path.to.C.%d", i+3000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				require.NoError(t, err)
+				_, err = lr.ResolveKey(fmt.Sprintf("path.to.B.%d", i+3000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				require.NoError(t, err)
+				_, err = lr.ResolveKey(fmt.Sprintf("path.to.A.%d", i+3000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 				require.NoError(t, err)
 			})
 		}()

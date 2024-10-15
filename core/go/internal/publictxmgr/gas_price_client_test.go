@@ -24,8 +24,8 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 
+	"github.com/kaleido-io/paladin/core/mocks/ethclientmocks"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
@@ -146,7 +146,7 @@ func TestGasPriceClient(t *testing.T) {
 	gasPriceClient := NewGasPriceClient(ctx, &pldconf.PublicTxManagerConfig{})
 	hgc := gasPriceClient.(*HybridGasPriceClient)
 
-	mEC := componentmocks.NewEthClient(t)
+	mEC := ethclientmocks.NewEthClient(t)
 	hgc.Init(ctx, mEC)
 	// check functions
 	assert.True(t, hgc.HasZeroGasPrice(ctx))

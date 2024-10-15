@@ -28,7 +28,9 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/ethclientmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/stretchr/testify/assert"
@@ -129,7 +131,7 @@ func tempSocketFile(t *testing.T) (fileName string) {
 
 func TestStartOK(t *testing.T) {
 
-	mockEthClientFactory := componentmocks.NewEthClientFactory(t)
+	mockEthClientFactory := ethclientmocks.NewEthClientFactory(t)
 	mockEthClientFactory.On("Start").Return(nil)
 	mockEthClientFactory.On("Stop").Return()
 
@@ -236,10 +238,11 @@ func TestBuildInternalEventStreamsPreCommitPostCommit(t *testing.T) {
 func TestErrorWrapping(t *testing.T) {
 	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &pldconf.PaladinConfig{}, nil).(*componentManager)
 
-	mockKeyManager := componentmocks.NewKeyManager(t)
-	mockEthClientFactory := componentmocks.NewEthClientFactory(t)
+	mockPersistence, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+	mockEthClientFactory := ethclientmocks.NewEthClientFactory(t)
 
-	assert.Regexp(t, "PD010000.*pop", cm.addIfOpened("key_manager", mockKeyManager, errors.New("pop"), msgs.MsgComponentKeyManagerInitError))
+	assert.Regexp(t, "PD010000.*pop", cm.addIfOpened("p", mockPersistence.P, errors.New("pop"), msgs.MsgComponentKeyManagerInitError))
 	assert.Regexp(t, "PD010002.*pop", cm.addIfStarted("eth_client", mockEthClientFactory, errors.New("pop"), msgs.MsgComponentEthClientInitError))
 	assert.Regexp(t, "PD010008.*pop", cm.wrapIfErr(errors.New("pop"), msgs.MsgComponentBlockIndexerInitError))
 

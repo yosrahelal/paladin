@@ -29,6 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/ethclientmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
@@ -937,7 +938,7 @@ type dependencyMocks struct {
 	transportManager    *componentmocks.TransportManager
 	stateStore          *componentmocks.StateManager
 	keyManager          *componentmocks.KeyManager
-	ethClientFactory    *componentmocks.EthClientFactory
+	ethClientFactory    *ethclientmocks.EthClientFactory
 	publicTxManager     components.PublicTxManager /* could be fake or mock */
 	identityResolver    *componentmocks.IdentityResolver
 }
@@ -1108,7 +1109,7 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 		transportManager:    componentmocks.NewTransportManager(t),
 		stateStore:          componentmocks.NewStateManager(t),
 		keyManager:          componentmocks.NewKeyManager(t),
-		ethClientFactory:    componentmocks.NewEthClientFactory(t),
+		ethClientFactory:    ethclientmocks.NewEthClientFactory(t),
 		publicTxManager:     publicTxMgr,
 		identityResolver:    componentmocks.NewIdentityResolver(t),
 	}

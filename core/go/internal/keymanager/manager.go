@@ -44,7 +44,7 @@ type keyManager struct {
 	walletsByName           map[string]*wallet
 
 	allocLock       sync.Mutex
-	allocLockHolder *keyResolutionContext
+	allocLockHolder *keyResolver
 
 	p persistence.Persistence
 }
@@ -99,7 +99,7 @@ func (km *keyManager) Sign(ctx context.Context, mapping *components.KeyMappingAn
 	return w.sign(ctx, mapping, payloadType, payload)
 }
 
-func (km *keyManager) lockAllocationOrGetOwner(krc *keyResolutionContext) *keyResolutionContext {
+func (km *keyManager) lockAllocationOrGetOwner(krc *keyResolver) *keyResolver {
 	km.allocLock.Lock()
 	defer km.allocLock.Unlock()
 	if km.allocLockHolder != nil {
@@ -109,7 +109,7 @@ func (km *keyManager) lockAllocationOrGetOwner(krc *keyResolutionContext) *keyRe
 	return nil
 }
 
-func (km *keyManager) takeAllocationLock(krc *keyResolutionContext) error {
+func (km *keyManager) takeAllocationLock(krc *keyResolver) error {
 	ctx := krc.ctx
 	for {
 		lockingKRC := km.lockAllocationOrGetOwner(krc)
@@ -127,7 +127,7 @@ func (km *keyManager) takeAllocationLock(krc *keyResolutionContext) error {
 	}
 }
 
-func (km *keyManager) unlockAllocation(krc *keyResolutionContext) {
+func (km *keyManager) unlockAllocation(krc *keyResolver) {
 	km.allocLock.Lock()
 	defer km.allocLock.Unlock()
 
@@ -149,6 +149,22 @@ func (km *keyManager) AddInMemorySigner(prefix string, signer signerapi.InMemory
 	for _, w := range km.walletsByName {
 		w.signingModule.AddInMemorySigner(prefix, signer)
 	}
+}
+
+// Convenience function
+func (km *keyManager) ResolveKeyNewDatabaseTX(ctx context.Context, identifier, algorithm, verifierType string) (resolvedKey *components.KeyMappingAndVerifier, err error) {
+	krc := km.NewKeyResolutionContext(ctx)
+	committed := false
+	defer func() { krc.Close(committed) }()
+	err = km.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
+		resolvedKey, err = krc.KeyResolver(dbTX).ResolveKey(identifier, algorithm, verifierType)
+		if err == nil {
+			err = krc.PreCommit()
+		}
+		return err
+	})
+	committed = true
+	return
 }
 
 func (km *keyManager) ReverseKeyLookup(ctx context.Context, dbTX *gorm.DB, algorithm, verifierType, verifier string) (*components.KeyMappingAndVerifier, error) {
@@ -174,11 +190,13 @@ func (km *keyManager) ReverseKeyLookup(ctx context.Context, dbTX *gorm.DB, algor
 
 	// Now we need to look up the associated mapping and rebuild it
 	// NOTE: this is an internal-only use mode of a KRC that does not follow the external convention
-	krc := km.NewKeyResolutionContext(ctx, dbTX).(*keyResolutionContext)
-	mapping, err = krc.resolveKey(dbVerifiers[0].Identifier, algorithm, verifierType, true /* existing only */)
+	krc := km.NewKeyResolutionContext(ctx)
+	defer krc.Close(false) // no changes to commit
+	mapping, err = krc.KeyResolver(dbTX).(*keyResolver).
+		resolveKey(dbVerifiers[0].Identifier, algorithm, verifierType, true /* existing only */)
 	if err != nil {
 		return nil, err
 	}
-	krc.km.verifierReverseCache.Set(vKey, mapping)
+	km.verifierReverseCache.Set(vKey, mapping)
 	return mapping, nil
 }

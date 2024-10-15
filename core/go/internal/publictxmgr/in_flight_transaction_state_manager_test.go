@@ -25,6 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/ethclientmocks"
 	"github.com/kaleido-io/paladin/core/mocks/publictxmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
@@ -35,7 +36,7 @@ import (
 
 type testInFlightTransactionStateManagerWithMocks struct {
 	stateManager    InFlightTransactionStateManager
-	mEC             *componentmocks.EthClient
+	mEC             *ethclientmocks.EthClient
 	mBI             *componentmocks.BlockIndexer
 	mBM             BalanceManager
 	mAT             *publictxmocks.InFlightStageActionTriggers
