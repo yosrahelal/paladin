@@ -1,0 +1,64 @@
+// Copyright © 2024 Kaleido, Inc.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { ApplicationContext } from "./Context"
+import { createTheme, ThemeProvider } from "@mui/material/styles";
+import { themeOptions } from "./themes/default";
+import { Header } from "./components/Header";
+import { Dashboard } from "./views/Dashboard";
+import { CssBaseline } from "@mui/material";
+import { useEffect, useState } from "react";
+import { constants, getLatestBlockWithTransactions } from "./utils";
+
+function App() {
+
+  const theme = createTheme(themeOptions);
+  const [lastBlockWithTransactions, setLastBlockWithTransactions] = useState(0);
+  const [errorMessage, setErrorMessage] = useState<string>();
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      getLatestBlockWithTransactions().then(data => {
+        if(errorMessage !== undefined) {
+          setErrorMessage(undefined);
+        }
+        if(data !== lastBlockWithTransactions) {
+          setLastBlockWithTransactions(data)
+        }
+      }).catch((err: any) => {
+        setErrorMessage(err.message);
+      })
+    }, constants.UPDATE_FREQUENCY_MILLISECONDS);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  return (
+    <ApplicationContext.Provider value={{ lastBlockWithTransactions, errorMessage }}>
+      <ThemeProvider theme={theme}>
+      <CssBaseline />
+        <BrowserRouter>
+          <Header />
+          <Routes>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </ThemeProvider>
+    </ApplicationContext.Provider>
+  )
+}
+
+export default App

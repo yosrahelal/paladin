@@ -1,0 +1,22 @@
+{
+  "paladinDebugToolkit": "Paladin Debug Toolkit",
+  "transactions": "Transactions",
+  "events": "Events",
+  "block": "Block",
+  "nonce": "Nonce",
+  "result": "Result",
+  "success": "Success",
+  "hash": "Hash",
+  "from": "From",
+  "contract": "Contract",
+  "dismiss": "Dismiss",
+  "copyToClipboard": "Copy to Clipboard",
+  "copied": "Copied!",
+  "transactionIndex": "Tx Index",
+  "logIndex": "Log Index",
+  "transactionHash": "Tx Hash",
+  "signature": "Signature",
+  "live": "Live",
+  "paused": "Paused",
+  "errorConnectingToPaladinNode": "Error connecting to Paladin node"
+}
