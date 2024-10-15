@@ -79,12 +79,17 @@ func mockPublicSubmitTxOkOrReject(t *testing.T) func(conf *pldconf.TxManagerConf
 
 func TestPublicTransactionLifecycle(t *testing.T) {
 
+	senderAddr := tktypes.RandAddress()
 	var publicTxns map[uuid.UUID][]*ptxapi.PublicTx
 	ctx, url, tmr, done := newTestTransactionManagerWithRPC(t,
 		mockPublicSubmitTxOkOrReject(t),
 		mockQueryPublicTxForTransactions(func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error) {
 			return publicTxns, nil
 		}),
+		func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
+				Return([]*tktypes.EthAddress{senderAddr}, nil)
+		},
 	)
 	defer done()
 
@@ -112,6 +117,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		DependsOn: []uuid.UUID{tx0ID},
 		Transaction: ptxapi.Transaction{
 			IdempotencyKey: "tx1",
+			From:           "sender1",
 			Type:           ptxapi.TransactionTypePublic.Enum(),
 			Data:           tktypes.RawJSON(`[12345]`),
 		},
@@ -120,11 +126,10 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	assert.NotEqual(t, uuid.UUID{}, tx1ID)
 
 	// Mock up the existence of the public TXs
-	publicKey := tktypes.EthAddress(tktypes.RandBytes(20))
 	publicTxns = map[uuid.UUID][]*ptxapi.PublicTx{
 		tx1ID: {
 			{
-				From:  publicKey,
+				From:  *senderAddr,
 				Nonce: 111222333,
 			},
 		},
@@ -139,7 +144,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	assert.Equal(t, tx0ID, txns[0].DependsOn[0])
 	assert.Equal(t, `{"0":"12345"}`, txns[0].Data.String())
 	assert.Equal(t, "(uint256)", txns[0].Function)
-	assert.Equal(t, publicKey, txns[0].Public[0].From)
+	assert.Equal(t, *senderAddr, txns[0].Public[0].From)
 	assert.Equal(t, uint64(111222333), txns[0].Public[0].Nonce.Uint64())
 
 	// Check full=false
@@ -182,6 +187,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 			Type:           ptxapi.TransactionTypePublic.Enum(),
 			Data:           tktypes.RawJSON(`{"0": 123456789012345678901234567890}`), // nice big JSON number to deal with
 			Function:       "set(uint256)",
+			From:           "sender1",
 			To:             tktypes.MustEthAddress(tktypes.RandHex(20)),
 		},
 	}
@@ -380,8 +386,6 @@ func TestIdentityResolvePassthroughQueries(t *testing.T) {
 		func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.identityResolver.On("ResolveVerifier", mock.Anything, "lookup1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
 				Return("0x6f4b36e614cf32a20f4c2146d9db4c59a699ea65", nil)
-			mc.keyManager.On("ResolveKey", mock.Anything, "key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
-				Return("keyhandle1", "0x880cd7e34bd3457e32352a2610c8ca737f2e2378", nil)
 		},
 	)
 	defer done()
@@ -393,9 +397,5 @@ func TestIdentityResolvePassthroughQueries(t *testing.T) {
 	err = rpcClient.CallRPC(ctx, &verifier, "ptx_resolveVerifier", "lookup1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 	assert.Equal(t, "0x6f4b36e614cf32a20f4c2146d9db4c59a699ea65", verifier)
-
-	err = rpcClient.CallRPC(ctx, &verifier, "ptx_resolveLocalVerifier", "key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
-	require.NoError(t, err)
-	assert.Equal(t, "0x880cd7e34bd3457e32352a2610c8ca737f2e2378", verifier)
 
 }

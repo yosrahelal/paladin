@@ -180,21 +180,22 @@ func (km *keyManager) ResolveEthAddressBatchNewDatabaseTX(ctx context.Context, i
 // Convenience function
 func (km *keyManager) ResolveBatchNewDatabaseTX(ctx context.Context, algorithm, verifierType string, identifiers []string) (resolvedKeys []*components.KeyMappingAndVerifier, err error) {
 	resolvedKeys = make([]*components.KeyMappingAndVerifier, len(identifiers))
-	krc := km.NewKeyResolutionContext(ctx)
-	committed := false
-	defer func() { krc.Close(committed) }()
+	krc := km.NewKeyResolutionContextLazyDB(ctx)
+	defer func() {
+		if err != nil {
+			krc.Rollback()
+		} else {
+			err = krc.Commit()
+		}
+	}()
 	err = km.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
 		for i, identifier := range identifiers {
 			if err == nil {
-				resolvedKeys[i], err = krc.KeyResolver(dbTX).ResolveKey(identifier, algorithm, verifierType)
+				resolvedKeys[i], err = krc.KeyResolverLazyDB().ResolveKey(identifier, algorithm, verifierType)
 			}
-		}
-		if err == nil {
-			err = krc.PreCommit()
 		}
 		return err
 	})
-	committed = true
 	return
 }
 

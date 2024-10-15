@@ -89,6 +89,9 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 		mc.publicTxMgr.On("NotifyConfirmPersisted", mock.Anything, mock.MatchedBy(func(matches []*components.PublicTxMatch) bool {
 			return len(matches) == 1 && matches[0].TransactionID == *txID
 		}))
+
+		mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
+			Return([]*tktypes.EthAddress{tktypes.RandAddress()}, nil)
 	})
 	defer done()
 
@@ -99,6 +102,7 @@ func TestPublicConfirmWithErrorDecodeRealDB(t *testing.T) {
 		Transaction: ptxapi.Transaction{
 			Type:         ptxapi.TransactionTypePublic.Enum(),
 			ABIReference: abiRef,
+			From:         "sender1",
 			To:           tktypes.MustEthAddress(tktypes.RandHex(20)),
 		},
 	})

@@ -45,7 +45,7 @@ type mockComponents struct {
 	db sqlmock.Sqlmock
 }
 
-func newTestKeyManager(t *testing.T, realDB bool, conf *pldconf.KeyManagerConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *keyManager, *mockComponents, func()) {
+func newTestKeyManager(t *testing.T, realDB bool, conf *pldconf.KeyManagerConfig) (context.Context, *keyManager, *mockComponents, func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	oldLevel := logrus.GetLevel()
 	logrus.SetLevel(logrus.TraceLevel)
@@ -103,7 +103,7 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 						Type: pldconf.KeyStoreTypeStatic,
 						Static: pldconf.StaticKeyStoreConfig{
 							Keys: map[string]pldconf.StaticKeyEntryConfig{
-								"seed": pldconf.StaticKeyEntryConfig{
+								"seed": {
 									Encoding: "hex",
 									Inline:   tktypes.RandHex(32),
 								},

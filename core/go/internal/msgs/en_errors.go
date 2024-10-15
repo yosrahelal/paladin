@@ -145,6 +145,7 @@ var (
 	MsgKeyManagerVerifierLookupNotFound     = ffe("PD010511", "Verifier not available in reverse lookup table")
 	MsgKeyManagerIdentifierPathNotFound     = ffe("PD010512", "Identifier path segment '%s' not found in database")
 	MsgKeyManagerExistingIdentifierNotFound = ffe("PD010513", "Identifier '%s' not found in database")
+	MsgKeyManagerMissingDatabaseTxn         = ffe("PD010514", "Missing database transaction context")
 
 	// Comms bus PD0106XX
 	MsgDestinationNotFound     = ffe("PD010600", "Destination not found: %s")

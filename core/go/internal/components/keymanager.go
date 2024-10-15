@@ -60,6 +60,11 @@ type KeyResolutionContext interface {
 	PreCommit() error                      // MUST be called for successful TX inside the DB TX
 	Close(committed bool)                  // MUST be called outside the DB TX
 }
+type KeyResolutionContextLazyDB interface {
+	KeyResolverLazyDB() KeyResolver // Defers starting the DB TX in until it's begun
+	Commit() error
+	Rollback()
+}
 
 type KeyResolver interface {
 	ResolveKey(identifier, algorithm, verifierType string) (mapping *KeyMappingAndVerifier, err error)
@@ -72,6 +77,9 @@ type KeyManager interface {
 	// To avoid deadlock when resolving multiple keys in the same DB transaction, the caller is responsible for using the same
 	// resolution context for all calls that occur within the same DB tx.
 	NewKeyResolutionContext(ctx context.Context) KeyResolutionContext
+
+	// Key resolution context where we sort the database transaction for you
+	NewKeyResolutionContextLazyDB(ctx context.Context) KeyResolutionContextLazyDB
 
 	// Convenience function in code where there isn't already a database transaction, and we're happy to create a
 	// new one just to scope the lookup (cannot be called safely within a containing DB transaction)

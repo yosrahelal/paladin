@@ -225,6 +225,7 @@ func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.Transac
 	// Public transactions need a signing address resolution and nonce allocation trackers
 	// before we open the database transaction
 	var publicTxs []*components.PublicTxSubmission
+	var publicTxSenders []string
 	txis := make([]*txInsertInfo, len(txs))
 	txIDs = make([]uuid.UUID, len(txs))
 	for i, tx := range txs {
@@ -239,12 +240,23 @@ func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.Transac
 				// Public transaction bound 1:1 with our parent transaction
 				Bindings: []*components.PaladinTXReference{{TransactionID: *tx.ID, TransactionType: ptxapi.TransactionTypePublic.Enum()}},
 				PublicTxInput: ptxapi.PublicTxInput{
-					From:            tx.From,
 					To:              tx.To,
 					Data:            txi.publicTxData,
 					PublicTxOptions: tx.PublicTxOptions,
 				},
 			})
+			publicTxSenders = append(publicTxSenders, tx.From)
+		}
+	}
+
+	// Need to resolve the addresses for any public senders
+	if len(publicTxs) > 0 {
+		ethAddresses, err := tm.keyManager.ResolveEthAddressBatchNewDatabaseTX(ctx, publicTxSenders)
+		if err != nil {
+			return nil, err
+		}
+		for i, ptx := range publicTxs {
+			ptx.From = ethAddresses[i]
 		}
 	}
 
