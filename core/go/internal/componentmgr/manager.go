@@ -127,7 +127,7 @@ func (cm *componentManager) Init() (err error) {
 
 	// pre-init managers
 	if err == nil {
-		cm.keyManager = keymanager.NewKeyManager(cm.bgCtx, &cm.conf.KeyManager)
+		cm.keyManager = keymanager.NewKeyManager(cm.bgCtx, &cm.conf.KeyManagerConfig)
 		cm.initResults["key_manager"], err = cm.keyManager.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentKeyManagerInitError)
 	}

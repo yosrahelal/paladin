@@ -309,7 +309,7 @@ func testConfig(t *testing.T) pldconf.PaladinConfig {
 	conf.RPCServer.WS.Disabled = true
 	conf.Log.Level = confutil.P("info")
 
-	conf.KeyManager.Wallets[0].Signer.KeyStore.Static.Keys["seed"] = pldconf.StaticKeyEntryConfig{
+	conf.Wallets[0].Signer.KeyStore.Static.Keys["seed"] = pldconf.StaticKeyEntryConfig{
 		Encoding: "hex",
 		Inline:   tktypes.RandHex(32),
 	}

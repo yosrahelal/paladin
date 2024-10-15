@@ -30,11 +30,11 @@ type PaladinConfig struct {
 	PluginManagerConfig    `json:",inline"`
 	TransportManagerConfig `json:",inline"`
 	RegistryManagerConfig  `json:",inline"`
+	KeyManagerConfig       `json:",inline"`
 	Log                    LogConfig              `json:"log"`
 	Blockchain             EthClientConfig        `json:"blockchain"`
 	DB                     DBConfig               `json:"db"`
 	RPCServer              RPCServerConfig        `json:"rpcServer"`
-	KeyManager             KeyManagerConfig       `json:"keyManager"`
 	StateStore             StateStoreConfig       `json:"statestore"`
 	BlockIndexer           BlockIndexerConfig     `json:"blockIndexer"`
 	TempDir                *string                `json:"tempDir"`

@@ -70,20 +70,19 @@ blockchain:
   ws:
     url: ws://localhost:8546
     initialConnectAttempts: 25
-keyManager:
-  wallets:
-  - name: wallet1
-    keySelector: .*
-    signer:
-        keyDerivation:
-            type: "bip32"
-        keyStore:
-            type: "static"
-            static:
-                keys:
-                    seed:
-                        encoding: none
-                        inline: polar mechanic crouch jungle field room dry sure machine brisk seed bulk student total ethics
+wallets:
+- name: wallet1
+  keySelector: .*
+  signer:
+    keyDerivation:
+      type: "bip32"
+    keyStore:
+    type: "static"
+      static:
+        keys:
+          seed:
+            encoding: none
+            inline: polar mechanic crouch jungle field room dry sure machine brisk seed bulk student total ethics
 `), &testConfig)
 	require.NoError(t, err)
 
@@ -127,7 +126,7 @@ keyManager:
 	require.NoError(t, err)
 	defer indexer.Stop()
 
-	keyMgr, err := ethclient.NewSimpleTestKeyManager(ctx, (*signerapi.ConfigNoExt)(testConfig.KeyManager.Wallets[0].Signer))
+	keyMgr, err := ethclient.NewSimpleTestKeyManager(ctx, (*signerapi.ConfigNoExt)(testConfig.Wallets[0].Signer))
 	require.NoError(t, err)
 
 	ecf, err := ethclient.NewEthClientFactoryWithKeyManager(ctx, keyMgr, &testConfig.Blockchain)

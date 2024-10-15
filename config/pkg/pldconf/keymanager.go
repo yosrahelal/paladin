@@ -18,9 +18,13 @@ package pldconf
 import "github.com/kaleido-io/paladin/config/pkg/confutil"
 
 type KeyManagerConfig struct {
-	IdentifierCache CacheConfig     `json:"identifierCache"`
-	VerifierCache   CacheConfig     `json:"verifierCache"`
-	Wallets         []*WalletConfig `json:"wallets"` // ordered list
+	KeyManagerManagerConfig `json:"keyManager"`
+	Wallets                 []*WalletConfig `json:"wallets"` // ordered list
+}
+
+type KeyManagerManagerConfig struct {
+	IdentifierCache CacheConfig `json:"identifierCache"`
+	VerifierCache   CacheConfig `json:"verifierCache"`
 }
 
 type WalletConfig struct {
@@ -40,10 +44,12 @@ var WalletDefaults = &WalletConfig{
 }
 
 var KeyManagerDefaults = &KeyManagerConfig{
-	IdentifierCache: CacheConfig{
-		Capacity: confutil.P(1000),
-	},
-	VerifierCache: CacheConfig{
-		Capacity: confutil.P(1000),
+	KeyManagerManagerConfig: KeyManagerManagerConfig{
+		IdentifierCache: CacheConfig{
+			Capacity: confutil.P(1000),
+		},
+		VerifierCache: CacheConfig{
+			Capacity: confutil.P(1000),
+		},
 	},
 }

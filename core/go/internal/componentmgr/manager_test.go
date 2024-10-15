@@ -33,6 +33,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -62,17 +63,24 @@ func TestInitOK(t *testing.T) {
 				URL: "http://localhost:8545", // we won't actually connect this test, just check the config
 			},
 		},
-		Signer: pldconf.SignerConfig{
-			KeyDerivation: pldconf.KeyDerivationConfig{
-				Type: pldconf.KeyDerivationTypeBIP32,
-			},
-			KeyStore: pldconf.KeyStoreConfig{
-				Type: "static",
-				Static: pldconf.StaticKeyStoreConfig{
-					Keys: map[string]pldconf.StaticKeyEntryConfig{
-						"seed": {
-							Encoding: "hex",
-							Inline:   "dfaf68b749c53672e5fa8e0b41514f9efd033ba6aa3add3b8b07f92e66f0e64a",
+		KeyManagerConfig: pldconf.KeyManagerConfig{
+			Wallets: []*pldconf.WalletConfig{
+				{
+					Name: "wallet1",
+					Signer: &pldconf.SignerConfig{
+						KeyDerivation: pldconf.KeyDerivationConfig{
+							Type: pldconf.KeyDerivationTypeBIP32,
+						},
+						KeyStore: pldconf.KeyStoreConfig{
+							Type: "static",
+							Static: pldconf.StaticKeyStoreConfig{
+								Keys: map[string]pldconf.StaticKeyEntryConfig{
+									"seed": {
+										Encoding: "hex",
+										Inline:   tktypes.RandHex(32),
+									},
+								},
+							},
 						},
 					},
 				},
