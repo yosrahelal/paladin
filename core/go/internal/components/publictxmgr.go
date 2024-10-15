@@ -56,6 +56,7 @@ var PublicTxFilterFields filters.FieldSet = filters.FieldMap{
 }
 
 type PublicTxSubmission struct {
+	ResolvedFromAddr     tktypes.EthAddress
 	Bindings             []*PaladinTXReference
 	ptxapi.PublicTxInput // the request to create the transaction
 }

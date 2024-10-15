@@ -625,7 +625,7 @@ func (it *inFlightTransactionStageController) TriggerStatusUpdate(ctx context.Co
 }
 func (it *inFlightTransactionStageController) TriggerSignTx(ctx context.Context) error {
 	it.executeAsync(func() {
-		signedMessage, txHash, err := it.signTx(ctx, it.stateManager.GetResolvedSigner(), it.stateManager.BuildEthTX())
+		signedMessage, txHash, err := it.signTx(ctx, it.stateManager.GetFrom(), it.stateManager.BuildEthTX())
 		log.L(ctx).Debugf("Adding signed message to output, hash %s, signedMessage not nil %t, err %+v", txHash, signedMessage != nil, err)
 		it.stateManager.AddSignOutput(ctx, signedMessage, txHash, err)
 	}, ctx, it.stateManager.GetStage(ctx), false)

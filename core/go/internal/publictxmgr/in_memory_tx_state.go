@@ -22,8 +22,6 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 )
 
 type managedTx struct {
@@ -137,13 +135,6 @@ func (imtxs *inMemoryTxState) GetTo() *tktypes.EthAddress {
 
 func (imtxs *inMemoryTxState) GetValue() *tktypes.HexUint256 {
 	return imtxs.mtx.ptx.Value
-}
-
-func (imtxs *inMemoryTxState) GetResolvedSigner() *ethclient.ResolvedSigner {
-	return &ethclient.ResolvedSigner{
-		Address:   imtxs.mtx.ptx.From,
-		KeyHandle: imtxs.mtx.ptx.KeyHandle,
-	}
 }
 
 func (imtxs *inMemoryTxState) BuildEthTX() *ethsigner.Transaction {

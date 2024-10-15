@@ -261,7 +261,6 @@ type InMemoryTxStateReadOnly interface {
 	GetFrom() tktypes.EthAddress
 	GetTo() *tktypes.EthAddress
 	GetValue() *tktypes.HexUint256
-	GetResolvedSigner() *ethclient.ResolvedSigner
 	BuildEthTX() *ethsigner.Transaction
 	GetGasPriceObject() *ptxapi.PublicTxGasPricing
 	GetFirstSubmit() *tktypes.Timestamp

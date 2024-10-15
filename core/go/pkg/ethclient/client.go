@@ -56,6 +56,7 @@ type EthClient interface {
 	CallContractNoResolve(ctx context.Context, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error)
 	GetTransactionCount(ctx context.Context, fromAddr tktypes.EthAddress) (transactionCount *tktypes.HexUint64, err error)
 	BuildRawTransactionNoResolve(ctx context.Context, txVersion EthTXVersion, from *ResolvedSigner, tx *ethsigner.Transaction, opts ...CallOption) (tktypes.HexBytes, error)
+	SendRawTransaction(ctx context.Context, rawTX tktypes.HexBytes) (*tktypes.Bytes32, error)
 }
 
 // Higher level client interface to the base Ethereum ledger for TX submission.
@@ -73,7 +74,6 @@ type EthClientWithKeyManager interface {
 	CallContract(ctx context.Context, from *string, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error)
 	EstimateGas(ctx context.Context, from *string, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error)
 	BuildRawTransaction(ctx context.Context, txVersion EthTXVersion, from string, tx *ethsigner.Transaction, opts ...CallOption) (tktypes.HexBytes, error)
-	SendRawTransaction(ctx context.Context, rawTX tktypes.HexBytes) (*tktypes.Bytes32, error)
 }
 
 type ResolvedSigner struct {

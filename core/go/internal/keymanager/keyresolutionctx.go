@@ -65,7 +65,7 @@ func (km *keyManager) NewKeyResolutionContext(ctx context.Context, dbTX *gorm.DB
 	}
 }
 
-func (krc *keyResolutionContext) getOrCreateIdentifierPath(identifier string) (resolved *resolvedDBPath, err error) {
+func (krc *keyResolutionContext) getOrCreateIdentifierPath(identifier string, allowCreate bool) (resolved *resolvedDBPath, err error) {
 
 	// We split it into segments by "." and create-or-update the index at each level
 	segments := append([]string{"" /* root path */}, strings.Split(identifier, ".")...)
@@ -74,7 +74,7 @@ func (krc *keyResolutionContext) getOrCreateIdentifierPath(identifier string) (r
 		if parent != krc.rootPath && len(segment) == 0 {
 			return nil, i18n.NewError(krc.ctx, msgs.MsgKeyManagerInvalidIdentifier, identifier)
 		}
-		resolved, err = krc.resolvePathSegment(parent, segment)
+		resolved, err = krc.resolvePathSegment(parent, segment, allowCreate)
 		if err != nil {
 			return nil, err
 		}
@@ -83,7 +83,7 @@ func (krc *keyResolutionContext) getOrCreateIdentifierPath(identifier string) (r
 	return resolved, nil
 }
 
-func (krc *keyResolutionContext) resolvePathSegment(parent *resolvedDBPath, segment string) (*resolvedDBPath, error) {
+func (krc *keyResolutionContext) resolvePathSegment(parent *resolvedDBPath, segment string, allowCreate bool) (*resolvedDBPath, error) {
 
 	path := segment
 	if parent.path != "" {
@@ -109,6 +109,9 @@ func (krc *keyResolutionContext) resolvePathSegment(parent *resolvedDBPath, segm
 			resolved := &resolvedDBPath{segment: segment, index: pathList[0].Index, path: path, parent: parent}
 			krc.resolvedPaths[path] = resolved
 			return resolved, nil
+		} else if !allowCreate {
+			// In reverse lookup we get called in read-only mode
+			return nil, i18n.NewError(krc.ctx, msgs.MsgKeyManagerIdentifierPathNotFound, path)
 		}
 
 		// Note: This is a single course grain lock on allocation, for the reasons described in TestE2ESigningHDWalletRealDB
@@ -179,8 +182,8 @@ func (krc *keyResolutionContext) resolvePathSegment(parent *resolvedDBPath, segm
 }
 
 func (krc *keyResolutionContext) getStoredVerifier(identifier, algorithm, verifierType string) (*components.KeyVerifier, error) {
-	vKey := verifierCacheKey(identifier, algorithm, verifierType)
-	verifier, _ := krc.km.verifierCache.Get(vKey)
+	vKey := verifierForwardCacheKey(identifier, algorithm, verifierType)
+	verifier, _ := krc.km.verifierByIdentityCache.Get(vKey)
 	if verifier != nil {
 		return verifier, nil
 	}
@@ -203,11 +206,15 @@ func (krc *keyResolutionContext) getStoredVerifier(identifier, algorithm, verifi
 		Type:      verifiers[0].Type,
 		Verifier:  verifiers[0].Verifier,
 	}
-	krc.km.verifierCache.Set(vKey, verifier)
+	krc.km.verifierByIdentityCache.Set(vKey, verifier)
 	return verifier, nil
 }
 
 func (krc *keyResolutionContext) ResolveKey(identifier, algorithm, verifierType string) (_ *components.KeyMappingAndVerifier, err error) {
+	return krc.resolveKey(identifier, algorithm, verifierType, false /* allow creation */)
+}
+
+func (krc *keyResolutionContext) resolveKey(identifier, algorithm, verifierType string, requireExistingMapping bool) (_ *components.KeyMappingAndVerifier, err error) {
 	krc.l.Lock()
 	defer krc.l.Unlock()
 
@@ -236,7 +243,7 @@ func (krc *keyResolutionContext) ResolveKey(identifier, algorithm, verifierType 
 		// We go look up the hierarchical path of this identifier, to see if it's existing or new.
 		// Lots of optimistic locking complexity inside this function to efficiently race threads to ensure one wins
 		// each index allocation race.
-		dbPath, err = krc.getOrCreateIdentifierPath(identifier)
+		dbPath, err = krc.getOrCreateIdentifierPath(identifier, !requireExistingMapping)
 		if err != nil {
 			return nil, err
 		}
@@ -269,6 +276,9 @@ func (krc *keyResolutionContext) ResolveKey(identifier, algorithm, verifierType 
 				Path: dbPath.pathSegments(),
 			}
 		} else {
+			if requireExistingMapping {
+				return nil, i18n.NewError(krc.ctx, msgs.MsgKeyManagerExistingIdentifierNotFound)
+			}
 			newMapping = true
 			mapping = &components.KeyMappingWithPath{
 				KeyMapping: &components.KeyMapping{
@@ -309,20 +319,30 @@ func (krc *keyResolutionContext) ResolveKey(identifier, algorithm, verifierType 
 		}
 
 		// Check the DB for a verifier for this existing mapping.
-		verifier, err := krc.getStoredVerifier(identifier, algorithm, verifierType)
+		v, err := krc.getStoredVerifier(identifier, algorithm, verifierType)
 		if err != nil {
 			return nil, err
 		}
-		if verifier != nil {
+		if v != nil {
 			log.L(krc.ctx).Infof("Resolved key (cached): identifier=%s algorithm=%s verifierType=%s keyHandle=%s verifier=%s",
-				identifier, algorithm, verifierType, mapping.KeyHandle, verifier.Verifier)
+				identifier, algorithm, verifierType, mapping.KeyHandle, v.Verifier)
+			// populate the reverse lookup cache
+			krc.km.verifierReverseCache.Set(verifierReverseCacheKey(v.Type, v.Algorithm, v.Verifier), &components.KeyMappingAndVerifier{
+				KeyMappingWithPath: mapping,
+				Verifier:           v,
+			})
 			// We have everything we need - no need to bother the signing module
 			return &components.KeyMappingAndVerifier{
 				KeyMappingWithPath: mapping,
-				Verifier:           verifier,
+				Verifier:           v,
 			}, nil
 		}
 
+	}
+
+	// We shouldn't get here for an existing mapping
+	if requireExistingMapping {
+		return nil, i18n.NewError(krc.ctx, msgs.MsgKeyManagerExistingIdentifierNotFound)
 	}
 
 	// Ok - we are ready to talk to the wallet signing module to resolve the
@@ -351,8 +371,12 @@ func (krc *keyResolutionContext) ResolveKey(identifier, algorithm, verifierType 
 
 }
 
-func verifierCacheKey(keyIdentifier, algorithm, verifierType string) string {
+func verifierForwardCacheKey(keyIdentifier, algorithm, verifierType string) string {
 	return fmt.Sprintf("%s|%s|%s", keyIdentifier, algorithm, verifierType)
+}
+
+func verifierReverseCacheKey(algorithm, verifierType, verifier string) string {
+	return fmt.Sprintf("%s|%s|%s", algorithm, verifierType, verifier)
 }
 
 func (krc *keyResolutionContext) PreCommit() (err error) {
@@ -387,25 +411,32 @@ func (krc *keyResolutionContext) PreCommit() (err error) {
 	return err
 }
 
-func (krc *keyResolutionContext) PostCommit() {
-	krc.l.Lock()
-	defer krc.l.Unlock()
-
+func (krc *keyResolutionContext) postCommit() {
+	// This updates all the caches after we're confident the data is committed to the DB
 	for _, v := range krc.newVerifiers {
-		krc.km.verifierCache.Set(verifierCacheKey(v.KeyIdentifier, v.Algorithm, v.Type), v.KeyVerifier)
+		krc.km.verifierByIdentityCache.Set(verifierForwardCacheKey(v.KeyIdentifier, v.Algorithm, v.Type), v.KeyVerifier)
 	}
 	for _, m := range krc.newMappings {
 		krc.km.identifierCache.Set(m.Identifier, m)
+		for _, v := range krc.newVerifiers {
+			if v.KeyIdentifier == m.Identifier {
+				// populate the reverse lookup cache
+				krc.km.verifierReverseCache.Set(verifierReverseCacheKey(v.Type, v.Algorithm, v.Verifier), &components.KeyMappingAndVerifier{
+					KeyMappingWithPath: m,
+					Verifier:           v.KeyVerifier,
+				})
+			}
+		}
 	}
-
-	// Ensure we're cancelled
-	krc.cleanup()
 }
 
-func (krc *keyResolutionContext) Cancel() {
+func (krc *keyResolutionContext) Close(committed bool) {
 	krc.l.Lock()
 	defer krc.l.Unlock()
 
+	if committed {
+		krc.postCommit()
+	}
 	krc.cleanup()
 }
 

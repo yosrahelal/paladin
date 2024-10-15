@@ -123,11 +123,11 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 		// - third run checks they don't change with reload
 		if i == 2 {
 			km.identifierCache.Clear()
-			km.verifierCache.Clear()
+			km.verifierByIdentityCache.Clear()
 		}
 		// - fourth run just clears the verifiers
 		if i == 3 {
-			km.verifierCache.Clear()
+			km.verifierByIdentityCache.Clear()
 		}
 
 		var krc components.KeyResolutionContext
@@ -188,7 +188,7 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 			return krc.PreCommit()
 		})
 		require.NoError(t, err)
-		krc.PostCommit()
+		krc.Close(true)
 	}
 
 	// Sub-test two - concurrent resolution with a consistent outcome
@@ -205,13 +205,7 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 	testResolveOne := func(identifier string) string {
 		var krc components.KeyResolutionContext
 		var result string
-		defer func() {
-			if result != "" {
-				krc.PostCommit()
-			} else {
-				krc.Cancel()
-			}
-		}()
+		defer func() { krc.Close(result != "") }()
 		// DB TX for each UUID to hammer things a little
 		err := km.p.DB().Transaction(func(tx *gorm.DB) error {
 			krc = km.NewKeyResolutionContext(ctx, tx)
@@ -242,19 +236,17 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 			result, found := results[i][u]
 			require.True(t, found)
 			require.Equal(t, reference[u], result)
+			// Check the reverse lookup too
+			resolved, err := km.ReverseKeyLookup(ctx, km.p.DB(), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, result)
+			require.NoError(t, err)
+			require.Equal(t, fmt.Sprintf("sally.rand.%s", u), resolved.Identifier)
 		}
 	}
 
 	testResolveMulti := func(doResolve func(krc components.KeyResolutionContext)) {
 		var krc components.KeyResolutionContext
-		var result string
-		defer func() {
-			if result != "" {
-				krc.PostCommit()
-			} else {
-				krc.Cancel()
-			}
-		}()
+		committed := false
+		defer func() { krc.Close(committed) }()
 		// DB TX for each UUID to hammer things a little
 		err := km.p.DB().Transaction(func(tx *gorm.DB) error {
 			krc = km.NewKeyResolutionContext(ctx, tx)
@@ -262,6 +254,7 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 			return krc.PreCommit()
 		})
 		require.NoError(t, err)
+		committed = true
 	}
 
 	// Now this last one is really hard.

@@ -53,7 +53,7 @@ type mocksAndTestControl struct {
 	disableManagerStart bool
 	allComponents       *componentmocks.AllComponents
 	db                  sqlmock.Sqlmock // unless realDB
-	keyManager          ethclient.KeyManager
+	keyManager          components.KeyManager
 	ethClientFactory    *componentmocks.EthClientFactory
 	ethClient           *componentmocks.EthClient
 	blockIndexer        *componentmocks.BlockIndexer

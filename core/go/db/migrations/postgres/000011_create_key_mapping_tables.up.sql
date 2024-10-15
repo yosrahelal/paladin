@@ -24,8 +24,10 @@ CREATE TABLE key_verifiers (
     "algorithm"          VARCHAR         NOT NULL,
     "type"               VARCHAR         NOT NULL,
     "verifier"           VARCHAR         NOT NULL,
-    PRIMARY KEY ("identifier", "algorithm", "type"),
+    PRIMARY KEY ("verifier", "algorithm", "type"), -- globally unique across wallets
     FOREIGN KEY ("identifier") REFERENCES key_mappings ("identifier") ON DELETE CASCADE
 );
+
+CREATE UNIQUE INDEX key_verifiers_identifier ON key_verifiers ("identifier", "algorithm", "type");
 
 COMMIT;

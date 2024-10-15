@@ -30,7 +30,6 @@ type DBPublicTxn struct {
 	From            tktypes.EthAddress     `gorm:"column:from"`
 	Nonce           uint64                 `gorm:"column:nonce"`
 	Created         tktypes.Timestamp      `gorm:"column:created;autoCreateTime:nano"`
-	KeyHandle       string                 `gorm:"column:key_handle"` // TODO: might need to revisit storing this once we have reverse lookup in the keymanager by address
 	To              *tktypes.EthAddress    `gorm:"column:to"`
 	Gas             uint64                 `gorm:"column:gas"`
 	FixedGasPricing tktypes.RawJSON        `gorm:"column:fixed_gas_pricing"`

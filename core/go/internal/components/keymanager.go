@@ -18,6 +18,7 @@ package components
 import (
 	"context"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"gorm.io/gorm"
 )
 
@@ -55,9 +56,8 @@ type KeyPathSegment struct {
 
 type KeyResolutionContext interface {
 	ResolveKey(identifier, algorithm, verifierType string) (mapping *KeyMappingAndVerifier, err error)
-	PreCommit() error //  MUST be called prior to completing the transaction to flush new records to the DB optimally at the end
-	PostCommit()      // must be called AFTER the transaction commits on success
-	Cancel()          // MUST be called if PostCommit() is not going to be called
+	PreCommit() error     //  If the transaction is going to be successful then MUST be called WITHIN THE TRANSACTION
+	Close(committed bool) // MUST be called OUTSIDE of the transaction regardless of success OR FAILURE
 }
 
 type KeyManager interface {
@@ -67,6 +67,11 @@ type KeyManager interface {
 	// To avoid deadlock when resolving multiple keys in the same DB transaction, the caller is responsible for using the same
 	// resolution context for all calls that occur within the same DB tx.
 	NewKeyResolutionContext(ctx context.Context, dbTX *gorm.DB) KeyResolutionContext
+
+	// Domains register their signers during PostCommit
+	AddInMemorySigner(prefix string, signer signerapi.InMemorySigner)
+
+	ReverseKeyLookup(ctx context.Context, dbTX *gorm.DB, algorithm, verifierType, verifier string) (mapping *KeyMappingAndVerifier, err error)
 
 	Sign(ctx context.Context, mapping *KeyMappingAndVerifier, payloadType string, payload []byte) ([]byte, error)
 }

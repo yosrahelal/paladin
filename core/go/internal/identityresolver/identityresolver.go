@@ -25,7 +25,6 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	pbIdentityResolver "github.com/kaleido-io/paladin/core/pkg/proto/identityresolver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -35,7 +34,7 @@ import (
 type identityResolver struct {
 	bgCtx                 context.Context
 	nodeID                string
-	keyManager            ethclient.KeyManager
+	keyManager            components.KeyManager
 	transportManager      components.TransportManager
 	inflightRequests      map[string]*inflightRequest
 	inflightRequestsMutex *sync.Mutex

@@ -37,14 +37,12 @@ import (
 
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
@@ -81,7 +79,7 @@ type pubTxManager struct {
 	p                persistence.Persistence
 	bIndexer         blockindexer.BlockIndexer
 	ethClient        ethclient.EthClient
-	keymgr           ethclient.KeyManager
+	keymgr           components.KeyManager
 	rootTxMgr        components.TXManager
 	ethClientFactory ethclient.EthClientFactory
 	// gas price
@@ -226,7 +224,6 @@ func (ble *pubTxManager) Stop() {
 type preparedTransaction struct {
 	bindings    []*components.PaladinTXReference
 	tx          *ptxapi.PublicTx
-	keyHandle   string
 	rejectError error                 // only if rejected
 	revertData  tktypes.HexBytes      // only if rejected, and was available
 	nsi         NonceAssignmentIntent // only if accepted
@@ -409,18 +406,7 @@ func (ble *pubTxManager) prepareSubmission(ctx context.Context, batchSoFar []*pr
 		},
 	}
 
-	var fromAddr *tktypes.EthAddress
-	keyHandle, fromAddrString, err := ble.keymgr.ResolveKey(ctx, txi.From, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
-	if err == nil {
-		fromAddr, err = tktypes.ParseEthAddress(fromAddrString)
-	}
-	if err != nil {
-		// Treat a failure to resolve as a rejected error for this individual transaction, rather than a system error
-		pt.rejectError = err
-		return pt, nil
-	}
-	pt.keyHandle = keyHandle
-	pt.tx.From = *fromAddr
+	pt.tx.From = txi.ResolvedFromAddr
 
 	prepareStart := time.Now()
 	var txType InFlightTxOperation
@@ -428,7 +414,7 @@ func (ble *pubTxManager) prepareSubmission(ctx context.Context, batchSoFar []*pr
 	rejected := false
 	if pt.tx.Gas == nil || *pt.tx.Gas == 0 {
 		gasEstimateResult, err := ble.ethClient.EstimateGasNoResolve(ctx, buildEthTX(
-			*fromAddr,
+			txi.ResolvedFromAddr,
 			nil, /* nonce not assigned at this point */
 			pt.tx.To,
 			pt.tx.Data,
@@ -493,7 +479,6 @@ func (ble *pubTxManager) finalizeNonceForPersistedTX(ctx context.Context, ptx *p
 		SignerNonce: fmt.Sprintf("%s:%d", tx.From, tx.Nonce), // having a single key rather than compound key helps us simplify cross-table correlation, particularly for batch lookup
 		From:        tx.From,
 		Nonce:       tx.Nonce.Uint64(),
-		KeyHandle:   ptx.keyHandle, // TODO: Consider once we have reverse mapping in key manager whether we still need this
 		To:          tx.To,
 		Gas:         tx.Gas.Uint64(),
 		Data:        tx.Data,

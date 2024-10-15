@@ -24,21 +24,24 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 )
 
 type keyManager struct {
 	bgCtx context.Context
 
-	conf            *pldconf.KeyManagerConfig
-	rpcModule       *rpcserver.RPCModule
-	identifierCache cache.Cache[string, *components.KeyMappingWithPath]
-	verifierCache   cache.Cache[string, *components.KeyVerifier]
-	walletsOrdered  []*wallet
-	walletsByName   map[string]*wallet
+	conf                    *pldconf.KeyManagerConfig
+	rpcModule               *rpcserver.RPCModule
+	identifierCache         cache.Cache[string, *components.KeyMappingWithPath]
+	verifierByIdentityCache cache.Cache[string, *components.KeyVerifier]
+	verifierReverseCache    cache.Cache[string, *components.KeyMappingAndVerifier]
+	walletsOrdered          []*wallet
+	walletsByName           map[string]*wallet
 
 	allocLock       sync.Mutex
 	allocLockHolder *keyResolutionContext
@@ -48,11 +51,12 @@ type keyManager struct {
 
 func NewKeyManager(bgCtx context.Context, conf *pldconf.KeyManagerConfig) components.KeyManager {
 	return &keyManager{
-		bgCtx:           bgCtx,
-		conf:            conf,
-		identifierCache: cache.NewCache[string, *components.KeyMappingWithPath](&conf.IdentifierCache, &pldconf.KeyManagerDefaults.IdentifierCache),
-		verifierCache:   cache.NewCache[string, *components.KeyVerifier](&conf.VerifierCache, &pldconf.KeyManagerDefaults.VerifierCache),
-		walletsByName:   make(map[string]*wallet),
+		bgCtx:                   bgCtx,
+		conf:                    conf,
+		identifierCache:         cache.NewCache[string, *components.KeyMappingWithPath](&conf.IdentifierCache, &pldconf.KeyManagerDefaults.IdentifierCache),
+		verifierByIdentityCache: cache.NewCache[string, *components.KeyVerifier](&conf.VerifierCache, &pldconf.KeyManagerDefaults.VerifierCache),
+		verifierReverseCache:    cache.NewCache[string, *components.KeyMappingAndVerifier](&conf.VerifierCache, &pldconf.KeyManagerDefaults.VerifierCache),
+		walletsByName:           make(map[string]*wallet),
 	}
 }
 
@@ -138,4 +142,43 @@ func (km *keyManager) unlockAllocation(krc *keyResolutionContext) {
 		}
 		log.L(krc.ctx).Errorf("key resolution context %s attempted to unlock allocation lock held by %s", krc.id, existingID)
 	}
+}
+
+func (km *keyManager) AddInMemorySigner(prefix string, signer signerapi.InMemorySigner) {
+	// Called during PostInit phase by domain manager
+	for _, w := range km.walletsByName {
+		w.signingModule.AddInMemorySigner(prefix, signer)
+	}
+}
+
+func (km *keyManager) ReverseKeyLookup(ctx context.Context, dbTX *gorm.DB, algorithm, verifierType, verifier string) (*components.KeyMappingAndVerifier, error) {
+	vKey := verifierReverseCacheKey(algorithm, verifierType, verifier)
+	mapping, _ := km.verifierReverseCache.Get(vKey)
+	if mapping != nil {
+		return mapping, nil
+	}
+	var dbVerifiers []*DBKeyVerifier
+	err := dbTX.WithContext(ctx).
+		Where(`"algorithm" = ?`, algorithm).
+		Where(`"type" = ?`, verifierType).
+		Where(`"verifier" = ?`, verifier).
+		Limit(1).
+		Find(&dbVerifiers).
+		Error
+	if err != nil {
+		return nil, err
+	}
+	if len(dbVerifiers) == 0 {
+		return nil, i18n.NewError(ctx, msgs.MsgKeyManagerVerifierLookupNotFound)
+	}
+
+	// Now we need to look up the associated mapping and rebuild it
+	// NOTE: this is an internal-only use mode of a KRC that does not follow the external convention
+	krc := km.NewKeyResolutionContext(ctx, dbTX).(*keyResolutionContext)
+	mapping, err = krc.resolveKey(dbVerifiers[0].Identifier, algorithm, verifierType, true /* existing only */)
+	if err != nil {
+		return nil, err
+	}
+	krc.km.verifierReverseCache.Set(vKey, mapping)
+	return mapping, nil
 }

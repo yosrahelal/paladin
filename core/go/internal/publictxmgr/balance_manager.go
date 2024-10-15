@@ -25,6 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
@@ -321,13 +322,21 @@ func NewBalanceManagerWithInMemoryTracking(ctx context.Context, conf *pldconf.Pu
 	autoFuelingSource := confutil.StringOrEmpty(conf.BalanceManager.AutoFueling.Source, "")
 	if autoFuelingSource != "" {
 		// We must be able to resolve the supplied auto fueling source at startup, so we can check its balance
-		_, sourceAddrStr, err := publicTxMgr.keymgr.ResolveKey(ctx, autoFuelingSource, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
-		if err == nil {
-			autoFuelingSourceAddress, err = tktypes.ParseEthAddress(sourceAddrStr)
-		}
+		var krc components.KeyResolutionContext
+		committed := false
+		defer func() { krc.Close(committed) }()
+		err := publicTxMgr.p.DB().Transaction(func(tx *gorm.DB) error {
+			krc = publicTxMgr.keymgr.NewKeyResolutionContext(ctx, tx)
+			resolved, err := krc.ResolveKey(autoFuelingSource, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+			if err == nil {
+				autoFuelingSourceAddress, err = tktypes.ParseEthAddress(resolved.Verifier.Verifier)
+			}
+			return krc.PreCommit()
+		})
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgInvalidAutoFuelSource, autoFuelingSource)
 		}
+		committed = true
 	}
 	calcMethod := confutil.StringNotEmpty(conf.BalanceManager.AutoFueling.ProactiveCostEstimationMethod, string(pldconf.ProactiveAutoFuelingCalcMethodMax))
 	log.L(ctx).Debugf("Balance manager calcMethod setting: %s", calcMethod)

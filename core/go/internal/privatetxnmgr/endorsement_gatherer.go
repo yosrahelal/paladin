@@ -24,13 +24,12 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 )
 
-func NewEndorsementGatherer(psc components.DomainSmartContract, dCtx components.DomainContext, keyMgr ethclient.KeyManager) ptmgrtypes.EndorsementGatherer {
+func NewEndorsementGatherer(psc components.DomainSmartContract, dCtx components.DomainContext, keyMgr components.KeyManager) ptmgrtypes.EndorsementGatherer {
 	return &endorsementGatherer{
 		psc:    psc,
 		dCtx:   dCtx,
@@ -41,7 +40,7 @@ func NewEndorsementGatherer(psc components.DomainSmartContract, dCtx components.
 type endorsementGatherer struct {
 	psc    components.DomainSmartContract
 	dCtx   components.DomainContext
-	keyMgr ethclient.KeyManager
+	keyMgr components.KeyManager
 }
 
 func (e *endorsementGatherer) DomainContext() components.DomainContext {
