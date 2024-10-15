@@ -29,12 +29,14 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 )
 
 type transportManager struct {
 	bgCtx context.Context
 	mux   sync.Mutex
 
+	rpcModule       *rpcserver.RPCModule
 	conf            *pldconf.TransportManagerConfig
 	localNodeName   string
 	registryManager components.RegistryManager
@@ -62,7 +64,10 @@ func (tm *transportManager) PreInit(pic components.PreInitComponents) (*componen
 	if tm.localNodeName == "" {
 		return nil, i18n.NewError(tm.bgCtx, msgs.MsgTransportNodeNameNotConfigured)
 	}
-	return &components.ManagerInitResult{}, nil
+	tm.initRPC()
+	return &components.ManagerInitResult{
+		RPCModules: []*rpcserver.RPCModule{tm.rpcModule},
+	}, nil
 }
 
 func (tm *transportManager) PostInit(c components.AllComponents) error {
@@ -124,6 +129,36 @@ func (tm *transportManager) ConfiguredTransports() map[string]*pldconf.PluginCon
 	return pluginConf
 }
 
+func (tm *transportManager) getTransportNames() []string {
+	tm.mux.Lock()
+	defer tm.mux.Unlock()
+
+	transportNames := make([]string, 0, len(tm.transportsByName))
+	for transportName := range tm.transportsByName {
+		transportNames = append(transportNames, transportName)
+	}
+	return transportNames
+}
+
+func (tm *transportManager) getTransportByName(ctx context.Context, transportName string) (*transport, error) {
+	tm.mux.Lock()
+	defer tm.mux.Unlock()
+
+	t := tm.transportsByName[transportName]
+	if t == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgTransportNotFound, transportName)
+	}
+	return t, nil
+}
+
+func (tm *transportManager) getLocalTransportDetails(ctx context.Context, transportName string) (string, error) {
+	t, err := tm.getTransportByName(ctx, transportName)
+	if err != nil {
+		return "", err
+	}
+	return t.getLocalDetails(ctx)
+}
+
 func (tm *transportManager) TransportRegistered(name string, id uuid.UUID, toTransport components.TransportManagerToTransport) (fromTransport plugintk.TransportCallbacks, err error) {
 	tm.mux.Lock()
 	defer tm.mux.Unlock()
@@ -167,19 +202,17 @@ func (tm *transportManager) Send(ctx context.Context, msg *components.TransportM
 		return i18n.NewError(ctx, msgs.MsgTransportInvalidMessage)
 	}
 
-	targetNode, err := msg.Destination.Node(ctx, false)
-	if err != nil || targetNode == tm.localNodeName {
-		return i18n.WrapError(ctx, err, msgs.MsgTransportInvalidDestinationSend, tm.localNodeName, msg.Destination)
+	if msg.Node == "" || msg.Node == tm.localNodeName {
+		return i18n.NewError(ctx, msgs.MsgTransportInvalidDestinationSend, tm.localNodeName, msg.Node)
 	}
 
-	msg.ReplyTo, err = msg.ReplyTo.FullyQualified(ctx, tm.localNodeName)
-	if err != nil {
-		return i18n.WrapError(ctx, err, msgs.MsgTransportInvalidReplyToReceived, msg.ReplyTo)
+	if msg.ReplyTo == "" {
+		msg.ReplyTo = tm.localNodeName
 	}
 
 	// Note the registry is responsible for caching to make this call as efficient as if
 	// we maintained the transport details in-memory ourselves.
-	registeredTransportDetails, err := tm.registryManager.GetNodeTransports(ctx, targetNode)
+	registeredTransportDetails, err := tm.registryManager.GetNodeTransports(ctx, msg.Node)
 	if err != nil {
 		return err
 	}
@@ -197,7 +230,7 @@ func (tm *transportManager) Send(ctx context.Context, msg *components.TransportM
 		for _, rtd := range registeredTransportDetails {
 			registeredTransportNames = append(registeredTransportNames, rtd.Transport)
 		}
-		return i18n.NewError(ctx, msgs.MsgTransportNoTransportsConfiguredForNode, targetNode, registeredTransportNames)
+		return i18n.NewError(ctx, msgs.MsgTransportNoTransportsConfiguredForNode, msg.Node, registeredTransportNames)
 	}
 
 	// Call the selected transport to send
@@ -217,8 +250,9 @@ func (tm *transportManager) Send(ctx context.Context, msg *components.TransportM
 		MessageType:   msg.MessageType,
 		MessageId:     msg.MessageID.String(),
 		CorrelationId: correlID,
-		Destination:   msg.Destination.String(),
-		ReplyTo:       msg.ReplyTo.String(),
+		Component:     msg.Component,
+		Node:          msg.Node,
+		ReplyTo:       msg.ReplyTo,
 		Payload:       msg.Payload,
 	})
 	if err != nil {

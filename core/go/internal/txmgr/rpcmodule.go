@@ -29,6 +29,7 @@ import (
 func (tm *txManager) buildRPCModule() {
 	tm.rpcModule = rpcserver.NewRPCModule("ptx").
 		Add("ptx_sendTransaction", tm.rpcSendTransaction()).
+		Add("ptx_sendTransactions", tm.rpcSendTransactions()).
 		Add("ptx_getTransaction", tm.rpcGetTransaction()).
 		Add("ptx_queryTransactions", tm.rpcQueryTransactions()).
 		Add("ptx_queryPendingTransactions", tm.rpcQueryPendingTransactions()).
@@ -42,6 +43,7 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_storeABI", tm.rpcStoreABI()).
 		Add("ptx_getStoredABI", tm.rpcGetStoredABI()).
 		Add("ptx_queryStoredABIs", tm.rpcQueryStoredABIs()).
+		Add("ptx_resolveLocalVerifier", tm.rpcResolveLocalVerifier()).
 		Add("ptx_resolveVerifier", tm.rpcResolveVerifier())
 }
 
@@ -50,6 +52,14 @@ func (tm *txManager) rpcSendTransaction() rpcserver.RPCHandler {
 		tx ptxapi.TransactionInput,
 	) (*uuid.UUID, error) {
 		return tm.sendTransaction(ctx, &tx)
+	})
+}
+
+func (tm *txManager) rpcSendTransactions() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		txs []*ptxapi.TransactionInput,
+	) ([]uuid.UUID, error) {
+		return tm.sendTransactions(ctx, txs)
 	})
 }
 
@@ -167,6 +177,17 @@ func (tm *txManager) rpcQueryStoredABIs() rpcserver.RPCHandler {
 		query query.QueryJSON,
 	) ([]*ptxapi.StoredABI, error) {
 		return tm.queryABIs(ctx, &query)
+	})
+}
+
+func (tm *txManager) rpcResolveLocalVerifier() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod3(func(ctx context.Context,
+		keyName string,
+		algorithm string,
+		verifierType string,
+	) (string, error) {
+		_, verifier, err := tm.keyManager.ResolveKey(ctx, keyName, algorithm, verifierType)
+		return verifier, err
 	})
 }
 

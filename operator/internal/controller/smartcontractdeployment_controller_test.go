@@ -30,7 +30,7 @@ import (
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
 )
 
-var _ = Describe("SmartContract Controller", func() {
+var _ = Describe("SmartContractDeployment Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -40,16 +40,19 @@ var _ = Describe("SmartContract Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		smartcontract := &corev1alpha1.SmartContract{}
+		smartcontractdeployment := &corev1alpha1.SmartContractDeployment{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind SmartContract")
-			err := k8sClient.Get(ctx, typeNamespacedName, smartcontract)
+			By("creating the custom resource for the Kind SmartContractDeployment")
+			err := k8sClient.Get(ctx, typeNamespacedName, smartcontractdeployment)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &corev1alpha1.SmartContract{
+				resource := &corev1alpha1.SmartContractDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
+					},
+					Spec: corev1alpha1.SmartContractDeploymentSpec{
+						TxType: "public",
 					},
 					// TODO(user): Specify other spec details if needed.
 				}
@@ -59,16 +62,16 @@ var _ = Describe("SmartContract Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &corev1alpha1.SmartContract{}
+			resource := &corev1alpha1.SmartContractDeployment{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance SmartContract")
+			By("Cleanup the specific resource instance SmartContractDeployment")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &SmartContractReconciler{
+			controllerReconciler := &SmartContractDeploymentReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}

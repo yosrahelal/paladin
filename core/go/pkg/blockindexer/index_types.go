@@ -17,8 +17,14 @@
 package blockindexer
 
 import (
+	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
+
+var IndexedBlockFilters filters.FieldSet = filters.FieldMap{
+	"hash":   filters.HexBytesField(`"hash"`),
+	"number": filters.Int64Field("number"),
+}
 
 type IndexedBlock struct {
 	Number int64           `json:"number"`
@@ -43,6 +49,17 @@ func (pl EthTransactionResult) Options() []string {
 	}
 }
 
+var IndexedTransactionFilters filters.FieldSet = filters.FieldMap{
+	"hash":             filters.HexBytesField("hash"),
+	"blockNumber":      filters.Int64Field("block_number"),
+	"transactionIndex": filters.Int64Field("transaction_index"),
+	"from":             filters.HexBytesField(`"from"`),
+	"to":               filters.HexBytesField("to"),
+	"nonce":            filters.Int64Field("nonce"),
+	"contractAddress":  filters.HexBytesField("contract_address"),
+	"result":           filters.StringField("result"),
+}
+
 type IndexedTransaction struct {
 	Hash             tktypes.Bytes32                    `json:"hash"                      gorm:"primaryKey"`
 	BlockNumber      int64                              `json:"blockNumber"`
@@ -59,6 +76,13 @@ type IndexedTransaction struct {
 type IndexedTransactionNotify struct {
 	IndexedTransaction
 	RevertReason tktypes.HexBytes
+}
+
+var IndexedEventFilters filters.FieldSet = filters.FieldMap{
+	"blockNumber":      filters.Int64Field("block_number"),
+	"transactionIndex": filters.Int64Field("transaction_index"),
+	"logIndex":         filters.Int64Field("log_index"),
+	"signature":        filters.HexBytesField("signature"),
 }
 
 type IndexedEvent struct {
