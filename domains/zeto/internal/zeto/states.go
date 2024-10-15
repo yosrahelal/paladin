@@ -64,7 +64,7 @@ func (n *Zeto) makeCoin(stateData string) (*types.ZetoCoin, error) {
 	return coin, err
 }
 
-func (z *Zeto) makeNewState(coin *types.ZetoCoin) (*pb.NewState, error) {
+func (z *Zeto) makeNewState(coin *types.ZetoCoin, owner string) (*pb.NewState, error) {
 	coinJSON, err := json.Marshal(coin)
 	if err != nil {
 		return nil, err
@@ -75,9 +75,10 @@ func (z *Zeto) makeNewState(coin *types.ZetoCoin) (*pb.NewState, error) {
 	}
 	hashStr := hash.String()
 	return &pb.NewState{
-		Id:            &hashStr,
-		SchemaId:      z.coinSchema.Id,
-		StateDataJson: string(coinJSON),
+		Id:               &hashStr,
+		SchemaId:         z.coinSchema.Id,
+		StateDataJson:    string(coinJSON),
+		DistributionList: []string{owner},
 	}, nil
 }
 
@@ -153,7 +154,7 @@ func (z *Zeto) prepareOutputs(params []*types.TransferParamEntry, resolvedVerifi
 			Amount:   param.Amount,
 		}
 
-		newState, err := z.makeNewState(newCoin)
+		newState, err := z.makeNewState(newCoin, param.To)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create new state. %s", err)
 		}

@@ -41,16 +41,17 @@ func (tt TransactionType) Options() []string {
 }
 
 type Transaction struct {
-	ID             uuid.UUID                     `json:"id,omitempty"`             // server generated UUID for this transaction (query only)
-	Created        tktypes.Timestamp             `json:"created,omitempty"`        // server generated creation timestamp for this transaction (query only)
-	IdempotencyKey string                        `json:"idempotencyKey,omitempty"` // externally supplied unique identifier for this transaction. 409 Conflict will be returned on attempt to re-submit
-	Type           tktypes.Enum[TransactionType] `json:"type,omitempty"`           // public transactions go straight to a base ledger EVM smart contract. Private transactions use a Paladin domain to mask the on-chain data
-	Domain         string                        `json:"domain,omitempty"`         // name of a domain - only required on input for private deploy transactions (n/a for public, and inferred from "to" for invoke)
-	Function       string                        `json:"function,omitempty"`       // inferred from definition if not supplied. Resolved to full signature and stored. Required with abiReference on input if not constructor
-	ABIReference   *tktypes.Bytes32              `json:"abiReference,omitempty"`   // calculated if not supplied (ABI will be stored for you)
-	From           string                        `json:"from,omitempty"`           // locator for a local signing identity to use for submission of this transaction
-	To             *tktypes.EthAddress           `json:"to,omitempty"`             // the target contract, or null for a deploy
-	Data           tktypes.RawJSON               `json:"data,omitempty"`           // pre-encoded array with/without function selector, array, or object input
+	ID              *uuid.UUID                    `json:"id,omitempty"`             // server generated UUID for this transaction (query only)
+	Created         tktypes.Timestamp             `json:"created,omitempty"`        // server generated creation timestamp for this transaction (query only)
+	IdempotencyKey  string                        `json:"idempotencyKey,omitempty"` // externally supplied unique identifier for this transaction. 409 Conflict will be returned on attempt to re-submit
+	Type            tktypes.Enum[TransactionType] `json:"type,omitempty"`           // public transactions go straight to a base ledger EVM smart contract. Private transactions use a Paladin domain to mask the on-chain data
+	Domain          string                        `json:"domain,omitempty"`         // name of a domain - only required on input for private deploy transactions (n/a for public, and inferred from "to" for invoke)
+	Function        string                        `json:"function,omitempty"`       // inferred from definition if not supplied. Resolved to full signature and stored. Required with abiReference on input if not constructor
+	ABIReference    *tktypes.Bytes32              `json:"abiReference,omitempty"`   // calculated if not supplied (ABI will be stored for you)
+	From            string                        `json:"from,omitempty"`           // locator for a local signing identity to use for submission of this transaction
+	To              *tktypes.EthAddress           `json:"to,omitempty"`             // the target contract, or null for a deploy
+	Data            tktypes.RawJSON               `json:"data,omitempty"`           // pre-encoded array with/without function selector, array, or object input
+	PublicTxOptions `json:",inline"`
 	// TODO: PrivateTransactions string list
 	// TODO: PublicTransactions string list
 }

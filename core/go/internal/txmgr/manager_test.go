@@ -33,6 +33,7 @@ type mockComponents struct {
 	db               sqlmock.Sqlmock
 	domainManager    *componentmocks.DomainManager
 	blockIndexer     *componentmocks.BlockIndexer
+	keyManager       *componentmocks.KeyManager
 	publicTxMgr      *componentmocks.PublicTxManager
 	privateTxMgr     *componentmocks.PrivateTxManager
 	identityResolver *componentmocks.IdentityResolver
@@ -46,6 +47,7 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pld
 	conf := &pldconf.TxManagerConfig{}
 	mc := &mockComponents{
 		blockIndexer:     componentmocks.NewBlockIndexer(t),
+		keyManager:       componentmocks.NewKeyManager(t),
 		domainManager:    componentmocks.NewDomainManager(t),
 		publicTxMgr:      componentmocks.NewPublicTxManager(t),
 		privateTxMgr:     componentmocks.NewPrivateTxManager(t),
@@ -55,6 +57,7 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pld
 	componentMocks := componentmocks.NewAllComponents(t)
 	componentMocks.On("BlockIndexer").Return(mc.blockIndexer).Maybe()
 	componentMocks.On("DomainManager").Return(mc.domainManager).Maybe()
+	componentMocks.On("KeyManager").Return(mc.keyManager).Maybe()
 	componentMocks.On("PublicTxManager").Return(mc.publicTxMgr).Maybe()
 	componentMocks.On("PrivateTxManager").Return(mc.privateTxMgr).Maybe()
 	componentMocks.On("IdentityResolver").Return(mc.identityResolver).Maybe()

@@ -21,6 +21,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	_ "embed"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -94,6 +95,7 @@ func transactionLatencyThreshold(t *testing.T) time.Duration {
 type componentTestInstance struct {
 	grpcTarget             string
 	id                     uuid.UUID
+	name                   string // useful for debugging and logging
 	conf                   *pldconf.PaladinConfig
 	ctx                    context.Context
 	client                 rpcclient.Client
@@ -121,7 +123,9 @@ func deplyDomainRegistry(t *testing.T) *tktypes.EthAddress {
 	cmTmp := componentmgr.NewComponentManager(context.Background(), grpcTarget, uuid.New(), &tmpConf)
 	err = cmTmp.Init()
 	require.NoError(t, err)
-	err = cmTmp.StartComponents()
+	err = cmTmp.StartManagers()
+	require.NoError(t, err)
+	err = cmTmp.CompleteStart()
 	require.NoError(t, err)
 	domainRegistryAddress := domains.DeploySmartContract(t, cmTmp.BlockIndexer(), cmTmp.EthClientFactory())
 
@@ -136,9 +140,10 @@ type nodeConfiguration struct {
 	port     int
 	cert     string
 	key      string
+	name     string
 }
 
-func newNodeConfiguration(t *testing.T) *nodeConfiguration {
+func newNodeConfiguration(t *testing.T, nodeName string) *nodeConfiguration {
 	identity := uuid.New()
 	port, err := getFreePort()
 	require.NoError(t, err)
@@ -149,12 +154,13 @@ func newNodeConfiguration(t *testing.T) *nodeConfiguration {
 		port:     port,
 		cert:     cert,
 		key:      key,
+		name:     nodeName,
 	}
 }
 
 func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes.EthAddress, binding *nodeConfiguration, peerNodes []*nodeConfiguration) *componentTestInstance {
 	if binding == nil {
-		binding = newNodeConfiguration(t)
+		binding = newNodeConfiguration(t, "default")
 	}
 	f, err := os.CreateTemp("", "component-test.*.sock")
 	require.NoError(t, err)
@@ -171,11 +177,14 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	i := &componentTestInstance{
 		grpcTarget: grpcTarget,
 		id:         binding.identity,
+		name:       binding.name,
 		conf:       &conf,
 	}
-	i.ctx = log.WithLogField(context.Background(), "instance", binding.identity.String())
+	i.ctx = log.WithLogField(context.Background(), "node-id", binding.identity.String())
+	i.ctx = log.WithLogField(i.ctx, "node-name", binding.name)
 
 	i.conf.Log.Level = confutil.P("info")
+	i.conf.BlockIndexer.FromBlock = json.RawMessage(`"latest"`)
 	i.conf.DomainManagerConfig.Domains = make(map[string]*pldconf.DomainConfig, 1)
 	i.conf.DomainManagerConfig.Domains["domain1"] = &pldconf.DomainConfig{
 		Plugin: pldconf.PluginConfig{
@@ -233,14 +242,15 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 		},
 	}
 
+	//uncomment for debugging
+	//i.conf.DB.SQLite.DSN = "./sql." + i.name + ".db"
+	//i.conf.Log.Level = confutil.P("debug")
+
 	var pl plugins.UnitTestPluginLoader
 
 	cm := componentmgr.NewComponentManager(i.ctx, i.grpcTarget, i.id, i.conf)
 	// Start it up
 	err = cm.Init()
-	require.NoError(t, err)
-
-	err = cm.StartComponents()
 	require.NoError(t, err)
 
 	err = cm.StartManagers()
@@ -291,8 +301,12 @@ func testConfig(t *testing.T) pldconf.PaladinConfig {
 
 	port, err := getFreePort()
 	require.NoError(t, err, "Error finding a free port")
+	conf.GRPC.ShutdownTimeout = confutil.P("0s")
+	conf.RPCServer.HTTP.ShutdownTimeout = confutil.P("0s")
 	conf.RPCServer.HTTP.Port = &port
 	conf.RPCServer.HTTP.Address = confutil.P("127.0.0.1")
+	conf.RPCServer.WS.ShutdownTimeout = confutil.P("0s")
+	conf.RPCServer.WS.Disabled = true
 	conf.Log.Level = confutil.P("info")
 
 	conf.Signer.KeyStore.Static.Keys["seed"] = pldconf.StaticKeyEntryConfig{

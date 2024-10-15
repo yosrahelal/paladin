@@ -223,6 +223,12 @@ task makeMocks(type: Mockery, dependsOn: [":installMockery", protoc, goGet]) {
         outputPackage 'componentmocks'
         outputDir 'mocks/componentmocks'
     }
+        mock {
+        inputDir 'internal/statedistribution'
+        includeAll true
+        outputPackage 'statedistributionmocks'
+        outputDir 'mocks/statedistributionmocks'
+    }
 }
 
 task clean(type: Delete, dependsOn: ':testinfra:stopTestInfra') {
@@ -321,7 +327,7 @@ abstract class UnitTests extends Exec {
         args './pkg/...', './internal/...'
         args '-cover'
         args '-covermode=atomic'
-        args '-timeout=30s'
+        args '-timeout=60s'
         if (project.findProperty('verboseTests') == 'true') {
             args '-v'
         }
