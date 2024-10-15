@@ -22,6 +22,7 @@ import (
 	"math/big"
 	"strconv"
 	"testing"
+	"time"
 
 	_ "embed"
 
@@ -31,10 +32,10 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
-	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
@@ -662,32 +663,39 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 // Then we return the factory
 func deploySmartContract(t *testing.T, confFile string) *tktypes.EthAddress {
 	ctx := context.Background()
-
-	simDomainABI := mustParseBuildABI(simDomainBuild)
-
 	tb := NewTestBed()
-
 	_, done, err := tb.StartForTest(confFile, nil)
 	require.NoError(t, err)
 	defer done()
 
-	bi := tb.Components().BlockIndexer()
+	simDomainABI := mustParseBuildABI(simDomainBuild)
+	simDomainBytecode := mustParseBuildBytecode(simDomainBuild)
+	txm := tb.Components().TxManager()
 
 	// In this test we deploy the factory in-line
-	ec, err := tb.Components().EthClientFactory().HTTPClient().ABI(ctx, simDomainABI)
+	txID, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
+		Transaction: ptxapi.Transaction{
+			Type: ptxapi.TransactionTypePublic.Enum(),
+			From: "domain1_admin",
+		},
+		ABI:      simDomainABI,
+		Bytecode: simDomainBytecode,
+	})
 	require.NoError(t, err)
 
-	cc, err := ec.Constructor(ctx, mustParseBuildBytecode(simDomainBuild))
-	require.NoError(t, err)
+	var receipt *ptxapi.TransactionReceipt
+	ticker := time.NewTicker(100 * time.Millisecond)
+	for {
+		<-ticker.C
+		require.False(t, t.Failed())
+		receipt, err = txm.GetTransactionReceiptByID(ctx, *txID)
+		require.NoError(t, err)
+		if receipt != nil {
+			break
+		}
+	}
 
-	deployTXHash, err := cc.R(ctx).
-		Signer("domain1_admin").
-		Input(`{}`).
-		SignAndSend()
-	require.NoError(t, err)
-
-	deployTx, err := bi.WaitForTransactionSuccess(ctx, *deployTXHash, simDomainABI)
-	require.NoError(t, err)
-	require.Equal(t, deployTx.Result.V(), blockindexer.TXResult_SUCCESS)
-	return deployTx.ContractAddress
+	require.True(t, receipt.Success)
+	require.NotNil(t, receipt.ContractAddress)
+	return receipt.ContractAddress
 }

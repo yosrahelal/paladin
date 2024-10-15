@@ -41,7 +41,7 @@ func writeTestConfig(t *testing.T) (configFile string) {
 	conf.DB.Postgres.MigrationsDir = "../../db/migrations/postgres"
 	entropy, _ := bip39.NewEntropy(256)
 	mnemonic, _ := bip39.NewMnemonic(entropy)
-	conf.Signer.KeyStore.Static.Keys = map[string]pldconf.StaticKeyEntryConfig{
+	conf.Wallets[0].Signer.KeyStore.Static.Keys = map[string]pldconf.StaticKeyEntryConfig{
 		"seed": {
 			Encoding: "none",
 			Inline:   mnemonic,

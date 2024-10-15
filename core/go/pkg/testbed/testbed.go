@@ -35,7 +35,7 @@ func HDWalletSeedScopedToTest() *UTInitFunction {
 	seed := tktypes.RandHex(32)
 	return &UTInitFunction{
 		ModifyConfig: func(conf *pldconf.PaladinConfig) {
-			conf.Signer.KeyStore.Static.Keys["seed"] = pldconf.StaticKeyEntryConfig{
+			conf.Wallets[0].Signer.KeyStore.Static.Keys["seed"] = pldconf.StaticKeyEntryConfig{
 				Encoding: "hex",
 				Inline:   seed,
 			}

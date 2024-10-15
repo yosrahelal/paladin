@@ -30,7 +30,6 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -99,7 +98,7 @@ func mustParseBuildBytecode(buildJSON []byte) tktypes.HexBytes {
 	return byteCode
 }
 
-func DeploySmartContract(t *testing.T, bi blockindexer.BlockIndexer, txm components.TXManager) *tktypes.EthAddress {
+func DeploySmartContract(t *testing.T, txm components.TXManager) *tktypes.EthAddress {
 	ctx := context.Background()
 
 	simpleDomainABI := mustParseBuildABI(simpleDomainBuild)

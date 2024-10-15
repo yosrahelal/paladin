@@ -23,8 +23,6 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
@@ -90,29 +88,19 @@ func (tb *testbed) rpcDeployBytecode() rpcserver.RPCHandler {
 		params tktypes.RawJSON,
 	) (*ethtypes.Address0xHex, error) {
 
-		var constructor ethclient.ABIFunctionClient
-		ec := tb.c.EthClientFactory().HTTPClient()
-		abic, err := ec.ABI(ctx, abi)
-		if err == nil {
-			constructor, err = abic.Constructor(ctx, bytecode)
-		}
+		receipt, err := tb.execTransactionSync(ctx, &ptxapi.TransactionInput{
+			Transaction: ptxapi.Transaction{
+				Type: ptxapi.TransactionTypePublic.Enum(),
+				From: from,
+				Data: params,
+			},
+			ABI:      abi,
+			Bytecode: tktypes.HexBytes(bytecode),
+		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to build client for constructor: %s", err)
+			return nil, err
 		}
-
-		var tx *blockindexer.IndexedTransaction
-		txHash, err := constructor.R(ctx).
-			Signer(from).
-			Input(params).
-			SignAndSend()
-		if err == nil {
-			tx, err = tb.c.BlockIndexer().WaitForTransactionSuccess(ctx, *txHash, abi)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to send transaction: %s", err)
-		}
-
-		return tx.ContractAddress.Address0xHex(), nil
+		return receipt.ContractAddress.Address0xHex(), nil
 	})
 }
 
@@ -137,17 +125,16 @@ func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
 			return nil, err
 		}
 
-		keyMgr := tb.c.KeyManager()
 		tx.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.RequiredVerifiers))
 		for i, v := range tx.RequiredVerifiers {
-			_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
+			resolvedKey, err := tb.resolveFQLookup(ctx, v.Lookup, v.Algorithm, v.VerifierType)
 			if err != nil {
 				return nil, fmt.Errorf("failed to resolve key %q: %s", v.Lookup, err)
 			}
 			tx.Verifiers[i] = &prototk.ResolvedVerifier{
 				Lookup:       v.Lookup,
 				Algorithm:    v.Algorithm,
-				Verifier:     verifier,
+				Verifier:     resolvedKey.Verifier.Verifier,
 				VerifierType: v.VerifierType,
 			}
 		}
@@ -160,9 +147,9 @@ func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
 
 		// Do the deploy - we wait for the transaction here to cover revert failures
 		if tx.DeployTransaction != nil && tx.InvokeTransaction == nil {
-			err = tb.execBaseLedgerDeployTransaction(ctx, tx.Signer, tx.DeployTransaction)
+			_, err = tb.execBaseLedgerDeployTransaction(ctx, tx.Signer, tx.DeployTransaction)
 		} else if tx.InvokeTransaction != nil && tx.DeployTransaction == nil {
-			err = tb.execBaseLedgerTransaction(ctx, tx.Signer, tx.InvokeTransaction)
+			_, err = tb.execBaseLedgerTransaction(ctx, tx.Signer, tx.InvokeTransaction)
 		} else {
 			err = fmt.Errorf("must return a transaction to invoke, or a transaction to deploy")
 		}
@@ -215,17 +202,16 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	}
 
 	// Gather the addresses - in the testbed we assume these all to be local
-	keyMgr := tb.c.KeyManager()
 	tx.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.PreAssembly.RequiredVerifiers))
 	for i, v := range tx.PreAssembly.RequiredVerifiers {
-		_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
+		resolvedKey, err := tb.resolveFQLookup(ctx, v.Lookup, v.Algorithm, v.VerifierType)
 		if err != nil {
 			return fmt.Errorf("failed to resolve key %q: %s", v.Lookup, err)
 		}
 		tx.PreAssembly.Verifiers[i] = &prototk.ResolvedVerifier{
 			Lookup:       v.Lookup,
 			Algorithm:    v.Algorithm,
-			Verifier:     verifier,
+			Verifier:     resolvedKey.Verifier.Verifier,
 			VerifierType: v.VerifierType,
 		}
 	}
@@ -286,7 +272,8 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	} else if tx.Inputs.Intent == prototk.TransactionSpecification_CALL {
 		return tb.execBaseLedgerCall(ctx, tx.Signer, tx.PreparedPublicTransaction)
 	} else {
-		return tb.execBaseLedgerTransaction(ctx, tx.Signer, tx.PreparedPublicTransaction)
+		_, err := tb.execBaseLedgerTransaction(ctx, tx.Signer, tx.PreparedPublicTransaction)
+		return err
 	}
 }
 
@@ -408,13 +395,10 @@ func (tb *testbed) rpcResolveVerifier() rpcserver.RPCHandler {
 		algorithm string,
 		verifierType string,
 	) (verifier string, _ error) {
-		identifier, err := tktypes.PrivateIdentityLocator(lookup).Identity(ctx)
-		if err == nil {
-			_, verifier, err = tb.c.KeyManager().ResolveKey(ctx, identifier, algorithm, verifierType)
-		}
+		resolvedKey, err := tb.resolveFQLookup(ctx, lookup, algorithm, verifierType)
 		if err != nil {
 			return "", err
 		}
-		return verifier, err
+		return resolvedKey.Verifier.Verifier, err
 	})
 }
