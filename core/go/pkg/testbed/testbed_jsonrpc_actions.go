@@ -348,25 +348,23 @@ func (tb *testbed) rpcTestbedInvoke() rpcserver.RPCHandler {
 		invocation tktypes.PrivateContractInvoke,
 		waitForCompletion bool,
 	) (*tktypes.PrivateContractTransaction, error) {
-
 		psc, tx, err := tb.newPrivateTransaction(ctx, invocation, prototk.TransactionSpecification_SEND_TRANSACTION)
 		if err != nil {
 			return nil, err
 		}
-		err = tb.execPrivateTransaction(ctx, psc, tx)
+		doExec := func() error {
+			return tb.execPrivateTransaction(ctx, psc, tx)
+		}
+		if waitForCompletion {
+			err = tb.c.DomainManager().ExecAndWaitTransaction(ctx, tx.ID, doExec)
+		} else {
+			err = doExec()
+		}
 		if err != nil {
 			return nil, err
 		}
-
-		// Wait for the domain to index the transaction events
-		if waitForCompletion {
-			err = tb.c.DomainManager().WaitForTransaction(ctx, tx.ID)
-			if err != nil {
-				return nil, err
-			}
-		}
-
 		return tb.mapTransaction(tx)
+
 	})
 }
 

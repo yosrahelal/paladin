@@ -369,6 +369,6 @@ func TestWaitForTransactionTimeout(t *testing.T) {
 
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	err := dm.WaitForTransaction(cancelled, uuid.New())
+	err := dm.ExecAndWaitTransaction(cancelled, uuid.New(), func() error { return nil })
 	assert.Regexp(t, "PD020100", err)
 }

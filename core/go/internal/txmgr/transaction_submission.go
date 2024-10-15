@@ -331,12 +331,14 @@ func (tm *txManager) SendTransactions(ctx context.Context, txs []*ptxapi.Transac
 		tx := txi.tx
 		if tx.Type.V() == ptxapi.TransactionTypePrivate {
 			if tx.To == nil {
+				log.L(ctx).Infof("Passing deploy transaction ID %s to private TX manager", tx.ID)
 				err = tm.privateTxMgr.HandleDeployTx(ctx, &components.PrivateContractDeploy{
 					ID:     *tx.ID,
 					Domain: tx.Domain,
 					Inputs: txi.inputs,
 				})
 			} else {
+				log.L(ctx).Infof("Passing transaction ID %s to private TX manager", tx.ID)
 				err = tm.privateTxMgr.HandleNewTx(ctx, &components.PrivateTransaction{
 					ID: *tx.ID,
 					Inputs: &components.TransactionInputs{

@@ -29,7 +29,7 @@ blockchain:
     url: ws://localhost:8546
     initialConnectAttempts: 25
 log:
-  level: info
+  level: debug
 wallets:
 - name: wallet1
   keySelector: .*
