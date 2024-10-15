@@ -197,15 +197,15 @@ func (km *keyManager) ResolveBatchNewDatabaseTX(ctx context.Context, algorithm, 
 			err = krc.Commit()
 		}
 	}()
-	err = km.p.DB().Transaction(func(dbTX *gorm.DB) (err error) {
-		for i, identifier := range identifiers {
-			if err == nil {
-				resolvedKeys[i], err = krc.KeyResolverLazyDB().ResolveKey(identifier, algorithm, verifierType)
-			}
+	for i, identifier := range identifiers {
+		if err == nil {
+			resolvedKeys[i], err = krc.KeyResolverLazyDB().ResolveKey(identifier, algorithm, verifierType)
 		}
-		return err
-	})
-	return
+	}
+	if err != nil {
+		return nil, err
+	}
+	return resolvedKeys, nil
 }
 
 func (km *keyManager) ReverseKeyLookup(ctx context.Context, dbTX *gorm.DB, algorithm, verifierType, verifier string) (*components.KeyMappingAndVerifier, error) {

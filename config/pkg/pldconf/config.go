@@ -37,7 +37,6 @@ type PaladinConfig struct {
 	KeyManager             KeyManagerConfig       `json:"keyManager"`
 	StateStore             StateStoreConfig       `json:"statestore"`
 	BlockIndexer           BlockIndexerConfig     `json:"blockIndexer"`
-	Signer                 SignerConfig           `json:"signer"`
 	TempDir                *string                `json:"tempDir"`
 	TxManager              TxManagerConfig        `json:"txManager"`
 	PrivateTxManager       PrivateTxManagerConfig `json:"privateTxManager"`

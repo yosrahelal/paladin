@@ -70,16 +70,20 @@ blockchain:
   ws:
     url: ws://localhost:8546
     initialConnectAttempts: 25
-signer:
-    keyDerivation:
-      type: bip32
-    keyStore:
-      type: static
-      static:
-        keys:
-          seed:
-            encoding: none
-            inline: polar mechanic crouch jungle field room dry sure machine brisk seed bulk student total ethics
+keyManager:
+  wallets:
+  - name: wallet1
+    keySelector: .*
+    signer:
+        keyDerivation:
+            type: "bip32"
+        keyStore:
+            type: "static"
+            static:
+                keys:
+                    seed:
+                        encoding: none
+                        inline: polar mechanic crouch jungle field room dry sure machine brisk seed bulk student total ethics
 `), &testConfig)
 	require.NoError(t, err)
 
@@ -123,7 +127,7 @@ signer:
 	require.NoError(t, err)
 	defer indexer.Stop()
 
-	keyMgr, err := ethclient.NewSimpleTestKeyManager(ctx, (*signerapi.ConfigNoExt)(&testConfig.Signer))
+	keyMgr, err := ethclient.NewSimpleTestKeyManager(ctx, (*signerapi.ConfigNoExt)(testConfig.KeyManager.Wallets[0].Signer))
 	require.NoError(t, err)
 
 	ecf, err := ethclient.NewEthClientFactoryWithKeyManager(ctx, keyMgr, &testConfig.Blockchain)
@@ -175,7 +179,7 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 	// The bootstrap code that is the entry point to the java side is not tested here, we bootstrap the component manager by hand
 
 	ctx := context.Background()
-	instance := newInstanceForComponentTesting(t, deplyDomainRegistry(t), nil, nil)
+	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil)
 	rpcClient := instance.client
 
 	// Check there are no transactions before we start
@@ -193,10 +197,10 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 			Domain:         "domain1",
 			From:           "wallets.org1.aaaaaa",
 			Data: tktypes.RawJSON(`{
-					"notary": "domain1.contract1.notary",
-					"name": "FakeToken1",
-					"symbol": "FT1"
-				}`),
+                    "notary": "domain1.contract1.notary",
+                    "name": "FakeToken1",
+                    "symbol": "FT1"
+                }`),
 		},
 	})
 	require.NoError(t, err)
@@ -232,10 +236,10 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 			Type:           ptxapi.TransactionTypePrivate.Enum(),
 			From:           "wallets.org1.aaaaaa",
 			Data: tktypes.RawJSON(`{
-				"from": "",
-				"to": "wallets.org1.aaaaaa",
-				"amount": "123000000000000000000"
-			}`),
+                "from": "",
+                "to": "wallets.org1.aaaaaa",
+                "amount": "123000000000000000000"
+            }`),
 		},
 	})
 
@@ -264,7 +268,7 @@ func TestPrivateTransactionsMintThenTransfer(t *testing.T) {
 	// Invoke 2 transactions on the same contract where the second transaction relies on the state created by the first
 
 	ctx := context.Background()
-	instance := newInstanceForComponentTesting(t, deplyDomainRegistry(t), nil, nil)
+	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil)
 	rpcClient := instance.client
 
 	// Check there are no transactions before we start
@@ -281,10 +285,10 @@ func TestPrivateTransactionsMintThenTransfer(t *testing.T) {
 			Domain:         "domain1",
 			From:           "wallets.org1.aaaaaa",
 			Data: tktypes.RawJSON(`{
-					"notary": "domain1.contract1.notary",
-					"name": "FakeToken1",
-					"symbol": "FT1"
-				}`),
+                    "notary": "domain1.contract1.notary",
+                    "name": "FakeToken1",
+                    "symbol": "FT1"
+                }`),
 		},
 	})
 	require.NoError(t, err)
@@ -320,10 +324,10 @@ func TestPrivateTransactionsMintThenTransfer(t *testing.T) {
 			Type:           ptxapi.TransactionTypePrivate.Enum(),
 			From:           "wallets.org1.aaaaaa",
 			Data: tktypes.RawJSON(`{
-				"from": "",
-				"to": "wallets.org1.bbbbbb",
-				"amount": "123000000000000000000"
-			}`),
+                "from": "",
+                "to": "wallets.org1.bbbbbb",
+                "amount": "123000000000000000000"
+            }`),
 		},
 	})
 
@@ -347,10 +351,10 @@ func TestPrivateTransactionsMintThenTransfer(t *testing.T) {
 			Type:           ptxapi.TransactionTypePrivate.Enum(),
 			From:           "wallets.org1.bbbbbb",
 			Data: tktypes.RawJSON(`{
-				"from": "wallets.org1.bbbbbb",
-				"to": "wallets.org1.aaaaaa",
-				"amount": "123000000000000000000"
-			}`),
+                "from": "wallets.org1.bbbbbb",
+                "to": "wallets.org1.aaaaaa",
+                "amount": "123000000000000000000"
+            }`),
 		},
 	})
 
@@ -372,7 +376,7 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 	// need the complexity of cross node transfers in this test
 	ctx := context.Background()
 
-	domainRegistryAddress := deplyDomainRegistry(t)
+	domainRegistryAddress := deployDomainRegistry(t)
 
 	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, nil, nil)
 	client1 := instance1.client
@@ -399,10 +403,10 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 			Domain:         "domain1",
 			From:           aliceIdentity,
 			Data: tktypes.RawJSON(`{
-					"notary": "domain1.contract1.notary",
-					"name": "FakeToken1",
-					"symbol": "FT1"
-				}`),
+                    "notary": "domain1.contract1.notary",
+                    "name": "FakeToken1",
+                    "symbol": "FT1"
+                }`),
 		},
 	})
 	require.NoError(t, err)
@@ -430,10 +434,10 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 			Type:           ptxapi.TransactionTypePrivate.Enum(),
 			From:           aliceIdentity,
 			Data: tktypes.RawJSON(`{
-					"from": "",
-					"to": "` + aliceIdentity + `",
-					"amount": "123000000000000000000"
-				}`),
+                    "from": "",
+                    "to": "` + aliceIdentity + `",
+                    "amount": "123000000000000000000"
+                }`),
 		},
 	})
 
@@ -458,10 +462,10 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 			Type:           ptxapi.TransactionTypePrivate.Enum(),
 			From:           bobIdentity,
 			Data: tktypes.RawJSON(`{
-					"from": "",
-					"to": "` + bobIdentity + `",
-					"amount": "123000000000000000000"
-				}`),
+                    "from": "",
+                    "to": "` + bobIdentity + `",
+                    "amount": "123000000000000000000"
+                }`),
 		},
 	})
 
@@ -483,7 +487,7 @@ func TestResolveIdentityFromRemoteNode(t *testing.T) {
 	ctx := context.Background()
 
 	//TODO shouldn't need domain registry for this test
-	domainRegistryAddress := deplyDomainRegistry(t)
+	domainRegistryAddress := deployDomainRegistry(t)
 
 	aliceNodeConfig := newNodeConfiguration(t, "alice")
 	bobNodeConfig := newNodeConfiguration(t, "bob")
@@ -526,7 +530,7 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 	t.Logf("Instance 1 id: %s", aliceNodeConfig.identity)
 	t.Logf("Instance 2 id: %s", bobNodeConfig.identity)
 
-	domainRegistryAddress := deplyDomainRegistry(t)
+	domainRegistryAddress := deployDomainRegistry(t)
 
 	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, aliceNodeConfig, []*nodeConfiguration{bobNodeConfig})
 	client1 := instance1.client
@@ -550,10 +554,10 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 			Domain:         "domain1",
 			From:           aliceIdentity,
 			Data: tktypes.RawJSON(`{
-					"notary": "domain1.contract1.notary",
-					"name": "FakeToken1",
-					"symbol": "FT1"
-				}`),
+                    "notary": "domain1.contract1.notary",
+                    "name": "FakeToken1",
+                    "symbol": "FT1"
+                }`),
 		},
 	})
 	require.NoError(t, err)
@@ -581,10 +585,10 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 			Type:           ptxapi.TransactionTypePrivate.Enum(),
 			From:           aliceIdentity,
 			Data: tktypes.RawJSON(`{
-					"from": "",
-					"to": "` + bobIdentity + `",
-					"amount": "123000000000000000000"
-				}`),
+                    "from": "",
+                    "to": "` + bobIdentity + `",
+                    "amount": "123000000000000000000"
+                }`),
 		},
 	})
 
@@ -609,10 +613,10 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 			Type:           ptxapi.TransactionTypePrivate.Enum(),
 			From:           bobIdentity,
 			Data: tktypes.RawJSON(`{
-					"from": "` + bobIdentity + `",
-					"to": "` + aliceIdentity + `",
-					"amount": "123000000000000000000"
-				}`),
+                    "from": "` + bobIdentity + `",
+                    "to": "` + aliceIdentity + `",
+                    "amount": "123000000000000000000"
+                }`),
 		},
 	})
 

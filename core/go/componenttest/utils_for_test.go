@@ -100,7 +100,7 @@ type componentTestInstance struct {
 	resolveEthereumAddress func(identity string) string
 }
 
-func deplyDomainRegistry(t *testing.T) *tktypes.EthAddress {
+func deployDomainRegistry(t *testing.T) *tktypes.EthAddress {
 	// We need an engine so that we can deploy the base ledger contract for the domain
 	//Actually, we only need a bare bones engine that is capable of deploying the base ledger contracts
 	// could make do with assembling some core components like key manager, eth client factory, block indexer, persistence and any other dependencies they pull in
@@ -277,9 +277,11 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	i.client = client
 
 	i.resolveEthereumAddress = func(identity string) string {
-		addrs, err := cm.KeyManager().ResolveEthAddressBatchNewDatabaseTX(i.ctx, []string{identity})
+		idPart, err := tktypes.PrivateIdentityLocator(identity).Identity(context.Background())
 		require.NoError(t, err)
-		return addrs[0].String()
+		addr, err := cm.KeyManager().ResolveEthAddressNewDatabaseTX(i.ctx, idPart)
+		require.NoError(t, err)
+		return addr.String()
 	}
 
 	return i
@@ -307,7 +309,7 @@ func testConfig(t *testing.T) pldconf.PaladinConfig {
 	conf.RPCServer.WS.Disabled = true
 	conf.Log.Level = confutil.P("info")
 
-	conf.Signer.KeyStore.Static.Keys["seed"] = pldconf.StaticKeyEntryConfig{
+	conf.KeyManager.Wallets[0].Signer.KeyStore.Static.Keys["seed"] = pldconf.StaticKeyEntryConfig{
 		Encoding: "hex",
 		Inline:   tktypes.RandHex(32),
 	}
