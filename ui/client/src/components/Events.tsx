@@ -31,7 +31,7 @@ export const Events: React.FC = () => {
       jsonrpc: '2.0',
       id: Date.now(),
       method: 'bidx_queryIndexedEvents',
-      params: [{ limit: 100, sort: ['blockNumber DESC', 'transactionIndex DESC'] }]
+      params: [{ limit: 100, sort: ['blockNumber DESC', 'transactionIndex DESC', 'logIndex DESC'] }]
     };
     fetch('/json-rpc', {
       method: 'post',
