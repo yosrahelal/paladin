@@ -50,7 +50,7 @@ type Testbed interface {
 	StartForTest(configFile string, domains map[string]*TestbedDomain, initFunctions ...*UTInitFunction) (url string, done func(), err error)
 	ResolveKey(ctx context.Context, fqLookup, algorithm, verifierType string) (resolvedKey *components.KeyMappingAndVerifier, err error)
 	ExecTransactionSync(ctx context.Context, tx *ptxapi.TransactionInput) (receipt *ptxapi.TransactionReceipt, err error)
-	ExecBaseLedgerCall(ctx context.Context, signer string, tx *ptxapi.TransactionInput) (any, error)
+	ExecBaseLedgerCall(ctx context.Context, output any, tx *ptxapi.TransactionInput) error
 	Components() AllComponents
 }
 

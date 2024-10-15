@@ -62,4 +62,5 @@ type TXManager interface {
 	QueryTransactionsFullTx(ctx context.Context, jq *query.QueryJSON, dbTX *gorm.DB, pending bool) ([]*ptxapi.TransactionFull, error)
 	QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) ([]*ptxapi.TransactionReceipt, error)
 	GetTransactionReceiptByID(ctx context.Context, id uuid.UUID) (*ptxapi.TransactionReceipt, error)
+	CallTransaction(ctx context.Context, result any, tx *ptxapi.TransactionInput) (err error)
 }

@@ -23,12 +23,9 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
 func (tb *testbed) ExecTransactionSync(ctx context.Context, tx *ptxapi.TransactionInput) (receipt *ptxapi.TransactionReceipt, err error) {
@@ -96,32 +93,8 @@ func (tb *testbed) execBaseLedgerTransaction(ctx context.Context, signer string,
 	return tb.ExecTransactionSync(ctx, tx)
 }
 
-func (tb *testbed) ExecBaseLedgerCall(ctx context.Context, signer string, tx *ptxapi.TransactionInput) (any, error) {
-
-	var abiFunc ethclient.ABIFunctionClient
-	ec := tb.c.EthClientFactory().HTTPClient().(ethclient.EthClientWithKeyManager) // workaround until call in txmgr
-	abiFunc, err := ec.ABIFunction(ctx, tx.ABI.Functions()[tx.Function])
-	if err != nil {
-		return nil, err
-	}
-
-	resolvedSigner, err := tb.ResolveKey(ctx, signer, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
-	if err != nil {
-		return nil, err
-	}
-
-	// Send the transaction
-	var result any
-	err = abiFunc.R(ctx).
-		Signer(resolvedSigner.Verifier.Verifier).
-		To(tx.To.Address0xHex()).
-		Input(tx.Data).
-		Output(&result).
-		Call()
-	if err != nil {
-		return nil, fmt.Errorf("failed to perform base ledger call: %s", err)
-	}
-	return result, nil
+func (tb *testbed) ExecBaseLedgerCall(ctx context.Context, result any, tx *ptxapi.TransactionInput) error {
+	return tb.Components().TxManager().CallTransaction(ctx, result, tx)
 }
 
 func (tb *testbed) ResolveKey(ctx context.Context, fqLookup, algorithm, verifierType string) (resolvedKey *components.KeyMappingAndVerifier, err error) {

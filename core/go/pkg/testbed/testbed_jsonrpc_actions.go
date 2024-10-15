@@ -270,7 +270,8 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 		}
 		return tb.execPrivateTransaction(ctx, nextContract, mapDirectlyToInternalPrivateTX(tx.PreparedPrivateTransaction, tx.Inputs.Intent))
 	} else if tx.Inputs.Intent == prototk.TransactionSpecification_CALL {
-		_, err := tb.ExecBaseLedgerCall(ctx, tx.Signer, tx.PreparedPublicTransaction)
+		var ignored any
+		err := tb.ExecBaseLedgerCall(ctx, &ignored, tx.PreparedPublicTransaction)
 		return err
 	} else {
 		_, err := tb.ExecTransactionSync(ctx, tx.PreparedPublicTransaction)

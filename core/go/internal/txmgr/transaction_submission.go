@@ -27,6 +27,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -218,6 +219,35 @@ func (tm *txManager) SendTransaction(ctx context.Context, tx *ptxapi.Transaction
 		return nil, err
 	}
 	return &txIDs[0], nil
+}
+
+func (tm *txManager) CallTransaction(ctx context.Context, result any, tx *ptxapi.TransactionInput) (err error) {
+	txi, err := tm.resolveNewTransaction(ctx, tx)
+	if err != nil {
+		return err
+	}
+
+	if tx.Type.V() != ptxapi.TransactionTypePublic {
+		return i18n.NewError(ctx, msgs.MsgTxMgrPrivateCallNotSupported)
+	}
+
+	// TODO: This is a temporary solution
+	ec := tm.ethClientFactory.HTTPClient().(ethclient.EthClientWithKeyManager)
+
+	abiFunc, err := ec.ABIFunction(ctx, txi.fn.definition)
+	var senderAddr *tktypes.EthAddress
+	if err == nil {
+		senderAddr, err = tm.keyManager.ResolveEthAddressNewDatabaseTX(ctx, tx.From)
+	}
+	if err == nil {
+		err = abiFunc.R(ctx).
+			Signer(senderAddr.String()). // TODO: Temp API coupling here
+			To(tx.To.Address0xHex()).
+			Input(tx.Data).
+			Output(&result).
+			Call()
+	}
+	return err
 }
 
 func (tm *txManager) SendTransactions(ctx context.Context, txs []*ptxapi.TransactionInput) (txIDs []uuid.UUID, err error) {

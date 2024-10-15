@@ -404,6 +404,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 	notoFactory := domain.LoadBuild(notoFactoryJSON)
 	_, err = tb.ExecTransactionSync(ctx, &ptxapi.TransactionInput{
 		Transaction: ptxapi.Transaction{
+			Type:     ptxapi.TransactionTypePublic.Enum(),
 			Function: "registerImplementation",
 			From:     notaryName,
 			To:       factoryAddress,
@@ -414,12 +415,14 @@ func TestNotoSelfSubmit(t *testing.T) {
 		},
 		ABI: notoFactory.ABI,
 	})
+	require.NoError(t, err)
 
-	query, err := tb.ExecBaseLedgerCall(ctx, notaryName, &ptxapi.TransactionInput{
+	var callResult map[string]any
+	err = tb.ExecBaseLedgerCall(ctx, &callResult, &ptxapi.TransactionInput{
 		Transaction: ptxapi.Transaction{
 			Type:     ptxapi.TransactionTypePublic.Enum(),
 			To:       factoryAddress,
-			Function: notoFactory.ABI.Functions()["getImplementation"].String(),
+			Function: "getImplementation",
 			From:     notaryName,
 			Data: tktypes.JSONString(map[string]any{
 				"name": "selfsubmit",
@@ -428,7 +431,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 		ABI: notoFactory.ABI,
 	})
 	require.NoError(t, err)
-	require.JSONEq(t, `{}`, string(tktypes.JSONString(query)))
+	require.NotEmpty(t, callResult["implementation"])
 
 	log.L(ctx).Infof("Deploying an instance of Noto")
 	var notoAddress tktypes.EthAddress
@@ -506,7 +509,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 	require.Len(t, coins, 2)
 
 	assert.Equal(t, int64(50), coins[0].Data.Amount.Int().Int64())
-	assert.Equal(t, notaryKey, coins[0].Data.Owner.String())
+	assert.Equal(t, notaryKey.Verifier.Verifier, coins[0].Data.Owner.String())
 	assert.Equal(t, int64(50), coins[1].Data.Amount.Int().Int64())
-	assert.Equal(t, recipient2Key, coins[1].Data.Owner.String())
+	assert.Equal(t, recipient2Key.Verifier.Verifier, coins[1].Data.Owner.String())
 }
