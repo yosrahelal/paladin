@@ -17,7 +17,6 @@ package publictxmgr
 
 import (
 	"context"
-	"hash"
 	"time"
 
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
@@ -36,14 +35,15 @@ func (it *inFlightTransactionStageController) signTx(ctx context.Context, from t
 
 	// Reverse resolve the key - to get to this point it will be in the key management system
 	resolvedKey, err := it.keymgr.ReverseKeyLookup(ctx, it.pubTxManager.p.DB(), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, from.String())
-	// Sign
-	var sigPayload *ethsigner.TransactionSignaturePayload
-	var sigPayloadHash hash.Hash
-	if err == nil {
-		sigPayload = ethTx.SignaturePayloadEIP1559(it.ethClient.ChainID())
-		sigPayloadHash = sha3.NewLegacyKeccak256()
-		_, err = sigPayloadHash.Write(sigPayload.Bytes())
+	if err != nil {
+		log.L(ctx).Errorf("signing failed to resolve key %s for signing: %s", from.String(), err)
+		it.thMetrics.RecordOperationMetrics(ctx, string(InFlightTxOperationSign), string(GenericStatusFail), time.Since(signStart).Seconds())
+		return nil, nil, err
 	}
+	// Sign
+	sigPayload := ethTx.SignaturePayloadEIP1559(it.ethClient.ChainID())
+	sigPayloadHash := sha3.NewLegacyKeccak256()
+	_, err = sigPayloadHash.Write(sigPayload.Bytes())
 	var signatureRSV []byte
 	if err == nil {
 		signatureRSV, err = it.keymgr.Sign(ctx, resolvedKey, signpayloads.OPAQUE_TO_RSV, tktypes.HexBytes(sigPayloadHash.Sum(nil)))

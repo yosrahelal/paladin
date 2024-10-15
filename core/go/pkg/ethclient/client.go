@@ -55,7 +55,6 @@ type EthClient interface {
 	EstimateGasNoResolve(ctx context.Context, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error)
 	CallContractNoResolve(ctx context.Context, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error)
 	GetTransactionCount(ctx context.Context, fromAddr tktypes.EthAddress) (transactionCount *tktypes.HexUint64, err error)
-	BuildRawTransactionNoResolve(ctx context.Context, txVersion EthTXVersion, from *ResolvedSigner, tx *ethsigner.Transaction, opts ...CallOption) (tktypes.HexBytes, error)
 	SendRawTransaction(ctx context.Context, rawTX tktypes.HexBytes) (*tktypes.Bytes32, error)
 }
 
@@ -74,11 +73,6 @@ type EthClientWithKeyManager interface {
 	CallContract(ctx context.Context, from *string, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error)
 	EstimateGas(ctx context.Context, from *string, tx *ethsigner.Transaction, opts ...CallOption) (res EstimateGasResult, err error)
 	BuildRawTransaction(ctx context.Context, txVersion EthTXVersion, from string, tx *ethsigner.Transaction, opts ...CallOption) (tktypes.HexBytes, error)
-}
-
-type ResolvedSigner struct {
-	Address   tktypes.EthAddress
-	KeyHandle string
 }
 
 // Call options affect the behavior of gas estimate and call functions, such as by allowing you to supply
@@ -160,9 +154,8 @@ func WrapRPCClient(ctx context.Context, keymgr KeyManager, rpc rpcclient.Client,
 
 // This is useful in cases where the RPC client is used only for ABI formatting.
 // All JSON/RPC requests will fail, and there is no chain ID available
-func NewUnconnectedRPCClient(ctx context.Context, keymgr KeyManager, conf *pldconf.EthClientConfig, chainID int64) EthClient {
+func NewUnconnectedRPCClient(ctx context.Context, conf *pldconf.EthClientConfig, chainID int64) EthClient {
 	return &ethClient{
-		keymgr:            keymgr,
 		rpc:               &unconnectedRPC{},
 		gasEstimateFactor: confutil.Float64Min(conf.EstimateGasFactor, 1.0, *pldconf.EthClientDefaults.EstimateGasFactor),
 		chainID:           chainID,
@@ -368,16 +361,12 @@ func (ec *ethClient) BuildRawTransaction(ctx context.Context, txVersion EthTXVer
 	if err != nil {
 		return nil, err
 	}
-	return ec.BuildRawTransactionNoResolve(ctx, txVersion, &ResolvedSigner{Address: *fromAddr, KeyHandle: keyHandle}, tx, opts...)
-}
-
-func (ec *ethClient) BuildRawTransactionNoResolve(ctx context.Context, txVersion EthTXVersion, from *ResolvedSigner, tx *ethsigner.Transaction, opts ...CallOption) (tktypes.HexBytes, error) {
 
 	// Trivial nonce management in the client - just get the current nonce for this key, from the local node mempool, for each TX
 	if tx.Nonce == nil {
-		txNonce, err := ec.GetTransactionCount(ctx, from.Address)
+		txNonce, err := ec.GetTransactionCount(ctx, *fromAddr)
 		if err != nil {
-			log.L(ctx).Errorf("eth_getTransactionCount(%s) failed: %+v", from.Address, err)
+			log.L(ctx).Errorf("eth_getTransactionCount(%s) failed: %+v", keyHandle, err)
 			return nil, err
 		}
 		tx.Nonce = ethtypes.NewHexInteger(big.NewInt(int64(txNonce.Uint64())))
@@ -412,7 +401,7 @@ func (ec *ethClient) BuildRawTransactionNoResolve(ctx context.Context, txVersion
 	signature, err := ec.keymgr.Sign(ctx, &signerapi.SignRequest{
 		Algorithm:   algorithms.ECDSA_SECP256K1,
 		PayloadType: signpayloads.OPAQUE_TO_RSV,
-		KeyHandle:   from.KeyHandle,
+		KeyHandle:   keyHandle,
 		Payload:     tktypes.HexBytes(hash.Sum(nil)),
 	})
 	var sig *secp256k1.SignatureData
@@ -431,7 +420,7 @@ func (ec *ethClient) BuildRawTransactionNoResolve(ctx context.Context, txVersion
 		}
 	}
 	if err != nil {
-		log.L(ctx).Errorf("signing failed with keyHandle %s (addr=%s): %s", from.KeyHandle, from.Address, err)
+		log.L(ctx).Errorf("signing failed with keyHandle %s (addr=%s): %s", keyHandle, fromAddr, err)
 		return nil, err
 	}
 	return rawTX, nil

@@ -314,6 +314,7 @@ var (
 	MsgPublicBatchCompleted            = ffe("PD011933", "Batch already completed")
 	MsgInvalidAutoFuelSource           = ffe("PD011934", "Invalid auto-fueling source '%s'")
 	MsgInvalidStateMissingTXHash       = ffe("PD011935", "Invalid state - missing transaction hash from previous sign stage")
+	MsgInvalidTXMissingFromAddr        = ffe("PD011936", "From address missing for transaction")
 
 	// TransportManager module PD0120XX
 	MsgTransportInvalidMessage                = ffe("PD012000", "Invalid message")

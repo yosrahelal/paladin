@@ -30,7 +30,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -371,7 +370,6 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		}
 
 		//Now we have the payloads, we can prepare the submission
-		ec := oc.components.EthClientFactory().SharedWS()
 		publicTransactionEngine := oc.components.PublicTxManager()
 
 		publicTXs := make([]*components.PublicTxSubmission, len(preparedTransactions))
@@ -385,16 +383,12 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 					PublicTxOptions: ptxapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
 				},
 			}
-			var req ethclient.ABIFunctionRequestBuilder
-			abiFn, err := ec.ABIFunction(ctx, pt.PreparedPublicTransaction.FunctionABI)
-			if err == nil {
-				req = abiFn.R(ctx)
-				err = req.Input(pt.PreparedPublicTransaction.Inputs).BuildCallData()
-			}
+
+			data, err := pt.PreparedPublicTransaction.FunctionABI.EncodeCallDataCtx(ctx, pt.PreparedPublicTransaction.Inputs)
 			if err != nil {
 				return err
 			}
-			publicTXs[i].Data = tktypes.HexBytes(req.TX().Data)
+			publicTXs[i].Data = tktypes.HexBytes(data)
 		}
 		pubBatch, err := publicTransactionEngine.PrepareSubmissionBatch(ctx, publicTXs)
 		if err != nil {

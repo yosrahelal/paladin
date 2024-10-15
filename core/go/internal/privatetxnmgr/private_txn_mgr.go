@@ -29,7 +29,6 @@ import (
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
@@ -226,14 +225,14 @@ func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.Pr
 	keyMgr := p.components.KeyManager()
 	tx.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.RequiredVerifiers))
 	for i, v := range tx.RequiredVerifiers {
-		_, verifier, err := keyMgr.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
+		resolvedKey, err := keyMgr.ResolveKeyNewDatabaseTX(ctx, v.Lookup, v.Algorithm, v.VerifierType)
 		if err != nil {
 			return i18n.WrapError(ctx, err, msgs.MsgKeyResolutionFailed, v.Lookup, v.Algorithm)
 		}
 		tx.Verifiers[i] = &prototk.ResolvedVerifier{
 			Lookup:       v.Lookup,
 			Algorithm:    v.Algorithm,
-			Verifier:     verifier,
+			Verifier:     resolvedKey.Verifier.Verifier,
 			VerifierType: v.VerifierType,
 		}
 	}
@@ -265,7 +264,6 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDeployPrepareFailed)
 	}
 
-	ec := p.components.EthClientFactory().SharedWS()
 	publicTransactionEngine := p.components.PublicTxManager()
 
 	publicTXs := []*components.PublicTxSubmission{
@@ -280,19 +278,14 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 		},
 	}
 
-	var req ethclient.ABIFunctionRequestBuilder
 	if tx.InvokeTransaction != nil {
 		log.L(ctx).Debug("Deploying by invoking a base ledger contract")
 
-		abiFn, err := ec.ABIFunction(ctx, tx.InvokeTransaction.FunctionABI)
-		if err == nil {
-			req = abiFn.R(ctx)
-			err = req.Input(tx.InvokeTransaction.Inputs).BuildCallData()
-		}
+		data, err := tx.InvokeTransaction.FunctionABI.EncodeCallDataCtx(ctx, tx.InvokeTransaction.Inputs)
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgBaseLedgerTransactionFailed)
 		}
-		publicTXs[0].Data = tktypes.HexBytes(req.TX().Data)
+		publicTXs[0].Data = tktypes.HexBytes(data)
 	} else if tx.DeployTransaction != nil {
 		//TODO
 		panic("Not implemented")

@@ -26,6 +26,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
@@ -42,8 +43,20 @@ func newTestBalanceManager(t *testing.T, autoFuel bool, cbs ...func(m *mocksAndT
 			conf.BalanceManager.AutoFueling.Source = confutil.P("autofueler")
 
 			autoFuelSourceAddr := tktypes.RandAddress()
-			m.keyManager.(*componentmocks.KeyManager).On("ResolveKey", mock.Anything, "autofueler", mock.Anything, mock.Anything).
-				Return("", autoFuelSourceAddr.String(), nil)
+
+			keyMapping := &components.KeyMappingAndVerifier{
+				KeyMappingWithPath: &components.KeyMappingWithPath{
+					KeyMapping: &components.KeyMapping{
+						Identifier: "autofueler",
+					},
+				},
+				Verifier: &components.KeyVerifier{
+					Verifier: autoFuelSourceAddr.String(),
+				},
+			}
+			mockKeyMgr := m.keyManager.(*componentmocks.KeyManager)
+			mockKeyMgr.On("ResolveKeyNewDatabaseTX", mock.Anything, "autofueler", mock.Anything, mock.Anything).
+				Return(keyMapping, nil).Maybe()
 		}
 		for _, cb := range cbs {
 			cb(m, conf)

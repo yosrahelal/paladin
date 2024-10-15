@@ -406,7 +406,10 @@ func (ble *pubTxManager) prepareSubmission(ctx context.Context, batchSoFar []*pr
 		},
 	}
 
-	pt.tx.From = txi.ResolvedFromAddr
+	if txi.From == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgInvalidTXMissingFromAddr)
+	}
+	pt.tx.From = *txi.From
 
 	prepareStart := time.Now()
 	var txType InFlightTxOperation
@@ -414,7 +417,7 @@ func (ble *pubTxManager) prepareSubmission(ctx context.Context, batchSoFar []*pr
 	rejected := false
 	if pt.tx.Gas == nil || *pt.tx.Gas == 0 {
 		gasEstimateResult, err := ble.ethClient.EstimateGasNoResolve(ctx, buildEthTX(
-			txi.ResolvedFromAddr,
+			*txi.From,
 			nil, /* nonce not assigned at this point */
 			pt.tx.To,
 			pt.tx.Data,

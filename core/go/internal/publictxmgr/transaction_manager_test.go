@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/keymanager"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/ethclientmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
@@ -41,7 +42,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
@@ -114,22 +114,35 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 		p, dbClose, err = persistence.NewUnitTestPersistence(ctx)
 		require.NoError(t, err)
 
-		mocks.keyManager, err = ethclient.NewSimpleTestKeyManager(ctx, &signerapi.ConfigNoExt{
-			KeyStore: pldconf.KeyStoreConfig{
-				Type: pldconf.KeyStoreTypeStatic,
-				Static: pldconf.StaticKeyStoreConfig{
-					Keys: map[string]pldconf.StaticKeyEntryConfig{
-						"seed": {
-							Encoding: "hex",
-							Inline:   tktypes.Bytes32(tktypes.RandBytes(32)).String(),
+		mocks.keyManager = keymanager.NewKeyManager(ctx, &pldconf.KeyManagerConfig{
+			Wallets: []*pldconf.WalletConfig{
+				{
+					Name: "wallet1",
+					Signer: &pldconf.SignerConfig{
+						KeyStore: pldconf.KeyStoreConfig{
+							Type: pldconf.KeyStoreTypeStatic,
+							Static: pldconf.StaticKeyStoreConfig{
+								Keys: map[string]pldconf.StaticKeyEntryConfig{
+									"seed": {
+										Encoding: "hex",
+										Inline:   tktypes.Bytes32(tktypes.RandBytes(32)).String(),
+									},
+								},
+							},
+						},
+						KeyDerivation: pldconf.KeyDerivationConfig{
+							Type: pldconf.KeyDerivationTypeBIP32,
 						},
 					},
 				},
 			},
-			KeyDerivation: pldconf.KeyDerivationConfig{
-				Type: pldconf.KeyDerivationTypeBIP32,
-			},
 		})
+		mocks.allComponents.On("Persistence").Return(p)
+		_, err = mocks.keyManager.PreInit(mocks.allComponents)
+		require.NoError(t, err)
+		err = mocks.keyManager.PostInit(mocks.allComponents)
+		require.NoError(t, err)
+		err = mocks.keyManager.Start()
 		require.NoError(t, err)
 	} else {
 		mp, err := mockpersistence.NewSQLMockProvider()
@@ -138,8 +151,8 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 		mocks.db = mp.Mock
 		dbClose = func() {}
 		mocks.keyManager = componentmocks.NewKeyManager(t)
+		mocks.allComponents.On("Persistence").Return(p).Maybe()
 	}
-	mocks.allComponents.On("Persistence").Return(p).Maybe()
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 
 	// Run any extra functions before we create the manager
@@ -172,24 +185,6 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 	}
 }
 
-func passthroughBuildRawTransactionNoResolve(m *mocksAndTestControl, chainID int64) {
-	mbt := m.ethClient.On("BuildRawTransactionNoResolve", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
-	mbt.Run(func(args mock.Arguments) {
-		var callOpts []ethclient.CallOption
-		for _, a := range args[4:] {
-			callOpts = append(callOpts, a.(ethclient.CallOption))
-		}
-		r, err := ethclient.NewUnconnectedRPCClient(context.Background(), m.keyManager, &pldconf.EthClientConfig{}, chainID).BuildRawTransactionNoResolve(
-			args[0].(context.Context),
-			args[1].(ethclient.EthTXVersion),
-			args[2].(*ethclient.ResolvedSigner),
-			args[3].(*ethsigner.Transaction),
-			callOpts...,
-		)
-		mbt.Return(r, err)
-	})
-}
-
 func TestNewEngineErrors(t *testing.T) {
 	mocks := baseMocks(t)
 
@@ -204,7 +199,8 @@ func TestNewEngineErrors(t *testing.T) {
 			},
 		},
 	})
-	mockKeyManager.On("ResolveKey", mock.Anything, "bad address", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("", "", fmt.Errorf("lookup failed"))
+	mockKeyManager.On("ResolveKeyNewDatabaseTX", mock.Anything, "bad address", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+		Return(nil, fmt.Errorf("lookup failed"))
 	err := pmgr.PostInit(mocks.allComponents)
 	assert.Regexp(t, "lookup failed", err)
 }
@@ -228,13 +224,10 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 	m.ethClient.On("GasPrice", mock.Anything).Return(tktypes.MustParseHexUint256("1000000000000000"), nil)
 	m.ethClient.On("ChainID").Return(chainID.Int64())
 
-	// When we create the transaction, it will be a real one
-	passthroughBuildRawTransactionNoResolve(m, chainID.Int64())
-
 	// Resolve the key ourselves for comparison
-	_, resolvedKeyStr, err := m.keyManager.ResolveKey(ctx, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	keyMapping, err := m.keyManager.ResolveKeyNewDatabaseTX(ctx, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
-	resolvedKey := tktypes.MustEthAddress(resolvedKeyStr)
+	resolvedKey := tktypes.MustEthAddress(keyMapping.Verifier.Verifier)
 
 	// create some transactions that are successfully added
 	const transactionCount = 10
@@ -251,7 +244,7 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 				{TransactionID: txIDs[i], TransactionType: ptxapi.TransactionTypePrivate.Enum()},
 			},
 			PublicTxInput: ptxapi.PublicTxInput{
-				From: "signer1",
+				From: resolvedKey,
 				Data: []byte(fmt.Sprintf("data %d", i)),
 			},
 		}
@@ -423,39 +416,16 @@ func fakeTxManagerInsert(t *testing.T, db *gorm.DB, txID uuid.UUID, fromStr stri
 	require.NoError(t, err)
 }
 
-func TestResolveFail(t *testing.T) {
-	ctx, ble, m, done := newTestPublicTxManager(t, false)
-	defer done()
-
-	keyManager := m.keyManager.(*componentmocks.KeyManager)
-
-	// resolve key failure
-	keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("", "", fmt.Errorf("resolve err")).Once()
-	_, err := ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
-		PublicTxInput: ptxapi.PublicTxInput{
-			From: "signer1",
-		},
-	})
-	assert.Regexp(t, "resolve err", err)
-
-	resolvedKey := tktypes.EthAddress(tktypes.RandBytes(20))
-	keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("keyhandle1", resolvedKey.String(), nil)
-}
-
 func TestSubmitFailures(t *testing.T) {
 	ctx, ble, m, done := newTestPublicTxManager(t, false)
 	defer done()
-
-	resolvedKey := tktypes.EthAddress(tktypes.RandBytes(20))
-	keyManager := m.keyManager.(*componentmocks.KeyManager)
-	keyManager.On("ResolveKey", ctx, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("", resolvedKey.String(), nil)
 
 	// estimation failure - for non-revert
 	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
 		Return(ethclient.EstimateGasResult{}, fmt.Errorf("GasEstimate error")).Once()
 	_, err := ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
 		PublicTxInput: ptxapi.PublicTxInput{
-			From: "signer1",
+			From: tktypes.RandAddress(),
 		},
 	})
 	assert.Regexp(t, "GasEstimate error", err)
@@ -469,7 +439,7 @@ func TestSubmitFailures(t *testing.T) {
 		}, fmt.Errorf("execution reverted")).Once()
 	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
 		PublicTxInput: ptxapi.PublicTxInput{
-			From: "signer1",
+			From: tktypes.RandAddress(),
 		},
 	})
 	assert.Regexp(t, "mapped revert error", err)
@@ -481,7 +451,7 @@ func TestSubmitFailures(t *testing.T) {
 		Return(nil, fmt.Errorf("pop")).Once()
 	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
 		PublicTxInput: ptxapi.PublicTxInput{
-			From: "signer1",
+			From: tktypes.RandAddress(),
 		},
 	})
 	assert.NotNil(t, err)
@@ -516,9 +486,6 @@ func TestAddActivityWrap(t *testing.T) {
 }
 
 func mockForSubmitSuccess(mocks *mocksAndTestControl, conf *pldconf.PublicTxManagerConfig) {
-	signingKey := tktypes.EthAddress(tktypes.RandBytes(20))
-	mockKeyManager := mocks.keyManager.(*componentmocks.KeyManager)
-	mockKeyManager.On("ResolveKey", mock.Anything, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("", signingKey.String(), nil)
 	mocks.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(confutil.P(tktypes.HexUint64(1122334455)), nil).Once()
 	mocks.db.ExpectBegin()
@@ -534,7 +501,7 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 	// create transaction succeeded
 	tx, err := ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
 		PublicTxInput: ptxapi.PublicTxInput{
-			From: "signer1",
+			From: tktypes.RandAddress(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			PublicTxOptions: ptxapi.PublicTxOptions{
 				Gas:   confutil.P(tktypes.HexUint64(1223451)),
@@ -559,16 +526,18 @@ func TestEngineSuspendResumeRealDB(t *testing.T) {
 	})
 	defer done()
 
+	keyMapping, err := m.keyManager.ResolveKeyNewDatabaseTX(ctx, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	require.NoError(t, err)
+	resolvedKey := *tktypes.MustEthAddress(keyMapping.Verifier.Verifier)
+
 	// Mock a gas price
 	chainID, _ := rand.Int(rand.Reader, big.NewInt(100000000000000))
+	m.ethClient.On("ChainID").Return(chainID.Int64())
 	m.ethClient.On("GasPrice", mock.Anything).Return(tktypes.MustParseHexUint256("1000000000000000"), nil)
-
-	// When we create the transaction, it will be a real one
-	passthroughBuildRawTransactionNoResolve(m, chainID.Int64())
 
 	pubTx := &components.PublicTxSubmission{
 		PublicTxInput: ptxapi.PublicTxInput{
-			From: "signer1",
+			From: &resolvedKey,
 			PublicTxOptions: ptxapi.PublicTxOptions{
 				Gas: confutil.P(tktypes.HexUint64(1223451)),
 			},
@@ -580,16 +549,11 @@ func TestEngineSuspendResumeRealDB(t *testing.T) {
 	// ... but attempting to get it onto the chain is going to block failing
 	m.ethClient.On("SendRawTransaction", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop")).Maybe()
 
-	_, err := ble.SingleTransactionSubmit(ctx, pubTx)
+	_, err = ble.SingleTransactionSubmit(ctx, pubTx)
 	require.NoError(t, err)
 
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
-
-	// Resolve the key ourselves for comparison
-	_, resolvedKeyStr, err := m.keyManager.ResolveKey(ctx, "signer1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
-	require.NoError(t, err)
-	resolvedKey := *tktypes.MustEthAddress(resolvedKeyStr)
 
 	// Wait for the orchestrator to kick off and pick this TX up
 	getIFT := func() *inFlightTransactionStageController {

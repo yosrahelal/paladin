@@ -278,7 +278,7 @@ func (af *BalanceManagerWithInMemoryTracking) TransferGasFromAutoFuelingSource(c
 	log.L(ctx).Debugf("TransferGasFromAutoFuelingSource submitting a fueling tx for  destination address: %s ", destAddress)
 	submission, err := af.pubTxMgr.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
 		PublicTxInput: ptxapi.PublicTxInput{
-			From: af.source, // must be the unresolved signer
+			From: af.sourceAddress,
 			To:   &destAddress,
 			PublicTxOptions: ptxapi.PublicTxOptions{
 				Value: (*tktypes.HexUint256)(value),
