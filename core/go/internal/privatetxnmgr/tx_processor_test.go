@@ -177,10 +177,35 @@ func TestHasOutstandingEndorsementRequestsMultipleRequestsIncomplete(t *testing.
 	ctx := context.Background()
 	newTxID := uuid.New()
 	aliceIdentityLocator := "alice@node1"
+	aliceVerifier := tktypes.RandAddress().String()
 	bobIdentityLocator := "bob@node2"
+	bobVerifier := tktypes.RandAddress().String()
 	carolIdentityLocator := "carol@node2"
+	carolVerifier := tktypes.RandAddress().String()
 	testTx := &components.PrivateTransaction{
 		ID: newTxID,
+		PreAssembly: &components.TransactionPreAssembly{
+			Verifiers: []*prototk.ResolvedVerifier{
+				{
+					Lookup:       aliceIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     aliceVerifier,
+				},
+				{
+					Lookup:       bobIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     bobVerifier,
+				},
+				{
+					Lookup:       carolIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     carolVerifier,
+				},
+			},
+		},
 		PostAssembly: &components.TransactionPostAssembly{
 			AttestationPlan: []*prototk.AttestationRequest{
 				{
@@ -231,7 +256,8 @@ func TestHasOutstandingEndorsementRequestsMultipleRequestsIncomplete(t *testing.
 	}
 
 	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	result := tp.hasOutstandingEndorsementRequests()
+	result, err := tp.hasOutstandingEndorsementRequests(ctx)
+	assert.NoError(t, err)
 	assert.True(t, result)
 
 }
@@ -240,10 +266,35 @@ func TestHasOutstandingEndorsementRequestsMultipleRequestsComplete(t *testing.T)
 	ctx := context.Background()
 	newTxID := uuid.New()
 	aliceIdentityLocator := "alice@node1"
+	aliceVerifier := tktypes.RandAddress().String()
 	bobIdentityLocator := "bob@node2"
+	bobVerifier := tktypes.RandAddress().String()
 	carolIdentityLocator := "carol@node2"
+	carolVerifier := tktypes.RandAddress().String()
 	testTx := &components.PrivateTransaction{
 		ID: newTxID,
+		PreAssembly: &components.TransactionPreAssembly{
+			Verifiers: []*prototk.ResolvedVerifier{
+				{
+					Lookup:       aliceIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     aliceVerifier,
+				},
+				{
+					Lookup:       bobIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     bobVerifier,
+				},
+				{
+					Lookup:       carolIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     carolVerifier,
+				},
+			},
+		},
 		PostAssembly: &components.TransactionPostAssembly{
 			AttestationPlan: []*prototk.AttestationRequest{
 				{
@@ -284,7 +335,7 @@ func TestHasOutstandingEndorsementRequestsMultipleRequestsComplete(t *testing.T)
 					Verifier: &prototk.ResolvedVerifier{
 						Lookup:       aliceIdentityLocator,
 						Algorithm:    algorithms.ECDSA_SECP256K1,
-						Verifier:     tktypes.RandAddress().String(),
+						Verifier:     aliceVerifier,
 						VerifierType: verifiers.ETH_ADDRESS,
 					},
 					Payload: tktypes.RandBytes(32),
@@ -295,7 +346,7 @@ func TestHasOutstandingEndorsementRequestsMultipleRequestsComplete(t *testing.T)
 					Verifier: &prototk.ResolvedVerifier{
 						Lookup:       bobIdentityLocator,
 						Algorithm:    algorithms.ECDSA_SECP256K1,
-						Verifier:     tktypes.RandAddress().String(),
+						Verifier:     bobVerifier,
 						VerifierType: verifiers.ETH_ADDRESS,
 					},
 					Payload: tktypes.RandBytes(32),
@@ -306,7 +357,7 @@ func TestHasOutstandingEndorsementRequestsMultipleRequestsComplete(t *testing.T)
 					Verifier: &prototk.ResolvedVerifier{
 						Lookup:       carolIdentityLocator,
 						Algorithm:    algorithms.ECDSA_SECP256K1,
-						Verifier:     tktypes.RandAddress().String(),
+						Verifier:     carolVerifier,
 						VerifierType: verifiers.ETH_ADDRESS,
 					},
 					Payload: tktypes.RandBytes(32),
@@ -316,7 +367,8 @@ func TestHasOutstandingEndorsementRequestsMultipleRequestsComplete(t *testing.T)
 	}
 
 	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	result := tp.hasOutstandingEndorsementRequests()
+	result, err := tp.hasOutstandingEndorsementRequests(ctx)
+	assert.NoError(t, err)
 	assert.False(t, result)
 
 }
@@ -325,10 +377,35 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesIncomplete(
 	ctx := context.Background()
 	newTxID := uuid.New()
 	aliceIdentityLocator := "alice@node1"
+	aliceVerifier := tktypes.RandAddress().String()
 	bobIdentityLocator := "bob@node2"
+	bobVerifier := tktypes.RandAddress().String()
 	carolIdentityLocator := "carol@node2"
+	carolVerifier := tktypes.RandAddress().String()
 	testTx := &components.PrivateTransaction{
 		ID: newTxID,
+		PreAssembly: &components.TransactionPreAssembly{
+			Verifiers: []*prototk.ResolvedVerifier{
+				{
+					Lookup:       aliceIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     aliceVerifier,
+				},
+				{
+					Lookup:       bobIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     bobVerifier,
+				},
+				{
+					Lookup:       carolIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     carolVerifier,
+				},
+			},
+		},
 		PostAssembly: &components.TransactionPostAssembly{
 			AttestationPlan: []*prototk.AttestationRequest{
 				{
@@ -351,7 +428,7 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesIncomplete(
 					Verifier: &prototk.ResolvedVerifier{
 						Lookup:       aliceIdentityLocator,
 						Algorithm:    algorithms.ECDSA_SECP256K1,
-						Verifier:     tktypes.RandAddress().String(),
+						Verifier:     aliceVerifier,
 						VerifierType: verifiers.ETH_ADDRESS,
 					},
 					Payload: tktypes.RandBytes(32),
@@ -361,7 +438,8 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesIncomplete(
 	}
 
 	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	result := tp.hasOutstandingEndorsementRequests()
+	result, err := tp.hasOutstandingEndorsementRequests(ctx)
+	assert.NoError(t, err)
 	assert.True(t, result)
 
 }
@@ -370,10 +448,35 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesComplete(t 
 	ctx := context.Background()
 	newTxID := uuid.New()
 	aliceIdentityLocator := "alice@node1"
+	aliceVerifier := tktypes.RandAddress().String()
 	bobIdentityLocator := "bob@node2"
+	bobVerifier := tktypes.RandAddress().String()
 	carolIdentityLocator := "carol@node2"
+	carolVerifier := tktypes.RandAddress().String()
 	testTx := &components.PrivateTransaction{
 		ID: newTxID,
+		PreAssembly: &components.TransactionPreAssembly{
+			Verifiers: []*prototk.ResolvedVerifier{
+				{
+					Lookup:       aliceIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     aliceVerifier,
+				},
+				{
+					Lookup:       bobIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     bobVerifier,
+				},
+				{
+					Lookup:       carolIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     carolVerifier,
+				},
+			},
+		},
 		PostAssembly: &components.TransactionPostAssembly{
 			AttestationPlan: []*prototk.AttestationRequest{
 				{
@@ -396,7 +499,7 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesComplete(t 
 					Verifier: &prototk.ResolvedVerifier{
 						Lookup:       aliceIdentityLocator,
 						Algorithm:    algorithms.ECDSA_SECP256K1,
-						Verifier:     tktypes.RandAddress().String(),
+						Verifier:     aliceVerifier,
 						VerifierType: verifiers.ETH_ADDRESS,
 					},
 					Payload: tktypes.RandBytes(32),
@@ -407,7 +510,7 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesComplete(t 
 					Verifier: &prototk.ResolvedVerifier{
 						Lookup:       bobIdentityLocator,
 						Algorithm:    algorithms.ECDSA_SECP256K1,
-						Verifier:     tktypes.RandAddress().String(),
+						Verifier:     bobVerifier,
 						VerifierType: verifiers.ETH_ADDRESS,
 					},
 					Payload: tktypes.RandBytes(32),
@@ -418,7 +521,7 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesComplete(t 
 					Verifier: &prototk.ResolvedVerifier{
 						Lookup:       carolIdentityLocator,
 						Algorithm:    algorithms.ECDSA_SECP256K1,
-						Verifier:     tktypes.RandAddress().String(),
+						Verifier:     carolVerifier,
 						VerifierType: verifiers.ETH_ADDRESS,
 					},
 					Payload: tktypes.RandBytes(32),
@@ -428,7 +531,8 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesComplete(t 
 	}
 
 	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	result := tp.hasOutstandingEndorsementRequests()
+	result, err := tp.hasOutstandingEndorsementRequests(ctx)
+	assert.NoError(t, err)
 	assert.False(t, result)
 
 }
@@ -438,10 +542,35 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesDuplicate(t
 	ctx := context.Background()
 	newTxID := uuid.New()
 	aliceIdentityLocator := "alice@node1"
+	aliceVerifier := tktypes.RandAddress().String()
 	bobIdentityLocator := "bob@node2"
+	bobVerifier := tktypes.RandAddress().String()
 	carolIdentityLocator := "carol@node2"
+	carolVerifier := tktypes.RandAddress().String()
 	testTx := &components.PrivateTransaction{
 		ID: newTxID,
+		PreAssembly: &components.TransactionPreAssembly{
+			Verifiers: []*prototk.ResolvedVerifier{
+				{
+					Lookup:       aliceIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     aliceVerifier,
+				},
+				{
+					Lookup:       bobIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     bobVerifier,
+				},
+				{
+					Lookup:       carolIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     carolVerifier,
+				},
+			},
+		},
 		PostAssembly: &components.TransactionPostAssembly{
 			AttestationPlan: []*prototk.AttestationRequest{
 				{
@@ -464,7 +593,7 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesDuplicate(t
 					Verifier: &prototk.ResolvedVerifier{
 						Lookup:       aliceIdentityLocator,
 						Algorithm:    algorithms.ECDSA_SECP256K1,
-						Verifier:     tktypes.RandAddress().String(),
+						Verifier:     aliceVerifier,
 						VerifierType: verifiers.ETH_ADDRESS,
 					},
 					Payload: tktypes.RandBytes(32),
@@ -475,7 +604,7 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesDuplicate(t
 					Verifier: &prototk.ResolvedVerifier{
 						Lookup:       aliceIdentityLocator,
 						Algorithm:    algorithms.ECDSA_SECP256K1,
-						Verifier:     tktypes.RandAddress().String(),
+						Verifier:     aliceVerifier,
 						VerifierType: verifiers.ETH_ADDRESS,
 					},
 					Payload: tktypes.RandBytes(32),
@@ -486,7 +615,7 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesDuplicate(t
 					Verifier: &prototk.ResolvedVerifier{
 						Lookup:       aliceIdentityLocator,
 						Algorithm:    algorithms.ECDSA_SECP256K1,
-						Verifier:     tktypes.RandAddress().String(),
+						Verifier:     aliceVerifier,
 						VerifierType: verifiers.ETH_ADDRESS,
 					},
 					Payload: tktypes.RandBytes(32),
@@ -496,7 +625,8 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesDuplicate(t
 	}
 
 	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	result := tp.hasOutstandingEndorsementRequests()
+	result, err := tp.hasOutstandingEndorsementRequests(ctx)
+	assert.NoError(t, err)
 	assert.True(t, result)
 
 }
@@ -506,10 +636,35 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesCompleteMix
 	ctx := context.Background()
 	newTxID := uuid.New()
 	aliceIdentityLocator := "alice@node1"
+	aliceVerifier := tktypes.RandAddress().String()
 	bobIdentityLocator := "bob@node2"
+	bobVerifier := tktypes.RandAddress().String()
 	carolIdentityLocator := "carol@node2"
+	carolVerifier := tktypes.RandAddress().String()
 	testTx := &components.PrivateTransaction{
 		ID: newTxID,
+		PreAssembly: &components.TransactionPreAssembly{
+			Verifiers: []*prototk.ResolvedVerifier{
+				{
+					Lookup:       aliceIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     aliceVerifier,
+				},
+				{
+					Lookup:       bobIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     bobVerifier,
+				},
+				{
+					Lookup:       carolIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     carolVerifier,
+				},
+			},
+		},
 		PostAssembly: &components.TransactionPostAssembly{
 			AttestationPlan: []*prototk.AttestationRequest{
 				{
@@ -532,7 +687,7 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesCompleteMix
 					Verifier: &prototk.ResolvedVerifier{
 						Lookup:       carolIdentityLocator,
 						Algorithm:    algorithms.ECDSA_SECP256K1,
-						Verifier:     tktypes.RandAddress().String(),
+						Verifier:     carolVerifier,
 						VerifierType: verifiers.ETH_ADDRESS,
 					},
 					Payload: tktypes.RandBytes(32),
@@ -543,7 +698,7 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesCompleteMix
 					Verifier: &prototk.ResolvedVerifier{
 						Lookup:       aliceIdentityLocator,
 						Algorithm:    algorithms.ECDSA_SECP256K1,
-						Verifier:     tktypes.RandAddress().String(),
+						Verifier:     aliceVerifier,
 						VerifierType: verifiers.ETH_ADDRESS,
 					},
 					Payload: tktypes.RandBytes(32),
@@ -554,7 +709,7 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesCompleteMix
 					Verifier: &prototk.ResolvedVerifier{
 						Lookup:       bobIdentityLocator,
 						Algorithm:    algorithms.ECDSA_SECP256K1,
-						Verifier:     tktypes.RandAddress().String(),
+						Verifier:     bobVerifier,
 						VerifierType: verifiers.ETH_ADDRESS,
 					},
 					Payload: tktypes.RandBytes(32),
@@ -564,7 +719,59 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesCompleteMix
 	}
 
 	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	result := tp.hasOutstandingEndorsementRequests()
+	result, err := tp.hasOutstandingEndorsementRequests(ctx)
+	assert.NoError(t, err)
 	assert.False(t, result)
 
+}
+
+func TestHasOutstandingEndorsementRequestsNilPreAssembly(t *testing.T) {
+	ctx := context.Background()
+	newTxID := uuid.New()
+
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
+	}
+	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
+	_, err := tp.hasOutstandingEndorsementRequests(ctx)
+	assert.Error(t, err)
+}
+
+func TestHasOutstandingEndorsementRequestsNilPostAssembly(t *testing.T) {
+	ctx := context.Background()
+	newTxID := uuid.New()
+	aliceIdentityLocator := "alice@node1"
+	aliceVerifier := tktypes.RandAddress().String()
+	bobIdentityLocator := "bob@node2"
+	bobVerifier := tktypes.RandAddress().String()
+	carolIdentityLocator := "carol@node2"
+	carolVerifier := tktypes.RandAddress().String()
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
+		PreAssembly: &components.TransactionPreAssembly{
+			Verifiers: []*prototk.ResolvedVerifier{
+				{
+					Lookup:       aliceIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     aliceVerifier,
+				},
+				{
+					Lookup:       bobIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     bobVerifier,
+				},
+				{
+					Lookup:       carolIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     carolVerifier,
+				},
+			},
+		},
+	}
+	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
+	_, err := tp.hasOutstandingEndorsementRequests(ctx)
+	assert.Error(t, err)
 }
