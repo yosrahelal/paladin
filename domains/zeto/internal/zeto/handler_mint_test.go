@@ -34,18 +34,24 @@ func TestMintValidateParams(t *testing.T) {
 	assert.EqualError(t, err, "invalid character 'b' looking for beginning of value")
 
 	_, err = h.ValidateParams(ctx, nil, "{}")
+	assert.EqualError(t, err, "no transfer parameters provided")
+
+	_, err = h.ValidateParams(ctx, nil, "{\"mints\":{}}")
+	assert.EqualError(t, err, "json: cannot unmarshal object into Go struct field MintParams.mints of type []*types.TransferParamEntry")
+
+	_, err = h.ValidateParams(ctx, nil, "{\"mints\":[{}]}")
 	assert.EqualError(t, err, "parameter 'to' is required")
 
-	_, err = h.ValidateParams(ctx, nil, "{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":0}")
+	_, err = h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":0}]}")
 	assert.EqualError(t, err, "parameter 'amount' must be greater than 0")
 
-	_, err = h.ValidateParams(ctx, nil, "{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":-10}")
+	_, err = h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":-10}]}")
 	assert.EqualError(t, err, "parameter 'amount' must be greater than 0")
 
-	params, err := h.ValidateParams(ctx, nil, "{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":10}")
+	params, err := h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":10}]}")
 	assert.NoError(t, err)
-	assert.Equal(t, "0x1234567890123456789012345678901234567890", params.(*types.MintParams).To)
-	assert.Equal(t, "0x0a", params.(*types.MintParams).Amount.String())
+	assert.Equal(t, "0x1234567890123456789012345678901234567890", params.([]*types.TransferParamEntry)[0].To)
+	assert.Equal(t, "0x0a", params.([]*types.TransferParamEntry)[0].Amount.String())
 }
 
 func TestMintInit(t *testing.T) {
@@ -56,9 +62,11 @@ func TestMintInit(t *testing.T) {
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
-		Params: &types.MintParams{
-			To:     "Alice",
-			Amount: tktypes.MustParseHexUint256("0x0a"),
+		Params: []*types.TransferParamEntry{
+			{
+				To:     "Alice",
+				Amount: tktypes.MustParseHexUint256("0x0a"),
+			},
 		},
 	}
 	req := &prototk.InitTransactionRequest{}
@@ -81,9 +89,11 @@ func TestMintAssemble(t *testing.T) {
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
-		Params: &types.MintParams{
-			To:     "Alice",
-			Amount: tktypes.MustParseHexUint256("0x0a"),
+		Params: []*types.TransferParamEntry{
+			{
+				To:     "Alice",
+				Amount: tktypes.MustParseHexUint256("0x0a"),
+			},
 		},
 		Transaction: &prototk.TransactionSpecification{
 			From: "Bob",
@@ -106,17 +116,17 @@ func TestMintAssemble(t *testing.T) {
 		},
 	}
 	_, err = h.Assemble(ctx, tx, req)
-	assert.EqualError(t, err, "failed to decode recipient public key. invalid compressed public key length: 20")
+	assert.EqualError(t, err, "failed load receiver public key. expected 32 bytes in hex string, got 20")
 
 	privKey := babyjub.NewRandPrivKey()
 	pubKey := privKey.Public()
 	compressedKey := pubKey.Compress()
 	req.ResolvedVerifiers[0].Verifier = compressedKey.String()
-	tx.Params.(*types.MintParams).Amount = tktypes.MustParseHexUint256("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+	tx.Params.([]*types.TransferParamEntry)[0].Amount = tktypes.MustParseHexUint256("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 	_, err = h.Assemble(ctx, tx, req)
-	assert.EqualError(t, err, "inputs values not inside Finite Field")
+	assert.EqualError(t, err, "failed to create new state. inputs values not inside Finite Field")
 
-	tx.Params.(*types.MintParams).Amount = tktypes.MustParseHexUint256("0x0f")
+	tx.Params.([]*types.TransferParamEntry)[0].Amount = tktypes.MustParseHexUint256("0x0f")
 	res, err := h.Assemble(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Equal(t, prototk.AssembleTransactionResponse_OK, res.AssemblyResult)
@@ -127,9 +137,11 @@ func TestMintEndorse(t *testing.T) {
 	h := mintHandler{}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
-		Params: &types.MintParams{
-			To:     "Alice",
-			Amount: tktypes.MustParseHexUint256("0x0a"),
+		Params: []*types.TransferParamEntry{
+			{
+				To:     "Alice",
+				Amount: tktypes.MustParseHexUint256("0x0a"),
+			},
 		},
 		Transaction: &prototk.TransactionSpecification{
 			From: "Bob",
@@ -154,9 +166,11 @@ func TestMintPrepare(t *testing.T) {
 		From:          "Bob",
 	}
 	tx := &types.ParsedTransaction{
-		Params: &types.MintParams{
-			To:     "Alice",
-			Amount: tktypes.MustParseHexUint256("0x0a"),
+		Params: []*types.TransferParamEntry{
+			{
+				To:     "Alice",
+				Amount: tktypes.MustParseHexUint256("0x0a"),
+			},
 		},
 		Transaction: txSpec,
 		DomainConfig: &types.DomainInstanceConfig{

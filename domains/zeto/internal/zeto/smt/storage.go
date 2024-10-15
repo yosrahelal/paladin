@@ -223,11 +223,6 @@ func (s *statesStorage) GetNode(ref core.NodeRef) (core.Node, error) {
 }
 
 func (s *statesStorage) InsertNode(n core.Node) error {
-	if s.pendingNodesTx == nil {
-		s.pendingNodesTx = &nodesTx{
-			inflightNodes: make(map[core.NodeRef]core.Node),
-		}
-	}
 	s.pendingNodesTx.inflightNodes[n.Ref()] = n
 
 	return nil
@@ -257,6 +252,9 @@ func (s *statesStorage) Commit() error {
 			txId: s.pendingNodesTx.transactionId,
 		}
 	}
+	// reset the inflight nodes cache
+	s.pendingNodesTx.inflightNodes = make(map[core.NodeRef]core.Node)
+	s.pendingNodesTx.inflightRoot = nil
 	return nil
 }
 

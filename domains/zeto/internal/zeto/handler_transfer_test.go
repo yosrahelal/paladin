@@ -38,10 +38,23 @@ func TestTransferValidateParams(t *testing.T) {
 	assert.EqualError(t, err, "invalid character 'b' looking for beginning of value")
 
 	_, err = h.ValidateParams(ctx, nil, "{}")
+	assert.EqualError(t, err, "no transfer parameters provided")
+
+	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":{}}")
+	assert.EqualError(t, err, "json: cannot unmarshal object into Go struct field TransferParams.transfers of type []*types.TransferParamEntry")
+
+	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":[{}]}")
 	assert.EqualError(t, err, "parameter 'to' is required")
 
-	_, err = h.ValidateParams(ctx, nil, "{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":0}")
+	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":0}]}")
+	assert.EqualError(t, err, "parameter 'amount' must be greater than 0")
+
+	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":-10}]}")
+	assert.EqualError(t, err, "parameter 'amount' must be greater than 0")
+
+	params, err := h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":10}]}")
 	assert.NoError(t, err)
+	assert.Equal(t, "0x1234567890123456789012345678901234567890", params.([]*types.TransferParamEntry)[0].To)
 }
 
 func TestTransferInit(t *testing.T) {
@@ -52,9 +65,11 @@ func TestTransferInit(t *testing.T) {
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
-		Params: &types.TransferParams{
-			To:     "Alice",
-			Amount: tktypes.MustParseHexUint256("0x0a"),
+		Params: []*types.TransferParamEntry{
+			{
+				To:     "Alice",
+				Amount: tktypes.MustParseHexUint256("0x0a"),
+			},
 		},
 		Transaction: &prototk.TransactionSpecification{
 			From: "Bob",
@@ -92,9 +107,11 @@ func TestTransferAssemble(t *testing.T) {
 		},
 	}
 	tx := &types.ParsedTransaction{
-		Params: &types.TransferParams{
-			To:     "Alice",
-			Amount: tktypes.MustParseHexUint256("0x09"),
+		Params: []*types.TransferParamEntry{
+			{
+				To:     "Alice",
+				Amount: tktypes.MustParseHexUint256("0x09"),
+			},
 		},
 		Transaction: txSpec,
 		DomainConfig: &types.DomainInstanceConfig{
@@ -116,30 +133,46 @@ func TestTransferAssemble(t *testing.T) {
 	_, err := h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "failed to resolve: Bob")
 
-	req.ResolvedVerifiers[0].Lookup = "Bob"
-	_, err = h.Assemble(ctx, tx, req)
-	assert.EqualError(t, err, "failed to resolve: Alice")
-
 	req.ResolvedVerifiers = append(req.ResolvedVerifiers, &prototk.ResolvedVerifier{
-		Lookup:       "Alice",
+		Lookup:       "Bob",
 		Verifier:     "0x1234567890123456789012345678901234567890",
 		Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
 		VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 	})
-	_, err = h.Assemble(ctx, tx, req)
-	assert.EqualError(t, err, "failed to load sender public key. expected 32 bytes in hex string, got 20")
-
-	req.ResolvedVerifiers[0].Verifier = "0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025"
-	_, err = h.Assemble(ctx, tx, req)
-	assert.EqualError(t, err, "failed load receiver public key. expected 32 bytes in hex string, got 20")
-
 	testCallbacks := &testDomainCallbacks{
 		returnFunc: func() (*prototk.FindAvailableStatesResponse, error) {
 			return nil, errors.New("test error")
 		},
 	}
 	h.zeto.Callbacks = testCallbacks
-	req.ResolvedVerifiers[1].Verifier = "0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922"
+	_, err = h.Assemble(ctx, tx, req)
+	assert.EqualError(t, err, "failed to prepare inputs. failed to query the state store for available coins. test error")
+
+	calls := 0
+	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
+		defer func() { calls++ }()
+		if calls == 0 {
+			return &prototk.FindAvailableStatesResponse{
+				States: []*prototk.StoredState{
+					{
+						DataJson: "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922\",\"amount\":\"0x0f\"}",
+					},
+				},
+			}, nil
+		} else {
+			return nil, errors.New("test error")
+		}
+	}
+	req.ResolvedVerifiers[1].Verifier = "0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025"
+	_, err = h.Assemble(ctx, tx, req)
+	assert.EqualError(t, err, "failed to prepare outputs. failed load receiver public key. expected 32 bytes in hex string, got 20")
+
+	calls = 0
+	req.ResolvedVerifiers[0].Lookup = "Bob"
+	_, err = h.Assemble(ctx, tx, req)
+	assert.EqualError(t, err, "failed to prepare outputs. failed to resolve: Alice")
+
+	req.ResolvedVerifiers[0].Verifier = "0x19d2ee6b9770a4f8d7c3b7906bc7595684509166fa42d718d1d880b62bcb7922"
 	_, err = h.Assemble(ctx, tx, req)
 	assert.EqualError(t, err, "failed to prepare inputs. failed to query the state store for available coins. test error")
 
@@ -152,6 +185,7 @@ func TestTransferAssemble(t *testing.T) {
 			},
 		}, nil
 	}
+	req.ResolvedVerifiers[0].Lookup = "Alice"
 	res, err := h.Assemble(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Len(t, res.AssembledTransaction.InputStates, 1)
@@ -219,9 +253,11 @@ func TestTransferEndorse(t *testing.T) {
 	h := transferHandler{}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
-		Params: &types.MintParams{
-			To:     "Alice",
-			Amount: tktypes.MustParseHexUint256("0x0a"),
+		Params: []*types.TransferParamEntry{
+			{
+				To:     "Alice",
+				Amount: tktypes.MustParseHexUint256("0x0a"),
+			},
 		},
 		Transaction: &prototk.TransactionSpecification{
 			From: "Bob",
@@ -246,9 +282,11 @@ func TestTransferPrepare(t *testing.T) {
 		From:          "Bob",
 	}
 	tx := &types.ParsedTransaction{
-		Params: &types.MintParams{
-			To:     "Alice",
-			Amount: tktypes.MustParseHexUint256("0x0a"),
+		Params: []*types.TransferParamEntry{
+			{
+				To:     "Alice",
+				Amount: tktypes.MustParseHexUint256("0x0a"),
+			},
 		},
 		Transaction: txSpec,
 		DomainConfig: &types.DomainInstanceConfig{

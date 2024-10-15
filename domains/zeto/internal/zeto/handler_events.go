@@ -82,7 +82,7 @@ func (z *Zeto) handleTransferWithEncryptionEvent(ctx context.Context, tree core.
 		if tokenName == constants.TOKEN_ANON_NULLIFIER {
 			err := z.updateMerkleTree(tree, storage, txID, transfer.Outputs)
 			if err != nil {
-				return fmt.Errorf("failed to update merkle tree for the UTXOTransfer event. %s", err)
+				return fmt.Errorf("failed to update merkle tree for the UTXOTransferWithEncryptedValues event. %s", err)
 			}
 		}
 	} else {
