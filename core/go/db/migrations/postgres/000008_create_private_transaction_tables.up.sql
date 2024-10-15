@@ -35,8 +35,8 @@ CREATE TABLE transaction_delegations (
   "id"                        UUID NOT NULL,
   "transaction_id"            UUID NOT NULL,
   "delegate_node_id"          TEXT NOT NULL,
-  PRIMARY KEY ("id"),
-  FOREIGN KEY ("transaction") REFERENCES transactions ("id") ON DELETE CASCADE
+  PRIMARY KEY ("id")
+  -- need to reorder the migrations before we can define a foreign key to the transactions table  FOREIGN KEY ("transaction_id") REFERENCES transactions ("id") ON DELETE CASCADE
 );
 
 CREATE TABLE transaction_delegation_acknowledgements (
