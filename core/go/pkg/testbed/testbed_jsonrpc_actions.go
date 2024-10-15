@@ -88,7 +88,7 @@ func (tb *testbed) rpcDeployBytecode() rpcserver.RPCHandler {
 		params tktypes.RawJSON,
 	) (*ethtypes.Address0xHex, error) {
 
-		receipt, err := tb.execTransactionSync(ctx, &ptxapi.TransactionInput{
+		receipt, err := tb.ExecTransactionSync(ctx, &ptxapi.TransactionInput{
 			Transaction: ptxapi.Transaction{
 				Type: ptxapi.TransactionTypePublic.Enum(),
 				From: from,
@@ -127,7 +127,7 @@ func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
 
 		tx.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.RequiredVerifiers))
 		for i, v := range tx.RequiredVerifiers {
-			resolvedKey, err := tb.resolveFQLookup(ctx, v.Lookup, v.Algorithm, v.VerifierType)
+			resolvedKey, err := tb.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
 			if err != nil {
 				return nil, fmt.Errorf("failed to resolve key %q: %s", v.Lookup, err)
 			}
@@ -204,7 +204,7 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	// Gather the addresses - in the testbed we assume these all to be local
 	tx.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.PreAssembly.RequiredVerifiers))
 	for i, v := range tx.PreAssembly.RequiredVerifiers {
-		resolvedKey, err := tb.resolveFQLookup(ctx, v.Lookup, v.Algorithm, v.VerifierType)
+		resolvedKey, err := tb.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
 		if err != nil {
 			return fmt.Errorf("failed to resolve key %q: %s", v.Lookup, err)
 		}
@@ -270,7 +270,8 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 		}
 		return tb.execPrivateTransaction(ctx, nextContract, mapDirectlyToInternalPrivateTX(tx.PreparedPrivateTransaction, tx.Inputs.Intent))
 	} else if tx.Inputs.Intent == prototk.TransactionSpecification_CALL {
-		return tb.execBaseLedgerCall(ctx, tx.Signer, tx.PreparedPublicTransaction)
+		_, err := tb.ExecBaseLedgerCall(ctx, tx.Signer, tx.PreparedPublicTransaction)
+		return err
 	} else {
 		_, err := tb.execBaseLedgerTransaction(ctx, tx.Signer, tx.PreparedPublicTransaction)
 		return err
@@ -395,7 +396,7 @@ func (tb *testbed) rpcResolveVerifier() rpcserver.RPCHandler {
 		algorithm string,
 		verifierType string,
 	) (verifier string, _ error) {
-		resolvedKey, err := tb.resolveFQLookup(ctx, lookup, algorithm, verifierType)
+		resolvedKey, err := tb.ResolveKey(ctx, lookup, algorithm, verifierType)
 		if err != nil {
 			return "", err
 		}

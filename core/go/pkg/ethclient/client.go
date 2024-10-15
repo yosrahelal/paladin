@@ -206,8 +206,16 @@ func (ec *ethClient) resolveFrom(ctx context.Context, from *string, tx *ethsigne
 }
 
 func (ec *ethClient) CallContract(ctx context.Context, from *string, tx *ethsigner.Transaction, block string, opts ...CallOption) (res CallResult, err error) {
-	if _, _, err := ec.resolveFrom(ctx, from, tx); err != nil {
-		return res, err
+	if ec.keymgr == nil && from != nil && *from != "" {
+		ethAddr, err := tktypes.ParseEthAddress(*from)
+		if err != nil {
+			return res, err
+		}
+		tx.From = json.RawMessage(tktypes.JSONString(ethAddr))
+	} else {
+		if _, _, err := ec.resolveFrom(ctx, from, tx); err != nil {
+			return res, err
+		}
 	}
 	return ec.CallContractNoResolve(ctx, tx, block, opts...)
 }

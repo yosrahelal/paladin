@@ -197,10 +197,13 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 			require.NoError(t, err)
 			tx := args[1].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
-			tx.PreparedPublicTransaction = &components.EthTransaction{
-				FunctionABI: testABI[0],
-				To:          *domainAddress,
-				Inputs:      cv,
+			jsonData, _ := cv.JSON()
+			tx.PreparedPublicTransaction = &ptxapi.TransactionInput{
+				ABI: abi.ABI{testABI[0]},
+				Transaction: ptxapi.Transaction{
+					To:   domainAddress,
+					Data: tktypes.RawJSON(jsonData),
+				},
 			}
 		},
 	)
@@ -370,10 +373,13 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 			require.NoError(t, err)
 			tx := args[1].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
-			tx.PreparedPublicTransaction = &components.EthTransaction{
-				FunctionABI: testABI[0],
-				To:          *domainAddress,
-				Inputs:      cv,
+			jsonData, _ := cv.JSON()
+			tx.PreparedPublicTransaction = &ptxapi.TransactionInput{
+				ABI: abi.ABI{testABI[0]},
+				Transaction: ptxapi.Transaction{
+					To:   domainAddress,
+					Data: tktypes.RawJSON(jsonData),
+				},
 			}
 		},
 	)
@@ -542,10 +548,13 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 			require.NoError(t, err)
 			tx := args[1].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
-			tx.PreparedPublicTransaction = &components.EthTransaction{
-				FunctionABI: testABI[0],
-				To:          *domainAddress,
-				Inputs:      cv,
+			jsonData, _ := cv.JSON()
+			tx.PreparedPublicTransaction = &ptxapi.TransactionInput{
+				ABI: abi.ABI{testABI[0]},
+				Transaction: ptxapi.Transaction{
+					To:   domainAddress,
+					Data: tktypes.RawJSON(jsonData),
+				},
 			}
 		},
 	)

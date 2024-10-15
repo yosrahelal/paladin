@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/plugins"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -47,6 +48,9 @@ type Testbed interface {
 	components.AdditionalManager
 	// Use GenerateSeed to get a valid seed
 	StartForTest(configFile string, domains map[string]*TestbedDomain, initFunctions ...*UTInitFunction) (url string, done func(), err error)
+	ResolveKey(ctx context.Context, fqLookup, algorithm, verifierType string) (resolvedKey *components.KeyMappingAndVerifier, err error)
+	ExecTransactionSync(ctx context.Context, tx *ptxapi.TransactionInput) (receipt *ptxapi.TransactionReceipt, err error)
+	ExecBaseLedgerCall(ctx context.Context, signer string, tx *ptxapi.TransactionInput) (any, error)
 	Components() AllComponents
 }
 

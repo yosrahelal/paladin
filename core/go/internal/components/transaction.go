@@ -86,7 +86,7 @@ type PrivateTransaction struct {
 	// Each private transaction may result in a public transaction which should be submitted to the
 	// base ledger, or another private transaction which should go around the transaction loop again.
 	Signer                     string
-	PreparedPublicTransaction  *EthTransaction
+	PreparedPublicTransaction  *ptxapi.TransactionInput
 	PreparedPrivateTransaction *ptxapi.TransactionInput
 	PreparedTransactionIntent  prototk.TransactionSpecification_Intent
 

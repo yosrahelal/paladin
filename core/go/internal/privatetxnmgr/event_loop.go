@@ -363,7 +363,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 			stateDistributions = append(stateDistributions, txProcessor.GetStateDistributions(ctx)...)
 		}
 
-		preparedTransactionPayloads := make([]*components.EthTransaction, len(preparedTransactions))
+		preparedTransactionPayloads := make([]*ptxapi.TransactionInput, len(preparedTransactions))
 
 		for j, preparedTransaction := range preparedTransactions {
 			preparedTransactionPayloads[j] = preparedTransaction.PreparedPublicTransaction
@@ -394,7 +394,8 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 				},
 			}
 
-			data, err := pt.PreparedPublicTransaction.FunctionABI.EncodeCallDataCtx(ctx, pt.PreparedPublicTransaction.Inputs)
+			// TODO: This aligning with submission in public Tx manage
+			data, err := pt.PreparedPublicTransaction.ABI[0].EncodeCallDataJSONCtx(ctx, pt.PreparedPublicTransaction.Data)
 			if err != nil {
 				return err
 			}

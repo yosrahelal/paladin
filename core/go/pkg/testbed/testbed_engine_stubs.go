@@ -22,15 +22,16 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
-func (tb *testbed) execTransactionSync(ctx context.Context, tx *ptxapi.TransactionInput) (receipt *ptxapi.TransactionReceipt, err error) {
+func (tb *testbed) ExecTransactionSync(ctx context.Context, tx *ptxapi.TransactionInput) (receipt *ptxapi.TransactionReceipt, err error) {
 	txm := tb.c.TxManager()
 	txID, err := tb.c.TxManager().SendTransaction(ctx, tx)
 	if err != nil {
@@ -71,7 +72,7 @@ func (tb *testbed) execBaseLedgerDeployTransaction(ctx context.Context, signer s
 		ABI:      abi.ABI{txInstruction.ConstructorABI},
 		Bytecode: tktypes.HexBytes(txInstruction.Bytecode),
 	}
-	return tb.execTransactionSync(ctx, tx)
+	return tb.ExecTransactionSync(ctx, tx)
 }
 
 func (tb *testbed) execBaseLedgerTransaction(ctx context.Context, signer string, txInstruction *components.EthTransaction) (receipt *ptxapi.TransactionReceipt, err error) {
@@ -92,34 +93,38 @@ func (tb *testbed) execBaseLedgerTransaction(ctx context.Context, signer string,
 		},
 		ABI: abi.ABI{txInstruction.FunctionABI},
 	}
-	return tb.execTransactionSync(ctx, tx)
+	return tb.ExecTransactionSync(ctx, tx)
 }
 
-func (tb *testbed) execBaseLedgerCall(ctx context.Context, signer string, txInstruction *components.EthTransaction) error {
+func (tb *testbed) ExecBaseLedgerCall(ctx context.Context, signer string, tx *ptxapi.TransactionInput) (any, error) {
 
 	var abiFunc ethclient.ABIFunctionClient
 	ec := tb.c.EthClientFactory().HTTPClient().(ethclient.EthClientWithKeyManager) // workaround until call in txmgr
-	abiFunc, err := ec.ABIFunction(ctx, txInstruction.FunctionABI)
+	abiFunc, err := ec.ABIFunction(ctx, tx.ABI.Functions()[tx.Function])
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	resolvedSigner, err := tb.ResolveKey(ctx, signer, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	if err != nil {
+		return nil, err
 	}
 
 	// Send the transaction
-	var ignored any
-	addr := ethtypes.Address0xHex(txInstruction.To)
+	var result any
 	err = abiFunc.R(ctx).
-		Signer(signer).
-		To(&addr).
-		Input(txInstruction.Inputs).
-		Output(&ignored).
+		Signer(resolvedSigner.Verifier.Verifier).
+		To(tx.To.Address0xHex()).
+		Input(tx.Data).
+		Output(&result).
 		Call()
 	if err != nil {
-		return fmt.Errorf("failed to perform base ledger call: %s", err)
+		return nil, fmt.Errorf("failed to perform base ledger call: %s", err)
 	}
-	return nil
+	return result, nil
 }
 
-func (tb *testbed) resolveFQLookup(ctx context.Context, fqLookup, algorithm, verifierType string) (resolvedKey *components.KeyMappingAndVerifier, err error) {
+func (tb *testbed) ResolveKey(ctx context.Context, fqLookup, algorithm, verifierType string) (resolvedKey *components.KeyMappingAndVerifier, err error) {
 	keyMgr := tb.c.KeyManager()
 	unqualifiedLookup, err := tktypes.PrivateIdentityLocator(fqLookup).Identity(ctx)
 	if err == nil {
@@ -133,7 +138,7 @@ func (tb *testbed) gatherSignatures(ctx context.Context, tx *components.PrivateT
 	for _, ar := range tx.PostAssembly.AttestationPlan {
 		if ar.AttestationType == prototk.AttestationType_SIGN {
 			for _, partyName := range ar.Parties {
-				resolvedKey, err := tb.resolveFQLookup(ctx, partyName, ar.Algorithm, ar.VerifierType)
+				resolvedKey, err := tb.ResolveKey(ctx, partyName, ar.Algorithm, ar.VerifierType)
 				if err != nil {
 					return fmt.Errorf("failed to resolve local signer for %s (algorithm=%s): %s", partyName, ar.Algorithm, err)
 				}
@@ -179,7 +184,7 @@ func (tb *testbed) gatherEndorsements(dCtx components.DomainContext, psc compone
 		if ar.AttestationType == prototk.AttestationType_ENDORSE {
 			for _, partyName := range ar.Parties {
 				// Look up the endorser
-				resolvedKey, err := tb.resolveFQLookup(dCtx.Ctx(), partyName, ar.Algorithm, ar.VerifierType)
+				resolvedKey, err := tb.ResolveKey(dCtx.Ctx(), partyName, ar.Algorithm, ar.VerifierType)
 				if err != nil {
 					return fmt.Errorf("failed to resolve (local in testbed case) endorser for %s (algorithm=%s): %s", partyName, ar.Algorithm, err)
 				}

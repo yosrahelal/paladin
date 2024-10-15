@@ -408,10 +408,6 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *
 	if err := json.Unmarshal(([]byte)(res.Transaction.FunctionAbiJson), &functionABI); err != nil {
 		return i18n.WrapError(dCtx.Ctx(), err, msgs.MsgDomainPrivateAbiJsonInvalid)
 	}
-	inputs, err := functionABI.Inputs.ParseJSONCtx(dCtx.Ctx(), emptyJSONIfBlank(res.Transaction.ParamsJson))
-	if err != nil {
-		return err
-	}
 
 	contractAddress := &dc.info.Address
 	if res.Transaction.ContractAddress != nil {
@@ -440,10 +436,13 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *
 			ABI: abi.ABI{&functionABI},
 		}
 	} else {
-		tx.PreparedPublicTransaction = &components.EthTransaction{
-			FunctionABI: &functionABI,
-			To:          *contractAddress,
-			Inputs:      inputs,
+		tx.PreparedPublicTransaction = &ptxapi.TransactionInput{
+			Transaction: ptxapi.Transaction{
+				From: tx.Signer,
+				To:   contractAddress,
+				Data: tktypes.RawJSON(res.Transaction.ParamsJson),
+			},
+			ABI: abi.ABI{&functionABI},
 		}
 	}
 	return nil

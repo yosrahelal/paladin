@@ -122,16 +122,19 @@ public class Testbed implements Closeable {
                     autoMigrate:   true
                     migrationsDir: %s
                     debugQueries:  false
-                signer:
-                  keyDerivation:
-                    type: bip32
-                  keyStore:
-                    type: static
-                    static:
-                      keys:
-                        seed:
-                          encoding: hex
-                          inline: '17250abf7976eae3c964e9704063f1457a8e1b4c0c0bd8b21ec8db5b88743c10'
+                wallets:
+                - name: wallet1
+                  keySelector: .*
+                  signer:
+                    keyDerivation:
+                      type: "bip32"
+                    keyStore:
+                      type: "static"
+                      static:
+                        keys:
+                          seed:
+                            encoding: none
+                            inline: '17250abf7976eae3c964e9704063f1457a8e1b4c0c0bd8b21ec8db5b88743c10'                    
                 rpcServer:
                   http:
                     port: %s
