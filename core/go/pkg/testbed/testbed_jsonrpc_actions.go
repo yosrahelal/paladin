@@ -191,7 +191,7 @@ func (tb *testbed) newPrivateTransaction(ctx context.Context, invocation tktypes
 func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.DomainSmartContract, tx *components.PrivateTransaction) error {
 
 	// Testbed just uses a domain context for the duration of the TX, and flushes before returning
-	dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address())
+	dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address(), tb.c.Persistence().DB() /* no TX */)
 	defer dCtx.Close()
 
 	// First we call init on the smart contract to:
