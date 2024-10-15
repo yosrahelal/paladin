@@ -27,8 +27,11 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
 	"github.com/kaleido-io/paladin/core/mocks/prvtxsyncpointsmocks"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -167,5 +170,401 @@ func TestTransactionProcessorAssembleError(t *testing.T) {
 		},
 	})
 	assert.NoError(t, err) //the event was successfully handled and part of that handling was to revert the transaction so there is no error
+
+}
+
+func TestHasOutstandingEndorsementRequestsMultipleRequestsIncomplete(t *testing.T) {
+	ctx := context.Background()
+	newTxID := uuid.New()
+	aliceIdentityLocator := "alice@node1"
+	bobIdentityLocator := "bob@node2"
+	carolIdentityLocator := "carol@node2"
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
+		PostAssembly: &components.TransactionPostAssembly{
+			AttestationPlan: []*prototk.AttestationRequest{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						aliceIdentityLocator,
+					},
+				},
+				{
+					Name:            "bar",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						bobIdentityLocator,
+					},
+				},
+				{
+					Name:            "quz",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						carolIdentityLocator,
+					},
+				},
+			},
+			Endorsements: []*prototk.AttestationResult{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Verifier: &prototk.ResolvedVerifier{
+						Lookup:       aliceIdentityLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						Verifier:     tktypes.RandAddress().String(),
+						VerifierType: verifiers.ETH_ADDRESS,
+					},
+					Payload: tktypes.RandBytes(32),
+				},
+			},
+		},
+	}
+
+	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
+	result := tp.hasOutstandingEndorsementRequests()
+	assert.True(t, result)
+
+}
+
+func TestHasOutstandingEndorsementRequestsMultipleRequestsComplete(t *testing.T) {
+	ctx := context.Background()
+	newTxID := uuid.New()
+	aliceIdentityLocator := "alice@node1"
+	bobIdentityLocator := "bob@node2"
+	carolIdentityLocator := "carol@node2"
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
+		PostAssembly: &components.TransactionPostAssembly{
+			AttestationPlan: []*prototk.AttestationRequest{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						aliceIdentityLocator,
+					},
+				},
+				{
+					Name:            "bar",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						bobIdentityLocator,
+					},
+				},
+				{
+					Name:            "quz",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						carolIdentityLocator,
+					},
+				},
+			},
+			Endorsements: []*prototk.AttestationResult{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Verifier: &prototk.ResolvedVerifier{
+						Lookup:       aliceIdentityLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						Verifier:     tktypes.RandAddress().String(),
+						VerifierType: verifiers.ETH_ADDRESS,
+					},
+					Payload: tktypes.RandBytes(32),
+				},
+				{
+					Name:            "bar",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Verifier: &prototk.ResolvedVerifier{
+						Lookup:       bobIdentityLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						Verifier:     tktypes.RandAddress().String(),
+						VerifierType: verifiers.ETH_ADDRESS,
+					},
+					Payload: tktypes.RandBytes(32),
+				},
+				{
+					Name:            "quz",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Verifier: &prototk.ResolvedVerifier{
+						Lookup:       carolIdentityLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						Verifier:     tktypes.RandAddress().String(),
+						VerifierType: verifiers.ETH_ADDRESS,
+					},
+					Payload: tktypes.RandBytes(32),
+				},
+			},
+		},
+	}
+
+	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
+	result := tp.hasOutstandingEndorsementRequests()
+	assert.False(t, result)
+
+}
+
+func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesIncomplete(t *testing.T) {
+	ctx := context.Background()
+	newTxID := uuid.New()
+	aliceIdentityLocator := "alice@node1"
+	bobIdentityLocator := "bob@node2"
+	carolIdentityLocator := "carol@node2"
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
+		PostAssembly: &components.TransactionPostAssembly{
+			AttestationPlan: []*prototk.AttestationRequest{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						aliceIdentityLocator,
+						bobIdentityLocator,
+						carolIdentityLocator,
+					},
+				},
+			},
+			Endorsements: []*prototk.AttestationResult{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Verifier: &prototk.ResolvedVerifier{
+						Lookup:       aliceIdentityLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						Verifier:     tktypes.RandAddress().String(),
+						VerifierType: verifiers.ETH_ADDRESS,
+					},
+					Payload: tktypes.RandBytes(32),
+				},
+			},
+		},
+	}
+
+	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
+	result := tp.hasOutstandingEndorsementRequests()
+	assert.True(t, result)
+
+}
+
+func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesComplete(t *testing.T) {
+	ctx := context.Background()
+	newTxID := uuid.New()
+	aliceIdentityLocator := "alice@node1"
+	bobIdentityLocator := "bob@node2"
+	carolIdentityLocator := "carol@node2"
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
+		PostAssembly: &components.TransactionPostAssembly{
+			AttestationPlan: []*prototk.AttestationRequest{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						aliceIdentityLocator,
+						bobIdentityLocator,
+						carolIdentityLocator,
+					},
+				},
+			},
+			Endorsements: []*prototk.AttestationResult{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Verifier: &prototk.ResolvedVerifier{
+						Lookup:       aliceIdentityLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						Verifier:     tktypes.RandAddress().String(),
+						VerifierType: verifiers.ETH_ADDRESS,
+					},
+					Payload: tktypes.RandBytes(32),
+				},
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Verifier: &prototk.ResolvedVerifier{
+						Lookup:       bobIdentityLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						Verifier:     tktypes.RandAddress().String(),
+						VerifierType: verifiers.ETH_ADDRESS,
+					},
+					Payload: tktypes.RandBytes(32),
+				},
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Verifier: &prototk.ResolvedVerifier{
+						Lookup:       carolIdentityLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						Verifier:     tktypes.RandAddress().String(),
+						VerifierType: verifiers.ETH_ADDRESS,
+					},
+					Payload: tktypes.RandBytes(32),
+				},
+			},
+		},
+	}
+
+	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
+	result := tp.hasOutstandingEndorsementRequests()
+	assert.False(t, result)
+
+}
+
+func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesDuplicate(t *testing.T) {
+	// when we have the right number of endorsements but they are all for the same party that counts as incomplete
+	ctx := context.Background()
+	newTxID := uuid.New()
+	aliceIdentityLocator := "alice@node1"
+	bobIdentityLocator := "bob@node2"
+	carolIdentityLocator := "carol@node2"
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
+		PostAssembly: &components.TransactionPostAssembly{
+			AttestationPlan: []*prototk.AttestationRequest{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						aliceIdentityLocator,
+						bobIdentityLocator,
+						carolIdentityLocator,
+					},
+				},
+			},
+			Endorsements: []*prototk.AttestationResult{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Verifier: &prototk.ResolvedVerifier{
+						Lookup:       aliceIdentityLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						Verifier:     tktypes.RandAddress().String(),
+						VerifierType: verifiers.ETH_ADDRESS,
+					},
+					Payload: tktypes.RandBytes(32),
+				},
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Verifier: &prototk.ResolvedVerifier{
+						Lookup:       aliceIdentityLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						Verifier:     tktypes.RandAddress().String(),
+						VerifierType: verifiers.ETH_ADDRESS,
+					},
+					Payload: tktypes.RandBytes(32),
+				},
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Verifier: &prototk.ResolvedVerifier{
+						Lookup:       aliceIdentityLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						Verifier:     tktypes.RandAddress().String(),
+						VerifierType: verifiers.ETH_ADDRESS,
+					},
+					Payload: tktypes.RandBytes(32),
+				},
+			},
+		},
+	}
+
+	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
+	result := tp.hasOutstandingEndorsementRequests()
+	assert.True(t, result)
+
+}
+
+func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesCompleteMixedOrder(t *testing.T) {
+	// order of responses does not need to match order of requests
+	ctx := context.Background()
+	newTxID := uuid.New()
+	aliceIdentityLocator := "alice@node1"
+	bobIdentityLocator := "bob@node2"
+	carolIdentityLocator := "carol@node2"
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
+		PostAssembly: &components.TransactionPostAssembly{
+			AttestationPlan: []*prototk.AttestationRequest{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						aliceIdentityLocator,
+						bobIdentityLocator,
+						carolIdentityLocator,
+					},
+				},
+			},
+			Endorsements: []*prototk.AttestationResult{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Verifier: &prototk.ResolvedVerifier{
+						Lookup:       carolIdentityLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						Verifier:     tktypes.RandAddress().String(),
+						VerifierType: verifiers.ETH_ADDRESS,
+					},
+					Payload: tktypes.RandBytes(32),
+				},
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Verifier: &prototk.ResolvedVerifier{
+						Lookup:       aliceIdentityLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						Verifier:     tktypes.RandAddress().String(),
+						VerifierType: verifiers.ETH_ADDRESS,
+					},
+					Payload: tktypes.RandBytes(32),
+				},
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Verifier: &prototk.ResolvedVerifier{
+						Lookup:       bobIdentityLocator,
+						Algorithm:    algorithms.ECDSA_SECP256K1,
+						Verifier:     tktypes.RandAddress().String(),
+						VerifierType: verifiers.ETH_ADDRESS,
+					},
+					Payload: tktypes.RandBytes(32),
+				},
+			},
+		},
+	}
+
+	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
+	result := tp.hasOutstandingEndorsementRequests()
+	assert.False(t, result)
 
 }

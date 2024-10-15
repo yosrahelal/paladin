@@ -746,17 +746,20 @@ func (ts *PaladinTxProcessor) hasOutstandingEndorsementRequests() bool {
 out:
 	for _, attRequest := range ts.transaction.PostAssembly.AttestationPlan {
 		if attRequest.AttestationType == prototk.AttestationType_ENDORSE {
-			found := false
-			for _, endorsement := range ts.transaction.PostAssembly.Endorsements {
-				if endorsement.Name == attRequest.Name {
-					found = true
-					break
+			for _, party := range attRequest.Parties {
+
+				found := false
+				for _, endorsement := range ts.transaction.PostAssembly.Endorsements {
+					if endorsement.Name == attRequest.Name && endorsement.Verifier.Lookup == party {
+						found = true
+						break
+					}
 				}
-			}
-			if !found {
-				outstandingEndorsementRequests = true
-				// no point checking any further, we have at least one outstanding endorsement request
-				break out
+				if !found {
+					outstandingEndorsementRequests = true
+					// no point checking any further, we have at least one outstanding endorsement request
+					break out
+				}
 			}
 		}
 	}
