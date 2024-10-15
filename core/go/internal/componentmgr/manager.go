@@ -110,10 +110,8 @@ func NewComponentManager(bgCtx context.Context, grpcTarget string, instanceUUID 
 }
 
 func (cm *componentManager) Init() (err error) {
-	if err == nil {
-		cm.ethClientFactory, err = ethclient.NewEthClientFactory(cm.bgCtx, &cm.conf.Blockchain)
-		err = cm.wrapIfErr(err, msgs.MsgComponentEthClientInitError)
-	}
+	cm.ethClientFactory, err = ethclient.NewEthClientFactory(cm.bgCtx, &cm.conf.Blockchain)
+	err = cm.wrapIfErr(err, msgs.MsgComponentEthClientInitError)
 	if err == nil {
 		cm.persistence, err = persistence.NewPersistence(cm.bgCtx, &cm.conf.DB)
 		err = cm.addIfOpened("database", cm.persistence, err, msgs.MsgComponentDBInitError)
@@ -195,6 +193,11 @@ func (cm *componentManager) Init() (err error) {
 	}
 
 	// post-init the managers
+	if err == nil {
+		err = cm.keyManager.PostInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentKeyManagerInitError)
+	}
+
 	if err == nil {
 		err = cm.stateManager.PostInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentStateManagerInitError)

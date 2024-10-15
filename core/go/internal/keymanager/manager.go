@@ -64,6 +64,7 @@ func NewKeyManager(bgCtx context.Context, conf *pldconf.KeyManagerConfig) compon
 }
 
 func (km *keyManager) PreInit(pic components.PreInitComponents) (*components.ManagerInitResult, error) {
+	km.initRPC()
 	return &components.ManagerInitResult{
 		RPCModules: []*rpcserver.RPCModule{km.rpcModule},
 	}, nil
@@ -161,6 +162,14 @@ func (km *keyManager) ResolveKeyNewDatabaseTX(ctx context.Context, identifier, a
 		return nil, err
 	}
 	return resolvedKeys[0], nil
+}
+
+func (km *keyManager) ResolveEthAddressNewDatabaseTX(ctx context.Context, identifier string) (ethAddress *tktypes.EthAddress, err error) {
+	ethAddresses, err := km.ResolveEthAddressBatchNewDatabaseTX(ctx, []string{identifier})
+	if err != nil {
+		return nil, err
+	}
+	return ethAddresses[0], nil
 }
 
 func (km *keyManager) ResolveEthAddressBatchNewDatabaseTX(ctx context.Context, identifiers []string) (ethAddresses []*tktypes.EthAddress, err error) {

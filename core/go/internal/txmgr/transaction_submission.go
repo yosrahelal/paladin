@@ -210,17 +210,17 @@ func (tm *txManager) parseInputs(
 	return
 }
 
-func (tm *txManager) sendTransaction(ctx context.Context, tx *ptxapi.TransactionInput) (*uuid.UUID, error) {
+func (tm *txManager) SendTransaction(ctx context.Context, tx *ptxapi.TransactionInput) (*uuid.UUID, error) {
 	// TODO: Add flush writer for parallel performance here, that calls sendTransactions
 	// in the flush writer on the batch (rather than doing a DB commit per TX)
-	txIDs, err := tm.sendTransactions(ctx, []*ptxapi.TransactionInput{tx})
+	txIDs, err := tm.SendTransactions(ctx, []*ptxapi.TransactionInput{tx})
 	if err != nil {
 		return nil, err
 	}
 	return &txIDs[0], nil
 }
 
-func (tm *txManager) sendTransactions(ctx context.Context, txs []*ptxapi.TransactionInput) (txIDs []uuid.UUID, err error) {
+func (tm *txManager) SendTransactions(ctx context.Context, txs []*ptxapi.TransactionInput) (txIDs []uuid.UUID, err error) {
 
 	// Public transactions need a signing address resolution and nonce allocation trackers
 	// before we open the database transaction
@@ -337,7 +337,7 @@ func (tm *txManager) checkIdempotencyKeys(ctx context.Context, origErr error, in
 		}
 	}
 	if !insertedOK && len(idempotencyKeys) > 0 {
-		existingTxs, lookupErr := tm.queryTransactions(ctx, query.NewQueryBuilder().In("idempotencyKey", idempotencyKeys).Limit(len(idempotencyKeys)).Query(), false)
+		existingTxs, lookupErr := tm.QueryTransactions(ctx, query.NewQueryBuilder().In("idempotencyKey", idempotencyKeys).Limit(len(idempotencyKeys)).Query(), false)
 		if lookupErr != nil {
 			log.L(ctx).Errorf("Failed to query for existing idempotencyKeys after insert error (returning original error): %s", lookupErr)
 		} else if (len(existingTxs)) > 0 {

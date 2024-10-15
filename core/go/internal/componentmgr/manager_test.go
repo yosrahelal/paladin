@@ -146,6 +146,10 @@ func TestStartOK(t *testing.T) {
 	mockPluginManager.On("WaitForInit", mock.Anything).Return(nil)
 	mockPluginManager.On("Stop").Return()
 
+	mockKeyManager := componentmocks.NewKeyManager(t)
+	mockKeyManager.On("Start").Return(nil)
+	mockKeyManager.On("Stop").Return()
+
 	mockDomainManager := componentmocks.NewDomainManager(t)
 	mockDomainManager.On("Start").Return(nil)
 	mockDomainManager.On("Stop").Return()
@@ -197,6 +201,7 @@ func TestStartOK(t *testing.T) {
 	}
 	cm.blockIndexer = mockBlockIndexer
 	cm.pluginManager = mockPluginManager
+	cm.keyManager = mockKeyManager
 	cm.domainManager = mockDomainManager
 	cm.transportManager = mockTransportManager
 	cm.registryManager = mockRegistryManager

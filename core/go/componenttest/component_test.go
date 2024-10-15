@@ -126,7 +126,7 @@ signer:
 	keyMgr, err := ethclient.NewSimpleTestKeyManager(ctx, (*signerapi.ConfigNoExt)(&testConfig.Signer))
 	require.NoError(t, err)
 
-	ecf, err := ethclient.NewEthClientFactory(ctx, keyMgr, &testConfig.Blockchain)
+	ecf, err := ethclient.NewEthClientFactoryWithKeyManager(ctx, keyMgr, &testConfig.Blockchain)
 	require.NoError(t, err)
 	err = ecf.Start()
 	require.NoError(t, err)

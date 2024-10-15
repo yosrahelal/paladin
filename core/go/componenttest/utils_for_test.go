@@ -41,13 +41,11 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/componentmgr"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
 	"github.com/kaleido-io/paladin/registries/static/pkg/static"
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/kaleido-io/paladin/transports/grpc/pkg/grpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -127,7 +125,7 @@ func deplyDomainRegistry(t *testing.T) *tktypes.EthAddress {
 	require.NoError(t, err)
 	err = cmTmp.CompleteStart()
 	require.NoError(t, err)
-	domainRegistryAddress := domains.DeploySmartContract(t, cmTmp.BlockIndexer(), cmTmp.EthClientFactory())
+	domainRegistryAddress := domains.DeploySmartContract(t, cmTmp.BlockIndexer(), cmTmp.TxManager())
 
 	cmTmp.Stop()
 	return domainRegistryAddress
@@ -279,9 +277,9 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	i.client = client
 
 	i.resolveEthereumAddress = func(identity string) string {
-		_, address, err := cm.KeyManager().ResolveKey(i.ctx, identity, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+		addrs, err := cm.KeyManager().ResolveEthAddressBatchNewDatabaseTX(i.ctx, []string{identity})
 		require.NoError(t, err)
-		return address
+		return addrs[0].String()
 	}
 
 	return i

@@ -90,8 +90,8 @@ func newTestKeyManager(t *testing.T, realDB bool, conf *pldconf.KeyManagerConfig
 	}
 }
 
-func TestE2ESigningHDWalletRealDB(t *testing.T) {
-	ctx, km, _, done := newTestKeyManager(t, true, &pldconf.KeyManagerConfig{
+func newTestKeyManagerHDWallet(t *testing.T) (context.Context, *keyManager, *mockComponents, func()) {
+	return newTestKeyManager(t, true, &pldconf.KeyManagerConfig{
 		Wallets: []*pldconf.WalletConfig{
 			{
 				Name: "hdwallet1",
@@ -114,6 +114,10 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestE2ESigningHDWalletRealDB(t *testing.T) {
+	ctx, km, _, done := newTestKeyManagerHDWallet(t)
 	defer done()
 
 	// Sub-test one - repeated resolution of a complex tree

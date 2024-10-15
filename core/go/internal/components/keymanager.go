@@ -89,6 +89,9 @@ type KeyManager interface {
 	ResolveBatchNewDatabaseTX(ctx context.Context, algorithm, verifierType string, identifiers []string) (resolvedKey []*KeyMappingAndVerifier, err error)
 
 	// Convenience when all you want is the EthAddress, and to know the reverse lookup will later be possible
+	ResolveEthAddressNewDatabaseTX(ctx context.Context, identifier string) (ethAddress *tktypes.EthAddress, err error)
+
+	// Convenience when all you want is the EthAddress, and to know the reverse lookup will later be possible
 	ResolveEthAddressBatchNewDatabaseTX(ctx context.Context, identifiers []string) (ethAddresses []*tktypes.EthAddress, err error)
 
 	// Domains register their signers during PostCommit
