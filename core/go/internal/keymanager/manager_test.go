@@ -18,10 +18,13 @@ package keymanager
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
@@ -111,7 +114,8 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 	})
 	defer done()
 
-	for i := 0; i < 3; i++ {
+	// Sub-test one - repeated resolution of a complex tree
+	for i := 0; i < 4; i++ {
 		// - first run creates
 		// - second run validates they don't change with caching
 		// - third run checks they don't change with reload
@@ -119,21 +123,24 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 			km.identifierCache.Clear()
 			km.verifierCache.Clear()
 		}
+		// - fourth run just clears the verifiers
+		if i == 3 {
+			km.verifierCache.Clear()
+		}
 
-		var postCommit func()
+		var krc components.KeyResolutionContext
 		err := km.p.DB().Transaction(func(tx *gorm.DB) error {
-			krc1 := km.NewKeyResolutionContext(ctx, tx)
-			postCommit = krc1.PostCommit
+			krc = km.NewKeyResolutionContext(ctx, tx)
 
 			// one key out of the blue
-			resolved1, err := krc1.ResolveKey("bob.keys.blue.42", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+			resolved1, err := krc.ResolveKey("bob.keys.blue.42", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 			require.NoError(t, err)
 			assert.Equal(t, algorithms.ECDSA_SECP256K1, resolved1.Verifier.Algorithm)
 			assert.Equal(t, verifiers.ETH_ADDRESS, resolved1.Verifier.Type)
 			assert.Equal(t, "m/44'/60'/1'/0/0/0", resolved1.KeyHandle)
 
 			// a root key, after we've already allocated a key under it
-			resolved2, err := krc1.ResolveKey("bob", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+			resolved2, err := krc.ResolveKey("bob", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 			require.NoError(t, err)
 			assert.Equal(t, algorithms.ECDSA_SECP256K1, resolved2.Verifier.Algorithm)
 			assert.Equal(t, verifiers.ETH_ADDRESS, resolved2.Verifier.Type)
@@ -141,7 +148,7 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 
 			// keys at a nested layer
 			for i := 0; i < 10; i++ {
-				resolved, err := krc1.ResolveKey(fmt.Sprintf("bob.keys.red.%d", i), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				resolved, err := krc.ResolveKey(fmt.Sprintf("bob.keys.red.%d", i), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 				require.NoError(t, err)
 				assert.Equal(t, algorithms.ECDSA_SECP256K1, resolved.Verifier.Algorithm)
 				assert.Equal(t, verifiers.ETH_ADDRESS, resolved.Verifier.Type)
@@ -150,7 +157,7 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 
 			// same keys backwards
 			for i := 9; i >= 0; i-- {
-				resolved, err := krc1.ResolveKey(fmt.Sprintf("bob.keys.red.%d", i), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				resolved, err := krc.ResolveKey(fmt.Sprintf("bob.keys.red.%d", i), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 				require.NoError(t, err)
 				assert.Equal(t, algorithms.ECDSA_SECP256K1, resolved.Verifier.Algorithm)
 				assert.Equal(t, verifiers.ETH_ADDRESS, resolved.Verifier.Type)
@@ -159,17 +166,71 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 
 			// keys under a different root
 			for i := 0; i < 10; i++ {
-				resolved, err := krc1.ResolveKey(fmt.Sprintf("sally.%d", i), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				resolved, err := krc.ResolveKey(fmt.Sprintf("sally.%d", i), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 				require.NoError(t, err)
 				assert.Equal(t, algorithms.ECDSA_SECP256K1, resolved.Verifier.Algorithm)
 				assert.Equal(t, verifiers.ETH_ADDRESS, resolved.Verifier.Type)
 				assert.Equal(t, fmt.Sprintf("m/44'/60'/2'/%d", i), resolved.KeyHandle)
 			}
 
-			return nil
+			return krc.PreCommit()
 		})
 		require.NoError(t, err)
-		postCommit()
+		krc.PostCommit()
+	}
+
+	// Sub-test two - concurrent resolution with a consistent outcome
+	testUUIDs := make([]uuid.UUID, 15)
+	for i := 0; i < len(testUUIDs); i++ {
+		testUUIDs[i] = uuid.New()
+	}
+	const threadCount = 10
+	results := make([]map[uuid.UUID]string, threadCount)
+
+	// With this slightly more realistic example of use, we do a proper
+	// defer style processing like all the code that uses us in anger should
+	// do, ensuring we either commit or cancel.
+	testResolveOne := func(u uuid.UUID) string {
+		var krc components.KeyResolutionContext
+		var result string
+		defer func() {
+			if result != "" {
+				krc.PostCommit()
+			} else {
+				krc.Cancel()
+			}
+		}()
+		// DB TX for each UUID to hammer things a little
+		err := km.p.DB().Transaction(func(tx *gorm.DB) error {
+			krc = km.NewKeyResolutionContext(ctx, tx)
+			resolved, err := krc.ResolveKey(fmt.Sprintf("sally.rand.%s", u), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+			require.NoError(t, err)
+			result = resolved.Verifier.Verifier
+			return krc.PreCommit()
+		})
+		require.NoError(t, err)
+		return result
+	}
+
+	wg := new(sync.WaitGroup)
+	for i := 0; i < threadCount; i++ {
+		wg.Add(1)
+		results[i] = make(map[uuid.UUID]string)
+		go func() {
+			defer wg.Done()
+			for _, u := range testUUIDs {
+				results[i][u] = testResolveOne(u)
+			}
+		}()
+	}
+	wg.Wait()
+	reference := results[0]
+	for i := 0; i < threadCount; i++ {
+		for _, u := range testUUIDs {
+			result, found := results[i][u]
+			require.True(t, found)
+			require.Equal(t, reference[u], result)
+		}
 	}
 
 }

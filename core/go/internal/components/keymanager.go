@@ -38,8 +38,8 @@ type KeyMappingAndVerifier struct {
 }
 
 type KeyVerifierWithKeyRef struct {
-	*KeyVerifier `json:",inline"`
-	Algorithm    string `json:"algorithm"`
+	KeyIdentifier string `json:"keyIdentifier"`
+	*KeyVerifier  `json:",inline"`
 }
 
 type KeyVerifier struct {
@@ -55,8 +55,9 @@ type KeyPathSegment struct {
 
 type KeyResolutionContext interface {
 	ResolveKey(identifier, algorithm, verifierType string) (mapping *KeyMappingAndVerifier, err error)
-	Cancel()     // must be called if PostCommit() is not going to be called
-	PostCommit() // must be called AFTER the transaction commits on success
+	PreCommit() error //  MUST be called prior to completing the transaction to flush new records to the DB optimally at the end
+	PostCommit()      // must be called AFTER the transaction commits on success
+	Cancel()          // MUST be called if PostCommit() is not going to be called
 }
 
 type KeyManager interface {

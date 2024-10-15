@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type resolvedDBPath struct {
@@ -35,8 +36,6 @@ type resolvedDBPath struct {
 	path      string
 	nextIndex *int64
 	parent    *resolvedDBPath
-	mapping   *components.KeyMappingWithPath // nil if we only resolved a path up in a hierarchy
-	verifiers []*components.KeyVerifier      // might not be all the verifiers for a key, but they will all be valid ones
 }
 
 type keyResolutionContext struct {
@@ -48,6 +47,8 @@ type keyResolutionContext struct {
 	rootPath      *resolvedDBPath
 	resolvedPaths map[string]*resolvedDBPath
 	lockedPaths   map[string]bool
+	newMappings   []*components.KeyMappingWithPath
+	newVerifiers  []*components.KeyVerifierWithKeyRef
 	done          chan struct{}
 }
 
@@ -96,73 +97,84 @@ func (krc *keyResolutionContext) resolvePathSegment(parent *resolvedDBPath, segm
 		return resolved, nil
 	}
 
-	// Check for an existing entry in the DB
-	var pathList []*DBKeyPath
-	err := krc.dbTX.WithContext(krc.ctx).
-		Where("path = ?", path).
-		Find(&pathList).Error
-	if err != nil {
-		return nil, err
-	}
-	if len(pathList) > 0 {
-		return &resolvedDBPath{segment: segment, index: pathList[0].Index, path: path, parent: parent}, nil
-	}
-
-	// We need to lock the PARENT path to this KRC, so no others can be attempting to allocate
-	// an index at this point or below in the hierarchy at the same time as us
-	// (note due to possible failure below in this function, we keep lockedPaths separate to resolvedPaths)
-	if !krc.lockedPaths[parent.path] {
-		if err := krc.km.lockPath(krc, parent.path); err != nil {
-			return nil, err // context cancelled while waiting
-		}
-		krc.lockedPaths[parent.path] = true
-	}
-
-	// Find or create in the DB
-	var dbPath *DBKeyPath
-
-	if parent.nextIndex == nil {
-		// Get the highest index on the parent so far written to the DB
-		err = krc.dbTX.WithContext(krc.ctx).
-			Where("parent = ?", parent.path).
-			Order(`"index" DESC`).
-			Limit(1).
-			Find(&pathList).
-			Error
+	for {
+		// Check for an existing entry in the DB
+		var pathList []*DBKeyPath
+		err := krc.dbTX.WithContext(krc.ctx).
+			Where("path = ?", path).
+			Find(&pathList).Error
 		if err != nil {
 			return nil, err
 		}
-		nextIndex := int64(0)
 		if len(pathList) > 0 {
-			nextIndex = pathList[0].Index + 1
+			resolved := &resolvedDBPath{segment: segment, index: pathList[0].Index, path: path, parent: parent}
+			krc.resolvedPaths[path] = resolved
+			return resolved, nil
 		}
+
+		// We need to lock the PARENT path to this KRC, so no others can be attempting to allocate
+		// an index at this point or below in the hierarchy at the same time as us
+		// (note due to possible failure below in this function, we keep lockedPaths separate to resolvedPaths)
+		if !krc.lockedPaths[parent.path] {
+			if err := krc.km.lockPath(krc, parent.path); err != nil {
+				return nil, err // context cancelled while waiting
+			}
+			krc.lockedPaths[parent.path] = true
+		}
+
+		// Find or create in the DB
+		var dbPath *DBKeyPath
+
+		nextIndex := int64(0)
+		if parent.nextIndex == nil {
+			// Get the highest index on the parent so far written to the DB
+			err = krc.dbTX.WithContext(krc.ctx).
+				Where("parent = ?", parent.path).
+				Order(`"index" DESC`).
+				Limit(1).
+				Find(&pathList).
+				Error
+			if err != nil {
+				return nil, err
+			}
+			if len(pathList) > 0 {
+				nextIndex = pathList[0].Index + 1
+			}
+		}
+
+		// We think we've got ourselves a nice new index - try to allocate it
+		dbPath = &DBKeyPath{
+			Parent: parent.path,
+			Path:   path,
+			Index:  nextIndex,
+		}
+
+		// We might get a conflict because we did a dirty read before we took the lock.
+		log.L(krc.ctx).Infof("allocating index %d on parent %s to key-path %s", nextIndex, parent.path, path)
+		result := krc.dbTX.WithContext(krc.ctx).
+			Clauses(clause.OnConflict{DoNothing: true}).
+			Create(dbPath)
+		if result.Error != nil {
+			return nil, result.Error
+		}
+		if result.RowsAffected == 0 {
+			// note this is not an optimized path - lots of thread clashing to create the same
+			// key concurrently. Separate re-use of lots of keys is the more optimized path.
+			log.L(krc.ctx).Infof("re-checking with lock after losing optimistic race: %s", err)
+			parent.nextIndex = nil
+			continue
+		}
+
+		// Ok - we took the index - increment in the parent entry as we won't query again
+		nextIndex++
 		parent.nextIndex = &nextIndex
+
+		// Store the resolved path, and return
+		resolved := &resolvedDBPath{segment: segment, index: dbPath.Index, path: path, parent: parent}
+		krc.resolvedPaths[path] = resolved
+
+		return resolved, nil
 	}
-
-	// We think we've got ourselves a nice new index - try to allocate it
-	dbPath = &DBKeyPath{
-		Parent: parent.path,
-		Path:   path,
-		Index:  *parent.nextIndex,
-	}
-
-	// We might fail this because we're racing with another thread - in which case no rows will be affected
-	log.L(krc.ctx).Infof("allocating index %d on parent %s to key-path %s", *parent.nextIndex, parent.path, path)
-	err = krc.dbTX.WithContext(krc.ctx).
-		Create(dbPath).
-		Error
-	if err != nil {
-		return nil, err
-	}
-
-	// Ok - we took the index - increment in the parent entry as we won't query again
-	(*parent.nextIndex)++
-
-	// Store the resolved path, and return
-	resolved := &resolvedDBPath{segment: segment, index: dbPath.Index, path: path, parent: parent}
-	krc.resolvedPaths[path] = resolved
-
-	return resolved, nil
 }
 
 func (krc *keyResolutionContext) getStoredVerifier(identifier, algorithm, verifierType string) (*components.KeyVerifier, error) {
@@ -203,25 +215,21 @@ func (krc *keyResolutionContext) ResolveKey(identifier, algorithm, verifierType 
 		return nil, i18n.WrapError(krc.ctx, err, msgs.MsgKeyManagerInvalidIdentifier, identifier)
 	}
 
-	// Use the cache first to resolve it - if this is good, then we don't need to do anything
-	// persistent in this key resolution context, or block anyone else.
-	mapping, _ := krc.km.identifierCache.Get(identifier)
-	if mapping != nil {
-		verifier, err := krc.getStoredVerifier(identifier, algorithm, verifierType)
-		if err != nil {
-			return nil, err
-		}
-		if verifier != nil {
-			log.L(krc.ctx).Infof("Resolved key (cached): identifier=%s algorithm=%s verifierType=%s keyHandle=%s verifier=%s",
-				identifier, algorithm, verifierType, mapping.KeyHandle, verifier.Verifier)
-			// We have everything we need - no need to bother the signing module
-			return &components.KeyMappingAndVerifier{
-				KeyMappingWithPath: mapping,
-				Verifier:           verifier,
-			}, nil
+	// Now check the mappings we've already generated in this context
+	var mapping *components.KeyMappingWithPath
+	for _, m := range krc.newMappings {
+		if m.Identifier == identifier {
+			mapping = m
 		}
 	}
 
+	if mapping == nil {
+		// Next use the cache to resolve it - if this is good, then we don't need to do anything
+		// persistent in this key resolution context, or block anyone else.
+		mapping, _ = krc.km.identifierCache.Get(identifier)
+	}
+
+	var newMapping = false
 	var dbPath *resolvedDBPath
 	if mapping == nil {
 		// We go look up the hierarchical path of this identifier, to see if it's existing or new.
@@ -260,6 +268,7 @@ func (krc *keyResolutionContext) ResolveKey(identifier, algorithm, verifierType 
 				Path: dbPath.pathSegments(),
 			}
 		} else {
+			newMapping = true
 			mapping = &components.KeyMappingWithPath{
 				KeyMapping: &components.KeyMapping{
 					Identifier: identifier,
@@ -270,7 +279,7 @@ func (krc *keyResolutionContext) ResolveKey(identifier, algorithm, verifierType 
 	}
 
 	var w *wallet
-	if mapping.Wallet == "" {
+	if newMapping {
 		// Match it to a wallet (or fail)
 		w, err = krc.km.selectWallet(krc.ctx, identifier)
 		if err != nil {
@@ -284,6 +293,35 @@ func (krc *keyResolutionContext) ResolveKey(identifier, algorithm, verifierType 
 		if err != nil {
 			return nil, err
 		}
+
+		// Check if the verifier is being created in this context
+		for _, v := range krc.newVerifiers {
+			if v.KeyIdentifier == identifier && v.Algorithm == algorithm && v.Type == verifierType {
+				log.L(krc.ctx).Infof("Resolved key (created earlier in context): identifier=%s algorithm=%s verifierType=%s keyHandle=%s verifier=%s",
+					identifier, algorithm, verifierType, mapping.KeyHandle, v.Verifier)
+				// We have everything we need - no need to bother the signing module
+				return &components.KeyMappingAndVerifier{
+					KeyMappingWithPath: mapping,
+					Verifier:           v.KeyVerifier,
+				}, nil
+			}
+		}
+
+		// Check the DB for a verifier for this existing mapping.
+		verifier, err := krc.getStoredVerifier(identifier, algorithm, verifierType)
+		if err != nil {
+			return nil, err
+		}
+		if verifier != nil {
+			log.L(krc.ctx).Infof("Resolved key (cached): identifier=%s algorithm=%s verifierType=%s keyHandle=%s verifier=%s",
+				identifier, algorithm, verifierType, mapping.KeyHandle, verifier.Verifier)
+			// We have everything we need - no need to bother the signing module
+			return &components.KeyMappingAndVerifier{
+				KeyMappingWithPath: mapping,
+				Verifier:           verifier,
+			}, nil
+		}
+
 	}
 
 	// Ok - we are ready to talk to the wallet signing module to resolve the
@@ -293,14 +331,18 @@ func (krc *keyResolutionContext) ResolveKey(identifier, algorithm, verifierType 
 		return nil, err
 	}
 
-	// If we resolved a path, then in post-commit we will add the verifiers
-	if dbPath != nil {
-		dbPath.verifiers = append(dbPath.verifiers, result.Verifier)
-		dbPath.mapping = result.KeyMappingWithPath
-	} else {
-		// otherwise we can it them now
-		krc.km.verifierCache.Set(verifierCacheKey(identifier, algorithm, verifierType), result.Verifier)
+	// We have a verifier and possibly a new mapping to write in our pre-commit
+	if newMapping {
+		krc.newMappings = append(krc.newMappings, result.KeyMappingWithPath)
 	}
+	// We add the verifier to our list to create here - but there is one small edge case where
+	// this might be a duplicate. If multiple threads race to create a second verifier for
+	// an existing key. Because there's no locking needed on the mapping to do that.
+	// This is fine because it's deterministic, and we just do an ON CONFLICT DO NOTHING below.
+	krc.newVerifiers = append(krc.newVerifiers, &components.KeyVerifierWithKeyRef{
+		KeyIdentifier: identifier,
+		KeyVerifier:   result.Verifier,
+	})
 
 	log.L(krc.ctx).Infof("Resolved key: identifier=%s algorithm=%s verifierType=%s keyHandle=%s verifier=%s",
 		identifier, algorithm, verifierType, result.KeyHandle, result.Verifier.Verifier)
@@ -312,20 +354,49 @@ func verifierCacheKey(keyIdentifier, algorithm, verifierType string) string {
 	return fmt.Sprintf("%s|%s|%s", keyIdentifier, algorithm, verifierType)
 }
 
+func (krc *keyResolutionContext) PreCommit() (err error) {
+	if len(krc.newMappings) > 0 {
+		dbMappings := make([]*DBKeyMapping, len(krc.newMappings))
+		for i, m := range krc.newMappings {
+			dbMappings[i] = &DBKeyMapping{
+				Identifier: m.Identifier,
+				Wallet:     m.Wallet,
+				KeyHandle:  m.KeyHandle,
+			}
+		}
+		// Note we have locking to prevent us having an ON CONFLICT here, and
+		// if one is added it needs careful understanding of why.
+		err = krc.dbTX.WithContext(krc.ctx).Create(dbMappings).Error
+	}
+	if err == nil && len(krc.newVerifiers) > 0 {
+		dbVerifiers := make([]*DBKeyVerifier, len(krc.newVerifiers))
+		for i, v := range krc.newVerifiers {
+			dbVerifiers[i] = &DBKeyVerifier{
+				Identifier: v.KeyIdentifier,
+				Algorithm:  v.Algorithm,
+				Type:       v.Type,
+				Verifier:   v.Verifier,
+			}
+		}
+		err = krc.dbTX.WithContext(krc.ctx).
+			Clauses(clause.OnConflict{DoNothing: true}). // explained where we add to krc.newVerifiers
+			Create(dbVerifiers).
+			Error
+	}
+	return err
+}
+
 func (krc *keyResolutionContext) PostCommit() {
 	krc.l.Lock()
 	defer krc.l.Unlock()
 
-	for _, p := range krc.resolvedPaths {
-		// set the verifiers first, as we look them up 2nd
-		for _, v := range p.verifiers {
-			krc.km.verifierCache.Set(verifierCacheKey(p.path, v.Algorithm, v.Type), v)
-		}
-		// the mapping will be nil if we only used this path in the hierarchy (not at the leaf key itself)
-		if p.mapping != nil {
-			krc.km.identifierCache.Set(p.path, p.mapping)
-		}
+	for _, v := range krc.newVerifiers {
+		krc.km.verifierCache.Set(verifierCacheKey(v.KeyIdentifier, v.Algorithm, v.Type), v.KeyVerifier)
 	}
+	for _, m := range krc.newMappings {
+		krc.km.identifierCache.Set(m.Identifier, m)
+	}
+
 	// Ensure we're cancelled
 	krc.cleanup()
 }
