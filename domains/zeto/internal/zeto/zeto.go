@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
@@ -344,11 +345,16 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 
 	var res prototk.HandleEventBatchResponse
 	var errors []string
-	smtName := smt.MerkleTreeName(domainConfig.TokenName, contractAddress)
-	storage := smt.NewStatesStorage(z.Callbacks, smtName, req.StateQueryContext, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id)
-	tree, err := smt.NewSmt(storage)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Merkle tree for %s: %s", smtName, err)
+	var smtName string
+	var storage smt.StatesStorage
+	var tree core.SparseMerkleTree
+	if useNullifiers(domainConfig.CircuitId) {
+		smtName = smt.MerkleTreeName(domainConfig.TokenName, contractAddress)
+		storage = smt.NewStatesStorage(z.Callbacks, smtName, req.StateQueryContext, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id)
+		tree, err = smt.NewSmt(storage)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Merkle tree for %s: %s", smtName, err)
+		}
 	}
 	for _, ev := range req.Events {
 		var err error
@@ -367,12 +373,14 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 	if len(errors) > 0 {
 		return &res, fmt.Errorf("failed to handle events %s", formatErrors(errors))
 	}
-	newStatesForSMT, err := storage.GetNewStates()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get new states for Merkle tree %s: %s", smtName, err)
-	}
-	if len(newStatesForSMT) > 0 {
-		res.NewStates = append(res.NewStates, newStatesForSMT...)
+	if useNullifiers(domainConfig.CircuitId) {
+		newStatesForSMT, err := storage.GetNewStates()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get new states for Merkle tree %s: %s", smtName, err)
+		}
+		if len(newStatesForSMT) > 0 {
+			res.NewStates = append(res.NewStates, newStatesForSMT...)
+		}
 	}
 	return &res, nil
 }
