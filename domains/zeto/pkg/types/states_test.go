@@ -16,6 +16,7 @@
 package types
 
 import (
+	"context"
 	"testing"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -26,6 +27,7 @@ func TestCoinHash(t *testing.T) {
 	coin := &ZetoCoin{
 		OwnerKey: tktypes.MustParseHexBytes("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 	}
-	_, err := coin.Hash()
-	assert.EqualError(t, err, "failed to decode babyjubjub key. p.y >= Q")
+	ctx := context.Background()
+	_, err := coin.Hash(ctx)
+	assert.EqualError(t, err, "PD210001: Failed to decode babyjubjub key. p.y >= Q")
 }

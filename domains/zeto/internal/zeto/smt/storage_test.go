@@ -132,7 +132,7 @@ func TestStorage(t *testing.T) {
 
 	storage := NewStatesStorage(&testDomainCallbacks{returnFunc: returnCustomError}, "test", stateQueryConext, "root-schema", "node-schema")
 	smt, err := NewSmt(storage)
-	assert.EqualError(t, err, "failed to find available states. test error")
+	assert.EqualError(t, err, "PD210065: failed to find available states for the merkle tree. test error")
 	assert.NotNil(t, storage)
 	assert.Nil(t, smt)
 
@@ -152,7 +152,7 @@ func TestStorage(t *testing.T) {
 
 	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnBadData}, "test", stateQueryConext, "root-schema", "node-schema")
 	smt, err = NewSmt(storage)
-	assert.EqualError(t, err, "failed to unmarshal root node index. invalid character 'b' looking for beginning of value")
+	assert.EqualError(t, err, "PD210066: failed to unmarshal root node index. invalid character 'b' looking for beginning of value")
 	assert.NotNil(t, storage)
 	assert.Nil(t, smt)
 
@@ -210,7 +210,7 @@ func TestGetNode(t *testing.T) {
 
 	storage := NewStatesStorage(&testDomainCallbacks{returnFunc: returnCustomError}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err := storage.GetNode(idx)
-	assert.EqualError(t, err, "failed to find available states. test error")
+	assert.EqualError(t, err, "PD210065: failed to find available states for the merkle tree. test error")
 
 	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err = storage.GetNode(idx)

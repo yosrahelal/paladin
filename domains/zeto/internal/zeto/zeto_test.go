@@ -60,7 +60,7 @@ func TestConfigureDomain(t *testing.T) {
 		ConfigJson: "bad json",
 	}
 	_, err = z.ConfigureDomain(context.Background(), req)
-	assert.EqualError(t, err, "failed to parse domain config json. invalid character 'b' looking for beginning of value")
+	assert.EqualError(t, err, "PD210002: Failed to parse domain config json. invalid character 'b' looking for beginning of value")
 
 	req.ConfigJson = string(configBytes)
 	res, err := z.ConfigureDomain(context.Background(), req)
@@ -122,7 +122,7 @@ func TestInitDeploy(t *testing.T) {
 		},
 	}
 	_, err := z.InitDeploy(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init deploy parameters. invalid character 'b' looking for beginning of value")
+	assert.EqualError(t, err, "PD210005: failed to validate init deploy parameters. invalid character 'b' looking for beginning of value")
 
 	req.Transaction.ConstructorParamsJson = "{}"
 	_, err = z.InitDeploy(context.Background(), req)
@@ -154,11 +154,11 @@ func TestPrepareDeploy(t *testing.T) {
 		},
 	}
 	_, err := z.PrepareDeploy(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate prepare deploy parameters. invalid character 'b' looking for beginning of value")
+	assert.EqualError(t, err, "PD210006: failed to validate prepare deploy parameters. invalid character 'b' looking for beginning of value")
 
 	req.Transaction.ConstructorParamsJson = "{}"
 	_, err = z.PrepareDeploy(context.Background(), req)
-	assert.EqualError(t, err, "failed to find circuit ID based on the token name. contract  not found")
+	assert.EqualError(t, err, "PD210007: failed to find circuit ID based on the token name. PD210000: Contract  not found")
 
 	req.Transaction.ConstructorParamsJson = "{\"tokenName\":\"testToken1\"}"
 	z.factoryABI = abi.ABI{}
@@ -180,11 +180,11 @@ func TestInitTransaction(t *testing.T) {
 		},
 	}
 	_, err := z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. failed to unmarshal function abi json. invalid character 'b' looking for beginning of value")
+	assert.EqualError(t, err, "PD210008: failed to validate init transaction spec. PD210012: failed to unmarshal function abi json. invalid character 'b' looking for beginning of value")
 
 	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"test\"}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.ErrorContains(t, err, "failed to validate init transaction spec. failed to decode domain config. FF22045: Insufficient bytes")
+	assert.ErrorContains(t, err, "PD210008: failed to validate init transaction spec. PD210013: failed to decode domain config. FF22045: Insufficient bytes")
 
 	conf := types.DomainInstanceConfig{
 		CircuitId: "circuit1",
@@ -195,35 +195,35 @@ func TestInitTransaction(t *testing.T) {
 	assert.NoError(t, err)
 	req.Transaction.ContractInfo.ContractConfig = encoded
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. unknown function: test")
+	assert.EqualError(t, err, "PD210008: failed to validate init transaction spec. PD210014: unknown function: test")
 
 	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"mint\"}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. failed to validate function params. invalid character 'b' looking for beginning of value")
+	assert.EqualError(t, err, "PD210008: failed to validate init transaction spec. PD210015: failed to validate function params. invalid character 'b' looking for beginning of value")
 
 	req.Transaction.FunctionParamsJson = "{}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. failed to validate function params. no transfer parameters provided")
+	assert.EqualError(t, err, "PD210008: failed to validate init transaction spec. PD210015: failed to validate function params. PD210024: no transfer parameters provided")
 
 	req.Transaction.FunctionParamsJson = "{\"mints\":[{}]}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. failed to validate function params. parameter 'to' is required")
+	assert.EqualError(t, err, "PD210008: failed to validate init transaction spec. PD210015: failed to validate function params. PD210025: parameter 'to' is required")
 
 	req.Transaction.FunctionParamsJson = "{\"mints\":[{\"to\":\"Alice\"}]}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. failed to validate function params. parameter 'amount' is required")
+	assert.EqualError(t, err, "PD210008: failed to validate init transaction spec. PD210015: failed to validate function params. PD210026: parameter 'amount' is required")
 
 	req.Transaction.FunctionParamsJson = "{\"mints\":[{\"to\":\"Alice\",\"amount\":\"0\"}]}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. failed to validate function params. parameter 'amount' must be greater than 0")
+	assert.EqualError(t, err, "PD210008: failed to validate init transaction spec. PD210015: failed to validate function params. PD210027: parameter 'amount' must be greater than 0")
 
 	req.Transaction.FunctionParamsJson = "{\"mints\":[{\"to\":\"Alice\",\"amount\":\"10\"}]}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. unexpected signature for function 'mint': expected='function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }', actual=''")
+	assert.EqualError(t, err, "PD210008: failed to validate init transaction spec. PD210016: unexpected signature for function 'mint': expected='function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }', actual=''")
 
 	req.Transaction.FunctionSignature = "function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. failed to decode contract address. bad address - must be 20 bytes (len=0)")
+	assert.EqualError(t, err, "PD210008: failed to validate init transaction spec. PD210017: failed to decode contract address. bad address - must be 20 bytes (len=0)")
 
 	req.Transaction.ContractInfo.ContractAddress = "0x1234567890123456789012345678901234567890"
 	res, err := z.InitTransaction(context.Background(), req)
@@ -261,7 +261,7 @@ func TestAssembleTransaction(t *testing.T) {
 		},
 	}
 	_, err := z.AssembleTransaction(context.Background(), req)
-	assert.ErrorContains(t, err, "failed to validate assemble transaction spec. failed to decode domain config. FF22045: Insufficient bytes")
+	assert.ErrorContains(t, err, "PD210009: failed to validate assemble transaction spec. PD210013: failed to decode domain config. FF22045: Insufficient bytes")
 
 	req.Transaction.FunctionSignature = "function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }"
 	conf := types.DomainInstanceConfig{
@@ -289,7 +289,7 @@ func TestEndorseTransaction(t *testing.T) {
 		},
 	}
 	_, err := z.EndorseTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate endorse transaction spec. failed to unmarshal function abi json. unexpected end of JSON input")
+	assert.EqualError(t, err, "PD210010: failed to validate endorse transaction spec. PD210012: failed to unmarshal function abi json. unexpected end of JSON input")
 
 	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"mint\"}"
 	req.Transaction.FunctionSignature = "function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }"
@@ -334,7 +334,7 @@ func TestPrepareTransaction(t *testing.T) {
 		},
 	}
 	_, err := z.PrepareTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate prepare transaction spec. failed to unmarshal function abi json. unexpected end of JSON input")
+	assert.EqualError(t, err, "PD210011: failed to validate prepare transaction spec. PD210012: failed to unmarshal function abi json. unexpected end of JSON input")
 
 	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"mint\"}"
 	req.Transaction.FunctionSignature = "function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }"
@@ -431,11 +431,11 @@ func TestHandleEventBatch(t *testing.T) {
 	req.ContractInfo.ContractConfig = bytes
 	req.ContractInfo.ContractAddress = "0x1234"
 	_, err = z.HandleEventBatch(ctx, req)
-	assert.ErrorContains(t, err, "failed to parse contract address. bad address - must be 20 bytes (len=2)")
+	assert.ErrorContains(t, err, "PD210017: failed to decode contract address. bad address - must be 20 bytes (len=2)")
 
 	req.ContractInfo.ContractAddress = "0x1234567890123456789012345678901234567890"
 	_, err = z.HandleEventBatch(ctx, req)
-	assert.EqualError(t, err, "failed to create Merkle tree for smt_Zeto_AnonNullifier_0x1234567890123456789012345678901234567890: failed to find available states. find merkle tree root error")
+	assert.EqualError(t, err, "PD210019: failed to create Merkle tree for smt_Zeto_AnonNullifier_0x1234567890123456789012345678901234567890: PD210065: failed to find available states for the merkle tree. find merkle tree root error")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{}, nil
@@ -457,7 +457,7 @@ func TestHandleEventBatch(t *testing.T) {
 	req.Events[0].SoliditySignature = "event UTXOMint(uint256[] outputs, address indexed submitter, bytes data)"
 	req.Events[0].DataJson = "{\"data\":\"0x0001000030e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000\",\"outputs\":[\"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
 	_, err = z.HandleEventBatch(ctx, req)
-	assert.EqualError(t, err, "failed to handle events (failures=1). [0]failed to update merkle tree for the UTXOMint event. failed to create node index for 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff: key for the new node not inside the Finite Field")
+	assert.ErrorContains(t, err, "PD210020: failed to handle events (failures=1). [0]PD210061: failed to update merkle tree for the UTXOMint event. PD210056: failed to create new node index from hash. 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 
 	req.Events[0].DataJson = "{\"data\":\"0x0001000030e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000\",\"outputs\":[\"7980718117603030807695495350922077879582656644717071592146865497574198464253\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
 	res4, err := z.HandleEventBatch(ctx, req)

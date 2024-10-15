@@ -16,21 +16,24 @@
 package signer
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/iden3/go-rapidsnark/witness/v2"
 	"github.com/iden3/go-rapidsnark/witness/wasmer"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 )
 
-func loadCircuit(circuitName string, config *zetosignerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
+func loadCircuit(ctx context.Context, circuitName string, config *zetosignerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
 	if config.CircuitsDir == "" {
-		return nil, []byte{}, fmt.Errorf("circuits root must be set via the configuration file")
+		return nil, []byte{}, i18n.NewError(ctx, msgs.MsgInvalidConfigCircuitRoot)
 	}
 	if config.ProvingKeysDir == "" {
-		return nil, []byte{}, fmt.Errorf("proving keys root must be set via the configuration file")
+		return nil, []byte{}, i18n.NewError(ctx, msgs.MsgInvalidConfigProvingKeysRoot)
 	}
 
 	// load the wasm file for the circuit

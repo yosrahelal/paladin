@@ -50,7 +50,7 @@ type snarkProver struct {
 	workerPerCircuit              int
 	circuitsWorkerIndexChanRWLock sync.RWMutex
 	circuitsWorkerIndexChan       map[string]chan *int
-	circuitLoader                 func(circuitID string, config *zetosignerapi.SnarkProverConfig) (witness.Calculator, []byte, error)
+	circuitLoader                 func(ctx context.Context, circuitID string, config *zetosignerapi.SnarkProverConfig) (witness.Calculator, []byte, error)
 	proofGenerator                func(witness []byte, provingKey []byte) (*types.ZKProof, error)
 }
 
@@ -106,7 +106,7 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 	copy(keyBytes[:], privateKey)
 	keyEntry := key.NewKeyEntryFromPrivateKeyBytes(keyBytes)
 
-	inputs, extras, err := decodeProvingRequest(payload)
+	inputs, extras, err := decodeProvingRequest(ctx, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 		if circuit == nil || provingKey == nil {
 			// the generated WASM instance can only generate one proof at a time, circuitsWorkerIndexChan is used to ensure only 1 proof request
 			// is served per WASM instance at any given time
-			c, p, err := sp.circuitLoader(circuitId, sp.zkpProverConfig)
+			c, p, err := sp.circuitLoader(ctx, circuitId, sp.zkpProverConfig)
 			if err != nil {
 				return nil, err
 			}
@@ -176,7 +176,7 @@ func (sp *snarkProver) Sign(ctx context.Context, algorithm, payloadType string, 
 		}
 		sp.proverCacheRWLock.Unlock()
 	}
-	wtns, err := calculateWitness(circuitId, inputs.Common, extras, keyEntry, circuit)
+	wtns, err := calculateWitness(ctx, circuitId, inputs.Common, extras, keyEntry, circuit)
 	if err != nil {
 		return nil, err
 	}
@@ -264,8 +264,8 @@ func serializeProofResponse(circuitId string, proof *types.ZKProof) ([]byte, err
 	return proto.Marshal(&res)
 }
 
-func calculateWitness(circuitId string, commonInputs *pb.ProvingRequestCommon, extras interface{}, keyEntry *core.KeyEntry, circuit witness.Calculator) ([]byte, error) {
-	inputs, err := buildCircuitInputs(commonInputs)
+func calculateWitness(ctx context.Context, circuitId string, commonInputs *pb.ProvingRequestCommon, extras interface{}, keyEntry *core.KeyEntry, circuit witness.Calculator) ([]byte, error) {
+	inputs, err := buildCircuitInputs(ctx, commonInputs)
 	if err != nil {
 		return nil, err
 	}
@@ -275,12 +275,12 @@ func calculateWitness(circuitId string, commonInputs *pb.ProvingRequestCommon, e
 	case constants.CIRCUIT_ANON, constants.CIRCUIT_ANON_BATCH:
 		witnessInputs = assembleInputs_anon(inputs, keyEntry)
 	case constants.CIRCUIT_ANON_ENC, constants.CIRCUIT_ANON_ENC_BATCH:
-		witnessInputs, err = assembleInputs_anon_enc(inputs, extras.(*pb.ProvingRequestExtras_Encryption), keyEntry)
+		witnessInputs, err = assembleInputs_anon_enc(ctx, inputs, extras.(*pb.ProvingRequestExtras_Encryption), keyEntry)
 		if err != nil {
 			return nil, fmt.Errorf("failed to assemble private inputs for witness calculation. %s", err)
 		}
 	case constants.CIRCUIT_ANON_NULLIFIER, constants.CIRCUIT_ANON_NULLIFIER_BATCH:
-		witnessInputs, err = assembleInputs_anon_nullifier(inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
+		witnessInputs, err = assembleInputs_anon_nullifier(ctx, inputs, extras.(*pb.ProvingRequestExtras_Nullifiers), keyEntry)
 		if err != nil {
 			return nil, fmt.Errorf("failed to assemble private inputs for witness calculation. %s", err)
 		}

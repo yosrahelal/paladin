@@ -18,10 +18,11 @@ package zeto
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
@@ -35,23 +36,23 @@ import (
 var MAX_INPUT_COUNT = 10
 var MAX_OUTPUT_COUNT = 10
 
-func getStateSchemas() ([]string, error) {
+func getStateSchemas(ctx context.Context) ([]string, error) {
 	var schemas []string
 	coinJSON, err := json.Marshal(types.ZetoCoinABI)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal Zeto Coin schema abi. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalZetoCoinSchemaAbi, err)
 	}
 	schemas = append(schemas, string(coinJSON))
 
 	smtRootJSON, err := json.Marshal(smt.MerkleTreeRootABI)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal Merkle Tree Root schema abi. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalMerkleTreeRootSchemaAbi, err)
 	}
 	schemas = append(schemas, string(smtRootJSON))
 
 	smtNodeJSON, err := json.Marshal(smt.MerkleTreeNodeABI)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal Merkle Tree Node schema abi. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalMerkleTreeNodeSchemaAbi, err)
 	}
 	schemas = append(schemas, string(smtNodeJSON))
 
@@ -64,12 +65,12 @@ func (n *Zeto) makeCoin(stateData string) (*types.ZetoCoin, error) {
 	return coin, err
 }
 
-func (z *Zeto) makeNewState(coin *types.ZetoCoin, owner string) (*pb.NewState, error) {
+func (z *Zeto) makeNewState(ctx context.Context, coin *types.ZetoCoin, owner string) (*pb.NewState, error) {
 	coinJSON, err := json.Marshal(coin)
 	if err != nil {
 		return nil, err
 	}
-	hash, err := coin.Hash()
+	hash, err := coin.Hash(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -104,16 +105,16 @@ func (z *Zeto) prepareInputs(ctx context.Context, stateQueryContext, sender stri
 		}
 		states, err := z.findAvailableStates(ctx, stateQueryContext, queryBuilder.Query().String())
 		if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("failed to query the state store for available coins. %s", err)
+			return nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgErrorQueryAvailCoins, err)
 		}
 		if len(states) == 0 {
-			return nil, nil, nil, nil, fmt.Errorf("insufficient funds (available=%s)", total.Text(10))
+			return nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgInsufficientFunds, total.Text(10))
 		}
 		for _, state := range states {
 			lastStateTimestamp = state.StoredAt
 			coin, err := z.makeCoin(state.DataJson)
 			if err != nil {
-				return nil, nil, nil, nil, fmt.Errorf("coin %s is invalid: %s", state.Id, err)
+				return nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgInvalidCoin, state.Id, err)
 			}
 			total = total.Add(total, coin.Amount.Int())
 			stateRefs = append(stateRefs, &pb.StateRef{
@@ -126,23 +127,23 @@ func (z *Zeto) prepareInputs(ctx context.Context, stateQueryContext, sender stri
 				return coins, stateRefs, total, remainder, nil
 			}
 			if len(stateRefs) >= MAX_INPUT_COUNT {
-				return nil, nil, nil, nil, fmt.Errorf("could not find enough coins to fulfill the transfer amount total")
+				return nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgMaxCoinsReached, MAX_INPUT_COUNT)
 			}
 		}
 	}
 }
 
-func (z *Zeto) prepareOutputs(params []*types.TransferParamEntry, resolvedVerifiers []*pb.ResolvedVerifier) ([]*types.ZetoCoin, []*pb.NewState, error) {
+func (z *Zeto) prepareOutputs(ctx context.Context, params []*types.TransferParamEntry, resolvedVerifiers []*pb.ResolvedVerifier) ([]*types.ZetoCoin, []*pb.NewState, error) {
 	var coins []*types.ZetoCoin
 	var newStates []*pb.NewState
 	for _, param := range params {
 		resolvedRecipient := domain.FindVerifier(param.To, z.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, resolvedVerifiers)
 		if resolvedRecipient == nil {
-			return nil, nil, fmt.Errorf("failed to resolve: %s", param.To)
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, param.To)
 		}
 		recipientKey, err := loadBabyJubKey([]byte(resolvedRecipient.Verifier))
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed load receiver public key. %s", err)
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)
 		}
 
 		salt := crypto.NewSalt()
@@ -154,9 +155,9 @@ func (z *Zeto) prepareOutputs(params []*types.TransferParamEntry, resolvedVerifi
 			Amount:   param.Amount,
 		}
 
-		newState, err := z.makeNewState(newCoin, param.To)
+		newState, err := z.makeNewState(ctx, newCoin, param.To)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create new state. %s", err)
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorCreateNewState, err)
 		}
 		coins = append(coins, newCoin)
 		newStates = append(newStates, newState)

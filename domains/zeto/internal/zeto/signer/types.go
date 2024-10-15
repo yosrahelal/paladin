@@ -16,11 +16,12 @@
 package signer
 
 import (
-	"errors"
-	"fmt"
+	"context"
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/utxo"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 )
 
@@ -34,7 +35,7 @@ type commonWitnessInputs struct {
 	outputOwnerPublicKeys [][]*big.Int
 }
 
-func buildCircuitInputs(commonInputs *pb.ProvingRequestCommon) (*commonWitnessInputs, error) {
+func buildCircuitInputs(ctx context.Context, commonInputs *pb.ProvingRequestCommon) (*commonWitnessInputs, error) {
 	// construct the output UTXOs based on the values and owner public keys
 	outputCommitments := make([]*big.Int, len(commonInputs.OutputValues))
 	outputSalts := make([]*big.Int, len(commonInputs.OutputValues))
@@ -44,7 +45,7 @@ func buildCircuitInputs(commonInputs *pb.ProvingRequestCommon) (*commonWitnessIn
 	for i := 0; i < len(commonInputs.OutputSalts); i++ {
 		salt, ok := new(big.Int).SetString(commonInputs.OutputSalts[i], 16)
 		if !ok {
-			return nil, errors.New("failed to parse output salt")
+			return nil, i18n.NewError(ctx, msgs.MsgErrorParseOutputSalt)
 		}
 		outputSalts[i] = salt
 
@@ -55,7 +56,7 @@ func buildCircuitInputs(commonInputs *pb.ProvingRequestCommon) (*commonWitnessIn
 		} else {
 			ownerPubKey, err := DecodeBabyJubJubPublicKey(commonInputs.OutputOwners[i])
 			if err != nil {
-				return nil, fmt.Errorf("failed to decode output owner public key. %s", err)
+				return nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)
 			}
 			outputOwnerPublicKeys[i] = []*big.Int{ownerPubKey.X, ownerPubKey.Y}
 			value := commonInputs.OutputValues[i]
@@ -75,13 +76,13 @@ func buildCircuitInputs(commonInputs *pb.ProvingRequestCommon) (*commonWitnessIn
 	for i, c := range commonInputs.InputCommitments {
 		commitment, ok := new(big.Int).SetString(c, 16)
 		if !ok {
-			return nil, errors.New("failed to parse input commitment")
+			return nil, i18n.NewError(ctx, msgs.MsgErrorParseInputCommitment)
 		}
 		inputCommitments[i] = commitment
 		inputValues[i] = new(big.Int).SetUint64(commonInputs.InputValues[i])
 		salt, ok := new(big.Int).SetString(commonInputs.InputSalts[i], 16)
 		if !ok {
-			return nil, errors.New("failed to parse input salt")
+			return nil, i18n.NewError(ctx, msgs.MsgErrorParseInputSalt)
 		}
 		inputSalts[i] = salt
 	}

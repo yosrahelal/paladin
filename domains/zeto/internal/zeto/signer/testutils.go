@@ -16,6 +16,7 @@
 package signer
 
 import (
+	"context"
 	"math/big"
 	"testing"
 
@@ -67,7 +68,7 @@ func NewTestProver(t *testing.T) signerapi.InMemorySigner {
 	prover, err := newSnarkProver(config)
 	require.NoError(t, err)
 
-	testCircuitLoader := func(circuitID string, config *zetosignerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
+	testCircuitLoader := func(ctx context.Context, circuitID string, config *zetosignerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
 		return &testWitnessCalculator{}, []byte("proving key"), nil
 	}
 	prover.circuitLoader = testCircuitLoader
