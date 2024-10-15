@@ -23,12 +23,14 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/sirupsen/logrus"
@@ -139,6 +141,16 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 			assert.Equal(t, verifiers.ETH_ADDRESS, resolved1.Verifier.Type)
 			assert.Equal(t, "m/44'/60'/1'/0/0/0", resolved1.KeyHandle)
 
+			// sign and recover something
+			payload := []byte("some data")
+			signature, err := km.Sign(ctx, resolved1, signpayloads.OPAQUE_TO_RSV, payload)
+			require.NoError(t, err)
+			sig, err := secp256k1.DecodeCompactRSV(ctx, signature)
+			require.NoError(t, err)
+			addr, err := sig.RecoverDirect(payload, 0)
+			require.NoError(t, err)
+			assert.Equal(t, addr.String(), resolved1.Verifier.Verifier)
+
 			// a root key, after we've already allocated a key under it
 			resolved2, err := krc.ResolveKey("bob", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 			require.NoError(t, err)
@@ -190,7 +202,7 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 	// With this slightly more realistic example of use, we do a proper
 	// defer style processing like all the code that uses us in anger should
 	// do, ensuring we either commit or cancel.
-	testResolveOne := func(u uuid.UUID) string {
+	testResolveOne := func(identifier string) string {
 		var krc components.KeyResolutionContext
 		var result string
 		defer func() {
@@ -203,7 +215,7 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 		// DB TX for each UUID to hammer things a little
 		err := km.p.DB().Transaction(func(tx *gorm.DB) error {
 			krc = km.NewKeyResolutionContext(ctx, tx)
-			resolved, err := krc.ResolveKey(fmt.Sprintf("sally.rand.%s", u), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+			resolved, err := krc.ResolveKey(identifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 			require.NoError(t, err)
 			result = resolved.Verifier.Verifier
 			return krc.PreCommit()
@@ -219,7 +231,7 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for _, u := range testUUIDs {
-				results[i][u] = testResolveOne(u)
+				results[i][u] = testResolveOne(fmt.Sprintf("sally.rand.%s", u))
 			}
 		}()
 	}
@@ -231,6 +243,66 @@ func TestE2ESigningHDWalletRealDB(t *testing.T) {
 			require.True(t, found)
 			require.Equal(t, reference[u], result)
 		}
+	}
+
+	testResolveMulti := func(doResolve func(krc components.KeyResolutionContext)) {
+		var krc components.KeyResolutionContext
+		var result string
+		defer func() {
+			if result != "" {
+				krc.PostCommit()
+			} else {
+				krc.Cancel()
+			}
+		}()
+		// DB TX for each UUID to hammer things a little
+		err := km.p.DB().Transaction(func(tx *gorm.DB) error {
+			krc = km.NewKeyResolutionContext(ctx, tx)
+			doResolve(krc)
+			return krc.PreCommit()
+		})
+		require.NoError(t, err)
+	}
+
+	// Now this last one is really hard.
+	// We're trying to create parallelism, but have the potential for an A-B B-A deadlock.
+	// Requires PostgreSQL to create the conditions for a hang (multiple parallel DB transactions)
+	for i := 0; i < 10; i++ {
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			testResolveMulti(func(krc components.KeyResolutionContext) {
+				_, err := krc.ResolveKey(fmt.Sprintf("path.to.A.%d", i+1000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				require.NoError(t, err)
+				_, err = krc.ResolveKey(fmt.Sprintf("path.to.B.%d", i+1000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				require.NoError(t, err)
+				_, err = krc.ResolveKey(fmt.Sprintf("path.to.C.%d", i+1000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				require.NoError(t, err)
+			})
+		}()
+		go func() {
+			defer wg.Done()
+			testResolveMulti(func(krc components.KeyResolutionContext) {
+				_, err := krc.ResolveKey(fmt.Sprintf("path.to.B.%d", i+2000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				require.NoError(t, err)
+				_, err = krc.ResolveKey(fmt.Sprintf("path.to.C.%d", i+2000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				require.NoError(t, err)
+				_, err = krc.ResolveKey(fmt.Sprintf("path.to.A.%d", i+2000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				require.NoError(t, err)
+			})
+		}()
+		go func() {
+			defer wg.Done()
+			testResolveMulti(func(krc components.KeyResolutionContext) {
+				_, err := krc.ResolveKey(fmt.Sprintf("path.to.C.%d", i+3000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				require.NoError(t, err)
+				_, err = krc.ResolveKey(fmt.Sprintf("path.to.B.%d", i+3000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				require.NoError(t, err)
+				_, err = krc.ResolveKey(fmt.Sprintf("path.to.A.%d", i+3000), algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+				require.NoError(t, err)
+			})
+		}()
+		wg.Wait()
 	}
 
 }

@@ -40,20 +40,19 @@ type keyManager struct {
 	walletsOrdered  []*wallet
 	walletsByName   map[string]*wallet
 
-	allocLock        sync.Mutex
-	allocPathsLocked map[string]*keyResolutionContext
+	allocLock       sync.Mutex
+	allocLockHolder *keyResolutionContext
 
 	p persistence.Persistence
 }
 
 func NewKeyManager(bgCtx context.Context, conf *pldconf.KeyManagerConfig) components.KeyManager {
 	return &keyManager{
-		bgCtx:            bgCtx,
-		conf:             conf,
-		identifierCache:  cache.NewCache[string, *components.KeyMappingWithPath](&conf.IdentifierCache, &pldconf.KeyManagerDefaults.IdentifierCache),
-		verifierCache:    cache.NewCache[string, *components.KeyVerifier](&conf.VerifierCache, &pldconf.KeyManagerDefaults.VerifierCache),
-		allocPathsLocked: make(map[string]*keyResolutionContext),
-		walletsByName:    make(map[string]*wallet),
+		bgCtx:           bgCtx,
+		conf:            conf,
+		identifierCache: cache.NewCache[string, *components.KeyMappingWithPath](&conf.IdentifierCache, &pldconf.KeyManagerDefaults.IdentifierCache),
+		verifierCache:   cache.NewCache[string, *components.KeyVerifier](&conf.VerifierCache, &pldconf.KeyManagerDefaults.VerifierCache),
+		walletsByName:   make(map[string]*wallet),
 	}
 }
 
@@ -88,52 +87,55 @@ func (km *keyManager) Start() error {
 func (km *keyManager) Stop() {
 }
 
-func (km *keyManager) Sign(ctx context.Context, mapping *components.KeyMappingAndVerifier, algorithm, payloadType string, payload []byte) ([]byte, error) {
+func (km *keyManager) Sign(ctx context.Context, mapping *components.KeyMappingAndVerifier, payloadType string, payload []byte) ([]byte, error) {
 	w, err := km.getWalletByName(ctx, mapping.Wallet)
 	if err != nil {
 		return nil, err
 	}
-	return w.sign(ctx, mapping, algorithm, payloadType, payload)
+	return w.sign(ctx, mapping, payloadType, payload)
 }
 
-func (km *keyManager) lockPathOrGetOwner(krc *keyResolutionContext, path string) *keyResolutionContext {
+func (km *keyManager) lockAllocationOrGetOwner(krc *keyResolutionContext) *keyResolutionContext {
 	km.allocLock.Lock()
 	defer km.allocLock.Unlock()
-	existingLock := km.allocPathsLocked[path]
-	if existingLock != nil {
-		return existingLock
+	if km.allocLockHolder != nil {
+		return km.allocLockHolder
 	}
-	km.allocPathsLocked[path] = krc
+	km.allocLockHolder = krc
 	return nil
 }
 
-func (km *keyManager) lockPath(krc *keyResolutionContext, path string) error {
+func (km *keyManager) takeAllocationLock(krc *keyResolutionContext) error {
 	ctx := krc.ctx
 	for {
-		lockingKRC := km.lockPathOrGetOwner(krc, path)
+		lockingKRC := km.lockAllocationOrGetOwner(krc)
 		if lockingKRC == nil {
-			log.L(ctx).Debugf("key resolution context %s locked path %s", krc.id, path)
+			log.L(ctx).Debugf("key resolution context %s locked allocation", krc.id)
 			return nil
 		}
 		// There is contention on this path - wait until the lock is released, and try to get it again
-		log.L(ctx).Debugf("key resolution context %s locking on %s for path %s", krc.id, lockingKRC.id, path)
 		select {
 		case <-lockingKRC.done:
-			log.L(ctx).Debugf("key resolution context %s unlocked by %s for path %s", krc.id, lockingKRC.id, path)
 		case <-ctx.Done():
-			log.L(ctx).Debugf("key resolution context %s cancelled while waiting unlocked by %s for path %s", krc.id, lockingKRC.id, path)
+			log.L(ctx).Debugf("key resolution context %s cancelled while waiting for allocation unlocked by %s", krc.id, lockingKRC.id)
 			return i18n.NewError(ctx, msgs.MsgContextCanceled)
 		}
 	}
 }
 
-func (km *keyManager) unlockPaths(krc *keyResolutionContext, paths map[string]bool) {
+func (km *keyManager) unlockAllocation(krc *keyResolutionContext) {
 	km.allocLock.Lock()
 	defer km.allocLock.Unlock()
 
 	// We will have locks on all the parent paths
-	for path := range paths {
-		log.L(krc.ctx).Debugf("key resolution context %s unlocked path %s", krc.id, path)
-		delete(km.allocPathsLocked, path)
+	if km.allocLockHolder == krc {
+		log.L(krc.ctx).Debugf("key resolution context %s unlocked allocation", krc.id)
+		km.allocLockHolder = nil
+	} else {
+		existingID := "null"
+		if km.allocLockHolder != nil {
+			existingID = km.allocLockHolder.id
+		}
+		log.L(krc.ctx).Errorf("key resolution context %s attempted to unlock allocation lock held by %s", krc.id, existingID)
 	}
 }

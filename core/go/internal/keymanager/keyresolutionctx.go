@@ -39,17 +39,17 @@ type resolvedDBPath struct {
 }
 
 type keyResolutionContext struct {
-	ctx           context.Context
-	id            string
-	km            *keyManager
-	dbTX          *gorm.DB
-	l             sync.Mutex
-	rootPath      *resolvedDBPath
-	resolvedPaths map[string]*resolvedDBPath
-	lockedPaths   map[string]bool
-	newMappings   []*components.KeyMappingWithPath
-	newVerifiers  []*components.KeyVerifierWithKeyRef
-	done          chan struct{}
+	ctx                 context.Context
+	id                  string
+	km                  *keyManager
+	dbTX                *gorm.DB
+	l                   sync.Mutex
+	rootPath            *resolvedDBPath
+	resolvedPaths       map[string]*resolvedDBPath
+	allocationLockTaken bool
+	newMappings         []*components.KeyMappingWithPath
+	newVerifiers        []*components.KeyVerifierWithKeyRef
+	done                chan struct{}
 }
 
 func (km *keyManager) NewKeyResolutionContext(ctx context.Context, dbTX *gorm.DB) components.KeyResolutionContext {
@@ -61,7 +61,6 @@ func (km *keyManager) NewKeyResolutionContext(ctx context.Context, dbTX *gorm.DB
 		dbTX:          dbTX,
 		rootPath:      &resolvedDBPath{},
 		resolvedPaths: make(map[string]*resolvedDBPath),
-		lockedPaths:   make(map[string]bool),
 		done:          make(chan struct{}),
 	}
 }
@@ -112,14 +111,16 @@ func (krc *keyResolutionContext) resolvePathSegment(parent *resolvedDBPath, segm
 			return resolved, nil
 		}
 
-		// We need to lock the PARENT path to this KRC, so no others can be attempting to allocate
-		// an index at this point or below in the hierarchy at the same time as us
-		// (note due to possible failure below in this function, we keep lockedPaths separate to resolvedPaths)
-		if !krc.lockedPaths[parent.path] {
-			if err := krc.km.lockPath(krc, parent.path); err != nil {
+		// Note: This is a single course grain lock on allocation, for the reasons described in TestE2ESigningHDWalletRealDB
+		// If performance shows DB locks coupling to new key allocation is a bottleneck, then the proposed solution would be:
+		// - Create a resolve-intent structure that is used before opening the DB transaction to list all identifiers that will be resolved
+		// - When we get to this point the lock we take is at the level of the tree that is the highest common root of all intents
+		// - We reject any attempt to allocate an identifier not in the intent list
+		if !krc.allocationLockTaken {
+			if err := krc.km.takeAllocationLock(krc); err != nil {
 				return nil, err // context cancelled while waiting
 			}
-			krc.lockedPaths[parent.path] = true
+			krc.allocationLockTaken = true
 		}
 
 		// Find or create in the DB
@@ -410,8 +411,8 @@ func (krc *keyResolutionContext) Cancel() {
 
 func (krc *keyResolutionContext) cleanup() {
 	if krc.done != nil {
-		if len(krc.lockedPaths) > 0 {
-			krc.km.unlockPaths(krc, krc.lockedPaths)
+		if krc.allocationLockTaken {
+			krc.km.unlockAllocation(krc)
 		}
 		// All other KRCs waiting on us will wake up and race to grab the lock on the parent context of their choosing
 		close(krc.done)

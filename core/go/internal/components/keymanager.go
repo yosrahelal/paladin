@@ -68,5 +68,5 @@ type KeyManager interface {
 	// resolution context for all calls that occur within the same DB tx.
 	NewKeyResolutionContext(ctx context.Context, dbTX *gorm.DB) KeyResolutionContext
 
-	Sign(ctx context.Context, mapping *KeyMappingAndVerifier, algorithm, payloadType string, payload []byte) ([]byte, error)
+	Sign(ctx context.Context, mapping *KeyMappingAndVerifier, payloadType string, payload []byte) ([]byte, error)
 }
