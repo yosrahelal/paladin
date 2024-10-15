@@ -77,7 +77,7 @@ wallets:
     keyDerivation:
       type: "bip32"
     keyStore:
-    type: "static"
+      type: "static"
       static:
         keys:
           seed:

@@ -368,7 +368,11 @@ func (ts *PaladinTxProcessor) HandleResolveVerifierErrorEvent(ctx context.Contex
 func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *prototk.AttestationRequest, partyName string) {
 
 	keyMgr := ts.components.KeyManager()
-	resolvedKey, err := keyMgr.ResolveKeyNewDatabaseTX(ctx, partyName, attRequest.Algorithm, attRequest.VerifierType)
+	unqualifiedLookup, err := tktypes.PrivateIdentityLocator(partyName).Identity(ctx)
+	var resolvedKey *components.KeyMappingAndVerifier
+	if err == nil {
+		resolvedKey, err = keyMgr.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, attRequest.Algorithm, attRequest.VerifierType)
+	}
 	if err != nil {
 		log.L(ctx).Errorf("Failed to resolve local signer for %s (algorithm=%s): %s", partyName, attRequest.Algorithm, err)
 
