@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
@@ -44,6 +45,9 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_getStoredABI", tm.rpcGetStoredABI()).
 		Add("ptx_queryStoredABIs", tm.rpcQueryStoredABIs()).
 		Add("ptx_resolveVerifier", tm.rpcResolveVerifier())
+
+	tm.debugRpcModule = rpcserver.NewRPCModule("debug").
+		Add("debug_getTransactionStatus", tm.rpcDebugTransactionStatus())
 }
 
 func (tm *txManager) rpcSendTransaction() rpcserver.RPCHandler {
@@ -186,5 +190,14 @@ func (tm *txManager) rpcResolveVerifier() rpcserver.RPCHandler {
 		verifierType string,
 	) (string, error) {
 		return tm.identityResolver.ResolveVerifier(ctx, lookup, algorithm, verifierType)
+	})
+}
+
+func (tm *txManager) rpcDebugTransactionStatus() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context,
+		contractAddress string,
+		id uuid.UUID,
+	) (components.PrivateTxStatus, error) {
+		return tm.privateTxMgr.GetTxStatus(ctx, contractAddress, id.String())
 	})
 }
