@@ -56,6 +56,7 @@ func newTestTransactionManagerWithRPC(t *testing.T, init ...func(*pldconf.TxMana
 	require.NoError(t, err)
 
 	rpcServer.Register(txm.rpcModule)
+	rpcServer.Register(txm.debugRpcModule)
 
 	err = rpcServer.Start()
 	require.NoError(t, err)
@@ -397,5 +398,35 @@ func TestIdentityResolvePassthroughQueries(t *testing.T) {
 	err = rpcClient.CallRPC(ctx, &verifier, "ptx_resolveVerifier", "lookup1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 	assert.Equal(t, "0x6f4b36e614cf32a20f4c2146d9db4c59a699ea65", verifier)
+
+}
+
+func TestDebugTransactionStatus(t *testing.T) {
+
+	contractAddress := tktypes.RandAddress()
+	txID := uuid.New().String()
+
+	ctx, url, _, done := newTestTransactionManagerWithRPC(t,
+		func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.privateTxMgr.On("GetTxStatus", mock.Anything, contractAddress.String(), txID).Return(components.PrivateTxStatus{
+				TxID:        txID,
+				Status:      "pending",
+				LatestEvent: "submitted",
+				LatestError: "some error message",
+			}, nil)
+		},
+	)
+	defer done()
+
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
+	require.NoError(t, err)
+
+	var result components.PrivateTxStatus
+	err = rpcClient.CallRPC(ctx, &result, "debug_getTransactionStatus", contractAddress.String(), txID)
+	require.NoError(t, err)
+	assert.Equal(t, txID, result.TxID)
+	assert.Equal(t, "pending", result.Status)
+	assert.Equal(t, "submitted", result.LatestEvent)
+	assert.Equal(t, "some error message", result.LatestError)
 
 }
