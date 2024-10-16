@@ -79,7 +79,7 @@ func (r *PaladinDomainReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 func (r *PaladinDomainReconciler) updateStatusAndRequeue(ctx context.Context, domain *corev1alpha1.PaladinDomain) (ctrl.Result, error) {
 	if err := r.Status().Update(ctx, domain); err != nil {
 		log.FromContext(ctx).Error(err, "Failed to update Paladin domain status")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: 100 * time.Millisecond}, err
 	}
 	return ctrl.Result{Requeue: true}, nil // Run again immediately to submit
 }
@@ -109,5 +109,7 @@ func (r *PaladinDomainReconciler) trackContractDeploymentAndRequeue(ctx context.
 func (r *PaladinDomainReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.PaladinDomain{}).
+		// Reconcile when any contract deployment changes status
+		Watches(&corev1alpha1.SmartContractDeployment{}, reconcileAll(PaladinDomainCRMap, r.Client), reconcileEveryChange()).
 		Complete(r)
 }

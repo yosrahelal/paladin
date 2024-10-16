@@ -105,7 +105,8 @@ func (r *PaladinRegistrationReconciler) Reconcile(ctx context.Context, req ctrl.
 	)
 	err = regTx.reconcile(ctx)
 	if err != nil {
-		return ctrl.Result{}, err
+		// There's nothing to notify us when the world changes other than polling, so we keep re-trying
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, err
 	} else if regTx.statusChanged {
 		if reg.Status.PublishTxs == nil {
 			reg.Status.PublishTxs = map[string]corev1alpha1.TransactionSubmission{}
@@ -131,7 +132,8 @@ func (r *PaladinRegistrationReconciler) Reconcile(ctx context.Context, req ctrl.
 		)
 		err := regTx.reconcile(ctx)
 		if err != nil {
-			return ctrl.Result{}, err
+			// There's nothing to notify us when the world changes other than polling, so we keep re-trying
+			return ctrl.Result{RequeueAfter: 1 * time.Second}, err
 		} else if regTx.statusChanged {
 			reg.Status.PublishTxs[transportName] = transportPublishStatus
 			return r.updateStatusAndRequeue(ctx, &reg, publishCount)
@@ -151,7 +153,7 @@ func (r *PaladinRegistrationReconciler) updateStatusAndRequeue(ctx context.Conte
 	reg.Status.PublishCount = publishCount
 	if err := r.Status().Update(ctx, reg); err != nil {
 		log.FromContext(ctx).Error(err, "Failed to update Paladin registration status")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: 100 * time.Millisecond}, err
 	}
 	return ctrl.Result{Requeue: true}, nil // Run again immediately to submit
 }
@@ -179,17 +181,17 @@ func (r *PaladinRegistrationReconciler) getRegistryAddress(ctx context.Context, 
 func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context, reg *corev1alpha1.PaladinRegistration, registryAddr *tktypes.EthAddress) (bool, *pldapi.TransactionInput, error) {
 
 	// We ask the node its name, so we know what to register it as
-	regNodeRPC, err := getPaladinRPC(ctx, r.Client, reg.Spec.Node, reg.Namespace)
-	if err != nil || regNodeRPC == nil {
+	targetNodeRPC, err := getPaladinRPC(ctx, r.Client, reg.Spec.Node, reg.Namespace)
+	if err != nil || targetNodeRPC == nil {
 		return false, nil, err // not ready, or error
 	}
 	var nodeName string
-	if err := regNodeRPC.CallRPC(ctx, &nodeName, "transport_nodeName"); err != nil || nodeName == "" {
+	if err := targetNodeRPC.CallRPC(ctx, &nodeName, "transport_nodeName"); err != nil || nodeName == "" {
 		return false, nil, err
 	}
 
 	// We also ask it to resolve its key down to an address
-	addr, err := regNodeRPC.KeyManager().ResolveEthAddress(ctx, reg.Spec.NodeKey)
+	addr, err := targetNodeRPC.KeyManager().ResolveEthAddress(ctx, reg.Spec.NodeKey)
 	if err != nil {
 		return false, nil, err
 	}
@@ -273,5 +275,7 @@ func (r *PaladinRegistrationReconciler) buildTransportTX(ctx context.Context, re
 func (r *PaladinRegistrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.PaladinRegistration{}).
+		// Reconcile when any node status changes
+		Watches(&corev1alpha1.Paladin{}, reconcileAll(PaladinRegistrationCRMap, r.Client), reconcileEveryChange()).
 		Complete(r)
 }
