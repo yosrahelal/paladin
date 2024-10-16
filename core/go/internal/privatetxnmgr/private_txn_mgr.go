@@ -265,7 +265,11 @@ func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.Pr
 	keyMgr := p.components.KeyManager()
 	tx.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.RequiredVerifiers))
 	for i, v := range tx.RequiredVerifiers {
-		resolvedKey, err := keyMgr.ResolveKeyNewDatabaseTX(ctx, v.Lookup, v.Algorithm, v.VerifierType)
+		unqualifiedLookup, err := tktypes.PrivateIdentityLocator(v.Lookup).Identity(ctx)
+		var resolvedKey *pldapi.KeyMappingAndVerifier
+		if err == nil {
+			resolvedKey, err = keyMgr.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, v.Algorithm, v.VerifierType)
+		}
 		if err != nil {
 			return i18n.WrapError(ctx, err, msgs.MsgKeyResolutionFailed, v.Lookup, v.Algorithm)
 		}

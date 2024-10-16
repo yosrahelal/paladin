@@ -373,15 +373,15 @@ func TestPrivateTransactionRevertedAssembleFailed(t *testing.T) {
 	// in this case, we use the simple token domain and attempt to transfer from a wallet that has no tokens
 
 	ctx := context.Background()
-	instance := newInstanceForComponentTesting(t, deplyDomainRegistry(t), nil, nil)
+	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil)
 	rpcClient := instance.client
 
 	var dplyTxID uuid.UUID
-	err := rpcClient.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+	err := rpcClient.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenConstructorABI(),
-		Transaction: ptxapi.Transaction{
+		Transaction: pldapi.Transaction{
 			IdempotencyKey: "deploy1",
-			Type:           ptxapi.TransactionTypePrivate.Enum(),
+			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			From:           "wallets.org1.aaaaaa",
 			Data: tktypes.RawJSON(`{
@@ -399,7 +399,7 @@ func TestPrivateTransactionRevertedAssembleFailed(t *testing.T) {
 		"Deploy transaction did not receive a receipt",
 	)
 
-	var dplyTxFull ptxapi.TransactionFull
+	var dplyTxFull pldapi.TransactionFull
 	err = rpcClient.CallRPC(ctx, &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
 	require.NoError(t, err)
 	require.NotNil(t, dplyTxFull.Receipt)
@@ -411,13 +411,13 @@ func TestPrivateTransactionRevertedAssembleFailed(t *testing.T) {
 	// however, that wont be known until the transaction is assembled which is asynchronous so the initial submission
 	// should succeed
 	var tx1ID uuid.UUID
-	err = rpcClient.CallRPC(ctx, &tx1ID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+	err = rpcClient.CallRPC(ctx, &tx1ID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
-		Transaction: ptxapi.Transaction{
+		Transaction: pldapi.Transaction{
 			To:             contractAddress,
 			Domain:         "domain1",
 			IdempotencyKey: "tx2",
-			Type:           ptxapi.TransactionTypePrivate.Enum(),
+			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           "wallets.org1.bbbbbb",
 			Data: tktypes.RawJSON(`{
 				"from": "wallets.org1.bbbbbb",
@@ -436,7 +436,7 @@ func TestPrivateTransactionRevertedAssembleFailed(t *testing.T) {
 		"Transaction did not revert",
 	)
 
-	var txFull ptxapi.TransactionFull
+	var txFull pldapi.TransactionFull
 	err = rpcClient.CallRPC(ctx, &txFull, "ptx_getTransaction", tx1ID, true)
 	require.NoError(t, err)
 	require.NotNil(t, txFull.Receipt)
@@ -748,7 +748,7 @@ func TestNotaryDelegated(t *testing.T) {
 	t.Logf("Instance 2 id: %s", bobNodeConfig.identity)
 	t.Logf("Instance 3 id: %s", notaryNodeConfig.identity)
 
-	domainRegistryAddress := deplyDomainRegistry(t)
+	domainRegistryAddress := deployDomainRegistry(t)
 
 	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, aliceNodeConfig, []*nodeConfiguration{bobNodeConfig, notaryNodeConfig})
 	client1 := instance1.client
@@ -770,11 +770,11 @@ func TestNotaryDelegated(t *testing.T) {
 
 	// send JSON RPC message to node 3 ( notary) to deploy a private contract
 	var dplyTxID uuid.UUID
-	err := client3.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+	err := client3.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenConstructorABI(),
-		Transaction: ptxapi.Transaction{
+		Transaction: pldapi.Transaction{
 			IdempotencyKey: "deploy1",
-			Type:           ptxapi.TransactionTypePrivate.Enum(),
+			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			From:           notaryIdentity,
 			Data: tktypes.RawJSON(`{
@@ -793,7 +793,7 @@ func TestNotaryDelegated(t *testing.T) {
 	)
 
 	// As notary, mint some tokens to alice
-	var dplyTxFull ptxapi.TransactionFull
+	var dplyTxFull pldapi.TransactionFull
 	err = client3.CallRPC(ctx, &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
 	require.NoError(t, err)
 	contractAddress := dplyTxFull.Receipt.ContractAddress
@@ -801,13 +801,13 @@ func TestNotaryDelegated(t *testing.T) {
 	// Start a private transaction on notary node
 	// this is a mint to alice so alice should later be able to do a transfer to bob
 	var mintTxID uuid.UUID
-	err = client3.CallRPC(ctx, &mintTxID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+	err = client3.CallRPC(ctx, &mintTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
-		Transaction: ptxapi.Transaction{
+		Transaction: pldapi.Transaction{
 			To:             contractAddress,
 			Domain:         "domain1",
 			IdempotencyKey: "tx1-mint",
-			Type:           ptxapi.TransactionTypePrivate.Enum(),
+			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           notaryIdentity,
 			Data: tktypes.RawJSON(`{
 					"from": "",
@@ -828,13 +828,13 @@ func TestNotaryDelegated(t *testing.T) {
 
 	// Start a private transaction on alices node to transfer to bob
 	var transferA2BTxId uuid.UUID
-	err = client1.CallRPC(ctx, &transferA2BTxId, "ptx_sendTransaction", &ptxapi.TransactionInput{
+	err = client1.CallRPC(ctx, &transferA2BTxId, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
-		Transaction: ptxapi.Transaction{
+		Transaction: pldapi.Transaction{
 			To:             contractAddress,
 			Domain:         "domain1",
 			IdempotencyKey: "transferA2B1",
-			Type:           ptxapi.TransactionTypePrivate.Enum(),
+			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           aliceIdentity,
 			Data: tktypes.RawJSON(`{
 					"from": "` + aliceIdentity + `",

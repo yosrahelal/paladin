@@ -509,7 +509,7 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 	// TODO this could be calling out to a remote signer, should we be doing these in parallel?
 	signaturePayload, err := keyMgr.Sign(ctx, resolvedKey, attRequest.PayloadType, attRequest.Payload)
 	if err != nil {
-		log.L(ctx).Errorf("failed to sign for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, attRequest.Algorithm, err)
+		log.L(ctx).Errorf("failed to sign for party %s (verifier=%s,algorithm=%s): %s", partyName, resolvedKey.Verifier.Verifier, attRequest.Algorithm, err)
 		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerSignError), partyName, resolvedKey.Verifier.Verifier, attRequest.Algorithm, err.Error())
 		return
 	}

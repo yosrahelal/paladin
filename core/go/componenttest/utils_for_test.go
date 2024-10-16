@@ -67,7 +67,7 @@ func transactionReceiptCondition(t *testing.T, ctx context.Context, txID uuid.UU
 func transactionRevertedCondition(t *testing.T, ctx context.Context, txID uuid.UUID, rpcClient rpcclient.Client) func() bool {
 	//for the given transaction ID, return a function that can be used in an assert.Eventually to check if the transaction has been reverted
 	return func() bool {
-		txFull := ptxapi.TransactionFull{}
+		txFull := pldapi.TransactionFull{}
 		err := rpcClient.CallRPC(ctx, &txFull, "ptx_getTransaction", txID, true)
 		require.NoError(t, err)
 		return txFull.Receipt != nil &&

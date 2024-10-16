@@ -424,7 +424,14 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 
 		signers := make([]string, len(preparedTransactions))
 		for i, pt := range preparedTransactions {
-			signers[i] = pt.Signer
+			unqualifiedSigner, err := tktypes.PrivateIdentityLocator(pt.Signer).Identity(ctx)
+			if err != nil {
+				errorMessage := fmt.Sprintf("failed to parse lookup key for signer %s : %s", pt.Signer, err)
+				log.L(ctx).Error(errorMessage)
+				return i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, errorMessage)
+			}
+
+			signers[i] = unqualifiedSigner
 		}
 		keyMgr := oc.components.KeyManager()
 		resolvedAddrs, err := keyMgr.ResolveEthAddressBatchNewDatabaseTX(ctx, signers)
