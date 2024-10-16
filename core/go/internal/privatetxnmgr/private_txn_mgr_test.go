@@ -298,7 +298,7 @@ func (i *identityForTesting) mockResolve(ctx context.Context, other identityForT
 		}).Return(nil).Maybe()
 }
 
-func newPartyForTesting(ctx context.Context, t *testing.T, name, node string, mocks *dependencyMocks) identityForTesting {
+func newPartyForTesting(ctx context.Context, name, node string, mocks *dependencyMocks) identityForTesting {
 	party := identityForTesting{
 		identity:        name,
 		identityLocator: name + "@" + node,
@@ -344,8 +344,8 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 
 	remoteEngine, remoteEngineMocks, remoteNodeID := NewPrivateTransactionMgrForTesting(t, domainAddress)
 
-	alice := newPartyForTesting(ctx, t, "alice", localNodeID, localNodeMocks)
-	notary := newPartyForTesting(ctx, t, "notary", remoteNodeID, remoteEngineMocks)
+	alice := newPartyForTesting(ctx, "alice", localNodeID, localNodeMocks)
+	notary := newPartyForTesting(ctx, "notary", remoteNodeID, remoteEngineMocks)
 
 	alice.mockResolve(ctx, notary)
 
@@ -520,9 +520,9 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	bobEngine, bobEngineMocks, bobNodeID := NewPrivateTransactionMgrForTesting(t, domainAddress)
 	carolEngine, carolEngineMocks, carolNodeID := NewPrivateTransactionMgrForTesting(t, domainAddress)
 
-	alice := newPartyForTesting(ctx, t, "alice", aliceNodeID, aliceEngineMocks)
-	bob := newPartyForTesting(ctx, t, "bob", bobNodeID, bobEngineMocks)
-	carol := newPartyForTesting(ctx, t, "carol", carolNodeID, carolEngineMocks)
+	alice := newPartyForTesting(ctx, "alice", aliceNodeID, aliceEngineMocks)
+	bob := newPartyForTesting(ctx, "bob", bobNodeID, bobEngineMocks)
+	carol := newPartyForTesting(ctx, "carol", carolNodeID, carolEngineMocks)
 
 	alice.mockResolve(ctx, bob)
 	alice.mockResolve(ctx, carol)
@@ -768,8 +768,8 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	aliceEngine, aliceEngineMocks, aliceNodeID := NewPrivateTransactionMgrForTesting(t, domainAddress)
 	_, bobEngineMocks, bobNodeID := NewPrivateTransactionMgrForTesting(t, domainAddress)
 
-	alice := newPartyForTesting(ctx, t, "alice", aliceNodeID, aliceEngineMocks)
-	bob := newPartyForTesting(ctx, t, "bob", bobNodeID, bobEngineMocks)
+	alice := newPartyForTesting(ctx, "alice", aliceNodeID, aliceEngineMocks)
+	bob := newPartyForTesting(ctx, "bob", bobNodeID, bobEngineMocks)
 
 	alice.mockResolve(ctx, bob)
 
@@ -917,10 +917,6 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	)
 	tx := &components.PrivateTransaction{
 		ID: uuid.New(),
-		Inputs: &components.TransactionInputs{
-			Domain: "domain1",
-			To:     *domainAddress,
-		},
 	}
 
 	mockPublicTxBatch := componentmocks.NewPublicTxBatch(t)
@@ -1478,6 +1474,7 @@ func newFakePublicTxManager(t *testing.T) *fakePublicTxManager {
 
 func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, domainAddress *tktypes.EthAddress, publicTxMgr components.PublicTxManager) (components.PrivateTxManager, *dependencyMocks, string) {
 
+	nodeID := tktypes.RandHex(16)
 	ctx := context.Background()
 	mocks := &dependencyMocks{
 		allComponents:       componentmocks.NewAllComponents(t),
@@ -1495,6 +1492,7 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
 	mocks.allComponents.On("TransportManager").Return(mocks.transportManager).Maybe()
+	mocks.transportManager.On("LocalNodeName").Return(nodeID)
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.allComponents.On("TxManager").Return(mocks.txManager).Maybe()
 	mocks.allComponents.On("PublicTxManager").Return(publicTxMgr).Maybe()
@@ -1503,8 +1501,7 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 	mocks.stateStore.On("NewDomainContext", mock.Anything, mocks.domain, *domainAddress, mock.Anything).Return(mocks.domainContext).Maybe()
 	mocks.domain.On("Name").Return("domain1").Maybe()
 
-	nodeID := tktypes.RandHex(16)
-	e := NewPrivateTransactionMgr(ctx, nodeID, &pldconf.PrivateTxManagerConfig{
+	e := NewPrivateTransactionMgr(ctx, &pldconf.PrivateTxManagerConfig{
 		Writer: pldconf.FlushWriterConfig{
 			WorkerCount:  confutil.P(1),
 			BatchMaxSize: confutil.P(1), // we don't want batching for our test
