@@ -17,6 +17,7 @@ package pldclient
 
 import (
 	"context"
+	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -27,13 +28,20 @@ import (
 )
 
 type PaladinClient interface {
+	// Config
+	ReceiptPollingInterval(t time.Duration) PaladinClient
+	HTTP(ctx context.Context, conf *pldconf.HTTPClientConfig) (PaladinClient, error)
+	WebSocket(ctx context.Context, conf *pldconf.WSClientConfig) (PaladinClient, error)
+
+	// ABI based helpers for building data payloads, and submitting transactions
 	ABI(ctx context.Context, a abi.ABI) (ABIClient, error)
 	ABIJSON(ctx context.Context, abiJson []byte) (ABIClient, error)
 	ABIFunction(ctx context.Context, functionABI *abi.Entry) (_ ABIFunctionClient, err error)
 	ABIConstructor(ctx context.Context, constructorABI *abi.Entry, bytecode tktypes.HexBytes) (_ ABIFunctionClient, err error)
 	MustABIJSON(abiJson []byte) ABIClient
 
-	PTX() PTX // ptx_ function access
+	// Paladin transaction RPC interface
+	PTX() PTX
 }
 
 type PaladinWSClient interface {
@@ -41,35 +49,50 @@ type PaladinWSClient interface {
 }
 
 type paladinClient struct {
-	rpc rpcclient.Client
+	rpc                    rpcclient.Client
+	receiptPollingInterval time.Duration
 }
+
+const (
+	DefaultReceiptPollingInterval = 1 * time.Second
+)
 
 func Wrap(rpc rpcclient.Client) PaladinClient {
-	return &paladinClient{rpc: rpc}
+	return &paladinClient{
+		rpc:                    rpc,
+		receiptPollingInterval: DefaultReceiptPollingInterval,
+	}
 }
 
-func NewUnconnected(ctx context.Context) PaladinClient {
+func New() PaladinClient {
 	return Wrap(&unconnectedRPC{})
 }
 
-func NewHTTP(ctx context.Context, conf *pldconf.HTTPClientConfig) (PaladinClient, error) {
+func (c *paladinClient) HTTP(ctx context.Context, conf *pldconf.HTTPClientConfig) (PaladinClient, error) {
 	rpc, err := rpcclient.NewHTTPClient(ctx, conf)
 	if err != nil {
 		return nil, err
 	}
-	return Wrap(rpc), nil
+	c.rpc = rpc
+	return c, nil
 }
 
-func NewWebSockets(ctx context.Context, conf *pldconf.WSClientConfig) (PaladinClient, error) {
+func (c *paladinClient) WebSocket(ctx context.Context, conf *pldconf.WSClientConfig) (PaladinClient, error) {
 	rpc, err := rpcclient.NewWSClient(ctx, conf)
 	if err != nil {
 		return nil, err
 	}
-	return Wrap(rpc), nil
+	c.rpc = rpc
+	return c, nil
 }
 
 type unconnectedRPC struct{}
 
 func (u *unconnectedRPC) CallRPC(ctx context.Context, result interface{}, method string, params ...interface{}) rpcclient.ErrorRPC {
 	return rpcclient.WrapErrorRPC(rpcclient.RPCCodeInternalError, i18n.NewError(ctx, tkmsgs.MsgPaladinClientNoConnection))
+}
+
+func (c *paladinClient) ReceiptPollingInterval(t time.Duration) PaladinClient {
+	c.receiptPollingInterval = t
+	return c
 }

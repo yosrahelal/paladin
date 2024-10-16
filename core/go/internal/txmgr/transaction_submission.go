@@ -231,21 +231,21 @@ func (tm *txManager) CallTransaction(ctx context.Context, result any, tx *ptxapi
 		return i18n.NewError(ctx, msgs.MsgTxMgrPrivateCallNotSupported)
 	}
 
-	// TODO: This is a temporary solution
 	ec := tm.ethClientFactory.HTTPClient().(ethclient.EthClientWithKeyManager)
-
+	var callReq ethclient.ABIFunctionRequestBuilder
 	abiFunc, err := ec.ABIFunction(ctx, txi.fn.definition)
-	var senderAddr *tktypes.EthAddress
 	if err == nil {
-		senderAddr, err = tm.keyManager.ResolveEthAddressNewDatabaseTX(ctx, tx.From)
+		callReq = abiFunc.R(ctx).To(tx.To.Address0xHex()).Input(tx.Data).Output(result)
+		if tx.From != "" {
+			var senderAddr *tktypes.EthAddress
+			senderAddr, err = tm.keyManager.ResolveEthAddressNewDatabaseTX(ctx, tx.From)
+			if err == nil {
+				callReq = callReq.Signer(senderAddr.String())
+			}
+		}
 	}
 	if err == nil {
-		err = abiFunc.R(ctx).
-			Signer(senderAddr.String()). // TODO: Temp API coupling here
-			To(tx.To.Address0xHex()).
-			Input(tx.Data).
-			Output(&result).
-			Call()
+		err = callReq.Call()
 	}
 	return err
 }

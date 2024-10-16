@@ -31,7 +31,7 @@ import (
 type ABIFunctionClient interface {
 	ABI() abi.ABI
 	ABIEntry() *abi.Entry
-	R(ctx context.Context) ABIFunctionRequestBuilder
+	TXBuilder(ctx context.Context) TransactionBuilder
 }
 
 type ABIClient interface {
@@ -42,16 +42,19 @@ type ABIClient interface {
 	MustConstructor(bytecode tktypes.HexBytes) ABIFunctionClient
 }
 
-type ABIFunctionRequestBuilder interface {
+type TransactionBuilder interface {
 	// Builder function
-	Type(ptxapi.TransactionType) ABIFunctionRequestBuilder
-	From(string) ABIFunctionRequestBuilder
-	To(*tktypes.EthAddress) ABIFunctionRequestBuilder
-	Bytecode([]byte) ABIFunctionRequestBuilder
-	Input(any) ABIFunctionRequestBuilder
-	Output(any) ABIFunctionRequestBuilder
-	JSONSerializer(*abi.Serializer) ABIFunctionRequestBuilder
-	PublicTxOptions(ptxapi.PublicTxOptions) ABIFunctionRequestBuilder
+	Public() TransactionBuilder
+	Private() TransactionBuilder
+	IdempotencyKey(string) TransactionBuilder
+	From(string) TransactionBuilder
+	To(*tktypes.EthAddress) TransactionBuilder
+	Bytecode([]byte) TransactionBuilder
+	Domain(string) TransactionBuilder
+	Input(any) TransactionBuilder
+	Output(any) TransactionBuilder
+	JSONSerializer(*abi.Serializer) TransactionBuilder
+	PublicTxOptions(ptxapi.PublicTxOptions) TransactionBuilder
 
 	// Result functions
 	Definition() *abi.Entry                                    // returns the definition
@@ -59,6 +62,7 @@ type ABIFunctionRequestBuilder interface {
 	BuildInputDataCV() (cv *abi.ComponentValue, err error)     // build the intermediate abi.ComponentValue tree for the inputs
 	BuildInputDataJSON() (jsonData tktypes.RawJSON, err error) // build the input data as JSON (object by default, with serialization options via Serializer())
 	BuildTX() (*ptxapi.TransactionInput, error)                // builds the full TransactionInput object for use with Paladin
+	SendTX() (stx SentTransaction, err error)                  // shortcut to BuildTX() then SendTX()
 }
 
 type abiClient struct {
@@ -80,7 +84,7 @@ type abiFunctionClient struct {
 	outputs       abi.TypeComponent
 }
 
-type abiFunctionRequestBuilder struct {
+type txBuilder struct {
 	*abiFunctionClient
 	ctx        context.Context
 	tx         ptxapi.TransactionInput
@@ -220,65 +224,91 @@ func (fc *abiFunctionClient) ABIEntry() *abi.Entry {
 	return fc.abiEntry
 }
 
-func (fc *abiFunctionClient) R(ctx context.Context) ABIFunctionRequestBuilder {
-	return &abiFunctionRequestBuilder{
+func (fc *abiFunctionClient) TXBuilder(ctx context.Context) TransactionBuilder {
+	return &txBuilder{
 		ctx:               ctx,
 		abiFunctionClient: fc,
 		serializer:        tktypes.StandardABISerializer(),
+		tx: ptxapi.TransactionInput{
+			Transaction: ptxapi.Transaction{
+				Function: fc.signature,
+			},
+			ABI:      fc.abi,
+			Bytecode: fc.buildBytecode,
+		},
 	}
 }
 
-func (b *abiFunctionRequestBuilder) From(from string) ABIFunctionRequestBuilder {
+func (b *txBuilder) From(from string) TransactionBuilder {
 	b.tx.From = from
 	return b
 }
 
-func (b *abiFunctionRequestBuilder) To(to *tktypes.EthAddress) ABIFunctionRequestBuilder {
+func (b *txBuilder) To(to *tktypes.EthAddress) TransactionBuilder {
 	b.tx.To = to
 	return b
 }
 
-func (b *abiFunctionRequestBuilder) Input(input any) ABIFunctionRequestBuilder {
+func (b *txBuilder) Input(input any) TransactionBuilder {
 	b.input = input
 	return b
 }
 
-func (b *abiFunctionRequestBuilder) Output(output any) ABIFunctionRequestBuilder {
+func (b *txBuilder) Output(output any) TransactionBuilder {
 	b.output = output
 	return b
 }
 
-func (b *abiFunctionRequestBuilder) PublicTxOptions(opts ptxapi.PublicTxOptions) ABIFunctionRequestBuilder {
+func (b *txBuilder) PublicTxOptions(opts ptxapi.PublicTxOptions) TransactionBuilder {
 	b.tx.PublicTxOptions = opts
 	return b
 }
 
-func (b *abiFunctionRequestBuilder) JSONSerializer(s *abi.Serializer) ABIFunctionRequestBuilder {
+func (b *txBuilder) JSONSerializer(s *abi.Serializer) TransactionBuilder {
 	b.serializer = s
 	return b
 }
 
-func (b *abiFunctionRequestBuilder) Type(t ptxapi.TransactionType) ABIFunctionRequestBuilder {
-	b.tx.Type = tktypes.Enum[ptxapi.TransactionType](t)
+func (b *txBuilder) Public() TransactionBuilder {
+	b.tx.Type = ptxapi.TransactionTypePublic.Enum()
 	return b
 }
 
-func (b *abiFunctionRequestBuilder) Bytecode(bytecode []byte) ABIFunctionRequestBuilder {
+func (b *txBuilder) Private() TransactionBuilder {
+	b.tx.Type = ptxapi.TransactionTypePrivate.Enum()
+	return b
+}
+
+func (b *txBuilder) Bytecode(bytecode []byte) TransactionBuilder {
 	b.tx.Bytecode = bytecode
 	return b
 }
 
-func (b *abiFunctionRequestBuilder) Definition() *abi.Entry {
+func (b *txBuilder) Domain(domain string) TransactionBuilder {
+	b.tx.Domain = domain
+	return b
+}
+
+func (b *txBuilder) IdempotencyKey(idempotencyKey string) TransactionBuilder {
+	b.tx.IdempotencyKey = idempotencyKey
+	return b
+}
+
+func (b *txBuilder) Definition() *abi.Entry {
 	return b.abiEntry
 }
 
-func (b *abiFunctionRequestBuilder) validateFromToType() error {
-	if b.tx.From == "" {
-		return i18n.NewError(b.ctx, tkmsgs.MsgPaladinClientMissingFrom)
+func (b *txBuilder) validateFromToType() error {
+	if b.tx.Type == "" {
+		return i18n.NewError(b.ctx, tkmsgs.MsgPaladinClientMissingType)
 	}
 	if b.tx.To != nil {
 		if b.selector == nil {
 			return i18n.NewError(b.ctx, tkmsgs.MsgPaladinClientToWithConstructor)
+		}
+	} else {
+		if b.selector != nil {
+			return i18n.NewError(b.ctx, tkmsgs.MsgPaladinClientMissingTo)
 		}
 		if b.tx.Type.V() == ptxapi.TransactionTypePrivate && b.tx.Bytecode != nil {
 			return i18n.NewError(b.ctx, tkmsgs.MsgPaladinClientBytecodeWithPriv)
@@ -289,15 +319,11 @@ func (b *abiFunctionRequestBuilder) validateFromToType() error {
 				return i18n.NewError(b.ctx, tkmsgs.MsgPaladinClientBytecodeMissing)
 			}
 		}
-	} else {
-		if b.selector != nil {
-			return i18n.NewError(b.ctx, tkmsgs.MsgPaladinClientMissingTo)
-		}
 	}
 	return nil
 }
 
-func (b *abiFunctionRequestBuilder) BuildInputDataCV() (cv *abi.ComponentValue, err error) {
+func (b *txBuilder) BuildInputDataCV() (cv *abi.ComponentValue, err error) {
 	if b.input == nil && len(b.inputs.TupleChildren()) > 0 {
 		return nil, i18n.NewError(b.ctx, tkmsgs.MsgPaladinClientMissingInput)
 	}
@@ -329,7 +355,7 @@ func (b *abiFunctionRequestBuilder) BuildInputDataCV() (cv *abi.ComponentValue, 
 	return cv, err
 }
 
-func (b *abiFunctionRequestBuilder) BuildCallData() (callData tktypes.HexBytes, err error) {
+func (b *txBuilder) BuildCallData() (callData tktypes.HexBytes, err error) {
 	var inputDataRLP []byte
 	cv, err := b.BuildInputDataCV()
 	if err == nil {
@@ -351,7 +377,7 @@ func (b *abiFunctionRequestBuilder) BuildCallData() (callData tktypes.HexBytes, 
 	return callData, err
 }
 
-func (b *abiFunctionRequestBuilder) BuildInputDataJSON() (jsonData tktypes.RawJSON, err error) {
+func (b *txBuilder) BuildInputDataJSON() (jsonData tktypes.RawJSON, err error) {
 	cv, err := b.BuildInputDataCV()
 	if err == nil {
 		jsonData, err = b.serializer.SerializeJSONCtx(b.ctx, cv)
@@ -359,7 +385,7 @@ func (b *abiFunctionRequestBuilder) BuildInputDataJSON() (jsonData tktypes.RawJS
 	return jsonData, err
 }
 
-func (b *abiFunctionRequestBuilder) BuildTX() (tx *ptxapi.TransactionInput, err error) {
+func (b *txBuilder) BuildTX() (tx *ptxapi.TransactionInput, err error) {
 	b.tx.Data, err = b.BuildInputDataJSON()
 	if b.selector == nil {
 		b.tx.Function = ""
@@ -373,4 +399,15 @@ func (b *abiFunctionRequestBuilder) BuildTX() (tx *ptxapi.TransactionInput, err 
 		return nil, err
 	}
 	return &b.tx, err
+}
+
+func (b *txBuilder) SendTX() (stx SentTransaction, err error) {
+	if b.tx.From == "" {
+		return nil, i18n.NewError(b.ctx, tkmsgs.MsgPaladinClientMissingFrom)
+	}
+	tx, err := b.BuildTX()
+	if err == nil {
+		stx, err = b.c.PTX().SendTransaction(b.ctx, tx)
+	}
+	return stx, err
 }

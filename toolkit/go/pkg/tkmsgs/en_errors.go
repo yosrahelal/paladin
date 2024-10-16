@@ -63,6 +63,8 @@ var (
 	MsgPaladinClientFunctionNotFound  = ffe("PD020208", "Function %q not found on ABI")
 	MsgPaladinClientToWithConstructor = ffe("PD020209", "To address cannot be specified for constructor")
 	MsgPaladinClientNoConnection      = ffe("PD020210", "No JSON/RPC connection is available to this client")
+	MsgPaladinClientMissingType       = ffe("PD020211", "Type missing (public or private)")
+	MsgPaladinClientNoFailureMsg      = ffe("PD020212", "No failure message available")
 
 	// Plugin PD0203XX
 	MsgPluginUnsupportedRequest   = ffe("PD020300", "Unsupported request %T")
