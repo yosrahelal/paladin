@@ -76,9 +76,8 @@ func (ir *identityResolver) Stop() {
 }
 
 func (ir *identityResolver) ResolveVerifier(ctx context.Context, lookup string, algorithm string, verifierType string) (string, error) {
-	//TODO should we have a timeout here? Shoudl be related to the async timeout and reaping of the inflight requests?
-	replyChan := make(chan string)
-	errChan := make(chan error)
+	replyChan := make(chan string, 1)
+	errChan := make(chan error, 1)
 	ir.ResolveVerifierAsync(ctx, lookup, algorithm, verifierType, func(ctx context.Context, verifier string) {
 		replyChan <- verifier
 	}, func(ctx context.Context, err error) {
@@ -89,6 +88,8 @@ func (ir *identityResolver) ResolveVerifier(ctx context.Context, lookup string, 
 		return verifier, nil
 	case err := <-errChan:
 		return "", err
+	case <-ctx.Done():
+		return "", i18n.NewError(ctx, msgs.MsgContextCanceled)
 	}
 }
 
