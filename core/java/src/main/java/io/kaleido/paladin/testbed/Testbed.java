@@ -74,7 +74,8 @@ public class Testbed implements Closeable {
 
         // Build the config
         ObjectMapper objectMapper = new ObjectMapper(YAMLFactory.builder().build());
-        Map<String, Object> configMap = objectMapper.readValue(baseConfig(), new TypeReference<>() {
+        var baseConfig = baseConfig();
+        Map<String, Object> configMap = objectMapper.readValue(baseConfig, new TypeReference<>() {
         });
         Map<String, Object> domainMap = new HashMap<>();
         for (ConfigDomain domain : domains) {
@@ -133,8 +134,8 @@ public class Testbed implements Closeable {
                       static:
                         keys:
                           seed:
-                            encoding: none
-                            inline: '17250abf7976eae3c964e9704063f1457a8e1b4c0c0bd8b21ec8db5b88743c10'                    
+                            encoding: hex
+                            inline: '%s'                    
                 rpcServer:
                   http:
                     port: %s
@@ -155,7 +156,11 @@ public class Testbed implements Closeable {
                   debug: true
                 log:
                   level: debug
-                """.formatted(new File(testbedSetup.dbMigrationsDir).getAbsolutePath(), availableRPCPort);
+                """.formatted(
+                    new File(testbedSetup.dbMigrationsDir).getAbsolutePath(),
+                    JsonHex.randomBytes32(),
+                    availableRPCPort
+            );
     }
 
     private void start() throws Exception {
