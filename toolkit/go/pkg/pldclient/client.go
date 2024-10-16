@@ -35,6 +35,7 @@ type PaladinClient interface {
 
 	// ABI based helpers for building data payloads, and submitting transactions
 	ABI(ctx context.Context, a abi.ABI) (ABIClient, error)
+	MustABI(a abi.ABI) ABIClient
 	ABIJSON(ctx context.Context, abiJson []byte) (ABIClient, error)
 	ABIFunction(ctx context.Context, functionABI *abi.Entry) (_ ABIFunctionClient, err error)
 	ABIConstructor(ctx context.Context, constructorABI *abi.Entry, bytecode tktypes.HexBytes) (_ ABIFunctionClient, err error)

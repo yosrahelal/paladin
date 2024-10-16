@@ -126,6 +126,14 @@ func (c *paladinClient) ABI(ctx context.Context, a abi.ABI) (ABIClient, error) {
 	}, nil
 }
 
+func (c *paladinClient) MustABI(a abi.ABI) ABIClient {
+	abic, err := c.ABI(context.Background(), a)
+	if err != nil {
+		panic(err)
+	}
+	return abic
+}
+
 func (c *paladinClient) MustABIJSON(abiJson []byte) ABIClient {
 	abic, err := c.ABIJSON(context.Background(), abiJson)
 	if err != nil {
