@@ -796,7 +796,7 @@ func (r *PaladinReconciler) generatePaladinRegistries(ctx context.Context, node 
 		pldConf.Registries[reg.Name] = &pldconf.RegistryConfig{
 			Plugin: r.mapPluginConfig(reg.Spec.Plugin),
 			Transports: pldconf.RegistryTransportsConfig{
-				Enabled:           &reg.Spec.Transports.Enabled,
+				Enabled:           reg.Spec.Transports.Enabled,
 				RequiredPrefix:    reg.Spec.Transports.RequiredPrefix,
 				HierarchySplitter: reg.Spec.Transports.HierarchySplitter,
 				PropertyRegexp:    reg.Spec.Transports.PropertyRegexp,
@@ -1087,7 +1087,7 @@ func getPaladinURLEndpoint(ctx context.Context, c client.Client, name, namespace
 		for _, p := range svc.Spec.Ports {
 			if p.Name == "rpc-http" {
 				if p.NodePort == 0 {
-					return "", fmt.Errorf("cannot use nodePort for %s rpc-http port as not set", generatePaladinName(name))
+					return "", fmt.Errorf("cannot use nodePort for %s rpc-http port as not cset", generatePaladinName(name))
 				}
 				return fmt.Sprintf("http://localhost:%d", p.NodePort), nil
 			}

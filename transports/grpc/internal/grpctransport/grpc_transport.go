@@ -307,6 +307,7 @@ func (t *grpcTransport) getConnection(ctx context.Context, nodeName string) (*ou
 	}
 
 	// Ok - try connecting
+	log.L(ctx).Infof("GRPC connecting to new peer %s (endpoint=%s)", nodeName, transportDetails.Endpoint)
 	individualNodeVerifier := t.peerVerifier.Clone().(*tlsVerifier)
 	individualNodeVerifier.expectedNode = nodeName
 	conn, err := grpc.NewClient(transportDetails.Endpoint,
@@ -325,6 +326,7 @@ func (t *grpcTransport) SendMessage(ctx context.Context, req *prototk.SendMessag
 	}
 	oc, err := t.getConnection(ctx, req.Message.Node)
 	if err == nil {
+		log.L(ctx).Infof("GRPC sending message %s (cid=%v) to peer %s", req.Message.MessageId, req.Message.CorrelationId, req.Message.Node)
 		err = t.send(ctx, oc, &proto.Message{
 			MessageId:     req.Message.MessageId,
 			CorrelationId: req.Message.CorrelationId,
