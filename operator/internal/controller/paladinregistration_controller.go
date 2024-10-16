@@ -30,11 +30,9 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
 var registryABI = abi.ABI{
@@ -191,17 +189,15 @@ func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context,
 	}
 
 	// We also ask it to resolve its key down to an address
-	var nodeOwnerAddress string
-	if err := regNodeRPC.CallRPC(ctx, &nodeOwnerAddress, "keymgr_resolveKey",
-		reg.Spec.NodeKey, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS,
-	); err != nil || nodeOwnerAddress == "" {
+	addr, err := regNodeRPC.KeyManager().ResolveEthAddress(ctx, reg.Spec.NodeKey)
+	if err != nil {
 		return false, nil, err
 	}
 
 	registration := map[string]any{
 		"parentIdentityHash": tktypes.Bytes32{}, // zero for root
 		"name":               nodeName,
-		"owner":              nodeOwnerAddress,
+		"owner":              addr,
 	}
 
 	tx := &pldapi.TransactionInput{

@@ -110,8 +110,8 @@ func (r *evmRegistry) handleIdentityRegistered(ctx context.Context, inEvent *pro
 	entryID := parsedEvent.IdentityHash.String()
 
 	parentID := ""
-	if !parsedEvent.Owner.IsZero() {
-		parentID = parsedEvent.Owner.String()
+	if !parsedEvent.ParentIdentityHash.IsZero() {
+		parentID = parsedEvent.ParentIdentityHash.String()
 	}
 
 	return &prototk.RegistryEntry{
