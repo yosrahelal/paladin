@@ -222,6 +222,7 @@ func (tm *txManager) SendTransaction(ctx context.Context, tx *ptxapi.Transaction
 }
 
 func (tm *txManager) CallTransaction(ctx context.Context, result any, tx *ptxapi.TransactionInput) (err error) {
+
 	txi, err := tm.resolveNewTransaction(ctx, tx)
 	if err != nil {
 		return err

@@ -16,6 +16,7 @@
 package txmgr
 
 import (
+	"context"
 	"database/sql/driver"
 	"fmt"
 	"testing"
@@ -26,7 +27,9 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -656,5 +659,109 @@ func TestGetPublicTxDataErrors(t *testing.T) {
 		{Type: "wrong"},
 	}}, nil, nil)
 	assert.Regexp(t, "FF22041", err)
+
+}
+
+func TestCallTransactionNoFrom(t *testing.T) {
+	ec := ethclient.NewUnconnectedRPCClient(context.Background(), &pldconf.EthClientConfig{}, 0)
+
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockInsertABI,
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.ethClientFactory.On("HTTPClient").Return(ec)
+		})
+	defer done()
+
+	abic, err := pldclient.New().ABI(ctx, abi.ABI{
+		{
+			Name: "getSpins",
+			Type: abi.Function,
+			Inputs: abi.ParameterArray{
+				{Name: "wheel", Type: "string"},
+			},
+			Outputs: abi.ParameterArray{
+				{Name: "times", Type: "uint256"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	tx, err := abic.MustFunction("getSpins").TXBuilder(ctx).
+		Public().
+		To(tktypes.RandAddress()).
+		Input(map[string]any{"wheel": "of fortune"}).
+		BuildTX()
+	require.NoError(t, err)
+
+	var result any
+	err = txm.CallTransaction(ctx, &result, tx)
+	require.Regexp(t, "PD011517", err) // means we successfully submitted it to the client
+
+}
+
+func TestCallTransactionWithFrom(t *testing.T) {
+	ec := ethclient.NewUnconnectedRPCClient(context.Background(), &pldconf.EthClientConfig{}, 0)
+
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockInsertABI,
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.keyManager.On("ResolveEthAddressNewDatabaseTX", mock.Anything, "red.one").
+				Return(tktypes.RandAddress(), nil)
+			mc.ethClientFactory.On("HTTPClient").Return(ec)
+		})
+	defer done()
+
+	abic, err := pldclient.New().ABI(ctx, abi.ABI{
+		{
+			Name: "getSpins",
+			Type: abi.Function,
+			Inputs: abi.ParameterArray{
+				{Name: "wheel", Type: "string"},
+			},
+			Outputs: abi.ParameterArray{
+				{Name: "times", Type: "uint256"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	tx, err := abic.MustFunction("getSpins").TXBuilder(ctx).
+		Public().
+		From("red.one").
+		To(tktypes.RandAddress()).
+		Input(map[string]any{"wheel": "of fortune"}).
+		BuildTX()
+	require.NoError(t, err)
+
+	var result any
+	err = txm.CallTransaction(ctx, &result, tx)
+	require.Regexp(t, "PD011517", err) // means we successfully submitted it to the client
+
+}
+
+func TestCallTransactionBadTX(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false)
+	defer done()
+
+	var result any
+	err := txm.CallTransaction(ctx, &result, &ptxapi.TransactionInput{})
+	require.Regexp(t, "PD012211", err)
+
+}
+
+func TestCallTransactionPrivNotSupported(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	defer done()
+
+	abic, err := pldclient.New().ABI(ctx, abi.ABI{{Name: "getSpins", Type: abi.Function}})
+	require.NoError(t, err)
+	tx, err := abic.MustFunction("getSpins").TXBuilder(ctx).
+		Private().
+		To(tktypes.RandAddress()).
+		Input(map[string]any{"wheel": "of fortune"}).
+		BuildTX()
+	require.NoError(t, err)
+
+	var result any
+	err = txm.CallTransaction(ctx, &result, tx)
+	require.Regexp(t, "PD012221", err)
 
 }
