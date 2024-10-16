@@ -1062,7 +1062,7 @@ func (r *PaladinReconciler) getLabels(node *corev1alpha1.Paladin, extraLabels ..
 			l[k] = v
 		}
 	}
-	l["app"] = generatePaladinName(node.Name)
+	l["app.kubernetes.io/name"] = generatePaladinName(node.Name)
 	return l
 }
 

@@ -11,7 +11,7 @@ metadata:
 spec:
   config: |
     log:
-      level: info
+      level: debug
   database:
     mode: sidecarPostgres
     migrationMode: auto

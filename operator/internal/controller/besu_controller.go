@@ -343,7 +343,7 @@ func (r *BesuReconciler) getLabels(node *corev1alpha1.Besu, extraLabels ...map[s
 			l[k] = v
 		}
 	}
-	l["app"] = generateBesuName(node.Name)
+	l["app.kubernetes.io/name"] = generateBesuName(node.Name)
 	return l
 }
 
