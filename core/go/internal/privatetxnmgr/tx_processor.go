@@ -126,7 +126,7 @@ func (ts *PaladinTxProcessor) isReadyToAssemble(ctx context.Context) bool {
 
 	if ts.transaction.PreAssembly != nil {
 		// assume they are all resolved until we find one in RequiredVerifiers that is not in Verifiers
-		verifieresResolved := true
+		verifiersResolved := true
 		for _, v := range ts.transaction.PreAssembly.RequiredVerifiers {
 			thisVerifierIsResolved := false
 			for _, rv := range ts.transaction.PreAssembly.Verifiers {
@@ -136,10 +136,10 @@ func (ts *PaladinTxProcessor) isReadyToAssemble(ctx context.Context) bool {
 				}
 			}
 			if !thisVerifierIsResolved {
-				verifieresResolved = false
+				verifiersResolved = false
 			}
 		}
-		if verifieresResolved {
+		if verifiersResolved {
 			return true
 		} else {
 			log.L(ctx).Infof("Transaction %s not ready to assemble. Waiting for verifiers to be resolved", ts.transaction.ID.String())
@@ -364,7 +364,12 @@ func (ts *PaladinTxProcessor) HandleTransactionEndorsedEvent(ctx context.Context
 				}
 			}
 		}
-		if !ts.hasOutstandingEndorsementRequests() {
+		hasOutstandingEndorsementRequests, err := ts.hasOutstandingEndorsementRequests(ctx)
+		if err != nil {
+			ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
+			return err
+		}
+		if !hasOutstandingEndorsementRequests {
 			ts.status = "endorsed"
 			//resolve the signing address here before informing the sequencer about endorsement
 			// because endorsement will could trigger a dispatch but
@@ -741,26 +746,39 @@ out:
 	return outstandingSignatureRequests
 }
 
-func (ts *PaladinTxProcessor) hasOutstandingEndorsementRequests() bool {
+func (ts *PaladinTxProcessor) hasOutstandingEndorsementRequests(ctx context.Context) (bool, error) {
+	if ts.transaction.PostAssembly == nil || ts.transaction.PreAssembly == nil {
+		return false, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "Transaction not assembled")
+	}
 	outstandingEndorsementRequests := false
 out:
 	for _, attRequest := range ts.transaction.PostAssembly.AttestationPlan {
 		if attRequest.AttestationType == prototk.AttestationType_ENDORSE {
-			found := false
-			for _, endorsement := range ts.transaction.PostAssembly.Endorsements {
-				if endorsement.Name == attRequest.Name {
-					found = true
-					break
+			for _, party := range attRequest.Parties {
+				var verifier string
+				for _, v := range ts.transaction.PreAssembly.Verifiers {
+					if v.Lookup == party {
+						verifier = v.Verifier
+						break
+					}
 				}
-			}
-			if !found {
-				outstandingEndorsementRequests = true
-				// no point checking any further, we have at least one outstanding endorsement request
-				break out
+
+				found := false
+				for _, endorsement := range ts.transaction.PostAssembly.Endorsements {
+					if endorsement.Name == attRequest.Name && endorsement.Verifier.Verifier == verifier {
+						found = true
+						break
+					}
+				}
+				if !found {
+					outstandingEndorsementRequests = true
+					// no point checking any further, we have at least one outstanding endorsement request
+					break out
+				}
 			}
 		}
 	}
-	return outstandingEndorsementRequests
+	return outstandingEndorsementRequests, nil
 }
 
 func (ts *PaladinTxProcessor) PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error) {

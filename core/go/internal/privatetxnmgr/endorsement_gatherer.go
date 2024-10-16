@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 func NewEndorsementGatherer(psc components.DomainSmartContract, dCtx components.DomainContext, keyMgr components.KeyManager) ptmgrtypes.EndorsementGatherer {
@@ -47,7 +48,15 @@ func (e *endorsementGatherer) DomainContext() components.DomainContext {
 }
 
 func (e *endorsementGatherer) GatherEndorsement(ctx context.Context, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, partyName string, endorsementRequest *prototk.AttestationRequest) (*prototk.AttestationResult, *string, error) {
-	resolvedSigner, err := e.keyMgr.ResolveKeyNewDatabaseTX(ctx, partyName, endorsementRequest.Algorithm, endorsementRequest.VerifierType)
+
+	unqualifiedLookup, err := tktypes.PrivateIdentityLocator(partyName).Identity(ctx)
+	if err != nil {
+		errorMessage := fmt.Sprintf("failed to parse lookup key for party %s : %s", partyName, err)
+		log.L(ctx).Error(errorMessage)
+		return nil, nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, errorMessage)
+	}
+
+	resolvedSigner, err := e.keyMgr.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, endorsementRequest.Algorithm, endorsementRequest.VerifierType)
 	if err != nil {
 		errorMessage := fmt.Sprintf("failed to resolve key for party %s (algorithm=%s,verifierType=%s): %s", partyName, endorsementRequest.Algorithm, endorsementRequest.VerifierType, err)
 		log.L(ctx).Error(errorMessage)
