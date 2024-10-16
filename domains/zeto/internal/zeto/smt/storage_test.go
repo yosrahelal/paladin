@@ -132,7 +132,7 @@ func TestStorage(t *testing.T) {
 
 	storage := NewStatesStorage(&testDomainCallbacks{returnFunc: returnCustomError}, "test", stateQueryConext, "root-schema", "node-schema")
 	smt, err := NewSmt(storage)
-	assert.EqualError(t, err, "failed to find available states. test error")
+	assert.EqualError(t, err, "PD210065: Failed to find available states for the merkle tree. test error")
 	assert.NotNil(t, storage)
 	assert.Nil(t, smt)
 
@@ -152,7 +152,7 @@ func TestStorage(t *testing.T) {
 
 	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnBadData}, "test", stateQueryConext, "root-schema", "node-schema")
 	smt, err = NewSmt(storage)
-	assert.EqualError(t, err, "failed to unmarshal root node index. invalid character 'b' looking for beginning of value")
+	assert.EqualError(t, err, "PD210066: Failed to unmarshal root node index. invalid character 'b' looking for beginning of value")
 	assert.NotNil(t, storage)
 	assert.Nil(t, smt)
 
@@ -210,7 +210,7 @@ func TestGetNode(t *testing.T) {
 
 	storage := NewStatesStorage(&testDomainCallbacks{returnFunc: returnCustomError}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err := storage.GetNode(idx)
-	assert.EqualError(t, err, "failed to find available states. test error")
+	assert.EqualError(t, err, "PD210065: Failed to find available states for the merkle tree. test error")
 
 	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err = storage.GetNode(idx)
@@ -240,11 +240,11 @@ func TestGetNode(t *testing.T) {
 
 	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(5)}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err = storage.GetNode(idx)
-	assert.ErrorContains(t, err, "failed to unmarshal Merkle Tree Node from state json. PD020007: Invalid hex")
+	assert.ErrorContains(t, err, "PD210067: Failed to unmarshal Merkle Tree Node from state json. PD020007: Invalid hex")
 
 	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(6)}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err = storage.GetNode(idx)
-	assert.ErrorContains(t, err, "failed to unmarshal Merkle Tree Node from state json. PD020008: Failed to parse value as 32 byte hex string")
+	assert.ErrorContains(t, err, "PD210067: Failed to unmarshal Merkle Tree Node from state json. PD020008: Failed to parse value as 32 byte hex string")
 
 	// test with committed nodes
 	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")

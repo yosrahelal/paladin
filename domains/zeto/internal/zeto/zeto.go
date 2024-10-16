@@ -19,11 +19,12 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"fmt"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
@@ -101,7 +102,7 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	var config types.DomainFactoryConfig
 	err := json.Unmarshal([]byte(req.ConfigJson), &config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse domain config json. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorParseDomainConfig, err)
 	}
 
 	z.name = req.Name
@@ -111,15 +112,15 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	factory := domain.LoadBuildLinked(factoryJSONBytes, config.Libraries)
 	z.factoryABI = factory.ABI
 
-	schemas, err := getStateSchemas()
+	schemas, err := getStateSchemas(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to configure Zeto domain. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorConfigZetoDomain, err)
 	}
 
 	events := getAllZetoEventAbis()
 	eventsJSON, err := json.Marshal(events)
 	if err != nil {
-		return nil, fmt.Errorf("failed to configure Zeto domain. Failed to marshal Zeto event abis. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalZetoEventAbis, err)
 	}
 
 	z.registerEventSignatures(events)
@@ -159,7 +160,7 @@ func (z *Zeto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (
 func (z *Zeto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error) {
 	initParams, err := z.validateDeploy(req.Transaction)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate init deploy parameters. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateInitDeployParams, err)
 	}
 	return &prototk.InitDeployResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
@@ -175,11 +176,11 @@ func (z *Zeto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (
 func (z *Zeto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 	initParams, err := z.validateDeploy(req.Transaction)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate prepare deploy parameters. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorValidatePrepDeployParams, err)
 	}
-	circuitId, err := z.config.GetCircuitId(initParams.TokenName)
+	circuitId, err := z.config.GetCircuitId(ctx, initParams.TokenName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find circuit ID based on the token name. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorFindCircuitId, err)
 	}
 	config := &types.DomainInstanceConfig{
 		CircuitId: circuitId,
@@ -221,7 +222,7 @@ func (z *Zeto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 func (z *Zeto) InitTransaction(ctx context.Context, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate init transaction spec. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateInitTxSpec, err)
 	}
 	return handler.Init(ctx, tx, req)
 }
@@ -229,7 +230,7 @@ func (z *Zeto) InitTransaction(ctx context.Context, req *prototk.InitTransaction
 func (z *Zeto) AssembleTransaction(ctx context.Context, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate assemble transaction spec. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateAssembleTxSpec, err)
 	}
 	return handler.Assemble(ctx, tx, req)
 }
@@ -237,7 +238,7 @@ func (z *Zeto) AssembleTransaction(ctx context.Context, req *prototk.AssembleTra
 func (z *Zeto) EndorseTransaction(ctx context.Context, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate endorse transaction spec. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateEndorseTxParams, err)
 	}
 	return handler.Endorse(ctx, tx, req)
 }
@@ -245,7 +246,7 @@ func (z *Zeto) EndorseTransaction(ctx context.Context, req *prototk.EndorseTrans
 func (z *Zeto) PrepareTransaction(ctx context.Context, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate prepare transaction spec. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorValidatePrepTxSpec, err)
 	}
 	return handler.Prepare(ctx, tx, req)
 }
@@ -274,32 +275,32 @@ func (z *Zeto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 	var functionABI abi.Entry
 	err := json.Unmarshal([]byte(tx.FunctionAbiJson), &functionABI)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to unmarshal function abi json. %s", err)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalFuncAbi, err)
 	}
 
 	domainConfig, err := z.decodeDomainConfig(ctx, tx.ContractInfo.ContractConfig)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to decode domain config. %s", err)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorDecodeDomainConfig, err)
 	}
 
 	abi := types.ZetoABI.Functions()[functionABI.Name]
 	handler := z.GetHandler(functionABI.Name)
 	if abi == nil || handler == nil {
-		return nil, nil, fmt.Errorf("unknown function: %s", functionABI.Name)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, functionABI.Name)
 	}
 	params, err := handler.ValidateParams(ctx, domainConfig, tx.FunctionParamsJson)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to validate function params. %s", err)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorValidateFuncParams, err)
 	}
 
 	signature := abi.SolString()
 	if tx.FunctionSignature != signature {
-		return nil, nil, fmt.Errorf("unexpected signature for function '%s': expected='%s', actual='%s'", functionABI.Name, signature, tx.FunctionSignature)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgUnexpectedFuncSignature, functionABI.Name, signature, tx.FunctionSignature)
 	}
 
 	contractAddress, err := ethtypes.NewAddress(tx.ContractInfo.ContractAddress)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to decode contract address. %s", err)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
 
 	return &types.ParsedTransaction{
@@ -327,7 +328,7 @@ func (z *Zeto) registerEventSignatures(eventAbis abi.ABI) {
 func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
 	cv, err := types.DomainInstanceConfigABI.DecodeABIData(req.ContractInfo.ContractConfig, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to abi decode domain instance config bytes. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorAbiDecodeDomainInstanceConfig, err)
 	}
 	j, err := cv.JSON()
 	if err != nil {
@@ -340,7 +341,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 
 	contractAddress, err := tktypes.ParseEthAddress(req.ContractInfo.ContractAddress)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse contract address. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
 
 	var res prototk.HandleEventBatchResponse
@@ -353,7 +354,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 		storage = smt.NewStatesStorage(z.Callbacks, smtName, req.StateQueryContext, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id)
 		tree, err = smt.NewSmt(storage)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create Merkle tree for %s: %s", smtName, err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorNewSmt, smtName, err)
 		}
 	}
 	for _, ev := range req.Events {
@@ -371,12 +372,12 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 		}
 	}
 	if len(errors) > 0 {
-		return &res, fmt.Errorf("failed to handle events %s", formatErrors(errors))
+		return &res, i18n.NewError(ctx, msgs.MsgErrorHandleEvents, formatErrors(errors))
 	}
 	if useNullifiers(domainConfig.CircuitId) {
 		newStatesForSMT, err := storage.GetNewStates()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get new states for Merkle tree %s: %s", smtName, err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorGetNewSmtStates, smtName, err)
 		}
 		if len(newStatesForSMT) > 0 {
 			res.NewStates = append(res.NewStates, newStatesForSMT...)
@@ -388,7 +389,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 func (z *Zeto) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error) {
 	verifier, err := z.snarkProver.GetVerifier(ctx, req.Algorithm, req.VerifierType, req.PrivateKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get verifier. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorGetVerifier, err)
 	}
 	return &prototk.GetVerifierResponse{
 		Verifier: verifier,
@@ -398,7 +399,7 @@ func (z *Zeto) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest)
 func (z *Zeto) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.SignResponse, error) {
 	proof, err := z.snarkProver.Sign(ctx, req.Algorithm, req.PayloadType, req.PrivateKey, req.Payload)
 	if err != nil {
-		return nil, fmt.Errorf("failed to sign. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorSign, err)
 	}
 	return &prototk.SignResponse{
 		Payload: proof,

@@ -17,9 +17,10 @@ package zeto
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/iden3/go-iden3-crypto/babyjub"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -48,19 +49,19 @@ func loadBabyJubKey(payload []byte) (*babyjub.PublicKey, error) {
 	return keyCompressed.Decompress()
 }
 
-func validateTransferParams(params []*types.TransferParamEntry) error {
+func validateTransferParams(ctx context.Context, params []*types.TransferParamEntry) error {
 	if len(params) == 0 {
-		return fmt.Errorf("no transfer parameters provided")
+		return i18n.NewError(ctx, msgs.MsgNoTransferParams)
 	}
 	for _, param := range params {
 		if param.To == "" {
-			return fmt.Errorf("parameter 'to' is required")
+			return i18n.NewError(ctx, msgs.MsgNoParamTo)
 		}
 		if param.Amount == nil {
-			return fmt.Errorf("parameter 'amount' is required")
+			return i18n.NewError(ctx, msgs.MsgNoParamAmount)
 		}
 		if param.Amount.Int().Sign() != 1 {
-			return fmt.Errorf("parameter 'amount' must be greater than 0")
+			return i18n.NewError(ctx, msgs.MsgParamAmountGtZero)
 		}
 	}
 	return nil
@@ -69,7 +70,7 @@ func validateTransferParams(params []*types.TransferParamEntry) error {
 func encodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {
 	txID, err := tktypes.ParseHexBytes(ctx, transaction.TransactionId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse transaction id. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorParseTxId, err)
 	}
 	var data []byte
 	data = append(data, types.ZetoTransactionData_V0...)

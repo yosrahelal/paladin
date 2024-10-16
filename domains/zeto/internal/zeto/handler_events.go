@@ -7,6 +7,8 @@ import (
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -28,9 +30,9 @@ func (z *Zeto) handleMintEvent(ctx context.Context, tree core.SparseMerkleTree, 
 		})
 		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, mint.Outputs)...)
 		if tokenName == constants.TOKEN_ANON_NULLIFIER {
-			err := z.updateMerkleTree(tree, storage, txID, mint.Outputs)
+			err := z.updateMerkleTree(ctx, tree, storage, txID, mint.Outputs)
 			if err != nil {
-				return fmt.Errorf("failed to update merkle tree for the UTXOMint event. %s", err)
+				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "UTXOMint", err)
 			}
 		}
 	} else {
@@ -54,9 +56,9 @@ func (z *Zeto) handleTransferEvent(ctx context.Context, tree core.SparseMerkleTr
 		res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
 		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
 		if tokenName == constants.TOKEN_ANON_NULLIFIER {
-			err := z.updateMerkleTree(tree, storage, txID, transfer.Outputs)
+			err := z.updateMerkleTree(ctx, tree, storage, txID, transfer.Outputs)
 			if err != nil {
-				return fmt.Errorf("failed to update merkle tree for the UTXOTransfer event. %s", err)
+				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "UTXOTransfer", err)
 			}
 		}
 	} else {
@@ -80,9 +82,9 @@ func (z *Zeto) handleTransferWithEncryptionEvent(ctx context.Context, tree core.
 		res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
 		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
 		if tokenName == constants.TOKEN_ANON_NULLIFIER {
-			err := z.updateMerkleTree(tree, storage, txID, transfer.Outputs)
+			err := z.updateMerkleTree(ctx, tree, storage, txID, transfer.Outputs)
 			if err != nil {
-				return fmt.Errorf("failed to update merkle tree for the UTXOTransferWithEncryptedValues event. %s", err)
+				return i18n.NewError(ctx, msgs.MsgErrorUpdateSMT, "UTXOTransferWithEncryptedValues", err)
 			}
 		}
 	} else {
@@ -91,13 +93,13 @@ func (z *Zeto) handleTransferWithEncryptionEvent(ctx context.Context, tree core.
 	return nil
 }
 
-func (z *Zeto) updateMerkleTree(tree core.SparseMerkleTree, storage smt.StatesStorage, txID tktypes.HexBytes, outputs []tktypes.HexUint256) error {
+func (z *Zeto) updateMerkleTree(ctx context.Context, tree core.SparseMerkleTree, storage smt.StatesStorage, txID tktypes.HexBytes, outputs []tktypes.HexUint256) error {
 	storage.SetTransactionId(txID.HexString0xPrefix())
 	for _, out := range outputs {
 		if out.NilOrZero() {
 			continue
 		}
-		err := z.addOutputToMerkleTree(tree, out)
+		err := z.addOutputToMerkleTree(ctx, tree, out)
 		if err != nil {
 			return err
 		}
@@ -105,19 +107,19 @@ func (z *Zeto) updateMerkleTree(tree core.SparseMerkleTree, storage smt.StatesSt
 	return nil
 }
 
-func (z *Zeto) addOutputToMerkleTree(tree core.SparseMerkleTree, output tktypes.HexUint256) error {
+func (z *Zeto) addOutputToMerkleTree(ctx context.Context, tree core.SparseMerkleTree, output tktypes.HexUint256) error {
 	idx, err := node.NewNodeIndexFromBigInt(output.Int())
 	if err != nil {
-		return fmt.Errorf("failed to create node index for %s: %s", output.String(), err)
+		return i18n.NewError(ctx, msgs.MsgErrorNewNodeIndex, output.String(), err)
 	}
 	n := node.NewIndexOnly(idx)
 	leaf, err := node.NewLeafNode(n)
 	if err != nil {
-		return fmt.Errorf("failed to create leaf node for %s: %s", output.String(), err)
+		return i18n.NewError(ctx, msgs.MsgErrorNewLeafNode, err)
 	}
 	err = tree.AddLeaf(leaf)
 	if err != nil {
-		return fmt.Errorf("failed to add leaf node for %s: %s", output.String(), err)
+		return i18n.NewError(ctx, msgs.MsgErrorAddLeafNode, err)
 	}
 	return nil
 }

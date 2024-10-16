@@ -18,10 +18,11 @@ package smt
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -96,17 +97,18 @@ func (s *statesStorage) SetTransactionId(txId string) {
 
 func (s *statesStorage) GetNewStates() ([]*prototk.NewConfirmedState, error) {
 	var newStates []*prototk.NewConfirmedState
+	ctx := context.Background()
 	if s.rootNode != nil {
-		newRootNodeState, err := s.makeNewStateFromRootNode(s.rootNode)
+		newRootNodeState, err := s.makeNewStateFromRootNode(ctx, s.rootNode)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create new state from committed merkle tree root node. %s", err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorNewStateFromCommittedRoot, err)
 		}
 		newStates = append(newStates, newRootNodeState)
 	}
 	for _, node := range s.committedNewNodes {
-		newNodeState, err := s.makeNewStateFromTreeNode(node)
+		newNodeState, err := s.makeNewStateFromTreeNode(ctx, node)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create new state from committed merkle tree node. %s", err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorNewStateFromCommittedNode, err)
 		}
 		newStates = append(newStates, newNodeState)
 	}
@@ -127,13 +129,14 @@ func (s *statesStorage) GetRootNodeRef() (core.NodeRef, error) {
 		Sort(".created DESC").
 		Equal("smtName", s.smtName)
 
-	res, err := s.CoreInterface.FindAvailableStates(context.Background(), &prototk.FindAvailableStatesRequest{
+	ctx := context.Background()
+	res, err := s.CoreInterface.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
 		StateQueryContext: s.stateQueryContext,
 		SchemaId:          s.rootSchemaId,
 		QueryJson:         queryBuilder.Query().String(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to find available states. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorQueryAvailStates, err)
 	}
 
 	if len(res.States) == 0 {
@@ -143,7 +146,7 @@ func (s *statesStorage) GetRootNodeRef() (core.NodeRef, error) {
 	var root MerkleTreeRoot
 	err = json.Unmarshal([]byte(res.States[0].DataJson), &root)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal root node index. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalRootIdx, err)
 	}
 
 	idx, err := node.NewNodeIndexFromHex(root.RootIndex.HexString())
@@ -181,13 +184,14 @@ func (s *statesStorage) GetNode(ref core.NodeRef) (core.Node, error) {
 		Sort(".created").
 		Equal("refKey", refKey)
 
-	res, err := s.CoreInterface.FindAvailableStates(context.Background(), &prototk.FindAvailableStatesRequest{
+	ctx := context.Background()
+	res, err := s.CoreInterface.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
 		StateQueryContext: s.stateQueryContext,
 		SchemaId:          s.nodeSchemaId,
 		QueryJson:         queryBuilder.Query().String(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to find available states. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorQueryAvailStates, err)
 	}
 	if len(res.States) == 0 {
 		return nil, core.ErrNotFound
@@ -195,7 +199,7 @@ func (s *statesStorage) GetNode(ref core.NodeRef) (core.Node, error) {
 	var n MerkleTreeNode
 	err = json.Unmarshal([]byte(res.States[0].DataJson), &n)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal Merkle Tree Node from state json. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalSMTNode, err)
 	}
 
 	var newNode core.Node
@@ -204,18 +208,18 @@ func (s *statesStorage) GetNode(ref core.NodeRef) (core.Node, error) {
 	case core.NodeTypeLeaf:
 		idx, err1 := node.NewNodeIndexFromHex(n.Index.HexString())
 		if err1 != nil {
-			return nil, fmt.Errorf("failed to create leaf node index. %s", err1)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorNewNodeIndex, err1)
 		}
 		v := node.NewIndexOnly(idx)
 		newNode, err = node.NewLeafNode(v)
 	case core.NodeTypeBranch:
 		leftChild, err1 := node.NewNodeIndexFromHex(n.LeftChild.HexString())
 		if err1 != nil {
-			return nil, fmt.Errorf("failed to create left child node index. %s", err1)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorNewNodeIndex, err1)
 		}
 		rightChild, err2 := node.NewNodeIndexFromHex(n.RightChild.HexString())
 		if err2 != nil {
-			return nil, fmt.Errorf("failed to create right child node index. %s", err2)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorNewNodeIndex, err2)
 		}
 		newNode, err = node.NewBranchNode(leftChild, rightChild)
 	}
@@ -271,12 +275,12 @@ func (s *statesStorage) Close() {
 	// there are no resources to close
 }
 
-func (s *statesStorage) makeNewStateFromTreeNode(n *smtNode) (*prototk.NewConfirmedState, error) {
+func (s *statesStorage) makeNewStateFromTreeNode(ctx context.Context, n *smtNode) (*prototk.NewConfirmedState, error) {
 	node := n.node
 	// we clone the node so that the value properties are not saved
 	refBytes, err := tktypes.ParseBytes32(node.Ref().Hex())
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse node reference. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorParseNodeRef, err)
 	}
 	newNode := &MerkleTreeNode{
 		RefKey: refBytes,
@@ -285,29 +289,26 @@ func (s *statesStorage) makeNewStateFromTreeNode(n *smtNode) (*prototk.NewConfir
 	if node.Type() == core.NodeTypeBranch {
 		leftBytes, err1 := tktypes.ParseBytes32(node.LeftChild().Hex())
 		if err1 != nil {
-			return nil, fmt.Errorf("failed to parse left child node reference. %s", err1)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorParseNodeRef, err1)
 		}
 		rightBytes, err2 := tktypes.ParseBytes32(node.RightChild().Hex())
 		if err2 != nil {
-			return nil, fmt.Errorf("failed to parse right child node reference. %s", err2)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorParseNodeRef, err2)
 		}
 		newNode.LeftChild = leftBytes
 		newNode.RightChild = rightBytes
 	} else if node.Type() == core.NodeTypeLeaf {
 		idxBytes, err := tktypes.ParseBytes32(node.Index().Hex())
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse leaf node index. %s", err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorParseNodeRef, err)
 		}
 		newNode.Index = idxBytes
 	}
 
-	data, err := json.Marshal(newNode)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert node. %s", err)
-	}
+	data, _ := json.Marshal(newNode)
 	hash, err := newNode.Hash()
 	if err != nil {
-		return nil, fmt.Errorf("failed to hash merkle tree node. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorHashSMTNode, err)
 	}
 	newNodeState := &prototk.NewConfirmedState{
 		Id:            &hash,
@@ -318,11 +319,11 @@ func (s *statesStorage) makeNewStateFromTreeNode(n *smtNode) (*prototk.NewConfir
 	return newNodeState, nil
 }
 
-func (s *statesStorage) makeNewStateFromRootNode(rootNode *smtRootNode) (*prototk.NewConfirmedState, error) {
+func (s *statesStorage) makeNewStateFromRootNode(ctx context.Context, rootNode *smtRootNode) (*prototk.NewConfirmedState, error) {
 	root := rootNode.root
 	bytes, err := tktypes.ParseBytes32(root.Hex())
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse root node index. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorParseRootNodeIdx, err)
 	}
 	newRoot := &MerkleTreeRoot{
 		SmtName:   s.smtName,
@@ -330,11 +331,11 @@ func (s *statesStorage) makeNewStateFromRootNode(rootNode *smtRootNode) (*protot
 	}
 	data, err := json.Marshal(newRoot)
 	if err != nil {
-		return nil, fmt.Errorf("failed to upsert root node. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorUpsertRootNode, err)
 	}
 	hash, err := newRoot.Hash()
 	if err != nil {
-		return nil, fmt.Errorf("failed to hash root node. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorHashSMTNode, err)
 	}
 	newRootState := &prototk.NewConfirmedState{
 		Id:            &hash,

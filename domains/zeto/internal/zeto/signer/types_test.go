@@ -16,6 +16,7 @@
 package signer
 
 import (
+	"context"
 	"testing"
 
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
@@ -35,7 +36,8 @@ func TestBuildCircuitInputs(t *testing.T) {
 		OutputSalts:      []string{"5", "0"},
 		OutputOwners:     []string{sender, receiver},
 	}
-	inputs, err := buildCircuitInputs(req)
+	ctx := context.Background()
+	inputs, err := buildCircuitInputs(ctx, req)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(inputs.outputOwnerPublicKeys))
 	assert.Equal(t, alice.PublicKey.X.Text(10), inputs.outputOwnerPublicKeys[0][0].Text(10))
@@ -46,11 +48,11 @@ func TestBuildCircuitInputs(t *testing.T) {
 	assert.Equal(t, "0", inputs.outputCommitments[1].Text(10))
 
 	req.OutputOwners = []string{"1234", "5678"}
-	_, err = buildCircuitInputs(req)
-	assert.EqualError(t, err, "failed to decode output owner public key. invalid compressed public key length: 2")
+	_, err = buildCircuitInputs(ctx, req)
+	assert.EqualError(t, err, "PD210037: Failed load owner public key. PD210072: Invalid compressed public key length: 2")
 
 	req.OutputOwners = []string{sender, receiver}
 	req.OutputSalts = []string{"0x5", "0x1"}
-	_, err = buildCircuitInputs(req)
-	assert.EqualError(t, err, "failed to parse output salt")
+	_, err = buildCircuitInputs(ctx, req)
+	assert.EqualError(t, err, "PD210083: Failed to parse output salt")
 }

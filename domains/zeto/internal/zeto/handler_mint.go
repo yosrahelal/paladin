@@ -18,8 +18,9 @@ package zeto
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -37,7 +38,7 @@ func (h *mintHandler) ValidateParams(ctx context.Context, config *types.DomainIn
 		return nil, err
 	}
 
-	if err := validateTransferParams(mintParams.Mints); err != nil {
+	if err := validateTransferParams(ctx, mintParams.Mints); err != nil {
 		return nil, err
 	}
 
@@ -65,7 +66,7 @@ func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
 	params := tx.Params.([]*types.TransferParamEntry)
 
-	_, outputStates, err := h.zeto.prepareOutputs(params, req.ResolvedVerifiers)
+	_, outputStates, err := h.zeto.prepareOutputs(ctx, params, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +100,7 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 		if err != nil {
 			return nil, err
 		}
-		hash, err := coin.Hash()
+		hash, err := coin.Hash(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -108,7 +109,7 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 
 	data, err := encodeTransactionData(ctx, req.Transaction)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encode transaction data. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}
 	params := map[string]interface{}{
 		"utxos": outputs,
@@ -118,7 +119,7 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 	if err != nil {
 		return nil, err
 	}
-	contractAbi, err := h.zeto.config.GetContractAbi(tx.DomainConfig.TokenName)
+	contractAbi, err := h.zeto.config.GetContractAbi(ctx, tx.DomainConfig.TokenName)
 	if err != nil {
 		return nil, err
 	}

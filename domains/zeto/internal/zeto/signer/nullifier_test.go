@@ -39,7 +39,7 @@ func TestCalculateNullifier(t *testing.T) {
 	tooBig, ok := new(big.Int).SetString("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16)
 	assert.True(t, ok)
 	_, err = CalculateNullifier(value, salt, tooBig)
-	assert.EqualError(t, err, "failed to create the nullifier hash. inputs values not inside Finite Field")
+	assert.EqualError(t, err, "inputs values not inside Finite Field")
 }
 
 func newKeypair() (*babyjub.PrivateKey, *babyjub.PublicKey, *big.Int) {

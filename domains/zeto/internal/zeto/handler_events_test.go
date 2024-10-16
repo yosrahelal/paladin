@@ -56,7 +56,7 @@ func TestHandleMintEvent(t *testing.T) {
 
 	ev.DataJson = "{\"data\":\"0x0001000030e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000\",\"outputs\":[\"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
 	err = z.handleMintEvent(ctx, merkleTree, storage, ev, "Zeto_AnonNullifier", res)
-	assert.EqualError(t, err, "failed to update merkle tree for the UTXOMint event. failed to create node index for 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff: key for the new node not inside the Finite Field")
+	assert.ErrorContains(t, err, "PD210061: Failed to update merkle tree for the UTXOMint event. PD210056: Failed to create new node index from hash. 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 
 	storage = smt.NewStatesStorage(testCallbacks, "testToken1", "context1", "merkle_tree_root", "merkle_tree_node")
 	merkleTree, err = smt.NewSmt(storage)
@@ -103,7 +103,7 @@ func TestHandleTransferEvent(t *testing.T) {
 
 	ev.DataJson = "{\"data\":\"0x0001000030e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000\",\"outputs\":[\"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
 	err = z.handleTransferEvent(ctx, merkleTree, storage, ev, "Zeto_AnonNullifier", res)
-	assert.EqualError(t, err, "failed to update merkle tree for the UTXOTransfer event. failed to create node index for 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff: key for the new node not inside the Finite Field")
+	assert.ErrorContains(t, err, "PD210061: Failed to update merkle tree for the UTXOTransfer event. PD210056: Failed to create new node index from hash. 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 
 	storage = smt.NewStatesStorage(testCallbacks, "testToken1", "context1", "merkle_tree_root", "merkle_tree_node")
 	merkleTree, err = smt.NewSmt(storage)
@@ -147,7 +147,7 @@ func TestHandleTransferWithEncryptionEvent(t *testing.T) {
 
 	ev.DataJson = "{\"data\":\"0x0001000030e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000\",\"outputs\":[\"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
 	err = z.handleTransferWithEncryptionEvent(ctx, merkleTree, storage, ev, "Zeto_AnonNullifier", res)
-	assert.EqualError(t, err, "failed to update merkle tree for the UTXOTransferWithEncryptedValues event. failed to create node index for 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff: key for the new node not inside the Finite Field")
+	assert.ErrorContains(t, err, "PD210061: Failed to update merkle tree for the UTXOTransferWithEncryptedValues event. PD210056: Failed to create new node index from hash. 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 
 	storage = smt.NewStatesStorage(testCallbacks, "testToken1", "context1", "merkle_tree_root", "merkle_tree_node")
 	merkleTree, err = smt.NewSmt(storage)
@@ -164,6 +164,7 @@ func TestUpdateMerkleTree(t *testing.T) {
 	merkleTree, err := smt.NewSmt(storage)
 	require.NoError(t, err)
 
-	err = z.updateMerkleTree(merkleTree, storage, tktypes.HexBytes("0x1234"), []tktypes.HexUint256{*tktypes.MustParseHexUint256("0x1234"), *tktypes.MustParseHexUint256("0x0")})
+	ctx := context.Background()
+	err = z.updateMerkleTree(ctx, merkleTree, storage, tktypes.HexBytes("0x1234"), []tktypes.HexUint256{*tktypes.MustParseHexUint256("0x1234"), *tktypes.MustParseHexUint256("0x0")})
 	assert.NoError(t, err)
 }

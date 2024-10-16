@@ -16,13 +16,15 @@
 package signer
 
 import (
+	"context"
 	"crypto/rand"
-	"fmt"
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/key"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 )
 
@@ -40,12 +42,12 @@ func assembleInputs_anon(inputs *commonWitnessInputs, keyEntry *core.KeyEntry) m
 	return witnessInputs
 }
 
-func assembleInputs_anon_enc(inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Encryption, keyEntry *core.KeyEntry) (map[string]any, error) {
+func assembleInputs_anon_enc(ctx context.Context, inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Encryption, keyEntry *core.KeyEntry) (map[string]any, error) {
 	var nonce *big.Int
 	if extras != nil && extras.EncryptionNonce != "" {
 		n, ok := new(big.Int).SetString(extras.EncryptionNonce, 10)
 		if !ok {
-			return nil, fmt.Errorf("failed to parse encryption nonce")
+			return nil, i18n.NewError(ctx, msgs.MsgErrorParseEncNonce)
 		}
 		nonce = n
 	} else {
@@ -56,7 +58,7 @@ func assembleInputs_anon_enc(inputs *commonWitnessInputs, extras *pb.ProvingRequ
 	randomBytes := make([]byte, 32)
 	_, err := rand.Read(randomBytes)
 	if err != nil {
-		panic(fmt.Errorf("failed to generate random bytes for encryption key. %s", err))
+		panic(i18n.NewError(ctx, msgs.MsgErrorGenerateRandBytes, err))
 	}
 	ephemeralKey := key.NewKeyEntryFromPrivateKeyBytes([32]byte(randomBytes))
 
@@ -75,7 +77,7 @@ func assembleInputs_anon_enc(inputs *commonWitnessInputs, extras *pb.ProvingRequ
 	return witnessInputs, nil
 }
 
-func assembleInputs_anon_nullifier(inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Nullifiers, keyEntry *core.KeyEntry) (map[string]any, error) {
+func assembleInputs_anon_nullifier(ctx context.Context, inputs *commonWitnessInputs, extras *pb.ProvingRequestExtras_Nullifiers, keyEntry *core.KeyEntry) (map[string]any, error) {
 	// calculate the nullifiers for the input UTXOs
 	nullifiers := make([]*big.Int, len(inputs.inputCommitments))
 	for i := 0; i < len(inputs.inputCommitments); i++ {
@@ -86,13 +88,13 @@ func assembleInputs_anon_nullifier(inputs *commonWitnessInputs, extras *pb.Provi
 		}
 		nullifier, err := CalculateNullifier(inputs.inputValues[i], inputs.inputSalts[i], keyEntry.PrivateKeyForZkp)
 		if err != nil {
-			return nil, fmt.Errorf("failed to calculate nullifier. %s", err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorCalcNullifier, err)
 		}
 		nullifiers[i] = nullifier
 	}
 	root, ok := new(big.Int).SetString(extras.Root, 16)
 	if !ok {
-		return nil, fmt.Errorf("failed to parse root")
+		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeRootExtras)
 	}
 	var proofs [][]*big.Int
 	for _, proof := range extras.MerkleProofs {
@@ -100,7 +102,7 @@ func assembleInputs_anon_nullifier(inputs *commonWitnessInputs, extras *pb.Provi
 		for _, node := range proof.Nodes {
 			n, ok := new(big.Int).SetString(node, 16)
 			if !ok {
-				return nil, fmt.Errorf("failed to parse node")
+				return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeMTPNodeExtras)
 			}
 			mp = append(mp, n)
 		}
