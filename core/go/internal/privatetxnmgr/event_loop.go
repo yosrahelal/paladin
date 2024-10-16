@@ -30,9 +30,8 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -364,37 +363,43 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 			stateDistributions = append(stateDistributions, txProcessor.GetStateDistributions(ctx)...)
 		}
 
-		preparedTransactionPayloads := make([]*components.EthTransaction, len(preparedTransactions))
+		preparedTransactionPayloads := make([]*pldapi.TransactionInput, len(preparedTransactions))
 
 		for j, preparedTransaction := range preparedTransactions {
 			preparedTransactionPayloads[j] = preparedTransaction.PreparedPublicTransaction
 		}
 
 		//Now we have the payloads, we can prepare the submission
-		ec := oc.components.EthClientFactory().SharedWS()
 		publicTransactionEngine := oc.components.PublicTxManager()
+
+		signers := make([]string, len(preparedTransactions))
+		for i, pt := range preparedTransactions {
+			signers[i] = pt.Signer
+		}
+		keyMgr := oc.components.KeyManager()
+		resolvedAddrs, err := keyMgr.ResolveEthAddressBatchNewDatabaseTX(ctx, signers)
+		if err != nil {
+			return err
+		}
 
 		publicTXs := make([]*components.PublicTxSubmission, len(preparedTransactions))
 		for i, pt := range preparedTransactions {
 			log.L(ctx).Debugf("DispatchTransactions: creating PublicTxSubmission from %s", pt.Signer)
 			publicTXs[i] = &components.PublicTxSubmission{
-				Bindings: []*components.PaladinTXReference{{TransactionID: pt.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
-				PublicTxInput: ptxapi.PublicTxInput{
-					From:            pt.Signer,
+				Bindings: []*components.PaladinTXReference{{TransactionID: pt.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+				PublicTxInput: pldapi.PublicTxInput{
+					From:            resolvedAddrs[i],
 					To:              &oc.contractAddress,
-					PublicTxOptions: ptxapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
+					PublicTxOptions: pldapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
 				},
 			}
-			var req ethclient.ABIFunctionRequestBuilder
-			abiFn, err := ec.ABIFunction(ctx, pt.PreparedPublicTransaction.FunctionABI)
-			if err == nil {
-				req = abiFn.R(ctx)
-				err = req.Input(pt.PreparedPublicTransaction.Inputs).BuildCallData()
-			}
+
+			// TODO: This aligning with submission in public Tx manage
+			data, err := pt.PreparedPublicTransaction.ABI[0].EncodeCallDataJSONCtx(ctx, pt.PreparedPublicTransaction.Data)
 			if err != nil {
 				return err
 			}
-			publicTXs[i].Data = tktypes.HexBytes(req.TX().Data)
+			publicTXs[i].Data = tktypes.HexBytes(data)
 		}
 		pubBatch, err := publicTransactionEngine.PrepareSubmissionBatch(ctx, publicTXs)
 		if err != nil {

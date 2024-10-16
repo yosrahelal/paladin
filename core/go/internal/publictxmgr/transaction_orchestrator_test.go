@@ -25,13 +25,11 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -169,8 +167,19 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 		conf.GasPrice.FixedGasPrice = 1
 		conf.BalanceManager.AutoFueling.Source = confutil.P("autofueler")
 
-		m.keyManager.(*componentmocks.KeyManager).On("ResolveKey", mock.Anything, "autofueler", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
-			Return("", autoFuelingSourceAddr.String(), nil)
+		keyMapping := &pldapi.KeyMappingAndVerifier{
+			KeyMappingWithPath: &pldapi.KeyMappingWithPath{
+				KeyMapping: &pldapi.KeyMapping{
+					Identifier: "autofueler",
+				},
+			},
+			Verifier: &pldapi.KeyVerifier{
+				Verifier: autoFuelingSourceAddr.String(),
+			},
+		}
+		mockKeyMgr := m.keyManager.(*componentmocks.KeyManager)
+		mockKeyMgr.On("ResolveKeyNewDatabaseTX", mock.Anything, "autofueler", mock.Anything, mock.Anything).
+			Return(keyMapping, nil).Maybe()
 
 	})
 	defer done()
@@ -179,7 +188,7 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 		tx.Gas = 100
 	})
 	txState.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
-		GasPricing: &ptxapi.PublicTxGasPricing{
+		GasPricing: &pldapi.PublicTxGasPricing{
 			GasPrice: tktypes.Int64ToInt256(1000),
 		},
 	})
@@ -208,7 +217,7 @@ func TestOrchestratorTriggerTopUp(t *testing.T) {
 	oDone, err := o.Start(ctx)
 	require.NoError(t, err)
 
-	var trackedTx *ptxapi.PublicTx
+	var trackedTx *pldapi.PublicTx
 	for trackedTx == nil {
 		time.Sleep(10 * time.Millisecond)
 		if t.Failed() {

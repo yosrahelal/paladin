@@ -27,7 +27,6 @@ import (
 
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	pbSequence "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
@@ -102,7 +101,7 @@ type StageFoundationService interface {
 	TransportManager() components.TransportManager
 	DomainAPI() components.DomainSmartContract
 	StateManager() components.StateManager // TODO: filter out to only getters so setters can be coordinated efficiently like transactions
-	KeyManager() ethclient.KeyManager
+	KeyManager() components.KeyManager
 }
 
 type Sequencer interface {

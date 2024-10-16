@@ -392,6 +392,13 @@ spec:
                   a k8s secret
                 items:
                   properties:
+                    keySelector:
+                      default: .*
+                      description: |-
+                        Wallets will be evaluated against new allocations of key identifiers in the order they are
+                        defined. The key selector regular expression allows wallets to sub-select, with more specific
+                        rules first on key matching and more generic rules (like the default of ".*") last.
+                      type: string
                     name:
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                       type: string
@@ -407,6 +414,7 @@ spec:
                       - preConfigured
                       type: string
                   required:
+                  - keySelector
                   - name
                   - secret
                   - type

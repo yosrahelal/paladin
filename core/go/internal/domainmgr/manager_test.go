@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/statemgr"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/ethclientmocks"
 
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
@@ -40,8 +41,8 @@ import (
 
 type mockComponents struct {
 	db               sqlmock.Sqlmock
-	ethClient        *componentmocks.EthClient
-	ethClientFactory *componentmocks.EthClientFactory
+	ethClient        *ethclientmocks.EthClient
+	ethClientFactory *ethclientmocks.EthClientFactory
 	stateStore       *componentmocks.StateManager
 	blockIndexer     *componentmocks.BlockIndexer
 	keyManager       *componentmocks.KeyManager
@@ -55,7 +56,7 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManager
 	mc := &mockComponents{
 		blockIndexer:     componentmocks.NewBlockIndexer(t),
 		stateStore:       componentmocks.NewStateManager(t),
-		ethClientFactory: componentmocks.NewEthClientFactory(t),
+		ethClientFactory: ethclientmocks.NewEthClientFactory(t),
 		keyManager:       componentmocks.NewKeyManager(t),
 		txManager:        componentmocks.NewTXManager(t),
 		privateTxManager: componentmocks.NewPrivateTxManager(t),
@@ -172,7 +173,7 @@ func TestDomainMissingRegistryAddress(t *testing.T) {
 	mc := &mockComponents{
 		blockIndexer:     componentmocks.NewBlockIndexer(t),
 		stateStore:       componentmocks.NewStateManager(t),
-		ethClientFactory: componentmocks.NewEthClientFactory(t),
+		ethClientFactory: ethclientmocks.NewEthClientFactory(t),
 		keyManager:       componentmocks.NewKeyManager(t),
 		txManager:        componentmocks.NewTXManager(t),
 		privateTxManager: componentmocks.NewPrivateTxManager(t),
@@ -368,6 +369,6 @@ func TestWaitForTransactionTimeout(t *testing.T) {
 
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	err := dm.WaitForTransaction(cancelled, uuid.New())
+	err := dm.ExecAndWaitTransaction(cancelled, uuid.New(), func() error { return nil })
 	assert.Regexp(t, "PD020100", err)
 }

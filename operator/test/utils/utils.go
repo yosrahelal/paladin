@@ -27,7 +27,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/onsi/ginkgo/v2" //nolint:golint,revive
@@ -154,7 +154,7 @@ type TestDeployer struct {
 	From string
 }
 
-func (td *TestDeployer) DeploySmartContractDeploymentBytecode(ctx context.Context, buildJSON string, params any) (receipt *ptxapi.TransactionReceipt, err error) {
+func (td *TestDeployer) DeploySmartContractDeploymentBytecode(ctx context.Context, buildJSON string, params any) (receipt *pldapi.TransactionReceipt, err error) {
 	type buildDefinition struct {
 		Bytecode tktypes.HexBytes `json:"bytecode"`
 		ABI      abi.ABI          `json:"abi"`
@@ -168,9 +168,9 @@ func (td *TestDeployer) DeploySmartContractDeploymentBytecode(ctx context.Contex
 		return nil, err
 	}
 
-	txIn := &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type: ptxapi.TransactionTypePublic.Enum(),
+	txIn := &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
 			From: td.From,
 			Data: data,
 		},

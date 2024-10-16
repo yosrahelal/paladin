@@ -147,7 +147,7 @@ func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, u
 	log.L(ctx).Infof("Attempt mint from non-controller (should fail)")
 	_, err = s.mint(ctx, zetoAddress, recipient1Name, 10)
 	require.ErrorContains(t, err, "PD011513: Reverted: 0x118cdaa7")
-	assert.Regexp(t, "failed to send base ledger transaction: PD011513: Reverted: 0x118cdaa.*", err)
+	assert.Regexp(t, "PD011513: Reverted: 0x118cdaa.*", err)
 
 	// for testing the batch circuits, we transfer 50 which would require 3 UTXOs (>2)
 	amount := 25
@@ -257,7 +257,7 @@ func newZetoDomain(t *testing.T, config *types.DomainFactoryConfig) (zeto.Zeto, 
 
 func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[string]*testbed.TestbedDomain) (context.CancelFunc, testbed.Testbed, rpcbackend.Backend) {
 	tb := testbed.NewTestBed()
-	url, done, err := tb.StartForTest("./testbed.config.yaml", domains, hdWalletSeed)
+	url, _, done, err := tb.StartForTest("./testbed.config.yaml", domains, hdWalletSeed)
 	assert.NoError(t, err)
 	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
 	return done, tb, rpc

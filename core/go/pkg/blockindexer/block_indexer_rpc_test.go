@@ -24,6 +24,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
@@ -39,12 +40,12 @@ func TestBlockIndexRPCCalls(t *testing.T) {
 	rpc, rpcDone := newTestRPCServer(t, ctx, bi)
 	defer rpcDone()
 
-	var idxBlock *IndexedBlock
+	var idxBlock *pldapi.IndexedBlock
 	err := rpc.CallRPC(ctx, &idxBlock, "bidx_getBlockByNumber", rpcBlock.Number)
 	require.NoError(t, err)
 	assert.Equal(t, rpcBlock.Hash.String(), idxBlock.Hash.String())
 
-	var idxTxn *IndexedTransaction
+	var idxTxn *pldapi.IndexedTransaction
 	err = rpc.CallRPC(ctx, &idxTxn, "bidx_getTransactionByHash", rpcBlock.Transactions[0].Hash)
 	require.NoError(t, err)
 	assert.Equal(t, rpcBlock.Transactions[0].Hash.String(), idxTxn.Hash.String())
@@ -53,17 +54,17 @@ func TestBlockIndexRPCCalls(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, rpcBlock.Transactions[0].Hash.String(), idxTxn.Hash.String())
 
-	var idxTxns []*IndexedTransaction
+	var idxTxns []*pldapi.IndexedTransaction
 	err = rpc.CallRPC(ctx, &idxTxns, "bidx_getBlockTransactionsByNumber", rpcBlock.Number)
 	require.NoError(t, err)
 	assert.Equal(t, rpcBlock.Transactions[0].Hash.String(), idxTxns[0].Hash.String())
 
-	var idxEvents []*IndexedEvent
+	var idxEvents []*pldapi.IndexedEvent
 	err = rpc.CallRPC(ctx, &idxEvents, "bidx_getTransactionEventsByHash", rpcBlock.Transactions[0].Hash)
 	require.NoError(t, err)
 	assert.Equal(t, rpcBlock.Transactions[0].Hash.String(), idxEvents[0].TransactionHash.String())
 
-	var idxBlocks []*IndexedBlock
+	var idxBlocks []*pldapi.IndexedBlock
 	err = rpc.CallRPC(ctx, &idxBlocks, "bidx_queryIndexedBlocks", query.NewQueryBuilder().Equal("hash", rpcBlock.Hash).Limit(1).Query())
 	require.NoError(t, err)
 	assert.Equal(t, rpcBlock.Hash.String(), idxBlocks[0].Hash.String())
@@ -93,8 +94,8 @@ func newBlockIndexerWithOneBlock(t *testing.T) (context.Context, *BlockInfoJSONR
 	blocks, receipts := testBlockArray(t, 1)
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 
-	utBatchNotify := make(chan []*IndexedBlock)
-	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+	utBatchNotify := make(chan []*pldapi.IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 	<-utBatchNotify
