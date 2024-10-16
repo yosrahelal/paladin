@@ -28,9 +28,13 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/ethclientmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -60,17 +64,24 @@ func TestInitOK(t *testing.T) {
 				URL: "http://localhost:8545", // we won't actually connect this test, just check the config
 			},
 		},
-		Signer: pldconf.SignerConfig{
-			KeyDerivation: pldconf.KeyDerivationConfig{
-				Type: pldconf.KeyDerivationTypeBIP32,
-			},
-			KeyStore: pldconf.KeyStoreConfig{
-				Type: "static",
-				Static: pldconf.StaticKeyStoreConfig{
-					Keys: map[string]pldconf.StaticKeyEntryConfig{
-						"seed": {
-							Encoding: "hex",
-							Inline:   "dfaf68b749c53672e5fa8e0b41514f9efd033ba6aa3add3b8b07f92e66f0e64a",
+		KeyManagerConfig: pldconf.KeyManagerConfig{
+			Wallets: []*pldconf.WalletConfig{
+				{
+					Name: "wallet1",
+					Signer: &pldconf.SignerConfig{
+						KeyDerivation: pldconf.KeyDerivationConfig{
+							Type: pldconf.KeyDerivationTypeBIP32,
+						},
+						KeyStore: pldconf.KeyStoreConfig{
+							Type: "static",
+							Static: pldconf.StaticKeyStoreConfig{
+								Keys: map[string]pldconf.StaticKeyEntryConfig{
+									"seed": {
+										Encoding: "hex",
+										Inline:   tktypes.RandHex(32),
+									},
+								},
+							},
 						},
 					},
 				},
@@ -129,7 +140,7 @@ func tempSocketFile(t *testing.T) (fileName string) {
 
 func TestStartOK(t *testing.T) {
 
-	mockEthClientFactory := componentmocks.NewEthClientFactory(t)
+	mockEthClientFactory := ethclientmocks.NewEthClientFactory(t)
 	mockEthClientFactory.On("Start").Return(nil)
 	mockEthClientFactory.On("Stop").Return()
 
@@ -143,6 +154,10 @@ func TestStartOK(t *testing.T) {
 	mockPluginManager.On("Start").Return(nil)
 	mockPluginManager.On("WaitForInit", mock.Anything).Return(nil)
 	mockPluginManager.On("Stop").Return()
+
+	mockKeyManager := componentmocks.NewKeyManager(t)
+	mockKeyManager.On("Start").Return(nil)
+	mockKeyManager.On("Stop").Return()
 
 	mockDomainManager := componentmocks.NewDomainManager(t)
 	mockDomainManager.On("Start").Return(nil)
@@ -195,6 +210,7 @@ func TestStartOK(t *testing.T) {
 	}
 	cm.blockIndexer = mockBlockIndexer
 	cm.pluginManager = mockPluginManager
+	cm.keyManager = mockKeyManager
 	cm.domainManager = mockDomainManager
 	cm.transportManager = mockTransportManager
 	cm.registryManager = mockRegistryManager
@@ -216,7 +232,7 @@ func TestStartOK(t *testing.T) {
 
 func TestBuildInternalEventStreamsPreCommitPostCommit(t *testing.T) {
 	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &pldconf.PaladinConfig{}, nil).(*componentManager)
-	handler := func(ctx context.Context, dbTX *gorm.DB, blocks []*blockindexer.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
+	handler := func(ctx context.Context, dbTX *gorm.DB, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
 		return nil, nil
 	}
 	cm.initResults = map[string]*components.ManagerInitResult{
@@ -236,10 +252,11 @@ func TestBuildInternalEventStreamsPreCommitPostCommit(t *testing.T) {
 func TestErrorWrapping(t *testing.T) {
 	cm := NewComponentManager(context.Background(), tempSocketFile(t), uuid.New(), &pldconf.PaladinConfig{}, nil).(*componentManager)
 
-	mockKeyManager := componentmocks.NewKeyManager(t)
-	mockEthClientFactory := componentmocks.NewEthClientFactory(t)
+	mockPersistence, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+	mockEthClientFactory := ethclientmocks.NewEthClientFactory(t)
 
-	assert.Regexp(t, "PD010000.*pop", cm.addIfOpened("key_manager", mockKeyManager, errors.New("pop"), msgs.MsgComponentKeyManagerInitError))
+	assert.Regexp(t, "PD010000.*pop", cm.addIfOpened("p", mockPersistence.P, errors.New("pop"), msgs.MsgComponentKeyManagerInitError))
 	assert.Regexp(t, "PD010002.*pop", cm.addIfStarted("eth_client", mockEthClientFactory, errors.New("pop"), msgs.MsgComponentEthClientInitError))
 	assert.Regexp(t, "PD010008.*pop", cm.wrapIfErr(errors.New("pop"), msgs.MsgComponentBlockIndexerInitError))
 

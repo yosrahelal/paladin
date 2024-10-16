@@ -31,8 +31,8 @@ import (
 
 	"github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -490,25 +490,25 @@ func (ts *PaladinTxProcessor) HandleTransactionFinalizeError(ctx context.Context
 
 func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *prototk.AttestationRequest, partyName string) {
 
-	keyHandle, verifier, err := ts.components.KeyManager().ResolveKey(ctx, partyName, attRequest.Algorithm, attRequest.VerifierType)
+	keyMgr := ts.components.KeyManager()
+	unqualifiedLookup, err := tktypes.PrivateIdentityLocator(partyName).Identity(ctx)
+	var resolvedKey *pldapi.KeyMappingAndVerifier
+	if err == nil {
+		resolvedKey, err = keyMgr.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, attRequest.Algorithm, attRequest.VerifierType)
+	}
 	if err != nil {
 		log.L(ctx).Errorf("Failed to resolve local signer for %s (algorithm=%s): %s", partyName, attRequest.Algorithm, err)
 		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerResolveError), partyName, attRequest.Algorithm, err.Error())
 		return
 	}
 	// TODO this could be calling out to a remote signer, should we be doing these in parallel?
-	signaturePayload, err := ts.components.KeyManager().Sign(ctx, &signerapi.SignRequest{
-		KeyHandle:   keyHandle,
-		Algorithm:   attRequest.Algorithm,
-		Payload:     attRequest.Payload,
-		PayloadType: attRequest.PayloadType,
-	})
+	signaturePayload, err := keyMgr.Sign(ctx, resolvedKey, attRequest.PayloadType, attRequest.Payload)
 	if err != nil {
 		log.L(ctx).Errorf("failed to sign for party %s (verifier=%s,algorithm=%s): %s", partyName, verifier, attRequest.Algorithm, err)
-		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerSignError), partyName, verifier, attRequest.Algorithm, err.Error())
+		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerSignError), partyName, resolvedKey.Verifier.Verifier, attRequest.Algorithm, err.Error())
 		return
 	}
-	log.L(ctx).Debugf("payload: %x signed %x by %s (%s)", attRequest.Payload, signaturePayload.Payload, partyName, verifier)
+	log.L(ctx).Debugf("payload: %x signed %x by %s (%s)", attRequest.Payload, signaturePayload, partyName, resolvedKey.Verifier.Verifier)
 
 	ts.publisher.PublishTransactionSignedEvent(ctx,
 		ts.transaction.ID.String(),
@@ -518,10 +518,10 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 			Verifier: &prototk.ResolvedVerifier{
 				Lookup:       partyName,
 				Algorithm:    attRequest.Algorithm,
-				Verifier:     verifier,
+				Verifier:     resolvedKey.Verifier.Verifier,
 				VerifierType: attRequest.VerifierType,
 			},
-			Payload:     signaturePayload.Payload,
+			Payload:     signaturePayload,
 			PayloadType: &attRequest.PayloadType,
 		},
 	)

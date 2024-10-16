@@ -2,10 +2,11 @@
     "go.formatFlags": ["-s"],
     "go.lintTool": "golangci-lint",
     "cSpell.words": [
-      "idempotency"
+      "idempotency",
+      "remoting"
     ],
     "go.testTimeout": "60s",
     "java.configuration.updateBuildConfiguration": "disabled",
-    // "go.testTags": "testdbpostgres"
+    "go.testTags": "testdbpostgres"
   }
   

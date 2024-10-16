@@ -670,13 +670,17 @@ func (r *PaladinReconciler) generatePaladinSigners(ctx context.Context, node *co
 			return fmt.Errorf("only one signer currently supported")
 		}
 
-		// TODO: This should resolve the keystore by "name" once we have the full key store config in Paladin
-		pldSigner := &pldConf.Signer
+		wallet := &pldconf.WalletConfig{
+			Name:        s.Name,
+			SignerType:  pldconf.WalletSignerTypeEmbedded,
+			KeySelector: s.KeySelector,
+			Signer:      &pldconf.SignerConfig{},
+		}
 
 		// Upsert a secret if we've been asked to. We use a mnemonic in this case (rather than directly generating a 32byte seed)
 		if s.Type == corev1alpha1.SignerType_AutoHDWallet {
-			pldSigner.KeyDerivation.Type = pldconf.KeyDerivationTypeBIP32
-			pldSigner.KeyDerivation.SeedKeyPath = pldconf.SigningKeyConfigEntry{Name: "seed"}
+			wallet.Signer.KeyDerivation.Type = pldconf.KeyDerivationTypeBIP32
+			wallet.Signer.KeyDerivation.SeedKeyPath = pldconf.SigningKeyConfigEntry{Name: "seed"}
 			if err := r.generateBIP39SeedSecretIfNotExist(ctx, node, s.Secret); err != nil {
 				return err
 			}
@@ -684,8 +688,11 @@ func (r *PaladinReconciler) generatePaladinSigners(ctx context.Context, node *co
 
 		// Note we update the fields we are responsible for, rather than creating the whole object
 		// So detailed configuration can be provided in the config YAML
-		pldSigner.KeyStore.Type = pldconf.KeyStoreTypeStatic
-		pldSigner.KeyStore.Static.File = fmt.Sprintf("/keystores/%s/keys.yaml", s.Name)
+		wallet.Signer.KeyStore.Type = pldconf.KeyStoreTypeStatic
+		wallet.Signer.KeyStore.Static.File = fmt.Sprintf("/keystores/%s/keys.yaml", s.Name)
+
+		// Add to the end of the list in the order defined
+		pldConf.Wallets = append(pldConf.Wallets, wallet)
 
 	}
 

@@ -29,7 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -42,8 +42,20 @@ func newTestBalanceManager(t *testing.T, autoFuel bool, cbs ...func(m *mocksAndT
 			conf.BalanceManager.AutoFueling.Source = confutil.P("autofueler")
 
 			autoFuelSourceAddr := tktypes.RandAddress()
-			m.keyManager.(*componentmocks.KeyManager).On("ResolveKey", mock.Anything, "autofueler", mock.Anything, mock.Anything).
-				Return("", autoFuelSourceAddr.String(), nil)
+
+			keyMapping := &pldapi.KeyMappingAndVerifier{
+				KeyMappingWithPath: &pldapi.KeyMappingWithPath{
+					KeyMapping: &pldapi.KeyMapping{
+						Identifier: "autofueler",
+					},
+				},
+				Verifier: &pldapi.KeyVerifier{
+					Verifier: autoFuelSourceAddr.String(),
+				},
+			}
+			mockKeyMgr := m.keyManager.(*componentmocks.KeyManager)
+			mockKeyMgr.On("ResolveKeyNewDatabaseTX", mock.Anything, "autofueler", mock.Anything, mock.Anything).
+				Return(keyMapping, nil).Maybe()
 		}
 		for _, cb := range cbs {
 			cb(m, conf)
@@ -252,13 +264,13 @@ func TestTopUpAddressNoOpScenarios(t *testing.T) {
 
 }
 
-func generateExpectedFuelingTransaction(idx int, amountToTransfer uint64, from, to tktypes.EthAddress) *ptxapi.PublicTx {
+func generateExpectedFuelingTransaction(idx int, amountToTransfer uint64, from, to tktypes.EthAddress) *pldapi.PublicTx {
 	gas := tktypes.HexUint64(10)
-	return &ptxapi.PublicTx{
+	return &pldapi.PublicTx{
 		From:  from,
 		To:    &to,
 		Nonce: tktypes.HexUint64(mockBaseNonce) + tktypes.HexUint64(idx), // fixed mock when disableManagerStart set
-		PublicTxOptions: ptxapi.PublicTxOptions{
+		PublicTxOptions: pldapi.PublicTxOptions{
 			Gas:   &gas,
 			Value: tktypes.Uint64ToUint256(amountToTransfer),
 		},

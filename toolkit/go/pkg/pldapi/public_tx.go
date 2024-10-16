@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ptxapi
+package pldapi
 
 import (
 	"github.com/google/uuid"
@@ -37,7 +37,7 @@ type PublicTxGasPricing struct {
 }
 
 type PublicTxInput struct {
-	From string              `json:"from"`           // unresolved signing account locator (public TX manager will resolve)
+	From *tktypes.EthAddress `json:"from"`           // resolved signing account
 	To   *tktypes.EthAddress `json:"to,omitempty"`   // target contract address, or nil for deploy
 	Data tktypes.HexBytes    `json:"data,omitempty"` // the pre-encoded calldata
 	PublicTxOptions

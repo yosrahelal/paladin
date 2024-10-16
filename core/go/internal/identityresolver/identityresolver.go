@@ -25,9 +25,9 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	pbIdentityResolver "github.com/kaleido-io/paladin/core/pkg/proto/identityresolver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
 )
@@ -35,7 +35,7 @@ import (
 type identityResolver struct {
 	bgCtx                 context.Context
 	nodeID                string
-	keyManager            ethclient.KeyManager
+	keyManager            components.KeyManager
 	transportManager      components.TransportManager
 	inflightRequests      map[string]*inflightRequest
 	inflightRequestsMutex *sync.Mutex
@@ -105,17 +105,16 @@ func (ir *identityResolver) ResolveVerifierAsync(ctx context.Context, lookup str
 		// we just need to be careful not to update the transaction object on this other thread
 		go func() {
 			unqualifiedLookup, err := tktypes.PrivateIdentityLocator(lookup).Identity(ctx)
-			var verifier string
+			var resolvedKey *pldapi.KeyMappingAndVerifier
 			if err == nil {
-				_, verifier, err = ir.keyManager.ResolveKey(ctx, unqualifiedLookup, algorithm, verifierType)
+				resolvedKey, err = ir.keyManager.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, algorithm, verifierType)
 			}
 			if err != nil {
 				log.L(ctx).Errorf("Failed to resolve local signer for %s (algorithm=%s, verifierType=%s): %s", lookup, algorithm, verifierType, err)
 				failed(ctx, err)
 				return
-
 			}
-			resolved(ctx, verifier)
+			resolved(ctx, resolvedKey.Verifier.Verifier)
 		}()
 
 	} else {
@@ -235,16 +234,16 @@ func (ir *identityResolver) handleResolveVerifierRequest(ctx context.Context, me
 
 	// contractAddress and transactionID in the request message are simply used to populate the response
 	// so that the requesting node can correlate the response with the transaction that needs it
+	var resolvedKey *pldapi.KeyMappingAndVerifier
 	unqualifiedLookup, err := tktypes.PrivateIdentityLocator(resolveVerifierRequest.Lookup).Identity(ctx)
-	var verifier string
 	if err == nil {
-		_, verifier, err = ir.keyManager.ResolveKey(ctx, unqualifiedLookup, resolveVerifierRequest.Algorithm, resolveVerifierRequest.VerifierType)
+		resolvedKey, err = ir.keyManager.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, resolveVerifierRequest.Algorithm, resolveVerifierRequest.VerifierType)
 	}
 	if err == nil {
 		resolveVerifierResponse := &pbIdentityResolver.ResolveVerifierResponse{
 			Lookup:       resolveVerifierRequest.Lookup,
 			Algorithm:    resolveVerifierRequest.Algorithm,
-			Verifier:     verifier,
+			Verifier:     resolvedKey.Verifier.Verifier,
 			VerifierType: resolveVerifierRequest.VerifierType,
 		}
 		resolveVerifierResponseBytes, err := proto.Marshal(resolveVerifierResponse)

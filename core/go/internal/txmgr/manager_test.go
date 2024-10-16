@@ -23,6 +23,7 @@ import (
 	"github.com/alecthomas/assert/v2"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/mocks/ethclientmocks"
 
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
@@ -31,6 +32,7 @@ import (
 
 type mockComponents struct {
 	db               sqlmock.Sqlmock
+	ethClientFactory *ethclientmocks.EthClientFactory
 	domainManager    *componentmocks.DomainManager
 	blockIndexer     *componentmocks.BlockIndexer
 	keyManager       *componentmocks.KeyManager
@@ -47,6 +49,7 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pld
 	conf := &pldconf.TxManagerConfig{}
 	mc := &mockComponents{
 		blockIndexer:     componentmocks.NewBlockIndexer(t),
+		ethClientFactory: ethclientmocks.NewEthClientFactory(t),
 		keyManager:       componentmocks.NewKeyManager(t),
 		domainManager:    componentmocks.NewDomainManager(t),
 		publicTxMgr:      componentmocks.NewPublicTxManager(t),
@@ -61,6 +64,7 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pld
 	componentMocks.On("PublicTxManager").Return(mc.publicTxMgr).Maybe()
 	componentMocks.On("PrivateTxManager").Return(mc.privateTxMgr).Maybe()
 	componentMocks.On("IdentityResolver").Return(mc.identityResolver).Maybe()
+	componentMocks.On("EthClientFactory").Return(mc.ethClientFactory).Maybe()
 
 	var p persistence.Persistence
 	var err error

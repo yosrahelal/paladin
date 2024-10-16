@@ -132,6 +132,11 @@ type SecretBackedSigner struct {
 	// The operator supports generating the seed and base config for a simple seeded BIP32 HDWallet signer.
 	// If more other options are needed, these can be set directly in the YAML config for this signer.
 	Type string `json:"type"`
+	// Wallets will be evaluated against new allocations of key identifiers in the order they are
+	// defined. The key selector regular expression allows wallets to sub-select, with more specific
+	// rules first on key matching and more generic rules (like the default of ".*") last.
+	// +kubebuilder:default=.*
+	KeySelector string `json:"keySelector"`
 }
 
 // StatusReason is an enumeration of possible failure causes.  Each StatusReason

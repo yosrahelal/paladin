@@ -18,8 +18,8 @@ package components
 import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -85,11 +85,11 @@ type PrivateTransaction struct {
 	// Each private transaction may result in a public transaction which should be submitted to the
 	// base ledger, or another private transaction which should go around the transaction loop again.
 	Signer                     string                                  `json:"signer"`
-	PreparedPublicTransaction  *EthTransaction                         `json:"-"`
-	PreparedPrivateTransaction *ptxapi.TransactionInput                `json:"-"`
+	PreparedPublicTransaction  *pldapi.TransactionInput                `json:"-"`
+	PreparedPrivateTransaction *pldapi.TransactionInput                `json:"-"`
 	PreparedTransactionIntent  prototk.TransactionSpecification_Intent `json:"-"`
 
-	PublicTxOptions ptxapi.PublicTxOptions `json:"-"`
+	PublicTxOptions pldapi.PublicTxOptions `json:"-"`
 }
 
 // PrivateContractDeploy is a simpler transaction type that constructs new private smart contract instances
