@@ -75,11 +75,11 @@ func TestLoadCircuitFail(t *testing.T) {
 	ctx := context.Background()
 	config := &zetosignerapi.SnarkProverConfig{}
 	_, _, err = loadCircuit(ctx, "test", config)
-	assert.EqualError(t, err, "PD210074: circuits root must be set via the configuration file")
+	assert.EqualError(t, err, "PD210074: Circuits root must be set via the configuration file")
 
 	config.CircuitsDir = tmpDir
 	_, _, err = loadCircuit(ctx, "test", config)
-	assert.EqualError(t, err, "PD210075: proving keys root must be set via the configuration file")
+	assert.EqualError(t, err, "PD210075: Proving keys root must be set via the configuration file")
 }
 
 func TestLoadCircuitFailRead(t *testing.T) {

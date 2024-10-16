@@ -49,10 +49,10 @@ func TestBuildCircuitInputs(t *testing.T) {
 
 	req.OutputOwners = []string{"1234", "5678"}
 	_, err = buildCircuitInputs(ctx, req)
-	assert.EqualError(t, err, "PD210037: failed load owner public key. PD210072: invalid compressed public key length: 2")
+	assert.EqualError(t, err, "PD210037: Failed load owner public key. PD210072: Invalid compressed public key length: 2")
 
 	req.OutputOwners = []string{sender, receiver}
 	req.OutputSalts = []string{"0x5", "0x1"}
 	_, err = buildCircuitInputs(ctx, req)
-	assert.EqualError(t, err, "PD210083: failed to parse output salt")
+	assert.EqualError(t, err, "PD210083: Failed to parse output salt")
 }

@@ -34,19 +34,19 @@ func TestMintValidateParams(t *testing.T) {
 	assert.EqualError(t, err, "invalid character 'b' looking for beginning of value")
 
 	_, err = h.ValidateParams(ctx, nil, "{}")
-	assert.EqualError(t, err, "PD210024: no transfer parameters provided")
+	assert.EqualError(t, err, "PD210024: No transfer parameters provided")
 
 	_, err = h.ValidateParams(ctx, nil, "{\"mints\":{}}")
 	assert.EqualError(t, err, "json: cannot unmarshal object into Go struct field MintParams.mints of type []*types.TransferParamEntry")
 
 	_, err = h.ValidateParams(ctx, nil, "{\"mints\":[{}]}")
-	assert.EqualError(t, err, "PD210025: parameter 'to' is required")
+	assert.EqualError(t, err, "PD210025: Parameter 'to' is required")
 
 	_, err = h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":0}]}")
-	assert.EqualError(t, err, "PD210027: parameter 'amount' must be greater than 0")
+	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be greater than 0")
 
 	_, err = h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":-10}]}")
-	assert.EqualError(t, err, "PD210027: parameter 'amount' must be greater than 0")
+	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be greater than 0")
 
 	params, err := h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":10}]}")
 	assert.NoError(t, err)
@@ -103,7 +103,7 @@ func TestMintAssemble(t *testing.T) {
 		ResolvedVerifiers: []*prototk.ResolvedVerifier{},
 	}
 	_, err := h.Assemble(ctx, tx, req)
-	assert.EqualError(t, err, "PD210036: failed to resolve verifier: Alice")
+	assert.EqualError(t, err, "PD210036: Failed to resolve verifier: Alice")
 
 	req = &prototk.AssembleTransactionRequest{
 		ResolvedVerifiers: []*prototk.ResolvedVerifier{
@@ -116,7 +116,7 @@ func TestMintAssemble(t *testing.T) {
 		},
 	}
 	_, err = h.Assemble(ctx, tx, req)
-	assert.EqualError(t, err, "PD210037: failed load owner public key. expected 32 bytes in hex string, got 20")
+	assert.EqualError(t, err, "PD210037: Failed load owner public key. expected 32 bytes in hex string, got 20")
 
 	privKey := babyjub.NewRandPrivKey()
 	pubKey := privKey.Public()
@@ -124,7 +124,7 @@ func TestMintAssemble(t *testing.T) {
 	req.ResolvedVerifiers[0].Verifier = compressedKey.String()
 	tx.Params.([]*types.TransferParamEntry)[0].Amount = tktypes.MustParseHexUint256("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 	_, err = h.Assemble(ctx, tx, req)
-	assert.EqualError(t, err, "PD210038: failed to create new state. inputs values not inside Finite Field")
+	assert.EqualError(t, err, "PD210038: Failed to create new state. inputs values not inside Finite Field")
 
 	tx.Params.([]*types.TransferParamEntry)[0].Amount = tktypes.MustParseHexUint256("0x0f")
 	res, err := h.Assemble(ctx, tx, req)
@@ -195,7 +195,7 @@ func TestMintPrepare(t *testing.T) {
 
 	req.OutputStates[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\",\"hash\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\"}"
 	_, err = h.Prepare(ctx, tx, req)
-	assert.ErrorContains(t, err, "PD210049: failed to encode transaction data. PD210028: failed to parse transaction id. PD020007: Invalid hex")
+	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD210028: Failed to parse transaction id. PD020007: Invalid hex")
 
 	txSpec.TransactionId = "0x1234567890123456789012345678901234567890"
 	z.config = &types.DomainFactoryConfig{

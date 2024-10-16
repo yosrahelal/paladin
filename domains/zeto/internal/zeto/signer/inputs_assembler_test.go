@@ -72,7 +72,7 @@ func TestAssembleInputsAnonEnc_fail(t *testing.T) {
 
 	extras.EncryptionNonce = "bad number"
 	_, err = assembleInputs_anon_enc(ctx, &inputs, &extras, &key)
-	assert.EqualError(t, err, "PD210077: failed to parse encryption nonce")
+	assert.EqualError(t, err, "PD210077: Failed to parse encryption nonce")
 }
 
 func TestAssembleInputsAnonNullifier_fail(t *testing.T) {
@@ -99,12 +99,12 @@ func TestAssembleInputsAnonNullifier_fail(t *testing.T) {
 
 	extras.Root = "bad number"
 	_, err = assembleInputs_anon_nullifier(ctx, &inputs, &extras, &key)
-	assert.EqualError(t, err, "PD210080: failed to decode root value in extras")
+	assert.EqualError(t, err, "PD210080: Failed to decode root value in extras")
 
 	extras.Root = "123456"
 	extras.MerkleProofs[0].Nodes = []string{"bad number"}
 	_, err = assembleInputs_anon_nullifier(ctx, &inputs, &extras, &key)
-	assert.EqualError(t, err, "PD210081: failed to decode node in merkle proof in extras")
+	assert.EqualError(t, err, "PD210081: Failed to decode node in merkle proof in extras")
 
 	inputs = commonWitnessInputs{
 		inputCommitments: []*big.Int{big.NewInt(1), big.NewInt(2)},
@@ -120,5 +120,5 @@ func TestAssembleInputsAnonNullifier_fail(t *testing.T) {
 		PrivateKeyForZkp: tooBig,
 	}
 	_, err = assembleInputs_anon_nullifier(ctx, &inputs, &extras, &key)
-	assert.EqualError(t, err, "PD210079: failed to calculate nullifier. inputs values not inside Finite Field")
+	assert.EqualError(t, err, "PD210079: Failed to calculate nullifier. inputs values not inside Finite Field")
 }

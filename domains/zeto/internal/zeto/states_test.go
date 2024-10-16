@@ -55,13 +55,13 @@ func TestPrepareInputs(t *testing.T) {
 	stateQueryContext := "test"
 	ctx := context.Background()
 	_, _, _, _, err := zeto.prepareInputs(ctx, stateQueryContext, "Alice", []*types.TransferParamEntry{{Amount: tktypes.Uint64ToUint256(100)}})
-	assert.EqualError(t, err, "PD210032: failed to query the state store for available coins. test error")
+	assert.EqualError(t, err, "PD210032: Failed to query the state store for available coins. test error")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{}, nil
 	}
 	_, _, _, _, err = zeto.prepareInputs(ctx, stateQueryContext, "Alice", []*types.TransferParamEntry{{Amount: tktypes.Uint64ToUint256(100)}})
-	assert.EqualError(t, err, "PD210033: insufficient funds (available=0)")
+	assert.EqualError(t, err, "PD210033: Insufficient funds (available=0)")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{
@@ -74,7 +74,7 @@ func TestPrepareInputs(t *testing.T) {
 		}, nil
 	}
 	_, _, _, _, err = zeto.prepareInputs(ctx, stateQueryContext, "Alice", []*types.TransferParamEntry{{Amount: tktypes.Uint64ToUint256(100)}})
-	assert.EqualError(t, err, "PD210034: coin state-1 is invalid: invalid character 'b' looking for beginning of value")
+	assert.EqualError(t, err, "PD210034: Coin state-1 is invalid: invalid character 'b' looking for beginning of value")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{

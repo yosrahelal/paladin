@@ -476,7 +476,7 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 	payload, err := proto.Marshal(&req)
 	require.NoError(t, err)
 	_, err = prover.Sign(context.Background(), zetosignerapi.AlgoDomainZetoSnarkBJJ("zeto"), zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
-	assert.ErrorContains(t, err, "failed to parse input commitment")
+	assert.ErrorContains(t, err, "PD210084: Failed to parse input commitment")
 
 	req = pb.ProvingRequest{
 		CircuitId: constants.CIRCUIT_ANON,
@@ -493,7 +493,7 @@ func TestSnarkProveErrorGenerateProof2(t *testing.T) {
 	payload, err = proto.Marshal(&req)
 	require.NoError(t, err)
 	_, err = prover.Sign(context.Background(), zetosignerapi.AlgoDomainZetoSnarkBJJ("zeto"), zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK, alice.PrivateKey[:], payload)
-	assert.ErrorContains(t, err, "failed to parse input salt")
+	assert.ErrorContains(t, err, "PD210082: Failed to parse input salt")
 }
 
 func TestValidateInputs(t *testing.T) {
@@ -575,7 +575,7 @@ func TestZKPProverInvalidAlgos(t *testing.T) {
 	assert.Regexp(t, "verifier", err)
 
 	_, err = prover.GetVerifier(ctx, zetosignerapi.AlgoDomainZetoSnarkBJJ("zeto"), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, nil)
-	assert.Regexp(t, "invalid key", err)
+	assert.Regexp(t, "Invalid key", err)
 
 	_, err = prover.Sign(ctx, "domain:zeto:unsupported", "", nil, nil)
 	assert.Regexp(t, "algorithm", err)
