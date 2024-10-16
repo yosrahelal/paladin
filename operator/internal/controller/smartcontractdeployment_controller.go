@@ -30,7 +30,7 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -69,7 +69,7 @@ func (r *SmartContractDeploymentReconciler) Reconcile(ctx context.Context, req c
 		"scdeploy."+scd.Name,
 		scd.Spec.DeployNode, scd.Namespace,
 		&scd.Status.TransactionSubmission,
-		func() (bool, *ptxapi.TransactionInput, error) { return r.buildDeployTransaction(ctx, &scd) },
+		func() (bool, *pldapi.TransactionInput, error) { return r.buildDeployTransaction(ctx, &scd) },
 	)
 	err := txReconcile.reconcile(ctx)
 	if err != nil {
@@ -100,7 +100,7 @@ func (r *SmartContractDeploymentReconciler) updateStatusAndRequeue(ctx context.C
 	return ctrl.Result{Requeue: true}, nil // Run again immediately to submit
 }
 
-func (r *SmartContractDeploymentReconciler) buildDeployTransaction(ctx context.Context, scd *corev1alpha1.SmartContractDeployment) (bool, *ptxapi.TransactionInput, error) {
+func (r *SmartContractDeploymentReconciler) buildDeployTransaction(ctx context.Context, scd *corev1alpha1.SmartContractDeployment) (bool, *pldapi.TransactionInput, error) {
 	var data tktypes.RawJSON
 	if scd.Spec.ParamsJSON == "" {
 		data = tktypes.RawJSON(scd.Spec.ParamsJSON)
@@ -114,9 +114,9 @@ func (r *SmartContractDeploymentReconciler) buildDeployTransaction(ctx context.C
 		return false, nil, fmt.Errorf("invalid bytecode: %s", err)
 	}
 
-	return true, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:   tktypes.Enum[ptxapi.TransactionType](scd.Spec.TxType),
+	return true, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:   tktypes.Enum[pldapi.TransactionType](scd.Spec.TxType),
 			Domain: scd.Spec.Domain,
 			From:   scd.Spec.DeployKey,
 			Data:   data,

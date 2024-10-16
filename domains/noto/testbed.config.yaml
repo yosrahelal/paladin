@@ -24,13 +24,16 @@ blockchain:
     initialConnectAttempts: 25
 log:
   level: info
-signer:
-  keyDerivation:
-    type: "bip32"
-  keyStore:
-    type: "static"
-    static:
-      keys:
-        seed:
-          encoding: none
-          inline: REPLACED BY GENERATED KEY IN TEST
+wallets:
+- name: wallet1
+  keySelector: .*
+  signer:
+    keyDerivation:
+      type: "bip32"
+    keyStore:
+      type: "static"
+      static:
+        keys:
+          seed:
+            encoding: none
+            inline: REPLACED BY GENERATED KEY IN TEST

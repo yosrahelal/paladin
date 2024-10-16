@@ -24,6 +24,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/domainmgr"
 	"github.com/kaleido-io/paladin/core/internal/identityresolver"
+	"github.com/kaleido-io/paladin/core/internal/keymanager"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/plugins"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr"
@@ -38,7 +39,6 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 )
 
 type ComponentManager interface {
@@ -56,7 +56,7 @@ type componentManager struct {
 	// config
 	conf *pldconf.PaladinConfig
 	// pre-init
-	keyManager       ethclient.KeyManager
+	keyManager       components.KeyManager
 	ethClientFactory ethclient.EthClientFactory
 	persistence      persistence.Persistence
 	blockIndexer     blockindexer.BlockIndexer
@@ -110,13 +110,8 @@ func NewComponentManager(bgCtx context.Context, grpcTarget string, instanceUUID 
 }
 
 func (cm *componentManager) Init() (err error) {
-	// pre-init components
-	cm.keyManager, err = ethclient.NewSimpleTestKeyManager(cm.bgCtx, (*signerapi.ConfigNoExt)(&cm.conf.Signer))
-	err = cm.addIfOpened("key_manager", cm.keyManager, err, msgs.MsgComponentKeyManagerInitError)
-	if err == nil {
-		cm.ethClientFactory, err = ethclient.NewEthClientFactory(cm.bgCtx, cm.keyManager, &cm.conf.Blockchain)
-		err = cm.wrapIfErr(err, msgs.MsgComponentEthClientInitError)
-	}
+	cm.ethClientFactory, err = ethclient.NewEthClientFactory(cm.bgCtx, &cm.conf.Blockchain)
+	err = cm.wrapIfErr(err, msgs.MsgComponentEthClientInitError)
 	if err == nil {
 		cm.persistence, err = persistence.NewPersistence(cm.bgCtx, &cm.conf.DB)
 		err = cm.addIfOpened("database", cm.persistence, err, msgs.MsgComponentDBInitError)
@@ -131,6 +126,11 @@ func (cm *componentManager) Init() (err error) {
 	}
 
 	// pre-init managers
+	if err == nil {
+		cm.keyManager = keymanager.NewKeyManager(cm.bgCtx, &cm.conf.KeyManagerConfig)
+		cm.initResults["key_manager"], err = cm.keyManager.PreInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentKeyManagerInitError)
+	}
 	if err == nil {
 		cm.stateManager = statemgr.NewStateManager(cm.bgCtx, &cm.conf.StateStore, cm.persistence)
 		cm.initResults["state_manager"], err = cm.stateManager.PreInit(cm)
@@ -193,6 +193,11 @@ func (cm *componentManager) Init() (err error) {
 	}
 
 	// post-init the managers
+	if err == nil {
+		err = cm.keyManager.PostInit(cm)
+		err = cm.wrapIfErr(err, msgs.MsgComponentKeyManagerInitError)
+	}
+
 	if err == nil {
 		err = cm.stateManager.PostInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentStateManagerInitError)
@@ -272,6 +277,11 @@ func (cm *componentManager) StartManagers() (err error) {
 	err = cm.addIfStarted("eth_client", cm.ethClientFactory, err, msgs.MsgComponentEthClientStartError)
 
 	// start the managers
+	if err == nil {
+		err = cm.keyManager.Start()
+		err = cm.addIfStarted("key_manager", cm.keyManager, err, msgs.MsgComponentKeyManagerStartError)
+	}
+
 	if err == nil {
 		err = cm.stateManager.Start()
 		err = cm.addIfStarted("state_manager", cm.stateManager, err, msgs.MsgComponentStateManagerStartError)
@@ -418,7 +428,7 @@ func (cm *componentManager) Stop() {
 	log.L(cm.bgCtx).Debug("Stopped")
 }
 
-func (cm *componentManager) KeyManager() ethclient.KeyManager {
+func (cm *componentManager) KeyManager() components.KeyManager {
 	return cm.keyManager
 }
 

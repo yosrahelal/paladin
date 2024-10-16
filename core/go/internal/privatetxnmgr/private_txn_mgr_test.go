@@ -17,7 +17,6 @@ package privatetxnmgr
 
 import (
 	"context"
-	"crypto/sha256"
 	"math/rand"
 	"sync"
 	"testing"
@@ -31,13 +30,12 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
@@ -157,7 +155,15 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 
 	}).Return(nil)
 
-	mocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("notaryKeyHandle", "notaryVerifier", nil)
+	keyMapping := &pldapi.KeyMappingAndVerifier{
+		KeyMappingWithPath: &pldapi.KeyMappingWithPath{KeyMapping: &pldapi.KeyMapping{
+			Identifier: "domain1.contract1.notary",
+			KeyHandle:  "notaryKeyHandle",
+		}},
+		Verifier: &pldapi.KeyVerifier{Verifier: "notaryVerifier"},
+	}
+	mocks.keyManager.On("ResolveKeyNewDatabaseTX", mock.Anything, "domain1.contract1.notary", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+		Return(keyMapping, nil)
 
 	signingAddress := tktypes.RandHex(32)
 
@@ -178,14 +184,8 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 		},
 	}, nil)
 
-	mocks.keyManager.On("Sign", mock.Anything, &signerapi.SignRequest{
-		KeyHandle:   "notaryKeyHandle",
-		Algorithm:   algorithms.ECDSA_SECP256K1,
-		PayloadType: signpayloads.OPAQUE_TO_RSV,
-		Payload:     []byte("some-endorsement-bytes"),
-	}).Return(&signerapi.SignResponse{
-		Payload: []byte("some-signature-bytes"),
-	}, nil)
+	mocks.keyManager.On("Sign", mock.Anything, keyMapping, signpayloads.OPAQUE_TO_RSV, mock.Anything).
+		Return([]byte("some-signature-bytes"), nil)
 
 	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
@@ -197,10 +197,13 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 			require.NoError(t, err)
 			tx := args[1].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
-			tx.PreparedPublicTransaction = &components.EthTransaction{
-				FunctionABI: testABI[0],
-				To:          *domainAddress,
-				Inputs:      cv,
+			jsonData, _ := cv.JSON()
+			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
+				ABI: abi.ABI{testABI[0]},
+				Transaction: pldapi.Transaction{
+					To:   domainAddress,
+					Data: tktypes.RawJSON(jsonData),
+				},
 			}
 		},
 	)
@@ -220,11 +223,15 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	mockPublicTxManager := mocks.publicTxManager.(*componentmocks.PublicTxManager)
 	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockPublicTxBatch, nil)
 
+	signingAddr := tktypes.RandAddress()
+	mocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1"}).
+		Return([]*tktypes.EthAddress{signingAddr}, nil)
+
 	publicTransactions := []components.PublicTxAccepted{
 		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: ptxapi.PublicTxInput{
-				From: "signer1",
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: pldapi.PublicTxInput{
+				From: signingAddr,
 			},
 		}, nil),
 	}
@@ -325,7 +332,15 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 
 	remoteEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(remoteEngineMocks.domainSmartContract, nil)
 
-	remoteEngineMocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("notaryKeyHandle", "notaryVerifier", nil)
+	keyMapping := &pldapi.KeyMappingAndVerifier{
+		KeyMappingWithPath: &pldapi.KeyMappingWithPath{KeyMapping: &pldapi.KeyMapping{
+			Identifier: "domain1.contract1.notary@othernode",
+			KeyHandle:  "notaryKeyHandle",
+		}},
+		Verifier: &pldapi.KeyVerifier{Verifier: "notaryVerifier"},
+	}
+	remoteEngineMocks.keyManager.On("ResolveKeyNewDatabaseTX", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+		Return(keyMapping, nil)
 
 	signingAddress := tktypes.RandHex(32)
 
@@ -345,14 +360,8 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 			VerifierType: verifiers.ETH_ADDRESS,
 		},
 	}, nil)
-	remoteEngineMocks.keyManager.On("Sign", mock.Anything, &signerapi.SignRequest{
-		KeyHandle:   "notaryKeyHandle",
-		Algorithm:   algorithms.ECDSA_SECP256K1,
-		PayloadType: signpayloads.OPAQUE_TO_RSV,
-		Payload:     []byte("some-endorsement-bytes"),
-	}).Return(&signerapi.SignResponse{
-		Payload: []byte("some-signature-bytes"),
-	}, nil)
+	remoteEngineMocks.keyManager.On("Sign", mock.Anything, keyMapping, signpayloads.OPAQUE_TO_RSV, []byte("some-endorsement-bytes")).
+		Return([]byte("some-signature-bytes"), nil)
 
 	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
@@ -364,10 +373,13 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 			require.NoError(t, err)
 			tx := args[1].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
-			tx.PreparedPublicTransaction = &components.EthTransaction{
-				FunctionABI: testABI[0],
-				To:          *domainAddress,
-				Inputs:      cv,
+			jsonData, _ := cv.JSON()
+			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
+				ABI: abi.ABI{testABI[0]},
+				Transaction: pldapi.Transaction{
+					To:   domainAddress,
+					Data: tktypes.RawJSON(jsonData),
+				},
 			}
 		},
 	)
@@ -387,11 +399,15 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 	mockPublicTxManager := mocks.publicTxManager.(*componentmocks.PublicTxManager)
 	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockPublicTxBatch, nil)
 
+	signingAddr := tktypes.RandAddress()
+	mocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1"}).
+		Return([]*tktypes.EthAddress{signingAddr}, nil)
+
 	publicTransactions := []components.PublicTxAccepted{
 		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: ptxapi.PublicTxInput{
-				From: "signer1",
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: pldapi.PublicTxInput{
+				From: signingAddr,
 			},
 		}, nil),
 	}
@@ -532,10 +548,13 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 			require.NoError(t, err)
 			tx := args[1].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
-			tx.PreparedPublicTransaction = &components.EthTransaction{
-				FunctionABI: testABI[0],
-				To:          *domainAddress,
-				Inputs:      cv,
+			jsonData, _ := cv.JSON()
+			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
+				ABI: abi.ABI{testABI[0]},
+				Transaction: pldapi.Transaction{
+					To:   domainAddress,
+					Data: tktypes.RawJSON(jsonData),
+				},
 			}
 		},
 	)
@@ -546,6 +565,11 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		tx.Signer = signingAddress
 	}).Return(nil)
 
+	signingAddr1 := tktypes.RandAddress()
+	signingAddr2 := tktypes.RandAddress()
+	mocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1", "signer1" /* no de-duplication currently, but caching in keymgr */}).
+		Return([]*tktypes.EthAddress{signingAddr1, signingAddr2}, nil)
+
 	mockPublicTxBatch1 := componentmocks.NewPublicTxBatch(t)
 	mockPublicTxBatch1.On("Finalize", mock.Anything).Return().Maybe()
 	mockPublicTxBatch1.On("CleanUp", mock.Anything).Return().Maybe()
@@ -555,15 +579,15 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 
 	publicTransactions := []components.PublicTxAccepted{
 		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx1.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: ptxapi.PublicTxInput{
-				From: "signer1",
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx1.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: pldapi.PublicTxInput{
+				From: tktypes.RandAddress(),
 			},
 		}, nil),
 		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx2.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: ptxapi.PublicTxInput{
-				From: "signer1",
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx2.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: pldapi.PublicTxInput{
+				From: tktypes.RandAddress(),
 			},
 		}, nil),
 	}
@@ -937,7 +961,6 @@ type dependencyMocks struct {
 	transportManager    *componentmocks.TransportManager
 	stateStore          *componentmocks.StateManager
 	keyManager          *componentmocks.KeyManager
-	ethClientFactory    *componentmocks.EthClientFactory
 	publicTxManager     components.PublicTxManager /* could be fake or mock */
 	identityResolver    *componentmocks.IdentityResolver
 }
@@ -957,17 +980,17 @@ type fakePublicTxManager struct {
 }
 
 // GetPublicTransactionForHash implements components.PublicTxManager.
-func (f *fakePublicTxManager) GetPublicTransactionForHash(ctx context.Context, dbTX *gorm.DB, hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error) {
+func (f *fakePublicTxManager) GetPublicTransactionForHash(ctx context.Context, dbTX *gorm.DB, hash tktypes.Bytes32) (*pldapi.PublicTxWithBinding, error) {
 	panic("unimplemented")
 }
 
 // QueryPublicTxForTransactions implements components.PublicTxManager.
-func (f *fakePublicTxManager) QueryPublicTxForTransactions(ctx context.Context, dbTX *gorm.DB, boundToTxns []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error) {
+func (f *fakePublicTxManager) QueryPublicTxForTransactions(ctx context.Context, dbTX *gorm.DB, boundToTxns []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*pldapi.PublicTx, error) {
 	panic("unimplemented")
 }
 
 // QueryPublicTxWithBindings implements components.PublicTxManager.
-func (f *fakePublicTxManager) QueryPublicTxWithBindings(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) {
+func (f *fakePublicTxManager) QueryPublicTxWithBindings(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*pldapi.PublicTxWithBinding, error) {
 	panic("unimplemented")
 }
 
@@ -1027,21 +1050,17 @@ func (f *fakePublicTxBatch) Rejected() []components.PublicTxRejected {
 type fakePublicTx struct {
 	t         *components.PublicTxSubmission
 	rejectErr error
-	pubTx     *ptxapi.PublicTx
+	pubTx     *pldapi.PublicTx
 }
 
 func newFakePublicTx(t *components.PublicTxSubmission, rejectErr error) *fakePublicTx {
-	// Fake up signer resolution by just hashing whatever comes in
-	signerStringHash := sha256.New()
-	signerStringHash.Write([]byte(t.From))
-	fromAddr := tktypes.EthAddress(signerStringHash.Sum(nil)[0:20])
 	return &fakePublicTx{
 		t:         t,
 		rejectErr: rejectErr,
-		pubTx: &ptxapi.PublicTx{
+		pubTx: &pldapi.PublicTx{
 			To:              t.To,
 			Data:            t.Data,
-			From:            fromAddr,
+			From:            *t.From,
 			Created:         tktypes.TimestampNow(),
 			PublicTxOptions: t.PublicTxOptions,
 		},
@@ -1060,7 +1079,7 @@ func (f *fakePublicTx) Bindings() []*components.PaladinTXReference {
 	return f.t.Bindings
 }
 
-func (f *fakePublicTx) PublicTx() *ptxapi.PublicTx {
+func (f *fakePublicTx) PublicTx() *pldapi.PublicTx {
 	return f.pubTx
 }
 
@@ -1108,7 +1127,6 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 		transportManager:    componentmocks.NewTransportManager(t),
 		stateStore:          componentmocks.NewStateManager(t),
 		keyManager:          componentmocks.NewKeyManager(t),
-		ethClientFactory:    componentmocks.NewEthClientFactory(t),
 		publicTxManager:     publicTxMgr,
 		identityResolver:    componentmocks.NewIdentityResolver(t),
 	}
@@ -1118,11 +1136,8 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.allComponents.On("PublicTxManager").Return(publicTxMgr).Maybe()
 	mocks.allComponents.On("Persistence").Return(persistence.NewUnitTestPersistence(ctx)).Maybe()
-	mocks.allComponents.On("EthClientFactory").Return(mocks.ethClientFactory).Maybe()
-	unconnectedRealClient := ethclient.NewUnconnectedRPCClient(ctx, mocks.keyManager, &pldconf.EthClientConfig{}, 0)
-	mocks.ethClientFactory.On("SharedWS").Return(unconnectedRealClient).Maybe()
 	mocks.domainSmartContract.On("Domain").Return(mocks.domain).Maybe()
-	mocks.stateStore.On("NewDomainContext", mock.Anything, mocks.domain, *domainAddress).Return(mocks.domainContext).Maybe()
+	mocks.stateStore.On("NewDomainContext", mock.Anything, mocks.domain, *domainAddress, mock.Anything).Return(mocks.domainContext).Maybe()
 	mocks.domain.On("Name").Return("domain1").Maybe()
 
 	e := NewPrivateTransactionMgr(ctx, tktypes.RandHex(16), &pldconf.PrivateTxManagerConfig{

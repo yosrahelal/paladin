@@ -22,15 +22,16 @@ import (
 	"math/big"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
-	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -97,28 +98,38 @@ func mustParseBuildBytecode(buildJSON []byte) tktypes.HexBytes {
 	return byteCode
 }
 
-func DeploySmartContract(t *testing.T, bi blockindexer.BlockIndexer, ecf ethclient.EthClientFactory) *tktypes.EthAddress {
+func DeploySmartContract(t *testing.T, txm components.TXManager) *tktypes.EthAddress {
 	ctx := context.Background()
 
 	simpleDomainABI := mustParseBuildABI(simpleDomainBuild)
+	simpleDomainBytecode := mustParseBuildBytecode(simpleDomainBuild)
 
 	// In this test we deploy the factory in-line
-	ec, err := ecf.HTTPClient().ABI(ctx, simpleDomainABI)
+	txID, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
+			From: "domain1_admin",
+		},
+		ABI:      simpleDomainABI,
+		Bytecode: simpleDomainBytecode,
+	})
 	require.NoError(t, err)
 
-	cc, err := ec.Constructor(ctx, mustParseBuildBytecode(simpleDomainBuild))
-	require.NoError(t, err)
+	var receipt *pldapi.TransactionReceipt
+	ticker := time.NewTicker(100 * time.Millisecond)
+	for {
+		<-ticker.C
+		require.False(t, t.Failed())
+		receipt, err = txm.GetTransactionReceiptByID(ctx, *txID)
+		require.NoError(t, err)
+		if receipt != nil {
+			break
+		}
+	}
 
-	deployTXHash, err := cc.R(ctx).
-		Signer("domain1_admin").
-		Input(`{}`).
-		SignAndSend()
-	require.NoError(t, err)
-
-	deployTx, err := bi.WaitForTransactionSuccess(ctx, *deployTXHash, simpleDomainABI)
-	require.NoError(t, err)
-	require.Equal(t, deployTx.Result.V(), blockindexer.TXResult_SUCCESS)
-	return deployTx.ContractAddress
+	require.True(t, receipt.Success)
+	require.NotNil(t, receipt.ContractAddress)
+	return receipt.ContractAddress
 }
 
 // Note, here we're simulating a domain that choose to support versions of a "Transfer" function
@@ -431,7 +442,7 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 				assert.Equal(t, "domain1.contract1.notary", req.ResolvedVerifiers[0].Lookup)
 				assert.NotEmpty(t, req.ResolvedVerifiers[0].Verifier)
 				return &prototk.PrepareDeployResponse{
-					Signer: confutil.P(fmt.Sprintf("domain1/transactions/%s", req.Transaction.TransactionId)),
+					Signer: confutil.P(fmt.Sprintf("domain1.transactions.%s", req.Transaction.TransactionId)),
 					Transaction: &prototk.PreparedTransaction{
 						FunctionAbiJson: toJSONString(t, simpleDomainABI.Functions()["newSimpleTokenNotarized"]),
 						ParamsJson: fmt.Sprintf(`{
