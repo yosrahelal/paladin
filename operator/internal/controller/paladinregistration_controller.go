@@ -260,7 +260,7 @@ func (r *PaladinRegistrationReconciler) buildTransportTX(ctx context.Context, re
 			Type:     pldapi.TransactionTypePublic.Enum(),
 			To:       registryAddr,
 			Function: registryABI.Functions()["setIdentityProperty"].String(),
-			From:     reg.Spec.RegistryAdminKey, // registry admin registers the root entry for the node
+			From:     reg.Spec.NodeKey, // node registers the transports
 			Data:     tktypes.JSONString(property),
 		},
 		ABI: registryABI,
