@@ -34,8 +34,8 @@ import (
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
@@ -155,12 +155,12 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 
 	}).Return(nil)
 
-	keyMapping := &components.KeyMappingAndVerifier{
-		KeyMappingWithPath: &components.KeyMappingWithPath{KeyMapping: &components.KeyMapping{
+	keyMapping := &pldapi.KeyMappingAndVerifier{
+		KeyMappingWithPath: &pldapi.KeyMappingWithPath{KeyMapping: &pldapi.KeyMapping{
 			Identifier: "domain1.contract1.notary",
 			KeyHandle:  "notaryKeyHandle",
 		}},
-		Verifier: &components.KeyVerifier{Verifier: "notaryVerifier"},
+		Verifier: &pldapi.KeyVerifier{Verifier: "notaryVerifier"},
 	}
 	mocks.keyManager.On("ResolveKeyNewDatabaseTX", mock.Anything, "domain1.contract1.notary", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
 		Return(keyMapping, nil)
@@ -198,9 +198,9 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 			tx := args[1].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
 			jsonData, _ := cv.JSON()
-			tx.PreparedPublicTransaction = &ptxapi.TransactionInput{
+			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
-				Transaction: ptxapi.Transaction{
+				Transaction: pldapi.Transaction{
 					To:   domainAddress,
 					Data: tktypes.RawJSON(jsonData),
 				},
@@ -229,8 +229,8 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 
 	publicTransactions := []components.PublicTxAccepted{
 		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: ptxapi.PublicTxInput{
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: pldapi.PublicTxInput{
 				From: signingAddr,
 			},
 		}, nil),
@@ -332,12 +332,12 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 
 	remoteEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(remoteEngineMocks.domainSmartContract, nil)
 
-	keyMapping := &components.KeyMappingAndVerifier{
-		KeyMappingWithPath: &components.KeyMappingWithPath{KeyMapping: &components.KeyMapping{
+	keyMapping := &pldapi.KeyMappingAndVerifier{
+		KeyMappingWithPath: &pldapi.KeyMappingWithPath{KeyMapping: &pldapi.KeyMapping{
 			Identifier: "domain1.contract1.notary@othernode",
 			KeyHandle:  "notaryKeyHandle",
 		}},
-		Verifier: &components.KeyVerifier{Verifier: "notaryVerifier"},
+		Verifier: &pldapi.KeyVerifier{Verifier: "notaryVerifier"},
 	}
 	remoteEngineMocks.keyManager.On("ResolveKeyNewDatabaseTX", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
 		Return(keyMapping, nil)
@@ -374,9 +374,9 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 			tx := args[1].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
 			jsonData, _ := cv.JSON()
-			tx.PreparedPublicTransaction = &ptxapi.TransactionInput{
+			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
-				Transaction: ptxapi.Transaction{
+				Transaction: pldapi.Transaction{
 					To:   domainAddress,
 					Data: tktypes.RawJSON(jsonData),
 				},
@@ -405,8 +405,8 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 
 	publicTransactions := []components.PublicTxAccepted{
 		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: ptxapi.PublicTxInput{
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: pldapi.PublicTxInput{
 				From: signingAddr,
 			},
 		}, nil),
@@ -549,9 +549,9 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 			tx := args[1].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
 			jsonData, _ := cv.JSON()
-			tx.PreparedPublicTransaction = &ptxapi.TransactionInput{
+			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
 				ABI: abi.ABI{testABI[0]},
-				Transaction: ptxapi.Transaction{
+				Transaction: pldapi.Transaction{
 					To:   domainAddress,
 					Data: tktypes.RawJSON(jsonData),
 				},
@@ -579,14 +579,14 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 
 	publicTransactions := []components.PublicTxAccepted{
 		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx1.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: ptxapi.PublicTxInput{
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx1.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: pldapi.PublicTxInput{
 				From: tktypes.RandAddress(),
 			},
 		}, nil),
 		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx2.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: ptxapi.PublicTxInput{
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx2.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: pldapi.PublicTxInput{
 				From: tktypes.RandAddress(),
 			},
 		}, nil),
@@ -980,17 +980,17 @@ type fakePublicTxManager struct {
 }
 
 // GetPublicTransactionForHash implements components.PublicTxManager.
-func (f *fakePublicTxManager) GetPublicTransactionForHash(ctx context.Context, dbTX *gorm.DB, hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error) {
+func (f *fakePublicTxManager) GetPublicTransactionForHash(ctx context.Context, dbTX *gorm.DB, hash tktypes.Bytes32) (*pldapi.PublicTxWithBinding, error) {
 	panic("unimplemented")
 }
 
 // QueryPublicTxForTransactions implements components.PublicTxManager.
-func (f *fakePublicTxManager) QueryPublicTxForTransactions(ctx context.Context, dbTX *gorm.DB, boundToTxns []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error) {
+func (f *fakePublicTxManager) QueryPublicTxForTransactions(ctx context.Context, dbTX *gorm.DB, boundToTxns []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*pldapi.PublicTx, error) {
 	panic("unimplemented")
 }
 
 // QueryPublicTxWithBindings implements components.PublicTxManager.
-func (f *fakePublicTxManager) QueryPublicTxWithBindings(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) {
+func (f *fakePublicTxManager) QueryPublicTxWithBindings(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*pldapi.PublicTxWithBinding, error) {
 	panic("unimplemented")
 }
 
@@ -1050,14 +1050,14 @@ func (f *fakePublicTxBatch) Rejected() []components.PublicTxRejected {
 type fakePublicTx struct {
 	t         *components.PublicTxSubmission
 	rejectErr error
-	pubTx     *ptxapi.PublicTx
+	pubTx     *pldapi.PublicTx
 }
 
 func newFakePublicTx(t *components.PublicTxSubmission, rejectErr error) *fakePublicTx {
 	return &fakePublicTx{
 		t:         t,
 		rejectErr: rejectErr,
-		pubTx: &ptxapi.PublicTx{
+		pubTx: &pldapi.PublicTx{
 			To:              t.To,
 			Data:            t.Data,
 			From:            *t.From,
@@ -1079,7 +1079,7 @@ func (f *fakePublicTx) Bindings() []*components.PaladinTXReference {
 	return f.t.Bindings
 }
 
-func (f *fakePublicTx) PublicTx() *ptxapi.PublicTx {
+func (f *fakePublicTx) PublicTx() *pldapi.PublicTx {
 	return f.pubTx
 }
 

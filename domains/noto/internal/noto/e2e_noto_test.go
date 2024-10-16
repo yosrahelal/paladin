@@ -30,8 +30,8 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
@@ -351,9 +351,9 @@ func TestNotoApprove(t *testing.T) {
 	}
 
 	log.L(ctx).Infof("Claim 50 using approval")
-	receipt, err := tb.ExecTransactionSync(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	receipt, err := tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: "transferWithApproval",
 			From:     recipient1Name,
 			To:       &notoAddress,
@@ -402,9 +402,9 @@ func TestNotoSelfSubmit(t *testing.T) {
 	require.NoError(t, err)
 
 	notoFactory := domain.LoadBuild(notoFactoryJSON)
-	_, err = tb.ExecTransactionSync(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	_, err = tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: "registerImplementation",
 			From:     notaryName,
 			To:       factoryAddress,
@@ -418,9 +418,9 @@ func TestNotoSelfSubmit(t *testing.T) {
 	require.NoError(t, err)
 
 	var callResult map[string]any
-	err = tb.ExecBaseLedgerCall(ctx, &callResult, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	err = tb.ExecBaseLedgerCall(ctx, &callResult, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			To:       factoryAddress,
 			Function: "getImplementation",
 			From:     notaryName,

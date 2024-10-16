@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -49,7 +49,7 @@ func (DBPublicTxn) TableName() string {
 type DBPublicTxnBinding struct {
 	SignerNonce     string                               `gorm:"column:signer_nonce;primaryKey"`
 	Transaction     uuid.UUID                            `gorm:"column:transaction"`
-	TransactionType tktypes.Enum[ptxapi.TransactionType] `gorm:"column:tx_type"`
+	TransactionType tktypes.Enum[pldapi.TransactionType] `gorm:"column:tx_type"`
 }
 
 func (DBPublicTxnBinding) TableName() string {

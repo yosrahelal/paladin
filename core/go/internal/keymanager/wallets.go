@@ -22,9 +22,9 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -84,7 +84,18 @@ func (km *keyManager) getWalletByName(ctx context.Context, walletName string) (*
 	return w, nil
 }
 
-func (w *wallet) resolveKeyAndVerifier(ctx context.Context, mapping *components.KeyMappingWithPath, algorithm, verifierType string) (*components.KeyMappingAndVerifier, error) {
+func (km *keyManager) getWalletList() []*pldapi.WalletInfo {
+	walletNames := make([]*pldapi.WalletInfo, len(km.walletsOrdered))
+	for i, w := range km.walletsOrdered {
+		walletNames[i] = &pldapi.WalletInfo{
+			Name:        w.name,
+			KeySelector: w.keySelector.String(),
+		}
+	}
+	return walletNames
+}
+
+func (w *wallet) resolveKeyAndVerifier(ctx context.Context, mapping *pldapi.KeyMappingWithPath, algorithm, verifierType string) (*pldapi.KeyMappingAndVerifier, error) {
 
 	req := &signerapi.ResolveKeyRequest{
 		Attributes: map[string]string{},
@@ -121,9 +132,9 @@ func (w *wallet) resolveKeyAndVerifier(ctx context.Context, mapping *components.
 	}
 
 	mapping.KeyHandle = res.KeyHandle
-	return &components.KeyMappingAndVerifier{
+	return &pldapi.KeyMappingAndVerifier{
 		KeyMappingWithPath: mapping,
-		Verifier: &components.KeyVerifier{
+		Verifier: &pldapi.KeyVerifier{
 			Algorithm: res.Identifiers[0].Algorithm,
 			Type:      res.Identifiers[0].VerifierType,
 			Verifier:  res.Identifiers[0].Verifier,
@@ -132,7 +143,7 @@ func (w *wallet) resolveKeyAndVerifier(ctx context.Context, mapping *components.
 
 }
 
-func (w *wallet) sign(ctx context.Context, mapping *components.KeyMappingAndVerifier, payloadType string, payload []byte) ([]byte, error) {
+func (w *wallet) sign(ctx context.Context, mapping *pldapi.KeyMappingAndVerifier, payloadType string, payload []byte) ([]byte, error) {
 	log.L(ctx).Infof("Wallet '%s' signing %d bytes with keyHandle=%s algorithm=%s payloadType=%s", w.name, len(payload), mapping.KeyHandle, mapping.Verifier.Algorithm, payloadType)
 	res, err := w.signingModule.Sign(ctx, &signerapi.SignRequest{
 		KeyHandle:   mapping.KeyHandle,

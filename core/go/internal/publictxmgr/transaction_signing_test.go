@@ -21,9 +21,9 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
@@ -39,13 +39,13 @@ func TestInFlightTxSignFail(t *testing.T) {
 	fromAddr := *tktypes.RandAddress()
 
 	m.ethClient.On("ChainID").Return(int64(1122334455))
-	keyMapping := &components.KeyMappingAndVerifier{
-		KeyMappingWithPath: &components.KeyMappingWithPath{
-			KeyMapping: &components.KeyMapping{
+	keyMapping := &pldapi.KeyMappingAndVerifier{
+		KeyMappingWithPath: &pldapi.KeyMappingWithPath{
+			KeyMapping: &pldapi.KeyMapping{
 				Identifier: "any.key",
 			},
 		},
-		Verifier: &components.KeyVerifier{
+		Verifier: &pldapi.KeyVerifier{
 			Verifier: fromAddr.String(),
 		},
 	}

@@ -27,7 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/integration-test/helpers"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -187,9 +187,9 @@ func registerImpl(ctx context.Context, name string, domainContracts *zetoDomainC
 			WithdrawVerifier: withdrawVerifierAddr.String(),
 		},
 	}
-	_, err := tb.ExecTransactionSync(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	_, err := tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			From:     deployer,
 			To:       addr,
 			Data:     tktypes.JSONString(params),

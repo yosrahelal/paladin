@@ -28,7 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -585,9 +585,9 @@ func TestBatchDoubleSubmit(t *testing.T) {
 	addr := tktypes.RandAddress()
 	batch, err := ble.PrepareSubmissionBatch(ctx, []*components.PublicTxSubmission{
 		{
-			PublicTxInput: ptxapi.PublicTxInput{
+			PublicTxInput: pldapi.PublicTxInput{
 				From: addr,
-				PublicTxOptions: ptxapi.PublicTxOptions{
+				PublicTxOptions: pldapi.PublicTxOptions{
 					Gas:   confutil.P(tktypes.HexUint64(1223451)),
 					Value: tktypes.Uint64ToUint256(100),
 				},

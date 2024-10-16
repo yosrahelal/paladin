@@ -19,7 +19,7 @@ package keymanager
 import (
 	"context"
 
-	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -30,8 +30,17 @@ func (km *keyManager) RPCModule() *rpcserver.RPCModule {
 
 func (km *keyManager) initRPC() {
 	km.rpcModule = rpcserver.NewRPCModule("keymgr").
+		Add("keymgr_wallets", km.rpcWallets()).
 		Add("keymgr_resolveKey", km.rpcResolveKey()).
-		Add("keymgr_resolveEthAddress", km.rpcResolveEthAddress())
+		Add("keymgr_resolveEthAddress", km.rpcResolveEthAddress()).
+		Add("keymgr_reverseKeyLookup", km.rpcReverseKeyLookup())
+}
+
+func (km *keyManager) rpcWallets() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod0(func(ctx context.Context,
+	) ([]*pldapi.WalletInfo, error) {
+		return km.getWalletList(), nil
+	})
 }
 
 func (km *keyManager) rpcResolveKey() rpcserver.RPCHandler {
@@ -39,7 +48,7 @@ func (km *keyManager) rpcResolveKey() rpcserver.RPCHandler {
 		identifier string,
 		algorithm string,
 		verifierType string,
-	) (*components.KeyMappingAndVerifier, error) {
+	) (*pldapi.KeyMappingAndVerifier, error) {
 		return km.ResolveKeyNewDatabaseTX(ctx, identifier, algorithm, verifierType)
 	})
 }
@@ -49,5 +58,15 @@ func (km *keyManager) rpcResolveEthAddress() rpcserver.RPCHandler {
 		identifier string,
 	) (*tktypes.EthAddress, error) {
 		return km.ResolveEthAddressNewDatabaseTX(ctx, identifier)
+	})
+}
+
+func (km *keyManager) rpcReverseKeyLookup() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod3(func(ctx context.Context,
+		algorithm string,
+		verifierType string,
+		verifier string,
+	) (*pldapi.KeyMappingAndVerifier, error) {
+		return km.ReverseKeyLookup(ctx, km.p.DB(), algorithm, verifierType, verifier)
 	})
 }

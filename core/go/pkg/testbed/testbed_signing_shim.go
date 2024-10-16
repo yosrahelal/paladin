@@ -19,15 +19,15 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 )
 
 type ethClientKeyMgrShim struct {
 	tb       *testbed
-	resolved map[string]*components.KeyMappingAndVerifier
+	resolved map[string]*pldapi.KeyMappingAndVerifier
 }
 
 func (e *ethClientKeyMgrShim) AddInMemorySigner(prefix string, signer signerapi.InMemorySigner) {
@@ -60,6 +60,6 @@ func (e *ethClientKeyMgrShim) Sign(ctx context.Context, req *signerapi.SignReque
 func (tb *testbed) EthClientKeyManagerShim() ethclient.KeyManager {
 	return &ethClientKeyMgrShim{
 		tb:       tb,
-		resolved: make(map[string]*components.KeyMappingAndVerifier),
+		resolved: make(map[string]*pldapi.KeyMappingAndVerifier),
 	}
 }

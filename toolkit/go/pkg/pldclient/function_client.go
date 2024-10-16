@@ -23,7 +23,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -54,14 +54,14 @@ type TransactionBuilder interface {
 	Input(any) TransactionBuilder
 	Output(any) TransactionBuilder
 	JSONSerializer(*abi.Serializer) TransactionBuilder
-	PublicTxOptions(ptxapi.PublicTxOptions) TransactionBuilder
+	PublicTxOptions(pldapi.PublicTxOptions) TransactionBuilder
 
 	// Result functions
 	Definition() *abi.Entry                                    // returns the definition
 	BuildCallData() (callData tktypes.HexBytes, err error)     // builds binary call data, useful for various low level functions on ABI
 	BuildInputDataCV() (cv *abi.ComponentValue, err error)     // build the intermediate abi.ComponentValue tree for the inputs
 	BuildInputDataJSON() (jsonData tktypes.RawJSON, err error) // build the input data as JSON (object by default, with serialization options via Serializer())
-	BuildTX() (*ptxapi.TransactionInput, error)                // builds the full TransactionInput object for use with Paladin
+	BuildTX() (*pldapi.TransactionInput, error)                // builds the full TransactionInput object for use with Paladin
 	SendTX() (stx SentTransaction, err error)                  // shortcut to BuildTX() then SendTX()
 }
 
@@ -87,7 +87,7 @@ type abiFunctionClient struct {
 type txBuilder struct {
 	*abiFunctionClient
 	ctx        context.Context
-	tx         ptxapi.TransactionInput
+	tx         pldapi.TransactionInput
 	serializer *abi.Serializer
 	input      any
 	output     any // TODO: Implement call
@@ -237,8 +237,8 @@ func (fc *abiFunctionClient) TXBuilder(ctx context.Context) TransactionBuilder {
 		ctx:               ctx,
 		abiFunctionClient: fc,
 		serializer:        tktypes.StandardABISerializer(),
-		tx: ptxapi.TransactionInput{
-			Transaction: ptxapi.Transaction{
+		tx: pldapi.TransactionInput{
+			Transaction: pldapi.Transaction{
 				Function: fc.signature,
 			},
 			ABI:      fc.abi,
@@ -267,7 +267,7 @@ func (b *txBuilder) Output(output any) TransactionBuilder {
 	return b
 }
 
-func (b *txBuilder) PublicTxOptions(opts ptxapi.PublicTxOptions) TransactionBuilder {
+func (b *txBuilder) PublicTxOptions(opts pldapi.PublicTxOptions) TransactionBuilder {
 	b.tx.PublicTxOptions = opts
 	return b
 }
@@ -278,12 +278,12 @@ func (b *txBuilder) JSONSerializer(s *abi.Serializer) TransactionBuilder {
 }
 
 func (b *txBuilder) Public() TransactionBuilder {
-	b.tx.Type = ptxapi.TransactionTypePublic.Enum()
+	b.tx.Type = pldapi.TransactionTypePublic.Enum()
 	return b
 }
 
 func (b *txBuilder) Private() TransactionBuilder {
-	b.tx.Type = ptxapi.TransactionTypePrivate.Enum()
+	b.tx.Type = pldapi.TransactionTypePrivate.Enum()
 	return b
 }
 
@@ -318,9 +318,9 @@ func (b *txBuilder) validateFromToType() error {
 		if b.selector != nil {
 			return i18n.NewError(b.ctx, tkmsgs.MsgPaladinClientMissingTo)
 		}
-		if b.tx.Type.V() == ptxapi.TransactionTypePrivate && b.tx.Bytecode != nil {
+		if b.tx.Type.V() == pldapi.TransactionTypePrivate && b.tx.Bytecode != nil {
 			return i18n.NewError(b.ctx, tkmsgs.MsgPaladinClientBytecodeWithPriv)
-		} else if b.tx.Type.V() == ptxapi.TransactionTypePublic && b.tx.Bytecode == nil {
+		} else if b.tx.Type.V() == pldapi.TransactionTypePublic && b.tx.Bytecode == nil {
 			if len(b.buildBytecode) != 0 {
 				b.tx.Bytecode = b.buildBytecode
 			} else {
@@ -393,7 +393,7 @@ func (b *txBuilder) BuildInputDataJSON() (jsonData tktypes.RawJSON, err error) {
 	return jsonData, err
 }
 
-func (b *txBuilder) BuildTX() (tx *ptxapi.TransactionInput, err error) {
+func (b *txBuilder) BuildTX() (tx *pldapi.TransactionInput, err error) {
 	b.tx.Data, err = b.BuildInputDataJSON()
 	if b.selector == nil {
 		b.tx.Function = ""

@@ -29,8 +29,8 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -42,9 +42,9 @@ func TestResolveFunctionABIAndDef(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
-	_, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:         ptxapi.TransactionTypePublic.Enum(),
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:         pldapi.TransactionTypePublic.Enum(),
 			ABIReference: confutil.P(tktypes.Bytes32(tktypes.RandBytes(32))),
 		},
 		ABI: abi.ABI{},
@@ -56,9 +56,9 @@ func TestResolveFunctionNoABI(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
-	_, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type: ptxapi.TransactionTypePublic.Enum(),
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 		},
 		ABI: abi.ABI{},
@@ -70,9 +70,9 @@ func TestResolveFunctionBadABI(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
-	_, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type: ptxapi.TransactionTypePublic.Enum(),
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 		},
 		ABI: abi.ABI{{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "wrong"}}}},
@@ -91,9 +91,9 @@ func TestResolveFunctionNamedWithNoTarget(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
 	defer done()
 
-	_, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: "doIt",
 		},
 		ABI: abi.ABI{{Type: abi.Function, Name: "doIt"}},
@@ -127,7 +127,7 @@ func mockPublicSubmitWithDataTxOk(t *testing.T) func(conf *pldconf.TxManagerConf
 	}
 }
 
-func mockQueryPublicTxForTransactions(cb func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error)) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+func mockQueryPublicTxForTransactions(cb func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*pldapi.PublicTx, error)) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mqb := mc.publicTxMgr.On("QueryPublicTxForTransactions", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 		mqb.Run(func(args mock.Arguments) {
@@ -137,7 +137,7 @@ func mockQueryPublicTxForTransactions(cb func(ids []uuid.UUID, jq *query.QueryJS
 	}
 }
 
-func mockQueryPublicTxWithBindings(cb func(jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error)) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+func mockQueryPublicTxWithBindings(cb func(jq *query.QueryJSON) ([]*pldapi.PublicTxWithBinding, error)) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mqb := mc.publicTxMgr.On("QueryPublicTxWithBindings", mock.Anything, mock.Anything, mock.Anything)
 		mqb.Run(func(args mock.Arguments) {
@@ -147,7 +147,7 @@ func mockQueryPublicTxWithBindings(cb func(jq *query.QueryJSON) ([]*ptxapi.Publi
 	}
 }
 
-func mockGetPublicTransactionForHash(cb func(hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error)) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+func mockGetPublicTransactionForHash(cb func(hash tktypes.Bytes32) (*pldapi.PublicTxWithBinding, error)) func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 	return func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mqb := mc.publicTxMgr.On("GetPublicTransactionForHash", mock.Anything, mock.Anything, mock.Anything)
 		mqb.Run(func(args mock.Arguments) {
@@ -172,9 +172,9 @@ func TestSubmitBadFromAddr(t *testing.T) {
 	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
 	require.NoError(t, err)
 
-	_, err = txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			From:     "sender1",
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
@@ -196,9 +196,9 @@ func TestResolveFunctionHexInputOK(t *testing.T) {
 	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
 	require.NoError(t, err)
 
-	_, err = txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			From:     "sender1",
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
@@ -215,9 +215,9 @@ func TestResolveFunctionHexInputFail(t *testing.T) {
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}}}
 
-	_, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data:     tktypes.RawJSON(`"0x"`),
@@ -233,9 +233,9 @@ func TestResolveFunctionUnsupportedInput(t *testing.T) {
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}}}
 
-	_, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data:     tktypes.RawJSON(`false`),
@@ -257,9 +257,9 @@ func TestResolveFunctionPlainNameOK(t *testing.T) {
 	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
 	require.NoError(t, err)
 
-	_, err = txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			From:     "sender1",
 			Function: "doIt",
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
@@ -280,9 +280,9 @@ func TestSendTransactionPrivateDeploy(t *testing.T) {
 	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
 	require.NoError(t, err)
 
-	_, err = txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:   ptxapi.TransactionTypePrivate.Enum(),
+	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:   pldapi.TransactionTypePrivate.Enum(),
 			Domain: "domain1",
 			Data:   tktypes.JSONString(tktypes.HexBytes(callData)),
 		},
@@ -301,9 +301,9 @@ func TestSendTransactionPrivateInvoke(t *testing.T) {
 	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
 	require.NoError(t, err)
 
-	_, err = txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePrivate.Enum(),
+	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePrivate.Enum(),
 			Domain:   "domain1",
 			Function: "doIt",
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
@@ -324,9 +324,9 @@ func TestSendTransactionPrivateInvokeFail(t *testing.T) {
 	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
 	require.NoError(t, err)
 
-	_, err = txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePrivate.Enum(),
+	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePrivate.Enum(),
 			Domain:   "domain1",
 			Function: "doIt",
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
@@ -349,9 +349,9 @@ func TestResolveFunctionOnlyOneToMatch(t *testing.T) {
 	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
 	require.NoError(t, err)
 
-	_, err = txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type: ptxapi.TransactionTypePublic.Enum(),
+	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
 			From: "sender1",
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
@@ -372,9 +372,9 @@ func TestResolveFunctionOnlyDuplicateMatch(t *testing.T) {
 	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
 	require.NoError(t, err)
 
-	_, err = txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type: ptxapi.TransactionTypePublic.Enum(),
+	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
 		},
@@ -393,9 +393,9 @@ func TestResolveFunctionNoMatch(t *testing.T) {
 	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
 	require.NoError(t, err)
 
-	_, err = txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: "nope",
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data:     tktypes.JSONString(tktypes.HexBytes(callData)),
@@ -415,8 +415,8 @@ func TestParseInputsBadTxType(t *testing.T) {
 	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
 	require.NoError(t, err)
 
-	_, err = txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
+	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
 		},
@@ -435,9 +435,9 @@ func TestParseInputsBytecodeNonConstructor(t *testing.T) {
 	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
 	require.NoError(t, err)
 
-	_, err = txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type: ptxapi.TransactionTypePublic.Enum(),
+	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
 		},
@@ -457,9 +457,9 @@ func TestParseInputsBytecodeMissingConstructor(t *testing.T) {
 	callData, err := exampleABI[0].EncodeCallDataJSON([]byte(`[]`))
 	require.NoError(t, err)
 
-	_, err = txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type: ptxapi.TransactionTypePublic.Enum(),
+	_, err = txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
 			Data: tktypes.JSONString(tktypes.HexBytes(callData)),
 		},
 		ABI: exampleABI,
@@ -475,9 +475,9 @@ func TestParseInputsBadDataJSON(t *testing.T) {
 		{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}},
 	}
 
-	_, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type: ptxapi.TransactionTypePublic.Enum(),
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.RawJSON(`{!!! bad json`),
 		},
@@ -494,9 +494,9 @@ func TestParseInputsBadDataForFunction(t *testing.T) {
 		{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}},
 	}
 
-	_, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type: ptxapi.TransactionTypePublic.Enum(),
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.RawJSON(`["not a number"]`),
 		},
@@ -513,9 +513,9 @@ func TestParseInputsBadByteString(t *testing.T) {
 		{Type: abi.Function, Name: "doIt", Inputs: abi.ParameterArray{{Type: "uint256"}}},
 	}
 
-	_, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type: ptxapi.TransactionTypePublic.Enum(),
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
 			Data: tktypes.RawJSON(`"not hex"`),
 		},
@@ -550,9 +550,9 @@ func TestInsertTransactionFail(t *testing.T) {
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
 
-	_, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			From:     "sender1",
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
@@ -582,9 +582,9 @@ func TestInsertTransactionPublicTxPrepareFail(t *testing.T) {
 
 	exampleABI := abi.ABI{{Type: abi.Function, Name: "doIt"}}
 
-	_, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: exampleABI[0].FunctionSelectorBytes().String(),
 			From:     "sender1",
 			To:       tktypes.MustEthAddress(tktypes.RandHex(20)),
@@ -605,9 +605,9 @@ func TestInsertTransactionPublicTxPrepareReject(t *testing.T) {
 	defer done()
 
 	// Default public constructor invoke - no ABI or data
-	_, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type: ptxapi.TransactionTypePublic.Enum(),
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
 			From: "sender1",
 		},
 		Bytecode: tktypes.HexBytes(tktypes.RandBytes(1)),
@@ -624,9 +624,9 @@ func TestInsertTransactionOkDefaultConstructor(t *testing.T) {
 	defer done()
 
 	// Default public constructor invoke
-	_, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type: ptxapi.TransactionTypePublic.Enum(),
+	_, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
 			From: "sender1",
 		},
 		ABI:      abi.ABI{{Name: "notConstructor", Type: abi.Function, Inputs: abi.ParameterArray{}}},
@@ -642,7 +642,7 @@ func TestCheckIdempotencyKeyNoOverrideErrIfFail(t *testing.T) {
 	defer done()
 
 	// Default public constructor invoke
-	err := txm.checkIdempotencyKeys(ctx, fmt.Errorf("pop"), false, []*ptxapi.TransactionInput{{Transaction: ptxapi.Transaction{
+	err := txm.checkIdempotencyKeys(ctx, fmt.Errorf("pop"), false, []*pldapi.TransactionInput{{Transaction: pldapi.Transaction{
 		IdempotencyKey: "idem1",
 	}}})
 	assert.Regexp(t, "pop", err)
@@ -742,7 +742,7 @@ func TestCallTransactionBadTX(t *testing.T) {
 	defer done()
 
 	var result any
-	err := txm.CallTransaction(ctx, &result, &ptxapi.TransactionInput{})
+	err := txm.CallTransaction(ctx, &result, &pldapi.TransactionInput{})
 	require.Regexp(t, "PD012211", err)
 
 }

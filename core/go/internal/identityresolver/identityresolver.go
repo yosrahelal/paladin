@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	pbIdentityResolver "github.com/kaleido-io/paladin/core/pkg/proto/identityresolver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
 )
@@ -104,7 +105,7 @@ func (ir *identityResolver) ResolveVerifierAsync(ctx context.Context, lookup str
 		// we just need to be careful not to update the transaction object on this other thread
 		go func() {
 			unqualifiedLookup, err := tktypes.PrivateIdentityLocator(lookup).Identity(ctx)
-			var resolvedKey *components.KeyMappingAndVerifier
+			var resolvedKey *pldapi.KeyMappingAndVerifier
 			if err == nil {
 				resolvedKey, err = ir.keyManager.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, algorithm, verifierType)
 			}
@@ -233,7 +234,7 @@ func (ir *identityResolver) handleResolveVerifierRequest(ctx context.Context, me
 
 	// contractAddress and transactionID in the request message are simply used to populate the response
 	// so that the requesting node can correlate the response with the transaction that needs it
-	var resolvedKey *components.KeyMappingAndVerifier
+	var resolvedKey *pldapi.KeyMappingAndVerifier
 	unqualifiedLookup, err := tktypes.PrivateIdentityLocator(resolveVerifierRequest.Lookup).Identity(ctx)
 	if err == nil {
 		resolvedKey, err = ir.keyManager.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, resolveVerifierRequest.Algorithm, resolveVerifierRequest.VerifierType)

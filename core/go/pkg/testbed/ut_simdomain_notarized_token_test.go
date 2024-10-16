@@ -33,9 +33,9 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
@@ -673,9 +673,9 @@ func deploySmartContract(t *testing.T, confFile string) *tktypes.EthAddress {
 	txm := tb.Components().TxManager()
 
 	// In this test we deploy the factory in-line
-	txID, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type: ptxapi.TransactionTypePublic.Enum(),
+	txID, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
 			From: "domain1_admin",
 		},
 		ABI:      simDomainABI,
@@ -683,7 +683,7 @@ func deploySmartContract(t *testing.T, confFile string) *tktypes.EthAddress {
 	})
 	require.NoError(t, err)
 
-	var receipt *ptxapi.TransactionReceipt
+	var receipt *pldapi.TransactionReceipt
 	ticker := time.NewTicker(100 * time.Millisecond)
 	for {
 		<-ticker.C

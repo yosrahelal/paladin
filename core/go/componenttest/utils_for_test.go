@@ -42,8 +42,8 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/plugins"
 	"github.com/kaleido-io/paladin/registries/static/pkg/static"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/transports/grpc/pkg/grpc"
@@ -57,7 +57,7 @@ var simpleStorageBuildJSON []byte // From "gradle copyTestSolidityBuild"
 func transactionReceiptCondition(t *testing.T, ctx context.Context, txID uuid.UUID, rpcClient rpcclient.Client, isDeploy bool) func() bool {
 	//for the given transaction ID, return a function that can be used in an assert.Eventually to check if the transaction has a receipt
 	return func() bool {
-		txFull := ptxapi.TransactionFull{}
+		txFull := pldapi.TransactionFull{}
 		err := rpcClient.CallRPC(ctx, &txFull, "ptx_getTransaction", txID, true)
 		require.NoError(t, err)
 		return txFull.Receipt != nil && (!isDeploy || txFull.Receipt.ContractAddress != nil)

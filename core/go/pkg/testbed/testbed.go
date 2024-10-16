@@ -27,8 +27,8 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/plugins"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -45,15 +45,15 @@ func HDWalletSeedScopedToTest() *UTInitFunction {
 	}
 }
 
-type KeyMapping = components.KeyMappingAndVerifier
+type KeyMapping = pldapi.KeyMappingAndVerifier
 
 type Testbed interface {
 	components.AdditionalManager
 	// Use GenerateSeed to get a valid seed
 	StartForTest(configFile string, domains map[string]*TestbedDomain, initFunctions ...*UTInitFunction) (url string, conf *pldconf.PaladinConfig, done func(), err error)
 	ResolveKey(ctx context.Context, fqLookup, algorithm, verifierType string) (resolvedKey *KeyMapping, err error)
-	ExecTransactionSync(ctx context.Context, tx *ptxapi.TransactionInput) (receipt *ptxapi.TransactionReceipt, err error)
-	ExecBaseLedgerCall(ctx context.Context, output any, tx *ptxapi.TransactionInput) error
+	ExecTransactionSync(ctx context.Context, tx *pldapi.TransactionInput) (receipt *pldapi.TransactionReceipt, err error)
+	ExecBaseLedgerCall(ctx context.Context, output any, tx *pldapi.TransactionInput) error
 	EthClientKeyManagerShim() ethclient.KeyManager // CAREFUL - this will give you "nonce too low" if you clash with anything in-flight in Paladin managed TXs
 	Components() AllComponents
 }

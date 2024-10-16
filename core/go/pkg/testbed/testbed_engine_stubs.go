@@ -23,12 +23,12 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func (tb *testbed) ExecTransactionSync(ctx context.Context, tx *ptxapi.TransactionInput) (receipt *ptxapi.TransactionReceipt, err error) {
+func (tb *testbed) ExecTransactionSync(ctx context.Context, tx *pldapi.TransactionInput) (receipt *pldapi.TransactionReceipt, err error) {
 	txm := tb.c.TxManager()
 	txID, err := tb.c.TxManager().SendTransaction(ctx, tx)
 	if err != nil {
@@ -52,7 +52,7 @@ func (tb *testbed) ExecTransactionSync(ctx context.Context, tx *ptxapi.Transacti
 	return receipt, nil
 }
 
-func (tb *testbed) execBaseLedgerDeployTransaction(ctx context.Context, signer string, txInstruction *components.EthDeployTransaction) (receipt *ptxapi.TransactionReceipt, err error) {
+func (tb *testbed) execBaseLedgerDeployTransaction(ctx context.Context, signer string, txInstruction *components.EthDeployTransaction) (receipt *pldapi.TransactionReceipt, err error) {
 	var data []byte
 	if txInstruction.Inputs != nil {
 		data, err = tktypes.StandardABISerializer().SerializeJSONCtx(ctx, txInstruction.Inputs)
@@ -60,9 +60,9 @@ func (tb *testbed) execBaseLedgerDeployTransaction(ctx context.Context, signer s
 			return nil, err
 		}
 	}
-	tx := &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type: ptxapi.TransactionTypePublic.Enum(),
+	tx := &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
 			From: signer,
 			Data: data,
 		},
@@ -72,7 +72,7 @@ func (tb *testbed) execBaseLedgerDeployTransaction(ctx context.Context, signer s
 	return tb.ExecTransactionSync(ctx, tx)
 }
 
-func (tb *testbed) execBaseLedgerTransaction(ctx context.Context, signer string, txInstruction *components.EthTransaction) (receipt *ptxapi.TransactionReceipt, err error) {
+func (tb *testbed) execBaseLedgerTransaction(ctx context.Context, signer string, txInstruction *components.EthTransaction) (receipt *pldapi.TransactionReceipt, err error) {
 	var data []byte
 	if txInstruction.Inputs != nil {
 		data, err = tktypes.StandardABISerializer().SerializeJSONCtx(ctx, txInstruction.Inputs)
@@ -80,9 +80,9 @@ func (tb *testbed) execBaseLedgerTransaction(ctx context.Context, signer string,
 			return nil, err
 		}
 	}
-	tx := &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	tx := &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			Function: txInstruction.FunctionABI.String(),
 			From:     signer,
 			To:       &txInstruction.To,
@@ -93,11 +93,11 @@ func (tb *testbed) execBaseLedgerTransaction(ctx context.Context, signer string,
 	return tb.ExecTransactionSync(ctx, tx)
 }
 
-func (tb *testbed) ExecBaseLedgerCall(ctx context.Context, result any, tx *ptxapi.TransactionInput) error {
+func (tb *testbed) ExecBaseLedgerCall(ctx context.Context, result any, tx *pldapi.TransactionInput) error {
 	return tb.Components().TxManager().CallTransaction(ctx, result, tx)
 }
 
-func (tb *testbed) ResolveKey(ctx context.Context, fqLookup, algorithm, verifierType string) (resolvedKey *components.KeyMappingAndVerifier, err error) {
+func (tb *testbed) ResolveKey(ctx context.Context, fqLookup, algorithm, verifierType string) (resolvedKey *pldapi.KeyMappingAndVerifier, err error) {
 	keyMgr := tb.c.KeyManager()
 	unqualifiedLookup, err := tktypes.PrivateIdentityLocator(fqLookup).Identity(ctx)
 	if err == nil {

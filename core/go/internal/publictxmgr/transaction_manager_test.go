@@ -40,7 +40,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
@@ -241,9 +241,9 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 
 		txs[i] = &components.PublicTxSubmission{
 			Bindings: []*components.PaladinTXReference{
-				{TransactionID: txIDs[i], TransactionType: ptxapi.TransactionTypePrivate.Enum()},
+				{TransactionID: txIDs[i], TransactionType: pldapi.TransactionTypePrivate.Enum()},
 			},
-			PublicTxInput: ptxapi.PublicTxInput{
+			PublicTxInput: pldapi.PublicTxInput{
 				From: resolvedKey,
 				Data: []byte(fmt.Sprintf("data %d", i)),
 			},
@@ -322,14 +322,14 @@ func TestTransactionLifecycleRealKeyMgrAndDB(t *testing.T) {
 		// We need to decode the TX to find the nonce
 		txHash := calculateTransactionHash(signedMessage)
 		confirmation := &blockindexer.IndexedTransactionNotify{
-			IndexedTransaction: blockindexer.IndexedTransaction{
+			IndexedTransaction: pldapi.IndexedTransaction{
 				Hash:             *txHash,
 				BlockNumber:      11223344,
 				TransactionIndex: 10,
 				From:             resolvedKey,
 				To:               (*tktypes.EthAddress)(ethTx.To),
 				Nonce:            ethTx.Nonce.Uint64(),
-				Result:           blockindexer.TXResult_SUCCESS.Enum(),
+				Result:           pldapi.TXResult_SUCCESS.Enum(),
 			},
 		}
 		calculatedConfirmations <- confirmation
@@ -411,7 +411,7 @@ func fakeTxManagerInsert(t *testing.T, db *gorm.DB, txID uuid.UUID, fromStr stri
 		Error
 	require.NoError(t, err)
 	err = db.Exec(`INSERT INTO "transactions" ("id", "created", "type", "abi_ref", "from") VALUES (?, ?, ?, ?, ?)`,
-		txID, tktypes.TimestampNow(), ptxapi.TransactionTypePrivate.Enum(), fakeABI, fromStr).
+		txID, tktypes.TimestampNow(), pldapi.TransactionTypePrivate.Enum(), fakeABI, fromStr).
 		Error
 	require.NoError(t, err)
 }
@@ -424,7 +424,7 @@ func TestSubmitFailures(t *testing.T) {
 	m.ethClient.On("EstimateGasNoResolve", mock.Anything, mock.Anything, mock.Anything).
 		Return(ethclient.EstimateGasResult{}, fmt.Errorf("GasEstimate error")).Once()
 	_, err := ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
-		PublicTxInput: ptxapi.PublicTxInput{
+		PublicTxInput: pldapi.PublicTxInput{
 			From: tktypes.RandAddress(),
 		},
 	})
@@ -438,7 +438,7 @@ func TestSubmitFailures(t *testing.T) {
 			RevertData: sampleRevertData,
 		}, fmt.Errorf("execution reverted")).Once()
 	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
-		PublicTxInput: ptxapi.PublicTxInput{
+		PublicTxInput: pldapi.PublicTxInput{
 			From: tktypes.RandAddress(),
 		},
 	})
@@ -450,7 +450,7 @@ func TestSubmitFailures(t *testing.T) {
 	m.ethClient.On("GetTransactionCount", mock.Anything, mock.Anything).
 		Return(nil, fmt.Errorf("pop")).Once()
 	_, err = ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
-		PublicTxInput: ptxapi.PublicTxInput{
+		PublicTxInput: pldapi.PublicTxInput{
 			From: tktypes.RandAddress(),
 		},
 	})
@@ -500,10 +500,10 @@ func TestHandleNewTransactionTransferOnlyWithProvideGas(t *testing.T) {
 
 	// create transaction succeeded
 	tx, err := ble.SingleTransactionSubmit(ctx, &components.PublicTxSubmission{
-		PublicTxInput: ptxapi.PublicTxInput{
+		PublicTxInput: pldapi.PublicTxInput{
 			From: tktypes.RandAddress(),
 			To:   tktypes.MustEthAddress(tktypes.RandHex(20)),
-			PublicTxOptions: ptxapi.PublicTxOptions{
+			PublicTxOptions: pldapi.PublicTxOptions{
 				Gas:   confutil.P(tktypes.HexUint64(1223451)),
 				Value: tktypes.Uint64ToUint256(100),
 			},
@@ -536,9 +536,9 @@ func TestEngineSuspendResumeRealDB(t *testing.T) {
 	m.ethClient.On("GasPrice", mock.Anything).Return(tktypes.MustParseHexUint256("1000000000000000"), nil)
 
 	pubTx := &components.PublicTxSubmission{
-		PublicTxInput: ptxapi.PublicTxInput{
+		PublicTxInput: pldapi.PublicTxInput{
 			From: &resolvedKey,
-			PublicTxOptions: ptxapi.PublicTxOptions{
+			PublicTxOptions: pldapi.PublicTxOptions{
 				Gas: confutil.P(tktypes.HexUint64(1223451)),
 			},
 		},

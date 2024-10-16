@@ -24,7 +24,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
@@ -44,7 +44,7 @@ func TestProduceLatestInFlightStageContextSigning(t *testing.T) {
 	}
 
 	mTS.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
-		GasPricing: &ptxapi.PublicTxGasPricing{
+		GasPricing: &pldapi.PublicTxGasPricing{
 			GasPrice: tktypes.Uint64ToUint256(10),
 		},
 	})
@@ -162,7 +162,7 @@ func TestProduceLatestInFlightStageContextSigningPanic(t *testing.T) {
 	}
 
 	mTS.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
-		GasPricing: &ptxapi.PublicTxGasPricing{
+		GasPricing: &pldapi.PublicTxGasPricing{
 			GasPrice: tktypes.Uint64ToUint256(10),
 		},
 	})
@@ -207,7 +207,7 @@ func TestProduceLatestInFlightStageContextTriggerSign(t *testing.T) {
 	}
 
 	mTS.ApplyInMemoryUpdates(ctx, &BaseTXUpdates{
-		GasPricing: &ptxapi.PublicTxGasPricing{
+		GasPricing: &pldapi.PublicTxGasPricing{
 			GasPrice: tktypes.Uint64ToUint256(10),
 		},
 	})

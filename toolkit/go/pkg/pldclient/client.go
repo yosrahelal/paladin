@@ -28,6 +28,9 @@ import (
 )
 
 type PaladinClient interface {
+	// Direct RPC access
+	rpcclient.Client
+
 	// Config
 	ReceiptPollingInterval(t time.Duration) PaladinClient
 	HTTP(ctx context.Context, conf *pldconf.HTTPClientConfig) (PaladinClient, error)
@@ -43,6 +46,9 @@ type PaladinClient interface {
 
 	// Paladin transaction RPC interface
 	PTX() PTX
+
+	// Paladin Key Manager RPC interface
+	KeyManager() KeyManager
 }
 
 type PaladinWSClient interface {
@@ -50,7 +56,7 @@ type PaladinWSClient interface {
 }
 
 type paladinClient struct {
-	rpc                    rpcclient.Client
+	rpcclient.Client
 	receiptPollingInterval time.Duration
 }
 
@@ -60,7 +66,7 @@ const (
 
 func Wrap(rpc rpcclient.Client) PaladinClient {
 	return &paladinClient{
-		rpc:                    rpc,
+		Client:                 rpc,
 		receiptPollingInterval: DefaultReceiptPollingInterval,
 	}
 }
@@ -74,7 +80,7 @@ func (c *paladinClient) HTTP(ctx context.Context, conf *pldconf.HTTPClientConfig
 	if err != nil {
 		return nil, err
 	}
-	c.rpc = rpc
+	c.Client = rpc
 	return c, nil
 }
 
@@ -83,7 +89,7 @@ func (c *paladinClient) WebSocket(ctx context.Context, conf *pldconf.WSClientCon
 	if err != nil {
 		return nil, err
 	}
-	c.rpc = rpc
+	c.Client = rpc
 	return c, nil
 }
 

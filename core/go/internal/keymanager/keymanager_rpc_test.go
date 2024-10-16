@@ -23,8 +23,8 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -40,8 +40,13 @@ func TestRPCLocalDetails(t *testing.T) {
 	rpc, rpcDone := newTestRPCServer(t, ctx, km)
 	defer rpcDone()
 
-	var resolvedKey *components.KeyMappingAndVerifier
-	err := rpc.CallRPC(ctx, &resolvedKey, "keymgr_resolveKey", "my.key.1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	var wallets []*pldapi.WalletInfo
+	err := rpc.CallRPC(ctx, &wallets, "keymgr_wallets")
+	require.NoError(t, err)
+	assert.Equal(t, []*pldapi.WalletInfo{{Name: "hdwallet1", KeySelector: ".*"}}, wallets)
+
+	var resolvedKey *pldapi.KeyMappingAndVerifier
+	err = rpc.CallRPC(ctx, &resolvedKey, "keymgr_resolveKey", "my.key.1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 	assert.Equal(t, "m/44'/60'/1'/0/0", resolvedKey.KeyHandle)
 
@@ -49,6 +54,11 @@ func TestRPCLocalDetails(t *testing.T) {
 	err = rpc.CallRPC(ctx, &ethAddress, "keymgr_resolveEthAddress", "my.key.1")
 	require.NoError(t, err)
 	assert.Equal(t, resolvedKey.Verifier.Verifier, ethAddress.String())
+
+	var reverseLookedUp *pldapi.KeyMappingAndVerifier
+	err = rpc.CallRPC(ctx, &reverseLookedUp, "keymgr_reverseKeyLookup", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, ethAddress)
+	require.NoError(t, err)
+	assert.Equal(t, resolvedKey, reverseLookedUp)
 
 }
 

@@ -30,7 +30,7 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
@@ -80,10 +80,10 @@ func mockPublicSubmitTxOkOrReject(t *testing.T) func(conf *pldconf.TxManagerConf
 func TestPublicTransactionLifecycle(t *testing.T) {
 
 	senderAddr := tktypes.RandAddress()
-	var publicTxns map[uuid.UUID][]*ptxapi.PublicTx
+	var publicTxns map[uuid.UUID][]*pldapi.PublicTx
 	ctx, url, tmr, done := newTestTransactionManagerWithRPC(t,
 		mockPublicSubmitTxOkOrReject(t),
-		mockQueryPublicTxForTransactions(func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error) {
+		mockQueryPublicTxForTransactions(func(ids []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*pldapi.PublicTx, error) {
 			return publicTxns, nil
 		}),
 		func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
@@ -111,14 +111,14 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	// Submit in a public deploy with array encoded params and bytecode
 	tx0ID := uuid.New()
 	var tx1ID uuid.UUID
-	err = rpcClient.CallRPC(ctx, &tx1ID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+	err = rpcClient.CallRPC(ctx, &tx1ID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI:       sampleABI,
 		Bytecode:  tktypes.MustParseHexBytes("0x11223344"),
 		DependsOn: []uuid.UUID{tx0ID},
-		Transaction: ptxapi.Transaction{
+		Transaction: pldapi.Transaction{
 			IdempotencyKey: "tx1",
 			From:           "sender1",
-			Type:           ptxapi.TransactionTypePublic.Enum(),
+			Type:           pldapi.TransactionTypePublic.Enum(),
 			Data:           tktypes.RawJSON(`[12345]`),
 		},
 	})
@@ -126,7 +126,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	assert.NotEqual(t, uuid.UUID{}, tx1ID)
 
 	// Mock up the existence of the public TXs
-	publicTxns = map[uuid.UUID][]*ptxapi.PublicTx{
+	publicTxns = map[uuid.UUID][]*pldapi.PublicTx{
 		tx1ID: {
 			{
 				From:  *senderAddr,
@@ -136,7 +136,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	}
 
 	// Query them back
-	var txns []*ptxapi.TransactionFull
+	var txns []*pldapi.TransactionFull
 	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
 	require.NoError(t, err)
 	assert.Len(t, txns, 1)
@@ -154,7 +154,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	assert.Len(t, txns, 1)
 
 	// Get the stored ABIs to check we found it
-	var abis []*ptxapi.StoredABI
+	var abis []*pldapi.StoredABI
 	err = rpcClient.CallRPC(ctx, &abis, "ptx_queryStoredABIs", query.NewQueryBuilder().Limit(1).Query())
 	require.NoError(t, err)
 	assert.Len(t, abis, 1)
@@ -167,24 +167,24 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	assert.Equal(t, abiHash, *txns[0].ABIReference)
 
 	// Get it directly by ID
-	var abiGet *ptxapi.StoredABI
+	var abiGet *pldapi.StoredABI
 	err = rpcClient.CallRPC(ctx, &abiGet, "ptx_getStoredABI", abiHash)
 	require.NoError(t, err)
 	assert.Equal(t, abiHash, abiGet.Hash)
 
 	// Null on not found is the consistent ethereum pattern
-	var abiNotFound *ptxapi.StoredABI
+	var abiNotFound *pldapi.StoredABI
 	err = rpcClient.CallRPC(ctx, &abiNotFound, "ptx_getStoredABI", tktypes.Bytes32(tktypes.RandBytes(32)))
 	require.NoError(t, err)
 	assert.Nil(t, abiNotFound)
 
 	// Submit in a public invoke using that same ABI referring to the function
-	tx2Input := &ptxapi.TransactionInput{
+	tx2Input := &pldapi.TransactionInput{
 		DependsOn: []uuid.UUID{tx1ID},
-		Transaction: ptxapi.Transaction{
+		Transaction: pldapi.Transaction{
 			ABIReference:   &abiHash,
 			IdempotencyKey: "tx2",
-			Type:           ptxapi.TransactionTypePublic.Enum(),
+			Type:           pldapi.TransactionTypePublic.Enum(),
 			Data:           tktypes.RawJSON(`{"0": 123456789012345678901234567890}`), // nice big JSON number to deal with
 			Function:       "set(uint256)",
 			From:           "sender1",
@@ -192,10 +192,10 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		},
 	}
 	var txIDs []uuid.UUID
-	err = rpcClient.CallRPC(ctx, &txIDs, "ptx_sendTransactions", []*ptxapi.TransactionInput{tx2Input})
+	err = rpcClient.CallRPC(ctx, &txIDs, "ptx_sendTransactions", []*pldapi.TransactionInput{tx2Input})
 	assert.NoError(t, err)
 	tx2ID := txIDs[0]
-	var tx2 *ptxapi.TransactionFull
+	var tx2 *pldapi.TransactionFull
 	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransaction", tx2ID, true)
 	require.NoError(t, err)
 	assert.Equal(t, tx2ID, *tx2.ID)
@@ -205,11 +205,11 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	assert.Equal(t, tx2ID, *tx2.ID)
 
 	// Submit again and check we get the right error with the ID
-	err = rpcClient.CallRPC(ctx, &txIDs, "ptx_sendTransactions", []*ptxapi.TransactionInput{tx2Input})
+	err = rpcClient.CallRPC(ctx, &txIDs, "ptx_sendTransactions", []*pldapi.TransactionInput{tx2Input})
 	assert.Regexp(t, fmt.Sprintf("PD012220.*tx2=%s", tx2ID), err)
 
 	// Null on not found is the consistent ethereum pattern
-	var txNotFound *ptxapi.Transaction
+	var txNotFound *pldapi.Transaction
 	err = rpcClient.CallRPC(ctx, &txns, "ptx_getTransaction", uuid.New(), false)
 	require.NoError(t, err)
 	assert.Nil(t, txNotFound)
@@ -231,7 +231,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	// We should get that back with full
-	var txWithReceipt *ptxapi.TransactionFull
+	var txWithReceipt *pldapi.TransactionFull
 	err = rpcClient.CallRPC(ctx, &txWithReceipt, "ptx_getTransaction", tx1ID, true)
 	require.NoError(t, err)
 	require.True(t, txWithReceipt.Receipt.Success)
@@ -240,13 +240,13 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.Nil(t, txWithReceipt.Receipt.RevertData)
 
 	// Select just pending transactions
-	var pendingTransactionFull []*ptxapi.TransactionFull
+	var pendingTransactionFull []*pldapi.TransactionFull
 	err = rpcClient.CallRPC(ctx, &pendingTransactionFull, "ptx_queryPendingTransactions", query.NewQueryBuilder().Limit(100).Query(), true)
 	require.NoError(t, err)
 	require.Len(t, pendingTransactionFull, 1)
 	require.Equal(t, tx2ID, *pendingTransactionFull[0].ID)
 	require.Len(t, pendingTransactionFull[0].DependsOn, 1)
-	var pendingTransactions []*ptxapi.Transaction
+	var pendingTransactions []*pldapi.Transaction
 	err = rpcClient.CallRPC(ctx, &pendingTransactions, "ptx_queryPendingTransactions", query.NewQueryBuilder().Limit(100).Query(), false)
 	require.NoError(t, err)
 	require.Len(t, pendingTransactions, 1)
@@ -271,7 +271,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	// Ask for the receipt directly
-	var txReceipt *ptxapi.TransactionReceipt
+	var txReceipt *pldapi.TransactionReceipt
 	err = rpcClient.CallRPC(ctx, &txReceipt, "ptx_getTransactionReceipt", tx2ID)
 	require.NoError(t, err)
 	require.NotNil(t, txReceipt)
@@ -282,14 +282,14 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.Equal(t, `PD012216: Transaction reverted BadValue("12345")`, txReceipt.FailureMessage)
 
 	// Select just success receipts
-	var successReceipts []*ptxapi.TransactionReceipt
+	var successReceipts []*pldapi.TransactionReceipt
 	err = rpcClient.CallRPC(ctx, &successReceipts, "ptx_queryTransactionReceipts", query.NewQueryBuilder().Limit(100).Equal("success", true).Query())
 	require.NoError(t, err)
 	require.Len(t, successReceipts, 1)
 	assert.Equal(t, successReceipts[0].ID, tx1ID)
 
 	// Get the dependency in the middle of the chain 0, 1, 2 to see both sides
-	var tx1Deps *ptxapi.TransactionDependencies
+	var tx1Deps *pldapi.TransactionDependencies
 	err = rpcClient.CallRPC(ctx, &tx1Deps, "ptx_getTransactionDependencies", tx1ID)
 	require.NoError(t, err)
 	assert.Equal(t, []uuid.UUID{tx0ID}, tx1Deps.DependsOn)
@@ -300,18 +300,18 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 func TestPublicTransactionPassthroughQueries(t *testing.T) {
 
 	nonce, _ := rand.Int(rand.Reader, big.NewInt(10000000))
-	tx := &ptxapi.PublicTxWithBinding{
-		PublicTx: &ptxapi.PublicTx{
+	tx := &pldapi.PublicTxWithBinding{
+		PublicTx: &pldapi.PublicTx{
 			From:  tktypes.EthAddress(tktypes.RandBytes(20)),
 			Nonce: tktypes.HexUint64(nonce.Uint64()),
 		},
-		PublicTxBinding: ptxapi.PublicTxBinding{Transaction: uuid.New(), TransactionType: ptxapi.TransactionTypePublic.Enum()},
+		PublicTxBinding: pldapi.PublicTxBinding{Transaction: uuid.New(), TransactionType: pldapi.TransactionTypePublic.Enum()},
 	}
-	var mockQuery func(jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error)
-	var mockGetByHash func(hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error)
+	var mockQuery func(jq *query.QueryJSON) ([]*pldapi.PublicTxWithBinding, error)
+	var mockGetByHash func(hash tktypes.Bytes32) (*pldapi.PublicTxWithBinding, error)
 	ctx, url, _, done := newTestTransactionManagerWithRPC(t,
-		mockQueryPublicTxWithBindings(func(jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) { return mockQuery(jq) }),
-		mockGetPublicTransactionForHash(func(hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error) { return mockGetByHash(hash) }),
+		mockQueryPublicTxWithBindings(func(jq *query.QueryJSON) ([]*pldapi.PublicTxWithBinding, error) { return mockQuery(jq) }),
+		mockGetPublicTransactionForHash(func(hash tktypes.Bytes32) (*pldapi.PublicTxWithBinding, error) { return mockGetByHash(hash) }),
 	)
 	defer done()
 
@@ -319,16 +319,16 @@ func TestPublicTransactionPassthroughQueries(t *testing.T) {
 	require.NoError(t, err)
 
 	// Simple query
-	sampleTxns := []*ptxapi.PublicTxWithBinding{tx}
-	mockQuery = func(_ *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) { return sampleTxns, nil }
-	var txns []*ptxapi.PublicTxWithBinding
+	sampleTxns := []*pldapi.PublicTxWithBinding{tx}
+	mockQuery = func(_ *query.QueryJSON) ([]*pldapi.PublicTxWithBinding, error) { return sampleTxns, nil }
+	var txns []*pldapi.PublicTxWithBinding
 	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryPublicTransactions", query.NewQueryBuilder().Limit(100).Query())
 	require.NoError(t, err)
 	require.Len(t, txns, 1)
 	assert.Equal(t, sampleTxns, txns)
 
 	// Query pending
-	mockQuery = func(jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) {
+	mockQuery = func(jq *query.QueryJSON) ([]*pldapi.PublicTxWithBinding, error) {
 		assert.JSONEq(t, `{
 			"limit": 100,
 			"eq": [{"field":"nonce","value":12345}],
@@ -347,31 +347,31 @@ func TestPublicTransactionPassthroughQueries(t *testing.T) {
 	require.Regexp(t, "PD012200", err)
 
 	// Query fail
-	mockQuery = func(_ *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) { return nil, fmt.Errorf("pop") }
+	mockQuery = func(_ *query.QueryJSON) ([]*pldapi.PublicTxWithBinding, error) { return nil, fmt.Errorf("pop") }
 	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryPublicTransactions", query.NewQueryBuilder().Limit(100).Query())
 	require.Regexp(t, "pop", err)
 
 	// Query by nonce
-	mockQuery = func(jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) {
+	mockQuery = func(jq *query.QueryJSON) ([]*pldapi.PublicTxWithBinding, error) {
 		assert.JSONEq(t, `{
 			"limit": 1,
 			"eq": [{"field":"from","value":"`+tx.From.String()+`"},{"field":"nonce","value":"`+tx.Nonce.String()+`"}]
 		}`, string(tktypes.JSONString(jq)))
 		return sampleTxns, nil
 	}
-	var txn *ptxapi.PublicTxWithBinding
+	var txn *pldapi.PublicTxWithBinding
 	err = rpcClient.CallRPC(ctx, &txn, "ptx_getPublicTransactionByNonce", tx.From, tx.Nonce)
 	require.NoError(t, err)
 	assert.Equal(t, sampleTxns[0], txn)
 
 	// Query by nonce err
-	mockQuery = func(_ *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) { return nil, fmt.Errorf("pop") }
+	mockQuery = func(_ *query.QueryJSON) ([]*pldapi.PublicTxWithBinding, error) { return nil, fmt.Errorf("pop") }
 	err = rpcClient.CallRPC(ctx, &txn, "ptx_getPublicTransactionByNonce", tx.From, tx.Nonce)
 	require.Regexp(t, "pop", err)
 
 	// Query by hash
 	txHash := tktypes.Bytes32(tktypes.RandBytes(32))
-	mockGetByHash = func(hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error) {
+	mockGetByHash = func(hash tktypes.Bytes32) (*pldapi.PublicTxWithBinding, error) {
 		assert.Equal(t, txHash, hash)
 		return tx, nil
 	}

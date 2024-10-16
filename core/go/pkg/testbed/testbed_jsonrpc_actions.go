@@ -24,8 +24,8 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -88,9 +88,9 @@ func (tb *testbed) rpcDeployBytecode() rpcserver.RPCHandler {
 		params tktypes.RawJSON,
 	) (*ethtypes.Address0xHex, error) {
 
-		receipt, err := tb.ExecTransactionSync(ctx, &ptxapi.TransactionInput{
-			Transaction: ptxapi.Transaction{
-				Type: ptxapi.TransactionTypePublic.Enum(),
+		receipt, err := tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
+			Transaction: pldapi.Transaction{
+				Type: pldapi.TransactionTypePublic.Enum(),
 				From: from,
 				Data: params,
 			},
@@ -279,7 +279,7 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	}
 }
 
-func mapDirectlyToInternalPrivateTX(etx *ptxapi.TransactionInput, intent prototk.TransactionSpecification_Intent) *components.PrivateTransaction {
+func mapDirectlyToInternalPrivateTX(etx *pldapi.TransactionInput, intent prototk.TransactionSpecification_Intent) *components.PrivateTransaction {
 	return &components.PrivateTransaction{
 		ID: uuid.New(),
 		Inputs: &components.TransactionInputs{

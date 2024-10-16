@@ -33,7 +33,7 @@ import (
 
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -274,11 +274,11 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 
 	publicTXs := []*components.PublicTxSubmission{
 		{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: ptxapi.PublicTxInput{
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: pldapi.PublicTxInput{
 				From:            resolvedAddrs[0],
 				To:              &tx.InvokeTransaction.To,
-				PublicTxOptions: ptxapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
+				PublicTxOptions: pldapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
 			},
 		},
 	}

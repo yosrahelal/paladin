@@ -28,7 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/ethclientmocks"
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -135,7 +135,7 @@ func TestFixedGasPrice(t *testing.T) {
 
 	gpo, err := hgc.GetGasPriceObject(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, &ptxapi.PublicTxGasPricing{
+	assert.Equal(t, &pldapi.PublicTxGasPricing{
 		GasPrice: tktypes.Int64ToInt256(1020304050),
 	}, gpo)
 }

@@ -31,7 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -363,7 +363,7 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 			stateDistributions = append(stateDistributions, txProcessor.GetStateDistributions(ctx)...)
 		}
 
-		preparedTransactionPayloads := make([]*ptxapi.TransactionInput, len(preparedTransactions))
+		preparedTransactionPayloads := make([]*pldapi.TransactionInput, len(preparedTransactions))
 
 		for j, preparedTransaction := range preparedTransactions {
 			preparedTransactionPayloads[j] = preparedTransaction.PreparedPublicTransaction
@@ -386,11 +386,11 @@ func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTr
 		for i, pt := range preparedTransactions {
 			log.L(ctx).Debugf("DispatchTransactions: creating PublicTxSubmission from %s", pt.Signer)
 			publicTXs[i] = &components.PublicTxSubmission{
-				Bindings: []*components.PaladinTXReference{{TransactionID: pt.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
-				PublicTxInput: ptxapi.PublicTxInput{
+				Bindings: []*components.PaladinTXReference{{TransactionID: pt.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+				PublicTxInput: pldapi.PublicTxInput{
 					From:            resolvedAddrs[i],
 					To:              &oc.contractAddress,
-					PublicTxOptions: ptxapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
+					PublicTxOptions: pldapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
 				},
 			}
 

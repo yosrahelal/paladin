@@ -30,6 +30,7 @@ import (
 
 	"github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
@@ -369,7 +370,7 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 
 	keyMgr := ts.components.KeyManager()
 	unqualifiedLookup, err := tktypes.PrivateIdentityLocator(partyName).Identity(ctx)
-	var resolvedKey *components.KeyMappingAndVerifier
+	var resolvedKey *pldapi.KeyMappingAndVerifier
 	if err == nil {
 		resolvedKey, err = keyMgr.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, attRequest.Algorithm, attRequest.VerifierType)
 	}

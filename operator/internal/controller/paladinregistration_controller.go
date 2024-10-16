@@ -31,7 +31,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
@@ -103,7 +103,7 @@ func (r *PaladinRegistrationReconciler) Reconcile(ctx context.Context, req ctrl.
 		"reg."+reg.Name,
 		reg.Spec.RegistryAdminNode /* for the root entry */, reg.Namespace,
 		&reg.Status.RegistrationTx,
-		func() (bool, *ptxapi.TransactionInput, error) { return r.buildRegistrationTX(ctx, &reg, registryAddr) },
+		func() (bool, *pldapi.TransactionInput, error) { return r.buildRegistrationTX(ctx, &reg, registryAddr) },
 	)
 	err = regTx.reconcile(ctx)
 	if err != nil {
@@ -127,7 +127,7 @@ func (r *PaladinRegistrationReconciler) Reconcile(ctx context.Context, req ctrl.
 			"reg."+reg.Name+"."+transportName,
 			reg.Spec.Node /* the node owns their transports */, reg.Namespace,
 			&transportPublishStatus,
-			func() (bool, *ptxapi.TransactionInput, error) {
+			func() (bool, *pldapi.TransactionInput, error) {
 				return r.buildTransportTX(ctx, &reg, registryAddr, transportName)
 			},
 		)
@@ -178,7 +178,7 @@ func (r *PaladinRegistrationReconciler) getRegistryAddress(ctx context.Context, 
 
 }
 
-func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context, reg *corev1alpha1.PaladinRegistration, registryAddr *tktypes.EthAddress) (bool, *ptxapi.TransactionInput, error) {
+func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context, reg *corev1alpha1.PaladinRegistration, registryAddr *tktypes.EthAddress) (bool, *pldapi.TransactionInput, error) {
 
 	// We ask the node its name, so we know what to register it as
 	regNodeRPC, err := getPaladinRPC(ctx, r.Client, reg.Spec.Node, reg.Namespace)
@@ -192,7 +192,7 @@ func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context,
 
 	// We also ask it to resolve its key down to an address
 	var nodeOwnerAddress string
-	if err := regNodeRPC.CallRPC(ctx, &nodeOwnerAddress, "ptx_resolveLocalVerifier",
+	if err := regNodeRPC.CallRPC(ctx, &nodeOwnerAddress, "keymgr_resolveKey",
 		reg.Spec.NodeKey, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS,
 	); err != nil || nodeOwnerAddress == "" {
 		return false, nil, err
@@ -204,9 +204,9 @@ func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context,
 		"owner":              nodeOwnerAddress,
 	}
 
-	tx := &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	tx := &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			To:       registryAddr,
 			Function: registryABI.Functions()["registerIdentity"].String(),
 			From:     reg.Spec.RegistryAdminKey, // registry admin registers the root entry for the node
@@ -218,7 +218,7 @@ func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context,
 	return true, tx, nil
 }
 
-func (r *PaladinRegistrationReconciler) buildTransportTX(ctx context.Context, reg *corev1alpha1.PaladinRegistration, registryAddr *tktypes.EthAddress, transportName string) (bool, *ptxapi.TransactionInput, error) {
+func (r *PaladinRegistrationReconciler) buildTransportTX(ctx context.Context, reg *corev1alpha1.PaladinRegistration, registryAddr *tktypes.EthAddress, transportName string) (bool, *pldapi.TransactionInput, error) {
 
 	// Get the details from the node
 	regNodeRPC, err := getPaladinRPC(ctx, r.Client, reg.Spec.Node, reg.Namespace)
@@ -259,9 +259,9 @@ func (r *PaladinRegistrationReconciler) buildTransportTX(ctx context.Context, re
 		"value":        transportDetails,
 	}
 
-	tx := &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	tx := &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			To:       registryAddr,
 			Function: registryABI.Functions()["setIdentityProperty"].String(),
 			From:     reg.Spec.RegistryAdminKey, // registry admin registers the root entry for the node

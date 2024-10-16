@@ -31,9 +31,9 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -105,9 +105,9 @@ func DeploySmartContract(t *testing.T, txm components.TXManager) *tktypes.EthAdd
 	simpleDomainBytecode := mustParseBuildBytecode(simpleDomainBuild)
 
 	// In this test we deploy the factory in-line
-	txID, err := txm.SendTransaction(ctx, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type: ptxapi.TransactionTypePublic.Enum(),
+	txID, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
 			From: "domain1_admin",
 		},
 		ABI:      simpleDomainABI,
@@ -115,7 +115,7 @@ func DeploySmartContract(t *testing.T, txm components.TXManager) *tktypes.EthAdd
 	})
 	require.NoError(t, err)
 
-	var receipt *ptxapi.TransactionReceipt
+	var receipt *pldapi.TransactionReceipt
 	ticker := time.NewTicker(100 * time.Millisecond)
 	for {
 		<-ticker.C

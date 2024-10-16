@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/mock"
@@ -44,9 +44,9 @@ func TestGatherEndorsementFailEndorseTransaction(t *testing.T) {
 		VerifierType: verifiers.ETH_ADDRESS,
 	}
 	mocks.keyManager.On("ResolveKeyNewDatabaseTX", mock.Anything, "alice", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
-		Return(&components.KeyMappingAndVerifier{
-			KeyMappingWithPath: &components.KeyMappingWithPath{KeyMapping: &components.KeyMapping{Identifier: "alice"}},
-			Verifier:           &components.KeyVerifier{Verifier: "something"},
+		Return(&pldapi.KeyMappingAndVerifier{
+			KeyMappingWithPath: &pldapi.KeyMappingWithPath{KeyMapping: &pldapi.KeyMapping{Identifier: "alice"}},
+			Verifier:           &pldapi.KeyVerifier{Verifier: "something"},
 		}, nil)
 	mocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("test error"))
 	eg := NewEndorsementGatherer(mocks.domainSmartContract, mocks.domainContext, mocks.keyManager)

@@ -26,11 +26,10 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -44,13 +43,13 @@ func newTestBalanceManager(t *testing.T, autoFuel bool, cbs ...func(m *mocksAndT
 
 			autoFuelSourceAddr := tktypes.RandAddress()
 
-			keyMapping := &components.KeyMappingAndVerifier{
-				KeyMappingWithPath: &components.KeyMappingWithPath{
-					KeyMapping: &components.KeyMapping{
+			keyMapping := &pldapi.KeyMappingAndVerifier{
+				KeyMappingWithPath: &pldapi.KeyMappingWithPath{
+					KeyMapping: &pldapi.KeyMapping{
 						Identifier: "autofueler",
 					},
 				},
-				Verifier: &components.KeyVerifier{
+				Verifier: &pldapi.KeyVerifier{
 					Verifier: autoFuelSourceAddr.String(),
 				},
 			}
@@ -265,13 +264,13 @@ func TestTopUpAddressNoOpScenarios(t *testing.T) {
 
 }
 
-func generateExpectedFuelingTransaction(idx int, amountToTransfer uint64, from, to tktypes.EthAddress) *ptxapi.PublicTx {
+func generateExpectedFuelingTransaction(idx int, amountToTransfer uint64, from, to tktypes.EthAddress) *pldapi.PublicTx {
 	gas := tktypes.HexUint64(10)
-	return &ptxapi.PublicTx{
+	return &pldapi.PublicTx{
 		From:  from,
 		To:    &to,
 		Nonce: tktypes.HexUint64(mockBaseNonce) + tktypes.HexUint64(idx), // fixed mock when disableManagerStart set
-		PublicTxOptions: ptxapi.PublicTxOptions{
+		PublicTxOptions: pldapi.PublicTxOptions{
 			Gas:   &gas,
 			Value: tktypes.Uint64ToUint256(amountToTransfer),
 		},

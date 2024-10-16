@@ -25,6 +25,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -55,8 +56,8 @@ type keyResolver struct {
 	rootPath            *resolvedDBPath
 	resolvedPaths       map[string]*resolvedDBPath
 	allocationLockTaken bool
-	newMappings         []*components.KeyMappingWithPath
-	newVerifiers        []*components.KeyVerifierWithKeyRef
+	newMappings         []*pldapi.KeyMappingWithPath
+	newVerifiers        []*pldapi.KeyVerifierWithKeyRef
 	done                chan struct{}
 }
 
@@ -275,7 +276,7 @@ func (kr *keyResolver) resolvePathSegment(dbTX *gorm.DB, parent *resolvedDBPath,
 	}
 }
 
-func (kr *keyResolver) getStoredVerifier(dbTX *gorm.DB, identifier, algorithm, verifierType string) (*components.KeyVerifier, error) {
+func (kr *keyResolver) getStoredVerifier(dbTX *gorm.DB, identifier, algorithm, verifierType string) (*pldapi.KeyVerifier, error) {
 	vKey := verifierForwardCacheKey(identifier, algorithm, verifierType)
 	verifier, _ := kr.km.verifierByIdentityCache.Get(vKey)
 	if verifier != nil {
@@ -295,7 +296,7 @@ func (kr *keyResolver) getStoredVerifier(dbTX *gorm.DB, identifier, algorithm, v
 	if len(verifiers) == 0 {
 		return nil, nil
 	}
-	verifier = &components.KeyVerifier{
+	verifier = &pldapi.KeyVerifier{
 		Algorithm: verifiers[0].Algorithm,
 		Type:      verifiers[0].Type,
 		Verifier:  verifiers[0].Verifier,
@@ -304,11 +305,11 @@ func (kr *keyResolver) getStoredVerifier(dbTX *gorm.DB, identifier, algorithm, v
 	return verifier, nil
 }
 
-func (kr *keyResolver) ResolveKey(identifier, algorithm, verifierType string) (_ *components.KeyMappingAndVerifier, err error) {
+func (kr *keyResolver) ResolveKey(identifier, algorithm, verifierType string) (_ *pldapi.KeyMappingAndVerifier, err error) {
 	return kr.resolveKey(identifier, algorithm, verifierType, false /* allow creation */)
 }
 
-func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, requireExistingMapping bool) (_ *components.KeyMappingAndVerifier, err error) {
+func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, requireExistingMapping bool) (_ *pldapi.KeyMappingAndVerifier, err error) {
 	kr.l.Lock()
 	defer kr.l.Unlock()
 
@@ -318,7 +319,7 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 	}
 
 	// Now check the mappings we've already generated in this context
-	var mapping *components.KeyMappingWithPath
+	var mapping *pldapi.KeyMappingWithPath
 	for _, m := range kr.newMappings {
 		if m.Identifier == identifier {
 			mapping = m
@@ -367,8 +368,8 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 
 		// Now we know if we're creating a new DB, or we have an existing one
 		if len(mappings) > 0 {
-			mapping = &components.KeyMappingWithPath{
-				KeyMapping: &components.KeyMapping{
+			mapping = &pldapi.KeyMappingWithPath{
+				KeyMapping: &pldapi.KeyMapping{
 					Identifier: mappings[0].Identifier,
 					Wallet:     mappings[0].Wallet,
 					KeyHandle:  mappings[0].KeyHandle,
@@ -380,8 +381,8 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 				return nil, i18n.NewError(kr.ctx, msgs.MsgKeyManagerExistingIdentifierNotFound)
 			}
 			newMapping = true
-			mapping = &components.KeyMappingWithPath{
-				KeyMapping: &components.KeyMapping{
+			mapping = &pldapi.KeyMappingWithPath{
+				KeyMapping: &pldapi.KeyMapping{
 					Identifier: identifier,
 				},
 				Path: dbPath.pathSegments(),
@@ -411,7 +412,7 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 				log.L(kr.ctx).Infof("Resolved key (created earlier in context): identifier=%s algorithm=%s verifierType=%s keyHandle=%s verifier=%s",
 					identifier, algorithm, verifierType, mapping.KeyHandle, v.Verifier)
 				// We have everything we need - no need to bother the signing module
-				return &components.KeyMappingAndVerifier{
+				return &pldapi.KeyMappingAndVerifier{
 					KeyMappingWithPath: mapping,
 					Verifier:           v.KeyVerifier,
 				}, nil
@@ -419,7 +420,7 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 		}
 
 		// Check the DB for a verifier for this existing mapping.
-		var v *components.KeyVerifier
+		var v *pldapi.KeyVerifier
 		dbTX, err := kr.krc.getDBTX()
 		if err == nil {
 			v, err = kr.getStoredVerifier(dbTX, identifier, algorithm, verifierType)
@@ -431,12 +432,12 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 			log.L(kr.ctx).Infof("Resolved key (cached): identifier=%s algorithm=%s verifierType=%s keyHandle=%s verifier=%s",
 				identifier, algorithm, verifierType, mapping.KeyHandle, v.Verifier)
 			// populate the reverse lookup cache
-			kr.km.verifierReverseCache.Set(verifierReverseCacheKey(v.Type, v.Algorithm, v.Verifier), &components.KeyMappingAndVerifier{
+			kr.km.verifierReverseCache.Set(verifierReverseCacheKey(v.Type, v.Algorithm, v.Verifier), &pldapi.KeyMappingAndVerifier{
 				KeyMappingWithPath: mapping,
 				Verifier:           v,
 			})
 			// We have everything we need - no need to bother the signing module
-			return &components.KeyMappingAndVerifier{
+			return &pldapi.KeyMappingAndVerifier{
 				KeyMappingWithPath: mapping,
 				Verifier:           v,
 			}, nil
@@ -464,7 +465,7 @@ func (kr *keyResolver) resolveKey(identifier, algorithm, verifierType string, re
 	// this might be a duplicate. If multiple threads race to create a second verifier for
 	// an existing key. Because there's no locking needed on the mapping to do that.
 	// This is fine because it's deterministic, and we just do an ON CONFLICT DO NOTHING below.
-	kr.newVerifiers = append(kr.newVerifiers, &components.KeyVerifierWithKeyRef{
+	kr.newVerifiers = append(kr.newVerifiers, &pldapi.KeyVerifierWithKeyRef{
 		KeyIdentifier: identifier,
 		KeyVerifier:   result.Verifier,
 	})
@@ -533,7 +534,7 @@ func (kr *keyResolver) postCommit() {
 		for _, v := range kr.newVerifiers {
 			if v.KeyIdentifier == m.Identifier {
 				// populate the reverse lookup cache
-				kr.km.verifierReverseCache.Set(verifierReverseCacheKey(v.Type, v.Algorithm, v.Verifier), &components.KeyMappingAndVerifier{
+				kr.km.verifierReverseCache.Set(verifierReverseCacheKey(v.Type, v.Algorithm, v.Verifier), &pldapi.KeyMappingAndVerifier{
 					KeyMappingWithPath: m,
 					Verifier:           v.KeyVerifier,
 				})
@@ -563,20 +564,20 @@ func (kr *keyResolver) cleanup() {
 	}
 }
 
-func (resolved *resolvedDBPath) pathSegments() []*components.KeyPathSegment {
-	var reversed []*components.KeyPathSegment
+func (resolved *resolvedDBPath) pathSegments() []*pldapi.KeyPathSegment {
+	var reversed []*pldapi.KeyPathSegment
 	p := resolved
 	for p != nil {
 		if p.segment == "" /* don't include the root */ {
 			break
 		}
-		reversed = append(reversed, &components.KeyPathSegment{
+		reversed = append(reversed, &pldapi.KeyPathSegment{
 			Name:  p.segment,
 			Index: p.index,
 		})
 		p = p.parent
 	}
-	segments := make([]*components.KeyPathSegment, len(reversed))
+	segments := make([]*pldapi.KeyPathSegment, len(reversed))
 	for i := 0; i < len(segments); i++ {
 		segments[i] = reversed[len(segments)-1-i]
 	}

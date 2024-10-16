@@ -31,8 +31,8 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
@@ -853,9 +853,9 @@ func TestPrepareTransactionPrivateResult(t *testing.T) {
 
 	err := psc.PrepareTransaction(td.mdc, tx)
 	require.NoError(t, err)
-	assert.Equal(t, ptxapi.Transaction{
+	assert.Equal(t, pldapi.Transaction{
 		IdempotencyKey: fmt.Sprintf("%s_doTheNextThing", tx.ID),
-		Type:           ptxapi.TransactionTypePrivate.Enum(),
+		Type:           pldapi.TransactionTypePrivate.Enum(),
 		Function:       "doTheNextThing(string)",
 		From:           tx.Signer,
 		To:             contractAddr,

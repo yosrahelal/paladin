@@ -24,14 +24,14 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 func NewTXManager(ctx context.Context, conf *pldconf.TxManagerConfig) components.TXManager {
 	return &txManager{
-		abiCache: cache.NewCache[tktypes.Bytes32, *ptxapi.StoredABI](&conf.ABI.Cache, &pldconf.TxManagerDefaults.ABI.Cache),
+		abiCache: cache.NewCache[tktypes.Bytes32, *pldapi.StoredABI](&conf.ABI.Cache, &pldconf.TxManagerDefaults.ABI.Cache),
 	}
 }
 
@@ -42,7 +42,7 @@ type txManager struct {
 	publicTxMgr      components.PublicTxManager
 	privateTxMgr     components.PrivateTxManager
 	identityResolver components.IdentityResolver
-	abiCache         cache.Cache[tktypes.Bytes32, *ptxapi.StoredABI]
+	abiCache         cache.Cache[tktypes.Bytes32, *pldapi.StoredABI]
 	rpcModule        *rpcserver.RPCModule
 }
 

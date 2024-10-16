@@ -29,6 +29,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -40,9 +41,9 @@ type keyManager struct {
 
 	conf                    *pldconf.KeyManagerConfig
 	rpcModule               *rpcserver.RPCModule
-	identifierCache         cache.Cache[string, *components.KeyMappingWithPath]
-	verifierByIdentityCache cache.Cache[string, *components.KeyVerifier]
-	verifierReverseCache    cache.Cache[string, *components.KeyMappingAndVerifier]
+	identifierCache         cache.Cache[string, *pldapi.KeyMappingWithPath]
+	verifierByIdentityCache cache.Cache[string, *pldapi.KeyVerifier]
+	verifierReverseCache    cache.Cache[string, *pldapi.KeyMappingAndVerifier]
 	walletsOrdered          []*wallet
 	walletsByName           map[string]*wallet
 
@@ -56,9 +57,9 @@ func NewKeyManager(bgCtx context.Context, conf *pldconf.KeyManagerConfig) compon
 	return &keyManager{
 		bgCtx:                   bgCtx,
 		conf:                    conf,
-		identifierCache:         cache.NewCache[string, *components.KeyMappingWithPath](&conf.IdentifierCache, &pldconf.KeyManagerDefaults.IdentifierCache),
-		verifierByIdentityCache: cache.NewCache[string, *components.KeyVerifier](&conf.VerifierCache, &pldconf.KeyManagerDefaults.VerifierCache),
-		verifierReverseCache:    cache.NewCache[string, *components.KeyMappingAndVerifier](&conf.VerifierCache, &pldconf.KeyManagerDefaults.VerifierCache),
+		identifierCache:         cache.NewCache[string, *pldapi.KeyMappingWithPath](&conf.IdentifierCache, &pldconf.KeyManagerDefaults.IdentifierCache),
+		verifierByIdentityCache: cache.NewCache[string, *pldapi.KeyVerifier](&conf.VerifierCache, &pldconf.KeyManagerDefaults.VerifierCache),
+		verifierReverseCache:    cache.NewCache[string, *pldapi.KeyMappingAndVerifier](&conf.VerifierCache, &pldconf.KeyManagerDefaults.VerifierCache),
 		walletsByName:           make(map[string]*wallet),
 	}
 }
@@ -95,7 +96,7 @@ func (km *keyManager) Start() error {
 func (km *keyManager) Stop() {
 }
 
-func (km *keyManager) Sign(ctx context.Context, mapping *components.KeyMappingAndVerifier, payloadType string, payload []byte) ([]byte, error) {
+func (km *keyManager) Sign(ctx context.Context, mapping *pldapi.KeyMappingAndVerifier, payloadType string, payload []byte) ([]byte, error) {
 	w, err := km.getWalletByName(ctx, mapping.Wallet)
 	if err != nil {
 		return nil, err
@@ -156,7 +157,7 @@ func (km *keyManager) AddInMemorySigner(prefix string, signer signerapi.InMemory
 }
 
 // Convenience function
-func (km *keyManager) ResolveKeyNewDatabaseTX(ctx context.Context, identifier, algorithm, verifierType string) (resolvedKey *components.KeyMappingAndVerifier, err error) {
+func (km *keyManager) ResolveKeyNewDatabaseTX(ctx context.Context, identifier, algorithm, verifierType string) (resolvedKey *pldapi.KeyMappingAndVerifier, err error) {
 	resolvedKeys, err := km.ResolveBatchNewDatabaseTX(ctx, algorithm, verifierType, []string{identifier})
 	if err != nil {
 		return nil, err
@@ -187,8 +188,8 @@ func (km *keyManager) ResolveEthAddressBatchNewDatabaseTX(ctx context.Context, i
 }
 
 // Convenience function
-func (km *keyManager) ResolveBatchNewDatabaseTX(ctx context.Context, algorithm, verifierType string, identifiers []string) (resolvedKeys []*components.KeyMappingAndVerifier, err error) {
-	resolvedKeys = make([]*components.KeyMappingAndVerifier, len(identifiers))
+func (km *keyManager) ResolveBatchNewDatabaseTX(ctx context.Context, algorithm, verifierType string, identifiers []string) (resolvedKeys []*pldapi.KeyMappingAndVerifier, err error) {
+	resolvedKeys = make([]*pldapi.KeyMappingAndVerifier, len(identifiers))
 	krc := km.NewKeyResolutionContextLazyDB(ctx)
 	defer func() {
 		if err != nil {
@@ -208,7 +209,7 @@ func (km *keyManager) ResolveBatchNewDatabaseTX(ctx context.Context, algorithm, 
 	return resolvedKeys, nil
 }
 
-func (km *keyManager) ReverseKeyLookup(ctx context.Context, dbTX *gorm.DB, algorithm, verifierType, verifier string) (*components.KeyMappingAndVerifier, error) {
+func (km *keyManager) ReverseKeyLookup(ctx context.Context, dbTX *gorm.DB, algorithm, verifierType, verifier string) (*pldapi.KeyMappingAndVerifier, error) {
 	vKey := verifierReverseCacheKey(algorithm, verifierType, verifier)
 	mapping, _ := km.verifierReverseCache.Get(vKey)
 	if mapping != nil {

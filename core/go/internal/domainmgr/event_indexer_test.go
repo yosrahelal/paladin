@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -77,7 +78,7 @@ func TestEventIndexingWithDB(t *testing.T) {
 				{
 					SoliditySignature: eventSolSig_PaladinRegisterSmartContract_V0,
 					Address:           (tktypes.EthAddress)(*tp.d.RegistryAddress()),
-					IndexedEvent: &blockindexer.IndexedEvent{
+					IndexedEvent: &pldapi.IndexedEvent{
 						BlockNumber:      12345,
 						TransactionIndex: 0,
 						LogIndex:         0,
@@ -170,7 +171,7 @@ func TestEventIndexingInsertError(t *testing.T) {
 				{
 					SoliditySignature: eventSolSig_PaladinRegisterSmartContract_V0,
 					Address:           *td.tp.d.RegistryAddress(),
-					IndexedEvent: &blockindexer.IndexedEvent{
+					IndexedEvent: &pldapi.IndexedEvent{
 						BlockNumber:      12345,
 						TransactionIndex: 0,
 						LogIndex:         0,
@@ -203,7 +204,7 @@ func TestHandleEventBatch(t *testing.T) {
 	fakeSchema := tktypes.Bytes32(tktypes.RandBytes(32))
 	event1 := &blockindexer.EventWithData{
 		Address: *contract1,
-		IndexedEvent: &blockindexer.IndexedEvent{
+		IndexedEvent: &pldapi.IndexedEvent{
 			BlockNumber:      1000,
 			TransactionIndex: 20,
 			LogIndex:         30,
@@ -215,7 +216,7 @@ func TestHandleEventBatch(t *testing.T) {
 	}
 	event2 := &blockindexer.EventWithData{
 		Address: *contract2,
-		IndexedEvent: &blockindexer.IndexedEvent{
+		IndexedEvent: &pldapi.IndexedEvent{
 			BlockNumber:      2000,
 			TransactionIndex: 30,
 			LogIndex:         40,
@@ -334,7 +335,7 @@ func TestHandleEventBatchFinalizeFail(t *testing.T) {
 		Events: []*blockindexer.EventWithData{
 			{
 				Address: td.contractAddress,
-				IndexedEvent: &blockindexer.IndexedEvent{
+				IndexedEvent: &pldapi.IndexedEvent{
 					BlockNumber:      1000,
 					TransactionIndex: 20,
 					LogIndex:         30,
@@ -395,7 +396,7 @@ func TestHandleEventBatchRegistrationError(t *testing.T) {
 		BatchID: batchID,
 		Events: []*blockindexer.EventWithData{
 			{
-				IndexedEvent:      &blockindexer.IndexedEvent{},
+				IndexedEvent:      &pldapi.IndexedEvent{},
 				SoliditySignature: eventSolSig_PaladinRegisterSmartContract_V0,
 				Data:              registrationDataJSON,
 			},
@@ -426,7 +427,7 @@ func TestHandleEventBatchDomainError(t *testing.T) {
 		BatchID: batchID,
 		Events: []*blockindexer.EventWithData{
 			{
-				IndexedEvent: &blockindexer.IndexedEvent{},
+				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
 				Data:         tktypes.RawJSON(`{"result": "success"}`),
 			},
@@ -465,7 +466,7 @@ func TestHandleEventBatchSpentBadTransactionID(t *testing.T) {
 		BatchID: batchID,
 		Events: []*blockindexer.EventWithData{
 			{
-				IndexedEvent: &blockindexer.IndexedEvent{},
+				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
 				Data:         tktypes.RawJSON(`{"result": "success"}`),
 			},
@@ -504,7 +505,7 @@ func TestHandleEventBatchConfirmBadTransactionID(t *testing.T) {
 		BatchID: batchID,
 		Events: []*blockindexer.EventWithData{
 			{
-				IndexedEvent: &blockindexer.IndexedEvent{},
+				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
 				Data:         tktypes.RawJSON(`{"result": "success"}`),
 			},
@@ -542,7 +543,7 @@ func TestHandleEventBatchSpentBadSchemaID(t *testing.T) {
 		BatchID: batchID,
 		Events: []*blockindexer.EventWithData{
 			{
-				IndexedEvent: &blockindexer.IndexedEvent{},
+				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
 				Data:         tktypes.RawJSON(`{"result": "success"}`),
 			},
@@ -580,7 +581,7 @@ func TestHandleEventBatchConfirmBadSchemaID(t *testing.T) {
 		BatchID: batchID,
 		Events: []*blockindexer.EventWithData{
 			{
-				IndexedEvent: &blockindexer.IndexedEvent{},
+				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
 				Data:         tktypes.RawJSON(`{"result": "success"}`),
 			},
@@ -617,7 +618,7 @@ func TestHandleEventBatchNewBadTransactionID(t *testing.T) {
 		BatchID: batchID,
 		Events: []*blockindexer.EventWithData{
 			{
-				IndexedEvent: &blockindexer.IndexedEvent{},
+				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
 				Data:         tktypes.RawJSON(`{"result": "success"}`),
 			},
@@ -655,7 +656,7 @@ func TestHandleEventBatchNewBadSchemaID(t *testing.T) {
 		BatchID: batchID,
 		Events: []*blockindexer.EventWithData{
 			{
-				IndexedEvent: &blockindexer.IndexedEvent{},
+				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
 				Data:         tktypes.RawJSON(`{"result": "success"}`),
 			},
@@ -693,7 +694,7 @@ func TestHandleEventBatchNewBadStateID(t *testing.T) {
 		BatchID: batchID,
 		Events: []*blockindexer.EventWithData{
 			{
-				IndexedEvent: &blockindexer.IndexedEvent{},
+				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
 				Data:         tktypes.RawJSON(`{"result": "success"}`),
 			},
@@ -732,7 +733,7 @@ func TestHandleEventBatchBadTransactionID(t *testing.T) {
 		BatchID: batchID,
 		Events: []*blockindexer.EventWithData{
 			{
-				IndexedEvent: &blockindexer.IndexedEvent{},
+				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
 				Data:         tktypes.RawJSON(`{"result": "success"}`),
 			},
@@ -776,7 +777,7 @@ func TestHandleEventBatchMarkConfirmedFail(t *testing.T) {
 		BatchID: batchID,
 		Events: []*blockindexer.EventWithData{
 			{
-				IndexedEvent: &blockindexer.IndexedEvent{},
+				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
 				Data:         tktypes.RawJSON(`{"result": "success"}`),
 			},
@@ -817,7 +818,7 @@ func TestHandleEventBatchUpsertStateFail(t *testing.T) {
 		BatchID: batchID,
 		Events: []*blockindexer.EventWithData{
 			{
-				IndexedEvent: &blockindexer.IndexedEvent{},
+				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
 				Data:         tktypes.RawJSON(`{"result": "success"}`),
 			},

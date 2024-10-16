@@ -26,8 +26,8 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -423,10 +423,10 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *
 		if err != nil {
 			return err
 		}
-		tx.PreparedPrivateTransaction = &ptxapi.TransactionInput{
-			Transaction: ptxapi.Transaction{
+		tx.PreparedPrivateTransaction = &pldapi.TransactionInput{
+			Transaction: pldapi.Transaction{
 				IdempotencyKey: fmt.Sprintf("%s_%s", tx.ID, functionABI.Name),
-				Type:           ptxapi.TransactionTypePrivate.Enum(),
+				Type:           pldapi.TransactionTypePrivate.Enum(),
 				Function:       functionABI.String(),
 				From:           tx.Signer,
 				To:             contractAddress,
@@ -436,9 +436,9 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *
 			ABI: abi.ABI{&functionABI},
 		}
 	} else {
-		tx.PreparedPublicTransaction = &ptxapi.TransactionInput{
-			Transaction: ptxapi.Transaction{
-				Type:     ptxapi.TransactionTypePublic.Enum(),
+		tx.PreparedPublicTransaction = &pldapi.TransactionInput{
+			Transaction: pldapi.Transaction{
+				Type:     pldapi.TransactionTypePublic.Enum(),
 				Function: functionABI.String(),
 				From:     tx.Signer,
 				To:       contractAddress,

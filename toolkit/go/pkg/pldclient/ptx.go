@@ -22,27 +22,27 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 )
 
 type PTX interface {
-	SendTransaction(ctx context.Context, tx *ptxapi.TransactionInput) (result SentTransaction, err error)
-	SendTransactions(ctx context.Context, tx *ptxapi.TransactionInput) (results []SentTransaction, err error)
+	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (result SentTransaction, err error)
+	SendTransactions(ctx context.Context, tx *pldapi.TransactionInput) (results []SentTransaction, err error)
 
 	WrapSentTransaction(id uuid.UUID) SentTransaction
 	WrapSentTransactions(ids []uuid.UUID) []SentTransaction
 
-	WrapTransactionResult(receipt *ptxapi.TransactionReceipt) TransactionResult
+	WrapTransactionResult(receipt *pldapi.TransactionReceipt) TransactionResult
 
-	GetTransaction(ctx context.Context, txID uuid.UUID) (receipt *ptxapi.Transaction, err error)
-	GetTransactionFull(ctx context.Context, txID uuid.UUID) (receipt *ptxapi.TransactionFull, err error)
-	QueryTransactions(ctx context.Context, jq *query.QueryJSON) (txs []*ptxapi.Transaction, err error)
-	QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON) (txs []*ptxapi.TransactionFull, err error)
+	GetTransaction(ctx context.Context, txID uuid.UUID) (receipt *pldapi.Transaction, err error)
+	GetTransactionFull(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionFull, err error)
+	QueryTransactions(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.Transaction, err error)
+	QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.TransactionFull, err error)
 
-	GetTransactionReceipt(ctx context.Context, txID uuid.UUID) (receipt *ptxapi.TransactionReceipt, err error)
-	QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*ptxapi.TransactionReceipt, err error)
+	GetTransactionReceipt(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionReceipt, err error)
+	QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*pldapi.TransactionReceipt, err error)
 }
 
 type SentTransaction interface {
@@ -54,58 +54,58 @@ type TransactionResult interface {
 	ID() uuid.UUID
 	Error() error
 	Success() bool
-	Receipt() *ptxapi.TransactionReceipt
+	Receipt() *pldapi.TransactionReceipt
 }
 
 type ptx struct{ *paladinClient }
 
-func (p *ptx) SendTransaction(ctx context.Context, tx *ptxapi.TransactionInput) (result SentTransaction, err error) {
+func (c *paladinClient) PTX() PTX {
+	return &ptx{paladinClient: c}
+}
+
+func (p *ptx) SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (result SentTransaction, err error) {
 	var txID *uuid.UUID
-	err = p.rpc.CallRPC(ctx, &txID, "ptx_sendTransaction", tx)
+	err = p.CallRPC(ctx, &txID, "ptx_sendTransaction", tx)
 	if err != nil {
 		return nil, err
 	}
 	return p.WrapSentTransaction(*txID), err
 }
 
-func (p *ptx) SendTransactions(ctx context.Context, txs *ptxapi.TransactionInput) (results []SentTransaction, err error) {
+func (p *ptx) SendTransactions(ctx context.Context, txs *pldapi.TransactionInput) (results []SentTransaction, err error) {
 	var txIDs []uuid.UUID
-	err = p.rpc.CallRPC(ctx, &txIDs, "ptx_sendTransactions", txs)
+	err = p.CallRPC(ctx, &txIDs, "ptx_sendTransactions", txs)
 	return p.WrapSentTransactions(txIDs), err
 }
 
-func (p *ptx) GetTransaction(ctx context.Context, txID uuid.UUID) (tx *ptxapi.Transaction, err error) {
-	err = p.rpc.CallRPC(ctx, &tx, "ptx_getTransaction", txID, false)
+func (p *ptx) GetTransaction(ctx context.Context, txID uuid.UUID) (tx *pldapi.Transaction, err error) {
+	err = p.CallRPC(ctx, &tx, "ptx_getTransaction", txID, false)
 	return tx, err
 }
 
-func (p *ptx) GetTransactionFull(ctx context.Context, txID uuid.UUID) (tx *ptxapi.TransactionFull, err error) {
-	err = p.rpc.CallRPC(ctx, &tx, "ptx_getTransaction", txID, true)
+func (p *ptx) GetTransactionFull(ctx context.Context, txID uuid.UUID) (tx *pldapi.TransactionFull, err error) {
+	err = p.CallRPC(ctx, &tx, "ptx_getTransaction", txID, true)
 	return tx, err
 }
 
-func (p *ptx) QueryTransactions(ctx context.Context, jq *query.QueryJSON) (txs []*ptxapi.Transaction, err error) {
-	err = p.rpc.CallRPC(ctx, &txs, "ptx_queryTransactions", jq, false)
+func (p *ptx) QueryTransactions(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.Transaction, err error) {
+	err = p.CallRPC(ctx, &txs, "ptx_queryTransactions", jq, false)
 	return txs, err
 }
 
-func (p *ptx) QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON) (txs []*ptxapi.TransactionFull, err error) {
-	err = p.rpc.CallRPC(ctx, &txs, "ptx_queryTransactions", jq, true)
+func (p *ptx) QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.TransactionFull, err error) {
+	err = p.CallRPC(ctx, &txs, "ptx_queryTransactions", jq, true)
 	return txs, err
 }
 
-func (p *ptx) GetTransactionReceipt(ctx context.Context, txID uuid.UUID) (receipt *ptxapi.TransactionReceipt, err error) {
-	err = p.rpc.CallRPC(ctx, &receipt, "ptx_getTransactionReceipt", txID)
+func (p *ptx) GetTransactionReceipt(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionReceipt, err error) {
+	err = p.CallRPC(ctx, &receipt, "ptx_getTransactionReceipt", txID)
 	return receipt, err
 }
 
-func (p *ptx) QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*ptxapi.TransactionReceipt, err error) {
-	err = p.rpc.CallRPC(ctx, &receipts, "ptx_queryTransactionReceipts", jq)
+func (p *ptx) QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*pldapi.TransactionReceipt, err error) {
+	err = p.CallRPC(ctx, &receipts, "ptx_queryTransactionReceipts", jq)
 	return receipts, err
-}
-
-func (c *paladinClient) PTX() PTX {
-	return &ptx{paladinClient: c}
 }
 
 func (p *ptx) WrapSentTransaction(id uuid.UUID) SentTransaction {
@@ -129,11 +129,11 @@ func (s *sentTransaction) ID() uuid.UUID {
 	return s.txID
 }
 
-func (s *sentTransaction) GetTransaction(ctx context.Context) (*ptxapi.Transaction, error) {
+func (s *sentTransaction) GetTransaction(ctx context.Context) (*pldapi.Transaction, error) {
 	return s.PTX().GetTransaction(ctx, s.txID)
 }
 
-func (s *sentTransaction) GetTransactionFull(ctx context.Context) (*ptxapi.TransactionFull, error) {
+func (s *sentTransaction) GetTransactionFull(ctx context.Context) (*pldapi.TransactionFull, error) {
 	return s.PTX().GetTransactionFull(ctx, s.txID)
 }
 
@@ -157,13 +157,13 @@ func (s *sentTransaction) Wait(ctx context.Context) (TransactionResult, error) {
 	}
 }
 
-func (p *ptx) WrapTransactionResult(r *ptxapi.TransactionReceipt) TransactionResult {
+func (p *ptx) WrapTransactionResult(r *pldapi.TransactionReceipt) TransactionResult {
 	return &completedTransaction{ptx: p, receipt: r}
 }
 
 type completedTransaction struct {
 	*ptx
-	receipt *ptxapi.TransactionReceipt
+	receipt *pldapi.TransactionReceipt
 }
 
 func (s *completedTransaction) ID() uuid.UUID {
@@ -184,6 +184,6 @@ func (s *completedTransaction) Error() error {
 	return errors.New(s.receipt.FailureMessage)
 }
 
-func (s *completedTransaction) Receipt() *ptxapi.TransactionReceipt {
+func (s *completedTransaction) Receipt() *pldapi.TransactionReceipt {
 	return s.receipt
 }
