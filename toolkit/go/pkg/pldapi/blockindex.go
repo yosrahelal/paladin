@@ -14,22 +14,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package blockindexer
+package pldapi
 
 import (
-	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
-
-var IndexedBlockFilters filters.FieldSet = filters.FieldMap{
-	"hash":   filters.HexBytesField(`"hash"`),
-	"number": filters.Int64Field("number"),
-}
-
-type IndexedBlock struct {
-	Number int64           `json:"number"`
-	Hash   tktypes.Bytes32 `json:"hash"                                     gorm:"primaryKey"`
-}
 
 type EthTransactionResult string
 
@@ -49,15 +38,9 @@ func (pl EthTransactionResult) Options() []string {
 	}
 }
 
-var IndexedTransactionFilters filters.FieldSet = filters.FieldMap{
-	"hash":             filters.HexBytesField("hash"),
-	"blockNumber":      filters.Int64Field("block_number"),
-	"transactionIndex": filters.Int64Field("transaction_index"),
-	"from":             filters.HexBytesField(`"from"`),
-	"to":               filters.HexBytesField("to"),
-	"nonce":            filters.Int64Field("nonce"),
-	"contractAddress":  filters.HexBytesField("contract_address"),
-	"result":           filters.StringField("result"),
+type IndexedBlock struct {
+	Number int64           `json:"number"`
+	Hash   tktypes.Bytes32 `json:"hash"                                     gorm:"primaryKey"`
 }
 
 type IndexedTransaction struct {
@@ -69,20 +52,6 @@ type IndexedTransaction struct {
 	Nonce            uint64                             `json:"nonce"`
 	ContractAddress  *tktypes.EthAddress                `json:"contractAddress,omitempty"`
 	Result           tktypes.Enum[EthTransactionResult] `json:"result,omitempty"`
-}
-
-// Contains additional data that the block indexer does not persist, but allows other code to process
-// and persist during PreCommitHandlers and PostCommitHandlers (no JSON serialization for these)
-type IndexedTransactionNotify struct {
-	IndexedTransaction
-	RevertReason tktypes.HexBytes
-}
-
-var IndexedEventFilters filters.FieldSet = filters.FieldMap{
-	"blockNumber":      filters.Int64Field("block_number"),
-	"transactionIndex": filters.Int64Field("transaction_index"),
-	"logIndex":         filters.Int64Field("log_index"),
-	"signature":        filters.HexBytesField("signature"),
 }
 
 type IndexedEvent struct {
