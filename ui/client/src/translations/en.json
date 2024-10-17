@@ -1,5 +1,5 @@
 {
-  "paladinDebugToolkit": "Paladin Debug Toolkit",
+  "paladin": "Paladin",
   "transactions": "Transactions",
   "events": "Events",
   "block": "Block",
@@ -18,5 +18,13 @@
   "signature": "Signature",
   "live": "Live",
   "paused": "Paused",
-  "errorConnectingToPaladinNode": "Error connecting to Paladin node"
+  "errorConnectingToPaladinNode": "Error connecting to Paladin node",
+  "transactionsAndEvents": "Transactions & Events",
+  "registryName": "Registry {{name}}",
+  "name": "Name",
+  "id": "ID",
+  "owner": "Owner",
+  "registry": "Registry",
+  "active": "Active",
+  "entries": "Entries"
 }

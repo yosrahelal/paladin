@@ -14,20 +14,45 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { AppBar, Box, Toolbar, Typography } from "@mui/material";
+import { AppBar, Box, Grid2, Tab, Tabs, Toolbar, Typography } from "@mui/material";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import HandymanIcon from '@mui/icons-material/Handyman';
+import { useNavigate } from "react-router-dom";
 
 export const Header: React.FC = () => {
 
+  const [tab, setTab] = useState(0);
   const { t } = useTranslation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    switch (tab) {
+      case 0: navigate('/transactions-and-events'); break;
+      case 1: navigate('/registry'); break;
+    }
+  }, [tab]);
 
   return (
     <>
       <AppBar>
-        <Toolbar sx={{ justifyContent: 'center'}}>
-          <HandymanIcon sx={{ marginRight: '10px'}} />
-          <Typography variant="h6">{t('paladinDebugToolkit')}</Typography>
+        <Toolbar>
+          <Grid2 container alignItems="center" justifyContent="space-between" size={{ xs: 12 }}>
+            <Grid2>
+              <Typography variant="h6">{t('paladin')}</Typography>
+            </Grid2>
+            <Grid2>
+              <Tabs value={tab} onChange={(_event, value) => setTab(value)} textColor="inherit"
+                TabIndicatorProps={{
+                  style: {
+                    backgroundColor: 'white'
+                  }
+                }}
+              >
+                <Tab label={t('transactionsAndEvents')} />
+                <Tab label={t('registry')} />
+              </Tabs>
+            </Grid2>
+          </Grid2>
         </Toolbar>
       </AppBar>
       <Box sx={{ height: theme => theme.mixins.toolbar }} />

@@ -36,3 +36,13 @@ export interface IEvent {
   transactionHash: string
   signature: string
 }
+
+export interface IRegistryEntry {
+  registry: string
+  id: string
+  name: string
+  active: boolean
+  properties: {
+    [key: string]: string
+  }
+}

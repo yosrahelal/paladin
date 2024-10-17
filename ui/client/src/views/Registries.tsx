@@ -14,25 +14,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Typography } from "@mui/material";
-import { t } from "i18next";
 import { useContext, useEffect, useState } from "react";
-import { ITransaction } from "../interfaces";
-import { Transaction } from "./Transaction";
 import { ApplicationContext } from "../Context";
-import { constants } from "../utils";
+import { Registry } from "../components/Registry";
+import { Box, Paper, Typography } from "@mui/material";
+import { t } from "i18next";
 
-export const Transactions: React.FC = () => {
+export const Registries: React.FC = () => {
 
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
-  const [transactions, setTransactions] = useState<ITransaction[]>();
+  const [loading, setLoading] = useState(true);
+  const [registries, setRegistries] = useState<string[]>([]);
 
   useEffect(() => {
     let requestPayload = {
       jsonrpc: '2.0',
       id: Date.now(),
-      method: 'bidx_queryIndexedTransactions',
-      params: [{ limit: constants.TRANSACTION_QUERY_LIMIT, sort: ['blockNumber DESC', 'transactionIndex DESC'] }]
+      method: 'reg_registries'
     };
     fetch('/json-rpc', {
       method: 'post',
@@ -42,19 +40,29 @@ export const Transactions: React.FC = () => {
       },
       body: JSON.stringify(requestPayload)
     }).then(async response => {
-      setTransactions((await response.json()).result);
-    });
+      setRegistries((await response.json()).result);
+    }).finally(() => setLoading(false));
   }, [lastBlockWithTransactions]);
 
+  if (loading) {
+    return <></>;
+  }
+
   return (
-    <>
-      <Typography align="center" sx={{ fontSize: '24px', fontWeight: 500 }}>{t('transactions')}</Typography>
-      <Box sx={{  height: 'calc(100vh - 162px)', overflow: 'scroll', padding: '20px' }}>
-        {transactions?.map(transaction =>
-          <Transaction key={transaction.hash} transaction={transaction} />
-        )}
+    <Box sx={{
+      backgroundImage: 'url("paladin-icon-light.svg")', backgroundRepeat: 'no-repeat',
+      backgroundSize: '90vh', backgroundPosition: 'center bottom', backgroundAttachment: 'fixed'
+    }}>
+      <Box sx={{ padding: '20px', maxWidth: '1200px', marginLeft: 'auto', marginRight: 'auto' }}>
+        <Paper sx={{
+          margin: '20px', padding: '10px', paddingTop: '12px', backgroundColor: 'rgba(255, 255, 255, .65)',
+          height: 'calc(100vh - 144px)', overflow: 'scroll'
+        }}>
+          <Typography align="center" sx={{ fontSize: '24px', fontWeight: 500 }}>{t('entries')}</Typography>
+          {registries.map(registry => <Registry key={registry} registryName={registry} />)}
+        </Paper>
       </Box>
-    </>
+    </Box>
   );
 
 }

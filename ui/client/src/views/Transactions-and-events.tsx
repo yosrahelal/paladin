@@ -17,16 +17,10 @@
 import { Box, Grid2, Paper } from "@mui/material";
 import { Transactions } from "../components/Transactions";
 import { Events } from "../components/Events";
-import { ErrorDialog } from "../dialogs/Error";
-import { useContext } from "react";
-import { ApplicationContext } from "../Context";
 
-export const Dashboard: React.FC = () => {
-
-  const { errorMessage } = useContext(ApplicationContext);
+export const TransactionsAndEvents: React.FC = () => {
 
   return (
-    <>
     <Box sx={{
       backgroundImage: 'url("paladin-icon-light.svg")', backgroundRepeat: 'no-repeat',
       backgroundSize: '90vh', backgroundPosition: 'center bottom', backgroundAttachment: 'fixed'
@@ -46,7 +40,6 @@ export const Dashboard: React.FC = () => {
         </Grid2>
       </Box>
     </Box>
-    <ErrorDialog dialogOpen={errorMessage !== undefined} message={errorMessage ?? ''} />
-    </>
+
   );
 };

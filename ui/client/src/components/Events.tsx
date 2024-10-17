@@ -20,6 +20,7 @@ import { useContext, useEffect, useState } from "react";
 import { IEvent } from "../interfaces";
 import { Event } from "./Event";
 import { ApplicationContext } from "../Context";
+import { constants } from "../utils";
 
 export const Events: React.FC = () => {
 
@@ -31,7 +32,7 @@ export const Events: React.FC = () => {
       jsonrpc: '2.0',
       id: Date.now(),
       method: 'bidx_queryIndexedEvents',
-      params: [{ limit: 100, sort: ['blockNumber DESC', 'transactionIndex DESC', 'logIndex DESC'] }]
+      params: [{ limit: constants.EVENT_QUERY_LIMIT, sort: ['blockNumber DESC', 'transactionIndex DESC', 'logIndex DESC'] }]
     };
     fetch('/json-rpc', {
       method: 'post',

@@ -18,10 +18,12 @@ import { ApplicationContext } from "./Context"
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { themeOptions } from "./themes/default";
 import { Header } from "./components/Header";
-import { Dashboard } from "./views/Dashboard";
+import { TransactionsAndEvents } from "./views/Transactions-and-events";
 import { CssBaseline } from "@mui/material";
 import { useEffect, useState } from "react";
 import { constants, getLatestBlockWithTransactions } from "./utils";
+import { Registries } from "./views/Registries";
+import { ErrorDialog } from "./dialogs/Error";
 
 function App() {
 
@@ -52,10 +54,12 @@ function App() {
         <BrowserRouter>
           <Header />
           <Routes>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/transactions-and-events" element={<TransactionsAndEvents />} />
+            <Route path="/registry" element={<Registries />} />
+            <Route path="*" element={<Navigate to="/transactions-and-events" replace />} />
           </Routes>
         </BrowserRouter>
+        <ErrorDialog dialogOpen={errorMessage !== undefined} message={errorMessage ?? ''} />
       </ThemeProvider>
     </ApplicationContext.Provider>
   )
