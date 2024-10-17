@@ -13,19 +13,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zetosigner
+package types
 
 import (
-	"fmt"
-	"math/big"
+	"testing"
 
-	"github.com/iden3/go-iden3-crypto/poseidon"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/assert"
 )
 
-func CalculateNullifier(value, salt *big.Int, privateKeyForZkp *big.Int) (*big.Int, error) {
-	nullifier, err := poseidon.Hash([]*big.Int{value, salt, privateKeyForZkp})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create the nullifier hash. %s", err)
+func TestCoinHash(t *testing.T) {
+	coin := &ZetoCoin{
+		OwnerKey: tktypes.MustParseHexBytes("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 	}
-	return nullifier, nil
+	_, err := coin.Hash()
+	assert.EqualError(t, err, "failed to decode babyjubjub key. p.y >= Q")
 }

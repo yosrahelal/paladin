@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zetosigner
+package signer
 
 import (
 	"fmt"
@@ -22,9 +22,10 @@ import (
 
 	"github.com/iden3/go-rapidsnark/witness/v2"
 	"github.com/iden3/go-rapidsnark/witness/wasmer"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 )
 
-func loadCircuit(circuitName string, config *SnarkProverConfig) (witness.Calculator, []byte, error) {
+func loadCircuit(circuitName string, config *zetosignerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
 	if config.CircuitsDir == "" {
 		return nil, []byte{}, fmt.Errorf("circuits root must be set via the configuration file")
 	}

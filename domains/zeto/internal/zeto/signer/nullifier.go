@@ -13,21 +13,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zetosigner
+package signer
 
 import (
 	"fmt"
-	"regexp"
+	"math/big"
+
+	"github.com/iden3/go-iden3-crypto/poseidon"
 )
 
-// - SNARK proving engine
-// - Baby Jub Jub key materials used in proofs
-var ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP = regexp.MustCompile(`^domain:([a-zA-Z0-9-._]+):snark:babyjubjub$`)
-
-func AlgoDomainZetoSnarkBJJ(name string) string {
-	return fmt.Sprintf("domain:%s:snark:babyjubjub", name)
+func CalculateNullifier(value, salt *big.Int, privateKeyForZkp *big.Int) (*big.Int, error) {
+	nullifier, err := poseidon.Hash([]*big.Int{value, salt, privateKeyForZkp})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create the nullifier hash. %s", err)
+	}
+	return nullifier, nil
 }
-
-const PAYLOAD_DOMAIN_ZETO_SNARK = "domain:zeto:snark"
-
-const IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X = "iden3_pubkey_babyjubjub_compressed_0x"

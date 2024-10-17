@@ -13,20 +13,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zeto
+package zetosignerapi
 
-import "github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
+import (
+	"fmt"
+	"regexp"
+)
 
-func useNullifiers(circuitId string) bool {
-	return circuitId == constants.CIRCUIT_ANON_NULLIFIER || circuitId == constants.CIRCUIT_ANON_NULLIFIER_BATCH
+// - SNARK proving engine
+// - Baby Jub Jub key materials used in proofs
+var ALGO_DOMAIN_ZETO_SNARK_BJJ_REGEXP = regexp.MustCompile(`^domain:([a-zA-Z0-9-._]+):snark:babyjubjub$`)
+
+func AlgoDomainZetoSnarkBJJ(name string) string {
+	return fmt.Sprintf("domain:%s:snark:babyjubjub", name)
 }
 
-// the Zeto implementations support two input/output sizes for the circuits: 2 and 10,
-// if the input or output size is larger than 2, then the batch circuit is used with
-// input/output size 10
-func getInputSize(sizeOfEndorsableStates int) int {
-	if sizeOfEndorsableStates <= 2 {
-		return 2
-	}
-	return 10
-}
+const PAYLOAD_DOMAIN_ZETO_SNARK = "domain:zeto:snark"
+
+const IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X = "iden3_pubkey_babyjubjub_compressed_0x"

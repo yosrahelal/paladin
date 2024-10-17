@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zetosigner
+package signer
 
 import (
 	"testing"

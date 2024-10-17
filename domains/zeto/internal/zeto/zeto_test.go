@@ -26,10 +26,12 @@ import (
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/iden3/go-iden3-crypto/poseidon"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/signer"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	protoz "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -47,7 +49,7 @@ func TestConfigureDomain(t *testing.T) {
 	z := &Zeto{}
 	dfConfig := &types.DomainFactoryConfig{
 		FactoryAddress: "0x1234",
-		SnarkProver: zetosigner.SnarkProverConfig{
+		SnarkProver: zetosignerapi.SnarkProverConfig{
 			CircuitsDir: "circuit-dir",
 		},
 	}
@@ -232,6 +234,10 @@ func TestAssembleTransaction(t *testing.T) {
 	z.coinSchema = &prototk.StateSchema{
 		Id: "coin",
 	}
+
+	assert.Equal(t, "z1", z.Name())
+	assert.Equal(t, "coin", z.CoinSchemaID())
+
 	req := &prototk.AssembleTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
 			TransactionId:      "0x1234",
@@ -246,7 +252,7 @@ func TestAssembleTransaction(t *testing.T) {
 				Lookup:       "Alice",
 				Verifier:     "0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025",
 				Algorithm:    z.getAlgoZetoSnarkBJJ(),
-				VerifierType: zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
 		},
 	}
@@ -539,7 +545,7 @@ func TestGetVerifier(t *testing.T) {
 	z.coinSchema = &prototk.StateSchema{
 		Id: "coin",
 	}
-	snarkProver, err := zetosigner.NewSnarkProver(&zetosigner.SnarkProverConfig{})
+	snarkProver, err := zetosigner.NewSnarkProver(&zetosignerapi.SnarkProverConfig{})
 	assert.NoError(t, err)
 	z.snarkProver = snarkProver
 	req := &prototk.GetVerifierRequest{
@@ -552,7 +558,7 @@ func TestGetVerifier(t *testing.T) {
 	assert.NoError(t, err)
 	req = &prototk.GetVerifierRequest{
 		Algorithm:    z.getAlgoZetoSnarkBJJ(),
-		VerifierType: zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+		VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 		PrivateKey:   bytes,
 	}
 	res, err := z.GetVerifier(context.Background(), req)
@@ -567,7 +573,7 @@ func TestSign(t *testing.T) {
 	z.coinSchema = &prototk.StateSchema{
 		Id: "coin",
 	}
-	snarkProver := zetosigner.NewTestProver(t)
+	snarkProver := signer.NewTestProver(t)
 	z.snarkProver = snarkProver
 
 	req := &prototk.SignRequest{
@@ -578,8 +584,8 @@ func TestSign(t *testing.T) {
 
 	bytes, err := hex.DecodeString("7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025")
 	assert.NoError(t, err)
-	alice := zetosigner.NewTestKeypair()
-	bob := zetosigner.NewTestKeypair()
+	alice := signer.NewTestKeypair()
+	bob := signer.NewTestKeypair()
 
 	inputValues := []*big.Int{big.NewInt(30), big.NewInt(40)}
 	outputValues := []*big.Int{big.NewInt(32), big.NewInt(38)}

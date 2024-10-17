@@ -1,11 +1,28 @@
-package zetosigner
+/*
+ * Copyright © 2024 Kaleido, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+package signer
 
 import (
+	"crypto/rand"
 	"fmt"
 	"math/big"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/crypto"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/core"
+	"github.com/hyperledger-labs/zeto/go-sdk/pkg/key-manager/key"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 )
 
@@ -34,6 +51,15 @@ func assembleInputs_anon_enc(inputs *commonWitnessInputs, extras *pb.ProvingRequ
 	} else {
 		nonce = crypto.NewEncryptionNonce()
 	}
+	// TODO: right now we generate the ephemeral key pair and throw away the private key,
+	// need more thought on if more management of the key is needed
+	randomBytes := make([]byte, 32)
+	_, err := rand.Read(randomBytes)
+	if err != nil {
+		panic(fmt.Errorf("failed to generate random bytes for encryption key. %s", err))
+	}
+	ephemeralKey := key.NewKeyEntryFromPrivateKeyBytes([32]byte(randomBytes))
+
 	witnessInputs := map[string]interface{}{
 		"inputCommitments":      inputs.inputCommitments,
 		"inputValues":           inputs.inputValues,
@@ -44,6 +70,7 @@ func assembleInputs_anon_enc(inputs *commonWitnessInputs, extras *pb.ProvingRequ
 		"outputSalts":           inputs.outputSalts,
 		"outputOwnerPublicKeys": inputs.outputOwnerPublicKeys,
 		"encryptionNonce":       nonce,
+		"ecdhPrivateKey":        ephemeralKey.PrivateKeyForZkp,
 	}
 	return witnessInputs, nil
 }
@@ -52,6 +79,11 @@ func assembleInputs_anon_nullifier(inputs *commonWitnessInputs, extras *pb.Provi
 	// calculate the nullifiers for the input UTXOs
 	nullifiers := make([]*big.Int, len(inputs.inputCommitments))
 	for i := 0; i < len(inputs.inputCommitments); i++ {
+		// if the input commitment is 0, as a filler, the nullifier is 0
+		if inputs.inputCommitments[i].Cmp(big.NewInt(0)) == 0 {
+			nullifiers[i] = big.NewInt(0)
+			continue
+		}
 		nullifier, err := CalculateNullifier(inputs.inputValues[i], inputs.inputSalts[i], keyEntry.PrivateKeyForZkp)
 		if err != nil {
 			return nil, fmt.Errorf("failed to calculate nullifier. %s", err)

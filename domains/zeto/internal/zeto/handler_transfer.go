@@ -30,6 +30,7 @@ import (
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -61,12 +62,12 @@ func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction,
 			{
 				Lookup:       tx.Transaction.From,
 				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
-				VerifierType: zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
 			{
 				Lookup:       params.To,
 				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
-				VerifierType: zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
 		},
 	}, nil
@@ -75,11 +76,11 @@ func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction,
 func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.TransferParams)
 
-	resolvedSender := domain.FindVerifier(tx.Transaction.From, h.zeto.getAlgoZetoSnarkBJJ(), zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
+	resolvedSender := domain.FindVerifier(tx.Transaction.From, h.zeto.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
 	if resolvedSender == nil {
 		return nil, fmt.Errorf("failed to resolve: %s", tx.Transaction.From)
 	}
-	resolvedRecipient := domain.FindVerifier(params.To, h.zeto.getAlgoZetoSnarkBJJ(), zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
+	resolvedRecipient := domain.FindVerifier(params.To, h.zeto.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
 	if resolvedRecipient == nil {
 		return nil, fmt.Errorf("failed to resolve: %s", params.To)
 	}
@@ -131,8 +132,8 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 				Name:            "sender",
 				AttestationType: pb.AttestationType_SIGN,
 				Algorithm:       h.zeto.getAlgoZetoSnarkBJJ(),
-				VerifierType:    zetosigner.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
-				PayloadType:     zetosigner.PAYLOAD_DOMAIN_ZETO_SNARK,
+				VerifierType:    zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+				PayloadType:     zetosignerapi.PAYLOAD_DOMAIN_ZETO_SNARK,
 				Payload:         payloadBytes,
 				Parties:         []string{tx.Transaction.From},
 			},
@@ -163,8 +164,9 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		return nil, fmt.Errorf("failed to unmarshal proving response. %s", err)
 	}
 
-	inputs := make([]string, INPUT_COUNT)
-	for i := 0; i < INPUT_COUNT; i++ {
+	inputSize := getInputSize(len(req.InputStates))
+	inputs := make([]string, inputSize)
+	for i := 0; i < inputSize; i++ {
 		if i < len(req.InputStates) {
 			state := req.InputStates[i]
 			coin, err := h.zeto.makeCoin(state.StateDataJson)
@@ -180,8 +182,8 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 			inputs[i] = "0"
 		}
 	}
-	outputs := make([]string, OUTPUT_COUNT)
-	for i := 0; i < OUTPUT_COUNT; i++ {
+	outputs := make([]string, inputSize)
+	for i := 0; i < inputSize; i++ {
 		if i < len(req.OutputStates) {
 			state := req.OutputStates[i]
 			coin, err := h.zeto.makeCoin(state.StateDataJson)
@@ -208,10 +210,11 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		"proof":   h.encodeProof(proofRes.Proof),
 		"data":    data,
 	}
-	if tx.DomainConfig.TokenName == constants.TOKEN_ANON_ENC {
+	if tx.DomainConfig.TokenName == constants.TOKEN_ANON_ENC || tx.DomainConfig.TokenName == constants.TOKEN_ANON_ENC_BATCH {
+		params["ecdhPublicKey"] = strings.Split(proofRes.PublicInputs["ecdhPublicKey"], ",")
 		params["encryptionNonce"] = proofRes.PublicInputs["encryptionNonce"]
 		params["encryptedValues"] = strings.Split(proofRes.PublicInputs["encryptedValues"], ",")
-	} else if tx.DomainConfig.TokenName == constants.TOKEN_ANON_NULLIFIER {
+	} else if tx.DomainConfig.TokenName == constants.TOKEN_ANON_NULLIFIER || tx.DomainConfig.TokenName == constants.TOKEN_ANON_NULLIFIER_BATCH {
 		delete(params, "inputs")
 		params["nullifiers"] = strings.Split(proofRes.PublicInputs["nullifiers"], ",")
 		params["root"] = proofRes.PublicInputs["root"]
@@ -246,11 +249,12 @@ func (h *transferHandler) loadBabyJubKey(payload []byte) (*babyjub.PublicKey, er
 }
 
 func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.ZetoCoin, circuitId, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress) ([]byte, error) {
-	inputCommitments := make([]string, INPUT_COUNT)
-	inputValueInts := make([]uint64, INPUT_COUNT)
-	inputSalts := make([]string, INPUT_COUNT)
+	inputSize := getInputSize(len(inputCoins))
+	inputCommitments := make([]string, inputSize)
+	inputValueInts := make([]uint64, inputSize)
+	inputSalts := make([]string, inputSize)
 	inputOwner := inputCoins[0].OwnerKey.String()
-	for i := 0; i < INPUT_COUNT; i++ {
+	for i := 0; i < inputSize; i++ {
 		if i < len(inputCoins) {
 			coin := inputCoins[i]
 			hash, err := coin.Hash()
@@ -266,10 +270,10 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 		}
 	}
 
-	outputValueInts := make([]uint64, OUTPUT_COUNT)
-	outputSalts := make([]string, OUTPUT_COUNT)
-	outputOwners := make([]string, OUTPUT_COUNT)
-	for i := 0; i < OUTPUT_COUNT; i++ {
+	outputValueInts := make([]uint64, inputSize)
+	outputSalts := make([]string, inputSize)
+	outputOwners := make([]string, inputSize)
+	for i := 0; i < inputSize; i++ {
 		if i < len(outputCoins) {
 			coin := outputCoins[i]
 			outputValueInts[i] = coin.Amount.Int().Uint64()
@@ -286,7 +290,7 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate merkle proofs. %s", err)
 		}
-		for i := len(proofs); i < INPUT_COUNT; i++ {
+		for i := len(proofs); i < inputSize; i++ {
 			extrasObj.MerkleProofs = append(extrasObj.MerkleProofs, &smt.Empty_Proof)
 			extrasObj.Enabled = append(extrasObj.Enabled, false)
 		}

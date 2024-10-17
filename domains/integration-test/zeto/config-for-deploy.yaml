@@ -8,14 +8,21 @@ contracts:
     - name: Groth16Verifier_Anon
       abiAndBytecode:
         path: ./helpers/abis/Groth16Verifier_Anon.json
+    - name: Groth16Verifier_AnonBatch
+      abiAndBytecode:
+        path: ./helpers/abis/Groth16Verifier_AnonBatch.json
     - name: Groth16Verifier_CheckHashesValue
       abiAndBytecode:
         path: ./helpers/abis/Groth16Verifier_CheckHashesValue.json
     - name: Groth16Verifier_CheckInputsOutputsValue
       abiAndBytecode:
         path: ./helpers/abis/Groth16Verifier_CheckInputsOutputsValue.json
+    - name: Groth16Verifier_CheckInputsOutputsValueBatch
+      abiAndBytecode:
+        path: ./helpers/abis/Groth16Verifier_CheckInputsOutputsValueBatch.json
     - name: Zeto_Anon
       verifier: Groth16Verifier_Anon
+      batchVerifier: Groth16Verifier_AnonBatch
       circuitId: anon
       cloneable: true
       abiAndBytecode:

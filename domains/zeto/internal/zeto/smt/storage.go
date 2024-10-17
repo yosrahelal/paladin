@@ -39,7 +39,7 @@ type statesStorage struct {
 	stateQueryContext string
 	rootSchemaId      string
 	nodeSchemaId      string
-	rootNode          core.NodeIndex
+	rootNode          core.NodeRef
 	newNodes          []*prototk.NewConfirmedState
 }
 
@@ -57,7 +57,7 @@ func (s *statesStorage) GetNewStates() []*prototk.NewConfirmedState {
 	return s.newNodes
 }
 
-func (s *statesStorage) GetRootNodeIndex() (core.NodeIndex, error) {
+func (s *statesStorage) GetRootNodeRef() (core.NodeRef, error) {
 	if s.rootNode != nil {
 		return s.rootNode, nil
 	}
@@ -89,7 +89,7 @@ func (s *statesStorage) GetRootNodeIndex() (core.NodeIndex, error) {
 	return idx, err
 }
 
-func (s *statesStorage) UpsertRootNodeIndex(root core.NodeIndex) error {
+func (s *statesStorage) UpsertRootNodeRef(root core.NodeRef) error {
 	bytes, err := tktypes.ParseBytes32(root.Hex())
 	if err != nil {
 		return fmt.Errorf("failed to parse root node index. %s", err)
@@ -116,7 +116,7 @@ func (s *statesStorage) UpsertRootNodeIndex(root core.NodeIndex) error {
 	return err
 }
 
-func (s *statesStorage) GetNode(ref core.NodeIndex) (core.Node, error) {
+func (s *statesStorage) GetNode(ref core.NodeRef) (core.Node, error) {
 	// the node's reference key (not the index) is used as the key to
 	// store the node in the DB
 	queryBuilder := query.NewQueryBuilder().

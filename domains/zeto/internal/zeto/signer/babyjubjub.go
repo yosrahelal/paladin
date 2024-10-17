@@ -13,21 +13,38 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zetosigner
+package signer
 
 import (
+	"fmt"
+
 	"github.com/iden3/go-iden3-crypto/babyjub"
-	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/signer"
+	"github.com/iden3/go-iden3-crypto/utils"
 )
 
 func EncodeBabyJubJubPublicKey(pubKey *babyjub.PublicKey) string {
-	return signer.EncodeBabyJubJubPublicKey(pubKey)
+	pubKeyComp := pubKey.Compress()
+	return utils.HexEncode(pubKeyComp[:])
 }
 
 func DecodeBabyJubJubPublicKey(pubKeyHex string) (*babyjub.PublicKey, error) {
-	return signer.DecodeBabyJubJubPublicKey(pubKeyHex)
+	pubKeyCompBytes, err := utils.HexDecode(pubKeyHex)
+	if err != nil {
+		return nil, err
+	}
+	if len(pubKeyCompBytes) != 32 {
+		return nil, fmt.Errorf("invalid compressed public key length: %d", len(pubKeyCompBytes))
+	}
+	var compressedPubKey babyjub.PublicKeyComp
+	copy(compressedPubKey[:], pubKeyCompBytes)
+	return compressedPubKey.Decompress()
 }
 
 func NewBabyJubJubPrivateKey(privateKey []byte) (*babyjub.PrivateKey, error) {
-	return signer.NewBabyJubJubPrivateKey(privateKey)
+	if len(privateKey) < 32 {
+		return nil, fmt.Errorf("invalid key length: %d", len(privateKey))
+	}
+	var pk babyjub.PrivateKey
+	copy(pk[:], privateKey[:])
+	return &pk, nil
 }

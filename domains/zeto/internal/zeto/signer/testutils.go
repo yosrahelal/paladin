@@ -13,7 +13,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zetosigner
+package signer
 
 import (
 	"math/big"
@@ -22,6 +22,7 @@ import (
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-rapidsnark/types"
 	"github.com/iden3/go-rapidsnark/witness/v2"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 
 	"github.com/stretchr/testify/require"
@@ -59,14 +60,14 @@ func (t *testWitnessCalculator) CalculateBinWitness(inputs map[string]interface{
 }
 
 func NewTestProver(t *testing.T) signerapi.InMemorySigner {
-	config := &SnarkProverConfig{
+	config := &zetosignerapi.SnarkProverConfig{
 		CircuitsDir:    "test",
 		ProvingKeysDir: "test",
 	}
 	prover, err := newSnarkProver(config)
 	require.NoError(t, err)
 
-	testCircuitLoader := func(circuitID string, config *SnarkProverConfig) (witness.Calculator, []byte, error) {
+	testCircuitLoader := func(circuitID string, config *zetosignerapi.SnarkProverConfig) (witness.Calculator, []byte, error) {
 		return &testWitnessCalculator{}, []byte("proving key"), nil
 	}
 	prover.circuitLoader = testCircuitLoader

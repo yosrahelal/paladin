@@ -24,11 +24,11 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
+	testZeto "github.com/kaleido-io/paladin/domains/integration-test/zeto"
 	internalZeto "github.com/kaleido-io/paladin/domains/zeto/internal/zeto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zeto"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -36,7 +36,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -44,13 +43,195 @@ var (
 	recipient1Name = "recipient1"
 )
 
-//go:embed config-for-deploy.yaml
-var testZetoConfigYaml []byte
+func TestZetoDomainTestSuite(t *testing.T) {
+	suite.Run(t, new(zetoDomainTestSuite))
+}
 
-func toJSON(t *testing.T, v any) []byte {
-	result, err := json.Marshal(v)
+type zetoDomainTestSuite struct {
+	suite.Suite
+	hdWalletSeed      *testbed.UTInitFunction
+	deployedContracts *testZeto.ZetoDomainContracts
+	domainName        string
+	domain            zeto.Zeto
+	rpc               rpcbackend.Backend
+	done              func()
+}
+
+func (s *zetoDomainTestSuite) SetupSuite() {
+	s.hdWalletSeed = testbed.HDWalletSeedScopedToTest()
+	domainContracts := testZeto.DeployZetoContracts(s.T(), s.hdWalletSeed, "./config-for-deploy.yaml", controllerName)
+	s.deployedContracts = domainContracts
+	ctx := context.Background()
+	domainName := "zeto_" + tktypes.RandHex(8)
+	log.L(ctx).Infof("Domain name = %s", domainName)
+	config := testZeto.PrepareZetoConfig(s.T(), s.deployedContracts, "../zkp")
+	zeto, zetoTestbed := newZetoDomain(s.T(), config)
+	done, _, rpc := newTestbed(s.T(), s.hdWalletSeed, map[string]*testbed.TestbedDomain{
+		domainName: zetoTestbed,
+	})
+	s.domainName = domainName
+	s.domain = zeto
+	s.rpc = rpc
+	s.done = done
+}
+
+func (s *zetoDomainTestSuite) TearDownSuite() {
+	s.done()
+}
+
+func (s *zetoDomainTestSuite) TestZeto_Anon() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON, false)
+}
+
+func (s *zetoDomainTestSuite) TestZeto_AnonBatch() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON, true)
+}
+
+func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, false)
+}
+
+func (s *zetoDomainTestSuite) TestZeto_AnonEncBatch() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC, true)
+}
+
+func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, false)
+}
+
+func (s *zetoDomainTestSuite) TestZeto_AnonNullifierBatch() {
+	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER, true)
+}
+
+func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string, useBatch bool) {
+	ctx := context.Background()
+	log.L(ctx).Infof("Deploying an instance of the %s token", tokenName)
+	var zetoAddress tktypes.EthAddress
+	rpcerr := s.rpc.CallRPC(ctx, &zetoAddress, "testbed_deploy",
+		s.domainName, &types.InitializerParams{
+			From:      controllerName,
+			TokenName: tokenName,
+		})
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
+	log.L(ctx).Infof("Zeto instance deployed to %s", zetoAddress)
+
+	log.L(ctx).Infof("Mint 10 from controller to controller")
+	_, err := s.mint(ctx, zetoAddress, controllerName, 10)
 	require.NoError(t, err)
-	return result
+
+	coins := findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
+	require.Len(t, coins, 1)
+	assert.Equal(t, int64(10), coins[0].Data.Amount.Int().Int64())
+	assert.Equal(t, controllerName, coins[0].Data.Owner)
+
+	log.L(ctx).Infof("Mint 20 from controller to controller")
+	_, err = s.mint(ctx, zetoAddress, controllerName, 20)
+	require.NoError(t, err)
+
+	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
+	require.Len(t, coins, 2)
+	assert.Equal(t, int64(10), coins[0].Data.Amount.Int().Int64())
+	assert.Equal(t, controllerName, coins[0].Data.Owner)
+	assert.Equal(t, int64(20), coins[1].Data.Amount.Int().Int64())
+	assert.Equal(t, controllerName, coins[1].Data.Owner)
+
+	// for testing the batch circuits, we mint the 3rd UTXO
+	if useBatch {
+		log.L(ctx).Infof("Mint 30 from controller to controller")
+		_, err = s.mint(ctx, zetoAddress, controllerName, 20)
+		require.NoError(t, err)
+	}
+
+	log.L(ctx).Infof("Attempt mint from non-controller (should fail)")
+	_, err = s.mint(ctx, zetoAddress, recipient1Name, 10)
+	require.ErrorContains(t, err, "PD011513: Reverted: 0x118cdaa7")
+	assert.Regexp(t, "PD011513: Reverted: 0x118cdaa.*", err)
+
+	// for testing the batch circuits, we transfer 50 which would require 3 UTXOs (>2)
+	amount := 25
+	if useBatch {
+		amount = 50
+	}
+	log.L(ctx).Infof("Transfer %d from controller to recipient1", amount)
+	_, err = s.transfer(ctx, zetoAddress, controllerName, recipient1Name, int64(amount))
+	require.NoError(t, err)
+
+	// check that we now only have one unspent coin, of value 5
+	// coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
+	// one for the controller from the failed transaction
+	// one for the controller from the successful transaction as change (value=5)
+	// one for the recipient (value=25)
+	// TODO: re-enable this test after the nullifiers handling is sorted
+	// require.Len(t, coins, 3)
+	// assert.Equal(t, int64(10), coins[0].Amount.Int64())
+	// assert.Equal(t, recipient1Name, coins[0].Owner)
+	// assert.Equal(t, int64(25), coins[1].Amount.Int64())
+	// assert.Equal(t, recipient1Name, coins[1].Owner)
+	// assert.Equal(t, int64(5), coins[2].Amount.Int64())
+	// assert.Equal(t, controllerName, coins[2].Owner)
+}
+
+func (s *zetoDomainTestSuite) transfer(ctx context.Context, zetoAddress tktypes.EthAddress, sender, receiver string, amount int64) (*tktypes.PrivateContractTransaction, error) {
+	var invokeResult tktypes.PrivateContractTransaction
+	params := &types.TransferParams{
+		To:     receiver,
+		Amount: tktypes.Int64ToInt256(amount),
+	}
+	paramsJson, err := json.Marshal(&params)
+	if err != nil {
+		return nil, err
+	}
+	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
+		From:     sender,
+		To:       tktypes.EthAddress(zetoAddress),
+		Function: *types.ZetoABI.Functions()["transfer"],
+		Inputs:   paramsJson,
+	}, true)
+	if rpcerr != nil {
+		return nil, rpcerr.Error()
+	}
+	return &invokeResult, nil
+}
+
+func (s *zetoDomainTestSuite) mint(ctx context.Context, zetoAddress tktypes.EthAddress, minter string, amount int64) (*tktypes.PrivateContractTransaction, error) {
+	var invokeResult tktypes.PrivateContractTransaction
+	params := &types.MintParams{
+		To:     minter,
+		Amount: tktypes.Int64ToInt256(amount),
+	}
+	paramsJson, err := json.Marshal(&params)
+	if err != nil {
+		return nil, err
+	}
+	rpcerr := s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
+		From:     minter,
+		To:       tktypes.EthAddress(zetoAddress),
+		Function: *types.ZetoABI.Functions()["mint"],
+		Inputs:   paramsJson,
+	}, true)
+	if rpcerr != nil {
+		return nil, rpcerr.Error()
+	}
+	return &invokeResult, nil
+}
+
+func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON) []*types.ZetoCoinState {
+	if jq == nil {
+		jq = query.NewQueryBuilder().Limit(100).Query()
+	}
+	var zetoCoins []*types.ZetoCoinState
+	rpcerr := rpc.CallRPC(ctx, &zetoCoins, "pstate_queryStates",
+		zeto.Name(),
+		address,
+		zeto.CoinSchemaID(),
+		jq,
+		"available")
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
+	return zetoCoins
 }
 
 func mapConfig(t *testing.T, config *types.DomainFactoryConfig) (m map[string]any) {
@@ -59,63 +240,6 @@ func mapConfig(t *testing.T, config *types.DomainFactoryConfig) (m map[string]an
 	err = json.Unmarshal(configJSON, &m)
 	require.NoError(t, err)
 	return m
-}
-
-func prepareDomainConfig(t *testing.T, domainContracts *zetoDomainContracts) *types.DomainFactoryConfig {
-	config := types.DomainFactoryConfig{
-		SnarkProver: zetosigner.SnarkProverConfig{
-			CircuitsDir:    "../zkp",
-			ProvingKeysDir: "../zkp",
-		},
-		DomainContracts: types.DomainConfigContracts{
-			Factory: &types.DomainContract{
-				ContractAddress: domainContracts.factoryAddress.String(),
-			},
-		},
-	}
-
-	var impls []*types.DomainContract
-	for name, implContract := range domainContracts.cloneableContracts {
-		abiJSON, err := json.Marshal(domainContracts.deployedContractAbis[name])
-		require.NoError(t, err)
-		contract := types.DomainContract{
-			Name:            name,
-			CircuitId:       implContract.circuitId,
-			ContractAddress: domainContracts.deployedContracts[name].String(),
-			Abi:             tktypes.RawJSON(abiJSON).String(),
-		}
-		impls = append(impls, &contract)
-	}
-	config.DomainContracts.Implementations = impls
-
-	factoryAbiJSON, err := json.Marshal(domainContracts.factoryAbi)
-	assert.NoError(t, err)
-	config.DomainContracts.Factory.Abi = tktypes.RawJSON(factoryAbiJSON).String()
-	config.FactoryAddress = domainContracts.factoryAddress.String()
-	return &config
-}
-
-func deployZetoContracts(t *testing.T, hdWalletSeed *testbed.UTInitFunction) *zetoDomainContracts {
-	ctx := context.Background()
-	log.L(ctx).Infof("Deploy Zeto Contracts")
-
-	tb := testbed.NewTestBed()
-	url, _, done, err := tb.StartForTest("./testbed.config.yaml", map[string]*testbed.TestbedDomain{}, hdWalletSeed)
-	assert.NoError(t, err)
-	defer done()
-	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
-
-	var config domainConfig
-	err = yaml.Unmarshal(testZetoConfigYaml, &config)
-	assert.NoError(t, err)
-
-	deployedContracts, err := deployDomainContracts(ctx, rpc, controllerName, &config)
-	assert.NoError(t, err)
-
-	err = configureFactoryContract(ctx, tb, controllerName, deployedContracts)
-	assert.NoError(t, err)
-
-	return deployedContracts
 }
 
 func newZetoDomain(t *testing.T, config *types.DomainFactoryConfig) (zeto.Zeto, *testbed.TestbedDomain) {
@@ -137,166 +261,4 @@ func newTestbed(t *testing.T, hdWalletSeed *testbed.UTInitFunction, domains map[
 	assert.NoError(t, err)
 	rpc := rpcbackend.NewRPCClient(resty.New().SetBaseURL(url))
 	return done, tb, rpc
-}
-
-type zetoDomainTestSuite struct {
-	suite.Suite
-	hdWalletSeed      *testbed.UTInitFunction
-	deployedContracts *zetoDomainContracts
-	domainName        string
-	domain            zeto.Zeto
-	rpc               rpcbackend.Backend
-	done              func()
-}
-
-func (s *zetoDomainTestSuite) SetupSuite() {
-	s.hdWalletSeed = testbed.HDWalletSeedScopedToTest()
-	domainContracts := deployZetoContracts(s.T(), s.hdWalletSeed)
-	s.deployedContracts = domainContracts
-	ctx := context.Background()
-	domainName := "zeto_" + tktypes.RandHex(8)
-	log.L(ctx).Infof("Domain name = %s", domainName)
-	config := prepareDomainConfig(s.T(), s.deployedContracts)
-	zeto, zetoTestbed := newZetoDomain(s.T(), config)
-	done, _, rpc := newTestbed(s.T(), s.hdWalletSeed, map[string]*testbed.TestbedDomain{
-		domainName: zetoTestbed,
-	})
-	s.domainName = domainName
-	s.domain = zeto
-	s.rpc = rpc
-	s.done = done
-}
-
-func (s *zetoDomainTestSuite) TearDownSuite() {
-	s.done()
-}
-
-func (s *zetoDomainTestSuite) TestZeto_Anon() {
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON)
-}
-
-func (s *zetoDomainTestSuite) TestZeto_AnonEnc() {
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON_ENC)
-}
-
-func (s *zetoDomainTestSuite) TestZeto_AnonNullifier() {
-	s.testZetoFungible(s.T(), constants.TOKEN_ANON_NULLIFIER)
-}
-
-func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backend, zeto zeto.Zeto, address tktypes.EthAddress, jq *query.QueryJSON) []*types.ZetoCoinState {
-	if jq == nil {
-		jq = query.NewQueryBuilder().Limit(100).Query()
-	}
-	var zetoCoins []*types.ZetoCoinState
-	rpcerr := rpc.CallRPC(ctx, &zetoCoins, "pstate_queryStates",
-		zeto.Name(),
-		address,
-		zeto.CoinSchemaID(),
-		jq,
-		"available")
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
-	return zetoCoins
-}
-
-func (s *zetoDomainTestSuite) testZetoFungible(t *testing.T, tokenName string) {
-	ctx := context.Background()
-	log.L(ctx).Infof("Deploying an instance of the %s token", tokenName)
-	var zetoAddress tktypes.EthAddress
-	rpcerr := s.rpc.CallRPC(ctx, &zetoAddress, "testbed_deploy",
-		s.domainName, &types.InitializerParams{
-			From:      controllerName,
-			TokenName: tokenName,
-		})
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
-	log.L(ctx).Infof("Zeto instance deployed to %s", zetoAddress)
-
-	log.L(ctx).Infof("Mint 10 from controller to controller")
-	var invokeResult tktypes.PrivateContractTransaction
-	rpcerr = s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
-		From:     controllerName,
-		To:       tktypes.EthAddress(zetoAddress),
-		Function: *types.ZetoABI.Functions()["mint"],
-		Inputs: toJSON(t, &types.MintParams{
-			To:     controllerName,
-			Amount: tktypes.Int64ToInt256(10),
-		}),
-	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
-
-	coins := findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
-	require.Len(t, coins, 1)
-	assert.Equal(t, int64(10), coins[0].Data.Amount.Int().Int64())
-	assert.Equal(t, controllerName, coins[0].Data.Owner)
-
-	log.L(ctx).Infof("Mint 20 from controller to controller")
-	rpcerr = s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
-		From:     controllerName,
-		To:       tktypes.EthAddress(zetoAddress),
-		Function: *types.ZetoABI.Functions()["mint"],
-		Inputs: toJSON(t, &types.MintParams{
-			To:     controllerName,
-			Amount: tktypes.Int64ToInt256(20),
-		}),
-	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
-
-	coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
-	require.Len(t, coins, 2)
-	assert.Equal(t, int64(10), coins[0].Data.Amount.Int().Int64())
-	assert.Equal(t, controllerName, coins[0].Data.Owner)
-	assert.Equal(t, int64(20), coins[1].Data.Amount.Int().Int64())
-	assert.Equal(t, controllerName, coins[1].Data.Owner)
-
-	log.L(ctx).Infof("Attempt mint from non-controller (should fail)")
-	rpcerr = s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
-		From:     recipient1Name,
-		To:       tktypes.EthAddress(zetoAddress),
-		Function: *types.ZetoABI.Functions()["mint"],
-		Inputs: toJSON(t, &types.MintParams{
-			To:     recipient1Name,
-			Amount: tktypes.Int64ToInt256(10),
-		}),
-	}, false)
-	require.NotNil(t, rpcerr)
-	assert.Regexp(t, "PD011513: Reverted: 0x118cdaa.*", rpcerr.Error())
-
-	log.L(ctx).Infof("Transfer 25 from controller to recipient1")
-	rpcerr = s.rpc.CallRPC(ctx, &invokeResult, "testbed_invoke", &tktypes.PrivateContractInvoke{
-		From:     controllerName,
-		To:       tktypes.EthAddress(zetoAddress),
-		Function: *types.ZetoABI.Functions()["transfer"],
-		Inputs: toJSON(t, &types.TransferParams{
-			To:     recipient1Name,
-			Amount: tktypes.Int64ToInt256(25),
-		}),
-	}, true)
-	if rpcerr != nil {
-		require.NoError(t, rpcerr.Error())
-	}
-
-	// check that we now only have one unspent coin, of value 5
-	// coins = findAvailableCoins(t, ctx, s.rpc, s.domain, zetoAddress, nil)
-	// one for the controller from the failed transaction
-	// one for the controller from the successful transaction as change (value=5)
-	// one for the recipient (value=25)
-	// TODO: re-enable this test after the nullifiers handling is sorted
-	// require.Len(t, coins, 3)
-	// assert.Equal(t, int64(10), coins[0].Amount.Int64())
-	// assert.Equal(t, recipient1Name, coins[0].Owner)
-	// assert.Equal(t, int64(25), coins[1].Amount.Int64())
-	// assert.Equal(t, recipient1Name, coins[1].Owner)
-	// assert.Equal(t, int64(5), coins[2].Amount.Int64())
-	// assert.Equal(t, controllerName, coins[2].Owner)
-}
-
-func TestZetoDomainTestSuite(t *testing.T) {
-	suite.Run(t, new(zetoDomainTestSuite))
 }

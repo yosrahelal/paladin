@@ -13,20 +13,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package zeto
+package zetosigner
 
-import "github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
+import (
+	"testing"
 
-func useNullifiers(circuitId string) bool {
-	return circuitId == constants.CIRCUIT_ANON_NULLIFIER || circuitId == constants.CIRCUIT_ANON_NULLIFIER_BATCH
-}
+	"github.com/stretchr/testify/assert"
+)
 
-// the Zeto implementations support two input/output sizes for the circuits: 2 and 10,
-// if the input or output size is larger than 2, then the batch circuit is used with
-// input/output size 10
-func getInputSize(sizeOfEndorsableStates int) int {
-	if sizeOfEndorsableStates <= 2 {
-		return 2
-	}
-	return 10
+func TestNewBabyJubJubPrivateKey(t *testing.T) {
+	privateKey, err := NewBabyJubJubPrivateKey([]byte("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"))
+	assert.NoError(t, err)
+	assert.NotNil(t, privateKey)
 }

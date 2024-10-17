@@ -25,6 +25,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	"github.com/kaleido-io/paladin/domains/integration-test/helpers"
+	"github.com/kaleido-io/paladin/domains/integration-test/zeto"
 	nototypes "github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	zetotypes "github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -288,8 +289,8 @@ func TestNotoForZeto(t *testing.T) {
 	}
 
 	log.L(ctx).Infof("Deploying Zeto dependencies")
-	zetoContracts := deployZetoContracts(t, hdWalletSeed, notary)
-	zetoConfig := prepareZetoConfig(t, zetoContracts)
+	zetoContracts := zeto.DeployZetoContracts(t, hdWalletSeed, "./zeto/config-for-deploy.yaml", notary)
+	zetoConfig := zeto.PrepareZetoConfig(t, zetoContracts, "../../domains/zeto/zkp")
 
 	log.L(ctx).Infof("Initializing testbed")
 	waitForNoto, notoTestbed := newNotoDomain(t, &nototypes.DomainConfig{
