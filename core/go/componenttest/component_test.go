@@ -571,14 +571,14 @@ func TestResolveIdentityFromRemoteNode(t *testing.T) {
 
 	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, aliceNodeConfig, []*nodeConfiguration{bobNodeConfig})
 	client1 := instance1.client
-	aliceIdentity := "wallets.org1.alice@" + instance1.id.String()
+	aliceIdentity := "wallets.org1.alice@" + instance1.name
 	aliceAddress := instance1.resolveEthereumAddress(aliceIdentity)
 	t.Logf("Alice address: %s", aliceAddress)
 
 	instance2 := newInstanceForComponentTesting(t, domainRegistryAddress, bobNodeConfig, []*nodeConfiguration{aliceNodeConfig})
 	client2 := instance2.client
 	bobUnqualifiedIdentity := "wallets.org2.bob"
-	bobIdentity := bobUnqualifiedIdentity + "@" + instance2.id.String()
+	bobIdentity := bobUnqualifiedIdentity + "@" + instance2.name
 	bobAddress := instance2.resolveEthereumAddress(bobIdentity)
 	t.Logf("Bob address: %s", bobAddress)
 
@@ -629,20 +629,17 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 	aliceNodeConfig := newNodeConfiguration(t, "alice")
 	bobNodeConfig := newNodeConfiguration(t, "bob")
 
-	t.Logf("Instance 1 id: %s", aliceNodeConfig.identity)
-	t.Logf("Instance 2 id: %s", bobNodeConfig.identity)
-
 	domainRegistryAddress := deployDomainRegistry(t)
 
 	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, aliceNodeConfig, []*nodeConfiguration{bobNodeConfig})
 	client1 := instance1.client
-	aliceIdentity := "wallets.org1.alice@" + instance1.id.String()
+	aliceIdentity := "wallets.org1.alice@" + instance1.name
 	aliceAddress := instance1.resolveEthereumAddress(aliceIdentity)
 	t.Logf("Alice address: %s", aliceAddress)
 
 	instance2 := newInstanceForComponentTesting(t, domainRegistryAddress, bobNodeConfig, []*nodeConfiguration{aliceNodeConfig})
 	client2 := instance2.client
-	bobIdentity := "wallets.org2.bob@" + instance2.id.String()
+	bobIdentity := "wallets.org2.bob@" + instance2.name
 	bobAddress := instance2.resolveEthereumAddress(bobIdentity)
 	t.Logf("Bob address: %s", bobAddress)
 
@@ -744,27 +741,23 @@ func TestNotaryDelegated(t *testing.T) {
 	bobNodeConfig := newNodeConfiguration(t, "bob")
 	notaryNodeConfig := newNodeConfiguration(t, "notary")
 
-	t.Logf("Instance 1 id: %s", aliceNodeConfig.identity)
-	t.Logf("Instance 2 id: %s", bobNodeConfig.identity)
-	t.Logf("Instance 3 id: %s", notaryNodeConfig.identity)
-
 	domainRegistryAddress := deployDomainRegistry(t)
 
 	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, aliceNodeConfig, []*nodeConfiguration{bobNodeConfig, notaryNodeConfig})
 	client1 := instance1.client
-	aliceIdentity := "wallets.org1.alice@" + instance1.id.String()
+	aliceIdentity := "wallets.org1.alice@" + instance1.name
 	aliceAddress := instance1.resolveEthereumAddress(aliceIdentity)
 	t.Logf("Alice address: %s", aliceAddress)
 
 	instance2 := newInstanceForComponentTesting(t, domainRegistryAddress, bobNodeConfig, []*nodeConfiguration{aliceNodeConfig, notaryNodeConfig})
 	//client2 := instance2.client
-	bobIdentity := "wallets.org2.bob@" + instance2.id.String()
+	bobIdentity := "wallets.org2.bob@" + instance2.name
 	bobAddress := instance2.resolveEthereumAddress(bobIdentity)
 	t.Logf("Bob address: %s", bobAddress)
 
 	instance3 := newInstanceForComponentTesting(t, domainRegistryAddress, notaryNodeConfig, []*nodeConfiguration{aliceNodeConfig, bobNodeConfig})
 	client3 := instance3.client
-	notaryIdentity := "wallets.org3.notary@" + instance3.id.String()
+	notaryIdentity := "wallets.org3.notary@" + instance3.name
 	//notaryAddress := instance3.resolveEthereumAddress(notaryIdentity)
 	t.Logf("Notary address: %s", bobAddress)
 
