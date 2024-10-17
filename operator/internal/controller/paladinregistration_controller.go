@@ -30,11 +30,9 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
 var registryABI = abi.ABI{
@@ -103,11 +101,12 @@ func (r *PaladinRegistrationReconciler) Reconcile(ctx context.Context, req ctrl.
 		"reg."+reg.Name,
 		reg.Spec.RegistryAdminNode /* for the root entry */, reg.Namespace,
 		&reg.Status.RegistrationTx,
-		func() (bool, *ptxapi.TransactionInput, error) { return r.buildRegistrationTX(ctx, &reg, registryAddr) },
+		func() (bool, *pldapi.TransactionInput, error) { return r.buildRegistrationTX(ctx, &reg, registryAddr) },
 	)
 	err = regTx.reconcile(ctx)
 	if err != nil {
-		return ctrl.Result{}, err
+		// There's nothing to notify us when the world changes other than polling, so we keep re-trying
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, err
 	} else if regTx.statusChanged {
 		if reg.Status.PublishTxs == nil {
 			reg.Status.PublishTxs = map[string]corev1alpha1.TransactionSubmission{}
@@ -127,13 +126,14 @@ func (r *PaladinRegistrationReconciler) Reconcile(ctx context.Context, req ctrl.
 			"reg."+reg.Name+"."+transportName,
 			reg.Spec.Node /* the node owns their transports */, reg.Namespace,
 			&transportPublishStatus,
-			func() (bool, *ptxapi.TransactionInput, error) {
+			func() (bool, *pldapi.TransactionInput, error) {
 				return r.buildTransportTX(ctx, &reg, registryAddr, transportName)
 			},
 		)
 		err := regTx.reconcile(ctx)
 		if err != nil {
-			return ctrl.Result{}, err
+			// There's nothing to notify us when the world changes other than polling, so we keep re-trying
+			return ctrl.Result{RequeueAfter: 1 * time.Second}, err
 		} else if regTx.statusChanged {
 			reg.Status.PublishTxs[transportName] = transportPublishStatus
 			return r.updateStatusAndRequeue(ctx, &reg, publishCount)
@@ -153,7 +153,7 @@ func (r *PaladinRegistrationReconciler) updateStatusAndRequeue(ctx context.Conte
 	reg.Status.PublishCount = publishCount
 	if err := r.Status().Update(ctx, reg); err != nil {
 		log.FromContext(ctx).Error(err, "Failed to update Paladin registration status")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: 100 * time.Millisecond}, err
 	}
 	return ctrl.Result{Requeue: true}, nil // Run again immediately to submit
 }
@@ -178,35 +178,33 @@ func (r *PaladinRegistrationReconciler) getRegistryAddress(ctx context.Context, 
 
 }
 
-func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context, reg *corev1alpha1.PaladinRegistration, registryAddr *tktypes.EthAddress) (bool, *ptxapi.TransactionInput, error) {
+func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context, reg *corev1alpha1.PaladinRegistration, registryAddr *tktypes.EthAddress) (bool, *pldapi.TransactionInput, error) {
 
 	// We ask the node its name, so we know what to register it as
-	regNodeRPC, err := getPaladinRPC(ctx, r.Client, reg.Spec.Node, reg.Namespace)
-	if err != nil || regNodeRPC == nil {
+	targetNodeRPC, err := getPaladinRPC(ctx, r.Client, reg.Spec.Node, reg.Namespace)
+	if err != nil || targetNodeRPC == nil {
 		return false, nil, err // not ready, or error
 	}
 	var nodeName string
-	if err := regNodeRPC.CallRPC(ctx, &nodeName, "transport_nodeName"); err != nil || nodeName == "" {
+	if err := targetNodeRPC.CallRPC(ctx, &nodeName, "transport_nodeName"); err != nil || nodeName == "" {
 		return false, nil, err
 	}
 
 	// We also ask it to resolve its key down to an address
-	var nodeOwnerAddress string
-	if err := regNodeRPC.CallRPC(ctx, &nodeOwnerAddress, "ptx_resolveLocalVerifier",
-		reg.Spec.NodeKey, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS,
-	); err != nil || nodeOwnerAddress == "" {
+	addr, err := targetNodeRPC.KeyManager().ResolveEthAddress(ctx, reg.Spec.NodeKey)
+	if err != nil {
 		return false, nil, err
 	}
 
 	registration := map[string]any{
 		"parentIdentityHash": tktypes.Bytes32{}, // zero for root
 		"name":               nodeName,
-		"owner":              nodeOwnerAddress,
+		"owner":              addr,
 	}
 
-	tx := &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	tx := &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			To:       registryAddr,
 			Function: registryABI.Functions()["registerIdentity"].String(),
 			From:     reg.Spec.RegistryAdminKey, // registry admin registers the root entry for the node
@@ -218,7 +216,7 @@ func (r *PaladinRegistrationReconciler) buildRegistrationTX(ctx context.Context,
 	return true, tx, nil
 }
 
-func (r *PaladinRegistrationReconciler) buildTransportTX(ctx context.Context, reg *corev1alpha1.PaladinRegistration, registryAddr *tktypes.EthAddress, transportName string) (bool, *ptxapi.TransactionInput, error) {
+func (r *PaladinRegistrationReconciler) buildTransportTX(ctx context.Context, reg *corev1alpha1.PaladinRegistration, registryAddr *tktypes.EthAddress, transportName string) (bool, *pldapi.TransactionInput, error) {
 
 	// Get the details from the node
 	regNodeRPC, err := getPaladinRPC(ctx, r.Client, reg.Spec.Node, reg.Namespace)
@@ -259,12 +257,12 @@ func (r *PaladinRegistrationReconciler) buildTransportTX(ctx context.Context, re
 		"value":        transportDetails,
 	}
 
-	tx := &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:     ptxapi.TransactionTypePublic.Enum(),
+	tx := &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:     pldapi.TransactionTypePublic.Enum(),
 			To:       registryAddr,
 			Function: registryABI.Functions()["setIdentityProperty"].String(),
-			From:     reg.Spec.RegistryAdminKey, // registry admin registers the root entry for the node
+			From:     reg.Spec.NodeKey, // node registers the transports
 			Data:     tktypes.JSONString(property),
 		},
 		ABI: registryABI,
@@ -277,5 +275,7 @@ func (r *PaladinRegistrationReconciler) buildTransportTX(ctx context.Context, re
 func (r *PaladinRegistrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.PaladinRegistration{}).
+		// Reconcile when any node status changes
+		Watches(&corev1alpha1.Paladin{}, reconcileAll(PaladinRegistrationCRMap, r.Client), reconcileEveryChange()).
 		Complete(r)
 }

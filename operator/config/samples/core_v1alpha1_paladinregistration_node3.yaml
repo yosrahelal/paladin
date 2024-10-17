@@ -4,12 +4,12 @@ metadata:
   labels:
     app.kubernetes.io/name: operator-go
     app.kubernetes.io/managed-by: kustomize
-  name: node1
+  name: node3
 spec:
   registry: evm-registry
-  registryAdminNode: node1
-  registryAdminKey: deployKey
-  node: node1
-  nodeAdminKey: registryAdmin
+  registryAdminNode: node1 # home of the root key
+  registryAdminKey: registry.root
+  node: node3
+  nodeAdminKey: registry.node3
   transports:
   - grpc 

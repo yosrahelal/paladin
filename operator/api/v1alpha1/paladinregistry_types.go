@@ -49,9 +49,9 @@ type EVMRegistryConfig struct {
 }
 
 type RegistryTransportsConfig struct {
-	// +kubebuilder:default=true
 	// If true, then this registry will be used for lookup of node transports
-	Enabled bool `json:"enabled,omitempty"`
+	// +kubebuilder:default=true
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// Prefix if set that will be matched and cut from any supplied lookup
 	// node name before performing a lookup. If it does not match (or matches

@@ -14,17 +14,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ptxapi
+package syncpoints
 
-type ResolveVerifierRequest struct {
-	Lookup       *string `json:"lookup"`
-	Algorithm    *string `json:"algorithm"`
-	VerifierType *string `json:"verifierType"`
+import (
+	"testing"
+
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
+	"github.com/stretchr/testify/require"
+)
+
+type dependencyMocks struct {
+	persistence *mockpersistence.SQLMockProvider
+	txMgr       *componentmocks.TXManager
 }
 
-type ResolvedVerifier struct {
-	Lookup       *string `json:"lookup"`
-	Algorithm    *string `json:"algorithm"`
-	VerifierType *string `json:"verifierType"`
-	Verifier     *string `json:"verifier"`
+func newSyncPointsForTesting(t *testing.T) (*syncPoints, *dependencyMocks) {
+	p, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+	mocks := &dependencyMocks{
+		persistence: p,
+		txMgr:       componentmocks.NewTXManager(t),
+	}
+
+	return &syncPoints{
+		txMgr: mocks.txMgr,
+	}, mocks
 }

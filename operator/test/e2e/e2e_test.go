@@ -27,7 +27,7 @@ import (
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/operator/test/utils"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 )
@@ -56,9 +56,9 @@ var _ = Describe("controller", Ordered, func() {
 
 			By("waiting for Paladin node to be ready") // TODO: We should have the paladin pod ready once this is ready
 			EventuallyWithOffset(1, func() error {
-				var txs []*ptxapi.Transaction
+				var txs []*pldapi.Transaction
 				return rpc.CallRPC(ctx, &txs, "ptx_queryPendingTransactions", query.NewQueryBuilder().Limit(1).Query(), false)
-			}, time.Minute, 100*time.Millisecond).Should(Succeed())
+			}, 5*time.Minute, 5*time.Second).Should(Succeed())
 
 			deployer := utils.TestDeployer{RPC: rpc, From: "deployerKey"}
 

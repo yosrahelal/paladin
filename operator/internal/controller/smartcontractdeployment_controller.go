@@ -30,7 +30,7 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -69,11 +69,12 @@ func (r *SmartContractDeploymentReconciler) Reconcile(ctx context.Context, req c
 		"scdeploy."+scd.Name,
 		scd.Spec.DeployNode, scd.Namespace,
 		&scd.Status.TransactionSubmission,
-		func() (bool, *ptxapi.TransactionInput, error) { return r.buildDeployTransaction(ctx, &scd) },
+		func() (bool, *pldapi.TransactionInput, error) { return r.buildDeployTransaction(ctx, &scd) },
 	)
 	err := txReconcile.reconcile(ctx)
 	if err != nil {
-		return ctrl.Result{}, err
+		// There's nothing to notify us when the world changes other than polling, so we keep re-trying
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, err
 	} else if txReconcile.statusChanged {
 		// Common TX reconciler does everything for us apart from grab the receipt
 		if scd.Status.TransactionStatus == corev1alpha1.TransactionStatusSuccess && scd.Status.ContractAddress == "" {
@@ -95,12 +96,12 @@ func (r *SmartContractDeploymentReconciler) Reconcile(ctx context.Context, req c
 func (r *SmartContractDeploymentReconciler) updateStatusAndRequeue(ctx context.Context, scd *corev1alpha1.SmartContractDeployment) (ctrl.Result, error) {
 	if err := r.Status().Update(ctx, scd); err != nil {
 		log.FromContext(ctx).Error(err, "Failed to update smart contract deployment status")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: 100 * time.Millisecond}, err
 	}
 	return ctrl.Result{Requeue: true}, nil // Run again immediately to submit
 }
 
-func (r *SmartContractDeploymentReconciler) buildDeployTransaction(ctx context.Context, scd *corev1alpha1.SmartContractDeployment) (bool, *ptxapi.TransactionInput, error) {
+func (r *SmartContractDeploymentReconciler) buildDeployTransaction(ctx context.Context, scd *corev1alpha1.SmartContractDeployment) (bool, *pldapi.TransactionInput, error) {
 	var data tktypes.RawJSON
 	if scd.Spec.ParamsJSON == "" {
 		data = tktypes.RawJSON(scd.Spec.ParamsJSON)
@@ -114,9 +115,9 @@ func (r *SmartContractDeploymentReconciler) buildDeployTransaction(ctx context.C
 		return false, nil, fmt.Errorf("invalid bytecode: %s", err)
 	}
 
-	return true, &ptxapi.TransactionInput{
-		Transaction: ptxapi.Transaction{
-			Type:   tktypes.Enum[ptxapi.TransactionType](scd.Spec.TxType),
+	return true, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type:   tktypes.Enum[pldapi.TransactionType](scd.Spec.TxType),
 			Domain: scd.Spec.Domain,
 			From:   scd.Spec.DeployKey,
 			Data:   data,
@@ -130,5 +131,7 @@ func (r *SmartContractDeploymentReconciler) buildDeployTransaction(ctx context.C
 func (r *SmartContractDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.SmartContractDeployment{}).
+		// Reconcile when any node status changes
+		Watches(&corev1alpha1.Paladin{}, reconcileAll(SmartContractDeploymentCRMap, r.Client), reconcileEveryChange()).
 		Complete(r)
 }

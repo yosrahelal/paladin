@@ -84,7 +84,7 @@ func (r *PaladinRegistryReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 func (r *PaladinRegistryReconciler) updateStatusAndRequeue(ctx context.Context, reg *corev1alpha1.PaladinRegistry) (ctrl.Result, error) {
 	if err := r.Status().Update(ctx, reg); err != nil {
 		log.FromContext(ctx).Error(err, "Failed to update Paladin registry status")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: 100 * time.Millisecond}, err
 	}
 	return ctrl.Result{Requeue: true}, nil // Run again immediately to submit
 }
@@ -114,5 +114,7 @@ func (r *PaladinRegistryReconciler) trackContractDeploymentAndRequeue(ctx contex
 func (r *PaladinRegistryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.PaladinRegistry{}).
+		// Reconcile when any contract deployment changes status
+		Watches(&corev1alpha1.SmartContractDeployment{}, reconcileAll(PaladinRegistryCRMap, r.Client), reconcileEveryChange()).
 		Complete(r)
 }

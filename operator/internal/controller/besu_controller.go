@@ -333,7 +333,6 @@ func generateBesuIDSecretName(n string) string {
 
 func (r *BesuReconciler) getLabels(node *corev1alpha1.Besu, extraLabels ...map[string]string) map[string]string {
 	l := make(map[string]string, len(r.config.Besu.Labels))
-	l["app"] = generateBesuName(node.Name)
 
 	for k, v := range r.config.Besu.Labels {
 		l[k] = v
@@ -344,6 +343,7 @@ func (r *BesuReconciler) getLabels(node *corev1alpha1.Besu, extraLabels ...map[s
 			l[k] = v
 		}
 	}
+	l["app.kubernetes.io/name"] = generateBesuName(node.Name)
 	return l
 }
 
@@ -685,40 +685,38 @@ func (r *BesuReconciler) generateServiceTemplate(node *corev1alpha1.Besu, name s
 	if svc.Spec.Type == "" {
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
-	// Set ports unless CR has taken ownership
-	if svc.Spec.Ports == nil {
-		mergeServicePorts(&svc.Spec, []corev1.ServicePort{
-			{
-				Name:       "rpc-http",
-				Port:       8545,
-				TargetPort: intstr.FromInt(8545),
-				Protocol:   corev1.ProtocolTCP,
-			},
-			{
-				Name:       "rpc-ws",
-				Port:       8546,
-				TargetPort: intstr.FromInt(8546),
-				Protocol:   corev1.ProtocolTCP,
-			},
-			{
-				Name:       "graphql-http",
-				Port:       8547,
-				TargetPort: intstr.FromInt(8547),
-				Protocol:   corev1.ProtocolTCP,
-			},
-			{
-				Name:       "p2p-tcp",
-				Port:       30303,
-				TargetPort: intstr.FromInt(30303),
-				Protocol:   corev1.ProtocolTCP,
-			},
-			{
-				Name:       "p2p-udp",
-				Port:       30303,
-				TargetPort: intstr.FromInt(30303),
-				Protocol:   corev1.ProtocolUDP,
-			},
-		})
-	}
+	// Merge our required ports with the overrides the user has provided
+	mergeServicePorts(&svc.Spec, []corev1.ServicePort{
+		{
+			Name:       "rpc-http",
+			Port:       8545,
+			TargetPort: intstr.FromInt(8545),
+			Protocol:   corev1.ProtocolTCP,
+		},
+		{
+			Name:       "rpc-ws",
+			Port:       8546,
+			TargetPort: intstr.FromInt(8546),
+			Protocol:   corev1.ProtocolTCP,
+		},
+		{
+			Name:       "graphql-http",
+			Port:       8547,
+			TargetPort: intstr.FromInt(8547),
+			Protocol:   corev1.ProtocolTCP,
+		},
+		{
+			Name:       "p2p-tcp",
+			Port:       30303,
+			TargetPort: intstr.FromInt(30303),
+			Protocol:   corev1.ProtocolTCP,
+		},
+		{
+			Name:       "p2p-udp",
+			Port:       30303,
+			TargetPort: intstr.FromInt(30303),
+			Protocol:   corev1.ProtocolUDP,
+		},
+	})
 	return svc
 }

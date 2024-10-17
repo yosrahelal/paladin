@@ -14,76 +14,83 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package privatetxnstore
+package syncpoints
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/kaleido-io/paladin/core/internal/flushwriter"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
-
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
-
-	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
-/*
-Dispatching a transaction to the baseledger transaction manager is a point of no return and as part
-of the hand over, we must get some assurance from the baseledger transaction manager that ordering will
-be preserved.  So, we need to have the nonce allocated and written to the baseledger transaction manager's
-database table in the same database transaction as the we update the state of the private transaction
-table to record the dispatch. It would be a bottleneck on performance if we were to create a new database
-transaction for each transaction that is dispatched given that there could be many hundreds, or even thousands
-per second accross all smart contract domains.  So we have a flush worker pattern here where a small number (relative to
-the number of transaction processing threads ) of worker threads batch up several transactions across multiple
-domain instances and run the database update for the dispatch and call the baseledger transaction manager
-to atomically allocate and record the nonce under that same transaction.
-*/
-
-// the submit will happen on the user transaction manager's flush writer context so
-// that it can be co-ordinated with the user transaction submission
-// do we have any other checkpoints (e.g. on delegate?)
-
-type dispatchSequenceOperation struct {
-	contractAddress    tktypes.EthAddress
+type dispatchOperation struct {
 	dispatches         []*DispatchSequence
 	stateDistributions []*statedistribution.StateDistributionPersisted
 }
 
-func (dso *dispatchSequenceOperation) WriteKey() string {
-	return dso.contractAddress.String()
+type DispatchPersisted struct {
+	ID                       string             `json:"id"`
+	PrivateTransactionID     string             `json:"privateTransactionID"`
+	PublicTransactionAddress tktypes.EthAddress `json:"publicTransactionAddress"`
+	PublicTransactionNonce   uint64             `json:"publicTransactionNonce"`
 }
 
-type noResult struct{}
+// A dispatch sequence is a collection of private transactions that are submitted together for a given signing address in order
+type DispatchSequence struct {
+	PublicTxBatch                components.PublicTxBatch
+	PrivateTransactionDispatches []*DispatchPersisted
+}
 
-func (s *store) runBatch(ctx context.Context, dbTX *gorm.DB, values []*dispatchSequenceOperation) ([]flushwriter.Result[*noResult], error) {
+// a dispatch batch is a collection of dispatch sequences that are submitted together with no ordering requirements between sequences
+// purely for a database performance reason, they are included in the same transaction
+type DispatchBatch struct {
+	DispatchSequences []*DispatchSequence
+}
 
-	/*To reliably allocate a nonce in a gapless sequence without locking out a bunch of threads for too long and without gitting deadlocks:
-	- Before we go into a database transaction, check that we have a fresh record of the latest nonce in memory for the given signing address - reading DB and/or calling out to the blockchain node if needed
-	 - On the private transaction manager thread: take a lock on the nonce allocator for the signing address
-	 - defer a call to release the lock with a rollback ( i.e. by default, if the stack unwinds, we don't change the "next" nonce value)
-	 - send a message to the flush worker's channel to
-	   		- allocate increment the next nonce (or nonces, depending on how many transactions are being dispatched for that signing address in that flush batch - noting that the same flush batch will be potentially processing transactions for multiple signign keys from multile private transaction manger threads)
-			- write the records to both ( BLT manager and Private transaction manager) tables
-	 - wait for the flush worker to complete the operation and release the lock with a rollforward (i.e. next reader to get the lock will see the new nonce value)
-	   - NOTE we have held the lock for quite a long time by now so if any other private transaction manager threads are trying to get a nonce for the same signign key, then the are slowed down. But that's ok because we assume it is extremely rare that multiple private transaction managers will be trying to use the same signing key
-	 - if the flush worker fails, and the DB transaction is rolled back we need to roll back the lock and the nonce value
-	 	- is there a timeout on the private transaction manager thread waiting for the flush worker? If it hasn't signalled completion in time, do we assume failure? Do we read the database? If in doubt, we can tell the none allocator to refresh its cache by reading the DB and/or calling the blockchain node
-	 - if the
-	*/
+// PersistDispatches persists the dispatches to the database and coordinates with the public transaction manager
+// to submit public transactions.
+func (s *syncPoints) PersistDispatchBatch(ctx context.Context, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*statedistribution.StateDistribution) error {
+
+	stateDistributionsPersisted := make([]*statedistribution.StateDistributionPersisted, 0, len(stateDistributions))
+	for _, stateDistribution := range stateDistributions {
+		stateDistributionsPersisted = append(stateDistributionsPersisted, &statedistribution.StateDistributionPersisted{
+			ID:              stateDistribution.ID,
+			StateID:         stateDistribution.StateID,
+			IdentityLocator: stateDistribution.IdentityLocator,
+			DomainName:      stateDistribution.Domain,
+			ContractAddress: stateDistribution.ContractAddress,
+		})
+	}
+	// Send the write operation with all of the batch sequence operations to the flush worker
+	op := s.writer.Queue(ctx, &syncPointOperation{
+		contractAddress: contractAddress,
+		dispatchOperation: &dispatchOperation{
+			dispatches:         dispatchBatch.DispatchSequences,
+			stateDistributions: stateDistributionsPersisted,
+		},
+	})
+
+	//wait for the flush to complete
+	_, err := op.WaitFlushed(ctx)
+	return err
+}
+
+func (s *syncPoints) writeDispatchOperations(ctx context.Context, dbTX *gorm.DB, dispatchOperations []*dispatchOperation) error {
 
 	// For each operation in the batch, we need to call the baseledger transaction manager to allocate its nonce
 	// which it can only guaranteed to be gapless and unique if it is done during the database transaction that inserts the dispatch record.
-	// However, this is
-	// Build lists of things to insert (we are insert only)
 
-	for _, op := range values {
+	// Build lists of things to insert (we are insert only)
+	for _, op := range dispatchOperations {
+
 		//for each batchSequence operation, call the public transaction manager to allocate a nonce
 		//and persist the intent to send the states to the distribution list.
 		for _, dispatchSequenceOp := range op.dispatches {
@@ -95,13 +102,13 @@ func (s *store) runBatch(ctx context.Context, dbTX *gorm.DB, values []*dispatchS
 				log.L(ctx).Errorf("Error submitting public transaction: %s", err)
 				// TODO  this is a really bad situation because it will cause all dispatches in the flush to rollback
 				// Should we skip this dispatch ( or this mini batch of dispatches?)
-				return nil, err
+				return err
 			}
 			publicTxIDs := pubBatch.Accepted()
 			if len(publicTxIDs) != len(dispatchSequenceOp.PrivateTransactionDispatches) {
 				errorMessage := fmt.Sprintf("Expected %d public transaction IDs, got %d", len(dispatchSequenceOp.PrivateTransactionDispatches), len(publicTxIDs))
 				log.L(ctx).Error(errorMessage)
-				return nil, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
+				return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
 			}
 
 			//TODO this results in an `INSERT` for each dispatchSequence
@@ -133,7 +140,7 @@ func (s *store) runBatch(ctx context.Context, dbTX *gorm.DB, values []*dispatchS
 
 			if err != nil {
 				log.L(ctx).Errorf("Error persisting dispatches: %s", err)
-				return nil, err
+				return err
 			}
 
 		}
@@ -158,11 +165,8 @@ func (s *store) runBatch(ctx context.Context, dbTX *gorm.DB, values []*dispatchS
 
 		if err != nil {
 			log.L(ctx).Errorf("Error persisting state distributions: %s", err)
-			return nil, err
+			return err
 		}
 	}
-
-	// We don't actually provide any result, so just build an array of nil results
-	return make([]flushwriter.Result[*noResult], len(values)), nil
-
+	return nil
 }

@@ -30,7 +30,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 )
@@ -41,8 +42,8 @@ type transactionReconcile struct {
 	nodeName             string
 	namespace            string
 	pStatus              *corev1alpha1.TransactionSubmission
-	txFactory            func() (bool, *ptxapi.TransactionInput, error)
-	receipt              *ptxapi.TransactionReceipt
+	txFactory            func() (bool, *pldapi.TransactionInput, error)
+	receipt              *pldapi.TransactionReceipt
 	statusChanged        bool
 	succeeded            bool
 	failed               bool
@@ -52,7 +53,7 @@ func newTransactionReconcile(c client.Client,
 	idempotencyKeyPrefix,
 	nodeName, namespace string,
 	pStatus *corev1alpha1.TransactionSubmission,
-	txFactory func() (bool, *ptxapi.TransactionInput, error),
+	txFactory func() (bool, *pldapi.TransactionInput, error),
 ) *transactionReconcile {
 	return &transactionReconcile{
 		Client:               c,
@@ -127,7 +128,7 @@ func (r *transactionReconcile) submitTransactionAndRequeue(ctx context.Context, 
 }
 
 func (r *transactionReconcile) queryTxByIdempotencyKeyAndRequeue(ctx context.Context, paladinRPC rpcclient.Client) error {
-	var txns []*ptxapi.Transaction
+	var txns []*pldapi.Transaction
 	err := paladinRPC.CallRPC(ctx, &txns, "ptx_queryTransactions",
 		query.NewQueryBuilder().Equal("idempotencyKey", r.pStatus.IdempotencyKey).Limit(1))
 	if err != nil {
@@ -164,7 +165,7 @@ func (r *transactionReconcile) trackTransactionAndRequeue(ctx context.Context, p
 	return nil
 }
 
-func getPaladinRPC(ctx context.Context, c client.Client, nodeName, namespace string) (rpcclient.Client, error) {
+func getPaladinRPC(ctx context.Context, c client.Client, nodeName, namespace string) (pldclient.PaladinClient, error) {
 
 	log := log.FromContext(ctx)
 	var node corev1alpha1.Paladin
@@ -186,6 +187,6 @@ func getPaladinRPC(ctx context.Context, c client.Client, nodeName, namespace str
 	if err != nil {
 		return nil, err
 	}
-	return rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
+	return pldclient.New().HTTP(ctx, &pldconf.HTTPClientConfig{URL: url})
 
 }
