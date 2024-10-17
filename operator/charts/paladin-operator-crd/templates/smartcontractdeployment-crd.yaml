@@ -66,15 +66,15 @@ spec:
               bytecode:
                 description: The bytecode of the smart contract
                 type: string
-              deployKey:
-                description: Reference to the signing key to use to deploy
-                type: string
-              deployNode:
-                description: The node to use to deploy - reference to a PaladinNode
-                  CR
-                type: string
               domain:
                 description: Domain for private transactions
+                type: string
+              from:
+                description: Reference to the signing key to use to deploy
+                type: string
+              node:
+                description: The node to use to deploy - reference to a PaladinNode
+                  CR
                 type: string
               paramsJSON:
                 description: JSON parameter data (array, object, or empty if no params)
@@ -89,8 +89,8 @@ spec:
             required:
             - abi
             - bytecode
-            - deployKey
-            - deployNode
+            - from
+            - node
             - txType
             type: object
           status:

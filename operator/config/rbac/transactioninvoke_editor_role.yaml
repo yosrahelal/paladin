@@ -1,8 +1,11 @@
----
+# permissions for end users to edit transactioninvokes.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: manager-role
+  labels:
+    app.kubernetes.io/name: operator-go
+    app.kubernetes.io/managed-by: kustomize
+  name: transactioninvoke-editor-role
 rules:
 - apiGroups:
   - core.paladin.io
@@ -19,14 +22,6 @@ rules:
 - apiGroups:
   - core.paladin.io
   resources:
-  - transactioninvokes/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - core.paladin.io
-  resources:
   - transactioninvokes/status
   verbs:
   - get
-  - patch
-  - update

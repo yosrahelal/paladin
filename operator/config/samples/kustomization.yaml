@@ -18,4 +18,5 @@ resources:
 - core_v1alpha1_paladinregistration_node1_admin.yaml
 - core_v1alpha1_paladinregistration_node2.yaml
 - core_v1alpha1_paladinregistration_node3.yaml
+- core_v1alpha1_transactioninvoke.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

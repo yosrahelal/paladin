@@ -67,7 +67,7 @@ func (r *SmartContractDeploymentReconciler) Reconcile(ctx context.Context, req c
 	// Reconcile the deployment transaction
 	txReconcile := newTransactionReconcile(r.Client,
 		"scdeploy."+scd.Name,
-		scd.Spec.DeployNode, scd.Namespace,
+		scd.Spec.Node, scd.Namespace,
 		&scd.Status.TransactionSubmission,
 		func() (bool, *pldapi.TransactionInput, error) { return r.buildDeployTransaction(ctx, &scd) },
 	)
@@ -119,7 +119,7 @@ func (r *SmartContractDeploymentReconciler) buildDeployTransaction(ctx context.C
 		Transaction: pldapi.Transaction{
 			Type:   tktypes.Enum[pldapi.TransactionType](scd.Spec.TxType),
 			Domain: scd.Spec.Domain,
-			From:   scd.Spec.DeployKey,
+			From:   scd.Spec.From,
 			Data:   data,
 		},
 		ABI:      a,

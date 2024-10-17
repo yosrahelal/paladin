@@ -18,7 +18,6 @@ package e2e
 
 import (
 	"context"
-	"time"
 
 	_ "embed"
 
@@ -26,17 +25,12 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/operator/test/utils"
-	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/query"
-	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 )
 
-//go:embed abis/PenteFactory.json
-var penteFactoryBuild string
-
-//go:embed abis/NotoFactory.json
-var notoFactoryBuild string
+const node1HttpURL = "http://127.0.0.1:31548"
+const node2HttpURL = "http://127.0.0.1:31648"
+const node3HttpURL = "http://127.0.0.1:31748"
 
 var _ = Describe("controller", Ordered, func() {
 	BeforeAll(func() {
@@ -45,34 +39,14 @@ var _ = Describe("controller", Ordered, func() {
 	AfterAll(func() {
 	})
 
-	Context("Paladin Single Node", func() {
+	Context("Noto domain verification", func() {
 		It("start up the node", func() {
 			ctx := context.Background()
 
-			rpc, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{
+			_, err := pldclient.New().HTTP(ctx, &pldconf.HTTPClientConfig{
 				URL: "http://127.0.0.1:31548",
 			})
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
-
-			By("waiting for Paladin node to be ready") // TODO: We should have the paladin pod ready once this is ready
-			EventuallyWithOffset(1, func() error {
-				var txs []*pldapi.Transaction
-				return rpc.CallRPC(ctx, &txs, "ptx_queryPendingTransactions", query.NewQueryBuilder().Limit(1).Query(), false)
-			}, 5*time.Minute, 5*time.Second).Should(Succeed())
-
-			deployer := utils.TestDeployer{RPC: rpc, From: "deployerKey"}
-
-			By("deploying the pente factory")
-			_, err = deployer.DeploySmartContractDeploymentBytecode(ctx, penteFactoryBuild, []any{})
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
-			// penteFactoryAddr := receipt.ContractAddress
-			// By("recording pente factory deployed at " + penteFactoryAddr.String())
-
-			By("deploying the noto factory")
-			_, err = deployer.DeploySmartContractDeploymentBytecode(ctx, notoFactoryBuild, []any{})
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
-			// notoFactoryAddr := receipt.ContractAddress
-			// By("recording noto factory deployed at " + notoFactoryAddr.String())
 
 		})
 	})

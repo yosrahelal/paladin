@@ -4,27 +4,27 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
-  name: smartcontractdeployments.core.paladin.io
+  name: transactioninvokes.core.paladin.io
 spec:
   group: core.paladin.io
   names:
-    kind: SmartContractDeployment
-    listKind: SmartContractDeploymentList
-    plural: smartcontractdeployments
+    kind: TransactionInvoke
+    listKind: TransactionInvokeList
+    plural: transactioninvokes
     shortNames:
-    - scd
-    singular: smartcontractdeployment
+    - tx
+    singular: transactioninvoke
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.transactionStatus
       name: Status
       type: string
+    - jsonPath: .status.contractDepsSummary
+      name: Contracts
+      type: string
     - jsonPath: .status.transactionID
       name: TransactionID
-      type: string
-    - jsonPath: .status.contractAddress
-      name: Contract
       type: string
     - jsonPath: .status.transactionHash
       name: TxHash
@@ -35,8 +35,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: SmartContractDeployment is the Schema for the smartcontractdeployments
-          API
+        description: TransactionInvoke is the Schema for the transactioninvokes API
         properties:
           apiVersion:
             description: |-
@@ -56,8 +55,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: SmartContractDeploymentSpec defines the desired state of
-              SmartContractDeployment
+            description: TransactionInvokeSpec defines the desired state of TransactionInvoke
             properties:
               abi:
                 description: The ABI of the smart contract - provides the constructor
@@ -76,8 +74,35 @@ spec:
                 description: The node to use to deploy - reference to a PaladinNode
                   CR
                 type: string
-              paramsJSON:
-                description: JSON parameter data (array, object, or empty if no params)
+              paramsJSONTemplate:
+                description: |-
+                  Go template that specifies the data JSON payload for the invocation
+                  of the smart contract (array of input values, or map of inputs by name).
+                  Once all pre-requisite contract deployments are completed, this template
+                  will be executed with the JSON serialization of CR as the input
+                  to the CR execution. As such it has access to fields like:
+                  .status.resolvedContractAddresses
+                type: string
+              requiredContractDeployments:
+                description: |-
+                  A list of pre-requisite smart contract deployments that must be resolved
+                  to contract addresses before the transaction can be built+submitted.
+                  The set of smart contracts is built one-by-one as the smart contract deployments
+                  complete, and once set a dependency does not change if the deployment CR
+                  is deleted and re-created. So it is important to delete+recreate all
+                  inter-related SmartContractDeployment and TransactionInvoke CRs in a set
+                  when they are being used as a deployment engine for test infrastructure.
+
+                  This is not intended as substitute to proper smart contract management
+                  in production. Instead it is an excellent tool for rapid re-deployment
+                  of test infrastructure.
+                items:
+                  type: string
+                type: array
+              toTemplate:
+                description: |-
+                  Go template that specifies the target smart contract for invocation.
+                  See paramsJSONTemplate for more detail
                 type: string
               txType:
                 default: public
@@ -94,21 +119,27 @@ spec:
             - txType
             type: object
           status:
-            description: SmartContractDeploymentStatus defines the observed state
-              of SmartContractDeployment
+            description: TransactionInvokeStatus defines the observed state of TransactionInvoke
             properties:
-              contractAddress:
+              contractDepsSummary:
                 type: string
               failureMessage:
                 type: string
               idempotencyKey:
                 type: string
+              resolvedContractAddresses:
+                additionalProperties:
+                  type: string
+                type: object
               transactionHash:
                 type: string
               transactionID:
                 type: string
               transactionStatus:
                 type: string
+            required:
+            - contractDepsSummary
+            - resolvedContractAddresses
             type: object
         type: object
     served: true

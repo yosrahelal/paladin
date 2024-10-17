@@ -40,8 +40,8 @@ spec:
   abi: |
 {{ .abi | indent 4 }}  
   bytecode: "{{ .bytecode }}"
-  deployNode: node1
-  deployKey: deployKey
+  node: node1
+  from: {{ .name }}.deployer
   paramsJSON: |
 {{ .params | indent 4 }}
 

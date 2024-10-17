@@ -25,20 +25,20 @@ type SmartContractDeploymentSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// The node to use to deploy - reference to a PaladinNode CR
+	Node string `json:"node"`
 	// +kubebuilder:validation:Enum=public;private
 	// +kubebuilder:default=public
 	// Type of transaction to submit to Paladin
 	TxType string `json:"txType"`
+	// Domain for private transactions
+	Domain string `json:"domain,omitempty"`
 	// The ABI of the smart contract - provides the constructor parameter definition
 	ABI string `json:"abi"`
 	// The bytecode of the smart contract
 	Bytecode string `json:"bytecode"`
-	// The node to use to deploy - reference to a PaladinNode CR
-	DeployNode string `json:"deployNode"`
 	// Reference to the signing key to use to deploy
-	DeployKey string `json:"deployKey"`
-	// Domain for private transactions
-	Domain string `json:"domain,omitempty"`
+	From string `json:"from"`
 	// JSON parameter data (array, object, or empty if no params)
 	ParamsJSON string `json:"paramsJSON,omitempty"`
 }
