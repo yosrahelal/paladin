@@ -34,7 +34,7 @@ import (
 
 type identityResolver struct {
 	bgCtx                 context.Context
-	nodeID                string
+	nodeName              string
 	keyManager            components.KeyManager
 	transportManager      components.TransportManager
 	inflightRequests      map[string]*inflightRequest
@@ -47,10 +47,9 @@ type inflightRequest struct {
 }
 
 // As a LateBoundComponent, the identity resolver is created and initialised in a single function call
-func NewIdentityResolver(ctx context.Context, nodeID string) components.IdentityResolver {
+func NewIdentityResolver(ctx context.Context) components.IdentityResolver {
 	return &identityResolver{
 		bgCtx:                 ctx,
-		nodeID:                nodeID,
 		inflightRequests:      make(map[string]*inflightRequest),
 		inflightRequestsMutex: &sync.Mutex{},
 	}
@@ -61,6 +60,7 @@ func (ir *identityResolver) PreInit(c components.PreInitComponents) (*components
 }
 
 func (ir *identityResolver) PostInit(c components.AllComponents) error {
+	ir.nodeName = c.TransportManager().LocalNodeName()
 	ir.keyManager = c.KeyManager()
 	ir.transportManager = c.TransportManager()
 	return c.TransportManager().RegisterClient(ir.bgCtx, ir)
@@ -76,9 +76,8 @@ func (ir *identityResolver) Stop() {
 }
 
 func (ir *identityResolver) ResolveVerifier(ctx context.Context, lookup string, algorithm string, verifierType string) (string, error) {
-	//TODO should we have a timeout here? Shoudl be related to the async timeout and reaping of the inflight requests?
-	replyChan := make(chan string)
-	errChan := make(chan error)
+	replyChan := make(chan string, 1)
+	errChan := make(chan error, 1)
 	ir.ResolveVerifierAsync(ctx, lookup, algorithm, verifierType, func(ctx context.Context, verifier string) {
 		replyChan <- verifier
 	}, func(ctx context.Context, err error) {
@@ -89,6 +88,8 @@ func (ir *identityResolver) ResolveVerifier(ctx context.Context, lookup string, 
 		return verifier, nil
 	case err := <-errChan:
 		return "", err
+	case <-ctx.Done():
+		return "", i18n.NewError(ctx, msgs.MsgContextCanceled)
 	}
 }
 
@@ -98,7 +99,7 @@ func (ir *identityResolver) ResolveVerifierAsync(ctx context.Context, lookup str
 
 	atIndex := strings.Index(lookup, "@")
 
-	if atIndex == -1 || lookup[atIndex+1:] == ir.nodeID {
+	if atIndex == -1 || lookup[atIndex+1:] == ir.nodeName {
 		// this is an asynchronous call because the key manager may need to call out to a remote signer in order to
 		// resolve the key (e.g. if this is the first time this key has been referenced)
 		// its a one and done go routine so no need for additional concurrency controls
@@ -145,7 +146,7 @@ func (ir *identityResolver) ResolveVerifierAsync(ctx context.Context, lookup str
 			MessageID:   requestID,
 			Component:   IDENTITY_RESOLVER_DESTINATION,
 			Node:        remoteNodeId,
-			ReplyTo:     ir.nodeID,
+			ReplyTo:     ir.nodeName,
 			Payload:     resolveVerifierRequestBytes,
 		})
 		if err != nil {
@@ -279,7 +280,7 @@ func (ir *identityResolver) handleResolveVerifierRequest(ctx context.Context, me
 			err = ir.transportManager.Send(ctx, &components.TransportMessage{
 				MessageType:   "ResolveVerifierError",
 				CorrelationID: requestID,
-				ReplyTo:       ir.nodeID,
+				ReplyTo:       ir.nodeName,
 				Component:     IDENTITY_RESOLVER_DESTINATION,
 				Node:          replyTo,
 				Payload:       resolveVerifierErrorBytes,

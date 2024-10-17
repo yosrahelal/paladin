@@ -102,8 +102,7 @@ func transactionLatencyThreshold(t *testing.T) time.Duration {
 
 type componentTestInstance struct {
 	grpcTarget             string
-	id                     uuid.UUID
-	name                   string // useful for debugging and logging
+	name                   string
 	conf                   *pldconf.PaladinConfig
 	ctx                    context.Context
 	client                 rpcclient.Client
@@ -143,26 +142,23 @@ func deployDomainRegistry(t *testing.T) *tktypes.EthAddress {
 }
 
 type nodeConfiguration struct {
-	identity uuid.UUID
-	address  string
-	port     int
-	cert     string
-	key      string
-	name     string
+	address string
+	port    int
+	cert    string
+	key     string
+	name    string
 }
 
 func newNodeConfiguration(t *testing.T, nodeName string) *nodeConfiguration {
-	identity := uuid.New()
 	port, err := getFreePort()
 	require.NoError(t, err)
-	cert, key := buildTestCertificate(t, pkix.Name{CommonName: identity.String()}, nil, nil)
+	cert, key := buildTestCertificate(t, pkix.Name{CommonName: nodeName}, nil, nil)
 	return &nodeConfiguration{
-		identity: identity,
-		address:  "localhost",
-		port:     port,
-		cert:     cert,
-		key:      key,
-		name:     nodeName,
+		address: "localhost",
+		port:    port,
+		cert:    cert,
+		key:     key,
+		name:    nodeName,
 	}
 }
 
@@ -184,12 +180,10 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	conf := testConfig(t)
 	i := &componentTestInstance{
 		grpcTarget: grpcTarget,
-		id:         binding.identity,
 		name:       binding.name,
 		conf:       &conf,
 	}
-	i.ctx = log.WithLogField(context.Background(), "node-id", binding.identity.String())
-	i.ctx = log.WithLogField(i.ctx, "node-name", binding.name)
+	i.ctx = log.WithLogField(context.Background(), "node-name", binding.name)
 
 	i.conf.Log.Level = confutil.P("info")
 	i.conf.BlockIndexer.FromBlock = json.RawMessage(`"latest"`)
@@ -203,7 +197,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 		RegistryAddress: domainRegistryAddress.String(),
 	}
 
-	i.conf.NodeName = binding.identity.String()
+	i.conf.NodeName = binding.name
 	i.conf.Transports = map[string]*pldconf.TransportConfig{
 		"grpc": {
 			Plugin: pldconf.PluginConfig{
@@ -226,7 +220,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 
 	nodesConfig := make(map[string]*static.StaticEntry)
 	for _, peerNode := range peerNodes {
-		nodesConfig[peerNode.identity.String()] = &static.StaticEntry{
+		nodesConfig[peerNode.name] = &static.StaticEntry{
 			Properties: map[string]tktypes.RawJSON{
 				"transport.grpc": tktypes.JSONString(
 					grpc.PublishedTransportDetails{
@@ -256,7 +250,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 
 	var pl plugins.UnitTestPluginLoader
 
-	cm := componentmgr.NewComponentManager(i.ctx, i.grpcTarget, i.id, i.conf)
+	cm := componentmgr.NewComponentManager(i.ctx, i.grpcTarget, uuid.New(), i.conf)
 	// Start it up
 	err = cm.Init()
 	require.NoError(t, err)
@@ -282,7 +276,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 		cm.Stop()
 	})
 
-	client, err := rpcclient.NewHTTPClient(log.WithLogField(context.Background(), "client-for", binding.identity.String()), &pldconf.HTTPClientConfig{URL: "http://localhost:" + strconv.Itoa(*i.conf.RPCServer.HTTP.Port)})
+	client, err := rpcclient.NewHTTPClient(log.WithLogField(context.Background(), "client-for", binding.name), &pldconf.HTTPClientConfig{URL: "http://localhost:" + strconv.Itoa(*i.conf.RPCServer.HTTP.Port)})
 	require.NoError(t, err)
 	i.client = client
 

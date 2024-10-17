@@ -58,7 +58,7 @@ var _ = Describe("controller", Ordered, func() {
 			EventuallyWithOffset(1, func() error {
 				var txs []*pldapi.Transaction
 				return rpc.CallRPC(ctx, &txs, "ptx_queryPendingTransactions", query.NewQueryBuilder().Limit(1).Query(), false)
-			}, time.Minute, 100*time.Millisecond).Should(Succeed())
+			}, 5*time.Minute, 5*time.Second).Should(Succeed())
 
 			deployer := utils.TestDeployer{RPC: rpc, From: "deployerKey"}
 

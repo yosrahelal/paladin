@@ -50,7 +50,7 @@ type privateTxManager struct {
 	orchestrators        map[string]*Orchestrator
 	endorsementGatherers map[string]ptmgrtypes.EndorsementGatherer
 	components           components.AllComponents
-	nodeID               string
+	nodeName             string
 	subscribers          []components.PrivateTxEventSubscriber
 	subscribersLock      sync.Mutex
 	syncPoints           syncpoints.SyncPoints
@@ -64,10 +64,11 @@ func (p *privateTxManager) PreInit(c components.PreInitComponents) (*components.
 
 func (p *privateTxManager) PostInit(c components.AllComponents) error {
 	p.components = c
+	p.nodeName = p.components.TransportManager().LocalNodeName()
 	p.syncPoints = syncpoints.NewSyncPoints(p.ctx, &p.config.Writer, c.Persistence(), c.TxManager())
 	p.stateDistributer = statedistribution.NewStateDistributer(
 		p.ctx,
-		p.nodeID,
+		p.nodeName,
 		p.components.TransportManager(),
 		p.components.StateManager(),
 		p.components.Persistence(),
@@ -89,12 +90,11 @@ func (p *privateTxManager) Stop() {
 
 }
 
-func NewPrivateTransactionMgr(ctx context.Context, nodeID string, config *pldconf.PrivateTxManagerConfig) components.PrivateTxManager {
+func NewPrivateTransactionMgr(ctx context.Context, config *pldconf.PrivateTxManagerConfig) components.PrivateTxManager {
 	p := &privateTxManager{
 		config:               config,
 		orchestrators:        make(map[string]*Orchestrator),
 		endorsementGatherers: make(map[string]ptmgrtypes.EndorsementGatherer),
-		nodeID:               nodeID,
 		subscribers:          make([]components.PrivateTxEventSubscriber, 0),
 	}
 	p.ctx, p.ctxCancel = context.WithCancel(ctx)
@@ -104,10 +104,10 @@ func NewPrivateTransactionMgr(ctx context.Context, nodeID string, config *pldcon
 func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contractAddr tktypes.EthAddress, domainAPI components.DomainSmartContract) (oc *Orchestrator, err error) {
 
 	if p.orchestrators[contractAddr.String()] == nil {
-		transportWriter := NewTransportWriter(domainAPI.Domain().Name(), &contractAddr, p.nodeID, p.components.TransportManager())
+		transportWriter := NewTransportWriter(domainAPI.Domain().Name(), &contractAddr, p.nodeName, p.components.TransportManager())
 		publisher := NewPublisher(p, contractAddr.String())
 		seq := NewSequencer(
-			p.nodeID,
+			p.nodeName,
 			publisher,
 			transportWriter,
 		)
@@ -119,7 +119,7 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 
 		p.orchestrators[contractAddr.String()] =
 			NewOrchestrator(
-				p.ctx, p.nodeID,
+				p.ctx, p.nodeName,
 				contractAddr, /** TODO: fill in the real plug-ins*/
 				&p.config.Orchestrator,
 				p.components,
@@ -374,22 +374,25 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 		},
 	}
 
-	// as this is a deploy we specify the null address
-	err = p.syncPoints.PersistDispatchBatch(ctx, tktypes.EthAddress{}, dispatchBatch, nil)
-	if err != nil {
-		log.L(ctx).Errorf("Error persisting batch: %s", err)
-		return nil, err
-	}
+	psc, err := p.components.DomainManager().ExecDeployAndWait(ctx, tx.ID, func() error {
 
-	completed = true
+		// as this is a deploy we specify the null address
+		err = p.syncPoints.PersistDispatchBatch(ctx, tktypes.EthAddress{}, dispatchBatch, nil)
+		if err != nil {
+			log.L(ctx).Errorf("Error persisting batch: %s", err)
+			return err
+		}
 
-	p.publishToSubscribers(ctx, &components.TransactionDispatchedEvent{
-		TransactionID:  tx.ID.String(),
-		Nonce:          uint64(0), /*TODO*/
-		SigningAddress: tx.Signer,
+		completed = true
+
+		p.publishToSubscribers(ctx, &components.TransactionDispatchedEvent{
+			TransactionID:  tx.ID.String(),
+			Nonce:          uint64(0), /*TODO*/
+			SigningAddress: tx.Signer,
+		})
+		return nil
 	})
 
-	psc, err := p.components.DomainManager().WaitForDeploy(ctx, tx.ID)
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgBaseLedgerTransactionFailed)
 	}
@@ -547,7 +550,7 @@ func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, message
 
 	err = p.components.TransportManager().Send(ctx, &components.TransportMessage{
 		MessageType: "EndorsementResponse",
-		ReplyTo:     p.nodeID,
+		ReplyTo:     p.nodeName,
 		Payload:     endorsementResponseBytes,
 		Node:        replyTo,
 		Component:   PRIVATE_TX_MANAGER_DESTINATION,
@@ -558,7 +561,7 @@ func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, message
 	}
 }
 
-func (p *privateTxManager) handleDelegationRequest(ctx context.Context, messagePayload []byte, replyTo string) {
+func (p *privateTxManager) handleDelegationRequest(ctx context.Context, messagePayload []byte) {
 	delegationRequest := &pbEngine.DelegationRequest{}
 	err := proto.Unmarshal(messagePayload, delegationRequest)
 	if err != nil {

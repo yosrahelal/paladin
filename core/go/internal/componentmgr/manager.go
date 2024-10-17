@@ -167,7 +167,7 @@ func (cm *componentManager) Init() (err error) {
 	}
 
 	if err == nil {
-		cm.privateTxManager = privatetxnmgr.NewPrivateTransactionMgr(cm.bgCtx, cm.instanceUUID.String(), &cm.conf.PrivateTxManager)
+		cm.privateTxManager = privatetxnmgr.NewPrivateTransactionMgr(cm.bgCtx, &cm.conf.PrivateTxManager)
 		cm.initResults["private_tx_manager"], err = cm.privateTxManager.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentPrivateTxManagerInitError)
 	}
@@ -179,7 +179,7 @@ func (cm *componentManager) Init() (err error) {
 	}
 
 	if err == nil {
-		cm.identityResolver = identityresolver.NewIdentityResolver(cm.bgCtx, cm.instanceUUID.String())
+		cm.identityResolver = identityresolver.NewIdentityResolver(cm.bgCtx)
 		cm.initResults["identity_resolver"], err = cm.identityResolver.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentIdentityResolverInitError)
 	}

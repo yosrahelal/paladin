@@ -195,6 +195,9 @@ func (t *grpcTransport) ConnectSendStream(stream grpc.ClientStreamingServer[prot
 			return err
 		}
 
+		log.L(ctx).Infof("GRPC received message id=%s cid=%v component=%s messageType=%s replyTo=%s from peer %s",
+			msg.MessageId, msg.CorrelationId, msg.Component, msg.MessageType, msg.ReplyTo, ai.verifiedNodeName)
+
 		// Check the message is from the node we expect.
 		// Note the destination node is checked by Paladin - just just have to verify the sender.
 		if msg.ReplyTo != ai.verifiedNodeName {
@@ -307,6 +310,7 @@ func (t *grpcTransport) getConnection(ctx context.Context, nodeName string) (*ou
 	}
 
 	// Ok - try connecting
+	log.L(ctx).Infof("GRPC connecting to new peer %s (endpoint=%s)", nodeName, transportDetails.Endpoint)
 	individualNodeVerifier := t.peerVerifier.Clone().(*tlsVerifier)
 	individualNodeVerifier.expectedNode = nodeName
 	conn, err := grpc.NewClient(transportDetails.Endpoint,
@@ -320,19 +324,22 @@ func (t *grpcTransport) getConnection(ctx context.Context, nodeName string) (*ou
 }
 
 func (t *grpcTransport) SendMessage(ctx context.Context, req *prototk.SendMessageRequest) (*prototk.SendMessageResponse, error) {
+	msg := req.Message
 	if req.Message.Node == "" {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorNoTargetNode)
 	}
-	oc, err := t.getConnection(ctx, req.Message.Node)
+	oc, err := t.getConnection(ctx, msg.Node)
 	if err == nil {
+		log.L(ctx).Infof("GRPC sending message id=%s cid=%v component=%s messageType=%s replyTo=%s to peer %s",
+			msg.MessageId, msg.CorrelationId, msg.Component, msg.MessageType, msg.ReplyTo, msg.Node)
 		err = t.send(ctx, oc, &proto.Message{
-			MessageId:     req.Message.MessageId,
-			CorrelationId: req.Message.CorrelationId,
-			Component:     req.Message.Component,
-			Node:          req.Message.Node,
-			ReplyTo:       req.Message.ReplyTo,
-			MessageType:   req.Message.MessageType,
-			Payload:       req.Message.Payload,
+			MessageId:     msg.MessageId,
+			CorrelationId: msg.CorrelationId,
+			Component:     msg.Component,
+			Node:          msg.Node,
+			ReplyTo:       msg.ReplyTo,
+			MessageType:   msg.MessageType,
+			Payload:       msg.Payload,
 		})
 	}
 	if err != nil {

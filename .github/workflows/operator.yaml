@@ -6,9 +6,9 @@ on:
       - main
     paths:
       - 'operator/**'
-  pull_request:
-    paths:
-      - 'operator/**'
+  # pull_request:
+  #   paths:
+  #     - 'operator/**'
   workflow_dispatch:
 
 

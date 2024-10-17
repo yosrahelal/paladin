@@ -44,7 +44,7 @@ func (p *privateTxManager) ReceiveTransportMessage(ctx context.Context, message 
 	case "EndorsementResponse":
 		go p.handleEndorsementResponse(ctx, messagePayload)
 	case "DelegationRequest":
-		go p.handleDelegationRequest(ctx, messagePayload, replyToDestination)
+		go p.handleDelegationRequest(ctx, messagePayload)
 	default:
 		log.L(ctx).Errorf("Unknown message type: %s", message.MessageType)
 	}

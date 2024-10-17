@@ -796,7 +796,7 @@ func (r *PaladinReconciler) generatePaladinRegistries(ctx context.Context, node 
 		pldConf.Registries[reg.Name] = &pldconf.RegistryConfig{
 			Plugin: r.mapPluginConfig(reg.Spec.Plugin),
 			Transports: pldconf.RegistryTransportsConfig{
-				Enabled:           &reg.Spec.Transports.Enabled,
+				Enabled:           reg.Spec.Transports.Enabled,
 				RequiredPrefix:    reg.Spec.Transports.RequiredPrefix,
 				HierarchySplitter: reg.Spec.Transports.HierarchySplitter,
 				PropertyRegexp:    reg.Spec.Transports.PropertyRegexp,
@@ -1017,23 +1017,21 @@ func (r *PaladinReconciler) generateServiceTemplate(node *corev1alpha1.Paladin, 
 	if svc.Spec.Type == "" {
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
-	// Set ports unless CR has taken ownership
-	if svc.Spec.Ports == nil {
-		mergeServicePorts(&svc.Spec, []corev1.ServicePort{
-			{
-				Name:       "rpc-http",
-				Port:       8548,
-				TargetPort: intstr.FromInt(8548),
-				Protocol:   corev1.ProtocolTCP,
-			},
-			{
-				Name:       "rpc-ws",
-				Port:       8549,
-				TargetPort: intstr.FromInt(8549),
-				Protocol:   corev1.ProtocolTCP,
-			},
-		})
-	}
+	// Merge our required ports with the overrides the user has provided
+	mergeServicePorts(&svc.Spec, []corev1.ServicePort{
+		{
+			Name:       "rpc-http",
+			Port:       8548,
+			TargetPort: intstr.FromInt(8548),
+			Protocol:   corev1.ProtocolTCP,
+		},
+		{
+			Name:       "rpc-ws",
+			Port:       8549,
+			TargetPort: intstr.FromInt(8549),
+			Protocol:   corev1.ProtocolTCP,
+		},
+	})
 	return svc
 }
 
@@ -1056,8 +1054,6 @@ func (r *PaladinReconciler) generateSecretTemplate(node *corev1alpha1.Paladin, n
 
 func (r *PaladinReconciler) getLabels(node *corev1alpha1.Paladin, extraLabels ...map[string]string) map[string]string {
 	l := make(map[string]string, len(r.config.Paladin.Labels))
-	l["app"] = generatePaladinName(node.Name)
-
 	for k, v := range r.config.Paladin.Labels {
 		l[k] = v
 	}
@@ -1066,6 +1062,7 @@ func (r *PaladinReconciler) getLabels(node *corev1alpha1.Paladin, extraLabels ..
 			l[k] = v
 		}
 	}
+	l["app.kubernetes.io/name"] = generatePaladinName(node.Name)
 	return l
 }
 
@@ -1090,7 +1087,7 @@ func getPaladinURLEndpoint(ctx context.Context, c client.Client, name, namespace
 		for _, p := range svc.Spec.Ports {
 			if p.Name == "rpc-http" {
 				if p.NodePort == 0 {
-					return "", fmt.Errorf("cannot use nodePort for %s rpc-http port as not set", generatePaladinName(name))
+					return "", fmt.Errorf("cannot use nodePort for %s rpc-http port as not cset", generatePaladinName(name))
 				}
 				return fmt.Sprintf("http://localhost:%d", p.NodePort), nil
 			}

@@ -2,12 +2,12 @@
 # echo -n '<your-json>' | base64
 #
 # Example:
-# echo -n '{"nodeName":"node1","db":{"type":"sqlite","sqlite":{"uri":":memory:","autoMigrate":true,"migrationsDir":"./db/migrations/sqlite","debugQueries":true}},"grpc":{"shutdownTimeout":0},"rpcServer":{"http":{"port":0,"shutdownTimeout":0},"ws":{"disabled":true,"shutdownTimeout":0}},"blockchain":{"http":{"url":"http://localhost:8545"},"ws":{"url":"ws://localhost:8546","initialConnectAttempts":25}},"signer":{"keyDerivation":{"type":"bip32"},"keyStore":{"type":"static","static":{"keys":{"seed":{"encoding":"none","inline":"worth race crush harbor atom race scrub quit glimpse solution style adapt catalog cheese nothing"}}}}}}' | base64
+# echo -n '{"nodeName":"node3","db":{"type":"sqlite","sqlite":{"uri":":memory:","autoMigrate":true,"migrationsDir":"./db/migrations/sqlite","debugQueries":true}},"grpc":{"shutdownTimeout":0},"rpcServer":{"http":{"port":0,"shutdownTimeout":0},"ws":{"disabled":true,"shutdownTimeout":0}},"blockchain":{"http":{"url":"http://localhost:8545"},"ws":{"url":"ws://localhost:8546","initialConnectAttempts":25}},"signer":{"keyDerivation":{"type":"bip32"},"keyStore":{"type":"static","static":{"keys":{"seed":{"encoding":"none","inline":"worth race crush harbor atom race scrub quit glimpse solution style adapt catalog cheese nothing"}}}}}}' | base64
 
 apiVersion: core.paladin.io/v1alpha1
 kind: Paladin
 metadata:
-  name: node1
+  name: node3
 spec:
   config: |
     log:
@@ -15,10 +15,10 @@ spec:
   database:
     mode: sidecarPostgres
     migrationMode: auto
-  besuNode: node1
+  besuNode: node3
   secretBackedSigners:
     - name: signer-1
-      secret: node1.keys
+      secret: node3.keys
       type: autoHDWallet
   domains:
     - labelSelector:
@@ -49,14 +49,14 @@ spec:
         port: 9000
         targetPort: 9000
       tls:
-        secretName: paladin-node1-mtls
-        certName: paladin-node1-mtls
+        secretName: paladin-node3-mtls
+        certName: paladin-node3-mtls
   service:
     type: NodePort
     ports:
     - name: rpc-http
       port: 8548
-      nodePort: 31548 # see paladin-kind.yaml
+      nodePort: 31748 # see paladin-kind.yaml
     - name: rpc-ws
       port: 8549
-      nodePort: 31549 # see paladin-kind.yaml
+      nodePort: 31749 # see paladin-kind.yaml
