@@ -145,21 +145,19 @@ func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
 			return nil, err
 		}
 
-		// Do the deploy - we wait for the transaction here to cover revert failures
-		if tx.DeployTransaction != nil && tx.InvokeTransaction == nil {
-			_, err = tb.execBaseLedgerDeployTransaction(ctx, tx.Signer, tx.DeployTransaction)
-		} else if tx.InvokeTransaction != nil && tx.DeployTransaction == nil {
-			_, err = tb.execBaseLedgerTransaction(ctx, tx.Signer, tx.InvokeTransaction)
-		} else {
-			err = fmt.Errorf("must return a transaction to invoke, or a transaction to deploy")
-		}
-		if err != nil {
-			return nil, err
-		}
-
 		// Rather than just inspecting the TX - we wait for the domain to index the event, such that
 		// we know it's in the map by the time we return.
-		psc, err := tb.c.DomainManager().WaitForDeploy(ctx, tx.ID)
+		psc, err := tb.c.DomainManager().ExecDeployAndWait(ctx, tx.ID, func() error {
+			// Do the deploy - we wait for the transaction here to cover revert failures
+			if tx.DeployTransaction != nil && tx.InvokeTransaction == nil {
+				_, err = tb.execBaseLedgerDeployTransaction(ctx, tx.Signer, tx.DeployTransaction)
+			} else if tx.InvokeTransaction != nil && tx.DeployTransaction == nil {
+				_, err = tb.execBaseLedgerTransaction(ctx, tx.Signer, tx.InvokeTransaction)
+			} else {
+				err = fmt.Errorf("must return a transaction to invoke, or a transaction to deploy")
+			}
+			return err
+		})
 		if err != nil {
 			return nil, err
 		}

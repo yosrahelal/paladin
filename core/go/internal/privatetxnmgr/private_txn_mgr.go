@@ -374,22 +374,25 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 		},
 	}
 
-	// as this is a deploy we specify the null address
-	err = p.syncPoints.PersistDispatchBatch(ctx, tktypes.EthAddress{}, dispatchBatch, nil)
-	if err != nil {
-		log.L(ctx).Errorf("Error persisting batch: %s", err)
-		return nil, err
-	}
+	psc, err := p.components.DomainManager().ExecDeployAndWait(ctx, tx.ID, func() error {
 
-	completed = true
+		// as this is a deploy we specify the null address
+		err = p.syncPoints.PersistDispatchBatch(ctx, tktypes.EthAddress{}, dispatchBatch, nil)
+		if err != nil {
+			log.L(ctx).Errorf("Error persisting batch: %s", err)
+			return err
+		}
 
-	p.publishToSubscribers(ctx, &components.TransactionDispatchedEvent{
-		TransactionID:  tx.ID.String(),
-		Nonce:          uint64(0), /*TODO*/
-		SigningAddress: tx.Signer,
+		completed = true
+
+		p.publishToSubscribers(ctx, &components.TransactionDispatchedEvent{
+			TransactionID:  tx.ID.String(),
+			Nonce:          uint64(0), /*TODO*/
+			SigningAddress: tx.Signer,
+		})
+		return nil
 	})
 
-	psc, err := p.components.DomainManager().WaitForDeploy(ctx, tx.ID)
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgBaseLedgerTransactionFailed)
 	}
