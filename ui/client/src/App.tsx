@@ -20,7 +20,7 @@ import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { themeOptions } from "./themes/default";
 import { Header } from "./components/Header";
 import { Indexer } from "./views/indexer";
-import { CssBaseline } from "@mui/material";
+import { Box, CssBaseline } from "@mui/material";
 import { useEffect, useState } from "react";
 import { constants, getLatestBlockWithTransactions } from "./utils";
 import { Registries } from "./views/Registries";
@@ -51,6 +51,11 @@ function App() {
     <ApplicationContext.Provider value={{ lastBlockWithTransactions, errorMessage }}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
+        <Box sx={{
+          position: 'fixed', height: '100vh', width: '100vw', zIndex: -1,
+          backgroundImage: 'url("paladin-icon-light.svg")', backgroundRepeat: 'no-repeat',
+          backgroundSize: '88vh', backgroundPosition: 'center bottom', backgroundAttachment: 'fixed'
+        }} />
         <BrowserRouter>
           <Header />
           <Routes>

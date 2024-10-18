@@ -18,7 +18,7 @@ import { useContext, useEffect, useState } from "react";
 import { ApplicationContext } from "../Context";
 import { constants } from "../utils";
 import { IPendingTransaction } from "../interfaces";
-import { Box, Paper, Typography } from "@mui/material";
+import { Box, Fade, Paper, Typography } from "@mui/material";
 import { t } from "i18next";
 import { PendingTransaction } from "../components/PendingTransaction";
 
@@ -52,22 +52,18 @@ export const PendingTransactions: React.FC = () => {
   }
 
   return (
-    <Box sx={{
-      backgroundImage: 'url("paladin-icon-light.svg")', backgroundRepeat: 'no-repeat',
-      backgroundSize: '88vh', backgroundPosition: 'center bottom', backgroundAttachment: 'fixed'
-    }}>
+    <Fade timeout={800} in={true}>
       <Box sx={{ padding: '20px', maxWidth: '1200px', marginLeft: 'auto', marginRight: 'auto' }}>
         <Paper sx={{
           padding: '10px', paddingTop: '12px', backgroundColor: 'rgba(255, 255, 255, .65)',
-          
         }}>
           <Typography align="center" sx={{ fontSize: '24px', fontWeight: 500 }}>{t('pendingTransactions')}</Typography>
-          <Box sx={{ padding: '20px', overflow: 'scroll', height: 'calc(100vh - 162px)'}}>
-          {pendingTransactions.map(pendingTransaction => <PendingTransaction key={pendingTransaction.id} pendingTransaction={pendingTransaction} />)}
+          <Box sx={{ padding: '20px', overflow: 'scroll', height: 'calc(100vh - 162px)' }}>
+            {pendingTransactions.map(pendingTransaction => <PendingTransaction key={pendingTransaction.id} pendingTransaction={pendingTransaction} />)}
           </Box>
         </Paper>
       </Box>
-    </Box>
+    </Fade>
   );
 
 }

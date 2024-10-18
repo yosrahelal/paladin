@@ -17,7 +17,7 @@
 import { useContext, useEffect, useState } from "react";
 import { ApplicationContext } from "../Context";
 import { Registry } from "../components/Registry";
-import { Box, Paper, Typography } from "@mui/material";
+import { Box, Fade, Paper, Typography } from "@mui/material";
 import { t } from "i18next";
 
 export const Registries: React.FC = () => {
@@ -49,10 +49,7 @@ export const Registries: React.FC = () => {
   }
 
   return (
-    <Box sx={{
-      backgroundImage: 'url("paladin-icon-light.svg")', backgroundRepeat: 'no-repeat',
-      backgroundSize: '88vh', backgroundPosition: 'center bottom', backgroundAttachment: 'fixed'
-    }}>
+    <Fade timeout={800} in={true}>
       <Box sx={{ padding: '20px', maxWidth: '1200px', marginLeft: 'auto', marginRight: 'auto' }}>
         <Paper sx={{
           padding: '10px', paddingTop: '12px', backgroundColor: 'rgba(255, 255, 255, .65)'
@@ -63,7 +60,7 @@ export const Registries: React.FC = () => {
           </Box>
         </Paper>
       </Box>
-    </Box>
+    </Fade>
   );
 
 }

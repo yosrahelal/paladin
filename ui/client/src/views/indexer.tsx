@@ -14,17 +14,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Grid2, Paper } from "@mui/material";
+import { Box, Fade, Grid2, Paper } from "@mui/material";
 import { Transactions } from "../components/Transactions";
 import { Events } from "../components/Events";
 
 export const Indexer: React.FC = () => {
 
   return (
-    <Box sx={{
-      backgroundImage: 'url("paladin-icon-light.svg")', backgroundRepeat: 'no-repeat',
-      backgroundSize: '88vh', backgroundPosition: 'center bottom', backgroundAttachment: 'fixed'
-    }}>
+    <Fade timeout={800} in={true}>
       <Box sx={{ padding: '20px', maxWidth: '1200px', marginLeft: 'auto', marginRight: 'auto' }}>
         <Grid2 container spacing={2}>
           <Grid2 size={{ md: 6, sm: 12, xs: 12 }}>
@@ -39,7 +36,6 @@ export const Indexer: React.FC = () => {
           </Grid2>
         </Grid2>
       </Box>
-    </Box>
-
+    </Fade>
   );
 };
