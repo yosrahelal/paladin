@@ -122,9 +122,6 @@ task copyZetoSolidity(type: Copy) {
             commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_AnonBatch.json", "zeto_g16_verifier_anon_batch"
         }
         exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_AnonBatch.json", "zeto_g16_verifier_anon_batch"
-        }
-        exec() {
             commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_AnonEnc.json", "zeto_g16_verifier_anon_enc"
         }
         exec() {
@@ -138,6 +135,15 @@ task copyZetoSolidity(type: Copy) {
         }
         exec() {
             commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_AnonNullifierBatch.json", "zeto_g16_verifier_anon_nullifier_batch"
+        }
+        exec() {
+            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_CheckHashesValue.json", "zeto_g16_check_hashes_value"
+        }
+        exec() {
+            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_CheckInputsOutputsValue.json", "zeto_g16_check_inputs_outputs"
+        }
+        exec() {
+            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_CheckInputsOutputsValueBatch.json", "zeto_g16_check_inputs_outputs_batch"
         }
         exec() {
             commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/PoseidonUnit2L.json", "zeto_poseidon_unit2l"

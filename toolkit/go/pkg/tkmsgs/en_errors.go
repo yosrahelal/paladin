@@ -98,7 +98,7 @@ var (
 	MsgJSONRPCInvalidParam        = ffe("PD020704", "method %s parameter %d invalid: %s")
 	MsgJSONRPCResultSerialization = ffe("PD020705", "method %s result serialization failed: %s")
 
-	// Signing module PD020800
+	// Signing module PD0208XX
 	MsgSigningModuleBadPathError                = ffe("PD020800", "Path '%s' does not exist, or it is not a directory")
 	MsgSigningModuleBadKeyFile                  = ffe("PD020801", "Key file '%s' does not exist")
 	MsgSigningModuleBadPassFile                 = ffe("PD020802", "Password file '%s' does not exist")
@@ -127,4 +127,8 @@ var (
 	MsgSigningEmptyPayload                      = ffe("PD020825", "No payload supplied for signing")
 	MsgSigningInvalidDomainAlgorithmNoPrefix    = ffe("PD020826", "Invalid domain algorithm (no 'domain:' prefix): %s")
 	MsgSigningNoDomainRegisteredWithModule      = ffe("PD020827", "Domain '%s' has not been registered in this signing module")
+
+	// SolUtils module PD0209XX
+	MsgSolBuildParseFailed = ffe("PD020900", "Invalid link hash at position %d in bytecode. Fully qualified lib name: %s. Placeholder: %s. Lib name hash prefix: %s")
+	MsgSolBuildMissingLink = ffe("PD020901", "The solidity build is unlinked and requires an address for '%s'")
 )

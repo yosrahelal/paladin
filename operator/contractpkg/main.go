@@ -39,6 +39,7 @@ metadata:
   name: {{ .name }}
 spec:
   node: node1
+  txType: public
   from: {{ .nameFirstSegment }}.deployer
   paramsJSON: |
 {{ .params | indent 4 }}
@@ -57,8 +58,8 @@ func main() {
 }
 
 type buildJSON struct {
-	ABI      abi.ABI `json:"abi"`
-	Bytecode string  `json:"bytecode"`
+	ABI      abi.ABI          `json:"abi"`
+	Bytecode tktypes.HexBytes `json:"bytecode"`
 }
 
 func run() error {
@@ -85,7 +86,7 @@ func run() error {
 		"name":             strings.ReplaceAll(name, "_", "-"),
 		"nameFirstSegment": strings.SplitN(name, "_", 2)[0],
 		"abi":              tktypes.JSONString(build.ABI).Pretty(),
-		"bytecode":         build.Bytecode,
+		"bytecode":         build.Bytecode.String(),
 		"params":           "{}",
 	}
 	if len(os.Args) > 3 {

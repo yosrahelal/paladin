@@ -23,8 +23,8 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
-	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,8 +73,8 @@ func InitAtom(
 		tb:          tb,
 		pld:         pld,
 		Address:     tktypes.MustEthAddress(address),
-		FactoryABI:  domain.LoadBuild(AtomFactoryJSON).ABI,
-		InstanceABI: domain.LoadBuild(AtomJSON).ABI,
+		FactoryABI:  solutils.MustLoadBuild(AtomFactoryJSON).ABI,
+		InstanceABI: solutils.MustLoadBuild(AtomJSON).ABI,
 	}
 
 	return a

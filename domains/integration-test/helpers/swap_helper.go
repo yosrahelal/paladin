@@ -22,8 +22,8 @@ import (
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
-	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -64,7 +64,7 @@ func DeploySwap(
 	signer string,
 	input *TradeRequestInput,
 ) *SwapHelper {
-	build := domain.LoadBuild(SwapJSON)
+	build := solutils.MustLoadBuild(SwapJSON)
 	builder := deployBuilder(ctx, t, pld, build.ABI, build.Bytecode).
 		Input(toJSON(t, map[string]any{"inputData": input}))
 	deploy, err := NewTransactionHelper(ctx, t, tb, builder).SignAndSend(signer).Wait(ctx)

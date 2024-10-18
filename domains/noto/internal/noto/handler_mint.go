@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
@@ -197,7 +198,7 @@ func (h *mintHandler) guardMint(ctx context.Context, tx *types.ParsedTransaction
 	}
 
 	transactionType := prototk.PreparedTransaction_PUBLIC
-	functionABI := domain.LoadBuild(notoGuardJSON).ABI.Functions()["onMint"]
+	functionABI := solutils.MustLoadBuild(notoGuardJSON).ABI.Functions()["onMint"]
 	var paramsJSON []byte
 
 	if tx.DomainConfig.DecodedData.PrivateAddress != nil {

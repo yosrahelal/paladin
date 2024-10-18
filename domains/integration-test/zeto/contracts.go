@@ -25,9 +25,9 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	"github.com/kaleido-io/paladin/domains/integration-test/helpers"
-	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -46,7 +46,7 @@ type cloneableContract struct {
 }
 
 func newZetoDomainContracts() *ZetoDomainContracts {
-	factory := domain.LoadBuildLinked(helpers.ZetoFactoryJSON, map[string]*tktypes.EthAddress{})
+	factory := solutils.MustLoadBuild(helpers.ZetoFactoryJSON)
 
 	return &ZetoDomainContracts{
 		factoryAbi: factory.ABI,
@@ -129,16 +129,16 @@ func deployContract(ctx context.Context, rpc rpcbackend.Backend, deployer string
 	return addr, build.ABI, nil
 }
 
-func getContractSpec(contract *domainContract, deployedContracts map[string]*tktypes.EthAddress) (*domain.SolidityBuild, error) {
+func getContractSpec(contract *domainContract, deployedContracts map[string]*tktypes.EthAddress) (*solutils.SolidityBuild, error) {
 	bytes, err := os.ReadFile(contract.AbiAndBytecode.Path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read abi+bytecode file %s. %s", contract.AbiAndBytecode.Path, err)
 	}
-	build := domain.LoadBuildLinked(bytes, deployedContracts)
+	build := solutils.MustLoadBuildResolveLinks(bytes, deployedContracts)
 	return build, nil
 }
 
-func deployBytecode(ctx context.Context, rpc rpcbackend.Backend, deployer string, build *domain.SolidityBuild) (*tktypes.EthAddress, error) {
+func deployBytecode(ctx context.Context, rpc rpcbackend.Backend, deployer string, build *solutils.SolidityBuild) (*tktypes.EthAddress, error) {
 	var addr string
 	rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deployBytecode", deployer, build.ABI, build.Bytecode.String(), tktypes.RawJSON(`{}`))
 	if rpcerr != nil {
