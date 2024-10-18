@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
@@ -37,13 +38,13 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: {{ .name }}
 spec:
+  node: node1
+  from: {{ .nameFirstSegment }}.deployer
+  paramsJSON: |
+{{ .params | indent 4 }}
   abi: |
 {{ .abi | indent 4 }}  
   bytecode: "{{ .bytecode }}"
-  node: node1
-  from: {{ .name }}.deployer
-  paramsJSON: |
-{{ .params | indent 4 }}
 
 `
 
@@ -81,10 +82,11 @@ func run() error {
 		return err
 	}
 	tData := map[string]any{
-		"name":     name,
-		"abi":      tktypes.JSONString(build.ABI).Pretty(),
-		"bytecode": build.Bytecode,
-		"params":   "{}",
+		"name":             strings.ReplaceAll(name, "_", "-"),
+		"nameFirstSegment": strings.SplitN(name, "_", 2)[0],
+		"abi":              tktypes.JSONString(build.ABI).Pretty(),
+		"bytecode":         build.Bytecode,
+		"params":           "{}",
 	}
 	if len(os.Args) > 3 {
 		tData["params"], err = json.MarshalIndent(os.Args[3], "", "  ")

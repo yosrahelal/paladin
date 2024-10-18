@@ -4,12 +4,12 @@ metadata:
   labels:
     app.kubernetes.io/name: operator-go
     app.kubernetes.io/managed-by: kustomize
-    paladin.io/domain-name: noto
-  name: noto
+    paladin.io/domain-name: zeto
+  name: zeto
 spec:
-  smartContractDeployment: noto-factory
+  smartContractDeployment: zeto-factory
   plugin:
     type: c-shared
-    library: /app/domains/libnoto.so
+    library: /app/domains/libzeto.so
   configJSON: |
     {}

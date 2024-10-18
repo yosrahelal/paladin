@@ -1,0 +1,21 @@
+apiVersion: core.paladin.io/v1alpha1
+kind: TransactionInvoke
+metadata:
+  labels:
+    app.kubernetes.io/name: operator-go
+    app.kubernetes.io/managed-by: kustomize
+  name: zeto-anon
+spec:
+  node: node1
+  from: zeto.deployer
+  toTemplate: "{{ index .status.resolvedContractAddresses "noto-factory" }}"
+  paramsJSONTemplate: |
+    {
+      "implementation": "{{ index .status.resolvedContractAddresses "zeto-impl-anon" }}",
+      "depositVerifier": "{{ index .status.resolvedContractAddresses "noto-factory" }}",
+      "withdrawVerifier": "{{ index .status.resolvedContractAddresses "noto-factory" }}",
+      "verifier": "{{ index .status.resolvedContractAddresses "noto-factory" }}",
+      "batchVerifier": "{{ index .status.resolvedContractAddresses "noto-factory" }}",
+      "batchWithdrawVerifier": "{{ index .status.resolvedContractAddresses "noto-factory" }}",
+    }
+
