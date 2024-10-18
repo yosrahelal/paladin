@@ -13,17 +13,19 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { ApplicationContext } from "./Context"
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { themeOptions } from "./themes/default";
 import { Header } from "./components/Header";
-import { TransactionsAndEvents } from "./views/Transactions-and-events";
+import { Indexer } from "./views/indexer";
 import { CssBaseline } from "@mui/material";
 import { useEffect, useState } from "react";
 import { constants, getLatestBlockWithTransactions } from "./utils";
 import { Registries } from "./views/Registries";
 import { ErrorDialog } from "./dialogs/Error";
+import { PendingTransactions } from "./views/PendingTransactions";
 
 function App() {
 
@@ -54,9 +56,10 @@ function App() {
         <BrowserRouter>
           <Header />
           <Routes>
-            <Route path="/transactions-and-events" element={<TransactionsAndEvents />} />
+            <Route path="/indexer" element={<Indexer />} />
+            <Route path="/submissions" element={<PendingTransactions />} />\
             <Route path="/registry" element={<Registries />} />
-            <Route path="*" element={<Navigate to="/transactions-and-events" replace />} />
+            <Route path="*" element={<Navigate to="/indexer" replace />} />
           </Routes>
         </BrowserRouter>
         <ErrorDialog dialogOpen={errorMessage !== undefined} message={errorMessage ?? ''} />

@@ -18,12 +18,12 @@ import { Box, Grid2, Paper } from "@mui/material";
 import { Transactions } from "../components/Transactions";
 import { Events } from "../components/Events";
 
-export const TransactionsAndEvents: React.FC = () => {
+export const Indexer: React.FC = () => {
 
   return (
     <Box sx={{
       backgroundImage: 'url("paladin-icon-light.svg")', backgroundRepeat: 'no-repeat',
-      backgroundSize: '90vh', backgroundPosition: 'center bottom', backgroundAttachment: 'fixed'
+      backgroundSize: '88vh', backgroundPosition: 'center bottom', backgroundAttachment: 'fixed'
     }}>
       <Box sx={{ padding: '20px', maxWidth: '1200px', marginLeft: 'auto', marginRight: 'auto' }}>
         <Grid2 container spacing={2}>

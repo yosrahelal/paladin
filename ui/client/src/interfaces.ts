@@ -46,3 +46,17 @@ export interface IRegistryEntry {
     [key: string]: string
   }
 }
+
+export interface IPendingTransaction {
+  id: string
+  created: string
+  type: string
+  domain: string
+  function: string
+  to?: string
+  from: string
+  abiReference: string
+  data: {
+    [key: string]: string
+  }
+}

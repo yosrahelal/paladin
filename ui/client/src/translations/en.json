@@ -26,5 +26,11 @@
   "owner": "Owner",
   "registry": "Registry",
   "active": "Active",
-  "entries": "Entries"
+  "entries": "Entries",
+  "pendingTransactions": "Pending Transactions",
+  "domain": "Domain",
+  "type": "Type",
+  "private": "Private",
+  "public": "Public", 
+  "created": "Created"
 }

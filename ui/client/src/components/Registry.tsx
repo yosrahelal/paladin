@@ -60,7 +60,7 @@ export const Registry: React.FC<Props> = ({ registryName }) => {
   };
 
   return (
-    <Box sx={{ padding: '10px' }}>
+    <Box sx={{ padding: '20px' }}>
       {registryEntries.filter(registryEntry => registryEntry.name !== 'root').map(registryEntry =>
         <Box key={registryEntry.id} sx={{
           backgroundColor: theme => theme.palette.background.paper,
@@ -90,7 +90,7 @@ export const Registry: React.FC<Props> = ({ registryName }) => {
               </Grid2>
             </Grid2>
               {Object.keys(registryEntry.properties).filter(property => property !== '$owner').map(property =>
-                  <TextField label={property} disabled maxRows={8} multiline fullWidth size="small" value={processValue(registryEntry.properties[property])} />
+                  <TextField key={property} label={property} disabled maxRows={8} multiline fullWidth size="small" value={processValue(registryEntry.properties[property])} />
               )}
           </Grid2>
         </Box>

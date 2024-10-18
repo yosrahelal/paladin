@@ -16,21 +16,24 @@
 
 import { useContext, useEffect, useState } from "react";
 import { ApplicationContext } from "../Context";
-import { Registry } from "../components/Registry";
+import { constants } from "../utils";
+import { IPendingTransaction } from "../interfaces";
 import { Box, Paper, Typography } from "@mui/material";
 import { t } from "i18next";
+import { PendingTransaction } from "../components/PendingTransaction";
 
-export const Registries: React.FC = () => {
+export const PendingTransactions: React.FC = () => {
 
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
   const [loading, setLoading] = useState(true);
-  const [registries, setRegistries] = useState<string[]>([]);
+  const [pendingTransactions, setPendingTransactions] = useState<IPendingTransaction[]>([]);
 
   useEffect(() => {
     let requestPayload = {
       jsonrpc: '2.0',
       id: Date.now(),
-      method: 'reg_registries'
+      method: 'ptx_queryPendingTransactions',
+      params: [{ limit: constants.PENDING_TRANSACTIONS_QUERY_LIMIT, sort: ['created DESC'] }, true]
     };
     fetch('/json-rpc', {
       method: 'post',
@@ -40,7 +43,7 @@ export const Registries: React.FC = () => {
       },
       body: JSON.stringify(requestPayload)
     }).then(async response => {
-      setRegistries((await response.json()).result);
+      setPendingTransactions((await response.json()).result);
     }).finally(() => setLoading(false));
   }, [lastBlockWithTransactions]);
 
@@ -55,11 +58,12 @@ export const Registries: React.FC = () => {
     }}>
       <Box sx={{ padding: '20px', maxWidth: '1200px', marginLeft: 'auto', marginRight: 'auto' }}>
         <Paper sx={{
-          padding: '10px', paddingTop: '12px', backgroundColor: 'rgba(255, 255, 255, .65)'
+          padding: '10px', paddingTop: '12px', backgroundColor: 'rgba(255, 255, 255, .65)',
+          
         }}>
-          <Typography align="center" sx={{ fontSize: '24px', fontWeight: 500 }}>{t('entries')}</Typography>
-          <Box sx={{ padding: '20px', overflow: 'scroll', height: 'calc(100vh - 162px)' }}>
-            {registries.map(registry => <Registry key={registry} registryName={registry} />)}
+          <Typography align="center" sx={{ fontSize: '24px', fontWeight: 500 }}>{t('pendingTransactions')}</Typography>
+          <Box sx={{ padding: '20px', overflow: 'scroll', height: 'calc(100vh - 162px)'}}>
+          {pendingTransactions.map(pendingTransaction => <PendingTransaction key={pendingTransaction.id} pendingTransaction={pendingTransaction} />)}
           </Box>
         </Paper>
       </Box>

@@ -27,8 +27,9 @@ export const Header: React.FC = () => {
 
   useEffect(() => {
     switch (tab) {
-      case 0: navigate('/transactions-and-events'); break;
-      case 1: navigate('/registry'); break;
+      case 0: navigate('/indexer'); break;
+      case 1: navigate('/submissions'); break;
+      case 2: navigate('/registry'); break;
     }
   }, [tab]);
 
@@ -48,7 +49,8 @@ export const Header: React.FC = () => {
                   }
                 }}
               >
-                <Tab label={t('transactionsAndEvents')} />
+                <Tab label={t('indexer')} />
+                <Tab label={t('submissions')} />
                 <Tab label={t('registry')} />
               </Tabs>
             </Grid2>
