@@ -49,7 +49,7 @@ type param struct {
 }
 
 /*
- * This function generates a series of markdown pages to document FireFly types, and are
+ * This function generates a series of markdown pages to document Paladin types, and are
  * designed to be included in the docs. Each page is a []byte value in the map, and the
  * key is the file name of the page. To add additional pages, simply create an example
  * instance of the type you would like to document, then include that in the `types`
@@ -61,8 +61,8 @@ var allTypes = []interface{}{
 	pldapi.IndexedEvent{},
 	pldapi.TransactionInput{},
 	pldapi.Transaction{},
-	// pldapi.TransactionFull{},
-	// pldapi.TransactionReceipt{},
+	// pldapi.TransactionFull{}, // FIXME: The code needs a fix before uncommenting this (it looks like `field.Anonymous` is not handled properly)
+	// pldapi.TransactionReceipt{}, // FIXME: The code needs a fix before uncommenting this (it looks like `field.Anonymous` is not handled properly)
 	pldapi.PublicTx{},
 	pldapi.StoredABI{
 		ABI: abi.ABI{
