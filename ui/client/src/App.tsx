@@ -36,10 +36,8 @@ function App() {
   useEffect(() => {
     const intervalId = setInterval(() => {
       getLatestBlockWithTransactions().then(data => {
-        if(errorMessage !== undefined) {
-          setErrorMessage(undefined);
-        }
-        if(data !== lastBlockWithTransactions) {
+        setErrorMessage(undefined);
+        if (data !== lastBlockWithTransactions) {
           setLastBlockWithTransactions(data)
         }
       }).catch((err: any) => {
@@ -52,7 +50,7 @@ function App() {
   return (
     <ApplicationContext.Provider value={{ lastBlockWithTransactions, errorMessage }}>
       <ThemeProvider theme={theme}>
-      <CssBaseline />
+        <CssBaseline />
         <BrowserRouter>
           <Header />
           <Routes>
