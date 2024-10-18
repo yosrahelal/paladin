@@ -91,7 +91,7 @@ func (r *TransactionInvokeReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	err = txReconcile.reconcile(ctx)
 	if err != nil {
 		// There's nothing to notify us when the world changes other than polling, so we keep re-trying
-		return ctrl.Result{RequeueAfter: 1 * time.Second}, err
+		return ctrl.Result{}, err
 	} else if txReconcile.statusChanged {
 		return r.updateStatusAndRequeue(ctx, &txi)
 	} else if !txReconcile.failed && !txReconcile.succeeded {
@@ -104,14 +104,14 @@ func (r *TransactionInvokeReconciler) Reconcile(ctx context.Context, req ctrl.Re
 func (r *TransactionInvokeReconciler) updateStatusAndRequeue(ctx context.Context, txi *corev1alpha1.TransactionInvoke) (ctrl.Result, error) {
 	if err := r.Status().Update(ctx, txi); err != nil {
 		log.FromContext(ctx).Error(err, "Failed to update smart contract deployment status")
-		return ctrl.Result{RequeueAfter: 100 * time.Millisecond}, err
+		return ctrl.Result{}, err
 	}
 	return ctrl.Result{Requeue: true}, nil // Run again immediately to submit
 }
 
 func (r *TransactionInvokeReconciler) buildDeployTransaction(txi *corev1alpha1.TransactionInvoke) (bool, *pldapi.TransactionInput, error) {
 
-	toTemplate, err := template.New("").Option("missingkey=error").Funcs(sprig.FuncMap()).Parse(txi.Spec.ParamsJSONTemplate)
+	toTemplate, err := template.New("").Option("missingkey=error").Funcs(sprig.FuncMap()).Parse(txi.Spec.ToTemplate)
 	if err != nil {
 		return false, nil, fmt.Errorf("toTemplate invalid: %s", err)
 	}

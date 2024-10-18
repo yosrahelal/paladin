@@ -4,7 +4,7 @@ metadata:
   labels:
     app.kubernetes.io/name: operator-go
     app.kubernetes.io/managed-by: kustomize
-  name: zeto-anon
+  name: zeto-anon-enc
 spec:
   node: node1
   from: zeto.operator
@@ -12,23 +12,23 @@ spec:
   toTemplate: '{{ index .status.resolvedContractAddresses "zeto-factory" }}'
   requiredContractDeployments:
   - "zeto-factory"
-  - "zeto-impl-anon"
+  - "zeto-impl-anon-enc"
   - "zeto-g16-check-hashes-value"
   - "zeto-g16-check-inputs-outputs"
   - "zeto-g16-check-inputs-outputs-batch"
-  - "zeto-g16-verifier-anon"
-  - "zeto-g16-verifier-anon-batch"
+  - "zeto-g16-verifier-anon-enc"
+  - "zeto-g16-verifier-anon-enc-batch"
   function: registerImplementation
   paramsJSONTemplate: |
     {
-      "name": "Zeto_Anon",
+      "name": "Zeto_AnonEnc",
       "implementation": {
-        "implementation":        "{{ index .status.resolvedContractAddresses "zeto-impl-anon" }}",
+        "implementation":        "{{ index .status.resolvedContractAddresses "zeto-impl-anon-enc" }}",
         "depositVerifier":       "{{ index .status.resolvedContractAddresses "zeto-g16-check-hashes-value" }}",
         "withdrawVerifier":      "{{ index .status.resolvedContractAddresses "zeto-g16-check-inputs-outputs" }}",
         "batchWithdrawVerifier": "{{ index .status.resolvedContractAddresses "zeto-g16-check-inputs-outputs-batch" }}",
-        "verifier":              "{{ index .status.resolvedContractAddresses "zeto-g16-verifier-anon" }}",
-        "batchVerifier":         "{{ index .status.resolvedContractAddresses "zeto-g16-verifier-anon-batch" }}"
+        "verifier":              "{{ index .status.resolvedContractAddresses "zeto-g16-verifier-anon-enc" }}",
+        "batchVerifier":         "{{ index .status.resolvedContractAddresses "zeto-g16-verifier-anon-enc-batch" }}"
       }
     }
   abiJSON: |
