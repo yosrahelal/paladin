@@ -16,11 +16,13 @@
 package types
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -48,7 +50,7 @@ type DomainContract struct {
 	Abi             string `yaml:"abi"`
 }
 
-func (d *DomainFactoryConfig) GetContractAbi(tokenName string) (abi.ABI, error) {
+func (d *DomainFactoryConfig) GetContractAbi(ctx context.Context, tokenName string) (abi.ABI, error) {
 	for _, contract := range d.DomainContracts.Implementations {
 		if contract.Name == tokenName {
 			var contractAbi abi.ABI
@@ -59,16 +61,16 @@ func (d *DomainFactoryConfig) GetContractAbi(tokenName string) (abi.ABI, error) 
 			return contractAbi, nil
 		}
 	}
-	return nil, fmt.Errorf("contract %s not found", tokenName)
+	return nil, i18n.NewError(ctx, msgs.MsgContractNotFound, tokenName)
 }
 
-func (d *DomainFactoryConfig) GetCircuitId(tokenName string) (string, error) {
+func (d *DomainFactoryConfig) GetCircuitId(ctx context.Context, tokenName string) (string, error) {
 	for _, contract := range d.DomainContracts.Implementations {
 		if contract.Name == tokenName {
 			return contract.CircuitId, nil
 		}
 	}
-	return "", fmt.Errorf("contract %s not found", tokenName)
+	return "", i18n.NewError(ctx, msgs.MsgContractNotFound, tokenName)
 }
 
 // DomainInstanceConfig is the domain instance config, which are

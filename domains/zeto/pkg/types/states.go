@@ -16,11 +16,13 @@
 package types
 
 import (
-	"fmt"
+	"context"
 	"math/big"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/iden3/go-iden3-crypto/poseidon"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -40,11 +42,11 @@ type ZetoCoin struct {
 	hash     *tktypes.HexUint256
 }
 
-func (z *ZetoCoin) Hash() (*tktypes.HexUint256, error) {
+func (z *ZetoCoin) Hash(ctx context.Context) (*tktypes.HexUint256, error) {
 	if z.hash == nil {
 		ownerKey, err := zetosigner.DecodeBabyJubJubPublicKey(z.OwnerKey.HexString())
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode babyjubjub key. %s", err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeBJJKey, err)
 		}
 		commitment, err := poseidon.Hash([]*big.Int{
 			z.Amount.Int(),

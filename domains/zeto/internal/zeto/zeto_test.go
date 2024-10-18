@@ -60,7 +60,7 @@ func TestConfigureDomain(t *testing.T) {
 		ConfigJson: "bad json",
 	}
 	_, err = z.ConfigureDomain(context.Background(), req)
-	assert.EqualError(t, err, "failed to parse domain config json. invalid character 'b' looking for beginning of value")
+	assert.EqualError(t, err, "PD210002: Failed to parse domain config json. invalid character 'b' looking for beginning of value")
 
 	req.ConfigJson = string(configBytes)
 	res, err := z.ConfigureDomain(context.Background(), req)
@@ -122,7 +122,7 @@ func TestInitDeploy(t *testing.T) {
 		},
 	}
 	_, err := z.InitDeploy(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init deploy parameters. invalid character 'b' looking for beginning of value")
+	assert.EqualError(t, err, "PD210005: Failed to validate init deploy parameters. invalid character 'b' looking for beginning of value")
 
 	req.Transaction.ConstructorParamsJson = "{}"
 	_, err = z.InitDeploy(context.Background(), req)
@@ -154,11 +154,11 @@ func TestPrepareDeploy(t *testing.T) {
 		},
 	}
 	_, err := z.PrepareDeploy(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate prepare deploy parameters. invalid character 'b' looking for beginning of value")
+	assert.EqualError(t, err, "PD210006: Failed to validate prepare deploy parameters. invalid character 'b' looking for beginning of value")
 
 	req.Transaction.ConstructorParamsJson = "{}"
 	_, err = z.PrepareDeploy(context.Background(), req)
-	assert.EqualError(t, err, "failed to find circuit ID based on the token name. contract  not found")
+	assert.EqualError(t, err, "PD210007: Failed to find circuit ID based on the token name. PD210000: Contract  not found")
 
 	req.Transaction.ConstructorParamsJson = "{\"tokenName\":\"testToken1\"}"
 	z.factoryABI = abi.ABI{}
@@ -180,11 +180,11 @@ func TestInitTransaction(t *testing.T) {
 		},
 	}
 	_, err := z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. failed to unmarshal function abi json. invalid character 'b' looking for beginning of value")
+	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210012: Failed to unmarshal function abi json. invalid character 'b' looking for beginning of value")
 
 	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"test\"}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.ErrorContains(t, err, "failed to validate init transaction spec. failed to decode domain config. FF22045: Insufficient bytes")
+	assert.ErrorContains(t, err, "PD210008: Failed to validate init transaction spec. PD210013: Failed to decode domain config. FF22045: Insufficient bytes")
 
 	conf := types.DomainInstanceConfig{
 		CircuitId: "circuit1",
@@ -195,31 +195,35 @@ func TestInitTransaction(t *testing.T) {
 	assert.NoError(t, err)
 	req.Transaction.ContractInfo.ContractConfig = encoded
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. unknown function: test")
+	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210014: Unknown function: test")
 
 	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"mint\"}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. failed to validate function params. invalid character 'b' looking for beginning of value")
+	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210015: Failed to validate function params. invalid character 'b' looking for beginning of value")
 
 	req.Transaction.FunctionParamsJson = "{}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. failed to validate function params. parameter 'to' is required")
+	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210015: Failed to validate function params. PD210024: No transfer parameters provided")
 
-	req.Transaction.FunctionParamsJson = "{\"to\":\"Alice\"}"
+	req.Transaction.FunctionParamsJson = "{\"mints\":[{}]}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. failed to validate function params. parameter 'amount' is required")
+	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210015: Failed to validate function params. PD210025: Parameter 'to' is required")
 
-	req.Transaction.FunctionParamsJson = "{\"to\":\"Alice\",\"amount\":\"0\"}"
+	req.Transaction.FunctionParamsJson = "{\"mints\":[{\"to\":\"Alice\"}]}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. failed to validate function params. parameter 'amount' must be greater than 0")
+	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210015: Failed to validate function params. PD210026: Parameter 'amount' is required")
 
-	req.Transaction.FunctionParamsJson = "{\"to\":\"Alice\",\"amount\":\"10\"}"
+	req.Transaction.FunctionParamsJson = "{\"mints\":[{\"to\":\"Alice\",\"amount\":\"0\"}]}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. unexpected signature for function 'mint': expected=function mint(string memory to, uint256 amount) external { } actual=")
+	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210015: Failed to validate function params. PD210027: Parameter 'amount' must be greater than 0")
 
-	req.Transaction.FunctionSignature = "function mint(string memory to, uint256 amount) external { }"
+	req.Transaction.FunctionParamsJson = "{\"mints\":[{\"to\":\"Alice\",\"amount\":\"10\"}]}"
 	_, err = z.InitTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate init transaction spec. failed to decode contract address. bad address - must be 20 bytes (len=0)")
+	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210016: Unexpected signature for function 'mint': expected='function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }', actual=''")
+
+	req.Transaction.FunctionSignature = "function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }"
+	_, err = z.InitTransaction(context.Background(), req)
+	assert.EqualError(t, err, "PD210008: Failed to validate init transaction spec. PD210017: Failed to decode contract address. bad address - must be 20 bytes (len=0)")
 
 	req.Transaction.ContractInfo.ContractAddress = "0x1234567890123456789012345678901234567890"
 	res, err := z.InitTransaction(context.Background(), req)
@@ -242,7 +246,7 @@ func TestAssembleTransaction(t *testing.T) {
 		Transaction: &prototk.TransactionSpecification{
 			TransactionId:      "0x1234",
 			FunctionAbiJson:    "{\"type\":\"function\",\"name\":\"mint\"}",
-			FunctionParamsJson: "{\"to\":\"Alice\",\"amount\":\"10\"}",
+			FunctionParamsJson: "{\"mints\":[{\"to\":\"Alice\",\"amount\":\"10\"}]}",
 			ContractInfo: &prototk.ContractInfo{
 				ContractAddress: "0x1234567890123456789012345678901234567890",
 			},
@@ -257,9 +261,9 @@ func TestAssembleTransaction(t *testing.T) {
 		},
 	}
 	_, err := z.AssembleTransaction(context.Background(), req)
-	assert.ErrorContains(t, err, "failed to validate assemble transaction spec. failed to decode domain config. FF22045: Insufficient bytes")
+	assert.ErrorContains(t, err, "PD210009: Failed to validate assemble transaction spec. PD210013: Failed to decode domain config. FF22045: Insufficient bytes")
 
-	req.Transaction.FunctionSignature = "function mint(string memory to, uint256 amount) external { }"
+	req.Transaction.FunctionSignature = "function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }"
 	conf := types.DomainInstanceConfig{
 		CircuitId: "circuit1",
 		TokenName: "testToken1",
@@ -278,17 +282,17 @@ func TestEndorseTransaction(t *testing.T) {
 	req := &prototk.EndorseTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
 			TransactionId:      "0x1234",
-			FunctionParamsJson: "{\"to\":\"Alice\",\"amount\":\"10\"}",
+			FunctionParamsJson: "{\"mints\":[{\"to\":\"Alice\",\"amount\":\"10\"}]}",
 			ContractInfo: &prototk.ContractInfo{
 				ContractAddress: "0x1234567890123456789012345678901234567890",
 			},
 		},
 	}
 	_, err := z.EndorseTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate endorse transaction spec. failed to unmarshal function abi json. unexpected end of JSON input")
+	assert.EqualError(t, err, "PD210010: Failed to validate endorse transaction spec. PD210012: Failed to unmarshal function abi json. unexpected end of JSON input")
 
 	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"mint\"}"
-	req.Transaction.FunctionSignature = "function mint(string memory to, uint256 amount) external { }"
+	req.Transaction.FunctionSignature = "function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }"
 	conf := types.DomainInstanceConfig{
 		CircuitId: "circuit1",
 		TokenName: "testToken1",
@@ -318,7 +322,7 @@ func TestPrepareTransaction(t *testing.T) {
 	req := &prototk.PrepareTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
 			TransactionId:      "0x1234",
-			FunctionParamsJson: "{\"to\":\"Alice\",\"amount\":\"10\"}",
+			FunctionParamsJson: "{\"mints\":[{\"to\":\"Alice\",\"amount\":\"10\"}]}",
 			ContractInfo: &prototk.ContractInfo{
 				ContractAddress: "0x1234567890123456789012345678901234567890",
 			},
@@ -330,10 +334,10 @@ func TestPrepareTransaction(t *testing.T) {
 		},
 	}
 	_, err := z.PrepareTransaction(context.Background(), req)
-	assert.EqualError(t, err, "failed to validate prepare transaction spec. failed to unmarshal function abi json. unexpected end of JSON input")
+	assert.EqualError(t, err, "PD210011: Failed to validate prepare transaction spec. PD210012: Failed to unmarshal function abi json. unexpected end of JSON input")
 
 	req.Transaction.FunctionAbiJson = "{\"type\":\"function\",\"name\":\"mint\"}"
-	req.Transaction.FunctionSignature = "function mint(string memory to, uint256 amount) external { }"
+	req.Transaction.FunctionSignature = "function mint(mints[] memory mints) external { }; struct mints { string to; uint256 amount; }"
 	conf := types.DomainInstanceConfig{
 		CircuitId: "circuit1",
 		TokenName: "testToken1",
@@ -375,8 +379,12 @@ func TestFindCoins(t *testing.T) {
 	assert.NotNil(t, res)
 }
 
-func TestHandleEventBatch(t *testing.T) {
-	testCallbacks := &testDomainCallbacks{}
+func newTestZeto() (*Zeto, *testDomainCallbacks) {
+	testCallbacks := &testDomainCallbacks{
+		returnFunc: func() (*prototk.FindAvailableStatesResponse, error) {
+			return &prototk.FindAvailableStatesResponse{}, nil
+		},
+	}
 	z := New(testCallbacks)
 	z.name = "z1"
 	z.coinSchema = &prototk.StateSchema{
@@ -391,7 +399,14 @@ func TestHandleEventBatch(t *testing.T) {
 	z.mintSignature = "event UTXOMint(uint256[] outputs, address indexed submitter, bytes data)"
 	z.transferSignature = "event UTXOTransfer(uint256[] inputs, uint256[] outputs, address indexed submitter, bytes data)"
 	z.transferWithEncSignature = "event UTXOTransferWithEncryptedValues(uint256[] inputs, uint256[] outputs, uint256 encryptionNonce, uint256[2] ecdhPublicKey, uint256[] encryptedValues, address indexed submitter, bytes data)"
+	return z, testCallbacks
+}
 
+func TestHandleEventBatch(t *testing.T) {
+	z, testCallbacks := newTestZeto()
+	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
+		return nil, errors.New("find merkle tree root error")
+	}
 	ctx := context.Background()
 	req := &prototk.HandleEventBatchRequest{
 		Events: []*prototk.OnChainEvent{
@@ -405,137 +420,50 @@ func TestHandleEventBatch(t *testing.T) {
 		},
 	}
 	_, err := z.HandleEventBatch(ctx, req)
-	assert.ErrorContains(t, err, "failed to abi decode domain instance config bytes. FF22045: Insufficient bytes")
+	assert.ErrorContains(t, err, "PD210018: Failed to abi decode domain instance config bytes. FF22045: Insufficient bytes")
 
 	config := map[string]interface{}{
-		"circuitId": "circuit1",
-		"tokenName": "testToken1",
+		"circuitId": "anon_nullifier",
+		"tokenName": "Zeto_AnonNullifier",
 	}
 	bytes, err := types.DomainInstanceConfigABI.EncodeABIDataValues(config)
 	require.NoError(t, err)
 	req.ContractInfo.ContractConfig = bytes
 	req.ContractInfo.ContractAddress = "0x1234"
 	_, err = z.HandleEventBatch(ctx, req)
-	assert.ErrorContains(t, err, "failed to parse contract address. bad address - must be 20 bytes (len=2)")
+	assert.ErrorContains(t, err, "PD210017: Failed to decode contract address. bad address - must be 20 bytes (len=2)")
 
 	req.ContractInfo.ContractAddress = "0x1234567890123456789012345678901234567890"
+	_, err = z.HandleEventBatch(ctx, req)
+	assert.EqualError(t, err, "PD210019: Failed to create Merkle tree for smt_Zeto_AnonNullifier_0x1234567890123456789012345678901234567890: PD210065: Failed to find available states for the merkle tree. find merkle tree root error")
+
+	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
+		return &prototk.FindAvailableStatesResponse{}, nil
+	}
 	res1, err := z.HandleEventBatch(ctx, req)
 	assert.NoError(t, err)
 	assert.Len(t, res1.TransactionsComplete, 0)
 
-	// bad transaction data for the mint event - should be logged and move on
-	req.Events[0].DataJson = "{\"data\":\"0x0001\",\"outputs\":[\"7980718117603030807695495350922077879582656644717071592146865497574198464253\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
-	_, err = z.HandleEventBatch(ctx, req)
-	assert.NoError(t, err)
-	req.Events[0].DataJson = "{\"data\":\"0x0001ffff\",\"outputs\":[\"7980718117603030807695495350922077879582656644717071592146865497574198464253\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
-	_, err = z.HandleEventBatch(ctx, req)
-	assert.NoError(t, err)
-
-	// bad data for the transfer event - should be logged and move on
-	req.Events[0].DataJson = "bad data"
 	req.Events[0].SoliditySignature = "event UTXOTransfer(uint256[] inputs, uint256[] outputs, address indexed submitter, bytes data)"
-	_, err = z.HandleEventBatch(ctx, req)
-	assert.NoError(t, err)
-
-	// bad transaction data for the transfer event - should be logged and move on
-	req.Events[0].DataJson = "{\"data\":\"0x0001\",\"outputs\":[\"7980718117603030807695495350922077879582656644717071592146865497574198464253\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
-	_, err = z.HandleEventBatch(ctx, req)
-	assert.NoError(t, err)
-	req.Events[0].DataJson = "{\"data\":\"0x0001ffff\",\"outputs\":[\"7980718117603030807695495350922077879582656644717071592146865497574198464253\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
-	_, err = z.HandleEventBatch(ctx, req)
-	assert.NoError(t, err)
-
-	// bad data for the transfer with encrypted values event - should be logged and move on
-	req.Events[0].DataJson = "bad data"
-	req.Events[0].SoliditySignature = "event UTXOTransferWithEncryptedValues(uint256[] inputs, uint256[] outputs, uint256 encryptionNonce, uint256[2] ecdhPublicKey, uint256[] encryptedValues, address indexed submitter, bytes data)"
-	_, err = z.HandleEventBatch(ctx, req)
-	assert.NoError(t, err)
-
-	// bad transaction data for the transfer with encrypted values event - should be logged and move on
-	req.Events[0].DataJson = "{\"data\":\"0x0001\",\"outputs\":[\"7980718117603030807695495350922077879582656644717071592146865497574198464253\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
-	_, err = z.HandleEventBatch(ctx, req)
-	assert.NoError(t, err)
-	req.Events[0].DataJson = "{\"data\":\"0x0001ffff\",\"outputs\":[\"7980718117603030807695495350922077879582656644717071592146865497574198464253\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
-	_, err = z.HandleEventBatch(ctx, req)
-	assert.NoError(t, err)
-
-	req.Events[0].DataJson = "{\"data\":\"0x0001000030e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000\",\"outputs\":[\"7980718117603030807695495350922077879582656644717071592146865497574198464253\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
-	req.Events[0].SoliditySignature = "event UTXOMint(uint256[] outputs, address indexed submitter, bytes data)"
 	res2, err := z.HandleEventBatch(ctx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "0x30e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000", res2.TransactionsComplete[0].TransactionId)
+	assert.Len(t, res2.TransactionsComplete, 0)
 
-	req.Events[0].DataJson = "{\"data\":\"0x0001000030e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000\",\"outputs\":[\"7980718117603030807695495350922077879582656644717071592146865497574198464253\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
-	req.Events[0].SoliditySignature = "event UTXOTransfer(uint256[] inputs, uint256[] outputs, address indexed submitter, bytes data)"
+	req.Events[0].SoliditySignature = "event UTXOTransferWithEncryptedValues(uint256[] inputs, uint256[] outputs, uint256 encryptionNonce, uint256[2] ecdhPublicKey, uint256[] encryptedValues, address indexed submitter, bytes data)"
 	res3, err := z.HandleEventBatch(ctx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "0x30e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000", res3.TransactionsComplete[0].TransactionId)
+	assert.Len(t, res3.TransactionsComplete, 0)
+
+	req.Events[0].SoliditySignature = "event UTXOMint(uint256[] outputs, address indexed submitter, bytes data)"
+	req.Events[0].DataJson = "{\"data\":\"0x0001000030e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000\",\"outputs\":[\"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
+	_, err = z.HandleEventBatch(ctx, req)
+	assert.ErrorContains(t, err, "PD210020: Failed to handle events (failures=1). [0]PD210061: Failed to update merkle tree for the UTXOMint event. PD210056: Failed to create new node index from hash. 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 
 	req.Events[0].DataJson = "{\"data\":\"0x0001000030e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000\",\"outputs\":[\"7980718117603030807695495350922077879582656644717071592146865497574198464253\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
-	req.Events[0].SoliditySignature = "event UTXOTransferWithEncryptedValues(uint256[] inputs, uint256[] outputs, uint256 encryptionNonce, uint256[2] ecdhPublicKey, uint256[] encryptedValues, address indexed submitter, bytes data)"
 	res4, err := z.HandleEventBatch(ctx, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "0x30e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000", res4.TransactionsComplete[0].TransactionId)
-
-	config["tokenName"] = "Zeto_AnonNullifier"
-	bytes, err = types.DomainInstanceConfigABI.EncodeABIDataValues(config)
-	require.NoError(t, err)
-	req.ContractInfo.ContractConfig = bytes
-	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
-		return nil, errors.New("find coins error")
-	}
-	req.Events[0].DataJson = "{\"data\":\"0x0001000030e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000\",\"outputs\":[\"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
-	req.Events[0].SoliditySignature = "event UTXOMint(uint256[] outputs, address indexed submitter, bytes data)"
-	_, err = z.HandleEventBatch(ctx, req)
-	assert.EqualError(t, err, "failed to handle events (failures=1). [0]failed to update merkle tree for the UTXOMint event. failed to create Merkle tree for smt_Zeto_AnonNullifier_0x1234567890123456789012345678901234567890: failed to find available states. find coins error")
-
-	calls := 0
-	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
-		if calls == 0 {
-			calls++
-			return &prototk.FindAvailableStatesResponse{
-				States: []*prototk.StoredState{
-					{
-						DataJson: "{\"salt\":\"0x13de02d64a5736a56b2d35d2a83dd60397ba70aae6f8347629f0960d4fee5d58\",\"owner\":\"Alice\",\"ownerKey\":\"0xc1d218cf8993f940e75eabd3fee23dadc4e89cd1de479f03a61e91727959281b\",\"amount\":\"0x0a\"}",
-					},
-				},
-			}, nil
-		} else {
-			return &prototk.FindAvailableStatesResponse{}, nil
-		}
-	}
-	req.Events[0].DataJson = "{\"data\":\"0x0001000030e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000\",\"outputs\":[\"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
-	_, err = z.HandleEventBatch(ctx, req)
-	assert.EqualError(t, err, "failed to handle events (failures=1). [0]failed to update merkle tree for the UTXOMint event. failed to create node index for 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff: key for the new node not inside the Finite Field")
-
-	calls = 0
-	req.Events[0].DataJson = "{\"data\":\"0x0001000030e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000\",\"outputs\":[\"7980718117603030807695495350922077879582656644717071592146865497574198464253\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
-	res5, err := z.HandleEventBatch(ctx, req)
-	assert.NoError(t, err)
-	assert.Len(t, res5.TransactionsComplete, 1)
-	assert.Len(t, res5.NewStates, 2)
-	assert.Equal(t, "merkle_tree_node", res5.NewStates[0].SchemaId)
-	assert.Equal(t, "merkle_tree_root", res5.NewStates[1].SchemaId)
-
-	calls = 0
-	req.Events[0].DataJson = "{\"data\":\"0x0001000030e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000\",\"outputs\":[\"7980718117603030807695495350922077879582656644717071592146865497574198464253\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
-	req.Events[0].SoliditySignature = "event UTXOTransfer(uint256[] inputs, uint256[] outputs, address indexed submitter, bytes data)"
-	res6, err := z.HandleEventBatch(ctx, req)
-	assert.NoError(t, err)
-	assert.Len(t, res6.TransactionsComplete, 1)
-	assert.Len(t, res6.NewStates, 2)
-	assert.Equal(t, "merkle_tree_node", res6.NewStates[0].SchemaId)
-	assert.Equal(t, "merkle_tree_root", res6.NewStates[1].SchemaId)
-
-	calls = 0
-	req.Events[0].DataJson = "{\"data\":\"0x0001000030e43028afbb41d6887444f4c2b4ed6d00000000000000000000000000000000\",\"outputs\":[\"7980718117603030807695495350922077879582656644717071592146865497574198464253\"],\"submitter\":\"0x74e71b05854ee819cb9397be01c82570a178d019\"}"
-	req.Events[0].SoliditySignature = "event UTXOTransferWithEncryptedValues(uint256[] inputs, uint256[] outputs, uint256 encryptionNonce, uint256[2] ecdhPublicKey, uint256[] encryptedValues, address indexed submitter, bytes data)"
-	res7, err := z.HandleEventBatch(ctx, req)
-	assert.NoError(t, err)
-	assert.Len(t, res7.TransactionsComplete, 1)
-	assert.Len(t, res7.NewStates, 2)
-	assert.Equal(t, "merkle_tree_node", res7.NewStates[0].SchemaId)
-	assert.Equal(t, "merkle_tree_root", res7.NewStates[1].SchemaId)
+	assert.Len(t, res4.TransactionsComplete, 1)
+	assert.Len(t, res4.NewStates, 2)
 }
 
 func TestGetVerifier(t *testing.T) {
@@ -552,7 +480,7 @@ func TestGetVerifier(t *testing.T) {
 		Algorithm: "bad algo",
 	}
 	_, err = z.GetVerifier(context.Background(), req)
-	assert.ErrorContains(t, err, "failed to get verifier. 'bad algo' does not match supported algorithm")
+	assert.ErrorContains(t, err, "Failed to get verifier. 'bad algo' does not match supported algorithm")
 
 	bytes, err := hex.DecodeString("7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025")
 	assert.NoError(t, err)
@@ -580,7 +508,7 @@ func TestSign(t *testing.T) {
 		Algorithm: "bad algo",
 	}
 	_, err := z.Sign(context.Background(), req)
-	assert.ErrorContains(t, err, "failed to sign. 'bad algo' does not match supported algorithm")
+	assert.ErrorContains(t, err, "PD210023: Failed to sign. 'bad algo' does not match supported algorithm")
 
 	bytes, err := hex.DecodeString("7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025")
 	assert.NoError(t, err)

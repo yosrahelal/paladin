@@ -13,21 +13,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package types
+package signer
 
 import (
-	"context"
 	"testing"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCoinHash(t *testing.T) {
-	coin := &ZetoCoin{
-		OwnerKey: tktypes.MustParseHexBytes("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
-	}
-	ctx := context.Background()
-	_, err := coin.Hash(ctx)
-	assert.EqualError(t, err, "PD210001: Failed to decode babyjubjub key. p.y >= Q")
+func TestWitnessCalculator(t *testing.T) {
+	calc := &testWitnessCalculator{}
+	res1, err := calc.CalculateBinWitness(nil, false)
+	assert.NoError(t, err)
+	assert.Empty(t, res1)
+
+	res2, err := calc.CalculateWitness(nil, false)
+	assert.NoError(t, err)
+	assert.Empty(t, res2)
 }

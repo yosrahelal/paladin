@@ -16,7 +16,6 @@
 package signer
 
 import (
-	"fmt"
 	"math/big"
 
 	"github.com/iden3/go-iden3-crypto/poseidon"
@@ -25,7 +24,7 @@ import (
 func CalculateNullifier(value, salt *big.Int, privateKeyForZkp *big.Int) (*big.Int, error) {
 	nullifier, err := poseidon.Hash([]*big.Int{value, salt, privateKeyForZkp})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create the nullifier hash. %s", err)
+		return nil, err
 	}
 	return nullifier, nil
 }

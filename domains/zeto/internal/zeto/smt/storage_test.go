@@ -130,48 +130,78 @@ func returnNode(t int) func() (*prototk.FindAvailableStatesResponse, error) {
 func TestStorage(t *testing.T) {
 	stateQueryConext := tktypes.ShortID()
 
-	storage, smt, err := New(&testDomainCallbacks{returnFunc: returnCustomError}, "test", stateQueryConext, "root-schema", "node-schema")
-	assert.EqualError(t, err, "failed to find available states. test error")
+	storage := NewStatesStorage(&testDomainCallbacks{returnFunc: returnCustomError}, "test", stateQueryConext, "root-schema", "node-schema")
+	smt, err := NewSmt(storage)
+	assert.EqualError(t, err, "PD210065: Failed to find available states for the merkle tree. test error")
 	assert.NotNil(t, storage)
 	assert.Nil(t, smt)
 
-	storage, smt, err = New(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")
+	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")
+	smt, err = NewSmt(storage)
 	assert.NoError(t, err)
 	assert.NotNil(t, storage)
 	assert.NotNil(t, smt)
-	assert.Equal(t, 0, big.NewInt(0).Cmp(storage.(*statesStorage).rootNode.BigInt()))
-	assert.Equal(t, 1, len(storage.(*statesStorage).newNodes))
-	var root MerkleTreeRoot
-	err = json.Unmarshal([]byte(storage.(*statesStorage).newNodes[0].StateDataJson), &root)
+	assert.Nil(t, storage.(*statesStorage).rootNode)
+	assert.Equal(t, 0, len(storage.(*statesStorage).committedNewNodes))
+	newStates, err := storage.(*statesStorage).GetNewStates()
 	assert.NoError(t, err)
-	assert.Equal(t, "0x0000000000000000000000000000000000000000000000000000000000000000", root.RootIndex.String())
-
-	storage, smt, err = New(&testDomainCallbacks{returnFunc: returnBadData}, "test", stateQueryConext, "root-schema", "node-schema")
-	assert.EqualError(t, err, "failed to unmarshal root node index. invalid character 'b' looking for beginning of value")
-	assert.NotNil(t, storage)
-	assert.Nil(t, smt)
-
-	storage, smt, err = New(&testDomainCallbacks{returnFunc: returnNode(0)}, "test", stateQueryConext, "root-schema", "node-schema")
-	assert.NoError(t, err)
-	assert.NotNil(t, storage)
-	assert.NotNil(t, smt)
-	assert.Equal(t, "1234567890123456789012345678901234567890123456789012345678901234", storage.(*statesStorage).rootNode.Hex())
-
-	assert.Empty(t, storage.(*statesStorage).GetNewStates())
+	assert.Len(t, newStates, 0)
 	idx, err := storage.(*statesStorage).GetRootNodeRef()
 	assert.NoError(t, err)
+	assert.Equal(t, "0000000000000000000000000000000000000000000000000000000000000000", idx.Hex())
+
+	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnBadData}, "test", stateQueryConext, "root-schema", "node-schema")
+	smt, err = NewSmt(storage)
+	assert.EqualError(t, err, "PD210066: Failed to unmarshal root node index. invalid character 'b' looking for beginning of value")
+	assert.NotNil(t, storage)
+	assert.Nil(t, smt)
+
+	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(0)}, "test", stateQueryConext, "root-schema", "node-schema")
+	smt, err = NewSmt(storage)
+	assert.NoError(t, err)
+	assert.NotNil(t, storage)
+	assert.NotNil(t, smt)
+	assert.Nil(t, storage.(*statesStorage).pendingNodesTx)
+
+	newStates, err = storage.(*statesStorage).GetNewStates()
+	assert.NoError(t, err)
+	assert.Empty(t, newStates)
+	idx, err = storage.(*statesStorage).GetRootNodeRef()
+	assert.NoError(t, err)
 	assert.NotEmpty(t, idx)
+
+	// test rollback
+	tx, err := storage.BeginTx()
+	assert.NoError(t, err)
+	idx1, _ := node.NewNodeIndexFromBigInt(big.NewInt(1234))
+	err = tx.UpsertRootNodeRef(idx1)
+	assert.NoError(t, err)
+	assert.Equal(t, "d204000000000000000000000000000000000000000000000000000000000000", storage.(*statesStorage).pendingNodesTx.inflightRoot.Hex())
+	assert.Nil(t, tx.Rollback())
+	newStates, err = storage.(*statesStorage).GetNewStates()
+	assert.NoError(t, err)
+	assert.Equal(t, 0, len(newStates))
 }
 
 func TestUpsertRootNodeIndex(t *testing.T) {
 	stateQueryConext := tktypes.ShortID()
-	storage, _, _ := New(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")
+	storage := NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")
+	_, _ = NewSmt(storage)
 	assert.NotNil(t, storage)
-	idx, _ := node.NewNodeIndexFromBigInt(big.NewInt(1234))
-	err := storage.UpsertRootNodeRef(idx)
+	tx, err := storage.BeginTx()
 	assert.NoError(t, err)
-	assert.Equal(t, "d204000000000000000000000000000000000000000000000000000000000000", storage.(*statesStorage).rootNode.Hex())
-	assert.Equal(t, 2, len(storage.(*statesStorage).newNodes))
+	idx1, _ := node.NewNodeIndexFromBigInt(big.NewInt(1234))
+	err = tx.UpsertRootNodeRef(idx1)
+	assert.NoError(t, err)
+	assert.Equal(t, "d204000000000000000000000000000000000000000000000000000000000000", storage.(*statesStorage).pendingNodesTx.inflightRoot.Hex())
+	assert.Nil(t, tx.Commit())
+	newStates, err := storage.(*statesStorage).GetNewStates()
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(newStates))
+
+	idx2, err := storage.(*statesStorage).GetRootNodeRef()
+	assert.NoError(t, err)
+	assert.Equal(t, idx1, idx2)
 }
 
 func TestGetNode(t *testing.T) {
@@ -180,7 +210,7 @@ func TestGetNode(t *testing.T) {
 
 	storage := NewStatesStorage(&testDomainCallbacks{returnFunc: returnCustomError}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err := storage.GetNode(idx)
-	assert.EqualError(t, err, "failed to find available states. test error")
+	assert.EqualError(t, err, "PD210065: Failed to find available states for the merkle tree. test error")
 
 	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err = storage.GetNode(idx)
@@ -210,11 +240,34 @@ func TestGetNode(t *testing.T) {
 
 	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(5)}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err = storage.GetNode(idx)
-	assert.ErrorContains(t, err, "failed to unmarshal Merkle Tree Node from state json. PD020007: Invalid hex")
+	assert.ErrorContains(t, err, "PD210067: Failed to unmarshal Merkle Tree Node from state json. PD020007: Invalid hex")
 
 	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnNode(6)}, "test", stateQueryConext, "root-schema", "node-schema")
 	_, err = storage.GetNode(idx)
-	assert.ErrorContains(t, err, "failed to unmarshal Merkle Tree Node from state json. PD020008: Failed to parse value as 32 byte hex string")
+	assert.ErrorContains(t, err, "PD210067: Failed to unmarshal Merkle Tree Node from state json. PD020008: Failed to parse value as 32 byte hex string")
+
+	// test with committed nodes
+	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")
+	tx1, err := storage.BeginTx()
+	assert.NoError(t, err)
+	n1, _ := node.NewLeafNode(node.NewIndexOnly(idx))
+	err = tx1.InsertNode(n1)
+	assert.NoError(t, err)
+	assert.Nil(t, tx1.Commit())
+	n2, err := storage.GetNode(n1.Ref())
+	assert.NoError(t, err)
+	assert.Equal(t, n1, n2)
+
+	// test with pending nodes (called when we are still updating a leaf node path up to the root)
+	storage = NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")
+	tx2, err := storage.BeginTx()
+	assert.NoError(t, err)
+	n3, _ := node.NewLeafNode(node.NewIndexOnly(idx))
+	err = tx2.InsertNode(n3)
+	assert.NoError(t, err)
+	n4, err := storage.GetNode(n3.Ref())
+	assert.NoError(t, err)
+	assert.Equal(t, n3, n4)
 }
 
 func TestInsertNode(t *testing.T) {
@@ -223,21 +276,94 @@ func TestInsertNode(t *testing.T) {
 	assert.NotNil(t, storage)
 	idx, _ := node.NewNodeIndexFromBigInt(big.NewInt(1234))
 	n, _ := node.NewLeafNode(node.NewIndexOnly(idx))
-	err := storage.InsertNode(n)
+
+	tx1, err := storage.BeginTx()
 	assert.NoError(t, err)
-	assert.Equal(t, 1, len(storage.(*statesStorage).newNodes))
+	err = tx1.InsertNode(n)
+	assert.NoError(t, err)
+	err = tx1.UpsertRootNodeRef(n.Ref())
+	assert.NoError(t, err)
+	newStates, err := storage.(*statesStorage).GetNewStates()
+	assert.NoError(t, err)
+	assert.Equal(t, 0, len(newStates))
+	assert.Nil(t, tx1.Commit())
+	newStates, err = storage.(*statesStorage).GetNewStates()
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(newStates))
+
+	rootNode, err := storage.GetRootNodeRef()
+	assert.NoError(t, err)
+	assert.Equal(t, n.Ref().Hex(), rootNode.Hex())
 
 	n, _ = node.NewBranchNode(idx, idx)
-	err = storage.InsertNode(n)
+	tx2, err := storage.BeginTx()
 	assert.NoError(t, err)
-	assert.Equal(t, 2, len(storage.(*statesStorage).newNodes))
+	err = tx2.InsertNode(n)
+	assert.NoError(t, err)
+	err = tx1.UpsertRootNodeRef(n.Ref())
+	assert.NoError(t, err)
+	newStates, err = storage.(*statesStorage).GetNewStates()
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(newStates))
+	assert.Nil(t, tx2.Commit())
+	newStates, err = storage.(*statesStorage).GetNewStates()
+	assert.NoError(t, err)
+	assert.Equal(t, 3, len(newStates))
 }
 
 func TestUnimplementedMethods(t *testing.T) {
 	stateQueryConext := tktypes.ShortID()
 	storage := NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", stateQueryConext, "root-schema", "node-schema")
 	assert.NotNil(t, storage)
-	assert.Nil(t, storage.(*statesStorage).Commit())
-	assert.Nil(t, storage.(*statesStorage).Rollback())
 	storage.(*statesStorage).Close()
+}
+
+func TestNodesTxGetNode(t *testing.T) {
+	tx := &nodesTx{
+		inflightNodes: make(map[core.NodeRef]core.Node),
+	}
+	idx, _ := node.NewNodeIndexFromBigInt(big.NewInt(1234))
+	_, err := tx.getNode(idx)
+	assert.EqualError(t, err, core.ErrNotFound.Error())
+
+	n, _ := node.NewLeafNode(node.NewIndexOnly(idx))
+	tx.inflightNodes[idx] = n
+	n2, err := tx.getNode(idx)
+	assert.NoError(t, err)
+	assert.Equal(t, n, n2)
+}
+
+func TestSetTransactionId(t *testing.T) {
+	storage := NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", "stateQueryContext", "root-schema", "node-schema")
+	storage.SetTransactionId("txid")
+	assert.Equal(t, "txid", storage.(*statesStorage).pendingNodesTx.transactionId)
+}
+
+func TestGetNewStates(t *testing.T) {
+	s := NewStatesStorage(&testDomainCallbacks{returnFunc: returnEmptyStates}, "test", "stateQueryContext", "root-schema", "node-schema")
+	storage := s.(*statesStorage)
+	states, err := storage.GetNewStates()
+	assert.NoError(t, err)
+	assert.Len(t, states, 0)
+
+	rootNode, _ := node.NewNodeIndexFromBigInt(big.NewInt(1234))
+	storage.rootNode = &smtRootNode{
+		root: rootNode,
+		txId: "txid",
+	}
+	states, err = storage.GetNewStates()
+	assert.NoError(t, err)
+	assert.Len(t, states, 1)
+
+	idx, _ := node.NewNodeIndexFromBigInt(big.NewInt(1234567890))
+	node, _ := node.NewLeafNode(node.NewIndexOnly(idx))
+	storage.committedNewNodes = map[core.NodeRef]*smtNode{
+		idx: {
+			node: node,
+			txId: "txid",
+		},
+	}
+	states, err = storage.GetNewStates()
+	assert.NoError(t, err)
+	assert.Len(t, states, 2)
 }

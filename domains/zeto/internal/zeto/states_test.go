@@ -20,13 +20,14 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestGetStateSchemas(t *testing.T) {
-	schemas, err := getStateSchemas()
+	schemas, err := getStateSchemas(context.Background())
 	assert.NoError(t, err)
 	assert.Len(t, schemas, 3)
 }
@@ -53,14 +54,14 @@ func TestPrepareInputs(t *testing.T) {
 
 	stateQueryContext := "test"
 	ctx := context.Background()
-	_, _, _, err := zeto.prepareInputs(ctx, stateQueryContext, "Alice", tktypes.Uint64ToUint256(100))
-	assert.EqualError(t, err, "failed to query the state store for available coins. test error")
+	_, _, _, _, err := zeto.prepareInputs(ctx, stateQueryContext, "Alice", []*types.TransferParamEntry{{Amount: tktypes.Uint64ToUint256(100)}})
+	assert.EqualError(t, err, "PD210032: Failed to query the state store for available coins. test error")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{}, nil
 	}
-	_, _, _, err = zeto.prepareInputs(ctx, stateQueryContext, "Alice", tktypes.Uint64ToUint256(100))
-	assert.EqualError(t, err, "insufficient funds (available=0)")
+	_, _, _, _, err = zeto.prepareInputs(ctx, stateQueryContext, "Alice", []*types.TransferParamEntry{{Amount: tktypes.Uint64ToUint256(100)}})
+	assert.EqualError(t, err, "PD210033: Insufficient funds (available=0)")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{
@@ -72,8 +73,8 @@ func TestPrepareInputs(t *testing.T) {
 			},
 		}, nil
 	}
-	_, _, _, err = zeto.prepareInputs(ctx, stateQueryContext, "Alice", tktypes.Uint64ToUint256(100))
-	assert.EqualError(t, err, "coin state-1 is invalid: invalid character 'b' looking for beginning of value")
+	_, _, _, _, err = zeto.prepareInputs(ctx, stateQueryContext, "Alice", []*types.TransferParamEntry{{Amount: tktypes.Uint64ToUint256(100)}})
+	assert.EqualError(t, err, "PD210034: Coin state-1 is invalid: invalid character 'b' looking for beginning of value")
 
 	testCallbacks.returnFunc = func() (*prototk.FindAvailableStatesResponse, error) {
 		return &prototk.FindAvailableStatesResponse{
@@ -91,6 +92,6 @@ func TestPrepareInputs(t *testing.T) {
 			},
 		}, nil
 	}
-	_, _, _, err = zeto.prepareInputs(ctx, stateQueryContext, "Alice", tktypes.Uint64ToUint256(200))
-	assert.EqualError(t, err, "could not find suitable coins")
+	_, _, _, _, err = zeto.prepareInputs(ctx, stateQueryContext, "Alice", []*types.TransferParamEntry{{Amount: tktypes.Uint64ToUint256(200)}})
+	assert.EqualError(t, err, "PD210035: Need more than maximum number (10) of coins to fulfill the transfer amount total")
 }

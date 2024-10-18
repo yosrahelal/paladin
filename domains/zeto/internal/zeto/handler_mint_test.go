@@ -34,18 +34,24 @@ func TestMintValidateParams(t *testing.T) {
 	assert.EqualError(t, err, "invalid character 'b' looking for beginning of value")
 
 	_, err = h.ValidateParams(ctx, nil, "{}")
-	assert.EqualError(t, err, "parameter 'to' is required")
+	assert.EqualError(t, err, "PD210024: No transfer parameters provided")
 
-	_, err = h.ValidateParams(ctx, nil, "{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":0}")
-	assert.EqualError(t, err, "parameter 'amount' must be greater than 0")
+	_, err = h.ValidateParams(ctx, nil, "{\"mints\":{}}")
+	assert.EqualError(t, err, "json: cannot unmarshal object into Go struct field MintParams.mints of type []*types.TransferParamEntry")
 
-	_, err = h.ValidateParams(ctx, nil, "{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":-10}")
-	assert.EqualError(t, err, "parameter 'amount' must be greater than 0")
+	_, err = h.ValidateParams(ctx, nil, "{\"mints\":[{}]}")
+	assert.EqualError(t, err, "PD210025: Parameter 'to' is required")
 
-	params, err := h.ValidateParams(ctx, nil, "{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":10}")
+	_, err = h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":0}]}")
+	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be greater than 0")
+
+	_, err = h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":-10}]}")
+	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be greater than 0")
+
+	params, err := h.ValidateParams(ctx, nil, "{\"mints\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":10}]}")
 	assert.NoError(t, err)
-	assert.Equal(t, "0x1234567890123456789012345678901234567890", params.(*types.MintParams).To)
-	assert.Equal(t, "0x0a", params.(*types.MintParams).Amount.String())
+	assert.Equal(t, "0x1234567890123456789012345678901234567890", params.([]*types.TransferParamEntry)[0].To)
+	assert.Equal(t, "0x0a", params.([]*types.TransferParamEntry)[0].Amount.String())
 }
 
 func TestMintInit(t *testing.T) {
@@ -56,9 +62,11 @@ func TestMintInit(t *testing.T) {
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
-		Params: &types.MintParams{
-			To:     "Alice",
-			Amount: tktypes.MustParseHexUint256("0x0a"),
+		Params: []*types.TransferParamEntry{
+			{
+				To:     "Alice",
+				Amount: tktypes.MustParseHexUint256("0x0a"),
+			},
 		},
 	}
 	req := &prototk.InitTransactionRequest{}
@@ -81,9 +89,11 @@ func TestMintAssemble(t *testing.T) {
 	}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
-		Params: &types.MintParams{
-			To:     "Alice",
-			Amount: tktypes.MustParseHexUint256("0x0a"),
+		Params: []*types.TransferParamEntry{
+			{
+				To:     "Alice",
+				Amount: tktypes.MustParseHexUint256("0x0a"),
+			},
 		},
 		Transaction: &prototk.TransactionSpecification{
 			From: "Bob",
@@ -93,7 +103,7 @@ func TestMintAssemble(t *testing.T) {
 		ResolvedVerifiers: []*prototk.ResolvedVerifier{},
 	}
 	_, err := h.Assemble(ctx, tx, req)
-	assert.EqualError(t, err, "failed to resolve: Alice")
+	assert.EqualError(t, err, "PD210036: Failed to resolve verifier: Alice")
 
 	req = &prototk.AssembleTransactionRequest{
 		ResolvedVerifiers: []*prototk.ResolvedVerifier{
@@ -106,17 +116,17 @@ func TestMintAssemble(t *testing.T) {
 		},
 	}
 	_, err = h.Assemble(ctx, tx, req)
-	assert.EqualError(t, err, "failed to decode recipient public key. invalid compressed public key length: 20")
+	assert.EqualError(t, err, "PD210037: Failed load owner public key. expected 32 bytes in hex string, got 20")
 
 	privKey := babyjub.NewRandPrivKey()
 	pubKey := privKey.Public()
 	compressedKey := pubKey.Compress()
 	req.ResolvedVerifiers[0].Verifier = compressedKey.String()
-	tx.Params.(*types.MintParams).Amount = tktypes.MustParseHexUint256("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+	tx.Params.([]*types.TransferParamEntry)[0].Amount = tktypes.MustParseHexUint256("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 	_, err = h.Assemble(ctx, tx, req)
-	assert.EqualError(t, err, "inputs values not inside Finite Field")
+	assert.EqualError(t, err, "PD210038: Failed to create new state. inputs values not inside Finite Field")
 
-	tx.Params.(*types.MintParams).Amount = tktypes.MustParseHexUint256("0x0f")
+	tx.Params.([]*types.TransferParamEntry)[0].Amount = tktypes.MustParseHexUint256("0x0f")
 	res, err := h.Assemble(ctx, tx, req)
 	assert.NoError(t, err)
 	assert.Equal(t, prototk.AssembleTransactionResponse_OK, res.AssemblyResult)
@@ -127,9 +137,11 @@ func TestMintEndorse(t *testing.T) {
 	h := mintHandler{}
 	ctx := context.Background()
 	tx := &types.ParsedTransaction{
-		Params: &types.MintParams{
-			To:     "Alice",
-			Amount: tktypes.MustParseHexUint256("0x0a"),
+		Params: []*types.TransferParamEntry{
+			{
+				To:     "Alice",
+				Amount: tktypes.MustParseHexUint256("0x0a"),
+			},
 		},
 		Transaction: &prototk.TransactionSpecification{
 			From: "Bob",
@@ -154,9 +166,11 @@ func TestMintPrepare(t *testing.T) {
 		From:          "Bob",
 	}
 	tx := &types.ParsedTransaction{
-		Params: &types.MintParams{
-			To:     "Alice",
-			Amount: tktypes.MustParseHexUint256("0x0a"),
+		Params: []*types.TransferParamEntry{
+			{
+				To:     "Alice",
+				Amount: tktypes.MustParseHexUint256("0x0a"),
+			},
 		},
 		Transaction: txSpec,
 		DomainConfig: &types.DomainInstanceConfig{
@@ -181,7 +195,7 @@ func TestMintPrepare(t *testing.T) {
 
 	req.OutputStates[0].StateDataJson = "{\"salt\":\"0x042fac32983b19d76425cc54dd80e8a198f5d477c6a327cb286eb81a0c2b95ec\",\"owner\":\"Alice\",\"ownerKey\":\"0x7cdd539f3ed6c283494f47d8481f84308a6d7043087fb6711c9f1df04e2b8025\",\"amount\":\"0x0f\",\"hash\":\"0x303eb034d22aacc5dff09647928d757017a35e64e696d48609a250a6505e5d5f\"}"
 	_, err = h.Prepare(ctx, tx, req)
-	assert.ErrorContains(t, err, "failed to encode transaction data. failed to parse transaction id. PD020007: Invalid hex")
+	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD210028: Failed to parse transaction id. PD020007: Invalid hex")
 
 	txSpec.TransactionId = "0x1234567890123456789012345678901234567890"
 	z.config = &types.DomainFactoryConfig{
@@ -195,7 +209,7 @@ func TestMintPrepare(t *testing.T) {
 		},
 	}
 	_, err = h.Prepare(ctx, tx, req)
-	assert.EqualError(t, err, "contract tokenContract1 not found")
+	assert.EqualError(t, err, "PD210000: Contract tokenContract1 not found")
 
 	z.config.DomainContracts.Implementations = append(z.config.DomainContracts.Implementations, &types.DomainContract{
 		Name: "tokenContract1",

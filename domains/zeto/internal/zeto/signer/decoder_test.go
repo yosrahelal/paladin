@@ -16,6 +16,7 @@
 package signer
 
 import (
+	"context"
 	"testing"
 
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
@@ -35,7 +36,8 @@ func TestDecodeProvingRequest_AnonEnc(t *testing.T) {
 	bytes, err := proto.Marshal(req)
 	require.NoError(t, err)
 
-	_, extras, err := decodeProvingRequest(bytes)
+	ctx := context.Background()
+	_, extras, err := decodeProvingRequest(ctx, bytes)
 	require.NoError(t, err)
 	assert.Empty(t, extras)
 
@@ -47,7 +49,7 @@ func TestDecodeProvingRequest_AnonEnc(t *testing.T) {
 
 	bytes, err = proto.Marshal(req)
 	require.NoError(t, err)
-	_, extras, err = decodeProvingRequest(bytes)
+	_, extras, err = decodeProvingRequest(ctx, bytes)
 	require.NoError(t, err)
 	assert.Equal(t, "123456", extras.(*pb.ProvingRequestExtras_Encryption).EncryptionNonce)
 }
@@ -78,10 +80,11 @@ func TestDecodeProvingRequest_AnonNullifier(t *testing.T) {
 		Payload: bytes,
 	}
 
+	ctx := context.Background()
 	bytes, err = proto.Marshal(req)
 	assert.NoError(t, err)
 	signReq.Payload = bytes
-	_, extras, err := decodeProvingRequest(signReq.Payload)
+	_, extras, err := decodeProvingRequest(ctx, signReq.Payload)
 	assert.NoError(t, err)
 	assert.Equal(t, "123456", extras.(*pb.ProvingRequestExtras_Nullifiers).Root)
 }
@@ -96,11 +99,12 @@ func TestDecodeProvingRequest_Fail(t *testing.T) {
 	bytes, err := proto.Marshal(req)
 	require.NoError(t, err)
 
+	ctx := context.Background()
 	signReq := &signerapi.SignRequest{
 		Payload: bytes,
 	}
-	_, _, err = decodeProvingRequest(signReq.Payload)
-	assert.ErrorContains(t, err, "failed to unmarshal proving request extras for circuit anon_enc")
+	_, _, err = decodeProvingRequest(ctx, signReq.Payload)
+	assert.ErrorContains(t, err, "PD210076: Failed to unmarshal proving request extras for circuit anon_enc")
 
 	req.CircuitId = constants.CIRCUIT_ANON_NULLIFIER
 	bytes, err = proto.Marshal(req)
@@ -109,8 +113,8 @@ func TestDecodeProvingRequest_Fail(t *testing.T) {
 	signReq = &signerapi.SignRequest{
 		Payload: bytes,
 	}
-	_, _, err = decodeProvingRequest(signReq.Payload)
-	assert.ErrorContains(t, err, "failed to unmarshal proving request extras for circuit anon_nullifier")
-	_, _, err = decodeProvingRequest(bytes)
+	_, _, err = decodeProvingRequest(ctx, signReq.Payload)
+	assert.ErrorContains(t, err, "PD210076: Failed to unmarshal proving request extras for circuit anon_nullifier")
+	_, _, err = decodeProvingRequest(ctx, bytes)
 	assert.ErrorContains(t, err, "cannot parse invalid wire-format data")
 }

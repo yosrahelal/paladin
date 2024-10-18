@@ -16,14 +16,16 @@
 package signer
 
 import (
-	"fmt"
+	"context"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	pb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"google.golang.org/protobuf/proto"
 )
 
-func decodeProvingRequest(payload []byte) (*pb.ProvingRequest, interface{}, error) {
+func decodeProvingRequest(ctx context.Context, payload []byte) (*pb.ProvingRequest, interface{}, error) {
 	inputs := pb.ProvingRequest{}
 	// Unmarshal payload into inputs
 	err := proto.Unmarshal(payload, &inputs)
@@ -37,7 +39,7 @@ func decodeProvingRequest(payload []byte) (*pb.ProvingRequest, interface{}, erro
 		if len(inputs.Extras) > 0 {
 			err := proto.Unmarshal(inputs.Extras, &encExtras)
 			if err != nil {
-				return nil, nil, fmt.Errorf("failed to unmarshal proving request extras for circuit %s. %s", inputs.CircuitId, err)
+				return nil, nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalProvingReqExtras, inputs.CircuitId, err)
 			}
 		}
 		return &inputs, &encExtras, nil
@@ -45,7 +47,7 @@ func decodeProvingRequest(payload []byte) (*pb.ProvingRequest, interface{}, erro
 		var nullifierExtras pb.ProvingRequestExtras_Nullifiers
 		err := proto.Unmarshal(inputs.Extras, &nullifierExtras)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to unmarshal proving request extras for circuit %s. %s", inputs.CircuitId, err)
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalProvingReqExtras, inputs.CircuitId, err)
 		}
 		return &inputs, &nullifierExtras, nil
 	}

@@ -19,19 +19,18 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"fmt"
 
-	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
+	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
-	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
@@ -103,7 +102,7 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	var config types.DomainFactoryConfig
 	err := json.Unmarshal([]byte(req.ConfigJson), &config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse domain config json. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorParseDomainConfig, err)
 	}
 
 	z.name = req.Name
@@ -113,15 +112,15 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	factory := domain.LoadBuildLinked(factoryJSONBytes, config.Libraries)
 	z.factoryABI = factory.ABI
 
-	schemas, err := getStateSchemas()
+	schemas, err := getStateSchemas(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to configure Zeto domain. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorConfigZetoDomain, err)
 	}
 
 	events := getAllZetoEventAbis()
 	eventsJSON, err := json.Marshal(events)
 	if err != nil {
-		return nil, fmt.Errorf("failed to configure Zeto domain. Failed to marshal Zeto event abis. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalZetoEventAbis, err)
 	}
 
 	z.registerEventSignatures(events)
@@ -161,7 +160,7 @@ func (z *Zeto) InitDomain(ctx context.Context, req *prototk.InitDomainRequest) (
 func (z *Zeto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (*prototk.InitDeployResponse, error) {
 	initParams, err := z.validateDeploy(req.Transaction)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate init deploy parameters. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateInitDeployParams, err)
 	}
 	return &prototk.InitDeployResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
@@ -177,11 +176,11 @@ func (z *Zeto) InitDeploy(ctx context.Context, req *prototk.InitDeployRequest) (
 func (z *Zeto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequest) (*prototk.PrepareDeployResponse, error) {
 	initParams, err := z.validateDeploy(req.Transaction)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate prepare deploy parameters. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorValidatePrepDeployParams, err)
 	}
-	circuitId, err := z.config.GetCircuitId(initParams.TokenName)
+	circuitId, err := z.config.GetCircuitId(ctx, initParams.TokenName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find circuit ID based on the token name. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorFindCircuitId, err)
 	}
 	config := &types.DomainInstanceConfig{
 		CircuitId: circuitId,
@@ -223,7 +222,7 @@ func (z *Zeto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 func (z *Zeto) InitTransaction(ctx context.Context, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate init transaction spec. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateInitTxSpec, err)
 	}
 	return handler.Init(ctx, tx, req)
 }
@@ -231,7 +230,7 @@ func (z *Zeto) InitTransaction(ctx context.Context, req *prototk.InitTransaction
 func (z *Zeto) AssembleTransaction(ctx context.Context, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate assemble transaction spec. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateAssembleTxSpec, err)
 	}
 	return handler.Assemble(ctx, tx, req)
 }
@@ -239,7 +238,7 @@ func (z *Zeto) AssembleTransaction(ctx context.Context, req *prototk.AssembleTra
 func (z *Zeto) EndorseTransaction(ctx context.Context, req *prototk.EndorseTransactionRequest) (*prototk.EndorseTransactionResponse, error) {
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate endorse transaction spec. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorValidateEndorseTxParams, err)
 	}
 	return handler.Endorse(ctx, tx, req)
 }
@@ -247,7 +246,7 @@ func (z *Zeto) EndorseTransaction(ctx context.Context, req *prototk.EndorseTrans
 func (z *Zeto) PrepareTransaction(ctx context.Context, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate prepare transaction spec. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorValidatePrepTxSpec, err)
 	}
 	return handler.Prepare(ctx, tx, req)
 }
@@ -276,35 +275,32 @@ func (z *Zeto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 	var functionABI abi.Entry
 	err := json.Unmarshal([]byte(tx.FunctionAbiJson), &functionABI)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to unmarshal function abi json. %s", err)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalFuncAbi, err)
 	}
 
 	domainConfig, err := z.decodeDomainConfig(ctx, tx.ContractInfo.ContractConfig)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to decode domain config. %s", err)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorDecodeDomainConfig, err)
 	}
 
 	abi := types.ZetoABI.Functions()[functionABI.Name]
 	handler := z.GetHandler(functionABI.Name)
 	if abi == nil || handler == nil {
-		return nil, nil, fmt.Errorf("unknown function: %s", functionABI.Name)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, functionABI.Name)
 	}
 	params, err := handler.ValidateParams(ctx, domainConfig, tx.FunctionParamsJson)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to validate function params. %s", err)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorValidateFuncParams, err)
 	}
 
-	signature, _, err := abi.SolidityDefCtx(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
+	signature := abi.SolString()
 	if tx.FunctionSignature != signature {
-		return nil, nil, fmt.Errorf("unexpected signature for function '%s': expected=%s actual=%s", functionABI.Name, signature, tx.FunctionSignature)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgUnexpectedFuncSignature, functionABI.Name, signature, tx.FunctionSignature)
 	}
 
 	contractAddress, err := ethtypes.NewAddress(tx.ContractInfo.ContractAddress)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to decode contract address. %s", err)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
 
 	return &types.ParsedTransaction{
@@ -332,7 +328,7 @@ func (z *Zeto) registerEventSignatures(eventAbis abi.ABI) {
 func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
 	cv, err := types.DomainInstanceConfigABI.DecodeABIData(req.ContractInfo.ContractConfig, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to abi decode domain instance config bytes. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorAbiDecodeDomainInstanceConfig, err)
 	}
 	j, err := cv.JSON()
 	if err != nil {
@@ -345,27 +341,47 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 
 	contractAddress, err := tktypes.ParseEthAddress(req.ContractInfo.ContractAddress)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse contract address. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
 
 	var res prototk.HandleEventBatchResponse
 	var errors []string
+	var smtName string
+	var storage smt.StatesStorage
+	var tree core.SparseMerkleTree
+	if useNullifiers(domainConfig.CircuitId) {
+		smtName = smt.MerkleTreeName(domainConfig.TokenName, contractAddress)
+		storage = smt.NewStatesStorage(z.Callbacks, smtName, req.StateQueryContext, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id)
+		tree, err = smt.NewSmt(storage)
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorNewSmt, smtName, err)
+		}
+	}
 	for _, ev := range req.Events {
 		var err error
 		switch ev.SoliditySignature {
 		case z.mintSignature:
-			err = z.handleMintEvent(ctx, ev, domainConfig.TokenName, req.StateQueryContext, contractAddress, &res)
+			err = z.handleMintEvent(ctx, tree, storage, ev, domainConfig.TokenName, &res)
 		case z.transferSignature:
-			err = z.handleTransferEvent(ctx, ev, domainConfig.TokenName, req.StateQueryContext, contractAddress, &res)
+			err = z.handleTransferEvent(ctx, tree, storage, ev, domainConfig.TokenName, &res)
 		case z.transferWithEncSignature:
-			err = z.handleTransferWithEncryptionEvent(ctx, ev, domainConfig.TokenName, req.StateQueryContext, contractAddress, &res)
+			err = z.handleTransferWithEncryptionEvent(ctx, tree, storage, ev, domainConfig.TokenName, &res)
 		}
 		if err != nil {
 			errors = append(errors, err.Error())
 		}
 	}
 	if len(errors) > 0 {
-		return &res, fmt.Errorf("failed to handle events %s", formatErrors(errors))
+		return &res, i18n.NewError(ctx, msgs.MsgErrorHandleEvents, formatErrors(errors))
+	}
+	if useNullifiers(domainConfig.CircuitId) {
+		newStatesForSMT, err := storage.GetNewStates()
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgErrorGetNewSmtStates, smtName, err)
+		}
+		if len(newStatesForSMT) > 0 {
+			res.NewStates = append(res.NewStates, newStatesForSMT...)
+		}
 	}
 	return &res, nil
 }
@@ -373,7 +389,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 func (z *Zeto) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error) {
 	verifier, err := z.snarkProver.GetVerifier(ctx, req.Algorithm, req.VerifierType, req.PrivateKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get verifier. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorGetVerifier, err)
 	}
 	return &prototk.GetVerifierResponse{
 		Verifier: verifier,
@@ -383,170 +399,11 @@ func (z *Zeto) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest)
 func (z *Zeto) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.SignResponse, error) {
 	proof, err := z.snarkProver.Sign(ctx, req.Algorithm, req.PayloadType, req.PrivateKey, req.Payload)
 	if err != nil {
-		return nil, fmt.Errorf("failed to sign. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorSign, err)
 	}
 	return &prototk.SignResponse{
 		Payload: proof,
 	}, nil
-}
-
-func (z *Zeto) handleMintEvent(ctx context.Context, ev *prototk.OnChainEvent, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress, res *prototk.HandleEventBatchResponse) error {
-	var mint MintEvent
-	if err := json.Unmarshal([]byte(ev.DataJson), &mint); err == nil {
-		txID := decodeTransactionData(mint.Data)
-		if txID == nil {
-			log.L(ctx).Errorf("Failed to decode transaction data for mint event: %s. Skip to the next event", mint.Data)
-			return nil
-		}
-		res.TransactionsComplete = append(res.TransactionsComplete, &prototk.CompletedTransaction{
-			TransactionId: txID.String(),
-			Location:      ev.Location,
-		})
-		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, mint.Outputs)...)
-		if tokenName == constants.TOKEN_ANON_NULLIFIER {
-			newStates, err := z.updateMerkleTree(txID, tokenName, stateQueryContext, contractAddress, mint.Outputs)
-			if err != nil {
-				return fmt.Errorf("failed to update merkle tree for the UTXOMint event. %s", err)
-			}
-			res.NewStates = append(res.NewStates, newStates...)
-		}
-	} else {
-		log.L(ctx).Errorf("Failed to unmarshal mint event: %s", err)
-	}
-	return nil
-}
-
-func (z *Zeto) handleTransferEvent(ctx context.Context, ev *prototk.OnChainEvent, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress, res *prototk.HandleEventBatchResponse) error {
-	var transfer TransferEvent
-	if err := json.Unmarshal([]byte(ev.DataJson), &transfer); err == nil {
-		txID := decodeTransactionData(transfer.Data)
-		if txID == nil {
-			log.L(ctx).Errorf("Failed to decode transaction data for transfer event: %s. Skip to the next event", transfer.Data)
-			return nil
-		}
-		res.TransactionsComplete = append(res.TransactionsComplete, &prototk.CompletedTransaction{
-			TransactionId: txID.String(),
-			Location:      ev.Location,
-		})
-		res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
-		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
-		if tokenName == constants.TOKEN_ANON_NULLIFIER {
-			newStates, err := z.updateMerkleTree(txID, tokenName, stateQueryContext, contractAddress, transfer.Outputs)
-			if err != nil {
-				return fmt.Errorf("failed to update merkle tree for the UTXOTransfer event. %s", err)
-			}
-			res.NewStates = append(res.NewStates, newStates...)
-		}
-	} else {
-		log.L(ctx).Errorf("Failed to unmarshal transfer event: %s", err)
-	}
-	return nil
-}
-
-func (z *Zeto) handleTransferWithEncryptionEvent(ctx context.Context, ev *prototk.OnChainEvent, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress, res *prototk.HandleEventBatchResponse) error {
-	var transfer TransferWithEncryptedValuesEvent
-	if err := json.Unmarshal([]byte(ev.DataJson), &transfer); err == nil {
-		txID := decodeTransactionData(transfer.Data)
-		if txID == nil {
-			log.L(ctx).Errorf("Failed to decode transaction data for transfer event: %s. Skip to the next event", transfer.Data)
-			return nil
-		}
-		res.TransactionsComplete = append(res.TransactionsComplete, &prototk.CompletedTransaction{
-			TransactionId: txID.String(),
-			Location:      ev.Location,
-		})
-		res.SpentStates = append(res.SpentStates, parseStatesFromEvent(txID, transfer.Inputs)...)
-		res.ConfirmedStates = append(res.ConfirmedStates, parseStatesFromEvent(txID, transfer.Outputs)...)
-		if tokenName == constants.TOKEN_ANON_NULLIFIER {
-			newStates, err := z.updateMerkleTree(txID, tokenName, stateQueryContext, contractAddress, transfer.Outputs)
-			if err != nil {
-				return fmt.Errorf("failed to update merkle tree for the UTXOTransfer event. %s", err)
-			}
-			res.NewStates = append(res.NewStates, newStates...)
-		}
-	} else {
-		log.L(ctx).Errorf("Failed to unmarshal transfer event: %s", err)
-	}
-	return nil
-}
-
-func (z *Zeto) updateMerkleTree(txID tktypes.HexBytes, tokenName string, stateQueryContext string, contractAddress *tktypes.EthAddress, output []tktypes.HexUint256) ([]*prototk.NewConfirmedState, error) {
-	var newStates []*prototk.NewConfirmedState
-	for _, out := range output {
-		states, err := z.addOutputToMerkleTree(txID, tokenName, stateQueryContext, contractAddress, out)
-		if err != nil {
-			return nil, err
-		}
-		newStates = append(newStates, states...)
-	}
-	return newStates, nil
-}
-
-func (z *Zeto) addOutputToMerkleTree(txID tktypes.HexBytes, tokenName string, stateQueryContext string, contractAddress *tktypes.EthAddress, output tktypes.HexUint256) ([]*prototk.NewConfirmedState, error) {
-	smtName := smt.MerkleTreeName(tokenName, contractAddress)
-	storage, tree, err := smt.New(z.Callbacks, smtName, stateQueryContext, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Merkle tree for %s: %s", smtName, err)
-	}
-	idx, err := node.NewNodeIndexFromBigInt(output.Int())
-	if err != nil {
-		return nil, fmt.Errorf("failed to create node index for %s: %s", output.String(), err)
-	}
-	n := node.NewIndexOnly(idx)
-	leaf, err := node.NewLeafNode(n)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create leaf node for %s: %s", output.String(), err)
-	}
-	err = tree.AddLeaf(leaf)
-	if err != nil {
-		return nil, fmt.Errorf("failed to add leaf node for %s: %s", output.String(), err)
-	}
-	newStates := storage.GetNewStates()
-	for _, state := range newStates {
-		state.TransactionId = txID.String()
-	}
-	return newStates, nil
-}
-
-func encodeTransactionData(ctx context.Context, transaction *prototk.TransactionSpecification) (tktypes.HexBytes, error) {
-	txID, err := tktypes.ParseHexBytes(ctx, transaction.TransactionId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse transaction id. %s", err)
-	}
-	var data []byte
-	data = append(data, types.ZetoTransactionData_V0...)
-	data = append(data, txID...)
-	return data, nil
-}
-
-func decodeTransactionData(data tktypes.HexBytes) (txID tktypes.HexBytes) {
-	if len(data) < 4 {
-		return nil
-	}
-	dataPrefix := data[0:4]
-	if dataPrefix.String() != types.ZetoTransactionData_V0.String() {
-		return nil
-	}
-	return data[4:]
-}
-
-func parseStatesFromEvent(txID tktypes.HexBytes, states []tktypes.HexUint256) []*prototk.StateUpdate {
-	refs := make([]*prototk.StateUpdate, len(states))
-	for i, state := range states {
-		refs[i] = &prototk.StateUpdate{
-			Id:            state.String(),
-			TransactionId: txID.String(),
-		}
-	}
-	return refs
-}
-
-func formatErrors(errors []string) string {
-	msg := fmt.Sprintf("(failures=%d)", len(errors))
-	for i, err := range errors {
-		msg = fmt.Sprintf("%s. [%d]%s", msg, i, err)
-	}
-	return msg
 }
 
 func (z *Zeto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {

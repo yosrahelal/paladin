@@ -16,6 +16,7 @@
 package signer
 
 import (
+	"context"
 	"math/big"
 	"testing"
 
@@ -27,7 +28,9 @@ import (
 func TestAssembleInputsAnonEnc(t *testing.T) {
 	inputs := commonWitnessInputs{}
 	key := core.KeyEntry{}
-	privateInputs, err := assembleInputs_anon_enc(&inputs, nil, &key)
+
+	ctx := context.Background()
+	privateInputs, err := assembleInputs_anon_enc(ctx, &inputs, nil, &key)
 	assert.NoError(t, err)
 	assert.Equal(t, 10, len(privateInputs))
 }
@@ -47,7 +50,8 @@ func TestAssembleInputsAnonNullifier(t *testing.T) {
 	extras := proto.ProvingRequestExtras_Nullifiers{
 		Root: "123",
 	}
-	privateInputs, err := assembleInputs_anon_nullifier(&inputs, &extras, &key)
+	ctx := context.Background()
+	privateInputs, err := assembleInputs_anon_nullifier(ctx, &inputs, &extras, &key)
 	assert.NoError(t, err)
 	assert.Equal(t, 12, len(privateInputs))
 	assert.Equal(t, "123", privateInputs["root"].(*big.Int).Text(16))
@@ -61,13 +65,14 @@ func TestAssembleInputsAnonEnc_fail(t *testing.T) {
 		EncryptionNonce: "1234",
 	}
 	key := core.KeyEntry{}
-	privateInputs, err := assembleInputs_anon_enc(&inputs, &extras, &key)
+	ctx := context.Background()
+	privateInputs, err := assembleInputs_anon_enc(ctx, &inputs, &extras, &key)
 	assert.NoError(t, err)
 	assert.Equal(t, privateInputs["encryptionNonce"], new(big.Int).SetInt64(1234))
 
 	extras.EncryptionNonce = "bad number"
-	_, err = assembleInputs_anon_enc(&inputs, &extras, &key)
-	assert.EqualError(t, err, "failed to parse encryption nonce")
+	_, err = assembleInputs_anon_enc(ctx, &inputs, &extras, &key)
+	assert.EqualError(t, err, "PD210077: Failed to parse encryption nonce")
 }
 
 func TestAssembleInputsAnonNullifier_fail(t *testing.T) {
@@ -85,20 +90,21 @@ func TestAssembleInputsAnonNullifier_fail(t *testing.T) {
 		Enabled: []bool{true, false},
 	}
 	key := core.KeyEntry{}
-	privateInputs, err := assembleInputs_anon_nullifier(&inputs, &extras, &key)
+	ctx := context.Background()
+	privateInputs, err := assembleInputs_anon_nullifier(ctx, &inputs, &extras, &key)
 	assert.NoError(t, err)
 	assert.Equal(t, "123456", privateInputs["root"].(*big.Int).Text(16))
 	assert.Equal(t, "1", privateInputs["enabled"].([]*big.Int)[0].Text(10))
 	assert.Equal(t, "0", privateInputs["enabled"].([]*big.Int)[1].Text(10))
 
 	extras.Root = "bad number"
-	_, err = assembleInputs_anon_nullifier(&inputs, &extras, &key)
-	assert.EqualError(t, err, "failed to parse root")
+	_, err = assembleInputs_anon_nullifier(ctx, &inputs, &extras, &key)
+	assert.EqualError(t, err, "PD210080: Failed to decode root value in extras")
 
 	extras.Root = "123456"
 	extras.MerkleProofs[0].Nodes = []string{"bad number"}
-	_, err = assembleInputs_anon_nullifier(&inputs, &extras, &key)
-	assert.EqualError(t, err, "failed to parse node")
+	_, err = assembleInputs_anon_nullifier(ctx, &inputs, &extras, &key)
+	assert.EqualError(t, err, "PD210081: Failed to decode node in merkle proof in extras")
 
 	inputs = commonWitnessInputs{
 		inputCommitments: []*big.Int{big.NewInt(1), big.NewInt(2)},
@@ -113,6 +119,6 @@ func TestAssembleInputsAnonNullifier_fail(t *testing.T) {
 		PublicKey:        pubKey,
 		PrivateKeyForZkp: tooBig,
 	}
-	_, err = assembleInputs_anon_nullifier(&inputs, &extras, &key)
-	assert.EqualError(t, err, "failed to calculate nullifier. failed to create the nullifier hash. inputs values not inside Finite Field")
+	_, err = assembleInputs_anon_nullifier(ctx, &inputs, &extras, &key)
+	assert.EqualError(t, err, "PD210079: Failed to calculate nullifier. inputs values not inside Finite Field")
 }

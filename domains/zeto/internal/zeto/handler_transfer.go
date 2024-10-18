@@ -18,13 +18,13 @@ package zeto
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"strings"
 
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/core"
 	"github.com/hyperledger-labs/zeto/go-sdk/pkg/sparse-merkle-tree/node"
-	"github.com/iden3/go-iden3-crypto/babyjub"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
@@ -48,65 +48,65 @@ func (h *transferHandler) ValidateParams(ctx context.Context, config *types.Doma
 	if err := json.Unmarshal([]byte(params), &transferParams); err != nil {
 		return nil, err
 	}
-	if transferParams.To == "" {
-		return nil, fmt.Errorf("parameter 'to' is required")
+
+	if err := validateTransferParams(ctx, transferParams.Transfers); err != nil {
+		return nil, err
 	}
-	return &transferParams, nil
+
+	return transferParams.Transfers, nil
 }
 
 func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *pb.InitTransactionRequest) (*pb.InitTransactionResponse, error) {
-	params := tx.Params.(*types.TransferParams)
+	params := tx.Params.([]*types.TransferParamEntry)
 
-	return &pb.InitTransactionResponse{
+	res := &pb.InitTransactionResponse{
 		RequiredVerifiers: []*pb.ResolveVerifierRequest{
 			{
 				Lookup:       tx.Transaction.From,
 				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
 				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
 			},
-			{
-				Lookup:       params.To,
-				Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
-				VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
-			},
 		},
-	}, nil
+	}
+	for _, param := range params {
+		res.RequiredVerifiers = append(res.RequiredVerifiers, &pb.ResolveVerifierRequest{
+			Lookup:       param.To,
+			Algorithm:    h.zeto.getAlgoZetoSnarkBJJ(),
+			VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X,
+		})
+	}
+
+	return res, nil
 }
 
 func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *pb.AssembleTransactionRequest) (*pb.AssembleTransactionResponse, error) {
-	params := tx.Params.(*types.TransferParams)
+	params := tx.Params.([]*types.TransferParamEntry)
 
 	resolvedSender := domain.FindVerifier(tx.Transaction.From, h.zeto.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
 	if resolvedSender == nil {
-		return nil, fmt.Errorf("failed to resolve: %s", tx.Transaction.From)
-	}
-	resolvedRecipient := domain.FindVerifier(params.To, h.zeto.getAlgoZetoSnarkBJJ(), zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X, req.ResolvedVerifiers)
-	if resolvedRecipient == nil {
-		return nil, fmt.Errorf("failed to resolve: %s", params.To)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorResolveVerifier, tx.Transaction.From)
 	}
 
-	senderKey, err := h.loadBabyJubKey([]byte(resolvedSender.Verifier))
+	inputCoins, inputStates, _, remainder, err := h.zeto.prepareInputs(ctx, req.StateQueryContext, tx.Transaction.From, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load sender public key. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxInputs, err)
 	}
-	recipientKey, err := h.loadBabyJubKey([]byte(resolvedRecipient.Verifier))
+	outputCoins, outputStates, err := h.zeto.prepareOutputs(ctx, params, req.ResolvedVerifiers)
 	if err != nil {
-		return nil, fmt.Errorf("failed load receiver public key. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxOutputs, err)
 	}
-
-	inputCoins, inputStates, total, err := h.zeto.prepareInputs(ctx, req.StateQueryContext, tx.Transaction.From, params.Amount)
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare inputs. %s", err)
-	}
-	outputCoins, outputStates, err := h.zeto.prepareOutputs(params.To, recipientKey, params.Amount)
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare outputs. %s", err)
-	}
-	if total.Cmp(params.Amount.Int()) == 1 {
-		remainder := big.NewInt(0).Sub(total, params.Amount.Int())
-		returnedCoins, returnedStates, err := h.zeto.prepareOutputs(tx.Transaction.From, senderKey, (*tktypes.HexUint256)(remainder))
+	if remainder.Sign() > 0 {
+		// add the remainder as an output to the sender themselves
+		remainderHex := tktypes.HexUint256(*remainder)
+		remainderParams := []*types.TransferParamEntry{
+			{
+				To:     tx.Transaction.From,
+				Amount: &remainderHex,
+			},
+		}
+		returnedCoins, returnedStates, err := h.zeto.prepareOutputs(ctx, remainderParams, req.ResolvedVerifiers)
 		if err != nil {
-			return nil, fmt.Errorf("failed to prepare outputs for change coins. %s", err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorPrepTxChange, err)
 		}
 		outputCoins = append(outputCoins, returnedCoins...)
 		outputStates = append(outputStates, returnedStates...)
@@ -114,11 +114,11 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 
 	contractAddress, err := tktypes.ParseEthAddress(req.Transaction.ContractInfo.ContractAddress)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse contract address. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeContractAddress, err)
 	}
-	payloadBytes, err := h.formatProvingRequest(inputCoins, outputCoins, tx.DomainConfig.CircuitId, tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
+	payloadBytes, err := h.formatProvingRequest(ctx, inputCoins, outputCoins, tx.DomainConfig.CircuitId, tx.DomainConfig.TokenName, req.StateQueryContext, contractAddress)
 	if err != nil {
-		return nil, fmt.Errorf("failed to format proving request. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorFormatProvingReq, err)
 	}
 
 	return &pb.AssembleTransactionResponse{
@@ -158,10 +158,10 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 	var proofRes corepb.ProvingResponse
 	result := domain.FindAttestation("sender", req.AttestationResult)
 	if result == nil {
-		return nil, fmt.Errorf("did not find 'sender' attestation")
+		return nil, i18n.NewError(ctx, msgs.MsgErrorFindSenderAttestation)
 	}
 	if err := proto.Unmarshal(result.Payload, &proofRes); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal proving response. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalProvingRes, err)
 	}
 
 	inputSize := getInputSize(len(req.InputStates))
@@ -171,11 +171,11 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 			state := req.InputStates[i]
 			coin, err := h.zeto.makeCoin(state.StateDataJson)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse input states. %s", err)
+				return nil, i18n.NewError(ctx, msgs.MsgErrorParseInputStates, err)
 			}
-			hash, err := coin.Hash()
+			hash, err := coin.Hash(ctx)
 			if err != nil {
-				return nil, fmt.Errorf("failed to create Poseidon hash for an input coin. %s", err)
+				return nil, i18n.NewError(ctx, msgs.MsgErrorHashInputState, err)
 			}
 			inputs[i] = hash.String()
 		} else {
@@ -188,11 +188,11 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 			state := req.OutputStates[i]
 			coin, err := h.zeto.makeCoin(state.StateDataJson)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse output states. %s", err)
+				return nil, i18n.NewError(ctx, msgs.MsgErrorParseOutputStates, err)
 			}
-			hash, err := coin.Hash()
+			hash, err := coin.Hash(ctx)
 			if err != nil {
-				return nil, fmt.Errorf("failed to create Poseidon hash for an output coin. %s", err)
+				return nil, i18n.NewError(ctx, msgs.MsgErrorHashOutputState, err)
 			}
 			outputs[i] = hash.String()
 		} else {
@@ -202,7 +202,7 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 
 	data, err := encodeTransactionData(ctx, req.Transaction)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encode transaction data. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}
 	params := map[string]any{
 		"inputs":  inputs,
@@ -221,11 +221,11 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 	}
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal prepared params to JSON. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalPrepedParams, err)
 	}
-	contractAbi, err := h.zeto.config.GetContractAbi(tx.DomainConfig.TokenName)
+	contractAbi, err := h.zeto.config.GetContractAbi(ctx, tx.DomainConfig.TokenName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find abi for the token contract %s. %s", tx.DomainConfig.TokenName, err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorFindTokenAbi, tx.DomainConfig.TokenName, err)
 	}
 	functionJSON, err := json.Marshal(contractAbi.Functions()["transfer"])
 	if err != nil {
@@ -240,15 +240,7 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 	}, nil
 }
 
-func (h *transferHandler) loadBabyJubKey(payload []byte) (*babyjub.PublicKey, error) {
-	var keyCompressed babyjub.PublicKeyComp
-	if err := keyCompressed.UnmarshalText(payload); err != nil {
-		return nil, err
-	}
-	return keyCompressed.Decompress()
-}
-
-func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.ZetoCoin, circuitId, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress) ([]byte, error) {
+func (h *transferHandler) formatProvingRequest(ctx context.Context, inputCoins, outputCoins []*types.ZetoCoin, circuitId, tokenName, stateQueryContext string, contractAddress *tktypes.EthAddress) ([]byte, error) {
 	inputSize := getInputSize(len(inputCoins))
 	inputCommitments := make([]string, inputSize)
 	inputValueInts := make([]uint64, inputSize)
@@ -257,9 +249,9 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 	for i := 0; i < inputSize; i++ {
 		if i < len(inputCoins) {
 			coin := inputCoins[i]
-			hash, err := coin.Hash()
+			hash, err := coin.Hash(ctx)
 			if err != nil {
-				return nil, fmt.Errorf("failed to create Poseidon hash for an input coin. %s", err)
+				return nil, i18n.NewError(ctx, msgs.MsgErrorHashInputState, err)
 			}
 			inputCommitments[i] = hash.Int().Text(16)
 			inputValueInts[i] = coin.Amount.Int().Uint64()
@@ -286,9 +278,9 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 
 	var extras []byte
 	if useNullifiers(circuitId) {
-		proofs, extrasObj, err := h.generateMerkleProofs(tokenName, stateQueryContext, contractAddress, inputCoins)
+		proofs, extrasObj, err := h.generateMerkleProofs(ctx, tokenName, stateQueryContext, contractAddress, inputCoins)
 		if err != nil {
-			return nil, fmt.Errorf("failed to generate merkle proofs. %s", err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
 		}
 		for i := len(proofs); i < inputSize; i++ {
 			extrasObj.MerkleProofs = append(extrasObj.MerkleProofs, &smt.Empty_Proof)
@@ -296,7 +288,7 @@ func (h *transferHandler) formatProvingRequest(inputCoins, outputCoins []*types.
 		}
 		protoExtras, err := proto.Marshal(extrasObj)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal the extras object in the proving request. %s", err)
+			return nil, i18n.NewError(ctx, msgs.MsgErrorMarshalExtraObj, err)
 		}
 		extras = protoExtras
 	}
@@ -331,11 +323,12 @@ func (h *transferHandler) encodeProof(proof *corepb.SnarkProof) map[string]inter
 	}
 }
 
-func (h *transferHandler) generateMerkleProofs(tokenName string, stateQueryContext string, contractAddress *tktypes.EthAddress, inputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.ProvingRequestExtras_Nullifiers, error) {
+func (h *transferHandler) generateMerkleProofs(ctx context.Context, tokenName string, stateQueryContext string, contractAddress *tktypes.EthAddress, inputCoins []*types.ZetoCoin) ([]core.Proof, *corepb.ProvingRequestExtras_Nullifiers, error) {
 	smtName := smt.MerkleTreeName(tokenName, contractAddress)
-	_, mt, err := smt.New(h.zeto.Callbacks, smtName, stateQueryContext, h.zeto.merkleTreeRootSchema.Id, h.zeto.merkleTreeNodeSchema.Id)
+	storage := smt.NewStatesStorage(h.zeto.Callbacks, smtName, stateQueryContext, h.zeto.merkleTreeRootSchema.Id, h.zeto.merkleTreeNodeSchema.Id)
+	mt, err := smt.NewSmt(storage)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create new smt object. %s", err)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorNewSmt, smtName, err)
 	}
 	// verify that the input UTXOs have been indexed by the Merkle tree DB
 	// and generate a merkle proof for each
@@ -343,43 +336,43 @@ func (h *transferHandler) generateMerkleProofs(tokenName string, stateQueryConte
 	for _, coin := range inputCoins {
 		pubKey, err := zetosigner.DecodeBabyJubJubPublicKey(coin.OwnerKey.String())
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to decode owner key. %s", err)
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorLoadOwnerPubKey, err)
 		}
 		idx := node.NewFungible(coin.Amount.Int(), pubKey, coin.Salt.Int())
 		leaf, err := node.NewLeafNode(idx)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create new leaf node. %s", err)
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorNewLeafNode, err)
 		}
 		n, err := mt.GetNode(leaf.Ref())
 		if err != nil {
 			// TODO: deal with when the node is not found in the DB tables for the tree
 			// e.g because the transaction event hasn't been processed yet
-			return nil, nil, fmt.Errorf("failed to query the smt DB for leaf node (index=%s). %s", leaf.Index().Hex(), err)
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorQueryLeafNode, leaf.Ref().Hex(), err)
 		}
-		hash, err := coin.Hash()
+		hash, err := coin.Hash(ctx)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create Poseidon hash for an input coin. %s", err)
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorHashInputState, err)
 		}
 		if n.Index().BigInt().Cmp(hash.Int()) != 0 {
 			expectedIndex, err := node.NewNodeIndexFromBigInt(hash.Int())
 			if err != nil {
-				return nil, nil, fmt.Errorf("failed to create new node index from the local coin hash. %s", err)
+				return nil, nil, i18n.NewError(ctx, msgs.MsgErrorNewNodeIndex, err)
 			}
-			return nil, nil, fmt.Errorf("coin (ref=%s) found in the merkle tree but the persisted hash %s (index=%s) did not match the expected hash %s (index=%s)", leaf.Ref().Hex(), n.Index().BigInt().Text(16), n.Index().Hex(), hash.HexString0xPrefix(), expectedIndex.Hex())
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorHashMismatch, leaf.Ref().Hex(), n.Index().BigInt().Text(16), n.Index().Hex(), hash.HexString0xPrefix(), expectedIndex.Hex())
 		}
 		indexes = append(indexes, n.Index().BigInt())
 	}
 	mtRoot := mt.Root()
 	proofs, _, err := mt.GenerateProofs(indexes, mtRoot)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to generate merkle proofs. %s", err)
+		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
 	}
 	var mps []*corepb.MerkleProof
 	var enabled []bool
 	for i, proof := range proofs {
 		cp, err := proof.ToCircomVerifierProof(indexes[i], indexes[i], mtRoot, smt.SMT_HEIGHT_UTXO)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to convert to circom verifier proof. %s", err)
+			return nil, nil, i18n.NewError(ctx, msgs.MsgErrorConvertToCircomProof, err)
 		}
 		proofSiblings := make([]string, len(cp.Siblings)-1)
 		for i, s := range cp.Siblings[0 : len(cp.Siblings)-1] {

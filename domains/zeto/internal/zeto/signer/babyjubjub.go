@@ -16,10 +16,12 @@
 package signer
 
 import (
-	"fmt"
+	"context"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/iden3/go-iden3-crypto/babyjub"
 	"github.com/iden3/go-iden3-crypto/utils"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 )
 
 func EncodeBabyJubJubPublicKey(pubKey *babyjub.PublicKey) string {
@@ -33,7 +35,7 @@ func DecodeBabyJubJubPublicKey(pubKeyHex string) (*babyjub.PublicKey, error) {
 		return nil, err
 	}
 	if len(pubKeyCompBytes) != 32 {
-		return nil, fmt.Errorf("invalid compressed public key length: %d", len(pubKeyCompBytes))
+		return nil, i18n.NewError(context.Background(), msgs.MsgInvalidCompressedPubkeyLen, len(pubKeyCompBytes))
 	}
 	var compressedPubKey babyjub.PublicKeyComp
 	copy(compressedPubKey[:], pubKeyCompBytes)
@@ -42,7 +44,7 @@ func DecodeBabyJubJubPublicKey(pubKeyHex string) (*babyjub.PublicKey, error) {
 
 func NewBabyJubJubPrivateKey(privateKey []byte) (*babyjub.PrivateKey, error) {
 	if len(privateKey) < 32 {
-		return nil, fmt.Errorf("invalid key length: %d", len(privateKey))
+		return nil, i18n.NewError(context.Background(), msgs.MsgInvalidPrivkeyLen, len(privateKey))
 	}
 	var pk babyjub.PrivateKey
 	copy(pk[:], privateKey[:])
