@@ -128,7 +128,11 @@ var (
 	MsgSigningInvalidDomainAlgorithmNoPrefix    = ffe("PD020826", "Invalid domain algorithm (no 'domain:' prefix): %s")
 	MsgSigningNoDomainRegisteredWithModule      = ffe("PD020827", "Domain '%s' has not been registered in this signing module")
 
-	// SolUtils module PD0209XX
-	MsgSolBuildParseFailed = ffe("PD020900", "Invalid link hash at position %d in bytecode. Fully qualified lib name: %s. Placeholder: %s. Lib name hash prefix: %s")
-	MsgSolBuildMissingLink = ffe("PD020901", "The solidity build is unlinked and requires an address for '%s'")
+	// Reference markdown PD0209XX
+	MsgReferenceMarkdownMissing = ffe("PD020900", "Reference markdown file missing: '%s'")
+	MsgFieldDescriptionMissing  = ffe("PD020901", "Missing description for field '%s' in struct '%s'")
+
+	// SolUtils module PD0210XX
+	MsgSolBuildParseFailed = ffe("PD021000", "Invalid link hash at position %d in bytecode. Fully qualified lib name: %s. Placeholder: %s. Lib name hash prefix: %s")
+	MsgSolBuildMissingLink = ffe("PD021001", "The solidity build is unlinked and requires an address for '%s'")
 )
