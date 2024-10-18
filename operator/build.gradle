@@ -106,6 +106,62 @@ task copySolidity(type: Copy) {
     ]
 }
 
+task zetoCDSampleGroth16Verifier_Anon(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto.Groth16Verifier_Anon.json", "zeto_g16_verifier_anon"
+}
+
+task zetoCDSampleGroth16Verifier_AnonBatch(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto.Groth16Verifier_AnonBatch.json", "zeto_g16_verifier_anon_batch"
+}
+
+task zetoCDSample(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto.Groth16Verifier_AnonBatch.json", "zeto_g16_verifier_anon_batch"
+}
+
+task zetoCDSampleGroth16Verifier_AnonEnc(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto.Groth16Verifier_AnonEnc.json", "zeto_g16_verifier_anon_enc"
+}
+
+task zetoCDSampleGroth16Verifier_AnonEncBatch(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto.Groth16Verifier_AnonEncBatch.json", "zeto_g16_verifier_anon_enc_batch"
+}
+
+task zetoCDSampleGroth16Verifier_AnonNullifier(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto.Groth16Verifier_AnonNullifier.json", "zeto_g16_verifier_anon_nullifier"
+}
+
+task zetoCDSampleGroth16Verifier_AnonBatch(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto.Groth16Verifier_AnonBatch.json", "zeto_g16_verifier_anon_batch"
+}
+
+task zetoCDSampleGroth16Verifier_AnonNullifierBatch(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto.Groth16Verifier_AnonNullifierBatch.json", "zeto_g16_verifier_anon_nullifier_batch"
+}
+
+task zetoCDSamplePoseidon2(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto.Poseidon2.json", "zeto_poseidon_2"
+}
+
+task zetoCDSamplePoseidon3(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto.Poseidon3.json", "zeto_poseidon_3"
+}
+
+task zetoCDSampleSmtLib(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto.SmtLib.json", "zeto_smt_lib"
+}
+
+task zetoCDSampleZetoImplAnon(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto.Zeto_Anon.json", "zeto_impl_anon"
+}
+
+task zetoCDSampleZetoImplAnonEnc(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto.Zeto_AnonEnc.json", "zeto_impl_anon_enc"
+}
+
+task zetoCDSampleZetoImplAnonNullifier(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto.Zeto_AnonNullifier.json", "zeto_impl_anon_nullifier"
+}
+
 task copyZetoSolidity(type: Copy) {
     inputs.files(configurations.zetoArtifacts)
     from fileTree(configurations.zetoArtifacts.asPath) {
