@@ -20,6 +20,9 @@ spec:
     - jsonPath: .status.transactionStatus
       name: Status
       type: string
+    - jsonPath: .status.contractDepsSummary
+      name: Deps
+      type: string
     - jsonPath: .status.transactionID
       name: TransactionID
       type: string
@@ -59,7 +62,7 @@ spec:
             description: SmartContractDeploymentSpec defines the desired state of
               SmartContractDeployment
             properties:
-              abi:
+              abiJSON:
                 description: The ABI of the smart contract - provides the constructor
                   parameter definition
                 type: string
@@ -72,6 +75,23 @@ spec:
               from:
                 description: Reference to the signing key to use to deploy
                 type: string
+              linkReferencesJSON:
+                description: Unlinked contracts have list of the references that need
+                  to be resolve, alongside the bytecode
+                type: string
+              linkedContracts:
+                additionalProperties:
+                  type: string
+                description: |-
+                  If the bytecode is unlinked, then this map will be used to resolve the dependencies.
+                  The keys in the map are the library name, which can be optionally fully qualified
+                  with the syntax FileName.sol:LibName. An entry must be provided for every
+                  unlinked dependency, or the CR will not perform a deployment.
+
+                  The values are evaluated as go templates, with access to the CR.
+                  So you can refer to .status.resolvedContractAddresses in the values via go templating.
+                  See https://docs.soliditylang.org/en/latest/using-the-compiler.html#library-linking for detail
+                type: object
               node:
                 description: The node to use to deploy - reference to a PaladinNode
                   CR
@@ -79,6 +99,14 @@ spec:
               paramsJSON:
                 description: JSON parameter data (array, object, or empty if no params)
                 type: string
+              requiredContractDeployments:
+                description: |-
+                  This CR will wait for the deployment of all contracts in this list, before
+                  parsing the bytecode for deployment. This allows unlinked dependencies
+                  to be linked before deployment.
+                items:
+                  type: string
+                type: array
               txType:
                 default: public
                 description: Type of transaction to submit to Paladin
@@ -87,7 +115,7 @@ spec:
                 - private
                 type: string
             required:
-            - abi
+            - abiJSON
             - bytecode
             - from
             - node
@@ -99,10 +127,16 @@ spec:
             properties:
               contractAddress:
                 type: string
+              contractDepsSummary:
+                type: string
               failureMessage:
                 type: string
               idempotencyKey:
                 type: string
+              resolvedContractAddresses:
+                additionalProperties:
+                  type: string
+                type: object
               transactionHash:
                 type: string
               transactionID:

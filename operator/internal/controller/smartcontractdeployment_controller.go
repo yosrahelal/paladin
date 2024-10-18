@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"text/template"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -28,9 +30,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/Masterminds/sprig/v3"
 	corev1alpha1 "github.com/kaleido-io/paladin/operator/api/v1alpha1"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -64,6 +67,14 @@ func (r *SmartContractDeploymentReconciler) Reconcile(ctx context.Context, req c
 		return ctrl.Result{}, err
 	}
 
+	// Check all our deps are resolved
+	depsChanged, err := checkSmartContractDeps(ctx, r.Client, scd.Namespace, scd.Spec.RequiredContractDeployments, &scd.Status.ContactDependenciesStatus)
+	if err != nil {
+		return ctrl.Result{}, err
+	} else if depsChanged {
+		return r.updateStatusAndRequeue(ctx, &scd)
+	}
+
 	// Reconcile the deployment transaction
 	txReconcile := newTransactionReconcile(r.Client,
 		"scdeploy."+scd.Name,
@@ -71,7 +82,7 @@ func (r *SmartContractDeploymentReconciler) Reconcile(ctx context.Context, req c
 		&scd.Status.TransactionSubmission,
 		func() (bool, *pldapi.TransactionInput, error) { return r.buildDeployTransaction(ctx, &scd) },
 	)
-	err := txReconcile.reconcile(ctx)
+	err = txReconcile.reconcile(ctx)
 	if err != nil {
 		// There's nothing to notify us when the world changes other than polling, so we keep re-trying
 		return ctrl.Result{RequeueAfter: 1 * time.Second}, err
@@ -106,13 +117,24 @@ func (r *SmartContractDeploymentReconciler) buildDeployTransaction(ctx context.C
 	if scd.Spec.ParamsJSON == "" {
 		data = tktypes.RawJSON(scd.Spec.ParamsJSON)
 	}
-	var a abi.ABI
-	if err := json.Unmarshal([]byte(scd.Spec.ABI), &a); err != nil {
+	build := solutils.SolidityBuildWithLinks{
+		Bytecode: scd.Spec.Bytecode,
+	}
+	if err := json.Unmarshal([]byte(scd.Spec.ABIJSON), &build.ABI); err != nil {
 		return false, nil, fmt.Errorf("invalid ABI: %s", err)
 	}
-	bytecode, err := tktypes.ParseHexBytes(ctx, scd.Spec.Bytecode)
+	if scd.Spec.LinkReferencesJSON != "" {
+		if err := json.Unmarshal([]byte(scd.Spec.LinkReferencesJSON), &build.LinkReferences); err != nil {
+			return false, nil, fmt.Errorf("invalid linkReferences: %s", err)
+		}
+	}
+	linkReferences, err := r.buildLinkReferences(scd)
 	if err != nil {
-		return false, nil, fmt.Errorf("invalid bytecode: %s", err)
+		return false, nil, err
+	}
+	bytecode, err := build.ResolveLinks(ctx, linkReferences)
+	if err != nil {
+		return false, nil, err
 	}
 
 	return true, &pldapi.TransactionInput{
@@ -122,9 +144,46 @@ func (r *SmartContractDeploymentReconciler) buildDeployTransaction(ctx context.C
 			From:   scd.Spec.From,
 			Data:   data,
 		},
-		ABI:      a,
+		ABI:      build.ABI,
 		Bytecode: bytecode,
 	}, nil
+}
+
+func (r *SmartContractDeploymentReconciler) buildLinkReferences(scd *corev1alpha1.SmartContractDeployment) (map[string]*tktypes.EthAddress, error) {
+
+	var crMap map[string]any
+	linkedAddresses := map[string]*tktypes.EthAddress{}
+
+	for libName, addrTemplateStr := range scd.Spec.LinkedContracts {
+
+		t, err := template.New("").Option("missingkey=error").Funcs(sprig.FuncMap()).Parse(addrTemplateStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid Go template for linked contract %s: %s", libName, err)
+		}
+
+		if crMap == nil {
+			crJSON, err := json.Marshal(scd)
+			if err == nil {
+				err = json.Unmarshal(crJSON, &crMap)
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		addrBuff := new(strings.Builder)
+		if err = t.Execute(addrBuff, crMap); err != nil {
+			return nil, fmt.Errorf("go template failed for linked contract %s: %s", libName, err)
+		}
+
+		addr, err := tktypes.ParseEthAddress(addrBuff.String())
+		if err != nil {
+			return nil, fmt.Errorf("invalid address '%s' for resolved library %s: %s", addrBuff, libName, err)
+		}
+		linkedAddresses[libName] = addr
+
+	}
+	return linkedAddresses, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

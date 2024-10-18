@@ -86,19 +86,6 @@ task copySolidity(type: Copy) {
     // Flatten all paths into the destination folder
     eachFile { path = name }
     includeEmptyDirs = false
-
-    doLast {
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/IdentityRegistry.json", "registry"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/PenteFactory.json", "pente_factory"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/NotoFactory.json", "noto_factory"
-        }
-    }
-
 }
 
 task copyZetoSolidity(type: Copy) {
@@ -113,60 +100,10 @@ task copyZetoSolidity(type: Copy) {
     // Flatten all paths into the destination folder
     eachFile { path = name }
     includeEmptyDirs = false
+}
 
-    doLast {
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_Anon.json", "zeto_g16_verifier_anon"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_AnonBatch.json", "zeto_g16_verifier_anon_batch"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_AnonEnc.json", "zeto_g16_verifier_anon_enc"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_AnonEncBatch.json", "zeto_g16_verifier_anon_enc_batch"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_AnonNullifier.json", "zeto_g16_verifier_anon_nullifier"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_AnonBatch.json", "zeto_g16_verifier_anon_batch"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_AnonNullifierBatch.json", "zeto_g16_verifier_anon_nullifier_batch"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_CheckHashesValue.json", "zeto_g16_check_hashes_value"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_CheckInputsOutputsValue.json", "zeto_g16_check_inputs_outputs"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Groth16Verifier_CheckInputsOutputsValueBatch.json", "zeto_g16_check_inputs_outputs_batch"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/PoseidonUnit2L.json", "zeto_poseidon_unit2l"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/PoseidonUnit3L.json", "zeto_poseidon_unit3l"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/SmtLib.json", "zeto_smt_lib"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Zeto_Anon.json", "zeto_impl_anon"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Zeto_AnonEnc.json", "zeto_impl_anon_enc"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/Zeto_AnonNullifier.json", "zeto_impl_anon_nullifier"
-        }
-        exec() {
-            commandLine "go", "run", "./contractpkg", "test/e2e/abis/zeto/ZetoTokenFactory.json", "zeto_facotry"
-        }
-    }
+task buildContractSamples(type: Exec) {
+    commandLine "go", "run", "./contractpkg", "./contractpkg/contract_map.json"
 }
 
 // Task to build the Paladin image from the parent project

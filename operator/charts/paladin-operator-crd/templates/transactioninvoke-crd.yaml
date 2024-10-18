@@ -13,7 +13,7 @@ spec:
     listKind: TransactionInvokeList
     plural: transactioninvokes
     shortNames:
-    - tx
+    - txinvoke
     singular: transactioninvoke
   scope: Namespaced
   versions:
@@ -22,7 +22,7 @@ spec:
       name: Status
       type: string
     - jsonPath: .status.contractDepsSummary
-      name: Contracts
+      name: Deps
       type: string
     - jsonPath: .status.transactionID
       name: TransactionID
@@ -58,18 +58,18 @@ spec:
           spec:
             description: TransactionInvokeSpec defines the desired state of TransactionInvoke
             properties:
-              abi:
+              abiJSON:
                 description: The ABI of the smart contract - provides the constructor
                   parameter definition
-                type: string
-              bytecode:
-                description: The bytecode of the smart contract
                 type: string
               domain:
                 description: Domain for private transactions
                 type: string
               from:
                 description: Reference to the signing key to use to deploy
+                type: string
+              function:
+                description: The name or full signature of the function to invoke
                 type: string
               node:
                 description: The node to use to deploy - reference to a PaladinNode
@@ -113,9 +113,9 @@ spec:
                 - private
                 type: string
             required:
-            - abi
-            - bytecode
+            - abiJSON
             - from
+            - function
             - node
             - txType
             type: object
@@ -138,9 +138,6 @@ spec:
                 type: string
               transactionStatus:
                 type: string
-            required:
-            - contractDepsSummary
-            - resolvedContractAddresses
             type: object
         type: object
     served: true

@@ -43,10 +43,10 @@ type TransactionInvokeSpec struct {
 	TxType string `json:"txType"`
 	// Domain for private transactions
 	Domain string `json:"domain,omitempty"`
+	// The name or full signature of the function to invoke
+	Function string `json:"function"`
 	// The ABI of the smart contract - provides the constructor parameter definition
-	ABI string `json:"abi"`
-	// The bytecode of the smart contract
-	Bytecode string `json:"bytecode"`
+	ABIJSON string `json:"abiJSON"`
 	// Reference to the signing key to use to deploy
 	From string `json:"from"`
 	// Go template that specifies the target smart contract for invocation.
@@ -63,16 +63,15 @@ type TransactionInvokeSpec struct {
 
 // TransactionInvokeStatus defines the observed state of TransactionInvoke
 type TransactionInvokeStatus struct {
-	ContractDepsSummary       string            `json:"contractDepsSummary"`
-	ResolvedContractAddresses map[string]string `json:"resolvedContractAddresses"`
+	ContactDependenciesStatus `json:",inline"`
 	TransactionSubmission     `json:",inline"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-//+kubebuilder:resource:shortName="tx"
+//+kubebuilder:resource:shortName="txinvoke"
 //+kubebuilder:printcolumn:name="Status",type="string",JSONPath=`.status.transactionStatus`
-//+kubebuilder:printcolumn:name="Contracts",type="string",JSONPath=`.status.contractDepsSummary`
+//+kubebuilder:printcolumn:name="Deps",type="string",JSONPath=`.status.contractDepsSummary`
 //+kubebuilder:printcolumn:name="TransactionID",type="string",JSONPath=`.status.transactionID`
 //+kubebuilder:printcolumn:name="TxHash",type="string",JSONPath=`.status.transactionHash`
 //+kubebuilder:printcolumn:name="Failure",type="string",JSONPath=`.status.failureMessage`

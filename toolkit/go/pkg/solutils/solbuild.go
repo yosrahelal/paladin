@@ -61,11 +61,11 @@ func LoadBuild(ctx context.Context, buildOutput []byte) (build *SolidityBuild, e
 }
 
 func LoadBuildResolveLinks(ctx context.Context, buildOutput []byte, libraries map[string]*tktypes.EthAddress) (build *SolidityBuild, err error) {
-	var unresolved SolidityBuildWithLinks
-	err = json.Unmarshal(buildOutput, &unresolved)
+	var unlinked SolidityBuildWithLinks
+	err = json.Unmarshal(buildOutput, &unlinked)
 	if err == nil {
-		build = &SolidityBuild{ABI: unresolved.ABI}
-		build.Bytecode, err = linkBytecode(ctx, unresolved, libraries)
+		build = &SolidityBuild{ABI: unlinked.ABI}
+		build.Bytecode, err = unlinked.ResolveLinks(ctx, libraries)
 	}
 	if err != nil {
 		return nil, err
@@ -73,11 +73,11 @@ func LoadBuildResolveLinks(ctx context.Context, buildOutput []byte, libraries ma
 	return build, nil
 }
 
-// linkBytecode: performs linking by replacing placeholders with deployed addresses
+// ResolveLinks: performs linking by replacing placeholders with deployed addresses
 // See https://docs.soliditylang.org/en/latest/using-the-compiler.html#library-linking
-func linkBytecode(ctx context.Context, artifact SolidityBuildWithLinks, libraries map[string]*tktypes.EthAddress) (tktypes.HexBytes, error) {
-	bytecode := artifact.Bytecode
-	for fileName, fileReferences := range artifact.LinkReferences {
+func (unlinked *SolidityBuildWithLinks) ResolveLinks(ctx context.Context, libraries map[string]*tktypes.EthAddress) (tktypes.HexBytes, error) {
+	bytecode := unlinked.Bytecode
+	for fileName, fileReferences := range unlinked.LinkReferences {
 		for libName, link := range fileReferences {
 			fullLibName := fmt.Sprintf("%s:%s", fileName, libName)
 			addr, found := libraries[fullLibName]

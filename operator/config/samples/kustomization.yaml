@@ -15,13 +15,15 @@ resources:
 - core_v1alpha1_paladinregistration_node1_admin.yaml
 - core_v1alpha1_paladinregistration_node2.yaml
 - core_v1alpha1_paladinregistration_node3.yaml
-- core_v1alpha1_transactioninvoke.yaml
 - core_v1alpha1_transactioninvoke_zeto_register_anon.yaml
 # Smart contracts - note these CRs are generate dynamically by the build
 - core_v1alpha1_smartcontractdeployment_registry.yaml
 - core_v1alpha1_smartcontractdeployment_noto_factory.yaml
 - core_v1alpha1_smartcontractdeployment_pente_factory.yaml
-- core_v1alpha1_smartcontractdeployment_zeto_facotry.yaml
+- core_v1alpha1_smartcontractdeployment_zeto_factory.yaml
+- core_v1alpha1_smartcontractdeployment_zeto_g16_check_inputs_outputs.yaml
+- core_v1alpha1_smartcontractdeployment_zeto_g16_check_inputs_outputs_batch.yaml
+- core_v1alpha1_smartcontractdeployment_zeto_g16_check_hashes_value.yaml
 - core_v1alpha1_smartcontractdeployment_zeto_g16_verifier_anon.yaml
 - core_v1alpha1_smartcontractdeployment_zeto_g16_verifier_anon_batch.yaml
 - core_v1alpha1_smartcontractdeployment_zeto_g16_verifier_anon_enc.yaml

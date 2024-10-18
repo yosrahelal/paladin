@@ -74,7 +74,7 @@ func (r *TransactionInvokeReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// Check all our deps are resolved
-	depsChanged, err := r.checkDeps(ctx, &txi)
+	depsChanged, err := checkSmartContractDeps(ctx, r.Client, txi.Namespace, txi.Spec.ContractDeploymentDeps, &txi.Status.ContactDependenciesStatus)
 	if err != nil {
 		return ctrl.Result{}, err
 	} else if depsChanged {
@@ -120,13 +120,17 @@ func (r *TransactionInvokeReconciler) buildDeployTransaction(txi *corev1alpha1.T
 		return false, nil, fmt.Errorf("paramsJSONTemplate invalid: %s", err)
 	}
 
+	var crMap map[string]any
 	crJSON, err := json.Marshal(txi)
+	if err == nil {
+		err = json.Unmarshal(crJSON, &crMap)
+	}
 	if err != nil {
 		return false, nil, err
 	}
 
 	toBuff := new(strings.Builder)
-	if err = toTemplate.Execute(toBuff, crJSON); err != nil {
+	if err = toTemplate.Execute(toBuff, crMap); err != nil {
 		return false, nil, fmt.Errorf("toTemplate failed: %s", err)
 	}
 	to, err := tktypes.ParseEthAddress(toBuff.String())
@@ -135,12 +139,12 @@ func (r *TransactionInvokeReconciler) buildDeployTransaction(txi *corev1alpha1.T
 	}
 
 	paramsJSONBuff := new(bytes.Buffer)
-	if err = paramsTemplate.Execute(paramsJSONBuff, crJSON); err != nil {
+	if err = paramsTemplate.Execute(paramsJSONBuff, crMap); err != nil {
 		return false, nil, fmt.Errorf("ar paramsJSONTemplate: %s", err)
 	}
 
 	var a abi.ABI
-	if err := json.Unmarshal([]byte(txi.Spec.ABI), &a); err != nil {
+	if err := json.Unmarshal([]byte(txi.Spec.ABIJSON), &a); err != nil {
 		return false, nil, fmt.Errorf("invalid ABI: %s", err)
 	}
 
@@ -157,45 +161,45 @@ func (r *TransactionInvokeReconciler) buildDeployTransaction(txi *corev1alpha1.T
 
 }
 
-func (r *TransactionInvokeReconciler) checkDeps(ctx context.Context, txi *corev1alpha1.TransactionInvoke) (bool, error) {
+func checkSmartContractDeps(ctx context.Context, c client.Client, namespace string, requiredContractDeployments []string, pStatus *corev1alpha1.ContactDependenciesStatus) (bool, error) {
 
-	if txi.Status.ContractDepsSummary != "" &&
-		len(txi.Status.ResolvedContractAddresses) == len(txi.Spec.ContractDeploymentDeps) {
+	if pStatus.ContractDepsSummary != "" &&
+		len(pStatus.ResolvedContractAddresses) == len(requiredContractDeployments) {
 		// Nothing to do - we're resolved
 		return false, nil
 	}
 
 	// If our status has changed if we've never built it before, or we find a missing dep below
 	statusChanged := false
-	if txi.Status.ResolvedContractAddresses == nil {
-		txi.Status.ResolvedContractAddresses = make(map[string]string)
+	if pStatus.ResolvedContractAddresses == nil {
+		pStatus.ResolvedContractAddresses = make(map[string]string)
 		statusChanged = true
 	}
 
 	// Look for any missing deps
-	for _, dep := range txi.Spec.ContractDeploymentDeps {
-		if txi.Status.ResolvedContractAddresses[dep] == "" {
-			contractAddress, err := r.getContractDeploymentAddress(ctx, txi, dep)
+	for _, dep := range requiredContractDeployments {
+		if pStatus.ResolvedContractAddresses[dep] == "" {
+			contractAddress, err := getContractDeploymentAddress(ctx, c, dep, namespace)
 			if err != nil {
 				return false, err
 			}
 			if contractAddress != "" {
 				statusChanged = true
-				txi.Status.ResolvedContractAddresses[dep] = contractAddress
+				pStatus.ResolvedContractAddresses[dep] = contractAddress
 			}
 		}
 	}
 
 	// Rebuild this string every time, but statusChanged calc'd above decides if we store it back
-	txi.Status.ContractDepsSummary = fmt.Sprintf("%d/%d", len(txi.Status.ResolvedContractAddresses), len(txi.Spec.ContractDeploymentDeps))
+	pStatus.ContractDepsSummary = fmt.Sprintf("%d/%d", len(pStatus.ResolvedContractAddresses), len(requiredContractDeployments))
 	return statusChanged, nil
 
 }
 
-func (r *TransactionInvokeReconciler) getContractDeploymentAddress(ctx context.Context, txi *corev1alpha1.TransactionInvoke, name string) (string, error) {
+func getContractDeploymentAddress(ctx context.Context, c client.Client, name, namespace string) (string, error) {
 
 	var scd corev1alpha1.SmartContractDeployment
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: txi.Namespace}, &scd)
+	err := c.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &scd)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return "", nil
