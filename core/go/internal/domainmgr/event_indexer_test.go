@@ -58,14 +58,6 @@ func TestEventIndexingWithDB(t *testing.T) {
 	deployTX := uuid.New()
 	contractAddr := tktypes.EthAddress(tktypes.RandBytes(20))
 
-	txNotified := make(chan struct{})
-	go func() {
-		defer close(txNotified)
-		sc, err := dm.WaitForDeploy(ctx, deployTX)
-		require.NoError(t, err)
-		assert.Equal(t, contractAddr, sc.Address())
-	}()
-
 	// Index an event indicating deployment of a new smart contract instance
 	var batchTxs []*components.ReceiptInput
 	var unprocessedEvents []*blockindexer.EventWithData
@@ -117,8 +109,6 @@ func TestEventIndexingWithDB(t *testing.T) {
 	psc2, err := dm.GetSmartContractByAddress(ctx, contractAddr)
 	require.NoError(t, err)
 	assert.Equal(t, psc, psc2)
-
-	<-txNotified
 }
 
 func TestEventIndexingBadEvent(t *testing.T) {

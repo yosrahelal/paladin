@@ -127,6 +127,22 @@ task lint(type: Exec, dependsOn:[protoc, makeMocks, ":installGolangCILint"]) {
     args '--timeout', '5m'
 }
 
+task generateDocs(type: Exec) {
+
+    inputs.files(getProject().goFiles)
+    outputs.dir('coverage')
+
+    workingDir '.'
+    executable 'go'
+    args 'test'
+    args './pkg/reference'
+    args '-tags=reference'
+    if (project.findProperty('verboseTests') == 'true') {
+        args '-v'
+    }
+    
+}
+
 task test(type: Exec, dependsOn: [goGet, makeMocks]) {
     inputs.files(getProject().goFiles)
     outputs.dir('coverage')

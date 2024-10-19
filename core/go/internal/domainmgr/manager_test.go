@@ -17,7 +17,6 @@ package domainmgr
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -252,22 +251,6 @@ func TestMustParseLoaders(t *testing.T) {
 	})
 }
 
-func TestWaitForDeployQueryError(t *testing.T) {
-	ctx, dm, _, done := newTestDomainManager(t, false, &pldconf.DomainManagerConfig{
-		Domains: map[string]*pldconf.DomainConfig{
-			"domain1": {
-				RegistryAddress: tktypes.RandHex(20),
-			},
-		},
-	}, func(mc *mockComponents) {
-		mc.db.ExpectQuery("SELECT.*private_smart_contracts").WillReturnError(fmt.Errorf("pop"))
-	})
-	defer done()
-
-	_, err := dm.WaitForDeploy(ctx, uuid.New())
-	assert.Regexp(t, "pop", err)
-}
-
 func TestWaitForDeployDomainNotFound(t *testing.T) {
 	reqID := uuid.New()
 	domainAddr := tktypes.RandAddress()
@@ -280,9 +263,6 @@ func TestWaitForDeployDomainNotFound(t *testing.T) {
 			},
 		},
 	}, func(mc *mockComponents) {
-		// Once before wait, which returns empty
-		mc.db.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows([]string{}))
-		// Once after wait, when the contract exists
 		mc.db.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows([]string{
 			"deploy_tx", "domain_address", "address", "config_bytes",
 		}).AddRow(
@@ -293,7 +273,10 @@ func TestWaitForDeployDomainNotFound(t *testing.T) {
 
 	received := make(chan struct{})
 	go func() {
-		_, err := dm.WaitForDeploy(ctx, reqID)
+		_, err := dm.ExecDeployAndWait(ctx, reqID, func() error {
+			// We simulate this on the main test routine below
+			return nil
+		})
 		assert.Regexp(t, "PD011609", err)
 		close(received)
 	}()
@@ -316,8 +299,6 @@ func TestWaitForDeployNotADeploy(t *testing.T) {
 				RegistryAddress: tktypes.RandHex(20),
 			},
 		},
-	}, func(mc *mockComponents) {
-		mc.db.ExpectQuery("SELECT.*private_smart_contracts").WillReturnRows(sqlmock.NewRows([]string{}))
 	})
 	defer done()
 
@@ -325,7 +306,10 @@ func TestWaitForDeployNotADeploy(t *testing.T) {
 
 	received := make(chan struct{})
 	go func() {
-		_, err := dm.WaitForDeploy(ctx, reqID)
+		_, err := dm.ExecDeployAndWait(ctx, reqID, func() error {
+			// We simulate this on the main test routine below
+			return nil
+		})
 		assert.Regexp(t, "PD011648", err)
 		close(received)
 	}()
@@ -353,7 +337,7 @@ func TestWaitForDeployTimeout(t *testing.T) {
 
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	_, err := dm.waitAndEnrich(cancelled, dm.privateTxWaiter.AddInflight(cancelled, uuid.New()))
+	_, err := dm.waitForDeploy(cancelled, dm.privateTxWaiter.AddInflight(cancelled, uuid.New()))
 	assert.Regexp(t, "PD020100", err)
 }
 
