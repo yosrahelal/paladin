@@ -20,11 +20,9 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type PaladinClient interface {
@@ -36,19 +34,17 @@ type PaladinClient interface {
 	HTTP(ctx context.Context, conf *pldconf.HTTPClientConfig) (PaladinClient, error)
 	WebSocket(ctx context.Context, conf *pldconf.WSClientConfig) (PaladinClient, error)
 
-	// ABI based helpers for building data payloads, and submitting transactions
-	ABI(ctx context.Context, a abi.ABI) (ABIClient, error)
-	MustABI(a abi.ABI) ABIClient
-	ABIJSON(ctx context.Context, abiJson []byte) (ABIClient, error)
-	ABIFunction(ctx context.Context, functionABI *abi.Entry) (_ ABIFunctionClient, err error)
-	ABIConstructor(ctx context.Context, constructorABI *abi.Entry, bytecode tktypes.HexBytes) (_ ABIFunctionClient, err error)
-	MustABIJSON(abiJson []byte) ABIClient
+	// High level transaction building and submission APIs
+	Transaction() Transaction
 
 	// Paladin transaction RPC interface
 	PTX() PTX
 
 	// Paladin Key Manager RPC interface
 	KeyManager() KeyManager
+
+	// Paladin Transport RPC interface
+	Transport() Transport
 }
 
 type PaladinWSClient interface {

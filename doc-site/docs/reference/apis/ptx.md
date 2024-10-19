@@ -73,3 +73,35 @@ title: API ptx
 
 - TransactionFull[]
 
+## ptx_resoleVerifier
+
+### Parameters
+
+- string
+- string
+- string
+
+### Returns
+
+- string
+
+## ptx_sendTransaction
+
+### Parameters
+
+- [TransactionInput](../types/transactioninput.md#transactioninput)
+
+### Returns
+
+- [UUID](../types/simpletypes.md#uuid)
+
+## ptx_sendTransactions
+
+### Parameters
+
+- [TransactionInput[]](../types/transactioninput.md#transactioninput)
+
+### Returns
+
+- [UUID[]](../types/simpletypes.md#uuid)
+

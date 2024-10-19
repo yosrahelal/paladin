@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"context"
+	"time"
 
 	_ "embed"
 
@@ -25,6 +26,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 )
 
@@ -32,22 +34,51 @@ const node1HttpURL = "http://127.0.0.1:31548"
 const node2HttpURL = "http://127.0.0.1:31648"
 const node3HttpURL = "http://127.0.0.1:31748"
 
+func withTimeout[T any](do func(ctx context.Context) T) T {
+	ctx, cancelCtx := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelCtx()
+	return do(ctx)
+}
+
 var _ = Describe("controller", Ordered, func() {
 	BeforeAll(func() {
+		log.SetLevel("debug")
 	})
 
 	AfterAll(func() {
 	})
 
 	Context("Noto domain verification", func() {
-		It("start up the node", func() {
-			ctx := context.Background()
 
-			_, err := pldclient.New().HTTP(ctx, &pldconf.HTTPClientConfig{
-				URL: "http://127.0.0.1:31548",
-			})
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+		nodes := map[string]pldclient.PaladinClient{}
 
+		connectNode := func(url, name string) {
+			Eventually(func() bool {
+				return withTimeout(func(ctx context.Context) bool {
+					pld, err := pldclient.New().HTTP(ctx, &pldconf.HTTPClientConfig{URL: url})
+					if err == nil {
+						queriedName, err := pld.Transport().LocalNodeName(ctx)
+						Expect(err).To(BeNil())
+						Expect(queriedName).To(Equal(name))
+						nodes[name] = pld
+					}
+					return err == nil
+				})
+			}).Should(BeTrue())
+		}
+
+		It("waits to connect to all three nodes", func() {
+			connectNode(node1HttpURL, "node1")
+			connectNode(node1HttpURL, "node3")
+			connectNode(node1HttpURL, "node3")
+		})
+
+		It("checks nodes can talk to each other", func() {
+			for src := range nodes {
+				for dest := range nodes {
+					nodes[src].PTX().QueryTransactionReceipts()
+				}
+			}
 		})
 	})
 })

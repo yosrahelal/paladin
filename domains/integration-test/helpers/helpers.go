@@ -154,7 +154,7 @@ func toJSON(t *testing.T, v any) []byte {
 }
 
 func deployBuilder(ctx context.Context, t *testing.T, pld pldclient.PaladinClient, abi abi.ABI, bytecode []byte) pldclient.TransactionBuilder {
-	abiClient, err := pld.ABI(ctx, abi)
+	abiClient, err := pld.Transaction().ABI(ctx, abi)
 	assert.NoError(t, err)
 	construct, err := abiClient.Constructor(ctx, bytecode)
 	assert.NoError(t, err)
@@ -162,7 +162,7 @@ func deployBuilder(ctx context.Context, t *testing.T, pld pldclient.PaladinClien
 }
 
 func functionBuilder(ctx context.Context, t *testing.T, pld pldclient.PaladinClient, abi abi.ABI, functionName string) pldclient.TransactionBuilder {
-	abiClient, err := pld.ABI(ctx, abi)
+	abiClient, err := pld.Transaction().ABI(ctx, abi)
 	assert.NoError(t, err)
 	fn, err := abiClient.Function(ctx, functionName)
 	assert.NoError(t, err)

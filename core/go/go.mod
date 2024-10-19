@@ -4,14 +4,15 @@ go 1.22.5
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/alecthomas/assert/v2 v2.2.2
 	github.com/go-resty/resty/v2 v2.14.0
 	github.com/golang-migrate/migrate/v4 v4.17.1
 	github.com/google/uuid v1.6.0
 	github.com/hyperledger/firefly-common v1.4.11
 	github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1
 	github.com/kaleido-io/paladin/config v0.0.0-00010101000000-000000000000
+	github.com/kaleido-io/paladin/registries/static v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000
+	github.com/kaleido-io/paladin/transports/grpc v0.0.0-00010101000000-000000000000
 	github.com/serialx/hashring v0.0.0-20200727003509-22c0c7ab6b1b
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
@@ -30,7 +31,6 @@ require (
 
 require (
 	github.com/aidarkhanov/nanoid v1.0.8 // indirect
-	github.com/alecthomas/repr v0.2.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/rs/cors v1.11.0 // indirect
@@ -58,7 +58,6 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
-	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/yaml v0.2.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -116,3 +115,7 @@ require (
 replace github.com/kaleido-io/paladin/toolkit => ../../toolkit/go
 
 replace github.com/kaleido-io/paladin/config => ../../config
+
+replace github.com/kaleido-io/paladin/registries/static => ../../registries/static
+
+replace github.com/kaleido-io/paladin/transports/grpc => ../../transports/grpc

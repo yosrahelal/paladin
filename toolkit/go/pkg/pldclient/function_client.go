@@ -93,16 +93,16 @@ type txBuilder struct {
 	output     any // TODO: Implement call
 }
 
-func (c *paladinClient) ABIJSON(ctx context.Context, abiJson []byte) (ABIClient, error) {
+func (t *transaction) ABIJSON(ctx context.Context, abiJson []byte) (ABIClient, error) {
 	var a abi.ABI
 	err := json.Unmarshal(abiJson, &a)
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, tkmsgs.MsgPaladinClientABIJson)
 	}
-	return c.ABI(ctx, a)
+	return t.ABI(ctx, a)
 }
 
-func (c *paladinClient) ABI(ctx context.Context, a abi.ABI) (ABIClient, error) {
+func (t *transaction) ABI(ctx context.Context, a abi.ABI) (ABIClient, error) {
 	functions := map[string]*abi.Entry{}
 	for _, e := range a {
 		s, err := e.SignatureCtx(ctx)
@@ -120,26 +120,34 @@ func (c *paladinClient) ABI(ctx context.Context, a abi.ABI) (ABIClient, error) {
 		}
 	}
 	return &abiClient{
-		c:         c,
+		c:         t.c,
 		abi:       a,
 		functions: functions,
 	}, nil
 }
 
-func (c *paladinClient) MustABI(a abi.ABI) ABIClient {
-	abic, err := c.ABI(context.Background(), a)
+func (t *transaction) MustABI(a abi.ABI) ABIClient {
+	abic, err := t.ABI(context.Background(), a)
 	if err != nil {
 		panic(err)
 	}
 	return abic
 }
 
-func (c *paladinClient) MustABIJSON(abiJson []byte) ABIClient {
-	abic, err := c.ABIJSON(context.Background(), abiJson)
+func (t *transaction) MustABIJSON(abiJson []byte) ABIClient {
+	abic, err := t.ABIJSON(context.Background(), abiJson)
 	if err != nil {
 		panic(err)
 	}
 	return abic
+}
+
+func (t *transaction) ABIConstructor(ctx context.Context, constructorABI *abi.Entry, bytecode tktypes.HexBytes) (fc ABIFunctionClient, err error) {
+	a, err := t.ABI(ctx, abi.ABI{constructorABI})
+	if err == nil {
+		fc, err = a.Constructor(ctx, bytecode)
+	}
+	return fc, err
 }
 
 func (abic *abiClient) Function(ctx context.Context, nameOrFullSig string) (_ ABIFunctionClient, err error) {
@@ -157,8 +165,8 @@ func (abic *abiClient) Function(ctx context.Context, nameOrFullSig string) (_ AB
 	return ac.functionCommon(ctx, functionABI)
 }
 
-func (c *paladinClient) ABIFunction(ctx context.Context, functionABI *abi.Entry) (fc ABIFunctionClient, err error) {
-	a, err := c.ABI(ctx, abi.ABI{functionABI})
+func (t *transaction) ABIFunction(ctx context.Context, functionABI *abi.Entry) (fc ABIFunctionClient, err error) {
+	a, err := t.ABI(ctx, abi.ABI{functionABI})
 	if err == nil {
 		fc, err = a.Function(ctx, functionABI.Name)
 	}
@@ -177,14 +185,6 @@ func (abic *abiClient) Constructor(ctx context.Context, bytecode tktypes.HexByte
 		}
 	}
 	return ac.functionCommon(ctx, functionABI)
-}
-
-func (c *paladinClient) ABIConstructor(ctx context.Context, constructorABI *abi.Entry, bytecode tktypes.HexBytes) (fc ABIFunctionClient, err error) {
-	a, err := c.ABI(ctx, abi.ABI{constructorABI})
-	if err == nil {
-		fc, err = a.Constructor(ctx, bytecode)
-	}
-	return fc, err
 }
 
 func (fc *abiFunctionClient) functionCommon(ctx context.Context, functionABI *abi.Entry) (_ ABIFunctionClient, err error) {
@@ -415,7 +415,7 @@ func (b *txBuilder) SendTX() (stx SentTransaction, err error) {
 	}
 	tx, err := b.BuildTX()
 	if err == nil {
-		stx, err = b.c.PTX().SendTransaction(b.ctx, tx)
+		stx, err = b.c.Transaction().Send(b.ctx, tx)
 	}
 	return stx, err
 }

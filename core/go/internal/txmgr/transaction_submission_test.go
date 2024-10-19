@@ -672,7 +672,7 @@ func TestCallTransactionNoFrom(t *testing.T) {
 		})
 	defer done()
 
-	abic, err := pldclient.New().ABI(ctx, abi.ABI{
+	abic, err := pldclient.New().Transaction().ABI(ctx, abi.ABI{
 		{
 			Name: "getSpins",
 			Type: abi.Function,
@@ -710,7 +710,7 @@ func TestCallTransactionWithFrom(t *testing.T) {
 		})
 	defer done()
 
-	abic, err := pldclient.New().ABI(ctx, abi.ABI{
+	abic, err := pldclient.New().Transaction().ABI(ctx, abi.ABI{
 		{
 			Name: "getSpins",
 			Type: abi.Function,
@@ -751,7 +751,7 @@ func TestCallTransactionPrivNotSupported(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
 	defer done()
 
-	abic, err := pldclient.New().ABI(ctx, abi.ABI{{Name: "getSpins", Type: abi.Function}})
+	abic, err := pldclient.New().Transaction().ABI(ctx, abi.ABI{{Name: "getSpins", Type: abi.Function}})
 	require.NoError(t, err)
 	tx, err := abic.MustFunction("getSpins").TXBuilder(ctx).
 		Private().

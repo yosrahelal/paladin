@@ -174,7 +174,10 @@ var allTypes = []interface{}{
 }
 var allAPITypes = map[string][]interface{}{
 	"ptx": {
-		&pldclient.PTXTransactionDoc{},
+		pldclient.New().PTX(),
+	},
+	"transport": {
+		pldclient.New().Transport(),
 	},
 }
 var allSimpleTypes = []interface{}{
@@ -222,7 +225,7 @@ func (d *docGenerator) generateMarkdownPages(ctx context.Context, types, simpleT
 	markdownMap[filepath.Join(typesPath, pageName+".md")] = d.generateSimpleTypesMarkdown(ctx, simpleTypes, pageName, typesPath)
 
 	// first add all pages to map
-	for i, _ := range types {
+	for i := range types {
 		pageTitle := getType(types[i]).Name()
 		d.pageToTypes[strings.ToLower(pageTitle)] = []string{}
 	}

@@ -19,8 +19,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/alecthomas/assert/v2"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,7 +58,7 @@ func TestLibraryLinkingSuccess(t *testing.T) {
 	require.Contains(t, build.Bytecode.String(), resolvedAddresses["contracts/lib/MyContract.sol:Dependency2"].HexString())
 
 	_, err = LoadBuild(context.Background(), unlinkedBuildJSON)
-	require.Regexp(t, "PD020901", err) // missing links
+	require.Regexp(t, "PD021001", err) // missing links
 
 	assert.Panics(t, func() {
 		_ = MustLoadBuild(unlinkedBuildJSON)
@@ -84,6 +84,6 @@ func TestLibraryLinkingSuccess(t *testing.T) {
 		}
 	}`)
 	_, err = LoadBuildResolveLinks(context.Background(), unlinkedBuildJSON, resolvedAddresses)
-	require.Regexp(t, "PD020900.*0102030405060708aabbccddeeff998877", err) // bad links
+	require.Regexp(t, "PD021000.*0102030405060708aabbccddeeff998877", err) // bad links
 
 }
