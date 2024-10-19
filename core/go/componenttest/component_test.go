@@ -628,68 +628,43 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 	// so this tests that the state is shared between the nodes
 
 	ctx := context.Background()
-
-	aliceNodeConfig := newNodeConfiguration(t, "alice")
-	bobNodeConfig := newNodeConfiguration(t, "bob")
-
 	domainRegistryAddress := deployDomainRegistry(t)
 
-	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, aliceNodeConfig, []*nodeConfiguration{bobNodeConfig}, nil)
-	client1 := instance1.client
-	aliceIdentity := "wallets.org1.alice@" + instance1.name
-	aliceAddress := instance1.resolveEthereumAddress(aliceIdentity)
-	t.Logf("Alice address: %s", aliceAddress)
+	alice := newPartyForTesting(t, "alice", domainRegistryAddress)
+	bob := newPartyForTesting(t, "bob", domainRegistryAddress)
 
-	instance2 := newInstanceForComponentTesting(t, domainRegistryAddress, bobNodeConfig, []*nodeConfiguration{aliceNodeConfig}, nil)
-	client2 := instance2.client
-	bobIdentity := "wallets.org2.bob@" + instance2.name
-	bobAddress := instance2.resolveEthereumAddress(bobIdentity)
-	t.Logf("Bob address: %s", bobAddress)
+	alice.peer(bob.nodeConfig)
+	bob.peer(alice.nodeConfig)
 
-	// send JSON RPC message to node 1 to deploy a private contract
-	var dplyTxID uuid.UUID
-	err := client1.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
-		ABI: *domains.SimpleTokenConstructorABI(domains.SelfEndorsement),
-		Transaction: pldapi.Transaction{
-			IdempotencyKey: "deploy1",
-			Type:           pldapi.TransactionTypePrivate.Enum(),
-			Domain:         "domain1",
-			From:           aliceIdentity,
-			Data: tktypes.RawJSON(`{
-                    "from": "` + aliceIdentity + `",
-                    "name": "FakeToken1",
-                    "symbol": "FT1",
-					"endorsementMode": "` + domains.SelfEndorsement + `"
-                }`),
-		},
-	})
-	require.NoError(t, err)
-	assert.Eventually(t,
-		transactionReceiptCondition(t, ctx, dplyTxID, client1, true),
-		transactionLatencyThreshold(t)+5*time.Second, //TODO deploy transaction seems to take longer than expected
-		100*time.Millisecond,
-		"Deploy transaction did not receive a receipt",
-	)
+	domainConfig := domains.SimpleDomainConfig{
+		SubmitMode: domains.ENDORSER_SUBMISSION,
+	}
+	alice.start(t, domainConfig)
+	bob.start(t, domainConfig)
 
-	var dplyTxFull pldapi.TransactionFull
-	err = client1.CallRPC(ctx, &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
-	require.NoError(t, err)
-	contractAddress := dplyTxFull.Receipt.ContractAddress
+	constructorParameters := &domains.ConstructorParameters{
+		From:            alice.identity,
+		Name:            "FakeToken1",
+		Symbol:          "FT1",
+		EndorsementMode: domains.SelfEndorsement,
+	}
+
+	contractAddress := alice.deploySimpleDomainInstanceContract(t, domainRegistryAddress, domains.SelfEndorsement, constructorParameters)
 
 	// Start a private transaction on alices node
 	// this is a mint to bob so bob should later be able to do a transfer without any mint taking place on bobs node
 	var aliceTxID uuid.UUID
-	err = client1.CallRPC(ctx, &aliceTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
+	err := alice.client.CallRPC(ctx, &aliceTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
 		Transaction: pldapi.Transaction{
 			To:             contractAddress,
 			Domain:         "domain1",
 			IdempotencyKey: "tx1-alice",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
-			From:           aliceIdentity,
+			From:           alice.identity,
 			Data: tktypes.RawJSON(`{
                     "from": "",
-                    "to": "` + bobIdentity + `",
+                    "to": "` + bob.identity + `",
                     "amount": "123000000000000000000"
                 }`),
 		},
@@ -698,7 +673,7 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, uuid.UUID{}, aliceTxID)
 	assert.Eventually(t,
-		transactionReceiptCondition(t, ctx, aliceTxID, client1, false),
+		transactionReceiptCondition(t, ctx, aliceTxID, alice.client, false),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
 		"Transaction did not receive a receipt",
@@ -707,17 +682,17 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 	// Start a private transaction on bobs node
 	// This is a transfer which relies on bobs node being aware of the state created by alice's mint to bob above
 	var bobTx1ID uuid.UUID
-	err = client2.CallRPC(ctx, &bobTx1ID, "ptx_sendTransaction", &pldapi.TransactionInput{
+	err = bob.client.CallRPC(ctx, &bobTx1ID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
 		Transaction: pldapi.Transaction{
 			To:             contractAddress,
 			Domain:         "domain1",
 			IdempotencyKey: "tx1-bob",
 			Type:           pldapi.TransactionTypePrivate.Enum(),
-			From:           bobIdentity,
+			From:           bob.identity,
 			Data: tktypes.RawJSON(`{
-                    "from": "` + bobIdentity + `",
-                    "to": "` + aliceIdentity + `",
+                    "from": "` + bob.identity + `",
+                    "to": "` + alice.identity + `",
                     "amount": "123000000000000000000"
                 }`),
 		},
@@ -726,7 +701,7 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, uuid.UUID{}, bobTx1ID)
 	assert.Eventually(t,
-		transactionReceiptCondition(t, ctx, bobTx1ID, client2, false),
+		transactionReceiptCondition(t, ctx, bobTx1ID, bob.client, false),
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
 		"Transaction did not receive a receipt",
