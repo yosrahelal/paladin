@@ -27,6 +27,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	nototypes "github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
@@ -94,6 +95,14 @@ var _ = Describe("controller", Ordered, func() {
 					}).Should(BeTrue())
 				}
 			}
+		})
+
+		It("deploys a noto", func() {
+
+			addr, err := nodes["node1"].Transaction().
+				MustABI(nototypes.NotoABI).
+				Constructor()
+
 		})
 	})
 })

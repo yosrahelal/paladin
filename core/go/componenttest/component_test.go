@@ -211,7 +211,7 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 	)
 
 	var dplyTxFull pldapi.TransactionFull
-	err = rpcClient.CallRPC(ctx, &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
+	err = rpcClient.CallRPC(ctx, &dplyTxFull, "ptx_getTransactionFull", dplyTxID)
 	require.NoError(t, err)
 	require.NotNil(t, dplyTxFull.Receipt)
 	require.True(t, dplyTxFull.Receipt.Success)
@@ -256,7 +256,7 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 	assert.Len(t, txns, 2)
 
 	txFull := pldapi.TransactionFull{}
-	err = rpcClient.CallRPC(ctx, &txFull, "ptx_getTransaction", tx1ID, true)
+	err = rpcClient.CallRPC(ctx, &txFull, "ptx_getTransactionFull", tx1ID)
 	require.NoError(t, err)
 
 	require.NotNil(t, txFull.Receipt)
@@ -299,7 +299,7 @@ func TestPrivateTransactionsMintThenTransfer(t *testing.T) {
 	)
 
 	var dplyTxFull pldapi.TransactionFull
-	err = rpcClient.CallRPC(ctx, &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
+	err = rpcClient.CallRPC(ctx, &dplyTxFull, "ptx_getTransactionFull", dplyTxID)
 	require.NoError(t, err)
 	require.NotNil(t, dplyTxFull.Receipt)
 	require.True(t, dplyTxFull.Receipt.Success)
@@ -400,7 +400,7 @@ func TestPrivateTransactionRevertedAssembleFailed(t *testing.T) {
 	)
 
 	var dplyTxFull pldapi.TransactionFull
-	err = rpcClient.CallRPC(ctx, &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
+	err = rpcClient.CallRPC(ctx, &dplyTxFull, "ptx_getTransactionFull", dplyTxID)
 	require.NoError(t, err)
 	require.NotNil(t, dplyTxFull.Receipt)
 	require.True(t, dplyTxFull.Receipt.Success)
@@ -437,7 +437,7 @@ func TestPrivateTransactionRevertedAssembleFailed(t *testing.T) {
 	)
 
 	var txFull pldapi.TransactionFull
-	err = rpcClient.CallRPC(ctx, &txFull, "ptx_getTransaction", tx1ID, true)
+	err = rpcClient.CallRPC(ctx, &txFull, "ptx_getTransactionFull", tx1ID)
 	require.NoError(t, err)
 	require.NotNil(t, txFull.Receipt)
 	assert.False(t, txFull.Receipt.Success)
@@ -495,7 +495,7 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 	)
 
 	var dplyTxFull pldapi.TransactionFull
-	err = client1.CallRPC(ctx, &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
+	err = client1.CallRPC(ctx, &dplyTxFull, "ptx_getTransactionFull", dplyTxID)
 	require.NoError(t, err)
 	contractAddress := dplyTxFull.Receipt.ContractAddress
 
@@ -668,7 +668,7 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 	)
 
 	var dplyTxFull pldapi.TransactionFull
-	err = client1.CallRPC(ctx, &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
+	err = client1.CallRPC(ctx, &dplyTxFull, "ptx_getTransactionFull", dplyTxID)
 	require.NoError(t, err)
 	contractAddress := dplyTxFull.Receipt.ContractAddress
 
@@ -787,7 +787,7 @@ func TestNotaryDelegated(t *testing.T) {
 
 	// As notary, mint some tokens to alice
 	var dplyTxFull pldapi.TransactionFull
-	err = client3.CallRPC(ctx, &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
+	err = client3.CallRPC(ctx, &dplyTxFull, "ptx_getTransactionFull", dplyTxID)
 	require.NoError(t, err)
 	contractAddress := dplyTxFull.Receipt.ContractAddress
 

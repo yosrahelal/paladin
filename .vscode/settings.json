@@ -5,7 +5,7 @@
       "idempotency",
       "remoting"
     ],
-    "go.testTimeout": "60s",
+    "go.testTimeout": "10s",
     "java.configuration.updateBuildConfiguration": "disabled",
     "go.testTags": "testdbpostgres"
   }

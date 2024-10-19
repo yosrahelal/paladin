@@ -24,8 +24,12 @@ import (
 )
 
 type PTX interface {
+	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (txID *uuid.UUID, err error)
+	SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
+
 	GetTransaction(ctx context.Context, txID uuid.UUID) (receipt *pldapi.Transaction, err error)
 	GetTransactionFull(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionFull, err error)
+	GetTransactionByIdempotencyKey(ctx context.Context, idempotencyKey string) (tx *pldapi.Transaction, err error)
 	QueryTransactions(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.Transaction, err error)
 	QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.TransactionFull, err error)
 
@@ -54,22 +58,27 @@ func (p *ptx) SendTransactions(ctx context.Context, txs []*pldapi.TransactionInp
 }
 
 func (p *ptx) GetTransaction(ctx context.Context, txID uuid.UUID) (tx *pldapi.Transaction, err error) {
-	err = p.c.CallRPC(ctx, &tx, "ptx_getTransaction", txID, false)
+	err = p.c.CallRPC(ctx, &tx, "ptx_getTransaction", txID)
+	return tx, err
+}
+
+func (p *ptx) GetTransactionByIdempotencyKey(ctx context.Context, idempotencyKey string) (tx *pldapi.Transaction, err error) {
+	err = p.c.CallRPC(ctx, &tx, "ptx_getTransactionByIdempotencyKey", idempotencyKey)
 	return tx, err
 }
 
 func (p *ptx) GetTransactionFull(ctx context.Context, txID uuid.UUID) (tx *pldapi.TransactionFull, err error) {
-	err = p.c.CallRPC(ctx, &tx, "ptx_getTransaction", txID, true)
+	err = p.c.CallRPC(ctx, &tx, "ptx_getTransactionFull", txID)
 	return tx, err
 }
 
 func (p *ptx) QueryTransactions(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.Transaction, err error) {
-	err = p.c.CallRPC(ctx, &txs, "ptx_queryTransactions", jq, false)
+	err = p.c.CallRPC(ctx, &txs, "ptx_queryTransactions", jq)
 	return txs, err
 }
 
 func (p *ptx) QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.TransactionFull, err error) {
-	err = p.c.CallRPC(ctx, &txs, "ptx_queryTransactions", jq, true)
+	err = p.c.CallRPC(ctx, &txs, "ptx_queryTransactionFulls", jq)
 	return txs, err
 }
 
