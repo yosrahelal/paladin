@@ -25,56 +25,55 @@ import (
 // If set these affect the submission of the public transaction.
 // All are optional
 type PublicTxOptions struct {
-	Gas                *tktypes.HexUint64  `json:"gas,omitempty"`
-	Value              *tktypes.HexUint256 `json:"value,omitempty"`
+	Gas                *tktypes.HexUint64  `docstruct:"PublicTxOptions" json:"gas,omitempty"`
+	Value              *tktypes.HexUint256 `docstruct:"PublicTxOptions" json:"value,omitempty"`
 	PublicTxGasPricing                     // fixed when any of these are supplied - disabling the gas pricing engine for this TX
 }
 
 type PublicTxGasPricing struct {
-	MaxPriorityFeePerGas *tktypes.HexUint256 `json:"maxPriorityFeePerGas,omitempty"`
-	MaxFeePerGas         *tktypes.HexUint256 `json:"maxFeePerGas,omitempty"`
-	GasPrice             *tktypes.HexUint256 `json:"gasPrice,omitempty"`
+	MaxPriorityFeePerGas *tktypes.HexUint256 `docstruct:"PublicTxGasPricing" json:"maxPriorityFeePerGas,omitempty"`
+	MaxFeePerGas         *tktypes.HexUint256 `docstruct:"PublicTxGasPricing" json:"maxFeePerGas,omitempty"`
+	GasPrice             *tktypes.HexUint256 `docstruct:"PublicTxGasPricing" json:"gasPrice,omitempty"`
 }
 
 type PublicTxInput struct {
-	From *tktypes.EthAddress `json:"from"`           // resolved signing account
-	To   *tktypes.EthAddress `json:"to,omitempty"`   // target contract address, or nil for deploy
-	Data tktypes.HexBytes    `json:"data,omitempty"` // the pre-encoded calldata
+	From *tktypes.EthAddress `docstruct:"PublicTxInput" json:"from"`           // resolved signing account
+	To   *tktypes.EthAddress `docstruct:"PublicTxInput" json:"to,omitempty"`   // target contract address, or nil for deploy
+	Data tktypes.HexBytes    `docstruct:"PublicTxInput" json:"data,omitempty"` // the pre-encoded calldata
 	PublicTxOptions
 }
 
 type PublicTxSubmission struct {
-	From  tktypes.EthAddress `json:"from"`
-	Nonce tktypes.HexUint64  `json:"nonce"`
+	From  tktypes.EthAddress `docstruct:"PublicTxSubmission" json:"from"`
+	Nonce tktypes.HexUint64  `docstruct:"PublicTxSubmission" json:"nonce"`
 	PublicTxSubmissionData
 }
 
 type PublicTxSubmissionData struct {
-	Time            tktypes.Timestamp `json:"time"`
-	TransactionHash tktypes.Bytes32   `json:"transactionHash"`
+	Time            tktypes.Timestamp `docstruct:"PublicTxSubmissionData" json:"time"`
+	TransactionHash tktypes.Bytes32   `docstruct:"PublicTxSubmissionData" json:"transactionHash"`
 	PublicTxGasPricing
 }
 
 type PublicTx struct {
-	To              *tktypes.EthAddress         `json:"to,omitempty"`
-	Data            tktypes.HexBytes            `json:"data,omitempty"`
-	From            tktypes.EthAddress          `json:"from"`
-	Nonce           tktypes.HexUint64           `json:"nonce"`
-	Created         tktypes.Timestamp           `json:"created"`
-	CompletedAt     *tktypes.Timestamp          `json:"completedAt,omitempty"` // only once confirmed
-	TransactionHash *tktypes.Bytes32            `json:"transactionHash"`       // only once confirmed
-	Success         *bool                       `json:"success,omitempty"`     // only once confirmed
-	RevertData      tktypes.HexBytes            `json:"revertData,omitempty"`  // only once confirmed, if available
-	Submissions     []*PublicTxSubmissionData   `json:"submissions,omitempty"`
-	Activity        []TransactionActivityRecord `json:"activity,omitempty"`
+	To              *tktypes.EthAddress         `docstruct:"PublicTx" json:"to,omitempty"`
+	Data            tktypes.HexBytes            `docstruct:"PublicTx" json:"data,omitempty"`
+	From            tktypes.EthAddress          `docstruct:"PublicTx" json:"from"`
+	Nonce           tktypes.HexUint64           `docstruct:"PublicTx" json:"nonce"`
+	Created         tktypes.Timestamp           `docstruct:"PublicTx" json:"created"`
+	CompletedAt     *tktypes.Timestamp          `docstruct:"PublicTx" json:"completedAt,omitempty"` // only once confirmed
+	TransactionHash *tktypes.Bytes32            `docstruct:"PublicTx" json:"transactionHash"`       // only once confirmed
+	Success         *bool                       `docstruct:"PublicTx" json:"success,omitempty"`     // only once confirmed
+	RevertData      tktypes.HexBytes            `docstruct:"PublicTx" json:"revertData,omitempty"`  // only once confirmed, if available
+	Submissions     []*PublicTxSubmissionData   `docstruct:"PublicTx" json:"submissions,omitempty"`
+	Activity        []TransactionActivityRecord `docstruct:"PublicTx" json:"activity,omitempty"`
 	PublicTxOptions
 }
 
 type PublicTxBinding struct {
-	Transaction     uuid.UUID                     `json:"transaction"`
-	TransactionType tktypes.Enum[TransactionType] `json:"transactionType"`
+	Transaction     uuid.UUID                     `docstruct:"PublicTxBinding" json:"transaction"`
+	TransactionType tktypes.Enum[TransactionType] `docstruct:"PublicTxBinding" json:"transactionType"`
 }
-
 type PublicTxWithBinding struct {
 	*PublicTx
 	PublicTxBinding

@@ -1,0 +1,1 @@
+HexUint64 is an unsigned integer that is serialized in JSON as hex

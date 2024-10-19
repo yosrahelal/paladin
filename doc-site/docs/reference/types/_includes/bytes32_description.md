@@ -1,0 +1,1 @@
+Bytes32 is a 32 byte value, with DB storage serialization

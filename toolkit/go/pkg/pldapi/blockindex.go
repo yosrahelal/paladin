@@ -39,27 +39,27 @@ func (pl EthTransactionResult) Options() []string {
 }
 
 type IndexedBlock struct {
-	Number int64           `json:"number"`
-	Hash   tktypes.Bytes32 `json:"hash"                                     gorm:"primaryKey"`
+	Number int64           `docstruct:"IndexedBlock" json:"number"`
+	Hash   tktypes.Bytes32 `docstruct:"IndexedBlock" json:"hash"           gorm:"primaryKey"`
 }
 
 type IndexedTransaction struct {
-	Hash             tktypes.Bytes32                    `json:"hash"                      gorm:"primaryKey"`
-	BlockNumber      int64                              `json:"blockNumber"`
-	TransactionIndex int64                              `json:"transactionIndex"`
-	From             *tktypes.EthAddress                `json:"from"`
-	To               *tktypes.EthAddress                `json:"to,omitempty"`
-	Nonce            uint64                             `json:"nonce"`
-	ContractAddress  *tktypes.EthAddress                `json:"contractAddress,omitempty"`
-	Result           tktypes.Enum[EthTransactionResult] `json:"result,omitempty"`
+	Hash             tktypes.Bytes32                    `docstruct:"IndexedTransaction" json:"hash"               gorm:"primaryKey"`
+	BlockNumber      int64                              `docstruct:"IndexedTransaction" json:"blockNumber"`
+	TransactionIndex int64                              `docstruct:"IndexedTransaction" json:"transactionIndex"`
+	From             *tktypes.EthAddress                `docstruct:"IndexedTransaction" json:"from"`
+	To               *tktypes.EthAddress                `docstruct:"IndexedTransaction" json:"to,omitempty"`
+	Nonce            uint64                             `docstruct:"IndexedTransaction" json:"nonce"`
+	ContractAddress  *tktypes.EthAddress                `docstruct:"IndexedTransaction" json:"contractAddress,omitempty"`
+	Result           tktypes.Enum[EthTransactionResult] `docstruct:"IndexedTransaction" json:"result,omitempty"`
 }
 
 type IndexedEvent struct {
-	BlockNumber      int64               `json:"blockNumber"             gorm:"primaryKey"`
-	TransactionIndex int64               `json:"transactionIndex"        gorm:"primaryKey"`
-	LogIndex         int64               `json:"logIndex"                gorm:"primaryKey"`
-	TransactionHash  tktypes.Bytes32     `json:"transactionHash"`
-	Signature        tktypes.Bytes32     `json:"signature"`
-	Transaction      *IndexedTransaction `json:"transaction,omitempty"   gorm:"foreignKey:block_number,transaction_index;references:block_number,transaction_index"`
-	Block            *IndexedBlock       `json:"block,omitempty"         gorm:"foreignKey:number;references:block_number"`
+	BlockNumber      int64               `docstruct:"IndexedEvent" json:"blockNumber"            gorm:"primaryKey"`
+	TransactionIndex int64               `docstruct:"IndexedEvent" json:"transactionIndex"       gorm:"primaryKey"`
+	LogIndex         int64               `docstruct:"IndexedEvent" json:"logIndex"               gorm:"primaryKey"`
+	TransactionHash  tktypes.Bytes32     `docstruct:"IndexedEvent" json:"transactionHash"`
+	Signature        tktypes.Bytes32     `docstruct:"IndexedEvent" json:"signature"`
+	Transaction      *IndexedTransaction `docstruct:"IndexedEvent" json:"transaction,omitempty"  gorm:"foreignKey:block_number,transaction_index;references:block_number,transaction_index"`
+	Block            *IndexedBlock       `docstruct:"IndexedEvent" json:"block,omitempty"        gorm:"foreignKey:number;references:block_number"`
 }

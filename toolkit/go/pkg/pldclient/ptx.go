@@ -27,15 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 )
 
-type PTX interface {
-	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (result SentTransaction, err error)
-	SendTransactions(ctx context.Context, tx *pldapi.TransactionInput) (results []SentTransaction, err error)
-
-	WrapSentTransaction(id uuid.UUID) SentTransaction
-	WrapSentTransactions(ids []uuid.UUID) []SentTransaction
-
-	WrapTransactionResult(receipt *pldapi.TransactionReceipt) TransactionResult
-
+type PTXTransaction interface {
 	GetTransaction(ctx context.Context, txID uuid.UUID) (receipt *pldapi.Transaction, err error)
 	GetTransactionFull(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionFull, err error)
 	QueryTransactions(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.Transaction, err error)
@@ -43,6 +35,17 @@ type PTX interface {
 
 	GetTransactionReceipt(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionReceipt, err error)
 	QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*pldapi.TransactionReceipt, err error)
+}
+
+type PTX interface {
+	PTXTransaction
+	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (result SentTransaction, err error)
+	SendTransactions(ctx context.Context, tx *pldapi.TransactionInput) (results []SentTransaction, err error)
+
+	WrapSentTransaction(id uuid.UUID) SentTransaction
+	WrapSentTransactions(ids []uuid.UUID) []SentTransaction
+
+	WrapTransactionResult(receipt *pldapi.TransactionReceipt) TransactionResult
 }
 
 type SentTransaction interface {
@@ -56,6 +59,8 @@ type TransactionResult interface {
 	Success() bool
 	Receipt() *pldapi.TransactionReceipt
 }
+
+var _ PTX = &ptx{}
 
 type ptx struct{ *paladinClient }
 
