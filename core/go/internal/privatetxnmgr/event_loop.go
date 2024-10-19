@@ -180,6 +180,8 @@ func (oc *Orchestrator) handleEvent(ctx context.Context, event ptmgrtypes.Privat
 	// find (or create) the transaction processor for that transaction
 	// and pass the event to it
 	transactionID := event.GetTransactionID()
+	log.L(ctx).Debugf("Orchestrator handling event %T for transaction %s", event, transactionID)
+
 	transactionProcessor := oc.getTransactionProcessor(transactionID)
 	if transactionProcessor == nil {
 		//What has happened here is either:
