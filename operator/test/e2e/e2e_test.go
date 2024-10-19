@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	_ "embed"
@@ -26,8 +27,11 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
 const node1HttpURL = "http://127.0.0.1:31548"
@@ -57,7 +61,7 @@ var _ = Describe("controller", Ordered, func() {
 				return withTimeout(func(ctx context.Context) bool {
 					pld, err := pldclient.New().HTTP(ctx, &pldconf.HTTPClientConfig{URL: url})
 					if err == nil {
-						queriedName, err := pld.Transport().LocalNodeName(ctx)
+						queriedName, err := pld.Transport().NodeName(ctx)
 						Expect(err).To(BeNil())
 						Expect(queriedName).To(Equal(name))
 						nodes[name] = pld
@@ -69,14 +73,25 @@ var _ = Describe("controller", Ordered, func() {
 
 		It("waits to connect to all three nodes", func() {
 			connectNode(node1HttpURL, "node1")
-			connectNode(node1HttpURL, "node3")
-			connectNode(node1HttpURL, "node3")
+			connectNode(node2HttpURL, "node2")
+			connectNode(node3HttpURL, "node3")
 		})
 
 		It("checks nodes can talk to each other", func() {
 			for src := range nodes {
 				for dest := range nodes {
-					nodes[src].PTX().QueryTransactionReceipts()
+					Eventually(func() bool {
+						return withTimeout(func(ctx context.Context) bool {
+							verifier, err := nodes[src].PTX().ResoleVerifier(ctx, fmt.Sprintf("test@%s", dest),
+								algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+							if err == nil {
+								addr, err := tktypes.ParseEthAddress(verifier)
+								Expect(err).To(BeNil())
+								Expect(addr).ToNot(BeNil())
+							}
+							return err == nil
+						})
+					}).Should(BeTrue())
 				}
 			}
 		})

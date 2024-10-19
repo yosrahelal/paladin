@@ -20,7 +20,7 @@ import (
 )
 
 type Transport interface {
-	LocalNodeName(ctx context.Context) (name string, err error)
+	NodeName(ctx context.Context) (name string, err error)
 }
 
 type transport struct{ *paladinClient }
@@ -29,7 +29,7 @@ func (c *paladinClient) Transport() Transport {
 	return &transport{paladinClient: c}
 }
 
-func (t *transport) LocalNodeName(ctx context.Context) (name string, err error) {
-	err = t.CallRPC(ctx, &name, "transport_localNodeName")
+func (t *transport) NodeName(ctx context.Context) (name string, err error) {
+	err = t.CallRPC(ctx, &name, "transport_nodeName")
 	return name, err
 }

@@ -29,7 +29,7 @@ title: API transport
 
 - KeyManager
 
-## transport_localNodeName
+## transport_nodeName
 
 ### Returns
 
