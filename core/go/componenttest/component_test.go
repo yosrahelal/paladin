@@ -183,7 +183,7 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 
 	// Check there are no transactions before we start
 	var txns []*pldapi.TransactionFull
-	err := rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
+	err := rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactionsFull", query.NewQueryBuilder().Limit(1).Query())
 	require.NoError(t, err)
 	assert.Len(t, txns, 0)
 	var dplyTxID uuid.UUID
@@ -252,7 +252,7 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 		"Transaction did not receive a receipt",
 	)
 
-	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(2).Query(), true)
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactionsFull", query.NewQueryBuilder().Limit(2).Query())
 	require.NoError(t, err)
 	assert.Len(t, txns, 2)
 
@@ -273,7 +273,7 @@ func TestPrivateTransactionsMintThenTransfer(t *testing.T) {
 
 	// Check there are no transactions before we start
 	var txns []*pldapi.TransactionFull
-	err := rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
+	err := rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactionsFull", query.NewQueryBuilder().Limit(1).Query())
 	require.NoError(t, err)
 	assert.Len(t, txns, 0)
 	var dplyTxID uuid.UUID
@@ -649,7 +649,7 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 		EndorsementMode: domains.SelfEndorsement,
 	}
 
-	contractAddress := alice.deploySimpleDomainInstanceContract(t, domainRegistryAddress, domains.SelfEndorsement, constructorParameters)
+	contractAddress := alice.deploySimpleDomainInstanceContract(t, domains.SelfEndorsement, constructorParameters)
 
 	// Start a private transaction on alices node
 	// this is a mint to bob so bob should later be able to do a transfer without any mint taking place on bobs node
@@ -852,7 +852,7 @@ func TestPrivateTransactions100PercentEndorsement(t *testing.T) {
 		EndorsementMode: domains.PrivacyGroupEndorsement,
 	}
 	// send JSON RPC message to node 1 to deploy a private contract
-	contractAddress := alice.deploySimpleDomainInstanceContract(t, domainRegistryAddress, domains.PrivacyGroupEndorsement, constructorParameters)
+	contractAddress := alice.deploySimpleDomainInstanceContract(t, domains.PrivacyGroupEndorsement, constructorParameters)
 
 	// Start a private transaction on alice's node
 	// this should require endorsement from bob and carol

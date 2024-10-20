@@ -410,7 +410,7 @@ func (p *partyForTesting) start(t *testing.T, domainConfig domains.SimpleDomainC
 
 }
 
-func (p *partyForTesting) deploySimpleDomainInstanceContract(t *testing.T, domainRegistryAddress *tktypes.EthAddress, endorsementMode string, constructorParameters *domains.ConstructorParameters) *tktypes.EthAddress {
+func (p *partyForTesting) deploySimpleDomainInstanceContract(t *testing.T, endorsementMode string, constructorParameters *domains.ConstructorParameters) *tktypes.EthAddress {
 
 	var dplyTxID uuid.UUID
 
@@ -432,7 +432,7 @@ func (p *partyForTesting) deploySimpleDomainInstanceContract(t *testing.T, domai
 	)
 
 	var dplyTxFull pldapi.TransactionFull
-	err = p.client.CallRPC(context.Background(), &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
+	err = p.client.CallRPC(context.Background(), &dplyTxFull, "ptx_getTransactionFull", dplyTxID)
 	require.NoError(t, err)
 	require.NotNil(t, dplyTxFull.Receipt)
 	require.True(t, dplyTxFull.Receipt.Success)
