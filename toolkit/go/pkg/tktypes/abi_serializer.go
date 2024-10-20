@@ -31,13 +31,24 @@ import (
 type JSONFormatOptions string
 
 func (jfo JSONFormatOptions) GetABISerializer(ctx context.Context) (serializer *abi.Serializer, err error) {
+	return jfo.getABISerializer(ctx, false)
+}
+
+func (jfo JSONFormatOptions) GetABISerializerIgnoreErrors(ctx context.Context) *abi.Serializer {
+	serializer, _ := jfo.getABISerializer(ctx, true)
+	return serializer
+}
+
+func (jfo JSONFormatOptions) getABISerializer(ctx context.Context, skipErrors bool) (serializer *abi.Serializer, err error) {
 	serializer = StandardABISerializer()
 	if len(jfo) == 0 {
 		return
 	}
 	options, err := url.ParseQuery(string(jfo))
 	if err != nil {
-		return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesInvalidJSONFormatOptions, jfo)
+		if !skipErrors {
+			return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesInvalidJSONFormatOptions, jfo)
+		}
 	}
 	for option, values := range options {
 		for _, v := range values {
@@ -51,7 +62,9 @@ func (jfo JSONFormatOptions) GetABISerializer(ctx context.Context) (serializer *
 				case "self-describing":
 					serializer = serializer.SetFormattingMode(abi.FormatAsSelfDescribingArrays)
 				default:
-					return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+					if !skipErrors {
+						return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+					}
 				}
 			case "number":
 				switch strings.ToLower(v) {
@@ -62,7 +75,9 @@ func (jfo JSONFormatOptions) GetABISerializer(ctx context.Context) (serializer *
 				case "json-number": // note consumer must be very careful to use a JSON parser that support large numbers
 					serializer = serializer.SetIntSerializer(abi.JSONNumberIntSerializer)
 				default:
-					return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+					if !skipErrors {
+						return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+					}
 				}
 			case "bytes":
 				switch strings.ToLower(v) {
@@ -78,7 +93,9 @@ func (jfo JSONFormatOptions) GetABISerializer(ctx context.Context) (serializer *
 			case "pretty":
 				serializer = serializer.SetPretty(v != "false")
 			default:
-				return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+				if !skipErrors {
+					return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+				}
 			}
 		}
 	}

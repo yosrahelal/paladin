@@ -584,4 +584,7 @@ func TestJSONFormatOptionErrors(t *testing.T) {
 	_, err = JSONFormatOptions("bytes=blue").GetABISerializer(ctx)
 	assert.Regexp(t, "PD020015", err)
 
+	s := JSONFormatOptions("this;is;ignored").GetABISerializerIgnoreErrors(ctx)
+	assert.NotNil(t, s)
+
 }
