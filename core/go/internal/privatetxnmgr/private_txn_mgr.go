@@ -310,8 +310,17 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 
 	publicTransactionEngine := p.components.PublicTxManager()
 
+	// The signer needs to be in our local node or it's an error
+	identifier, node, err := tktypes.PrivateIdentityLocator(tx.Signer).Validate(ctx, p.nodeName, true)
+	if err != nil {
+		return nil, err
+	}
+	if node != p.nodeName {
+		return nil, i18n.NewError(ctx, msgs.MsgPrivateTxManagerNonLocalSigningAddr, tx.Signer)
+	}
+
 	keyMgr := p.components.KeyManager()
-	resolvedAddrs, err := keyMgr.ResolveEthAddressBatchNewDatabaseTX(ctx, []string{tx.Signer})
+	resolvedAddrs, err := keyMgr.ResolveEthAddressBatchNewDatabaseTX(ctx, []string{identifier})
 	if err != nil {
 		return nil, err
 	}

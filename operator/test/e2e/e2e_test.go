@@ -23,6 +23,7 @@ import (
 
 	_ "embed"
 
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -55,6 +56,7 @@ var _ = Describe("controller", Ordered, func() {
 
 	Context("Noto domain verification", func() {
 
+		ctx := context.Background()
 		nodes := map[string]pldclient.PaladinClient{}
 
 		connectNode := func(url, name string) {
@@ -97,12 +99,44 @@ var _ = Describe("controller", Ordered, func() {
 			}
 		})
 
+		const notary = "notary.on@node1"
+		var notoContract *tktypes.EthAddress
+
 		It("deploys a noto", func() {
+			deploy := nodes["node1"].ForABI(ctx, abi.ABI{
+				{Type: abi.Constructor, Inputs: abi.ParameterArray{
+					{Name: "notary", Type: "string"},
+				}},
+			}).
+				Private().
+				Domain("noto").
+				Constructor().
+				Inputs(&nototypes.ConstructorParams{
+					Notary: notary,
+				}).
+				From(notary).
+				Send().
+				Wait(10 * time.Second)
+			Expect(deploy.Error()).To(BeNil())
+			Expect(deploy.Receipt().ContractAddress).ToNot(BeNil())
+			notoContract = deploy.Receipt().ContractAddress
+		})
 
-			addr, err := nodes["node1"].Transaction().
-				MustABI(nototypes.NotoABI).
-				Constructor()
-
+		It("mints some notos to the notary", func() {
+			deploy := nodes["node1"].ForABI(ctx, nototypes.NotoABI).
+				Private().
+				Domain("noto").
+				Function("mint").
+				To(notoContract).
+				Inputs(&nototypes.MintParams{
+					To:     notary,
+					Amount: tktypes.MustParseHexUint256("123000000000000000000"),
+				}).
+				From(notary).
+				Send().
+				Wait(10 * time.Second)
+			Expect(deploy.Error()).To(BeNil())
+			Expect(deploy.Receipt().ContractAddress).ToNot(BeNil())
 		})
 	})
 })

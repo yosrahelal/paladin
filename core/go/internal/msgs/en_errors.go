@@ -292,6 +292,7 @@ var (
 	MsgPrivateTxManagerEndorsementRequestError = ffe("PD011817", "Failed to request endorsement from %s: %s")
 	MsgPrivateTxManagerResolveDispatchError    = ffe("PD011818", "Failed to resolve dispatcher: %s")
 	MsgPrivateTxManagerPrepareError            = ffe("PD011819", "Failed to prepare transaction dispatch to base ledger: %s")
+	MsgPrivateTxManagerNonLocalSigningAddr     = ffe("PD011820", "Attempt do dispatch a blockchain transaction using a signing identity for a different node: %s")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")
