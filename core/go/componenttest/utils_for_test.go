@@ -60,7 +60,8 @@ func transactionReceiptCondition(t *testing.T, ctx context.Context, txID uuid.UU
 		txFull := pldapi.TransactionFull{}
 		err := rpcClient.CallRPC(ctx, &txFull, "ptx_getTransactionFull", txID)
 		require.NoError(t, err)
-		return txFull.Receipt != nil && (!isDeploy || txFull.Receipt.ContractAddress != nil)
+		require.False(t, (txFull.Receipt != nil && txFull.Receipt.Success == false), "Have transaction receipt but not successful")
+		return txFull.Receipt != nil && (!isDeploy || (txFull.Receipt.ContractAddress != nil && *txFull.Receipt.ContractAddress != tktypes.EthAddress{}))
 	}
 }
 
@@ -162,7 +163,7 @@ func newNodeConfiguration(t *testing.T, nodeName string) *nodeConfiguration {
 	}
 }
 
-func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes.EthAddress, binding *nodeConfiguration, peerNodes []*nodeConfiguration) *componentTestInstance {
+func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes.EthAddress, binding *nodeConfiguration, peerNodes []*nodeConfiguration, domainConfig *domains.SimpleDomainConfig) *componentTestInstance {
 	if binding == nil {
 		binding = newNodeConfiguration(t, "default")
 	}
@@ -188,12 +189,18 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 	i.conf.Log.Level = confutil.P("info")
 	i.conf.BlockIndexer.FromBlock = json.RawMessage(`"latest"`)
 	i.conf.DomainManagerConfig.Domains = make(map[string]*pldconf.DomainConfig, 1)
+	if domainConfig == nil {
+		domainConfig = &domains.SimpleDomainConfig{
+			SubmitMode: domains.ENDORSER_SUBMISSION,
+		}
+	}
 	i.conf.DomainManagerConfig.Domains["domain1"] = &pldconf.DomainConfig{
+		AllowSigning: true,
 		Plugin: pldconf.PluginConfig{
 			Type:    string(tktypes.LibraryTypeCShared),
 			Library: "loaded/via/unit/test/loader",
 		},
-		Config:          map[string]any{"some": "config"},
+		Config:          map[string]any{"submitMode": domainConfig.SubmitMode},
 		RegistryAddress: domainRegistryAddress.String(),
 	}
 
@@ -368,4 +375,67 @@ func buildTestCertificate(t *testing.T, subject pkix.Name, ca *x509.Certificate,
 	err = pem.Encode(publicKeyPEM, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 	require.NoError(t, err)
 	return publicKeyPEM.String(), privateKeyPEM.String()
+}
+
+type partyForTesting struct {
+	identity              string // identity used to resolve the verifier on its local node
+	identityLocator       string // fully qualified locator for the identity that can be used on other nodes
+	instance              *componentTestInstance
+	nodeConfig            *nodeConfiguration
+	peers                 []*nodeConfiguration
+	domainRegistryAddress *tktypes.EthAddress
+	client                rpcclient.Client //TODO swap out for pldclient.PaladinClient
+}
+
+func newPartyForTesting(t *testing.T, name string, domainRegistryAddress *tktypes.EthAddress) *partyForTesting {
+	nodeName := name + "Node"
+	party := &partyForTesting{
+		peers:                 make([]*nodeConfiguration, 0),
+		domainRegistryAddress: domainRegistryAddress,
+		identity:              fmt.Sprintf("wallets.org1.%s", name),
+		identityLocator:       fmt.Sprintf("wallets.org1.%s@%s", name, nodeName),
+	}
+
+	party.nodeConfig = newNodeConfiguration(t, nodeName)
+	return party
+}
+
+func (p *partyForTesting) peer(peers ...*nodeConfiguration) {
+	p.peers = append(p.peers, peers...)
+}
+
+func (p *partyForTesting) start(t *testing.T, domainConfig domains.SimpleDomainConfig) {
+	p.instance = newInstanceForComponentTesting(t, p.domainRegistryAddress, p.nodeConfig, p.peers, &domainConfig)
+	p.client = p.instance.client
+
+}
+
+func (p *partyForTesting) deploySimpleDomainInstanceContract(t *testing.T, domainRegistryAddress *tktypes.EthAddress, endorsementMode string, constructorParameters *domains.ConstructorParameters) *tktypes.EthAddress {
+
+	var dplyTxID uuid.UUID
+
+	err := p.client.CallRPC(context.Background(), &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenConstructorABI(endorsementMode),
+		Transaction: pldapi.Transaction{
+			Type:   pldapi.TransactionTypePrivate.Enum(),
+			Domain: "domain1",
+			From:   p.identity,
+			Data:   tktypes.JSONString(constructorParameters),
+		},
+	})
+	require.NoError(t, err)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, context.Background(), dplyTxID, p.client, true),
+		transactionLatencyThreshold(t)+5*time.Second, //TODO deploy transaction seems to take longer than expected
+		100*time.Millisecond,
+		"Deploy transaction did not receive a receipt",
+	)
+
+	var dplyTxFull pldapi.TransactionFull
+	err = p.client.CallRPC(context.Background(), &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
+	require.NoError(t, err)
+	require.NotNil(t, dplyTxFull.Receipt)
+	require.True(t, dplyTxFull.Receipt.Success)
+	require.NotNil(t, dplyTxFull.Receipt.ContractAddress)
+	return dplyTxFull.Receipt.ContractAddress
 }
