@@ -664,7 +664,7 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 			From:           alice.identity,
 			Data: tktypes.RawJSON(`{
                     "from": "",
-                    "to": "` + bob.identity + `",
+                    "to": "` + bob.identityLocator + `",
                     "amount": "123000000000000000000"
                 }`),
 		},
@@ -691,8 +691,8 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           bob.identity,
 			Data: tktypes.RawJSON(`{
-                    "from": "` + bob.identity + `",
-                    "to": "` + alice.identity + `",
+                    "from": "` + bob.identityLocator + `",
+                    "to": "` + alice.identityLocator + `",
                     "amount": "123000000000000000000"
                 }`),
 		},
