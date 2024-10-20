@@ -38,6 +38,7 @@ import (
 
 type Chainable interface {
 	GetCtx() context.Context
+	Client() PaladinClient
 	Error() error // if an error has happened at any point that was not returned, it is returned here
 }
 
@@ -55,6 +56,7 @@ type TxBuilder interface {
 	ABIFunction(fn *abi.Entry) TxBuilder // sets the ABI and Function with a single call (overwrites any previous ABI)
 	GetABI() abi.ABI
 
+	Constructor() TxBuilder       // shortcut to Function("").To(nil)
 	Function(fn string) TxBuilder // fhe name or full signature of a function - can be left unset for a constructor
 	GetFunction() string
 
@@ -122,6 +124,8 @@ type TransactionResult interface {
 	Receipt() *pldapi.TransactionReceipt // if nil, then error is guaranteed to be non-nil
 }
 
+var defaultConstructor = &abi.Entry{Type: abi.Constructor, Inputs: abi.ParameterArray{}}
+
 type chainable struct {
 	c           *paladinClient
 	ctx         context.Context
@@ -156,6 +160,10 @@ func (wc *chainable) GetCtx() context.Context {
 	return wc.ctx
 }
 
+func (wc *chainable) Client() PaladinClient {
+	return wc.c
+}
+
 func (wc *chainable) deferError(err error) {
 	if err != nil {
 		log.L(wc.GetCtx()).Errorf("deferred error: %s", err)
@@ -181,6 +189,10 @@ func (c *paladinClient) TxBuilder(ctx context.Context) TxBuilder {
 		// Use the default serializer unless overridden
 		serializer: tktypes.StandardABISerializer(),
 	}
+}
+
+func (c *paladinClient) ForABI(ctx context.Context, a abi.ABI) TxBuilder {
+	return c.TxBuilder(ctx).ABI(a)
 }
 
 func (t *txBuilder) ABI(a abi.ABI) TxBuilder {
@@ -237,6 +249,10 @@ func (t *txBuilder) Domain(domain string) TxBuilder {
 func (t *txBuilder) From(from string) TxBuilder {
 	t.tx.From = from
 	return t
+}
+
+func (t *txBuilder) Constructor() TxBuilder {
+	return t.Function("").To(nil)
 }
 
 func (t *txBuilder) Function(fn string) TxBuilder {
@@ -383,7 +399,7 @@ func (t *txBuilder) BuildCallData() (callData tktypes.HexBytes, err error) {
 		inputDataRLP, err = cv.EncodeABIDataCtx(t.ctx)
 	}
 	if err == nil {
-		if t.tx.To != nil {
+		if t.tx.Function != "" {
 			// function call
 			var selector []byte
 			selector, err = def.GenerateFunctionSelectorCtx(t.ctx)
@@ -406,15 +422,12 @@ func (t *txBuilder) ResolveDefinition() (*abi.Entry, error) {
 	if t.tx.ABI == nil {
 		return nil, i18n.NewError(t.ctx, tkmsgs.MsgPaladinClientNoABISupplied)
 	}
-	if t.tx.To == nil {
+	if t.tx.Function == "" {
 		def := t.tx.ABI.Constructor()
 		if def == nil {
-			return nil, i18n.NewError(t.ctx, tkmsgs.MsgPaladinClientNoConstructor)
+			def = defaultConstructor
 		}
 		return def, nil
-	}
-	if t.tx.Function == "" {
-		return nil, i18n.NewError(t.ctx, tkmsgs.MsgPaladinClientNoFunction)
 	}
 	def := t.functions[t.tx.Function]
 	if def == nil {
@@ -424,38 +437,37 @@ func (t *txBuilder) ResolveDefinition() (*abi.Entry, error) {
 }
 
 func (t *txBuilder) BuildInputDataCV() (def *abi.Entry, cv *abi.ComponentValue, err error) {
+	var typeTree abi.TypeComponent
 	def, err = t.ResolveDefinition()
+	if err == nil {
+		typeTree, err = def.Inputs.TypeComponentTreeCtx(t.ctx)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
 
-	typeTree, err := def.Inputs.TypeComponentTreeCtx(t.ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if t.inputs == nil && len(typeTree.TupleChildren()) > 0 {
-		return nil, nil, i18n.NewError(t.ctx, tkmsgs.MsgPaladinClientMissingInput)
-	}
 	var inputJSONable any
-	switch input := t.inputs.(type) {
-	case []any:
-		inputJSONable = input
-	case map[string]any:
-		inputJSONable = input
-	case string:
-		err = json.Unmarshal([]byte(input), &inputJSONable)
-	case []byte:
-		err = json.Unmarshal(input, &inputJSONable)
-	case tktypes.RawJSON:
-		err = json.Unmarshal(input, &inputJSONable)
-	case *abi.ComponentValue:
-		cv = input
-	default:
-		var jsonInput []byte
-		jsonInput, err = json.Marshal(t.inputs)
-		if err == nil {
-			err = json.Unmarshal(jsonInput, &inputJSONable)
+	if t.inputs == nil {
+		if len(typeTree.TupleChildren()) > 0 {
+			return nil, nil, i18n.NewError(t.ctx, tkmsgs.MsgPaladinClientMissingInput, def.SolString())
+		}
+		inputJSONable = []any{}
+	} else {
+		switch input := t.inputs.(type) {
+		case string:
+			err = json.Unmarshal([]byte(input), &inputJSONable)
+		case []byte:
+			err = json.Unmarshal(input, &inputJSONable)
+		case tktypes.RawJSON:
+			err = json.Unmarshal(input, &inputJSONable)
+		case *abi.ComponentValue:
+			cv = input
+		default:
+			var jsonInput []byte
+			jsonInput, err = json.Marshal(t.inputs)
+			if err == nil {
+				err = json.Unmarshal(jsonInput, &inputJSONable)
+			}
 		}
 	}
 	if err == nil && cv == nil /* might have got a CV directly */ {
@@ -549,12 +561,6 @@ func (tr *transactionResult) wait(timeout time.Duration) TransactionResult {
 	var lastErr error
 	for {
 		attempt++
-		select {
-		case <-ticker.C:
-		case <-tr.ctx.Done():
-			tr.deferError(i18n.WrapError(tr.ctx, lastErr, tkmsgs.MsgContextCanceled))
-			return tr
-		}
 		tr.receipt, lastErr = tr.c.PTX().GetTransactionReceipt(tr.ctx, tr.txID)
 		if lastErr != nil {
 			log.L(tr.ctx).Warnf("attempt %d to get receipt %s failed: %s", attempt, tr.txID, lastErr)
@@ -567,6 +573,13 @@ func (tr *transactionResult) wait(timeout time.Duration) TransactionResult {
 		waitTime := time.Since(startTime)
 		if waitTime > timeout {
 			tr.deferError(i18n.WrapError(tr.ctx, lastErr, tkmsgs.MsgPaladinClientPollTimedOut, attempt, waitTime))
+			return tr
+		}
+		// Wait before polling
+		select {
+		case <-ticker.C:
+		case <-tr.ctx.Done():
+			tr.deferError(i18n.WrapError(tr.ctx, lastErr, tkmsgs.MsgContextCanceled))
 			return tr
 		}
 	}
@@ -594,18 +607,18 @@ func (t *txBuilder) validateForSend() error {
 	if t.tx.Domain == "" && t.tx.Type.V() == pldapi.TransactionTypePrivate {
 		return i18n.NewError(t.ctx, tkmsgs.MsgPaladinClientNoDomain)
 	}
-	if t.tx.To != nil {
-		if t.tx.Function == "" {
+	if t.tx.Function == "" {
+		if t.tx.To != nil {
 			return i18n.NewError(t.ctx, tkmsgs.MsgPaladinClientNoFunction)
-		}
-	} else {
-		if t.tx.Function != "" {
-			return i18n.NewError(t.ctx, tkmsgs.MsgPaladinClientMissingTo, t.tx.Function)
 		}
 		if t.tx.Type.V() == pldapi.TransactionTypePrivate && t.tx.Bytecode != nil {
 			return i18n.NewError(t.ctx, tkmsgs.MsgPaladinClientBytecodeWithPriv)
 		} else if t.tx.Type.V() == pldapi.TransactionTypePublic && len(t.tx.Bytecode) == 0 {
 			return i18n.NewError(t.ctx, tkmsgs.MsgPaladinClientBytecodeMissing)
+		}
+	} else {
+		if t.tx.To == nil {
+			return i18n.NewError(t.ctx, tkmsgs.MsgPaladinClientMissingTo, t.tx.Function)
 		}
 	}
 	return nil

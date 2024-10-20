@@ -17,7 +17,6 @@ package pldclient
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -114,7 +113,9 @@ var testABIJSON = ([]byte)(`[
 	}
 ]`)
 
-func TestBuildAndSubmitPublicTXOk(t *testing.T) {
+var testABI = New().TxBuilder(context.Background()).ABIJSON(testABIJSON).GetABI()
+
+func TestBuildAndSubmitPublicTXHTTPOk(t *testing.T) {
 
 	ctx, c, rpcServer, done := newTestClientAndServerHTTP(t)
 	defer done()
@@ -142,6 +143,14 @@ func TestBuildAndSubmitPublicTXOk(t *testing.T) {
 			}),
 		).
 		Add(
+			"ptx_getTransaction", rpcserver.RPCMethod1(func(ctx context.Context, suppliedID uuid.UUID) (*pldapi.Transaction, error) {
+				require.Equal(t, txID, suppliedID)
+				return &pldapi.Transaction{
+					ID: &txID,
+				}, nil
+			}),
+		).
+		Add(
 			"ptx_getTransactionReceipt", rpcserver.RPCMethod1(func(ctx context.Context, suppliedID uuid.UUID) (*pldapi.TransactionReceipt, error) {
 				require.Equal(t, txID, suppliedID)
 				return &pldapi.TransactionReceipt{
@@ -154,11 +163,11 @@ func TestBuildAndSubmitPublicTXOk(t *testing.T) {
 					},
 				}, nil
 			}),
-		))
+		),
+	)
 
-	res := c.TxBuilder(ctx).
+	sent := c.ForABI(ctx, testABI).
 		Public().
-		ABIJSON(testABIJSON).
 		Function("newWidget").
 		Inputs(map[string]any{
 			"widget": map[string]any{
@@ -172,16 +181,29 @@ func TestBuildAndSubmitPublicTXOk(t *testing.T) {
 		PublicTxOptions(pldapi.PublicTxOptions{
 			Gas: confutil.P(tktypes.HexUint64(100000)),
 		}).
-		Send().
-		Wait(100 * time.Millisecond)
+		Send()
+
+	res := sent.Wait(100 * time.Millisecond)
 	require.NoError(t, res.Error())
 	require.Equal(t, txHash, *res.TransactionHash())
+	require.Equal(t, txHash, *res.Receipt().TransactionHash)
+	require.Equal(t, txID, res.ID())
+
+	// Check directly getting TX and receipt
+	tx, err := sent.GetTransaction()
+	require.NoError(t, err)
+	require.Equal(t, txID, *tx.ID)
+
+	// Check directly getting TX and receipt
+	receipt, err := sent.GetReceipt()
+	require.NoError(t, err)
+	require.Equal(t, txID, receipt.ID)
 
 }
 
-func TestBuildAndSubmitPublicDeployFail(t *testing.T) {
+func TestBuildAndSubmitPublicDeployWSFail(t *testing.T) {
 
-	ctx, c, rpcServer, done := newTestClientAndServerHTTP(t)
+	ctx, c, rpcServer, done := newTestClientAndServerWebSockets(t)
 	defer done()
 
 	bytecode := tktypes.HexBytes(tktypes.RandBytes(64))
@@ -202,23 +224,40 @@ func TestBuildAndSubmitPublicDeployFail(t *testing.T) {
 			}),
 		))
 
-	var a abi.ABI
-	err := json.Unmarshal(testABIJSON, &a)
-	require.NoError(t, err)
+	cancellable, cancelCtx := context.WithCancel(ctx)
 
-	res := c.ReceiptPollingInterval(1 * time.Millisecond).
-		TxBuilder(ctx).
+	sent := c.ReceiptPollingInterval(1 * time.Millisecond).
+		TxBuilder(cancellable).
 		Public().
 		SolidityBuild(&solutils.SolidityBuild{
-			ABI:      a,
+			ABI:      testABI,
 			Bytecode: bytecode,
 		}).
 		From("tx.sender").
 		Inputs(`{"supplier": "0x172EA50B3535721154ae5B368E850825615882BB"}`).
-		Send().
-		Wait(25 * time.Millisecond)
+		Send()
+
+	res := sent.Wait(25 * time.Millisecond)
 	require.Regexp(t, "PD020216.*timed out.*server throws an error", res.Error())
 	require.Nil(t, res.TransactionHash())
+
+	cancelCtx()
+	res = sent.Wait(1 * time.Minute)
+	require.Regexp(t, "PD020000", res.Error())
+	require.Nil(t, res.TransactionHash())
+
+}
+
+func TestSendUnconnectedFail(t *testing.T) {
+
+	res := New().TxBuilder(context.Background()).
+		Public().
+		From("tx.sender").
+		Function("someFunc").
+		To(tktypes.RandAddress()).
+		Inputs(`{"supplier": "0x172EA50B3535721154ae5B368E850825615882BB"}`).
+		Send()
+	require.Regexp(t, "PD020210", res.Error())
 
 }
 
@@ -302,23 +341,41 @@ func TestSendNoABI(t *testing.T) {
 	defer done()
 
 	txID := uuid.New()
+	expectNil := false
 	rpcServer.Register(rpcserver.NewRPCModule("ptx").
 		Add(
 			"ptx_sendTransaction", rpcserver.RPCMethod1(func(ctx context.Context, tx pldapi.TransactionInput) (*uuid.UUID, error) {
-				require.JSONEq(t, `{"sku": 73588229205}`, string(tx.Data))
+				if expectNil {
+					require.Nil(t, tx.Data)
+				} else {
+					require.JSONEq(t, `{"sku": 73588229205}`, string(tx.Data))
+				}
 				return &txID, nil
 			}),
 		))
 
-	res := c.ReceiptPollingInterval(1 * time.Millisecond).
+	builder := c.ReceiptPollingInterval(1 * time.Millisecond).
 		TxBuilder(ctx).
 		Public().
 		ABIReference((*tktypes.Bytes32)(tktypes.RandBytes(32))).
 		Function("getWidgets(uint256)").
 		From("tx.sender").
-		To(tktypes.RandAddress()).
-		Inputs(`{"sku": 73588229205}`).
-		Send()
+		To(tktypes.RandAddress())
+
+	res := builder.Inputs(`{"sku": 73588229205}`).Send()
+	require.NoError(t, res.Error())
+	require.Equal(t, txID, *res.ID())
+
+	res = builder.Inputs([]byte(`{"sku": 73588229205}`)).Send()
+	require.NoError(t, res.Error())
+	require.Equal(t, txID, *res.ID())
+
+	res = builder.Inputs(map[string]any{"sku": 73588229205}).Send()
+	require.NoError(t, res.Error())
+	require.Equal(t, txID, *res.ID())
+
+	expectNil = true
+	res = builder.Inputs(nil).Send()
 	require.NoError(t, res.Error())
 	require.Equal(t, txID, *res.ID())
 }
@@ -339,6 +396,18 @@ func TestBuildBadABIFunction(t *testing.T) {
 		Inputs(`{"sku": 73588229205}`).
 		Send()
 	assert.Regexp(t, "FF22025", res.Error())
+}
+
+func TestErrChainingTXAndReceipt(t *testing.T) {
+
+	send := New().ForABI(context.Background(), abi.ABI{}).Send()
+	require.Regexp(t, "PD020211", send.Error()) // missing public or private
+
+	_, err := send.GetTransaction()
+	require.Regexp(t, "PD020211", err)
+
+	_, err = send.GetReceipt()
+	require.Regexp(t, "PD020211", err)
 }
 
 func TestBuildBadABIJSON(t *testing.T) {
@@ -398,4 +467,109 @@ func TestGetters(t *testing.T) {
 
 	serializer := abi.NewSerializer()
 	assert.Equal(t, serializer, b.JSONSerializer(serializer).GetJSONSerializer())
+	assert.NotNil(t, b.Client())
+}
+
+func TestBuildCallDataFunction(t *testing.T) {
+
+	builder := New().ForABI(context.Background(), testABI).Function("getWidgets(uint256)")
+
+	type skuInput struct {
+		SKU tktypes.HexUint64 `json:"sku"`
+	}
+
+	// A JSON serializable structure
+	callData, err := builder.Inputs(&skuInput{SKU: 0x1122334455}).BuildCallData()
+	require.NoError(t, err)
+	require.Equal(t, "0x4f8989ff0000000000000000000000000000000000000000000000000000001122334455", callData.String())
+
+	// A generic structure serializable to an array
+	callData, err = builder.Inputs([]string{"0x1122334455"}).BuildCallData()
+	require.NoError(t, err)
+	require.Equal(t, "0x4f8989ff0000000000000000000000000000000000000000000000000000001122334455", callData.String())
+
+	// A generic structure serializable to an object
+	callData, err = builder.Inputs(map[string]any{"sku": 0x1122334455}).BuildCallData()
+	require.NoError(t, err)
+	require.Equal(t, "0x4f8989ff0000000000000000000000000000000000000000000000000000001122334455", callData.String())
+
+	// A string JSON array
+	callData, err = builder.Inputs(`["0x1122334455"]`).BuildCallData()
+	require.NoError(t, err)
+	require.Equal(t, "0x4f8989ff0000000000000000000000000000000000000000000000000000001122334455", callData.String())
+
+	// A bytes JSON object
+	callData, err = builder.Inputs([]byte(`{"sku": "0x1122334455"}`)).BuildCallData()
+	require.NoError(t, err)
+	require.Equal(t, "0x4f8989ff0000000000000000000000000000000000000000000000000000001122334455", callData.String())
+
+	// A pre-parsed component value tree ready to go
+	cv, err := testABI.Functions()["getWidgets"].Inputs.ParseJSON([]byte(`{"sku": "0x1122334455"}`))
+	require.NoError(t, err)
+	callData, err = builder.Inputs(cv).BuildCallData()
+	require.NoError(t, err)
+	require.Equal(t, "0x4f8989ff0000000000000000000000000000000000000000000000000000001122334455", callData.String())
+
+	// Nil when no value is required (default constructor)
+	callData, err = New().ForABI(context.Background(), abi.ABI{}).
+		Constructor().Inputs(nil).
+		Bytecode(tktypes.MustParseHexBytes("0xfeedbeef")).
+		BuildCallData()
+	require.NoError(t, err)
+	require.Equal(t, "0xfeedbeef", callData.String())
+
+	// Nil when a value is required
+	_, err = builder.Inputs(nil).BuildCallData()
+	assert.Regexp(t, "PD020203", err)
+
+	// Some broken JSON
+	_, err = builder.Inputs(tktypes.RawJSON(`{!!!! bad json`)).BuildCallData()
+	assert.Regexp(t, "PD020200", err)
+
+}
+
+func TestResolveDefinitionNoABI(t *testing.T) {
+	_, err := New().TxBuilder(context.Background()).ResolveDefinition()
+	assert.Regexp(t, "PD020213", err)
+}
+
+func TestNoDomain(t *testing.T) {
+	res := New().TxBuilder(context.Background()).Private().Send()
+	assert.Regexp(t, "PD020214", res.Error())
+}
+
+func TestMissingFunction(t *testing.T) {
+	res := New().TxBuilder(context.Background()).
+		Private().
+		Domain("noto").
+		To(tktypes.RandAddress()).
+		Send()
+	assert.Regexp(t, "PD020215", res.Error())
+}
+
+func TestMissingTo(t *testing.T) {
+	res := New().TxBuilder(context.Background()).
+		Private().
+		Domain("noto").
+		Function("someFunc").
+		Send()
+	assert.Regexp(t, "PD020202", res.Error())
+}
+
+func TestIncorrectlyAddingBytecode(t *testing.T) {
+	res := New().TxBuilder(context.Background()).
+		Private().
+		Domain("noto").
+		Constructor().
+		Bytecode(tktypes.MustParseHexBytes("0xfeedbeef")).
+		Send()
+	assert.Regexp(t, "PD020205", res.Error())
+}
+
+func TestMissingBytecode(t *testing.T) {
+	res := New().TxBuilder(context.Background()).
+		Public().
+		Constructor().
+		Send()
+	assert.Regexp(t, "PD020206", res.Error())
 }

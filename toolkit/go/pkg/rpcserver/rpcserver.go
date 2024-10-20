@@ -37,7 +37,7 @@ type RPCServer interface {
 	EthPublish(eventType string, result interface{}) // Note this is an `eth_` specific extension, with no ack or reliability
 	HTTPAddr() net.Addr
 	WSAddr() net.Addr
-	WSHandler(w http.ResponseWriter, r *http.Request)
+	WSHandler(w http.ResponseWriter, r *http.Request) // Provides access to the WebSocket handler directly to be able to install it into another server
 }
 
 func NewRPCServer(ctx context.Context, conf *pldconf.RPCServerConfig) (_ RPCServer, err error) {

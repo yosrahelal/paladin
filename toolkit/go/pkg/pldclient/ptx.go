@@ -62,13 +62,13 @@ func (p *ptx) GetTransaction(ctx context.Context, txID uuid.UUID) (tx *pldapi.Tr
 	return tx, err
 }
 
-func (p *ptx) GetTransactionByIdempotencyKey(ctx context.Context, idempotencyKey string) (tx *pldapi.Transaction, err error) {
-	err = p.c.CallRPC(ctx, &tx, "ptx_getTransactionByIdempotencyKey", idempotencyKey)
+func (p *ptx) GetTransactionFull(ctx context.Context, txID uuid.UUID) (tx *pldapi.TransactionFull, err error) {
+	err = p.c.CallRPC(ctx, &tx, "ptx_getTransactionFull", txID)
 	return tx, err
 }
 
-func (p *ptx) GetTransactionFull(ctx context.Context, txID uuid.UUID) (tx *pldapi.TransactionFull, err error) {
-	err = p.c.CallRPC(ctx, &tx, "ptx_getTransactionFull", txID)
+func (p *ptx) GetTransactionByIdempotencyKey(ctx context.Context, idempotencyKey string) (tx *pldapi.Transaction, err error) {
+	err = p.c.CallRPC(ctx, &tx, "ptx_getTransactionByIdempotencyKey", idempotencyKey)
 	return tx, err
 }
 
@@ -78,7 +78,7 @@ func (p *ptx) QueryTransactions(ctx context.Context, jq *query.QueryJSON) (txs [
 }
 
 func (p *ptx) QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.TransactionFull, err error) {
-	err = p.c.CallRPC(ctx, &txs, "ptx_queryTransactionFulls", jq)
+	err = p.c.CallRPC(ctx, &txs, "ptx_queryTransactionsFull", jq)
 	return txs, err
 }
 

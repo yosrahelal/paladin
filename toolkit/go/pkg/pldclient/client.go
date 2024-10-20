@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
@@ -36,6 +37,9 @@ type PaladinClient interface {
 
 	// High level transaction building and submission APIs
 	TxBuilder(ctx context.Context) TxBuilder
+
+	// Quick access to TxBuilder(ctx).ABI(a)
+	ForABI(ctx context.Context, a abi.ABI) TxBuilder
 
 	// Paladin transaction RPC interface
 	PTX() PTX
@@ -83,6 +87,9 @@ func (c *paladinClient) HTTP(ctx context.Context, conf *pldconf.HTTPClientConfig
 
 func (c *paladinClient) WebSocket(ctx context.Context, conf *pldconf.WSClientConfig) (PaladinWSClient, error) {
 	rpc, err := rpcclient.NewWSClient(ctx, conf)
+	if err == nil {
+		err = rpc.Connect(ctx)
+	}
 	if err != nil {
 		return nil, err
 	}

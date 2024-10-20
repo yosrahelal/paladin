@@ -55,7 +55,7 @@ var (
 	MsgPaladinClientInvalidInput      = ffe("PD020200", "Unable to convert to ABI function input (%s)")
 	MsgPaladinClientMissingFrom       = ffe("PD020201", "From (signing key identifier) missing")
 	MsgPaladinClientMissingTo         = ffe("PD020202", "To address missing for function '%s'")
-	MsgPaladinClientMissingInput      = ffe("PD020203", "Input missing")
+	MsgPaladinClientMissingInput      = ffe("PD020203", "Input missing for %s")
 	MsgPaladinClientMissingOutput     = ffe("PD020204", "Output missing")
 	MsgPaladinClientBytecodeWithPriv  = ffe("PD020205", "Bytecode cannot be specified with a private contract deployment")
 	MsgPaladinClientBytecodeMissing   = ffe("PD020206", "Bytecode required to deploy a public smart contract")
@@ -66,10 +66,9 @@ var (
 	MsgPaladinClientMissingType       = ffe("PD020211", "Type missing (public or private)")
 	MsgPaladinClientNoFailureMsg      = ffe("PD020212", "No failure message available")
 	MsgPaladinClientNoABISupplied     = ffe("PD020213", "No ABI supplied")
-	MsgPaladinClientNoConstructor     = ffe("PD020214", "No constructor found in supplied ABI")
+	MsgPaladinClientNoDomain          = ffe("PD020214", "No domain specified for private transaction")
 	MsgPaladinClientNoFunction        = ffe("PD020215", "No function specified")
 	MsgPaladinClientPollTimedOut      = ffe("PD020216", "Polling timed out after %d attempts in %s")
-	MsgPaladinClientNoDomain          = ffe("PD020217", "No domain specified for private transaction")
 
 	// Plugin PD0203XX
 	MsgPluginUnsupportedRequest   = ffe("PD020300", "Unsupported request %T")
@@ -98,7 +97,7 @@ var (
 	// JSON/RPC PD0207XX
 	MsgJSONRPCInvalidRequest      = ffe("PD020700", "Invalid JSON/RPC request data")
 	MsgJSONRPCMissingRequestID    = ffe("PD020701", "Invalid JSON/RPC request. Must set request ID")
-	MsgJSONRPCUnsupportedMethod   = ffe("PD020702", "method not supported")
+	MsgJSONRPCUnsupportedMethod   = ffe("PD020702", "method not supported %s")
 	MsgJSONRPCIncorrectParamCount = ffe("PD020703", "method %s requires %d params (supplied=%d)")
 	MsgJSONRPCInvalidParam        = ffe("PD020704", "method %s parameter %d invalid: %s")
 	MsgJSONRPCResultSerialization = ffe("PD020705", "method %s result serialization failed: %s")

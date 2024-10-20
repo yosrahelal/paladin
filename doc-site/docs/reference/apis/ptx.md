@@ -13,6 +13,16 @@ title: API ptx
 
 - [Transaction](../types/transaction.md#transaction)
 
+## ptx_getTransactionByIdempotencyKey
+
+### Parameters
+
+- string
+
+### Returns
+
+- [Transaction](../types/transaction.md#transaction)
+
 ## ptx_getTransactionFull
 
 {% include-markdown "./_includes/gettransactionfull_description.md" %}

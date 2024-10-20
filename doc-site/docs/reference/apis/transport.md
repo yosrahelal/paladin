@@ -13,6 +13,16 @@ title: API transport
 
 - ErrorRPC
 
+## transport_forABI
+
+### Parameters
+
+- [Entry[]](../types/transactioninput.md#entry)
+
+### Returns
+
+- TxBuilder
+
 ## transport_hTTP
 
 ### Parameters
@@ -51,17 +61,17 @@ title: API transport
 
 - PaladinClient
 
-## transport_transaction
-
-### Returns
-
-- [Transaction](../types/transaction.md#transaction)
-
 ## transport_transport
 
 ### Returns
 
 - Transport
+
+## transport_txBuilder
+
+### Returns
+
+- TxBuilder
 
 ## transport_webSocket
 
@@ -71,5 +81,5 @@ title: API transport
 
 ### Returns
 
-- PaladinClient
+- PaladinWSClient
 
