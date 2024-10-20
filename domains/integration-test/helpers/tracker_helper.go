@@ -20,6 +20,7 @@ import (
 	_ "embed"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
@@ -49,12 +50,12 @@ func DeployTracker(
 	signer string,
 ) *NotoTrackerHelper {
 	build := solutils.MustLoadBuild(NotoTrackerJSON)
-	builder := deployBuilder(ctx, t, pld, build.ABI, build.Bytecode).Input(map[string]any{
+	builder := deployBuilder(ctx, pld, build.ABI, build.Bytecode).Inputs(map[string]any{
 		"name":   "NotoTracker",
 		"symbol": "NOTO",
 	})
-	deploy, err := NewTransactionHelper(ctx, t, tb, builder).SignAndSend(signer).Wait(ctx)
-	require.NoError(t, err)
+	deploy := NewTransactionHelper(ctx, t, tb, builder).SignAndSend(signer).Wait(5 * time.Second)
+	require.NoError(t, deploy.Error())
 	assert.NotNil(t, deploy.Receipt().ContractAddress)
 	return &NotoTrackerHelper{
 		t:       t,
@@ -66,14 +67,14 @@ func DeployTracker(
 }
 
 func (h *NotoTrackerHelper) GetBalance(ctx context.Context, account string) int64 {
-	call, err := functionBuilder(ctx, h.t, h.pld, h.ABI, "balanceOf").
+	call := functionBuilder(ctx, h.pld, h.ABI, "balanceOf").
 		Public().
 		To(h.Address).
-		Input(map[string]any{"account": account}).
+		Inputs(map[string]any{"account": account}).
 		BuildTX()
-	require.NoError(h.t, err)
+	require.NoError(h.t, call.Error())
 	var jsonOutput map[string]any
-	err = h.tb.ExecBaseLedgerCall(ctx, &jsonOutput, call)
+	err := h.tb.ExecBaseLedgerCall(ctx, &jsonOutput, call.TX())
 	require.NoError(h.t, err)
 	var balance big.Int
 	balance.SetString(jsonOutput["0"].(string), 10)

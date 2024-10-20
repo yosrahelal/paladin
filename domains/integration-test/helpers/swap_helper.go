@@ -19,6 +19,7 @@ import (
 	"context"
 	_ "embed"
 	"testing"
+	"time"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
@@ -65,10 +66,10 @@ func DeploySwap(
 	input *TradeRequestInput,
 ) *SwapHelper {
 	build := solutils.MustLoadBuild(SwapJSON)
-	builder := deployBuilder(ctx, t, pld, build.ABI, build.Bytecode).
-		Input(toJSON(t, map[string]any{"inputData": input}))
-	deploy, err := NewTransactionHelper(ctx, t, tb, builder).SignAndSend(signer).Wait(ctx)
-	require.NoError(t, err)
+	builder := deployBuilder(ctx, pld, build.ABI, build.Bytecode).
+		Inputs(toJSON(t, map[string]any{"inputData": input}))
+	deploy := NewTransactionHelper(ctx, t, tb, builder).SignAndSend(signer).Wait(5 * time.Second)
+	require.NoError(t, deploy.Error())
 	assert.NotNil(t, deploy.Receipt().ContractAddress)
 	return &SwapHelper{
 		t:       t,
@@ -80,24 +81,24 @@ func DeploySwap(
 }
 
 func (s *SwapHelper) Prepare(ctx context.Context, states *StateData) *TransactionHelper {
-	builder := functionBuilder(ctx, s.t, s.pld, s.ABI, "prepare").
+	builder := functionBuilder(ctx, s.pld, s.ABI, "prepare").
 		To(s.Address).
-		Input(toJSON(s.t, map[string]any{
+		Inputs(map[string]any{
 			"states": states,
-		}))
+		})
 	return NewTransactionHelper(ctx, s.t, s.tb, builder)
 }
 
 func (s *SwapHelper) Execute(ctx context.Context) *TransactionHelper {
-	builder := functionBuilder(ctx, s.t, s.pld, s.ABI, "execute").To(s.Address)
+	builder := functionBuilder(ctx, s.pld, s.ABI, "execute").To(s.Address)
 	return NewTransactionHelper(ctx, s.t, s.tb, builder)
 }
 
 func (s *SwapHelper) GetTrade(ctx context.Context) map[string]any {
-	call, err := functionBuilder(ctx, s.t, s.pld, s.ABI, "trade").Public().To(s.Address).BuildTX()
-	require.NoError(s.t, err)
+	call := functionBuilder(ctx, s.pld, s.ABI, "trade").Public().To(s.Address).BuildTX()
+	require.NoError(s.t, call.Error())
 	var jsonOutput map[string]any
-	err = s.tb.ExecBaseLedgerCall(ctx, &jsonOutput, call)
+	err := s.tb.ExecBaseLedgerCall(ctx, &jsonOutput, call.TX())
 	require.NoError(s.t, err)
 	return jsonOutput
 }
