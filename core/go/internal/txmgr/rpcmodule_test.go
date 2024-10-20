@@ -136,9 +136,18 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		},
 	}
 
+	// Get it back by idempotency key
+	var tx *pldapi.Transaction
+	err = rpcClient.CallRPC(ctx, &tx, "ptx_getTransactionByIdempotencyKey", "not_submitted")
+	require.NoError(t, err)
+	assert.Nil(t, tx)
+	err = rpcClient.CallRPC(ctx, &tx, "ptx_getTransactionByIdempotencyKey", "tx1")
+	require.NoError(t, err)
+	assert.Equal(t, tx1ID, *tx.ID)
+
 	// Query them back
 	var txns []*pldapi.TransactionFull
-	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactionsFull", query.NewQueryBuilder().Limit(1).Query())
 	require.NoError(t, err)
 	assert.Len(t, txns, 1)
 	assert.Equal(t, tx1ID, *txns[0].ID)
@@ -150,7 +159,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 
 	// Check full=false
 	txns = nil
-	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), false)
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query())
 	require.NoError(t, err)
 	assert.Len(t, txns, 1)
 

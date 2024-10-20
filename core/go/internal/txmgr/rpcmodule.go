@@ -78,9 +78,8 @@ func (tm *txManager) rpcGetTransaction() rpcserver.RPCHandler {
 }
 
 func (tm *txManager) rpcGetTransactionFull() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod2(func(ctx context.Context,
+	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id uuid.UUID,
-		full bool,
 	) (*pldapi.TransactionFull, error) {
 		return tm.GetTransactionByIDFull(ctx, id)
 	})
