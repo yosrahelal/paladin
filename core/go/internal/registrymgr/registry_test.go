@@ -538,7 +538,7 @@ func TestHandleEventBatchOk(t *testing.T) {
 		StreamID:   uuid.New(),
 		StreamName: "registry_1",
 		BatchID:    uuid.New(),
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
 				IndexedEvent: &pldapi.IndexedEvent{
 					BlockNumber:      12345,
@@ -580,7 +580,7 @@ func TestHandleEventBatchError(t *testing.T) {
 
 	batch := &blockindexer.EventDeliveryBatch{
 		BatchID: uuid.New(),
-		Events: []*blockindexer.EventWithData{{
+		Events: []*pldapi.EventWithData{{
 			IndexedEvent: &pldapi.IndexedEvent{
 				BlockNumber:      12345,
 				TransactionIndex: 10,

@@ -123,6 +123,8 @@ github.com/hyperledger/firefly-signer v1.1.18-0.20241020190415-2aaf31608d01 h1:4
 github.com/hyperledger/firefly-signer v1.1.18-0.20241020190415-2aaf31608d01/go.mod h1:HDaDdht94JypRTunRGrcPL5Pvxfh4yigjatTrie5JUI=
 github.com/hyperledger/firefly-signer v1.1.18-0.20241020192314-ee4f1b4656bd h1:etBr76Jp1Y9Dr4lOXb8OuylzGxbotv+r6rxCQst052w=
 github.com/hyperledger/firefly-signer v1.1.18-0.20241020192314-ee4f1b4656bd/go.mod h1:HDaDdht94JypRTunRGrcPL5Pvxfh4yigjatTrie5JUI=
+github.com/hyperledger/firefly-signer v1.1.18-0.20241020193610-3c690d63b5f0 h1:QklmRn079wBZHpZN0LdUyvsn/0QHCoNm1J84xmy4j1g=
+github.com/hyperledger/firefly-signer v1.1.18-0.20241020193610-3c690d63b5f0/go.mod h1:HDaDdht94JypRTunRGrcPL5Pvxfh4yigjatTrie5JUI=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/invopop/yaml v0.2.0 h1:7zky/qH+O0DwAyoobXUqvVBwgBFRxKoQ/3FjcVpjTMY=

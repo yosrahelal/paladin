@@ -221,9 +221,9 @@ func (tm *txManager) SendTransaction(ctx context.Context, tx *pldapi.Transaction
 	return &txIDs[0], nil
 }
 
-func (tm *txManager) CallTransaction(ctx context.Context, result any, tx *pldapi.TransactionInput) (err error) {
+func (tm *txManager) CallTransaction(ctx context.Context, result any, tx *pldapi.TransactionCall) (err error) {
 
-	txi, err := tm.resolveNewTransaction(ctx, tx)
+	txi, err := tm.resolveNewTransaction(ctx, &tx.TransactionInput)
 	if err != nil {
 		return err
 	}
@@ -236,7 +236,10 @@ func (tm *txManager) CallTransaction(ctx context.Context, result any, tx *pldapi
 	var callReq ethclient.ABIFunctionRequestBuilder
 	abiFunc, err := ec.ABIFunction(ctx, txi.fn.definition)
 	if err == nil {
-		callReq = abiFunc.R(ctx).To(tx.To.Address0xHex()).Input(tx.Data).Output(result)
+		callReq = abiFunc.R(ctx).
+			To(tx.To.Address0xHex()).
+			Input(tx.Data).
+			Output(result)
 		if tx.From != "" {
 			var senderAddr *tktypes.EthAddress
 			senderAddr, err = tm.keyManager.ResolveEthAddressNewDatabaseTX(ctx, tx.From)

@@ -103,7 +103,7 @@ wallets:
 	err = json.Unmarshal(simpleStorageBuildJSON, &simpleStorageBuild)
 	require.NoError(t, err)
 
-	eventStreamEvents := make(chan *blockindexer.EventWithData, 2 /* all the events we exepct */)
+	eventStreamEvents := make(chan *pldapi.EventWithData, 2 /* all the events we exepct */)
 	err = indexer.Start(&blockindexer.InternalEventStream{
 		Handler: func(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
 			// With SQLite we cannot hang in here with a DB TX - as there's only one per process.

@@ -25,8 +25,8 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -78,7 +78,7 @@ func (th *TransactionHelper) Prepare() tktypes.HexBytes {
 	return b
 }
 
-func (th *TransactionHelper) FindEvent(txHash *tktypes.Bytes32, abi abi.ABI, eventName string, eventParams any) *blockindexer.EventWithData {
+func (th *TransactionHelper) FindEvent(txHash *tktypes.Bytes32, abi abi.ABI, eventName string, eventParams any) *pldapi.EventWithData {
 	targetEvent := abi.Events()[eventName]
 	assert.NotNil(th.t, targetEvent)
 	assert.NotEmpty(th.t, targetEvent.SolString())

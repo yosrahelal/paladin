@@ -21,11 +21,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type PTX interface {
 	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (txID *uuid.UUID, err error)
 	SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
+	Call(ctx context.Context, tx *pldapi.TransactionCall) (data tktypes.RawJSON, err error)
 
 	GetTransaction(ctx context.Context, txID uuid.UUID) (receipt *pldapi.Transaction, err error)
 	GetTransactionFull(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionFull, err error)
@@ -55,6 +57,11 @@ func (p *ptx) SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) 
 func (p *ptx) SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
 	err = p.c.CallRPC(ctx, &txIDs, "ptx_sendTransactions", txs)
 	return txIDs, err
+}
+
+func (p *ptx) Call(ctx context.Context, tx *pldapi.TransactionCall) (data tktypes.RawJSON, err error) {
+	err = p.c.CallRPC(ctx, &data, "ptx_call", tx)
+	return data, err
 }
 
 func (p *ptx) GetTransaction(ctx context.Context, txID uuid.UUID) (tx *pldapi.Transaction, err error) {

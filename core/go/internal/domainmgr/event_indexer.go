@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
@@ -39,11 +40,11 @@ func (r receiptsByOnChainOrder) Len() int           { return len(r) }
 func (r receiptsByOnChainOrder) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
 func (r receiptsByOnChainOrder) Less(i, j int) bool { return r[i].OnChain.Compare(&r[j].OnChain) < 0 }
 
-func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB, batch *blockindexer.EventDeliveryBatch) ([]*blockindexer.EventWithData, receiptsByOnChainOrder, error) {
+func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB, batch *blockindexer.EventDeliveryBatch) ([]*pldapi.EventWithData, receiptsByOnChainOrder, error) {
 
 	var contracts []*PrivateSmartContract
 	var txCompletions receiptsByOnChainOrder
-	unprocessedEvents := make([]*blockindexer.EventWithData, 0, len(batch.Events))
+	unprocessedEvents := make([]*pldapi.EventWithData, 0, len(batch.Events))
 
 	for _, ev := range batch.Events {
 		processedEvent := false
@@ -112,7 +113,7 @@ func (dm *domainManager) notifyTransactions(txCompletions receiptsByOnChainOrder
 	}
 }
 
-func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID string, events []*blockindexer.EventWithData) (map[tktypes.EthAddress]*prototk.HandleEventBatchRequest, error) {
+func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID string, events []*pldapi.EventWithData) (map[tktypes.EthAddress]*prototk.HandleEventBatchRequest, error) {
 
 	batches := make(map[tktypes.EthAddress]*prototk.HandleEventBatchRequest)
 

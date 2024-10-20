@@ -72,9 +72,10 @@ func (tm *txManager) rpcSendTransactions() rpcserver.RPCHandler {
 
 func (tm *txManager) rpcCall() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
-		tx []*pldapi.TransactionCall,
-	) (result any, _ error) {
-		return tm.CallTransaction(ctx, &result, tx)
+		tx *pldapi.TransactionCall,
+	) (result tktypes.RawJSON, err error) {
+		err = tm.CallTransaction(ctx, &result, tx)
+		return
 	})
 }
 

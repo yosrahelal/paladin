@@ -201,6 +201,52 @@ func TestBuildAndSubmitPublicTXHTTPOk(t *testing.T) {
 
 }
 
+func TestBuildAndSubmitPublicCallHTTPOk(t *testing.T) {
+
+	ctx, c, rpcServer, done := newTestClientAndServerHTTP(t)
+	defer done()
+
+	contractAddr := tktypes.RandAddress()
+	rpcServer.Register(rpcserver.NewRPCModule("ptx").
+		Add(
+			"ptx_call", rpcserver.RPCMethod1(func(ctx context.Context, tx pldapi.TransactionCall) (tktypes.RawJSON, error) {
+				require.JSONEq(t, `["12345"]`, string(tx.Data))
+				require.Equal(t, pldapi.TransactionTypePublic, tx.Type.V())
+				require.Equal(t, "getWidgets", tx.Function)
+				require.Equal(t, contractAddr, tx.To)
+				require.Equal(t, "latest", tx.Block.String())
+				return tktypes.RawJSON(`[[
+					"0x172ea50b3535721154ae5b368e850825615882bb",
+					"12345",
+					["blue", "round"]
+				]]`), nil
+			}),
+		),
+	)
+
+	var widgets []any
+	called := c.ForABI(ctx, testABI).
+		Public().
+		Function("getWidgets").
+		To(contractAddr).
+		Inputs([]int{12345}).
+		Outputs(&widgets).
+		DataFormat("mode=array").
+		PublicCallOptions(pldapi.PublicCallOptions{
+			Block: "latest",
+		}).
+		Call()
+	require.NoError(t, called)
+	assert.Equal(t, []any{
+		[]any{
+			"0x172ea50b3535721154ae5b368e850825615882bb",
+			"12345",
+			[]any{"blue", "round"},
+		},
+	}, widgets)
+
+}
+
 func TestBuildAndSubmitPublicDeployWSFail(t *testing.T) {
 
 	ctx, c, rpcServer, done := newTestClientAndServerWebSockets(t)
@@ -325,10 +371,7 @@ func TestBuildABIDataJSONArray(t *testing.T) {
 		Function("getWidgets(uint256)").
 		To(tktypes.RandAddress()).
 		Inputs(`{"sku": 73588229205}`).
-		JSONSerializer(abi.NewSerializer().
-			SetFormattingMode(abi.FormatAsFlatArrays).
-			SetIntSerializer(abi.HexIntSerializer0xPrefix),
-		).
+		DataFormat("mode=array&number=hex").
 		BuildInputDataJSON()
 	require.NoError(t, err)
 	require.JSONEq(t, `["0x1122334455"]`, string(data))
@@ -400,10 +443,15 @@ func TestBuildBadABIFunction(t *testing.T) {
 
 func TestErrChainingTXAndReceipt(t *testing.T) {
 
-	send := New().ForABI(context.Background(), abi.ABI{}).Send()
+	builder := New().ForABI(context.Background(), abi.ABI{})
+
+	send := builder.Send()
 	require.Regexp(t, "PD020211", send.Error()) // missing public or private
 
-	_, err := send.GetTransaction()
+	err := builder.Call()
+	require.Regexp(t, "PD020211", err)
+
+	_, err = send.GetTransaction()
 	require.Regexp(t, "PD020211", err)
 
 	_, err = send.GetReceipt()
@@ -461,13 +509,28 @@ func TestGetters(t *testing.T) {
 	assert.Equal(t, tx.Bytecode, b.GetBytecode())
 	assert.Equal(t, tx.PublicTxOptions, b.GetPublicTxOptions())
 
+	require.NotNil(t, b.Client())
+
 	// Check it doesn't change in the round trip
 	tx2 := b.BuildTX().TX()
 	require.Equal(t, tx, tx2)
 
-	serializer := abi.NewSerializer()
-	assert.Equal(t, serializer, b.JSONSerializer(serializer).GetJSONSerializer())
-	assert.NotNil(t, b.Client())
+	callTX := &pldapi.TransactionCall{
+		TransactionInput: *b.BuildTX().TX(),
+		DataFormat:       "mode=array",
+		PublicCallOptions: pldapi.PublicCallOptions{
+			Block: "latest",
+		},
+	}
+	b = b.WrapCall(callTX)
+	require.Equal(t, callTX.PublicCallOptions, b.GetPublicCallOptions())
+	require.Equal(t, tktypes.JSONFormatOptions("mode=array"), b.GetDataFormat())
+	var result tktypes.RawJSON
+	b.Outputs(&result)
+	require.Equal(t, &result, b.GetOutputs())
+
+	tx3 := b.BuildTX().CallTX()
+	require.Equal(t, callTX, tx3)
 }
 
 func TestBuildCallDataFunction(t *testing.T) {

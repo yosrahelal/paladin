@@ -8,7 +8,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.17.1
 	github.com/google/uuid v1.6.0
 	github.com/hyperledger/firefly-common v1.4.11
-	github.com/hyperledger/firefly-signer v1.1.18-0.20241020192314-ee4f1b4656bd
+	github.com/hyperledger/firefly-signer v1.1.18-0.20241020193610-3c690d63b5f0
 	github.com/kaleido-io/paladin/config v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/registries/static v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000

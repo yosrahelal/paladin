@@ -81,28 +81,38 @@ type TxBuilder interface {
 	Inputs(inputs any) TxBuilder // can be string and tktypes.RawJSON are interpreted as JSON, abi.ComponentValue trees can be used, and any other type will be serialized to JSON then parsed against the ABI inputs. Errors processing this input against the ABI function definition are deferred
 	GetInputs() any
 
-	JSONSerializer(serializer *abi.Serializer) TxBuilder // allows customization of how the data will be serialized into the transaction from the input (as an object or array for example)
-	GetJSONSerializer() *abi.Serializer
+	Outputs(outputs any) TxBuilder // only used for call - must be a pointer to the place to store the return value. Same type rules as Inputs
+	GetOutputs() any
 
 	PublicTxOptions(opts pldapi.PublicTxOptions) TxBuilder // detailed options of how to submit the public / base ledger transaction that results from the public/private transaction
 	GetPublicTxOptions() pldapi.PublicTxOptions
 
-	Wrap(*pldapi.TransactionInput) TxBuilder // initializes a TxBuilder from an existing transaction, including setting the inputs to be the Data from the TX
+	PublicCallOptions(opts pldapi.PublicCallOptions) TxBuilder // for calls of public transactions, this is
+	GetPublicCallOptions() pldapi.PublicCallOptions
+
+	DataFormat(format tktypes.JSONFormatOptions) TxBuilder // determines how JSON will be sent/received to/from the server as serialized JSON
+	GetDataFormat() tktypes.JSONFormatOptions
+
+	Wrap(*pldapi.TransactionInput) TxBuilder    // initializes a TxBuilder from an existing transaction, including setting the inputs to be the Data from the TX
+	WrapCall(*pldapi.TransactionCall) TxBuilder // initializes a TxBuilder from an existing call, including setting the inputs to be the Data from the TX
 
 	ResolveDefinition() (*abi.Entry, error)                                // resolves the function/constructor client-side against the ABI and returns the full definition
 	BuildCallData() (callData tktypes.HexBytes, err error)                 // builds binary call data, useful for various low level functions on ABI
 	BuildInputDataCV() (def *abi.Entry, cv *abi.ComponentValue, err error) // build the intermediate abi.ComponentValue tree for the inputs
 	BuildInputDataJSON() (jsonData tktypes.RawJSON, err error)             // build the input data as JSON (object by default, with serialization options via Serializer())
 	BuildTX() SendableTransaction                                          // builds the full TransactionInput object for use with Paladin - copies the TX so the builder can be re-used safely
-	Send() SentTransaction                                                 // shortcut to BuildTX() then SendTX() with a chainable result (errors deferred)
+	Send() SentTransaction                                                 // shortcut to BuildTX() then Send() with a chainable result (errors deferred)
+	Call() error                                                           // shortcut to BuildTX() then Call()
 }
 
 type SendableTransaction interface {
 	Chainable
 
-	TX() *pldapi.TransactionInput // get the transaction directly to use
-	Error() error                 // deferred error
-	Send() SentTransaction        // sends the transaction and builds a wrapper around the returned ID, including handling idempotency key conflicts
+	TX() *pldapi.TransactionInput    // get the transaction directly to use
+	CallTX() *pldapi.TransactionCall // get the call version of the transaction directly to use
+	Error() error                    // deferred error
+	Send() SentTransaction           // sends the transaction and builds a wrapper around the returned ID, including handling idempotency key conflicts
+	Call() error                     // performs a call, storing the returned value back into the outputs (as JSON per the DataFormat if a string/[]byte/RawJSON is provided, otherwise un-marshalling to your value)
 }
 
 type SentTransaction interface {
@@ -134,15 +144,16 @@ type chainable struct {
 
 type txBuilder struct {
 	chainable
-	functions  map[string]*abi.Entry
-	tx         *pldapi.TransactionInput
-	serializer *abi.Serializer
-	inputs     any
+	functions map[string]*abi.Entry
+	tx        *pldapi.TransactionCall
+	inputs    any
+	outputs   any
 }
 
 type sendableTransaction struct {
 	chainable
-	tx *pldapi.TransactionInput
+	tx      *pldapi.TransactionCall
+	outputs any
 }
 
 type sentTransaction struct {
@@ -185,9 +196,7 @@ func (c *paladinClient) TxBuilder(ctx context.Context) TxBuilder {
 			c:   c,
 		},
 		functions: map[string]*abi.Entry{},
-		tx:        &pldapi.TransactionInput{},
-		// Use the default serializer unless overridden
-		serializer: tktypes.StandardABISerializer(),
+		tx:        &pldapi.TransactionCall{},
 	}
 }
 
@@ -292,12 +301,20 @@ func (t *txBuilder) GetInputs() any {
 	return t.inputs
 }
 
-func (t *txBuilder) GetJSONSerializer() *abi.Serializer {
-	return t.serializer
+func (t *txBuilder) GetOutputs() any {
+	return t.outputs
+}
+
+func (t *txBuilder) GetDataFormat() tktypes.JSONFormatOptions {
+	return t.tx.DataFormat
 }
 
 func (t *txBuilder) GetPublicTxOptions() pldapi.PublicTxOptions {
 	return t.tx.PublicTxOptions
+}
+
+func (t *txBuilder) GetPublicCallOptions() pldapi.PublicCallOptions {
+	return t.tx.PublicCallOptions
 }
 
 func (t *txBuilder) GetTo() *tktypes.EthAddress {
@@ -318,8 +335,13 @@ func (t *txBuilder) Inputs(inputs any) TxBuilder {
 	return t
 }
 
-func (t *txBuilder) JSONSerializer(serializer *abi.Serializer) TxBuilder {
-	t.serializer = serializer
+func (t *txBuilder) Outputs(outputs any) TxBuilder {
+	t.outputs = outputs
+	return t
+}
+
+func (t *txBuilder) DataFormat(format tktypes.JSONFormatOptions) TxBuilder {
+	t.tx.DataFormat = format
 	return t
 }
 
@@ -338,6 +360,11 @@ func (t *txBuilder) PublicTxOptions(opts pldapi.PublicTxOptions) TxBuilder {
 	return t
 }
 
+func (t *txBuilder) PublicCallOptions(opts pldapi.PublicCallOptions) TxBuilder {
+	t.tx.PublicCallOptions = opts
+	return t
+}
+
 func (t *txBuilder) SolidityBuild(build *solutils.SolidityBuild) TxBuilder {
 	return t.ABI(build.ABI).Bytecode(build.Bytecode)
 }
@@ -348,7 +375,16 @@ func (t *txBuilder) To(to *tktypes.EthAddress) TxBuilder {
 }
 
 func (t *txBuilder) Wrap(tx *pldapi.TransactionInput) TxBuilder {
-	t.tx = tx
+	t.tx = &pldapi.TransactionCall{
+		TransactionInput: *tx,
+	}
+	t.inputs = tx.Data
+	return t
+}
+
+func (t *txBuilder) WrapCall(tx *pldapi.TransactionCall) TxBuilder {
+	txCopy := *tx
+	t.tx = &txCopy
 	t.inputs = tx.Data
 	return t
 }
@@ -356,6 +392,7 @@ func (t *txBuilder) Wrap(tx *pldapi.TransactionInput) TxBuilder {
 func (t *txBuilder) BuildTX() SendableTransaction {
 	st := &sendableTransaction{
 		chainable: t.chainable,
+		outputs:   t.outputs,
 	}
 	var err error
 	st.tx, err = t.copyTX()
@@ -364,7 +401,7 @@ func (t *txBuilder) BuildTX() SendableTransaction {
 	return st
 }
 
-func (t *txBuilder) copyTX() (*pldapi.TransactionInput, error) {
+func (t *txBuilder) copyTX() (*pldapi.TransactionCall, error) {
 	tx := *t.tx
 	err := t.validateForSend()
 	if err == nil {
@@ -390,6 +427,10 @@ func (t *txBuilder) copyTX() (*pldapi.TransactionInput, error) {
 
 func (t *txBuilder) Send() SentTransaction {
 	return t.BuildTX().Send()
+}
+
+func (t *txBuilder) Call() error {
+	return t.BuildTX().Call()
 }
 
 func (t *txBuilder) BuildCallData() (callData tktypes.HexBytes, err error) {
@@ -480,11 +521,15 @@ func (t *txBuilder) BuildInputDataCV() (def *abi.Entry, cv *abi.ComponentValue, 
 }
 
 func (t *txBuilder) BuildInputDataJSON() (jsonData tktypes.RawJSON, err error) {
+	var serializer *abi.Serializer
 	_, cv, err := t.BuildInputDataCV()
+	if err == nil {
+		serializer, err = t.tx.DataFormat.GetABISerializer(t.ctx)
+	}
 	if err != nil {
 		return nil, err
 	}
-	return t.serializer.SerializeJSONCtx(t.ctx, cv)
+	return serializer.SerializeJSONCtx(t.ctx, cv)
 }
 
 func (st sendableTransaction) Send() SentTransaction {
@@ -499,7 +544,7 @@ func (st sendableTransaction) Send() SentTransaction {
 	}
 	var err error
 	var existingTX *pldapi.Transaction
-	sent.txID, err = st.c.PTX().SendTransaction(st.ctx, st.tx)
+	sent.txID, err = st.c.PTX().SendTransaction(st.ctx, &st.tx.TransactionInput)
 	if err != nil && st.tx.IdempotencyKey != "" && strings.Contains(err.Error(), "PD012220") {
 		log.L(st.ctx).Infof("Idempotency key clash for %s - checking for existing transaction: %s", st.tx.IdempotencyKey, err)
 		existingTX, err = st.c.PTX().GetTransactionByIdempotencyKey(st.ctx, st.tx.IdempotencyKey)
@@ -512,7 +557,22 @@ func (st sendableTransaction) Send() SentTransaction {
 	return sent
 }
 
+func (st sendableTransaction) Call() error {
+	if st.deferredErr != nil {
+		return st.deferredErr
+	}
+	data, err := st.c.PTX().Call(st.ctx, st.tx)
+	if err == nil {
+		err = json.Unmarshal(data, st.outputs)
+	}
+	return err
+}
+
 func (st sendableTransaction) TX() *pldapi.TransactionInput {
+	return &st.tx.TransactionInput
+}
+
+func (st sendableTransaction) CallTX() *pldapi.TransactionCall {
 	return st.tx
 }
 

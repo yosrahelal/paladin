@@ -37,6 +37,9 @@ func TestPTXFunctions(t *testing.T) {
 	_, err = c.PTX().SendTransactions(ctx, []*pldapi.TransactionInput{})
 	assert.Regexp(t, "PD020702.*ptx_sendTransactions", err)
 
+	_, err = c.PTX().Call(ctx, &pldapi.TransactionCall{})
+	assert.Regexp(t, "PD020702.*ptx_call", err)
+
 	_, err = c.PTX().GetTransaction(ctx, uuid.New())
 	assert.Regexp(t, "PD020702.*ptx_getTransaction", err)
 
