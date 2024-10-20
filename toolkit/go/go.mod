@@ -11,7 +11,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/hyperledger/firefly-common v1.4.11
-	github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1
+	github.com/hyperledger/firefly-signer v1.1.18-0.20241020193610-3c690d63b5f0
 	github.com/kaleido-io/paladin/config v0.0.0-00010101000000-000000000000
 	github.com/rs/cors v1.11.0
 	github.com/sirupsen/logrus v1.9.3

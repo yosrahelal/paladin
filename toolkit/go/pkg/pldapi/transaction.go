@@ -64,6 +64,13 @@ type TransactionInput struct {
 	Bytecode  tktypes.HexBytes `docstruct:"TransactionInput" json:"bytecode,omitempty"`  // for deploy this is prepended to the encoded data inputs
 }
 
+// Call also provides some options on how to execute the call
+type TransactionCall struct {
+	TransactionInput
+	Block      string                    `json:"block,omitempty"` // only applicable to public calls, specifies the block number using any of the values applicable to eth_call (default "latest"). Note historical calls require an archive node
+	DataFormat tktypes.JSONFormatOptions `json:"dataFormat"`      // formatting options for the result data
+}
+
 // Additional fields returned on output when "full" specified
 type TransactionFull struct {
 	*Transaction

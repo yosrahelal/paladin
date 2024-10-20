@@ -19,12 +19,71 @@ package tktypes
 import (
 	"context"
 	"crypto/sha256"
+	"net/url"
 	"sort"
+	"strings"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 )
+
+type JSONFormatOptions string
+
+func (jfo JSONFormatOptions) GetABISerializer(ctx context.Context) (serializer *abi.Serializer, err error) {
+	serializer = StandardABISerializer()
+	if len(jfo) == 0 {
+		return
+	}
+	options, err := url.ParseQuery(string(jfo))
+	if err != nil {
+		return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesInvalidJSONFormatOptions, jfo)
+	}
+	for option, values := range options {
+		for _, v := range values {
+			switch strings.ToLower(option) {
+			case "mode":
+				switch strings.ToLower(v) {
+				case "object":
+					serializer = serializer.SetFormattingMode(abi.FormatAsObjects)
+				case "array":
+					serializer = serializer.SetFormattingMode(abi.FormatAsFlatArrays)
+				case "self-describing":
+					serializer = serializer.SetFormattingMode(abi.FormatAsSelfDescribingArrays)
+				default:
+					return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+				}
+			case "number":
+				switch strings.ToLower(v) {
+				case "string": // default
+					serializer = serializer.SetIntSerializer(abi.Base10StringIntSerializer)
+				case "hex-0x", "hex":
+					serializer = serializer.SetIntSerializer(abi.HexIntSerializer0xPrefix)
+				case "json-number": // note consumer must be very careful to use a JSON parser that support large numbers
+					serializer = serializer.SetIntSerializer(abi.JSONNumberIntSerializer)
+				default:
+					return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+				}
+			case "bytes":
+				switch strings.ToLower(v) {
+				case "hex-0x", "hex":
+					serializer = serializer.SetByteSerializer(abi.HexByteSerializer0xPrefix)
+				case "hex-plain":
+					serializer = serializer.SetByteSerializer(abi.HexByteSerializer)
+				case "base64":
+					serializer = serializer.SetByteSerializer(abi.Base64ByteSerializer)
+				default:
+					return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+				}
+			case "pretty":
+				serializer = serializer.SetPretty(v != "false")
+			default:
+				return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+			}
+		}
+	}
+	return serializer, nil
+}
 
 // The serializer we should use in all places that go from ABI validated data,
 // back down to JSON that might be:
