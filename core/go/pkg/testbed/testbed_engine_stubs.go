@@ -93,7 +93,7 @@ func (tb *testbed) execBaseLedgerTransaction(ctx context.Context, signer string,
 	return tb.ExecTransactionSync(ctx, tx)
 }
 
-func (tb *testbed) ExecBaseLedgerCall(ctx context.Context, result any, tx *pldapi.TransactionInput) error {
+func (tb *testbed) ExecBaseLedgerCall(ctx context.Context, result any, tx *pldapi.TransactionCall) error {
 	return tb.Components().TxManager().CallTransaction(ctx, result, tx)
 }
 

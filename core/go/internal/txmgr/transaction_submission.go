@@ -235,10 +235,15 @@ func (tm *txManager) CallTransaction(ctx context.Context, result any, tx *pldapi
 	ec := tm.ethClientFactory.HTTPClient().(ethclient.EthClientWithKeyManager)
 	var callReq ethclient.ABIFunctionRequestBuilder
 	abiFunc, err := ec.ABIFunction(ctx, txi.fn.definition)
+	blockRef := tx.Block.String()
+	if blockRef == "" {
+		blockRef = "latest"
+	}
 	if err == nil {
 		callReq = abiFunc.R(ctx).
 			To(tx.To.Address0xHex()).
 			Input(tx.Data).
+			BlockRef(ethclient.BlockRef(blockRef)).
 			Output(result)
 		if tx.From != "" {
 			var senderAddr *tktypes.EthAddress

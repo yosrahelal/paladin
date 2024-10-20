@@ -114,7 +114,7 @@ func (a *AtomHelper) GetOperationCount(ctx context.Context) int {
 		BuildTX()
 	require.NoError(a.t, tx.Error())
 	var jsonOutput map[string]any
-	err := a.tb.ExecBaseLedgerCall(ctx, &jsonOutput, tx.TX())
+	err := a.tb.ExecBaseLedgerCall(ctx, &jsonOutput, tx.CallTX())
 	require.NoError(a.t, err)
 	opCount, err := strconv.Atoi(jsonOutput["0"].(string))
 	require.NoError(a.t, err)
@@ -132,7 +132,7 @@ func (a *AtomHelper) GetOperations(ctx context.Context) []map[string]any {
 			BuildTX()
 		require.NoError(a.t, tx.Error())
 		var jsonOutput map[string]any
-		err := a.tb.ExecBaseLedgerCall(ctx, &jsonOutput, tx.TX())
+		err := a.tb.ExecBaseLedgerCall(ctx, &jsonOutput, tx.CallTX())
 		require.NoError(a.t, err)
 		operations = append(operations, jsonOutput["0"].(map[string]any))
 	}

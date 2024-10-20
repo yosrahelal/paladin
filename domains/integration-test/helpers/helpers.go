@@ -82,7 +82,7 @@ func (th *TransactionHelper) FindEvent(txHash *tktypes.Bytes32, abi abi.ABI, eve
 	targetEvent := abi.Events()[eventName]
 	assert.NotNil(th.t, targetEvent)
 	assert.NotEmpty(th.t, targetEvent.SolString())
-	events, err := th.tb.Components().BlockIndexer().DecodeTransactionEvents(th.ctx, *txHash, abi)
+	events, err := th.tb.Components().BlockIndexer().DecodeTransactionEvents(th.ctx, *txHash, abi, "")
 	assert.NoError(th.t, err)
 	for _, event := range events {
 		if event.SoliditySignature == targetEvent.SolString() {

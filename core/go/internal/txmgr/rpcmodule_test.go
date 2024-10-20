@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -90,6 +91,10 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"sender1"}).
 				Return([]*tktypes.EthAddress{senderAddr}, nil)
+			mc.keyManager.On("ResolveEthAddressNewDatabaseTX", mock.Anything, "sender1").
+				Return(senderAddr, nil)
+			unconnected := ethclient.NewUnconnectedRPCClient(context.Background(), &pldconf.EthClientConfig{}, 0)
+			mc.ethClientFactory.On("HTTPClient").Return(unconnected)
 		},
 	)
 	defer done()
@@ -103,6 +108,9 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		}},
 		{Type: abi.Function, Name: "set", Inputs: abi.ParameterArray{
 			{Type: "uint256"}, // named where we are using an object input
+		}},
+		{Type: abi.Function, Name: "get", Outputs: abi.ParameterArray{
+			{Type: "uint256"},
 		}},
 		{Type: abi.Error, Name: "BadValue", Inputs: abi.ParameterArray{
 			{Type: "uint256"},
@@ -304,6 +312,22 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []uuid.UUID{tx0ID}, tx1Deps.DependsOn)
 	assert.Equal(t, []uuid.UUID{tx2ID}, tx1Deps.PrereqOf)
+
+	var resJSON tktypes.RawJSON
+	err = rpcClient.CallRPC(ctx, &resJSON, "ptx_call", &pldapi.TransactionCall{
+		TransactionInput: pldapi.TransactionInput{
+			Transaction: pldapi.Transaction{
+				IdempotencyKey: "tx2",
+				Type:           pldapi.TransactionTypePublic.Enum(),
+				Data:           tktypes.RawJSON(`{"0": 123456789012345678901234567890}`),
+				Function:       "get()",
+				From:           "sender1",
+				To:             tktypes.MustEthAddress(tktypes.RandHex(20)),
+			},
+			ABI: sampleABI,
+		},
+	})
+	assert.Regexp(t, "PD011517", err) // means we got all the way to the unconnected client
 
 }
 

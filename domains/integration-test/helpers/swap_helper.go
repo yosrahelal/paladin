@@ -98,7 +98,7 @@ func (s *SwapHelper) GetTrade(ctx context.Context) map[string]any {
 	call := functionBuilder(ctx, s.pld, s.ABI, "trade").Public().To(s.Address).BuildTX()
 	require.NoError(s.t, call.Error())
 	var jsonOutput map[string]any
-	err := s.tb.ExecBaseLedgerCall(ctx, &jsonOutput, call.TX())
+	err := s.tb.ExecBaseLedgerCall(ctx, &jsonOutput, call.CallTX())
 	require.NoError(s.t, err)
 	return jsonOutput
 }
