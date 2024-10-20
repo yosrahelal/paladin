@@ -292,6 +292,8 @@ var (
 	MsgPrivateTxManagerEndorsementRequestError = ffe("PD011817", "Failed to request endorsement from %s: %s")
 	MsgPrivateTxManagerResolveDispatchError    = ffe("PD011818", "Failed to resolve dispatcher: %s")
 	MsgPrivateTxManagerPrepareError            = ffe("PD011819", "Failed to prepare transaction dispatch to base ledger: %s")
+	MsgPrivateTxManagerDeployError             = ffe("PD011820", "Failed to deploy private contract")
+	MsgPrivateTxMgrEncodeCallDataFailed        = ffe("PD011821", "Failed to encode call data '%s' for private contract deploy")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")

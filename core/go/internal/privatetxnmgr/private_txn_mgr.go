@@ -261,6 +261,8 @@ func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.Pr
 		return i18n.WrapError(ctx, err, msgs.MsgDeployInitFailed)
 	}
 
+	// NOTE unlike private transactions, we assume that all verifiers are resolved locally
+
 	//Resolve keys synchronously so that we can return an error if any key resolution fails
 	keyMgr := p.components.KeyManager()
 	tx.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.RequiredVerifiers))
@@ -290,22 +292,41 @@ func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.Pr
 }
 func (p *privateTxManager) deploymentLoop(ctx context.Context, domain components.Domain, tx *components.PrivateContractDeploy) {
 	log.L(ctx).Info("Starting deployment loop")
-	adddr, err := p.evaluateDeployment(ctx, domain, tx)
+	err := p.evaluateDeployment(ctx, domain, tx)
 	if err != nil {
 		log.L(ctx).Errorf("Error evaluating deployment: %s", err)
 		return
 	}
-	log.L(ctx).Infof("Deployment completed successfully. Contract address: %s", adddr.String())
+	log.L(ctx).Info("Deployment completed successfully. ")
 }
 
-func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain components.Domain, tx *components.PrivateContractDeploy) (*tktypes.EthAddress, error) {
+func (p *privateTxManager) revertDeploy(ctx context.Context, tx *components.PrivateContractDeploy, err error) error {
+	deployError := i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerDeployError)
+
+	var tryFinalize func()
+	tryFinalize = func() {
+		p.syncPoints.QueueTransactionFinalize(ctx, tktypes.EthAddress{}, tx.ID, deployError.Error(),
+			func(ctx context.Context) {
+				log.L(ctx).Debugf("Finalized deployment transaction: %s", tx.ID)
+			},
+			func(ctx context.Context, err error) {
+				log.L(ctx).Errorf("Error finalizing deployment: %s", err)
+				tryFinalize()
+			})
+	}
+	tryFinalize()
+	return deployError
+
+}
+
+func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain components.Domain, tx *components.PrivateContractDeploy) error {
 
 	// TODO there is a lot of common code between this and the Dispatch function in the orchestrator. should really move some of it into a common place
 	// and use that as an opportunity to refactor to be more readable
 
 	err := domain.PrepareDeploy(ctx, tx)
 	if err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgDeployPrepareFailed)
+		return p.revertDeploy(ctx, tx, err)
 	}
 
 	publicTransactionEngine := p.components.PublicTxManager()
@@ -313,7 +334,7 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 	keyMgr := p.components.KeyManager()
 	resolvedAddrs, err := keyMgr.ResolveEthAddressBatchNewDatabaseTX(ctx, []string{tx.Signer})
 	if err != nil {
-		return nil, err
+		return p.revertDeploy(ctx, tx, err)
 	}
 
 	publicTXs := []*components.PublicTxSubmission{
@@ -321,7 +342,6 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
 			PublicTxInput: pldapi.PublicTxInput{
 				From:            resolvedAddrs[0],
-				To:              &tx.InvokeTransaction.To,
 				PublicTxOptions: pldapi.PublicTxOptions{}, // TODO: Consider propagation from paladin transaction input
 			},
 		},
@@ -332,20 +352,31 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 
 		data, err := tx.InvokeTransaction.FunctionABI.EncodeCallDataCtx(ctx, tx.InvokeTransaction.Inputs)
 		if err != nil {
-			return nil, i18n.WrapError(ctx, err, msgs.MsgBaseLedgerTransactionFailed)
+			return p.revertDeploy(ctx, tx, i18n.WrapError(ctx, err, msgs.MsgPrivateTxMgrEncodeCallDataFailed))
 		}
 		publicTXs[0].Data = tktypes.HexBytes(data)
+		publicTXs[0].To = &tx.InvokeTransaction.To
+
 	} else if tx.DeployTransaction != nil {
 		//TODO
-		panic("Not implemented")
+		return p.revertDeploy(ctx, tx, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "DeployTransaction not implemented"))
 	} else {
-		//TODO error message
-		return nil, i18n.NewError(ctx, msgs.MsgBaseLedgerTransactionFailed)
+		return p.revertDeploy(ctx, tx, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "Neither InvokeTransaction nor DeployTransaction set"))
 	}
 
 	pubBatch, err := publicTransactionEngine.PrepareSubmissionBatch(ctx, publicTXs)
 	if err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgPrivTxMgrPublicTxFail)
+		return p.revertDeploy(ctx, tx, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError, "PrepareSubmissionBatch failed"))
+	}
+
+	// Must make sure from this point we return the nonces
+	completed := false // and include whether we committed the DB transaction or not
+	defer func() {
+		pubBatch.Completed(ctx, completed)
+	}()
+	if len(pubBatch.Rejected()) > 0 {
+		// We do not handle partial success - roll everything back
+		return p.revertDeploy(ctx, tx, i18n.WrapError(ctx, pubBatch.Rejected()[0].RejectedError(), msgs.MsgPrivateTxManagerInternalError, "Submission batch rejected "))
 	}
 
 	//transactions are always dispatched as a sequence, even if only a sequence of one
@@ -356,55 +387,35 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 			},
 		},
 	}
-
-	// Must make sure from this point we return the nonces
-	completed := false // and include whether we committed the DB transaction or not
 	sequence.PublicTxBatch = pubBatch
-	defer func() {
-		pubBatch.Completed(ctx, completed)
-	}()
-	if len(pubBatch.Rejected()) > 0 {
-		// We do not handle partial success - roll everything back
-		return nil, i18n.WrapError(ctx, pubBatch.Rejected()[0].RejectedError(), msgs.MsgPrivTxMgrPublicTxFail)
-	}
-
 	dispatchBatch := &syncpoints.DispatchBatch{
 		DispatchSequences: []*syncpoints.DispatchSequence{
 			sequence,
 		},
 	}
 
-	psc, err := p.components.DomainManager().ExecDeployAndWait(ctx, tx.ID, func() error {
-
-		// as this is a deploy we specify the null address
-		err = p.syncPoints.PersistDispatchBatch(ctx, tktypes.EthAddress{}, dispatchBatch, nil)
-		if err != nil {
-			log.L(ctx).Errorf("Error persisting batch: %s", err)
-			return err
-		}
-
-		completed = true
-
-		p.publishToSubscribers(ctx, &components.TransactionDispatchedEvent{
-			TransactionID:  tx.ID.String(),
-			Nonce:          uint64(0), /*TODO*/
-			SigningAddress: tx.Signer,
-		})
-		return nil
-	})
-
+	// as this is a deploy we specify the null address
+	err = p.syncPoints.PersistDispatchBatch(ctx, tktypes.EthAddress{}, dispatchBatch, nil)
 	if err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgBaseLedgerTransactionFailed)
+		log.L(ctx).Errorf("Error persisting batch: %s", err)
+		return p.revertDeploy(ctx, tx, err)
 	}
 
-	addr := psc.Address()
-	return &addr, nil
+	completed = true
+
+	p.publishToSubscribers(ctx, &components.TransactionDispatchedEvent{
+		TransactionID:  tx.ID.String(),
+		Nonce:          uint64(0), /*TODO*/
+		SigningAddress: tx.Signer,
+	})
+
+	return nil
 
 }
 
 func (p *privateTxManager) GetTxStatus(ctx context.Context, domainAddress string, txID string) (status components.PrivateTxStatus, err error) {
-	//TODO This is primarily here to help with testing for now
-	// this needs to be revisited ASAP as part of a holisitic review of the persistence model
+	// this returns status that we happen to have in memory at the moment and might be useful for debugging
+
 	targetOrchestrator := p.orchestrators[domainAddress]
 	if targetOrchestrator == nil {
 		//TODO should be valid to query the status of a transaction that belongs to a domain instance that is not currently active
@@ -611,7 +622,7 @@ func (p *privateTxManager) handleEndorsementResponse(ctx context.Context, messag
 	endorsement := &prototk.AttestationResult{}
 	err = endorsementResponse.GetEndorsement().UnmarshalTo(endorsement)
 	if err != nil {
-		// TODO this is only temproary until we stop using anypb in EndorsementResponse
+		// TODO this is only temporary until we stop using anypb in EndorsementResponse
 		log.L(ctx).Errorf("Wrong type received in EndorsementResponse")
 		return
 	}
@@ -629,7 +640,7 @@ func (p *privateTxManager) handleEndorsementResponse(ctx context.Context, messag
 
 // For now, this is here to help with testing but it seems like it could be useful thing to have
 // in the future if we want to have an eventing interface but at such time we would need to put more effort
-// into the reliabilty of the event delivery or maybe there is only a consumer of the event and it is responsible
+// into the reliability of the event delivery or maybe there is only a consumer of the event and it is responsible
 // for managing multiple subscribers and durability etc...
 func (p *privateTxManager) Subscribe(ctx context.Context, subscriber components.PrivateTxEventSubscriber) {
 	p.subscribersLock.Lock()
