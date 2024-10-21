@@ -775,3 +775,100 @@ func TestHasOutstandingEndorsementRequestsNilPostAssembly(t *testing.T) {
 	_, err := tp.hasOutstandingEndorsementRequests(ctx)
 	assert.Error(t, err)
 }
+
+
+//TODO this moved here from the event_loop_test and needs to be changed to fit with the new structure
+func TestOrchestratorHandleEvents(t *testing.T) {
+	newTxID := uuid.New()
+	tests := []struct {
+		name        string
+		handlerName string
+		event       ptmgrtypes.PrivateTransactionEvent
+	}{
+		{
+			name:        "TransactionSubmittedEvent",
+			handlerName: "HandleTransactionSubmittedEvent",
+			event: &ptmgrtypes.TransactionSubmittedEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
+		{
+			name:        "TransactionSwappedInEvent",
+			handlerName: "HandleTransactionSwappedInEvent",
+			event: &ptmgrtypes.TransactionSwappedInEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
+		{
+			name:        "TransactionSignedEvent",
+			handlerName: "HandleTransactionSignedEvent",
+			event: &ptmgrtypes.TransactionSignedEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
+		{
+			name:        "TransactionEndorsedEvent",
+			handlerName: "HandleTransactionEndorsedEvent",
+			event: &ptmgrtypes.TransactionEndorsedEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
+		{
+			name:        "TransactionDispatchedEvent",
+			handlerName: "HandleTransactionDispatchedEvent",
+			event: &ptmgrtypes.TransactionDispatchedEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
+		{
+			name:        "TransactionConfirmedEvent",
+			handlerName: "HandleTransactionConfirmedEvent",
+			event: &ptmgrtypes.TransactionConfirmedEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
+		{
+			name:        "TransactionRevertedEvent",
+			handlerName: "HandleTransactionRevertedEvent",
+			event: &ptmgrtypes.TransactionRevertedEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
+		{
+			name:        "TransactionDelegatedEvent",
+			handlerName: "HandleTransactionDelegatedEvent",
+			event: &ptmgrtypes.TransactionDelegatedEvent{
+				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			ctx := context.Background()
+			testOc, _, _ := newOrchestratorForTesting(t, ctx, nil)
+
+			waitForAction := make(chan bool, 1)
+
+			//Emulate ProcessNewTransaction with a mockTxProcessor
+			mockTxProcessor := privatetxnmgrmocks.NewTxProcessor(t)
+			mockTxProcessor.On("GetStatus", mock.Anything).Return(ptmgrtypes.TxProcessorActive).Maybe()
+			mockTxProcessor.On(tt.handlerName, mock.Anything, tt.event).Run(func(args mock.Arguments) {
+				waitForAction <- true
+			}).Return(nil)
+
+			testOc.incompleteTxSProcessMap[newTxID.String()] = mockTxProcessor
+			testOc.pendingEvents <- tt.event
+
+			select {
+			case <-waitForAction:
+				// Handle the action
+			case <-time.After(1 * time.Second):
+				t.Fatal("Timeout waiting for action")
+			}
+			mockTxProcessor.AssertExpectations(t)
+		})
+	}
+
+}

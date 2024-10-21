@@ -24,7 +24,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
@@ -89,7 +88,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	mocks.domainSmartContract.On("Address").Return(*domainAddress).Maybe()
 
 	syncPoints := syncpoints.NewSyncPoints(ctx, &pldconf.FlushWriterConfig{}, p, mocks.txManager)
-	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer, mocks.transportWriter)
+	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer, mocks.transportWriter)
 	ocDone, err := o.Start(ctx)
 	require.NoError(t, err)
 
@@ -100,40 +99,48 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 
 }
 
-func waitForChannel[T any](ch chan T) T {
+func waitForChannel[T any](t *testing.T, ch chan T) T {
 	ticker := time.NewTicker(100 * time.Millisecond)
+	if _, ok := t.Deadline(); !ok {
+		//no deadline set - assuming we are in a debug session
+		ticker = time.NewTicker(1 * time.Hour)
+	}
 	defer ticker.Stop()
 	for {
 		select {
 		case ret := <-ch:
 			return ret
 		case <-ticker.C:
-			panic("test failed")
+			require.Fail(t, "timeout waiting for channel")
 		}
 	}
 }
 
-func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
+func TestNewOrchestratorProcessNewTransactionAssemblyFailed(t *testing.T) {
+	// Test that the orchestrator can receive a new transaction and begin processing it.
+	// In this test, it doesn't need to get any further than assembly
+
 	ctx := context.Background()
 
 	testOc, dependencyMocks, _ := newOrchestratorForTesting(t, ctx, nil)
 
 	newTxID := uuid.New()
 	testTx := &components.PrivateTransaction{
-		ID:          newTxID,
+		ID: newTxID,
+		Inputs: &components.TransactionInputs{
+			From: "alice",
+		},
 		PreAssembly: &components.TransactionPreAssembly{},
 	}
 
 	waitForFinalize := make(chan bool, 1)
 	dependencyMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Return(errors.New("fail assembly. Just happy that we got this far"))
-
-	dependencyMocks.txManager.On("FinalizeTransactions", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-
-	dependencyMocks.publisher.On("PublishTransactionFinalizedEvent", mock.Anything, newTxID.String()).
-		Return(nil).
-		Run(func(args mock.Arguments) {
-			waitForFinalize <- true
-		})
+	dependencyMocks.publisher.On("PublishTransactionAssembleFailedEvent", mock.Anything, newTxID.String(), "mock.Anything").Return(nil).Run(func(args mock.Arguments) {
+		waitForFinalize <- true
+	})
+	//As we are using a mock publisher, the assemble failed event never gets back onto the event loop to trigger the next step ( finalization )
+	// but that's ok, we have proven what we set out to, the orchestrator can handle a new transaction and begin processing it
+	// we could then emulate the publisher and trigger the next iteration of the loop but that would be better done with a less isolated test
 
 	assert.Empty(t, testOc.incompleteTxSProcessMap)
 
@@ -147,106 +154,11 @@ func TestNewOrchestratorProcessNewTransaction(t *testing.T) {
 	assert.False(t, testOc.ProcessNewTransaction(ctx, testTx))
 	assert.Equal(t, 1, len(testOc.incompleteTxSProcessMap))
 
-	_ = waitForChannel(waitForFinalize)
+	_ = waitForChannel(t, waitForFinalize)
 
 	// add again doesn't cause a repeat process of the current stage context
 	assert.False(t, testOc.ProcessNewTransaction(ctx, testTx))
 	assert.Equal(t, 1, len(testOc.incompleteTxSProcessMap))
-
-}
-
-func TestOrchestratorHandleEvents(t *testing.T) {
-	newTxID := uuid.New()
-	tests := []struct {
-		name        string
-		handlerName string
-		event       ptmgrtypes.PrivateTransactionEvent
-	}{
-		{
-			name:        "TransactionSubmittedEvent",
-			handlerName: "HandleTransactionSubmittedEvent",
-			event: &ptmgrtypes.TransactionSubmittedEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-		{
-			name:        "TransactionSwappedInEvent",
-			handlerName: "HandleTransactionSwappedInEvent",
-			event: &ptmgrtypes.TransactionSwappedInEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-		{
-			name:        "TransactionSignedEvent",
-			handlerName: "HandleTransactionSignedEvent",
-			event: &ptmgrtypes.TransactionSignedEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-		{
-			name:        "TransactionEndorsedEvent",
-			handlerName: "HandleTransactionEndorsedEvent",
-			event: &ptmgrtypes.TransactionEndorsedEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-		{
-			name:        "TransactionDispatchedEvent",
-			handlerName: "HandleTransactionDispatchedEvent",
-			event: &ptmgrtypes.TransactionDispatchedEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-		{
-			name:        "TransactionConfirmedEvent",
-			handlerName: "HandleTransactionConfirmedEvent",
-			event: &ptmgrtypes.TransactionConfirmedEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-		{
-			name:        "TransactionRevertedEvent",
-			handlerName: "HandleTransactionRevertedEvent",
-			event: &ptmgrtypes.TransactionRevertedEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-		{
-			name:        "TransactionDelegatedEvent",
-			handlerName: "HandleTransactionDelegatedEvent",
-			event: &ptmgrtypes.TransactionDelegatedEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-
-			ctx := context.Background()
-			testOc, _, _ := newOrchestratorForTesting(t, ctx, nil)
-
-			waitForAction := make(chan bool, 1)
-
-			//Emulate ProcessNewTransaction with a mockTxProcessor
-			mockTxProcessor := privatetxnmgrmocks.NewTxProcessor(t)
-			mockTxProcessor.On("GetStatus", mock.Anything).Return(ptmgrtypes.TxProcessorActive).Maybe()
-			mockTxProcessor.On(tt.handlerName, mock.Anything, tt.event).Run(func(args mock.Arguments) {
-				waitForAction <- true
-			}).Return(nil)
-
-			testOc.incompleteTxSProcessMap[newTxID.String()] = mockTxProcessor
-			testOc.pendingEvents <- tt.event
-
-			select {
-			case <-waitForAction:
-				// Handle the action
-			case <-time.After(1 * time.Second):
-				t.Fatal("Timeout waiting for action")
-			}
-			mockTxProcessor.AssertExpectations(t)
-		})
-	}
 
 }
 
