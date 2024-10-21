@@ -297,8 +297,6 @@ func (oc *Orchestrator) handleEvent(ctx context.Context, event ptmgrtypes.Privat
 	//DispatchTransactions is a persistence point so we can remove the transactions from our graph now that they are dispatched
 	oc.graph.RemoveTransactions(ctx, dispatchableTransactions)
 
-	return
-
 }
 
 func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *components.PrivateTransaction) (queued bool) {
