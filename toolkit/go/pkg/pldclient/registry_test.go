@@ -19,6 +19,6 @@ import (
 	"testing"
 )
 
-func TestPTXModule(t *testing.T) {
-	testRPCModule(t, func(c PaladinClient) RPCModule { return c.PTX() })
+func TestRegistryModule(t *testing.T) {
+	testRPCModule(t, func(c PaladinClient) RPCModule { return c.Registry() })
 }

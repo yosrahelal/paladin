@@ -15,10 +15,21 @@
 
 package pldclient
 
-import (
-	"testing"
-)
+type Registry interface {
+	RPCModule
+}
 
-func TestPTXModule(t *testing.T) {
-	testRPCModule(t, func(c PaladinClient) RPCModule { return c.PTX() })
+// This is necessary because there's no way to introspect function parameter names via reflection
+var registryInfo = &rpcModuleInfo{
+	group:      "registry",
+	methodInfo: map[string]RPCMethodInfo{},
+}
+
+type registry struct {
+	*rpcModuleInfo
+	c *paladinClient
+}
+
+func (c *paladinClient) Registry() Registry {
+	return &registry{rpcModuleInfo: registryInfo, c: c}
 }

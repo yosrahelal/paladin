@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/text/language"
 )
@@ -34,6 +35,6 @@ func TestCheckGeneratedMarkdownPages(t *testing.T) {
 func TestGenerateMarkdownDescriptionMissing(t *testing.T) {
 	type thingy struct{}
 	d := newDocGenerator()
-	_, err := d.generateMarkdownPages(context.Background(), []interface{}{thingy{}}, []interface{}{}, map[string][]interface{}{}, "")
+	_, err := d.generateMarkdownPages(context.Background(), []interface{}{thingy{}}, []interface{}{}, []pldclient.RPCModule{}, "")
 	assert.Regexp(t, "PD020900.*thingy_description.md", err)
 }

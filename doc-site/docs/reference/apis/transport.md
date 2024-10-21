@@ -1,85 +1,25 @@
 ---
-title: API transport
+title: transport_*
 ---
-## transport_callRPC
+## `transport_nodeName`
+
+### Returns
+
+0. `nodeName`: `string`
+
+## `transport_localTransports`
+
+### Returns
+
+0. `transportNames`: `string[]`
+
+## `transport_localTransportDetails`
 
 ### Parameters
 
-- 
-- string
-- []
+0. `transportName`: `string`
 
 ### Returns
 
-- ErrorRPC
-
-## transport_forABI
-
-### Parameters
-
-- Entry[]
-
-### Returns
-
-- TxBuilder
-
-## transport_hTTP
-
-### Parameters
-
-- HTTPClientConfig
-
-### Returns
-
-- PaladinClient
-
-## transport_keyManager
-
-### Returns
-
-- KeyManager
-
-## transport_nodeName
-
-### Returns
-
-- string
-
-## transport_pTX
-
-### Returns
-
-- PTX
-
-## transport_receiptPollingInterval
-
-### Parameters
-
-- Duration
-
-### Returns
-
-- PaladinClient
-
-## transport_transport
-
-### Returns
-
-- Transport
-
-## transport_txBuilder
-
-### Returns
-
-- TxBuilder
-
-## transport_webSocket
-
-### Parameters
-
-- WSClientConfig
-
-### Returns
-
-- PaladinWSClient
+0. `transportDetailsStr`: `string`
 

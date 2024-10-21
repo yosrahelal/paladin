@@ -44,6 +44,7 @@ type methodDescription struct {
 // Param holds information about a method parameter or return type.
 type param struct {
 	name      string
+	typeName  string
 	isList    bool
 	isPointer bool
 }
@@ -174,14 +175,12 @@ var allTypes = []interface{}{
 		},
 	},
 }
-var allAPITypes = map[string][]interface{}{
-	"ptx": {
-		pldclient.New().PTX(),
-	},
-	"transport": {
-		pldclient.New().Transport(),
-	},
+var allAPITypes = []pldclient.RPCModule{
+	pldclient.New().PTX(),
+	pldclient.New().KeyManager(),
+	pldclient.New().Transport(),
 }
+
 var allSimpleTypes = []interface{}{
 	tktypes.Bytes32{},
 	tktypes.HexBytes{},
@@ -218,7 +217,7 @@ func GenerateObjectsReferenceMarkdown(ctx context.Context) (map[string][]byte, e
 	return d.generateMarkdownPages(ctx, types, simpleTypes, apiTypes, getRelativePath(4))
 }
 
-func (d *docGenerator) generateMarkdownPages(ctx context.Context, types, simpleTypes []interface{}, apiTypes map[string][]interface{}, outputPath string) (map[string][]byte, error) {
+func (d *docGenerator) generateMarkdownPages(ctx context.Context, types, simpleTypes []interface{}, apiTypes []pldclient.RPCModule, outputPath string) (map[string][]byte, error) {
 	markdownMap := make(map[string][]byte, len(types)+len(apiTypes)+1)
 
 	typesPath := filepath.Join(outputPath, "types")
@@ -256,34 +255,61 @@ func (d *docGenerator) generateMarkdownPages(ctx context.Context, types, simpleT
 	}
 
 	// add api types
-	for apiGroup, v := range apiTypes {
-		for _, t := range v {
-			pageTitle := fmt.Sprintf("API %s", apiGroup)
-			pageName := strings.ToLower(apiGroup)
+	for _, apiGroup := range apiTypes {
+		pageTitle := fmt.Sprintf("%s_*", apiGroup.Group())
+		pageName := strings.ToLower(apiGroup.Group())
 
-			// Page index starts at 1. Simple types will be the first page. Everything else comes after that.
-			pageHeader := generatePageHeader(pageTitle)
-			b := bytes.NewBuffer([]byte(pageHeader))
-			markdown := d.generateMethodTypesMarkdown(ctx, t, apiGroup, apisPath)
-			b.Write(markdown)
-
-			markdownMap[filepath.Join(apisPath, pageName+".md")] = b.Bytes()
+		// Page index starts at 1. Simple types will be the first page. Everything else comes after that.
+		pageHeader := generatePageHeader(pageTitle)
+		b := bytes.NewBuffer([]byte(pageHeader))
+		markdown, err := d.generateMethodTypesMarkdown(ctx, apiGroup, apisPath)
+		if err != nil {
+			return nil, err
 		}
+		b.Write(markdown)
+
+		markdownMap[filepath.Join(apisPath, pageName+".md")] = b.Bytes()
 	}
 
 	return markdownMap, nil
 }
 
-func (d *docGenerator) generateMethodTypesMarkdown(ctx context.Context, methodType interface{}, apiGroup, outputPath string) []byte {
-	methods := d.generateMethodDescriptions(methodType)
+func (d *docGenerator) generateMethodTypesMarkdown(ctx context.Context, apiGroup pldclient.RPCModule, outputPath string) ([]byte, error) {
+	apiGroupType := reflect.TypeOf(apiGroup)
+	reflectMethods := make(map[string]reflect.Method)
+	for _, methodName := range apiGroup.Methods() {
+		groupPrefix := apiGroup.Group() + "_"
+		requiredFnName, hasPrefix := strings.CutPrefix(methodName, groupPrefix)
+		if !hasPrefix {
+			return nil, fmt.Errorf("RPC method '%s' does not start with prefix %s", requiredFnName, groupPrefix)
+		}
+		requiredFnName = strings.ToUpper(requiredFnName[0:1]) + requiredFnName[1:]
+
+		var method *reflect.Method
+		for i := 0; i < apiGroupType.NumMethod(); i++ {
+			m := apiGroupType.Method(i)
+			if m.Name == requiredFnName {
+				method = &m
+			}
+		}
+		if method == nil {
+			return nil, fmt.Errorf("Implementation method '%s' for RPC method '%s' does not exist on interface %T", requiredFnName, methodName, apiGroup)
+		}
+		reflectMethods[methodName] = *method
+	}
+
+	methods, err := d.generateMethodDescriptions(apiGroup, reflectMethods)
+	if err != nil {
+		return nil, err
+	}
 
 	b := bytes.NewBuffer([]byte{})
 	for _, method := range methods {
-		b.WriteString(fmt.Sprintf("## %s_%s\n\n", apiGroup, toLowerPrefix(method.name)))
+		b.WriteString(fmt.Sprintf("## `%s`\n\n", method.name))
 		markdown, _ := d.generateMethodReferenceMarkdown(ctx, method, outputPath)
 		b.Write(markdown)
 	}
-	return b.Bytes()
+	return b.Bytes(), nil
 }
 
 func (d *docGenerator) generateMethodReferenceMarkdown(ctx context.Context, method methodDescription, outputPath string) ([]byte, error) {
@@ -308,8 +334,8 @@ func (d *docGenerator) generateMethodReferenceMarkdown(ctx context.Context, meth
 	// **Add Parameters Section**
 	if len(method.inputs) > 0 {
 		buff.WriteString("### Parameters\n\n")
-		for _, param := range method.inputs {
-			buff.WriteString(fmt.Sprintf("- %s\n", d.getParamField(param)))
+		for i, param := range method.inputs {
+			buff.WriteString(fmt.Sprintf("%d. %s\n", i, d.getParamField(param)))
 		}
 		buff.WriteString("\n")
 	}
@@ -317,8 +343,8 @@ func (d *docGenerator) generateMethodReferenceMarkdown(ctx context.Context, meth
 	// **Add Return Section**
 	if len(method.outputs) > 0 {
 		buff.WriteString("### Returns\n\n")
-		for _, param := range method.outputs {
-			buff.WriteString(fmt.Sprintf("- %s\n", d.getParamField(param)))
+		for i, param := range method.outputs {
+			buff.WriteString(fmt.Sprintf("%d. %s\n", i, d.getParamField(param)))
 		}
 		buff.WriteString("\n")
 	}
@@ -338,52 +364,66 @@ func (d *docGenerator) getParamField(p param) string {
 	if p.isList {
 		listMarker = "[]"
 	}
-	pldType := fmt.Sprintf("%s%s", p.name, listMarker)
+	pldType := fmt.Sprintf("`%s%s`", p.typeName, listMarker)
 	link := ""
-	if fileName, ok := d.typeToPage[strings.ToLower(p.name)]; ok {
-		link = fmt.Sprintf("../types/%s.md#%s", fileName, strings.ToLower(p.name))
+	if fileName, ok := d.typeToPage[strings.ToLower(p.typeName)]; ok {
+		link = fmt.Sprintf("../types/%s.md#%s", fileName, strings.ToLower(p.typeName))
 	}
 	if link != "" {
 		pldType = fmt.Sprintf("[%s](%s)", pldType, link)
 	}
-	return pldType
+	return fmt.Sprintf("`%s`: %s", p.name, pldType)
 }
 
 // generateMethodDescriptions extracts metadata about all methods of a struct/interface.
-func (d *docGenerator) generateMethodDescriptions(example interface{}) []methodDescription {
-	t := reflect.TypeOf(example)
+func (d *docGenerator) generateMethodDescriptions(apiGroup pldclient.RPCModule, reflectMethods map[string]reflect.Method) (_ []methodDescription, err error) {
 	var methods []methodDescription
 
 	// Iterate over all methods.
-	for i := 0; i < t.NumMethod(); i++ {
-		method := t.Method(i)
-		if !method.IsExported() {
-			continue
+	for methodName, reflectMethod := range reflectMethods {
+		methodDesc := methodDescription{name: methodName}
+		methodDesc.inputs, err = d.extractParams(reflectMethod.Type, apiGroup.MethodInfo(methodName), true)
+		if err == nil {
+			methodDesc.outputs, err = d.extractParams(reflectMethod.Type, apiGroup.MethodInfo(methodName), false)
 		}
-
-		methodDesc := methodDescription{
-			name:    method.Name,
-			inputs:  d.extractParams(method.Type, true),
-			outputs: d.extractParams(method.Type, false),
+		if err != nil {
+			return nil, err
 		}
 		methods = append(methods, methodDesc)
 	}
-	return methods
+	return methods, err
 }
 
 // extractParams extracts input or output parameters from a method type.
-func (d *docGenerator) extractParams(funcType reflect.Type, isInput bool) []param {
+func (d *docGenerator) extractParams(funcType reflect.Type, methodInfo *pldclient.RPCMethodInfo, isInput bool) ([]param, error) {
 	var params []param
-	count := funcType.NumIn()
-	start := 1 // Skip the first input (receiver)
+	var count int
+	discardStart := 0
+	discardEnd := 0
 
-	if !isInput {
+	if isInput {
+		count = funcType.NumIn()
+		discardStart = 2 // discard the struct pointer, and the context variable
+		discardEnd = 0
+	} else {
 		count = funcType.NumOut()
-		start = 0 // For outputs, we start at 0
+		discardStart = 0
+		discardEnd = 1 //discard the error parameters
+	}
+	docCount := count - discardStart - discardEnd
+
+	var nameArray []string
+	if isInput {
+		nameArray = methodInfo.Inputs
+	} else {
+		nameArray = []string{methodInfo.Output}
+	}
+	if len(nameArray) != docCount {
+		return nil, fmt.Errorf("function %s has %d inputs/outputs (inputs=%t), but list is %v", funcType.Name(), docCount, isInput, nameArray)
 	}
 
 	// Iterate over parameters.
-	for j := start; j < count; j++ {
+	for j := discardStart; j < count-discardEnd; j++ {
 		var paramType reflect.Type
 		if isInput {
 			paramType = funcType.In(j)
@@ -417,13 +457,14 @@ func (d *docGenerator) extractParams(funcType reflect.Type, isInput bool) []para
 
 		// Store the parameter metadata.
 		param := param{
-			name:      paramType.Name(),
+			name:      nameArray[j-discardStart],
+			typeName:  paramType.Name(),
 			isList:    isList,
 			isPointer: isPointer,
 		}
 		params = append(params, param)
 	}
-	return params
+	return params, nil
 }
 
 func (d *docGenerator) generateSimpleTypesMarkdown(ctx context.Context, simpleTypes []interface{}, pageName, outputPath string) []byte {

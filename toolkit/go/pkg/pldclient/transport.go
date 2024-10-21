@@ -20,16 +20,51 @@ import (
 )
 
 type Transport interface {
-	NodeName(ctx context.Context) (name string, err error)
+	RPCModule
+
+	NodeName(ctx context.Context) (nodeName string, err error)
+	LocalTransports(ctx context.Context) (transportNames []string, err error)
 }
 
-type transport struct{ *paladinClient }
+// This is necessary because there's no way to introspect function parameter names via reflection
+var transportInfo = &rpcModuleInfo{
+	group: "transport",
+	methodInfo: map[string]RPCMethodInfo{
+		"transport_nodeName": {
+			Inputs: []string{},
+			Output: "nodeName",
+		},
+		"transport_localTransports": {
+			Inputs: []string{},
+			Output: "transportNames",
+		},
+		"transport_localTransportDetails": {
+			Inputs: []string{"transportName"},
+			Output: "transportDetailsStr",
+		},
+	},
+}
+
+type transport struct {
+	*rpcModuleInfo
+	c *paladinClient
+}
 
 func (c *paladinClient) Transport() Transport {
-	return &transport{paladinClient: c}
+	return &transport{rpcModuleInfo: transportInfo, c: c}
 }
 
 func (t *transport) NodeName(ctx context.Context) (name string, err error) {
-	err = t.CallRPC(ctx, &name, "transport_nodeName")
+	err = t.c.CallRPC(ctx, &name, "transport_nodeName")
 	return name, err
+}
+
+func (t *transport) LocalTransports(ctx context.Context) (transportNames []string, err error) {
+	err = t.c.CallRPC(ctx, &transportNames, "transport_localTransports")
+	return transportNames, err
+}
+
+func (t *transport) LocalTransportDetails(ctx context.Context, transportName string) (transportDetailsStr string, err error) {
+	err = t.c.CallRPC(ctx, &transportDetailsStr, "transport_localTransportDetails", transportName)
+	return transportDetailsStr, err
 }

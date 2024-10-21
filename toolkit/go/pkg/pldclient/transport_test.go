@@ -17,15 +17,8 @@ package pldclient
 
 import (
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
-func TestTransportFunctions(t *testing.T) {
-
-	ctx, c, _, done := newTestClientAndServerHTTP(t)
-	defer done()
-
-	_, err := c.Transport().NodeName(ctx)
-	assert.Regexp(t, "PD020702.*transport_nodeName", err)
+func TestTransportModule(t *testing.T) {
+	testRPCModule(t, func(c PaladinClient) RPCModule { return c.Transport() })
 }

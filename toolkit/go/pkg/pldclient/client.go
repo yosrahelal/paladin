@@ -49,25 +49,32 @@ type PaladinClient interface {
 
 	// Paladin Transport RPC interface
 	Transport() Transport
+
+	// Paladin Registry RPC interface
+	Registry() Registry
 }
 
-type RPCFunctionGroup interface {
+type RPCModule interface {
+	Group() string
 	Methods() []string
-	MethodInfo(method string) RPCMethodMetadata
+	MethodInfo(method string) *RPCMethodInfo
 }
 
-type FunctionMetadata map[string]RPCMethodMetadata
-
-type RPCMethodMetadata struct {
+type RPCMethodInfo struct {
 	Inputs []string
-	Output []string
+	Output string
 }
 
-type rpcMethodGroup struct {
-	methodInfo map[string]RPCMethodMetadata
+type rpcModuleInfo struct {
+	group      string
+	methodInfo map[string]RPCMethodInfo
 }
 
-func (fg *rpcMethodGroup) Methods() []string {
+func (fg *rpcModuleInfo) Group() string {
+	return fg.group
+}
+
+func (fg *rpcModuleInfo) Methods() []string {
 	methods := make([]string, 0, len(fg.methodInfo))
 	for name := range fg.methodInfo {
 		methods = append(methods, name)
@@ -75,8 +82,12 @@ func (fg *rpcMethodGroup) Methods() []string {
 	return methods
 }
 
-func (fg *rpcMethodGroup) MethodInfo(method string) RPCMethodMetadata {
-	return fg.methodInfo[method]
+func (fg *rpcModuleInfo) MethodInfo(method string) *RPCMethodInfo {
+	info, found := fg.methodInfo[method]
+	if !found {
+		return nil
+	}
+	return &info
 }
 
 type PaladinWSClient interface {

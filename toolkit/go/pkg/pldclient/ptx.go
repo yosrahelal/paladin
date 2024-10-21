@@ -25,7 +25,7 @@ import (
 )
 
 type PTX interface {
-	RPCFunctionGroup
+	RPCModule
 
 	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (txID *uuid.UUID, err error)
 	SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
@@ -40,65 +40,67 @@ type PTX interface {
 	GetTransactionReceipt(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionReceipt, err error)
 	QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*pldapi.TransactionReceipt, err error)
 
-	ResolveVerifier(ctx context.Context, identifier string, algorithm string, verifierType string) (verifier string, err error)
+	ResolveVerifier(ctx context.Context, keyIdentifier string, algorithm string, verifierType string) (verifier string, err error)
 }
 
-var ptxInfo = &rpcMethodGroup{
-	methodInfo: map[string]RPCMethodMetadata{
+// This is necessary because there's no way to introspect function parameter names via reflection
+var ptxInfo = &rpcModuleInfo{
+	group: "ptx",
+	methodInfo: map[string]RPCMethodInfo{
 		"ptx_sendTransaction": {
 			Inputs: []string{"transaction"},
-			Output: []string{"transactionId"},
+			Output: "transactionId",
 		},
 		"ptx_sendTransactions": {
 			Inputs: []string{"transactions"},
-			Output: []string{"transactionIds"},
+			Output: "transactionIds",
 		},
 		"ptx_call": {
 			Inputs: []string{"transaction"},
-			Output: []string{"result"},
+			Output: "result",
 		},
 		"ptx_getTransaction": {
 			Inputs: []string{"transactionId"},
-			Output: []string{"transaction"},
+			Output: "transaction",
 		},
 		"ptx_getTransactionFull": {
 			Inputs: []string{"transactionId"},
-			Output: []string{"transaction"},
+			Output: "transaction",
 		},
 		"ptx_getTransactionByIdempotencyKey": {
-			Inputs: []string{"query"},
-			Output: []string{"transaction"},
+			Inputs: []string{"idempotencyKey"},
+			Output: "transaction",
 		},
 		"ptx_queryTransactions": {
 			Inputs: []string{"query"},
-			Output: []string{"transactions"},
+			Output: "transactions",
 		},
 		"ptx_queryTransactionsFull": {
 			Inputs: []string{"query"},
-			Output: []string{"transactions"},
+			Output: "transactions",
 		},
 		"ptx_getTransactionReceipt": {
 			Inputs: []string{"transactionId"},
-			Output: []string{"receipt"},
+			Output: "receipt",
 		},
 		"ptx_queryTransactionReceipts": {
 			Inputs: []string{"query"},
-			Output: []string{"receipts"},
+			Output: "receipts",
 		},
 		"ptx_resolveVerifier": {
-			Inputs: []string{"identifier", "algorithm", "verifierType"},
-			Output: []string{"receipts"},
+			Inputs: []string{"keyIdentifier", "algorithm", "verifierType"},
+			Output: "receipts",
 		},
 	},
 }
 
 type ptx struct {
-	*rpcMethodGroup
+	*rpcModuleInfo
 	c *paladinClient
 }
 
 func (c *paladinClient) PTX() PTX {
-	return &ptx{rpcMethodGroup: ptxInfo, c: c}
+	return &ptx{rpcModuleInfo: ptxInfo, c: c}
 }
 
 func (p *ptx) SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (txID *uuid.UUID, err error) {
@@ -151,7 +153,7 @@ func (p *ptx) QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON)
 	return receipts, err
 }
 
-func (p *ptx) ResolveVerifier(ctx context.Context, identifier string, algorithm string, verifierType string) (verifier string, err error) {
-	err = p.c.CallRPC(ctx, &verifier, "ptx_resolveVerifier", identifier, algorithm, verifierType)
+func (p *ptx) ResolveVerifier(ctx context.Context, keyIdentifier string, algorithm string, verifierType string) (verifier string, err error) {
+	err = p.c.CallRPC(ctx, &verifier, "ptx_resolveVerifier", keyIdentifier, algorithm, verifierType)
 	return verifier, err
 }

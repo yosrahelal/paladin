@@ -23,34 +23,62 @@ import (
 )
 
 type KeyManager interface {
+	RPCModule
+
 	Wallets(ctx context.Context) ([]string, error)
-	ResolveKey(ctx context.Context, identifier, algorithm, verifierType string) (mapping *pldapi.KeyMappingAndVerifier, err error)
-	ResolveEthAddress(ctx context.Context, identifier string) (addr *tktypes.EthAddress, err error)
+	ResolveKey(ctx context.Context, keyIdentifier, algorithm, verifierType string) (mapping *pldapi.KeyMappingAndVerifier, err error)
+	ResolveEthAddress(ctx context.Context, keyIdentifier string) (ethAddress *tktypes.EthAddress, err error)
 	ReverseKeyLookup(ctx context.Context, algorithm, verifierType, verifier string) (mapping *pldapi.KeyMappingAndVerifier, err error)
 }
 
-type kmgr struct{ *paladinClient }
-
-func (c *paladinClient) KeyManager() KeyManager {
-	return &kmgr{paladinClient: c}
+// This is necessary because there's no way to introspect function parameter names via reflection
+var keymgrInfo = &rpcModuleInfo{
+	group: "keymgr",
+	methodInfo: map[string]RPCMethodInfo{
+		"keymgr_wallets": {
+			Inputs: []string{},
+			Output: "wallets",
+		},
+		"keymgr_resolveKey": {
+			Inputs: []string{"keyIdentifier", "algorithm", "verifierType"},
+			Output: "mapping",
+		},
+		"keymgr_resolveEthAddress": {
+			Inputs: []string{"keyIdentifier"},
+			Output: "ethAddress",
+		},
+		"keymgr_reverseKeyLookup": {
+			Inputs: []string{"algorithm", "verifierType", "verifier"},
+			Output: "mapping",
+		},
+	},
 }
 
-func (k *kmgr) Wallets(ctx context.Context) (wallets []string, err error) {
-	err = k.CallRPC(ctx, &wallets, "keymgr_wallets")
+type keymgr struct {
+	*rpcModuleInfo
+	c *paladinClient
+}
+
+func (c *paladinClient) KeyManager() KeyManager {
+	return &keymgr{rpcModuleInfo: keymgrInfo, c: c}
+}
+
+func (k *keymgr) Wallets(ctx context.Context) (wallets []string, err error) {
+	err = k.c.CallRPC(ctx, &wallets, "keymgr_wallets")
 	return wallets, err
 }
 
-func (k *kmgr) ResolveKey(ctx context.Context, identifier, algorithm, verifierType string) (mapping *pldapi.KeyMappingAndVerifier, err error) {
-	err = k.CallRPC(ctx, &mapping, "keymgr_resolveKey", identifier, algorithm, verifierType)
+func (k *keymgr) ResolveKey(ctx context.Context, keyIdentifier, algorithm, verifierType string) (mapping *pldapi.KeyMappingAndVerifier, err error) {
+	err = k.c.CallRPC(ctx, &mapping, "keymgr_resolveKey", keyIdentifier, algorithm, verifierType)
 	return mapping, err
 }
 
-func (k *kmgr) ResolveEthAddress(ctx context.Context, identifier string) (addr *tktypes.EthAddress, err error) {
-	err = k.CallRPC(ctx, &addr, "keymgr_resolveEthAddress", identifier)
-	return addr, err
+func (k *keymgr) ResolveEthAddress(ctx context.Context, keyIdentifier string) (ethAddress *tktypes.EthAddress, err error) {
+	err = k.c.CallRPC(ctx, &ethAddress, "keymgr_resolveEthAddress", keyIdentifier)
+	return ethAddress, err
 }
 
-func (k *kmgr) ReverseKeyLookup(ctx context.Context, algorithm, verifierType, verifier string) (mapping *pldapi.KeyMappingAndVerifier, err error) {
-	err = k.CallRPC(ctx, &mapping, "keymgr_reverseKeyLookup", algorithm, verifierType, verifier)
+func (k *keymgr) ReverseKeyLookup(ctx context.Context, algorithm, verifierType, verifier string) (mapping *pldapi.KeyMappingAndVerifier, err error) {
+	err = k.c.CallRPC(ctx, &mapping, "keymgr_reverseKeyLookup", algorithm, verifierType, verifier)
 	return mapping, err
 }

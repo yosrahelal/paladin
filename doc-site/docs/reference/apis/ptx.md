@@ -1,127 +1,115 @@
 ---
-title: API ptx
+title: ptx_*
 ---
-## ptx_call
+## `ptx_getTransactionByIdempotencyKey`
 
 ### Parameters
 
-- [TransactionCall](../types/transactioncall.md#transactioncall)
+0. `idempotencyKey`: `string`
 
 ### Returns
 
-- [RawJSON](../types/simpletypes.md#rawjson)
+0. `transaction`: [`Transaction`](../types/transaction.md#transaction)
 
-## ptx_getTransaction
-
-{% include-markdown "./_includes/gettransaction_description.md" %}
+## `ptx_getTransaction`
 
 ### Parameters
 
-- [UUID](../types/simpletypes.md#uuid)
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
 
 ### Returns
 
-- [Transaction](../types/transaction.md#transaction)
+0. `transaction`: [`Transaction`](../types/transaction.md#transaction)
 
-## ptx_getTransactionByIdempotencyKey
+## `ptx_getTransactionFull`
 
 ### Parameters
 
-- string
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
 
 ### Returns
 
-- [Transaction](../types/transaction.md#transaction)
+0. `transaction`: [`TransactionFull`](../types/transactionfull.md#transactionfull)
 
-## ptx_getTransactionFull
-
-{% include-markdown "./_includes/gettransactionfull_description.md" %}
+## `ptx_queryTransactions`
 
 ### Parameters
 
-- [UUID](../types/simpletypes.md#uuid)
+0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
 
 ### Returns
 
-- [TransactionFull](../types/transactionfull.md#transactionfull)
+0. `transactions`: [`Transaction[]`](../types/transaction.md#transaction)
 
-## ptx_getTransactionReceipt
-
-{% include-markdown "./_includes/gettransactionreceipt_description.md" %}
+## `ptx_queryTransactionReceipts`
 
 ### Parameters
 
-- [UUID](../types/simpletypes.md#uuid)
+0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
 
 ### Returns
 
-- [TransactionReceipt](../types/transactionreceipt.md#transactionreceipt)
+0. `receipts`: [`TransactionReceipt[]`](../types/transactionreceipt.md#transactionreceipt)
 
-## ptx_queryTransactionReceipts
-
-{% include-markdown "./_includes/querytransactionreceipts_description.md" %}
+## `ptx_sendTransaction`
 
 ### Parameters
 
-- [QueryJSON](../types/queryjson.md#queryjson)
+0. `transaction`: [`TransactionInput`](../types/transactioninput.md#transactioninput)
 
 ### Returns
 
-- [TransactionReceipt[]](../types/transactionreceipt.md#transactionreceipt)
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
 
-## ptx_queryTransactions
-
-{% include-markdown "./_includes/querytransactions_description.md" %}
+## `ptx_sendTransactions`
 
 ### Parameters
 
-- [QueryJSON](../types/queryjson.md#queryjson)
+0. `transactions`: [`TransactionInput[]`](../types/transactioninput.md#transactioninput)
 
 ### Returns
 
-- [Transaction[]](../types/transaction.md#transaction)
+0. `transactionIds`: [`UUID[]`](../types/simpletypes.md#uuid)
 
-## ptx_queryTransactionsFull
-
-{% include-markdown "./_includes/querytransactionsfull_description.md" %}
+## `ptx_call`
 
 ### Parameters
 
-- [QueryJSON](../types/queryjson.md#queryjson)
+0. `transaction`: [`TransactionCall`](../types/transactioncall.md#transactioncall)
 
 ### Returns
 
-- [TransactionFull[]](../types/transactionfull.md#transactionfull)
+0. `result`: [`RawJSON`](../types/simpletypes.md#rawjson)
 
-## ptx_resoleVerifier
+## `ptx_queryTransactionsFull`
 
 ### Parameters
 
-- string
-- string
-- string
+0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
 
 ### Returns
 
-- string
+0. `transactions`: [`TransactionFull[]`](../types/transactionfull.md#transactionfull)
 
-## ptx_sendTransaction
+## `ptx_resolveVerifier`
 
 ### Parameters
 
-- [TransactionInput](../types/transactioninput.md#transactioninput)
+0. `keyIdentifier`: `string`
+1. `algorithm`: `string`
+2. `verifierType`: `string`
 
 ### Returns
 
-- [UUID](../types/simpletypes.md#uuid)
+0. `receipts`: `string`
 
-## ptx_sendTransactions
+## `ptx_getTransactionReceipt`
 
 ### Parameters
 
-- [TransactionInput[]](../types/transactioninput.md#transactioninput)
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
 
 ### Returns
 
-- [UUID[]](../types/simpletypes.md#uuid)
+0. `receipt`: [`TransactionReceipt`](../types/transactionreceipt.md#transactionreceipt)
 
