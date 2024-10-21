@@ -48,6 +48,7 @@ type privateTxManager struct {
 	ctxCancel            func()
 	config               *pldconf.PrivateTxManagerConfig
 	orchestrators        map[string]*Orchestrator
+	orchestratorsLock    sync.RWMutex
 	endorsementGatherers map[string]ptmgrtypes.EndorsementGatherer
 	components           components.AllComponents
 	nodeName             string
@@ -103,40 +104,59 @@ func NewPrivateTransactionMgr(ctx context.Context, config *pldconf.PrivateTxMana
 
 func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contractAddr tktypes.EthAddress, domainAPI components.DomainSmartContract) (oc *Orchestrator, err error) {
 
+	readlock := true
+	p.orchestratorsLock.RLock()
+	defer func() {
+		if readlock {
+			p.orchestratorsLock.RUnlock()
+		}
+	}()
 	if p.orchestrators[contractAddr.String()] == nil {
-		transportWriter := NewTransportWriter(domainAPI.Domain().Name(), &contractAddr, p.nodeName, p.components.TransportManager())
-		publisher := NewPublisher(p, contractAddr.String())
+		//swap the read lock for a write lock
+		p.orchestratorsLock.RUnlock()
+		readlock = false
+		p.orchestratorsLock.Lock()
+		defer p.orchestratorsLock.Unlock()
+		//double check in case another goroutine has created the orchestrator while we were waiting for the write lock
+		if p.orchestrators[contractAddr.String()] == nil {
+			transportWriter := NewTransportWriter(domainAPI.Domain().Name(), &contractAddr, p.nodeName, p.components.TransportManager())
+			publisher := NewPublisher(p, contractAddr.String())
 
-		endorsementGatherer, err := p.getEndorsementGathererForContract(ctx, contractAddr)
-		if err != nil {
-			log.L(ctx).Errorf("Failed to get endorsement gatherer for contract %s: %s", contractAddr.String(), err)
-			return nil, err
+			endorsementGatherer, err := p.getEndorsementGathererForContract(ctx, contractAddr)
+			if err != nil {
+				log.L(ctx).Errorf("Failed to get endorsement gatherer for contract %s: %s", contractAddr.String(), err)
+				return nil, err
+			}
+
+			p.orchestrators[contractAddr.String()] =
+				NewOrchestrator(
+					p.ctx, p.nodeName,
+					contractAddr,
+					&p.config.Orchestrator,
+					p.components,
+					domainAPI,
+					endorsementGatherer,
+					publisher,
+					p.syncPoints,
+					p.components.IdentityResolver(),
+					p.stateDistributer,
+					transportWriter,
+				)
+			orchestratorDone, err := p.orchestrators[contractAddr.String()].Start(ctx)
+			if err != nil {
+				log.L(ctx).Errorf("Failed to start orchestrator for contract %s: %s", contractAddr.String(), err)
+				return nil, err
+			}
+
+			go func() {
+
+				<-orchestratorDone
+				log.L(ctx).Infof("Orchestrator for contract %s has stopped", contractAddr.String())
+				p.orchestratorsLock.Lock()
+				defer p.orchestratorsLock.Unlock()
+				delete(p.orchestrators, contractAddr.String())
+			}()
 		}
-
-		p.orchestrators[contractAddr.String()] =
-			NewOrchestrator(
-				p.ctx, p.nodeName,
-				contractAddr,
-				&p.config.Orchestrator,
-				p.components,
-				domainAPI,
-				endorsementGatherer,
-				publisher,
-				p.syncPoints,
-				p.components.IdentityResolver(),
-				p.stateDistributer,
-				transportWriter,
-			)
-		orchestratorDone, err := p.orchestrators[contractAddr.String()].Start(ctx)
-		if err != nil {
-			log.L(ctx).Errorf("Failed to start orchestrator for contract %s: %s", contractAddr.String(), err)
-			return nil, err
-		}
-
-		go func() {
-			<-orchestratorDone
-			log.L(ctx).Infof("Orchestrator for contract %s has stopped", contractAddr.String())
-		}()
 	}
 	return p.orchestrators[contractAddr.String()], nil
 }
@@ -411,6 +431,8 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 func (p *privateTxManager) GetTxStatus(ctx context.Context, domainAddress string, txID string) (status components.PrivateTxStatus, err error) {
 	// this returns status that we happen to have in memory at the moment and might be useful for debugging
 
+	p.orchestratorsLock.RLock()
+	defer p.orchestratorsLock.RUnlock()
 	targetOrchestrator := p.orchestrators[domainAddress]
 	if targetOrchestrator == nil {
 		//TODO should be valid to query the status of a transaction that belongs to a domain instance that is not currently active
@@ -423,6 +445,8 @@ func (p *privateTxManager) GetTxStatus(ctx context.Context, domainAddress string
 }
 
 func (p *privateTxManager) HandleNewEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
+	p.orchestratorsLock.RLock()
+	defer p.orchestratorsLock.RUnlock()
 	targetOrchestrator := p.orchestrators[event.GetContractAddress()]
 	if targetOrchestrator == nil { // this is an event that belongs to a contract that's not in flight, throw it away and rely on the engine to trigger the action again when the orchestrator is wake up. (an enhanced version is to add weight on queueing an orchestrator)
 		log.L(ctx).Warnf("Ignored %T event for domain contract %s and transaction %s . If this happens a lot, check the orchestrator idle timeout is set to a reasonable number", event, event.GetContractAddress(), event.GetTransactionID())

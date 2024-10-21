@@ -144,8 +144,6 @@ type ContentionResolver interface {
 }
 
 type TransportWriter interface {
-	// Provided to the sequencer to allow it to send messages to other nodes in the network
-	SendDelegateTransactionMessage(ctx context.Context, transactionId string, delegateNodeId string) error
 	SendState(ctx context.Context, stateId string, schemaId string, stateDataJson string, party string) error
 	SendDelegationRequest(ctx context.Context, delegationId string, delegateNodeId string, transaction *components.PrivateTransaction) error
 }
@@ -160,9 +158,7 @@ const (
 )
 
 type TxProcessor interface {
-	Init(ctx context.Context)
 	GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error)
-	GetStatus(ctx context.Context) TxProcessorStatus
 
 	ApplyEvent(ctx context.Context, event PrivateTransactionEvent)
 	Action(ctx context.Context)

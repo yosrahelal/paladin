@@ -18,7 +18,6 @@ package privatetxnmgr
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
@@ -31,7 +30,7 @@ type Graph interface {
 	AddTransaction(ctx context.Context, transaction ptmgrtypes.TxProcessor)
 	GetDispatchableTransactions(ctx context.Context) (ptmgrtypes.DispatchableTransactions, error)
 	RemoveTransaction(ctx context.Context, txID string)
-	RemoveTransactions(ctx context.Context, transactionsToRemove ptmgrtypes.DispatchableTransactions) error
+	RemoveTransactions(ctx context.Context, transactionsToRemove ptmgrtypes.DispatchableTransactions)
 	IncludesTransaction(txID string) bool
 }
 
@@ -226,7 +225,7 @@ func (g *graph) RemoveTransaction(ctx context.Context, txID string) {
 	}
 }
 
-func (g *graph) RemoveTransactions(ctx context.Context, transactionsToRemove ptmgrtypes.DispatchableTransactions) error {
+func (g *graph) RemoveTransactions(ctx context.Context, transactionsToRemove ptmgrtypes.DispatchableTransactions) {
 	log.L(ctx).Debugf("Graph.RemoveTransactions Removing transactions from graph")
 	// no validation performed here
 	// it is valid to remove transactions that have dependents.  In fact that is normal.
@@ -238,19 +237,10 @@ func (g *graph) RemoveTransactions(ctx context.Context, transactionsToRemove ptm
 	for _, sequence := range transactionsToRemove {
 		for _, txID := range sequence {
 			if g.allTransactions[txID] == nil {
-				//Only real validation we do is to throw an error if a transaction to be removed does not exist
-				// TODO - is that really an error?  Should we just ignore it and remove the others?  That would give us some idempotency behaviour that might be useful
-				log.L(ctx).Errorf("Transaction %s does not exist", txID)
-				return i18n.NewError(ctx, msgs.MsgSequencerInternalError, fmt.Sprintf("Transaction %s does not exist", txID))
+				log.L(ctx).Infof("Transaction %s already removed", txID)
+			} else {
+				delete(g.allTransactions, txID)
 			}
-			delete(g.allTransactions, txID)
 		}
 	}
-
-	err := g.buildMatrix(ctx)
-	if err != nil {
-		log.L(ctx).Errorf("Error building graph: %s", err)
-		return err
-	}
-	return nil
 }

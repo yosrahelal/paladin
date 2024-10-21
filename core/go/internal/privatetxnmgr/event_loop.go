@@ -154,6 +154,11 @@ func NewOrchestrator(
 	return newOrchestrator
 }
 
+func (oc *Orchestrator) abort(err error) {
+	log.L(oc.ctx).Errorf("Orchestrator aborting: %s", err)
+	oc.stopProcess <- true
+
+}
 func (oc *Orchestrator) getTransactionProcessor(txID string) ptmgrtypes.TxProcessor {
 	oc.incompleteTxProcessMapMutex.Lock()
 	defer oc.incompleteTxProcessMapMutex.Unlock()
@@ -169,98 +174,6 @@ func (oc *Orchestrator) removeTransactionProcessor(txID string) {
 	oc.incompleteTxProcessMapMutex.Lock()
 	defer oc.incompleteTxProcessMapMutex.Unlock()
 	delete(oc.incompleteTxSProcessMap, txID)
-}
-
-func (oc *Orchestrator) handleEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
-	//For any event that is specific to a single transaction,
-	// find (or create) the transaction processor for that transaction
-	// and pass the event to it
-	transactionID := event.GetTransactionID()
-	log.L(ctx).Debugf("Orchestrator handling event %T for transaction %s", event, transactionID)
-
-	transactionProcessor := oc.getTransactionProcessor(transactionID)
-	if transactionProcessor == nil {
-		//What has happened here is either:
-		// a) we don't know about this transaction yet, which is possible if we have just restarted
-		// and not yet completed the initialization from the database but in the interim, we have received
-		// a transport message from another node concerning this transaction
-		// b) the transaction has been completed and removed from memory
-		// in case of (a) we ignore it and rely on the fact that we will send out request for data that we need once
-		// we have completed the initialization from the database
-		// in case of (b) we ignore it because an event for a completed transaction is redundant.
-		// most likely it is a tardy response for something we timed out waiting for and failed or retried successfully
-		log.L(ctx).Warnf("Received an event for a transaction that is not in flight %s", transactionID)
-		return
-	}
-
-	//Since event has already been validated, there should be no errors in ApplyEvent because it is just simply taking a copy
-	// of the data in the event into the in-memory record of the transaction
-	//TODO should we allow for errors here in cases where the in-memory record is somehow corrupted ( i.e. we have a bug and need to reset to latest syncpoint)
-	// or should we just panic and rely on the orchestrator to be restarted
-
-	validationError := event.Validate(ctx)
-	if validationError != nil {
-		log.L(ctx).Errorf("Error validating %T event: %s ", event, validationError.Error())
-		//we can't handle this event.  If that leaves a transaction in an incomplete state, then it will eventually resend requests for the data it needs
-		return
-	}
-
-	transactionProcessor.ApplyEvent(ctx, event)
-
-	if transactionProcessor.IsComplete() {
-
-		oc.graph.RemoveTransaction(ctx, transactionID)
-		oc.removeTransactionProcessor(transactionID)
-	} else {
-		// perform any necessary actions (e.g. sending requests for signatures, endorsements etc.)
-		transactionProcessor.Action(ctx)
-	}
-
-	if transactionProcessor.CoordinatingLocally() && transactionProcessor.ReadyForSequencing() && !transactionProcessor.Dispatched() {
-		// we are responsible for coordinating the endorsement flow for this transaction, add it to the graph
-		oc.graph.AddTransaction(ctx, transactionProcessor)
-	}
-
-	//analyze the graph to see if we can dispatch any transactions
-	err := oc.evaluateGraph(ctx)
-	if err != nil {
-		//TODO evaluate graph should not return an error.
-		log.L(ctx).Errorf("Error evaluating graph: %s", err)
-		panic("Error evaluating graph")
-	}
-
-	// Any expected errors like assembly failed or endorsement failed should have been handled by the transaction processor
-	// Any errors that get back here mean that event has not been fully applied and we rely on the
-	// event being re-sent, most likely after the transaction processor re-sends an async request
-	// because it has detected a stale transaction that has timed out waiting for a response
-	//	log.L(ctx).Errorf("Error handling %T event: %s ", event, err.Error())
-
-}
-
-func (oc *Orchestrator) evaluateGraph(ctx context.Context) error {
-
-	dispatchableTransactions, err := oc.graph.GetDispatchableTransactions(ctx)
-	if err != nil {
-		log.L(ctx).Errorf("Error getting dispatchable transactions: %s", err)
-		return err
-	}
-	if len(dispatchableTransactions) == 0 {
-		return nil
-	}
-	err = oc.DispatchTransactions(ctx, dispatchableTransactions)
-	if err != nil {
-		log.L(ctx).Errorf("Error dispatching transaction: %s", err)
-		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, err)
-	}
-	//DispatchTransactions is a persistence point so we can remove the transactions from our graph now that they are dispatched
-	err = oc.graph.RemoveTransactions(ctx, dispatchableTransactions)
-	if err != nil {
-		//TODO this is bad.  What can we do?
-		// probably need to add more precise error reporting to RemoveTransactions function
-		log.L(ctx).Errorf("Error removing dispatched transaction: %s", err)
-		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, err)
-	}
-	return nil
 }
 
 func (oc *Orchestrator) evaluationLoop() {
@@ -295,6 +208,97 @@ func (oc *Orchestrator) evaluationLoop() {
 		}
 		// TODO while we have woken up, iterate through all transactions in memory and check if any are stale or completed and query the database for any in flight transactions that need to be brought into memory
 	}
+}
+
+func (oc *Orchestrator) handleEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
+	//For any event that is specific to a single transaction,
+	// find (or create) the transaction processor for that transaction
+	// and pass the event to it
+	transactionID := event.GetTransactionID()
+	log.L(ctx).Debugf("Orchestrator handling event %T for transaction %s", event, transactionID)
+
+	transactionProcessor := oc.getTransactionProcessor(transactionID)
+	if transactionProcessor == nil {
+		//What has happened here is either:
+		// a) we don't know about this transaction yet, which is possible if we have just restarted
+		// and not yet completed the initialization from the database but in the interim, we have received
+		// a transport message from another node concerning this transaction
+		// b) the transaction has been completed and removed from memory
+		// in case of (a) we ignore it and rely on the fact that we will send out request for data that we need once
+		// we have completed the initialization from the database
+		// in case of (b) we ignore it because an event for a completed transaction is redundant.
+		// most likely it is a tardy response for something we timed out waiting for and failed or retried successfully
+		log.L(ctx).Warnf("Received an event for a transaction that is not in flight %s", transactionID)
+		return
+	}
+
+	validationError := event.Validate(ctx)
+	if validationError != nil {
+		log.L(ctx).Errorf("Error validating %T event: %s ", event, validationError.Error())
+		//we can't handle this event.  If that leaves a transaction in an incomplete state, then it will eventually resend requests for the data it needs
+		return
+	}
+
+	/*
+		Apply the event to the transaction processor's in memory record of the transaction
+		this is expected to be a simple in memory data mapping and therefore is not expected to return any errors
+		it must either
+			- decide to ignore the event altogether
+			- completely apply the the event
+			- panic if the event data is partially applied and an unexpected error occurs before it can be completely applied
+	*/
+	transactionProcessor.ApplyEvent(ctx, event)
+
+	/*
+		 	After applying the event to the transaction, we can either a) clean up that transaction ( if we have just learned, from the event that the transaction is complete and needs no further actions)
+			or b) perform any necessary actions (e.g. sending requests for signatures, endorsements etc.)
+	*/
+	if transactionProcessor.IsComplete() {
+
+		oc.graph.RemoveTransaction(ctx, transactionID)
+		oc.removeTransactionProcessor(transactionID)
+	} else {
+
+		/*
+			Action will perform any necessary actions based on the current state of the transaction.
+			This may include sending asynchronous requests for data and/or synchronous analysis of the in memory record of the transaction.
+			Action is retry safe and idempotent.
+		*/
+		transactionProcessor.Action(ctx)
+	}
+
+	if transactionProcessor.CoordinatingLocally() && transactionProcessor.ReadyForSequencing() && !transactionProcessor.Dispatched() {
+		// we are responsible for coordinating the endorsement flow for this transaction, ensure that it has been added it to the graph
+		// NOTE: AddTransaction is idempotent so we don't need to check whether we have already added it
+		oc.graph.AddTransaction(ctx, transactionProcessor)
+	}
+
+	//analyze the graph to see if we can dispatch any transactions
+	dispatchableTransactions, err := oc.graph.GetDispatchableTransactions(ctx)
+	if err != nil {
+		//If the graph can't give us an answer without an error then we have no confidence that we are in possession of a valid
+		// graph of transactions that can successfully be dispatched so only option here is to abandon everything we have in-memory for this contract
+		// and start again
+		log.L(ctx).Errorf("Error getting dispatchable transactions: %s", err)
+		oc.abort(err)
+		return
+	}
+	if len(dispatchableTransactions) == 0 {
+		log.L(ctx).Debug("No dispatchable transactions")
+		return
+	}
+	err = oc.DispatchTransactions(ctx, dispatchableTransactions)
+	if err != nil {
+		log.L(ctx).Errorf("Error dispatching transaction: %s", err)
+		// assuming this is a transient error with e.g. network or the DB, then we will try again next time round the loop
+		return
+	}
+
+	//DispatchTransactions is a persistence point so we can remove the transactions from our graph now that they are dispatched
+	oc.graph.RemoveTransactions(ctx, dispatchableTransactions)
+
+	return
+
 }
 
 func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *components.PrivateTransaction) (queued bool) {
