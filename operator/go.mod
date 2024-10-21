@@ -7,7 +7,7 @@ toolchain go1.22.7
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/google/uuid v1.6.0
-	github.com/hyperledger/firefly-signer v1.1.18-0.20241020190415-2aaf31608d01
+	github.com/hyperledger/firefly-signer v1.1.18-0.20241021021019-221d03d615f3
 	github.com/kaleido-io/paladin/config v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/testinfra v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000

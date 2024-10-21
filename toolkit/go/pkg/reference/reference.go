@@ -59,10 +59,11 @@ type param struct {
 
 var allTypes = []interface{}{
 	pldapi.IndexedEvent{},
+	pldapi.TransactionReceipt{},
 	pldapi.TransactionInput{},
+	pldapi.TransactionFull{},
+	pldapi.TransactionCall{},
 	pldapi.Transaction{},
-	// pldapi.TransactionFull{}, // FIXME: The code needs a fix before uncommenting this (it looks like `field.Anonymous` is not handled properly)
-	// pldapi.TransactionReceipt{}, // FIXME: The code needs a fix before uncommenting this (it looks like `field.Anonymous` is not handled properly)
 	pldapi.PublicTx{},
 	pldapi.StoredABI{
 		ABI: abi.ABI{
@@ -74,6 +75,7 @@ var allTypes = []interface{}{
 		},
 		Hash: tktypes.Bytes32{},
 	},
+	tktypes.JSONFormatOptions(""),
 	query.QueryJSON{
 		Limit: ptr.To(10),
 		Sort:  []string{"field1 DESC", "field2"},
@@ -187,6 +189,7 @@ var allSimpleTypes = []interface{}{
 	tktypes.HexUint256{},
 	tktypes.HexInt256{},
 	uuid.UUID{},
+	tktypes.HexUint64OrString(""),
 	tktypes.HexUint64(0),
 	tktypes.Timestamp(0),
 	tktypes.RawJSON([]byte{}),
@@ -529,8 +532,12 @@ func (d *docGenerator) writeStructFields(ctx context.Context, t reflect.Type, pa
 
 		// If this is a nested struct, we need to recurse into it
 		if field.Anonymous {
+			structType := field.Type
+			if structType.Kind() == reflect.Pointer {
+				structType = structType.Elem()
+			}
 			var err error
-			tableRowCount, err = d.writeStructFields(ctx, field.Type, pageName, outputPath, subFieldBuff, tableBuff, tableRowCount)
+			tableRowCount, err = d.writeStructFields(ctx, structType, pageName, outputPath, subFieldBuff, tableBuff, tableRowCount)
 			if err != nil {
 				return tableRowCount, err
 			}

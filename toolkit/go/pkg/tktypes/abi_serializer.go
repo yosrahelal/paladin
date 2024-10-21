@@ -90,6 +90,17 @@ func (jfo JSONFormatOptions) getABISerializer(ctx context.Context, skipErrors bo
 				default:
 					return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
 				}
+			case "address":
+				switch strings.ToLower(v) {
+				case "hex-0x", "hex":
+					serializer = serializer.SetAddressSerializer(abi.HexAddrSerializer0xPrefix)
+				case "hex-plain":
+					serializer = serializer.SetAddressSerializer(abi.HexAddrSerializerPlain)
+				case "checksum":
+					serializer = serializer.SetAddressSerializer(abi.ChecksumAddrSerializer)
+				default:
+					return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+				}
 			case "pretty":
 				serializer = serializer.SetPretty(v != "false")
 			default:
@@ -111,7 +122,8 @@ func StandardABISerializer() *abi.Serializer {
 		SetFormattingMode(abi.FormatAsObjects).
 		SetIntSerializer(abi.Base10StringIntSerializer).
 		SetFloatSerializer(abi.Base10StringFloatSerializer).
-		SetByteSerializer(abi.HexByteSerializer0xPrefix)
+		SetByteSerializer(abi.HexByteSerializer0xPrefix).
+		SetAddressSerializer(abi.HexAddrSerializer0xPrefix)
 }
 
 // Validates that two ABIs contains exactly the same entires

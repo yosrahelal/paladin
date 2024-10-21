@@ -456,6 +456,10 @@ func TestJSONFormatOptions(t *testing.T) {
 				{
 					"name": "valueDiff",
 					"type": "int256"
+				},
+				{
+					"name": "supplier",
+					"type": "address"
 				}
 			]
 		}
@@ -470,6 +474,7 @@ func TestJSONFormatOptions(t *testing.T) {
 				"description": "widgetA",
 				"count":       100,
 				"valueDiff":   "-123456789012345678901234567890", // big number
+				"supplier":    "0xB8F7764d413B518c49824fb5E6078b41B2549d4e",
 			},
 		},
 	})
@@ -496,36 +501,39 @@ func TestJSONFormatOptions(t *testing.T) {
 				"count": "100",
 				"description": "widgetA",
 				"valueDiff": "-123456789012345678901234567890",
-				"item": "0xbb36636e2b58f2ca2538a966b95a253ed78c6bd1d176255be5a58c7ced3c21ea"
+				"item": "0xbb36636e2b58f2ca2538a966b95a253ed78c6bd1d176255be5a58c7ced3c21ea",
+				"supplier": "0xb8f7764d413b518c49824fb5e6078b41b2549d4e"
 			}
 		]
 	}`)
-	checkEqual("mode=object&number=hex&bytes=hex-plain", `{
+	checkEqual("mode=object&number=hex&bytes=hex-plain&address=checksum", `{
 		"date": "0x671550d8",
 		"stock": [
 			{
 				"count": "0x64",
 				"description": "widgetA",
 				"valueDiff": "-0x18ee90ff6c373e0ee4e3f0ad2",
-				"item": "bb36636e2b58f2ca2538a966b95a253ed78c6bd1d176255be5a58c7ced3c21ea"
+				"item": "bb36636e2b58f2ca2538a966b95a253ed78c6bd1d176255be5a58c7ced3c21ea",
+				"supplier": "0xB8F7764d413B518c49824fb5E6078b41B2549d4e"
 			}
 		]
 	}`)
-	checkEqual("mode=object&number=json-number&bytes=base64", `{
+	checkEqual("mode=object&number=json-number&bytes=base64&address=hex-plain", `{
 		"date": 1729450200,
 		"stock": [
 			{
 				"count": 100,
 				"description": "widgetA",
 				"valueDiff": -123456789012345678901234567890,
-				"item": "uzZjbitY8solOKlmuVolPteMa9HRdiVb5aWMfO08Ieo="
+				"item": "uzZjbitY8solOKlmuVolPteMa9HRdiVb5aWMfO08Ieo=",
+				"supplier": "b8f7764d413b518c49824fb5e6078b41b2549d4e"
 			}
 		]
 	}`)
-	checkEqual("mode=array&number=string&bytes=hex-plain", `[
+	checkEqual("mode=array&number=string&bytes=hex-plain&address=hex", `[
 		"1729450200",
 		[
-			["bb36636e2b58f2ca2538a966b95a253ed78c6bd1d176255be5a58c7ced3c21ea", "widgetA", "100", "-123456789012345678901234567890"]
+			["bb36636e2b58f2ca2538a966b95a253ed78c6bd1d176255be5a58c7ced3c21ea", "widgetA", "100", "-123456789012345678901234567890", "0xb8f7764d413b518c49824fb5e6078b41b2549d4e"]
 		]
 	]`)
 	checkEqual("mode=self-describing&number=json-number&bytes=hex&pretty", `[
@@ -536,7 +544,7 @@ func TestJSONFormatOptions(t *testing.T) {
 		},
 		{
 			"name": "stock",
-			"type": "(bytes32,string,uint256,int256)[]",
+			"type": "(bytes32,string,uint256,int256,address)[]",
 			"value": [
 				[
 					{
@@ -557,7 +565,12 @@ func TestJSONFormatOptions(t *testing.T) {
 					{
 						"name": "valueDiff",
 						"type": "int256",
-						"value": -1.2345678901234568e+29
+						"value": -123456789012345678901234567890
+					},
+					{
+						"name": "supplier",
+						"type": "address",
+						"value": "0xb8f7764d413b518c49824fb5e6078b41b2549d4e"
 					}
 				]
 			]
@@ -582,6 +595,9 @@ func TestJSONFormatOptionErrors(t *testing.T) {
 	assert.Regexp(t, "PD020015", err)
 
 	_, err = JSONFormatOptions("bytes=blue").GetABISerializer(ctx)
+	assert.Regexp(t, "PD020015", err)
+
+	_, err = JSONFormatOptions("address=blue").GetABISerializer(ctx)
 	assert.Regexp(t, "PD020015", err)
 
 	s := JSONFormatOptions("this;is;ignored").GetABISerializerIgnoreErrors(ctx)

@@ -52,6 +52,7 @@ var (
 var (
 	PublicTxOptionsGas                     = ffm("PublicTxOptions.gas", "The gas limit for the transaction (optional)")
 	PublicTxOptionsValue                   = ffm("PublicTxOptions.value", "The value transferred in the transaction (optional)")
+	PublicCallOptionsBlock                 = ffm("PublicCallOptions.block", "The block number or 'latest' when calling a public smart contract (optional)")
 	PublicTxGasPricingMaxPriorityFeePerGas = ffm("PublicTxGasPricing.maxPriorityFeePerGas", "The maximum priority fee per gas (optional)")
 	PublicTxGasPricingMaxFeePerGas         = ffm("PublicTxGasPricing.maxFeePerGas", "The maximum fee per gas (optional)")
 	PublicTxGasPricingGasPrice             = ffm("PublicTxGasPricing.gasPrice", "The gas price (optional)")
@@ -98,6 +99,7 @@ var (
 	TransactionInputDependsOn                     = ffm("TransactionInput.dependsOn", "Transactions that must be mined on the blockchain successfully before this transaction submits")
 	TransactionInputABI                           = ffm("TransactionInput.abi", "Application Binary Interface (ABI) definition - required if abiReference not supplied")
 	TransactionInputBytecode                      = ffm("TransactionInput.bytecode", "Bytecode prepended to encoded data inputs for deploy transactions")
+	TransactionCallDataFormat                     = ffm("TransactionCall.dataFormat", "How call data should be serialized into JSON once decoded using the ABI function definition")
 	TransactionFullDependsOn                      = ffm("TransactionFull.dependsOn", "Transactions registered as dependencies when the transaction was created")
 	TransactionFullReceipt                        = ffm("TransactionFull.receipt", "Transaction receipt data - available if the transaction has reached a final state")
 	TransactionFullPublic                         = ffm("TransactionFull.public", "List of public transactions associated with this transaction")

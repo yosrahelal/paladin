@@ -1,6 +1,16 @@
 ---
 title: API ptx
 ---
+## ptx_call
+
+### Parameters
+
+- [TransactionCall](../types/transactioncall.md#transactioncall)
+
+### Returns
+
+- uint8[]
+
 ## ptx_getTransaction
 
 {% include-markdown "./_includes/gettransaction_description.md" %}
@@ -33,7 +43,7 @@ title: API ptx
 
 ### Returns
 
-- TransactionFull
+- [TransactionFull](../types/transactionfull.md#transactionfull)
 
 ## ptx_getTransactionReceipt
 
@@ -45,7 +55,7 @@ title: API ptx
 
 ### Returns
 
-- TransactionReceipt
+- [TransactionReceipt](../types/transactionreceipt.md#transactionreceipt)
 
 ## ptx_queryTransactionReceipts
 
@@ -57,7 +67,7 @@ title: API ptx
 
 ### Returns
 
-- TransactionReceipt[]
+- [TransactionReceipt[]](../types/transactionreceipt.md#transactionreceipt)
 
 ## ptx_queryTransactions
 
@@ -81,7 +91,7 @@ title: API ptx
 
 ### Returns
 
-- TransactionFull[]
+- [TransactionFull[]](../types/transactionfull.md#transactionfull)
 
 ## ptx_resoleVerifier
 
