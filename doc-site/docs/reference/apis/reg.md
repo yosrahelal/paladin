@@ -1,6 +1,18 @@
 ---
 title: reg_*
 ---
+## `reg_queryEntries`
+
+### Parameters
+
+0. `registryName`: `string`
+1. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
+2. `activeFilter`: `Enum[github.com/kaleido-io/paladin/toolkit/pkg/pldapi.ActiveFilter]`
+
+### Returns
+
+0. `entries`: [`RegistryEntry[]`](../types/registryentry.md#registryentry)
+
 ## `reg_queryEntriesWithProps`
 
 ### Parameters
@@ -11,7 +23,7 @@ title: reg_*
 
 ### Returns
 
-0. `entries`: `RegistryEntryWithProperties[]`
+0. `entries`: [`RegistryEntryWithProperties[]`](../types/registryentrywithproperties.md#registryentrywithproperties)
 
 ## `reg_getEntryProperties`
 
@@ -23,23 +35,11 @@ title: reg_*
 
 ### Returns
 
-0. `properties`: `RegistryProperty[]`
+0. `properties`: [`RegistryProperty[]`](../types/registryproperty.md#registryproperty)
 
 ## `reg_registries`
 
 ### Returns
 
 0. `registryNames`: `string[]`
-
-## `reg_queryEntries`
-
-### Parameters
-
-0. `registryName`: `string`
-1. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
-2. `activeFilter`: `Enum[github.com/kaleido-io/paladin/toolkit/pkg/pldapi.ActiveFilter]`
-
-### Returns
-
-0. `entries`: `RegistryEntry[]`
 

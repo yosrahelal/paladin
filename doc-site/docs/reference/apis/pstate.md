@@ -1,6 +1,16 @@
 ---
 title: pstate_*
 ---
+## `pstate_listSchemas`
+
+### Parameters
+
+0. `domain`: `string`
+
+### Returns
+
+0. `schemas`: [`Schema[]`](../types/schema.md#schema)
+
 ## `pstate_storeState`
 
 ### Parameters
@@ -26,14 +36,4 @@ title: pstate_*
 ### Returns
 
 0. `states`: [`State[]`](../types/state.md#state)
-
-## `pstate_listSchemas`
-
-### Parameters
-
-0. `domain`: `string`
-
-### Returns
-
-0. `schemas`: [`Schema[]`](../types/schema.md#schema)
 

@@ -20,31 +20,31 @@ import "github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
 // An entity within a registry with its current properties
 type RegistryEntry struct {
-	Registry         string              `json:"registry"`           // the registry that maintains this record
-	ID               tktypes.HexBytes    `json:"id"`                 // unique within the registry, across all records in the hierarchy
-	Name             string              `json:"name"`               // unique across entries with the same parent, within the particular registry
-	ParentID         tktypes.HexBytes    `json:"parentId,omitempty"` // nil a root record, otherwise will be a reference to another entity in the same registry
+	Registry         string              `docstruct:"RegistryEntry" json:"registry"`           // the registry that maintains this record
+	ID               tktypes.HexBytes    `docstruct:"RegistryEntry" json:"id"`                 // unique within the registry, across all records in the hierarchy
+	Name             string              `docstruct:"RegistryEntry" json:"name"`               // unique across entries with the same parent, within the particular registry
+	ParentID         tktypes.HexBytes    `docstruct:"RegistryEntry" json:"parentId,omitempty"` // nil a root record, otherwise will be a reference to another entity in the same registry
 	*OnChainLocation `json:",omitempty"` // only included if the registry uses blockchain indexing
 	*ActiveFlag      `json:",omitempty"` // only returned from queries that explicitly look for inactive entries
 }
 
 type RegistryProperty struct {
-	Registry         string              `json:"registry"` // the registry that maintains this record
-	EntryID          tktypes.HexBytes    `json:"entityId"` // the ID of the entity that owns this record within the registry
-	Name             string              `json:"name"`     // unique across entries with the same parent, within the particular registry
-	Value            string              `json:"value"`    // unique across entries with the same parent, within the particular registry
+	Registry         string              `docstruct:"RegistryProperty" json:"registry"` // the registry that maintains this record
+	EntryID          tktypes.HexBytes    `docstruct:"RegistryProperty" json:"entryId"`  // the ID of the entity that owns this record within the registry
+	Name             string              `docstruct:"RegistryProperty" json:"name"`     // unique across entries with the same parent, within the particular registry
+	Value            string              `docstruct:"RegistryProperty" json:"value"`    // unique across entries with the same parent, within the particular registry
 	*OnChainLocation `json:",omitempty"` // only included if the registry uses blockchain indexing
 	*ActiveFlag      `json:",omitempty"` // only returned from queries that explicitly look for inactive entries
 }
 
 type ActiveFlag struct {
-	Active bool `json:"active"`
+	Active bool `docstruct:"ActiveFlag" json:"active"`
 }
 
 type OnChainLocation struct {
-	BlockNumber      int64 `json:"blockNumber"`
-	TransactionIndex int64 `json:"transactionIndex"`
-	LogIndex         int64 `json:"logIndex"`
+	BlockNumber      int64 `docstruct:"OnChainLocation" json:"blockNumber"`
+	TransactionIndex int64 `docstruct:"OnChainLocation" json:"transactionIndex"`
+	LogIndex         int64 `docstruct:"OnChainLocation" json:"logIndex"`
 }
 
 // A convenience structure that gives a snapshot of the whole entity, with all it's properties.
@@ -52,7 +52,7 @@ type OnChainLocation struct {
 type RegistryEntryWithProperties struct {
 	*RegistryEntry `json:",inline"`
 	// With this convenience object all of the properties are flattened into a name=value string map
-	Properties map[string]string `json:"properties"`
+	Properties map[string]string `docstruct:"RegistryEntryWithProperties" json:"properties"`
 }
 
 type ActiveFilter string

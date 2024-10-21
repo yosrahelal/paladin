@@ -81,6 +81,14 @@ var allTypes = []interface{}{
 	pldapi.StateSpend{},
 	pldapi.StateLock{},
 	pldapi.Schema{},
+	pldapi.RegistryEntry{OnChainLocation: &pldapi.OnChainLocation{}},
+	pldapi.RegistryEntryWithProperties{
+		RegistryEntry: &pldapi.RegistryEntry{
+			OnChainLocation: &pldapi.OnChainLocation{},
+		},
+	},
+	pldapi.RegistryProperty{},
+	pldapi.OnChainLocation{},
 	tktypes.JSONFormatOptions(""),
 	query.QueryJSON{
 		Limit: ptr.To(10),
