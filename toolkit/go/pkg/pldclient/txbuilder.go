@@ -93,6 +93,7 @@ type TxBuilder interface {
 	DataFormat(format tktypes.JSONFormatOptions) TxBuilder // determines how JSON will be sent/received to/from the server as serialized JSON
 	GetDataFormat() tktypes.JSONFormatOptions
 
+	Clone() TxBuilder                           // creates a copy that is useful as a way to create a common reference builder for multiple calls
 	Wrap(*pldapi.TransactionInput) TxBuilder    // initializes a TxBuilder from an existing transaction, including setting the inputs to be the Data from the TX
 	WrapCall(*pldapi.TransactionCall) TxBuilder // initializes a TxBuilder from an existing call, including setting the inputs to be the Data from the TX
 
@@ -197,6 +198,17 @@ func (c *paladinClient) TxBuilder(ctx context.Context) TxBuilder {
 		},
 		functions: map[string]*abi.Entry{},
 		tx:        &pldapi.TransactionCall{},
+	}
+}
+
+func (t *txBuilder) Clone() TxBuilder {
+	txCopy := *t.tx
+	return &txBuilder{
+		chainable: t.chainable,
+		tx:        &txCopy,
+		functions: t.functions,
+		inputs:    t.inputs,
+		outputs:   t.outputs,
 	}
 }
 

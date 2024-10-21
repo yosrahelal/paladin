@@ -85,7 +85,7 @@ var _ = Describe("controller", Ordered, func() {
 				for dest := range nodes {
 					Eventually(func() bool {
 						return withTimeout(func(ctx context.Context) bool {
-							verifier, err := nodes[src].PTX().ResoleVerifier(ctx, fmt.Sprintf("test@%s", dest),
+							verifier, err := nodes[src].PTX().ResolveVerifier(ctx, fmt.Sprintf("test@%s", dest),
 								algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 							if err == nil {
 								addr, err := tktypes.ParseEthAddress(verifier)

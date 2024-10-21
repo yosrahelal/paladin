@@ -496,7 +496,7 @@ func TestGetters(t *testing.T) {
 	}
 
 	// This isn't a valid TX, but we're just testing getters
-	b := New().TxBuilder(context.Background()).Wrap(tx)
+	b := New().TxBuilder(context.Background()).Wrap(tx).Clone()
 	assert.Equal(t, tx.ABI, b.GetABI())
 	assert.Equal(t, tx.IdempotencyKey, b.GetIdempotencyKey())
 	assert.Equal(t, pldapi.TransactionTypePrivate, b.GetType())
