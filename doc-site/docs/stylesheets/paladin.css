@@ -7,6 +7,10 @@
     --md-primary-bg-color--dark:  #9E9E9E;
     --md-typeset-a-color: #1EC4C4;
 }
+[data-md-color-scheme="paladin"] img[src$="#only-dark"] {
+    display: none;
+}
+
 [data-md-color-scheme="paladin-dark"] {
     --md-primary-fg-color: #212121;
     --md-primary-fg-color--light: #212121;
@@ -27,4 +31,7 @@
 }
 [data-md-color-scheme="paladin-dark"] .md-tabs__link {
     font-weight: bolder;
+}
+[data-md-color-scheme="paladin-dark"] img[src$="#only-light"] {
+    display: none;
 }
