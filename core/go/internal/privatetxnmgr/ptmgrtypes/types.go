@@ -27,7 +27,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
-	pbSequence "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
@@ -41,63 +40,6 @@ type Transaction struct {
 	AssemblerNodeID string
 	OutputStates    []string
 	InputStates     []string
-}
-
-type Sequencer interface {
-	/*
-		HandleTransactionAssembledEvent needs to be called whenever a transaction has been assembled by any node in the network, including the local node.
-	*/
-	HandleTransactionAssembledEvent(ctx context.Context, event *pbSequence.TransactionAssembledEvent)
-
-	/*
-		HandleTransactionEndorsedEvent needs to be called whenever a the endorsement rules for the given domain have been satisfied for a given transaction.
-	*/
-	HandleTransactionEndorsedEvent(ctx context.Context, event *pbSequence.TransactionEndorsedEvent) error
-
-	/*
-		HandleTransactionDispatchResovedEvent needs to be called whenever a the signign address for a transaction has been resolved.
-	*/
-	HandleTransactionDispatchResolvedEvent(ctx context.Context, event *pbSequence.TransactionDispatchResolvedEvent) error
-
-	/*
-		HandleTransactionConfirmedEvent needs to be called whenever a transaction has been confirmed on the base ledger
-		i.e. it has been included in a block with enough subsequent blocks to consider this final for that particular chain.
-	*/
-	HandleTransactionConfirmedEvent(ctx context.Context, event *pbSequence.TransactionConfirmedEvent) error
-
-	/*
-		OnTransationReverted needs to be called whenever a transaction has been rejected by any of the validation
-		steps on any nodes or the base leddger contract. The transaction may or may not be reassembled after this
-		hanlder is called.
-	*/
-	HandleTransactionRevertedEvent(ctx context.Context, event *pbSequence.TransactionRevertedEvent) error
-
-	/*
-		HandleTransactionDelegatedEvent needs to be called whenever a transaction has been delegated from one node to another
-		this is an event that is broadcast to all nodes after the fact and should not be confused with the DelegateTransaction message which is
-		an instruction to the delegate node.
-	*/
-	HandleTransactionDelegatedEvent(ctx context.Context, event *pbSequence.TransactionDelegatedEvent) error
-
-	/*
-		AssignTransaction is an instruction for the given transaction to be managed by this sequencer
-	*/
-	AssignTransaction(ctx context.Context, transactionID string)
-
-	/*
-		RemoveTransaction is an instruction for the given transaction to be no longer be managed by this sequencer
-		A re-assembled version ( with the same ID ) of the transaction may be assigned to the sequencer at a later time.
-	*/
-	RemoveTransaction(ctx context.Context, transactionID string)
-
-	/*
-		ApproveEndorsement is a synchronous check of whether a given transaction could be endorsed by the local node. It asks the question:
-		"given the information available to the local node at this point in time, does it appear that this transaction has no contention on input states".
-	*/
-	ApproveEndorsement(ctx context.Context, endorsementRequest EndorsementRequest) (bool, error)
-
-	SetDispatcher(dispatcher Dispatcher)
-	EvaluateGraph(ctx context.Context)
 }
 
 type Publisher interface {
