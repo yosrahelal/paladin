@@ -24,6 +24,18 @@ title: pstate_*
 
 0. `states`: [`State[]`](../types/state.md#state)
 
+## `pstate_queryStates`
+
+### Parameters
+
+0. `domain`: `string`
+1. `schemaRef`: [`Bytes32`](../types/simpletypes.md#bytes32)
+2. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
+
+### Returns
+
+0. `states`: [`State[]`](../types/state.md#state)
+
 ## `pstate_storeState`
 
 ### Parameters

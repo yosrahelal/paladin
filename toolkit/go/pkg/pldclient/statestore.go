@@ -28,6 +28,7 @@ type StateStore interface {
 
 	ListSchemas(ctx context.Context, domain string) (schemas []*pldapi.Schema, err error)
 	StoreState(ctx context.Context, domain string, contractAddress tktypes.EthAddress, schemaRef tktypes.Bytes32, data tktypes.RawJSON) (state *pldapi.State, err error)
+	QueryStates(ctx context.Context, domain string, schemaRef tktypes.Bytes32, query *query.QueryJSON) (states []*pldapi.State, err error)
 	QueryContractStates(ctx context.Context, domain string, contractAddress tktypes.EthAddress, schemaRef tktypes.Bytes32, query *query.QueryJSON) (states []*pldapi.State, err error)
 }
 
@@ -42,6 +43,10 @@ var stateStoreInfo = &rpcModuleInfo{
 		"pstate_storeState": {
 			Inputs: []string{"domain", "contractAddress", "schemaRef", "data"},
 			Output: "state",
+		},
+		"pstate_queryStates": {
+			Inputs: []string{"domain", "schemaRef", "query"},
+			Output: "states",
 		},
 		"pstate_queryContractStates": {
 			Inputs: []string{"domain", "contractAddress", "schemaRef", "query"},
@@ -66,6 +71,11 @@ func (r *stateStore) ListSchemas(ctx context.Context, domain string) (schemas []
 
 func (r *stateStore) StoreState(ctx context.Context, domain string, contractAddress tktypes.EthAddress, schemaRef tktypes.Bytes32, data tktypes.RawJSON) (state *pldapi.State, err error) {
 	err = r.c.CallRPC(ctx, &state, "pstate_storeState", domain, contractAddress, schemaRef, data)
+	return
+}
+
+func (r *stateStore) QueryStates(ctx context.Context, domain string, schemaRef tktypes.Bytes32, query *query.QueryJSON) (states []*pldapi.State, err error) {
+	err = r.c.CallRPC(ctx, &states, "pstate_queryStates", domain, schemaRef, query)
 	return
 }
 

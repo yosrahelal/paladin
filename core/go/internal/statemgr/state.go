@@ -198,8 +198,13 @@ func (ss *stateManager) labelSetFor(schema components.Schema) *trackingLabelSet 
 	return &tls
 }
 
-func (ss *stateManager) FindStates(ctx context.Context, dbTX *gorm.DB, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, query *query.QueryJSON, status StateStatusQualifier) (s []*pldapi.State, err error) {
-	_, s, err = ss.findStates(ctx, dbTX, domainName, contractAddress, schemaID, query, status)
+func (ss *stateManager) FindContractStates(ctx context.Context, dbTX *gorm.DB, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, query *query.QueryJSON, status StateStatusQualifier) (s []*pldapi.State, err error) {
+	_, s, err = ss.findStates(ctx, dbTX, domainName, &contractAddress, schemaID, query, status)
+	return s, err
+}
+
+func (ss *stateManager) FindStates(ctx context.Context, dbTX *gorm.DB, domainName string, schemaID tktypes.Bytes32, query *query.QueryJSON, status StateStatusQualifier) (s []*pldapi.State, err error) {
+	_, s, err = ss.findStates(ctx, dbTX, domainName, nil, schemaID, query, status)
 	return s, err
 }
 
@@ -207,7 +212,7 @@ func (ss *stateManager) findStates(
 	ctx context.Context,
 	dbTX *gorm.DB,
 	domainName string,
-	contractAddress tktypes.EthAddress,
+	contractAddress *tktypes.EthAddress,
 	schemaID tktypes.Bytes32,
 	jq *query.QueryJSON,
 	status StateStatusQualifier,
@@ -247,7 +252,7 @@ func (ss *stateManager) findAvailableNullifiers(
 	ctx context.Context,
 	dbTX *gorm.DB,
 	domainName string,
-	contractAddress tktypes.EthAddress,
+	contractAddress *tktypes.EthAddress,
 	schemaID tktypes.Bytes32,
 	jq *query.QueryJSON,
 	spendingStates []tktypes.HexBytes,
@@ -281,7 +286,7 @@ func (ss *stateManager) findStatesCommon(
 	ctx context.Context,
 	dbTX *gorm.DB,
 	domainName string,
-	contractAddress tktypes.EthAddress,
+	contractAddress *tktypes.EthAddress,
 	schemaID tktypes.Bytes32,
 	jq *query.QueryJSON,
 	addQuery func(q *gorm.DB) *gorm.DB,
@@ -313,8 +318,10 @@ func (ss *stateManager) findStatesCommon(
 	}
 
 	q = q.Where("states.domain_name = ?", domainName).
-		Where("states.contract_address = ?", contractAddress).
 		Where("states.schema = ?", schema.Persisted().ID)
+	if contractAddress != nil {
+		q = q.Where("states.contract_address = ?", contractAddress)
+	}
 	q = addQuery(q)
 
 	var states []*pldapi.State

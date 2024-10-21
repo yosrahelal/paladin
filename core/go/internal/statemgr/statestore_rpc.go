@@ -34,6 +34,7 @@ func (ss *stateManager) initRPC() {
 	ss.rpcModule = rpcserver.NewRPCModule("pstate").
 		Add("pstate_listSchemas", ss.rpcListSchema()).
 		Add("pstate_storeState", ss.rpcStoreState()).
+		Add("pstate_queryStates", ss.rpcQueryStates()).
 		Add("pstate_queryContractStates", ss.rpcQueryContractStates())
 }
 
@@ -67,6 +68,17 @@ func (ss *stateManager) rpcStoreState() rpcserver.RPCHandler {
 	})
 }
 
+func (ss *stateManager) rpcQueryStates() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod4(func(ctx context.Context,
+		domain string,
+		schema tktypes.Bytes32,
+		query query.QueryJSON,
+		status StateStatusQualifier,
+	) ([]*pldapi.State, error) {
+		return ss.FindStates(ctx, ss.p.DB(), domain, schema, &query, status)
+	})
+}
+
 func (ss *stateManager) rpcQueryContractStates() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod5(func(ctx context.Context,
 		domain string,
@@ -75,6 +87,6 @@ func (ss *stateManager) rpcQueryContractStates() rpcserver.RPCHandler {
 		query query.QueryJSON,
 		status StateStatusQualifier,
 	) ([]*pldapi.State, error) {
-		return ss.FindStates(ctx, ss.p.DB(), domain, contractAddress, schema, &query, status)
+		return ss.FindContractStates(ctx, ss.p.DB(), domain, contractAddress, schema, &query, status)
 	})
 }

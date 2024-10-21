@@ -131,7 +131,7 @@ func TestStateLockingQuery(t *testing.T) {
 	})
 
 	checkQuery := func(jq *query.QueryJSON, status StateStatusQualifier, expected ...int) {
-		states, err := ss.FindStates(ctx, ss.p.DB(), "domain1", contractAddress, schemaID, jq, status)
+		states, err := ss.FindContractStates(ctx, ss.p.DB(), "domain1", contractAddress, schemaID, jq, status)
 		require.NoError(t, err)
 		assert.Len(t, states, len(expected))
 		for _, wIndex := range expected {

@@ -113,4 +113,15 @@ func TestRPC(t *testing.T) {
 	assert.Len(t, states, 1)
 	assert.Equal(t, state, states[0])
 
+	rpcErr = c.CallRPC(ctx, &states, "pstate_queryStates", "domain1", schemas[0].ID, tktypes.RawJSON(`{
+		"eq": [{
+		  "field": "color",
+		  "value": "blue"
+		}]
+	}`), "all")
+	jsonTestLog(t, "pstate_storeState", states)
+	assert.Nil(t, rpcErr)
+	assert.Len(t, states, 1)
+	assert.Equal(t, state, states[0])
+
 }

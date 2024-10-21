@@ -258,7 +258,7 @@ func (dc *domainContext) FindAvailableStates(schemaID tktypes.Bytes32, query *qu
 	}
 
 	// Run the query against the DB
-	schema, states, err := dc.ss.findStates(dc, dc.dbTX, dc.domainName, dc.contractAddress, schemaID, query, StateStatusAvailable, spending...)
+	schema, states, err := dc.ss.findStates(dc, dc.dbTX, dc.domainName, &dc.contractAddress, schemaID, query, StateStatusAvailable, spending...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -281,7 +281,7 @@ func (dc *domainContext) FindAvailableNullifiers(schemaID tktypes.Bytes32, query
 	}
 
 	// Run the query against the DB
-	schema, states, err := dc.ss.findAvailableNullifiers(dc, dc.dbTX, dc.domainName, dc.contractAddress, schemaID, query, spending, nullifierIDs)
+	schema, states, err := dc.ss.findAvailableNullifiers(dc, dc.dbTX, dc.domainName, &dc.contractAddress, schemaID, query, spending, nullifierIDs)
 	if err != nil {
 		return nil, nil, err
 	}
