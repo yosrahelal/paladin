@@ -24,6 +24,7 @@ package ptmgrtypes
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	pbSequence "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
@@ -96,12 +97,15 @@ type Sequencer interface {
 	ApproveEndorsement(ctx context.Context, endorsementRequest EndorsementRequest) (bool, error)
 
 	SetDispatcher(dispatcher Dispatcher)
+	EvaluateGraph(ctx context.Context)
 }
 
 type Publisher interface {
 	//Service for sending messages and events within the local node
 	PublishTransactionBlockedEvent(ctx context.Context, transactionId string)
 	PublishTransactionDispatchedEvent(ctx context.Context, transactionId string, nonce uint64, signingAddress string)
+	PublishTransactionAssembledEvent(ctx context.Context, transactionId string)
+	PublishTransactionAssembleFailedEvent(ctx context.Context, transactionId string, errorMessage string)
 	PublishTransactionSignedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult)
 	PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult, revertReason *string)
 	PublishResolveVerifierResponseEvent(ctx context.Context, transactionId string, lookup, algorithm, verifier, verifierType string)
@@ -160,20 +164,18 @@ type TxProcessor interface {
 	GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error)
 	GetStatus(ctx context.Context) TxProcessorStatus
 
-	HandleTransactionSubmittedEvent(ctx context.Context, event *TransactionSubmittedEvent) error
-	HandleTransactionSwappedInEvent(ctx context.Context, event *TransactionSwappedInEvent) error
-	HandleTransactionAssembledEvent(ctx context.Context, event *TransactionAssembledEvent) error
-	HandleTransactionSignedEvent(ctx context.Context, event *TransactionSignedEvent) error
-	HandleTransactionEndorsedEvent(ctx context.Context, event *TransactionEndorsedEvent) error
-	HandleTransactionDispatchedEvent(ctx context.Context, event *TransactionDispatchedEvent) error
-	HandleTransactionConfirmedEvent(ctx context.Context, event *TransactionConfirmedEvent) error
-	HandleTransactionRevertedEvent(ctx context.Context, event *TransactionRevertedEvent) error
-	HandleTransactionDelegatedEvent(ctx context.Context, event *TransactionDelegatedEvent) error
-	HandleResolveVerifierResponseEvent(ctx context.Context, event *ResolveVerifierResponseEvent) error
-	HandleResolveVerifierErrorEvent(ctx context.Context, event *ResolveVerifierErrorEvent) error
-	HandleTransactionFinalizedEvent(ctx context.Context, event *TransactionFinalizedEvent) error
-	HandleTransactionFinalizeError(ctx context.Context, event *TransactionFinalizeError) error
+	ApplyEvent(ctx context.Context, event PrivateTransactionEvent)
+	Action(ctx context.Context)
 
 	PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error)
 	GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution
+	CoordinatingLocally() bool
+	IsComplete() bool
+	ReadyForSequencing() bool
+	Dispatched() bool
+	ID() uuid.UUID
+	IsEndorsed(ctx context.Context) bool
+	InputStateIDs() []string
+	OutputStateIDs() []string
+	Signer() string
 }

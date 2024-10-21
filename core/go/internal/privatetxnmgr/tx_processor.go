@@ -29,7 +29,6 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
 	engineProto "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 
-	"github.com/kaleido-io/paladin/core/pkg/proto/sequence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -38,38 +37,55 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract, sequencer ptmgrtypes.Sequencer, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, syncPoints syncpoints.SyncPoints, transportWriter ptmgrtypes.TransportWriter) ptmgrtypes.TxProcessor {
+func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract /*sequencer ptmgrtypes.Sequencer,*/, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, syncPoints syncpoints.SyncPoints, transportWriter ptmgrtypes.TransportWriter) ptmgrtypes.TxProcessor {
 	return &PaladinTxProcessor{
-		stageErrorRetry:     10 * time.Second,
-		sequencer:           sequencer,
-		domainAPI:           domainAPI,
-		nodeID:              nodeID,
-		components:          components,
-		publisher:           publisher,
-		endorsementGatherer: endorsementGatherer,
-		transaction:         transaction,
-		status:              "new",
-		identityResolver:    identityResolver,
-		syncPoints:          syncPoints,
-		transportWriter:     transportWriter,
+		stageErrorRetry:             10 * time.Second,
+		domainAPI:                   domainAPI,
+		nodeID:                      nodeID,
+		components:                  components,
+		publisher:                   publisher,
+		endorsementGatherer:         endorsementGatherer,
+		transaction:                 transaction,
+		status:                      "new",
+		identityResolver:            identityResolver,
+		syncPoints:                  syncPoints,
+		transportWriter:             transportWriter,
+		finalizeRequired:            false,
+		finalizePending:             false,
+		requestedVerifierResolution: false,
+		requestedSignatures:         false,
+		requestedEndorsement:        false,
+		complete:                    false,
+		localCoordinator:            true,
+		readyForSequencing:          false,
+		dispatched:                  false,
 	}
 }
 
 type PaladinTxProcessor struct {
-	stageErrorRetry     time.Duration
-	components          components.AllComponents
-	nodeID              string
-	domainAPI           components.DomainSmartContract
-	sequencer           ptmgrtypes.Sequencer
-	transaction         *components.PrivateTransaction
-	publisher           ptmgrtypes.Publisher
-	endorsementGatherer ptmgrtypes.EndorsementGatherer
-	status              string
-	latestEvent         string
-	latestError         string
-	identityResolver    components.IdentityResolver
-	syncPoints          syncpoints.SyncPoints
-	transportWriter     ptmgrtypes.TransportWriter
+	stageErrorRetry             time.Duration
+	components                  components.AllComponents
+	nodeID                      string
+	domainAPI                   components.DomainSmartContract
+	transaction                 *components.PrivateTransaction
+	publisher                   ptmgrtypes.Publisher
+	endorsementGatherer         ptmgrtypes.EndorsementGatherer
+	status                      string
+	latestEvent                 string
+	latestError                 string
+	identityResolver            components.IdentityResolver
+	syncPoints                  syncpoints.SyncPoints
+	transportWriter             ptmgrtypes.TransportWriter
+	finalizeReason              string
+	finalizeRequired            bool
+	finalizePending             bool
+	complete                    bool
+	requestedVerifierResolution bool
+	requestedSignatures         bool
+	requestedEndorsement        bool
+	localCoordinator            bool
+	readyForSequencing          bool
+	dispatched                  bool
 }
 
 func (ts *PaladinTxProcessor) Init(ctx context.Context) {
@@ -88,78 +104,238 @@ func (ts *PaladinTxProcessor) GetTxStatus(ctx context.Context) (components.Priva
 	}, nil
 }
 
-func (ts *PaladinTxProcessor) HandleTransactionSubmittedEvent(ctx context.Context, event *ptmgrtypes.TransactionSubmittedEvent) error {
-	log.L(ctx).Debug("PaladinTxProcessor:HandleTransactionSubmittedEvent")
+func (ts *PaladinTxProcessor) ApplyEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
+
+	//First we update our in memory record of the transaction with the data from the event
+	switch event := event.(type) {
+	case *ptmgrtypes.TransactionSubmittedEvent:
+		ts.applyTransactionSubmittedEvent(ctx, event)
+	case *ptmgrtypes.TransactionSwappedInEvent:
+		ts.applyTransactionSwappedInEvent(ctx, event)
+	case *ptmgrtypes.TransactionSignedEvent:
+		ts.applyTransactionSignedEvent(ctx, event)
+	case *ptmgrtypes.TransactionEndorsedEvent:
+		ts.applyTransactionEndorsedEvent(ctx, event)
+	case *ptmgrtypes.TransactionAssembledEvent:
+		ts.applyTransactionAssembledEvent(ctx, event)
+	case *ptmgrtypes.TransactionAssembleFailedEvent:
+		ts.applyTransactionAssembleFailedEvent(ctx, event)
+	case *ptmgrtypes.TransactionDispatchedEvent:
+		ts.applyTransactionDispatchedEvent(ctx, event)
+	case *ptmgrtypes.TransactionConfirmedEvent:
+		ts.applyTransactionConfirmedEvent(ctx, event)
+	case *ptmgrtypes.TransactionRevertedEvent:
+		ts.applyTransactionRevertedEvent(ctx, event)
+	case *ptmgrtypes.TransactionDelegatedEvent:
+		ts.applyTransactionDelegatedEvent(ctx, event)
+	case *ptmgrtypes.ResolveVerifierResponseEvent:
+		ts.applyResolveVerifierResponseEvent(ctx, event)
+	case *ptmgrtypes.ResolveVerifierErrorEvent:
+		ts.applyResolveVerifierErrorEvent(ctx, event)
+	case *ptmgrtypes.TransactionFinalizedEvent:
+		ts.applyTransactionFinalizedEvent(ctx, event)
+	case *ptmgrtypes.TransactionFinalizeError:
+		ts.applyTransactionFinalizeError(ctx, event)
+
+	default:
+		log.L(ctx).Warnf("Unknown event type: %T", event)
+	}
+}
+
+func (ts *PaladinTxProcessor) IsComplete() bool {
+	return ts.complete
+}
+
+func (ts *PaladinTxProcessor) ReadyForSequencing() bool {
+	return ts.readyForSequencing
+}
+
+func (ts *PaladinTxProcessor) Dispatched() bool {
+	return ts.dispatched
+}
+
+func (ts *PaladinTxProcessor) IsEndorsed(ctx context.Context) bool {
+	return !ts.hasOutstandingEndorsementRequests(ctx)
+}
+
+func (ts *PaladinTxProcessor) CoordinatingLocally() bool {
+	return ts.localCoordinator
+}
+
+func (ts *PaladinTxProcessor) applyTransactionSubmittedEvent(ctx context.Context, _ *ptmgrtypes.TransactionSubmittedEvent) {
+	log.L(ctx).Debug("PaladinTxProcessor:applyTransactionSubmittedEvent")
 
 	ts.latestEvent = "TransactionSubmittedEvent"
-	// if the transaction is ready to be assembled, go ahead and do that otherwise, we assume some future event will trigger that
-	if ts.isReadyToAssemble(ctx) {
-		ts.assembleTransaction(ctx)
-	} else {
-		ts.requestVerifierResolution(ctx)
-	}
-	return nil
+
 }
 
-func (ts *PaladinTxProcessor) HandleTransactionSwappedInEvent(ctx context.Context, event *ptmgrtypes.TransactionSwappedInEvent) error {
-	log.L(ctx).Debug("PaladinTxProcessor:HandleTransactionSwappedInEvent")
+func (ts *PaladinTxProcessor) applyTransactionSwappedInEvent(ctx context.Context, _ *ptmgrtypes.TransactionSwappedInEvent) {
+	log.L(ctx).Debug("PaladinTxProcessor:applyTransactionSwappedInEvent")
 
 	ts.latestEvent = "TransactionSwappedInEvent"
-	// if the transaction is ready to be assembled, go ahead and do that otherwise, we assume some future event will trigger that
-	if ts.transaction.PostAssembly == nil {
-		log.L(ctx).Debug("no assembled yet")
-		if ts.isReadyToAssemble(ctx) {
-			ts.assembleTransaction(ctx)
-		} else {
-			ts.requestVerifierResolution(ctx)
-		}
-	} else {
-		log.L(ctx).Debug("already assembled")
-		ts.commenceCoordination(ctx)
-	}
 
-	return nil
 }
 
-func (ts *PaladinTxProcessor) isReadyToAssemble(ctx context.Context) bool {
-	log.L(ctx).Debug("PaladinTxProcessor:isReadyToAssemble")
+func (ts *PaladinTxProcessor) Action(ctx context.Context) {
+	log.L(ctx).Debug("PaladinTxProcessor:Action")
+	if ts.complete {
+		log.L(ctx).Infof("Transaction %s is complete", ts.transaction.ID.String())
+		return
+	}
 
-	if ts.transaction.PreAssembly != nil {
-		// assume they are all resolved until we find one in RequiredVerifiers that is not in Verifiers
-		verifiersResolved := true
-		for _, v := range ts.transaction.PreAssembly.RequiredVerifiers {
-			thisVerifierIsResolved := false
-			for _, rv := range ts.transaction.PreAssembly.Verifiers {
-				if rv.Lookup == v.Lookup {
-					thisVerifierIsResolved = true
-					break
-				}
-			}
-			if !thisVerifierIsResolved {
-				verifiersResolved = false
-			}
+	if ts.dispatched {
+		log.L(ctx).Infof("Transaction %s is dispatched", ts.transaction.ID.String())
+		return
+	}
+
+	// Lets get the nasty stuff out of the way first
+	// if the event handler has marked the transaction as failed, then we initiate the finalize sync point
+	if ts.finalizeRequired {
+		if ts.finalizePending {
+			log.L(ctx).Infof("Transaction %s finalize already pending", ts.transaction.ID.String())
+			return
 		}
-		if verifiersResolved {
-			return true
-		} else {
+		//we know we need to finalize but we are not currently waiting for a finalize to complete
+		// most likely a previous attempt to finalize has failed
+		ts.finalize(ctx)
+	}
+
+	if ts.transaction.PreAssembly == nil {
+		panic("PreAssembly is nil.")
+		//This should never happen unless there is a serious programming error or the memory has been corrupted
+		// PreAssembly is checked for nil after InitTransaction which is during the synchronous transaction request
+		// and before it is added to the transaction processor / dispatched to the event loop
+	}
+
+	if ts.transaction.PostAssembly == nil {
+		log.L(ctx).Debug("not assembled yet - or was assembled and reverted")
+
+		//if we have not sent a request, or if the request has timed out or been invalided by a re-assembly, then send the request
+		ts.requestVerifierResolution(ctx)
+		if ts.hasOutstandingVerifierRequests(ctx) {
 			log.L(ctx).Infof("Transaction %s not ready to assemble. Waiting for verifiers to be resolved", ts.transaction.ID.String())
-			return false
+			return
+		}
+
+		ts.requestAssemble(ctx)
+		if ts.transaction.PostAssembly == nil {
+			log.L(ctx).Infof("Transaction %s not assembled. Waiting for assembler to return", ts.transaction.ID.String())
+			return
 		}
 	}
-	log.L(ctx).Infof("Transaction %s not ready to assemble. PreAssembly is nil", ts.transaction.ID.String())
-	return false
+
+	ts.delegateIfRequired(ctx)
+	if ts.status == "delegating" {
+		log.L(ctx).Infof("Transaction %s is delegating", ts.transaction.ID.String())
+		return
+	}
+
+	if ts.status == "delegated" {
+		// probably should not get here because the orchestrator should have removed the transaction processor
+		log.L(ctx).Infof("Transaction %s has been delegated", ts.transaction.ID.String())
+		return
+	}
+
+	if ts.transaction.PostAssembly.OutputStatesPotential != nil && ts.transaction.PostAssembly.OutputStates == nil {
+		// We need to write the potential states to the domain before we can sign or endorse the transaction
+		// but there is no point in doing that until we are sure that the transaction is going to be coordinated locally
+		// so this is the earliest, and latest, point in the flow that we can do this
+		err := ts.domainAPI.WritePotentialStates(ts.endorsementGatherer.DomainContext(), ts.transaction)
+		if err != nil {
+			//Any error from WritePotentialStates is likely to be caused by an invalid init or assemble of the transaction
+			// which ist most likely a programming error in the domain or the domain manager or privateTxManager
+			// not much we can do other than revert the transaction with an internal error
+			errorMessage := fmt.Sprintf("Failed to write potential states: %s", err)
+			log.L(ctx).Error(errorMessage)
+			//TODO publish an event that will cause the transaction to be reverted
+			//ts.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage))
+			return
+		}
+	}
+	ts.readyForSequencing = true
+
+	//If we get here, we have an assembled transaction and have no intention of delegating it
+	// so we are responsible for coordinating the endorsement flow
+
+	// either because it was submitted locally and we decided not to delegate or because it was delegated to us
+	// start with fulfilling any outstanding signature requests
+	ts.requestSignatures(ctx)
+	if ts.hasOutstandingSignatureRequests() {
+		return
+	}
+	ts.status = "signed"
+
+	ts.requestEndorsements(ctx)
+	if ts.hasOutstandingEndorsementRequests(ctx) {
+		return
+	}
+	ts.status = "endorsed"
+
+	// TODO is this too late to be resolving the dispatch key?
+	// Can we do it any earlier or do we need to wait until we have all endorsements ( i.e. so that the endorser can declare ENDORSER_MUST_SUBMIT)
+	// We would need to do it earlier if we want to avoid transactions for different dispatch keys ending up in the same dependency graph
+	if ts.transaction.Signer == "" {
+		err := ts.domainAPI.ResolveDispatch(ctx, ts.transaction)
+		if err != nil {
+
+			log.L(ctx).Errorf("Failed to resolve dispatch for transaction %s: %s", ts.transaction.ID.String(), err)
+			ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerResolveDispatchError), err.Error())
+
+			//TODO as it stands, we will just enter a retry loop of trying to resolve the dispatcher next time the event loop triggers an action
+			// if we are lucky, that will be triggered by an event that somehow changes the in memory state in a way that the dispatcher can be
+			// resolved but that is unlikely
+			// would it be more appropriate to re-assemble ( or even revert ) the transaction here?
+			return
+		}
+	}
+}
+
+func (ts *PaladinTxProcessor) hasOutstandingVerifierRequests(ctx context.Context) bool {
+	log.L(ctx).Debug("PaladinTxProcessor:hasOutstandingVerifierRequests")
+
+	// assume they are all resolved until we find one in RequiredVerifiers that is not in Verifiers
+	verifiersResolved := true
+	for _, v := range ts.transaction.PreAssembly.RequiredVerifiers {
+		thisVerifierIsResolved := false
+		for _, rv := range ts.transaction.PreAssembly.Verifiers {
+			if rv.Lookup == v.Lookup {
+				thisVerifierIsResolved = true
+				break
+			}
+		}
+		if !thisVerifierIsResolved {
+			verifiersResolved = false
+		}
+	}
+	if verifiersResolved {
+		return false
+	} else {
+		log.L(ctx).Infof("Waiting for verifiers to be resolved for transaction %s", ts.transaction.ID.String())
+		return true
+	}
+
 }
 
 func (ts *PaladinTxProcessor) revertTransaction(ctx context.Context, revertReason string) {
 	log.L(ctx).Errorf("Reverting transaction %s: %s", ts.transaction.ID.String(), revertReason)
-	//update the transaction as reverted and flush that to the txmgr database
+	//trigger a finalize and update the transaction state so that finalize can be retried if it fails
+	ts.finalizeRequired = true
+	ts.finalizePending = true
+	ts.finalizeReason = revertReason
+	ts.finalize(ctx)
+
+}
+
+func (ts *PaladinTxProcessor) finalize(ctx context.Context) {
+	log.L(ctx).Errorf("finalize transaction %s: %s", ts.transaction.ID.String(), ts.finalizeReason)
+	//flush that to the txmgr database
 	// so that the user can see that it is reverted and so that we stop retrying to assemble and endorse it
 
 	ts.syncPoints.QueueTransactionFinalize(
 		ctx,
 		ts.domainAPI.Address(),
 		ts.transaction.ID,
-		revertReason,
+		ts.finalizeReason,
 		func(ctx context.Context) {
 			//we are not on the main event loop thread so can't update in memory state here.
 			// need to go back into the event loop
@@ -170,61 +346,13 @@ func (ts *PaladinTxProcessor) revertTransaction(ctx context.Context, revertReaso
 			//we are not on the main event loop thread so can't update in memory state here.
 			// need to go back into the event loop
 			log.L(ctx).Errorf("Transaction %s finalize rolled back: %s", ts.transaction.ID.String(), rollbackErr)
-			go ts.publisher.PublishTransactionFinalizeError(ctx, ts.transaction.ID.String(), revertReason, rollbackErr)
+			go ts.publisher.PublishTransactionFinalizeError(ctx, ts.transaction.ID.String(), ts.finalizeReason, rollbackErr)
 		},
 	)
 }
 
-func (ts *PaladinTxProcessor) HandleVerifierResolvedEvent(ctx context.Context, event *ptmgrtypes.ResolveVerifierResponseEvent) error {
-	log.L(ctx).Debug("PaladinTxProcessor:HandleVerifierResolvedEvent")
-
-	ts.latestEvent = "VerifierResolvedEvent"
-
-	// if the transaction is ready to be assembled, go ahead and do that otherwise, we assume some future event will trigger that
-	if ts.isReadyToAssemble(ctx) {
-		ts.assembleTransaction(ctx)
-	} else {
-		log.L(ctx).Debug("not ready to assemble")
-	}
-	return nil
-}
-
-func (ts *PaladinTxProcessor) reassembleTransaction(ctx context.Context) {
-	log.L(ctx).Debug("PaladinTxProcessor:reassembleTransaction")
-	ts.transaction.PostAssembly = nil
-
-	//It will get re added once it has been re-assembled
-	ts.sequencer.RemoveTransaction(ctx, ts.transaction.ID.String())
-
-	ts.assembleTransaction(ctx)
-}
-
-func (ts *PaladinTxProcessor) assembleTransaction(ctx context.Context) {
-
-	log.L(ctx).Debug("PaladinTxProcessor:assembleTransaction")
-
-	if ts.transaction.PostAssembly != nil {
-		log.L(ctx).Debug("already assembled")
-		return
-	}
-
-	//synchronously assemble the transaction then inform the local sequencer and remote nodes for any parties in the
-	// privacy group that need to know about the transaction
-	// this could be other parties that have potential to attempt to spend the same state(s) as this transaction is assembled to spend
-	// or parties that could potentially spend the output states of this transaction
-	// or parties that will be needed to endorse or notarize this transaction
-	err := ts.domainAPI.AssembleTransaction(ts.endorsementGatherer.DomainContext(), ts.transaction)
-	if err != nil {
-		log.L(ctx).Errorf("AssembleTransaction failed: %s", err)
-		ts.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), err.Error()))
-		return
-	}
-	if ts.transaction.PostAssembly == nil {
-		// This is most likely a programming error in the domain
-		log.L(ctx).Errorf("PostAssembly is nil. Should never have reached this stage without a PostAssembly")
-		ts.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), "AssembleTransaction returned nil PostAssembly"))
-		return
-	}
+func (ts *PaladinTxProcessor) applyTransactionAssembledEvent(ctx context.Context, _ *ptmgrtypes.TransactionAssembledEvent) {
+	ts.latestEvent = "TransactionAssembledEvent"
 	if ts.transaction.PostAssembly.AssemblyResult == prototk.AssembleTransactionResponse_REVERT {
 		// Not sure if any domains actually use this but it is a valid response to indicate failure
 		log.L(ctx).Errorf("AssemblyResult is AssembleTransactionResponse_REVERT")
@@ -232,10 +360,19 @@ func (ts *PaladinTxProcessor) assembleTransaction(ctx context.Context) {
 		return
 	}
 	ts.status = "assembled"
-	if ts.transaction.PostAssembly.Signatures == nil {
-		ts.transaction.PostAssembly.Signatures = make([]*prototk.AttestationResult, 0)
-	}
 
+}
+
+func (ts *PaladinTxProcessor) applyTransactionAssembleFailedEvent(ctx context.Context, event *ptmgrtypes.TransactionAssembleFailedEvent) {
+	log.L(ctx).Debugf("PaladinTxProcessor:applyTransactionAssembleFailedEvent: %s", event.Error)
+	ts.latestEvent = "TransactionAssembleFailedEvent"
+	ts.latestError = event.Error
+	ts.finalizeRequired = true
+	ts.finalizeReason = event.Error
+}
+
+func (ts *PaladinTxProcessor) delegateIfRequired(ctx context.Context) {
+	log.L(ctx).Debug("PaladinTxProcessor:delegateIfRequired")
 	if ts.transaction.PostAssembly.AttestationPlan != nil {
 		numEndorsers := 0
 		endorser := "" // will only be used if there is only one
@@ -245,14 +382,13 @@ func (ts *PaladinTxProcessor) assembleTransaction(ctx context.Context) {
 				endorser = attRequest.Parties[0]
 			}
 		}
-		//in the special case of a single endorsers, we delegate to that endorser
-		// NOTE: this is a bit of an assumption that this is the best course of action here
-		// at this moment in time, it is a certainly that this means we are in the noto domain and
+		//in the special case of a single endorsers in a domain with a submit mode of ENDORSER_SUBMISSION we delegate to that endorser
+		// It is most likely that this means we are in the noto domain and
 		// that single endorser is the notary and all transactions will be delegated there for endorsement
 		// and dispatch to base ledger so we might as well delegate the coordination to it so that
 		// it can maximize the optimistic spending of pending states
 
-		if numEndorsers == 1 {
+		if ts.domainAPI.Domain().Configuration().GetBaseLedgerSubmitConfig().GetSubmitMode() == prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION && numEndorsers == 1 {
 			endorserNode, err := tktypes.PrivateIdentityLocator(endorser).Node(ctx, true)
 			if err != nil {
 				log.L(ctx).Errorf("Failed to get node name from locator %s: %s", ts.transaction.PostAssembly.AttestationPlan[0].Parties[0], err)
@@ -260,6 +396,7 @@ func (ts *PaladinTxProcessor) assembleTransaction(ctx context.Context) {
 				return
 			}
 			if endorserNode != ts.nodeID && endorserNode != "" {
+				ts.localCoordinator = false
 				// TODO persist the delegation and send the request on the callback
 				ts.status = "delegating"
 				// TODO update to "delegated" once the ack has been received
@@ -276,70 +413,80 @@ func (ts *PaladinTxProcessor) assembleTransaction(ctx context.Context) {
 			}
 		}
 	}
-	//we haven't delegated, so we should commence to coordinate the flow here
-	ts.commenceCoordination(ctx)
 }
 
-// we have decided to coordinate the endorsement flow and dispatch of this transaction locally
-// either because it was submitted locally and we decided not to delegate or because it was delegated to us
-func (ts *PaladinTxProcessor) commenceCoordination(ctx context.Context) {
+func (ts *PaladinTxProcessor) requestAssemble(ctx context.Context) {
+	//Assemble may require a call to another node ( in the case we have been delegated to coordinate transaction for other nodes)
+	//Usually, they will get sent to us already assembled but there may be cases where we need to re-assemble
+	// so this needs to be an async step
+	// however, there must be only one assemble in progress at a time or else there is a risk that 2 transactions could chose to spend the same state
+	//   (TODO - maybe in future, we could further optimise this and allow multiple assembles to be in progress if we can assert that they are not presented with the same available states)
+	//   However, before we do that, we really need to sort out the separation of concerns between the domain manager, state store and private transaction manager and where the responsibility to single thread the assembly stream(s) lies
 
-	// inform the sequencer that the transaction has been assembled
-	ts.sequencer.HandleTransactionAssembledEvent(ctx, &sequence.TransactionAssembledEvent{
-		TransactionId: ts.transaction.ID.String(),
-		NodeId:        ts.nodeID,
-		InputStateId:  stateIDs(ts.transaction.PostAssembly.InputStates),
-		OutputStateId: stateIDs(ts.transaction.PostAssembly.OutputStates),
-	})
+	log.L(ctx).Debug("PaladinTxProcessor:requestAssemble")
 
-	if ts.transaction.PostAssembly.OutputStatesPotential != nil && ts.transaction.PostAssembly.OutputStates == nil {
-		//TODO - a bit of a chicken and egg situation here.
-		// We need to write the potential states to the domain before we can sign or endorse the transaction
-		// however, this is something that we would prefer to defer until we are confident that this transaction will be
-		// added to a sequence.
-		// Currently, the sequencer waits for endorsement before giving us that confidence so we are forced to write the potential states here.
+	if ts.transaction.PostAssembly != nil {
+		log.L(ctx).Debug("already assembled")
+		return
+	}
 
-		err := ts.domainAPI.WritePotentialStates(ts.endorsementGatherer.DomainContext(), ts.transaction)
+	assemblingNode, err := tktypes.PrivateIdentityLocator(ts.transaction.Inputs.From).Node(ctx, true)
+	if err != nil {
+
+		log.L(ctx).Errorf("Failed to get node name from locator %s: %s", ts.transaction.Inputs.From, err)
+		ts.publisher.PublishTransactionAssembleFailedEvent(
+			ctx,
+			ts.transaction.ID.String(),
+			i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), "Failed to get node name from locator"),
+		)
+		return
+	}
+
+	if assemblingNode == ts.nodeID || assemblingNode == "" {
+		//we are the node that is responsible for assembling this transaction
+		err = ts.domainAPI.AssembleTransaction(ts.endorsementGatherer.DomainContext(), ts.transaction)
 		if err != nil {
-			//Any error from WritePotentialStates is likely to be caused by an invalid init or assemble of the transaction
-			// which ist most likely a programming error in the domain or the domain manager or privateTxManager
-			// not much we can do other than revert the transaction with an internal error
-			errorMessage := fmt.Sprintf("Failed to write potential states: %s", err)
-			log.L(ctx).Error(errorMessage)
-			ts.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage))
+			log.L(ctx).Errorf("AssembleTransaction failed: %s", err)
+			ts.publisher.PublishTransactionAssembleFailedEvent(ctx,
+				ts.transaction.ID.String(),
+				i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), err.Error()),
+			)
 			return
 		}
-	}
+		if ts.transaction.PostAssembly == nil {
+			// This is most likely a programming error in the domain
+			log.L(ctx).Errorf("PostAssembly is nil.")
+			ts.publisher.PublishTransactionAssembleFailedEvent(
+				ctx,
+				ts.transaction.ID.String(),
+				i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), "AssembleTransaction returned nil PostAssembly"),
+			)
+			return
+		}
 
-	ts.sequencer.AssignTransaction(ctx, ts.transaction.ID.String())
+		//TODO should probably include the assemble output in the event
+		// for now that is not necessary because this is a local assemble and the domain manager updates the transaction that we passed by reference
+		// need to decide if we want to continue with that style of interface to the domain manager and if so,
+		// we need to do something different when the assembling node is remote
+		ts.publisher.PublishTransactionAssembledEvent(ctx,
+			ts.transaction.ID.String(),
+		)
+		return
 
-	//start an async process to gather signatures
-	// this will emit a TransactionSignedEvent for each signature collected
-	if ts.hasOutstandingSignatureRequests() {
-		ts.requestSignatures(ctx)
 	} else {
-		ts.requestEndorsements(ctx)
+		log.L(ctx).Debugf("Assembling transaction %s on node %s", ts.transaction.ID.String(), assemblingNode)
+		//TODO send a request to the node that is responsible for assembling this transaction
 	}
 }
 
-func (ts *PaladinTxProcessor) HandleTransactionAssembledEvent(ctx context.Context, event *ptmgrtypes.TransactionAssembledEvent) error {
-	//TODO inform the sequencer about a transaction assembled by another node
-	ts.latestEvent = "TransactionAssembledEvent"
-	return nil
-}
-
-func (ts *PaladinTxProcessor) HandleTransactionSignedEvent(ctx context.Context, event *ptmgrtypes.TransactionSignedEvent) error {
+func (ts *PaladinTxProcessor) applyTransactionSignedEvent(ctx context.Context, event *ptmgrtypes.TransactionSignedEvent) {
 	ts.latestEvent = "TransactionSignedEvent"
 	log.L(ctx).Debugf("Adding signature to transaction %s", ts.transaction.ID.String())
 	ts.transaction.PostAssembly.Signatures = append(ts.transaction.PostAssembly.Signatures, event.AttestationResult)
-	if !ts.hasOutstandingSignatureRequests() {
-		ts.status = "signed"
-		ts.requestEndorsements(ctx)
-	}
-	return nil
+
 }
 
-func (ts *PaladinTxProcessor) HandleTransactionEndorsedEvent(ctx context.Context, event *ptmgrtypes.TransactionEndorsedEvent) error {
+func (ts *PaladinTxProcessor) applyTransactionEndorsedEvent(ctx context.Context, event *ptmgrtypes.TransactionEndorsedEvent) {
 	ts.latestEvent = "TransactionEndorsedEvent"
 	if event.RevertReason != nil {
 		log.L(ctx).Infof("Endorsement for transaction %s was rejected: %s", ts.transaction.ID.String(), *event.RevertReason)
@@ -347,110 +494,47 @@ func (ts *PaladinTxProcessor) HandleTransactionEndorsedEvent(ctx context.Context
 		// if the reason for the endorsement error is a change of state of the universe since the transaction was assembled, then the re-assemble may fail and cause the transaction to be reverted
 		// on the other hand, the re-assemble may result in an endorsable version of the transaction.
 		// either way, we trigger the re-assembly and hope for the best
-		ts.reassembleTransaction(ctx)
-		return nil
+		//TODO - there may be other endorsements that are en route, based on the previous assembly.  Need to make sure that
+		// we discard them when they do return.
+		//only apply at this stage, action will be taken later
+		ts.transaction.PostAssembly = nil
+
 	} else {
 		log.L(ctx).Infof("Adding endorsement to transaction %s", ts.transaction.ID.String())
 		ts.transaction.PostAssembly.Endorsements = append(ts.transaction.PostAssembly.Endorsements, event.Endorsement)
-		if event.Endorsement.Constraints != nil {
-			for _, constraint := range event.Endorsement.Constraints {
-				switch constraint {
-				case prototk.AttestationResult_ENDORSER_MUST_SUBMIT:
-					//TODO endorser must submit?
-					//TODO other constraints
 
-				default:
-					log.L(ctx).Errorf("Unsupported constraint: %s", constraint)
-				}
-			}
-		}
-		hasOutstandingEndorsementRequests, err := ts.hasOutstandingEndorsementRequests(ctx)
-		if err != nil {
-			ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
-			return err
-		}
-		if !hasOutstandingEndorsementRequests {
-			ts.status = "endorsed"
-			//resolve the signing address here before informing the sequencer about endorsement
-			// because endorsement will could trigger a dispatch but
-			// a change of signing address could affect the dispatchabiliy of the transaction and/or any transactions that depend on it
-
-			err := ts.domainAPI.ResolveDispatch(ctx, ts.transaction)
-			if err != nil {
-				log.L(ctx).Errorf("Failed to resolve dispatch for transaction %s: %s", ts.transaction.ID.String(), err)
-				ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerResolveDispatchError), err.Error())
-				return err
-			}
-
-			err = ts.sequencer.HandleTransactionDispatchResolvedEvent(ctx, &sequence.TransactionDispatchResolvedEvent{
-				TransactionId: ts.transaction.ID.String(),
-				Signer:        ts.transaction.Signer,
-			})
-			if err != nil {
-				errorMessage := fmt.Sprintf("Failed to publish transaction dispatch resolved event: %s", err)
-				log.L(ctx).Error(errorMessage)
-				ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
-				return err
-			}
-
-			//Tell the sequencer that this transaction has been endorsed and wait until it publishes a TransactionDispatched event before moving to the next stage
-			err = ts.sequencer.HandleTransactionEndorsedEvent(ctx, &sequence.TransactionEndorsedEvent{
-				TransactionId: ts.transaction.ID.String(),
-			})
-			if err != nil {
-				errorMessage := fmt.Sprintf("Failed to publish transaction endorsed event: %s", err)
-				log.L(ctx).Error(errorMessage)
-				ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
-				return err
-			}
-		}
 	}
-	return nil
 }
 
-func (ts *PaladinTxProcessor) HandleTransactionDispatchedEvent(ctx context.Context, event *ptmgrtypes.TransactionDispatchedEvent) error {
+func (ts *PaladinTxProcessor) applyTransactionDispatchedEvent(ctx context.Context, event *ptmgrtypes.TransactionDispatchedEvent) {
+	log.L(ctx).Debugf("PaladinTxProcessor:applyTransactionDispatchedEvent transactionID:%s nonce:%d signingAddress:%s", ts.transaction.ID.String(), event.Nonce, event.SigningAddress)
 	ts.latestEvent = "TransactionDispatchedEvent"
 	ts.status = "dispatched"
-	return nil
+	ts.dispatched = true
 }
 
-func (ts *PaladinTxProcessor) HandleTransactionConfirmedEvent(ctx context.Context, event *ptmgrtypes.TransactionConfirmedEvent) error {
+func (ts *PaladinTxProcessor) applyTransactionConfirmedEvent(ctx context.Context, event *ptmgrtypes.TransactionConfirmedEvent) {
+	log.L(ctx).Debugf("PaladinTxProcessor:applyTransactionConfirmedEvent transactionID:%s contractAddress: %s", ts.transaction.ID.String(), event.ContractAddress)
 	ts.latestEvent = "TransactionConfirmedEvent"
 	ts.status = "confirmed"
-	return nil
+	ts.complete = true
 }
 
-func (ts *PaladinTxProcessor) HandleTransactionRevertedEvent(ctx context.Context, event *ptmgrtypes.TransactionRevertedEvent) error {
+func (ts *PaladinTxProcessor) applyTransactionRevertedEvent(ctx context.Context, _ *ptmgrtypes.TransactionRevertedEvent) {
+	log.L(ctx).Debugf("PaladinTxProcessor:applyTransactionRevertedEvent transactionID:%s", ts.transaction.ID.String())
 	ts.latestEvent = "TransactionRevertedEvent"
 	ts.status = "reverted"
-	return nil
 }
 
-func (ts *PaladinTxProcessor) HandleTransactionDelegatedEvent(ctx context.Context, event *ptmgrtypes.TransactionDelegatedEvent) error {
+func (ts *PaladinTxProcessor) applyTransactionDelegatedEvent(ctx context.Context, _ *ptmgrtypes.TransactionDelegatedEvent) {
+	log.L(ctx).Debugf("PaladinTxProcessor:applyTransactionDelegatedEvent transactionID:%s", ts.transaction.ID.String())
 	ts.latestEvent = "TransactionDelegatedEvent"
 	ts.status = "delegated"
-	return nil
 }
 
-func (ts *PaladinTxProcessor) HandleResolveVerifierResponseEvent(ctx context.Context, event *ptmgrtypes.ResolveVerifierResponseEvent) error {
-	log.L(ctx).Debug("HandleResolveVerifierResponseEvent")
+func (ts *PaladinTxProcessor) applyResolveVerifierResponseEvent(ctx context.Context, event *ptmgrtypes.ResolveVerifierResponseEvent) {
+	log.L(ctx).Debug("applyResolveVerifierResponseEvent")
 	ts.latestEvent = "ResolveVerifierResponseEvent"
-
-	if event.Lookup == nil {
-		log.L(ctx).Error("Lookup is nil")
-		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInvalidEventMissingField), "Lookup")
-		return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInvalidEventMissingField, "Lookup")
-	}
-	if event.Algorithm == nil {
-		log.L(ctx).Error("Algorithm is nil")
-		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInvalidEventMissingField), "Algorithm")
-		return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInvalidEventMissingField, "Algorithm")
-	}
-	if event.Verifier == nil {
-		log.L(ctx).Error("Verifier is nil")
-		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInvalidEventMissingField), "Verifier")
-		return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInvalidEventMissingField, "Verifier")
-	}
 
 	if ts.transaction.PreAssembly.Verifiers == nil {
 		ts.transaction.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, 0, len(ts.transaction.PreAssembly.RequiredVerifiers))
@@ -463,34 +547,31 @@ func (ts *PaladinTxProcessor) HandleResolveVerifierResponseEvent(ctx context.Con
 		VerifierType: *event.VerifierType,
 	})
 
-	if ts.isReadyToAssemble(ctx) {
-		ts.assembleTransaction(ctx)
-	}
-	return nil
 }
 
-func (ts *PaladinTxProcessor) HandleResolveVerifierErrorEvent(ctx context.Context, event *ptmgrtypes.ResolveVerifierErrorEvent) error {
+func (ts *PaladinTxProcessor) applyResolveVerifierErrorEvent(ctx context.Context, event *ptmgrtypes.ResolveVerifierErrorEvent) {
 	ts.latestEvent = "ResolveVerifierErrorEvent"
 	log.L(ctx).Errorf("Failed to resolve verifier %s: %s", *event.Lookup, *event.ErrorMessage)
 	//it is possible that this identity was valid when the transaction was assembled but is no longer valid
 	// all we can do it try to re-assemble the transaction
-	ts.reassembleTransaction(ctx)
-	return nil
+	// TODO we might have other resolver verifieres in progress.  Need to make sure that when they are received, we only apply them if they
+	// happen to match the requirements new assembled transaction and if that is still nil, then discard them
+	ts.transaction.PostAssembly = nil
 }
 
-func (ts *PaladinTxProcessor) HandleTransactionFinalizedEvent(ctx context.Context, event *ptmgrtypes.TransactionFinalizedEvent) error {
+func (ts *PaladinTxProcessor) applyTransactionFinalizedEvent(ctx context.Context, _ *ptmgrtypes.TransactionFinalizedEvent) {
+	log.L(ctx).Debugf("PaladinTxProcessor:applyTransactionFinalizedEvent transactionID:%s", ts.transaction.ID.String())
 	ts.latestEvent = "TransactionFinalizedEvent"
+	ts.complete = true
 	log.L(ctx).Debug("HandleTransactionFinalizedEvent")
-	return nil
 }
 
-func (ts *PaladinTxProcessor) HandleTransactionFinalizeError(ctx context.Context, event *ptmgrtypes.TransactionFinalizeError) error {
-	ts.latestEvent = "TransactionFinalizeError"
-	log.L(ctx).Errorf("Failed to finalize transaction %s: %s", ts.transaction.ID, event.ErrorMessage)
+func (ts *PaladinTxProcessor) applyTransactionFinalizeError(ctx context.Context, event *ptmgrtypes.TransactionFinalizeError) {
+	log.L(ctx).Errorf("applyTransactionFinalizeError transaction %s: %s", ts.transaction.ID, event.ErrorMessage)
 
-	//try again
-	ts.revertTransaction(ctx, event.ErrorMessage)
-	return nil
+	ts.latestEvent = "TransactionFinalizeError"
+	ts.finalizeRequired = true
+	ts.finalizePending = false
 }
 
 func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *prototk.AttestationRequest, partyName string) {
@@ -534,6 +615,12 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 
 func (ts *PaladinTxProcessor) requestSignatures(ctx context.Context) {
 
+	if ts.requestedSignatures {
+		return
+	}
+	if ts.transaction.PostAssembly.Signatures == nil {
+		ts.transaction.PostAssembly.Signatures = make([]*prototk.AttestationResult, 0)
+	}
 	attPlan := ts.transaction.PostAssembly.AttestationPlan
 	attResults := ts.transaction.PostAssembly.Endorsements
 
@@ -555,6 +642,7 @@ func (ts *PaladinTxProcessor) requestSignatures(ctx context.Context) {
 			}
 		}
 	}
+	ts.requestedSignatures = true
 }
 
 func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party string, attRequest *prototk.AttestationRequest) {
@@ -566,6 +654,8 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 		//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError)
 	}
 
+	//TODO the following errors are only really possible if the memory has been corrupted or there is a serious programming error
+	// so we should probably panic here
 	if ts.transaction == nil {
 		log.L(ctx).Error("Transaction  is nil")
 		return
@@ -689,6 +779,10 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 }
 
 func (ts *PaladinTxProcessor) requestEndorsements(ctx context.Context) {
+	if ts.requestedEndorsement {
+		log.L(ctx).Infof("Transaction %s endorsement already requested", ts.transaction.ID.String())
+		return
+	}
 	attPlan := ts.transaction.PostAssembly.AttestationPlan
 	attResults := ts.transaction.PostAssembly.Endorsements
 	for _, attRequest := range attPlan {
@@ -722,6 +816,7 @@ func (ts *PaladinTxProcessor) requestEndorsements(ctx context.Context) {
 		}
 
 	}
+	ts.requestedEndorsement = true
 }
 
 func (ts *PaladinTxProcessor) hasOutstandingSignatureRequests() bool {
@@ -746,10 +841,7 @@ out:
 	return outstandingSignatureRequests
 }
 
-func (ts *PaladinTxProcessor) hasOutstandingEndorsementRequests(ctx context.Context) (bool, error) {
-	if ts.transaction.PostAssembly == nil || ts.transaction.PreAssembly == nil {
-		return false, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "Transaction not assembled")
-	}
+func (ts *PaladinTxProcessor) hasOutstandingEndorsementRequests(_ context.Context) bool {
 	outstandingEndorsementRequests := false
 out:
 	for _, attRequest := range ts.transaction.PostAssembly.AttestationPlan {
@@ -778,7 +870,7 @@ out:
 			}
 		}
 	}
-	return outstandingEndorsementRequests, nil
+	return outstandingEndorsementRequests
 }
 
 func (ts *PaladinTxProcessor) PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error) {
@@ -804,16 +896,14 @@ func toEndorsableList(states []*components.FullState) []*prototk.EndorsableState
 	return endorsableList
 }
 
-func stateIDs(states []*components.FullState) []string {
-	stateIDs := make([]string, 0, len(states))
-	for _, state := range states {
-		stateIDs = append(stateIDs, state.ID.String())
-	}
-	return stateIDs
-}
-
 func (ts *PaladinTxProcessor) requestVerifierResolution(ctx context.Context) {
 
+	if ts.requestedVerifierResolution {
+		log.L(ctx).Infof("Transaction %s verifier resolution already requested", ts.transaction.ID.String())
+		return
+	}
+
+	//TODO keep track of previous requests and send out new requests if previous ones have timed out
 	if ts.transaction.PreAssembly.Verifiers == nil {
 		ts.transaction.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, 0, len(ts.transaction.PreAssembly.RequiredVerifiers))
 	}
@@ -832,6 +922,8 @@ func (ts *PaladinTxProcessor) requestVerifierResolution(ctx context.Context) {
 			},
 		)
 	}
+	//TODO this needs to be more precise (like which verifiers have been sent / pending / stale  etc)
+	ts.requestedVerifierResolution = true
 }
 
 func (ts *PaladinTxProcessor) GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution {
@@ -864,4 +956,34 @@ func (ts *PaladinTxProcessor) GetStateDistributions(ctx context.Context) []*stat
 		}
 	}
 	return stateDistributions
+}
+
+func (ts *PaladinTxProcessor) InputStateIDs() []string {
+
+	inputStateIDs := make([]string, len(ts.transaction.PostAssembly.InputStates))
+	for i, inputState := range ts.transaction.PostAssembly.InputStates {
+		inputStateIDs[i] = inputState.ID.String()
+	}
+	return inputStateIDs
+}
+
+func (ts *PaladinTxProcessor) OutputStateIDs() []string {
+
+	//We use the output states here not the OutputStatesPotential because it is not possible for another transaction
+	// to spend a state unless it has been written to the state store and at that point we have the state ID
+	outputStateIDs := make([]string, len(ts.transaction.PostAssembly.OutputStates))
+	for i, outputState := range ts.transaction.PostAssembly.OutputStates {
+		outputStateIDs[i] = outputState.ID.String()
+	}
+	return outputStateIDs
+}
+
+func (ts *PaladinTxProcessor) Signer() string {
+
+	return ts.transaction.Signer
+}
+
+func (ts *PaladinTxProcessor) ID() uuid.UUID {
+
+	return ts.transaction.ID
 }

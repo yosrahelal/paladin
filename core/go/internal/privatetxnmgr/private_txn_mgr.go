@@ -106,11 +106,7 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 	if p.orchestrators[contractAddr.String()] == nil {
 		transportWriter := NewTransportWriter(domainAPI.Domain().Name(), &contractAddr, p.nodeName, p.components.TransportManager())
 		publisher := NewPublisher(p, contractAddr.String())
-		seq := NewSequencer(
-			p.nodeName,
-			publisher,
-			transportWriter,
-		)
+
 		endorsementGatherer, err := p.getEndorsementGathererForContract(ctx, contractAddr)
 		if err != nil {
 			log.L(ctx).Errorf("Failed to get endorsement gatherer for contract %s: %s", contractAddr.String(), err)
@@ -120,11 +116,10 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 		p.orchestrators[contractAddr.String()] =
 			NewOrchestrator(
 				p.ctx, p.nodeName,
-				contractAddr, /** TODO: fill in the real plug-ins*/
+				contractAddr,
 				&p.config.Orchestrator,
 				p.components,
 				domainAPI,
-				seq,
 				endorsementGatherer,
 				publisher,
 				p.syncPoints,

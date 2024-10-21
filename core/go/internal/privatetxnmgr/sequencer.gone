@@ -97,6 +97,14 @@ func (s *sequencer) SetDispatcher(dispatcher ptmgrtypes.Dispatcher) {
 	s.dispatcher = dispatcher
 }
 
+func (s *sequencer) EvaluateGraph(ctx context.Context) {
+	err := s.evaluateGraph(ctx)
+	if err != nil {
+		log.L(ctx).Errorf("Error evaluating graph: %s", err)
+		panic("Error evaluating graph")
+	}
+}
+
 func (s *sequencer) evaluateGraph(ctx context.Context) error {
 
 	dispatchableTransactions, err := s.graph.GetDispatchableTransactions(ctx)
@@ -268,25 +276,25 @@ func (s *sequencer) findDelegatableTransactions() []delegatableTransaction {
 func (s *sequencer) acceptTransaction(ctx context.Context, transaction *transaction) error {
 	transaction.sequencingNodeID = s.nodeID
 
-	delegated, err := s.delegateIfAppropriate(ctx, transaction)
+	/*delegated, err := s.delegateIfAppropriate(ctx, transaction)
 	if err != nil {
 		log.L(ctx).Errorf("Error delegating transaction: %s", err)
 		return err
 	}
 	if delegated {
 		return nil
-	}
+	}*/
 
-	err = s.graph.AddTransaction(ctx, transaction.id, transaction.inputStateIDs, transaction.outputStateIDs)
+	err := s.graph.AddTransaction(ctx, transaction.id, transaction.inputStateIDs, transaction.outputStateIDs)
 	if err != nil {
 		log.L(ctx).Errorf("Error adding transaction to graph: %s", err)
 		return err
 	}
-	err = s.evaluateGraph(ctx)
+	/*err = s.evaluateGraph(ctx)
 	if err != nil {
 		log.L(ctx).Errorf("Error evaluating graph: %s", err)
 		return err
-	}
+	}*/
 	return nil
 }
 
@@ -328,11 +336,11 @@ func (s *sequencer) HandleTransactionDispatchResolvedEvent(ctx context.Context, 
 	//TODO we evaluate the graph here because resolving the signer theoretically might unblock some transactions
 	// however, in reality, this is typically going to happen immediately before we are informed of an endorsement
 	// so maybe more efficient to not evaluate the graph right now because we will do it again very soon
-	err = s.evaluateGraph(ctx)
+	/*err = s.evaluateGraph(ctx)
 	if err != nil {
 		log.L(ctx).Errorf("Error evaluating graph: %s", err)
 		return err
-	}
+	}*/
 	return nil
 }
 
@@ -352,11 +360,11 @@ func (s *sequencer) HandleTransactionEndorsedEvent(ctx context.Context, event *p
 		return err
 	}
 
-	err = s.evaluateGraph(ctx)
+	/*err = s.evaluateGraph(ctx)
 	if err != nil {
 		log.L(ctx).Errorf("Error evaluating graph: %s", err)
 		return err
-	}
+	}*/
 	return nil
 }
 
@@ -444,6 +452,13 @@ func (s *sequencer) RemoveTransaction(ctx context.Context, txnID string) {
 }
 
 func (s *sequencer) AssignTransaction(ctx context.Context, txnID string) {
+	err := s.graph.AddTransaction(ctx, transaction.id, transaction.inputStateIDs, transaction.outputStateIDs)
+	if err != nil {
+		log.L(ctx).Errorf("Error adding transaction to graph: %s", err)
+		return err
+	}
+
+	panic()
 	log.L(ctx).Infof("AssignTransaction: %s", txnID)
 	s.lock.Lock()
 	defer s.lock.Unlock()

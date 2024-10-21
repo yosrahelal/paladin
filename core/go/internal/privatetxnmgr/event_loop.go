@@ -95,7 +95,6 @@ type Orchestrator struct {
 	contractAddress     tktypes.EthAddress // the contract address managed by the current orchestrator
 	nodeID              string
 	domainAPI           components.DomainSmartContract
-	sequencer           ptmgrtypes.Sequencer
 	components          components.AllComponents
 	endorsementGatherer ptmgrtypes.EndorsementGatherer
 	publisher           ptmgrtypes.Publisher
@@ -103,6 +102,7 @@ type Orchestrator struct {
 	syncPoints          syncpoints.SyncPoints
 	stateDistributer    statedistribution.StateDistributer
 	transportWriter     ptmgrtypes.TransportWriter
+	graph               Graph
 }
 
 func NewOrchestrator(
@@ -112,7 +112,6 @@ func NewOrchestrator(
 	oc *pldconf.PrivateTxManagerOrchestratorConfig,
 	allComponents components.AllComponents,
 	domainAPI components.DomainSmartContract,
-	sequencer ptmgrtypes.Sequencer,
 	endorsementGatherer ptmgrtypes.EndorsementGatherer,
 	publisher ptmgrtypes.Publisher,
 	syncPoints syncpoints.SyncPoints,
@@ -140,7 +139,6 @@ func NewOrchestrator(
 		pendingEvents:                make(chan ptmgrtypes.PrivateTransactionEvent, *pldconf.PrivateTxManagerDefaults.Orchestrator.MaxPendingEvents),
 		nodeID:                       nodeID,
 		domainAPI:                    domainAPI,
-		sequencer:                    sequencer,
 		components:                   allComponents,
 		endorsementGatherer:          endorsementGatherer,
 		publisher:                    publisher,
@@ -148,10 +146,8 @@ func NewOrchestrator(
 		identityResolver:             identityResolver,
 		stateDistributer:             stateDistributer,
 		transportWriter:              transportWriter,
+		graph:                        NewGraph(),
 	}
-
-	newOrchestrator.sequencer = sequencer
-	sequencer.SetDispatcher(newOrchestrator)
 
 	log.L(ctx).Debugf("NewOrchestrator for contract address %s created: %+v", newOrchestrator.contractAddress, newOrchestrator)
 
@@ -196,46 +192,75 @@ func (oc *Orchestrator) handleEvent(ctx context.Context, event ptmgrtypes.Privat
 		log.L(ctx).Warnf("Received an event for a transaction that is not in flight %s", transactionID)
 		return
 	}
-	var err error
-	switch event := event.(type) {
-	case *ptmgrtypes.TransactionSubmittedEvent:
-		err = transactionProcessor.HandleTransactionSubmittedEvent(ctx, event)
-	case *ptmgrtypes.TransactionSwappedInEvent:
-		err = transactionProcessor.HandleTransactionSwappedInEvent(ctx, event)
-	case *ptmgrtypes.TransactionAssembledEvent:
-		err = transactionProcessor.HandleTransactionAssembledEvent(ctx, event)
-	case *ptmgrtypes.TransactionSignedEvent:
-		err = transactionProcessor.HandleTransactionSignedEvent(ctx, event)
-	case *ptmgrtypes.TransactionEndorsedEvent:
-		err = transactionProcessor.HandleTransactionEndorsedEvent(ctx, event)
-	case *ptmgrtypes.TransactionDispatchedEvent:
-		err = transactionProcessor.HandleTransactionDispatchedEvent(ctx, event)
-	case *ptmgrtypes.TransactionConfirmedEvent:
-		err = transactionProcessor.HandleTransactionConfirmedEvent(ctx, event)
-	case *ptmgrtypes.TransactionRevertedEvent:
-		err = transactionProcessor.HandleTransactionRevertedEvent(ctx, event)
-	case *ptmgrtypes.TransactionDelegatedEvent:
-		err = transactionProcessor.HandleTransactionDelegatedEvent(ctx, event)
-	case *ptmgrtypes.ResolveVerifierResponseEvent:
-		err = transactionProcessor.HandleResolveVerifierResponseEvent(ctx, event)
-	case *ptmgrtypes.ResolveVerifierErrorEvent:
-		err = transactionProcessor.HandleResolveVerifierErrorEvent(ctx, event)
-	case *ptmgrtypes.TransactionFinalizedEvent:
-		err = transactionProcessor.HandleTransactionFinalizedEvent(ctx, event)
-		oc.removeTransactionProcessor(transactionID)
-	case *ptmgrtypes.TransactionFinalizeError:
-		err = transactionProcessor.HandleTransactionFinalizeError(ctx, event)
 
-	default:
-		log.L(ctx).Warnf("Unknown event type: %T", event)
+	//Since event has already been validated, there should be no errors in ApplyEvent because it is just simply taking a copy
+	// of the data in the event into the in-memory record of the transaction
+	//TODO should we allow for errors here in cases where the in-memory record is somehow corrupted ( i.e. we have a bug and need to reset to latest syncpoint)
+	// or should we just panic and rely on the orchestrator to be restarted
+
+	validationError := event.Validate(ctx)
+	if validationError != nil {
+		log.L(ctx).Errorf("Error validating %T event: %s ", event, validationError.Error())
+		//we can't handle this event.  If that leaves a transaction in an incomplete state, then it will eventually resend requests for the data it needs
+		return
 	}
+
+	transactionProcessor.ApplyEvent(ctx, event)
+
+	if transactionProcessor.IsComplete() {
+
+		oc.graph.RemoveTransaction(ctx, transactionID)
+		oc.removeTransactionProcessor(transactionID)
+	} else {
+		// perform any necessary actions (e.g. sending requests for signatures, endorsements etc.)
+		transactionProcessor.Action(ctx)
+	}
+
+	if transactionProcessor.CoordinatingLocally() && transactionProcessor.ReadyForSequencing() && !transactionProcessor.Dispatched() {
+		// we are responsible for coordinating the endorsement flow for this transaction, add it to the graph
+		oc.graph.AddTransaction(ctx, transactionProcessor)
+	}
+
+	//analyze the graph to see if we can dispatch any transactions
+	err := oc.evaluateGraph(ctx)
 	if err != nil {
-		// Any expected errors like assembly failed or endorsement failed should have been handled by the transaction processor
-		// Any errors that get back here mean that event has not been fully applied and we rely on the
-		// event being re-sent, most likely after the transaction processor re-sends an async request
-		// because it has detected a stale transaction that has timed out waiting for a response
-		log.L(ctx).Errorf("Error handling %T event: %s ", event, err.Error())
+		//TODO evaluate graph should not return an error.
+		log.L(ctx).Errorf("Error evaluating graph: %s", err)
+		panic("Error evaluating graph")
 	}
+
+	// Any expected errors like assembly failed or endorsement failed should have been handled by the transaction processor
+	// Any errors that get back here mean that event has not been fully applied and we rely on the
+	// event being re-sent, most likely after the transaction processor re-sends an async request
+	// because it has detected a stale transaction that has timed out waiting for a response
+	//	log.L(ctx).Errorf("Error handling %T event: %s ", event, err.Error())
+
+}
+
+func (oc *Orchestrator) evaluateGraph(ctx context.Context) error {
+
+	dispatchableTransactions, err := oc.graph.GetDispatchableTransactions(ctx)
+	if err != nil {
+		log.L(ctx).Errorf("Error getting dispatchable transactions: %s", err)
+		return err
+	}
+	if len(dispatchableTransactions) == 0 {
+		return nil
+	}
+	err = oc.DispatchTransactions(ctx, dispatchableTransactions)
+	if err != nil {
+		log.L(ctx).Errorf("Error dispatching transaction: %s", err)
+		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, err)
+	}
+	//DispatchTransactions is a persistence point so we can remove the transactions from our graph now that they are dispatched
+	err = oc.graph.RemoveTransactions(ctx, dispatchableTransactions)
+	if err != nil {
+		//TODO this is bad.  What can we do?
+		// probably need to add more precise error reporting to RemoveTransactions function
+		log.L(ctx).Errorf("Error removing dispatched transaction: %s", err)
+		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, err)
+	}
+	return nil
 }
 
 func (oc *Orchestrator) evaluationLoop() {
@@ -281,7 +306,7 @@ func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *component
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.syncPoints, oc.transportWriter)
+			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.syncPoints, oc.transportWriter)
 		}
 		oc.incompleteTxSProcessMap[tx.ID.String()].Init(ctx)
 		oc.pendingEvents <- &ptmgrtypes.TransactionSubmittedEvent{
@@ -309,7 +334,7 @@ func (oc *Orchestrator) ProcessInFlightTransaction(ctx context.Context, tx *comp
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.sequencer, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.syncPoints, oc.transportWriter)
+			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.syncPoints, oc.transportWriter)
 		}
 		oc.incompleteTxSProcessMap[tx.ID.String()].Init(ctx)
 		oc.pendingEvents <- &ptmgrtypes.TransactionSwappedInEvent{
