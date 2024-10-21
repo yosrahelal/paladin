@@ -61,7 +61,7 @@ func TestPTXFunctions(t *testing.T) {
 	_, err = c.PTX().QueryTransactionReceipts(ctx, query.NewQueryBuilder().Query())
 	assert.Regexp(t, "PD020702.*ptx_queryTransactionReceipts", err)
 
-	_, err = c.PTX().ResoleVerifier(ctx, "key.one", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	_, err = c.PTX().ResolveVerifier(ctx, "key.one", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	assert.Regexp(t, "PD020702.*ptx_resolveVerifier", err)
 
 }

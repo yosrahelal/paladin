@@ -25,6 +25,8 @@ import (
 )
 
 type PTX interface {
+	RPCFunctionGroup
+
 	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (txID *uuid.UUID, err error)
 	SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
 	Call(ctx context.Context, tx *pldapi.TransactionCall) (data tktypes.RawJSON, err error)
@@ -38,12 +40,15 @@ type PTX interface {
 	GetTransactionReceipt(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionReceipt, err error)
 	QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*pldapi.TransactionReceipt, err error)
 
-	ResoleVerifier(ctx context.Context, identifier string, algorithm string, verifierType string) (verifier string, err error)
+	ResolveVerifier(ctx context.Context, identifier string, algorithm string, verifierType string) (verifier string, err error)
 }
 
 var _ PTX = &ptx{}
 
-type ptx struct{ c *paladinClient }
+type ptx struct {
+	rpcFunctionGroup
+	c *paladinClient
+}
 
 func (c *paladinClient) PTX() PTX {
 	return &ptx{c: c}
@@ -99,7 +104,7 @@ func (p *ptx) QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON)
 	return receipts, err
 }
 
-func (p *ptx) ResoleVerifier(ctx context.Context, identifier string, algorithm string, verifierType string) (verifier string, err error) {
+func (p *ptx) ResolveVerifier(ctx context.Context, identifier string, algorithm string, verifierType string) (verifier string, err error) {
 	err = p.c.CallRPC(ctx, &verifier, "ptx_resolveVerifier", identifier, algorithm, verifierType)
 	return verifier, err
 }

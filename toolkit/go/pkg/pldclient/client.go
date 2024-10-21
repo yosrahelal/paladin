@@ -51,6 +51,33 @@ type PaladinClient interface {
 	Transport() Transport
 }
 
+type RPCFunctionGroup interface {
+	Methods() []string
+	MethodInfo(method string) RPCMethodMetadata
+}
+
+type FunctionMetadata map[string]RPCMethodMetadata
+
+type RPCMethodMetadata struct {
+	InputNames []string
+}
+
+type rpcFunctionGroup struct {
+	methodInfo map[string]RPCMethodMetadata
+}
+
+func (fg *rpcFunctionGroup) Methods() []string {
+	methods := make([]string, 0, len(fg.methodInfo))
+	for name := range fg.methodInfo {
+		methods = append(methods, name)
+	}
+	return methods
+}
+
+func (fg *rpcFunctionGroup) MethodInfo(method string) RPCMethodMetadata {
+	return fg.methodInfo[method]
+}
+
 type PaladinWSClient interface {
 	PaladinClient
 	Close()
