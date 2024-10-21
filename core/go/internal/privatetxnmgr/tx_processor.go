@@ -27,14 +27,11 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
-	engineProto "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract /*sequencer ptmgrtypes.Sequencer,*/, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, syncPoints syncpoints.SyncPoints, transportWriter ptmgrtypes.TransportWriter) ptmgrtypes.TxProcessor {
@@ -688,82 +685,19 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 	} else {
 		// This is a remote party, so we need to send an endorsement request to the remote node
 
-		attRequstAny, err := anypb.New(attRequest)
-		if err != nil {
-			log.L(ctx).Error("Error marshalling attestation request", err)
-			//TODO return nil, err
-		}
-
-		transactionSpecificationAny, err := anypb.New(ts.transaction.PreAssembly.TransactionSpecification)
-		if err != nil {
-			log.L(ctx).Error("Error marshalling transaction specification", err)
-			//TODO return nil, err
-		}
-		verifiers := make([]*anypb.Any, len(ts.transaction.PreAssembly.Verifiers))
-		for i, verifier := range ts.transaction.PreAssembly.Verifiers {
-			verifierAny, err := anypb.New(verifier)
-			if err != nil {
-				log.L(ctx).Error("Error marshalling verifier", err)
-				//TODO return nil, err
-			}
-			verifiers[i] = verifierAny
-		}
-		signatures := make([]*anypb.Any, len(ts.transaction.PostAssembly.Signatures))
-		for i, signature := range ts.transaction.PostAssembly.Signatures {
-			signatureAny, err := anypb.New(signature)
-			if err != nil {
-				log.L(ctx).Error("Error marshalling signature", err)
-				//TODO return nil, err
-			}
-			signatures[i] = signatureAny
-		}
-
-		inputStates := make([]*anypb.Any, len(ts.transaction.PostAssembly.InputStates))
-		endorseableInputStates := toEndorsableList(ts.transaction.PostAssembly.InputStates)
-		for i, inputState := range endorseableInputStates {
-			inputStateAny, err := anypb.New(inputState)
-			if err != nil {
-				log.L(ctx).Error("Error marshalling input state", err)
-				//TODO return nil, err
-			}
-			inputStates[i] = inputStateAny
-		}
-
-		outputStates := make([]*anypb.Any, len(ts.transaction.PostAssembly.OutputStates))
-		endorseableOutputStates := toEndorsableList(ts.transaction.PostAssembly.OutputStates)
-		for i, outputState := range endorseableOutputStates {
-			outputStateAny, err := anypb.New(outputState)
-			if err != nil {
-				log.L(ctx).Error("Error marshalling output state", err)
-				//TODO return nil, err
-			}
-			outputStates[i] = outputStateAny
-		}
-
-		endorsementRequest := &engineProto.EndorsementRequest{
-			ContractAddress:          ts.transaction.Inputs.To.String(),
-			TransactionId:            ts.transaction.ID.String(),
-			AttestationRequest:       attRequstAny,
-			Party:                    party,
-			TransactionSpecification: transactionSpecificationAny,
-			Verifiers:                verifiers,
-			Signatures:               signatures,
-			InputStates:              inputStates,
-			OutputStates:             outputStates,
-		}
-
-		endorsementRequestBytes, err := proto.Marshal(endorsementRequest)
-		if err != nil {
-			log.L(ctx).Error("Error marshalling endorsement request", err)
-			//TODO return nil, err
-		}
-		err = ts.components.TransportManager().Send(ctx, &components.TransportMessage{
-			MessageType: "EndorsementRequest",
-			Node:        partyNode,
-			Component:   PRIVATE_TX_MANAGER_DESTINATION,
-			ReplyTo:     ts.nodeID,
-			Payload:     endorsementRequestBytes,
-		})
+		err = ts.transportWriter.SendEndorsementRequest(
+			ctx,
+			party,
+			partyNode,
+			ts.transaction.Inputs.To.String(),
+			ts.transaction.ID.String(),
+			attRequest,
+			ts.transaction.PreAssembly.TransactionSpecification,
+			ts.transaction.PreAssembly.Verifiers,
+			ts.transaction.PostAssembly.Signatures,
+			ts.transaction.PostAssembly.InputStates,
+			ts.transaction.PostAssembly.OutputStates,
+		)
 		if err != nil {
 			log.L(ctx).Errorf("Failed to send endorsement request to party %s: %s", party, err)
 			ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerEndorsementRequestError), party, err.Error())

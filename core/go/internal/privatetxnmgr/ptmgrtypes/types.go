@@ -88,6 +88,7 @@ type ContentionResolver interface {
 type TransportWriter interface {
 	SendState(ctx context.Context, stateId string, schemaId string, stateDataJson string, party string) error
 	SendDelegationRequest(ctx context.Context, delegationId string, delegateNodeId string, transaction *components.PrivateTransaction) error
+	SendEndorsementRequest(ctx context.Context, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState) error
 }
 
 type TxProcessorStatus int
