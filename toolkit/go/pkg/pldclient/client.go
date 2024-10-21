@@ -59,14 +59,15 @@ type RPCFunctionGroup interface {
 type FunctionMetadata map[string]RPCMethodMetadata
 
 type RPCMethodMetadata struct {
-	InputNames []string
+	Inputs []string
+	Output []string
 }
 
-type rpcFunctionGroup struct {
+type rpcMethodGroup struct {
 	methodInfo map[string]RPCMethodMetadata
 }
 
-func (fg *rpcFunctionGroup) Methods() []string {
+func (fg *rpcMethodGroup) Methods() []string {
 	methods := make([]string, 0, len(fg.methodInfo))
 	for name := range fg.methodInfo {
 		methods = append(methods, name)
@@ -74,7 +75,7 @@ func (fg *rpcFunctionGroup) Methods() []string {
 	return methods
 }
 
-func (fg *rpcFunctionGroup) MethodInfo(method string) RPCMethodMetadata {
+func (fg *rpcMethodGroup) MethodInfo(method string) RPCMethodMetadata {
 	return fg.methodInfo[method]
 }
 
