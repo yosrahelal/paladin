@@ -282,3 +282,18 @@ func (br *domainBridge) ValidateStateHashes(ctx context.Context, req *prototk.Va
 	)
 	return
 }
+
+func (br *domainBridge) Call(ctx context.Context, req *prototk.CallRequest) (res *prototk.CallResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_Call{Call: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_CallRes); ok {
+				res = r.CallRes
+			}
+			return res != nil
+		},
+	)
+	return
+}

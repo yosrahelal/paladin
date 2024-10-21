@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -120,6 +121,7 @@ func newTestDomainPluginManager(t *testing.T, setup *testManagers) (context.Cont
 
 func TestDomainRequestsOK(t *testing.T) {
 
+	log.SetLevel("debug")
 	waitForAPI := make(chan components.DomainManagerToDomain, 1)
 	waitForCallbacks := make(chan plugintk.DomainCallbacks, 1)
 
@@ -199,6 +201,12 @@ func TestDomainRequestsOK(t *testing.T) {
 			assert.Equal(t, "state1_in", vshr.States[0].Id)
 			return &prototk.ValidateStateHashesResponse{
 				StateIds: []string{"state1_out"},
+			}, nil
+		},
+		Call: func(ctx context.Context, cr *prototk.CallRequest) (*prototk.CallResponse, error) {
+			assert.Equal(t, "tx1", cr.Transaction.TransactionId)
+			return &prototk.CallResponse{
+				ResultJson: `{"some":"data"}`,
 			}, nil
 		},
 	}
@@ -339,6 +347,12 @@ func TestDomainRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "state1_out", vshr.StateIds[0])
+
+	cr, err := domainAPI.Call(ctx, &prototk.CallRequest{
+		Transaction: &prototk.TransactionSpecification{TransactionId: "tx1"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, `{"some":"data"}`, cr.ResultJson)
 
 	callbacks := <-waitForCallbacks
 

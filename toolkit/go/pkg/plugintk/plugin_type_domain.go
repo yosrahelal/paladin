@@ -37,6 +37,7 @@ type DomainAPI interface {
 	Sign(context.Context, *prototk.SignRequest) (*prototk.SignResponse, error)
 	GetVerifier(context.Context, *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error)
 	ValidateStateHashes(context.Context, *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error)
+	Call(context.Context, *prototk.CallRequest) (*prototk.CallResponse, error)
 }
 
 type DomainCallbacks interface {
@@ -175,6 +176,10 @@ func (dp *domainHandler) RequestToPlugin(ctx context.Context, iReq PluginMessage
 		resMsg := &prototk.DomainMessage_ValidateStateHashesRes{}
 		resMsg.ValidateStateHashesRes, err = dp.api.ValidateStateHashes(ctx, input.ValidateStateHashes)
 		res.ResponseFromDomain = resMsg
+	case *prototk.DomainMessage_Call:
+		resMsg := &prototk.DomainMessage_CallRes{}
+		resMsg.CallRes, err = dp.api.Call(ctx, input.Call)
+		res.ResponseFromDomain = resMsg
 	default:
 		err = i18n.NewError(ctx, tkmsgs.MsgPluginUnsupportedRequest, input)
 	}
@@ -238,6 +243,7 @@ type DomainAPIFunctions struct {
 	Sign                func(context.Context, *prototk.SignRequest) (*prototk.SignResponse, error)
 	GetVerifier         func(context.Context, *prototk.GetVerifierRequest) (*prototk.GetVerifierResponse, error)
 	ValidateStateHashes func(context.Context, *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error)
+	Call                func(context.Context, *prototk.CallRequest) (*prototk.CallResponse, error)
 }
 
 type DomainAPIBase struct {
@@ -290,4 +296,8 @@ func (db *DomainAPIBase) GetVerifier(ctx context.Context, req *prototk.GetVerifi
 
 func (db *DomainAPIBase) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
 	return callPluginImpl(ctx, req, db.Functions.ValidateStateHashes)
+}
+
+func (db *DomainAPIBase) Call(ctx context.Context, req *prototk.CallRequest) (*prototk.CallResponse, error) {
+	return callPluginImpl(ctx, req, db.Functions.Call)
 }

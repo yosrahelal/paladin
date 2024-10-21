@@ -69,6 +69,15 @@ message InitTransactionResponse {
   repeated ResolveVerifierRequest required_verifiers = 1; // the list of verifiers that need to be resolved in order to prepare the transaction (such as issuers/notaries that have privledge in the smart contract)
 }
 
+// **CALL** this allows a domain to provide a read-only view into the state store, using high-level functions. There are no subsequent actions, and the response data must conform to the ABI supplied, or an error must be returned
+message CallRequest {
+  TransactionSpecification transaction = 1; // The transaction to plan
+}
+
+message CallResponse {
+  string result_json = 1; // JSON formatted data that conforms to the outputs specification of the ABI interface supplied in the request
+}
+
 // **ASSEMBLE** step happens after plan, once any verifiers specified as needing pre-emptive resolution by the owning Paladin nodes have been resolved successfully. At this step the state store should be queried to determine if sufficient states exist to execute
 message AssembleTransactionRequest {
   string state_query_context = 1; // handle to supply to state queries performed during this call
