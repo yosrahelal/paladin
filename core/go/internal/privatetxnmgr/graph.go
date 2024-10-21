@@ -219,10 +219,6 @@ func (g *graph) GetDispatchableTransactions(ctx context.Context) (ptmgrtypes.Dis
 func (g *graph) RemoveTransaction(ctx context.Context, txID string) {
 	log.L(ctx).Debugf("Graph.RemoveTransaction Removing transaction %s from graph", txID)
 	delete(g.allTransactions, txID)
-	err := g.buildMatrix(ctx)
-	if err != nil {
-		log.L(ctx).Errorf("Error building graph: %s", err)
-	}
 }
 
 func (g *graph) RemoveTransactions(ctx context.Context, transactionsToRemove ptmgrtypes.DispatchableTransactions) {
