@@ -233,11 +233,17 @@ func (d *docGenerator) generateMarkdownPages(ctx context.Context, types, simpleT
 		d.pageToTypes[strings.ToLower(pageTitle)] = []string{}
 	}
 
-	// add types to their respective pages
+	// have to go round twice to ensure we cross-link correctly. First to add them to the map
 	for i, o := range types {
 		pageTitle := getType(types[i]).Name()
 		pageName := strings.ToLower(pageTitle)
+		d.addPageToMap(reflect.TypeOf(o), pageName)
+	}
 
+	// ... then to build the content
+	for i, o := range types {
+		pageTitle := getType(types[i]).Name()
+		pageName := strings.ToLower(pageTitle)
 		// Page index starts at 1. Simple types will be the first page. Everything else comes after that.
 		pageHeader := generatePageHeader(pageTitle)
 		b := bytes.NewBuffer([]byte(pageHeader))
@@ -269,7 +275,7 @@ func (d *docGenerator) generateMarkdownPages(ctx context.Context, types, simpleT
 }
 
 func (d *docGenerator) generateMethodTypesMarkdown(ctx context.Context, methodType interface{}, apiGroup, outputPath string) []byte {
-	methods := generateMethodDescriptions(methodType)
+	methods := d.generateMethodDescriptions(methodType)
 
 	b := bytes.NewBuffer([]byte{})
 	for _, method := range methods {
@@ -344,7 +350,7 @@ func (d *docGenerator) getParamField(p param) string {
 }
 
 // generateMethodDescriptions extracts metadata about all methods of a struct/interface.
-func generateMethodDescriptions(example interface{}) []methodDescription {
+func (d *docGenerator) generateMethodDescriptions(example interface{}) []methodDescription {
 	t := reflect.TypeOf(example)
 	var methods []methodDescription
 
@@ -357,8 +363,8 @@ func generateMethodDescriptions(example interface{}) []methodDescription {
 
 		methodDesc := methodDescription{
 			name:    method.Name,
-			inputs:  extractParams(method.Type, true),
-			outputs: extractParams(method.Type, false),
+			inputs:  d.extractParams(method.Type, true),
+			outputs: d.extractParams(method.Type, false),
 		}
 		methods = append(methods, methodDesc)
 	}
@@ -366,7 +372,7 @@ func generateMethodDescriptions(example interface{}) []methodDescription {
 }
 
 // extractParams extracts input or output parameters from a method type.
-func extractParams(funcType reflect.Type, isInput bool) []param {
+func (d *docGenerator) extractParams(funcType reflect.Type, isInput bool) []param {
 	var params []param
 	count := funcType.NumIn()
 	start := 1 // Skip the first input (receiver)
@@ -390,15 +396,23 @@ func extractParams(funcType reflect.Type, isInput bool) []param {
 			continue
 		}
 
-		// FIXME: I'm not sure a pointer to a slice will parse correctly (because currently we first handle the slice and then the pointer)
-		isList := paramType.Kind() == reflect.Slice
-		if isList {
-			paramType = paramType.Elem()
-		}
+		// First check if this is a named type we know of directly
+		_, isKnown := d.typeToPage[strings.ToLower(paramType.Name())]
+		isList := false
+		isPointer := false
+		if !isKnown {
 
-		isPointer := paramType.Kind() == reflect.Ptr
-		if isPointer {
-			paramType = paramType.Elem()
+			// FIXME: I'm not sure a pointer to a slice will parse correctly (because currently we first handle the slice and then the pointer)
+			isList = paramType.Kind() == reflect.Slice
+			if isList {
+				paramType = paramType.Elem()
+			}
+
+			isPointer = paramType.Kind() == reflect.Ptr
+			if isPointer {
+				paramType = paramType.Elem()
+			}
+
 		}
 
 		// Store the parameter metadata.
@@ -418,22 +432,26 @@ func (d *docGenerator) generateSimpleTypesMarkdown(ctx context.Context, simpleTy
 	b := bytes.NewBuffer([]byte(pageHeader))
 	for _, simpleType := range simpleTypes {
 		b.WriteString(fmt.Sprintf("## %s\n\n", reflect.TypeOf(simpleType).Name()))
+		d.addPageToMap(reflect.TypeOf(simpleType), pageName)
 		markdown, _ := d.generateObjectReferenceMarkdown(ctx, true, nil, reflect.TypeOf(simpleType), pageName, outputPath)
 		b.Write(markdown)
 	}
 	return b.Bytes()
 }
 
-func (d *docGenerator) generateObjectReferenceMarkdown(ctx context.Context, descRequired bool, example interface{}, t reflect.Type, pageName string, outputPath string) ([]byte, error) {
+func (d *docGenerator) addPageToMap(t reflect.Type, pageName string) {
+	// typeToPage is where we keep track of all the tables we've generated (recursively)
+	// for creating hyperlinks within the markdown
+	d.typeToPage[strings.ToLower(t.Name())] = pageName
+	d.pageToTypes[pageName] = append(d.pageToTypes[pageName], t.Name())
+}
+
+func (d *docGenerator) generateObjectReferenceMarkdown(ctx context.Context, descRequired bool, example interface{}, t reflect.Type, pageName, outputPath string) ([]byte, error) {
 	typeReferenceDoc := TypeReferenceDoc{}
 
 	if t.Kind() == reflect.Ptr {
 		t = reflect.TypeOf(example).Elem()
 	}
-	// typeToPage is where we keep track of all the tables we've generated (recursively)
-	// for creating hyperlinks within the markdown
-	d.typeToPage[strings.ToLower(t.Name())] = pageName
-	d.pageToTypes[pageName] = append(d.pageToTypes[pageName], t.Name())
 
 	des, err := getIncludeFile(ctx, outputPath, strings.ToLower(t.Name()))
 	if descRequired && err != nil {
@@ -561,17 +579,19 @@ func (d *docGenerator) writeStructFields(ctx context.Context, t reflect.Type, pa
 		fieldType := field.Type
 		pldType := fieldType.Name()
 
-		if fieldType.Kind() == reflect.Slice {
-			fieldType = fieldType.Elem()
-			pldType = fieldType.Name()
-			isArray = true
-		}
+		_, isKnown := d.typeToPage[strings.ToLower(pldType)]
+		if !isKnown {
+			if fieldType.Kind() == reflect.Slice {
+				fieldType = fieldType.Elem()
+				pldType = fieldType.Name()
+				isArray = true
+			}
 
-		if fieldType.Kind() == reflect.Ptr {
-			fieldType = fieldType.Elem()
-			pldType = fieldType.Name()
+			if fieldType.Kind() == reflect.Ptr {
+				fieldType = fieldType.Elem()
+				pldType = fieldType.Name()
+			}
 		}
-
 		if isArray {
 			pldType = fmt.Sprintf("%s[]", pldType)
 		}
@@ -592,17 +612,6 @@ func (d *docGenerator) writeStructFields(ctx context.Context, t reflect.Type, pa
 
 		if link != "" {
 			pldType = fmt.Sprintf("[%s](%s)", pldType, link)
-
-			// Generate the table for the sub type
-			_, typeAlreadyGenerated := d.typeToPage[strings.ToLower(fieldType.Name())]
-			_, page := d.pageToTypes[strings.ToLower(fieldType.Name())]
-
-			if isStruct && !typeAlreadyGenerated && !page {
-				subFieldBuff.WriteString(fmt.Sprintf("## %s\n\n", fieldType.Name()))
-				subFieldMarkdown, _ := d.generateObjectReferenceMarkdown(ctx, false, nil, fieldType, pageName, outputPath)
-				subFieldBuff.Write(subFieldMarkdown)
-				subFieldBuff.WriteString("\n")
-			}
 		}
 
 		tableBuff.WriteString(fmt.Sprintf("| `%s` | %s | %s |\n", jsonFieldName, description, pldType))

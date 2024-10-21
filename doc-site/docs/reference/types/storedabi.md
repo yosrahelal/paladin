@@ -25,5 +25,5 @@ title: StoredABI
 | Field Name | Description | Type |
 |------------|-------------|------|
 | `hash` | The unique hash of the ABI | [`Bytes32`](simpletypes.md#bytes32) |
-| `abi` | The Application Binary Interface (ABI) definition | [`Entry[]`](transactioninput.md#entry) |
+| `abi` | The Application Binary Interface (ABI) definition | [`Entry[]`](#entry) |
 

@@ -17,7 +17,7 @@ title: API transport
 
 ### Parameters
 
-- [Entry[]](../types/transactioninput.md#entry)
+- Entry[]
 
 ### Returns
 

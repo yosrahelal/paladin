@@ -23,6 +23,6 @@ title: TransactionReceipt
 | `logIndex` | Log index | `int64` |
 | `source` | Event source | [`EthAddress`](simpletypes.md#ethaddress) |
 | `failureMessage` | Failure message - set if transaction reverted | `string` |
-| `revertData` | Encoded revert data - if available | `uint8[]` |
+| `revertData` | Encoded revert data - if available | [`HexBytes`](simpletypes.md#hexbytes) |
 | `contractAddress` | New contract address - to be used in the 'To' field for subsequent invoke transactions | [`EthAddress`](simpletypes.md#ethaddress) |
 

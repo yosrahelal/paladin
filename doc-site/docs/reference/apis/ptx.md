@@ -9,7 +9,7 @@ title: API ptx
 
 ### Returns
 
-- uint8[]
+- [RawJSON](../types/simpletypes.md#rawjson)
 
 ## ptx_getTransaction
 
