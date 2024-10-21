@@ -56,15 +56,15 @@ func (c *paladinClient) Transport() Transport {
 
 func (t *transport) NodeName(ctx context.Context) (name string, err error) {
 	err = t.c.CallRPC(ctx, &name, "transport_nodeName")
-	return name, err
+	return
 }
 
 func (t *transport) LocalTransports(ctx context.Context) (transportNames []string, err error) {
 	err = t.c.CallRPC(ctx, &transportNames, "transport_localTransports")
-	return transportNames, err
+	return
 }
 
 func (t *transport) LocalTransportDetails(ctx context.Context, transportName string) (transportDetailsStr string, err error) {
 	err = t.c.CallRPC(ctx, &transportDetailsStr, "transport_localTransportDetails", transportName)
-	return transportDetailsStr, err
+	return
 }

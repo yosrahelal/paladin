@@ -65,20 +65,20 @@ func (c *paladinClient) KeyManager() KeyManager {
 
 func (k *keymgr) Wallets(ctx context.Context) (wallets []string, err error) {
 	err = k.c.CallRPC(ctx, &wallets, "keymgr_wallets")
-	return wallets, err
+	return
 }
 
 func (k *keymgr) ResolveKey(ctx context.Context, keyIdentifier, algorithm, verifierType string) (mapping *pldapi.KeyMappingAndVerifier, err error) {
 	err = k.c.CallRPC(ctx, &mapping, "keymgr_resolveKey", keyIdentifier, algorithm, verifierType)
-	return mapping, err
+	return
 }
 
 func (k *keymgr) ResolveEthAddress(ctx context.Context, keyIdentifier string) (ethAddress *tktypes.EthAddress, err error) {
 	err = k.c.CallRPC(ctx, &ethAddress, "keymgr_resolveEthAddress", keyIdentifier)
-	return ethAddress, err
+	return
 }
 
 func (k *keymgr) ReverseKeyLookup(ctx context.Context, algorithm, verifierType, verifier string) (mapping *pldapi.KeyMappingAndVerifier, err error) {
 	err = k.c.CallRPC(ctx, &mapping, "keymgr_reverseKeyLookup", algorithm, verifierType, verifier)
-	return mapping, err
+	return
 }

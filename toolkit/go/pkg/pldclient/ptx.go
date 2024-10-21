@@ -105,55 +105,55 @@ func (c *paladinClient) PTX() PTX {
 
 func (p *ptx) SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (txID *uuid.UUID, err error) {
 	err = p.c.CallRPC(ctx, &txID, "ptx_sendTransaction", tx)
-	return txID, err
+	return
 }
 
 func (p *ptx) SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error) {
 	err = p.c.CallRPC(ctx, &txIDs, "ptx_sendTransactions", txs)
-	return txIDs, err
+	return
 }
 
 func (p *ptx) Call(ctx context.Context, tx *pldapi.TransactionCall) (data tktypes.RawJSON, err error) {
 	err = p.c.CallRPC(ctx, &data, "ptx_call", tx)
-	return data, err
+	return
 }
 
 func (p *ptx) GetTransaction(ctx context.Context, txID uuid.UUID) (tx *pldapi.Transaction, err error) {
 	err = p.c.CallRPC(ctx, &tx, "ptx_getTransaction", txID)
-	return tx, err
+	return
 }
 
 func (p *ptx) GetTransactionFull(ctx context.Context, txID uuid.UUID) (tx *pldapi.TransactionFull, err error) {
 	err = p.c.CallRPC(ctx, &tx, "ptx_getTransactionFull", txID)
-	return tx, err
+	return
 }
 
 func (p *ptx) GetTransactionByIdempotencyKey(ctx context.Context, idempotencyKey string) (tx *pldapi.Transaction, err error) {
 	err = p.c.CallRPC(ctx, &tx, "ptx_getTransactionByIdempotencyKey", idempotencyKey)
-	return tx, err
+	return
 }
 
 func (p *ptx) QueryTransactions(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.Transaction, err error) {
 	err = p.c.CallRPC(ctx, &txs, "ptx_queryTransactions", jq)
-	return txs, err
+	return
 }
 
 func (p *ptx) QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON) (txs []*pldapi.TransactionFull, err error) {
 	err = p.c.CallRPC(ctx, &txs, "ptx_queryTransactionsFull", jq)
-	return txs, err
+	return
 }
 
 func (p *ptx) GetTransactionReceipt(ctx context.Context, txID uuid.UUID) (receipt *pldapi.TransactionReceipt, err error) {
 	err = p.c.CallRPC(ctx, &receipt, "ptx_getTransactionReceipt", txID)
-	return receipt, err
+	return
 }
 
 func (p *ptx) QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) (receipts []*pldapi.TransactionReceipt, err error) {
 	err = p.c.CallRPC(ctx, &receipts, "ptx_queryTransactionReceipts", jq)
-	return receipts, err
+	return
 }
 
 func (p *ptx) ResolveVerifier(ctx context.Context, keyIdentifier string, algorithm string, verifierType string) (verifier string, err error) {
 	err = p.c.CallRPC(ctx, &verifier, "ptx_resolveVerifier", keyIdentifier, algorithm, verifierType)
-	return verifier, err
+	return
 }

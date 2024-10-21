@@ -1,12 +1,6 @@
 ---
 title: transport_*
 ---
-## `transport_nodeName`
-
-### Returns
-
-0. `nodeName`: `string`
-
 ## `transport_localTransports`
 
 ### Returns
@@ -22,4 +16,10 @@ title: transport_*
 ### Returns
 
 0. `transportDetailsStr`: `string`
+
+## `transport_nodeName`
+
+### Returns
+
+0. `nodeName`: `string`
 

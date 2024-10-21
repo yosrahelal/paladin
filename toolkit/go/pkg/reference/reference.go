@@ -178,6 +178,7 @@ var allTypes = []interface{}{
 var allAPITypes = []pldclient.RPCModule{
 	pldclient.New().PTX(),
 	pldclient.New().KeyManager(),
+	pldclient.New().Registry(),
 	pldclient.New().Transport(),
 }
 

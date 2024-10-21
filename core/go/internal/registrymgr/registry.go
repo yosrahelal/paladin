@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
@@ -376,7 +377,7 @@ func (dfs *dynamicFieldSet) ResolverFor(propName string) filters.FieldResolver {
 	return filters.StringField(fmt.Sprintf("p%d.value", idx))
 }
 
-func (r *registry) QueryEntries(ctx context.Context, dbTX *gorm.DB, fActive components.ActiveFilter, jq *query.QueryJSON) ([]*components.RegistryEntry, error) {
+func (r *registry) QueryEntries(ctx context.Context, dbTX *gorm.DB, fActive pldapi.ActiveFilter, jq *query.QueryJSON) ([]*pldapi.RegistryEntry, error) {
 
 	if jq.Limit == nil || *jq.Limit == 0 {
 		return nil, i18n.NewError(ctx, msgs.MsgRegistryQueryLimitRequired)
@@ -391,10 +392,10 @@ func (r *registry) QueryEntries(ctx context.Context, dbTX *gorm.DB, fActive comp
 		dfs)
 
 	switch fActive {
-	case components.ActiveFilterAny: // no filter
-	case components.ActiveFilterInactive:
+	case pldapi.ActiveFilterAny: // no filter
+	case pldapi.ActiveFilterInactive:
 		q = q.Where(`"reg_entries"."active" IS FALSE`)
-	case components.ActiveFilterActive:
+	case pldapi.ActiveFilterActive:
 		fallthrough
 	default:
 		q = q.Where(`"reg_entries"."active" IS TRUE`)
@@ -421,9 +422,9 @@ func (r *registry) QueryEntries(ctx context.Context, dbTX *gorm.DB, fActive comp
 		return nil, err
 	}
 
-	entries := make([]*components.RegistryEntry, len(dbEntries))
+	entries := make([]*pldapi.RegistryEntry, len(dbEntries))
 	for i, dbe := range dbEntries {
-		entry := &components.RegistryEntry{
+		entry := &pldapi.RegistryEntry{
 			Registry: dbe.Registry,
 			ID:       dbe.ID,
 			Name:     dbe.Name,
@@ -433,12 +434,12 @@ func (r *registry) QueryEntries(ctx context.Context, dbTX *gorm.DB, fActive comp
 			entry.ParentID = dbe.ParentID
 		}
 		// Return the active field in the JSON if the query was anything apart from "active"
-		if fActive != components.ActiveFilterActive {
-			entry.ActiveFlag = &components.ActiveFlag{Active: dbe.Active}
+		if fActive != pldapi.ActiveFilterActive {
+			entry.ActiveFlag = &pldapi.ActiveFlag{Active: dbe.Active}
 		}
 		// For block info, our insert logic ensures if one is set they are all set
 		if dbe.BlockNumber != nil {
-			entry.OnChainLocation = &components.OnChainLocation{
+			entry.OnChainLocation = &pldapi.OnChainLocation{
 				BlockNumber:      *dbe.BlockNumber,
 				TransactionIndex: *dbe.TransactionIndex,
 				LogIndex:         *dbe.TransactionIndex,
@@ -451,7 +452,7 @@ func (r *registry) QueryEntries(ctx context.Context, dbTX *gorm.DB, fActive comp
 
 }
 
-func (r *registry) GetEntryProperties(ctx context.Context, dbTX *gorm.DB, fActive components.ActiveFilter, entryIDs ...tktypes.HexBytes) ([]*components.RegistryProperty, error) {
+func (r *registry) GetEntryProperties(ctx context.Context, dbTX *gorm.DB, fActive pldapi.ActiveFilter, entryIDs ...tktypes.HexBytes) ([]*pldapi.RegistryProperty, error) {
 
 	var dbProps []*DBProperty
 	q := dbTX.WithContext(ctx).
@@ -460,10 +461,10 @@ func (r *registry) GetEntryProperties(ctx context.Context, dbTX *gorm.DB, fActiv
 		Where("entry_id IN (?)", entryIDs)
 
 	switch fActive {
-	case components.ActiveFilterAny: // no filter
-	case components.ActiveFilterInactive:
+	case pldapi.ActiveFilterAny: // no filter
+	case pldapi.ActiveFilterInactive:
 		q = q.Where("active IS FALSE")
-	case components.ActiveFilterActive:
+	case pldapi.ActiveFilterActive:
 		fallthrough
 	default:
 		q = q.Where("active IS TRUE")
@@ -474,21 +475,21 @@ func (r *registry) GetEntryProperties(ctx context.Context, dbTX *gorm.DB, fActiv
 		return nil, err
 	}
 
-	props := make([]*components.RegistryProperty, len(dbProps))
+	props := make([]*pldapi.RegistryProperty, len(dbProps))
 	for i, dbp := range dbProps {
-		prop := &components.RegistryProperty{
+		prop := &pldapi.RegistryProperty{
 			Registry: dbp.Registry,
 			EntryID:  dbp.EntryID,
 			Name:     dbp.Name,
 			Value:    dbp.Value,
 		}
 		// Return the active field in the JSON if the query was anything apart from "active"
-		if fActive != components.ActiveFilterActive {
-			prop.ActiveFlag = &components.ActiveFlag{Active: dbp.Active}
+		if fActive != pldapi.ActiveFilterActive {
+			prop.ActiveFlag = &pldapi.ActiveFlag{Active: dbp.Active}
 		}
 		// For block info, our insert logic ensures if one is set they are all set
 		if dbp.BlockNumber != nil {
-			prop.OnChainLocation = &components.OnChainLocation{
+			prop.OnChainLocation = &pldapi.OnChainLocation{
 				BlockNumber:      *dbp.BlockNumber,
 				TransactionIndex: *dbp.TransactionIndex,
 				LogIndex:         *dbp.TransactionIndex,
@@ -501,7 +502,7 @@ func (r *registry) GetEntryProperties(ctx context.Context, dbTX *gorm.DB, fActiv
 
 }
 
-func filteredPropsMap(entryProps []*components.RegistryProperty, entryID tktypes.HexBytes) map[string]string {
+func filteredPropsMap(entryProps []*pldapi.RegistryProperty, entryID tktypes.HexBytes) map[string]string {
 	props := make(map[string]string)
 	for _, p := range entryProps {
 		if p.EntryID.Equals(entryID) {
@@ -511,7 +512,7 @@ func filteredPropsMap(entryProps []*components.RegistryProperty, entryID tktypes
 	return props
 }
 
-func (r *registry) QueryEntriesWithProps(ctx context.Context, dbTX *gorm.DB, fActive components.ActiveFilter, jq *query.QueryJSON) ([]*components.RegistryEntryWithProperties, error) {
+func (r *registry) QueryEntriesWithProps(ctx context.Context, dbTX *gorm.DB, fActive pldapi.ActiveFilter, jq *query.QueryJSON) ([]*pldapi.RegistryEntryWithProperties, error) {
 
 	entries, err := r.QueryEntries(ctx, dbTX, fActive, jq)
 	if err != nil {
@@ -523,14 +524,14 @@ func (r *registry) QueryEntriesWithProps(ctx context.Context, dbTX *gorm.DB, fAc
 		entryIDs[i] = e.ID
 	}
 
-	withProps := make([]*components.RegistryEntryWithProperties, len(entries))
+	withProps := make([]*pldapi.RegistryEntryWithProperties, len(entries))
 	if len(entryIDs) > 0 {
-		entryProps, err := r.GetEntryProperties(ctx, dbTX, components.ActiveFilterActive /* still active props regardless of filter on active for entry */, entryIDs...)
+		entryProps, err := r.GetEntryProperties(ctx, dbTX, pldapi.ActiveFilterActive /* still active props regardless of filter on active for entry */, entryIDs...)
 		if err != nil {
 			return nil, err
 		}
 		for i, e := range entries {
-			withProps[i] = &components.RegistryEntryWithProperties{
+			withProps[i] = &pldapi.RegistryEntryWithProperties{
 				RegistryEntry: e,
 				Properties:    filteredPropsMap(entryProps, e.ID),
 			}

@@ -1,6 +1,16 @@
 ---
 title: ptx_*
 ---
+## `ptx_getTransactionReceipt`
+
+### Parameters
+
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
+
+### Returns
+
+0. `receipt`: [`TransactionReceipt`](../types/transactionreceipt.md#transactionreceipt)
+
 ## `ptx_getTransactionByIdempotencyKey`
 
 ### Parameters
@@ -11,36 +21,6 @@ title: ptx_*
 
 0. `transaction`: [`Transaction`](../types/transaction.md#transaction)
 
-## `ptx_getTransaction`
-
-### Parameters
-
-0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
-
-### Returns
-
-0. `transaction`: [`Transaction`](../types/transaction.md#transaction)
-
-## `ptx_getTransactionFull`
-
-### Parameters
-
-0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
-
-### Returns
-
-0. `transaction`: [`TransactionFull`](../types/transactionfull.md#transactionfull)
-
-## `ptx_queryTransactions`
-
-### Parameters
-
-0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
-
-### Returns
-
-0. `transactions`: [`Transaction[]`](../types/transaction.md#transaction)
-
 ## `ptx_queryTransactionReceipts`
 
 ### Parameters
@@ -50,26 +30,6 @@ title: ptx_*
 ### Returns
 
 0. `receipts`: [`TransactionReceipt[]`](../types/transactionreceipt.md#transactionreceipt)
-
-## `ptx_sendTransaction`
-
-### Parameters
-
-0. `transaction`: [`TransactionInput`](../types/transactioninput.md#transactioninput)
-
-### Returns
-
-0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
-
-## `ptx_sendTransactions`
-
-### Parameters
-
-0. `transactions`: [`TransactionInput[]`](../types/transactioninput.md#transactioninput)
-
-### Returns
-
-0. `transactionIds`: [`UUID[]`](../types/simpletypes.md#uuid)
 
 ## `ptx_call`
 
@@ -103,7 +63,37 @@ title: ptx_*
 
 0. `receipts`: `string`
 
-## `ptx_getTransactionReceipt`
+## `ptx_queryTransactions`
+
+### Parameters
+
+0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
+
+### Returns
+
+0. `transactions`: [`Transaction[]`](../types/transaction.md#transaction)
+
+## `ptx_sendTransaction`
+
+### Parameters
+
+0. `transaction`: [`TransactionInput`](../types/transactioninput.md#transactioninput)
+
+### Returns
+
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
+
+## `ptx_sendTransactions`
+
+### Parameters
+
+0. `transactions`: [`TransactionInput[]`](../types/transactioninput.md#transactioninput)
+
+### Returns
+
+0. `transactionIds`: [`UUID[]`](../types/simpletypes.md#uuid)
+
+## `ptx_getTransaction`
 
 ### Parameters
 
@@ -111,5 +101,15 @@ title: ptx_*
 
 ### Returns
 
-0. `receipt`: [`TransactionReceipt`](../types/transactionreceipt.md#transactionreceipt)
+0. `transaction`: [`Transaction`](../types/transaction.md#transaction)
+
+## `ptx_getTransactionFull`
+
+### Parameters
+
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
+
+### Returns
+
+0. `transaction`: [`TransactionFull`](../types/transactionfull.md#transactionfull)
 
