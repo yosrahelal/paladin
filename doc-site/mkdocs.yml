@@ -4,20 +4,20 @@ repo_url: https://github.com/kaleido-io/paladin
 theme:
   name: material
   custom_dir: overrides
-  logo: assets/project-logo.png
-  favicon: assets/project-icon.png
+  logo: assets/paladin-logo-light.svg
+  favicon: assets/paladin-icon-light.png
   icon:
     repo: fontawesome/brands/github
   palette:
     # Palette toggle for light mode
     - media: "(prefers-color-scheme: light)"
-      scheme: default
+      scheme: paladin
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     # Palette toggle for dark mode
     - media: "(prefers-color-scheme: dark)"
-      scheme: slate
+      scheme: paladin-dark
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
@@ -34,7 +34,7 @@ theme:
     - navigation.path
     - navigation.indexes
 extra_css:
-  - stylesheets/extra.css
+  - stylesheets/paladin.css
 markdown_extensions:
   - abbr
   - admonition
