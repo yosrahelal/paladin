@@ -159,7 +159,7 @@ func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context
 // HandleNewTx synchronously receives a new transaction submission
 // TODO this should really be a 2 (or 3?) phase handshake with
 //   - Pre submit phase to validate the inputs
-//   - Submit phase to persist the record of the submissino as part of a database transaction that is co-ordinated by the caller
+//   - Submit phase to persist the record of the submission as part of a database transaction that is coordinated by the caller
 //   - Post submit phase to clean up any locks / resources that were held during the submission after the database transaction has been committed ( given that we cannot be sure on completeion of phase 2 that the transaction will be committed)
 //
 // We are currently proving out this pattern on the boundary of the private transaction manager and the public transaction manager and once that has settled, we will implement the same pattern here.

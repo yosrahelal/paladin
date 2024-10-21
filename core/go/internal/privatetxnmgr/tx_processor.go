@@ -88,13 +88,6 @@ type PaladinTxProcessor struct {
 	dispatched                  bool
 }
 
-func (ts *PaladinTxProcessor) Init(ctx context.Context) {
-}
-
-func (ts *PaladinTxProcessor) GetStatus(ctx context.Context) ptmgrtypes.TxProcessorStatus {
-	return ptmgrtypes.TxProcessorActive
-}
-
 func (ts *PaladinTxProcessor) GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error) {
 	return components.PrivateTxStatus{
 		TxID:        ts.transaction.ID.String(),

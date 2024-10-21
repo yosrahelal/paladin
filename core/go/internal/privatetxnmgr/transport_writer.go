@@ -80,13 +80,6 @@ func (tw *transportWriter) SendDelegationRequest(
 	return nil
 }
 
-func (tw *transportWriter) SendDelegateTransactionMessage(ctx context.Context, transactionId string, delegateNodeId string) error {
-	//This is deprecated in favour of SendDelegationRequest.  all callers of this are due to be refactored away
-	//leaving here as a no-op temporarily to avoid breaking the build
-
-	return nil
-}
-
 func (tw *transportWriter) SendState(ctx context.Context, stateId string, schemaId string, stateDataJson string, party string) error {
 	stateProducedEvent := &pb.StateProducedEvent{
 		DomainName:      tw.domainName,

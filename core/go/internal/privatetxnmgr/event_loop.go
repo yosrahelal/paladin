@@ -308,7 +308,6 @@ func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *component
 		} else {
 			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.syncPoints, oc.transportWriter)
 		}
-		oc.incompleteTxSProcessMap[tx.ID.String()].Init(ctx)
 		oc.pendingEvents <- &ptmgrtypes.TransactionSubmittedEvent{
 			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
 		}
@@ -336,7 +335,6 @@ func (oc *Orchestrator) ProcessInFlightTransaction(ctx context.Context, tx *comp
 		} else {
 			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.syncPoints, oc.transportWriter)
 		}
-		oc.incompleteTxSProcessMap[tx.ID.String()].Init(ctx)
 		oc.pendingEvents <- &ptmgrtypes.TransactionSwappedInEvent{
 			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
 		}
