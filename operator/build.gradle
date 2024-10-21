@@ -223,7 +223,7 @@ task clean {
 }
 
 // Existing 'make' task
-task make(type: Exec, dependsOn: [copySolidity]) {
+task make(type: Exec, dependsOn: [buildContractSamples]) {
     executable 'make'
 }
 
