@@ -17,5 +17,5 @@ title: StateLock
 | Field Name | Description | Type |
 |------------|-------------|------|
 | `transaction` | The ID of the Paladin transaction being assembled that is responsible for this lock | [`UUID`](simpletypes.md#uuid) |
-| `type` | Whether this lock is for create, read or spend | `Enum[github.com/kaleido-io/paladin/toolkit/pkg/pldapi.StateLockType]` |
+| `type` | Whether this lock is for create, read or spend | `"create", "read", "spend"` |
 

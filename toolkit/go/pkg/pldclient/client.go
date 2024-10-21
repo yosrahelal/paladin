@@ -17,6 +17,7 @@ package pldclient
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -82,6 +83,7 @@ func (fg *rpcModuleInfo) Methods() []string {
 	for name := range fg.methodInfo {
 		methods = append(methods, name)
 	}
+	sort.Strings(methods) // needs to be a consistent order
 	return methods
 }
 

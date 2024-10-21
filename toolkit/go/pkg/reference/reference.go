@@ -471,10 +471,15 @@ func (d *docGenerator) extractParams(funcType reflect.Type, methodInfo *pldclien
 
 		}
 
+		typeName := paramType.Name()
+		if isEnum(paramType) {
+			typeName = generateEnumList(paramType)
+		}
+
 		// Store the parameter metadata.
 		param := param{
 			name:      nameArray[j-discardStart],
-			typeName:  paramType.Name(),
+			typeName:  typeName,
 			isList:    isList,
 			isPointer: isPointer,
 		}
@@ -656,11 +661,10 @@ func (d *docGenerator) writeStructFields(ctx context.Context, t reflect.Type, pa
 		pldType = fmt.Sprintf("`%s`", pldType)
 
 		isStruct := fieldType.Kind() == reflect.Struct
-		isEnum := strings.ToLower(fieldType.Name()) == "docenum"
 
 		link := ""
-		if isEnum {
-			pldType = generateEnumList(field)
+		if isEnum(field.Type) {
+			pldType = fmt.Sprintf("`%s`", generateEnumList(field.Type))
 		} else if p, ok := d.typeToPage[strings.ToLower(fieldType.Name())]; ok && p != pageName {
 			link = fmt.Sprintf("%s.md#%s", p, strings.ToLower(fieldType.Name()))
 		} else if isStruct {

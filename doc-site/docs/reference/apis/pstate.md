@@ -11,19 +11,6 @@ title: pstate_*
 
 0. `schemas`: [`Schema[]`](../types/schema.md#schema)
 
-## `pstate_storeState`
-
-### Parameters
-
-0. `domain`: `string`
-1. `contractAddress`: [`EthAddress`](../types/simpletypes.md#ethaddress)
-2. `schemaRef`: [`Bytes32`](../types/simpletypes.md#bytes32)
-3. `data`: [`RawJSON`](../types/simpletypes.md#rawjson)
-
-### Returns
-
-0. `state`: [`State`](../types/state.md#state)
-
 ## `pstate_queryContractStates`
 
 ### Parameters
@@ -36,4 +23,17 @@ title: pstate_*
 ### Returns
 
 0. `states`: [`State[]`](../types/state.md#state)
+
+## `pstate_storeState`
+
+### Parameters
+
+0. `domain`: `string`
+1. `contractAddress`: [`EthAddress`](../types/simpletypes.md#ethaddress)
+2. `schemaRef`: [`Bytes32`](../types/simpletypes.md#bytes32)
+3. `data`: [`RawJSON`](../types/simpletypes.md#rawjson)
+
+### Returns
+
+0. `state`: [`State`](../types/state.md#state)
 

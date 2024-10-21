@@ -1,11 +1,15 @@
 ---
 title: keymgr_*
 ---
-## `keymgr_wallets`
+## `keymgr_resolveEthAddress`
+
+### Parameters
+
+0. `keyIdentifier`: `string`
 
 ### Returns
 
-0. `wallets`: `string[]`
+0. `ethAddress`: [`EthAddress`](../types/simpletypes.md#ethaddress)
 
 ## `keymgr_resolveKey`
 
@@ -19,16 +23,6 @@ title: keymgr_*
 
 0. `mapping`: `KeyMappingAndVerifier`
 
-## `keymgr_resolveEthAddress`
-
-### Parameters
-
-0. `keyIdentifier`: `string`
-
-### Returns
-
-0. `ethAddress`: [`EthAddress`](../types/simpletypes.md#ethaddress)
-
 ## `keymgr_reverseKeyLookup`
 
 ### Parameters
@@ -40,4 +34,10 @@ title: keymgr_*
 ### Returns
 
 0. `mapping`: `KeyMappingAndVerifier`
+
+## `keymgr_wallets`
+
+### Returns
+
+0. `wallets`: `string[]`
 

@@ -1,12 +1,6 @@
 ---
 title: transport_*
 ---
-## `transport_localTransports`
-
-### Returns
-
-0. `transportNames`: `string[]`
-
 ## `transport_localTransportDetails`
 
 ### Parameters
@@ -16,6 +10,12 @@ title: transport_*
 ### Returns
 
 0. `transportDetailsStr`: `string`
+
+## `transport_localTransports`
+
+### Returns
+
+0. `transportNames`: `string[]`
 
 ## `transport_nodeName`
 
