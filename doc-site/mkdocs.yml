@@ -106,7 +106,7 @@ nav:
     - Operations: guides/operations.md
     - Developers: guides/developers.md
     - Upgrading: guides/upgrading.md
-  - References:
+  - Reference:
     - APIs: reference/apis/*.md
     - Types: reference/types/*.md
     - Architecture: reference/architecture.md

@@ -395,7 +395,8 @@ func (d *docGenerator) generateMethodDescriptions(apiGroup pldclient.RPCModule, 
 	var methods []methodDescription
 
 	// Iterate over all methods.
-	for methodName, reflectMethod := range reflectMethods {
+	for _, methodName := range apiGroup.Methods() {
+		reflectMethod := reflectMethods[methodName]
 		methodDesc := methodDescription{name: methodName}
 		methodDesc.inputs, err = d.extractParams(reflectMethod.Type, apiGroup.MethodInfo(methodName), true)
 		if err == nil {

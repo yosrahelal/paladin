@@ -1,6 +1,12 @@
 ---
 title: reg_*
 ---
+## `reg_registries`
+
+### Returns
+
+0. `registryNames`: `string[]`
+
 ## `reg_queryEntries`
 
 ### Parameters
@@ -36,10 +42,4 @@ title: reg_*
 ### Returns
 
 0. `properties`: [`RegistryProperty[]`](../types/registryproperty.md#registryproperty)
-
-## `reg_registries`
-
-### Returns
-
-0. `registryNames`: `string[]`
 
