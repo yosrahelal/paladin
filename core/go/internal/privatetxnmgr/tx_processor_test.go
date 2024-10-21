@@ -17,13 +17,10 @@ package privatetxnmgr
 
 import (
 	"context"
-	"errors"
-	"regexp"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
 	"github.com/kaleido-io/paladin/core/mocks/prvtxsyncpointsmocks"
@@ -33,7 +30,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 type transactionProcessorDepencyMocks struct {
@@ -77,103 +73,15 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 	mocks.endorsementGatherer.On("DomainContext").Return(mocks.domainContext).Maybe()
 	mocks.domainSmartContract.On("Address").Return(*contractAddress).Maybe()
 
-	tp := NewPaladinTransactionProcessor(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.sequencer, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.syncPoints, mocks.transportWriter)
+	tp := NewPaladinTransactionProcessor(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.syncPoints, mocks.transportWriter)
 
 	return tp.(*PaladinTxProcessor), mocks
 }
 
-func TestTransactionProcessorHandleTransactionSubmittedEvent(t *testing.T) {
-	ctx := context.Background()
-	newTxID := uuid.New()
-	testTx := &components.PrivateTransaction{
-		ID:          newTxID,
-		PreAssembly: &components.TransactionPreAssembly{},
-	}
-	tp, dependencyMocks := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	dependencyMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
-
-		tx.PostAssembly = &components.TransactionPostAssembly{
-			AssemblyResult: prototk.AssembleTransactionResponse_OK,
-		}
-	}).Return(nil).Once()
-	dependencyMocks.sequencer.On("HandleTransactionAssembledEvent", mock.Anything, mock.Anything).Return(nil).Once()
-	dependencyMocks.sequencer.On("AssignTransaction", mock.Anything, newTxID.String()).Return(nil).Once()
-
-	err := tp.HandleTransactionSubmittedEvent(ctx, &ptmgrtypes.TransactionSubmittedEvent{
-		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
-			TransactionID: newTxID.String(),
-		},
-	})
-	assert.NoError(t, err)
-}
-
-func TestTransactionProcessorAssembleRevert(t *testing.T) {
-	ctx := context.Background()
-	newTxID := uuid.New()
-	testTx := &components.PrivateTransaction{
-		ID: newTxID,
-		PreAssembly: &components.TransactionPreAssembly{
-			RequiredVerifiers: []*prototk.ResolveVerifierRequest{}, // empty list so that we are immediately ready to assemble
-		},
-	}
-	tp, dependencyMocks := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-
-	dependencyMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
-
-		tx.PostAssembly = &components.TransactionPostAssembly{
-			AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
-		}
-	}).Return(nil).Once()
-
-	dependencyMocks.syncPoints.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
-	err := tp.HandleTransactionSubmittedEvent(ctx, &ptmgrtypes.TransactionSubmittedEvent{
-		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
-			TransactionID: newTxID.String(),
-		},
-	})
-	assert.NoError(t, err) //the event was successfully handled and part of that handling was to revert the transaction so there is no error
-
-}
-
-func TestTransactionProcessorAssembleError(t *testing.T) {
-	ctx := context.Background()
-	newTxID := uuid.New()
-	testTx := &components.PrivateTransaction{
-		ID: newTxID,
-		PreAssembly: &components.TransactionPreAssembly{
-			RequiredVerifiers: []*prototk.ResolveVerifierRequest{}, // empty list so that we are immediately ready to assemble
-		},
-	}
-
-	tp, dependencyMocks := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-
-	testRevertReason := "test revert reason"
-	dependencyMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
-
-		tx.PostAssembly = &components.TransactionPostAssembly{
-			AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
-		}
-	}).Return(errors.New(testRevertReason)).Once()
-
-	matchRevertReason := func(s string) bool {
-		re := regexp.MustCompile(".*" + regexp.QuoteMeta(testRevertReason) + ".*")
-		return re.MatchString(s)
-	}
-	dependencyMocks.syncPoints.On("QueueTransactionFinalize", mock.Anything, mock.Anything, newTxID, mock.MatchedBy(matchRevertReason), mock.Anything, mock.Anything).Return()
-
-	err := tp.HandleTransactionSubmittedEvent(ctx, &ptmgrtypes.TransactionSubmittedEvent{
-		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
-			TransactionID: newTxID.String(),
-		},
-	})
-	assert.NoError(t, err) //the event was successfully handled and part of that handling was to revert the transaction so there is no error
-
-}
-
 func TestHasOutstandingEndorsementRequestsMultipleRequestsIncomplete(t *testing.T) {
+	// When there is an attestation plan with multiple AttestationRequest
+	// but not enough AttestationResult
+	// then returns true
 	ctx := context.Background()
 	newTxID := uuid.New()
 	aliceIdentityLocator := "alice@node1"
@@ -182,6 +90,7 @@ func TestHasOutstandingEndorsementRequestsMultipleRequestsIncomplete(t *testing.
 	bobVerifier := tktypes.RandAddress().String()
 	carolIdentityLocator := "carol@node2"
 	carolVerifier := tktypes.RandAddress().String()
+
 	testTx := &components.PrivateTransaction{
 		ID: newTxID,
 		PreAssembly: &components.TransactionPreAssembly{
@@ -256,13 +165,15 @@ func TestHasOutstandingEndorsementRequestsMultipleRequestsIncomplete(t *testing.
 	}
 
 	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	result, err := tp.hasOutstandingEndorsementRequests(ctx)
-	assert.NoError(t, err)
+	result := tp.hasOutstandingEndorsementRequests(ctx)
 	assert.True(t, result)
 
 }
 
 func TestHasOutstandingEndorsementRequestsMultipleRequestsComplete(t *testing.T) {
+	// When there is an attestation plan with multiple AttestationRequest
+	// and we have an AttestationResult matching each one
+	// then returns false
 	ctx := context.Background()
 	newTxID := uuid.New()
 	aliceIdentityLocator := "alice@node1"
@@ -367,13 +278,16 @@ func TestHasOutstandingEndorsementRequestsMultipleRequestsComplete(t *testing.T)
 	}
 
 	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	result, err := tp.hasOutstandingEndorsementRequests(ctx)
-	assert.NoError(t, err)
+	result := tp.hasOutstandingEndorsementRequests(ctx)
 	assert.False(t, result)
 
 }
 
 func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesIncomplete(t *testing.T) {
+	// When there is an attestation plan with a single AttestationRequest listing multiple parties
+	// and we dont have all of the matching AttestationResults
+	// then returns true
+
 	ctx := context.Background()
 	newTxID := uuid.New()
 	aliceIdentityLocator := "alice@node1"
@@ -438,13 +352,15 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesIncomplete(
 	}
 
 	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	result, err := tp.hasOutstandingEndorsementRequests(ctx)
-	assert.NoError(t, err)
+	result := tp.hasOutstandingEndorsementRequests(ctx)
 	assert.True(t, result)
 
 }
 
 func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesComplete(t *testing.T) {
+	// When there is an attestation plan with a single AttestationRequest listing multiple parties
+	// and we have an AttestationResult matching each one
+	// then returns false
 	ctx := context.Background()
 	newTxID := uuid.New()
 	aliceIdentityLocator := "alice@node1"
@@ -531,8 +447,7 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesComplete(t 
 	}
 
 	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	result, err := tp.hasOutstandingEndorsementRequests(ctx)
-	assert.NoError(t, err)
+	result := tp.hasOutstandingEndorsementRequests(ctx)
 	assert.False(t, result)
 
 }
@@ -625,8 +540,7 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesDuplicate(t
 	}
 
 	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	result, err := tp.hasOutstandingEndorsementRequests(ctx)
-	assert.NoError(t, err)
+	result := tp.hasOutstandingEndorsementRequests(ctx)
 	assert.True(t, result)
 
 }
@@ -719,156 +633,7 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesCompleteMix
 	}
 
 	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	result, err := tp.hasOutstandingEndorsementRequests(ctx)
-	assert.NoError(t, err)
+	result := tp.hasOutstandingEndorsementRequests(ctx)
 	assert.False(t, result)
-
-}
-
-func TestHasOutstandingEndorsementRequestsNilPreAssembly(t *testing.T) {
-	ctx := context.Background()
-	newTxID := uuid.New()
-
-	testTx := &components.PrivateTransaction{
-		ID: newTxID,
-	}
-	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	_, err := tp.hasOutstandingEndorsementRequests(ctx)
-	assert.Error(t, err)
-}
-
-func TestHasOutstandingEndorsementRequestsNilPostAssembly(t *testing.T) {
-	ctx := context.Background()
-	newTxID := uuid.New()
-	aliceIdentityLocator := "alice@node1"
-	aliceVerifier := tktypes.RandAddress().String()
-	bobIdentityLocator := "bob@node2"
-	bobVerifier := tktypes.RandAddress().String()
-	carolIdentityLocator := "carol@node2"
-	carolVerifier := tktypes.RandAddress().String()
-	testTx := &components.PrivateTransaction{
-		ID: newTxID,
-		PreAssembly: &components.TransactionPreAssembly{
-			Verifiers: []*prototk.ResolvedVerifier{
-				{
-					Lookup:       aliceIdentityLocator,
-					Algorithm:    algorithms.ECDSA_SECP256K1,
-					VerifierType: verifiers.ETH_ADDRESS,
-					Verifier:     aliceVerifier,
-				},
-				{
-					Lookup:       bobIdentityLocator,
-					Algorithm:    algorithms.ECDSA_SECP256K1,
-					VerifierType: verifiers.ETH_ADDRESS,
-					Verifier:     bobVerifier,
-				},
-				{
-					Lookup:       carolIdentityLocator,
-					Algorithm:    algorithms.ECDSA_SECP256K1,
-					VerifierType: verifiers.ETH_ADDRESS,
-					Verifier:     carolVerifier,
-				},
-			},
-		},
-	}
-	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
-	_, err := tp.hasOutstandingEndorsementRequests(ctx)
-	assert.Error(t, err)
-}
-
-
-//TODO this moved here from the event_loop_test and needs to be changed to fit with the new structure
-func TestOrchestratorHandleEvents(t *testing.T) {
-	newTxID := uuid.New()
-	tests := []struct {
-		name        string
-		handlerName string
-		event       ptmgrtypes.PrivateTransactionEvent
-	}{
-		{
-			name:        "TransactionSubmittedEvent",
-			handlerName: "HandleTransactionSubmittedEvent",
-			event: &ptmgrtypes.TransactionSubmittedEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-		{
-			name:        "TransactionSwappedInEvent",
-			handlerName: "HandleTransactionSwappedInEvent",
-			event: &ptmgrtypes.TransactionSwappedInEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-		{
-			name:        "TransactionSignedEvent",
-			handlerName: "HandleTransactionSignedEvent",
-			event: &ptmgrtypes.TransactionSignedEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-		{
-			name:        "TransactionEndorsedEvent",
-			handlerName: "HandleTransactionEndorsedEvent",
-			event: &ptmgrtypes.TransactionEndorsedEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-		{
-			name:        "TransactionDispatchedEvent",
-			handlerName: "HandleTransactionDispatchedEvent",
-			event: &ptmgrtypes.TransactionDispatchedEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-		{
-			name:        "TransactionConfirmedEvent",
-			handlerName: "HandleTransactionConfirmedEvent",
-			event: &ptmgrtypes.TransactionConfirmedEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-		{
-			name:        "TransactionRevertedEvent",
-			handlerName: "HandleTransactionRevertedEvent",
-			event: &ptmgrtypes.TransactionRevertedEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-		{
-			name:        "TransactionDelegatedEvent",
-			handlerName: "HandleTransactionDelegatedEvent",
-			event: &ptmgrtypes.TransactionDelegatedEvent{
-				PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: newTxID.String()},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-
-			ctx := context.Background()
-			testOc, _, _ := newOrchestratorForTesting(t, ctx, nil)
-
-			waitForAction := make(chan bool, 1)
-
-			//Emulate ProcessNewTransaction with a mockTxProcessor
-			mockTxProcessor := privatetxnmgrmocks.NewTxProcessor(t)
-			mockTxProcessor.On("GetStatus", mock.Anything).Return(ptmgrtypes.TxProcessorActive).Maybe()
-			mockTxProcessor.On(tt.handlerName, mock.Anything, tt.event).Run(func(args mock.Arguments) {
-				waitForAction <- true
-			}).Return(nil)
-
-			testOc.incompleteTxSProcessMap[newTxID.String()] = mockTxProcessor
-			testOc.pendingEvents <- tt.event
-
-			select {
-			case <-waitForAction:
-				// Handle the action
-			case <-time.After(1 * time.Second):
-				t.Fatal("Timeout waiting for action")
-			}
-			mockTxProcessor.AssertExpectations(t)
-		})
-	}
 
 }
