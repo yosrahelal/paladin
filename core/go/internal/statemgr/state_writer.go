@@ -23,6 +23,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -44,7 +45,7 @@ type writeOperation struct {
 	// are only available for consumption outside of a DomainContext
 	// with creation locks once they are confirmed via the blockchain.
 	states          []*components.StateWithLabels
-	stateNullifiers []*components.StateNullifier
+	stateNullifiers []*pldapi.StateNullifier
 }
 
 type noResult struct{}
@@ -87,9 +88,9 @@ func (sw *stateWriter) queue(ctx context.Context, op *writeOperation) {
 func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writeOperation) ([]flushwriter.Result[*noResult], error) {
 
 	// Build lists of things to insert (we are insert only)
-	var states []*components.State
-	var stateLocks []*components.StateLock
-	var stateNullifiers []*components.StateNullifier
+	var states []*pldapi.State
+	var stateLocks []*pldapi.StateLock
+	var stateNullifiers []*pldapi.StateNullifier
 	for _, op := range values {
 		for _, s := range op.states {
 			states = append(states, s.State)

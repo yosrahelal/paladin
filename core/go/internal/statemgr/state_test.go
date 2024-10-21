@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -133,8 +134,8 @@ func TestFindStatesFail(t *testing.T) {
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
 	cacheKey := schemaCacheKey("domain1", schemaID)
 	ss.abiSchemaCache.Set(cacheKey, &abiSchema{
-		SchemaPersisted: &components.SchemaPersisted{ID: schemaID},
-		definition:      &abi.Parameter{},
+		Schema:     &pldapi.Schema{ID: schemaID},
+		definition: &abi.Parameter{},
 	})
 
 	db.ExpectQuery("SELECT.*created").WillReturnError(fmt.Errorf("pop"))

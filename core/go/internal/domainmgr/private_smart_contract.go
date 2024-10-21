@@ -242,13 +242,13 @@ func (dc *domainContract) LockStates(dCtx components.DomainContext, tx *componen
 
 	// Input and read state locks are written separately to the states
 	states := make([]*components.StateUpsert, 0, len(postAssembly.InputStates)+len(postAssembly.ReadStates)+len(postAssembly.OutputStates))
-	stateLocks := make([]*components.StateLock, 0, len(postAssembly.InputStates)+len(postAssembly.ReadStates))
+	stateLocks := make([]*pldapi.StateLock, 0, len(postAssembly.InputStates)+len(postAssembly.ReadStates))
 	for _, s := range postAssembly.InputStates {
-		stateLocks = append(stateLocks, &components.StateLock{
+		stateLocks = append(stateLocks, &pldapi.StateLock{
 			State:       s.ID,
 			DomainName:  domainName,
 			Transaction: tx.ID,
-			Type:        components.StateLockTypeSpend.Enum(),
+			Type:        pldapi.StateLockTypeSpend.Enum(),
 		})
 		states = append(states, &components.StateUpsert{
 			ID:        s.ID,
@@ -258,11 +258,11 @@ func (dc *domainContract) LockStates(dCtx components.DomainContext, tx *componen
 		})
 	}
 	for _, s := range postAssembly.ReadStates {
-		stateLocks = append(stateLocks, &components.StateLock{
+		stateLocks = append(stateLocks, &pldapi.StateLock{
 			State:       s.ID,
 			DomainName:  domainName,
 			Transaction: tx.ID,
-			Type:        components.StateLockTypeRead.Enum(),
+			Type:        pldapi.StateLockTypeRead.Enum(),
 		})
 		states = append(states, &components.StateUpsert{
 			ID:        s.ID,
@@ -483,7 +483,7 @@ func (dc *domainContract) loadStates(dCtx components.DomainContext, refs []*prot
 		rawIDsBySchema[schemaID] = append(rawIDsBySchema[schemaID], tktypes.JSONString(stateID.String()))
 		stateIDs[i] = stateID
 	}
-	statesByID := make(map[string]*components.State)
+	statesByID := make(map[string]*pldapi.State)
 	for schemaID, stateIDs := range rawIDsBySchema {
 		_, statesForSchema, err := dCtx.FindAvailableStates(schemaID, &query.QueryJSON{
 			Statements: query.Statements{

@@ -219,9 +219,9 @@ func TestHandleEventBatch(t *testing.T) {
 
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
 
-		mc.stateStore.On("WriteStateFinalizations", mock.Anything, mock.Anything, []*components.StateSpend{
+		mc.stateStore.On("WriteStateFinalizations", mock.Anything, mock.Anything, []*pldapi.StateSpend{
 			{DomainName: "test1", State: tktypes.MustParseHexBytes(stateSpent), Transaction: txID}, // the SpentStates StateUpdate
-		}, []*components.StateConfirm{
+		}, []*pldapi.StateConfirm{
 			{DomainName: "test1", State: tktypes.MustParseHexBytes(stateConfirmed), Transaction: txID}, // the ConfirmedStates StateUpdate
 			{DomainName: "test1", State: tktypes.MustParseHexBytes(fakeHash1), Transaction: txID},      // the implicit confirm from the NewConfirmedState
 		}).Return(nil, nil)

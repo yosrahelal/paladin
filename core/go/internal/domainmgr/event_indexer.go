@@ -247,7 +247,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		return nil, err
 	}
 
-	stateSpends := make([]*components.StateSpend, len(res.SpentStates))
+	stateSpends := make([]*pldapi.StateSpend, len(res.SpentStates))
 	for i, state := range res.SpentStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
@@ -257,10 +257,10 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
 		}
-		stateSpends[i] = &components.StateSpend{DomainName: d.name, State: stateID, Transaction: *txUUID}
+		stateSpends[i] = &pldapi.StateSpend{DomainName: d.name, State: stateID, Transaction: *txUUID}
 	}
 
-	stateConfirms := make([]*components.StateConfirm, len(res.ConfirmedStates))
+	stateConfirms := make([]*pldapi.StateConfirm, len(res.ConfirmedStates))
 	for i, state := range res.ConfirmedStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
@@ -270,7 +270,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
 		}
-		stateConfirms[i] = &components.StateConfirm{DomainName: d.name, State: stateID, Transaction: *txUUID}
+		stateConfirms[i] = &pldapi.StateConfirm{DomainName: d.name, State: stateID, Transaction: *txUUID}
 	}
 
 	newStates := make([]*components.StateUpsertOutsideContext, 0)
@@ -298,7 +298,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		})
 
 		// These have implicit confirmations
-		stateConfirms = append(stateConfirms, &components.StateConfirm{DomainName: d.name, State: id, Transaction: *txUUID})
+		stateConfirms = append(stateConfirms, &pldapi.StateConfirm{DomainName: d.name, State: id, Transaction: *txUUID})
 	}
 
 	// Write any new states first

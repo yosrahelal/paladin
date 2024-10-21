@@ -76,6 +76,11 @@ var allTypes = []interface{}{
 		},
 		Hash: tktypes.Bytes32{},
 	},
+	pldapi.State{},
+	pldapi.StateConfirm{},
+	pldapi.StateSpend{},
+	pldapi.StateLock{},
+	pldapi.Schema{},
 	tktypes.JSONFormatOptions(""),
 	query.QueryJSON{
 		Limit: ptr.To(10),
@@ -180,6 +185,7 @@ var allAPITypes = []pldclient.RPCModule{
 	pldclient.New().KeyManager(),
 	pldclient.New().Registry(),
 	pldclient.New().Transport(),
+	pldclient.New().StateStore(),
 }
 
 var allSimpleTypes = []interface{}{

@@ -1,6 +1,12 @@
 ---
 title: keymgr_*
 ---
+## `keymgr_wallets`
+
+### Returns
+
+0. `wallets`: `string[]`
+
 ## `keymgr_resolveKey`
 
 ### Parameters
@@ -34,10 +40,4 @@ title: keymgr_*
 ### Returns
 
 0. `mapping`: `KeyMappingAndVerifier`
-
-## `keymgr_wallets`
-
-### Returns
-
-0. `wallets`: `string[]`
 

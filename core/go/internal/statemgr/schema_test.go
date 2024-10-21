@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,14 +49,10 @@ func TestGetSchemaNotFoundError(t *testing.T) {
 }
 
 func TestGetSchemaInvalidType(t *testing.T) {
-	ctx, ss, mdb, _, done := newDBMockStateManager(t)
+	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
-	mdb.ExpectQuery("SELECT.*schemas").WillReturnRows(sqlmock.NewRows(
-		[]string{"type"},
-	).AddRow("wrong"))
-
-	_, err := ss.GetSchema(ctx, ss.p.DB(), "domain1", tktypes.Bytes32Keccak(([]byte)("test")), true)
+	_, err := ss.restoreSchema(ctx, &pldapi.Schema{Type: tktypes.Enum[pldapi.SchemaType]("wrong")})
 	assert.Regexp(t, "PD010103.*wrong", err)
 }
 

@@ -52,6 +52,9 @@ type PaladinClient interface {
 
 	// Paladin Registry RPC interface
 	Registry() Registry
+
+	// Paladin state store RPC interface
+	StateStore() StateStore
 }
 
 type RPCModule interface {

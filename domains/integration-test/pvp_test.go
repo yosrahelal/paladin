@@ -244,7 +244,7 @@ func findAvailableCoins[T any](t *testing.T, ctx context.Context, rpc rpcbackend
 	var states []*T
 notReady:
 	for {
-		rpcerr := rpc.CallRPC(ctx, &states, "pstate_queryStates",
+		rpcerr := rpc.CallRPC(ctx, &states, "pstate_queryContractStates",
 			domainName,
 			address,
 			coinSchemaID,

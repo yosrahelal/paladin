@@ -119,6 +119,31 @@ var (
 	TransactionDependenciesPrereqOf               = ffm("TransactionDependencies.prereqOf", "Transactions that require this transaction as a prerequisite")
 )
 
+// pldclient/states.go
+var (
+	StateID                 = ffm("State.id", "The ID of the state, which is generated from the content per the rules of the domain, and is unique within the contract")
+	StateCreated            = ffm("State.created", "Server-generated creation timestamp for this state (query only)")
+	StateDomain             = ffm("State.domain", "The name of the domain this state is managed by")
+	StateSchema             = ffm("State.schema", "The ID of the schema for this state, which defines what fields it has and which are indexed for query")
+	StateContractAddress    = ffm("State.contractAddress", "The address of the contract that manages this state within the domain")
+	StateData               = ffm("State.data", "The JSON formatted data for this state")
+	StateConfirmed          = ffm("State.confirmed", "The confirmation record, if this an on-chain confirmation has been indexed from the base ledger for this state")
+	StateSpent              = ffm("State.spent", "The spend record, if this an on-chain spend has been indexed from the base ledger for this state")
+	StateLocks              = ffm("State.locks", "When querying states within a domain context running ahead of the blockchain assembling transactions for submission, this provides detail on locks applied to the state")
+	StateNullifier          = ffm("State.nullifier", "Only set if nullifiers are being used in the domain, and a nullifier has been generated that is available for spending this state")
+	StateConfirmTransaction = ffm("StateConfirm.transaction", "The ID of the Paladin transaction where this state was confirmed")
+	StateSpendTransaction   = ffm("StateSpend.transaction", "The ID of the Paladin transaction where this state was spent")
+	StateLockTransaction    = ffm("StateLock.transaction", "The ID of the Paladin transaction being assembled that is responsible for this lock")
+	StateLockType           = ffm("StateLock.type", "Whether this lock is for create, read or spend")
+	SchemaID                = ffm("Schema.id", "The hash derived ID of the schema (query only)")
+	SchemaCreated           = ffm("Schema.created", "Server-generated creation timestamp for this schema (query only)")
+	SchemaDomain            = ffm("Schema.domain", "The name of the domain this schema is managed by")
+	SchemaSignature         = ffm("Schema.signature", "Human readable signature string for this schema, that is used to generate the hash")
+	SchemaType              = ffm("Schema.type", "The type of the schema, such as if it is an ABI defined schema")
+	SchemaDefinition        = ffm("Schema.definition", "The definition of the schema, such as the ABI definition")
+	SchemaLabels            = ffm("Schema.labels", "The list of indexed labels that can be used to filter and sort states using to this schema")
+)
+
 // query/query_json.go
 var (
 	QueryJSONStatements         = ffm("QueryJSON.statements", "Query statements")

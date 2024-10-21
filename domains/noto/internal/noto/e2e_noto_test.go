@@ -108,7 +108,7 @@ func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backen
 		jq = query.NewQueryBuilder().Limit(100).Query()
 	}
 	var notoCoins []*types.NotoCoinState
-	rpcerr := rpc.CallRPC(ctx, &notoCoins, "pstate_queryStates",
+	rpcerr := rpc.CallRPC(ctx, &notoCoins, "pstate_queryContractStates",
 		noto.name,
 		address,
 		noto.coinSchema.Id,
