@@ -57,7 +57,7 @@ type DispatchBatch struct {
 
 // PersistDispatches persists the dispatches to the database and coordinates with the public transaction manager
 // to submit public transactions.
-func (s *syncPoints) PersistDispatchBatch(ctx context.Context, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*statedistribution.StateDistribution) error {
+func (s *syncPoints) PersistDispatchBatch(dCtx components.DomainContext, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*statedistribution.StateDistribution) error {
 
 	stateDistributionsPersisted := make([]*statedistribution.StateDistributionPersisted, 0, len(stateDistributions))
 	for _, stateDistribution := range stateDistributions {
@@ -70,11 +70,26 @@ func (s *syncPoints) PersistDispatchBatch(ctx context.Context, contractAddress t
 		})
 	}
 	// Send the write operation with all of the batch sequence operations to the flush worker
-	op := s.writer.Queue(ctx, &syncPointOperation{
+	op := s.writer.Queue(dCtx.Ctx(), &syncPointOperation{
+		domainContext:   dCtx,
 		contractAddress: contractAddress,
 		dispatchOperation: &dispatchOperation{
 			dispatches:         dispatchBatch.DispatchSequences,
 			stateDistributions: stateDistributionsPersisted,
+		},
+	})
+
+	//wait for the flush to complete
+	_, err := op.WaitFlushed(dCtx.Ctx())
+	return err
+}
+
+func (s *syncPoints) PersistDeployDispatchBatch(ctx context.Context, dispatchBatch *DispatchBatch) error {
+
+	// Send the write operation with all of the batch sequence operations to the flush worker
+	op := s.writer.Queue(ctx, &syncPointOperation{
+		dispatchOperation: &dispatchOperation{
+			dispatches: dispatchBatch.DispatchSequences,
 		},
 	})
 

@@ -420,7 +420,7 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 	}
 
 	// as this is a deploy we specify the null address
-	err = p.syncPoints.PersistDispatchBatch(ctx, tktypes.EthAddress{}, dispatchBatch, nil)
+	err = p.syncPoints.PersistDeployDispatchBatch(ctx, dispatchBatch)
 	if err != nil {
 		log.L(ctx).Errorf("Error persisting batch: %s", err)
 		return p.revertDeploy(ctx, tx, err)

@@ -261,6 +261,11 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
 	mockPublicTxBatch.On("Completed", mock.Anything, true).Return()
 
+	dcFlushed := make(chan error, 1)
+	mocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
+		dcFlushed <- err
+	}, nil)
+
 	err := privateTxManager.Start()
 	require.NoError(t, err)
 	err = privateTxManager.HandleNewTx(ctx, tx)
@@ -270,6 +275,8 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	testTimeout := 100 * time.Minute
 	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx.ID.String(), testTimeout)
 	assert.Equal(t, "dispatched", status)
+
+	require.NoError(t, <-dcFlushed)
 }
 
 func TestPrivateTxManagerLocalEndorserSubmits(t *testing.T) {
@@ -506,6 +513,12 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
 	mockPublicTxBatch.On("Completed", mock.Anything, true).Return()
 
+	// Flush of domain context happens on the remote node (the notary)
+	dcFlushed := make(chan error, 1)
+	remoteEngineMocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
+		dcFlushed <- err
+	}, nil)
+
 	err := privateTxManager.Start()
 	assert.NoError(t, err)
 
@@ -515,6 +528,8 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	<-delegated
 	status := pollForStatus(ctx, t, "dispatched", remoteEngine, domainAddressString, tx.ID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
+
+	require.NoError(t, <-dcFlushed)
 
 }
 
@@ -765,6 +780,11 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
 	mockPublicTxBatch.On("Completed", mock.Anything, true).Return()
 
+	dcFlushed := make(chan error, 1)
+	aliceEngineMocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
+		dcFlushed <- err
+	}, nil)
+
 	err := aliceEngine.Start()
 	assert.NoError(t, err)
 
@@ -774,6 +794,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, tx.ID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
+	require.NoError(t, <-dcFlushed)
 }
 
 func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
@@ -1053,11 +1074,19 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		Payload:     endorsementResponse1Bytes,
 	})
 
+	// at this point we should get a flush of the states
+	dcFlushed := make(chan error, 1)
+	aliceEngineMocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
+		dcFlushed <- err
+	}, nil)
+
 	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, tx1.ID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
 	status = pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, tx2.ID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
+
+	require.NoError(t, <-dcFlushed)
 
 	//TODO assert that transaction 1 got dispatched before 2
 
@@ -1820,6 +1849,9 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, pub
 	mocks.domainSmartContract.On("Domain").Return(mocks.domain).Maybe()
 	mocks.domainMgr.On("GetDomainByName", mock.Anything, "domain1").Return(mocks.domain, nil).Maybe()
 	mocks.domain.On("Name").Return("domain1").Maybe()
+
+	mocks.domainContext.On("Ctx").Return(ctx).Maybe()
+	mocks.domainContext.On("Info").Return(components.DomainContextInfo{ID: uuid.New()}).Maybe()
 
 	e := NewPrivateTransactionMgr(ctx, &pldconf.PrivateTxManagerConfig{
 		Writer: pldconf.FlushWriterConfig{
