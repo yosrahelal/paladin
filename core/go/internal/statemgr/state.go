@@ -234,7 +234,7 @@ func (ss *stateManager) findStates(
 		})
 	}
 
-	// We need to run it against the specified domain context
+	// Otherwise, we need to run it against the specified domain context
 	var dc components.DomainContext
 	dcID, err := uuid.Parse(string(status))
 	if err == nil {
@@ -245,7 +245,7 @@ func (ss *stateManager) findStates(
 	if err != nil {
 		return nil, nil, err
 	}
-	return dc.FindAvailableStates(schemaID, jq)
+	return dc.FindAvailableStates(dbTX, schemaID, jq)
 }
 
 func (ss *stateManager) findAvailableNullifiers(

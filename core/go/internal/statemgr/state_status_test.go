@@ -90,11 +90,9 @@ func makeWidgets(t *testing.T, ctx context.Context, ss *stateManager, domainName
 }
 
 func syncFlushContext(t *testing.T, dc components.DomainContext) {
-	flushed := make(chan error)
-	err := dc.InitiateFlush(func(err error) { flushed <- err })
+	postDBTx, err := dc.Flush(dc.(*domainContext).ss.p.DB())
 	require.NoError(t, err)
-	err = <-flushed
-	require.NoError(t, err)
+	postDBTx(nil)
 }
 
 func newTestDomainContext(t *testing.T, ctx context.Context, ss *stateManager, name string, customHashFunction bool) (tktypes.EthAddress, *domainContext) {
@@ -102,7 +100,7 @@ func newTestDomainContext(t *testing.T, ctx context.Context, ss *stateManager, n
 	md.On("Name").Return(name)
 	md.On("CustomHashFunction").Return(customHashFunction)
 	contractAddress := tktypes.RandAddress()
-	dc := ss.NewDomainContext(ctx, md, *contractAddress, ss.p.DB())
+	dc := ss.NewDomainContext(ctx, md, *contractAddress)
 	return *contractAddress, dc.(*domainContext)
 }
 
@@ -191,7 +189,7 @@ func TestStateLockingQuery(t *testing.T) {
 
 	// add a new state only within the domain context
 	txID1 := uuid.New()
-	contextStates, err := dc.UpsertStates(
+	contextStates, err := dc.UpsertStates(ss.p.DB(),
 		genWidget(t, schemaID, &txID1, `{"size": 66666, "color": "blue", "price": 600}`))
 	require.NoError(t, err)
 	widgets = append(widgets, contextStates...)
@@ -252,7 +250,7 @@ func TestStateLockingQuery(t *testing.T) {
 	// Note we have to re-supply the data here, so that the domain context can
 	// have it in memory for queries
 	txID13 := uuid.New()
-	_, err = dc.UpsertStates(&components.StateUpsert{
+	_, err = dc.UpsertStates(ss.p.DB(), &components.StateUpsert{
 		ID:        widgets[3].ID,
 		SchemaID:  widgets[3].Schema,
 		Data:      widgets[3].Data,
