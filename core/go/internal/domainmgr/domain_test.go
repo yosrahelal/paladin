@@ -219,7 +219,7 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 	var mdc *componentmocks.DomainContext
 	addr := *tktypes.RandAddress()
 	if realDB {
-		dCtx := dm.stateStore.NewDomainContext(ctx, tp.d, addr, dm.persistence.DB())
+		dCtx := dm.stateStore.NewDomainContext(ctx, tp.d, addr)
 		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), dCtx)
 	} else {
 		mdc = componentmocks.NewDomainContext(t)
@@ -481,7 +481,7 @@ func TestDomainFindAvailableStatesFail(t *testing.T) {
 	defer done()
 
 	schemaID := tktypes.Bytes32(tktypes.RandBytes(32))
-	td.mdc.On("FindAvailableStates", schemaID, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
+	td.mdc.On("FindAvailableStates", mock.Anything, schemaID, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
 
 	assert.Nil(t, td.d.initError.Load())
 	_, err := td.d.FindAvailableStates(td.ctx, &prototk.FindAvailableStatesRequest{
@@ -502,7 +502,7 @@ func storeTestState(t *testing.T, td *testDomainContext, txID uuid.UUID, amount 
 	require.NoError(t, err)
 
 	// Call the real statestore
-	_, err = td.c.dCtx.UpsertStates(&components.StateUpsert{
+	_, err = td.c.dCtx.UpsertStates(td.c.dbTX, &components.StateUpsert{
 		SchemaID:  tktypes.MustParseBytes32(td.tp.stateSchemas[0].Id),
 		Data:      stateJSON,
 		CreatedBy: &txID,

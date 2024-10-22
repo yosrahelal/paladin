@@ -25,6 +25,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -121,7 +122,7 @@ func (dc *domainContract) InitTransaction(ctx context.Context, tx *components.Pr
 	return nil
 }
 
-func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, tx *components.PrivateTransaction) error {
+func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction) error {
 	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil {
 		return i18n.NewError(dCtx.Ctx(), msgs.MsgDomainTXIncompleteAssembleTransaction)
 	}
@@ -130,7 +131,7 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, tx 
 	// at this point if we're re-assembling.
 	preAssembly := tx.PreAssembly
 
-	c := dc.d.newInFlightDomainRequest(nil, dCtx)
+	c := dc.d.newInFlightDomainRequest(readTX, dCtx)
 	defer c.close()
 
 	// Now we have the required verifiers, we can ask the domain to do the heavy lifting
@@ -148,11 +149,11 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, tx 
 	// We hydrate the states on our side of the Manager<->Plugin divide at this point,
 	// which provides back to the engine the full sequence locking information of the
 	// states (inputs, and read)
-	postAssembly.InputStates, err = dc.loadStates(dCtx, res.AssembledTransaction.InputStates)
+	postAssembly.InputStates, err = dc.loadStates(dCtx, readTX, res.AssembledTransaction.InputStates)
 	if err != nil {
 		return err
 	}
-	postAssembly.ReadStates, err = dc.loadStates(dCtx, res.AssembledTransaction.ReadStates)
+	postAssembly.ReadStates, err = dc.loadStates(dCtx, readTX, res.AssembledTransaction.ReadStates)
 	if err != nil {
 		return err
 	}
@@ -171,7 +172,7 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, tx 
 }
 
 // Happens only on the sequencing node
-func (dc *domainContract) WritePotentialStates(dCtx components.DomainContext, tx *components.PrivateTransaction) (err error) {
+func (dc *domainContract) WritePotentialStates(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction) (err error) {
 	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil || tx.PostAssembly == nil {
 		return i18n.NewError(dCtx.Ctx(), msgs.MsgDomainTXIncompleteWritePotentialStates)
 	}
@@ -211,7 +212,7 @@ func (dc *domainContract) WritePotentialStates(dCtx components.DomainContext, tx
 		}
 	}
 
-	states, err := dCtx.UpsertStates(newStatesToWrite...)
+	states, err := dCtx.UpsertStates(readTX, newStatesToWrite...)
 	if err != nil {
 		return err
 	}
@@ -231,7 +232,7 @@ func (dc *domainContract) WritePotentialStates(dCtx components.DomainContext, tx
 
 // Happens on all nodes that are aware of the transaction and want to mask input states from other
 // transactions being assembled on the same node.
-func (dc *domainContract) LockStates(dCtx components.DomainContext, tx *components.PrivateTransaction) error {
+func (dc *domainContract) LockStates(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction) error {
 	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil ||
 		tx.PostAssembly == nil || tx.PostAssembly.InputStates == nil || tx.PostAssembly.OutputStates == nil {
 		return i18n.NewError(dCtx.Ctx(), msgs.MsgDomainTXIncompleteLockStates)
@@ -290,7 +291,7 @@ func (dc *domainContract) LockStates(dCtx components.DomainContext, tx *componen
 	}
 
 	// Heavy lifting is all done for us by the state store
-	_, err := dCtx.UpsertStates(states...)
+	_, err := dCtx.UpsertStates(readTX, states...)
 	if err == nil {
 		err = dCtx.AddStateLocks(stateLocks...)
 	}
@@ -298,7 +299,7 @@ func (dc *domainContract) LockStates(dCtx components.DomainContext, tx *componen
 }
 
 // Endorse is a little special, because it returns a payload rather than updating the transaction.
-func (dc *domainContract) EndorseTransaction(dCtx components.DomainContext, req *components.PrivateTransactionEndorseRequest) (*components.EndorsementResult, error) {
+func (dc *domainContract) EndorseTransaction(dCtx components.DomainContext, readTX *gorm.DB, req *components.PrivateTransactionEndorseRequest) (*components.EndorsementResult, error) {
 
 	if req == nil ||
 		req.TransactionSpecification == nil ||
@@ -312,7 +313,7 @@ func (dc *domainContract) EndorseTransaction(dCtx components.DomainContext, req 
 		return nil, i18n.NewError(dCtx.Ctx(), msgs.MsgDomainReqIncompleteEndorseTransaction)
 	}
 
-	c := dc.d.newInFlightDomainRequest(nil, dCtx)
+	c := dc.d.newInFlightDomainRequest(readTX, dCtx)
 	defer c.close()
 
 	// This function does NOT FLUSH before or after doing endorse. The assumption is that this
@@ -384,7 +385,7 @@ func (dc *domainContract) ResolveDispatch(ctx context.Context, tx *components.Pr
 
 }
 
-func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *components.PrivateTransaction) error {
+func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction) error {
 	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil ||
 		tx.PostAssembly == nil || tx.Signer == "" {
 		return i18n.NewError(dCtx.Ctx(), msgs.MsgDomainTXIncompletePrepareTransaction)
@@ -393,7 +394,7 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *
 	preAssembly := tx.PreAssembly
 	postAssembly := tx.PostAssembly
 
-	c := dc.d.newInFlightDomainRequest(nil, dCtx)
+	c := dc.d.newInFlightDomainRequest(readTX, dCtx)
 	defer c.close()
 
 	// Run the prepare
@@ -476,7 +477,7 @@ func (dc *domainContract) InitCall(ctx context.Context, txi *components.Transact
 
 }
 
-func (dc *domainContract) ExecCall(dCtx components.DomainContext, txi *components.TransactionInputs, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error) {
+func (dc *domainContract) ExecCall(dCtx components.DomainContext, readTX *gorm.DB, txi *components.TransactionInputs, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error) {
 
 	txSpec, err := dc.processTxInputs(dCtx.Ctx(), txi)
 	if err != nil {
@@ -484,7 +485,7 @@ func (dc *domainContract) ExecCall(dCtx components.DomainContext, txi *component
 	}
 
 	// We expect queries to the state store during this call
-	c := dc.d.newInFlightDomainRequest(nil, dCtx)
+	c := dc.d.newInFlightDomainRequest(readTX, dCtx)
 	defer c.close()
 
 	// Call the domain
@@ -532,7 +533,7 @@ func (dc *domainContract) allAttestations(tx *components.PrivateTransaction) []*
 	return attestations
 }
 
-func (dc *domainContract) loadStates(dCtx components.DomainContext, refs []*prototk.StateRef) ([]*components.FullState, error) {
+func (dc *domainContract) loadStates(dCtx components.DomainContext, readTX *gorm.DB, refs []*prototk.StateRef) ([]*components.FullState, error) {
 	rawIDsBySchema := make(map[tktypes.Bytes32][]tktypes.RawJSON)
 	stateIDs := make([]tktypes.HexBytes, len(refs))
 	for i, s := range refs {
@@ -549,7 +550,7 @@ func (dc *domainContract) loadStates(dCtx components.DomainContext, refs []*prot
 	}
 	statesByID := make(map[string]*pldapi.State)
 	for schemaID, stateIDs := range rawIDsBySchema {
-		_, statesForSchema, err := dCtx.FindAvailableStates(schemaID, &query.QueryJSON{
+		_, statesForSchema, err := dCtx.FindAvailableStates(readTX, schemaID, &query.QueryJSON{
 			Statements: query.Statements{
 				Ops: query.Ops{
 					In: []*query.OpMultiVal{
