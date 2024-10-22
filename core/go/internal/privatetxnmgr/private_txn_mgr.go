@@ -141,6 +141,7 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 					p.components.IdentityResolver(),
 					p.stateDistributer,
 					transportWriter,
+					confutil.DurationMin(p.config.RequestTimeout, 0, *pldconf.PrivateTxManagerDefaults.RequestTimeout),
 				)
 			orchestratorDone, err := p.orchestrators[contractAddr.String()].Start(ctx)
 			if err != nil {

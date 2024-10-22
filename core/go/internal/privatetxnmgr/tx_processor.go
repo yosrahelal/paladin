@@ -34,7 +34,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract /*sequencer ptmgrtypes.Sequencer,*/, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, syncPoints syncpoints.SyncPoints, transportWriter ptmgrtypes.TransportWriter) ptmgrtypes.TxProcessor {
+func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract /*sequencer ptmgrtypes.Sequencer,*/, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, syncPoints syncpoints.SyncPoints, transportWriter ptmgrtypes.TransportWriter, requestTimeout time.Duration) ptmgrtypes.TxProcessor {
 	return &PaladinTxProcessor{
 		stageErrorRetry:             10 * time.Second,
 		domainAPI:                   domainAPI,
@@ -51,11 +51,13 @@ func NewPaladinTransactionProcessor(ctx context.Context, transaction *components
 		finalizePending:             false,
 		requestedVerifierResolution: false,
 		requestedSignatures:         false,
-		requestedEndorsement:        false,
+		requestedEndorsementTimes:   make(map[string]map[string]time.Time),
 		complete:                    false,
 		localCoordinator:            true,
 		readyForSequencing:          false,
 		dispatched:                  false,
+		clock:                       ptmgrtypes.RealClock(),
+		requestTimeout:              requestTimeout,
 	}
 }
 
@@ -79,10 +81,12 @@ type PaladinTxProcessor struct {
 	complete                    bool
 	requestedVerifierResolution bool
 	requestedSignatures         bool
-	requestedEndorsement        bool
+	requestedEndorsementTimes   map[string]map[string]time.Time //map of attestationRequest names to a map of parties to the time the most request was made
 	localCoordinator            bool
 	readyForSequencing          bool
 	dispatched                  bool
+	clock                       ptmgrtypes.Clock
+	requestTimeout              time.Duration
 }
 
 func (ts *PaladinTxProcessor) GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error) {
@@ -454,6 +458,30 @@ func (ts *PaladinTxProcessor) requestAssemble(ctx context.Context) {
 			return
 		}
 
+		// Some validation that we are confident we can execute the given attestation plan
+		for _, attRequest := range ts.transaction.PostAssembly.AttestationPlan {
+			switch attRequest.AttestationType {
+			case prototk.AttestationType_ENDORSE:
+			case prototk.AttestationType_SIGN:
+			case prototk.AttestationType_GENERATE_PROOF:
+				errorMessage := "AttestationType_GENERATE_PROOF is not implemented yet"
+				log.L(ctx).Error(errorMessage)
+				ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
+				ts.publisher.PublishTransactionAssembleFailedEvent(ctx,
+					ts.transaction.ID.String(),
+					i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), errorMessage),
+				)
+			default:
+				errorMessage := fmt.Sprintf("Unsupported attestation type: %s", attRequest.AttestationType)
+				log.L(ctx).Error(errorMessage)
+				ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
+				ts.publisher.PublishTransactionAssembleFailedEvent(ctx,
+					ts.transaction.ID.String(),
+					i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), errorMessage),
+				)
+			}
+		}
+
 		//TODO should probably include the assemble output in the event
 		// for now that is not necessary because this is a local assemble and the domain manager updates the transaction that we passed by reference
 		// need to decide if we want to continue with that style of interface to the domain manager and if so,
@@ -490,7 +518,7 @@ func (ts *PaladinTxProcessor) applyTransactionEndorsedEvent(ctx context.Context,
 		ts.transaction.PostAssembly = nil
 
 	} else {
-		log.L(ctx).Infof("Adding endorsement to transaction %s", ts.transaction.ID.String())
+		log.L(ctx).Infof("Adding endorsement from %s to transaction %s", event.Endorsement.Verifier.Lookup, ts.transaction.ID.String())
 		ts.transaction.PostAssembly.Endorsements = append(ts.transaction.PostAssembly.Endorsements, event.Endorsement)
 
 	}
@@ -641,23 +669,10 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 	partyNode, err := partyLocator.Node(ctx, true)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to get node name from locator %s: %s", party, err)
-		//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError)
+		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
+		return
 	}
 
-	//TODO the following errors are only really possible if the memory has been corrupted or there is a serious programming error
-	// so we should probably panic here
-	if ts.transaction == nil {
-		log.L(ctx).Error("Transaction  is nil")
-		return
-	}
-	if ts.transaction.PreAssembly == nil {
-		log.L(ctx).Error("PreAssembly is nil")
-		return
-	}
-	if ts.transaction.PostAssembly == nil {
-		log.L(ctx).Error("PostAssembly is nil")
-		return
-	}
 	if partyNode == ts.nodeID || partyNode == "" {
 		// This is a local party, so we can endorse it directly
 		endorsement, revertReason, err := ts.endorsementGatherer.GatherEndorsement(
@@ -672,9 +687,9 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 			attRequest)
 		if err != nil {
 			log.L(ctx).Errorf("Failed to gather endorsement for party %s: %s", party, err)
+			ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
 			return
-			//TODO specific error message
-			//TODO return nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerInternalError)
+
 		}
 		ts.publisher.PublishTransactionEndorsedEvent(ctx,
 			ts.transaction.ID.String(),
@@ -706,44 +721,32 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 }
 
 func (ts *PaladinTxProcessor) requestEndorsements(ctx context.Context) {
-	if ts.requestedEndorsement {
-		log.L(ctx).Infof("Transaction %s endorsement already requested", ts.transaction.ID.String())
-		return
-	}
-	attPlan := ts.transaction.PostAssembly.AttestationPlan
-	attResults := ts.transaction.PostAssembly.Endorsements
-	for _, attRequest := range attPlan {
-		switch attRequest.AttestationType {
-		case prototk.AttestationType_SIGN:
-			// no op. Signatures are gathered in the GatherSignaturesStage
-		case prototk.AttestationType_ENDORSE:
-			//TODO not sure this is the best way to check toBeComplete - take a closer look and think about this
-			toBeComplete := true
-			for _, ar := range attResults {
-				if ar.GetAttestationType().Type() == attRequest.GetAttestationType().Type() {
-					toBeComplete = false
-					break
-				}
+	for _, outstandingEndorsementRequest := range ts.outstandingEndorsementRequests(ctx) {
+		// there is a request in the attestation plan and we do not have a response to match it
+		// first lets see if we have recently sent a request for this endorsement and just need to be patient
+		previousRequestTime := time.Time{}
+		if timesForAttRequest, ok := ts.requestedEndorsementTimes[outstandingEndorsementRequest.attRequest.Name]; ok {
+			if t, ok := timesForAttRequest[outstandingEndorsementRequest.party]; ok {
+				previousRequestTime = t
 			}
-			if toBeComplete {
-
-				for _, party := range attRequest.GetParties() {
-					ts.requestEndorsement(ctx, party, attRequest)
-				}
-
-			}
-		case prototk.AttestationType_GENERATE_PROOF:
-			errorMessage := "AttestationType_GENERATE_PROOF is not implemented yet"
-			log.L(ctx).Error(errorMessage)
-			ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
-		default:
-			errorMessage := fmt.Sprintf("Unsupported attestation type: %s", attRequest.AttestationType)
-			log.L(ctx).Error(errorMessage)
-			ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
+		} else {
+			ts.requestedEndorsementTimes[outstandingEndorsementRequest.attRequest.Name] = make(map[string]time.Time)
 		}
 
+		if !previousRequestTime.IsZero() && ts.clock.Now().Before(previousRequestTime.Add(ts.requestTimeout)) {
+			//We have already sent a message for this request and the deadline has not passed
+			log.L(ctx).Debugf("Transaction %s endorsement already requested %v", ts.transaction.ID.String(), previousRequestTime)
+			return
+		}
+		if previousRequestTime.IsZero() {
+			log.L(ctx).Infof("Transaction %s endorsement has never been requested for attestation request:%s, party:%s", ts.transaction.ID.String(), outstandingEndorsementRequest.attRequest.Name, outstandingEndorsementRequest.party)
+		} else {
+			log.L(ctx).Infof("Previous endorsement request for transaction:%s, attestation request:%s, party:%s sent at %v has timed out", ts.transaction.ID.String(), outstandingEndorsementRequest.attRequest.Name, outstandingEndorsementRequest.party, previousRequestTime)
+		}
+		ts.requestEndorsement(ctx, outstandingEndorsementRequest.party, outstandingEndorsementRequest.attRequest)
+		ts.requestedEndorsementTimes[outstandingEndorsementRequest.attRequest.Name][outstandingEndorsementRequest.party] = ts.clock.Now()
+
 	}
-	ts.requestedEndorsement = true
 }
 
 func (ts *PaladinTxProcessor) hasOutstandingSignatureRequests() bool {
@@ -768,9 +771,17 @@ out:
 	return outstandingSignatureRequests
 }
 
-func (ts *PaladinTxProcessor) hasOutstandingEndorsementRequests(_ context.Context) bool {
-	outstandingEndorsementRequests := false
-out:
+func (ts *PaladinTxProcessor) hasOutstandingEndorsementRequests(ctx context.Context) bool {
+	return len(ts.outstandingEndorsementRequests(ctx)) > 0
+}
+
+type outstandingEndorsementRequest struct {
+	attRequest *prototk.AttestationRequest
+	party      string
+}
+
+func (ts *PaladinTxProcessor) outstandingEndorsementRequests(_ context.Context) []*outstandingEndorsementRequest {
+	outstandingEndorsementRequests := make([]*outstandingEndorsementRequest, 0)
 	for _, attRequest := range ts.transaction.PostAssembly.AttestationPlan {
 		if attRequest.AttestationType == prototk.AttestationType_ENDORSE {
 			for _, party := range attRequest.Parties {
@@ -790,9 +801,7 @@ out:
 					}
 				}
 				if !found {
-					outstandingEndorsementRequests = true
-					// no point checking any further, we have at least one outstanding endorsement request
-					break out
+					outstandingEndorsementRequests = append(outstandingEndorsementRequests, &outstandingEndorsementRequest{party: party, attRequest: attRequest})
 				}
 			}
 		}

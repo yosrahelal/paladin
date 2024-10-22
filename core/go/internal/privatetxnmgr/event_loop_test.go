@@ -88,7 +88,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	mocks.domainSmartContract.On("Address").Return(*domainAddress).Maybe()
 
 	syncPoints := syncpoints.NewSyncPoints(ctx, &pldconf.FlushWriterConfig{}, p, mocks.txManager)
-	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer, mocks.transportWriter)
+	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer, mocks.transportWriter, 30*time.Second)
 	ocDone, err := o.Start(ctx)
 	require.NoError(t, err)
 

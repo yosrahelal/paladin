@@ -18,9 +18,11 @@ package privatetxnmgr
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
 	"github.com/kaleido-io/paladin/core/mocks/prvtxsyncpointsmocks"
@@ -30,6 +32,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 type transactionProcessorDepencyMocks struct {
@@ -73,7 +76,15 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 	mocks.endorsementGatherer.On("DomainContext").Return(mocks.domainContext).Maybe()
 	mocks.domainSmartContract.On("Address").Return(*contractAddress).Maybe()
 
-	tp := NewPaladinTransactionProcessor(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.syncPoints, mocks.transportWriter)
+	domain := componentmocks.NewDomain(t)
+	domain.On("Configuration").Return(&prototk.DomainConfig{
+		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
+			SubmitMode: prototk.BaseLedgerSubmitConfig_ONE_TIME_USE_KEYS,
+		},
+	}).Maybe()
+	mocks.domainSmartContract.On("Domain").Return(domain).Maybe()
+
+	tp := NewPaladinTransactionProcessor(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.syncPoints, mocks.transportWriter, 1*time.Minute)
 
 	return tp.(*PaladinTxProcessor), mocks
 }
@@ -635,5 +646,437 @@ func TestHasOutstandingEndorsementRequestSingleRequestMultiplePartiesCompleteMix
 	tp, _ := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
 	result := tp.hasOutstandingEndorsementRequests(ctx)
 	assert.False(t, result)
+}
 
+func TestRequestEndorsements(t *testing.T) {
+	ctx := context.Background()
+	newTxID := uuid.New()
+
+	aliceIdentityLocator := "alice@node1"
+	aliceVerifier := tktypes.RandAddress().String()
+	bobIdentityLocator := "bob@node2"
+	bobVerifier := tktypes.RandAddress().String()
+	carolIdentityLocator := "carol@node2"
+	carolVerifier := tktypes.RandAddress().String()
+
+	testContractAddress := *tktypes.RandAddress()
+	// create a transaction as if we have already
+	// - resolved the verifiers
+	// - assembled it
+	// - signed it
+	// so next step is to request endorsements
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
+		Inputs: &components.TransactionInputs{
+			To:   testContractAddress,
+			From: aliceIdentityLocator,
+		},
+		PreAssembly: &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From:          aliceIdentityLocator,
+				TransactionId: newTxID.String(),
+			},
+			Verifiers: []*prototk.ResolvedVerifier{
+				{
+					Lookup:       aliceIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     aliceVerifier,
+				},
+				{
+					Lookup:       bobIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     bobVerifier,
+				},
+				{
+					Lookup:       carolIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     carolVerifier,
+				},
+			},
+		},
+		PostAssembly: &components.TransactionPostAssembly{
+			AttestationPlan: []*prototk.AttestationRequest{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						aliceIdentityLocator,
+						bobIdentityLocator,
+						carolIdentityLocator,
+					},
+				},
+			},
+		},
+	}
+
+	tp, mocks := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
+	mocks.transportWriter.On("SendEndorsementRequest",
+		mock.Anything,
+		"alice@node1",
+		"node1",
+		testContractAddress.String(),
+		newTxID.String(),
+		mock.Anything, //attRequest
+		mock.Anything, //TransactionSpecification,
+		mock.Anything, //Verifiers,
+		mock.Anything, //Signatures,
+		mock.Anything, //InputStates,
+		mock.Anything, //OutputStates,
+	).Return(nil).Once()
+	mocks.transportWriter.On("SendEndorsementRequest",
+		mock.Anything,
+		"bob@node2",
+		"node2",
+		testContractAddress.String(),
+		newTxID.String(),
+		mock.Anything, //attRequest
+		mock.Anything, //TransactionSpecification,
+		mock.Anything, //Verifiers,
+		mock.Anything, //Signatures,
+		mock.Anything, //InputStates,
+		mock.Anything, //OutputStates,
+	).Return(nil).Once()
+	mocks.transportWriter.On("SendEndorsementRequest",
+		mock.Anything,
+		"carol@node2",
+		"node2",
+		testContractAddress.String(),
+		newTxID.String(),
+		mock.Anything, //attRequest
+		mock.Anything, //TransactionSpecification,
+		mock.Anything, //Verifiers,
+		mock.Anything, //Signatures,
+		mock.Anything, //InputStates,
+		mock.Anything, //OutputStates,
+	).Return(nil).Once()
+	tp.Action(ctx)
+
+	mocks.transportWriter.AssertExpectations(t)
+
+	//Check that we don't send the same requests again (we specified Once in the mocks above)
+	tp.Action(ctx)
+
+}
+
+func TestTimedOutEndorsementRequest(t *testing.T) {
+	// This can happen if the remote node is slow to respond
+	//or the network is unreliable and the request or the response has been lost
+	// we don't necessarily know which of those is the case so we just treat it as a timeout
+	// this could / should be tested as part of an E2E reliability test but
+	// we like to get confidence at a white box level because there is no guarantee
+	// that the E2E test will be able to reproduce the conditions that cause the timeout
+
+	ctx := context.Background()
+	newTxID := uuid.New()
+
+	aliceIdentityLocator := "alice@node1"
+	aliceVerifier := tktypes.RandAddress().String()
+	bobIdentityLocator := "bob@node2"
+	bobVerifier := tktypes.RandAddress().String()
+	carolIdentityLocator := "carol@node2"
+	carolVerifier := tktypes.RandAddress().String()
+
+	testContractAddress := *tktypes.RandAddress()
+	// create a transaction as if we have already
+	// - resolved the verifiers
+	// - assembled it
+	// - signed it
+	// so next step is to request endorsements
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
+		Inputs: &components.TransactionInputs{
+			To:   testContractAddress,
+			From: aliceIdentityLocator,
+		},
+		PreAssembly: &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From:          aliceIdentityLocator,
+				TransactionId: newTxID.String(),
+			},
+			Verifiers: []*prototk.ResolvedVerifier{
+				{
+					Lookup:       aliceIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     aliceVerifier,
+				},
+				{
+					Lookup:       bobIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     bobVerifier,
+				},
+				{
+					Lookup:       carolIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     carolVerifier,
+				},
+			},
+		},
+		PostAssembly: &components.TransactionPostAssembly{
+			AttestationPlan: []*prototk.AttestationRequest{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						aliceIdentityLocator,
+						bobIdentityLocator,
+						carolIdentityLocator,
+					},
+				},
+			},
+		},
+	}
+
+	tp, mocks := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
+
+	fakeClock := &fakeClock{timePassed: 0}
+	tp.clock = fakeClock
+
+	expectEndorsementRequest := func(party, node string) {
+		mocks.transportWriter.On("SendEndorsementRequest",
+			mock.Anything,
+			party,
+			node,
+			testContractAddress.String(),
+			newTxID.String(),
+			mock.Anything, //attRequest
+			mock.Anything, //TransactionSpecification,
+			mock.Anything, //Verifiers,
+			mock.Anything, //Signatures,
+			mock.Anything, //InputStates,
+			mock.Anything, //OutputStates,
+		).Return(nil).Once()
+	}
+
+	expectEndorsementRequest("alice@node1", "node1")
+	expectEndorsementRequest("bob@node2", "node2")
+	expectEndorsementRequest("carol@node2", "node2")
+	tp.Action(ctx)
+	mocks.transportWriter.AssertExpectations(t)
+
+	//Check that we don't send the same requests again because it hasn't timeout out yet
+	tp.Action(ctx)
+
+	//simulate the passing of time
+	fakeClock.timePassed = 1*time.Minute + 1*time.Second
+	expectEndorsementRequest("alice@node1", "node1")
+	expectEndorsementRequest("bob@node2", "node2")
+	expectEndorsementRequest("carol@node2", "node2")
+	tp.Action(ctx)
+	mocks.transportWriter.AssertExpectations(t)
+
+	//Check that we don't send the same requests again because it hasn't timeout out yet
+	tp.Action(ctx)
+
+	//Receive response from bob
+	tp.applyTransactionEndorsedEvent(ctx, &ptmgrtypes.TransactionEndorsedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			TransactionID:   newTxID.String(),
+			ContractAddress: testContractAddress.String(),
+		},
+		Endorsement: &prototk.AttestationResult{
+			Name: "foo",
+			Verifier: &prototk.ResolvedVerifier{
+				Lookup:       bobIdentityLocator,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				Verifier:     bobVerifier,
+				VerifierType: verifiers.ETH_ADDRESS,
+			},
+		},
+	})
+
+	//simulate the passing of time
+	fakeClock.timePassed = fakeClock.timePassed + 1*time.Minute + 1*time.Second
+	expectEndorsementRequest("alice@node1", "node1")
+	expectEndorsementRequest("carol@node2", "node2")
+	tp.Action(ctx)
+}
+
+func TestEndorsementRequestAfterReassemble(t *testing.T) {
+	// when we have re-assembled the transaction after sending an endorsement request
+	// we should resend the request and should ignore any responses that eventually come back for the
+	// original request
+
+	//TODO skip for now while we think about his.
+	// the main reason for re-assembly would be a rejected endorsement because we are trying to spend a state that has ( unbeknown to us) been spent already
+	// in that situation ( most likely in pente) we actually want to trigger a delegation handover
+	// however, after delegation re-assembly is likely
+	t.Skip()
+
+}
+
+func TestDuplicateEndorsementResponse(t *testing.T) {
+	// we effectively have an at least once delivery guarantee on the endorsement requests and responses
+	// so we need to be able to handle duplicate responses
+	ctx := context.Background()
+	newTxID := uuid.New()
+
+	aliceIdentityLocator := "alice@node1"
+	aliceVerifier := tktypes.RandAddress().String()
+	bobIdentityLocator := "bob@node2"
+	bobVerifier := tktypes.RandAddress().String()
+	carolIdentityLocator := "carol@node2"
+	carolVerifier := tktypes.RandAddress().String()
+
+	testContractAddress := *tktypes.RandAddress()
+	// create a transaction as if we have already:
+	// - resolved the verifiers
+	// - assembled it
+	// - signed it
+	// so next step is to request endorsements
+	testTx := &components.PrivateTransaction{
+		ID: newTxID,
+		Inputs: &components.TransactionInputs{
+			To:   testContractAddress,
+			From: aliceIdentityLocator,
+		},
+		PreAssembly: &components.TransactionPreAssembly{
+			TransactionSpecification: &prototk.TransactionSpecification{
+				From:          aliceIdentityLocator,
+				TransactionId: newTxID.String(),
+			},
+			Verifiers: []*prototk.ResolvedVerifier{
+				{
+					Lookup:       aliceIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     aliceVerifier,
+				},
+				{
+					Lookup:       bobIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     bobVerifier,
+				},
+				{
+					Lookup:       carolIdentityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+					Verifier:     carolVerifier,
+				},
+			},
+		},
+		PostAssembly: &components.TransactionPostAssembly{
+			AttestationPlan: []*prototk.AttestationRequest{
+				{
+					Name:            "foo",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						aliceIdentityLocator,
+						bobIdentityLocator,
+						carolIdentityLocator,
+					},
+				},
+			},
+		},
+	}
+
+	tp, mocks := newPaladinTransactionProcessorForTesting(t, ctx, testTx)
+
+	fakeClock := &fakeClock{timePassed: 0}
+	tp.clock = fakeClock
+
+	expectEndorsementRequest := func(party, node string) {
+		mocks.transportWriter.On("SendEndorsementRequest",
+			mock.Anything,
+			party,
+			node,
+			testContractAddress.String(),
+			newTxID.String(),
+			mock.Anything, //attRequest
+			mock.Anything, //TransactionSpecification,
+			mock.Anything, //Verifiers,
+			mock.Anything, //Signatures,
+			mock.Anything, //InputStates,
+			mock.Anything, //OutputStates,
+		).Return(nil).Once()
+	}
+
+	expectEndorsementRequest("alice@node1", "node1")
+	expectEndorsementRequest("bob@node2", "node2")
+	expectEndorsementRequest("carol@node2", "node2")
+	tp.Action(ctx)
+	mocks.transportWriter.AssertExpectations(t)
+
+	//Receive response from alice
+	tp.applyTransactionEndorsedEvent(ctx, &ptmgrtypes.TransactionEndorsedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			TransactionID:   newTxID.String(),
+			ContractAddress: testContractAddress.String(),
+		},
+		Endorsement: &prototk.AttestationResult{
+			Name: "foo",
+			Verifier: &prototk.ResolvedVerifier{
+				Lookup:       aliceIdentityLocator,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				Verifier:     aliceVerifier,
+				VerifierType: verifiers.ETH_ADDRESS,
+			},
+		},
+	})
+
+	//simulate the passing of time
+	fakeClock.timePassed = 1*time.Minute + 1*time.Second
+	expectEndorsementRequest("bob@node2", "node2")
+	expectEndorsementRequest("carol@node2", "node2")
+	tp.Action(ctx)
+	mocks.transportWriter.AssertExpectations(t)
+
+	//Receive both responses from carol
+	tp.applyTransactionEndorsedEvent(ctx, &ptmgrtypes.TransactionEndorsedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			TransactionID:   newTxID.String(),
+			ContractAddress: testContractAddress.String(),
+		},
+		Endorsement: &prototk.AttestationResult{
+			Name: "foo",
+			Verifier: &prototk.ResolvedVerifier{
+				Lookup:       carolIdentityLocator,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				Verifier:     carolVerifier,
+				VerifierType: verifiers.ETH_ADDRESS,
+			},
+		},
+	})
+	tp.applyTransactionEndorsedEvent(ctx, &ptmgrtypes.TransactionEndorsedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			TransactionID:   newTxID.String(),
+			ContractAddress: testContractAddress.String(),
+		},
+		Endorsement: &prototk.AttestationResult{
+			Name: "foo",
+			Verifier: &prototk.ResolvedVerifier{
+				Lookup:       carolIdentityLocator,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				Verifier:     carolVerifier,
+				VerifierType: verifiers.ETH_ADDRESS,
+			},
+		},
+	})
+
+	// no further action because we are still waiting for a response from bob
+	//even though we have received 3 responses, we are not ready for dispatch because 2 of them are duplicates
+	tp.Action(ctx)
+}
+
+type fakeClock struct {
+	timePassed time.Duration
+}
+
+func (f *fakeClock) Now() time.Time {
+	return time.Now().Add(f.timePassed)
 }

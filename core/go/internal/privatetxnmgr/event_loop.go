@@ -103,6 +103,7 @@ type Orchestrator struct {
 	stateDistributer    statedistribution.StateDistributer
 	transportWriter     ptmgrtypes.TransportWriter
 	graph               Graph
+	requestTimeout      time.Duration
 }
 
 func NewOrchestrator(
@@ -118,6 +119,7 @@ func NewOrchestrator(
 	identityResolver components.IdentityResolver,
 	stateDistributer statedistribution.StateDistributer,
 	transportWriter ptmgrtypes.TransportWriter,
+	requestTimeout time.Duration,
 ) *Orchestrator {
 
 	newOrchestrator := &Orchestrator{
@@ -147,6 +149,7 @@ func NewOrchestrator(
 		stateDistributer:             stateDistributer,
 		transportWriter:              transportWriter,
 		graph:                        NewGraph(),
+		requestTimeout:               requestTimeout,
 	}
 
 	log.L(ctx).Debugf("NewOrchestrator for contract address %s created: %+v", newOrchestrator.contractAddress, newOrchestrator)
@@ -308,7 +311,7 @@ func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *component
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.syncPoints, oc.transportWriter)
+			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.syncPoints, oc.transportWriter, oc.requestTimeout)
 		}
 		oc.pendingEvents <- &ptmgrtypes.TransactionSubmittedEvent{
 			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
@@ -335,7 +338,7 @@ func (oc *Orchestrator) ProcessInFlightTransaction(ctx context.Context, tx *comp
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.syncPoints, oc.transportWriter)
+			oc.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, oc.nodeID, oc.components, oc.domainAPI, oc.publisher, oc.endorsementGatherer, oc.identityResolver, oc.syncPoints, oc.transportWriter, oc.requestTimeout)
 		}
 		oc.pendingEvents <- &ptmgrtypes.TransactionSwappedInEvent{
 			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},

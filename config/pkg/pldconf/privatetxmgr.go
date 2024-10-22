@@ -20,6 +20,7 @@ type PrivateTxManagerConfig struct {
 	Writer           FlushWriterConfig                  `json:"writer"`
 	Orchestrator     PrivateTxManagerOrchestratorConfig `json:"orchestrator"`
 	StateDistributer StateDistributerConfig             `json:"stateDistributer"`
+	RequestTimeout   *string                            `json:"requestTimeout"`
 }
 
 type StateDistributerConfig struct {
@@ -35,6 +36,7 @@ var PrivateTxManagerDefaults = &PrivateTxManagerConfig{
 		StaleTimeout:            confutil.P("10m"),
 		MaxPendingEvents:        confutil.P(500),
 	},
+	RequestTimeout: confutil.P("15s"),
 }
 
 type PrivateTxManagerOrchestratorConfig struct {

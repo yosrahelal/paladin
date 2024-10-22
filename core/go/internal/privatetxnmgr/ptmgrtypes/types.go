@@ -23,6 +23,7 @@ package ptmgrtypes
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
@@ -117,4 +118,18 @@ type TxProcessor interface {
 	InputStateIDs() []string
 	OutputStateIDs() []string
 	Signer() string
+}
+
+type Clock interface {
+	//wrapper of time.Now()
+	//primarily to allow artificial clocks to be injected for testing
+	Now() time.Time
+}
+type realClock struct{}
+
+func (c *realClock) Now() time.Time {
+	return time.Now()
+}
+func RealClock() Clock {
+	return &realClock{}
 }
