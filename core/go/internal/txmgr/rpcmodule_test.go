@@ -136,9 +136,18 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 		},
 	}
 
+	// Get it back by idempotency key
+	var tx *pldapi.Transaction
+	err = rpcClient.CallRPC(ctx, &tx, "ptx_getTransactionByIdempotencyKey", "not_submitted")
+	require.NoError(t, err)
+	assert.Nil(t, tx)
+	err = rpcClient.CallRPC(ctx, &tx, "ptx_getTransactionByIdempotencyKey", "tx1")
+	require.NoError(t, err)
+	assert.Equal(t, tx1ID, *tx.ID)
+
 	// Query them back
 	var txns []*pldapi.TransactionFull
-	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactionsFull", query.NewQueryBuilder().Limit(1).Query())
 	require.NoError(t, err)
 	assert.Len(t, txns, 1)
 	assert.Equal(t, tx1ID, *txns[0].ID)
@@ -150,7 +159,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 
 	// Check full=false
 	txns = nil
-	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), false)
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query())
 	require.NoError(t, err)
 	assert.Len(t, txns, 1)
 
@@ -197,11 +206,11 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	assert.NoError(t, err)
 	tx2ID := txIDs[0]
 	var tx2 *pldapi.TransactionFull
-	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransaction", tx2ID, true)
+	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransactionFull", tx2ID)
 	require.NoError(t, err)
 	assert.Equal(t, tx2ID, *tx2.ID)
 	assert.Equal(t, "set(uint256)", tx2.Function)
-	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransaction", tx2ID, false)
+	err = rpcClient.CallRPC(ctx, &tx2, "ptx_getTransaction", tx2ID)
 	require.NoError(t, err)
 	assert.Equal(t, tx2ID, *tx2.ID)
 
@@ -211,7 +220,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 
 	// Null on not found is the consistent ethereum pattern
 	var txNotFound *pldapi.Transaction
-	err = rpcClient.CallRPC(ctx, &txns, "ptx_getTransaction", uuid.New(), false)
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_getTransaction", uuid.New())
 	require.NoError(t, err)
 	assert.Nil(t, txNotFound)
 
@@ -233,7 +242,7 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 
 	// We should get that back with full
 	var txWithReceipt *pldapi.TransactionFull
-	err = rpcClient.CallRPC(ctx, &txWithReceipt, "ptx_getTransaction", tx1ID, true)
+	err = rpcClient.CallRPC(ctx, &txWithReceipt, "ptx_getTransactionFull", tx1ID)
 	require.NoError(t, err)
 	require.True(t, txWithReceipt.Receipt.Success)
 	require.Equal(t, txHash1, *txWithReceipt.Receipt.TransactionHash)

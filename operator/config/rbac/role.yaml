@@ -7,13 +7,7 @@ rules:
 - apiGroups:
   - core.paladin.io
   resources:
-  - besugeneses
-  - besus
-  - paladindomains
-  - paladinregistrations
-  - paladinregistries
-  - paladins
-  - smartcontractdeployments
+  - transactioninvokes
   verbs:
   - create
   - delete
@@ -25,25 +19,13 @@ rules:
 - apiGroups:
   - core.paladin.io
   resources:
-  - besugeneses/finalizers
-  - besus/finalizers
-  - paladindomains/finalizers
-  - paladinregistrations/finalizers
-  - paladinregistries/finalizers
-  - paladins/finalizers
-  - smartcontractdeployments/finalizers
+  - transactioninvokes/finalizers
   verbs:
   - update
 - apiGroups:
   - core.paladin.io
   resources:
-  - besugeneses/status
-  - besus/status
-  - paladindomains/status
-  - paladinregistrations/status
-  - paladinregistries/status
-  - paladins/status
-  - smartcontractdeployments/status
+  - transactioninvokes/status
   verbs:
   - get
   - patch

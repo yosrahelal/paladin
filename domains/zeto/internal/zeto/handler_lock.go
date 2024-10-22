@@ -18,10 +18,11 @@ package zeto
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
+	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -43,12 +44,12 @@ type TransferParams struct {
 func (h *lockHandler) ValidateParams(ctx context.Context, config *types.DomainInstanceConfig, params string) (interface{}, error) {
 	var lockParams types.LockParams
 	if err := json.Unmarshal([]byte(params), &lockParams); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal lockProof parameters. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalLockProofParams, err)
 	}
 	// the lockProof() function expects an encoded call to the transfer() function
 	_, err := h.decodeTransferCall(ctx, config, lockParams.Call)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode the transfer call. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeTransferCall, err)
 	}
 	return &lockParams, nil
 }
@@ -58,13 +59,13 @@ func (h *lockHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req
 }
 
 func (h *lockHandler) decodeTransferCall(ctx context.Context, config *types.DomainInstanceConfig, encodedCall []byte) (*TransferParams, error) {
-	contractAbi, err := h.zeto.config.GetContractAbi(config.TokenName)
+	contractAbi, err := h.zeto.config.GetContractAbi(ctx, config.TokenName)
 	if err != nil {
 		return nil, err
 	}
 	transfer := contractAbi.Functions()["transfer"]
 	if transfer == nil {
-		return nil, fmt.Errorf("unknown function: transfer")
+		return nil, i18n.NewError(ctx, msgs.MsgUnknownFunction, "transfer")
 	}
 	paramsJSON, err := decodeParams(ctx, transfer, encodedCall)
 	if err != nil {
@@ -112,12 +113,12 @@ func (h *lockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 	params := tx.Params.(*types.LockParams)
 	decodedTransfer, err := h.decodeTransferCall(context.Background(), tx.DomainConfig, params.Call)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode transfer call data. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorDecodeTransferCall, err)
 	}
 
 	data, err := encodeTransactionData(ctx, req.Transaction)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encode transaction data. %s", err)
+		return nil, i18n.NewError(ctx, msgs.MsgErrorEncodeTxData, err)
 	}
 	LockParams := map[string]interface{}{
 		"delegate": params.Delegate,
@@ -128,7 +129,7 @@ func (h *lockHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 	if err != nil {
 		return nil, err
 	}
-	contractAbi, err := h.zeto.config.GetContractAbi(tx.DomainConfig.TokenName)
+	contractAbi, err := h.zeto.config.GetContractAbi(ctx, tx.DomainConfig.TokenName)
 	if err != nil {
 		return nil, err
 	}

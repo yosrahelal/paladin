@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -129,5 +130,8 @@ func TestWSHandler(t *testing.T) {
 	require.NoError(t, err)
 	defer rpcServer.Stop()
 
-	assert.NotNil(t, rpcServer.WSHandler)
+	req := httptest.NewRequest("GET", "/test", nil)
+	res := httptest.NewRecorder()
+	rpcServer.WSHandler(res, req)
+	assert.Equal(t, http.StatusBadRequest, res.Code)
 }

@@ -20,10 +20,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/alecthomas/assert/v2"
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestWriteFinalizeOperations(t *testing.T) {

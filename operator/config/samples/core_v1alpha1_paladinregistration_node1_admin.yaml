@@ -8,7 +8,7 @@ metadata:
 spec:
   registry: evm-registry
   registryAdminNode: node1 # We are the root key owner
-  registryAdminKey: registry.root
+  registryAdminKey: registry.operator
   node: node1
   nodeAdminKey: registry.node1
   transports:

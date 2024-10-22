@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
@@ -134,8 +135,8 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 		return nil, err
 	}
 
-	factory := domain.LoadBuild(notoFactoryJSON)
-	contract := domain.LoadBuild(notoInterfaceJSON)
+	factory := solutils.MustLoadBuild(notoFactoryJSON)
+	contract := solutils.MustLoadBuild(notoInterfaceJSON)
 
 	n.name = req.Name
 	n.chainID = req.ChainId

@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
@@ -321,7 +322,7 @@ func (h *transferHandler) guardTransfer(ctx context.Context, tx *types.ParsedTra
 	}
 
 	transactionType := prototk.PreparedTransaction_PUBLIC
-	functionABI := domain.LoadBuild(notoGuardJSON).ABI.Functions()["onTransfer"]
+	functionABI := solutils.MustLoadBuild(notoGuardJSON).ABI.Functions()["onTransfer"]
 	var paramsJSON []byte
 
 	if tx.DomainConfig.DecodedData.PrivateAddress != nil {

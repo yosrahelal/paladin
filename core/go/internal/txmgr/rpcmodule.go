@@ -32,7 +32,10 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_sendTransaction", tm.rpcSendTransaction()).
 		Add("ptx_sendTransactions", tm.rpcSendTransactions()).
 		Add("ptx_getTransaction", tm.rpcGetTransaction()).
+		Add("ptx_getTransactionFull", tm.rpcGetTransactionFull()).
+		Add("ptx_getTransactionByIdempotencyKey", tm.rpcGetTransactionByIdempotencyKey()).
 		Add("ptx_queryTransactions", tm.rpcQueryTransactions()).
+		Add("ptx_queryTransactionsFull", tm.rpcQueryTransactionsFull()).
 		Add("ptx_queryPendingTransactions", tm.rpcQueryPendingTransactions()).
 		Add("ptx_getTransactionReceipt", tm.rpcGetTransactionReceipt()).
 		Add("ptx_queryTransactionReceipts", tm.rpcQueryTransactionReceipts()).
@@ -67,26 +70,42 @@ func (tm *txManager) rpcSendTransactions() rpcserver.RPCHandler {
 }
 
 func (tm *txManager) rpcGetTransaction() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod2(func(ctx context.Context,
+	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id uuid.UUID,
-		full bool,
-	) (any, error) {
-		if full {
-			return tm.GetTransactionByIDFull(ctx, id)
-		}
+	) (*pldapi.Transaction, error) {
 		return tm.GetTransactionByID(ctx, id)
 	})
 }
 
+func (tm *txManager) rpcGetTransactionFull() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		id uuid.UUID,
+	) (*pldapi.TransactionFull, error) {
+		return tm.GetTransactionByIDFull(ctx, id)
+	})
+}
+
+func (tm *txManager) rpcGetTransactionByIdempotencyKey() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		idempotencyKey string,
+	) (*pldapi.Transaction, error) {
+		return tm.GetTransactionByIdempotencyKey(ctx, idempotencyKey)
+	})
+}
+
 func (tm *txManager) rpcQueryTransactions() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod2(func(ctx context.Context,
+	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-		full bool,
-	) (any, error) {
-		if full {
-			return tm.QueryTransactionsFull(ctx, &query, false)
-		}
+	) ([]*pldapi.Transaction, error) {
 		return tm.QueryTransactions(ctx, &query, false)
+	})
+}
+
+func (tm *txManager) rpcQueryTransactionsFull() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		query query.QueryJSON,
+	) ([]*pldapi.TransactionFull, error) {
+		return tm.QueryTransactionsFull(ctx, &query, false)
 	})
 }
 

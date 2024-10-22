@@ -672,28 +672,28 @@ func TestCallTransactionNoFrom(t *testing.T) {
 		})
 	defer done()
 
-	abic, err := pldclient.New().ABI(ctx, abi.ABI{
-		{
-			Name: "getSpins",
-			Type: abi.Function,
-			Inputs: abi.ParameterArray{
-				{Name: "wheel", Type: "string"},
+	tx := pldclient.New().ForABI(ctx,
+		abi.ABI{
+			{
+				Name: "getSpins",
+				Type: abi.Function,
+				Inputs: abi.ParameterArray{
+					{Name: "wheel", Type: "string"},
+				},
+				Outputs: abi.ParameterArray{
+					{Name: "times", Type: "uint256"},
+				},
 			},
-			Outputs: abi.ParameterArray{
-				{Name: "times", Type: "uint256"},
-			},
-		},
-	})
-	require.NoError(t, err)
-	tx, err := abic.MustFunction("getSpins").TXBuilder(ctx).
+		}).
+		Function("getSpins").
 		Public().
 		To(tktypes.RandAddress()).
-		Input(map[string]any{"wheel": "of fortune"}).
+		Inputs(map[string]any{"wheel": "of fortune"}).
 		BuildTX()
-	require.NoError(t, err)
+	require.NoError(t, tx.Error())
 
 	var result any
-	err = txm.CallTransaction(ctx, &result, tx)
+	err := txm.CallTransaction(ctx, &result, tx.TX())
 	require.Regexp(t, "PD011517", err) // means we successfully submitted it to the client
 
 }
@@ -710,29 +710,29 @@ func TestCallTransactionWithFrom(t *testing.T) {
 		})
 	defer done()
 
-	abic, err := pldclient.New().ABI(ctx, abi.ABI{
-		{
-			Name: "getSpins",
-			Type: abi.Function,
-			Inputs: abi.ParameterArray{
-				{Name: "wheel", Type: "string"},
+	tx := pldclient.New().ForABI(ctx,
+		abi.ABI{
+			{
+				Name: "getSpins",
+				Type: abi.Function,
+				Inputs: abi.ParameterArray{
+					{Name: "wheel", Type: "string"},
+				},
+				Outputs: abi.ParameterArray{
+					{Name: "times", Type: "uint256"},
+				},
 			},
-			Outputs: abi.ParameterArray{
-				{Name: "times", Type: "uint256"},
-			},
-		},
-	})
-	require.NoError(t, err)
-	tx, err := abic.MustFunction("getSpins").TXBuilder(ctx).
+		}).
+		Function("getSpins").
 		Public().
 		From("red.one").
 		To(tktypes.RandAddress()).
-		Input(map[string]any{"wheel": "of fortune"}).
+		Inputs(map[string]any{"wheel": "of fortune"}).
 		BuildTX()
-	require.NoError(t, err)
+	require.NoError(t, tx.Error())
 
 	var result any
-	err = txm.CallTransaction(ctx, &result, tx)
+	err := txm.CallTransaction(ctx, &result, tx.TX())
 	require.Regexp(t, "PD011517", err) // means we successfully submitted it to the client
 
 }
@@ -751,17 +751,17 @@ func TestCallTransactionPrivNotSupported(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
 	defer done()
 
-	abic, err := pldclient.New().ABI(ctx, abi.ABI{{Name: "getSpins", Type: abi.Function}})
-	require.NoError(t, err)
-	tx, err := abic.MustFunction("getSpins").TXBuilder(ctx).
+	tx := pldclient.New().ForABI(ctx, abi.ABI{{Name: "getSpins", Type: abi.Function}}).
+		Function("getSpins").
 		Private().
+		Domain("test1").
 		To(tktypes.RandAddress()).
-		Input(map[string]any{"wheel": "of fortune"}).
+		Inputs(map[string]any{"wheel": "of fortune"}).
 		BuildTX()
-	require.NoError(t, err)
+	require.NoError(t, tx.Error())
 
 	var result any
-	err = txm.CallTransaction(ctx, &result, tx)
+	err := txm.CallTransaction(ctx, &result, tx.TX())
 	require.Regexp(t, "PD012221", err)
 
 }
