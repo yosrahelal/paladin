@@ -17,9 +17,10 @@ package pldconf
 import "github.com/kaleido-io/paladin/config/pkg/confutil"
 
 type PrivateTxManagerConfig struct {
-	Writer           FlushWriterConfig                  `json:"writer"`
-	Orchestrator     PrivateTxManagerOrchestratorConfig `json:"orchestrator"`
-	StateDistributer StateDistributerConfig             `json:"stateDistributer"`
+	Writer           FlushWriterConfig               `json:"writer"`
+	Sequencer        PrivateTxManagerSequencerConfig `json:"sequencer"`
+	StateDistributer StateDistributerConfig          `json:"stateDistributer"`
+	RequestTimeout   *string                         `json:"requestTimeout"`
 }
 
 type StateDistributerConfig struct {
@@ -28,16 +29,17 @@ type StateDistributerConfig struct {
 }
 
 var PrivateTxManagerDefaults = &PrivateTxManagerConfig{
-	Orchestrator: PrivateTxManagerOrchestratorConfig{
+	Sequencer: PrivateTxManagerSequencerConfig{
 		MaxConcurrentProcess:    confutil.P(500),
 		EvaluationInterval:      confutil.P("5m"),
 		PersistenceRetryTimeout: confutil.P("5s"),
 		StaleTimeout:            confutil.P("10m"),
 		MaxPendingEvents:        confutil.P(500),
 	},
+	RequestTimeout: confutil.P("15s"),
 }
 
-type PrivateTxManagerOrchestratorConfig struct {
+type PrivateTxManagerSequencerConfig struct {
 	MaxConcurrentProcess    *int    `json:"maxConcurrentProcess,omitempty"`
 	MaxPendingEvents        *int    `json:"maxPendingEvents,omitempty"`
 	EvaluationInterval      *string `json:"evalInterval,omitempty"`
