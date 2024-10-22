@@ -124,4 +124,5 @@ var (
 	MsgErrorParseInputSalt                 = ffe("PD210082", "Failed to parse input salt")
 	MsgErrorParseOutputSalt                = ffe("PD210083", "Failed to parse output salt")
 	MsgErrorParseInputCommitment           = ffe("PD210084", "Failed to parse input commitment")
+	MsgNotImplemented                      = ffe("PD210085", "Not implemented")
 )

@@ -409,3 +409,7 @@ func (z *Zeto) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.Sig
 func (z *Zeto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
 	panic("TODO: Must implement once receiving states from other nodes with zeto")
 }
+
+func (z *Zeto) Call(ctx context.Context, req *prototk.CallRequest) (*prototk.CallResponse, error) {
+	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
+}

@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -57,35 +58,28 @@ func (d *domain) newSmartContract(def *PrivateSmartContract) *domainContract {
 	return dc
 }
 
-func (dc *domainContract) InitTransaction(ctx context.Context, tx *components.PrivateTransaction) error {
-	if tx.Inputs == nil {
-		return i18n.NewError(ctx, msgs.MsgDomainTXIncompleteInitTransaction)
-	}
+func (dc *domainContract) processTxInputs(ctx context.Context, txi *components.TransactionInputs) (*prototk.TransactionSpecification, error) {
 
 	// Query the base block height to inform the assembly step that comes later
 	confirmedBlockHeight, err := dc.dm.blockIndexer.GetConfirmedBlockHeight(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// Build the init request
-	txi := tx.Inputs
 	var abiJSON []byte
-	var paramsJSON []byte
 	inputValues, err := txi.Function.Inputs.ParseJSONCtx(ctx, txi.Inputs)
 	if err == nil {
 		abiJSON, err = json.Marshal(txi.Function)
 	}
+	var paramsJSON []byte
 	if err == nil {
 		// Serialize to standardized JSON before passing to domain
 		paramsJSON, err = tktypes.StandardABISerializer().SerializeJSONCtx(ctx, inputValues)
 	}
 	if err != nil {
-		return i18n.WrapError(ctx, err, msgs.MsgDomainInvalidFunctionParams, txi.Function.SolString())
+		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidFunctionParams, txi.Function.SolString())
 	}
-
-	txSpec := &prototk.TransactionSpecification{
-		TransactionId: tktypes.Bytes32UUIDFirst16(tx.ID).String(),
+	return &prototk.TransactionSpecification{
 		ContractInfo: &prototk.ContractInfo{
 			ContractAddress: dc.info.Address.String(),
 			ContractConfig:  dc.info.ConfigBytes,
@@ -96,7 +90,20 @@ func (dc *domainContract) InitTransaction(ctx context.Context, tx *components.Pr
 		FunctionSignature:  txi.Function.SolString(), // we use the proprietary "Solidity inspired" form that is very specific, including param names and nested struct defs
 		BaseBlock:          int64(confirmedBlockHeight),
 		Intent:             txi.Intent,
+	}, nil
+}
+
+func (dc *domainContract) InitTransaction(ctx context.Context, tx *components.PrivateTransaction) error {
+	if tx.Inputs == nil {
+		return i18n.NewError(ctx, msgs.MsgDomainTXIncompleteInitTransaction)
 	}
+
+	txSpec, err := dc.processTxInputs(ctx, tx.Inputs)
+	if err != nil {
+		return err
+	}
+	txSpec.TransactionId = tktypes.Bytes32UUIDFirst16(tx.ID).String()
+
 	// Do the request with the domain
 	res, err := dc.api.InitTransaction(ctx, &prototk.InitTransactionRequest{
 		Transaction: txSpec,
@@ -448,6 +455,43 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *
 		}
 	}
 	return nil
+}
+
+func (dc *domainContract) Call(dCtx components.DomainContext, txi *components.TransactionInputs) (*abi.ComponentValue, error) {
+
+	txSpec, err := dc.processTxInputs(dCtx.Ctx(), txi)
+	if err != nil {
+		return nil, err
+	}
+
+	// We expect queries to the state store during this call
+	c := dc.d.newInFlightDomainRequest(nil, dCtx)
+	defer c.close()
+
+	// Call the domain
+	res, err := dc.api.Call(dCtx.Ctx(), &prototk.CallRequest{
+		StateQueryContext: c.id,
+		Transaction:       txSpec,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// The outputs must conform to the spec
+	outputDef := txi.Function.Outputs
+	if outputDef == nil {
+		outputDef = abi.ParameterArray{}
+	}
+	if res.ResultJson == "" {
+		res.ResultJson = `[]`
+	}
+	cv, err := outputDef.ParseJSONCtx(dCtx.Ctx(), []byte(res.ResultJson))
+	if err != nil {
+		log.L(dCtx.Ctx()).Errorf("Invalid data from domain for %s: %s", txi.Function.SolString(), res.ResultJson)
+		return nil, i18n.WrapError(dCtx.Ctx(), err, msgs.MsgDomainInvalidDataFromDomain)
+	}
+
+	return cv, nil
 }
 
 func (dc *domainContract) Domain() components.Domain {

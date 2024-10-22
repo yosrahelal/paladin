@@ -992,3 +992,127 @@ func TestIncompleteStages(t *testing.T) {
 	err = psc.PrepareTransaction(td.mdc, tx)
 	assert.Regexp(t, "PD011632", err)
 }
+
+func goodPrivateCallWithInputsAndOutputs(psc *domainContract) *components.TransactionInputs {
+	return &components.TransactionInputs{
+		To: psc.info.Address,
+		Function: &abi.Entry{
+			Type: abi.Function,
+			Name: "getBalance",
+			Inputs: abi.ParameterArray{
+				{Name: "address", Type: "address"},
+			},
+			Outputs: abi.ParameterArray{
+				{Name: "amount", Type: "uint256"},
+			},
+		},
+		Inputs: tktypes.RawJSON(`{
+			"address": "0xf2C41ae275A9acE65e1Fb78B97270a61D86Aa0Ed"
+		}`),
+	}
+}
+
+func TestCall(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	psc := goodPSC(td.d)
+
+	td.tp.Functions.Call = func(ctx context.Context, cr *prototk.CallRequest) (*prototk.CallResponse, error) {
+		assert.JSONEq(t, `{"address":"0xf2c41ae275a9ace65e1fb78b97270a61d86aa0ed"}`, cr.Transaction.FunctionParamsJson)
+		assert.Equal(t, "function getBalance(address address) external returns (uint256 amount) { }", cr.Transaction.FunctionSignature)
+		return &prototk.CallResponse{
+			ResultJson: `{"amount": 11223344556677889900}`,
+		}, nil
+	}
+
+	txi := goodPrivateCallWithInputsAndOutputs(psc)
+
+	cv, err := psc.Call(td.c.dCtx, txi)
+	require.NoError(t, err)
+	jv, err := cv.JSON()
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"amount":"11223344556677889900"}`, string(jv))
+}
+
+func TestCallBadInput(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	psc := goodPSC(td.d)
+
+	_, err := psc.Call(td.c.dCtx, &components.TransactionInputs{
+		To: psc.info.Address,
+		Function: &abi.Entry{
+			Type: abi.Function,
+			Name: "getBalance",
+			Inputs: abi.ParameterArray{
+				{Name: "address", Type: "address"},
+			},
+		},
+		Inputs: tktypes.RawJSON(`{
+			"wrong": "0xf2C41ae275A9acE65e1Fb78B97270a61D86Aa0Ed"
+		}`),
+	})
+	assert.Regexp(t, "PD011612", err)
+}
+
+func TestCallBadOutput(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	psc := goodPSC(td.d)
+
+	td.tp.Functions.Call = func(ctx context.Context, cr *prototk.CallRequest) (*prototk.CallResponse, error) {
+		assert.JSONEq(t, `{"address":"0xf2c41ae275a9ace65e1fb78b97270a61d86aa0ed"}`, cr.Transaction.FunctionParamsJson)
+		assert.Equal(t, "function getBalance(address address) external returns (uint256 amount) { }", cr.Transaction.FunctionSignature)
+		return &prototk.CallResponse{
+			ResultJson: `{"wrong": 11223344556677889900}`,
+		}, nil
+	}
+
+	txi := goodPrivateCallWithInputsAndOutputs(psc)
+
+	_, err := psc.Call(td.c.dCtx, txi)
+	assert.Regexp(t, "PD011653", err)
+}
+
+func TestCallNilOutputOk(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	psc := goodPSC(td.d)
+
+	td.tp.Functions.Call = func(ctx context.Context, cr *prototk.CallRequest) (*prototk.CallResponse, error) {
+		assert.JSONEq(t, `{"address":"0xf2c41ae275a9ace65e1fb78b97270a61d86aa0ed"}`, cr.Transaction.FunctionParamsJson)
+		assert.Equal(t, "function getBalance(address address) external { }", cr.Transaction.FunctionSignature)
+		return &prototk.CallResponse{}, nil
+	}
+
+	txi := goodPrivateCallWithInputsAndOutputs(psc)
+	txi.Function.Outputs = nil
+
+	_, err := psc.Call(td.c.dCtx, txi)
+	require.NoError(t, err)
+}
+
+func TestCallFail(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	psc := goodPSC(td.d)
+
+	td.tp.Functions.Call = func(ctx context.Context, cr *prototk.CallRequest) (*prototk.CallResponse, error) {
+		return &prototk.CallResponse{}, fmt.Errorf("pop")
+	}
+
+	txi := goodPrivateCallWithInputsAndOutputs(psc)
+
+	_, err := psc.Call(td.c.dCtx, txi)
+	assert.Regexp(t, "pop", err)
+}

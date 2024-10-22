@@ -493,3 +493,7 @@ func (n *Noto) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest)
 func (n *Noto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }
+
+func (n *Noto) Call(ctx context.Context, req *prototk.CallRequest) (*prototk.CallResponse, error) {
+	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
+}

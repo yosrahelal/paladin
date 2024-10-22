@@ -66,7 +66,10 @@ func (tb *testbed) initRPC() {
 		Add("testbed_prepare", tb.rpcTestbedPrepare()).
 
 		// Performs identity resolution (which in the case of the testbed is just local identities)
-		Add("testbed_resolveVerifier", tb.rpcResolveVerifier())
+		Add("testbed_resolveVerifier", tb.rpcResolveVerifier()).
+
+		// Performs a call directly against the domain
+		Add("testbed_call", tb.rpcTestbedCall())
 
 }
 
@@ -399,5 +402,19 @@ func (tb *testbed) rpcResolveVerifier() rpcserver.RPCHandler {
 			return "", err
 		}
 		return resolvedKey.Verifier.Verifier, err
+	})
+}
+
+func (tb *testbed) rpcTestbedCall() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		invocation tktypes.PrivateContractInvoke,
+	) (tktypes.RawJSON, error) {
+		psc, tx, err := tb.newPrivateTransaction(ctx, invocation, prototk.TransactionSpecification_CALL)
+		if err != nil {
+			return nil, err
+		}
+		if err := psc.InitTransaction(ctx, tx); err != nil {
+			return err
+		}
 	})
 }

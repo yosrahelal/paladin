@@ -71,7 +71,8 @@ message InitTransactionResponse {
 
 // **CALL** this allows a domain to provide a read-only view into the state store, using high-level functions. There are no subsequent actions, and the response data must conform to the ABI supplied, or an error must be returned
 message CallRequest {
-  TransactionSpecification transaction = 1; // The transaction to plan
+  string state_query_context = 1; // handle to supply to state queries performed during this call
+  TransactionSpecification transaction = 2; // The transaction to plan
 }
 
 message CallResponse {
