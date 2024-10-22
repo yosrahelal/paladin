@@ -21,31 +21,49 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/core/mocks/privatetxnmgrmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
+func NewMockTransactionProcessorForTesting(t *testing.T, transactionID uuid.UUID, inputStateIDs []string, outputStateIDs []string, endorsed bool, signer string) *privatetxnmgrmocks.TransactionFlow {
+	mockTransactionProcessor := privatetxnmgrmocks.NewTransactionFlow(t)
+	mockTransactionProcessor.On("ID").Return(transactionID).Maybe()
+	mockTransactionProcessor.On("InputStateIDs").Return(inputStateIDs).Maybe()
+	mockTransactionProcessor.On("OutputStateIDs").Return(outputStateIDs).Maybe()
+	mockTransactionProcessor.On("IsEndorsed", mock.Anything).Return(endorsed).Maybe()
+	mockTransactionProcessor.On("Signer").Return(signer).Maybe()
+	return mockTransactionProcessor
+}
+
 func TestAddTransactions(t *testing.T) {
 	ctx := context.Background()
+	signer := tktypes.RandHex(32)
+
+	TxID0 := uuid.New()
+	mockTransactionProcessor0 := NewMockTransactionProcessorForTesting(t, TxID0, []string{}, []string{"S0"}, false, signer)
+
+	TxID1 := uuid.New()
+	mockTransactionProcessor1 := NewMockTransactionProcessorForTesting(t, TxID1, []string{}, []string{"S1A", "S1B"}, false, signer)
+
+	TxID2 := uuid.New()
+	mockTransactionProcessor2 := NewMockTransactionProcessorForTesting(t, TxID2, []string{}, []string{"S2"}, false, signer)
+
+	TxID3 := uuid.New()
+	mockTransactionProcessor3 := NewMockTransactionProcessorForTesting(t, TxID3, []string{"S0", "S1A"}, []string{"S3"}, false, signer)
 
 	testGraph := NewGraph()
-	err := testGraph.AddTransaction(ctx, "tx0", []string{}, []string{"S0"})
-	require.NoError(t, err)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor0)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor1)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor2)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor3)
 
-	err = testGraph.AddTransaction(ctx, "tx1", []string{}, []string{"S1A", "S1B"})
-	require.NoError(t, err)
-
-	err = testGraph.AddTransaction(ctx, "tx2", []string{}, []string{"S2"})
-	require.NoError(t, err)
-
-	err = testGraph.AddTransaction(ctx, "tx3", []string{"S0", "S1A"}, []string{"S3"})
-	require.NoError(t, err)
-
-	assert.True(t, testGraph.IncludesTransaction("tx0"))
-	assert.True(t, testGraph.IncludesTransaction("tx1"))
-	assert.True(t, testGraph.IncludesTransaction("tx2"))
-	assert.True(t, testGraph.IncludesTransaction("tx3"))
+	assert.True(t, testGraph.IncludesTransaction(TxID0.String()))
+	assert.True(t, testGraph.IncludesTransaction(TxID1.String()))
+	assert.True(t, testGraph.IncludesTransaction(TxID2.String()))
+	assert.True(t, testGraph.IncludesTransaction(TxID3.String()))
 
 }
 
@@ -55,109 +73,29 @@ func TestRemoveTransactions(t *testing.T) {
 	testGraph := NewGraph()
 	signer := tktypes.RandHex(32)
 
-	err := testGraph.AddTransaction(ctx, "tx0", []string{}, []string{"S0"})
-	require.NoError(t, err)
-	err = testGraph.RecordSigner(ctx, "tx0", signer)
-	require.NoError(t, err)
+	TxID0 := uuid.New()
+	mockTransactionProcessor0 := NewMockTransactionProcessorForTesting(t, TxID0, []string{}, []string{"S0"}, false, signer)
 
-	err = testGraph.AddTransaction(ctx, "tx1", []string{}, []string{"S1A", "S1B"})
-	require.NoError(t, err)
-	err = testGraph.RecordSigner(ctx, "tx1", signer)
-	require.NoError(t, err)
+	TxID1 := uuid.New()
+	mockTransactionProcessor1 := NewMockTransactionProcessorForTesting(t, TxID1, []string{}, []string{"S1A", "S1B"}, false, signer)
 
-	err = testGraph.AddTransaction(ctx, "tx2", []string{}, []string{"S2"})
-	require.NoError(t, err)
-	err = testGraph.RecordSigner(ctx, "tx2", signer)
-	require.NoError(t, err)
+	TxID2 := uuid.New()
+	mockTransactionProcessor2 := NewMockTransactionProcessorForTesting(t, TxID2, []string{}, []string{"S2"}, false, signer)
 
-	err = testGraph.AddTransaction(ctx, "tx3", []string{"S0", "S1A"}, []string{"S3"})
-	require.NoError(t, err)
-	err = testGraph.RecordSigner(ctx, "tx3", signer)
-	require.NoError(t, err)
+	TxID3 := uuid.New()
+	mockTransactionProcessor3 := NewMockTransactionProcessorForTesting(t, TxID3, []string{"S0", "S1A"}, []string{"S3"}, false, signer)
 
-	err = testGraph.RemoveTransactions(ctx, map[string][]string{signer: {"tx1", "tx2"}})
-	require.NoError(t, err)
-	assert.True(t, testGraph.IncludesTransaction("tx0"))
-	assert.False(t, testGraph.IncludesTransaction("tx1"))
-	assert.False(t, testGraph.IncludesTransaction("tx2"))
-	assert.True(t, testGraph.IncludesTransaction("tx3"))
+	testGraph.AddTransaction(ctx, mockTransactionProcessor0)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor1)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor2)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor3)
 
-}
+	testGraph.RemoveTransactions(ctx, map[string][]string{signer: {"tx1", "tx2"}})
 
-func TestGetDispatchableTransactions(t *testing.T) {
-	ctx := context.Background()
-
-	// TODO / TBC trying to decide if we should keep this test or do we get good enough coverage on the others
-	// this is extremely white box and is more brittle and will potentially have a high maintenance cost on any future
-	// refactoring of the code under test
-
-	// build the matrix by hand
-	signer := tktypes.RandHex(32)
-
-	testTransactions := []*transaction{
-		{
-			id:             uuid.New().String(),
-			endorsed:       true,
-			signingAddress: signer,
-		},
-		{
-			id:             uuid.New().String(),
-			endorsed:       true,
-			signingAddress: signer,
-		},
-		{
-			id:             uuid.New().String(),
-			endorsed:       false,
-			signingAddress: signer,
-		},
-		{
-			id:             uuid.New().String(),
-			endorsed:       true,
-			signingAddress: signer,
-		},
-		{
-			id:             uuid.New().String(),
-			endorsed:       true,
-			signingAddress: signer,
-		},
-	}
-
-	allTransactions := make(map[string]*transaction)
-	for _, tx := range testTransactions {
-		allTransactions[tx.id] = tx
-	}
-
-	transactionsMatrix := make([][][]string, 5)
-	for i := 0; i < 5; i++ {
-		transactionsMatrix[i] = make([][]string, 5)
-	}
-
-	//state hash is not important for this test
-	transactionsMatrix[0][3] = []string{"foo"}
-	transactionsMatrix[1][3] = []string{"foo"}
-	transactionsMatrix[1][4] = []string{"foo"}
-	transactionsMatrix[2][4] = []string{"foo"}
-
-	testGraph := graph{
-		allTransactions:    allTransactions,
-		transactions:       testTransactions,
-		transactionsMatrix: transactionsMatrix,
-	}
-
-	dispatchable, err := testGraph.GetDispatchableTransactions(ctx)
-	assert.Len(t, dispatchable, 1)
-	dispatchableTransactions := dispatchable[signer]
-	require.NoError(t, err)
-	require.Len(t, dispatchableTransactions, 3)
-
-	//make sure they come out in the expected order
-	// stricly speaking, the absolute order does not matter so long as dependencies come before dependants.
-	//However we also check here that the breadth first search is favouring older transactions as expected
-	assert.Equal(t, testTransactions[0].id, dispatchableTransactions[0])
-	assert.Equal(t, testTransactions[1].id, dispatchableTransactions[1])
-	//transaction 2 is not endorsed so should not be in the dispatchable list
-	assert.Equal(t, testTransactions[3].id, dispatchableTransactions[2])
-	//transaction 4 has a dependency on 2 so should not be in the dispatchable list
+	assert.True(t, testGraph.IncludesTransaction(TxID0.String()))
+	assert.True(t, testGraph.IncludesTransaction(TxID1.String()))
+	assert.True(t, testGraph.IncludesTransaction(TxID2.String()))
+	assert.True(t, testGraph.IncludesTransaction(TxID3.String()))
 
 }
 
@@ -176,42 +114,27 @@ func TestScenario1(t *testing.T) {
 	testGraph := NewGraph()
 	signer := tktypes.RandHex(32)
 
-	err := testGraph.AddTransaction(ctx, "tx0", []string{}, []string{"S0"})
-	require.NoError(t, err)
-	err = testGraph.RecordSigner(ctx, "tx0", signer)
-	require.NoError(t, err)
+	TxID0 := uuid.New()
+	mockTransactionProcessor0 := NewMockTransactionProcessorForTesting(t, TxID0, []string{}, []string{"S0"}, true, signer)
 
-	err = testGraph.AddTransaction(ctx, "tx1", []string{}, []string{"S1A", "S1B"})
-	require.NoError(t, err)
-	err = testGraph.RecordSigner(ctx, "tx1", signer)
-	require.NoError(t, err)
+	TxID1 := uuid.New()
+	mockTransactionProcessor1 := NewMockTransactionProcessorForTesting(t, TxID1, []string{}, []string{"S1A", "S1B"}, true, signer)
 
-	err = testGraph.AddTransaction(ctx, "tx2", []string{}, []string{"S2"})
-	require.NoError(t, err)
-	err = testGraph.RecordSigner(ctx, "tx2", signer)
-	require.NoError(t, err)
+	//Only 2 is not endorsed
+	TxID2 := uuid.New()
+	mockTransactionProcessor2 := NewMockTransactionProcessorForTesting(t, TxID2, []string{}, []string{"S2"}, false, signer)
 
-	err = testGraph.AddTransaction(ctx, "tx3", []string{"S0", "S1A"}, []string{"S3"})
-	require.NoError(t, err)
-	err = testGraph.RecordSigner(ctx, "tx3", signer)
-	require.NoError(t, err)
+	TxID3 := uuid.New()
+	mockTransactionProcessor3 := NewMockTransactionProcessorForTesting(t, TxID3, []string{"S0", "S1A"}, []string{"S3"}, true, signer)
 
-	err = testGraph.AddTransaction(ctx, "tx4", []string{"S1B", "S2"}, []string{"S4"})
-	require.NoError(t, err)
-	err = testGraph.RecordSigner(ctx, "tx4", signer)
-	require.NoError(t, err)
+	TxID4 := uuid.New()
+	mockTransactionProcessor4 := NewMockTransactionProcessorForTesting(t, TxID4, []string{"S1B", "S2"}, []string{"S4"}, true, signer)
 
-	err = testGraph.RecordEndorsement(ctx, "tx0")
-	require.NoError(t, err)
-
-	err = testGraph.RecordEndorsement(ctx, "tx1")
-	require.NoError(t, err)
-
-	err = testGraph.RecordEndorsement(ctx, "tx3")
-	require.NoError(t, err)
-
-	err = testGraph.RecordEndorsement(ctx, "tx4")
-	require.NoError(t, err)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor0)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor1)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor2)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor3)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor4)
 
 	dispatchable, err := testGraph.GetDispatchableTransactions(ctx)
 	require.NoError(t, err)
@@ -225,11 +148,11 @@ func TestScenario1(t *testing.T) {
 	//make sure they come out in the expected order
 	// the absolute order does not matter so long as dependencies come before dependants.
 	// so we expect either 0,1,3 or 1,0,3.
-	assert.True(t, ((dispatchableTransactions[0] == "tx0" && dispatchableTransactions[1] == "tx1") ||
-		(dispatchableTransactions[0] == "tx1" && dispatchableTransactions[1] == "tx0")))
+	assert.True(t, ((dispatchableTransactions[0] == TxID0.String() && dispatchableTransactions[1] == TxID1.String()) ||
+		(dispatchableTransactions[0] == TxID1.String() && dispatchableTransactions[1] == TxID0.String())))
 
 	//transaction 2 is not endorsed so should not be in the dispatchable list
-	assert.Equal(t, "tx3", dispatchableTransactions[2])
+	assert.Equal(t, TxID3.String(), dispatchableTransactions[2])
 
 	// GetDispatchableTransactions is a read only operation so we can call it again and get the same result
 	dispatchable, err = testGraph.GetDispatchableTransactions(ctx)
@@ -242,12 +165,11 @@ func TestScenario1(t *testing.T) {
 	//make sure they come out in the expected order
 	// the absolute order does not matter so long as dependencies come before dependants.
 	// so we expect either 0,1,3 or 1,0,3.
-	assert.True(t, ((dispatchableTransactions[0] == "tx0" && dispatchableTransactions[1] == "tx1") ||
-		(dispatchableTransactions[0] == "tx1" && dispatchableTransactions[1] == "tx0")))
-	assert.Equal(t, "tx3", dispatchableTransactions[2])
+	assert.True(t, ((dispatchableTransactions[0] == TxID0.String() && dispatchableTransactions[1] == TxID1.String()) ||
+		(dispatchableTransactions[0] == TxID1.String() && dispatchableTransactions[1] == TxID0.String())))
+	assert.Equal(t, TxID3.String(), dispatchableTransactions[2])
 
-	err = testGraph.RemoveTransactions(ctx, dispatchable)
-	require.NoError(t, err)
+	testGraph.RemoveTransactions(ctx, dispatchable)
 
 	dispatchable, err = testGraph.GetDispatchableTransactions(ctx)
 	require.NoError(t, err)
@@ -269,53 +191,31 @@ func TestScenario2(t *testing.T) {
 	testGraph := NewGraph()
 	signer := tktypes.RandHex(32)
 
-	err := testGraph.AddTransaction(ctx, "tx0", []string{}, []string{"S0"})
-	require.NoError(t, err)
-	err = testGraph.RecordSigner(ctx, "tx0", signer)
-	require.NoError(t, err)
+	TxID0 := uuid.New()
+	mockTransactionProcessor0 := NewMockTransactionProcessorForTesting(t, TxID0, []string{}, []string{"S0"}, true, signer)
 
-	err = testGraph.AddTransaction(ctx, "tx1", []string{}, []string{"S1"})
-	require.NoError(t, err)
-	err = testGraph.RecordSigner(ctx, "tx1", signer)
-	require.NoError(t, err)
+	TxID1 := uuid.New()
+	mockTransactionProcessor1 := NewMockTransactionProcessorForTesting(t, TxID1, []string{}, []string{"S1"}, true, signer)
 
-	err = testGraph.AddTransaction(ctx, "tx2", []string{"S0"}, []string{"S2"})
-	require.NoError(t, err)
-	err = testGraph.RecordSigner(ctx, "tx2", signer)
-	require.NoError(t, err)
+	//Only 2 is not endorsed
+	TxID2 := uuid.New()
+	mockTransactionProcessor2 := NewMockTransactionProcessorForTesting(t, TxID2, []string{"S0"}, []string{"S2"}, true, signer)
 
-	err = testGraph.AddTransaction(ctx, "tx3", []string{"S1"}, []string{"S3"})
-	require.NoError(t, err)
-	err = testGraph.RecordSigner(ctx, "tx3", signer)
-	require.NoError(t, err)
+	TxID3 := uuid.New()
+	mockTransactionProcessor3 := NewMockTransactionProcessorForTesting(t, TxID3, []string{"S1"}, []string{"S3"}, true, signer)
 
-	err = testGraph.AddTransaction(ctx, "tx4", []string{"S2"}, []string{"S4"})
-	require.NoError(t, err)
-	err = testGraph.RecordSigner(ctx, "tx4", signer)
-	require.NoError(t, err)
+	TxID4 := uuid.New()
+	mockTransactionProcessor4 := NewMockTransactionProcessorForTesting(t, TxID4, []string{"S2"}, []string{"S4"}, true, signer)
 
-	err = testGraph.AddTransaction(ctx, "tx5", []string{"S3"}, []string{"S5"})
-	require.NoError(t, err)
-	err = testGraph.RecordSigner(ctx, "tx5", signer)
-	require.NoError(t, err)
+	TxID5 := uuid.New()
+	mockTransactionProcessor5 := NewMockTransactionProcessorForTesting(t, TxID5, []string{"S3"}, []string{"S5"}, true, signer)
 
-	err = testGraph.RecordEndorsement(ctx, "tx0")
-	require.NoError(t, err)
-
-	err = testGraph.RecordEndorsement(ctx, "tx1")
-	require.NoError(t, err)
-
-	err = testGraph.RecordEndorsement(ctx, "tx2")
-	require.NoError(t, err)
-
-	err = testGraph.RecordEndorsement(ctx, "tx3")
-	require.NoError(t, err)
-
-	err = testGraph.RecordEndorsement(ctx, "tx4")
-	require.NoError(t, err)
-
-	err = testGraph.RecordEndorsement(ctx, "tx5")
-	require.NoError(t, err)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor0)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor1)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor2)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor3)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor4)
+	testGraph.AddTransaction(ctx, mockTransactionProcessor5)
 
 	dispatchable, err := testGraph.GetDispatchableTransactions(ctx)
 	require.NoError(t, err)
@@ -340,13 +240,13 @@ func TestScenario2(t *testing.T) {
 		assert.Failf(t, "%s not found", tx2)
 		return false
 	}
-	assert.True(t, isBefore("tx0", "tx2"))
-	assert.True(t, isBefore("tx0", "tx3"))
-	assert.True(t, isBefore("tx1", "tx2"))
-	assert.True(t, isBefore("tx1", "tx3"))
-	assert.True(t, isBefore("tx2", "tx4"))
-	assert.True(t, isBefore("tx2", "tx5"))
-	assert.True(t, isBefore("tx3", "tx4"))
-	assert.True(t, isBefore("tx3", "tx5"))
+	assert.True(t, isBefore(TxID0.String(), TxID2.String()))
+	assert.True(t, isBefore(TxID0.String(), TxID3.String()))
+	assert.True(t, isBefore(TxID1.String(), TxID2.String()))
+	assert.True(t, isBefore(TxID1.String(), TxID2.String()))
+	assert.True(t, isBefore(TxID2.String(), TxID4.String()))
+	assert.True(t, isBefore(TxID2.String(), TxID5.String()))
+	assert.True(t, isBefore(TxID3.String(), TxID4.String()))
+	assert.True(t, isBefore(TxID3.String(), TxID5.String()))
 
 }

@@ -54,7 +54,7 @@ type SyncPoints interface {
 	PersistDispatchBatch(ctx context.Context, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*statedistribution.StateDistribution) error
 
 	// QueueTransactionFinalize integrates with TxManager to mark a transaction as finalized with the given formatter revert reason
-	// this is an async operation so it can safely be called from the orchestrator event loop thread
+	// this is an async operation so it can safely be called from the sequencer event loop thread
 	// the onCommit and onRollback callbacks are called, on a separate goroutine when the transaction is committed or rolled back
 	QueueTransactionFinalize(ctx context.Context, contractAddress tktypes.EthAddress, transactionID uuid.UUID, failureMessage string, onCommit func(context.Context), onRollback func(context.Context, error))
 

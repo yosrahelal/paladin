@@ -33,9 +33,9 @@ func (p *identityResolver) Destination() string {
 
 func (ir *identityResolver) ReceiveTransportMessage(ctx context.Context, message *components.TransportMessage) {
 	//TODO this need to become an ultra low latency, non blocking, handover to the event loop thread.
-	// need some thought on how to handle errors, retries, buffering, swapping idle orchestrators in and out of memory etc...
+	// need some thought on how to handle errors, retries, buffering, swapping idle sequencers in and out of memory etc...
 
-	//Send the event to the orchestrator for the contract and any transaction manager for the signing key
+	//Send the event to the sequencer for the contract and any transaction manager for the signing key
 	messagePayload := message.Payload
 	replyToDestination := message.ReplyTo
 
