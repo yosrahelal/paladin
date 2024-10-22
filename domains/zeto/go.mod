@@ -6,7 +6,7 @@ require (
 	github.com/go-resty/resty/v2 v2.14.0
 	github.com/hyperledger-labs/zeto/go-sdk v0.0.0-20241004174307-aa3c1fdf0966
 	github.com/hyperledger/firefly-common v1.4.11
-	github.com/hyperledger/firefly-signer v1.1.18-0.20241020190415-2aaf31608d01
+	github.com/hyperledger/firefly-signer v1.1.18
 	github.com/iden3/go-iden3-crypto v0.0.17
 	github.com/iden3/go-rapidsnark/prover v0.0.12
 	github.com/iden3/go-rapidsnark/types v0.0.3
