@@ -18,6 +18,8 @@ package zetosigner
 import (
 	"context"
 
+	zetosigner "github.com/kaleido-io/paladin/domains/zeto/internal/zeto/signer"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 )
@@ -28,19 +30,19 @@ import (
 // TODO: As part of the Paladin domain inside of the Paladin runtime, this can be enabled as a domain
 //
 //	signer to call over to the Zeto domain over gRPC and request signing within the Paladin process itself.
-func NewZetoSignerFactory() signerapi.InMemorySignerFactory[*SnarkProverConfig] {
+func NewZetoSignerFactory() signerapi.InMemorySignerFactory[*zetosignerapi.SnarkProverConfig] {
 	return &zetoSignerFactory{}
 }
 
 // A domain router that only knows about zeto (if that's the only domain you want to manage in your remote code deployment)
-func NewZetoOnlyDomainRouter() signerapi.InMemorySignerFactory[*SnarkProverConfig] {
-	return signer.NewDomainPrefixRouter(map[string]signerapi.InMemorySignerFactory[*SnarkProverConfig]{
+func NewZetoOnlyDomainRouter() signerapi.InMemorySignerFactory[*zetosignerapi.SnarkProverConfig] {
+	return signer.NewDomainPrefixRouter(map[string]signerapi.InMemorySignerFactory[*zetosignerapi.SnarkProverConfig]{
 		"zeto": NewZetoSignerFactory(),
 	})
 }
 
 type zetoSignerFactory struct{}
 
-func (zsf *zetoSignerFactory) NewSigner(ctx context.Context, conf *SnarkProverConfig) (signerapi.InMemorySigner, error) {
-	return NewSnarkProver(conf)
+func (zsf *zetoSignerFactory) NewSigner(ctx context.Context, conf *zetosignerapi.SnarkProverConfig) (signerapi.InMemorySigner, error) {
+	return zetosigner.NewSnarkProver(conf)
 }

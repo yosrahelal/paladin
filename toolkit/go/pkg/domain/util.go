@@ -16,77 +16,8 @@
 package domain
 
 import (
-	"encoding/hex"
-	"encoding/json"
-	"strings"
-
-	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	pb "github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
-
-type SolidityBuild struct {
-	ABI      abi.ABI                   `json:"abi"`
-	Bytecode ethtypes.HexBytes0xPrefix `json:"bytecode"`
-}
-
-type SolidityBuildWithLinks struct {
-	ABI            abi.ABI                                       `json:"abi"`
-	Bytecode       string                                        `json:"bytecode"`
-	LinkReferences map[string]map[string][]SolidityLinkReference `json:"linkReferences"`
-}
-
-type SolidityLinkReference struct {
-	Start  int `json:"start"`
-	Length int `json:"length"`
-}
-
-func LoadBuild(buildOutput []byte) *SolidityBuild {
-	var build SolidityBuild
-	err := json.Unmarshal(buildOutput, &build)
-	if err != nil {
-		panic(err)
-	}
-	return &build
-}
-
-func LoadBuildLinked(buildOutput []byte, libraries map[string]*tktypes.EthAddress) *SolidityBuild {
-	var build SolidityBuildWithLinks
-	err := json.Unmarshal(buildOutput, &build)
-	if err != nil {
-		panic(err)
-	}
-	bytecode, err := linkBytecode(build, libraries)
-	if err != nil {
-		panic(err)
-	}
-	return &SolidityBuild{
-		ABI:      build.ABI,
-		Bytecode: bytecode,
-	}
-}
-
-// linkBytecode: performs linking by replacing placeholders with deployed addresses
-// Based on a workaround from Hardhat team here:
-// https://github.com/nomiclabs/hardhat/issues/611#issuecomment-638891597
-func linkBytecode(artifact SolidityBuildWithLinks, libraries map[string]*tktypes.EthAddress) (ethtypes.HexBytes0xPrefix, error) {
-	bytecode := artifact.Bytecode
-	for _, fileReferences := range artifact.LinkReferences {
-		for libName, fixups := range fileReferences {
-			addr, found := libraries[libName]
-			if !found {
-				continue
-			}
-			for _, fixup := range fixups {
-				start := 2 + fixup.Start*2
-				end := start + fixup.Length*2
-				bytecode = bytecode[0:start] + addr.String()[2:] + bytecode[end:]
-			}
-		}
-	}
-	return hex.DecodeString(strings.TrimPrefix(bytecode, "0x"))
-}
 
 func FindVerifier(lookup, algorithm, verifierType string, verifiers []*pb.ResolvedVerifier) *pb.ResolvedVerifier {
 	for _, verifier := range verifiers {

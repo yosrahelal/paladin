@@ -25,6 +25,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	"github.com/kaleido-io/paladin/domains/integration-test/helpers"
+	"github.com/kaleido-io/paladin/domains/integration-test/zeto"
 	nototypes "github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	zetotypes "github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -139,16 +140,16 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withGuard b
 	encodedExecute := swap.Execute(ctx).Prepare()
 
 	log.L(ctx).Infof("Record the prepared transfers")
-	_, err = swap.Prepare(ctx, &helpers.StateData{
+	sent := swap.Prepare(ctx, &helpers.StateData{
 		Inputs:  transferGold.InputStates,
 		Outputs: transferGold.OutputStates,
-	}).SignAndSend(alice).Wait(ctx)
-	require.NoError(t, err)
-	_, err = swap.Prepare(ctx, &helpers.StateData{
+	}).SignAndSend(alice).Wait(5 * time.Second)
+	require.NoError(t, sent.Error())
+	sent = swap.Prepare(ctx, &helpers.StateData{
 		Inputs:  transferSilver.InputStates,
 		Outputs: transferSilver.OutputStates,
-	}).SignAndSend(bob).Wait(ctx)
-	require.NoError(t, err)
+	}).SignAndSend(bob).Wait(5 * time.Second)
+	require.NoError(t, sent.Error())
 
 	var transferGoldParams NotoTransferParams
 	var transferGoldEncoded []byte
@@ -227,8 +228,8 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withGuard b
 	}).SignAndSend(bob).Wait()
 
 	log.L(ctx).Infof("Execute the atomic operation")
-	_, err = transferAtom.Execute(ctx).SignAndSend(alice).Wait(ctx)
-	require.NoError(t, err)
+	sent = transferAtom.Execute(ctx).SignAndSend(alice).Wait(5 * time.Second)
+	require.NoError(t, sent.Error())
 
 	if withGuard {
 		assert.Equal(t, int64(9), guard.GetBalance(ctx, aliceKey.Verifier.Verifier))
@@ -288,8 +289,8 @@ func TestNotoForZeto(t *testing.T) {
 	}
 
 	log.L(ctx).Infof("Deploying Zeto dependencies")
-	zetoContracts := deployZetoContracts(t, hdWalletSeed, notary)
-	zetoConfig := prepareZetoConfig(t, zetoContracts)
+	zetoContracts := zeto.DeployZetoContracts(t, hdWalletSeed, "./zeto/config-for-deploy.yaml", notary)
+	zetoConfig := zeto.PrepareZetoConfig(t, zetoContracts, "../../domains/zeto/zkp")
 
 	log.L(ctx).Infof("Initializing testbed")
 	waitForNoto, notoTestbed := newNotoDomain(t, &nototypes.DomainConfig{
@@ -367,16 +368,16 @@ func TestNotoForZeto(t *testing.T) {
 
 	// TODO: should probably include the full encoded calls (including the zkp)
 	log.L(ctx).Infof("Record the prepared transfers")
-	_, err = swap.Prepare(ctx, &helpers.StateData{
+	sent := swap.Prepare(ctx, &helpers.StateData{
 		Inputs:  transferNoto.InputStates,
 		Outputs: transferNoto.OutputStates,
-	}).SignAndSend(alice).Wait(ctx)
-	require.NoError(t, err)
-	_, err = swap.Prepare(ctx, &helpers.StateData{
+	}).SignAndSend(alice).Wait(5 * time.Second)
+	require.NoError(t, sent.Error())
+	sent = swap.Prepare(ctx, &helpers.StateData{
 		Inputs:  transferZeto.InputStates,
 		Outputs: transferZeto.OutputStates,
-	}).SignAndSend(bob).Wait(ctx)
-	require.NoError(t, err)
+	}).SignAndSend(bob).Wait(5 * time.Second)
+	require.NoError(t, sent.Error())
 
 	prepared := swap.GetTrade(ctx)
 	aliceData := prepared["userTradeData1"].(map[string]any)
@@ -426,8 +427,8 @@ func TestNotoForZeto(t *testing.T) {
 	zeto.LockProof(ctx, transferAtom.Address, transferZetoEncoded).SignAndSend(bob, false).Wait()
 
 	log.L(ctx).Infof("Execute the atomic operation")
-	_, err = transferAtom.Execute(ctx).SignAndSend(alice).Wait(ctx)
-	require.NoError(t, err)
+	sent = transferAtom.Execute(ctx).SignAndSend(alice).Wait(5 * time.Second)
+	require.NoError(t, sent.Error())
 
 	// TODO: better way to wait for events to be indexed after Atom execution
 	time.Sleep(3 * time.Second)

@@ -18,7 +18,7 @@ package zeto
 import (
 	"testing"
 
-	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -67,7 +67,7 @@ func TestBuildEvents(t *testing.T) {
     }
 ]}`
 
-	contract := domain.LoadBuild([]byte(testABI))
+	contract := solutils.MustLoadBuild([]byte(testABI))
 	events := buildEvents(nil, contract)
 	assert.Equal(t, 2, len(events))
 }

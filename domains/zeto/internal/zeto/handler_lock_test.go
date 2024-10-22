@@ -49,14 +49,14 @@ func TestLockValidateParams(t *testing.T) {
 	}
 	ctx := context.Background()
 	_, err := h.ValidateParams(ctx, config, "bad json")
-	assert.EqualError(t, err, "failed to unmarshal lockProof parameters. invalid character 'b' looking for beginning of value")
+	assert.EqualError(t, err, "PD210059: Failed to unmarshal lockProof parameters. invalid character 'b' looking for beginning of value")
 
 	_, err = h.ValidateParams(ctx, config, "{}")
-	assert.EqualError(t, err, "failed to decode the transfer call. contract test not found")
+	assert.EqualError(t, err, "PD210060: Failed to decode the transfer call. PD210000: Contract test not found")
 
 	config.TokenName = "Zeto_Anon"
 	_, err = h.ValidateParams(ctx, config, "{}")
-	assert.EqualError(t, err, "failed to decode the transfer call. unknown function: transfer")
+	assert.EqualError(t, err, "PD210060: Failed to decode the transfer call. PD210014: Unknown function: transfer")
 
 	h.zeto.config.DomainContracts.Implementations[0].Abi = "[{\"inputs\": [{\"internalType\": \"uint256[2]\",\"name\": \"inputs\",\"type\": \"uint256[2]\"}],\"name\": \"transfer\",\"outputs\": [],\"type\": \"function\"}]"
 	lockParams := types.LockParams{
@@ -66,9 +66,9 @@ func TestLockValidateParams(t *testing.T) {
 	jsonBytes, err := json.Marshal(lockParams)
 	assert.NoError(t, err)
 	_, err = h.ValidateParams(ctx, config, string(jsonBytes))
-	assert.ErrorContains(t, err, "failed to decode the transfer call. FF22049: Incorrect ID for signature transfer(uint256[2])")
+	assert.ErrorContains(t, err, "PD210060: Failed to decode the transfer call. FF22049: Incorrect ID for signature transfer(uint256[2])")
 
-	contractAbi, err := h.zeto.config.GetContractAbi(config.TokenName)
+	contractAbi, err := h.zeto.config.GetContractAbi(ctx, config.TokenName)
 	assert.NoError(t, err)
 	transfer := contractAbi.Functions()["transfer"]
 	assert.NoError(t, err)
@@ -182,10 +182,10 @@ func TestLockPrepare(t *testing.T) {
 		},
 	}
 	_, err := h.Prepare(ctx, tx, req)
-	assert.EqualError(t, err, "failed to decode transfer call data. contract test not found")
+	assert.EqualError(t, err, "PD210060: Failed to decode the transfer call. PD210000: Contract test not found")
 
 	tx.DomainConfig.TokenName = "Zeto_Anon"
-	contractAbi, err := h.zeto.config.GetContractAbi("Zeto_Anon")
+	contractAbi, err := h.zeto.config.GetContractAbi(ctx, "Zeto_Anon")
 	assert.NoError(t, err)
 	transfer := contractAbi.Functions()["transfer"]
 	assert.NoError(t, err)
@@ -199,7 +199,7 @@ func TestLockPrepare(t *testing.T) {
 		Call:     tktypes.HexBytes(bytes),
 	}
 	_, err = h.Prepare(ctx, tx, req)
-	assert.ErrorContains(t, err, "failed to encode transaction data. failed to parse transaction id. PD020007: Invalid hex")
+	assert.ErrorContains(t, err, "PD210049: Failed to encode transaction data. PD210028: Failed to parse transaction id. PD020007: Invalid hex:")
 
 	req.Transaction.TransactionId = "0x1234567890123456789012345678901234567890"
 	_, err = h.Prepare(ctx, tx, req)

@@ -13,6 +13,16 @@ title: API ptx
 
 - [Transaction](../types/transaction.md#transaction)
 
+## ptx_getTransactionByIdempotencyKey
+
+### Parameters
+
+- string
+
+### Returns
+
+- [Transaction](../types/transaction.md#transaction)
+
 ## ptx_getTransactionFull
 
 {% include-markdown "./_includes/gettransactionfull_description.md" %}
@@ -72,4 +82,36 @@ title: API ptx
 ### Returns
 
 - TransactionFull[]
+
+## ptx_resoleVerifier
+
+### Parameters
+
+- string
+- string
+- string
+
+### Returns
+
+- string
+
+## ptx_sendTransaction
+
+### Parameters
+
+- [TransactionInput](../types/transactioninput.md#transactioninput)
+
+### Returns
+
+- [UUID](../types/simpletypes.md#uuid)
+
+## ptx_sendTransactions
+
+### Parameters
+
+- [TransactionInput[]](../types/transactioninput.md#transactioninput)
+
+### Returns
+
+- [UUID[]](../types/simpletypes.md#uuid)
 

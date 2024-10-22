@@ -58,8 +58,7 @@ func transactionReceiptCondition(t *testing.T, ctx context.Context, txID uuid.UU
 	//for the given transaction ID, return a function that can be used in an assert.Eventually to check if the transaction has a receipt
 	return func() bool {
 		txFull := pldapi.TransactionFull{}
-		err := rpcClient.CallRPC(ctx, &txFull, "ptx_getTransaction", txID, true)
-
+		err := rpcClient.CallRPC(ctx, &txFull, "ptx_getTransactionFull", txID)
 		require.NoError(t, err)
 		require.False(t, (txFull.Receipt != nil && txFull.Receipt.Success == false), "Have transaction receipt but not successful")
 		return txFull.Receipt != nil && (!isDeploy || (txFull.Receipt.ContractAddress != nil && *txFull.Receipt.ContractAddress != tktypes.EthAddress{}))
@@ -70,7 +69,7 @@ func transactionRevertedCondition(t *testing.T, ctx context.Context, txID uuid.U
 	//for the given transaction ID, return a function that can be used in an assert.Eventually to check if the transaction has been reverted
 	return func() bool {
 		txFull := pldapi.TransactionFull{}
-		err := rpcClient.CallRPC(ctx, &txFull, "ptx_getTransaction", txID, true)
+		err := rpcClient.CallRPC(ctx, &txFull, "ptx_getTransactionFull", txID)
 		require.NoError(t, err)
 		return txFull.Receipt != nil &&
 			!txFull.Receipt.Success
@@ -411,7 +410,7 @@ func (p *partyForTesting) start(t *testing.T, domainConfig domains.SimpleDomainC
 
 }
 
-func (p *partyForTesting) deploySimpleDomainInstanceContract(t *testing.T, domainRegistryAddress *tktypes.EthAddress, endorsementMode string, constructorParameters *domains.ConstructorParameters) *tktypes.EthAddress {
+func (p *partyForTesting) deploySimpleDomainInstanceContract(t *testing.T, endorsementMode string, constructorParameters *domains.ConstructorParameters) *tktypes.EthAddress {
 
 	var dplyTxID uuid.UUID
 
@@ -433,7 +432,7 @@ func (p *partyForTesting) deploySimpleDomainInstanceContract(t *testing.T, domai
 	)
 
 	var dplyTxFull pldapi.TransactionFull
-	err = p.client.CallRPC(context.Background(), &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
+	err = p.client.CallRPC(context.Background(), &dplyTxFull, "ptx_getTransactionFull", dplyTxID)
 	require.NoError(t, err)
 	require.NotNil(t, dplyTxFull.Receipt)
 	require.True(t, dplyTxFull.Receipt.Success)

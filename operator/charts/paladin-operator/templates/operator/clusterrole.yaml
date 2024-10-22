@@ -8,6 +8,7 @@ rules:
   - core.paladin.io
   resources:
   - smartcontractdeployments
+  - transactioninvokes
   - besus
   - paladins
   - besugeneses
@@ -24,6 +25,7 @@ rules:
   - core.paladin.io
   resources:
   - smartcontractdeployments/status
+  - transactioninvokes/status
   - besus/status
   - paladins/status
   - besugeneses/status
