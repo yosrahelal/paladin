@@ -131,6 +131,18 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 		"outputs": null
 	}`
 
+	fakeCoinGetBalanceABI := `{
+		"type": "function",
+		"name": "getBalance",
+		"inputs": [
+		  {
+		    "name": "account",
+			"type": "string"
+		  }
+		],
+		"outputs": null
+	}`
+
 	fakeDeployPayload := `{
 		"notary": "domain1.contract1.notary",
 		"name": "FakeToken1",
@@ -600,6 +612,13 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 					}
 				}
 				return &res, nil
+			},
+
+			ExecCall: func(ctx context.Context, cr *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
+				tx := cr.Transaction
+				assert.JSONEq(t, fakeCoinGetBalanceABI, tx.FunctionAbiJson)
+				assert.Equal(t, "function transfer(string memory from, string memory to, uint256 amount) external { }", tx.FunctionSignature)
+
 			},
 		}}
 	})

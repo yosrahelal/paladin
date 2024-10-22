@@ -283,14 +283,29 @@ func (br *domainBridge) ValidateStateHashes(ctx context.Context, req *prototk.Va
 	return
 }
 
-func (br *domainBridge) Call(ctx context.Context, req *prototk.CallRequest) (res *prototk.CallResponse, err error) {
+func (br *domainBridge) InitCall(ctx context.Context, req *prototk.InitCallRequest) (res *prototk.InitCallResponse, err error) {
 	err = br.toPlugin.RequestReply(ctx,
 		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
-			dm.Message().RequestToDomain = &prototk.DomainMessage_Call{Call: req}
+			dm.Message().RequestToDomain = &prototk.DomainMessage_InitCall{InitCall: req}
 		},
 		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
-			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_CallRes); ok {
-				res = r.CallRes
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_InitCallRes); ok {
+				res = r.InitCallRes
+			}
+			return res != nil
+		},
+	)
+	return
+}
+
+func (br *domainBridge) ExecCall(ctx context.Context, req *prototk.ExecCallRequest) (res *prototk.ExecCallResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_ExecCall{ExecCall: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_ExecCallRes); ok {
+				res = r.ExecCallRes
 			}
 			return res != nil
 		},

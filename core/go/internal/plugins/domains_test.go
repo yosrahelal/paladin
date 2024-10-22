@@ -203,9 +203,17 @@ func TestDomainRequestsOK(t *testing.T) {
 				StateIds: []string{"state1_out"},
 			}, nil
 		},
-		Call: func(ctx context.Context, cr *prototk.CallRequest) (*prototk.CallResponse, error) {
+		InitCall: func(ctx context.Context, cr *prototk.InitCallRequest) (*prototk.InitCallResponse, error) {
 			assert.Equal(t, "tx1", cr.Transaction.TransactionId)
-			return &prototk.CallResponse{
+			return &prototk.InitCallResponse{
+				RequiredVerifiers: []*prototk.ResolveVerifierRequest{
+					{Lookup: "lookup3"},
+				},
+			}, nil
+		},
+		ExecCall: func(ctx context.Context, cr *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
+			assert.Equal(t, "tx1", cr.Transaction.TransactionId)
+			return &prototk.ExecCallResponse{
 				ResultJson: `{"some":"data"}`,
 			}, nil
 		},
@@ -348,11 +356,17 @@ func TestDomainRequestsOK(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "state1_out", vshr.StateIds[0])
 
-	cr, err := domainAPI.Call(ctx, &prototk.CallRequest{
+	icr, err := domainAPI.InitCall(ctx, &prototk.InitCallRequest{
 		Transaction: &prototk.TransactionSpecification{TransactionId: "tx1"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, `{"some":"data"}`, cr.ResultJson)
+	assert.Equal(t, `lookup3`, icr.RequiredVerifiers[0].Lookup)
+
+	ecr, err := domainAPI.ExecCall(ctx, &prototk.ExecCallRequest{
+		Transaction: &prototk.TransactionSpecification{TransactionId: "tx1"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, `{"some":"data"}`, ecr.ResultJson)
 
 	callbacks := <-waitForCallbacks
 

@@ -406,15 +406,28 @@ func (tb *testbed) rpcResolveVerifier() rpcserver.RPCHandler {
 }
 
 func (tb *testbed) rpcTestbedCall() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod1(func(ctx context.Context,
+	return rpcserver.RPCMethod2(func(ctx context.Context,
 		invocation tktypes.PrivateContractInvoke,
+		dataFormat tktypes.JSONFormatOptions,
 	) (tktypes.RawJSON, error) {
 		psc, tx, err := tb.newPrivateTransaction(ctx, invocation, prototk.TransactionSpecification_CALL)
 		if err != nil {
 			return nil, err
 		}
-		if err := psc.InitTransaction(ctx, tx); err != nil {
-			return err
+
+		dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address(), tb.c.Persistence().DB() /* no TX */)
+		defer dCtx.Close()
+
+		cv, err := psc.Call(dCtx, tx.Inputs)
+		if err != nil {
+			return nil, err
 		}
+
+		serializer, err := dataFormat.GetABISerializer(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		return serializer.SerializeJSONCtx(ctx, cv)
 	})
 }

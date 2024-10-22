@@ -457,7 +457,26 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *
 	return nil
 }
 
-func (dc *domainContract) Call(dCtx components.DomainContext, txi *components.TransactionInputs) (*abi.ComponentValue, error) {
+func (dc *domainContract) InitCall(dCtx components.DomainContext, txi *components.TransactionInputs) ([]*prototk.ResolveVerifierRequest, error) {
+
+	txSpec, err := dc.processTxInputs(dCtx.Ctx(), txi)
+	if err != nil {
+		return nil, err
+	}
+
+	// Call the domain
+	res, err := dc.api.InitCall(dCtx.Ctx(), &prototk.InitCallRequest{
+		Transaction: txSpec,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return res.RequiredVerifiers, nil
+
+}
+
+func (dc *domainContract) ExecCall(dCtx components.DomainContext, txi *components.TransactionInputs, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error) {
 
 	txSpec, err := dc.processTxInputs(dCtx.Ctx(), txi)
 	if err != nil {
@@ -469,8 +488,9 @@ func (dc *domainContract) Call(dCtx components.DomainContext, txi *components.Tr
 	defer c.close()
 
 	// Call the domain
-	res, err := dc.api.Call(dCtx.Ctx(), &prototk.CallRequest{
+	res, err := dc.api.ExecCall(dCtx.Ctx(), &prototk.ExecCallRequest{
 		StateQueryContext: c.id,
+		ResolvedVerifiers: verifiers,
 		Transaction:       txSpec,
 	})
 	if err != nil {

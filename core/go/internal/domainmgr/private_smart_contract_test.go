@@ -1012,38 +1012,45 @@ func goodPrivateCallWithInputsAndOutputs(psc *domainContract) *components.Transa
 	}
 }
 
-func TestCall(t *testing.T) {
+func TestInitCallOk(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
 	psc := goodPSC(td.d)
 
-	td.tp.Functions.Call = func(ctx context.Context, cr *prototk.CallRequest) (*prototk.CallResponse, error) {
-		assert.JSONEq(t, `{"address":"0xf2c41ae275a9ace65e1fb78b97270a61d86aa0ed"}`, cr.Transaction.FunctionParamsJson)
-		assert.Equal(t, "function getBalance(address address) external returns (uint256 amount) { }", cr.Transaction.FunctionSignature)
-		return &prototk.CallResponse{
-			ResultJson: `{"amount": 11223344556677889900}`,
+	td.tp.Functions.InitCall = func(ctx context.Context, icr *prototk.InitCallRequest) (*prototk.InitCallResponse, error) {
+		assert.JSONEq(t, `{"address":"0xf2c41ae275a9ace65e1fb78b97270a61d86aa0ed"}`, icr.Transaction.FunctionParamsJson)
+		assert.Equal(t, "function getBalance(address address) external returns (uint256 amount) { }", icr.Transaction.FunctionSignature)
+		return &prototk.InitCallResponse{
+			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
+				{
+					Lookup:       "lookup1",
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+				},
+			},
 		}, nil
 	}
 
 	txi := goodPrivateCallWithInputsAndOutputs(psc)
 
-	cv, err := psc.Call(td.c.dCtx, txi)
+	requiredVerifiers, err := psc.InitCall(td.c.dCtx, txi)
 	require.NoError(t, err)
-	jv, err := cv.JSON()
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"amount":"11223344556677889900"}`, string(jv))
+	require.Len(t, requiredVerifiers, 1)
+	assert.Equal(t, "lookup1", requiredVerifiers[0].Lookup)
+	assert.Equal(t, algorithms.ECDSA_SECP256K1, requiredVerifiers[0].Algorithm)
+	assert.Equal(t, verifiers.ETH_ADDRESS, requiredVerifiers[0].VerifierType)
 }
 
-func TestCallBadInput(t *testing.T) {
+func TestInitCallBadInput(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
 	psc := goodPSC(td.d)
 
-	_, err := psc.Call(td.c.dCtx, &components.TransactionInputs{
+	_, err := psc.InitCall(td.c.dCtx, &components.TransactionInputs{
 		To: psc.info.Address,
 		Function: &abi.Entry{
 			Type: abi.Function,
@@ -1059,60 +1066,136 @@ func TestCallBadInput(t *testing.T) {
 	assert.Regexp(t, "PD011612", err)
 }
 
-func TestCallBadOutput(t *testing.T) {
+func TestInitCallError(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
 	psc := goodPSC(td.d)
 
-	td.tp.Functions.Call = func(ctx context.Context, cr *prototk.CallRequest) (*prototk.CallResponse, error) {
+	td.tp.Functions.InitCall = func(ctx context.Context, icr *prototk.InitCallRequest) (*prototk.InitCallResponse, error) {
+		return nil, fmt.Errorf("pop")
+	}
+
+	txi := goodPrivateCallWithInputsAndOutputs(psc)
+
+	_, err := psc.InitCall(td.c.dCtx, txi)
+	assert.Regexp(t, "pop", err)
+}
+
+func TestExecCall(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	psc := goodPSC(td.d)
+
+	td.tp.Functions.ExecCall = func(ctx context.Context, cr *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
+		require.Len(t, cr.ResolvedVerifiers, 1)
+		assert.Equal(t, "lookup1", cr.ResolvedVerifiers[0].Lookup)
+		assert.Equal(t, algorithms.ECDSA_SECP256K1, cr.ResolvedVerifiers[0].Algorithm)
+		assert.Equal(t, verifiers.ETH_ADDRESS, cr.ResolvedVerifiers[0].VerifierType)
+		assert.Equal(t, "0xf2c41ae275a9ace65e1fb78b97270a61d86aa0ed", cr.ResolvedVerifiers[0].Verifier)
 		assert.JSONEq(t, `{"address":"0xf2c41ae275a9ace65e1fb78b97270a61d86aa0ed"}`, cr.Transaction.FunctionParamsJson)
 		assert.Equal(t, "function getBalance(address address) external returns (uint256 amount) { }", cr.Transaction.FunctionSignature)
-		return &prototk.CallResponse{
+		return &prototk.ExecCallResponse{
+			ResultJson: `{"amount": 11223344556677889900}`,
+		}, nil
+	}
+
+	txi := goodPrivateCallWithInputsAndOutputs(psc)
+
+	cv, err := psc.ExecCall(td.c.dCtx, txi, []*prototk.ResolvedVerifier{
+		{
+			Lookup:       "lookup1",
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
+			Verifier:     "0xf2c41ae275a9ace65e1fb78b97270a61d86aa0ed",
+		},
+	})
+	require.NoError(t, err)
+	jv, err := cv.JSON()
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"amount":"11223344556677889900"}`, string(jv))
+}
+
+func TestExecCallBadInput(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	psc := goodPSC(td.d)
+
+	_, err := psc.ExecCall(td.c.dCtx, &components.TransactionInputs{
+		To: psc.info.Address,
+		Function: &abi.Entry{
+			Type: abi.Function,
+			Name: "getBalance",
+			Inputs: abi.ParameterArray{
+				{Name: "address", Type: "address"},
+			},
+		},
+		Inputs: tktypes.RawJSON(`{
+			"wrong": "0xf2C41ae275A9acE65e1Fb78B97270a61D86Aa0Ed"
+		}`),
+	}, []*prototk.ResolvedVerifier{})
+	assert.Regexp(t, "PD011612", err)
+}
+
+func TestExecCallBadOutput(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	psc := goodPSC(td.d)
+
+	td.tp.Functions.ExecCall = func(ctx context.Context, cr *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
+		assert.JSONEq(t, `{"address":"0xf2c41ae275a9ace65e1fb78b97270a61d86aa0ed"}`, cr.Transaction.FunctionParamsJson)
+		assert.Equal(t, "function getBalance(address address) external returns (uint256 amount) { }", cr.Transaction.FunctionSignature)
+		return &prototk.ExecCallResponse{
 			ResultJson: `{"wrong": 11223344556677889900}`,
 		}, nil
 	}
 
 	txi := goodPrivateCallWithInputsAndOutputs(psc)
 
-	_, err := psc.Call(td.c.dCtx, txi)
+	_, err := psc.ExecCall(td.c.dCtx, txi, []*prototk.ResolvedVerifier{})
 	assert.Regexp(t, "PD011653", err)
 }
 
-func TestCallNilOutputOk(t *testing.T) {
+func TestExecCallNilOutputOk(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
 	psc := goodPSC(td.d)
 
-	td.tp.Functions.Call = func(ctx context.Context, cr *prototk.CallRequest) (*prototk.CallResponse, error) {
+	td.tp.Functions.ExecCall = func(ctx context.Context, cr *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
 		assert.JSONEq(t, `{"address":"0xf2c41ae275a9ace65e1fb78b97270a61d86aa0ed"}`, cr.Transaction.FunctionParamsJson)
 		assert.Equal(t, "function getBalance(address address) external { }", cr.Transaction.FunctionSignature)
-		return &prototk.CallResponse{}, nil
+		return &prototk.ExecCallResponse{}, nil
 	}
 
 	txi := goodPrivateCallWithInputsAndOutputs(psc)
 	txi.Function.Outputs = nil
 
-	_, err := psc.Call(td.c.dCtx, txi)
+	_, err := psc.ExecCall(td.c.dCtx, txi, []*prototk.ResolvedVerifier{})
 	require.NoError(t, err)
 }
 
-func TestCallFail(t *testing.T) {
+func TestExecCallFail(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
 	psc := goodPSC(td.d)
 
-	td.tp.Functions.Call = func(ctx context.Context, cr *prototk.CallRequest) (*prototk.CallResponse, error) {
-		return &prototk.CallResponse{}, fmt.Errorf("pop")
+	td.tp.Functions.ExecCall = func(ctx context.Context, cr *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
+		return &prototk.ExecCallResponse{}, fmt.Errorf("pop")
 	}
 
 	txi := goodPrivateCallWithInputsAndOutputs(psc)
 
-	_, err := psc.Call(td.c.dCtx, txi)
+	_, err := psc.ExecCall(td.c.dCtx, txi, []*prototk.ResolvedVerifier{})
 	assert.Regexp(t, "pop", err)
 }

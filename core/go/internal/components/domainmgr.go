@@ -74,7 +74,8 @@ type DomainSmartContract interface {
 	EndorseTransaction(dCtx DomainContext, req *PrivateTransactionEndorseRequest) (*EndorsementResult, error)
 	PrepareTransaction(dCtx DomainContext, tx *PrivateTransaction) error
 
-	Call(dCtx DomainContext, tx *TransactionInputs) (*abi.ComponentValue, error)
+	InitCall(dCtx DomainContext, tx *TransactionInputs) ([]*prototk.ResolveVerifierRequest, error)
+	ExecCall(dCtx DomainContext, tx *TransactionInputs, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error)
 
 	ResolveDispatch(ctx context.Context, tx *PrivateTransaction) error
 }
