@@ -44,7 +44,6 @@ type sequencerDepencyMocks struct {
 	transportManager    *componentmocks.TransportManager
 	stateStore          *componentmocks.StateManager
 	keyManager          *componentmocks.KeyManager
-	sequencer           *privatetxnmgrmocks.Sequencer
 	endorsementGatherer *privatetxnmgrmocks.EndorsementGatherer
 	publisher           *privatetxnmgrmocks.Publisher
 	identityResolver    *componentmocks.IdentityResolver
@@ -66,7 +65,6 @@ func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *tk
 		transportManager:    componentmocks.NewTransportManager(t),
 		stateStore:          componentmocks.NewStateManager(t),
 		keyManager:          componentmocks.NewKeyManager(t),
-		sequencer:           privatetxnmgrmocks.NewSequencer(t),
 		endorsementGatherer: privatetxnmgrmocks.NewEndorsementGatherer(t),
 		publisher:           privatetxnmgrmocks.NewPublisher(t),
 		identityResolver:    componentmocks.NewIdentityResolver(t),
@@ -80,7 +78,6 @@ func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *tk
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.allComponents.On("TxManager").Return(mocks.txManager).Maybe()
 	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
-	mocks.sequencer.On("SetDispatcher", mock.Anything).Maybe().Return()
 	p, persistenceDone, err := persistence.NewUnitTestPersistence(ctx)
 	require.NoError(t, err)
 	mocks.allComponents.On("Persistence").Return(p).Maybe()

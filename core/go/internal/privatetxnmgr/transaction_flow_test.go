@@ -43,7 +43,6 @@ type transactionProcessorDepencyMocks struct {
 	transportManager    *componentmocks.TransportManager
 	stateStore          *componentmocks.StateManager
 	keyManager          *componentmocks.KeyManager
-	sequencer           *privatetxnmgrmocks.Sequencer
 	endorsementGatherer *privatetxnmgrmocks.EndorsementGatherer
 	publisher           *privatetxnmgrmocks.Publisher
 	identityResolver    *componentmocks.IdentityResolver
@@ -61,7 +60,6 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 		transportManager:    componentmocks.NewTransportManager(t),
 		stateStore:          componentmocks.NewStateManager(t),
 		keyManager:          componentmocks.NewKeyManager(t),
-		sequencer:           privatetxnmgrmocks.NewSequencer(t),
 		endorsementGatherer: privatetxnmgrmocks.NewEndorsementGatherer(t),
 		publisher:           privatetxnmgrmocks.NewPublisher(t),
 		identityResolver:    componentmocks.NewIdentityResolver(t),
