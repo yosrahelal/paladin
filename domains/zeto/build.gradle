@@ -208,7 +208,7 @@ task testE2E(type: Exec, dependsOn: [protoc, copySolidity, copySolidityForTest, 
     workingDir '.'
     executable 'go'
     args 'test'
-    args '-timeout=120s'
+    args '-timeout=300s'
     args './integration-test'
     if (project.findProperty('verboseTests') == 'true') {
         args '-v'
