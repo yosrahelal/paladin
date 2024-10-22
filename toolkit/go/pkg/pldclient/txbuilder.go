@@ -33,8 +33,11 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-// General builder pattern approaches
-// - Error deferred from builder until you take an
+// General builder pattern approaches:
+// - Context and errors propagate with chaining
+// - Error deferred from return into a chainable object wherever chaining is likely
+// - Setters on the builder have no prefix, as that's the primary job of the builder
+// - Getters are also provided, and have a "Get" prefix to access them
 
 type Chainable interface {
 	GetCtx() context.Context
