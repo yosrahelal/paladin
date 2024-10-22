@@ -119,6 +119,7 @@ func (tw *transportWriter) SendState(ctx context.Context, stateId string, schema
 	return nil
 }
 
+// TODO do we have duplication here?  contractAddress and transactionID are in the transactionSpecification
 func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState) error {
 	attRequestAny, err := anypb.New(attRequest)
 	if err != nil {
