@@ -131,7 +131,7 @@ func TestNewSequencerProcessNewTransactionAssemblyFailed(t *testing.T) {
 	}
 
 	waitForFinalize := make(chan bool, 1)
-	dependencyMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Return(errors.New("fail assembly. Just happy that we got this far"))
+	dependencyMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Return(errors.New("fail assembly. Just happy that we got this far"))
 	dependencyMocks.publisher.On("PublishTransactionAssembleFailedEvent", mock.Anything, newTxID.String(), "mock.Anything").Return(nil).Run(func(args mock.Arguments) {
 		waitForFinalize <- true
 	})

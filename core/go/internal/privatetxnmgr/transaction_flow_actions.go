@@ -93,7 +93,8 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 		// We need to write the potential states to the domain before we can sign or endorse the transaction
 		// but there is no point in doing that until we are sure that the transaction is going to be coordinated locally
 		// so this is the earliest, and latest, point in the flow that we can do this
-		err := tf.domainAPI.WritePotentialStates(tf.endorsementGatherer.DomainContext(), tf.transaction)
+		readTX := tf.components.Persistence().DB() // no DB transaction required here for the reads from the DB (writes happen on syncpoint flusher)
+		err := tf.domainAPI.WritePotentialStates(tf.endorsementGatherer.DomainContext(), readTX, tf.transaction)
 		if err != nil {
 			//Any error from WritePotentialStates is likely to be caused by an invalid init or assemble of the transaction
 			// which is most likely a programming error in the domain or the domain manager or privateTxManager
@@ -251,7 +252,8 @@ func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 
 	if assemblingNode == tf.nodeID || assemblingNode == "" {
 		//we are the node that is responsible for assembling this transaction
-		err = tf.domainAPI.AssembleTransaction(tf.endorsementGatherer.DomainContext(), tf.transaction)
+		readTX := tf.components.Persistence().DB() // no DB transaction required here
+		err = tf.domainAPI.AssembleTransaction(tf.endorsementGatherer.DomainContext(), readTX, tf.transaction)
 		if err != nil {
 			log.L(ctx).Errorf("AssembleTransaction failed: %s", err)
 			tf.publisher.PublishTransactionAssembleFailedEvent(ctx,

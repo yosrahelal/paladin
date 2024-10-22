@@ -171,7 +171,7 @@ func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context
 	if p.endorsementGatherers[contractAddr.String()] == nil {
 		// TODO: Consider scope of state in privateTxManager threading model
 		dCtx := p.components.StateManager().NewDomainContext(p.ctx /* background context */, domainSmartContract.Domain(), contractAddr)
-		endorsementGatherer := NewEndorsementGatherer(domainSmartContract, dCtx, p.components.KeyManager())
+		endorsementGatherer := NewEndorsementGatherer(p.components.Persistence(), domainSmartContract, dCtx, p.components.KeyManager())
 		p.endorsementGatherers[contractAddr.String()] = endorsementGatherer
 	}
 	return p.endorsementGatherers[contractAddr.String()], nil

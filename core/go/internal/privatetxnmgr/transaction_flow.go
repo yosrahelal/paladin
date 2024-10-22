@@ -117,7 +117,8 @@ func (tf *transactionFlow) CoordinatingLocally() bool {
 
 func (tf *transactionFlow) PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error) {
 
-	prepError := tf.domainAPI.PrepareTransaction(tf.endorsementGatherer.DomainContext(), tf.transaction)
+	readTX := tf.components.Persistence().DB() // no DB transaction required here
+	prepError := tf.domainAPI.PrepareTransaction(tf.endorsementGatherer.DomainContext(), readTX, tf.transaction)
 	if prepError != nil {
 		log.L(ctx).Errorf("Error preparing transaction: %s", prepError)
 		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerPrepareError), prepError.Error())

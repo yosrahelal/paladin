@@ -49,6 +49,7 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 )
 
@@ -146,8 +147,8 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	// TODO check that the transaction is signed with this key
 
 	assembled := make(chan struct{}, 1)
-	mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
+	mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
 			AssemblyResult: prototk.AssembleTransactionResponse_OK,
@@ -206,7 +207,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	mocks.keyManager.On("Sign", mock.Anything, notaryKeyMapping, signpayloads.OPAQUE_TO_RSV, mock.Anything).
 		Return([]byte("notary-signature-bytes"), nil)
 
-	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
+	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
 				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
@@ -214,7 +215,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
-			tx := args[1].(*components.PrivateTransaction)
+			tx := args[2].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
@@ -382,8 +383,8 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	assembled := make(chan struct{}, 1)
 	delegated := make(chan struct{}, 1)
 
-	localNodeMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
+	localNodeMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
 			AssemblyResult: prototk.AssembleTransactionResponse_OK,
@@ -451,7 +452,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 
 	notary.mockSign([]byte("some-signature-bytes"))
 
-	remoteEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
+	remoteEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
 				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
@@ -459,7 +460,7 @@ func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
-			tx := args[1].(*components.PrivateTransaction)
+			tx := args[2].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
@@ -589,8 +590,8 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 	}).Return(nil)
 
 	assembled := make(chan struct{}, 1)
-	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
+	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
 			AssemblyResult: prototk.AssembleTransactionResponse_OK,
@@ -690,7 +691,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 
 	carol.mockSign([]byte("carol-signature-bytes"))
 
-	aliceEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
+	aliceEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
 				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
@@ -698,7 +699,7 @@ func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
-			tx := args[1].(*components.PrivateTransaction)
+			tx := args[2].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
@@ -853,8 +854,8 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		},
 	}
 
-	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
+	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
 		switch tx.ID.String() {
 		case tx1.ID.String():
 			tx.PostAssembly = &components.TransactionPostAssembly{
@@ -922,7 +923,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		tx.Signer = signingAddress
 	}).Return(nil)
 
-	aliceEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
+	aliceEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
 				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
@@ -930,7 +931,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
-			tx := args[1].(*components.PrivateTransaction)
+			tx := args[2].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
 			jsonData, _ := cv.JSON()
 			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
@@ -1416,7 +1417,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 			failEarly := make(chan string, 1)
 
 			assembleConcurrency := 0
-			mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+			mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 				//assert that we are not assembling more than 1 transaction at a time
 				if assembleConcurrency > 0 {
 					failEarly <- "Assembling more than one transaction at a time"
@@ -1428,7 +1429,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 
 				// chose a number of dependencies at random 0, 1, 2, 3
 				// for each dependency, chose a different unclaimed pending state to spend
-				tx := args.Get(1).(*components.PrivateTransaction)
+				tx := args.Get(2).(*components.PrivateTransaction)
 
 				var inputStates []*components.FullState
 				numDependencies := min(r.Intn(4), len(unclaimedPendingStatesToMintingTransaction))
@@ -1533,7 +1534,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 				Payload: []byte("some-signature-bytes"),
 			}, nil)
 
-			mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
+			mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 			expectedNonce := uint64(0)
 
@@ -1629,6 +1630,7 @@ func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, pri
 
 type dependencyMocks struct {
 	allComponents       *componentmocks.AllComponents
+	db                  *mockpersistence.SQLMockProvider
 	domain              *componentmocks.Domain
 	domainSmartContract *componentmocks.DomainSmartContract
 	domainContext       *componentmocks.DomainContext
