@@ -92,16 +92,16 @@ type TransportWriter interface {
 	SendEndorsementRequest(ctx context.Context, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState) error
 }
 
-type TxProcessorStatus int
+type TransactionFlowStatus int
 
 const (
-	TxProcessorActive TxProcessorStatus = iota
-	TxProcessorSuspend
-	TxProcessorResume
-	TxProcessorRemove
+	TransactionFlowActive TransactionFlowStatus = iota
+	TransactionFlowSuspend
+	TransactionFlowResume
+	TransactionFlowRemove
 )
 
-type TxProcessor interface {
+type TransactionFlow interface {
 	GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error)
 
 	ApplyEvent(ctx context.Context, event PrivateTransactionEvent)

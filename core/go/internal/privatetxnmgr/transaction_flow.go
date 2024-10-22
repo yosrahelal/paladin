@@ -34,8 +34,8 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func NewPaladinTransactionProcessor(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract /*sequencer ptmgrtypes.Sequencer,*/, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, syncPoints syncpoints.SyncPoints, transportWriter ptmgrtypes.TransportWriter, requestTimeout time.Duration) ptmgrtypes.TxProcessor {
-	return &PaladinTxProcessor{
+func NewTransactionFlow(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, syncPoints syncpoints.SyncPoints, transportWriter ptmgrtypes.TransportWriter, requestTimeout time.Duration) ptmgrtypes.TransactionFlow {
+	return &transactionFlow{
 		stageErrorRetry:             10 * time.Second,
 		domainAPI:                   domainAPI,
 		nodeID:                      nodeID,
@@ -61,7 +61,7 @@ func NewPaladinTransactionProcessor(ctx context.Context, transaction *components
 	}
 }
 
-type PaladinTxProcessor struct {
+type transactionFlow struct {
 	stageErrorRetry             time.Duration
 	components                  components.AllComponents
 	nodeID                      string
@@ -89,152 +89,152 @@ type PaladinTxProcessor struct {
 	requestTimeout              time.Duration
 }
 
-func (ts *PaladinTxProcessor) GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error) {
+func (tf *transactionFlow) GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error) {
 	return components.PrivateTxStatus{
-		TxID:        ts.transaction.ID.String(),
-		Status:      ts.status,
-		LatestEvent: ts.latestEvent,
-		LatestError: ts.latestError,
+		TxID:        tf.transaction.ID.String(),
+		Status:      tf.status,
+		LatestEvent: tf.latestEvent,
+		LatestError: tf.latestError,
 	}, nil
 }
 
-func (ts *PaladinTxProcessor) ApplyEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
+func (tf *transactionFlow) ApplyEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
 
 	//First we update our in memory record of the transaction with the data from the event
 	switch event := event.(type) {
 	case *ptmgrtypes.TransactionSubmittedEvent:
-		ts.applyTransactionSubmittedEvent(ctx, event)
+		tf.applyTransactionSubmittedEvent(ctx, event)
 	case *ptmgrtypes.TransactionSwappedInEvent:
-		ts.applyTransactionSwappedInEvent(ctx, event)
+		tf.applyTransactionSwappedInEvent(ctx, event)
 	case *ptmgrtypes.TransactionSignedEvent:
-		ts.applyTransactionSignedEvent(ctx, event)
+		tf.applyTransactionSignedEvent(ctx, event)
 	case *ptmgrtypes.TransactionEndorsedEvent:
-		ts.applyTransactionEndorsedEvent(ctx, event)
+		tf.applyTransactionEndorsedEvent(ctx, event)
 	case *ptmgrtypes.TransactionAssembledEvent:
-		ts.applyTransactionAssembledEvent(ctx, event)
+		tf.applyTransactionAssembledEvent(ctx, event)
 	case *ptmgrtypes.TransactionAssembleFailedEvent:
-		ts.applyTransactionAssembleFailedEvent(ctx, event)
+		tf.applyTransactionAssembleFailedEvent(ctx, event)
 	case *ptmgrtypes.TransactionDispatchedEvent:
-		ts.applyTransactionDispatchedEvent(ctx, event)
+		tf.applyTransactionDispatchedEvent(ctx, event)
 	case *ptmgrtypes.TransactionConfirmedEvent:
-		ts.applyTransactionConfirmedEvent(ctx, event)
+		tf.applyTransactionConfirmedEvent(ctx, event)
 	case *ptmgrtypes.TransactionRevertedEvent:
-		ts.applyTransactionRevertedEvent(ctx, event)
+		tf.applyTransactionRevertedEvent(ctx, event)
 	case *ptmgrtypes.TransactionDelegatedEvent:
-		ts.applyTransactionDelegatedEvent(ctx, event)
+		tf.applyTransactionDelegatedEvent(ctx, event)
 	case *ptmgrtypes.ResolveVerifierResponseEvent:
-		ts.applyResolveVerifierResponseEvent(ctx, event)
+		tf.applyResolveVerifierResponseEvent(ctx, event)
 	case *ptmgrtypes.ResolveVerifierErrorEvent:
-		ts.applyResolveVerifierErrorEvent(ctx, event)
+		tf.applyResolveVerifierErrorEvent(ctx, event)
 	case *ptmgrtypes.TransactionFinalizedEvent:
-		ts.applyTransactionFinalizedEvent(ctx, event)
+		tf.applyTransactionFinalizedEvent(ctx, event)
 	case *ptmgrtypes.TransactionFinalizeError:
-		ts.applyTransactionFinalizeError(ctx, event)
+		tf.applyTransactionFinalizeError(ctx, event)
 
 	default:
 		log.L(ctx).Warnf("Unknown event type: %T", event)
 	}
 }
 
-func (ts *PaladinTxProcessor) IsComplete() bool {
-	return ts.complete
+func (tf *transactionFlow) IsComplete() bool {
+	return tf.complete
 }
 
-func (ts *PaladinTxProcessor) ReadyForSequencing() bool {
-	return ts.readyForSequencing
+func (tf *transactionFlow) ReadyForSequencing() bool {
+	return tf.readyForSequencing
 }
 
-func (ts *PaladinTxProcessor) Dispatched() bool {
-	return ts.dispatched
+func (tf *transactionFlow) Dispatched() bool {
+	return tf.dispatched
 }
 
-func (ts *PaladinTxProcessor) IsEndorsed(ctx context.Context) bool {
-	return !ts.hasOutstandingEndorsementRequests(ctx)
+func (tf *transactionFlow) IsEndorsed(ctx context.Context) bool {
+	return !tf.hasOutstandingEndorsementRequests(ctx)
 }
 
-func (ts *PaladinTxProcessor) CoordinatingLocally() bool {
-	return ts.localCoordinator
+func (tf *transactionFlow) CoordinatingLocally() bool {
+	return tf.localCoordinator
 }
 
-func (ts *PaladinTxProcessor) applyTransactionSubmittedEvent(ctx context.Context, _ *ptmgrtypes.TransactionSubmittedEvent) {
-	log.L(ctx).Debug("PaladinTxProcessor:applyTransactionSubmittedEvent")
+func (tf *transactionFlow) applyTransactionSubmittedEvent(ctx context.Context, _ *ptmgrtypes.TransactionSubmittedEvent) {
+	log.L(ctx).Debug("transactionFlow:applyTransactionSubmittedEvent")
 
-	ts.latestEvent = "TransactionSubmittedEvent"
-
-}
-
-func (ts *PaladinTxProcessor) applyTransactionSwappedInEvent(ctx context.Context, _ *ptmgrtypes.TransactionSwappedInEvent) {
-	log.L(ctx).Debug("PaladinTxProcessor:applyTransactionSwappedInEvent")
-
-	ts.latestEvent = "TransactionSwappedInEvent"
+	tf.latestEvent = "TransactionSubmittedEvent"
 
 }
 
-func (ts *PaladinTxProcessor) Action(ctx context.Context) {
-	log.L(ctx).Debug("PaladinTxProcessor:Action")
-	if ts.complete {
-		log.L(ctx).Infof("Transaction %s is complete", ts.transaction.ID.String())
+func (tf *transactionFlow) applyTransactionSwappedInEvent(ctx context.Context, _ *ptmgrtypes.TransactionSwappedInEvent) {
+	log.L(ctx).Debug("transactionFlow:applyTransactionSwappedInEvent")
+
+	tf.latestEvent = "TransactionSwappedInEvent"
+
+}
+
+func (tf *transactionFlow) Action(ctx context.Context) {
+	log.L(ctx).Debug("transactionFlow:Action")
+	if tf.complete {
+		log.L(ctx).Infof("Transaction %s is complete", tf.transaction.ID.String())
 		return
 	}
 
-	if ts.dispatched {
-		log.L(ctx).Infof("Transaction %s is dispatched", ts.transaction.ID.String())
+	if tf.dispatched {
+		log.L(ctx).Infof("Transaction %s is dispatched", tf.transaction.ID.String())
 		return
 	}
 
 	// Lets get the nasty stuff out of the way first
 	// if the event handler has marked the transaction as failed, then we initiate the finalize sync point
-	if ts.finalizeRequired {
-		if ts.finalizePending {
-			log.L(ctx).Infof("Transaction %s finalize already pending", ts.transaction.ID.String())
+	if tf.finalizeRequired {
+		if tf.finalizePending {
+			log.L(ctx).Infof("Transaction %s finalize already pending", tf.transaction.ID.String())
 			return
 		}
 		//we know we need to finalize but we are not currently waiting for a finalize to complete
 		// most likely a previous attempt to finalize has failed
-		ts.finalize(ctx)
+		tf.finalize(ctx)
 	}
 
-	if ts.transaction.PreAssembly == nil {
+	if tf.transaction.PreAssembly == nil {
 		panic("PreAssembly is nil.")
 		//This should never happen unless there is a serious programming error or the memory has been corrupted
 		// PreAssembly is checked for nil after InitTransaction which is during the synchronous transaction request
 		// and before it is added to the transaction processor / dispatched to the event loop
 	}
 
-	if ts.transaction.PostAssembly == nil {
+	if tf.transaction.PostAssembly == nil {
 		log.L(ctx).Debug("not assembled yet - or was assembled and reverted")
 
 		//if we have not sent a request, or if the request has timed out or been invalided by a re-assembly, then send the request
-		ts.requestVerifierResolution(ctx)
-		if ts.hasOutstandingVerifierRequests(ctx) {
-			log.L(ctx).Infof("Transaction %s not ready to assemble. Waiting for verifiers to be resolved", ts.transaction.ID.String())
+		tf.requestVerifierResolution(ctx)
+		if tf.hasOutstandingVerifierRequests(ctx) {
+			log.L(ctx).Infof("Transaction %s not ready to assemble. Waiting for verifiers to be resolved", tf.transaction.ID.String())
 			return
 		}
 
-		ts.requestAssemble(ctx)
-		if ts.transaction.PostAssembly == nil {
-			log.L(ctx).Infof("Transaction %s not assembled. Waiting for assembler to return", ts.transaction.ID.String())
+		tf.requestAssemble(ctx)
+		if tf.transaction.PostAssembly == nil {
+			log.L(ctx).Infof("Transaction %s not assembled. Waiting for assembler to return", tf.transaction.ID.String())
 			return
 		}
 	}
 
-	ts.delegateIfRequired(ctx)
-	if ts.status == "delegating" {
-		log.L(ctx).Infof("Transaction %s is delegating", ts.transaction.ID.String())
+	tf.delegateIfRequired(ctx)
+	if tf.status == "delegating" {
+		log.L(ctx).Infof("Transaction %s is delegating", tf.transaction.ID.String())
 		return
 	}
 
-	if ts.status == "delegated" {
+	if tf.status == "delegated" {
 		// probably should not get here because the sequencer should have removed the transaction processor
-		log.L(ctx).Infof("Transaction %s has been delegated", ts.transaction.ID.String())
+		log.L(ctx).Infof("Transaction %s has been delegated", tf.transaction.ID.String())
 		return
 	}
 
-	if ts.transaction.PostAssembly.OutputStatesPotential != nil && ts.transaction.PostAssembly.OutputStates == nil {
+	if tf.transaction.PostAssembly.OutputStatesPotential != nil && tf.transaction.PostAssembly.OutputStates == nil {
 		// We need to write the potential states to the domain before we can sign or endorse the transaction
 		// but there is no point in doing that until we are sure that the transaction is going to be coordinated locally
 		// so this is the earliest, and latest, point in the flow that we can do this
-		err := ts.domainAPI.WritePotentialStates(ts.endorsementGatherer.DomainContext(), ts.transaction)
+		err := tf.domainAPI.WritePotentialStates(tf.endorsementGatherer.DomainContext(), tf.transaction)
 		if err != nil {
 			//Any error from WritePotentialStates is likely to be caused by an invalid init or assemble of the transaction
 			// which ist most likely a programming error in the domain or the domain manager or privateTxManager
@@ -242,38 +242,38 @@ func (ts *PaladinTxProcessor) Action(ctx context.Context) {
 			errorMessage := fmt.Sprintf("Failed to write potential states: %s", err)
 			log.L(ctx).Error(errorMessage)
 			//TODO publish an event that will cause the transaction to be reverted
-			//ts.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage))
+			//tf.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage))
 			return
 		}
 	}
-	ts.readyForSequencing = true
+	tf.readyForSequencing = true
 
 	//If we get here, we have an assembled transaction and have no intention of delegating it
 	// so we are responsible for coordinating the endorsement flow
 
 	// either because it was submitted locally and we decided not to delegate or because it was delegated to us
 	// start with fulfilling any outstanding signature requests
-	ts.requestSignatures(ctx)
-	if ts.hasOutstandingSignatureRequests() {
+	tf.requestSignatures(ctx)
+	if tf.hasOutstandingSignatureRequests() {
 		return
 	}
-	ts.status = "signed"
+	tf.status = "signed"
 
-	ts.requestEndorsements(ctx)
-	if ts.hasOutstandingEndorsementRequests(ctx) {
+	tf.requestEndorsements(ctx)
+	if tf.hasOutstandingEndorsementRequests(ctx) {
 		return
 	}
-	ts.status = "endorsed"
+	tf.status = "endorsed"
 
 	// TODO is this too late to be resolving the dispatch key?
 	// Can we do it any earlier or do we need to wait until we have all endorsements ( i.e. so that the endorser can declare ENDORSER_MUST_SUBMIT)
 	// We would need to do it earlier if we want to avoid transactions for different dispatch keys ending up in the same dependency graph
-	if ts.transaction.Signer == "" {
-		err := ts.domainAPI.ResolveDispatch(ctx, ts.transaction)
+	if tf.transaction.Signer == "" {
+		err := tf.domainAPI.ResolveDispatch(ctx, tf.transaction)
 		if err != nil {
 
-			log.L(ctx).Errorf("Failed to resolve dispatch for transaction %s: %s", ts.transaction.ID.String(), err)
-			ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerResolveDispatchError), err.Error())
+			log.L(ctx).Errorf("Failed to resolve dispatch for transaction %s: %s", tf.transaction.ID.String(), err)
+			tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerResolveDispatchError), err.Error())
 
 			//TODO as it stands, we will just enter a retry loop of trying to resolve the dispatcher next time the event loop triggers an action
 			// if we are lucky, that will be triggered by an event that somehow changes the in memory state in a way that the dispatcher can be
@@ -284,14 +284,14 @@ func (ts *PaladinTxProcessor) Action(ctx context.Context) {
 	}
 }
 
-func (ts *PaladinTxProcessor) hasOutstandingVerifierRequests(ctx context.Context) bool {
-	log.L(ctx).Debug("PaladinTxProcessor:hasOutstandingVerifierRequests")
+func (tf *transactionFlow) hasOutstandingVerifierRequests(ctx context.Context) bool {
+	log.L(ctx).Debug("transactionFlow:hasOutstandingVerifierRequests")
 
 	// assume they are all resolved until we find one in RequiredVerifiers that is not in Verifiers
 	verifiersResolved := true
-	for _, v := range ts.transaction.PreAssembly.RequiredVerifiers {
+	for _, v := range tf.transaction.PreAssembly.RequiredVerifiers {
 		thisVerifierIsResolved := false
-		for _, rv := range ts.transaction.PreAssembly.Verifiers {
+		for _, rv := range tf.transaction.PreAssembly.Verifiers {
 			if rv.Lookup == v.Lookup {
 				thisVerifierIsResolved = true
 				break
@@ -304,73 +304,73 @@ func (ts *PaladinTxProcessor) hasOutstandingVerifierRequests(ctx context.Context
 	if verifiersResolved {
 		return false
 	} else {
-		log.L(ctx).Infof("Waiting for verifiers to be resolved for transaction %s", ts.transaction.ID.String())
+		log.L(ctx).Infof("Waiting for verifiers to be resolved for transaction %s", tf.transaction.ID.String())
 		return true
 	}
 
 }
 
-func (ts *PaladinTxProcessor) revertTransaction(ctx context.Context, revertReason string) {
-	log.L(ctx).Errorf("Reverting transaction %s: %s", ts.transaction.ID.String(), revertReason)
+func (tf *transactionFlow) revertTransaction(ctx context.Context, revertReason string) {
+	log.L(ctx).Errorf("Reverting transaction %s: %s", tf.transaction.ID.String(), revertReason)
 	//trigger a finalize and update the transaction state so that finalize can be retried if it fails
-	ts.finalizeRequired = true
-	ts.finalizePending = true
-	ts.finalizeReason = revertReason
-	ts.finalize(ctx)
+	tf.finalizeRequired = true
+	tf.finalizePending = true
+	tf.finalizeReason = revertReason
+	tf.finalize(ctx)
 
 }
 
-func (ts *PaladinTxProcessor) finalize(ctx context.Context) {
-	log.L(ctx).Errorf("finalize transaction %s: %s", ts.transaction.ID.String(), ts.finalizeReason)
+func (tf *transactionFlow) finalize(ctx context.Context) {
+	log.L(ctx).Errorf("finalize transaction %s: %s", tf.transaction.ID.String(), tf.finalizeReason)
 	//flush that to the txmgr database
 	// so that the user can see that it is reverted and so that we stop retrying to assemble and endorse it
 
-	ts.syncPoints.QueueTransactionFinalize(
+	tf.syncPoints.QueueTransactionFinalize(
 		ctx,
-		ts.domainAPI.Address(),
-		ts.transaction.ID,
-		ts.finalizeReason,
+		tf.domainAPI.Address(),
+		tf.transaction.ID,
+		tf.finalizeReason,
 		func(ctx context.Context) {
 			//we are not on the main event loop thread so can't update in memory state here.
 			// need to go back into the event loop
-			log.L(ctx).Infof("Transaction %s finalize committed", ts.transaction.ID.String())
-			go ts.publisher.PublishTransactionFinalizedEvent(ctx, ts.transaction.ID.String())
+			log.L(ctx).Infof("Transaction %s finalize committed", tf.transaction.ID.String())
+			go tf.publisher.PublishTransactionFinalizedEvent(ctx, tf.transaction.ID.String())
 		},
 		func(ctx context.Context, rollbackErr error) {
 			//we are not on the main event loop thread so can't update in memory state here.
 			// need to go back into the event loop
-			log.L(ctx).Errorf("Transaction %s finalize rolled back: %s", ts.transaction.ID.String(), rollbackErr)
-			go ts.publisher.PublishTransactionFinalizeError(ctx, ts.transaction.ID.String(), ts.finalizeReason, rollbackErr)
+			log.L(ctx).Errorf("Transaction %s finalize rolled back: %s", tf.transaction.ID.String(), rollbackErr)
+			go tf.publisher.PublishTransactionFinalizeError(ctx, tf.transaction.ID.String(), tf.finalizeReason, rollbackErr)
 		},
 	)
 }
 
-func (ts *PaladinTxProcessor) applyTransactionAssembledEvent(ctx context.Context, _ *ptmgrtypes.TransactionAssembledEvent) {
-	ts.latestEvent = "TransactionAssembledEvent"
-	if ts.transaction.PostAssembly.AssemblyResult == prototk.AssembleTransactionResponse_REVERT {
+func (tf *transactionFlow) applyTransactionAssembledEvent(ctx context.Context, _ *ptmgrtypes.TransactionAssembledEvent) {
+	tf.latestEvent = "TransactionAssembledEvent"
+	if tf.transaction.PostAssembly.AssemblyResult == prototk.AssembleTransactionResponse_REVERT {
 		// Not sure if any domains actually use this but it is a valid response to indicate failure
 		log.L(ctx).Errorf("AssemblyResult is AssembleTransactionResponse_REVERT")
-		ts.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleRevert)))
+		tf.revertTransaction(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleRevert)))
 		return
 	}
-	ts.status = "assembled"
+	tf.status = "assembled"
 
 }
 
-func (ts *PaladinTxProcessor) applyTransactionAssembleFailedEvent(ctx context.Context, event *ptmgrtypes.TransactionAssembleFailedEvent) {
-	log.L(ctx).Debugf("PaladinTxProcessor:applyTransactionAssembleFailedEvent: %s", event.Error)
-	ts.latestEvent = "TransactionAssembleFailedEvent"
-	ts.latestError = event.Error
-	ts.finalizeRequired = true
-	ts.finalizeReason = event.Error
+func (tf *transactionFlow) applyTransactionAssembleFailedEvent(ctx context.Context, event *ptmgrtypes.TransactionAssembleFailedEvent) {
+	log.L(ctx).Debugf("transactionFlow:applyTransactionAssembleFailedEvent: %s", event.Error)
+	tf.latestEvent = "TransactionAssembleFailedEvent"
+	tf.latestError = event.Error
+	tf.finalizeRequired = true
+	tf.finalizeReason = event.Error
 }
 
-func (ts *PaladinTxProcessor) delegateIfRequired(ctx context.Context) {
-	log.L(ctx).Debug("PaladinTxProcessor:delegateIfRequired")
-	if ts.transaction.PostAssembly.AttestationPlan != nil {
+func (tf *transactionFlow) delegateIfRequired(ctx context.Context) {
+	log.L(ctx).Debug("transactionFlow:delegateIfRequired")
+	if tf.transaction.PostAssembly.AttestationPlan != nil {
 		numEndorsers := 0
 		endorser := "" // will only be used if there is only one
-		for _, attRequest := range ts.transaction.PostAssembly.AttestationPlan {
+		for _, attRequest := range tf.transaction.PostAssembly.AttestationPlan {
 			if attRequest.AttestationType == prototk.AttestationType_ENDORSE {
 				numEndorsers = numEndorsers + len(attRequest.Parties)
 				endorser = attRequest.Parties[0]
@@ -382,26 +382,26 @@ func (ts *PaladinTxProcessor) delegateIfRequired(ctx context.Context) {
 		// and dispatch to base ledger so we might as well delegate the coordination to it so that
 		// it can maximize the optimistic spending of pending states
 
-		if ts.domainAPI.Domain().Configuration().GetBaseLedgerSubmitConfig().GetSubmitMode() == prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION && numEndorsers == 1 {
+		if tf.domainAPI.Domain().Configuration().GetBaseLedgerSubmitConfig().GetSubmitMode() == prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION && numEndorsers == 1 {
 			endorserNode, err := tktypes.PrivateIdentityLocator(endorser).Node(ctx, true)
 			if err != nil {
-				log.L(ctx).Errorf("Failed to get node name from locator %s: %s", ts.transaction.PostAssembly.AttestationPlan[0].Parties[0], err)
-				ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
+				log.L(ctx).Errorf("Failed to get node name from locator %s: %s", tf.transaction.PostAssembly.AttestationPlan[0].Parties[0], err)
+				tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
 				return
 			}
-			if endorserNode != ts.nodeID && endorserNode != "" {
-				ts.localCoordinator = false
+			if endorserNode != tf.nodeID && endorserNode != "" {
+				tf.localCoordinator = false
 				// TODO persist the delegation and send the request on the callback
-				ts.status = "delegating"
+				tf.status = "delegating"
 				// TODO update to "delegated" once the ack has been received
-				err := ts.transportWriter.SendDelegationRequest(
+				err := tf.transportWriter.SendDelegationRequest(
 					ctx,
 					uuid.New().String(),
 					endorserNode,
-					ts.transaction,
+					tf.transaction,
 				)
 				if err != nil {
-					ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
+					tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
 				}
 				return
 			}
@@ -409,7 +409,7 @@ func (ts *PaladinTxProcessor) delegateIfRequired(ctx context.Context) {
 	}
 }
 
-func (ts *PaladinTxProcessor) requestAssemble(ctx context.Context) {
+func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 	//Assemble may require a call to another node ( in the case we have been delegated to coordinate transaction for other nodes)
 	//Usually, they will get sent to us already assembled but there may be cases where we need to re-assemble
 	// so this needs to be an async step
@@ -417,66 +417,66 @@ func (ts *PaladinTxProcessor) requestAssemble(ctx context.Context) {
 	//   (TODO - maybe in future, we could further optimise this and allow multiple assembles to be in progress if we can assert that they are not presented with the same available states)
 	//   However, before we do that, we really need to sort out the separation of concerns between the domain manager, state store and private transaction manager and where the responsibility to single thread the assembly stream(s) lies
 
-	log.L(ctx).Debug("PaladinTxProcessor:requestAssemble")
+	log.L(ctx).Debug("transactionFlow:requestAssemble")
 
-	if ts.transaction.PostAssembly != nil {
+	if tf.transaction.PostAssembly != nil {
 		log.L(ctx).Debug("already assembled")
 		return
 	}
 
-	assemblingNode, err := tktypes.PrivateIdentityLocator(ts.transaction.Inputs.From).Node(ctx, true)
+	assemblingNode, err := tktypes.PrivateIdentityLocator(tf.transaction.Inputs.From).Node(ctx, true)
 	if err != nil {
 
-		log.L(ctx).Errorf("Failed to get node name from locator %s: %s", ts.transaction.Inputs.From, err)
-		ts.publisher.PublishTransactionAssembleFailedEvent(
+		log.L(ctx).Errorf("Failed to get node name from locator %s: %s", tf.transaction.Inputs.From, err)
+		tf.publisher.PublishTransactionAssembleFailedEvent(
 			ctx,
-			ts.transaction.ID.String(),
+			tf.transaction.ID.String(),
 			i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), "Failed to get node name from locator"),
 		)
 		return
 	}
 
-	if assemblingNode == ts.nodeID || assemblingNode == "" {
+	if assemblingNode == tf.nodeID || assemblingNode == "" {
 		//we are the node that is responsible for assembling this transaction
-		err = ts.domainAPI.AssembleTransaction(ts.endorsementGatherer.DomainContext(), ts.transaction)
+		err = tf.domainAPI.AssembleTransaction(tf.endorsementGatherer.DomainContext(), tf.transaction)
 		if err != nil {
 			log.L(ctx).Errorf("AssembleTransaction failed: %s", err)
-			ts.publisher.PublishTransactionAssembleFailedEvent(ctx,
-				ts.transaction.ID.String(),
+			tf.publisher.PublishTransactionAssembleFailedEvent(ctx,
+				tf.transaction.ID.String(),
 				i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), err.Error()),
 			)
 			return
 		}
-		if ts.transaction.PostAssembly == nil {
+		if tf.transaction.PostAssembly == nil {
 			// This is most likely a programming error in the domain
 			log.L(ctx).Errorf("PostAssembly is nil.")
-			ts.publisher.PublishTransactionAssembleFailedEvent(
+			tf.publisher.PublishTransactionAssembleFailedEvent(
 				ctx,
-				ts.transaction.ID.String(),
+				tf.transaction.ID.String(),
 				i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), "AssembleTransaction returned nil PostAssembly"),
 			)
 			return
 		}
 
 		// Some validation that we are confident we can execute the given attestation plan
-		for _, attRequest := range ts.transaction.PostAssembly.AttestationPlan {
+		for _, attRequest := range tf.transaction.PostAssembly.AttestationPlan {
 			switch attRequest.AttestationType {
 			case prototk.AttestationType_ENDORSE:
 			case prototk.AttestationType_SIGN:
 			case prototk.AttestationType_GENERATE_PROOF:
 				errorMessage := "AttestationType_GENERATE_PROOF is not implemented yet"
 				log.L(ctx).Error(errorMessage)
-				ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
-				ts.publisher.PublishTransactionAssembleFailedEvent(ctx,
-					ts.transaction.ID.String(),
+				tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
+				tf.publisher.PublishTransactionAssembleFailedEvent(ctx,
+					tf.transaction.ID.String(),
 					i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), errorMessage),
 				)
 			default:
 				errorMessage := fmt.Sprintf("Unsupported attestation type: %s", attRequest.AttestationType)
 				log.L(ctx).Error(errorMessage)
-				ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
-				ts.publisher.PublishTransactionAssembleFailedEvent(ctx,
-					ts.transaction.ID.String(),
+				tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
+				tf.publisher.PublishTransactionAssembleFailedEvent(ctx,
+					tf.transaction.ID.String(),
 					i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), errorMessage),
 				)
 			}
@@ -486,28 +486,28 @@ func (ts *PaladinTxProcessor) requestAssemble(ctx context.Context) {
 		// for now that is not necessary because this is a local assemble and the domain manager updates the transaction that we passed by reference
 		// need to decide if we want to continue with that style of interface to the domain manager and if so,
 		// we need to do something different when the assembling node is remote
-		ts.publisher.PublishTransactionAssembledEvent(ctx,
-			ts.transaction.ID.String(),
+		tf.publisher.PublishTransactionAssembledEvent(ctx,
+			tf.transaction.ID.String(),
 		)
 		return
 
 	} else {
-		log.L(ctx).Debugf("Assembling transaction %s on node %s", ts.transaction.ID.String(), assemblingNode)
+		log.L(ctx).Debugf("Assembling transaction %s on node %s", tf.transaction.ID.String(), assemblingNode)
 		//TODO send a request to the node that is responsible for assembling this transaction
 	}
 }
 
-func (ts *PaladinTxProcessor) applyTransactionSignedEvent(ctx context.Context, event *ptmgrtypes.TransactionSignedEvent) {
-	ts.latestEvent = "TransactionSignedEvent"
-	log.L(ctx).Debugf("Adding signature to transaction %s", ts.transaction.ID.String())
-	ts.transaction.PostAssembly.Signatures = append(ts.transaction.PostAssembly.Signatures, event.AttestationResult)
+func (tf *transactionFlow) applyTransactionSignedEvent(ctx context.Context, event *ptmgrtypes.TransactionSignedEvent) {
+	tf.latestEvent = "TransactionSignedEvent"
+	log.L(ctx).Debugf("Adding signature to transaction %s", tf.transaction.ID.String())
+	tf.transaction.PostAssembly.Signatures = append(tf.transaction.PostAssembly.Signatures, event.AttestationResult)
 
 }
 
-func (ts *PaladinTxProcessor) applyTransactionEndorsedEvent(ctx context.Context, event *ptmgrtypes.TransactionEndorsedEvent) {
-	ts.latestEvent = "TransactionEndorsedEvent"
+func (tf *transactionFlow) applyTransactionEndorsedEvent(ctx context.Context, event *ptmgrtypes.TransactionEndorsedEvent) {
+	tf.latestEvent = "TransactionEndorsedEvent"
 	if event.RevertReason != nil {
-		log.L(ctx).Infof("Endorsement for transaction %s was rejected: %s", ts.transaction.ID.String(), *event.RevertReason)
+		log.L(ctx).Infof("Endorsement for transaction %s was rejected: %s", tf.transaction.ID.String(), *event.RevertReason)
 		// endorsement errors trigger a re-assemble
 		// if the reason for the endorsement error is a change of state of the universe since the transaction was assembled, then the re-assemble may fail and cause the transaction to be reverted
 		// on the other hand, the re-assemble may result in an endorsable version of the transaction.
@@ -515,50 +515,50 @@ func (ts *PaladinTxProcessor) applyTransactionEndorsedEvent(ctx context.Context,
 		//TODO - there may be other endorsements that are en route, based on the previous assembly.  Need to make sure that
 		// we discard them when they do return.
 		//only apply at this stage, action will be taken later
-		ts.transaction.PostAssembly = nil
+		tf.transaction.PostAssembly = nil
 
 	} else {
-		log.L(ctx).Infof("Adding endorsement from %s to transaction %s", event.Endorsement.Verifier.Lookup, ts.transaction.ID.String())
-		ts.transaction.PostAssembly.Endorsements = append(ts.transaction.PostAssembly.Endorsements, event.Endorsement)
+		log.L(ctx).Infof("Adding endorsement from %s to transaction %s", event.Endorsement.Verifier.Lookup, tf.transaction.ID.String())
+		tf.transaction.PostAssembly.Endorsements = append(tf.transaction.PostAssembly.Endorsements, event.Endorsement)
 
 	}
 }
 
-func (ts *PaladinTxProcessor) applyTransactionDispatchedEvent(ctx context.Context, event *ptmgrtypes.TransactionDispatchedEvent) {
-	log.L(ctx).Debugf("PaladinTxProcessor:applyTransactionDispatchedEvent transactionID:%s nonce:%d signingAddress:%s", ts.transaction.ID.String(), event.Nonce, event.SigningAddress)
-	ts.latestEvent = "TransactionDispatchedEvent"
-	ts.status = "dispatched"
-	ts.dispatched = true
+func (tf *transactionFlow) applyTransactionDispatchedEvent(ctx context.Context, event *ptmgrtypes.TransactionDispatchedEvent) {
+	log.L(ctx).Debugf("transactionFlow:applyTransactionDispatchedEvent transactionID:%s nonce:%d signingAddress:%s", tf.transaction.ID.String(), event.Nonce, event.SigningAddress)
+	tf.latestEvent = "TransactionDispatchedEvent"
+	tf.status = "dispatched"
+	tf.dispatched = true
 }
 
-func (ts *PaladinTxProcessor) applyTransactionConfirmedEvent(ctx context.Context, event *ptmgrtypes.TransactionConfirmedEvent) {
-	log.L(ctx).Debugf("PaladinTxProcessor:applyTransactionConfirmedEvent transactionID:%s contractAddress: %s", ts.transaction.ID.String(), event.ContractAddress)
-	ts.latestEvent = "TransactionConfirmedEvent"
-	ts.status = "confirmed"
-	ts.complete = true
+func (tf *transactionFlow) applyTransactionConfirmedEvent(ctx context.Context, event *ptmgrtypes.TransactionConfirmedEvent) {
+	log.L(ctx).Debugf("transactionFlow:applyTransactionConfirmedEvent transactionID:%s contractAddress: %s", tf.transaction.ID.String(), event.ContractAddress)
+	tf.latestEvent = "TransactionConfirmedEvent"
+	tf.status = "confirmed"
+	tf.complete = true
 }
 
-func (ts *PaladinTxProcessor) applyTransactionRevertedEvent(ctx context.Context, _ *ptmgrtypes.TransactionRevertedEvent) {
-	log.L(ctx).Debugf("PaladinTxProcessor:applyTransactionRevertedEvent transactionID:%s", ts.transaction.ID.String())
-	ts.latestEvent = "TransactionRevertedEvent"
-	ts.status = "reverted"
+func (tf *transactionFlow) applyTransactionRevertedEvent(ctx context.Context, _ *ptmgrtypes.TransactionRevertedEvent) {
+	log.L(ctx).Debugf("transactionFlow:applyTransactionRevertedEvent transactionID:%s", tf.transaction.ID.String())
+	tf.latestEvent = "TransactionRevertedEvent"
+	tf.status = "reverted"
 }
 
-func (ts *PaladinTxProcessor) applyTransactionDelegatedEvent(ctx context.Context, _ *ptmgrtypes.TransactionDelegatedEvent) {
-	log.L(ctx).Debugf("PaladinTxProcessor:applyTransactionDelegatedEvent transactionID:%s", ts.transaction.ID.String())
-	ts.latestEvent = "TransactionDelegatedEvent"
-	ts.status = "delegated"
+func (tf *transactionFlow) applyTransactionDelegatedEvent(ctx context.Context, _ *ptmgrtypes.TransactionDelegatedEvent) {
+	log.L(ctx).Debugf("transactionFlow:applyTransactionDelegatedEvent transactionID:%s", tf.transaction.ID.String())
+	tf.latestEvent = "TransactionDelegatedEvent"
+	tf.status = "delegated"
 }
 
-func (ts *PaladinTxProcessor) applyResolveVerifierResponseEvent(ctx context.Context, event *ptmgrtypes.ResolveVerifierResponseEvent) {
+func (tf *transactionFlow) applyResolveVerifierResponseEvent(ctx context.Context, event *ptmgrtypes.ResolveVerifierResponseEvent) {
 	log.L(ctx).Debug("applyResolveVerifierResponseEvent")
-	ts.latestEvent = "ResolveVerifierResponseEvent"
+	tf.latestEvent = "ResolveVerifierResponseEvent"
 
-	if ts.transaction.PreAssembly.Verifiers == nil {
-		ts.transaction.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, 0, len(ts.transaction.PreAssembly.RequiredVerifiers))
+	if tf.transaction.PreAssembly.Verifiers == nil {
+		tf.transaction.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, 0, len(tf.transaction.PreAssembly.RequiredVerifiers))
 	}
 	// assuming that the order of resolved verifiers in .PreAssembly.Verifiers does not need to match the order of .PreAssembly.RequiredVerifiers
-	ts.transaction.PreAssembly.Verifiers = append(ts.transaction.PreAssembly.Verifiers, &prototk.ResolvedVerifier{
+	tf.transaction.PreAssembly.Verifiers = append(tf.transaction.PreAssembly.Verifiers, &prototk.ResolvedVerifier{
 		Lookup:       *event.Lookup,
 		Algorithm:    *event.Algorithm,
 		Verifier:     *event.Verifier,
@@ -567,34 +567,34 @@ func (ts *PaladinTxProcessor) applyResolveVerifierResponseEvent(ctx context.Cont
 
 }
 
-func (ts *PaladinTxProcessor) applyResolveVerifierErrorEvent(ctx context.Context, event *ptmgrtypes.ResolveVerifierErrorEvent) {
-	ts.latestEvent = "ResolveVerifierErrorEvent"
+func (tf *transactionFlow) applyResolveVerifierErrorEvent(ctx context.Context, event *ptmgrtypes.ResolveVerifierErrorEvent) {
+	tf.latestEvent = "ResolveVerifierErrorEvent"
 	log.L(ctx).Errorf("Failed to resolve verifier %s: %s", *event.Lookup, *event.ErrorMessage)
 	//it is possible that this identity was valid when the transaction was assembled but is no longer valid
 	// all we can do it try to re-assemble the transaction
 	// TODO we might have other resolver verifieres in progress.  Need to make sure that when they are received, we only apply them if they
 	// happen to match the requirements new assembled transaction and if that is still nil, then discard them
-	ts.transaction.PostAssembly = nil
+	tf.transaction.PostAssembly = nil
 }
 
-func (ts *PaladinTxProcessor) applyTransactionFinalizedEvent(ctx context.Context, _ *ptmgrtypes.TransactionFinalizedEvent) {
-	log.L(ctx).Debugf("PaladinTxProcessor:applyTransactionFinalizedEvent transactionID:%s", ts.transaction.ID.String())
-	ts.latestEvent = "TransactionFinalizedEvent"
-	ts.complete = true
+func (tf *transactionFlow) applyTransactionFinalizedEvent(ctx context.Context, _ *ptmgrtypes.TransactionFinalizedEvent) {
+	log.L(ctx).Debugf("transactionFlow:applyTransactionFinalizedEvent transactionID:%s", tf.transaction.ID.String())
+	tf.latestEvent = "TransactionFinalizedEvent"
+	tf.complete = true
 	log.L(ctx).Debug("HandleTransactionFinalizedEvent")
 }
 
-func (ts *PaladinTxProcessor) applyTransactionFinalizeError(ctx context.Context, event *ptmgrtypes.TransactionFinalizeError) {
-	log.L(ctx).Errorf("applyTransactionFinalizeError transaction %s: %s", ts.transaction.ID, event.ErrorMessage)
+func (tf *transactionFlow) applyTransactionFinalizeError(ctx context.Context, event *ptmgrtypes.TransactionFinalizeError) {
+	log.L(ctx).Errorf("applyTransactionFinalizeError transaction %s: %s", tf.transaction.ID, event.ErrorMessage)
 
-	ts.latestEvent = "TransactionFinalizeError"
-	ts.finalizeRequired = true
-	ts.finalizePending = false
+	tf.latestEvent = "TransactionFinalizeError"
+	tf.finalizeRequired = true
+	tf.finalizePending = false
 }
 
-func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *prototk.AttestationRequest, partyName string) {
+func (tf *transactionFlow) requestSignature(ctx context.Context, attRequest *prototk.AttestationRequest, partyName string) {
 
-	keyMgr := ts.components.KeyManager()
+	keyMgr := tf.components.KeyManager()
 	unqualifiedLookup, err := tktypes.PrivateIdentityLocator(partyName).Identity(ctx)
 	var resolvedKey *pldapi.KeyMappingAndVerifier
 	if err == nil {
@@ -602,20 +602,20 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 	}
 	if err != nil {
 		log.L(ctx).Errorf("Failed to resolve local signer for %s (algorithm=%s): %s", partyName, attRequest.Algorithm, err)
-		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerResolveError), partyName, attRequest.Algorithm, err.Error())
+		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerResolveError), partyName, attRequest.Algorithm, err.Error())
 		return
 	}
 	// TODO this could be calling out to a remote signer, should we be doing these in parallel?
 	signaturePayload, err := keyMgr.Sign(ctx, resolvedKey, attRequest.PayloadType, attRequest.Payload)
 	if err != nil {
 		log.L(ctx).Errorf("failed to sign for party %s (verifier=%s,algorithm=%s): %s", partyName, resolvedKey.Verifier.Verifier, attRequest.Algorithm, err)
-		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerSignError), partyName, resolvedKey.Verifier.Verifier, attRequest.Algorithm, err.Error())
+		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerSignError), partyName, resolvedKey.Verifier.Verifier, attRequest.Algorithm, err.Error())
 		return
 	}
 	log.L(ctx).Debugf("payload: %x signed %x by %s (%s)", attRequest.Payload, signaturePayload, partyName, resolvedKey.Verifier.Verifier)
 
-	ts.publisher.PublishTransactionSignedEvent(ctx,
-		ts.transaction.ID.String(),
+	tf.publisher.PublishTransactionSignedEvent(ctx,
+		tf.transaction.ID.String(),
 		&prototk.AttestationResult{
 			Name:            attRequest.Name,
 			AttestationType: attRequest.AttestationType,
@@ -631,16 +631,16 @@ func (ts *PaladinTxProcessor) requestSignature(ctx context.Context, attRequest *
 	)
 }
 
-func (ts *PaladinTxProcessor) requestSignatures(ctx context.Context) {
+func (tf *transactionFlow) requestSignatures(ctx context.Context) {
 
-	if ts.requestedSignatures {
+	if tf.requestedSignatures {
 		return
 	}
-	if ts.transaction.PostAssembly.Signatures == nil {
-		ts.transaction.PostAssembly.Signatures = make([]*prototk.AttestationResult, 0)
+	if tf.transaction.PostAssembly.Signatures == nil {
+		tf.transaction.PostAssembly.Signatures = make([]*prototk.AttestationResult, 0)
 	}
-	attPlan := ts.transaction.PostAssembly.AttestationPlan
-	attResults := ts.transaction.PostAssembly.Endorsements
+	attPlan := tf.transaction.PostAssembly.AttestationPlan
+	attResults := tf.transaction.PostAssembly.Endorsements
 
 	for _, attRequest := range attPlan {
 		switch attRequest.AttestationType {
@@ -655,44 +655,44 @@ func (ts *PaladinTxProcessor) requestSignatures(ctx context.Context) {
 			if toBeComplete {
 
 				for _, partyName := range attRequest.Parties {
-					go ts.requestSignature(ctx, attRequest, partyName)
+					go tf.requestSignature(ctx, attRequest, partyName)
 				}
 			}
 		}
 	}
-	ts.requestedSignatures = true
+	tf.requestedSignatures = true
 }
 
-func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party string, attRequest *prototk.AttestationRequest) {
+func (tf *transactionFlow) requestEndorsement(ctx context.Context, party string, attRequest *prototk.AttestationRequest) {
 
 	partyLocator := tktypes.PrivateIdentityLocator(party)
 	partyNode, err := partyLocator.Node(ctx, true)
 	if err != nil {
 		log.L(ctx).Errorf("Failed to get node name from locator %s: %s", party, err)
-		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
+		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
 		return
 	}
 
-	if partyNode == ts.nodeID || partyNode == "" {
+	if partyNode == tf.nodeID || partyNode == "" {
 		// This is a local party, so we can endorse it directly
-		endorsement, revertReason, err := ts.endorsementGatherer.GatherEndorsement(
+		endorsement, revertReason, err := tf.endorsementGatherer.GatherEndorsement(
 			ctx,
-			ts.transaction.PreAssembly.TransactionSpecification,
-			ts.transaction.PreAssembly.Verifiers,
-			ts.transaction.PostAssembly.Signatures,
-			toEndorsableList(ts.transaction.PostAssembly.InputStates),
-			toEndorsableList(ts.transaction.PostAssembly.ReadStates),
-			toEndorsableList(ts.transaction.PostAssembly.OutputStates),
+			tf.transaction.PreAssembly.TransactionSpecification,
+			tf.transaction.PreAssembly.Verifiers,
+			tf.transaction.PostAssembly.Signatures,
+			toEndorsableList(tf.transaction.PostAssembly.InputStates),
+			toEndorsableList(tf.transaction.PostAssembly.ReadStates),
+			toEndorsableList(tf.transaction.PostAssembly.OutputStates),
 			party,
 			attRequest)
 		if err != nil {
 			log.L(ctx).Errorf("Failed to gather endorsement for party %s: %s", party, err)
-			ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
+			tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
 			return
 
 		}
-		ts.publisher.PublishTransactionEndorsedEvent(ctx,
-			ts.transaction.ID.String(),
+		tf.publisher.PublishTransactionEndorsedEvent(ctx,
+			tf.transaction.ID.String(),
 			endorsement,
 			revertReason,
 		)
@@ -700,62 +700,62 @@ func (ts *PaladinTxProcessor) requestEndorsement(ctx context.Context, party stri
 	} else {
 		// This is a remote party, so we need to send an endorsement request to the remote node
 
-		err = ts.transportWriter.SendEndorsementRequest(
+		err = tf.transportWriter.SendEndorsementRequest(
 			ctx,
 			party,
 			partyNode,
-			ts.transaction.Inputs.To.String(),
-			ts.transaction.ID.String(),
+			tf.transaction.Inputs.To.String(),
+			tf.transaction.ID.String(),
 			attRequest,
-			ts.transaction.PreAssembly.TransactionSpecification,
-			ts.transaction.PreAssembly.Verifiers,
-			ts.transaction.PostAssembly.Signatures,
-			ts.transaction.PostAssembly.InputStates,
-			ts.transaction.PostAssembly.OutputStates,
+			tf.transaction.PreAssembly.TransactionSpecification,
+			tf.transaction.PreAssembly.Verifiers,
+			tf.transaction.PostAssembly.Signatures,
+			tf.transaction.PostAssembly.InputStates,
+			tf.transaction.PostAssembly.OutputStates,
 		)
 		if err != nil {
 			log.L(ctx).Errorf("Failed to send endorsement request to party %s: %s", party, err)
-			ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerEndorsementRequestError), party, err.Error())
+			tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerEndorsementRequestError), party, err.Error())
 		}
 	}
 }
 
-func (ts *PaladinTxProcessor) requestEndorsements(ctx context.Context) {
-	for _, outstandingEndorsementRequest := range ts.outstandingEndorsementRequests(ctx) {
+func (tf *transactionFlow) requestEndorsements(ctx context.Context) {
+	for _, outstandingEndorsementRequest := range tf.outstandingEndorsementRequests(ctx) {
 		// there is a request in the attestation plan and we do not have a response to match it
 		// first lets see if we have recently sent a request for this endorsement and just need to be patient
 		previousRequestTime := time.Time{}
-		if timesForAttRequest, ok := ts.requestedEndorsementTimes[outstandingEndorsementRequest.attRequest.Name]; ok {
+		if timesForAttRequest, ok := tf.requestedEndorsementTimes[outstandingEndorsementRequest.attRequest.Name]; ok {
 			if t, ok := timesForAttRequest[outstandingEndorsementRequest.party]; ok {
 				previousRequestTime = t
 			}
 		} else {
-			ts.requestedEndorsementTimes[outstandingEndorsementRequest.attRequest.Name] = make(map[string]time.Time)
+			tf.requestedEndorsementTimes[outstandingEndorsementRequest.attRequest.Name] = make(map[string]time.Time)
 		}
 
-		if !previousRequestTime.IsZero() && ts.clock.Now().Before(previousRequestTime.Add(ts.requestTimeout)) {
+		if !previousRequestTime.IsZero() && tf.clock.Now().Before(previousRequestTime.Add(tf.requestTimeout)) {
 			//We have already sent a message for this request and the deadline has not passed
-			log.L(ctx).Debugf("Transaction %s endorsement already requested %v", ts.transaction.ID.String(), previousRequestTime)
+			log.L(ctx).Debugf("Transaction %s endorsement already requested %v", tf.transaction.ID.String(), previousRequestTime)
 			return
 		}
 		if previousRequestTime.IsZero() {
-			log.L(ctx).Infof("Transaction %s endorsement has never been requested for attestation request:%s, party:%s", ts.transaction.ID.String(), outstandingEndorsementRequest.attRequest.Name, outstandingEndorsementRequest.party)
+			log.L(ctx).Infof("Transaction %s endorsement has never been requested for attestation request:%s, party:%s", tf.transaction.ID.String(), outstandingEndorsementRequest.attRequest.Name, outstandingEndorsementRequest.party)
 		} else {
-			log.L(ctx).Infof("Previous endorsement request for transaction:%s, attestation request:%s, party:%s sent at %v has timed out", ts.transaction.ID.String(), outstandingEndorsementRequest.attRequest.Name, outstandingEndorsementRequest.party, previousRequestTime)
+			log.L(ctx).Infof("Previous endorsement request for transaction:%s, attestation request:%s, party:%s sent at %v has timed out", tf.transaction.ID.String(), outstandingEndorsementRequest.attRequest.Name, outstandingEndorsementRequest.party, previousRequestTime)
 		}
-		ts.requestEndorsement(ctx, outstandingEndorsementRequest.party, outstandingEndorsementRequest.attRequest)
-		ts.requestedEndorsementTimes[outstandingEndorsementRequest.attRequest.Name][outstandingEndorsementRequest.party] = ts.clock.Now()
+		tf.requestEndorsement(ctx, outstandingEndorsementRequest.party, outstandingEndorsementRequest.attRequest)
+		tf.requestedEndorsementTimes[outstandingEndorsementRequest.attRequest.Name][outstandingEndorsementRequest.party] = tf.clock.Now()
 
 	}
 }
 
-func (ts *PaladinTxProcessor) hasOutstandingSignatureRequests() bool {
+func (tf *transactionFlow) hasOutstandingSignatureRequests() bool {
 	outstandingSignatureRequests := false
 out:
-	for _, attRequest := range ts.transaction.PostAssembly.AttestationPlan {
+	for _, attRequest := range tf.transaction.PostAssembly.AttestationPlan {
 		if attRequest.AttestationType == prototk.AttestationType_SIGN {
 			found := false
-			for _, signatures := range ts.transaction.PostAssembly.Signatures {
+			for _, signatures := range tf.transaction.PostAssembly.Signatures {
 				if signatures.Name == attRequest.Name {
 					found = true
 					break
@@ -771,8 +771,8 @@ out:
 	return outstandingSignatureRequests
 }
 
-func (ts *PaladinTxProcessor) hasOutstandingEndorsementRequests(ctx context.Context) bool {
-	return len(ts.outstandingEndorsementRequests(ctx)) > 0
+func (tf *transactionFlow) hasOutstandingEndorsementRequests(ctx context.Context) bool {
+	return len(tf.outstandingEndorsementRequests(ctx)) > 0
 }
 
 type outstandingEndorsementRequest struct {
@@ -780,13 +780,13 @@ type outstandingEndorsementRequest struct {
 	party      string
 }
 
-func (ts *PaladinTxProcessor) outstandingEndorsementRequests(_ context.Context) []*outstandingEndorsementRequest {
+func (tf *transactionFlow) outstandingEndorsementRequests(_ context.Context) []*outstandingEndorsementRequest {
 	outstandingEndorsementRequests := make([]*outstandingEndorsementRequest, 0)
-	for _, attRequest := range ts.transaction.PostAssembly.AttestationPlan {
+	for _, attRequest := range tf.transaction.PostAssembly.AttestationPlan {
 		if attRequest.AttestationType == prototk.AttestationType_ENDORSE {
 			for _, party := range attRequest.Parties {
 				var verifier string
-				for _, v := range ts.transaction.PreAssembly.Verifiers {
+				for _, v := range tf.transaction.PreAssembly.Verifiers {
 					if v.Lookup == party {
 						verifier = v.Verifier
 						break
@@ -794,7 +794,7 @@ func (ts *PaladinTxProcessor) outstandingEndorsementRequests(_ context.Context) 
 				}
 
 				found := false
-				for _, endorsement := range ts.transaction.PostAssembly.Endorsements {
+				for _, endorsement := range tf.transaction.PostAssembly.Endorsements {
 					if endorsement.Name == attRequest.Name && endorsement.Verifier.Verifier == verifier {
 						found = true
 						break
@@ -809,15 +809,15 @@ func (ts *PaladinTxProcessor) outstandingEndorsementRequests(_ context.Context) 
 	return outstandingEndorsementRequests
 }
 
-func (ts *PaladinTxProcessor) PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error) {
+func (tf *transactionFlow) PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error) {
 
-	prepError := ts.domainAPI.PrepareTransaction(ts.endorsementGatherer.DomainContext(), ts.transaction)
+	prepError := tf.domainAPI.PrepareTransaction(tf.endorsementGatherer.DomainContext(), tf.transaction)
 	if prepError != nil {
 		log.L(ctx).Errorf("Error preparing transaction: %s", prepError)
-		ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerPrepareError), prepError.Error())
+		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerPrepareError), prepError.Error())
 		return nil, prepError
 	}
-	return ts.transaction, nil
+	return tf.transaction, nil
 }
 
 func toEndorsableList(states []*components.FullState) []*prototk.EndorsableState {
@@ -832,59 +832,59 @@ func toEndorsableList(states []*components.FullState) []*prototk.EndorsableState
 	return endorsableList
 }
 
-func (ts *PaladinTxProcessor) requestVerifierResolution(ctx context.Context) {
+func (tf *transactionFlow) requestVerifierResolution(ctx context.Context) {
 
-	if ts.requestedVerifierResolution {
-		log.L(ctx).Infof("Transaction %s verifier resolution already requested", ts.transaction.ID.String())
+	if tf.requestedVerifierResolution {
+		log.L(ctx).Infof("Transaction %s verifier resolution already requested", tf.transaction.ID.String())
 		return
 	}
 
 	//TODO keep track of previous requests and send out new requests if previous ones have timed out
-	if ts.transaction.PreAssembly.Verifiers == nil {
-		ts.transaction.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, 0, len(ts.transaction.PreAssembly.RequiredVerifiers))
+	if tf.transaction.PreAssembly.Verifiers == nil {
+		tf.transaction.PreAssembly.Verifiers = make([]*prototk.ResolvedVerifier, 0, len(tf.transaction.PreAssembly.RequiredVerifiers))
 	}
-	for _, v := range ts.transaction.PreAssembly.RequiredVerifiers {
-		ts.identityResolver.ResolveVerifierAsync(
+	for _, v := range tf.transaction.PreAssembly.RequiredVerifiers {
+		tf.identityResolver.ResolveVerifierAsync(
 			ctx,
 			v.Lookup,
 			v.Algorithm,
 			v.VerifierType,
 			func(ctx context.Context, verifier string) {
 				//response event needs to be handled by the sequencer so that the dispatch to a handling thread is done in fairness to all other in flight transactions
-				ts.publisher.PublishResolveVerifierResponseEvent(ctx, ts.transaction.ID.String(), v.Lookup, v.Algorithm, verifier, v.VerifierType)
+				tf.publisher.PublishResolveVerifierResponseEvent(ctx, tf.transaction.ID.String(), v.Lookup, v.Algorithm, verifier, v.VerifierType)
 			},
 			func(ctx context.Context, err error) {
-				ts.publisher.PublishResolveVerifierErrorEvent(ctx, ts.transaction.ID.String(), v.Lookup, v.Algorithm, err.Error())
+				tf.publisher.PublishResolveVerifierErrorEvent(ctx, tf.transaction.ID.String(), v.Lookup, v.Algorithm, err.Error())
 			},
 		)
 	}
 	//TODO this needs to be more precise (like which verifiers have been sent / pending / stale  etc)
-	ts.requestedVerifierResolution = true
+	tf.requestedVerifierResolution = true
 }
 
-func (ts *PaladinTxProcessor) GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution {
-	log.L(ctx).Debug("PaladinTxProcessor:GetStateDistributions")
+func (tf *transactionFlow) GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution {
+	log.L(ctx).Debug("transactionFlow:GetStateDistributions")
 
 	stateDistributions := make([]*statedistribution.StateDistribution, 0)
-	if ts.transaction.PostAssembly == nil {
+	if tf.transaction.PostAssembly == nil {
 		log.L(ctx).Error("PostAssembly is nil")
 		return stateDistributions
 	}
-	if ts.transaction.PostAssembly.OutputStates == nil {
+	if tf.transaction.PostAssembly.OutputStates == nil {
 		log.L(ctx).Debug("OutputStates is nil")
 		return stateDistributions
 	}
-	for stateIndex, outputState := range ts.transaction.PostAssembly.OutputStates {
+	for stateIndex, outputState := range tf.transaction.PostAssembly.OutputStates {
 		//need the output state for the state ID and need the outputStatePotential for the distribution list
-		outputStatePotential := ts.transaction.PostAssembly.OutputStatesPotential[stateIndex]
+		outputStatePotential := tf.transaction.PostAssembly.OutputStatesPotential[stateIndex]
 
 		for _, party := range outputStatePotential.DistributionList {
 			stateDistributions = append(stateDistributions, &statedistribution.StateDistribution{
 				ID:              uuid.New().String(),
 				StateID:         outputState.ID.String(),
 				IdentityLocator: party,
-				Domain:          ts.domainAPI.Domain().Name(),
-				ContractAddress: ts.transaction.Inputs.To.String(),
+				Domain:          tf.domainAPI.Domain().Name(),
+				ContractAddress: tf.transaction.Inputs.To.String(),
 				SchemaID:        outputState.Schema.String(),
 				StateDataJson:   string(outputState.Data), // the state data json is available on both but we take it
 				// from the outputState to make sure it is the same json that was used to generate the hash
@@ -894,32 +894,32 @@ func (ts *PaladinTxProcessor) GetStateDistributions(ctx context.Context) []*stat
 	return stateDistributions
 }
 
-func (ts *PaladinTxProcessor) InputStateIDs() []string {
+func (tf *transactionFlow) InputStateIDs() []string {
 
-	inputStateIDs := make([]string, len(ts.transaction.PostAssembly.InputStates))
-	for i, inputState := range ts.transaction.PostAssembly.InputStates {
+	inputStateIDs := make([]string, len(tf.transaction.PostAssembly.InputStates))
+	for i, inputState := range tf.transaction.PostAssembly.InputStates {
 		inputStateIDs[i] = inputState.ID.String()
 	}
 	return inputStateIDs
 }
 
-func (ts *PaladinTxProcessor) OutputStateIDs() []string {
+func (tf *transactionFlow) OutputStateIDs() []string {
 
 	//We use the output states here not the OutputStatesPotential because it is not possible for another transaction
 	// to spend a state unless it has been written to the state store and at that point we have the state ID
-	outputStateIDs := make([]string, len(ts.transaction.PostAssembly.OutputStates))
-	for i, outputState := range ts.transaction.PostAssembly.OutputStates {
+	outputStateIDs := make([]string, len(tf.transaction.PostAssembly.OutputStates))
+	for i, outputState := range tf.transaction.PostAssembly.OutputStates {
 		outputStateIDs[i] = outputState.ID.String()
 	}
 	return outputStateIDs
 }
 
-func (ts *PaladinTxProcessor) Signer() string {
+func (tf *transactionFlow) Signer() string {
 
-	return ts.transaction.Signer
+	return tf.transaction.Signer
 }
 
-func (ts *PaladinTxProcessor) ID() uuid.UUID {
+func (tf *transactionFlow) ID() uuid.UUID {
 
-	return ts.transaction.ID
+	return tf.transaction.ID
 }

@@ -51,7 +51,7 @@ type transactionProcessorDepencyMocks struct {
 	transportWriter     *privatetxnmgrmocks.TransportWriter
 }
 
-func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context, transaction *components.PrivateTransaction) (*PaladinTxProcessor, *transactionProcessorDepencyMocks) {
+func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context, transaction *components.PrivateTransaction) (*transactionFlow, *transactionProcessorDepencyMocks) {
 
 	mocks := &transactionProcessorDepencyMocks{
 		allComponents:       componentmocks.NewAllComponents(t),
@@ -84,9 +84,9 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 	}).Maybe()
 	mocks.domainSmartContract.On("Domain").Return(domain).Maybe()
 
-	tp := NewPaladinTransactionProcessor(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.syncPoints, mocks.transportWriter, 1*time.Minute)
+	tp := NewTransactionFlow(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.syncPoints, mocks.transportWriter, 1*time.Minute)
 
-	return tp.(*PaladinTxProcessor), mocks
+	return tp.(*transactionFlow), mocks
 }
 
 func TestHasOutstandingEndorsementRequestsMultipleRequestsIncomplete(t *testing.T) {

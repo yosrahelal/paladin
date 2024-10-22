@@ -28,8 +28,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func NewMockTransactionProcessorForTesting(t *testing.T, transactionID uuid.UUID, inputStateIDs []string, outputStateIDs []string, endorsed bool, signer string) *privatetxnmgrmocks.TxProcessor {
-	mockTransactionProcessor := privatetxnmgrmocks.NewTxProcessor(t)
+func NewMockTransactionProcessorForTesting(t *testing.T, transactionID uuid.UUID, inputStateIDs []string, outputStateIDs []string, endorsed bool, signer string) *privatetxnmgrmocks.TransactionFlow {
+	mockTransactionProcessor := privatetxnmgrmocks.NewTransactionFlow(t)
 	mockTransactionProcessor.On("ID").Return(transactionID).Maybe()
 	mockTransactionProcessor.On("InputStateIDs").Return(inputStateIDs).Maybe()
 	mockTransactionProcessor.On("OutputStateIDs").Return(outputStateIDs).Maybe()

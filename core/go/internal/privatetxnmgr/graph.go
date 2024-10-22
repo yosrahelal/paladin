@@ -27,7 +27,7 @@ import (
 )
 
 type Graph interface {
-	AddTransaction(ctx context.Context, transaction ptmgrtypes.TxProcessor)
+	AddTransaction(ctx context.Context, transaction ptmgrtypes.TransactionFlow)
 	GetDispatchableTransactions(ctx context.Context) (ptmgrtypes.DispatchableTransactions, error)
 	RemoveTransaction(ctx context.Context, txID string)
 	RemoveTransactions(ctx context.Context, transactionsToRemove ptmgrtypes.DispatchableTransactions)
@@ -36,7 +36,7 @@ type Graph interface {
 
 type graph struct {
 	// This is the source of truth for all transaction
-	allTransactions map[string]ptmgrtypes.TxProcessor
+	allTransactions map[string]ptmgrtypes.TransactionFlow
 
 	// all of the following are ephemeral and derived from allTransactions
 
@@ -45,18 +45,18 @@ type graph struct {
 	// and the third dimension is the array of state hashes that connect the two transactions
 	//  this direction makes it easier to isolate a sequence of dispatchable transactions by doing a breadth first search starting at the layer of independent transactions
 	transactionsMatrix [][][]string
-	transactions       []ptmgrtypes.TxProcessor
+	transactions       []ptmgrtypes.TransactionFlow
 	//map of transaction id to index in the transactions array
 	transactionIndex map[string]int
 }
 
 func NewGraph() Graph {
 	return &graph{
-		allTransactions: make(map[string]ptmgrtypes.TxProcessor),
+		allTransactions: make(map[string]ptmgrtypes.TransactionFlow),
 	}
 }
 
-func (g *graph) AddTransaction(ctx context.Context, transaction ptmgrtypes.TxProcessor) {
+func (g *graph) AddTransaction(ctx context.Context, transaction ptmgrtypes.TransactionFlow) {
 	log.L(ctx).Debugf("Adding transaction %s to graph", transaction.ID().String())
 	g.allTransactions[transaction.ID().String()] = transaction
 
@@ -69,7 +69,7 @@ func (g *graph) IncludesTransaction(txID string) bool {
 func (g *graph) buildMatrix(ctx context.Context) error {
 	log.L(ctx).Debugf("Building graph with %d transactions", len(g.allTransactions))
 	g.transactionIndex = make(map[string]int)
-	g.transactions = make([]ptmgrtypes.TxProcessor, len(g.allTransactions))
+	g.transactions = make([]ptmgrtypes.TransactionFlow, len(g.allTransactions))
 	currentIndex := 0
 	for txnId, txn := range g.allTransactions {
 		g.transactionIndex[txnId] = currentIndex

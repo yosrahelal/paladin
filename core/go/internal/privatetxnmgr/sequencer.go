@@ -78,7 +78,7 @@ type Sequencer struct {
 
 	maxConcurrentProcess        int
 	incompleteTxProcessMapMutex sync.Mutex
-	incompleteTxSProcessMap     map[string]ptmgrtypes.TxProcessor // a map of all known transactions that are not completed
+	incompleteTxSProcessMap     map[string]ptmgrtypes.TransactionFlow // a map of all known transactions that are not completed
 
 	processedTxIDs    map[string]bool // an internal record of completed transactions to handle persistence delays that causes reprocessing
 	sequencerLoopDone chan struct{}
@@ -135,7 +135,7 @@ func NewSequencer(
 		state:                SequencerStateNew,
 		stateEntryTime:       time.Now(),
 
-		incompleteTxSProcessMap: make(map[string]ptmgrtypes.TxProcessor),
+		incompleteTxSProcessMap: make(map[string]ptmgrtypes.TransactionFlow),
 		persistenceRetryTimeout: confutil.DurationMin(sequencerConfig.PersistenceRetryTimeout, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Sequencer.PersistenceRetryTimeout),
 
 		staleTimeout:                 confutil.DurationMin(sequencerConfig.StaleTimeout, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Sequencer.StaleTimeout),
@@ -166,7 +166,7 @@ func (s *Sequencer) abort(err error) {
 	s.stopProcess <- true
 
 }
-func (s *Sequencer) getTransactionProcessor(txID string) ptmgrtypes.TxProcessor {
+func (s *Sequencer) getTransactionProcessor(txID string) ptmgrtypes.TransactionFlow {
 	s.incompleteTxProcessMapMutex.Lock()
 	defer s.incompleteTxProcessMapMutex.Unlock()
 	transactionProcessor, ok := s.incompleteTxSProcessMap[txID]
@@ -192,7 +192,7 @@ func (s *Sequencer) ProcessNewTransaction(ctx context.Context, tx *components.Pr
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			s.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, s.nodeID, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout)
+			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeID, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout)
 		}
 		s.pendingEvents <- &ptmgrtypes.TransactionSubmittedEvent{
 			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
@@ -219,7 +219,7 @@ func (s *Sequencer) ProcessInFlightTransaction(ctx context.Context, tx *componen
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			s.incompleteTxSProcessMap[tx.ID.String()] = NewPaladinTransactionProcessor(ctx, tx, s.nodeID, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout)
+			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeID, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout)
 		}
 		s.pendingEvents <- &ptmgrtypes.TransactionSwappedInEvent{
 			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
