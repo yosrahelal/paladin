@@ -35,64 +35,64 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-type OrchestratorState string
+type SequencerState string
 
 const (
-	// brand new orchestrator
-	OrchestratorStateNew OrchestratorState = "new"
-	// orchestrator running normally
-	OrchestratorStateRunning OrchestratorState = "running"
-	// orchestrator is blocked and waiting for precondition to be fulfilled, e.g. pre-req tx blocking current stage
-	OrchestratorStateWaiting OrchestratorState = "waiting"
-	// transactions managed by an orchestrator stuck in the same state
-	OrchestratorStateStale OrchestratorState = "stale"
-	// no transactions in a specific orchestrator
-	OrchestratorStateIdle OrchestratorState = "idle"
-	// orchestrator is paused
-	OrchestratorStatePaused OrchestratorState = "paused"
-	// orchestrator is stopped
-	OrchestratorStateStopped OrchestratorState = "stopped"
+	// brand new sequencer
+	SequencerStateNew SequencerState = "new"
+	// sequencer running normally
+	SequencerStateRunning SequencerState = "running"
+	// sequencer is blocked and waiting for precondition to be fulfilled, e.g. pre-req tx blocking current stage
+	SequencerStateWaiting SequencerState = "waiting"
+	// transactions managed by an sequencer stuck in the same state
+	SequencerStateStale SequencerState = "stale"
+	// no transactions in a specific sequencer
+	SequencerStateIdle SequencerState = "idle"
+	// sequencer is paused
+	SequencerStatePaused SequencerState = "paused"
+	// sequencer is stopped
+	SequencerStateStopped SequencerState = "stopped"
 )
 
-var AllOrchestratorStates = []string{
-	string(OrchestratorStateNew),
-	string(OrchestratorStateRunning),
-	string(OrchestratorStateWaiting),
-	string(OrchestratorStateStale),
-	string(OrchestratorStateIdle),
-	string(OrchestratorStatePaused),
-	string(OrchestratorStateStopped),
+var AllSequencerStates = []string{
+	string(SequencerStateNew),
+	string(SequencerStateRunning),
+	string(SequencerStateWaiting),
+	string(SequencerStateStale),
+	string(SequencerStateIdle),
+	string(SequencerStatePaused),
+	string(SequencerStateStopped),
 }
 
-type Orchestrator struct {
+type Sequencer struct {
 	ctx                     context.Context
 	persistenceRetryTimeout time.Duration
 
-	// each orchestrator has its own go routine
-	initiated    time.Time     // when orchestrator is created
-	evalInterval time.Duration // between how long the orchestrator will do an evaluation to check & remove transactions that missed events
+	// each sequencer has its own go routine
+	initiated    time.Time     // when sequencer is created
+	evalInterval time.Duration // between how long the sequencer will do an evaluation to check & remove transactions that missed events
 
 	maxConcurrentProcess        int
 	incompleteTxProcessMapMutex sync.Mutex
 	incompleteTxSProcessMap     map[string]ptmgrtypes.TxProcessor // a map of all known transactions that are not completed
 
-	processedTxIDs       map[string]bool // an internal record of completed transactions to handle persistence delays that causes reprocessing
-	orchestratorLoopDone chan struct{}
+	processedTxIDs    map[string]bool // an internal record of completed transactions to handle persistence delays that causes reprocessing
+	sequencerLoopDone chan struct{}
 
 	// input channels
 	orchestrationEvalRequestChan chan bool
-	stopProcess                  chan bool // a channel to tell the current orchestrator to stop processing all events and mark itself as to be deleted
+	stopProcess                  chan bool // a channel to tell the current sequencer to stop processing all events and mark itself as to be deleted
 
 	// Metrics provided for fairness control in the controller
 	totalCompleted int64 // total number of transaction completed since initiated
-	state          OrchestratorState
-	stateEntryTime time.Time // when the orchestrator entered the current state
+	state          SequencerState
+	stateEntryTime time.Time // when the sequencer entered the current state
 
 	staleTimeout time.Duration
 
 	pendingEvents chan ptmgrtypes.PrivateTransactionEvent
 
-	contractAddress     tktypes.EthAddress // the contract address managed by the current orchestrator
+	contractAddress     tktypes.EthAddress // the contract address managed by the current sequencer
 	nodeID              string
 	domainAPI           components.DomainSmartContract
 	components          components.AllComponents
@@ -106,11 +106,11 @@ type Orchestrator struct {
 	requestTimeout      time.Duration
 }
 
-func NewOrchestrator(
+func NewSequencer(
 	ctx context.Context,
 	nodeID string,
 	contractAddress tktypes.EthAddress,
-	oc *pldconf.PrivateTxManagerOrchestratorConfig,
+	oc *pldconf.PrivateTxManagerSequencerConfig,
 	allComponents components.AllComponents,
 	domainAPI components.DomainSmartContract,
 	endorsementGatherer ptmgrtypes.EndorsementGatherer,
@@ -120,25 +120,25 @@ func NewOrchestrator(
 	stateDistributer statedistribution.StateDistributer,
 	transportWriter ptmgrtypes.TransportWriter,
 	requestTimeout time.Duration,
-) *Orchestrator {
+) *Sequencer {
 
-	newOrchestrator := &Orchestrator{
-		ctx:                  log.WithLogField(ctx, "role", fmt.Sprintf("orchestrator-%s", contractAddress)),
+	newSequencer := &Sequencer{
+		ctx:                  log.WithLogField(ctx, "role", fmt.Sprintf("sequencer-%s", contractAddress)),
 		initiated:            time.Now(),
 		contractAddress:      contractAddress,
-		evalInterval:         confutil.DurationMin(oc.EvaluationInterval, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Orchestrator.EvaluationInterval),
-		maxConcurrentProcess: confutil.Int(oc.MaxConcurrentProcess, *pldconf.PrivateTxManagerDefaults.Orchestrator.MaxConcurrentProcess),
-		state:                OrchestratorStateNew,
+		evalInterval:         confutil.DurationMin(oc.EvaluationInterval, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Sequencer.EvaluationInterval),
+		maxConcurrentProcess: confutil.Int(oc.MaxConcurrentProcess, *pldconf.PrivateTxManagerDefaults.Sequencer.MaxConcurrentProcess),
+		state:                SequencerStateNew,
 		stateEntryTime:       time.Now(),
 
 		incompleteTxSProcessMap: make(map[string]ptmgrtypes.TxProcessor),
-		persistenceRetryTimeout: confutil.DurationMin(oc.PersistenceRetryTimeout, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Orchestrator.PersistenceRetryTimeout),
+		persistenceRetryTimeout: confutil.DurationMin(oc.PersistenceRetryTimeout, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Sequencer.PersistenceRetryTimeout),
 
-		staleTimeout:                 confutil.DurationMin(oc.StaleTimeout, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Orchestrator.StaleTimeout),
+		staleTimeout:                 confutil.DurationMin(oc.StaleTimeout, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Sequencer.StaleTimeout),
 		processedTxIDs:               make(map[string]bool),
 		orchestrationEvalRequestChan: make(chan bool, 1),
 		stopProcess:                  make(chan bool, 1),
-		pendingEvents:                make(chan ptmgrtypes.PrivateTransactionEvent, *pldconf.PrivateTxManagerDefaults.Orchestrator.MaxPendingEvents),
+		pendingEvents:                make(chan ptmgrtypes.PrivateTransactionEvent, *pldconf.PrivateTxManagerDefaults.Sequencer.MaxPendingEvents),
 		nodeID:                       nodeID,
 		domainAPI:                    domainAPI,
 		components:                   allComponents,
@@ -152,17 +152,17 @@ func NewOrchestrator(
 		requestTimeout:               requestTimeout,
 	}
 
-	log.L(ctx).Debugf("NewOrchestrator for contract address %s created: %+v", newOrchestrator.contractAddress, newOrchestrator)
+	log.L(ctx).Debugf("NewSequencer for contract address %s created: %+v", newSequencer.contractAddress, newSequencer)
 
-	return newOrchestrator
+	return newSequencer
 }
 
-func (oc *Orchestrator) abort(err error) {
-	log.L(oc.ctx).Errorf("Orchestrator aborting: %s", err)
+func (oc *Sequencer) abort(err error) {
+	log.L(oc.ctx).Errorf("Sequencer aborting: %s", err)
 	oc.stopProcess <- true
 
 }
-func (oc *Orchestrator) getTransactionProcessor(txID string) ptmgrtypes.TxProcessor {
+func (oc *Sequencer) getTransactionProcessor(txID string) ptmgrtypes.TxProcessor {
 	oc.incompleteTxProcessMapMutex.Lock()
 	defer oc.incompleteTxProcessMapMutex.Unlock()
 	transactionProcessor, ok := oc.incompleteTxSProcessMap[txID]
@@ -173,13 +173,13 @@ func (oc *Orchestrator) getTransactionProcessor(txID string) ptmgrtypes.TxProces
 	return transactionProcessor
 }
 
-func (oc *Orchestrator) removeTransactionProcessor(txID string) {
+func (oc *Sequencer) removeTransactionProcessor(txID string) {
 	oc.incompleteTxProcessMapMutex.Lock()
 	defer oc.incompleteTxProcessMapMutex.Unlock()
 	delete(oc.incompleteTxSProcessMap, txID)
 }
 
-func (oc *Orchestrator) evaluationLoop() {
+func (oc *Sequencer) evaluationLoop() {
 	// Select from the event channel and process each event on a single thread
 	// individual event handlers are responsible for kicking off another go routine if they have
 	// long running tasks that are not dependant on the order of events
@@ -187,9 +187,9 @@ func (oc *Orchestrator) evaluationLoop() {
 	// and we need to poll the database for any events that we missed
 
 	ctx := log.WithLogField(oc.ctx, "role", fmt.Sprintf("pctm-loop-%s", oc.contractAddress))
-	log.L(ctx).Infof("Orchestrator for contract address %s started evaluation loop based on interval %s", oc.contractAddress, oc.evalInterval)
+	log.L(ctx).Infof("Sequencer for contract address %s started evaluation loop based on interval %s", oc.contractAddress, oc.evalInterval)
 
-	defer close(oc.orchestratorLoopDone)
+	defer close(oc.sequencerLoopDone)
 
 	ticker := time.NewTicker(oc.evalInterval)
 	for {
@@ -200,11 +200,11 @@ func (oc *Orchestrator) evaluationLoop() {
 		case <-oc.orchestrationEvalRequestChan:
 		case <-ticker.C:
 		case <-ctx.Done():
-			log.L(ctx).Infof("Orchestrator loop exit due to canceled context, it processed %d transaction during its lifetime.", oc.totalCompleted)
+			log.L(ctx).Infof("Sequencer loop exit due to canceled context, it processed %d transaction during its lifetime.", oc.totalCompleted)
 			return
 		case <-oc.stopProcess:
-			log.L(ctx).Infof("Orchestrator loop process stopped, it processed %d transaction during its lifetime.", oc.totalCompleted)
-			oc.state = OrchestratorStateStopped
+			log.L(ctx).Infof("Sequencer loop process stopped, it processed %d transaction during its lifetime.", oc.totalCompleted)
+			oc.state = SequencerStateStopped
 			oc.stateEntryTime = time.Now()
 			// TODO: trigger parent loop for removal
 			return
@@ -213,12 +213,12 @@ func (oc *Orchestrator) evaluationLoop() {
 	}
 }
 
-func (oc *Orchestrator) handleEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
+func (oc *Sequencer) handleEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
 	//For any event that is specific to a single transaction,
 	// find (or create) the transaction processor for that transaction
 	// and pass the event to it
 	transactionID := event.GetTransactionID()
-	log.L(ctx).Debugf("Orchestrator handling event %T for transaction %s", event, transactionID)
+	log.L(ctx).Debugf("Sequencer handling event %T for transaction %s", event, transactionID)
 
 	transactionProcessor := oc.getTransactionProcessor(transactionID)
 	if transactionProcessor == nil {
@@ -302,7 +302,7 @@ func (oc *Orchestrator) handleEvent(ctx context.Context, event ptmgrtypes.Privat
 
 }
 
-func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *components.PrivateTransaction) (queued bool) {
+func (oc *Sequencer) ProcessNewTransaction(ctx context.Context, tx *components.PrivateTransaction) (queued bool) {
 	oc.incompleteTxProcessMapMutex.Lock()
 	defer oc.incompleteTxProcessMapMutex.Unlock()
 	if oc.incompleteTxSProcessMap[tx.ID.String()] == nil {
@@ -320,7 +320,7 @@ func (oc *Orchestrator) ProcessNewTransaction(ctx context.Context, tx *component
 	return false
 }
 
-func (oc *Orchestrator) ProcessInFlightTransaction(ctx context.Context, tx *components.PrivateTransaction) (queued bool) {
+func (oc *Sequencer) ProcessInFlightTransaction(ctx context.Context, tx *components.PrivateTransaction) (queued bool) {
 	log.L(ctx).Infof("Processing in flight transaction %s", tx.ID)
 	//a transaction that already has had some processing done on it
 	// currently the only case this can happen is a transaction delegated from another node
@@ -347,20 +347,20 @@ func (oc *Orchestrator) ProcessInFlightTransaction(ctx context.Context, tx *comp
 	return false
 }
 
-func (oc *Orchestrator) HandleEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
+func (oc *Sequencer) HandleEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
 	oc.pendingEvents <- event
 }
 
-func (oc *Orchestrator) Start(c context.Context) (done <-chan struct{}, err error) {
+func (oc *Sequencer) Start(c context.Context) (done <-chan struct{}, err error) {
 	oc.syncPoints.Start()
-	oc.orchestratorLoopDone = make(chan struct{})
+	oc.sequencerLoopDone = make(chan struct{})
 	go oc.evaluationLoop()
-	oc.TriggerOrchestratorEvaluation()
-	return oc.orchestratorLoopDone, nil
+	oc.TriggerSequencerEvaluation()
+	return oc.sequencerLoopDone, nil
 }
 
 // Stop the InFlight transaction process.
-func (oc *Orchestrator) Stop() {
+func (oc *Sequencer) Stop() {
 	// try to send an item in `stopProcess` channel, which has a buffer of 1
 	// if it already has an item in the channel, this function does nothing
 	select {
@@ -370,7 +370,7 @@ func (oc *Orchestrator) Stop() {
 
 }
 
-func (oc *Orchestrator) TriggerOrchestratorEvaluation() {
+func (oc *Sequencer) TriggerSequencerEvaluation() {
 	// try to send an item in `processNow` channel, which has a buffer of 1
 	// if it already has an item in the channel, this function does nothing
 	select {
@@ -379,7 +379,7 @@ func (oc *Orchestrator) TriggerOrchestratorEvaluation() {
 	}
 }
 
-func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status components.PrivateTxStatus, err error) {
+func (oc *Sequencer) GetTxStatus(ctx context.Context, txID string) (status components.PrivateTxStatus, err error) {
 	//TODO This is primarily here to help with testing for now
 	// this needs to be revisited ASAP as part of a holisitic review of the persistence model
 	oc.incompleteTxProcessMapMutex.Lock()
@@ -392,7 +392,7 @@ func (oc *Orchestrator) GetTxStatus(ctx context.Context, txID string) (status co
 }
 
 // synchronously prepare and dispatch all given transactions to their associated signing address
-func (oc *Orchestrator) DispatchTransactions(ctx context.Context, dispatchableTransactions ptmgrtypes.DispatchableTransactions) error {
+func (oc *Sequencer) DispatchTransactions(ctx context.Context, dispatchableTransactions ptmgrtypes.DispatchableTransactions) error {
 	log.L(ctx).Debug("DispatchTransactions")
 	//prepare all transactions then dispatch them
 

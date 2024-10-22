@@ -1824,7 +1824,7 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, pub
 			WorkerCount:  confutil.P(1),
 			BatchMaxSize: confutil.P(1), // we don't want batching for our test
 		},
-		Orchestrator: pldconf.PrivateTxManagerOrchestratorConfig{
+		Sequencer: pldconf.PrivateTxManagerSequencerConfig{
 			// StaleTimeout: ,
 		},
 	})

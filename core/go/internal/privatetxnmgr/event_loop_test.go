@@ -36,7 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type orchestratorDepencyMocks struct {
+type sequencerDepencyMocks struct {
 	allComponents       *componentmocks.AllComponents
 	domainSmartContract *componentmocks.DomainSmartContract
 	domainContext       *componentmocks.DomainContext
@@ -53,12 +53,12 @@ type orchestratorDepencyMocks struct {
 	transportWriter     *privatetxnmgrmocks.TransportWriter
 }
 
-func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress *tktypes.EthAddress) (*Orchestrator, *orchestratorDepencyMocks, func()) {
+func newSequencerForTesting(t *testing.T, ctx context.Context, domainAddress *tktypes.EthAddress) (*Sequencer, *sequencerDepencyMocks, func()) {
 	if domainAddress == nil {
 		domainAddress = tktypes.MustEthAddress(tktypes.RandHex(20))
 	}
 
-	mocks := &orchestratorDepencyMocks{
+	mocks := &sequencerDepencyMocks{
 		allComponents:       componentmocks.NewAllComponents(t),
 		domainSmartContract: componentmocks.NewDomainSmartContract(t),
 		domainContext:       componentmocks.NewDomainContext(t),
@@ -88,7 +88,7 @@ func newOrchestratorForTesting(t *testing.T, ctx context.Context, domainAddress 
 	mocks.domainSmartContract.On("Address").Return(*domainAddress).Maybe()
 
 	syncPoints := syncpoints.NewSyncPoints(ctx, &pldconf.FlushWriterConfig{}, p, mocks.txManager)
-	o := NewOrchestrator(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerOrchestratorConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer, mocks.transportWriter, 30*time.Second)
+	o := NewSequencer(ctx, tktypes.RandHex(16), *domainAddress, &pldconf.PrivateTxManagerSequencerConfig{}, mocks.allComponents, mocks.domainSmartContract, mocks.endorsementGatherer, mocks.publisher, syncPoints, mocks.identityResolver, mocks.stateDistributer, mocks.transportWriter, 30*time.Second)
 	ocDone, err := o.Start(ctx)
 	require.NoError(t, err)
 
@@ -116,13 +116,13 @@ func waitForChannel[T any](t *testing.T, ch chan T) T {
 	}
 }
 
-func TestNewOrchestratorProcessNewTransactionAssemblyFailed(t *testing.T) {
-	// Test that the orchestrator can receive a new transaction and begin processing it.
+func TestNewSequencerProcessNewTransactionAssemblyFailed(t *testing.T) {
+	// Test that the sequencer can receive a new transaction and begin processing it.
 	// In this test, it doesn't need to get any further than assembly
 
 	ctx := context.Background()
 
-	testOc, dependencyMocks, _ := newOrchestratorForTesting(t, ctx, nil)
+	testOc, dependencyMocks, _ := newSequencerForTesting(t, ctx, nil)
 
 	newTxID := uuid.New()
 	testTx := &components.PrivateTransaction{
@@ -139,7 +139,7 @@ func TestNewOrchestratorProcessNewTransactionAssemblyFailed(t *testing.T) {
 		waitForFinalize <- true
 	})
 	//As we are using a mock publisher, the assemble failed event never gets back onto the event loop to trigger the next step ( finalization )
-	// but that's ok, we have proven what we set out to, the orchestrator can handle a new transaction and begin processing it
+	// but that's ok, we have proven what we set out to, the sequencer can handle a new transaction and begin processing it
 	// we could then emulate the publisher and trigger the next iteration of the loop but that would be better done with a less isolated test
 
 	assert.Empty(t, testOc.incompleteTxSProcessMap)
@@ -162,21 +162,21 @@ func TestNewOrchestratorProcessNewTransactionAssemblyFailed(t *testing.T) {
 
 }
 
-func TestOrchestratorPollingLoopStop(t *testing.T) {
+func TestSequencerPollingLoopStop(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	testOc, _, ocDone := newOrchestratorForTesting(t, ctx, nil)
+	testOc, _, ocDone := newSequencerForTesting(t, ctx, nil)
 	defer ocDone()
-	testOc.TriggerOrchestratorEvaluation()
+	testOc.TriggerSequencerEvaluation()
 	testOc.Stop()
 
 }
 
-func TestOrchestratorPollingLoopCancelContext(t *testing.T) {
+func TestSequencerPollingLoopCancelContext(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
-	_, _, ocDone := newOrchestratorForTesting(t, ctx, nil)
+	_, _, ocDone := newSequencerForTesting(t, ctx, nil)
 	defer ocDone()
 
 	cancel()

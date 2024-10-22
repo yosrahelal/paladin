@@ -47,8 +47,8 @@ type privateTxManager struct {
 	ctx                  context.Context
 	ctxCancel            func()
 	config               *pldconf.PrivateTxManagerConfig
-	orchestrators        map[string]*Orchestrator
-	orchestratorsLock    sync.RWMutex
+	sequencers           map[string]*Sequencer
+	sequencersLock       sync.RWMutex
 	endorsementGatherers map[string]ptmgrtypes.EndorsementGatherer
 	components           components.AllComponents
 	nodeName             string
@@ -94,7 +94,7 @@ func (p *privateTxManager) Stop() {
 func NewPrivateTransactionMgr(ctx context.Context, config *pldconf.PrivateTxManagerConfig) components.PrivateTxManager {
 	p := &privateTxManager{
 		config:               config,
-		orchestrators:        make(map[string]*Orchestrator),
+		sequencers:           make(map[string]*Sequencer),
 		endorsementGatherers: make(map[string]ptmgrtypes.EndorsementGatherer),
 		subscribers:          make([]components.PrivateTxEventSubscriber, 0),
 	}
@@ -102,23 +102,23 @@ func NewPrivateTransactionMgr(ctx context.Context, config *pldconf.PrivateTxMana
 	return p
 }
 
-func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contractAddr tktypes.EthAddress, domainAPI components.DomainSmartContract) (oc *Orchestrator, err error) {
+func (p *privateTxManager) getSequencerForContract(ctx context.Context, contractAddr tktypes.EthAddress, domainAPI components.DomainSmartContract) (oc *Sequencer, err error) {
 
 	readlock := true
-	p.orchestratorsLock.RLock()
+	p.sequencersLock.RLock()
 	defer func() {
 		if readlock {
-			p.orchestratorsLock.RUnlock()
+			p.sequencersLock.RUnlock()
 		}
 	}()
-	if p.orchestrators[contractAddr.String()] == nil {
+	if p.sequencers[contractAddr.String()] == nil {
 		//swap the read lock for a write lock
-		p.orchestratorsLock.RUnlock()
+		p.sequencersLock.RUnlock()
 		readlock = false
-		p.orchestratorsLock.Lock()
-		defer p.orchestratorsLock.Unlock()
-		//double check in case another goroutine has created the orchestrator while we were waiting for the write lock
-		if p.orchestrators[contractAddr.String()] == nil {
+		p.sequencersLock.Lock()
+		defer p.sequencersLock.Unlock()
+		//double check in case another goroutine has created the sequencer while we were waiting for the write lock
+		if p.sequencers[contractAddr.String()] == nil {
 			transportWriter := NewTransportWriter(domainAPI.Domain().Name(), &contractAddr, p.nodeName, p.components.TransportManager())
 			publisher := NewPublisher(p, contractAddr.String())
 
@@ -128,11 +128,11 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 				return nil, err
 			}
 
-			p.orchestrators[contractAddr.String()] =
-				NewOrchestrator(
+			p.sequencers[contractAddr.String()] =
+				NewSequencer(
 					p.ctx, p.nodeName,
 					contractAddr,
-					&p.config.Orchestrator,
+					&p.config.Sequencer,
 					p.components,
 					domainAPI,
 					endorsementGatherer,
@@ -143,23 +143,23 @@ func (p *privateTxManager) getOrchestratorForContract(ctx context.Context, contr
 					transportWriter,
 					confutil.DurationMin(p.config.RequestTimeout, 0, *pldconf.PrivateTxManagerDefaults.RequestTimeout),
 				)
-			orchestratorDone, err := p.orchestrators[contractAddr.String()].Start(ctx)
+			sequencerDone, err := p.sequencers[contractAddr.String()].Start(ctx)
 			if err != nil {
-				log.L(ctx).Errorf("Failed to start orchestrator for contract %s: %s", contractAddr.String(), err)
+				log.L(ctx).Errorf("Failed to start sequencer for contract %s: %s", contractAddr.String(), err)
 				return nil, err
 			}
 
 			go func() {
 
-				<-orchestratorDone
-				log.L(ctx).Infof("Orchestrator for contract %s has stopped", contractAddr.String())
-				p.orchestratorsLock.Lock()
-				defer p.orchestratorsLock.Unlock()
-				delete(p.orchestrators, contractAddr.String())
+				<-sequencerDone
+				log.L(ctx).Infof("Sequencer for contract %s has stopped", contractAddr.String())
+				p.sequencersLock.Lock()
+				defer p.sequencersLock.Unlock()
+				delete(p.sequencers, contractAddr.String())
 			}()
 		}
 	}
-	return p.orchestrators[contractAddr.String()], nil
+	return p.sequencers[contractAddr.String()], nil
 }
 
 func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context, contractAddr tktypes.EthAddress) (ptmgrtypes.EndorsementGatherer, error) {
@@ -210,7 +210,7 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.Priva
 		return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "PreAssembly is nil")
 	}
 
-	oc, err := p.getOrchestratorForContract(ctx, contractAddr, domainAPI)
+	oc, err := p.getSequencerForContract(ctx, contractAddr, domainAPI)
 	if err != nil {
 		return err
 	}
@@ -247,7 +247,7 @@ func (p *privateTxManager) handleDelegatedTransaction(ctx context.Context, tx *c
 	if err != nil {
 		return err
 	}
-	oc, err := p.getOrchestratorForContract(ctx, contractAddr, domainAPI)
+	oc, err := p.getSequencerForContract(ctx, contractAddr, domainAPI)
 	if err != nil {
 		return err
 	}
@@ -300,7 +300,7 @@ func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.Pr
 	}
 
 	// this is a transaction that will confirm just like invoke transactions
-	// unlike invoke transactions, we don't yet have the orchestrator thread to dispatch to so we start a new go routine for each deployment
+	// unlike invoke transactions, we don't yet have the sequencer thread to dispatch to so we start a new go routine for each deployment
 	// TODO - should have a pool of deployment threads? Maybe size of pool should be one? Or at least one per domain?
 	go p.deploymentLoop(log.WithLogField(p.ctx, "role", "deploy-loop"), domain, tx)
 
@@ -337,7 +337,7 @@ func (p *privateTxManager) revertDeploy(ctx context.Context, tx *components.Priv
 
 func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain components.Domain, tx *components.PrivateContractDeploy) error {
 
-	// TODO there is a lot of common code between this and the Dispatch function in the orchestrator. should really move some of it into a common place
+	// TODO there is a lot of common code between this and the Dispatch function in the sequencer. should really move some of it into a common place
 	// and use that as an opportunity to refactor to be more readable
 
 	err := domain.PrepareDeploy(ctx, tx)
@@ -432,27 +432,27 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 func (p *privateTxManager) GetTxStatus(ctx context.Context, domainAddress string, txID string) (status components.PrivateTxStatus, err error) {
 	// this returns status that we happen to have in memory at the moment and might be useful for debugging
 
-	p.orchestratorsLock.RLock()
-	defer p.orchestratorsLock.RUnlock()
-	targetOrchestrator := p.orchestrators[domainAddress]
-	if targetOrchestrator == nil {
+	p.sequencersLock.RLock()
+	defer p.sequencersLock.RUnlock()
+	targetSequencer := p.sequencers[domainAddress]
+	if targetSequencer == nil {
 		//TODO should be valid to query the status of a transaction that belongs to a domain instance that is not currently active
-		errorMessage := fmt.Sprintf("Orchestrator not found for domain address %s", domainAddress)
+		errorMessage := fmt.Sprintf("Sequencer not found for domain address %s", domainAddress)
 		return components.PrivateTxStatus{}, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
 	} else {
-		return targetOrchestrator.GetTxStatus(ctx, txID)
+		return targetSequencer.GetTxStatus(ctx, txID)
 	}
 
 }
 
 func (p *privateTxManager) HandleNewEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
-	p.orchestratorsLock.RLock()
-	defer p.orchestratorsLock.RUnlock()
-	targetOrchestrator := p.orchestrators[event.GetContractAddress()]
-	if targetOrchestrator == nil { // this is an event that belongs to a contract that's not in flight, throw it away and rely on the engine to trigger the action again when the orchestrator is wake up. (an enhanced version is to add weight on queueing an orchestrator)
-		log.L(ctx).Warnf("Ignored %T event for domain contract %s and transaction %s . If this happens a lot, check the orchestrator idle timeout is set to a reasonable number", event, event.GetContractAddress(), event.GetTransactionID())
+	p.sequencersLock.RLock()
+	defer p.sequencersLock.RUnlock()
+	targetSequencer := p.sequencers[event.GetContractAddress()]
+	if targetSequencer == nil { // this is an event that belongs to a contract that's not in flight, throw it away and rely on the engine to trigger the action again when the sequencer is wake up. (an enhanced version is to add weight on queueing an sequencer)
+		log.L(ctx).Warnf("Ignored %T event for domain contract %s and transaction %s . If this happens a lot, check the sequencer idle timeout is set to a reasonable number", event, event.GetContractAddress(), event.GetTransactionID())
 	} else {
-		targetOrchestrator.HandleEvent(ctx, event)
+		targetSequencer.HandleEvent(ctx, event)
 	}
 }
 

@@ -225,7 +225,7 @@ func (ts *PaladinTxProcessor) Action(ctx context.Context) {
 	}
 
 	if ts.status == "delegated" {
-		// probably should not get here because the orchestrator should have removed the transaction processor
+		// probably should not get here because the sequencer should have removed the transaction processor
 		log.L(ctx).Infof("Transaction %s has been delegated", ts.transaction.ID.String())
 		return
 	}
@@ -850,7 +850,7 @@ func (ts *PaladinTxProcessor) requestVerifierResolution(ctx context.Context) {
 			v.Algorithm,
 			v.VerifierType,
 			func(ctx context.Context, verifier string) {
-				//response event needs to be handled by the orchestrator so that the dispatch to a handling thread is done in fairness to all other in flight transactions
+				//response event needs to be handled by the sequencer so that the dispatch to a handling thread is done in fairness to all other in flight transactions
 				ts.publisher.PublishResolveVerifierResponseEvent(ctx, ts.transaction.ID.String(), v.Lookup, v.Algorithm, verifier, v.VerifierType)
 			},
 			func(ctx context.Context, err error) {
