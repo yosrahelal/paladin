@@ -1035,7 +1035,7 @@ func TestInitCallOk(t *testing.T) {
 
 	txi := goodPrivateCallWithInputsAndOutputs(psc)
 
-	requiredVerifiers, err := psc.InitCall(td.c.dCtx, txi)
+	requiredVerifiers, err := psc.InitCall(td.ctx, txi)
 	require.NoError(t, err)
 	require.Len(t, requiredVerifiers, 1)
 	assert.Equal(t, "lookup1", requiredVerifiers[0].Lookup)
@@ -1050,7 +1050,7 @@ func TestInitCallBadInput(t *testing.T) {
 
 	psc := goodPSC(td.d)
 
-	_, err := psc.InitCall(td.c.dCtx, &components.TransactionInputs{
+	_, err := psc.InitCall(td.ctx, &components.TransactionInputs{
 		To: psc.info.Address,
 		Function: &abi.Entry{
 			Type: abi.Function,
@@ -1079,7 +1079,7 @@ func TestInitCallError(t *testing.T) {
 
 	txi := goodPrivateCallWithInputsAndOutputs(psc)
 
-	_, err := psc.InitCall(td.c.dCtx, txi)
+	_, err := psc.InitCall(td.ctx, txi)
 	assert.Regexp(t, "pop", err)
 }
 

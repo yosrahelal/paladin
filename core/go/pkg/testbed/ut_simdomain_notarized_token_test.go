@@ -140,7 +140,12 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 			"type": "string"
 		  }
 		],
-		"outputs": null
+		"outputs": [
+		  {
+		    "name": "amount",
+			"type": "uint256"
+		  }
+		]
 	}`
 
 	fakeDeployPayload := `{
@@ -159,6 +164,14 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 		Salt   tktypes.HexBytes      `json:"salt"`
 		Owner  ethtypes.Address0xHex `json:"owner"`
 		Amount *ethtypes.HexInteger  `json:"amount"`
+	}
+
+	type getBalanceParser struct {
+		Account string `json:"account"`
+	}
+
+	type getBalanceResult struct {
+		Amount *tktypes.HexUint256 `json:"amount"`
 	}
 
 	contractDataABI := &abi.ParameterArray{
@@ -210,7 +223,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 					return nil, nil, nil, fmt.Errorf("insufficient funds (available=%s)", total.Text(10))
 				}
 				for _, state := range states {
-					lastStateTimestamp = state.StoredAt
+					lastStateTimestamp = state.CreatedAt
 					// Note: More sophisticated coin selection might prefer states that aren't locked to a sequence
 					var coin fakeCoinParser
 					if err := json.Unmarshal([]byte(state.DataJson), &coin); err != nil {
@@ -614,11 +627,67 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 				return &res, nil
 			},
 
-			ExecCall: func(ctx context.Context, cr *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
-				tx := cr.Transaction
+			InitCall: func(ctx context.Context, icr *prototk.InitCallRequest) (*prototk.InitCallResponse, error) {
+				tx := icr.Transaction
 				assert.JSONEq(t, fakeCoinGetBalanceABI, tx.FunctionAbiJson)
-				assert.Equal(t, "function transfer(string memory from, string memory to, uint256 amount) external { }", tx.FunctionSignature)
+				assert.Equal(t, "function getBalance(string memory account) external returns (uint256 amount) { }", tx.FunctionSignature)
+				var inputs *getBalanceParser
+				err := json.Unmarshal([]byte(icr.Transaction.FunctionParamsJson), &inputs)
+				require.NoError(t, err)
+				return &prototk.InitCallResponse{
+					RequiredVerifiers: []*prototk.ResolveVerifierRequest{
+						{
+							Lookup:       inputs.Account,
+							Algorithm:    algorithms.ECDSA_SECP256K1,
+							VerifierType: verifiers.ETH_ADDRESS,
+						},
+					},
+				}, nil
+			},
 
+			ExecCall: func(ctx context.Context, ecr *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
+				tx := ecr.Transaction
+				assert.JSONEq(t, fakeCoinGetBalanceABI, tx.FunctionAbiJson)
+				assert.Equal(t, "function getBalance(string memory account) external returns (uint256 amount) { }", tx.FunctionSignature)
+				balance := new(big.Int)
+				var limit = 10
+				var lastState *prototk.StoredState
+				for {
+					jq := query.NewQueryBuilder().
+						Sort("-.created", "-.id").
+						Limit(limit).
+						Equal("owner", ecr.ResolvedVerifiers[0].Verifier)
+					if lastState != nil {
+						jq = jq.Or(
+							query.NewQueryBuilder().LessThan(".created", lastState.CreatedAt),
+							query.NewQueryBuilder().Equal(".created", lastState.CreatedAt).LessThan(".id", lastState.Id),
+						)
+					}
+					res, err := callbacks.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
+						StateQueryContext: ecr.StateQueryContext,
+						SchemaId:          fakeCoinSchemaID,
+						QueryJson:         jq.Query().String(),
+					})
+					require.NoError(t, err)
+
+					for _, state := range res.States {
+						var coin fakeCoinParser
+						err := json.Unmarshal([]byte(state.DataJson), &coin)
+						require.NoError(t, err)
+						balance = balance.Add(balance, coin.Amount.BigInt())
+						lastState = state
+					}
+
+					if len(res.States) < limit {
+						break
+					}
+
+				}
+				return &prototk.ExecCallResponse{
+					ResultJson: tktypes.JSONString(&getBalanceResult{
+						Amount: (*tktypes.HexUint256)(balance),
+					}).Pretty(),
+				}, nil
 			},
 		}}
 	})
@@ -669,6 +738,17 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 		}`),
 	}, true)
 	assert.NoError(t, rpcErr)
+
+	var balance *getBalanceResult
+	rpcErr = tbRPC.CallRPC(ctx, &balance, "testbed_call", &tktypes.PrivateContractInvoke{
+		To:       tktypes.EthAddress(contractAddr),
+		Function: *mustParseABIEntry(fakeCoinGetBalanceABI),
+		Inputs: tktypes.RawJSON(`{
+			"account": "wallets.org1.aaaaaa"
+		}`),
+	}, tktypes.DefaultJSONFormatOptions)
+	assert.NoError(t, rpcErr)
+	assert.Equal(t, "100000000000000000000", balance.Amount.Int().String())
 
 	// Check we can also use the utility function externally to resolve verifiers
 	var address tktypes.EthAddress

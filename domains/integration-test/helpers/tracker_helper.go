@@ -67,14 +67,14 @@ func DeployTracker(
 }
 
 func (h *NotoTrackerHelper) GetBalance(ctx context.Context, account string) int64 {
-	call := functionBuilder(ctx, h.pld, h.ABI, "balanceOf").
+	var jsonOutput map[string]any
+	err := functionBuilder(ctx, h.pld, h.ABI, "balanceOf").
 		Public().
 		To(h.Address).
 		Inputs(map[string]any{"account": account}).
-		BuildTX()
-	require.NoError(h.t, call.Error())
-	var jsonOutput map[string]any
-	err := h.tb.ExecBaseLedgerCall(ctx, &jsonOutput, call.CallTX())
+		Outputs(&jsonOutput).
+		BuildTX().
+		Call()
 	require.NoError(h.t, err)
 	var balance big.Int
 	balance.SetString(jsonOutput["0"].(string), 10)

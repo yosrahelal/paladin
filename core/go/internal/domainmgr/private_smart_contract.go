@@ -457,15 +457,15 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *
 	return nil
 }
 
-func (dc *domainContract) InitCall(dCtx components.DomainContext, txi *components.TransactionInputs) ([]*prototk.ResolveVerifierRequest, error) {
+func (dc *domainContract) InitCall(ctx context.Context, txi *components.TransactionInputs) ([]*prototk.ResolveVerifierRequest, error) {
 
-	txSpec, err := dc.processTxInputs(dCtx.Ctx(), txi)
+	txSpec, err := dc.processTxInputs(ctx, txi)
 	if err != nil {
 		return nil, err
 	}
 
 	// Call the domain
-	res, err := dc.api.InitCall(dCtx.Ctx(), &prototk.InitCallRequest{
+	res, err := dc.api.InitCall(ctx, &prototk.InitCallRequest{
 		Transaction: txSpec,
 	})
 	if err != nil {
