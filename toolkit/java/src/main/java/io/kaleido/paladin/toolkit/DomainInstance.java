@@ -41,6 +41,8 @@ public abstract class DomainInstance extends PluginInstance<Service.DomainMessag
     protected abstract CompletableFuture<ToDomain.SignResponse> sign(ToDomain.SignRequest request);
     protected abstract CompletableFuture<ToDomain.GetVerifierResponse> getVerifier(ToDomain.GetVerifierRequest request);
     protected abstract CompletableFuture<ToDomain.ValidateStateHashesResponse> validateStateHashes(ToDomain.ValidateStateHashesRequest request);
+    protected abstract CompletableFuture<ToDomain.InitCallResponse> initCall(ToDomain.InitCallRequest request);
+    protected abstract CompletableFuture<ToDomain.ExecCallResponse> execCall(ToDomain.ExecCallRequest request);
 
     protected DomainInstance(String grpcTarget, String instanceId) {
         super(grpcTarget, instanceId);
@@ -110,6 +112,8 @@ public abstract class DomainInstance extends PluginInstance<Service.DomainMessag
                 case SIGN -> sign(request.getSign()).thenApply(response::setSignRes);
                 case GET_VERIFIER -> getVerifier(request.getGetVerifier()).thenApply(response::setGetVerifierRes);
                 case VALIDATE_STATE_HASHES -> validateStateHashes(request.getValidateStateHashes()).thenApply(response::setValidateStateHashesRes);
+                case INIT_CALL -> initCall(request.getInitCall()).thenApply(response::setInitCallRes);
+                case EXEC_CALL -> execCall(request.getExecCall()).thenApply(response::setExecCallRes);
                 default -> throw new IllegalArgumentException("unknown request: %s".formatted(request.getRequestToDomainCase()));
             };
             return resultApplied.thenApply((ra) -> {

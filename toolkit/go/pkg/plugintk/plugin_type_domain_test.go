@@ -318,6 +318,40 @@ func TestDomainFunction_ValidateStateHashes(t *testing.T) {
 	})
 }
 
+func TestDomainFunction_InitCall(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// InitCall - paladin to domain
+	funcs.InitCall = func(ctx context.Context, cdr *prototk.InitCallRequest) (*prototk.InitCallResponse, error) {
+		return &prototk.InitCallResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_InitCall{
+			InitCall: &prototk.InitCallRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_InitCallRes{}, res.ResponseFromDomain)
+	})
+}
+
+func TestDomainFunction_ExecCall(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// ExecCall - paladin to domain
+	funcs.ExecCall = func(ctx context.Context, cdr *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
+		return &prototk.ExecCallResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_ExecCall{
+			ExecCall: &prototk.ExecCallRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_ExecCallRes{}, res.ResponseFromDomain)
+	})
+}
+
 func TestDomainRequestError(t *testing.T) {
 	_, exerciser, _, _, _, done := setupDomainTests(t)
 	defer done()

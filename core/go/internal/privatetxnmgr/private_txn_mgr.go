@@ -170,8 +170,8 @@ func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context
 	}
 	if p.endorsementGatherers[contractAddr.String()] == nil {
 		// TODO: Consider scope of state in privateTxManager threading model
-		dCtx := p.components.StateManager().NewDomainContext(p.ctx /* background context */, domainSmartContract.Domain(), contractAddr, p.components.Persistence().DB() /* no DB transaction */)
-		endorsementGatherer := NewEndorsementGatherer(domainSmartContract, dCtx, p.components.KeyManager())
+		dCtx := p.components.StateManager().NewDomainContext(p.ctx /* background context */, domainSmartContract.Domain(), contractAddr)
+		endorsementGatherer := NewEndorsementGatherer(p.components.Persistence(), domainSmartContract, dCtx, p.components.KeyManager())
 		p.endorsementGatherers[contractAddr.String()] = endorsementGatherer
 	}
 	return p.endorsementGatherers[contractAddr.String()], nil
@@ -420,7 +420,7 @@ func (p *privateTxManager) evaluateDeployment(ctx context.Context, domain compon
 	}
 
 	// as this is a deploy we specify the null address
-	err = p.syncPoints.PersistDispatchBatch(ctx, tktypes.EthAddress{}, dispatchBatch, nil)
+	err = p.syncPoints.PersistDeployDispatchBatch(ctx, dispatchBatch)
 	if err != nil {
 		log.L(ctx).Errorf("Error persisting batch: %s", err)
 		return p.revertDeploy(ctx, tx, err)

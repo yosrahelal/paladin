@@ -5,7 +5,7 @@ go 1.22.5
 require (
 	github.com/google/uuid v1.6.0
 	github.com/hyperledger/firefly-common v1.4.11
-	github.com/hyperledger/firefly-signer v1.1.18-0.20241020190415-2aaf31608d01
+	github.com/hyperledger/firefly-signer v1.1.18
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/text v0.19.0

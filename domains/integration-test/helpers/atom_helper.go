@@ -108,13 +108,13 @@ func (a *AtomHelper) Execute(ctx context.Context) *TransactionHelper {
 }
 
 func (a *AtomHelper) GetOperationCount(ctx context.Context) int {
-	tx := functionBuilder(ctx, a.pld, a.InstanceABI, "getOperationCount").
+	var jsonOutput map[string]any
+	err := functionBuilder(ctx, a.pld, a.InstanceABI, "getOperationCount").
 		Public().
 		To(a.Address).
-		BuildTX()
-	require.NoError(a.t, tx.Error())
-	var jsonOutput map[string]any
-	err := a.tb.ExecBaseLedgerCall(ctx, &jsonOutput, tx.CallTX())
+		Outputs(&jsonOutput).
+		BuildTX().
+		Call()
 	require.NoError(a.t, err)
 	opCount, err := strconv.Atoi(jsonOutput["0"].(string))
 	require.NoError(a.t, err)
@@ -125,14 +125,14 @@ func (a *AtomHelper) GetOperations(ctx context.Context) []map[string]any {
 	opCount := a.GetOperationCount(ctx)
 	var operations []map[string]any
 	for i := 0; i < opCount; i++ {
-		tx := functionBuilder(ctx, a.pld, a.InstanceABI, "getOperation").
+		var jsonOutput map[string]any
+		err := functionBuilder(ctx, a.pld, a.InstanceABI, "getOperation").
 			Public().
 			To(a.Address).
 			Inputs(map[string]int{"n": i}).
-			BuildTX()
-		require.NoError(a.t, tx.Error())
-		var jsonOutput map[string]any
-		err := a.tb.ExecBaseLedgerCall(ctx, &jsonOutput, tx.CallTX())
+			Outputs(&jsonOutput).
+			BuildTX().
+			Call()
 		require.NoError(a.t, err)
 		operations = append(operations, jsonOutput["0"].(map[string]any))
 	}

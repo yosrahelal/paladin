@@ -395,7 +395,7 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 					return nil, nil, nil, fmt.Errorf("%s: insufficient funds (available=%s)", SimpleDomainInsufficientFundsError, total.Text(10))
 				}
 				for _, state := range states {
-					lastStateTimestamp = state.StoredAt
+					lastStateTimestamp = state.CreatedAt
 					// Note: More sophisticated coin selection might prefer states that aren't locked to a sequence
 					var coin simpleTokenParser
 					if err := json.Unmarshal([]byte(state.DataJson), &coin); err != nil {

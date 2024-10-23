@@ -286,9 +286,9 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 
 	var states []*pldapi.State
 	if req.UseNullifiers != nil && *req.UseNullifiers {
-		_, states, err = c.dCtx.FindAvailableNullifiers(schemaID, &query)
+		_, states, err = c.dCtx.FindAvailableNullifiers(c.dbTX, schemaID, &query)
 	} else {
-		_, states, err = c.dCtx.FindAvailableStates(schemaID, &query)
+		_, states, err = c.dCtx.FindAvailableStates(c.dbTX, schemaID, &query)
 	}
 	if err != nil {
 		return nil, err
@@ -297,11 +297,11 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 	pbStates := make([]*prototk.StoredState, len(states))
 	for i, s := range states {
 		pbStates[i] = &prototk.StoredState{
-			Id:       s.ID.String(),
-			SchemaId: s.Schema.String(),
-			StoredAt: s.Created.UnixNano(),
-			DataJson: string(s.Data),
-			Locks:    []*prototk.StateLock{},
+			Id:        s.ID.String(),
+			SchemaId:  s.Schema.String(),
+			CreatedAt: s.Created.UnixNano(),
+			DataJson:  string(s.Data),
+			Locks:     []*prototk.StateLock{},
 		}
 		for _, l := range s.Locks {
 			pbStates[i].Locks = append(pbStates[i].Locks, &prototk.StateLock{

@@ -21,8 +21,7 @@ import (
 )
 
 type StateStoreConfig struct {
-	SchemaCache CacheConfig       `json:"schemaCache"`
-	StateWriter FlushWriterConfig `json:"stateWriter"`
+	SchemaCache CacheConfig `json:"schemaCache"`
 }
 
 var StateWriterConfigDefaults = FlushWriterConfig{

@@ -34,7 +34,7 @@ type StateManager interface {
 	ListDomainContexts() []DomainContextInfo
 
 	// Create a new domain context - caller is responsible for closing it
-	NewDomainContext(ctx context.Context, domain Domain, contractAddress tktypes.EthAddress, dbTX *gorm.DB) DomainContext
+	NewDomainContext(ctx context.Context, domain Domain, contractAddress tktypes.EthAddress) DomainContext
 
 	// Get a previously created domain context
 	GetDomainContext(ctx context.Context, id uuid.UUID) DomainContext
@@ -86,11 +86,15 @@ type DomainContext interface {
 	// 2) We deliberately return states that are locked to a transaction (but not spent yet) - which means the
 	//    result of the any assemble that uses those states, will be a transaction that must
 	//    be on the same transaction where those states are locked.
-	FindAvailableStates(schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*pldapi.State, error)
+	//
+	// The dbTX is passed in to allow re-use of a connection during read operations.
+	FindAvailableStates(dbTX *gorm.DB, schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*pldapi.State, error)
 
 	// FindAvailableNullifiers is similar to FindAvailableStates, but for domains that leverage
 	// nullifiers to record spending.
-	FindAvailableNullifiers(schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*pldapi.State, error)
+	//
+	// The dbTX is passed in to allow re-use of a connection during read operations.
+	FindAvailableNullifiers(dbTX *gorm.DB, schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*pldapi.State, error)
 
 	// AddStateLocks updates the in-memory state of the domain context, to record a set of locks
 	// that affect queries on available states and nullifiers.
@@ -109,7 +113,8 @@ type DomainContext interface {
 	// the specified transaction using an in-memory lock.
 	//
 	// States will be written to the DB on the next flush (the associated lock is not)
-	UpsertStates(states ...*StateUpsert) (s []*pldapi.State, err error)
+	// The dbTX is passed in to allow re-use of a connection during read operations.
+	UpsertStates(dbTX *gorm.DB, states ...*StateUpsert) (s []*pldapi.State, err error)
 
 	// UpsertNullifiers creates nullifier records associated with states.
 	// Nullifiers are an alternate state identifier (separate from the state ID) that can be used
@@ -140,18 +145,14 @@ type DomainContext interface {
 	// Flush moves the un-flushed set into flushing status, queueing to a DB writer to batch write
 	// to the database.
 	//
-	// We will wait for any previously initiated flush to complete.
-	// Synchronous error will be returned if a previously initiated flush fails/failed
-	// and Reset() has not yet been called.
+	// The domain context needs to know when the flush has completed for success or failure, as it needs to
+	// clear the flushing state from the in-memory context. This can only be done after the DB transaction
+	// commits, as only then is it assured that the states will be returned by the DB and do not need
+	// to be held in memory any longer. So the returned callback function must be called on commit OR ROLLBACK
+	// of the database transaction.
 	//
-	// Then if any previous flush is cleared ok, we go asynchronous allowing the current goroutine to continue.
-	//
-	// The supplied callback will be called once all writes up to the point of this call have
-	// been flushed to the database - for success or failure.
-	InitiateFlush(cb func(error)) error
-
-	// Convenience function for synchronous flush (mainly for testing)
-	FlushSync() error
+	// If an error is returned by this function, then the postDBTx callback will be nil
+	Flush(dbTX *gorm.DB) (postDBTx func(error), err error)
 
 	// Removes the domain context from the state manager, and prevents any further use
 	Close()

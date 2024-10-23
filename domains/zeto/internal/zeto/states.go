@@ -111,7 +111,7 @@ func (z *Zeto) prepareInputs(ctx context.Context, stateQueryContext, sender stri
 			return nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgInsufficientFunds, total.Text(10))
 		}
 		for _, state := range states {
-			lastStateTimestamp = state.StoredAt
+			lastStateTimestamp = state.CreatedAt
 			coin, err := z.makeCoin(state.DataJson)
 			if err != nil {
 				return nil, nil, nil, nil, i18n.NewError(ctx, msgs.MsgInvalidCoin, state.Id, err)

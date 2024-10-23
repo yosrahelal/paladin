@@ -95,10 +95,13 @@ func (s *SwapHelper) Execute(ctx context.Context) *TransactionHelper {
 }
 
 func (s *SwapHelper) GetTrade(ctx context.Context) map[string]any {
-	call := functionBuilder(ctx, s.pld, s.ABI, "trade").Public().To(s.Address).BuildTX()
-	require.NoError(s.t, call.Error())
 	var jsonOutput map[string]any
-	err := s.tb.ExecBaseLedgerCall(ctx, &jsonOutput, call.CallTX())
+	err := functionBuilder(ctx, s.pld, s.ABI, "trade").
+		Public().
+		To(s.Address).
+		Outputs(&jsonOutput).
+		BuildTX().
+		Call()
 	require.NoError(s.t, err)
 	return jsonOutput
 }

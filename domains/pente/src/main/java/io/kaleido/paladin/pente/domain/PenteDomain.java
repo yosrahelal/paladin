@@ -454,6 +454,18 @@ public class PenteDomain extends DomainInstance {
         return CompletableFuture.failedFuture(new UnsupportedOperationException());
     }
 
+    @Override
+    protected CompletableFuture<ToDomain.InitCallResponse> initCall(ToDomain.InitCallRequest request) {
+        // TODO: Implement call against the Pente privacy group
+        return CompletableFuture.failedFuture(new UnsupportedOperationException());
+    }
+
+    @Override
+    protected CompletableFuture<ToDomain.ExecCallResponse> execCall(ToDomain.ExecCallRequest request) {
+        // TODO: Implement call against the Pente privacy group
+        return CompletableFuture.failedFuture(new UnsupportedOperationException());
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     record EventWithData(
             @JsonProperty

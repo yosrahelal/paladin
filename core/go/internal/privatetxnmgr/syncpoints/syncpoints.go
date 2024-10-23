@@ -51,7 +51,10 @@ type SyncPoints interface {
 	// to the PrivateTxnManager's persistence store in the same database transaction
 	// Although the actual persistence is offloaded to the flushwriter, this method is synchronous and will block until the
 	// dispatch sequence is written to the database
-	PersistDispatchBatch(ctx context.Context, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*statedistribution.StateDistribution) error
+	PersistDispatchBatch(dCtx components.DomainContext, contractAddress tktypes.EthAddress, dispatchBatch *DispatchBatch, stateDistributions []*statedistribution.StateDistribution) error
+
+	// Deploy is a special case of dispatch batch, where there are no private states, so no domain context is required
+	PersistDeployDispatchBatch(ctx context.Context, dispatchBatch *DispatchBatch) error
 
 	// QueueTransactionFinalize integrates with TxManager to mark a transaction as finalized with the given formatter revert reason
 	// this is an async operation so it can safely be called from the sequencer event loop thread
@@ -60,10 +63,10 @@ type SyncPoints interface {
 
 	// DelegateTransaction writes a record to the local database recording that the given transaction has been delegated to the given delegate
 	// then triggers a reliable cross node handshake to transmit that delegation to the delegate node and record their acknowledgement
-	QueueDelegation(ctx context.Context, contractAddress tktypes.EthAddress, transactionID uuid.UUID, delegateNodeID string, onCommit func(context.Context), onRollback func(context.Context, error))
+	QueueDelegation(dCtx components.DomainContext, contractAddress tktypes.EthAddress, transactionID uuid.UUID, delegateNodeID string, onCommit func(context.Context), onRollback func(context.Context, error))
 
 	// DelegateTransaction writes a record to the local database recording that we have received acknowledgement from the delegate node
-	QueueDelegationAck(ctx context.Context, contractAddress tktypes.EthAddress, delegationID uuid.UUID, onCommit func(context.Context), onRollback func(context.Context, error))
+	QueueDelegationAck(dCtx components.DomainContext, contractAddress tktypes.EthAddress, delegationID uuid.UUID, onCommit func(context.Context), onRollback func(context.Context, error))
 	Close()
 }
 

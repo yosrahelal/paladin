@@ -38,14 +38,13 @@ type domainContext struct {
 	context.Context
 
 	id                 uuid.UUID
-	dbTX               *gorm.DB
 	ss                 *stateManager
 	domainName         string
 	customHashFunction bool
 	contractAddress    tktypes.EthAddress
 	stateLock          sync.Mutex
-	unFlushed          *writeOperation
-	flushing           *writeOperation
+	unFlushed          *pendingStateWrites
+	flushing           *pendingStateWrites
 	domainContexts     map[uuid.UUID]*domainContext
 	closed             bool
 
@@ -60,7 +59,7 @@ type domainContext struct {
 }
 
 // Very important that callers Close domain contexts they open
-func (ss *stateManager) NewDomainContext(ctx context.Context, domain components.Domain, contractAddress tktypes.EthAddress, dbTX *gorm.DB) components.DomainContext {
+func (ss *stateManager) NewDomainContext(ctx context.Context, domain components.Domain, contractAddress tktypes.EthAddress) components.DomainContext {
 	id := uuid.New()
 	log.L(ctx).Debugf("Domain context %s for domain %s contract %s closed", id, domain.Name(), contractAddress)
 
@@ -69,7 +68,6 @@ func (ss *stateManager) NewDomainContext(ctx context.Context, domain components.
 
 	dc := &domainContext{
 		Context:            log.WithLogField(ctx, "domain_ctx", fmt.Sprintf("%s_%s", domain.Name(), id)),
-		dbTX:               dbTX,
 		id:                 id,
 		ss:                 ss,
 		domainName:         domain.Name(),
@@ -249,7 +247,7 @@ func (dc *domainContext) mergeInMemoryMatches(schema components.Schema, states [
 
 }
 
-func (dc *domainContext) FindAvailableStates(schemaID tktypes.Bytes32, query *query.QueryJSON) (components.Schema, []*pldapi.State, error) {
+func (dc *domainContext) FindAvailableStates(dbTX *gorm.DB, schemaID tktypes.Bytes32, query *query.QueryJSON) (components.Schema, []*pldapi.State, error) {
 
 	// Build a list of spending states
 	spending, _, _, err := dc.getUnFlushedSpends()
@@ -258,7 +256,7 @@ func (dc *domainContext) FindAvailableStates(schemaID tktypes.Bytes32, query *qu
 	}
 
 	// Run the query against the DB
-	schema, states, err := dc.ss.findStates(dc, dc.dbTX, dc.domainName, &dc.contractAddress, schemaID, query, StateStatusAvailable, spending...)
+	schema, states, err := dc.ss.findStates(dc, dbTX, dc.domainName, &dc.contractAddress, schemaID, query, StateStatusAvailable, spending...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -268,7 +266,7 @@ func (dc *domainContext) FindAvailableStates(schemaID tktypes.Bytes32, query *qu
 	return schema, states, err
 }
 
-func (dc *domainContext) FindAvailableNullifiers(schemaID tktypes.Bytes32, query *query.QueryJSON) (components.Schema, []*pldapi.State, error) {
+func (dc *domainContext) FindAvailableNullifiers(dbTX *gorm.DB, schemaID tktypes.Bytes32, query *query.QueryJSON) (components.Schema, []*pldapi.State, error) {
 
 	// Build a list of unflushed and spending nullifiers
 	spending, nullifiers, nullifierIDs, err := dc.getUnFlushedSpends()
@@ -281,7 +279,7 @@ func (dc *domainContext) FindAvailableNullifiers(schemaID tktypes.Bytes32, query
 	}
 
 	// Run the query against the DB
-	schema, states, err := dc.ss.findAvailableNullifiers(dc, dc.dbTX, dc.domainName, &dc.contractAddress, schemaID, query, spending, nullifierIDs)
+	schema, states, err := dc.ss.findAvailableNullifiers(dc, dbTX, dc.domainName, &dc.contractAddress, schemaID, query, spending, nullifierIDs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -291,14 +289,14 @@ func (dc *domainContext) FindAvailableNullifiers(schemaID tktypes.Bytes32, query
 	return schema, states, err
 }
 
-func (dc *domainContext) UpsertStates(stateUpserts ...*components.StateUpsert) (states []*pldapi.State, err error) {
+func (dc *domainContext) UpsertStates(dbTX *gorm.DB, stateUpserts ...*components.StateUpsert) (states []*pldapi.State, err error) {
 
 	states = make([]*pldapi.State, len(stateUpserts))
 	stateLocks := make([]*pldapi.StateLock, 0, len(stateUpserts))
 	withValues := make([]*components.StateWithLabels, len(stateUpserts))
 	toMakeAvailable := make([]*components.StateWithLabels, 0, len(stateUpserts))
 	for i, ns := range stateUpserts {
-		schema, err := dc.ss.GetSchema(dc, dc.dbTX, dc.domainName, ns.SchemaID, true)
+		schema, err := dc.ss.GetSchema(dc, dbTX, dc.domainName, ns.SchemaID, true)
 		if err != nil {
 			return nil, err
 		}
@@ -478,11 +476,6 @@ func (dc *domainContext) Reset() {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 
-	err := dc.clearExistingFlush()
-	if err != nil {
-		log.L(dc).Warnf("Reset recovering from flush error: %s", err)
-	}
-
 	dc.creatingStates = make(map[string]*components.StateWithLabels)
 	dc.flushing = nil
 	dc.unFlushed = nil
@@ -501,56 +494,60 @@ func (dc *domainContext) Close() {
 	delete(dc.ss.domainContexts, dc.id)
 }
 
-func (dc *domainContext) clearExistingFlush() error {
-	// If we are already flushing, then we wait for that flush while holding the lock
-	// here - until we can queue up the next flush.
-	// e.g. we only get one flush ahead
-	if dc.flushing != nil {
-		select {
-		case <-dc.flushing.flushed:
-		case <-dc.Done():
-			// The caller gave up on us, we cannot flush
-			return i18n.NewError(dc, msgs.MsgContextCanceled)
-		}
-		return dc.flushing.flushResult
-	}
-	return nil
-}
+func (dc *domainContext) Flush(dbTX *gorm.DB) (postDBTx func(error), err error) {
+	ctx := dc.Ctx()
+	log.L(ctx).Infof("Flushing context domain=%s", dc.domainName)
 
-func (dc *domainContext) InitiateFlush(asyncCallback func(err error)) error {
+	// We hold the lock while we are doing the synchronous part of flushing
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 
-	// Sync check if there's already an error
-	if err := dc.clearExistingFlush(); err != nil {
-		return err
-	}
-
-	// Ok we're good to go async
-	flushing := dc.unFlushed
-	dc.flushing = flushing
-	dc.unFlushed = nil
-	// Always dispatch a routine for the callback
-	// even if there's a nil flushing - meaning nothing to do
-	if flushing != nil {
-		flushing.flushed = make(chan struct{})
-		dc.ss.writer.queue(dc, flushing)
-	}
-	go dc.doFlush(asyncCallback, flushing)
-	return nil
-}
-
-func (dc *domainContext) FlushSync() error {
-	flushed := make(chan error)
-	err := dc.InitiateFlush(func(err error) { flushed <- err })
-	if err == nil {
-		select {
-		case err = <-flushed:
-		case <-dc.Done():
-			err = i18n.NewError(dc, msgs.MsgContextCanceled)
+	if dc.flushing != nil {
+		if dc.flushing.flushResult != nil {
+			// we return the original error if the last flush error was not cleared
+			return nil, dc.flushing.flushResult
 		}
+		// It is an error if we are called a second time in this function before the callback
+		// from the first call is completed/failed.
+		return nil, i18n.NewError(ctx, msgs.MsgStateFlushInProgress)
 	}
-	return err
+
+	// Sync check if there's already an error
+	// Ok we're good to go async
+	dc.flushing = dc.unFlushed
+	dc.unFlushed = nil
+
+	// If there's nothing to do, return a nil result
+	if dc.flushing == nil {
+		log.L(ctx).Debugf("nothing pending to flush in domain context")
+		return func(error) {}, nil
+	}
+
+	// Need to make sure we clean up after ourselves if we fail synchronously
+	var syncFlushError error
+	defer func() {
+		if syncFlushError != nil {
+			dc.flushing.setError(syncFlushError)
+		}
+	}()
+	syncFlushError = dc.flushing.exec(ctx, dbTX)
+	if syncFlushError != nil {
+		return nil, syncFlushError
+	}
+
+	// Return a callback to the owner of the DB Transaction, so they can tell us if the commit succeeded
+	return func(commitError error) {
+		dc.stateLock.Lock()
+		defer dc.stateLock.Unlock()
+
+		if commitError != nil {
+			// The error sits on the context until a Reset() is called
+			dc.flushing.setError(commitError)
+		} else {
+			// We're ready for the next flush
+			dc.flushing = nil
+		}
+	}, nil
 }
 
 // MUST hold the lock to call this function
@@ -564,31 +561,14 @@ func (dc *domainContext) checkResetInitUnFlushed() error {
 		select {
 		case <-dc.flushing.flushed:
 			if dc.flushing.flushResult != nil {
-				log.L(dc).Errorf("flush %s failed - domain context must be reset", dc.flushing.id)
+				log.L(dc).Errorf("flush failed - domain context must be reset")
 				return i18n.WrapError(dc, dc.flushing.flushResult, msgs.MsgStateFlushFailedDomainReset, dc.domainName, dc.contractAddress)
-
 			}
 		default:
 		}
 	}
 	if dc.unFlushed == nil {
-		dc.unFlushed = dc.ss.writer.newWriteOp(dc.domainName, dc.contractAddress)
+		dc.unFlushed = dc.newPendingStateWrites()
 	}
 	return nil
-}
-
-// MUST NOT hold the lock to call this function - instead pass in a list of all the
-// unflushed writers (max 2 in practice) that need to be successful for this flush to
-// be considered complete
-func (dc *domainContext) doFlush(cb func(error), flushing *writeOperation) {
-	var err error
-	// We might have found by the time we got the lock to flush, there was nothing to do
-	if flushing != nil {
-		log.L(dc).Debugf("waiting for flush %s", flushing.id)
-		err = flushing.flush(dc)
-		flushing.flushResult = err // for any other routines the blocked waiting
-		log.L(dc).Debugf("flush %s completed (err=%v)", flushing.id, err)
-		close(flushing.flushed)
-	}
-	cb(err)
 }

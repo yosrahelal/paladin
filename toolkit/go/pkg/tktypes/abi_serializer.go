@@ -30,6 +30,8 @@ import (
 
 type JSONFormatOptions string
 
+const DefaultJSONFormatOptions JSONFormatOptions = ""
+
 func (jfo JSONFormatOptions) GetABISerializer(ctx context.Context) (serializer *abi.Serializer, err error) {
 	return jfo.getABISerializer(ctx, false)
 }
