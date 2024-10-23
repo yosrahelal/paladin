@@ -6,10 +6,10 @@ import "../private/interfaces/INotoGuard.sol";
 
 /**
  * Example Noto Guard which tracks all Noto token movements on a private ERC20.
- * Currently implemented as a base ledger contract.
- * TODO: migrate this to a test using Pente and PenteExternalCall.
+ * This version is implemented as a base ledger contract.
+ * TODO: remove when all functionality is tested using Pente instead of base ledger.
  */
-contract NotoTrackerERC20 is INotoGuard, ERC20 {
+contract NotoTrackerPublicERC20 is INotoGuard, ERC20 {
     constructor(string memory name, string memory symbol) ERC20(name, symbol) {}
 
     function onMint(
