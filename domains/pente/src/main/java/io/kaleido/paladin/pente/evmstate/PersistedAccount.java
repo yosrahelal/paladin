@@ -104,7 +104,7 @@ public class PersistedAccount implements Account {
     @Override
     public UInt256 getStorageValue(UInt256 k) {
         Optional<Bytes> v = this.storageTrie.get(Hash.hash(k));
-        return v.map(PersistedAccount::convertBytes32ToUInt256).orElse(null);
+        return v.map(PersistedAccount::convertBytes32ToUInt256).orElse(UInt256.ZERO);
     }
 
     @Override
