@@ -47,11 +47,11 @@ func NewStateDistributer(ctx context.Context, nodeID string, transportManager co
 }
 
 type StateDistributionPersisted struct {
-	ID              string `json:"id"`
-	StateID         string `json:"stateID"`
-	IdentityLocator string `json:"identityLocator"`
-	DomainName      string `json:"domainName"`
-	ContractAddress string `json:"contractAddress"`
+	ID              string             `json:"id"`
+	StateID         tktypes.HexBytes   `json:"stateID"`
+	IdentityLocator string             `json:"identityLocator"`
+	DomainName      string             `json:"domainName"`
+	ContractAddress tktypes.EthAddress `json:"contractAddress"`
 }
 
 // A StateDistribution is an intent to send private data for a given state to a remote party
@@ -117,7 +117,7 @@ func (sd *stateDistributer) Start(ctx context.Context) error {
 
 	for _, stateDistribution := range stateDistributions {
 		state, err := sd.stateManager.GetState(ctx, sd.persistence.DB(), /* no TX for now */
-			stateDistribution.DomainName, *tktypes.MustEthAddress(stateDistribution.ContractAddress), tktypes.MustParseHexBytes(stateDistribution.StateID), true, false)
+			stateDistribution.DomainName, stateDistribution.ContractAddress, stateDistribution.StateID, true, false)
 		if err != nil {
 			log.L(ctx).Errorf("Error getting state: %s", err)
 			continue
@@ -125,10 +125,10 @@ func (sd *stateDistributer) Start(ctx context.Context) error {
 
 		sd.inputChan <- &StateDistribution{
 			ID:              stateDistribution.ID,
-			StateID:         stateDistribution.StateID,
+			StateID:         stateDistribution.StateID.String(),
 			IdentityLocator: stateDistribution.IdentityLocator,
 			Domain:          stateDistribution.DomainName,
-			ContractAddress: stateDistribution.ContractAddress,
+			ContractAddress: stateDistribution.ContractAddress.String(),
 			SchemaID:        state.Schema.String(),
 			StateDataJson:   string(state.Data),
 		}

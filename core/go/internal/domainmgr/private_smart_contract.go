@@ -106,7 +106,7 @@ func (dc *domainContract) InitTransaction(ctx context.Context, tx *components.Pr
 	txSpec.TransactionId = tktypes.Bytes32UUIDFirst16(tx.ID).String()
 
 	// Do the request with the domain
-	log.L(ctx).Infof("Initializing transaction=%s domain=%s", tx.ID, dc.d.name)
+	log.L(ctx).Infof("Initializing transaction=%s domain=%s contract-address=%s", tx.ID, dc.d.name, tx.Inputs.To)
 	res, err := dc.api.InitTransaction(ctx, &prototk.InitTransactionRequest{
 		Transaction: txSpec,
 	})
@@ -137,7 +137,7 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 
 	// Now we have the required verifiers, we can ask the domain to do the heavy lifting
 	// and assemble the transaction (using the state store interface we provide)
-	log.L(dCtx.Ctx()).Infof("Assembling transaction=%s domain=%s domain-context=%s", tx.ID, dc.d.name, dCtx.Info().ID)
+	log.L(dCtx.Ctx()).Infof("Assembling transaction=%s domain=%s contract-address=%s", tx.ID, dc.d.name, tx.Inputs.To)
 	res, err := dc.api.AssembleTransaction(dCtx.Ctx(), &prototk.AssembleTransactionRequest{
 		StateQueryContext: c.id,
 		Transaction:       preAssembly.TransactionSpecification,
@@ -214,7 +214,7 @@ func (dc *domainContract) WritePotentialStates(dCtx components.DomainContext, re
 		}
 	}
 
-	log.L(dCtx.Ctx()).Infof("Writing states to domain context for transaction=%s domain=%s domain-context=%s", tx.ID, dc.d.name, dCtx.Info().ID)
+	log.L(dCtx.Ctx()).Infof("Writing states to domain context for transaction=%s domain=%s contract-address=%s", tx.ID, dc.d.name, tx.Inputs.To)
 	states, err := dCtx.UpsertStates(readTX, newStatesToWrite...)
 	if err != nil {
 		return err
@@ -300,7 +300,7 @@ func (dc *domainContract) LockStates(dCtx components.DomainContext, readTX *gorm
 	}
 
 	// Heavy lifting is all done for us by the state store
-	log.L(dCtx.Ctx()).Infof("Loading TX into context transaction=%s domain=%s domain-context=%s inputs=%v read=%s outputs=%v", tx.ID, dc.d.name, dCtx.Info().ID, inputIDs, readIDs, outputIDs)
+	log.L(dCtx.Ctx()).Infof("Loading TX into context transaction=%s domain=%s contract-address=%s inputs=%v read=%s outputs=%v", tx.ID, dc.d.name, tx.Inputs.To, inputIDs, readIDs, outputIDs)
 	_, err := dCtx.UpsertStates(readTX, states...)
 	if err == nil {
 		err = dCtx.AddStateLocks(stateLocks...)
@@ -335,8 +335,8 @@ func (dc *domainContract) EndorseTransaction(dCtx components.DomainContext, read
 	// waiting for the DB TX to commit.
 
 	// Run the endorsement
-	log.L(dCtx.Ctx()).Infof("Running endorsement transaction=%s domain=%s domain-context=%s",
-		req.TransactionSpecification.TransactionId, dc.d.name, dCtx.Info().ID)
+	log.L(dCtx.Ctx()).Infof("Running endorsement transaction=%s domain=%s contract-address=%s",
+		req.TransactionSpecification.TransactionId, dc.d.name, req.TransactionSpecification.ContractInfo.ContractAddress)
 	res, err := dc.api.EndorseTransaction(dCtx.Ctx(), &prototk.EndorseTransactionRequest{
 		StateQueryContext:   c.id,
 		Transaction:         req.TransactionSpecification,
@@ -410,7 +410,7 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 	defer c.close()
 
 	// Run the prepare
-	log.L(dCtx.Ctx()).Infof("Preparing transaction=%s domain=%s domain-context=%s", tx.ID, dc.d.name, dCtx.Info().ID)
+	log.L(dCtx.Ctx()).Infof("Preparing transaction=%s domain=%s contract-address=%s", tx.ID, dc.d.name, tx.Inputs.To)
 	res, err := dc.api.PrepareTransaction(dCtx.Ctx(), &prototk.PrepareTransactionRequest{
 		StateQueryContext: c.id,
 		Transaction:       preAssembly.TransactionSpecification,

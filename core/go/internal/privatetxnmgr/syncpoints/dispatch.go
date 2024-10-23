@@ -63,10 +63,10 @@ func (s *syncPoints) PersistDispatchBatch(dCtx components.DomainContext, contrac
 	for _, stateDistribution := range stateDistributions {
 		stateDistributionsPersisted = append(stateDistributionsPersisted, &statedistribution.StateDistributionPersisted{
 			ID:              stateDistribution.ID,
-			StateID:         stateDistribution.StateID,
+			StateID:         tktypes.MustParseHexBytes(stateDistribution.StateID),
 			IdentityLocator: stateDistribution.IdentityLocator,
 			DomainName:      stateDistribution.Domain,
-			ContractAddress: stateDistribution.ContractAddress,
+			ContractAddress: *tktypes.MustEthAddress(stateDistribution.ContractAddress),
 		})
 	}
 	// Send the write operation with all of the batch sequence operations to the flush worker

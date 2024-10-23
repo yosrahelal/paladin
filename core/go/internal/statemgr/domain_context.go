@@ -496,6 +496,7 @@ func (dc *domainContext) Close() {
 
 func (dc *domainContext) Flush(dbTX *gorm.DB) (postDBTx func(error), err error) {
 	ctx := dc.Ctx()
+	log.L(ctx).Infof("Flushing context domain=%s", dc.domainName)
 
 	// We hold the lock while we are doing the synchronous part of flushing
 	dc.stateLock.Lock()

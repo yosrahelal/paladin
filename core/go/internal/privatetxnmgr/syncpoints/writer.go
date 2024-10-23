@@ -25,6 +25,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -111,6 +112,8 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*sync
 			dbTXCallback(err)
 		}
 	}()
+	log.L(ctx).Infof("SyncPoints flush-writer: domain=contexts=%d finalizeOperations=%d dispatchOperations=%d delegateOperations=%d delegationAckOperations=%d",
+		len(domainContextsToFlush), len(finalizeOperations), len(dispatchOperations), len(delegateOperations), len(delegationAckOperations))
 	for _, dc := range domainContextsToFlush {
 		var domainCB func(error)
 		domainCB, err = dc.Flush(dbTX) // err variable must not be re-allocated
