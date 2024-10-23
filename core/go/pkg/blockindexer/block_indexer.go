@@ -751,7 +751,7 @@ func (bi *blockIndexer) readNextBlock(ctx context.Context, lastFromNotification 
 
 		// We successfully attached it
 		bi.blocksSinceCheckpoint = append(bi.blocksSinceCheckpoint, nextBlock)
-		log.L(ctx).Debugf("Added detected block %d / %s to list (new blocksSinceCheckpoint=%d)", nextBlock.Number, nextBlock.Hash, len(bi.blocksSinceCheckpoint))
+		log.L(ctx).Debugf("Added read block %d / %s to list (new blocksSinceCheckpoint=%d)", nextBlock.Number, nextBlock.Hash, len(bi.blocksSinceCheckpoint))
 	}
 	return true
 
