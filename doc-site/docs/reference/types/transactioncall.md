@@ -31,7 +31,7 @@ title: TransactionCall
 | `maxFeePerGas` | The maximum fee per gas (optional) | [`HexUint256`](simpletypes.md#hexuint256) |
 | `gasPrice` | The gas price (optional) | [`HexUint256`](simpletypes.md#hexuint256) |
 | `dependsOn` | Transactions that must be mined on the blockchain successfully before this transaction submits | [`UUID[]`](simpletypes.md#uuid) |
-| `abi` | Application Binary Interface (ABI) definition - required if abiReference not supplied | [`Entry[]`](#entry) |
+| `abi` | Application Binary Interface (ABI) definition - required if abiReference not supplied | [`Entry[]`](transactioninput.md#entry) |
 | `bytecode` | Bytecode prepended to encoded data inputs for deploy transactions | [`HexBytes`](simpletypes.md#hexbytes) |
 | `block` | The block number or 'latest' when calling a public smart contract (optional) | [`HexUint64OrString`](simpletypes.md#hexuint64orstring) |
 | `dataFormat` | How call data should be serialized into JSON once decoded using the ABI function definition | [`JSONFormatOptions`](jsonformatoptions.md#jsonformatoptions) |
