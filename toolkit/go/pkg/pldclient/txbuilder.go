@@ -90,7 +90,7 @@ type TxBuilder interface {
 	PublicTxOptions(opts pldapi.PublicTxOptions) TxBuilder // detailed options of how to submit the public / base ledger transaction that results from the public/private transaction
 	GetPublicTxOptions() pldapi.PublicTxOptions
 
-	PublicCallOptions(opts pldapi.PublicCallOptions) TxBuilder // for calls of public transactions, this is
+	PublicCallOptions(opts pldapi.PublicCallOptions) TxBuilder // allows you to set the block number the call happens against, when running queries directly against the base ledger
 	GetPublicCallOptions() pldapi.PublicCallOptions
 
 	DataFormat(format tktypes.JSONFormatOptions) TxBuilder // determines how JSON will be sent/received to/from the server as serialized JSON

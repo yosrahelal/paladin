@@ -35,3 +35,22 @@ title: PublicTx
 | `maxFeePerGas` | The maximum fee per gas (optional) | [`HexUint256`](simpletypes.md#hexuint256) |
 | `gasPrice` | The gas price (optional) | [`HexUint256`](simpletypes.md#hexuint256) |
 
+## PublicTxSubmissionData
+
+| Field Name | Description | Type |
+|------------|-------------|------|
+| `time` | The submission time | [`Timestamp`](simpletypes.md#timestamp) |
+| `transactionHash` | The transaction hash | [`Bytes32`](simpletypes.md#bytes32) |
+| `maxPriorityFeePerGas` | The maximum priority fee per gas (optional) | [`HexUint256`](simpletypes.md#hexuint256) |
+| `maxFeePerGas` | The maximum fee per gas (optional) | [`HexUint256`](simpletypes.md#hexuint256) |
+| `gasPrice` | The gas price (optional) | [`HexUint256`](simpletypes.md#hexuint256) |
+
+
+## TransactionActivityRecord
+
+| Field Name | Description | Type |
+|------------|-------------|------|
+| `time` | Time the record occurred | [`Timestamp`](simpletypes.md#timestamp) |
+| `message` | Activity message | `string` |
+
+
