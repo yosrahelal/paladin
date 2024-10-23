@@ -66,7 +66,7 @@ func TestInternalEventStreamDeliveryAtHead(t *testing.T) {
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 	mockBlockListenerNil(mRPC)
 
-	eventCollector := make(chan *EventWithData)
+	eventCollector := make(chan *pldapi.EventWithData)
 
 	// Do a full start now with an internal event listener
 	var esID string
@@ -142,7 +142,7 @@ func TestInternalEventStreamDeliveryAtHeadWithSourceAddress(t *testing.T) {
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 	mockBlockListenerNil(mRPC)
 
-	eventCollector := make(chan *EventWithData)
+	eventCollector := make(chan *pldapi.EventWithData)
 
 	definition := &EventStream{
 		Name: "unit_test",
@@ -211,7 +211,7 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 	mockBlockListenerNil(mRPC)
 
 	// Set up our handler, even though it won't be driven with anything yet
-	eventCollector := make(chan *EventWithData)
+	eventCollector := make(chan *pldapi.EventWithData)
 	var esID string
 	handler := func(ctx context.Context, tx *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error) {
 		if esID == "" {
@@ -629,6 +629,7 @@ func testReturnToCatchupAfterStart(t *testing.T, headBlock int64) {
 		blocks:       make(chan *eventStreamBlock),
 		dispatch:     make(chan *eventDispatch),
 		detectorDone: make(chan struct{}),
+		serializer:   tktypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
 	}
 	go func() {
 		assert.NotPanics(t, func() { es.detector() })
@@ -699,7 +700,7 @@ func TestSendToDispatcherClosedNoBlock(t *testing.T) {
 		ctx:      ctx,
 		dispatch: make(chan *eventDispatch),
 	}
-	es.sendToDispatcher(&EventWithData{
+	es.sendToDispatcher(&pldapi.EventWithData{
 		IndexedEvent: &pldapi.IndexedEvent{},
 	}, false)
 }
@@ -738,7 +739,7 @@ func TestDispatcherDispatchClosed(t *testing.T) {
 	}()
 
 	es.dispatch <- &eventDispatch{
-		event: &EventWithData{
+		event: &pldapi.EventWithData{
 			IndexedEvent: &pldapi.IndexedEvent{},
 		},
 	}
@@ -854,6 +855,7 @@ func TestProcessCatchupEventMultiPageRealDB(t *testing.T) {
 				ABI: testABI,
 			}},
 		},
+		serializer: tktypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
 	}
 
 	go func() {

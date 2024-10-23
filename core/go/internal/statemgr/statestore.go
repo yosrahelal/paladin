@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -95,7 +96,7 @@ func (ss *stateManager) Stop() {
 // be happening concurrently against the database, and after commit of these changes
 // might find new states become available and/or states marked locked for spending
 // become fully unavailable.
-func (ss *stateManager) WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*components.StateSpend, confirms []*components.StateConfirm) (err error) {
+func (ss *stateManager) WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*pldapi.StateSpend, confirms []*pldapi.StateConfirm) (err error) {
 	if len(spends) > 0 {
 		err = dbTX.
 			Table("state_spends").

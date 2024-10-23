@@ -74,7 +74,7 @@ func (h *NotoTrackerHelper) GetBalance(ctx context.Context, account string) int6
 		BuildTX()
 	require.NoError(h.t, call.Error())
 	var jsonOutput map[string]any
-	err := h.tb.ExecBaseLedgerCall(ctx, &jsonOutput, call.TX())
+	err := h.tb.ExecBaseLedgerCall(ctx, &jsonOutput, call.CallTX())
 	require.NoError(h.t, err)
 	var balance big.Int
 	balance.SetString(jsonOutput["0"].(string), 10)

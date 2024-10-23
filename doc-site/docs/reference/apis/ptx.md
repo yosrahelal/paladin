@@ -1,117 +1,115 @@
 ---
-title: API ptx
+title: ptx_*
 ---
-## ptx_getTransaction
-
-{% include-markdown "./_includes/gettransaction_description.md" %}
+## `ptx_call`
 
 ### Parameters
 
-- [UUID](../types/simpletypes.md#uuid)
+0. `transaction`: [`TransactionCall`](../types/transactioncall.md#transactioncall)
 
 ### Returns
 
-- [Transaction](../types/transaction.md#transaction)
+0. `result`: [`RawJSON`](../types/simpletypes.md#rawjson)
 
-## ptx_getTransactionByIdempotencyKey
+## `ptx_getTransaction`
 
 ### Parameters
 
-- string
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
 
 ### Returns
 
-- [Transaction](../types/transaction.md#transaction)
+0. `transaction`: [`Transaction`](../types/transaction.md#transaction)
 
-## ptx_getTransactionFull
-
-{% include-markdown "./_includes/gettransactionfull_description.md" %}
+## `ptx_getTransactionByIdempotencyKey`
 
 ### Parameters
 
-- [UUID](../types/simpletypes.md#uuid)
+0. `idempotencyKey`: `string`
 
 ### Returns
 
-- TransactionFull
+0. `transaction`: [`Transaction`](../types/transaction.md#transaction)
 
-## ptx_getTransactionReceipt
-
-{% include-markdown "./_includes/gettransactionreceipt_description.md" %}
+## `ptx_getTransactionFull`
 
 ### Parameters
 
-- [UUID](../types/simpletypes.md#uuid)
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
 
 ### Returns
 
-- TransactionReceipt
+0. `transaction`: [`TransactionFull`](../types/transactionfull.md#transactionfull)
 
-## ptx_queryTransactionReceipts
-
-{% include-markdown "./_includes/querytransactionreceipts_description.md" %}
+## `ptx_getTransactionReceipt`
 
 ### Parameters
 
-- [QueryJSON](../types/queryjson.md#queryjson)
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
 
 ### Returns
 
-- TransactionReceipt[]
+0. `receipt`: [`TransactionReceipt`](../types/transactionreceipt.md#transactionreceipt)
 
-## ptx_queryTransactions
-
-{% include-markdown "./_includes/querytransactions_description.md" %}
+## `ptx_queryTransactionReceipts`
 
 ### Parameters
 
-- [QueryJSON](../types/queryjson.md#queryjson)
+0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
 
 ### Returns
 
-- [Transaction[]](../types/transaction.md#transaction)
+0. `receipts`: [`TransactionReceipt[]`](../types/transactionreceipt.md#transactionreceipt)
 
-## ptx_queryTransactionsFull
-
-{% include-markdown "./_includes/querytransactionsfull_description.md" %}
+## `ptx_queryTransactions`
 
 ### Parameters
 
-- [QueryJSON](../types/queryjson.md#queryjson)
+0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
 
 ### Returns
 
-- TransactionFull[]
+0. `transactions`: [`Transaction[]`](../types/transaction.md#transaction)
 
-## ptx_resoleVerifier
+## `ptx_queryTransactionsFull`
 
 ### Parameters
 
-- string
-- string
-- string
+0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
 
 ### Returns
 
-- string
+0. `transactions`: [`TransactionFull[]`](../types/transactionfull.md#transactionfull)
 
-## ptx_sendTransaction
+## `ptx_resolveVerifier`
 
 ### Parameters
 
-- [TransactionInput](../types/transactioninput.md#transactioninput)
+0. `keyIdentifier`: `string`
+1. `algorithm`: `string`
+2. `verifierType`: `string`
 
 ### Returns
 
-- [UUID](../types/simpletypes.md#uuid)
+0. `receipts`: `string`
 
-## ptx_sendTransactions
+## `ptx_sendTransaction`
 
 ### Parameters
 
-- [TransactionInput[]](../types/transactioninput.md#transactioninput)
+0. `transaction`: [`TransactionInput`](../types/transactioninput.md#transactioninput)
 
 ### Returns
 
-- [UUID[]](../types/simpletypes.md#uuid)
+0. `transactionId`: [`UUID`](../types/simpletypes.md#uuid)
+
+## `ptx_sendTransactions`
+
+### Parameters
+
+0. `transactions`: [`TransactionInput[]`](../types/transactioninput.md#transactioninput)
+
+### Returns
+
+0. `transactionIds`: [`UUID[]`](../types/simpletypes.md#uuid)
 

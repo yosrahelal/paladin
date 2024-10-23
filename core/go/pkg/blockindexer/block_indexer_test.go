@@ -435,7 +435,7 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 		require.Equal(t, blocks[i].Number.Uint64(), uint64(events[0].BlockNumber))
 
 		// Decode events
-		decodedEvents, err := bi.DecodeTransactionEvents(ctx, tktypes.Bytes32(tx0.TransactionHash), testABI)
+		decodedEvents, err := bi.DecodeTransactionEvents(ctx, tktypes.Bytes32(tx0.TransactionHash), testABI, "")
 		assert.NoError(t, err)
 		assert.Len(t, decodedEvents, 3)
 		assert.Equal(t, "event EventA()", decodedEvents[0].SoliditySignature)
@@ -1026,7 +1026,7 @@ func TestDecodeTransactionEventsFail(t *testing.T) {
 
 	p.Mock.ExpectQuery("SELECT.*indexed_events").WillReturnError(fmt.Errorf("pop"))
 
-	_, err := bi.DecodeTransactionEvents(ctx, tktypes.Bytes32(tktypes.RandBytes(32)), testABI)
+	_, err := bi.DecodeTransactionEvents(ctx, tktypes.Bytes32(tktypes.RandBytes(32)), testABI, "")
 	assert.Regexp(t, "pop", err)
 
 }

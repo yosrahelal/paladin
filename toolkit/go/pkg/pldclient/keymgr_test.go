@@ -17,27 +17,8 @@ package pldclient
 
 import (
 	"testing"
-
-	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
-	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
-	"github.com/stretchr/testify/assert"
 )
 
-func TestKeyManagerFunctions(t *testing.T) {
-
-	ctx, c, _, done := newTestClientAndServerHTTP(t)
-	defer done()
-
-	_, err := c.KeyManager().Wallets(ctx)
-	assert.Regexp(t, "PD020702.*keymgr_wallets", err)
-
-	_, err = c.KeyManager().ResolveKey(ctx, "key.name", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
-	assert.Regexp(t, "PD020702.*keymgr_resolveKey", err)
-
-	_, err = c.KeyManager().ResolveEthAddress(ctx, "key.name")
-	assert.Regexp(t, "PD020702.*keymgr_resolveEthAddress", err)
-
-	_, err = c.KeyManager().ReverseKeyLookup(ctx, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, tktypes.RandAddress().String())
-	assert.Regexp(t, "PD020702.*keymgr_reverseKeyLookup", err)
+func TestKeyManagerModule(t *testing.T) {
+	testRPCModule(t, func(c PaladinClient) RPCModule { return c.KeyManager() })
 }

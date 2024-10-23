@@ -31,6 +31,7 @@ func (tm *txManager) buildRPCModule() {
 	tm.rpcModule = rpcserver.NewRPCModule("ptx").
 		Add("ptx_sendTransaction", tm.rpcSendTransaction()).
 		Add("ptx_sendTransactions", tm.rpcSendTransactions()).
+		Add("ptx_call", tm.rpcCall()).
 		Add("ptx_getTransaction", tm.rpcGetTransaction()).
 		Add("ptx_getTransactionFull", tm.rpcGetTransactionFull()).
 		Add("ptx_getTransactionByIdempotencyKey", tm.rpcGetTransactionByIdempotencyKey()).
@@ -66,6 +67,15 @@ func (tm *txManager) rpcSendTransactions() rpcserver.RPCHandler {
 		txs []*pldapi.TransactionInput,
 	) ([]uuid.UUID, error) {
 		return tm.SendTransactions(ctx, txs)
+	})
+}
+
+func (tm *txManager) rpcCall() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		tx *pldapi.TransactionCall,
+	) (result tktypes.RawJSON, err error) {
+		err = tm.CallTransaction(ctx, &result, tx)
+		return
 	})
 }
 

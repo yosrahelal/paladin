@@ -47,6 +47,8 @@ var (
 	MsgTypesInvalidDBInt64                = ffe("PD020011", "Integer too large for storage in a signed int64 database column: %s")
 	MsgTypesInvalidDBInt256               = ffe("PD020012", "Integer incorrectly serialized to the database for a int256: %s")
 	MsgTypesInvalidDBUint256              = ffe("PD020013", "Integer incorrectly serialized to the database for a uint256: %s")
+	MsgTypesInvalidJSONFormatOptions      = ffe("PD020014", "The JSON formatting options must be a valid set of key=value pairs in URL query string format '%s'")
+	MsgTypesUnknownJSONFormatOptions      = ffe("PD020015", "JSON formatting option unknown %s=%s")
 
 	// Inflight PD0201XX
 	MsgInflightRequestCancelled = ffe("PD020100", "Request cancelled after %s")

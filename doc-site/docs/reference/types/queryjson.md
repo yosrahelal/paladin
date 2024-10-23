@@ -159,7 +159,7 @@ title: QueryJSON
 | `not` | Negate the operation | `bool` |
 | `caseInsensitive` | Perform case-insensitive matching | `bool` |
 | `field` | Field to apply the operation to | `string` |
-| `value` | Value to compare against | `uint8[]` |
+| `value` | Value to compare against | [`RawJSON`](simpletypes.md#rawjson) |
 
 
 ## OpMultiVal

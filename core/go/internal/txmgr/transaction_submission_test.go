@@ -693,7 +693,7 @@ func TestCallTransactionNoFrom(t *testing.T) {
 	require.NoError(t, tx.Error())
 
 	var result any
-	err := txm.CallTransaction(ctx, &result, tx.TX())
+	err := txm.CallTransaction(ctx, &result, tx.CallTX())
 	require.Regexp(t, "PD011517", err) // means we successfully submitted it to the client
 
 }
@@ -732,7 +732,7 @@ func TestCallTransactionWithFrom(t *testing.T) {
 	require.NoError(t, tx.Error())
 
 	var result any
-	err := txm.CallTransaction(ctx, &result, tx.TX())
+	err := txm.CallTransaction(ctx, &result, tx.CallTX())
 	require.Regexp(t, "PD011517", err) // means we successfully submitted it to the client
 
 }
@@ -742,7 +742,7 @@ func TestCallTransactionBadTX(t *testing.T) {
 	defer done()
 
 	var result any
-	err := txm.CallTransaction(ctx, &result, &pldapi.TransactionInput{})
+	err := txm.CallTransaction(ctx, &result, &pldapi.TransactionCall{})
 	require.Regexp(t, "PD012211", err)
 
 }
@@ -761,7 +761,7 @@ func TestCallTransactionPrivNotSupported(t *testing.T) {
 	require.NoError(t, tx.Error())
 
 	var result any
-	err := txm.CallTransaction(ctx, &result, tx.TX())
+	err := txm.CallTransaction(ctx, &result, tx.CallTX())
 	require.Regexp(t, "PD012221", err)
 
 }

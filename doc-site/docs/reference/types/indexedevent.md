@@ -38,7 +38,7 @@ title: IndexedEvent
 | `to` | The recipient's Ethereum address (optional) | [`EthAddress`](simpletypes.md#ethaddress) |
 | `nonce` | The transaction nonce | `uint64` |
 | `contractAddress` | The contract address created by this transaction (optional) | [`EthAddress`](simpletypes.md#ethaddress) |
-| `result` | The result of the transaction (optional) | `Enum[github.com/kaleido-io/paladin/toolkit/pkg/pldapi.EthTransactionResult]` |
+| `result` | The result of the transaction (optional) | `"failure", "success"` |
 
 
 ## IndexedBlock

@@ -63,3 +63,16 @@ type IndexedEvent struct {
 	Transaction      *IndexedTransaction `docstruct:"IndexedEvent" json:"transaction,omitempty"  gorm:"foreignKey:block_number,transaction_index;references:block_number,transaction_index"`
 	Block            *IndexedBlock       `docstruct:"IndexedEvent" json:"block,omitempty"        gorm:"foreignKey:number;references:block_number"`
 }
+
+type EventWithData struct {
+	*IndexedEvent
+
+	// SoliditySignature allows a deterministic comparison to which ABI to use in the runtime,
+	// when both the blockindexer and consuming code are using the same version of firefly-signer.
+	// Includes variable names, including deep within nested structure.
+	// Things like whitespace etc. subject to change (so should not stored for later comparison)
+	SoliditySignature string `json:"soliditySignature"`
+
+	Address tktypes.EthAddress `json:"address"`
+	Data    tktypes.RawJSON    `json:"data"`
+}

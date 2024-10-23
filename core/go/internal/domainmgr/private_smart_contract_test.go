@@ -950,7 +950,7 @@ func TestLoadStatesNotFound(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
 	defer done()
 
-	td.mdc.On("FindAvailableStates", mock.Anything, mock.Anything).Return(nil, []*components.State{}, nil)
+	td.mdc.On("FindAvailableStates", mock.Anything, mock.Anything).Return(nil, []*pldapi.State{}, nil)
 
 	psc, tx := doDomainInitAssembleTransactionOK(t, td)
 	tx.Signer = "signer1"

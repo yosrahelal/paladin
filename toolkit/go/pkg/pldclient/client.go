@@ -17,6 +17,7 @@ package pldclient
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -49,6 +50,49 @@ type PaladinClient interface {
 
 	// Paladin Transport RPC interface
 	Transport() Transport
+
+	// Paladin Registry RPC interface
+	Registry() Registry
+
+	// Paladin state store RPC interface
+	StateStore() StateStore
+}
+
+type RPCModule interface {
+	Group() string
+	Methods() []string
+	MethodInfo(method string) *RPCMethodInfo
+}
+
+type RPCMethodInfo struct {
+	Inputs []string
+	Output string
+}
+
+type rpcModuleInfo struct {
+	group      string
+	methodInfo map[string]RPCMethodInfo
+}
+
+func (fg *rpcModuleInfo) Group() string {
+	return fg.group
+}
+
+func (fg *rpcModuleInfo) Methods() []string {
+	methods := make([]string, 0, len(fg.methodInfo))
+	for name := range fg.methodInfo {
+		methods = append(methods, name)
+	}
+	sort.Strings(methods) // needs to be a consistent order
+	return methods
+}
+
+func (fg *rpcModuleInfo) MethodInfo(method string) *RPCMethodInfo {
+	info, found := fg.methodInfo[method]
+	if !found {
+		return nil
+	}
+	return &info
 }
 
 type PaladinWSClient interface {

@@ -45,6 +45,7 @@ type eventStream struct {
 	blocks         chan *eventStreamBlock
 	dispatch       chan *eventDispatch
 	handler        InternalStreamCallback
+	serializer     *abi.Serializer
 	detectorDone   chan struct{}
 	dispatcherDone chan struct{}
 }
@@ -58,7 +59,7 @@ type eventBatch struct {
 }
 
 type eventDispatch struct {
-	event       *EventWithData
+	event       *pldapi.EventWithData
 	lastInBlock bool
 }
 
@@ -185,6 +186,7 @@ func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventSt
 			signatures: make(map[string]bool),
 			blocks:     make(chan *eventStreamBlock, bi.esBlockDispatchQueueLength),
 			dispatch:   make(chan *eventDispatch, batchSize),
+			serializer: definition.Format.GetABISerializerIgnoreErrors(ctx),
 		}
 	}
 
@@ -395,12 +397,12 @@ func (es *eventStream) detector() {
 
 func (es *eventStream) processNotifiedBlock(block *eventStreamBlock, fullBlock bool) {
 	for i, l := range block.events {
-		event := &EventWithData{
+		event := &pldapi.EventWithData{
 			IndexedEvent: es.bi.logToIndexedEvent(l),
 		}
 		// Only dispatch events that were completed by the validation against our ABI
 		for _, source := range es.definition.Sources {
-			if es.bi.matchLog(es.ctx, source.ABI, l, event, source.Address) {
+			if es.bi.matchLog(es.ctx, source.ABI, l, event, source.Address, es.serializer) {
 				es.sendToDispatcher(event,
 					// Can only move checkpoint past this block once we know we've processed the last one
 					fullBlock && i == (len(block.events)-1))
@@ -410,7 +412,7 @@ func (es *eventStream) processNotifiedBlock(block *eventStreamBlock, fullBlock b
 	}
 }
 
-func (es *eventStream) sendToDispatcher(event *EventWithData, lastInBlock bool) {
+func (es *eventStream) sendToDispatcher(event *pldapi.EventWithData, lastInBlock bool) {
 	log.L(es.ctx).Debugf("passing event to dispatcher %d/%d/%d (tx=%s,address=%s)", event.BlockNumber, event.TransactionIndex, event.LogIndex, event.TransactionHash, &event.Address)
 	select {
 	case es.dispatch <- &eventDispatch{event, lastInBlock}:
@@ -558,9 +560,9 @@ func (es *eventStream) processCatchupEventPage(lastCatchupEvent *pldapi.IndexedE
 
 	// Because we're in catch up here, we have to query the chain ourselves for the receipts.
 	// That's done by transaction (not by event) - so we've got to group
-	byTxID := make(map[string][]*EventWithData)
+	byTxID := make(map[string][]*pldapi.EventWithData)
 	for _, event := range page {
-		byTxID[event.TransactionHash.String()] = append(byTxID[event.TransactionHash.String()], &EventWithData{
+		byTxID[event.TransactionHash.String()] = append(byTxID[event.TransactionHash.String()], &pldapi.EventWithData{
 			IndexedEvent: event,
 			// Leave Address and Data as that's what we'll fill in, if it works
 		})
@@ -580,7 +582,7 @@ func (es *eventStream) processCatchupEventPage(lastCatchupEvent *pldapi.IndexedE
 		for _, _source := range es.definition.Sources {
 			source := _source // not safe to pass loop pointer
 			go func() {
-				enrichments <- es.bi.enrichTransactionEvents(es.ctx, source.ABI, source.Address, tx, events, true /* retry indefinitely */)
+				enrichments <- es.bi.enrichTransactionEvents(es.ctx, source.ABI, source.Address, tx, events, es.serializer, true /* retry indefinitely */)
 			}()
 		}
 	}

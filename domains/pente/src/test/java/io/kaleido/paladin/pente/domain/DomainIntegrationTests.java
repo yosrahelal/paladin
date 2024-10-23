@@ -236,7 +236,7 @@ public class DomainIntegrationTests {
                     ), true);
 
             // Validate minted coin
-            List<JsonNode> notoStates = testbed.getRpcClient().request("pstate_queryStates",
+            List<JsonNode> notoStates = testbed.getRpcClient().request("pstate_queryContractStates",
                     "noto",
                     notoInstanceAddress,
                     notoSchema.id,

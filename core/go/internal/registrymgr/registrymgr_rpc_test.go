@@ -23,7 +23,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
@@ -53,7 +53,7 @@ func TestRPCQuery(t *testing.T) {
 	require.NoError(t, regErr)
 	assert.NotNil(t, res)
 
-	var entries []*components.RegistryEntry
+	var entries []*pldapi.RegistryEntry
 	err = rpc.CallRPC(ctx, &entries, "reg_queryEntries", tp.r.name,
 		query.NewQueryBuilder().Equal(".name", "entry1").Null(".parentId").Equal("prop1", "value1").Limit(1).Query(), "active")
 	require.NoError(t, err)
@@ -63,7 +63,7 @@ func TestRPCQuery(t *testing.T) {
 	err = rpc.CallRPC(ctx, &entries, "reg_queryEntries", "unknown", query.NewQueryBuilder().Limit(1).Query(), "active")
 	assert.Regexp(t, "PD012101", err)
 
-	var entriesWithProps []*components.RegistryEntryWithProperties
+	var entriesWithProps []*pldapi.RegistryEntryWithProperties
 	err = rpc.CallRPC(ctx, &entriesWithProps, "reg_queryEntriesWithProps", tp.r.name,
 		query.NewQueryBuilder().Equal(".name", "entry1").Null(".parentId").Equal("prop1", "value1").Limit(1).Query(), "active")
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestRPCQuery(t *testing.T) {
 	require.Equal(t, "entry1", entriesWithProps[0].Name)
 	require.Equal(t, "value1", entriesWithProps[0].Properties["prop1"])
 
-	var props []*components.RegistryProperty
+	var props []*pldapi.RegistryProperty
 	err = rpc.CallRPC(ctx, &props, "reg_getEntryProperties", tp.r.name, entries[0].ID, "active")
 	require.NoError(t, err)
 	require.Len(t, props, 1)

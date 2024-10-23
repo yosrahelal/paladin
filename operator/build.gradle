@@ -102,7 +102,7 @@ task copyZetoSolidity(type: Copy) {
     includeEmptyDirs = false
 }
 
-task buildContractSamples(type: Exec) {
+task buildContractSamples(type: Exec, dependsOn: [copySolidity,copyZetoSolidity]) {
     commandLine "go", "run", "./contractpkg", "./contractpkg/contract_map.json"
 }
 
@@ -223,7 +223,7 @@ task clean {
 }
 
 // Existing 'make' task
-task make(type: Exec, dependsOn: [copySolidity]) {
+task make(type: Exec, dependsOn: [buildContractSamples]) {
     executable 'make'
 }
 

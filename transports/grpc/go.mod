@@ -17,7 +17,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hyperledger/firefly-signer v1.1.18-0.20240918193554-40e3592a70a1 // indirect
+	github.com/hyperledger/firefly-signer v1.1.18-0.20241020190415-2aaf31608d01 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

@@ -82,8 +82,9 @@ type CallOption interface {
 }
 
 type callOptions struct {
-	errABI  abi.ABI
-	outputs abi.TypeComponent
+	errABI     abi.ABI
+	outputs    abi.TypeComponent
+	serializer *abi.Serializer
 }
 
 func (co *callOptions) isCallOptions() {}
@@ -102,21 +103,33 @@ func WithOutputs(outputs abi.TypeComponent) CallOption {
 	}
 }
 
+// The supplied function definition will be used to decode return data
+func WithSerializer(serializer *abi.Serializer) CallOption {
+	return &callOptions{
+		serializer: serializer,
+	}
+}
+
 type EstimateGasResult struct {
 	GasLimit   tktypes.HexUint64
 	RevertData tktypes.HexBytes
 }
 
 type CallResult struct {
+	serializer    *abi.Serializer
 	Data          tktypes.HexBytes
 	DecodedResult *abi.ComponentValue
 	RevertData    tktypes.HexBytes
 }
 
-// Convenience func that uses our standard serializer to serialize to JSON, and bypasses errors
+// Convenience func that bypasses errors and uses the serializer provided
 func (cr CallResult) JSON() (s string) {
 	if cr.DecodedResult != nil {
-		b, _ := tktypes.StandardABISerializer().SerializeJSON(cr.DecodedResult)
+		serializer := cr.serializer
+		if serializer == nil {
+			serializer = tktypes.StandardABISerializer()
+		}
+		b, _ := serializer.SerializeJSON(cr.DecodedResult)
 		if b != nil {
 			s = string(b)
 		}
@@ -231,6 +244,9 @@ func (ec *ethClient) CallContractNoResolve(ctx context.Context, tx *ethsigner.Tr
 		}
 		if co.outputs != nil {
 			outputs = co.outputs
+		}
+		if co.serializer != nil {
+			res.serializer = co.serializer
 		}
 	}
 	if err := ec.rpc.CallRPC(ctx, &res.Data, "eth_call", tx, block); err != nil {

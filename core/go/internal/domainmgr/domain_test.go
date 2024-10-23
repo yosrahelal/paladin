@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
@@ -1007,11 +1008,11 @@ func TestRecoverSignerFailCases(t *testing.T) {
 }
 
 func TestMapStateLockType(t *testing.T) {
-	for _, pldType := range components.StateLockType("").Options() {
-		assert.NotNil(t, mapStateLockType(components.StateLockType(pldType)))
+	for _, pldType := range pldapi.StateLockType("").Options() {
+		assert.NotNil(t, mapStateLockType(pldapi.StateLockType(pldType)))
 	}
 	assert.Panics(t, func() {
-		_ = mapStateLockType(components.StateLockType("wrong"))
+		_ = mapStateLockType(pldapi.StateLockType("wrong"))
 	})
 }
 

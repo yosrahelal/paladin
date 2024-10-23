@@ -19,12 +19,99 @@ package tktypes
 import (
 	"context"
 	"crypto/sha256"
+	"net/url"
 	"sort"
+	"strings"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 )
+
+type JSONFormatOptions string
+
+func (jfo JSONFormatOptions) GetABISerializer(ctx context.Context) (serializer *abi.Serializer, err error) {
+	return jfo.getABISerializer(ctx, false)
+}
+
+func (jfo JSONFormatOptions) GetABISerializerIgnoreErrors(ctx context.Context) *abi.Serializer {
+	serializer, _ := jfo.getABISerializer(ctx, true)
+	return serializer
+}
+
+func (jfo JSONFormatOptions) getABISerializer(ctx context.Context, skipErrors bool) (serializer *abi.Serializer, err error) {
+	serializer = StandardABISerializer()
+	if len(jfo) == 0 {
+		return
+	}
+	options, err := url.ParseQuery(string(jfo))
+	if err != nil {
+		if !skipErrors {
+			return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesInvalidJSONFormatOptions, jfo)
+		}
+	}
+	for option, values := range options {
+		for _, v := range values {
+			switch strings.ToLower(option) {
+			case "mode":
+				switch strings.ToLower(v) {
+				case "object":
+					serializer = serializer.SetFormattingMode(abi.FormatAsObjects)
+				case "array":
+					serializer = serializer.SetFormattingMode(abi.FormatAsFlatArrays)
+				case "self-describing":
+					serializer = serializer.SetFormattingMode(abi.FormatAsSelfDescribingArrays)
+				default:
+					if !skipErrors {
+						return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+					}
+				}
+			case "number":
+				switch strings.ToLower(v) {
+				case "string": // default
+					serializer = serializer.SetIntSerializer(abi.Base10StringIntSerializer)
+				case "hex-0x", "hex":
+					serializer = serializer.SetIntSerializer(abi.HexIntSerializer0xPrefix)
+				case "json-number": // note consumer must be very careful to use a JSON parser that support large numbers
+					serializer = serializer.SetIntSerializer(abi.JSONNumberIntSerializer)
+				default:
+					if !skipErrors {
+						return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+					}
+				}
+			case "bytes":
+				switch strings.ToLower(v) {
+				case "hex-0x", "hex":
+					serializer = serializer.SetByteSerializer(abi.HexByteSerializer0xPrefix)
+				case "hex-plain":
+					serializer = serializer.SetByteSerializer(abi.HexByteSerializer)
+				case "base64":
+					serializer = serializer.SetByteSerializer(abi.Base64ByteSerializer)
+				default:
+					return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+				}
+			case "address":
+				switch strings.ToLower(v) {
+				case "hex-0x", "hex":
+					serializer = serializer.SetAddressSerializer(abi.HexAddrSerializer0xPrefix)
+				case "hex-plain":
+					serializer = serializer.SetAddressSerializer(abi.HexAddrSerializerPlain)
+				case "checksum":
+					serializer = serializer.SetAddressSerializer(abi.ChecksumAddrSerializer)
+				default:
+					return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+				}
+			case "pretty":
+				serializer = serializer.SetPretty(v != "false")
+			default:
+				if !skipErrors {
+					return nil, i18n.WrapError(ctx, err, tkmsgs.MsgTypesUnknownJSONFormatOptions, option, v)
+				}
+			}
+		}
+	}
+	return serializer, nil
+}
 
 // The serializer we should use in all places that go from ABI validated data,
 // back down to JSON that might be:
@@ -35,7 +122,8 @@ func StandardABISerializer() *abi.Serializer {
 		SetFormattingMode(abi.FormatAsObjects).
 		SetIntSerializer(abi.Base10StringIntSerializer).
 		SetFloatSerializer(abi.Base10StringFloatSerializer).
-		SetByteSerializer(abi.HexByteSerializer0xPrefix)
+		SetByteSerializer(abi.HexByteSerializer0xPrefix).
+		SetAddressSerializer(abi.HexAddrSerializer0xPrefix)
 }
 
 // Validates that two ABIs contains exactly the same entires
