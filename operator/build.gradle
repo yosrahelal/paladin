@@ -80,6 +80,7 @@ task copySolidity(type: Copy) {
         include 'contracts/registry/IdentityRegistry.sol/IdentityRegistry.json'
         include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
         include 'contracts/domains/pente/PenteFactory.sol/PenteFactory.json'
+        include 'contracts/private/NotoTrackerSimple.sol/NotoTrackerSimple.json'
     }
     into 'test/e2e/abis'
 
