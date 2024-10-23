@@ -120,10 +120,11 @@ var _ = Describe("controller", Ordered, func() {
 			Expect(deploy.Error()).To(BeNil())
 			Expect(deploy.Receipt().ContractAddress).ToNot(BeNil())
 			notoContract = deploy.Receipt().ContractAddress
+			By(fmt.Sprintf("using the contract %s deployed by TX %s", notoContract, deploy.ID()))
 		})
 
 		It("mints some notos to the notary", func() {
-			deploy := nodes["node1"].ForABI(ctx, nototypes.NotoABI).
+			txn := nodes["node1"].ForABI(ctx, nototypes.NotoABI).
 				Private().
 				Domain("noto").
 				Function("mint").
@@ -135,7 +136,8 @@ var _ = Describe("controller", Ordered, func() {
 				From(notary).
 				Send().
 				Wait(60 * time.Second) // TODO: Diagnose why this takes so long
-			Expect(deploy.Error()).To(BeNil())
+			Expect(txn.Error()).To(BeNil())
+			By(fmt.Sprintf("using the coins minted in TX %s", txn.ID()))
 		})
 	})
 })
