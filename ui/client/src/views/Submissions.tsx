@@ -69,7 +69,7 @@ export const Submissions: React.FC = () => {
 
 
           <Box sx={{ padding: '20px', overflow: 'scroll', height: 'calc(100vh - 162px)' }}>
-            {pendingTransactions.map(pendingTransaction => <PendingTransaction key={pendingTransaction.id} pendingTransaction={pendingTransaction} />)}
+            {pendingTransactions.map(pendingTransaction => <PendingTransaction key={pendingTransaction.id} paladinTransaction={pendingTransaction} />)}
           </Box>
         </Paper>
       </Box>
