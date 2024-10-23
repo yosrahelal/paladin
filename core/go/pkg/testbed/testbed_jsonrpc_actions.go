@@ -66,7 +66,10 @@ func (tb *testbed) initRPC() {
 		Add("testbed_prepare", tb.rpcTestbedPrepare()).
 
 		// Performs identity resolution (which in the case of the testbed is just local identities)
-		Add("testbed_resolveVerifier", tb.rpcResolveVerifier())
+		Add("testbed_resolveVerifier", tb.rpcResolveVerifier()).
+
+		// Performs a call directly against the domain
+		Add("testbed_call", tb.rpcTestbedCall())
 
 }
 
@@ -104,6 +107,23 @@ func (tb *testbed) rpcDeployBytecode() rpcserver.RPCHandler {
 	})
 }
 
+func (tb *testbed) resolveVerifiers(ctx context.Context, requiredVerifiers []*prototk.ResolveVerifierRequest) ([]*prototk.ResolvedVerifier, error) {
+	verifiers := make([]*prototk.ResolvedVerifier, len(requiredVerifiers))
+	for i, v := range requiredVerifiers {
+		resolvedKey, err := tb.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve key %q: %s", v.Lookup, err)
+		}
+		verifiers[i] = &prototk.ResolvedVerifier{
+			Lookup:       v.Lookup,
+			Algorithm:    v.Algorithm,
+			Verifier:     resolvedKey.Verifier.Verifier,
+			VerifierType: v.VerifierType,
+		}
+	}
+	return verifiers, nil
+}
+
 func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		domainName string,
@@ -125,18 +145,8 @@ func (tb *testbed) rpcTestbedDeploy() rpcserver.RPCHandler {
 			return nil, err
 		}
 
-		tx.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.RequiredVerifiers))
-		for i, v := range tx.RequiredVerifiers {
-			resolvedKey, err := tb.ResolveKey(ctx, v.Lookup, v.Algorithm, v.VerifierType)
-			if err != nil {
-				return nil, fmt.Errorf("failed to resolve key %q: %s", v.Lookup, err)
-			}
-			tx.Verifiers[i] = &prototk.ResolvedVerifier{
-				Lookup:       v.Lookup,
-				Algorithm:    v.Algorithm,
-				Verifier:     resolvedKey.Verifier.Verifier,
-				VerifierType: v.VerifierType,
-			}
+		if tx.Verifiers, err = tb.resolveVerifiers(ctx, tx.RequiredVerifiers); err != nil {
+			return nil, err
 		}
 
 		// Prepare the deployment transaction
@@ -399,5 +409,42 @@ func (tb *testbed) rpcResolveVerifier() rpcserver.RPCHandler {
 			return "", err
 		}
 		return resolvedKey.Verifier.Verifier, err
+	})
+}
+
+func (tb *testbed) rpcTestbedCall() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context,
+		invocation tktypes.PrivateContractInvoke,
+		dataFormat tktypes.JSONFormatOptions,
+	) (tktypes.RawJSON, error) {
+		psc, tx, err := tb.newPrivateTransaction(ctx, invocation, prototk.TransactionSpecification_CALL)
+		if err != nil {
+			return nil, err
+		}
+
+		requiredVerifiers, err := psc.InitCall(ctx, tx.Inputs)
+		if err != nil {
+			return nil, err
+		}
+
+		resolvedVerifiers, err := tb.resolveVerifiers(ctx, requiredVerifiers)
+		if err != nil {
+			return nil, err
+		}
+
+		dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address(), tb.c.Persistence().DB() /* no TX */)
+		defer dCtx.Close()
+
+		cv, err := psc.ExecCall(dCtx, tx.Inputs, resolvedVerifiers)
+		if err != nil {
+			return nil, err
+		}
+
+		serializer, err := dataFormat.GetABISerializer(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		return serializer.SerializeJSONCtx(ctx, cv)
 	})
 }

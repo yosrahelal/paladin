@@ -72,7 +72,7 @@ message RecoverSignerResponse {
 message StoredState {
   string id = 1;
   string schema_id = 2;
-  int64 stored_at = 3;
+  int64 created_at = 3;
   string data_json = 4;
   repeated StateLock locks = 5;
 }

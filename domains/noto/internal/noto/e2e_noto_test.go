@@ -418,7 +418,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 	require.NoError(t, err)
 
 	var callResult map[string]any
-	err = tb.ExecBaseLedgerCall(ctx, &callResult, &pldapi.TransactionCall{
+	rpcerr := rpc.CallRPC(ctx, &callResult, "ptx_call", &pldapi.TransactionCall{
 		TransactionInput: pldapi.TransactionInput{
 			Transaction: pldapi.Transaction{
 				Type:     pldapi.TransactionTypePublic.Enum(),
@@ -435,12 +435,14 @@ func TestNotoSelfSubmit(t *testing.T) {
 			Block: "latest",
 		},
 	})
-	require.NoError(t, err)
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
 	require.NotEmpty(t, callResult["implementation"])
 
 	log.L(ctx).Infof("Deploying an instance of Noto")
 	var notoAddress tktypes.EthAddress
-	rpcerr := rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
+	rpcerr = rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
 		domainName, &types.ConstructorParams{
 			Notary:         notaryName,
 			Implementation: "selfsubmit",

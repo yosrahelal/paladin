@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
@@ -67,12 +68,14 @@ type DomainSmartContract interface {
 	ConfigBytes() tktypes.HexBytes
 
 	InitTransaction(ctx context.Context, tx *PrivateTransaction) error
-
 	AssembleTransaction(dCtx DomainContext, tx *PrivateTransaction) error
 	WritePotentialStates(dCtx DomainContext, tx *PrivateTransaction) error
 	LockStates(dCtx DomainContext, tx *PrivateTransaction) error
 	EndorseTransaction(dCtx DomainContext, req *PrivateTransactionEndorseRequest) (*EndorsementResult, error)
 	PrepareTransaction(dCtx DomainContext, tx *PrivateTransaction) error
+
+	InitCall(ctx context.Context, tx *TransactionInputs) ([]*prototk.ResolveVerifierRequest, error)
+	ExecCall(dCtx DomainContext, tx *TransactionInputs, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error)
 
 	ResolveDispatch(ctx context.Context, tx *PrivateTransaction) error
 }
