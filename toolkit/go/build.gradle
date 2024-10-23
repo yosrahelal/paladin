@@ -25,6 +25,7 @@ ext {
     maxCoverageBarGap = 1
     coverageExcludedPackages = [
         'github.com/kaleido-io/paladin/toolkit/pkg/prototk',
+        'github.com/kaleido-io/paladin/toolkit/pkg/reference',
     ]
 }
 
@@ -125,6 +126,22 @@ task lint(type: Exec, dependsOn:[protoc, makeMocks, ":installGolangCILint"]) {
     args '-v'
     args '--color=always'
     args '--timeout', '5m'
+}
+
+task generateDocs(type: Exec) {
+
+    inputs.files(getProject().goFiles)
+    outputs.dir('coverage')
+
+    workingDir '.'
+    executable 'go'
+    args 'test'
+    args './pkg/reference'
+    args '-tags=reference'
+    if (project.findProperty('verboseTests') == 'true') {
+        args '-v'
+    }
+    
 }
 
 task test(type: Exec, dependsOn: [goGet, makeMocks]) {

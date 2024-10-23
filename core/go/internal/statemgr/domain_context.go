@@ -26,8 +26,10 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -36,6 +38,7 @@ type domainContext struct {
 	context.Context
 
 	id                 uuid.UUID
+	dbTX               *gorm.DB
 	ss                 *stateManager
 	domainName         string
 	customHashFunction bool
@@ -53,11 +56,11 @@ type domainContext struct {
 	// State locks are an in memory structure only, recording a set of locks associated with each transaction.
 	// These are held only in memory, and used during DB queries to create a view on top of the database
 	// that can make both additional states available, and remove visibility to states.
-	txLocks []*components.StateLock
+	txLocks []*pldapi.StateLock
 }
 
 // Very important that callers Close domain contexts they open
-func (ss *stateManager) NewDomainContext(ctx context.Context, domain components.Domain, contractAddress tktypes.EthAddress) components.DomainContext {
+func (ss *stateManager) NewDomainContext(ctx context.Context, domain components.Domain, contractAddress tktypes.EthAddress, dbTX *gorm.DB) components.DomainContext {
 	id := uuid.New()
 	log.L(ctx).Debugf("Domain context %s for domain %s contract %s closed", id, domain.Name(), contractAddress)
 
@@ -66,6 +69,7 @@ func (ss *stateManager) NewDomainContext(ctx context.Context, domain components.
 
 	dc := &domainContext{
 		Context:            log.WithLogField(ctx, "domain_ctx", fmt.Sprintf("%s_%s", domain.Name(), id)),
+		dbTX:               dbTX,
 		id:                 id,
 		ss:                 ss,
 		domainName:         domain.Name(),
@@ -106,7 +110,7 @@ func (dc *domainContext) Ctx() context.Context {
 	return dc.Context
 }
 
-func (dc *domainContext) getUnFlushedSpends() (spending []tktypes.HexBytes, nullifiers []*components.StateNullifier, nullifierIDs []tktypes.HexBytes, err error) {
+func (dc *domainContext) getUnFlushedSpends() (spending []tktypes.HexBytes, nullifiers []*pldapi.StateNullifier, nullifierIDs []tktypes.HexBytes, err error) {
 	// Take lock and check flush state
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
@@ -115,7 +119,7 @@ func (dc *domainContext) getUnFlushedSpends() (spending []tktypes.HexBytes, null
 	}
 
 	for _, l := range dc.txLocks {
-		if l.Type.V() == components.StateLockTypeSpend {
+		if l.Type.V() == pldapi.StateLockTypeSpend {
 			spending = append(spending, l.State)
 		}
 	}
@@ -130,7 +134,7 @@ func (dc *domainContext) getUnFlushedSpends() (spending []tktypes.HexBytes, null
 	return spending, nullifiers, nullifierIDs, nil
 }
 
-func (dc *domainContext) mergeUnFlushedApplyLocks(schema components.Schema, dbStates []*components.State, query *query.QueryJSON, requireNullifier bool) (_ []*components.State, err error) {
+func (dc *domainContext) mergeUnFlushedApplyLocks(schema components.Schema, dbStates []*pldapi.State, query *query.QueryJSON, requireNullifier bool) (_ []*pldapi.State, err error) {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 	if flushErr := dc.checkResetInitUnFlushed(); flushErr != nil {
@@ -146,7 +150,7 @@ func (dc *domainContext) mergeUnFlushedApplyLocks(schema components.Schema, dbSt
 		}
 		spent := false
 		for _, lock := range dc.txLocks {
-			if lock.State.Equals(state.ID) && lock.Type.V() == components.StateLockTypeSpend {
+			if lock.State.Equals(state.ID) && lock.Type.V() == pldapi.StateLockTypeSpend {
 				spent = true
 				break
 			}
@@ -204,7 +208,7 @@ func (dc *domainContext) Info() components.DomainContextInfo {
 	}
 }
 
-func (dc *domainContext) mergeInMemoryMatches(schema components.Schema, states []*components.State, extras []*components.StateWithLabels, query *query.QueryJSON) (_ []*components.State, err error) {
+func (dc *domainContext) mergeInMemoryMatches(schema components.Schema, states []*pldapi.State, extras []*components.StateWithLabels, query *query.QueryJSON) (_ []*pldapi.State, err error) {
 
 	// Reconstitute the labels for all the loaded states into the front of an aggregate list
 	fullList := make([]*components.StateWithLabels, len(states), len(states)+len(extras))
@@ -237,7 +241,7 @@ func (dc *domainContext) mergeInMemoryMatches(schema components.Schema, states [
 	if query.Limit != nil && len > *query.Limit {
 		len = *query.Limit
 	}
-	retList := make([]*components.State, len)
+	retList := make([]*pldapi.State, len)
 	for i := 0; i < len; i++ {
 		retList[i] = fullList[i].State
 	}
@@ -245,7 +249,7 @@ func (dc *domainContext) mergeInMemoryMatches(schema components.Schema, states [
 
 }
 
-func (dc *domainContext) FindAvailableStates(schemaID tktypes.Bytes32, query *query.QueryJSON) (components.Schema, []*components.State, error) {
+func (dc *domainContext) FindAvailableStates(schemaID tktypes.Bytes32, query *query.QueryJSON) (components.Schema, []*pldapi.State, error) {
 
 	// Build a list of spending states
 	spending, _, _, err := dc.getUnFlushedSpends()
@@ -254,7 +258,7 @@ func (dc *domainContext) FindAvailableStates(schemaID tktypes.Bytes32, query *qu
 	}
 
 	// Run the query against the DB
-	schema, states, err := dc.ss.findStates(dc, dc.domainName, dc.contractAddress, schemaID, query, StateStatusAvailable, spending...)
+	schema, states, err := dc.ss.findStates(dc, dc.dbTX, dc.domainName, &dc.contractAddress, schemaID, query, StateStatusAvailable, spending...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -264,7 +268,7 @@ func (dc *domainContext) FindAvailableStates(schemaID tktypes.Bytes32, query *qu
 	return schema, states, err
 }
 
-func (dc *domainContext) FindAvailableNullifiers(schemaID tktypes.Bytes32, query *query.QueryJSON) (components.Schema, []*components.State, error) {
+func (dc *domainContext) FindAvailableNullifiers(schemaID tktypes.Bytes32, query *query.QueryJSON) (components.Schema, []*pldapi.State, error) {
 
 	// Build a list of unflushed and spending nullifiers
 	spending, nullifiers, nullifierIDs, err := dc.getUnFlushedSpends()
@@ -277,7 +281,7 @@ func (dc *domainContext) FindAvailableNullifiers(schemaID tktypes.Bytes32, query
 	}
 
 	// Run the query against the DB
-	schema, states, err := dc.ss.findAvailableNullifiers(dc, dc.domainName, dc.contractAddress, schemaID, query, spending, nullifierIDs)
+	schema, states, err := dc.ss.findAvailableNullifiers(dc, dc.dbTX, dc.domainName, &dc.contractAddress, schemaID, query, spending, nullifierIDs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -287,14 +291,14 @@ func (dc *domainContext) FindAvailableNullifiers(schemaID tktypes.Bytes32, query
 	return schema, states, err
 }
 
-func (dc *domainContext) UpsertStates(stateUpserts ...*components.StateUpsert) (states []*components.State, err error) {
+func (dc *domainContext) UpsertStates(stateUpserts ...*components.StateUpsert) (states []*pldapi.State, err error) {
 
-	states = make([]*components.State, len(stateUpserts))
-	stateLocks := make([]*components.StateLock, 0, len(stateUpserts))
+	states = make([]*pldapi.State, len(stateUpserts))
+	stateLocks := make([]*pldapi.StateLock, 0, len(stateUpserts))
 	withValues := make([]*components.StateWithLabels, len(stateUpserts))
 	toMakeAvailable := make([]*components.StateWithLabels, 0, len(stateUpserts))
 	for i, ns := range stateUpserts {
-		schema, err := dc.ss.GetSchema(dc, dc.domainName, ns.SchemaID, true)
+		schema, err := dc.ss.GetSchema(dc, dc.dbTX, dc.domainName, ns.SchemaID, true)
 		if err != nil {
 			return nil, err
 		}
@@ -306,8 +310,8 @@ func (dc *domainContext) UpsertStates(stateUpserts ...*components.StateUpsert) (
 		withValues[i] = vs
 		states[i] = withValues[i].State
 		if ns.CreatedBy != nil {
-			createLock := &components.StateLock{
-				Type:        components.StateLockTypeCreate.Enum(),
+			createLock := &pldapi.StateLock{
+				Type:        pldapi.StateLockTypeCreate.Enum(),
 				Transaction: *ns.CreatedBy,
 				State:       withValues[i].State.ID,
 			}
@@ -351,7 +355,7 @@ func (dc *domainContext) UpsertNullifiers(nullifiers ...*components.NullifierUps
 	}
 
 	for _, nullifierInput := range nullifiers {
-		nullifier := &components.StateNullifier{
+		nullifier := &pldapi.StateNullifier{
 			DomainName: dc.domainName,
 			ID:         nullifierInput.ID,
 			State:      nullifierInput.State,
@@ -370,7 +374,7 @@ func (dc *domainContext) UpsertNullifiers(nullifiers ...*components.NullifierUps
 	return nil
 }
 
-func (dc *domainContext) addStateLocks(locks ...*components.StateLock) error {
+func (dc *domainContext) addStateLocks(locks ...*pldapi.StateLock) error {
 	for _, l := range locks {
 		lockType, err := l.Type.Validate()
 		if err != nil {
@@ -385,7 +389,7 @@ func (dc *domainContext) addStateLocks(locks ...*components.StateLock) error {
 
 		// For creating the state must be in our map (via Upsert) or we will fail to return it
 		creatingState := dc.creatingStates[l.State.String()]
-		if lockType == components.StateLockTypeCreate && creatingState == nil {
+		if lockType == pldapi.StateLockTypeCreate && creatingState == nil {
 			return i18n.NewError(dc, msgs.MsgStateLockCreateNotInContext, l.State)
 		}
 
@@ -396,9 +400,9 @@ func (dc *domainContext) addStateLocks(locks ...*components.StateLock) error {
 	return nil
 }
 
-func (dc *domainContext) applyLocks(states []*components.State) []*components.State {
+func (dc *domainContext) applyLocks(states []*pldapi.State) []*pldapi.State {
 	for _, s := range states {
-		s.Locks = []*components.StateLock{}
+		s.Locks = []*pldapi.StateLock{}
 		for _, l := range dc.txLocks {
 			if l.State.Equals(s.ID) {
 				s.Locks = append(s.Locks, l)
@@ -408,7 +412,7 @@ func (dc *domainContext) applyLocks(states []*components.State) []*components.St
 	return states
 }
 
-func (dc *domainContext) AddStateLocks(locks ...*components.StateLock) (err error) {
+func (dc *domainContext) AddStateLocks(locks ...*pldapi.StateLock) (err error) {
 	// Take lock and check flush state
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
@@ -428,12 +432,12 @@ func (dc *domainContext) ResetTransactions(transactions ...uuid.UUID) {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 
-	newLocks := make([]*components.StateLock, 0)
+	newLocks := make([]*pldapi.StateLock, 0)
 	for _, lock := range dc.txLocks {
 		skip := false
 		for _, tx := range transactions {
 			if lock.Transaction == tx {
-				if lock.Type.V() == components.StateLockTypeCreate {
+				if lock.Type.V() == pldapi.StateLockTypeCreate {
 					// Clean up the creating record
 					delete(dc.creatingStates, lock.State.String())
 				}
@@ -448,11 +452,11 @@ func (dc *domainContext) ResetTransactions(transactions ...uuid.UUID) {
 	dc.txLocks = newLocks
 }
 
-func (dc *domainContext) StateLocksByTransaction() map[uuid.UUID][]components.StateLock {
+func (dc *domainContext) StateLocksByTransaction() map[uuid.UUID][]pldapi.StateLock {
 	dc.stateLock.Lock()
 	defer dc.stateLock.Unlock()
 
-	txLocksCopy := make(map[uuid.UUID][]components.StateLock)
+	txLocksCopy := make(map[uuid.UUID][]pldapi.StateLock)
 	for _, l := range dc.txLocks {
 		txLocksCopy[l.Transaction] = append(txLocksCopy[l.Transaction], *l)
 	}

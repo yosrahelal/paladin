@@ -122,8 +122,11 @@ func TestTransportRequestsOK(t *testing.T) {
 			return &prototk.ConfigureTransportResponse{}, nil
 		},
 		SendMessage: func(ctx context.Context, smr *prototk.SendMessageRequest) (*prototk.SendMessageResponse, error) {
-			assert.Equal(t, "node1", smr.Message.Destination)
+			assert.Equal(t, "node1", smr.Message.Node)
 			return &prototk.SendMessageResponse{}, nil
+		},
+		GetLocalDetails: func(ctx context.Context, gldr *prototk.GetLocalDetailsRequest) (*prototk.GetLocalDetailsResponse, error) {
+			return &prototk.GetLocalDetailsResponse{TransportDetails: "endpoint stuff"}, nil
 		},
 	}
 
@@ -163,10 +166,15 @@ func TestTransportRequestsOK(t *testing.T) {
 	require.NoError(t, err)
 
 	smr, err := transportAPI.SendMessage(ctx, &prototk.SendMessageRequest{
-		Message: &prototk.Message{Destination: "node1"},
+		Message: &prototk.Message{Node: "node1"},
 	})
 	require.NoError(t, err)
 	assert.NotNil(t, smr)
+
+	gldr, err := transportAPI.GetLocalDetails(ctx, &prototk.GetLocalDetailsRequest{})
+	require.NoError(t, err)
+	assert.NotNil(t, smr)
+	assert.Equal(t, "endpoint stuff", gldr.TransportDetails)
 
 	// This is the point the transport manager would call us to say the transport is initialized
 	// (once it's happy it's updated its internal state)

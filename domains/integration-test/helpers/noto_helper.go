@@ -23,7 +23,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
-	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 )
@@ -54,7 +54,7 @@ func DeployNoto(ctx context.Context, t *testing.T, rpc rpcbackend.Backend, domai
 		t:       t,
 		rpc:     rpc,
 		Address: &addr,
-		ABI:     domain.LoadBuild(NotoInterfaceJSON).ABI,
+		ABI:     solutils.MustLoadBuild(NotoInterfaceJSON).ABI,
 	}
 }
 

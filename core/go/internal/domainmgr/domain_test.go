@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
@@ -218,14 +219,14 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 	var mdc *componentmocks.DomainContext
 	addr := *tktypes.RandAddress()
 	if realDB {
-		dCtx := dm.stateStore.NewDomainContext(ctx, tp.d, addr)
+		dCtx := dm.stateStore.NewDomainContext(ctx, tp.d, addr, dm.persistence.DB())
 		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), dCtx)
 	} else {
 		mdc = componentmocks.NewDomainContext(t)
 		mdc.On("Ctx").Return(ctx).Maybe()
 		mdc.On("Close").Return()
 		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), mdc)
-		mc.stateStore.On("NewDomainContext", mock.Anything, tp.d, mock.Anything).Return(mdc).Maybe()
+		mc.stateStore.On("NewDomainContext", mock.Anything, tp.d, mock.Anything, mock.Anything).Return(mdc).Maybe()
 	}
 
 	return &testDomainContext{
@@ -359,7 +360,7 @@ func TestDomainInitBadEventsABI(t *testing.T) {
 		AbiStateSchemasJson:    []string{},
 		AbiEventsJson: `[
 			{
-				"type": "badbadwrong",
+				"type": "event",
 				"name": "bad",
 				"inputs": [{"type": "verywrong"}]
 			}
@@ -1007,11 +1008,11 @@ func TestRecoverSignerFailCases(t *testing.T) {
 }
 
 func TestMapStateLockType(t *testing.T) {
-	for _, pldType := range components.StateLockType("").Options() {
-		assert.NotNil(t, mapStateLockType(components.StateLockType(pldType)))
+	for _, pldType := range pldapi.StateLockType("").Options() {
+		assert.NotNil(t, mapStateLockType(pldapi.StateLockType(pldType)))
 	}
 	assert.Panics(t, func() {
-		_ = mapStateLockType(components.StateLockType("wrong"))
+		_ = mapStateLockType(pldapi.StateLockType("wrong"))
 	})
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -87,7 +88,7 @@ func TestGetStateMissing(t *testing.T) {
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.GetState(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("state1")).Bytes(), true, false)
+	_, err := ss.GetState(ctx, ss.p.DB(), "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("state1")).Bytes(), true, false)
 	assert.Regexp(t, "PD010112", err)
 }
 
@@ -98,7 +99,7 @@ func TestFindStatesMissingSchema(t *testing.T) {
 	db.ExpectQuery("SELECT").WillReturnRows(db.NewRows([]string{}))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindStates(ctx, "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("schema1")), &query.QueryJSON{}, "all")
+	_, err := ss.FindContractStates(ctx, ss.p.DB(), "domain1", *contractAddress, tktypes.Bytes32Keccak(([]byte)("schema1")), &query.QueryJSON{}, "all")
 	assert.Regexp(t, "PD010106", err)
 }
 
@@ -113,7 +114,7 @@ func TestFindStatesBadQuery(t *testing.T) {
 	})
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID, &query.QueryJSON{
+	_, err := ss.FindContractStates(ctx, ss.p.DB(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				Equal: []*query.OpSingleVal{
@@ -133,14 +134,14 @@ func TestFindStatesFail(t *testing.T) {
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
 	cacheKey := schemaCacheKey("domain1", schemaID)
 	ss.abiSchemaCache.Set(cacheKey, &abiSchema{
-		SchemaPersisted: &components.SchemaPersisted{ID: schemaID},
-		definition:      &abi.Parameter{},
+		Schema:     &pldapi.Schema{ID: schemaID},
+		definition: &abi.Parameter{},
 	})
 
 	db.ExpectQuery("SELECT.*created").WillReturnError(fmt.Errorf("pop"))
 
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID, &query.QueryJSON{
+	_, err := ss.FindContractStates(ctx, ss.p.DB(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				GreaterThan: []*query.OpSingleVal{
@@ -161,7 +162,7 @@ func TestFindStatesUnknownContext(t *testing.T) {
 
 	schemaID := tktypes.Bytes32Keccak(([]byte)("schema1"))
 	contractAddress := tktypes.RandAddress()
-	_, err := ss.FindStates(ctx, "domain1", *contractAddress, schemaID, &query.QueryJSON{
+	_, err := ss.FindContractStates(ctx, ss.p.DB(), "domain1", *contractAddress, schemaID, &query.QueryJSON{
 		Statements: query.Statements{
 			Ops: query.Ops{
 				GreaterThan: []*query.OpSingleVal{

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -115,4 +116,22 @@ func TestBadWSUpgrade(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, res.StatusCode)
 
+}
+
+func TestWSHandler(t *testing.T) {
+	rpcServer, err := NewRPCServer(context.Background(), &pldconf.RPCServerConfig{
+		HTTP: pldconf.RPCServerConfigHTTP{Disabled: true},
+		WS: pldconf.RPCServerConfigWS{
+			HTTPServerConfig: pldconf.HTTPServerConfig{
+				Port: confutil.P(0),
+			},
+		},
+	})
+	require.NoError(t, err)
+	defer rpcServer.Stop()
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	res := httptest.NewRecorder()
+	rpcServer.WSHandler(res, req)
+	assert.Equal(t, http.StatusBadRequest, res.Code)
 }

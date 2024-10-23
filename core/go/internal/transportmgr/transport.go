@@ -29,7 +29,6 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -136,14 +135,11 @@ func (t *transport) ReceiveMessage(ctx context.Context, req *prototk.ReceiveMess
 		log.L(ctx).Errorf("Invalid message from transport: %s", protoToJSON(msg))
 		return nil, i18n.NewError(ctx, msgs.MsgTransportInvalidMessage)
 	}
-	destNode, err := tktypes.PrivateIdentityLocator(msg.Destination).Node(ctx, false)
-	if err != nil || destNode != t.tm.localNodeName {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgTransportInvalidDestinationReceived, t.tm.localNodeName, msg.Destination)
+
+	if msg.Node != t.tm.localNodeName {
+		return nil, i18n.NewError(ctx, msgs.MsgTransportInvalidNodeReceived, msg.Node, t.tm.localNodeName)
 	}
-	_, _, err = tktypes.PrivateIdentityLocator(msg.ReplyTo).Validate(ctx, "", false)
-	if err != nil {
-		return nil, i18n.WrapError(ctx, err, msgs.MsgTransportInvalidReplyToReceived, msg.ReplyTo)
-	}
+
 	msgID, err := uuid.Parse(msg.MessageId)
 	if err != nil {
 		log.L(ctx).Errorf("Invalid messageId from transport: %s", protoToJSON(msg))
@@ -165,30 +161,35 @@ func (t *transport) ReceiveMessage(ctx context.Context, req *prototk.ReceiveMess
 	if log.IsTraceEnabled() {
 		log.L(ctx).Tracef("transport %s message received: %s", t.name, protoToJSON(msg))
 	}
-	transportMessage := &components.TransportMessage{
+
+	if err = t.deliverMessage(ctx, msg.Component, &components.TransportMessage{
 		MessageID:     msgID,
 		MessageType:   msg.MessageType,
+		Component:     msg.Component,
 		CorrelationID: pCorrelID,
-		Destination:   tktypes.PrivateIdentityLocator(msg.Destination),
-		ReplyTo:       tktypes.PrivateIdentityLocator(msg.ReplyTo),
+		Node:          msg.Node,
+		ReplyTo:       msg.ReplyTo,
 		Payload:       msg.Payload,
+	}); err != nil {
+		return nil, err
 	}
-	t.tm.destinationsMux.RLock()
-	defer t.tm.destinationsMux.RUnlock()
-	localDestination, err := tktypes.PrivateIdentityLocator(msg.Destination).Identity(ctx)
-	if err != nil {
-		log.L(ctx).Errorf("Error resolving destination: %s", err)
-		return nil, i18n.WrapError(ctx, err, msgs.MsgTransportInvalidDestinationReceived, msg.Destination)
-	}
-	receiver, found := t.tm.destinations[localDestination]
-	if !found {
-		log.L(ctx).Errorf("Destination not found: %s", msg.Destination)
-		return nil, i18n.NewError(ctx, msgs.MsgTransportDestinationNotFound, msg.Destination)
-	}
-
-	receiver.ReceiveTransportMessage(ctx, transportMessage)
 
 	return &prototk.ReceiveMessageResponse{}, nil
+}
+
+func (t *transport) deliverMessage(ctx context.Context, destIdentity string, msg *components.TransportMessage) error {
+	t.tm.destinationsMux.RLock()
+	defer t.tm.destinationsMux.RUnlock()
+
+	// TODO: Reconcile why we're using the identity as the component routing location - Broadhurst/Hosie discussion required
+	receiver, found := t.tm.destinations[destIdentity]
+	if !found {
+		log.L(ctx).Errorf("Component not found: %s", msg.Component)
+		return i18n.NewError(ctx, msgs.MsgTransportDestinationNotFound, msg.Component)
+	}
+
+	receiver.ReceiveTransportMessage(ctx, msg)
+	return nil
 }
 
 func (t *transport) GetTransportDetails(ctx context.Context, req *prototk.GetTransportDetailsRequest) (*prototk.GetTransportDetailsResponse, error) {
@@ -202,7 +203,7 @@ func (t *transport) GetTransportDetails(ctx context.Context, req *prototk.GetTra
 	availableTransports, err := t.tm.registryManager.GetNodeTransports(ctx, req.Node)
 	for _, atd := range availableTransports {
 		if atd.Transport == t.name {
-			transportDetails = atd.TransportDetails
+			transportDetails = atd.Details
 			break
 		}
 	}
@@ -212,6 +213,14 @@ func (t *transport) GetTransportDetails(ctx context.Context, req *prototk.GetTra
 	return &prototk.GetTransportDetailsResponse{
 		TransportDetails: transportDetails,
 	}, nil
+}
+
+func (t *transport) getLocalDetails(ctx context.Context) (string, error) {
+	res, err := t.api.GetLocalDetails(ctx, &prototk.GetLocalDetailsRequest{})
+	if err != nil {
+		return "", err
+	}
+	return res.TransportDetails, nil
 }
 
 func (t *transport) close() {

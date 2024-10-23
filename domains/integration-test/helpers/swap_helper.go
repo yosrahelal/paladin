@@ -18,13 +18,13 @@ package helpers
 import (
 	"context"
 	_ "embed"
-	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
-	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,7 +36,7 @@ var SwapJSON []byte
 type SwapHelper struct {
 	t       *testing.T
 	tb      testbed.Testbed
-	eth     ethclient.EthClient
+	pld     pldclient.PaladinClient
 	Address *tktypes.EthAddress
 	ABI     abi.ABI
 }
@@ -61,43 +61,44 @@ func DeploySwap(
 	ctx context.Context,
 	t *testing.T,
 	tb testbed.Testbed,
+	pld pldclient.PaladinClient,
 	signer string,
 	input *TradeRequestInput,
 ) *SwapHelper {
-	build := domain.LoadBuild(SwapJSON)
-	eth := tb.Components().EthClientFactory().HTTPClient()
-	builder := deployBuilder(ctx, t, eth, build.ABI, build.Bytecode).
-		Input(toJSON(t, map[string]any{"inputData": input}))
-	deploy := NewTransactionHelper(ctx, t, tb, builder).SignAndSend(signer).Wait()
-	assert.NotNil(t, deploy.ContractAddress)
+	build := solutils.MustLoadBuild(SwapJSON)
+	builder := deployBuilder(ctx, pld, build.ABI, build.Bytecode).
+		Inputs(toJSON(t, map[string]any{"inputData": input}))
+	deploy := NewTransactionHelper(ctx, t, tb, builder).SignAndSend(signer).Wait(5 * time.Second)
+	require.NoError(t, deploy.Error())
+	assert.NotNil(t, deploy.Receipt().ContractAddress)
 	return &SwapHelper{
 		t:       t,
 		tb:      tb,
-		eth:     eth,
-		Address: deploy.ContractAddress,
+		pld:     pld,
+		Address: deploy.Receipt().ContractAddress,
 		ABI:     build.ABI,
 	}
 }
 
 func (s *SwapHelper) Prepare(ctx context.Context, states *StateData) *TransactionHelper {
-	builder := functionBuilder(ctx, s.t, s.eth, s.ABI, "prepare").
-		To(s.Address.Address0xHex()).
-		Input(toJSON(s.t, map[string]any{
+	builder := functionBuilder(ctx, s.pld, s.ABI, "prepare").
+		To(s.Address).
+		Inputs(map[string]any{
 			"states": states,
-		}))
+		})
 	return NewTransactionHelper(ctx, s.t, s.tb, builder)
 }
 
 func (s *SwapHelper) Execute(ctx context.Context) *TransactionHelper {
-	builder := functionBuilder(ctx, s.t, s.eth, s.ABI, "execute").To(s.Address.Address0xHex())
+	builder := functionBuilder(ctx, s.pld, s.ABI, "execute").To(s.Address)
 	return NewTransactionHelper(ctx, s.t, s.tb, builder)
 }
 
 func (s *SwapHelper) GetTrade(ctx context.Context) map[string]any {
-	output, err := functionBuilder(ctx, s.t, s.eth, s.ABI, "trade").To(s.Address.Address0xHex()).CallResult()
-	require.NoError(s.t, err)
+	call := functionBuilder(ctx, s.pld, s.ABI, "trade").Public().To(s.Address).BuildTX()
+	require.NoError(s.t, call.Error())
 	var jsonOutput map[string]any
-	err = json.Unmarshal([]byte(output.JSON()), &jsonOutput)
+	err := s.tb.ExecBaseLedgerCall(ctx, &jsonOutput, call.CallTX())
 	require.NoError(s.t, err)
 	return jsonOutput
 }

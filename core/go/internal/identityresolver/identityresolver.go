@@ -18,7 +18,6 @@ package identityresolver
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 
@@ -26,17 +25,17 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	pbIdentityResolver "github.com/kaleido-io/paladin/core/pkg/proto/identityresolver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
 )
 
 type identityResolver struct {
 	bgCtx                 context.Context
-	nodeID                string
-	keyManager            ethclient.KeyManager
+	nodeName              string
+	keyManager            components.KeyManager
 	transportManager      components.TransportManager
 	inflightRequests      map[string]*inflightRequest
 	inflightRequestsMutex *sync.Mutex
@@ -48,10 +47,9 @@ type inflightRequest struct {
 }
 
 // As a LateBoundComponent, the identity resolver is created and initialised in a single function call
-func NewIdentityResolver(ctx context.Context, nodeID string) components.IdentityResolver {
+func NewIdentityResolver(ctx context.Context) components.IdentityResolver {
 	return &identityResolver{
 		bgCtx:                 ctx,
-		nodeID:                nodeID,
 		inflightRequests:      make(map[string]*inflightRequest),
 		inflightRequestsMutex: &sync.Mutex{},
 	}
@@ -62,6 +60,7 @@ func (ir *identityResolver) PreInit(c components.PreInitComponents) (*components
 }
 
 func (ir *identityResolver) PostInit(c components.AllComponents) error {
+	ir.nodeName = c.TransportManager().LocalNodeName()
 	ir.keyManager = c.KeyManager()
 	ir.transportManager = c.TransportManager()
 	return c.TransportManager().RegisterClient(ir.bgCtx, ir)
@@ -77,9 +76,8 @@ func (ir *identityResolver) Stop() {
 }
 
 func (ir *identityResolver) ResolveVerifier(ctx context.Context, lookup string, algorithm string, verifierType string) (string, error) {
-	//TODO should we have a timeout here? Shoudl be related to the async timeout and reaping of the inflight requests?
-	replyChan := make(chan string)
-	errChan := make(chan error)
+	replyChan := make(chan string, 1)
+	errChan := make(chan error, 1)
 	ir.ResolveVerifierAsync(ctx, lookup, algorithm, verifierType, func(ctx context.Context, verifier string) {
 		replyChan <- verifier
 	}, func(ctx context.Context, err error) {
@@ -90,6 +88,8 @@ func (ir *identityResolver) ResolveVerifier(ctx context.Context, lookup string, 
 		return verifier, nil
 	case err := <-errChan:
 		return "", err
+	case <-ctx.Done():
+		return "", i18n.NewError(ctx, msgs.MsgContextCanceled)
 	}
 }
 
@@ -99,20 +99,23 @@ func (ir *identityResolver) ResolveVerifierAsync(ctx context.Context, lookup str
 
 	atIndex := strings.Index(lookup, "@")
 
-	if atIndex == -1 || lookup[atIndex+1:] == ir.nodeID {
-		// this is an asyncronous call because the key manager may need to call out to a remote signer in order to
-		// resovle the key (e.g. if this is the first time this key has been referenced)
-		// its a one and done go routine so no need for additional concurency controls
+	if atIndex == -1 || lookup[atIndex+1:] == ir.nodeName {
+		// this is an asynchronous call because the key manager may need to call out to a remote signer in order to
+		// resolve the key (e.g. if this is the first time this key has been referenced)
+		// its a one and done go routine so no need for additional concurrency controls
 		// we just need to be careful not to update the transaction object on this other thread
 		go func() {
-			_, verifier, err := ir.keyManager.ResolveKey(ctx, lookup, algorithm, verifierType)
+			unqualifiedLookup, err := tktypes.PrivateIdentityLocator(lookup).Identity(ctx)
+			var resolvedKey *pldapi.KeyMappingAndVerifier
+			if err == nil {
+				resolvedKey, err = ir.keyManager.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, algorithm, verifierType)
+			}
 			if err != nil {
 				log.L(ctx).Errorf("Failed to resolve local signer for %s (algorithm=%s, verifierType=%s): %s", lookup, algorithm, verifierType, err)
 				failed(ctx, err)
 				return
-
 			}
-			resolved(ctx, verifier)
+			resolved(ctx, resolvedKey.Verifier.Verifier)
 		}()
 
 	} else {
@@ -141,8 +144,9 @@ func (ir *identityResolver) ResolveVerifierAsync(ctx context.Context, lookup str
 		err = ir.transportManager.Send(ctx, &components.TransportMessage{
 			MessageType: "ResolveVerifierRequest",
 			MessageID:   requestID,
-			Destination: tktypes.PrivateIdentityLocator(fmt.Sprintf("%s@%s", IDENTITIY_RESOLVER_DESTINATION, remoteNodeId)),
-			ReplyTo:     tktypes.PrivateIdentityLocator(fmt.Sprintf("%s@%s", IDENTITIY_RESOLVER_DESTINATION, ir.nodeID)),
+			Component:   IDENTITY_RESOLVER_DESTINATION,
+			Node:        remoteNodeId,
+			ReplyTo:     ir.nodeName,
 			Payload:     resolveVerifierRequestBytes,
 		})
 		if err != nil {
@@ -217,7 +221,7 @@ func (ir *identityResolver) handleResolveVerifierError(ctx context.Context, mess
 }
 
 // TODO some common code with ResolveVerifierAsync. Refactor out to a re-usable function
-func (ir *identityResolver) handleResolveVerifierRequest(ctx context.Context, messagePayload []byte, replyTo tktypes.PrivateIdentityLocator, requestID *uuid.UUID) {
+func (ir *identityResolver) handleResolveVerifierRequest(ctx context.Context, messagePayload []byte, replyTo string, requestID *uuid.UUID) {
 
 	resolveVerifierRequest := &pbIdentityResolver.ResolveVerifierRequest{}
 	err := proto.Unmarshal(messagePayload, resolveVerifierRequest)
@@ -231,12 +235,16 @@ func (ir *identityResolver) handleResolveVerifierRequest(ctx context.Context, me
 
 	// contractAddress and transactionID in the request message are simply used to populate the response
 	// so that the requesting node can correlate the response with the transaction that needs it
-	_, verifier, err := ir.keyManager.ResolveKey(ctx, resolveVerifierRequest.Lookup, resolveVerifierRequest.Algorithm, resolveVerifierRequest.VerifierType)
+	var resolvedKey *pldapi.KeyMappingAndVerifier
+	unqualifiedLookup, err := tktypes.PrivateIdentityLocator(resolveVerifierRequest.Lookup).Identity(ctx)
+	if err == nil {
+		resolvedKey, err = ir.keyManager.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, resolveVerifierRequest.Algorithm, resolveVerifierRequest.VerifierType)
+	}
 	if err == nil {
 		resolveVerifierResponse := &pbIdentityResolver.ResolveVerifierResponse{
 			Lookup:       resolveVerifierRequest.Lookup,
 			Algorithm:    resolveVerifierRequest.Algorithm,
-			Verifier:     verifier,
+			Verifier:     resolvedKey.Verifier.Verifier,
 			VerifierType: resolveVerifierRequest.VerifierType,
 		}
 		resolveVerifierResponseBytes, err := proto.Marshal(resolveVerifierResponse)
@@ -244,8 +252,8 @@ func (ir *identityResolver) handleResolveVerifierRequest(ctx context.Context, me
 			err = ir.transportManager.Send(ctx, &components.TransportMessage{
 				MessageType:   "ResolveVerifierResponse",
 				CorrelationID: requestID,
-				ReplyTo:       tktypes.PrivateIdentityLocator(fmt.Sprintf("%s@%s", IDENTITIY_RESOLVER_DESTINATION, ir.nodeID)),
-				Destination:   replyTo,
+				Component:     IDENTITY_RESOLVER_DESTINATION,
+				Node:          replyTo,
 				Payload:       resolveVerifierResponseBytes,
 			})
 			if err != nil {
@@ -272,8 +280,9 @@ func (ir *identityResolver) handleResolveVerifierRequest(ctx context.Context, me
 			err = ir.transportManager.Send(ctx, &components.TransportMessage{
 				MessageType:   "ResolveVerifierError",
 				CorrelationID: requestID,
-				ReplyTo:       tktypes.PrivateIdentityLocator(fmt.Sprintf("%s@%s", IDENTITIY_RESOLVER_DESTINATION, ir.nodeID)),
-				Destination:   replyTo,
+				ReplyTo:       ir.nodeName,
+				Component:     IDENTITY_RESOLVER_DESTINATION,
+				Node:          replyTo,
 				Payload:       resolveVerifierErrorBytes,
 			})
 			if err != nil {

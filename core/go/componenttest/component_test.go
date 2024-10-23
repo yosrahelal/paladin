@@ -21,23 +21,20 @@ package componenttest
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/componenttest/domains"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
-	"github.com/kaleido-io/paladin/toolkit/pkg/signer/signerapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/sirupsen/logrus"
@@ -62,17 +59,22 @@ db:
     autoMigrate:   true
     migrationsDir: ../db/migrations/sqlite
     debugQueries:  false
+blockIndexer:
+  fromBlock: latest
 blockchain:
   http:
     url: http://localhost:8545
   ws:
     url: ws://localhost:8546
     initialConnectAttempts: 25
-signer:
+wallets:
+- name: wallet1
+  keySelector: .*
+  signer:
     keyDerivation:
-      type: bip32
+      type: "bip32"
     keyStore:
-      type: static
+      type: "static"
       static:
         keys:
           seed:
@@ -81,25 +83,15 @@ signer:
 `), &testConfig)
 	require.NoError(t, err)
 
-	p, err := persistence.NewPersistence(ctx, &testConfig.DB)
-	require.NoError(t, err)
-	defer p.Close()
+	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil, nil)
+	cm := instance.cm
+	c := pldclient.Wrap(instance.client).ReceiptPollingInterval(100 * time.Microsecond)
 
-	indexer, err := blockindexer.NewBlockIndexer(ctx, &pldconf.BlockIndexerConfig{
-		FromBlock: json.RawMessage(`"latest"`), // don't want earlier events
-	}, &testConfig.Blockchain.WS, p)
+	build, err := solutils.LoadBuild(ctx, simpleStorageBuildJSON)
 	require.NoError(t, err)
 
-	type solBuild struct {
-		ABI      abi.ABI                   `json:"abi"`
-		Bytecode ethtypes.HexBytes0xPrefix `json:"bytecode"`
-	}
-	var simpleStorageBuild solBuild
-	err = json.Unmarshal(simpleStorageBuildJSON, &simpleStorageBuild)
-	require.NoError(t, err)
-
-	eventStreamEvents := make(chan *blockindexer.EventWithData, 2 /* all the events we exepct */)
-	err = indexer.Start(&blockindexer.InternalEventStream{
+	eventStreamEvents := make(chan *pldapi.EventWithData, 2 /* all the events we exepct */)
+	_, err = cm.BlockIndexer().AddEventStream(ctx, &blockindexer.InternalEventStream{
 		Handler: func(ctx context.Context, tx *gorm.DB, batch *blockindexer.EventDeliveryBatch) (blockindexer.PostCommit, error) {
 			// With SQLite we cannot hang in here with a DB TX - as there's only one per process.
 			for _, e := range batch.Events {
@@ -114,46 +106,46 @@ signer:
 		Definition: &blockindexer.EventStream{
 			Name: "unittest",
 			Sources: []blockindexer.EventStreamSource{{
-				ABI: abi.ABI{simpleStorageBuild.ABI.Events()["Changed"]},
+				ABI: abi.ABI{build.ABI.Events()["Changed"]},
 			}},
 		},
 	})
 	require.NoError(t, err)
-	defer indexer.Stop()
 
-	keyMgr, err := ethclient.NewSimpleTestKeyManager(ctx, (*signerapi.ConfigNoExt)(&testConfig.Signer))
-	require.NoError(t, err)
+	simpleStorage := c.ForABI(ctx, build.ABI).Public().From("key1")
 
-	ecf, err := ethclient.NewEthClientFactory(ctx, keyMgr, &testConfig.Blockchain)
-	require.NoError(t, err)
-	err = ecf.Start()
-	require.NoError(t, err)
-	defer ecf.Stop()
-	ethClient := ecf.HTTPClient()
+	res := simpleStorage.Clone().
+		Constructor().
+		Bytecode(build.Bytecode).
+		Inputs(`{"x":11223344}`).
+		Send().Wait(5 * time.Second)
+	require.NoError(t, res.Error())
+	contractAddr := res.Receipt().ContractAddress
 
-	simpleStorage, err := ethClient.ABI(ctx, simpleStorageBuild.ABI)
+	var getX1 tktypes.RawJSON
+	err = simpleStorage.Clone().
+		Function("get").
+		To(contractAddr).
+		Outputs(&getX1).
+		Call()
 	require.NoError(t, err)
+	assert.JSONEq(t, `{"x":"11223344"}`, getX1.Pretty())
 
-	txHash1, err := simpleStorage.MustConstructor(tktypes.HexBytes(simpleStorageBuild.Bytecode)).R(ctx).
-		Signer("key1").Input(`{"x":11223344}`).SignAndSend()
-	require.NoError(t, err)
-	deployTX, err := indexer.WaitForTransactionSuccess(ctx, *txHash1, simpleStorageBuild.ABI)
-	require.NoError(t, err)
-	contractAddr := deployTX.ContractAddress.Address0xHex()
+	res = simpleStorage.Clone().
+		Function("set").
+		To(contractAddr).
+		Inputs(`{"_x":99887766}`).
+		Send().Wait(5 * time.Second)
+	require.NoError(t, res.Error())
 
-	getX1, err := simpleStorage.MustFunction("get").R(ctx).To(contractAddr).CallResult()
+	var getX2 tktypes.RawJSON
+	err = simpleStorage.Clone().
+		Function("get").
+		To(contractAddr).
+		Outputs(&getX2).
+		Call()
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"x":"11223344"}`, getX1.JSON())
-
-	txHash2, err := simpleStorage.MustFunction("set").R(ctx).
-		Signer("key1").To(contractAddr).Input(`{"_x":99887766}`).SignAndSend()
-	require.NoError(t, err)
-	_, err = indexer.WaitForTransactionSuccess(ctx, *txHash2, simpleStorageBuild.ABI)
-	require.NoError(t, err)
-
-	getX2, err := simpleStorage.MustFunction("get").R(ctx).To(contractAddr).CallResult()
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"x":"99887766"}`, getX2.JSON())
+	assert.JSONEq(t, `{"x":"99887766"}`, getX2.Pretty())
 
 	// Expect our event listener to be queued up with two Changed events
 	event1 := <-eventStreamEvents
@@ -173,27 +165,29 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 	// The bootstrap code that is the entry point to the java side is not tested here, we bootstrap the component manager by hand
 
 	ctx := context.Background()
-	instance := newInstanceForComponentTesting(t, deplyDomainRegistry(t), nil, nil)
+	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil, nil)
 	rpcClient := instance.client
 
 	// Check there are no transactions before we start
-	var txns []*ptxapi.TransactionFull
-	err := rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
+	var txns []*pldapi.TransactionFull
+	err := rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactionsFull", query.NewQueryBuilder().Limit(1).Query())
 	require.NoError(t, err)
 	assert.Len(t, txns, 0)
 	var dplyTxID uuid.UUID
-	err = rpcClient.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &ptxapi.TransactionInput{
-		ABI: *domains.SimpleTokenConstructorABI(),
-		Transaction: ptxapi.Transaction{
+
+	err = rpcClient.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenConstructorABI(domains.SelfEndorsement),
+		Transaction: pldapi.Transaction{
 			IdempotencyKey: "deploy1",
-			Type:           ptxapi.TransactionTypePrivate.Enum(),
+			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			From:           "wallets.org1.aaaaaa",
 			Data: tktypes.RawJSON(`{
-					"notary": "domain1.contract1.notary",
-					"name": "FakeToken1",
-					"symbol": "FT1"
-				}`),
+                    "from": "wallets.org1.aaaaaa",
+                    "name": "FakeToken1",
+                    "symbol": "FT1",
+					"endorsementMode": "` + domains.SelfEndorsement + `"
+                }`),
 		},
 	})
 	require.NoError(t, err)
@@ -204,15 +198,15 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 		"Deploy transaction did not receive a receipt",
 	)
 
-	var dplyTxFull ptxapi.TransactionFull
-	err = rpcClient.CallRPC(ctx, &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
+	var dplyTxFull pldapi.TransactionFull
+	err = rpcClient.CallRPC(ctx, &dplyTxFull, "ptx_getTransactionFull", dplyTxID)
 	require.NoError(t, err)
 	require.NotNil(t, dplyTxFull.Receipt)
 	require.True(t, dplyTxFull.Receipt.Success)
 	require.NotNil(t, dplyTxFull.Receipt.ContractAddress)
 	contractAddress := dplyTxFull.Receipt.ContractAddress
 
-	var receiptData ptxapi.TransactionReceiptData
+	var receiptData pldapi.TransactionReceiptData
 	err = rpcClient.CallRPC(ctx, &receiptData, "ptx_getTransactionReceipt", dplyTxID)
 	assert.NoError(t, err)
 	assert.True(t, receiptData.Success)
@@ -220,19 +214,19 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 
 	// Start a private transaction
 	var tx1ID uuid.UUID
-	err = rpcClient.CallRPC(ctx, &tx1ID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+	err = rpcClient.CallRPC(ctx, &tx1ID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
-		Transaction: ptxapi.Transaction{
+		Transaction: pldapi.Transaction{
 			To:             contractAddress,
 			Domain:         "domain1", //TODO comments say that this is inferred from `to` for invoke
 			IdempotencyKey: "tx1",
-			Type:           ptxapi.TransactionTypePrivate.Enum(),
+			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           "wallets.org1.aaaaaa",
 			Data: tktypes.RawJSON(`{
-				"from": "",
-				"to": "wallets.org1.aaaaaa",
-				"amount": "123000000000000000000"
-			}`),
+                "from": "",
+                "to": "wallets.org1.aaaaaa",
+                "amount": "123000000000000000000"
+            }`),
 		},
 	})
 
@@ -245,16 +239,201 @@ func TestPrivateTransactionsDeployAndExecute(t *testing.T) {
 		"Transaction did not receive a receipt",
 	)
 
-	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactions", query.NewQueryBuilder().Limit(1).Query(), true)
+	err = rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactionsFull", query.NewQueryBuilder().Limit(2).Query())
 	require.NoError(t, err)
 	assert.Len(t, txns, 2)
 
-	txFull := ptxapi.TransactionFull{}
-	err = rpcClient.CallRPC(ctx, &txFull, "ptx_getTransaction", tx1ID, true)
+	txFull := pldapi.TransactionFull{}
+	err = rpcClient.CallRPC(ctx, &txFull, "ptx_getTransactionFull", tx1ID)
 	require.NoError(t, err)
 
 	require.NotNil(t, txFull.Receipt)
 	assert.True(t, txFull.Receipt.Success)
+}
+
+func TestPrivateTransactionsMintThenTransfer(t *testing.T) {
+	// Invoke 2 transactions on the same contract where the second transaction relies on the state created by the first
+
+	ctx := context.Background()
+	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil, nil)
+	rpcClient := instance.client
+
+	// Check there are no transactions before we start
+	var txns []*pldapi.TransactionFull
+	err := rpcClient.CallRPC(ctx, &txns, "ptx_queryTransactionsFull", query.NewQueryBuilder().Limit(1).Query())
+	require.NoError(t, err)
+	assert.Len(t, txns, 0)
+	var dplyTxID uuid.UUID
+	err = rpcClient.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenConstructorABI(domains.SelfEndorsement),
+		Transaction: pldapi.Transaction{
+			IdempotencyKey: "deploy1",
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			Domain:         "domain1",
+			From:           "wallets.org1.aaaaaa",
+			Data: tktypes.RawJSON(`{
+                    "from": "wallets.org1.aaaaaa",
+                    "name": "FakeToken1",
+                    "symbol": "FT1",
+					"endorsementMode": "` + domains.SelfEndorsement + `"
+                }`),
+		},
+	})
+	require.NoError(t, err)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, dplyTxID, rpcClient, true),
+		transactionLatencyThreshold(t)+5*time.Second, //TODO deploy transaction seems to take longer than expected
+		100*time.Millisecond,
+		"Deploy transaction did not receive a receipt",
+	)
+
+	var dplyTxFull pldapi.TransactionFull
+	err = rpcClient.CallRPC(ctx, &dplyTxFull, "ptx_getTransactionFull", dplyTxID)
+	require.NoError(t, err)
+	require.NotNil(t, dplyTxFull.Receipt)
+	require.True(t, dplyTxFull.Receipt.Success)
+	require.NotNil(t, dplyTxFull.Receipt.ContractAddress)
+	contractAddress := dplyTxFull.Receipt.ContractAddress
+
+	var receiptData pldapi.TransactionReceiptData
+	err = rpcClient.CallRPC(ctx, &receiptData, "ptx_getTransactionReceipt", dplyTxID)
+	assert.NoError(t, err)
+	assert.True(t, receiptData.Success)
+	assert.Equal(t, contractAddress, receiptData.ContractAddress)
+
+	// Start a private transaction - Mint to alice
+	var tx1ID uuid.UUID
+	err = rpcClient.CallRPC(ctx, &tx1ID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenTransferABI(),
+		Transaction: pldapi.Transaction{
+			To:             contractAddress,
+			Domain:         "domain1",
+			IdempotencyKey: "tx1",
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			From:           "wallets.org1.aaaaaa",
+			Data: tktypes.RawJSON(`{
+                "from": "",
+                "to": "wallets.org1.bbbbbb",
+                "amount": "123000000000000000000"
+            }`),
+		},
+	})
+
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.UUID{}, tx1ID)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, tx1ID, rpcClient, false),
+		transactionLatencyThreshold(t),
+		100*time.Millisecond,
+		"Transaction did not receive a receipt",
+	)
+
+	// Start a private transaction - Transfer from alice to bob
+	var tx2ID uuid.UUID
+	err = rpcClient.CallRPC(ctx, &tx2ID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenTransferABI(),
+		Transaction: pldapi.Transaction{
+			To:             contractAddress,
+			Domain:         "domain1",
+			IdempotencyKey: "tx2",
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			From:           "wallets.org1.bbbbbb",
+			Data: tktypes.RawJSON(`{
+                "from": "wallets.org1.bbbbbb",
+                "to": "wallets.org1.aaaaaa",
+                "amount": "123000000000000000000"
+            }`),
+		},
+	})
+
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.UUID{}, tx2ID)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, tx2ID, rpcClient, false),
+		transactionLatencyThreshold(t),
+		100*time.Millisecond,
+		"Transaction did not receive a receipt",
+	)
+
+}
+
+func TestPrivateTransactionRevertedAssembleFailed(t *testing.T) {
+	// Invoke a transaction that will fail to assemble
+	// in this case, we use the simple token domain and attempt to transfer from a wallet that has no tokens
+
+	ctx := context.Background()
+	instance := newInstanceForComponentTesting(t, deployDomainRegistry(t), nil, nil, nil)
+	rpcClient := instance.client
+
+	var dplyTxID uuid.UUID
+	err := rpcClient.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenConstructorABI(domains.SelfEndorsement),
+		Transaction: pldapi.Transaction{
+			IdempotencyKey: "deploy1",
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			Domain:         "domain1",
+			From:           "wallets.org1.aaaaaa",
+			Data: tktypes.RawJSON(`{
+					"from": "wallets.org1.aaaaaa",
+					"name": "FakeToken1",
+					"symbol": "FT1",
+					"endorsementMode": "` + domains.SelfEndorsement + `"
+				}`),
+		},
+	})
+	require.NoError(t, err)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, dplyTxID, rpcClient, true),
+		transactionLatencyThreshold(t)+5*time.Second, //TODO deploy transaction seems to take longer than expected
+		100*time.Millisecond,
+		"Deploy transaction did not receive a receipt",
+	)
+
+	var dplyTxFull pldapi.TransactionFull
+	err = rpcClient.CallRPC(ctx, &dplyTxFull, "ptx_getTransactionFull", dplyTxID)
+	require.NoError(t, err)
+	require.NotNil(t, dplyTxFull.Receipt)
+	require.True(t, dplyTxFull.Receipt.Success)
+	require.NotNil(t, dplyTxFull.Receipt.ContractAddress)
+	contractAddress := dplyTxFull.Receipt.ContractAddress
+
+	// Start a private transaction - Transfer from alice to bob but we expect that alice can't afford this
+	// however, that wont be known until the transaction is assembled which is asynchronous so the initial submission
+	// should succeed
+	var tx1ID uuid.UUID
+	err = rpcClient.CallRPC(ctx, &tx1ID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenTransferABI(),
+		Transaction: pldapi.Transaction{
+			To:             contractAddress,
+			Domain:         "domain1",
+			IdempotencyKey: "tx2",
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			From:           "wallets.org1.bbbbbb",
+			Data: tktypes.RawJSON(`{
+				"from": "wallets.org1.bbbbbb",
+				"to": "wallets.org1.aaaaaa",
+				"amount": "123000000000000000000"
+			}`),
+		},
+	})
+
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.UUID{}, tx1ID)
+	assert.Eventually(t,
+		transactionRevertedCondition(t, ctx, tx1ID, rpcClient),
+		transactionLatencyThreshold(t),
+		100*time.Millisecond,
+		"Transaction did not revert",
+	)
+
+	var txFull pldapi.TransactionFull
+	err = rpcClient.CallRPC(ctx, &txFull, "ptx_getTransactionFull", tx1ID)
+	require.NoError(t, err)
+	require.NotNil(t, txFull.Receipt)
+	assert.False(t, txFull.Receipt.Success)
+	assert.Regexp(t, domains.SimpleDomainInsufficientFundsError, txFull.Receipt.FailureMessage)
+	assert.Regexp(t, "PD011802", txFull.Receipt.FailureMessage)
+
 }
 
 func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
@@ -264,15 +443,15 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 	// need the complexity of cross node transfers in this test
 	ctx := context.Background()
 
-	domainRegistryAddress := deplyDomainRegistry(t)
+	domainRegistryAddress := deployDomainRegistry(t)
 
-	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, nil, nil)
+	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, nil, nil, nil)
 	client1 := instance1.client
 	aliceIdentity := "wallets.org1.alice"
 	aliceAddress := instance1.resolveEthereumAddress(aliceIdentity)
 	t.Logf("Alice address: %s", aliceAddress)
 
-	instance2 := newInstanceForComponentTesting(t, domainRegistryAddress, nil, nil)
+	instance2 := newInstanceForComponentTesting(t, domainRegistryAddress, nil, nil, nil)
 	client2 := instance2.client
 	bobIdentity := "wallets.org2.bob"
 	bobAddress := instance2.resolveEthereumAddress(bobIdentity)
@@ -283,18 +462,19 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 
 	// send JSON RPC message to node 1 to deploy a private contract, using alice's key
 	var dplyTxID uuid.UUID
-	err := client1.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &ptxapi.TransactionInput{
-		ABI: *domains.SimpleTokenConstructorABI(),
-		Transaction: ptxapi.Transaction{
+	err := client1.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenConstructorABI(domains.SelfEndorsement),
+		Transaction: pldapi.Transaction{
 			IdempotencyKey: "deploy1",
-			Type:           ptxapi.TransactionTypePrivate.Enum(),
+			Type:           pldapi.TransactionTypePrivate.Enum(),
 			Domain:         "domain1",
 			From:           aliceIdentity,
 			Data: tktypes.RawJSON(`{
-					"notary": "domain1.contract1.notary",
-					"name": "FakeToken1",
-					"symbol": "FT1"
-				}`),
+                    "from": "` + aliceIdentity + `",
+                    "name": "FakeToken1",
+                    "symbol": "FT1",
+					"endorsementMode": "` + domains.SelfEndorsement + `"
+                }`),
 		},
 	})
 	require.NoError(t, err)
@@ -305,27 +485,27 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 		"Deploy transaction did not receive a receipt",
 	)
 
-	var dplyTxFull ptxapi.TransactionFull
-	err = client1.CallRPC(ctx, &dplyTxFull, "ptx_getTransaction", dplyTxID, true)
+	var dplyTxFull pldapi.TransactionFull
+	err = client1.CallRPC(ctx, &dplyTxFull, "ptx_getTransactionFull", dplyTxID)
 	require.NoError(t, err)
 	contractAddress := dplyTxFull.Receipt.ContractAddress
 
 	// Start a private transaction on alices node
 	// this is a mint to alice
 	var aliceTxID uuid.UUID
-	err = client1.CallRPC(ctx, &aliceTxID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+	err = client1.CallRPC(ctx, &aliceTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
-		Transaction: ptxapi.Transaction{
+		Transaction: pldapi.Transaction{
 			To:             contractAddress,
 			Domain:         "domain1",
 			IdempotencyKey: "tx1-alice",
-			Type:           ptxapi.TransactionTypePrivate.Enum(),
+			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           aliceIdentity,
 			Data: tktypes.RawJSON(`{
-					"from": "",
-					"to": "` + aliceIdentity + `",
-					"amount": "123000000000000000000"
-				}`),
+                    "from": "",
+                    "to": "` + aliceIdentity + `",
+                    "amount": "123000000000000000000"
+                }`),
 		},
 	})
 
@@ -341,19 +521,19 @@ func TestDeployOnOneNodeInvokeOnAnother(t *testing.T) {
 	// Start a private transaction on bobs node
 	// This is a mint to bob
 	var bobTx1ID uuid.UUID
-	err = client2.CallRPC(ctx, &bobTx1ID, "ptx_sendTransaction", &ptxapi.TransactionInput{
+	err = client2.CallRPC(ctx, &bobTx1ID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleTokenTransferABI(),
-		Transaction: ptxapi.Transaction{
+		Transaction: pldapi.Transaction{
 			To:             contractAddress,
 			Domain:         "domain1",
 			IdempotencyKey: "tx1-bob",
-			Type:           ptxapi.TransactionTypePrivate.Enum(),
+			Type:           pldapi.TransactionTypePrivate.Enum(),
 			From:           bobIdentity,
 			Data: tktypes.RawJSON(`{
-					"from": "",
-					"to": "` + bobIdentity + `",
-					"amount": "123000000000000000000"
-				}`),
+                    "from": "",
+                    "to": "` + bobIdentity + `",
+                    "amount": "123000000000000000000"
+                }`),
 		},
 	})
 
@@ -375,31 +555,318 @@ func TestResolveIdentityFromRemoteNode(t *testing.T) {
 	ctx := context.Background()
 
 	//TODO shouldn't need domain registry for this test
-	domainRegistryAddress := deplyDomainRegistry(t)
+	domainRegistryAddress := deployDomainRegistry(t)
 
-	aliceNodeConfig := newNodeConfiguration(t)
-	bobNodeConfig := newNodeConfiguration(t)
+	aliceNodeConfig := newNodeConfiguration(t, "alice")
+	bobNodeConfig := newNodeConfiguration(t, "bob")
 
-	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, aliceNodeConfig, []*nodeConfiguration{bobNodeConfig})
+	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, aliceNodeConfig, []*nodeConfiguration{bobNodeConfig}, nil)
 	client1 := instance1.client
-	aliceIdentity := "wallets.org1.alice@" + instance1.id.String()
+	aliceIdentity := "wallets.org1.alice@" + instance1.name
 	aliceAddress := instance1.resolveEthereumAddress(aliceIdentity)
 	t.Logf("Alice address: %s", aliceAddress)
 
-	instance2 := newInstanceForComponentTesting(t, domainRegistryAddress, bobNodeConfig, []*nodeConfiguration{aliceNodeConfig})
-
-	bobIdentity := "wallets.org2.bob@" + instance2.id.String()
+	instance2 := newInstanceForComponentTesting(t, domainRegistryAddress, bobNodeConfig, []*nodeConfiguration{aliceNodeConfig}, nil)
+	client2 := instance2.client
+	bobUnqualifiedIdentity := "wallets.org2.bob"
+	bobIdentity := bobUnqualifiedIdentity + "@" + instance2.name
 	bobAddress := instance2.resolveEthereumAddress(bobIdentity)
 	t.Logf("Bob address: %s", bobAddress)
 
-	// send JSON RPC message to node 1 to deploy a private contract
-	var verifier string
-	err := client1.CallRPC(ctx, &verifier, "ptx_resolveVerifier",
+	// send JSON RPC message to node 1 to resolve a verifier on node 2
+	var verifierResult1 string
+	var verifierResult2 string
+	var verifierResult3 string
+	err := client1.CallRPC(ctx, &verifierResult1, "ptx_resolveVerifier",
 		bobIdentity,
 		algorithms.ECDSA_SECP256K1,
 		verifiers.ETH_ADDRESS,
 	)
 	require.NoError(t, err)
-	require.NotNil(t, verifier)
+	require.NotNil(t, verifierResult1)
+
+	// resolve the same verifier on node 2 directly
+	err = client2.CallRPC(ctx, &verifierResult2, "ptx_resolveVerifier",
+		bobIdentity,
+		algorithms.ECDSA_SECP256K1,
+		verifiers.ETH_ADDRESS,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, verifierResult2)
+
+	// resolve the same verifier on node 2 directly using the unqualified identity
+	err = client2.CallRPC(ctx, &verifierResult3, "ptx_resolveVerifier",
+		bobUnqualifiedIdentity,
+		algorithms.ECDSA_SECP256K1,
+		verifiers.ETH_ADDRESS,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, verifierResult3)
+
+	// all 3 results should be the same
+	assert.Equal(t, verifierResult1, verifierResult2)
+	assert.Equal(t, verifierResult1, verifierResult3)
+
+}
+
+func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
+	// We use the simple token in SelfEndorsement mode (similar to zeto so either node can assemble a transaction
+	// however, in this test, Bob's transaction will only succeed if he can spend the coins that Alice transfers to him
+	// so this tests that the state is shared between the nodes
+
+	ctx := context.Background()
+	domainRegistryAddress := deployDomainRegistry(t)
+
+	alice := newPartyForTesting(t, "alice", domainRegistryAddress)
+	bob := newPartyForTesting(t, "bob", domainRegistryAddress)
+
+	alice.peer(bob.nodeConfig)
+	bob.peer(alice.nodeConfig)
+
+	domainConfig := domains.SimpleDomainConfig{
+		SubmitMode: domains.ENDORSER_SUBMISSION,
+	}
+	alice.start(t, domainConfig)
+	bob.start(t, domainConfig)
+
+	constructorParameters := &domains.ConstructorParameters{
+		From:            alice.identity,
+		Name:            "FakeToken1",
+		Symbol:          "FT1",
+		EndorsementMode: domains.SelfEndorsement,
+	}
+
+	contractAddress := alice.deploySimpleDomainInstanceContract(t, domains.SelfEndorsement, constructorParameters)
+
+	// Start a private transaction on alices node
+	// this is a mint to bob so bob should later be able to do a transfer without any mint taking place on bobs node
+	var aliceTxID uuid.UUID
+	err := alice.client.CallRPC(ctx, &aliceTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenTransferABI(),
+		Transaction: pldapi.Transaction{
+			To:             contractAddress,
+			Domain:         "domain1",
+			IdempotencyKey: "tx1-alice",
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			From:           alice.identity,
+			Data: tktypes.RawJSON(`{
+                    "from": "",
+                    "to": "` + bob.identityLocator + `",
+                    "amount": "123000000000000000000"
+                }`),
+		},
+	})
+
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.UUID{}, aliceTxID)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, aliceTxID, alice.client, false),
+		transactionLatencyThreshold(t),
+		100*time.Millisecond,
+		"Transaction did not receive a receipt",
+	)
+
+	// Start a private transaction on bobs node
+	// This is a transfer which relies on bobs node being aware of the state created by alice's mint to bob above
+	var bobTx1ID uuid.UUID
+	err = bob.client.CallRPC(ctx, &bobTx1ID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenTransferABI(),
+		Transaction: pldapi.Transaction{
+			To:             contractAddress,
+			Domain:         "domain1",
+			IdempotencyKey: "tx1-bob",
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			From:           bob.identity,
+			Data: tktypes.RawJSON(`{
+                    "from": "` + bob.identityLocator + `",
+                    "to": "` + alice.identityLocator + `",
+                    "amount": "123000000000000000000"
+                }`),
+		},
+	})
+
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.UUID{}, bobTx1ID)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, bobTx1ID, bob.client, false),
+		transactionLatencyThreshold(t),
+		100*time.Millisecond,
+		"Transaction did not receive a receipt",
+	)
+}
+
+func TestNotaryDelegated(t *testing.T) {
+	//This is similar to the noto scenario
+	// all transfers must be endorsed by the single notary and the notary must submit to the base ledger
+	// it also happens to be the case in noto that only the notary can mint so we replicate that
+	// constraint here too so this test serves as a reasonable contract test for the noto use case
+
+	ctx := context.Background()
+
+	aliceNodeConfig := newNodeConfiguration(t, "alice")
+	bobNodeConfig := newNodeConfiguration(t, "bob")
+	notaryNodeConfig := newNodeConfiguration(t, "notary")
+
+	domainRegistryAddress := deployDomainRegistry(t)
+
+	instance1 := newInstanceForComponentTesting(t, domainRegistryAddress, aliceNodeConfig, []*nodeConfiguration{bobNodeConfig, notaryNodeConfig}, nil)
+	client1 := instance1.client
+	aliceIdentity := "wallets.org1.alice@" + instance1.name
+
+	instance2 := newInstanceForComponentTesting(t, domainRegistryAddress, bobNodeConfig, []*nodeConfiguration{aliceNodeConfig, notaryNodeConfig}, nil)
+	bobIdentity := "wallets.org2.bob@" + instance2.name
+
+	instance3 := newInstanceForComponentTesting(t, domainRegistryAddress, notaryNodeConfig, []*nodeConfiguration{aliceNodeConfig, bobNodeConfig}, nil)
+	client3 := instance3.client
+	notaryIdentity := "wallets.org3.notary@" + instance3.name
+
+	// send JSON RPC message to node 3 ( notary) to deploy a private contract
+	var dplyTxID uuid.UUID
+	err := client3.CallRPC(ctx, &dplyTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenConstructorABI(domains.NotaryEndorsement),
+		Transaction: pldapi.Transaction{
+			IdempotencyKey: "deploy1",
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			Domain:         "domain1",
+			From:           notaryIdentity,
+			Data: tktypes.RawJSON(`{
+					"notary": "` + notaryIdentity + `",
+					"name": "FakeToken1",
+					"symbol": "FT1",
+					"endorsementMode": "NotaryEndorsement"
+				}`),
+		},
+	})
+	require.NoError(t, err)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, dplyTxID, client3, true),
+		transactionLatencyThreshold(t)+5*time.Second, //TODO deploy transaction seems to take longer than expected
+		100*time.Millisecond,
+		"Deploy transaction did not receive a receipt",
+	)
+
+	// As notary, mint some tokens to alice
+	var dplyTxFull pldapi.TransactionFull
+	err = client3.CallRPC(ctx, &dplyTxFull, "ptx_getTransactionFull", dplyTxID)
+	require.NoError(t, err)
+	contractAddress := dplyTxFull.Receipt.ContractAddress
+
+	// Start a private transaction on notary node
+	// this is a mint to alice so alice should later be able to do a transfer to bob
+	var mintTxID uuid.UUID
+	err = client3.CallRPC(ctx, &mintTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenTransferABI(),
+		Transaction: pldapi.Transaction{
+			To:             contractAddress,
+			Domain:         "domain1",
+			IdempotencyKey: "tx1-mint",
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			From:           notaryIdentity,
+			Data: tktypes.RawJSON(`{
+					"from": "",
+					"to": "` + aliceIdentity + `",
+					"amount": "100"
+				}`),
+		},
+	})
+
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.UUID{}, mintTxID)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, mintTxID, client3, false),
+		transactionLatencyThreshold(t),
+		100*time.Millisecond,
+		"Transaction did not receive a receipt",
+	)
+
+	// Start a private transaction on alices node to transfer to bob
+	var transferA2BTxId uuid.UUID
+	err = client1.CallRPC(ctx, &transferA2BTxId, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenTransferABI(),
+		Transaction: pldapi.Transaction{
+			To:             contractAddress,
+			Domain:         "domain1",
+			IdempotencyKey: "transferA2B1",
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			From:           aliceIdentity,
+			Data: tktypes.RawJSON(`{
+					"from": "` + aliceIdentity + `",
+					"to": "` + bobIdentity + `",
+					"amount": "50"
+				}`),
+		},
+	})
+
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.UUID{}, transferA2BTxId)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, transferA2BTxId, client1, false),
+		transactionLatencyThreshold(t),
+		100*time.Millisecond,
+		"Transaction did not receive a receipt",
+	)
+
+}
+
+func TestPrivateTransactions100PercentEndorsement(t *testing.T) {
+	// This test is intended to emulate the pente domain where all transactions must be endorsed by all parties in the predefined privacy group
+	// in this case, we have 3 nodes, each representing a different party in the privacy group
+	// and we expect that all transactions must be endorsed by all 3 nodes and that all output states are distributed to all 3 nodes
+	ctx := context.Background()
+	domainRegistryAddress := deployDomainRegistry(t)
+
+	alice := newPartyForTesting(t, "alice", domainRegistryAddress)
+	bob := newPartyForTesting(t, "bob", domainRegistryAddress)
+	carol := newPartyForTesting(t, "carol", domainRegistryAddress)
+
+	alice.peer(bob.nodeConfig, carol.nodeConfig)
+	bob.peer(alice.nodeConfig, carol.nodeConfig)
+	carol.peer(alice.nodeConfig, bob.nodeConfig)
+
+	domainConfig := domains.SimpleDomainConfig{
+		SubmitMode: domains.ONE_TIME_USE_KEYS,
+	}
+	alice.start(t, domainConfig)
+	bob.start(t, domainConfig)
+	carol.start(t, domainConfig)
+
+	endorsementSet := []string{alice.identityLocator, bob.identityLocator, carol.identityLocator}
+
+	constructorParameters := &domains.ConstructorParameters{
+		EndorsementSet:  endorsementSet,
+		Name:            "FakeToken1",
+		Symbol:          "FT1",
+		EndorsementMode: domains.PrivacyGroupEndorsement,
+	}
+	// send JSON RPC message to node 1 to deploy a private contract
+	contractAddress := alice.deploySimpleDomainInstanceContract(t, domains.PrivacyGroupEndorsement, constructorParameters)
+
+	// Start a private transaction on alice's node
+	// this should require endorsement from bob and carol
+	var aliceTxID uuid.UUID
+	err := alice.client.CallRPC(ctx, &aliceTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
+		ABI: *domains.SimpleTokenTransferABI(),
+		Transaction: pldapi.Transaction{
+			To:             contractAddress,
+			Domain:         "domain1",
+			IdempotencyKey: "tx1-alice",
+			Type:           pldapi.TransactionTypePrivate.Enum(),
+			From:           alice.identity,
+			Data: tktypes.RawJSON(`{
+                    "from": "",
+                    "to": "` + bob.identityLocator + `",
+                    "amount": "123000000000000000000"
+                }`),
+		},
+	})
+
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.UUID{}, aliceTxID)
+	assert.Eventually(t,
+		transactionReceiptCondition(t, ctx, aliceTxID, alice.client, false),
+		transactionLatencyThreshold(t),
+		100*time.Millisecond,
+		"Transaction did not receive a receipt",
+	)
 
 }

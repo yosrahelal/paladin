@@ -20,7 +20,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -29,8 +30,13 @@ import (
 func (tm *txManager) buildRPCModule() {
 	tm.rpcModule = rpcserver.NewRPCModule("ptx").
 		Add("ptx_sendTransaction", tm.rpcSendTransaction()).
+		Add("ptx_sendTransactions", tm.rpcSendTransactions()).
+		Add("ptx_call", tm.rpcCall()).
 		Add("ptx_getTransaction", tm.rpcGetTransaction()).
+		Add("ptx_getTransactionFull", tm.rpcGetTransactionFull()).
+		Add("ptx_getTransactionByIdempotencyKey", tm.rpcGetTransactionByIdempotencyKey()).
 		Add("ptx_queryTransactions", tm.rpcQueryTransactions()).
+		Add("ptx_queryTransactionsFull", tm.rpcQueryTransactionsFull()).
 		Add("ptx_queryPendingTransactions", tm.rpcQueryPendingTransactions()).
 		Add("ptx_getTransactionReceipt", tm.rpcGetTransactionReceipt()).
 		Add("ptx_queryTransactionReceipts", tm.rpcQueryTransactionReceipts()).
@@ -43,37 +49,73 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_getStoredABI", tm.rpcGetStoredABI()).
 		Add("ptx_queryStoredABIs", tm.rpcQueryStoredABIs()).
 		Add("ptx_resolveVerifier", tm.rpcResolveVerifier())
+
+	tm.debugRpcModule = rpcserver.NewRPCModule("debug").
+		Add("debug_getTransactionStatus", tm.rpcDebugTransactionStatus())
 }
 
 func (tm *txManager) rpcSendTransaction() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
-		tx ptxapi.TransactionInput,
+		tx pldapi.TransactionInput,
 	) (*uuid.UUID, error) {
-		return tm.sendTransaction(ctx, &tx)
+		return tm.SendTransaction(ctx, &tx)
+	})
+}
+
+func (tm *txManager) rpcSendTransactions() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		txs []*pldapi.TransactionInput,
+	) ([]uuid.UUID, error) {
+		return tm.SendTransactions(ctx, txs)
+	})
+}
+
+func (tm *txManager) rpcCall() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		tx *pldapi.TransactionCall,
+	) (result tktypes.RawJSON, err error) {
+		err = tm.CallTransaction(ctx, &result, tx)
+		return
 	})
 }
 
 func (tm *txManager) rpcGetTransaction() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod2(func(ctx context.Context,
+	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id uuid.UUID,
-		full bool,
-	) (any, error) {
-		if full {
-			return tm.getTransactionByIDFull(ctx, id)
-		}
-		return tm.getTransactionByID(ctx, id)
+	) (*pldapi.Transaction, error) {
+		return tm.GetTransactionByID(ctx, id)
+	})
+}
+
+func (tm *txManager) rpcGetTransactionFull() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		id uuid.UUID,
+	) (*pldapi.TransactionFull, error) {
+		return tm.GetTransactionByIDFull(ctx, id)
+	})
+}
+
+func (tm *txManager) rpcGetTransactionByIdempotencyKey() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		idempotencyKey string,
+	) (*pldapi.Transaction, error) {
+		return tm.GetTransactionByIdempotencyKey(ctx, idempotencyKey)
 	})
 }
 
 func (tm *txManager) rpcQueryTransactions() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod2(func(ctx context.Context,
+	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-		full bool,
-	) (any, error) {
-		if full {
-			return tm.queryTransactionsFull(ctx, &query, false)
-		}
-		return tm.queryTransactions(ctx, &query, false)
+	) ([]*pldapi.Transaction, error) {
+		return tm.QueryTransactions(ctx, &query, false)
+	})
+}
+
+func (tm *txManager) rpcQueryTransactionsFull() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
+		query query.QueryJSON,
+	) ([]*pldapi.TransactionFull, error) {
+		return tm.QueryTransactionsFull(ctx, &query, false)
 	})
 }
 
@@ -83,40 +125,40 @@ func (tm *txManager) rpcQueryPendingTransactions() rpcserver.RPCHandler {
 		full bool,
 	) (any, error) {
 		if full {
-			return tm.queryTransactionsFull(ctx, &query, true)
+			return tm.QueryTransactionsFull(ctx, &query, true)
 		}
-		return tm.queryTransactions(ctx, &query, true)
+		return tm.QueryTransactions(ctx, &query, true)
 	})
 }
 
 func (tm *txManager) rpcGetTransactionReceipt() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id uuid.UUID,
-	) (*ptxapi.TransactionReceipt, error) {
-		return tm.getTransactionReceiptByID(ctx, id)
+	) (*pldapi.TransactionReceipt, error) {
+		return tm.GetTransactionReceiptByID(ctx, id)
 	})
 }
 
 func (tm *txManager) rpcGetTransactionDependencies() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id uuid.UUID,
-	) (*ptxapi.TransactionDependencies, error) {
-		return tm.getTransactionDependencies(ctx, id)
+	) (*pldapi.TransactionDependencies, error) {
+		return tm.GetTransactionDependencies(ctx, id)
 	})
 }
 
 func (tm *txManager) rpcQueryTransactionReceipts() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*ptxapi.TransactionReceipt, error) {
-		return tm.queryTransactionReceipts(ctx, &query)
+	) ([]*pldapi.TransactionReceipt, error) {
+		return tm.QueryTransactionReceipts(ctx, &query)
 	})
 }
 
 func (tm *txManager) rpcQueryPublicTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*ptxapi.PublicTxWithBinding, error) {
+	) ([]*pldapi.PublicTxWithBinding, error) {
 		return tm.queryPublicTransactions(ctx, &query)
 	})
 }
@@ -124,7 +166,7 @@ func (tm *txManager) rpcQueryPublicTransactions() rpcserver.RPCHandler {
 func (tm *txManager) rpcQueryPendingPublicTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*ptxapi.PublicTxWithBinding, error) {
+	) ([]*pldapi.PublicTxWithBinding, error) {
 		return tm.queryPublicTransactions(ctx, query.ToBuilder().Null("transactionHash").Query())
 	})
 }
@@ -133,16 +175,16 @@ func (tm *txManager) rpcGetPublicTransactionByNonce() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		from tktypes.EthAddress,
 		nonce tktypes.HexUint64,
-	) (*ptxapi.PublicTxWithBinding, error) {
-		return tm.getPublicTransactionByNonce(ctx, from, nonce)
+	) (*pldapi.PublicTxWithBinding, error) {
+		return tm.GetPublicTransactionByNonce(ctx, from, nonce)
 	})
 }
 
 func (tm *txManager) rpcGetPublicTransactionByHash() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		hash tktypes.Bytes32,
-	) (*ptxapi.PublicTxWithBinding, error) {
-		return tm.getPublicTransactionByHash(ctx, hash)
+	) (*pldapi.PublicTxWithBinding, error) {
+		return tm.GetPublicTransactionByHash(ctx, hash)
 	})
 }
 
@@ -157,7 +199,7 @@ func (tm *txManager) rpcStoreABI() rpcserver.RPCHandler {
 func (tm *txManager) rpcGetStoredABI() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		hash tktypes.Bytes32,
-	) (*ptxapi.StoredABI, error) {
+	) (*pldapi.StoredABI, error) {
 		return tm.getABIByHash(ctx, hash)
 	})
 }
@@ -165,7 +207,7 @@ func (tm *txManager) rpcGetStoredABI() rpcserver.RPCHandler {
 func (tm *txManager) rpcQueryStoredABIs() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*ptxapi.StoredABI, error) {
+	) ([]*pldapi.StoredABI, error) {
 		return tm.queryABIs(ctx, &query)
 	})
 }
@@ -177,5 +219,14 @@ func (tm *txManager) rpcResolveVerifier() rpcserver.RPCHandler {
 		verifierType string,
 	) (string, error) {
 		return tm.identityResolver.ResolveVerifier(ctx, lookup, algorithm, verifierType)
+	})
+}
+
+func (tm *txManager) rpcDebugTransactionStatus() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context,
+		contractAddress string,
+		id uuid.UUID,
+	) (components.PrivateTxStatus, error) {
+		return tm.privateTxMgr.GetTxStatus(ctx, contractAddress, id.String())
 	})
 }

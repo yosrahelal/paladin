@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/mocks/rpcclientmocks"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -65,7 +66,7 @@ func TestInternalEventStreamDeliveryAtHead(t *testing.T) {
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 	mockBlockListenerNil(mRPC)
 
-	eventCollector := make(chan *EventWithData)
+	eventCollector := make(chan *pldapi.EventWithData)
 
 	// Do a full start now with an internal event listener
 	var esID string
@@ -141,7 +142,7 @@ func TestInternalEventStreamDeliveryAtHeadWithSourceAddress(t *testing.T) {
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 	mockBlockListenerNil(mRPC)
 
-	eventCollector := make(chan *EventWithData)
+	eventCollector := make(chan *pldapi.EventWithData)
 
 	definition := &EventStream{
 		Name: "unit_test",
@@ -210,7 +211,7 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 	mockBlockListenerNil(mRPC)
 
 	// Set up our handler, even though it won't be driven with anything yet
-	eventCollector := make(chan *EventWithData)
+	eventCollector := make(chan *pldapi.EventWithData)
 	var esID string
 	handler := func(ctx context.Context, tx *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error) {
 		if esID == "" {
@@ -231,11 +232,11 @@ func TestInternalEventStreamDeliveryCatchUp(t *testing.T) {
 	}
 
 	// Do a full start now without a block listener, and wait for the ut notification of all the blocks
-	utBatchNotify := make(chan []*IndexedBlock)
+	utBatchNotify := make(chan []*pldapi.IndexedBlock)
 	preCommitCount := 0
 	err := bi.Start(&InternalEventStream{
 		Type: IESTypePreCommitHandler,
-		PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error) {
+		PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*pldapi.IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error) {
 			// Return an error once to drive a retry
 			preCommitCount++
 			if preCommitCount == 0 {
@@ -338,10 +339,10 @@ func TestNoMatchingEvents(t *testing.T) {
 	testABICopy[1].Inputs[0].Indexed = !testABICopy[1].Inputs[0].Indexed
 
 	// Do a full start now with an internal event listener
-	utBatchNotify := make(chan []*IndexedBlock)
+	utBatchNotify := make(chan []*pldapi.IndexedBlock)
 	err := bi.Start(&InternalEventStream{
 		Type: IESTypePreCommitHandler,
-		PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error) {
+		PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*pldapi.IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error) {
 			return func() {
 				utBatchNotify <- blocks
 			}, nil
@@ -628,6 +629,7 @@ func testReturnToCatchupAfterStart(t *testing.T, headBlock int64) {
 		blocks:       make(chan *eventStreamBlock),
 		dispatch:     make(chan *eventDispatch),
 		detectorDone: make(chan struct{}),
+		serializer:   tktypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
 	}
 	go func() {
 		assert.NotPanics(t, func() { es.detector() })
@@ -698,8 +700,8 @@ func TestSendToDispatcherClosedNoBlock(t *testing.T) {
 		ctx:      ctx,
 		dispatch: make(chan *eventDispatch),
 	}
-	es.sendToDispatcher(&EventWithData{
-		IndexedEvent: &IndexedEvent{},
+	es.sendToDispatcher(&pldapi.EventWithData{
+		IndexedEvent: &pldapi.IndexedEvent{},
 	}, false)
 }
 
@@ -737,8 +739,8 @@ func TestDispatcherDispatchClosed(t *testing.T) {
 	}()
 
 	es.dispatch <- &eventDispatch{
-		event: &EventWithData{
-			IndexedEvent: &IndexedEvent{},
+		event: &pldapi.EventWithData{
+			IndexedEvent: &pldapi.IndexedEvent{},
 		},
 	}
 
@@ -786,32 +788,32 @@ func TestProcessCatchupEventMultiPageRealDB(t *testing.T) {
 
 	eventSig := tktypes.Bytes32(testABI.Events()["EventA"].SignatureHashBytes())
 
-	allBlocks := []*IndexedBlock{}
-	allTransactions := []*IndexedTransaction{}
-	allEvents := []*IndexedEvent{}
+	allBlocks := []*pldapi.IndexedBlock{}
+	allTransactions := []*pldapi.IndexedTransaction{}
+	allEvents := []*pldapi.IndexedEvent{}
 	for b := 1; b < 14; b++ {
 		blockHash := tktypes.Bytes32(tktypes.RandBytes(32))
-		allBlocks = append(allBlocks, &IndexedBlock{
+		allBlocks = append(allBlocks, &pldapi.IndexedBlock{
 			Number: int64(b),
 			Hash:   blockHash,
 		})
 		for tx := 0; tx < 8; tx++ {
 			txHash := tktypes.Bytes32(tktypes.RandBytes(32))
-			allTransactions = append(allTransactions, &IndexedTransaction{
+			allTransactions = append(allTransactions, &pldapi.IndexedTransaction{
 				Hash:             txHash,
 				BlockNumber:      int64(b),
 				TransactionIndex: int64(tx),
 				From:             tktypes.RandAddress(),
 				To:               tktypes.RandAddress(),
 				Nonce:            0,
-				Result:           TXResult_SUCCESS.Enum(),
+				Result:           pldapi.TXResult_SUCCESS.Enum(),
 			})
 			txReceipt := &TXReceiptJSONRPC{
 				BlockHash:   blockHash[:],
 				BlockNumber: ethtypes.HexUint64(b),
 			}
 			for li := 0; li < 9; li++ {
-				allEvents = append(allEvents, &IndexedEvent{
+				allEvents = append(allEvents, &pldapi.IndexedEvent{
 					BlockNumber:      int64(b),
 					TransactionIndex: int64(tx),
 					LogIndex:         int64(li),
@@ -853,11 +855,12 @@ func TestProcessCatchupEventMultiPageRealDB(t *testing.T) {
 				ABI: testABI,
 			}},
 		},
+		serializer: tktypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
 	}
 
 	go func() {
 		var caughtUp bool
-		var lastEvent *IndexedEvent
+		var lastEvent *pldapi.IndexedEvent
 		var err error
 		for !caughtUp {
 			caughtUp, lastEvent, err = es.processCatchupEventPage(lastEvent, 0, 100000000)
@@ -871,4 +874,66 @@ func TestProcessCatchupEventMultiPageRealDB(t *testing.T) {
 		require.Equal(t, allEvents[i].TransactionIndex, d.event.TransactionIndex)
 		require.Equal(t, allEvents[i].LogIndex, d.event.LogIndex)
 	}
+}
+
+func TestEventSourcesHashing(t *testing.T) {
+
+	abiEventIndexed := &abi.Entry{
+		Type: abi.Event,
+		Name: "Purple",
+		Inputs: abi.ParameterArray{
+			{
+				Name:    "maybeIndexed",
+				Type:    "uint256",
+				Indexed: true, //only diff to other purple
+			},
+		},
+	}
+	abiEventUnindexed := &abi.Entry{
+		Type: abi.Event,
+		Name: "Purple",
+		Inputs: abi.ParameterArray{
+			{
+				Name: "maybeIndexed",
+				Type: "uint256",
+			},
+		},
+	}
+	abiFunction := &abi.Entry{
+		Type:   abi.Function,
+		Name:   "goPurple",
+		Inputs: abi.ParameterArray{},
+	}
+	address1 := tktypes.RandAddress()
+	address2 := tktypes.RandAddress()
+
+	mustHash := func(ess EventSources) string {
+		hash, err := ess.Hash(context.Background())
+		require.NoError(t, err)
+		return hash.String()
+	}
+
+	// order and ancillary entries do not matter
+	assert.Equal(t,
+		mustHash(EventSources{{ABI: abi.ABI{abiEventIndexed, abiEventUnindexed, abiFunction}}}),
+		mustHash(EventSources{{ABI: abi.ABI{abiEventUnindexed, abiEventIndexed}}}),
+	)
+
+	// address or not does matter
+	assert.NotEqual(t,
+		mustHash(EventSources{{ABI: abi.ABI{abiEventIndexed}, Address: address1}}),
+		mustHash(EventSources{{ABI: abi.ABI{abiEventIndexed}}}),
+	)
+
+	// addresses matter
+	assert.NotEqual(t,
+		mustHash(EventSources{{ABI: abi.ABI{abiEventIndexed}, Address: address1}}),
+		mustHash(EventSources{{ABI: abi.ABI{abiEventIndexed}, Address: address2}}),
+	)
+
+	// error case
+	ess := EventSources{{ABI: abi.ABI{{Type: abi.Event, Inputs: abi.ParameterArray{{Type: "wrong"}}}}}}
+	_, err := ess.Hash(context.Background())
+	assert.Regexp(t, "FF22025", err)
+
 }

@@ -41,6 +41,10 @@ func (p Enum[O]) V() O {
 	return O(p)
 }
 
+func (p Enum[O]) Options() []string {
+	return O(p).Options()
+}
+
 // Case insensitive validation, with default, returning a string value
 func (p Enum[O]) MapToString() (string, error) {
 	ps, err := p.Validate()

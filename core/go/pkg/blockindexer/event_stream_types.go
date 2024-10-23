@@ -18,11 +18,15 @@ package blockindexer
 
 import (
 	"context"
+	"fmt"
+	"sort"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"golang.org/x/crypto/sha3"
 
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 )
@@ -59,7 +63,38 @@ type EventStream struct {
 	Updated tktypes.Timestamp             `json:"updated"        gorm:"autoUpdateTime:nano"`
 	Type    tktypes.Enum[EventStreamType] `json:"type"`
 	Config  EventStreamConfig             `json:"config"         gorm:"type:bytes;serializer:json"`
-	Sources []EventStreamSource           `json:"sources"        gorm:"serializer:json"` // immutable (event delivery behavior would be too undefined with mutability)
+	Sources EventSources                  `json:"sources"        gorm:"serializer:json"` // immutable (event delivery behavior would be too undefined with mutability)
+	Format  tktypes.JSONFormatOptions     `json:"format"`
+}
+
+type EventSources []EventStreamSource
+
+// Build a hash that covers the unique set of combinations events + address.
+// - Order independent
+// - Ignores non-event parts of the ABI
+func (ess EventSources) Hash(ctx context.Context) (*tktypes.Bytes32, error) {
+	// string hashes so we can sort them in a deterministic order
+	sourceHashes := make([]string, len(ess))
+	for i, s := range ess {
+		hash, err := tktypes.ABISolDefinitionHash(ctx, s.ABI, abi.Event /* only events matter */)
+		if err != nil {
+			return nil, err
+		}
+		// Need to factor the address into the hash
+		if s.Address != nil {
+			sourceHashes[i] = fmt.Sprintf("%s:%s", s.Address, hash)
+		} else {
+			sourceHashes[i] = fmt.Sprintf("*:%s", hash)
+		}
+	}
+	sort.Strings(sourceHashes)
+	hash := sha3.NewLegacyKeccak256()
+	for _, h := range sourceHashes {
+		hash.Write([]byte(h))
+	}
+	var h32 tktypes.Bytes32
+	_ = hash.Sum(h32[0:0])
+	return &h32, nil
 }
 
 type EventStreamSource struct {
@@ -77,30 +112,17 @@ type EventStreamSignature struct {
 	SignatureHash tktypes.Bytes32 `json:"signatureHash"          gorm:"primaryKey"`
 }
 
-type EventWithData struct {
-	*IndexedEvent
-
-	// SoliditySignature allows a deterministic comparison to which ABI to use in the runtime,
-	// when both the blockindexer and consuming code are using the same version of firefly-signer.
-	// Includes variable names, including deep within nested structure.
-	// Things like whitespace etc. subject to change (so should not stored for later comparison)
-	SoliditySignature string `json:"soliditySignature"`
-
-	Address tktypes.EthAddress `json:"address"`
-	Data    tktypes.RawJSON    `json:"data"`
-}
-
 type EventDeliveryBatch struct {
-	StreamID   uuid.UUID        `json:"streamId"`
-	StreamName string           `json:"streamName"`
-	BatchID    uuid.UUID        `json:"batchId"`
-	Events     []*EventWithData `json:"events"`
+	StreamID   uuid.UUID               `json:"streamId"`
+	StreamName string                  `json:"streamName"`
+	BatchID    uuid.UUID               `json:"batchId"`
+	Events     []*pldapi.EventWithData `json:"events"`
 }
 
 // Post commit callback is invoked after the DB transaction completes (only on success)
 type PostCommit func()
 
-type PreCommitHandler func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error)
+type PreCommitHandler func(ctx context.Context, dbTX *gorm.DB, blocks []*pldapi.IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error)
 
 type InternalStreamCallback func(ctx context.Context, dbTX *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error)
 

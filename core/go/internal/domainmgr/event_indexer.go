@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
@@ -39,11 +40,11 @@ func (r receiptsByOnChainOrder) Len() int           { return len(r) }
 func (r receiptsByOnChainOrder) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
 func (r receiptsByOnChainOrder) Less(i, j int) bool { return r[i].OnChain.Compare(&r[j].OnChain) < 0 }
 
-func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB, batch *blockindexer.EventDeliveryBatch) ([]*blockindexer.EventWithData, receiptsByOnChainOrder, error) {
+func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB, batch *blockindexer.EventDeliveryBatch) ([]*pldapi.EventWithData, receiptsByOnChainOrder, error) {
 
 	var contracts []*PrivateSmartContract
 	var txCompletions receiptsByOnChainOrder
-	unprocessedEvents := make([]*blockindexer.EventWithData, 0, len(batch.Events))
+	unprocessedEvents := make([]*pldapi.EventWithData, 0, len(batch.Events))
 
 	for _, ev := range batch.Events {
 		processedEvent := false
@@ -105,13 +106,14 @@ func (dm *domainManager) registrationIndexer(ctx context.Context, dbTX *gorm.DB,
 func (dm *domainManager) notifyTransactions(txCompletions receiptsByOnChainOrder) {
 	for _, receipt := range txCompletions {
 		inflight := dm.privateTxWaiter.GetInflight(receipt.TransactionID)
+		log.L(dm.bgCtx).Infof("Notifying for private deployment TransactionID %s (waiter=%t)", receipt.TransactionID, inflight != nil)
 		if inflight != nil {
 			inflight.Complete(receipt)
 		}
 	}
 }
 
-func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID string, events []*blockindexer.EventWithData) (map[tktypes.EthAddress]*prototk.HandleEventBatchRequest, error) {
+func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID string, events []*pldapi.EventWithData) (map[tktypes.EthAddress]*prototk.HandleEventBatchRequest, error) {
 
 	batches := make(map[tktypes.EthAddress]*prototk.HandleEventBatchRequest)
 
@@ -181,6 +183,7 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX *gorm.DB, batch *blo
 			if err != nil {
 				return nil, err
 			}
+			log.L(ctx).Infof("Domain transaction completion: %s", txID)
 			txCompletions = append(txCompletions, &components.ReceiptInput{
 				TransactionID: *txID,
 				ReceiptType:   components.RT_Success,
@@ -233,7 +236,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 
 	// We have a domain context for queries, but we never flush it to DB - as the only updates
 	// we allow in this function are those performed within our dbTX.
-	c := d.newInFlightDomainRequest(dbTX, d.dm.stateStore.NewDomainContext(ctx, d, addr))
+	c := d.newInFlightDomainRequest(dbTX, d.dm.stateStore.NewDomainContext(ctx, d, addr, dbTX))
 	defer c.close()
 
 	batch.StateQueryContext = c.id
@@ -244,7 +247,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		return nil, err
 	}
 
-	stateSpends := make([]*components.StateSpend, len(res.SpentStates))
+	stateSpends := make([]*pldapi.StateSpend, len(res.SpentStates))
 	for i, state := range res.SpentStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
@@ -254,10 +257,10 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
 		}
-		stateSpends[i] = &components.StateSpend{DomainName: d.name, State: stateID, Transaction: *txUUID}
+		stateSpends[i] = &pldapi.StateSpend{DomainName: d.name, State: stateID, Transaction: *txUUID}
 	}
 
-	stateConfirms := make([]*components.StateConfirm, len(res.ConfirmedStates))
+	stateConfirms := make([]*pldapi.StateConfirm, len(res.ConfirmedStates))
 	for i, state := range res.ConfirmedStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
 		if err != nil {
@@ -267,7 +270,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
 		}
-		stateConfirms[i] = &components.StateConfirm{DomainName: d.name, State: stateID, Transaction: *txUUID}
+		stateConfirms[i] = &pldapi.StateConfirm{DomainName: d.name, State: stateID, Transaction: *txUUID}
 	}
 
 	newStates := make([]*components.StateUpsertOutsideContext, 0)
@@ -295,7 +298,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		})
 
 		// These have implicit confirmations
-		stateConfirms = append(stateConfirms, &components.StateConfirm{DomainName: d.name, State: id, Transaction: *txUUID})
+		stateConfirms = append(stateConfirms, &pldapi.StateConfirm{DomainName: d.name, State: id, Transaction: *txUUID})
 	}
 
 	// Write any new states first

@@ -38,6 +38,7 @@ func TestEthAddress(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "0xaca6d8ba6bff0fa5c8a06a58368cb6097285d5c5", a.String())
 	assert.Equal(t, "0xacA6D8Ba6BFf0fa5c8a06A58368CB6097285d5c5", a.Checksummed())
+	assert.Equal(t, "aca6d8ba6bff0fa5c8a06a58368cb6097285d5c5", a.HexString())
 
 	a = MustEthAddress("0xacA6D8Ba6BFf0fa5c8a06A58368CB6097285d5c5")
 	assert.Equal(t, "0xaca6d8ba6bff0fa5c8a06a58368cb6097285d5c5", (*a).String())

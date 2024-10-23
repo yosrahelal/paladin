@@ -19,15 +19,23 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
+// Special mapped type of record used by the transport plugin to route to nodes.
+// Configuration in the registry manager (which can handle any type of record) defines how to
+// map certain records from certain registries to node transport entries.
 type RegistryNodeTransportEntry struct {
-	Node             string
-	Transport        string
-	TransportDetails string
+	Node      string
+	Registry  string
+	Transport string
+	Details   string
 }
 
 type RegistryManagerToRegistry interface {
@@ -40,4 +48,11 @@ type RegistryManager interface {
 	ConfiguredRegistries() map[string]*pldconf.PluginConfig
 	RegistryRegistered(name string, id uuid.UUID, toRegistry RegistryManagerToRegistry) (fromRegistry plugintk.RegistryCallbacks, err error)
 	GetNodeTransports(ctx context.Context, node string) ([]*RegistryNodeTransportEntry, error)
+	GetRegistry(ctx context.Context, name string) (Registry, error)
+}
+
+type Registry interface {
+	QueryEntries(ctx context.Context, dbTX *gorm.DB, fActive pldapi.ActiveFilter, jq *query.QueryJSON) ([]*pldapi.RegistryEntry, error)
+	QueryEntriesWithProps(ctx context.Context, dbTX *gorm.DB, fActive pldapi.ActiveFilter, jq *query.QueryJSON) ([]*pldapi.RegistryEntryWithProperties, error)
+	GetEntryProperties(ctx context.Context, dbTX *gorm.DB, fActive pldapi.ActiveFilter, entityIDs ...tktypes.HexBytes) ([]*pldapi.RegistryProperty, error)
 }

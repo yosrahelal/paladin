@@ -17,6 +17,9 @@ syntax = "proto3";
 
 package io.kaleido.paladin.kata;
 option go_package = "pkg/proto/sequence";
+import "google/protobuf/any.proto";
+
+/* all definititions in here are ear marked for deletion in an upcoming refactor / consolidation of orchestrator and sequencer code*/
 
 // StateClaiomEvent is an event that is emitted when a node has pressumptively claimed a state that it believes to be available ( i.e. either in pending or confirmed metastate).
 // if this believe is not held by any other node ( i.e. they beleive it is already claimed) then this will trigger a contention resolution process to determine the rightful claimer of the state.
@@ -30,6 +33,7 @@ message StateClaimLostEvent {
     string state_id = 1;
     string transaction_id = 2;
 }
+
 
 message ReassembleRequest {
     string transaction_id = 1;   
@@ -74,3 +78,5 @@ message TransactionDispatchResolvedEvent {
     string transaction_id = 1;
     string signer = 2;
 }
+
+

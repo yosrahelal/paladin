@@ -29,6 +29,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/filters"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -82,7 +83,7 @@ type FakeCoin struct {
 	Salt   ethtypes.HexBytes0xPrefix `json:"salt"`
 }
 
-func parseFakeCoin(t *testing.T, s *components.State) *FakeCoin {
+func parseFakeCoin(t *testing.T, s *pldapi.State) *FakeCoin {
 	var c FakeCoin
 	err := json.Unmarshal(s.Data, &c)
 	require.NoError(t, err)
@@ -217,25 +218,25 @@ func TestStateLockErrorsTransaction(t *testing.T) {
 	)
 	require.Regexp(t, "PD010124", err) // zero/missing txn
 
-	err = dc.AddStateLocks(&components.StateLock{
-		Type: components.StateLockTypeSpend.Enum(),
+	err = dc.AddStateLocks(&pldapi.StateLock{
+		Type: pldapi.StateLockTypeSpend.Enum(),
 	})
 	require.Regexp(t, "PD010124", err) // zero/missing txn
 
-	err = dc.AddStateLocks(&components.StateLock{
-		Type: tktypes.Enum[components.StateLockType]("wrong"),
+	err = dc.AddStateLocks(&pldapi.StateLock{
+		Type: tktypes.Enum[pldapi.StateLockType]("wrong"),
 	})
 	require.Regexp(t, "PD020003", err) // bad type
 
 	txn1 := uuid.New()
-	err = dc.AddStateLocks(&components.StateLock{
-		Type:        components.StateLockTypeSpend.Enum(),
+	err = dc.AddStateLocks(&pldapi.StateLock{
+		Type:        pldapi.StateLockTypeSpend.Enum(),
 		Transaction: txn1,
 	})
 	require.Regexp(t, "PD010125", err) // missing state
 
-	err = dc.AddStateLocks(&components.StateLock{
-		Type:        components.StateLockTypeCreate.Enum(),
+	err = dc.AddStateLocks(&pldapi.StateLock{
+		Type:        pldapi.StateLockTypeCreate.Enum(),
 		State:       tktypes.RandBytes(32),
 		Transaction: txn1,
 	})
@@ -271,21 +272,21 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	// Mark an in-memory read - doesn't affect it's availability
 	transactionID2 := uuid.New()
 	err = dc.AddStateLocks(
-		&components.StateLock{Type: components.StateLockTypeRead.Enum(), State: tx1states[1].ID, Transaction: transactionID2},
+		&pldapi.StateLock{Type: pldapi.StateLockTypeRead.Enum(), State: tx1states[1].ID, Transaction: transactionID2},
 	)
 	require.NoError(t, err)
 
 	// Check we can query the current state of locks.
 	// The map is by TXID, and within the map the locks are in order created by TX
 	lockView := dc.StateLocksByTransaction()
-	assert.Equal(t, map[uuid.UUID][]components.StateLock{
+	assert.Equal(t, map[uuid.UUID][]pldapi.StateLock{
 		transactionID1: {
-			{Type: components.StateLockTypeCreate.Enum(), State: tx1states[0].ID, Transaction: transactionID1},
-			{Type: components.StateLockTypeCreate.Enum(), State: tx1states[1].ID, Transaction: transactionID1},
-			{Type: components.StateLockTypeCreate.Enum(), State: tx1states[2].ID, Transaction: transactionID1},
+			{Type: pldapi.StateLockTypeCreate.Enum(), State: tx1states[0].ID, Transaction: transactionID1},
+			{Type: pldapi.StateLockTypeCreate.Enum(), State: tx1states[1].ID, Transaction: transactionID1},
+			{Type: pldapi.StateLockTypeCreate.Enum(), State: tx1states[2].ID, Transaction: transactionID1},
 		},
 		transactionID2: {
-			{Type: components.StateLockTypeRead.Enum(), State: tx1states[1].ID, Transaction: transactionID2},
+			{Type: pldapi.StateLockTypeRead.Enum(), State: tx1states[1].ID, Transaction: transactionID2},
 		},
 	}, lockView)
 
@@ -300,16 +301,16 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	assert.Equal(t, int64(75), parseFakeCoin(t, states[1]).Amount.Int64())
 	assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
 	require.Len(t, states[0].Locks, 2)
-	assert.Equal(t, components.StateLockTypeCreate, states[0].Locks[0].Type.V()) // should be marked creating
-	assert.Equal(t, transactionID1, states[0].Locks[0].Transaction)              // for the transaction we specified
-	assert.Equal(t, components.StateLockTypeRead, states[0].Locks[1].Type.V())   // should be marked read
-	assert.Equal(t, transactionID2, states[0].Locks[1].Transaction)              // for the transaction we specified
+	assert.Equal(t, pldapi.StateLockTypeCreate, states[0].Locks[0].Type.V()) // should be marked creating
+	assert.Equal(t, transactionID1, states[0].Locks[0].Transaction)          // for the transaction we specified
+	assert.Equal(t, pldapi.StateLockTypeRead, states[0].Locks[1].Type.V())   // should be marked read
+	assert.Equal(t, transactionID2, states[0].Locks[1].Transaction)          // for the transaction we specified
 
 	// Simulate a transaction where we spend two states, and create 2 new ones
 	transactionID3 := uuid.New()
 	err = dc.AddStateLocks(
-		&components.StateLock{Type: components.StateLockTypeSpend.Enum(), State: states[0].ID, Transaction: transactionID3}, // 10 +
-		&components.StateLock{Type: components.StateLockTypeSpend.Enum(), State: states[1].ID, Transaction: transactionID3}, // 75 +
+		&pldapi.StateLock{Type: pldapi.StateLockTypeSpend.Enum(), State: states[0].ID, Transaction: transactionID3}, // 10 +
+		&pldapi.StateLock{Type: pldapi.StateLockTypeSpend.Enum(), State: states[1].ID, Transaction: transactionID3}, // 75 +
 	)
 	require.NoError(t, err)
 
@@ -352,7 +353,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	// Write another transaction that splits a coin to two
 	transactionID4 := uuid.New()
 	err = dc.AddStateLocks(
-		&components.StateLock{Type: components.StateLockTypeSpend.Enum(), State: states[0].ID, Transaction: transactionID4}, // 50
+		&pldapi.StateLock{Type: pldapi.StateLockTypeSpend.Enum(), State: states[0].ID, Transaction: transactionID4}, // 50
 	)
 	require.NoError(t, err)
 	tx3states, err := dc.UpsertStates(
@@ -380,19 +381,19 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	syncFlushContext(t, dc)
 
 	// Write confirmations for all the things that happened above
-	var spends []*components.StateSpend
-	var confirms []*components.StateConfirm
+	var spends []*pldapi.StateSpend
+	var confirms []*pldapi.StateConfirm
 	for _, lock := range dc.txLocks {
 		switch lock.Type.V() {
-		case components.StateLockTypeSpend:
-			spends = append(spends, &components.StateSpend{DomainName: "domain1", State: lock.State, Transaction: lock.Transaction})
-		case components.StateLockTypeCreate:
-			confirms = append(confirms, &components.StateConfirm{DomainName: "domain1", State: lock.State, Transaction: lock.Transaction})
+		case pldapi.StateLockTypeSpend:
+			spends = append(spends, &pldapi.StateSpend{DomainName: "domain1", State: lock.State, Transaction: lock.Transaction})
+		case pldapi.StateLockTypeCreate:
+			confirms = append(confirms, &pldapi.StateConfirm{DomainName: "domain1", State: lock.State, Transaction: lock.Transaction})
 		}
 	}
 	// We add one extra spend that simulates something happening outside of this context
 	transactionID5 := uuid.New()
-	spends = append(spends, &components.StateSpend{DomainName: "domain1", State: states[0].ID, Transaction: transactionID5}) //20
+	spends = append(spends, &pldapi.StateSpend{DomainName: "domain1", State: states[0].ID, Transaction: transactionID5}) //20
 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), spends, confirms)
 	require.NoError(t, err)
 
@@ -406,8 +407,8 @@ func TestStateContextMintSpendMint(t *testing.T) {
 
 	// We left the read
 	assert.Len(t, dc.txLocks, 1)
-	assert.Equal(t, components.StateLockTypeRead, dc.txLocks[0].Type.V()) // should be marked read
-	assert.Equal(t, transactionID2, dc.txLocks[0].Transaction)            // for the transaction we specified
+	assert.Equal(t, pldapi.StateLockTypeRead, dc.txLocks[0].Type.V()) // should be marked read
+	assert.Equal(t, transactionID2, dc.txLocks[0].Transaction)        // for the transaction we specified
 
 	// Check the remaining states
 	_, states, err = dc.FindAvailableStates(schemaID, query.NewQueryBuilder().Sort("owner", "amount").Query())
@@ -489,8 +490,8 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	syncFlushContext(t, dc)
 
 	// Mark both states confirmed
-	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*components.StateSpend{},
-		[]*components.StateConfirm{
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*pldapi.StateSpend{},
+		[]*pldapi.StateConfirm{
 			{DomainName: "domain1", State: stateID1, Transaction: transactionID1},
 			{DomainName: "domain1", State: stateID2, Transaction: transactionID1},
 		})
@@ -499,7 +500,7 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	// Mark the first state as "spending"
 	transactionID2 := uuid.New()
 	err = dc.AddStateLocks(
-		&components.StateLock{Type: components.StateLockTypeSpend.Enum(), State: stateID1, Transaction: transactionID2},
+		&pldapi.StateLock{Type: pldapi.StateLockTypeSpend.Enum(), State: stateID1, Transaction: transactionID2},
 	)
 	assert.NoError(t, err)
 
@@ -519,9 +520,9 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	// Spend the state associated with nullifier
 	transactionID3 := uuid.New()
 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
-		[]*components.StateSpend{
+		[]*pldapi.StateSpend{
 			{DomainName: "domain1", State: nullifier1, Transaction: transactionID3},
-		}, []*components.StateConfirm{})
+		}, []*pldapi.StateConfirm{})
 	require.NoError(t, err)
 
 	// reset the domain context so we're working from the db
@@ -605,7 +606,7 @@ func TestDomainContextFlushErrorCapture(t *testing.T) {
 	err = dc.UpsertNullifiers()
 	assert.Regexp(t, "PD010119.*pop", err) // needs reset
 
-	err = dc.AddStateLocks(&components.StateLock{})
+	err = dc.AddStateLocks(&pldapi.StateLock{})
 	assert.Regexp(t, "PD010119.*pop", err) // needs reset
 
 	err = dc.InitiateFlush(func(err error) {})
@@ -646,14 +647,14 @@ func TestDCMergeUnFlushedWhileFlushing(t *testing.T) {
 	dc.flushing = dc.unFlushed
 
 	// We'll merge in creating
-	states, err := dc.mergeUnFlushedApplyLocks(schema, []*components.State{}, &query.QueryJSON{
+	states, err := dc.mergeUnFlushedApplyLocks(schema, []*pldapi.State{}, &query.QueryJSON{
 		Sort: []string{".created"},
 	}, false /* no nullifier required */)
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 
 	// Unless we require a nullifier
-	states, err = dc.mergeUnFlushedApplyLocks(schema, []*components.State{}, &query.QueryJSON{
+	states, err = dc.mergeUnFlushedApplyLocks(schema, []*pldapi.State{}, &query.QueryJSON{
 		Sort: []string{".created"},
 	}, true /* nullifier required */)
 	require.NoError(t, err)
@@ -667,7 +668,7 @@ func TestDCMergeUnFlushedWhileFlushing(t *testing.T) {
 	dc.flushing.stateNullifiers = append(dc.flushing.stateNullifiers, dc.unFlushed.stateNullifiers...)
 
 	// And then it will return the state
-	states, err = dc.mergeUnFlushedApplyLocks(schema, []*components.State{}, &query.QueryJSON{
+	states, err = dc.mergeUnFlushedApplyLocks(schema, []*pldapi.State{}, &query.QueryJSON{
 		Sort: []string{".created"},
 	}, true /* nullifier required */)
 	require.NoError(t, err)
@@ -703,7 +704,7 @@ func TestDSIMergeUnFlushedMultipleSchemas(t *testing.T) {
 	dc.creatingStates[s1.ID.String()] = s1
 	dc.creatingStates[s2.ID.String()] = s2
 
-	states, err := dc.mergeUnFlushedApplyLocks(schema1, []*components.State{},
+	states, err := dc.mergeUnFlushedApplyLocks(schema1, []*pldapi.State{},
 		query.NewQueryBuilder().Sort(".created").Query(), false)
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
@@ -730,7 +731,7 @@ func TestDSIMergeUnFlushedBadDBRecord(t *testing.T) {
 
 	dc.creatingStates[s1.ID.String()] = s1
 
-	_, err = dc.mergeUnFlushedApplyLocks(schema1, []*components.State{
+	_, err = dc.mergeUnFlushedApplyLocks(schema1, []*pldapi.State{
 		{ID: tktypes.RandBytes(32), Data: tktypes.RawJSON("wrong")},
 	}, query.NewQueryBuilder().Sort(".created").Query(), false)
 	assert.Regexp(t, "PD010116", err)
@@ -765,7 +766,7 @@ func TestDCMergeUnFlushedWhileFlushingDedup(t *testing.T) {
 	require.NoError(t, err)
 	_, err = dc.UpsertStates(&components.StateUpsert{ID: s2.ID, SchemaID: schema.ID(), Data: s2.Data, CreatedBy: &tx1})
 	require.NoError(t, err)
-	err = dc.AddStateLocks(&components.StateLock{Type: components.StateLockTypeSpend.Enum(), State: s2.ID, Transaction: tx1})
+	err = dc.AddStateLocks(&pldapi.StateLock{Type: pldapi.StateLockTypeSpend.Enum(), State: s2.ID, Transaction: tx1})
 	require.NoError(t, err)
 
 	// Fake a flush transition
@@ -781,7 +782,7 @@ func TestDCMergeUnFlushedWhileFlushingDedup(t *testing.T) {
 	assert.Equal(t, s1.ID, inTheFlush.State.ID)
 	dc.stateLock.Unlock()
 
-	states, err := dc.mergeUnFlushedApplyLocks(schema, []*components.State{
+	states, err := dc.mergeUnFlushedApplyLocks(schema, []*pldapi.State{
 		inTheFlush.State,
 	}, &query.QueryJSON{
 		Sort: []string{".created"},
@@ -811,7 +812,7 @@ func TestDCMergeUnFlushedEvalError(t *testing.T) {
 	_, err = dc.UpsertStates(&components.StateUpsert{ID: s1.ID, SchemaID: schema.ID(), Data: s1.Data, CreatedBy: &tx1})
 	require.NoError(t, err)
 
-	_, err = dc.mergeUnFlushedApplyLocks(schema, []*components.State{},
+	_, err = dc.mergeUnFlushedApplyLocks(schema, []*pldapi.State{},
 		query.NewQueryBuilder().Equal("wrong", "any").Query(), false)
 	assert.Regexp(t, "PD010700", err)
 
@@ -839,7 +840,7 @@ func TestDCMergedInMemoryMatchesRecoverLabelsFail(t *testing.T) {
 	dc.flushing = dc.ss.writer.newWriteOp("domain1", contractAddress)
 	dc.flushing.states = append(dc.flushing.states, s1)
 
-	_, err = dc.mergeInMemoryMatches(schema, []*components.State{
+	_, err = dc.mergeInMemoryMatches(schema, []*pldapi.State{
 		s1.State,
 	}, []*components.StateWithLabels{}, nil)
 	assert.Regexp(t, "PD010116", err)
@@ -867,7 +868,7 @@ func TestDCMergedInMemoryMatchesSortFail(t *testing.T) {
 	dc.flushing = dc.ss.writer.newWriteOp("domain1", contractAddress)
 	dc.flushing.states = append(dc.flushing.states, s1)
 
-	_, err = dc.mergeInMemoryMatches(schema, []*components.State{
+	_, err = dc.mergeInMemoryMatches(schema, []*pldapi.State{
 		s1.State,
 	}, []*components.StateWithLabels{}, query.NewQueryBuilder().Sort("wrong").Query())
 	assert.Regexp(t, "PD010700", err)
@@ -930,13 +931,13 @@ func TestDCResetWithMixedTxns(t *testing.T) {
 	state1 := tktypes.HexBytes("state1")
 	transactionID1 := uuid.New()
 	err := dc.AddStateLocks(
-		&components.StateLock{State: state1, Type: components.StateLockTypeRead.Enum(), Transaction: transactionID1})
+		&pldapi.StateLock{State: state1, Type: pldapi.StateLockTypeRead.Enum(), Transaction: transactionID1})
 	require.NoError(t, err)
 
 	state2 := tktypes.HexBytes("state2")
 	transactionID2 := uuid.New()
 	err = dc.AddStateLocks(
-		&components.StateLock{State: state2, Type: components.StateLockTypeSpend.Enum(), Transaction: transactionID2})
+		&pldapi.StateLock{State: state2, Type: pldapi.StateLockTypeSpend.Enum(), Transaction: transactionID2})
 	require.NoError(t, err)
 
 	dc.ResetTransactions(transactionID1)

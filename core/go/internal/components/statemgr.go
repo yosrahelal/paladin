@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/filters"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
@@ -33,7 +34,7 @@ type StateManager interface {
 	ListDomainContexts() []DomainContextInfo
 
 	// Create a new domain context - caller is responsible for closing it
-	NewDomainContext(ctx context.Context, domain Domain, contractAddress tktypes.EthAddress) DomainContext
+	NewDomainContext(ctx context.Context, domain Domain, contractAddress tktypes.EthAddress, dbTX *gorm.DB) DomainContext
 
 	// Get a previously created domain context
 	GetDomainContext(ctx context.Context, id uuid.UUID) DomainContext
@@ -42,14 +43,17 @@ type StateManager interface {
 	EnsureABISchemas(ctx context.Context, dbTX *gorm.DB, domainName string, defs []*abi.Parameter) ([]Schema, error)
 
 	// State finalizations are written on the DB context of the block indexer, by the domain manager.
-	WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*StateSpend, confirms []*StateConfirm) (err error)
+	WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*pldapi.StateSpend, confirms []*pldapi.StateConfirm) (err error)
 
 	// MUST NOT be called for states received over a network from another node.
 	// Writes a batch of states that have been pre-verified BY THIS NODE so can bypass domain hash verification.
-	WritePreVerifiedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*StateUpsertOutsideContext) ([]*State, error)
+	WritePreVerifiedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*StateUpsertOutsideContext) ([]*pldapi.State, error)
 
 	// Write a batch of states that have been received over the network. ID hash calculation will be validated by the domain as prior to storage
-	WriteReceivedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*StateUpsertOutsideContext) ([]*State, error)
+	WriteReceivedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*StateUpsertOutsideContext) ([]*pldapi.State, error)
+
+	// GetState returns a state by ID, with optional labels
+	GetState(ctx context.Context, dbTX *gorm.DB, domainName string, contractAddress tktypes.EthAddress, stateID tktypes.HexBytes, failNotFound, withLabels bool) (*pldapi.State, error)
 }
 
 type DomainContextInfo struct {
@@ -82,11 +86,11 @@ type DomainContext interface {
 	// 2) We deliberately return states that are locked to a transaction (but not spent yet) - which means the
 	//    result of the any assemble that uses those states, will be a transaction that must
 	//    be on the same transaction where those states are locked.
-	FindAvailableStates(schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*State, error)
+	FindAvailableStates(schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*pldapi.State, error)
 
 	// FindAvailableNullifiers is similar to FindAvailableStates, but for domains that leverage
 	// nullifiers to record spending.
-	FindAvailableNullifiers(schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*State, error)
+	FindAvailableNullifiers(schemaID tktypes.Bytes32, query *query.QueryJSON) (Schema, []*pldapi.State, error)
 
 	// AddStateLocks updates the in-memory state of the domain context, to record a set of locks
 	// that affect queries on available states and nullifiers.
@@ -96,7 +100,7 @@ type DomainContext interface {
 	// - Read locks just mark the relationship for later processing
 	//
 	// This is an in-memory record that will be lost on Reset, and can be deleted using ClearTransaction
-	AddStateLocks(locks ...*StateLock) (err error)
+	AddStateLocks(locks ...*pldapi.StateLock) (err error)
 
 	// UpsertStates creates or updates states.
 	// They are available immediately within the domain for return in FindAvailableStates
@@ -105,7 +109,7 @@ type DomainContext interface {
 	// the specified transaction using an in-memory lock.
 	//
 	// States will be written to the DB on the next flush (the associated lock is not)
-	UpsertStates(states ...*StateUpsert) (s []*State, err error)
+	UpsertStates(states ...*StateUpsert) (s []*pldapi.State, err error)
 
 	// UpsertNullifiers creates nullifier records associated with states.
 	// Nullifiers are an alternate state identifier (separate from the state ID) that can be used
@@ -126,7 +130,7 @@ type DomainContext interface {
 	// Mainly for debugging (lots of memory is copied) so any case this function is used on a critical path
 	// should be considered as a requirement for a new function on this interface that can be performed
 	// safely under the mutex of the domain context.
-	StateLocksByTransaction() map[uuid.UUID][]StateLock
+	StateLocksByTransaction() map[uuid.UUID][]pldapi.StateLock
 
 	// Reset restores the world to the current state of the database, clearing any errors
 	// from failed flush, all un-flushed writes, and all in-memory state locks.
@@ -153,21 +157,6 @@ type DomainContext interface {
 	Close()
 }
 
-type State struct {
-	ID              tktypes.HexBytes   `json:"id"                  gorm:"primaryKey"`
-	Created         tktypes.Timestamp  `json:"created"             gorm:"autoCreateTime:nano"`
-	DomainName      string             `json:"domain"              gorm:"primaryKey"`
-	Schema          tktypes.Bytes32    `json:"schema"`
-	ContractAddress tktypes.EthAddress `json:"contractAddress"`
-	Data            tktypes.RawJSON    `json:"data"`
-	Labels          []*StateLabel      `json:"-"                   gorm:"foreignKey:state;references:id;"`
-	Int64Labels     []*StateInt64Label `json:"-"                   gorm:"foreignKey:state;references:id;"`
-	Confirmed       *StateConfirm      `json:"confirmed,omitempty" gorm:"foreignKey:state;references:id;"`
-	Spent           *StateSpend        `json:"spent,omitempty"     gorm:"foreignKey:state;references:id;"`
-	Locks           []*StateLock       `json:"locks,omitempty"     gorm:"-"` // in memory only processing here
-	Nullifier       *StateNullifier    `json:"nullifier,omitempty" gorm:"foreignKey:state;references:id;"`
-}
-
 type StateUpsert struct {
 	ID        tktypes.HexBytes
 	SchemaID  tktypes.Bytes32
@@ -184,87 +173,12 @@ type StateUpsertOutsideContext struct {
 
 // StateWithLabels is a newly prepared state that has not yet been persisted
 type StateWithLabels struct {
-	*State
+	*pldapi.State
 	LabelValues filters.ValueSet
 }
 
 func (s *StateWithLabels) ValueSet() filters.ValueSet {
 	return s.LabelValues
-}
-
-type StateLabel struct {
-	DomainName string           `gorm:"primaryKey"`
-	State      tktypes.HexBytes `gorm:"primaryKey"`
-	Label      string
-	Value      string
-}
-
-type StateInt64Label struct {
-	DomainName string           `gorm:"primaryKey"`
-	State      tktypes.HexBytes `gorm:"primaryKey"`
-	Label      string
-	Value      int64
-}
-
-// State record can be updated before, during and after confirm records are written
-// For example the confirmation of the existence of states will be coming all the time
-// from the base ledger, for which we will never receive the private state itself.
-// Immutable once written
-type StateConfirm struct {
-	DomainName  string           `json:"domain"       gorm:"primaryKey"`
-	State       tktypes.HexBytes `json:"-"            gorm:"primaryKey"`
-	Transaction uuid.UUID        `json:"transaction"`
-}
-
-// State record can be updated before, during and after spend records are written
-// Immutable once written
-type StateSpend struct {
-	DomainName  string           `json:"domain"       gorm:"primaryKey"`
-	State       tktypes.HexBytes `json:"-"            gorm:"primaryKey"`
-	Transaction uuid.UUID        `json:"transaction"`
-}
-
-type StateLockType string
-
-const (
-	StateLockTypeCreate StateLockType = "create"
-	StateLockTypeRead   StateLockType = "read"
-	StateLockTypeSpend  StateLockType = "spend"
-)
-
-func (tt StateLockType) Enum() tktypes.Enum[StateLockType] {
-	return tktypes.Enum[StateLockType](tt)
-}
-
-func (tt StateLockType) Options() []string {
-	return []string{
-		string(StateLockTypeCreate),
-		string(StateLockTypeRead),
-		string(StateLockTypeSpend),
-	}
-}
-
-// State locks record which transaction a state is being locked to, either
-// spending a previously confirmed state, or an optimistic record of creating
-// (and maybe later spending) a state that is yet to be confirmed.
-type StateLock struct {
-	DomainName  string                      `json:"domain"`
-	State       tktypes.HexBytes            `json:"state,omitempty"`
-	Transaction uuid.UUID                   `json:"transaction"`
-	Type        tktypes.Enum[StateLockType] `json:"type"`
-}
-
-// State nullifiers are used when a domain chooses to use a separate identifier
-// specifically for spending states (i.e. not the state ID).
-// Domains that choose to leverage this architecture will create nullifier
-// entries for all unspent states, and create a StateSpend entry for the
-// nullifier (not for the state) when it is spent.
-// Immutable once written
-type StateNullifier struct {
-	DomainName string           `json:"domain"          gorm:"primaryKey"`
-	ID         tktypes.HexBytes `json:"id"              gorm:"primaryKey"`
-	State      tktypes.HexBytes `json:"-"`
-	Spent      *StateSpend      `json:"spent,omitempty" gorm:"foreignKey:state;references:id;"`
 }
 
 type NullifierUpsert struct {
@@ -273,27 +187,10 @@ type NullifierUpsert struct {
 }
 
 type Schema interface {
-	Type() SchemaType
+	Type() pldapi.SchemaType
 	ID() tktypes.Bytes32
 	Signature() string
-	Persisted() *SchemaPersisted
+	Persisted() *pldapi.Schema
 	ProcessState(ctx context.Context, contractAddress tktypes.EthAddress, data tktypes.RawJSON, id tktypes.HexBytes, customHash bool) (*StateWithLabels, error)
-	RecoverLabels(ctx context.Context, s *State) (*StateWithLabels, error)
-}
-
-type SchemaType string
-
-const (
-	// ABI schema uses the same semantics as events for defining indexed fields (must be top-level)
-	SchemaTypeABI SchemaType = "abi"
-)
-
-type SchemaPersisted struct {
-	ID         tktypes.Bytes32   `json:"id"          gorm:"primaryKey"`
-	Created    tktypes.Timestamp `json:"created"     gorm:"autoCreateTime:false"` // we calculate the created time ourselves due to complex in-memory caching
-	DomainName string            `json:"domain"`
-	Type       SchemaType        `json:"type"`
-	Signature  string            `json:"signature"`
-	Definition tktypes.RawJSON   `json:"definition"`
-	Labels     []string          `json:"labels"      gorm:"type:text[]; serializer:json"`
+	RecoverLabels(ctx context.Context, s *pldapi.State) (*StateWithLabels, error)
 }

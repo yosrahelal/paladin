@@ -26,8 +26,8 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
@@ -242,13 +242,13 @@ func (dc *domainContract) LockStates(dCtx components.DomainContext, tx *componen
 
 	// Input and read state locks are written separately to the states
 	states := make([]*components.StateUpsert, 0, len(postAssembly.InputStates)+len(postAssembly.ReadStates)+len(postAssembly.OutputStates))
-	stateLocks := make([]*components.StateLock, 0, len(postAssembly.InputStates)+len(postAssembly.ReadStates))
+	stateLocks := make([]*pldapi.StateLock, 0, len(postAssembly.InputStates)+len(postAssembly.ReadStates))
 	for _, s := range postAssembly.InputStates {
-		stateLocks = append(stateLocks, &components.StateLock{
+		stateLocks = append(stateLocks, &pldapi.StateLock{
 			State:       s.ID,
 			DomainName:  domainName,
 			Transaction: tx.ID,
-			Type:        components.StateLockTypeSpend.Enum(),
+			Type:        pldapi.StateLockTypeSpend.Enum(),
 		})
 		states = append(states, &components.StateUpsert{
 			ID:        s.ID,
@@ -258,11 +258,11 @@ func (dc *domainContract) LockStates(dCtx components.DomainContext, tx *componen
 		})
 	}
 	for _, s := range postAssembly.ReadStates {
-		stateLocks = append(stateLocks, &components.StateLock{
+		stateLocks = append(stateLocks, &pldapi.StateLock{
 			State:       s.ID,
 			DomainName:  domainName,
 			Transaction: tx.ID,
-			Type:        components.StateLockTypeRead.Enum(),
+			Type:        pldapi.StateLockTypeRead.Enum(),
 		})
 		states = append(states, &components.StateUpsert{
 			ID:        s.ID,
@@ -408,10 +408,6 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *
 	if err := json.Unmarshal(([]byte)(res.Transaction.FunctionAbiJson), &functionABI); err != nil {
 		return i18n.WrapError(dCtx.Ctx(), err, msgs.MsgDomainPrivateAbiJsonInvalid)
 	}
-	inputs, err := functionABI.Inputs.ParseJSONCtx(dCtx.Ctx(), emptyJSONIfBlank(res.Transaction.ParamsJson))
-	if err != nil {
-		return err
-	}
 
 	contractAddress := &dc.info.Address
 	if res.Transaction.ContractAddress != nil {
@@ -427,10 +423,10 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *
 		if err != nil {
 			return err
 		}
-		tx.PreparedPrivateTransaction = &ptxapi.TransactionInput{
-			Transaction: ptxapi.Transaction{
+		tx.PreparedPrivateTransaction = &pldapi.TransactionInput{
+			Transaction: pldapi.Transaction{
 				IdempotencyKey: fmt.Sprintf("%s_%s", tx.ID, functionABI.Name),
-				Type:           ptxapi.TransactionTypePrivate.Enum(),
+				Type:           pldapi.TransactionTypePrivate.Enum(),
 				Function:       functionABI.String(),
 				From:           tx.Signer,
 				To:             contractAddress,
@@ -440,10 +436,15 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, tx *
 			ABI: abi.ABI{&functionABI},
 		}
 	} else {
-		tx.PreparedPublicTransaction = &components.EthTransaction{
-			FunctionABI: &functionABI,
-			To:          *contractAddress,
-			Inputs:      inputs,
+		tx.PreparedPublicTransaction = &pldapi.TransactionInput{
+			Transaction: pldapi.Transaction{
+				Type:     pldapi.TransactionTypePublic.Enum(),
+				Function: functionABI.String(),
+				From:     tx.Signer,
+				To:       contractAddress,
+				Data:     tktypes.RawJSON(res.Transaction.ParamsJson),
+			},
+			ABI: abi.ABI{&functionABI},
 		}
 	}
 	return nil
@@ -482,7 +483,7 @@ func (dc *domainContract) loadStates(dCtx components.DomainContext, refs []*prot
 		rawIDsBySchema[schemaID] = append(rawIDsBySchema[schemaID], tktypes.JSONString(stateID.String()))
 		stateIDs[i] = stateID
 	}
-	statesByID := make(map[string]*components.State)
+	statesByID := make(map[string]*pldapi.State)
 	for schemaID, stateIDs := range rawIDsBySchema {
 		_, statesForSchema, err := dCtx.FindAvailableStates(schemaID, &query.QueryJSON{
 			Statements: query.Statements{

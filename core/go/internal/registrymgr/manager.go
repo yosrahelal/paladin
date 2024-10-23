@@ -21,11 +21,17 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
 )
 
 type registryManager struct {
@@ -34,28 +40,54 @@ type registryManager struct {
 
 	conf *pldconf.RegistryManagerConfig
 
+	p            persistence.Persistence
+	blockIndexer blockindexer.BlockIndexer
+	rpcModule    *rpcserver.RPCModule
+
+	// We provide a high level of customization of how the nodes are looked up in the registry
+	registryTransportLookups map[string]*transportLookup
+
+	// Due to the high frequency of calls to the registry for node details, we maintain
+	// a cache of resolved nodes by name - which is a global index, across all registries.
+	transportDetailsCache cache.Cache[string, []*components.RegistryNodeTransportEntry]
+
 	registriesByID   map[uuid.UUID]*registry
 	registriesByName map[string]*registry
 }
 
 func NewRegistryManager(bgCtx context.Context, conf *pldconf.RegistryManagerConfig) components.RegistryManager {
 	return &registryManager{
-		bgCtx:            bgCtx,
-		conf:             conf,
-		registriesByID:   make(map[uuid.UUID]*registry),
-		registriesByName: make(map[string]*registry),
+		bgCtx:                    bgCtx,
+		conf:                     conf,
+		registriesByID:           make(map[uuid.UUID]*registry),
+		registriesByName:         make(map[string]*registry),
+		registryTransportLookups: make(map[string]*transportLookup),
+		transportDetailsCache:    cache.NewCache[string, []*components.RegistryNodeTransportEntry](&conf.RegistryManager.RegistryCache, pldconf.RegistryCacheDefaults),
 	}
 }
 
-func (rm *registryManager) PreInit(pic components.PreInitComponents) (*components.ManagerInitResult, error) {
-	// RegistryManager does not rely on any other components during the pre-init phase (at the moment)
-	// for QoS we may need persistence in the future, and this will be the plug point for the registry
-	// when we have it
+func (rm *registryManager) PreInit(pic components.PreInitComponents) (_ *components.ManagerInitResult, err error) {
+	rm.p = pic.Persistence()
 
-	return &components.ManagerInitResult{}, nil
+	// For each of the registries, parse the transport lookup semantics
+	for regName, regConf := range rm.conf.Registries {
+		if confutil.Bool(regConf.Transports.Enabled, *pldconf.RegistryTransportsDefaults.Enabled) {
+			if rm.registryTransportLookups[regName], err = newTransportLookup(rm.bgCtx, regName, &regConf.Transports); err != nil {
+				return nil, err
+			}
+			log.L(rm.bgCtx).Infof("Transport lookups enabled for registry '%s' with matcher '%s'", regName, rm.registryTransportLookups[regName].propertyRegexp)
+		}
+	}
+	rm.initRPC()
+	return &components.ManagerInitResult{
+		RPCModules: []*rpcserver.RPCModule{rm.rpcModule},
+	}, nil
 }
 
-func (rm *registryManager) PostInit(c components.AllComponents) error { return nil }
+func (rm *registryManager) PostInit(c components.AllComponents) error {
+	rm.blockIndexer = c.BlockIndexer()
+	return nil
+}
 
 func (rm *registryManager) Start() error { return nil }
 
@@ -116,14 +148,54 @@ func (rm *registryManager) RegistryRegistered(name string, id uuid.UUID, toRegis
 	return t, nil
 }
 
+func (rm *registryManager) GetRegistry(ctx context.Context, name string) (components.Registry, error) {
+	rm.mux.Lock()
+	defer rm.mux.Unlock()
+
+	r := rm.registriesByName[name]
+	if r == nil {
+		return nil, i18n.NewError(ctx, msgs.MsgRegistryNotFound, name)
+	}
+	return r, nil
+}
+
+func (rm *registryManager) getRegistryNames() []string {
+	rm.mux.Lock()
+	defer rm.mux.Unlock()
+
+	registryNames := make([]string, 0, len(rm.registriesByName))
+	for registryName := range rm.registriesByName {
+		registryNames = append(registryNames, registryName)
+	}
+	return registryNames
+}
+
 func (rm *registryManager) GetNodeTransports(ctx context.Context, node string) ([]*components.RegistryNodeTransportEntry, error) {
-	// Scroll through all the configured registries to see if one of them knows about this node
-	var transports []*components.RegistryNodeTransportEntry
-	for _, r := range rm.registriesByID {
-		transports = append(transports, r.getNodeTransports(node)...)
+	// Check cache
+	transports, present := rm.transportDetailsCache.Get(node)
+	if present {
+		return transports, nil
 	}
-	if len(transports) == 0 {
-		return nil, i18n.NewError(ctx, msgs.MsgRegistryNodeEntiresNotFound, node)
+
+	regLookupsChecked := 0
+	for regName, r := range rm.registriesByName {
+		tl := rm.registryTransportLookups[regName]
+		if tl != nil {
+			regLookupsChecked++
+			regTransports, err := tl.getNodeTransports(ctx, rm.p.DB() /* no TX needed */, r, node)
+			if err != nil {
+				return nil, err
+			}
+			// we only return entries from a single registry (we do not merge transports across registries)
+			// the requiredPrefix allows node partitioning across registries.
+			if len(regTransports) > 0 {
+				log.L(ctx).Infof("Node '%s' matched to %d transports in registry '%s'", node, len(regTransports), regName)
+				rm.transportDetailsCache.Set(node, regTransports)
+				return regTransports, nil
+			}
+		}
 	}
-	return transports, nil
+	log.L(ctx).Infof("No transports found for node '%s' after checking %d registries configured with transports lookups", node, regLookupsChecked)
+
+	return nil, i18n.NewError(ctx, msgs.MsgRegistryNodeEntiresNotFound, node)
 }

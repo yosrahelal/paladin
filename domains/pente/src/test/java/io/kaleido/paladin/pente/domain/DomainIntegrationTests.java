@@ -60,7 +60,7 @@ public class DomainIntegrationTests {
                     "deployer",
                     factoryABI,
                     factoryBytecode,
-                    "{}");
+                    new HashMap<String,String>());
             return new JsonHex.Address(contractAddr);
         }
     }
@@ -81,7 +81,7 @@ public class DomainIntegrationTests {
                     "deployer",
                     factoryABI,
                     factoryBytecode,
-                    "{}");
+                    new HashMap<String,String>());
             return new JsonHex.Address(contractAddr);
         }
     }
@@ -236,7 +236,7 @@ public class DomainIntegrationTests {
                     ), true);
 
             // Validate minted coin
-            List<JsonNode> notoStates = testbed.getRpcClient().request("pstate_queryStates",
+            List<JsonNode> notoStates = testbed.getRpcClient().request("pstate_queryContractStates",
                     "noto",
                     notoInstanceAddress,
                     notoSchema.id,
