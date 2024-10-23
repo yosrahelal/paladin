@@ -55,6 +55,8 @@ public class PenteConfiguration {
 
     private final JsonABI externalCallABI;
 
+    private final JsonABI.Entry externalCallEventABI;
+
     // Topic generated from event "PenteExternalCall(address,bytes)"
     private final Bytes externalCallTopic = Bytes.fromHexString("0xcac03685d5ba4ab3e1465a8ee1b2bb21094ddbd612a969fd34f93a5be7a0ac4f");
 
@@ -82,6 +84,7 @@ public class PenteConfiguration {
             externalCallABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
                     "contracts/private/interfaces/IPenteExternalCall.sol/IPenteExternalCall.json",
                     "abi");
+            externalCallEventABI = externalCallABI.getABIEntry("event", "PenteExternalCall");
         } catch (Exception t) {
             LOGGER.error("failed to initialize configuration", t);
             throw new RuntimeException(t);
@@ -163,6 +166,22 @@ public class PenteConfiguration {
             JsonHex.Bytes data
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TransactionExternalCall(
+            @JsonProperty
+            Address contractAddress,
+            @JsonProperty
+            byte[] encodedCall
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TransactionExtraData(
+            @JsonProperty
+            Address contractAddress,
+            @JsonProperty
+            List<TransactionExternalCall> externalCalls
+    ) {}
+
     public static byte[] intToBytes4(int val) {
         return ByteBuffer.allocate(4).putInt(val).array();
     }
@@ -229,22 +248,6 @@ public class PenteConfiguration {
         };
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record TransactionExternalCall(
-            @JsonProperty
-            Address contractAddress,
-            @JsonProperty
-            byte[] encodedCall
-    ) {}
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record TransactionExtraData(
-            @JsonProperty
-            Address contractAddress,
-            @JsonProperty
-            List<TransactionExternalCall> externalCalls
-    ) {}
-
     synchronized JsonABI getFactoryContractABI() {
         return factoryContractABI;
     }
@@ -256,6 +259,8 @@ public class PenteConfiguration {
     synchronized JsonABI getInterfaceABI() { return interfaceABI; }
 
     synchronized JsonABI getExternalCallABI() { return externalCallABI; }
+
+    synchronized JsonABI.Entry getExternalCallEventABI() { return externalCallEventABI; }
 
     synchronized Bytes getExternalCallTopic() { return externalCallTopic; }
 
