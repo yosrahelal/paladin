@@ -46,9 +46,9 @@ export const Registry: React.FC<Props> = ({ registryName }) => {
       },
       body: JSON.stringify(requestPayload)
     }).then(async response => {
-      setRegistryEntries((await response.json()).result);
+      let registryEntries: IRegistryEntry[] = (await response.json()).result;
+      setRegistryEntries(registryEntries.sort((a, b) => a.name < b.name? -1 : 0));
     });
-
   }, []);
 
   const processValue = (value: string) => {
@@ -60,7 +60,7 @@ export const Registry: React.FC<Props> = ({ registryName }) => {
   };
 
   return (
-    <Box sx={{ padding: '20px' }}>
+    <Box >
       {registryEntries.filter(registryEntry => registryEntry.name !== 'root').map(registryEntry =>
         <Box key={registryEntry.id} sx={{
           backgroundColor: theme => theme.palette.background.paper,

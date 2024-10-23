@@ -17,23 +17,28 @@
 import { useContext, useEffect, useState } from "react";
 import { ApplicationContext } from "../Context";
 import { constants } from "../utils";
-import { IPendingTransaction } from "../interfaces";
-import { Box, Fade, Paper, Typography } from "@mui/material";
+import { Box, Fade, Paper, Tab, Tabs } from "@mui/material";
 import { t } from "i18next";
-import { PendingTransaction } from "../components/PendingTransaction";
+import { PendingTransaction } from "../components/PaladinTransaction";
+import { IPaladinTransaction } from "../interfaces";
 
-export const PendingTransactions: React.FC = () => {
+export const Submissions: React.FC = () => {
 
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
+  const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [pendingTransactions, setPendingTransactions] = useState<IPendingTransaction[]>([]);
+  const [pendingTransactions, setPendingTransactions] = useState<IPaladinTransaction[]>([]);
 
   useEffect(() => {
+    let params: any[] = [{ limit: constants.PENDING_TRANSACTIONS_QUERY_LIMIT, sort: ['created DESC'] }];
+    if(tab === 1) {
+      params.push(true);
+    }
     let requestPayload = {
       jsonrpc: '2.0',
       id: Date.now(),
-      method: 'ptx_queryPendingTransactions',
-      params: [{ limit: constants.PENDING_TRANSACTIONS_QUERY_LIMIT, sort: ['created DESC'] }, true]
+      method: tab === 0? 'ptx_queryTransactions' : 'ptx_queryPendingTransactions',
+      params
     };
     fetch('/json-rpc', {
       method: 'post',
@@ -45,7 +50,7 @@ export const PendingTransactions: React.FC = () => {
     }).then(async response => {
       setPendingTransactions((await response.json()).result);
     }).finally(() => setLoading(false));
-  }, [lastBlockWithTransactions]);
+  }, [lastBlockWithTransactions, tab]);
 
   if (loading) {
     return <></>;
@@ -57,7 +62,12 @@ export const PendingTransactions: React.FC = () => {
         <Paper sx={{
           padding: '10px', paddingTop: '12px', backgroundColor: 'rgba(255, 255, 255, .65)',
         }}>
-          <Typography align="center" sx={{ fontSize: '24px', fontWeight: 500 }}>{t('pendingTransactions')}</Typography>
+          <Tabs value={tab} onChange={(_event, value) => setTab(value)} centered>
+            <Tab label={t('all')} />
+            <Tab label={t('pending')} />
+          </Tabs>
+
+
           <Box sx={{ padding: '20px', overflow: 'scroll', height: 'calc(100vh - 162px)' }}>
             {pendingTransactions.map(pendingTransaction => <PendingTransaction key={pendingTransaction.id} pendingTransaction={pendingTransaction} />)}
           </Box>

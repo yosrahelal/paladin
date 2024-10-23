@@ -32,5 +32,7 @@
   "type": "Type",
   "private": "Private",
   "public": "Public", 
-  "created": "Created"
+  "created": "Created",
+  "transaction": "Transaction",
+  "all": "All"
 }

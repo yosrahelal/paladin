@@ -47,7 +47,7 @@ export interface IRegistryEntry {
   }
 }
 
-export interface IPendingTransaction {
+export interface IPaladinTransaction {
   id: string
   created: string
   type: string
@@ -59,4 +59,11 @@ export interface IPendingTransaction {
   data: {
     [key: string]: string
   }
+}
+
+export interface ITransactionReceipt {
+  blockNumber: number
+  id: string
+  success: boolean
+  transactionHash: string
 }

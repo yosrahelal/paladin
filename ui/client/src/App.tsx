@@ -25,7 +25,7 @@ import { useEffect, useState } from "react";
 import { constants, getLatestBlockWithTransactions } from "./utils";
 import { Registries } from "./views/Registries";
 import { ErrorDialog } from "./dialogs/Error";
-import { PendingTransactions } from "./views/PendingTransactions";
+import { Submissions } from "./views/Submissions";
 
 function App() {
 
@@ -60,7 +60,7 @@ function App() {
           <Header />
           <Routes>
             <Route path="/indexer" element={<Indexer />} />
-            <Route path="/submissions" element={<PendingTransactions />} />\
+            <Route path="/submissions" element={<Submissions />} />\
             <Route path="/registry" element={<Registries />} />
             <Route path="*" element={<Navigate to="/indexer" replace />} />
           </Routes>

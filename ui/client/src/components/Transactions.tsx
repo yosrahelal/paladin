@@ -17,7 +17,7 @@
 import { Box, Typography } from "@mui/material";
 import { t } from "i18next";
 import { useContext, useEffect, useState } from "react";
-import { ITransaction } from "../interfaces";
+import { IPaladinTransaction, ITransaction, ITransactionReceipt } from "../interfaces";
 import { Transaction } from "./Transaction";
 import { ApplicationContext } from "../Context";
 import { constants } from "../utils";
@@ -26,6 +26,8 @@ export const Transactions: React.FC = () => {
 
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
   const [transactions, setTransactions] = useState<ITransaction[]>();
+  const [transactionReceipts, setTransactionReceipts] = useState<ITransactionReceipt[]>();
+  const [paladinTransactions, setPaladinTransactions] = useState<IPaladinTransaction[]>();
 
   useEffect(() => {
     let requestPayload = {
@@ -46,12 +48,79 @@ export const Transactions: React.FC = () => {
     });
   }, [lastBlockWithTransactions]);
 
+  useEffect(() => {
+    if (transactions !== undefined) {
+      let requestPayload = {
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'ptx_queryTransactionReceipts',
+        params: [{
+          limit: constants.TRANSACTION_QUERY_LIMIT, in: [
+            {
+              field: 'transactionHash',
+              values: transactions.map(transaction => transaction.hash.substring(2))
+            }
+          ]
+        }]
+      };
+      fetch('/json-rpc', {
+        method: 'post',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestPayload)
+      }).then(async response => {
+        setTransactionReceipts((await response.json()).result);
+      });
+    }
+  }, [transactions]);
+
+  useEffect(() => {
+    if (transactionReceipts !== undefined) {
+      let requestPayload = {
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'ptx_queryTransactionsFull',
+        params: [{
+          limit: constants.TRANSACTION_QUERY_LIMIT, in: [
+            {
+              field: 'id',
+              values: transactionReceipts.map(transaction => transaction.id)
+            }
+          ]
+        }]
+      };
+      fetch('/json-rpc', {
+        method: 'post',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestPayload)
+      }).then(async response => {
+        setPaladinTransactions((await response.json()).result);
+      });
+    }
+  }, [transactionReceipts]);
+
+  if(paladinTransactions === undefined) {
+    return <></>
+  }
+
   return (
     <>
       <Typography align="center" sx={{ fontSize: '24px', fontWeight: 500 }}>{t('transactions')}</Typography>
-      <Box sx={{  height: 'calc(100vh - 162px)', overflow: 'scroll', padding: '20px' }}>
+      <Box sx={{ height: 'calc(100vh - 162px)', overflow: 'scroll', padding: '20px' }}>
         {transactions?.map(transaction =>
-          <Transaction key={transaction.hash} transaction={transaction} />
+          <Transaction
+            key={transaction.hash}
+            transaction={transaction}
+            transactionReceipt={transactionReceipts?.find(transactionReceipt => transactionReceipt.transactionHash === transaction.hash)}
+            paladinTransaction={paladinTransactions?.find(paladinTransaction => paladinTransaction.id ===
+              transactionReceipts?.find(transactionReceipt => transactionReceipt.transactionHash === transaction.hash)?.id
+            )}
+          />
         )}
       </Box>
     </>

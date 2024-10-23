@@ -15,23 +15,37 @@
 // limitations under the License.
 
 import { AppBar, Box, Grid2, Tab, Tabs, Toolbar, Typography } from "@mui/material";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 export const Header: React.FC = () => {
 
-  const [tab, setTab] = useState(0);
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const pathname = useLocation().pathname.toLowerCase();
 
-  useEffect(() => {
+  const getTabFromPath = (path: string) => {
+    if (path.startsWith('/indexer')) {
+      return 0;
+    } else if (path.startsWith('/submissions')) {
+      return 1;
+    } else if (path.startsWith('/registry')) {
+      return 2;
+    }
+    return 0;
+  };
+
+  const [tab, setTab] = useState(getTabFromPath(pathname));
+
+  const handleNavigation = (tab: number) => {
+    setTab(tab);
     switch (tab) {
       case 0: navigate('/indexer'); break;
       case 1: navigate('/submissions'); break;
       case 2: navigate('/registry'); break;
     }
-  }, [tab]);
+  };
 
   return (
     <>
@@ -42,7 +56,7 @@ export const Header: React.FC = () => {
               <Typography variant="h6">{t('paladin')}</Typography>
             </Grid2>
             <Grid2>
-              <Tabs value={tab} onChange={(_event, value) => setTab(value)} textColor="inherit"
+              <Tabs value={tab} onChange={(_event, value) => handleNavigation(value)} textColor="inherit"
                 TabIndicatorProps={{
                   style: {
                     backgroundColor: 'white'

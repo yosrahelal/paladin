@@ -14,14 +14,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { IPendingTransaction } from "../interfaces";
+import { IPaladinTransaction } from "../interfaces";
 import { t } from "i18next";
 import { Hash } from "./Hash";
 import { Box, Grid2, TextField, Typography } from "@mui/material";
 import { Timestamp } from "./Timestamp";
 
 type Props = {
-  pendingTransaction: IPendingTransaction
+  pendingTransaction: IPaladinTransaction
 };
 
 export const PendingTransaction: React.FC<Props> = ({ pendingTransaction }) => {
@@ -54,7 +54,8 @@ export const PendingTransaction: React.FC<Props> = ({ pendingTransaction }) => {
             <Typography align="center" variant="body2" color="textSecondary">{t('type')}</Typography>
           </Grid2>
           {Object.keys(pendingTransaction.data).filter(property => property !== '$owner').map(property =>
-            <TextField key={property} label={property} disabled maxRows={8} multiline fullWidth size="small" value={pendingTransaction.data[property]} />
+            <TextField key={property} label={property} disabled maxRows={8} multiline fullWidth size="small"
+            value={JSON.stringify(pendingTransaction.data[property])} />
           )}
         </Grid2>
       </Grid2>
