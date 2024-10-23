@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
@@ -31,9 +32,10 @@ type delegationAckOperation struct {
 	DelegationID uuid.UUID `json:"delegation_id"`
 }
 
-func (s *syncPoints) QueueDelegationAck(ctx context.Context, contractAddress tktypes.EthAddress, delegationID uuid.UUID, onCommit func(context.Context), onRollback func(context.Context, error)) {
+func (s *syncPoints) QueueDelegationAck(dCtx components.DomainContext, contractAddress tktypes.EthAddress, delegationID uuid.UUID, onCommit func(context.Context), onRollback func(context.Context, error)) {
 
-	op := s.writer.Queue(ctx, &syncPointOperation{
+	op := s.writer.Queue(dCtx.Ctx(), &syncPointOperation{
+		domainContext:   dCtx,
 		contractAddress: contractAddress,
 		delegationAckOperation: &delegationAckOperation{
 			ID:           uuid.New(),
@@ -41,10 +43,10 @@ func (s *syncPoints) QueueDelegationAck(ctx context.Context, contractAddress tkt
 		},
 	})
 	go func() {
-		if _, err := op.WaitFlushed(ctx); err != nil {
-			onRollback(ctx, err)
+		if _, err := op.WaitFlushed(dCtx.Ctx()); err != nil {
+			onRollback(dCtx.Ctx(), err)
 		} else {
-			onCommit(ctx)
+			onCommit(dCtx.Ctx())
 		}
 	}()
 }

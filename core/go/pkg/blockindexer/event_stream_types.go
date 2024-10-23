@@ -64,6 +64,7 @@ type EventStream struct {
 	Type    tktypes.Enum[EventStreamType] `json:"type"`
 	Config  EventStreamConfig             `json:"config"         gorm:"type:bytes;serializer:json"`
 	Sources EventSources                  `json:"sources"        gorm:"serializer:json"` // immutable (event delivery behavior would be too undefined with mutability)
+	Format  tktypes.JSONFormatOptions     `json:"format"`
 }
 
 type EventSources []EventStreamSource
@@ -111,24 +112,11 @@ type EventStreamSignature struct {
 	SignatureHash tktypes.Bytes32 `json:"signatureHash"          gorm:"primaryKey"`
 }
 
-type EventWithData struct {
-	*pldapi.IndexedEvent
-
-	// SoliditySignature allows a deterministic comparison to which ABI to use in the runtime,
-	// when both the blockindexer and consuming code are using the same version of firefly-signer.
-	// Includes variable names, including deep within nested structure.
-	// Things like whitespace etc. subject to change (so should not stored for later comparison)
-	SoliditySignature string `json:"soliditySignature"`
-
-	Address tktypes.EthAddress `json:"address"`
-	Data    tktypes.RawJSON    `json:"data"`
-}
-
 type EventDeliveryBatch struct {
-	StreamID   uuid.UUID        `json:"streamId"`
-	StreamName string           `json:"streamName"`
-	BatchID    uuid.UUID        `json:"batchId"`
-	Events     []*EventWithData `json:"events"`
+	StreamID   uuid.UUID               `json:"streamId"`
+	StreamName string                  `json:"streamName"`
+	BatchID    uuid.UUID               `json:"batchId"`
+	Events     []*pldapi.EventWithData `json:"events"`
 }
 
 // Post commit callback is invoked after the DB transaction completes (only on success)

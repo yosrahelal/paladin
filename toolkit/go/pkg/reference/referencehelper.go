@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"unicode"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
@@ -30,24 +29,27 @@ func shouldFilter(t reflect.Type) bool {
 	return t == reflect.TypeOf((*context.Context)(nil)).Elem() ||
 		t == reflect.TypeOf((*error)(nil)).Elem()
 }
-func generateEnumList(f reflect.StructField) string {
-	enumName := f.Tag.Get("docenum")
-	enumOptions := []string{enumName} // FIXME: Get the actual list of enum options
-	buff := new(strings.Builder)
-	buff.WriteString("`enum`:")
-	for _, v := range enumOptions {
-		buff.WriteString(fmt.Sprintf("<br/>`\"%s\"`", v))
-	}
-	return buff.String()
+
+func isEnum(f reflect.Type) bool {
+	return f.PkgPath() == "github.com/kaleido-io/paladin/toolkit/pkg/tktypes" && strings.HasPrefix(f.Name(), "Enum[")
 }
 
-func toLowerPrefix(s string) string {
-	if s == "" {
-		return s // Return empty string if input is empty
+func generateEnumList(f reflect.Type) string {
+
+	if f.Kind() == reflect.Pointer {
+		f = f.Elem()
 	}
-	r := []rune(s)               // Convert string to runes to handle multi-byte chars
-	r[0] = unicode.ToLower(r[0]) // Convert the first rune to lowercase
-	return string(r)             // Convert runes back to string
+	optionsMethod, _ := f.MethodByName("Options")
+	enumOptions := optionsMethod.Func.Call([]reflect.Value{reflect.New(f).Elem()})[0].Interface().([]string)
+
+	buff := new(strings.Builder)
+	for i, v := range enumOptions {
+		if i > 0 {
+			buff.WriteString(", ")
+		}
+		buff.WriteString(fmt.Sprintf(`"%s"`, v))
+	}
+	return buff.String()
 }
 
 func getRelativePath(depth int) string {

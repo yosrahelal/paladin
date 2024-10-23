@@ -22,25 +22,39 @@ import (
 
 // SmartContractDeploymentSpec defines the desired state of SmartContractDeployment
 type SmartContractDeploymentSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// This CR will wait for the deployment of all contracts in this list, before
+	// parsing the bytecode for deployment. This allows unlinked dependencies
+	// to be linked before deployment.
+	RequiredContractDeployments []string `json:"requiredContractDeployments,omitempty"`
 
+	// The node to use to deploy - reference to a PaladinNode CR
+	Node string `json:"node"`
 	// +kubebuilder:validation:Enum=public;private
 	// +kubebuilder:default=public
 	// Type of transaction to submit to Paladin
 	TxType string `json:"txType"`
-	// The ABI of the smart contract - provides the constructor parameter definition
-	ABI string `json:"abi"`
-	// The bytecode of the smart contract
-	Bytecode string `json:"bytecode"`
-	// The node to use to deploy - reference to a PaladinNode CR
-	DeployNode string `json:"deployNode"`
-	// Reference to the signing key to use to deploy
-	DeployKey string `json:"deployKey"`
 	// Domain for private transactions
 	Domain string `json:"domain,omitempty"`
+	// The ABI of the smart contract - provides the constructor parameter definition
+	ABIJSON string `json:"abiJSON"`
+	// The bytecode of the smart contract
+	Bytecode string `json:"bytecode"`
+	// Reference to the signing key to use to deploy
+	From string `json:"from"`
 	// JSON parameter data (array, object, or empty if no params)
 	ParamsJSON string `json:"paramsJSON,omitempty"`
+
+	// Unlinked contracts have list of the references that need to be resolve, alongside the bytecode
+	LinkReferencesJSON string `json:"linkReferencesJSON,omitempty"`
+	// If the bytecode is unlinked, then this map will be used to resolve the dependencies.
+	// The keys in the map are the library name, which can be optionally fully qualified
+	// with the syntax FileName.sol:LibName. An entry must be provided for every
+	// unlinked dependency, or the CR will not perform a deployment.
+	//
+	// The values are evaluated as go templates, with access to the CR.
+	// So you can refer to .status.resolvedContractAddresses in the values via go templating.
+	// See https://docs.soliditylang.org/en/latest/using-the-compiler.html#library-linking for detail
+	LinkedContracts map[string]string `json:"linkedContracts,omitempty"`
 }
 
 type TransactionStatus string
@@ -61,16 +75,23 @@ type TransactionSubmission struct {
 	TransactionHash   string            `json:"transactionHash,omitempty"`
 }
 
+type ContactDependenciesStatus struct {
+	ContractDepsSummary       string            `json:"contractDepsSummary,omitempty"`
+	ResolvedContractAddresses map[string]string `json:"resolvedContractAddresses,omitempty"`
+}
+
 // SmartContractDeploymentStatus defines the observed state of SmartContractDeployment
 type SmartContractDeploymentStatus struct {
-	TransactionSubmission `json:",inline"`
-	ContractAddress       string `json:"contractAddress,omitempty"`
+	ContactDependenciesStatus `json:",inline"`
+	TransactionSubmission     `json:",inline"`
+	ContractAddress           string `json:"contractAddress,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:resource:shortName="scd"
 //+kubebuilder:printcolumn:name="Status",type="string",JSONPath=`.status.transactionStatus`
+//+kubebuilder:printcolumn:name="Deps",type="string",JSONPath=`.status.contractDepsSummary`
 //+kubebuilder:printcolumn:name="TransactionID",type="string",JSONPath=`.status.transactionID`
 //+kubebuilder:printcolumn:name="Contract",type="string",JSONPath=`.status.contractAddress`
 //+kubebuilder:printcolumn:name="TxHash",type="string",JSONPath=`.status.transactionHash`

@@ -47,15 +47,17 @@ var (
 	MsgTypesInvalidDBInt64                = ffe("PD020011", "Integer too large for storage in a signed int64 database column: %s")
 	MsgTypesInvalidDBInt256               = ffe("PD020012", "Integer incorrectly serialized to the database for a int256: %s")
 	MsgTypesInvalidDBUint256              = ffe("PD020013", "Integer incorrectly serialized to the database for a uint256: %s")
+	MsgTypesInvalidJSONFormatOptions      = ffe("PD020014", "The JSON formatting options must be a valid set of key=value pairs in URL query string format '%s'")
+	MsgTypesUnknownJSONFormatOptions      = ffe("PD020015", "JSON formatting option unknown %s=%s")
 
 	// Inflight PD0201XX
 	MsgInflightRequestCancelled = ffe("PD020100", "Request cancelled after %s")
 
 	// PldClient module PD0202XX
-	MsgPaladinClientInvalidInput      = ffe("PD020200", "Unable to convert to ABI function input (func=%s)")
+	MsgPaladinClientInvalidInput      = ffe("PD020200", "Unable to convert to ABI function input (%s)")
 	MsgPaladinClientMissingFrom       = ffe("PD020201", "From (signing key identifier) missing")
-	MsgPaladinClientMissingTo         = ffe("PD020202", "To missing")
-	MsgPaladinClientMissingInput      = ffe("PD020203", "Input missing")
+	MsgPaladinClientMissingTo         = ffe("PD020202", "To address missing for function '%s'")
+	MsgPaladinClientMissingInput      = ffe("PD020203", "Input missing for %s")
 	MsgPaladinClientMissingOutput     = ffe("PD020204", "Output missing")
 	MsgPaladinClientBytecodeWithPriv  = ffe("PD020205", "Bytecode cannot be specified with a private contract deployment")
 	MsgPaladinClientBytecodeMissing   = ffe("PD020206", "Bytecode required to deploy a public smart contract")
@@ -65,6 +67,10 @@ var (
 	MsgPaladinClientNoConnection      = ffe("PD020210", "No JSON/RPC connection is available to this client")
 	MsgPaladinClientMissingType       = ffe("PD020211", "Type missing (public or private)")
 	MsgPaladinClientNoFailureMsg      = ffe("PD020212", "No failure message available")
+	MsgPaladinClientNoABISupplied     = ffe("PD020213", "No ABI supplied")
+	MsgPaladinClientNoDomain          = ffe("PD020214", "No domain specified for private transaction")
+	MsgPaladinClientNoFunction        = ffe("PD020215", "No function specified")
+	MsgPaladinClientPollTimedOut      = ffe("PD020216", "Polling timed out after %d attempts in %s")
 
 	// Plugin PD0203XX
 	MsgPluginUnsupportedRequest   = ffe("PD020300", "Unsupported request %T")
@@ -93,12 +99,12 @@ var (
 	// JSON/RPC PD0207XX
 	MsgJSONRPCInvalidRequest      = ffe("PD020700", "Invalid JSON/RPC request data")
 	MsgJSONRPCMissingRequestID    = ffe("PD020701", "Invalid JSON/RPC request. Must set request ID")
-	MsgJSONRPCUnsupportedMethod   = ffe("PD020702", "method not supported")
+	MsgJSONRPCUnsupportedMethod   = ffe("PD020702", "method not supported %s")
 	MsgJSONRPCIncorrectParamCount = ffe("PD020703", "method %s requires %d params (supplied=%d)")
 	MsgJSONRPCInvalidParam        = ffe("PD020704", "method %s parameter %d invalid: %s")
 	MsgJSONRPCResultSerialization = ffe("PD020705", "method %s result serialization failed: %s")
 
-	// Signing module PD020800
+	// Signing module PD0208XX
 	MsgSigningModuleBadPathError                = ffe("PD020800", "Path '%s' does not exist, or it is not a directory")
 	MsgSigningModuleBadKeyFile                  = ffe("PD020801", "Key file '%s' does not exist")
 	MsgSigningModuleBadPassFile                 = ffe("PD020802", "Password file '%s' does not exist")
@@ -131,4 +137,8 @@ var (
 	// Reference markdown PD0209XX
 	MsgReferenceMarkdownMissing = ffe("PD020900", "Reference markdown file missing: '%s'")
 	MsgFieldDescriptionMissing  = ffe("PD020901", "Missing description for field '%s' in struct '%s'")
+
+	// SolUtils module PD0210XX
+	MsgSolBuildParseFailed = ffe("PD021000", "Invalid link hash at position %d in bytecode. Fully qualified lib name: %s. Placeholder: %s. Lib name hash prefix: %s")
+	MsgSolBuildMissingLink = ffe("PD021001", "The solidity build is unlinked and requires an address for '%s'")
 )

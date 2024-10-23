@@ -28,11 +28,11 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
 	"github.com/kaleido-io/paladin/domains/noto/pkg/types"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
-	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 	"github.com/stretchr/testify/assert"
@@ -71,7 +71,7 @@ func deployContracts(ctx context.Context, t *testing.T, hdWalletSeed *testbed.UT
 
 	deployed := make(map[string]string, len(contracts))
 	for name, contract := range contracts {
-		build := domain.LoadBuild(contract)
+		build := solutils.MustLoadBuild(contract)
 		var addr string
 		rpcerr := rpc.CallRPC(ctx, &addr, "testbed_deployBytecode",
 			notaryName, build.ABI, build.Bytecode.String(), tktypes.RawJSON(`{}`))
@@ -108,7 +108,7 @@ func findAvailableCoins(t *testing.T, ctx context.Context, rpc rpcbackend.Backen
 		jq = query.NewQueryBuilder().Limit(100).Query()
 	}
 	var notoCoins []*types.NotoCoinState
-	rpcerr := rpc.CallRPC(ctx, &notoCoins, "pstate_queryStates",
+	rpcerr := rpc.CallRPC(ctx, &notoCoins, "pstate_queryContractStates",
 		noto.name,
 		address,
 		noto.coinSchema.Id,
@@ -401,7 +401,7 @@ func TestNotoSelfSubmit(t *testing.T) {
 	recipient2Key, err := tb.ResolveKey(ctx, recipient2Name, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
 	require.NoError(t, err)
 
-	notoFactory := domain.LoadBuild(notoFactoryJSON)
+	notoFactory := solutils.MustLoadBuild(notoFactoryJSON)
 	_, err = tb.ExecTransactionSync(ctx, &pldapi.TransactionInput{
 		Transaction: pldapi.Transaction{
 			Type:     pldapi.TransactionTypePublic.Enum(),
@@ -418,24 +418,31 @@ func TestNotoSelfSubmit(t *testing.T) {
 	require.NoError(t, err)
 
 	var callResult map[string]any
-	err = tb.ExecBaseLedgerCall(ctx, &callResult, &pldapi.TransactionInput{
-		Transaction: pldapi.Transaction{
-			Type:     pldapi.TransactionTypePublic.Enum(),
-			To:       factoryAddress,
-			Function: "getImplementation",
-			From:     notaryName,
-			Data: tktypes.JSONString(map[string]any{
-				"name": "selfsubmit",
-			}),
+	rpcerr := rpc.CallRPC(ctx, &callResult, "ptx_call", &pldapi.TransactionCall{
+		TransactionInput: pldapi.TransactionInput{
+			Transaction: pldapi.Transaction{
+				Type:     pldapi.TransactionTypePublic.Enum(),
+				To:       factoryAddress,
+				Function: "getImplementation",
+				From:     notaryName,
+				Data: tktypes.JSONString(map[string]any{
+					"name": "selfsubmit",
+				}),
+			},
+			ABI: notoFactory.ABI,
 		},
-		ABI: notoFactory.ABI,
+		PublicCallOptions: pldapi.PublicCallOptions{
+			Block: "latest",
+		},
 	})
-	require.NoError(t, err)
+	if rpcerr != nil {
+		require.NoError(t, rpcerr.Error())
+	}
 	require.NotEmpty(t, callResult["implementation"])
 
 	log.L(ctx).Infof("Deploying an instance of Noto")
 	var notoAddress tktypes.EthAddress
-	rpcerr := rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
+	rpcerr = rpc.CallRPC(ctx, &notoAddress, "testbed_deploy",
 		domainName, &types.ConstructorParams{
 			Notary:         notaryName,
 			Implementation: "selfsubmit",

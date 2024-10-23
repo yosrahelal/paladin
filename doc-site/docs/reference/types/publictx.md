@@ -19,14 +19,14 @@ title: PublicTx
 | Field Name | Description | Type |
 |------------|-------------|------|
 | `to` | The target contract address (optional) | [`EthAddress`](simpletypes.md#ethaddress) |
-| `data` | The pre-encoded calldata (optional) | `uint8[]` |
+| `data` | The pre-encoded calldata (optional) | [`HexBytes`](simpletypes.md#hexbytes) |
 | `from` | The sender's Ethereum address | [`EthAddress`](simpletypes.md#ethaddress) |
 | `nonce` | The transaction nonce | [`HexUint64`](simpletypes.md#hexuint64) |
 | `created` | The creation time | [`Timestamp`](simpletypes.md#timestamp) |
 | `completedAt` | The completion time (optional) | [`Timestamp`](simpletypes.md#timestamp) |
 | `transactionHash` | The transaction hash (optional) | [`Bytes32`](simpletypes.md#bytes32) |
 | `success` | The transaction success status (optional) | `bool` |
-| `revertData` | The revert data (optional) | `uint8[]` |
+| `revertData` | The revert data (optional) | [`HexBytes`](simpletypes.md#hexbytes) |
 | `submissions` | The submission data (optional) | [`PublicTxSubmissionData[]`](#publictxsubmissiondata) |
 | `activity` | The transaction activity records (optional) | [`TransactionActivityRecord[]`](#transactionactivityrecord) |
 | `gas` | The gas limit for the transaction (optional) | [`HexUint64`](simpletypes.md#hexuint64) |

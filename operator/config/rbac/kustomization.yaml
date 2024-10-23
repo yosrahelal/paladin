@@ -20,6 +20,8 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the Project itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- transactioninvoke_editor_role.yaml
+- transactioninvoke_viewer_role.yaml
 - paladinregistration_editor_role.yaml
 - paladinregistration_viewer_role.yaml
 - paladindomain_editor_role.yaml

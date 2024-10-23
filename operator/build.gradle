@@ -19,10 +19,15 @@ configurations {
         canBeConsumed = false
         canBeResolved = true
     }
+    zetoArtifacts {
+        canBeConsumed = false
+        canBeResolved = true
+    }
 }
 
 dependencies {
     contractCompile project(path: ":solidity", configuration: "compiledContracts")
+    zetoArtifacts project(path: ":domains:zeto", configuration: "zetoArtifacts")
 }
 
 ext {
@@ -69,18 +74,6 @@ def verifyResourceReady(String namespace, String resourceType, String resourceNa
     printClusterStatus(namespace)
 }
 
-task registryContractDeployCRSample(type: Exec) {
-    commandLine "go", "run", "./contractpkg", "test/e2e/abis/IdentityRegistry.json", "registry"
-}
-
-task penteContractDeployCRSample(type: Exec) {
-    commandLine "go", "run", "./contractpkg", "test/e2e/abis/PenteFactory.json", "pente"
-}
-
-task notoContractDeployCRSample(type: Exec) {
-    commandLine "go", "run", "./contractpkg", "test/e2e/abis/NotoFactory.json", "noto"
-}
-
 task copySolidity(type: Copy) {
     inputs.files(configurations.contractCompile)
     from fileTree(configurations.contractCompile.asPath) {
@@ -93,12 +86,24 @@ task copySolidity(type: Copy) {
     // Flatten all paths into the destination folder
     eachFile { path = name }
     includeEmptyDirs = false
+}
 
-    finalizedBy [
-        registryContractDeployCRSample,
-        penteContractDeployCRSample,
-        notoContractDeployCRSample,
-    ]
+task copyZetoSolidity(type: Copy) {
+    inputs.files(configurations.zetoArtifacts)
+    from fileTree(configurations.zetoArtifacts.asPath) {
+        include 'artifacts/contracts/**/*.json'
+        include 'artifacts/@iden3/contracts/**/*.json'
+        exclude '**/*.dbg.json'
+    }
+    into 'test/e2e/abis/zeto'
+
+    // Flatten all paths into the destination folder
+    eachFile { path = name }
+    includeEmptyDirs = false
+}
+
+task buildContractSamples(type: Exec, dependsOn: [copySolidity,copyZetoSolidity]) {
+    commandLine "go", "run", "./contractpkg", "./contractpkg/contract_map.json"
 }
 
 // Task to build the Paladin image from the parent project
@@ -189,14 +194,14 @@ task createNode(type: Exec, dependsOn: verifyOperator) {
 // }
 
 // The 'deplay' runs the whole flow
-task deploy(dependsOn: [copySolidity, createNode]) {
+task deploy(dependsOn: [copySolidity, copyZetoSolidity, createNode]) {
     doLast {
         println 'Deplopy setup completed. Operator is running in the paladin namespace.'
     }
 }
 
 // The 'e2e' task runs the whole flow
-task e2e(type: Exec, dependsOn: [copySolidity, deploy]) {
+task e2e(type: Exec, dependsOn: [buildContractSamples, deploy]) {
     executable 'make'
     args 'test-e2e'
     args "NAMESPACE=${namespace}"
@@ -218,7 +223,7 @@ task clean {
 }
 
 // Existing 'make' task
-task make(type: Exec, dependsOn: [copySolidity]) {
+task make(type: Exec) {
     executable 'make'
 }
 

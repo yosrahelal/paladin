@@ -106,7 +106,7 @@ func (r *PaladinRegistrationReconciler) Reconcile(ctx context.Context, req ctrl.
 	err = regTx.reconcile(ctx)
 	if err != nil {
 		// There's nothing to notify us when the world changes other than polling, so we keep re-trying
-		return ctrl.Result{RequeueAfter: 1 * time.Second}, err
+		return ctrl.Result{}, err
 	} else if regTx.statusChanged {
 		if reg.Status.PublishTxs == nil {
 			reg.Status.PublishTxs = map[string]corev1alpha1.TransactionSubmission{}
@@ -133,7 +133,7 @@ func (r *PaladinRegistrationReconciler) Reconcile(ctx context.Context, req ctrl.
 		err := regTx.reconcile(ctx)
 		if err != nil {
 			// There's nothing to notify us when the world changes other than polling, so we keep re-trying
-			return ctrl.Result{RequeueAfter: 1 * time.Second}, err
+			return ctrl.Result{}, err
 		} else if regTx.statusChanged {
 			reg.Status.PublishTxs[transportName] = transportPublishStatus
 			return r.updateStatusAndRequeue(ctx, &reg, publishCount)
@@ -153,7 +153,7 @@ func (r *PaladinRegistrationReconciler) updateStatusAndRequeue(ctx context.Conte
 	reg.Status.PublishCount = publishCount
 	if err := r.Status().Update(ctx, reg); err != nil {
 		log.FromContext(ctx).Error(err, "Failed to update Paladin registration status")
-		return ctrl.Result{RequeueAfter: 100 * time.Millisecond}, err
+		return ctrl.Result{}, err
 	}
 	return ctrl.Result{Requeue: true}, nil // Run again immediately to submit
 }

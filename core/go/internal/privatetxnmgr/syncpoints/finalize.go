@@ -37,6 +37,7 @@ type finalizeOperation struct {
 func (s *syncPoints) QueueTransactionFinalize(ctx context.Context, contractAddress tktypes.EthAddress, transactionID uuid.UUID, failureMessage string, onCommit func(context.Context), onRollback func(context.Context, error)) {
 
 	op := s.writer.Queue(ctx, &syncPointOperation{
+		domainContext:   nil, // finalize does not depend on the flushing of any states
 		contractAddress: contractAddress,
 		finalizeOperation: &finalizeOperation{
 			TransactionID:  transactionID,

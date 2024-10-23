@@ -19,6 +19,7 @@ package blockindexer
 import (
 	"context"
 
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcserver"
@@ -39,7 +40,8 @@ func (bi *blockIndexer) initRPC() {
 		Add("bidx_queryIndexedBlocks", bi.rpcQueryIndexedBlocks()).
 		Add("bidx_queryIndexedTransactions", bi.rpcQueryIndexedTransactions()).
 		Add("bidx_queryIndexedEvents", bi.rpcQueryIndexedEvents()).
-		Add("bidx_getConfirmedBlockHeight", bi.rpcGetConfirmedBlockHeight())
+		Add("bidx_getConfirmedBlockHeight", bi.rpcGetConfirmedBlockHeight()).
+		Add("bidx_decodeTransactionEvents", bi.rpcDecodeTransactionEvents())
 }
 
 func (bi *blockIndexer) rpcGetBlockByNumber() rpcserver.RPCHandler {
@@ -111,5 +113,15 @@ func (bi *blockIndexer) rpcQueryIndexedEvents() rpcserver.RPCHandler {
 		jq query.QueryJSON,
 	) ([]*pldapi.IndexedEvent, error) {
 		return bi.QueryIndexedEvents(ctx, &jq)
+	})
+}
+
+func (bi *blockIndexer) rpcDecodeTransactionEvents() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod3(func(ctx context.Context,
+		hash tktypes.Bytes32,
+		abi abi.ABI,
+		resultFormat tktypes.JSONFormatOptions,
+	) ([]*pldapi.EventWithData, error) {
+		return bi.DecodeTransactionEvents(ctx, hash, abi, resultFormat)
 	})
 }

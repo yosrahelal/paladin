@@ -64,6 +64,13 @@ type TransactionInput struct {
 	Bytecode  tktypes.HexBytes `docstruct:"TransactionInput" json:"bytecode,omitempty"`  // for deploy this is prepended to the encoded data inputs
 }
 
+// Call also provides some options on how to execute the call
+type TransactionCall struct {
+	TransactionInput
+	PublicCallOptions
+	DataFormat tktypes.JSONFormatOptions `docstruct:"TransactionCall" json:"dataFormat"` // formatting options for the result data
+}
+
 // Additional fields returned on output when "full" specified
 type TransactionFull struct {
 	*Transaction

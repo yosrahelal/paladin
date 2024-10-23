@@ -36,6 +36,7 @@ import (
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
@@ -283,11 +284,11 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 		return nil, i18n.WrapError(ctx, err, msgs.MsgDomainInvalidSchemaID, req.SchemaId)
 	}
 
-	var states []*components.State
+	var states []*pldapi.State
 	if req.UseNullifiers != nil && *req.UseNullifiers {
-		_, states, err = c.dCtx.FindAvailableNullifiers(schemaID, &query)
+		_, states, err = c.dCtx.FindAvailableNullifiers(c.dbTX, schemaID, &query)
 	} else {
-		_, states, err = c.dCtx.FindAvailableStates(schemaID, &query)
+		_, states, err = c.dCtx.FindAvailableStates(c.dbTX, schemaID, &query)
 	}
 	if err != nil {
 		return nil, err
@@ -296,11 +297,11 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 	pbStates := make([]*prototk.StoredState, len(states))
 	for i, s := range states {
 		pbStates[i] = &prototk.StoredState{
-			Id:       s.ID.String(),
-			SchemaId: s.Schema.String(),
-			StoredAt: s.Created.UnixNano(),
-			DataJson: string(s.Data),
-			Locks:    []*prototk.StateLock{},
+			Id:        s.ID.String(),
+			SchemaId:  s.Schema.String(),
+			CreatedAt: s.Created.UnixNano(),
+			DataJson:  string(s.Data),
+			Locks:     []*prototk.StateLock{},
 		}
 		for _, l := range s.Locks {
 			pbStates[i].Locks = append(pbStates[i].Locks, &prototk.StateLock{
@@ -315,13 +316,13 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 
 }
 
-func mapStateLockType(t components.StateLockType) prototk.StateLock_StateLockType {
+func mapStateLockType(t pldapi.StateLockType) prototk.StateLock_StateLockType {
 	switch t {
-	case components.StateLockTypeCreate:
+	case pldapi.StateLockTypeCreate:
 		return prototk.StateLock_CREATE
-	case components.StateLockTypeSpend:
+	case pldapi.StateLockTypeSpend:
 		return prototk.StateLock_SPEND
-	case components.StateLockTypeRead:
+	case pldapi.StateLockTypeRead:
 		return prototk.StateLock_READ
 	default:
 		// Unit test covers all valid types and we only use this in fully controlled code

@@ -275,7 +275,11 @@ func testCallGetWidgetsOk(t *testing.T, withFrom, withBlock, withBlockRef bool) 
 	testABI = ecf.HTTPClient().MustABIJSON(testABIJSON)
 	getWidgetsReq := testABI.MustFunction("getWidgets").R(ctx).
 		To(fakeContractAddr).
-		Input(`{"sku": 1122334455}`)
+		Input(`{"sku": 1122334455}`).
+		Serializer(abi.NewSerializer().
+			SetFormattingMode(abi.FormatAsFlatArrays).
+			SetByteSerializer(abi.HexByteSerializer0xPrefix),
+		)
 	if withFrom {
 		getWidgetsReq.
 			Signer("key1")
@@ -287,15 +291,15 @@ func testCallGetWidgetsOk(t *testing.T, withFrom, withBlock, withBlockRef bool) 
 	}
 	res, err := getWidgetsReq.CallResult()
 	require.NoError(t, err)
-	assert.JSONEq(t, `{
-		"0": [
-			{
-				"id":       "0xfd33700f0511abb60ff31a8a533854db90b0a32a",
-				"sku":      "1122334455",
-				"features": ["shiny", "spinny"]
-			}
+	assert.JSONEq(t, `[
+		[
+			[
+				"0xfd33700f0511abb60ff31a8a533854db90b0a32a",
+				"1122334455",
+				["shiny", "spinny"]
+			]
 		]
-	}`, res.JSON())
+	]`, res.JSON())
 
 	var getWidgetsRes getWidgetsOutput
 	err = getWidgetsReq.
@@ -426,6 +430,41 @@ func TestCallFunctionFail(t *testing.T) {
 
 	_, err := getWidgets.R(ctx).Input(`{"sku":12345}`).To(to).CallResult()
 	assert.Regexp(t, "pop", err)
+}
+
+func TestCallFunctionNoResolveEmptyResult(t *testing.T) {
+	ctx, ecf, done := newTestClientAndServer(t, &mockEth{
+		eth_call: func(ctx context.Context, t ethsigner.Transaction, s string) (tktypes.HexBytes, error) {
+			return nil, nil
+		},
+	})
+	defer done()
+	ec := ecf.HTTPClient().(*ethClient)
+	ec.keymgr = nil
+	getWidgets := ec.MustABIJSON(testABIJSON).MustFunction("newWidget") // no return value
+
+	to := ethtypes.MustNewAddress("0xD9E54Ba3F1419e6AC71A795d819fdBAE883A6575")
+
+	res, err := getWidgets.R(ctx).Input(`[["0xD9E54Ba3F1419e6AC71A795d819fdBAE883A6575",123,[]]]`).Signer("0xD9E54Ba3F1419e6AC71A795d819fdBAE883A6575").To(to).CallResult()
+	assert.NoError(t, err)
+	assert.Equal(t, `{}`, res.JSON())
+}
+
+func TestCallFunctionNoResolveBadAddr(t *testing.T) {
+	ctx, ecf, done := newTestClientAndServer(t, &mockEth{
+		eth_call: func(ctx context.Context, t ethsigner.Transaction, s string) (tktypes.HexBytes, error) {
+			return nil, nil
+		},
+	})
+	defer done()
+	ec := ecf.HTTPClient().(*ethClient)
+	ec.keymgr = nil
+	getWidgets := ec.MustABIJSON(testABIJSON).MustFunction("newWidget") // no return value
+
+	to := ethtypes.MustNewAddress("0xD9E54Ba3F1419e6AC71A795d819fdBAE883A6575")
+
+	_, err := getWidgets.R(ctx).Input(`[["0xD9E54Ba3F1419e6AC71A795d819fdBAE883A6575",123,[]]]`).Signer("not.an.address").To(to).CallResult()
+	assert.Regexp(t, "bad address", err)
 }
 
 func TestSignAndSendMissingFrom(t *testing.T) {

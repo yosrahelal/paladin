@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
@@ -134,8 +135,8 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 		return nil, err
 	}
 
-	factory := domain.LoadBuild(notoFactoryJSON)
-	contract := domain.LoadBuild(notoInterfaceJSON)
+	factory := solutils.MustLoadBuild(notoFactoryJSON)
+	contract := solutils.MustLoadBuild(notoInterfaceJSON)
 
 	n.name = req.Name
 	n.chainID = req.ChainId
@@ -490,5 +491,13 @@ func (n *Noto) GetVerifier(ctx context.Context, req *prototk.GetVerifierRequest)
 }
 
 func (n *Noto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
+	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
+}
+
+func (n *Noto) InitCall(ctx context.Context, req *prototk.InitCallRequest) (*prototk.InitCallResponse, error) {
+	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
+}
+
+func (n *Noto) ExecCall(ctx context.Context, req *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }

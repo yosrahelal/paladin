@@ -20,16 +20,33 @@ import (
 	"context"
 	"testing"
 
-	"github.com/alecthomas/assert/v2"
 	"github.com/google/uuid"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
+func newTestDomainContextWithFlush(t *testing.T) (dc *componentmocks.DomainContext, flushResult chan error) {
+	dc = componentmocks.NewDomainContext(t)
+	dc.On("Info").Return(components.DomainContextInfo{
+		ID: uuid.New(),
+	}).Maybe()
+
+	flushResult = make(chan error, 1)
+	dc.On("Flush", mock.Anything).Return(func(err error) {
+		flushResult <- err
+	}, nil)
+	return
+}
 
 func TestRunBatchFinalizeOperations(t *testing.T) {
 	ctx := context.Background()
 	s, m := newSyncPointsForTesting(t)
+
+	dc, flushResult := newTestDomainContextWithFlush(t)
 
 	testRevertReason := "test error"
 	testTxnID := uuid.New()
@@ -37,6 +54,7 @@ func TestRunBatchFinalizeOperations(t *testing.T) {
 	dbTX := m.persistence.P.DB()
 	testSyncPointOperations := []*syncPointOperation{
 		{
+			domainContext:   dc,
 			contractAddress: *testContractAddress,
 			finalizeOperation: &finalizeOperation{
 				TransactionID:  testTxnID,
@@ -56,9 +74,11 @@ func TestRunBatchFinalizeOperations(t *testing.T) {
 
 	m.txMgr.On("FinalizeTransactions", ctx, dbTX, expectedReceipts).Return(nil)
 
-	res, err := s.runBatch(ctx, dbTX, testSyncPointOperations)
+	dbResultCB, res, err := s.runBatch(ctx, dbTX, testSyncPointOperations)
 	assert.NoError(t, err)
 	require.Len(t, res, 1)
+	dbResultCB(nil)
+	require.NoError(t, <-flushResult)
 
 }
 
@@ -68,6 +88,8 @@ func TestRunBatchFinalizeOperationsMixedContractAddresses(t *testing.T) {
 	// so need to make sure we handle this case
 	ctx := context.Background()
 	s, m := newSyncPointsForTesting(t)
+
+	dc, flushResult := newTestDomainContextWithFlush(t)
 
 	testRevertReason1 := "test error1"
 	testRevertReason2a := "test error2a"
@@ -80,6 +102,7 @@ func TestRunBatchFinalizeOperationsMixedContractAddresses(t *testing.T) {
 	dbTX := m.persistence.P.DB()
 	testSyncPointOperations := []*syncPointOperation{
 		{
+			domainContext:   dc,
 			contractAddress: *testContractAddress1,
 			finalizeOperation: &finalizeOperation{
 				TransactionID:  testTxnID1,
@@ -87,6 +110,7 @@ func TestRunBatchFinalizeOperationsMixedContractAddresses(t *testing.T) {
 			},
 		},
 		{
+			domainContext:   dc,
 			contractAddress: *testContractAddress2,
 			finalizeOperation: &finalizeOperation{
 				TransactionID:  testTxnID2a,
@@ -94,6 +118,7 @@ func TestRunBatchFinalizeOperationsMixedContractAddresses(t *testing.T) {
 			},
 		},
 		{
+			domainContext:   dc,
 			contractAddress: *testContractAddress2,
 			finalizeOperation: &finalizeOperation{
 				TransactionID:  testTxnID2b,
@@ -128,8 +153,10 @@ func TestRunBatchFinalizeOperationsMixedContractAddresses(t *testing.T) {
 	m.txMgr.On("FinalizeTransactions", ctx, dbTX, expectedReceipts1).Return(nil)
 	m.txMgr.On("FinalizeTransactions", ctx, dbTX, expectedReceipts2).Return(nil)
 
-	res, err := s.runBatch(ctx, dbTX, testSyncPointOperations)
+	dbResultCB, res, err := s.runBatch(ctx, dbTX, testSyncPointOperations)
 	assert.NoError(t, err)
 	require.Len(t, res, 3)
+	dbResultCB(nil)
+	require.NoError(t, <-flushResult)
 
 }

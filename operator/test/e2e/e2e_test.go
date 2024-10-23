@@ -18,62 +18,124 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	_ "embed"
 
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/operator/test/utils"
-	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/query"
-	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
+	nototypes "github.com/kaleido-io/paladin/domains/noto/pkg/types"
+	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
-//go:embed abis/PenteFactory.json
-var penteFactoryBuild string
+const node1HttpURL = "http://127.0.0.1:31548"
+const node2HttpURL = "http://127.0.0.1:31648"
+const node3HttpURL = "http://127.0.0.1:31748"
 
-//go:embed abis/NotoFactory.json
-var notoFactoryBuild string
+func withTimeout[T any](do func(ctx context.Context) T) T {
+	ctx, cancelCtx := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelCtx()
+	return do(ctx)
+}
 
 var _ = Describe("controller", Ordered, func() {
 	BeforeAll(func() {
+		log.SetLevel("trace")
 	})
 
 	AfterAll(func() {
 	})
 
-	Context("Paladin Single Node", func() {
-		It("start up the node", func() {
-			ctx := context.Background()
+	Context("Noto domain verification", func() {
 
-			rpc, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{
-				URL: "http://127.0.0.1:31548",
-			})
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+		ctx := context.Background()
+		nodes := map[string]pldclient.PaladinClient{}
 
-			By("waiting for Paladin node to be ready") // TODO: We should have the paladin pod ready once this is ready
-			EventuallyWithOffset(1, func() error {
-				var txs []*pldapi.Transaction
-				return rpc.CallRPC(ctx, &txs, "ptx_queryPendingTransactions", query.NewQueryBuilder().Limit(1).Query(), false)
-			}, 5*time.Minute, 5*time.Second).Should(Succeed())
+		connectNode := func(url, name string) {
+			Eventually(func() bool {
+				return withTimeout(func(ctx context.Context) bool {
+					pld, err := pldclient.New().HTTP(ctx, &pldconf.HTTPClientConfig{URL: url})
+					if err == nil {
+						queriedName, err := pld.Transport().NodeName(ctx)
+						Expect(err).To(BeNil())
+						Expect(queriedName).To(Equal(name))
+						nodes[name] = pld
+					}
+					return err == nil
+				})
+			}).Should(BeTrue())
+		}
 
-			deployer := utils.TestDeployer{RPC: rpc, From: "deployerKey"}
+		It("waits to connect to all three nodes", func() {
+			connectNode(node1HttpURL, "node1")
+			connectNode(node2HttpURL, "node2")
+			connectNode(node3HttpURL, "node3")
+		})
 
-			By("deploying the pente factory")
-			_, err = deployer.DeploySmartContractDeploymentBytecode(ctx, penteFactoryBuild, []any{})
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
-			// penteFactoryAddr := receipt.ContractAddress
-			// By("recording pente factory deployed at " + penteFactoryAddr.String())
+		It("checks nodes can talk to each other", func() {
+			for src := range nodes {
+				for dest := range nodes {
+					Eventually(func() bool {
+						return withTimeout(func(ctx context.Context) bool {
+							verifier, err := nodes[src].PTX().ResolveVerifier(ctx, fmt.Sprintf("test@%s", dest),
+								algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+							if err == nil {
+								addr, err := tktypes.ParseEthAddress(verifier)
+								Expect(err).To(BeNil())
+								Expect(addr).ToNot(BeNil())
+							}
+							return err == nil
+						})
+					}).Should(BeTrue())
+				}
+			}
+		})
 
-			By("deploying the noto factory")
-			_, err = deployer.DeploySmartContractDeploymentBytecode(ctx, notoFactoryBuild, []any{})
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
-			// notoFactoryAddr := receipt.ContractAddress
-			// By("recording noto factory deployed at " + notoFactoryAddr.String())
+		const notary = "notary.on@node1"
+		var notoContract *tktypes.EthAddress
 
+		It("deploys a noto", func() {
+			deploy := nodes["node1"].ForABI(ctx, abi.ABI{
+				{Type: abi.Constructor, Inputs: abi.ParameterArray{
+					{Name: "notary", Type: "string"},
+				}},
+			}).
+				Private().
+				Domain("noto").
+				Constructor().
+				Inputs(&nototypes.ConstructorParams{
+					Notary: notary,
+				}).
+				From(notary).
+				Send().
+				Wait(60 * time.Second)
+			Expect(deploy.Error()).To(BeNil())
+			Expect(deploy.Receipt().ContractAddress).ToNot(BeNil())
+			notoContract = deploy.Receipt().ContractAddress
+		})
+
+		It("mints some notos to the notary", func() {
+			deploy := nodes["node1"].ForABI(ctx, nototypes.NotoABI).
+				Private().
+				Domain("noto").
+				Function("mint").
+				To(notoContract).
+				Inputs(&nototypes.MintParams{
+					To:     notary,
+					Amount: tktypes.MustParseHexUint256("123000000000000000000"),
+				}).
+				From(notary).
+				Send().
+				Wait(60 * time.Second) // TODO: Diagnose why this takes so long
+			Expect(deploy.Error()).To(BeNil())
 		})
 	})
 })

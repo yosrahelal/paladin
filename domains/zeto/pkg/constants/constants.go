@@ -16,11 +16,21 @@
 package constants
 
 const (
+	// the base circuits support inputs and outputs up to size 2
 	CIRCUIT_ANON           = "anon"
 	CIRCUIT_ANON_ENC       = "anon_enc"
 	CIRCUIT_ANON_NULLIFIER = "anon_nullifier"
 
+	// the batch circuits support inputs and outputs from size 3 up to size 10
+	CIRCUIT_ANON_BATCH           = "anon_batch"
+	CIRCUIT_ANON_ENC_BATCH       = "anon_enc_batch"
+	CIRCUIT_ANON_NULLIFIER_BATCH = "anon_nullifier_batch"
+
 	TOKEN_ANON           = "Zeto_Anon"
 	TOKEN_ANON_ENC       = "Zeto_AnonEnc"
 	TOKEN_ANON_NULLIFIER = "Zeto_AnonNullifier"
+
+	TOKEN_ANON_BATCH           = "Zeto_AnonBatch"
+	TOKEN_ANON_ENC_BATCH       = "Zeto_AnonEncBatch"
+	TOKEN_ANON_NULLIFIER_BATCH = "Zeto_AnonNullifierBatch"
 )

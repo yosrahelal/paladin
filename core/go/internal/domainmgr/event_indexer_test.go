@@ -60,13 +60,13 @@ func TestEventIndexingWithDB(t *testing.T) {
 
 	// Index an event indicating deployment of a new smart contract instance
 	var batchTxs []*components.ReceiptInput
-	var unprocessedEvents []*blockindexer.EventWithData
+	var unprocessedEvents []*pldapi.EventWithData
 	err := dm.persistence.DB().Transaction(func(tx *gorm.DB) (err error) {
 		unprocessedEvents, batchTxs, err = dm.registrationIndexer(ctx, tx, &blockindexer.EventDeliveryBatch{
 			StreamID:   uuid.New(),
 			StreamName: "name_given_by_component_mgr",
 			BatchID:    uuid.New(),
-			Events: []*blockindexer.EventWithData{
+			Events: []*pldapi.EventWithData{
 				{
 					SoliditySignature: eventSolSig_PaladinRegisterSmartContract_V0,
 					Address:           (tktypes.EthAddress)(*tp.d.RegistryAddress()),
@@ -125,7 +125,7 @@ func TestEventIndexingBadEvent(t *testing.T) {
 			StreamID:   uuid.New(),
 			StreamName: "name_given_by_component_mgr",
 			BatchID:    uuid.New(),
-			Events: []*blockindexer.EventWithData{
+			Events: []*pldapi.EventWithData{
 				{
 					SoliditySignature: eventSolSig_PaladinRegisterSmartContract_V0,
 					Data: tktypes.RawJSON(`{
@@ -157,7 +157,7 @@ func TestEventIndexingInsertError(t *testing.T) {
 			StreamID:   uuid.New(),
 			StreamName: "name_given_by_component_mgr",
 			BatchID:    uuid.New(),
-			Events: []*blockindexer.EventWithData{
+			Events: []*pldapi.EventWithData{
 				{
 					SoliditySignature: eventSolSig_PaladinRegisterSmartContract_V0,
 					Address:           *td.tp.d.RegistryAddress(),
@@ -192,7 +192,7 @@ func TestHandleEventBatch(t *testing.T) {
 	stateConfirmed := tktypes.RandHex(32)
 	fakeHash1 := tktypes.RandHex(32)
 	fakeSchema := tktypes.Bytes32(tktypes.RandBytes(32))
-	event1 := &blockindexer.EventWithData{
+	event1 := &pldapi.EventWithData{
 		Address: *contract1,
 		IndexedEvent: &pldapi.IndexedEvent{
 			BlockNumber:      1000,
@@ -204,7 +204,7 @@ func TestHandleEventBatch(t *testing.T) {
 		SoliditySignature: "some event signature 1",
 		Data:              tktypes.RawJSON(`{"result": "success"}`),
 	}
-	event2 := &blockindexer.EventWithData{
+	event2 := &pldapi.EventWithData{
 		Address: *contract2,
 		IndexedEvent: &pldapi.IndexedEvent{
 			BlockNumber:      2000,
@@ -219,9 +219,9 @@ func TestHandleEventBatch(t *testing.T) {
 
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
 
-		mc.stateStore.On("WriteStateFinalizations", mock.Anything, mock.Anything, []*components.StateSpend{
+		mc.stateStore.On("WriteStateFinalizations", mock.Anything, mock.Anything, []*pldapi.StateSpend{
 			{DomainName: "test1", State: tktypes.MustParseHexBytes(stateSpent), Transaction: txID}, // the SpentStates StateUpdate
-		}, []*components.StateConfirm{
+		}, []*pldapi.StateConfirm{
 			{DomainName: "test1", State: tktypes.MustParseHexBytes(stateConfirmed), Transaction: txID}, // the ConfirmedStates StateUpdate
 			{DomainName: "test1", State: tktypes.MustParseHexBytes(fakeHash1), Transaction: txID},      // the implicit confirm from the NewConfirmedState
 		}).Return(nil, nil)
@@ -300,7 +300,7 @@ func TestHandleEventBatch(t *testing.T) {
 
 	cb, err := d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
-		Events:  []*blockindexer.EventWithData{event1, event2},
+		Events:  []*pldapi.EventWithData{event1, event2},
 	})
 	assert.NoError(t, err)
 
@@ -322,7 +322,7 @@ func TestHandleEventBatchFinalizeFail(t *testing.T) {
 
 	_, err := td.d.handleEventBatch(td.ctx, td.dm.persistence.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
 				Address: td.contractAddress,
 				IndexedEvent: &pldapi.IndexedEvent{
@@ -355,7 +355,7 @@ func TestHandleEventBatchContractLookupFail(t *testing.T) {
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
 				Address: *contract1,
 				Data:    tktypes.RawJSON(`{"result": "success"}`),
@@ -384,7 +384,7 @@ func TestHandleEventBatchRegistrationError(t *testing.T) {
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
 				IndexedEvent:      &pldapi.IndexedEvent{},
 				SoliditySignature: eventSolSig_PaladinRegisterSmartContract_V0,
@@ -415,7 +415,7 @@ func TestHandleEventBatchDomainError(t *testing.T) {
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
 				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
@@ -454,7 +454,7 @@ func TestHandleEventBatchSpentBadTransactionID(t *testing.T) {
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
 				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
@@ -493,7 +493,7 @@ func TestHandleEventBatchConfirmBadTransactionID(t *testing.T) {
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
 				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
@@ -531,7 +531,7 @@ func TestHandleEventBatchSpentBadSchemaID(t *testing.T) {
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
 				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
@@ -569,7 +569,7 @@ func TestHandleEventBatchConfirmBadSchemaID(t *testing.T) {
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
 				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
@@ -606,7 +606,7 @@ func TestHandleEventBatchNewBadTransactionID(t *testing.T) {
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
 				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
@@ -644,7 +644,7 @@ func TestHandleEventBatchNewBadSchemaID(t *testing.T) {
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
 				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
@@ -682,7 +682,7 @@ func TestHandleEventBatchNewBadStateID(t *testing.T) {
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
 				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
@@ -721,7 +721,7 @@ func TestHandleEventBatchBadTransactionID(t *testing.T) {
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
 				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
@@ -765,7 +765,7 @@ func TestHandleEventBatchMarkConfirmedFail(t *testing.T) {
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
 				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,
@@ -806,7 +806,7 @@ func TestHandleEventBatchUpsertStateFail(t *testing.T) {
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
 				IndexedEvent: &pldapi.IndexedEvent{},
 				Address:      *contract1,

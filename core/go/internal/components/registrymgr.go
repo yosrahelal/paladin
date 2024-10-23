@@ -22,6 +22,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -37,43 +38,6 @@ type RegistryNodeTransportEntry struct {
 	Details   string
 }
 
-// An entity within a registry with its current properties
-type RegistryEntry struct {
-	Registry         string              `json:"registry"`           // the registry that maintains this record
-	ID               tktypes.HexBytes    `json:"id"`                 // unique within the registry, across all records in the hierarchy
-	Name             string              `json:"name"`               // unique across entries with the same parent, within the particular registry
-	ParentID         tktypes.HexBytes    `json:"parentId,omitempty"` // nil a root record, otherwise will be a reference to another entity in the same registry
-	*OnChainLocation `json:",omitempty"` // only included if the registry uses blockchain indexing
-	*ActiveFlag      `json:",omitempty"` // only returned from queries that explicitly look for inactive entries
-}
-
-type RegistryProperty struct {
-	Registry         string              `json:"registry"` // the registry that maintains this record
-	EntryID          tktypes.HexBytes    `json:"entityId"` // the ID of the entity that owns this record within the registry
-	Name             string              `json:"name"`     // unique across entries with the same parent, within the particular registry
-	Value            string              `json:"value"`    // unique across entries with the same parent, within the particular registry
-	*OnChainLocation `json:",omitempty"` // only included if the registry uses blockchain indexing
-	*ActiveFlag      `json:",omitempty"` // only returned from queries that explicitly look for inactive entries
-}
-
-type ActiveFlag struct {
-	Active bool `json:"active"`
-}
-
-type OnChainLocation struct {
-	BlockNumber      int64 `json:"blockNumber"`
-	TransactionIndex int64 `json:"transactionIndex"`
-	LogIndex         int64 `json:"logIndex"`
-}
-
-// A convenience structure that gives a snapshot of the whole entity, with all it's properties.
-// Alternatively you can list the full RegistryProperty (with the provenance information) separately.
-type RegistryEntryWithProperties struct {
-	*RegistryEntry `json:",inline"`
-	// With this convenience object all of the properties are flattened into a name=value string map
-	Properties map[string]string `json:"properties"`
-}
-
 type RegistryManagerToRegistry interface {
 	plugintk.RegistryAPI
 	Initialized()
@@ -87,28 +51,8 @@ type RegistryManager interface {
 	GetRegistry(ctx context.Context, name string) (Registry, error)
 }
 
-type ActiveFilter string
-
-const (
-	ActiveFilterActive   ActiveFilter = "active"
-	ActiveFilterInactive ActiveFilter = "inactive"
-	ActiveFilterAny      ActiveFilter = "any"
-)
-
-func (af ActiveFilter) Enum() tktypes.Enum[ActiveFilter] {
-	return tktypes.Enum[ActiveFilter](af)
-}
-
-func (af ActiveFilter) Options() []string {
-	return []string{
-		string(ActiveFilterActive),
-		string(ActiveFilterInactive),
-		string(ActiveFilterAny),
-	}
-}
-
 type Registry interface {
-	QueryEntries(ctx context.Context, dbTX *gorm.DB, fActive ActiveFilter, jq *query.QueryJSON) ([]*RegistryEntry, error)
-	QueryEntriesWithProps(ctx context.Context, dbTX *gorm.DB, fActive ActiveFilter, jq *query.QueryJSON) ([]*RegistryEntryWithProperties, error)
-	GetEntryProperties(ctx context.Context, dbTX *gorm.DB, fActive ActiveFilter, entityIDs ...tktypes.HexBytes) ([]*RegistryProperty, error)
+	QueryEntries(ctx context.Context, dbTX *gorm.DB, fActive pldapi.ActiveFilter, jq *query.QueryJSON) ([]*pldapi.RegistryEntry, error)
+	QueryEntriesWithProps(ctx context.Context, dbTX *gorm.DB, fActive pldapi.ActiveFilter, jq *query.QueryJSON) ([]*pldapi.RegistryEntryWithProperties, error)
+	GetEntryProperties(ctx context.Context, dbTX *gorm.DB, fActive pldapi.ActiveFilter, entityIDs ...tktypes.HexBytes) ([]*pldapi.RegistryProperty, error)
 }

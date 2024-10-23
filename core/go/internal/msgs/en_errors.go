@@ -105,6 +105,7 @@ var (
 	MsgStateInvalidCalculatingHash    = ffe("PD010128", "Failed to generate hash as state is invalid")
 	MsgStateHashMismatch              = ffe("PD010129", "The supplied state ID '%s' does not match the state hash '%s'")
 	MsgStateIDMissing                 = ffe("PD010130", "The state id must be supplied for this domain")
+	MsgStateFlushInProgress           = ffe("PD010131", "A flush is already in progress for this domain context")
 
 	// Persistence PD0102XX
 	MsgPersistenceInvalidType         = ffe("PD010200", "Invalid persistence type: %s")
@@ -267,6 +268,7 @@ var (
 	MsgDomainInvalidStateID                   = ffe("PD011650", "Invalid state ID '%s'")
 	MsgDomainInvalidStates                    = ffe("PD011651", "Invalid states")
 	MsgDomainInvalidResponseToValidate        = ffe("PD011652", "Invalid response to validation")
+	MsgDomainInvalidDataFromDomain            = ffe("PD011653", "Invalid data returned by domain for call ABI outputs")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownRunMode = ffe("PD011700", "Unknown run mode '%s'")
@@ -292,6 +294,9 @@ var (
 	MsgPrivateTxManagerEndorsementRequestError = ffe("PD011817", "Failed to request endorsement from %s: %s")
 	MsgPrivateTxManagerResolveDispatchError    = ffe("PD011818", "Failed to resolve dispatcher: %s")
 	MsgPrivateTxManagerPrepareError            = ffe("PD011819", "Failed to prepare transaction dispatch to base ledger: %s")
+	MsgPrivateTxManagerDeployError             = ffe("PD011820", "Failed to deploy private contract")
+	MsgPrivateTxMgrEncodeCallDataFailed        = ffe("PD011821", "Failed to encode call data '%s' for private contract deploy")
+	MsgPrivateTxManagerNonLocalSigningAddr     = ffe("PD011822", "Attempt do dispatch a blockchain transaction using a signing identity for a different node: %s")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")

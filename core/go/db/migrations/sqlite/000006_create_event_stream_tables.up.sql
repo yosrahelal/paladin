@@ -6,6 +6,7 @@ CREATE TABLE event_streams (
     "name"            VARCHAR NOT NULL,
     "config"          VARCHAR NOT NULL,
     "sources"         VARCHAR NOT NULL,
+    "format"          VARCHAR NOT NULL,
     PRIMARY KEY ("id")
 );
 CREATE UNIQUE INDEX event_stream_name ON event_streams("type","name");

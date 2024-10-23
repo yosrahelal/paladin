@@ -25,6 +25,8 @@ title: Simple Types
 
 {% include-markdown "./_includes/uuid_description.md" %}
 
+## HexUint64OrString
+
 ## HexUint64
 
 {% include-markdown "./_includes/hexuint64_description.md" %}

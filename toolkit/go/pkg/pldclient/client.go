@@ -17,6 +17,7 @@ package pldclient
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -24,7 +25,6 @@ import (
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
 type PaladinClient interface {
@@ -34,25 +34,70 @@ type PaladinClient interface {
 	// Config
 	ReceiptPollingInterval(t time.Duration) PaladinClient
 	HTTP(ctx context.Context, conf *pldconf.HTTPClientConfig) (PaladinClient, error)
-	WebSocket(ctx context.Context, conf *pldconf.WSClientConfig) (PaladinClient, error)
+	WebSocket(ctx context.Context, conf *pldconf.WSClientConfig) (PaladinWSClient, error)
 
-	// ABI based helpers for building data payloads, and submitting transactions
-	ABI(ctx context.Context, a abi.ABI) (ABIClient, error)
-	MustABI(a abi.ABI) ABIClient
-	ABIJSON(ctx context.Context, abiJson []byte) (ABIClient, error)
-	ABIFunction(ctx context.Context, functionABI *abi.Entry) (_ ABIFunctionClient, err error)
-	ABIConstructor(ctx context.Context, constructorABI *abi.Entry, bytecode tktypes.HexBytes) (_ ABIFunctionClient, err error)
-	MustABIJSON(abiJson []byte) ABIClient
+	// High level transaction building and submission APIs
+	TxBuilder(ctx context.Context) TxBuilder
+
+	// Quick access to TxBuilder(ctx).ABI(a)
+	ForABI(ctx context.Context, a abi.ABI) TxBuilder
 
 	// Paladin transaction RPC interface
 	PTX() PTX
 
 	// Paladin Key Manager RPC interface
 	KeyManager() KeyManager
+
+	// Paladin Transport RPC interface
+	Transport() Transport
+
+	// Paladin Registry RPC interface
+	Registry() Registry
+
+	// Paladin state store RPC interface
+	StateStore() StateStore
+}
+
+type RPCModule interface {
+	Group() string
+	Methods() []string
+	MethodInfo(method string) *RPCMethodInfo
+}
+
+type RPCMethodInfo struct {
+	Inputs []string
+	Output string
+}
+
+type rpcModuleInfo struct {
+	group      string
+	methodInfo map[string]RPCMethodInfo
+}
+
+func (fg *rpcModuleInfo) Group() string {
+	return fg.group
+}
+
+func (fg *rpcModuleInfo) Methods() []string {
+	methods := make([]string, 0, len(fg.methodInfo))
+	for name := range fg.methodInfo {
+		methods = append(methods, name)
+	}
+	sort.Strings(methods) // needs to be a consistent order
+	return methods
+}
+
+func (fg *rpcModuleInfo) MethodInfo(method string) *RPCMethodInfo {
+	info, found := fg.methodInfo[method]
+	if !found {
+		return nil
+	}
+	return &info
 }
 
 type PaladinWSClient interface {
-	PaladinClient // No differences... yet
+	PaladinClient
+	Close()
 }
 
 type paladinClient struct {
@@ -84,13 +129,16 @@ func (c *paladinClient) HTTP(ctx context.Context, conf *pldconf.HTTPClientConfig
 	return c, nil
 }
 
-func (c *paladinClient) WebSocket(ctx context.Context, conf *pldconf.WSClientConfig) (PaladinClient, error) {
+func (c *paladinClient) WebSocket(ctx context.Context, conf *pldconf.WSClientConfig) (PaladinWSClient, error) {
 	rpc, err := rpcclient.NewWSClient(ctx, conf)
+	if err == nil {
+		err = rpc.Connect(ctx)
+	}
 	if err != nil {
 		return nil, err
 	}
 	c.Client = rpc
-	return c, nil
+	return &wsPaladinClient{paladinClient: c, wsRPC: rpc}, nil
 }
 
 type unconnectedRPC struct{}
@@ -102,4 +150,13 @@ func (u *unconnectedRPC) CallRPC(ctx context.Context, result interface{}, method
 func (c *paladinClient) ReceiptPollingInterval(t time.Duration) PaladinClient {
 	c.receiptPollingInterval = t
 	return c
+}
+
+type wsPaladinClient struct {
+	*paladinClient
+	wsRPC rpcclient.WSClient
+}
+
+func (wsc *wsPaladinClient) Close() {
+	wsc.wsRPC.Close()
 }

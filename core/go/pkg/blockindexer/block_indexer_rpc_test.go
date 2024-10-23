@@ -82,6 +82,16 @@ func TestBlockIndexRPCCalls(t *testing.T) {
 	assert.Equal(t, rpcBlock.Transactions[0].Hash.String(), idxEvents[0].TransactionHash.String())
 	assert.Equal(t, int64(2), idxEvents[0].LogIndex)
 
+	var decodedEvents []*pldapi.EventWithData
+	err = rpc.CallRPC(ctx, &decodedEvents, "bidx_decodeTransactionEvents",
+		rpcBlock.Transactions[0].Hash,
+		testABI,
+		"mode=array",
+	)
+	require.NoError(t, err)
+	assert.Equal(t, rpcBlock.Transactions[0].Hash.String(), decodedEvents[1].TransactionHash.String())
+	assert.JSONEq(t, `["1000000", "event_b_in_block_0"]`, decodedEvents[1].Data.Pretty())
+
 	var blockHeight int64
 	err = rpc.CallRPC(ctx, &blockHeight, "bidx_getConfirmedBlockHeight")
 	require.NoError(t, err)

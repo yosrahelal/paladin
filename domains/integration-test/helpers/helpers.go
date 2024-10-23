@@ -25,8 +25,8 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/rpcbackend"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/core/pkg/testbed"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -37,7 +37,7 @@ type TransactionHelper struct {
 	ctx     context.Context
 	t       *testing.T
 	tb      testbed.Testbed
-	builder pldclient.TransactionBuilder
+	builder pldclient.TxBuilder
 }
 
 type DomainTransactionHelper struct {
@@ -62,13 +62,13 @@ func NewPaladinClient(t *testing.T, ctx context.Context, tb testbed.Testbed) pld
 	return c
 }
 
-func NewTransactionHelper(ctx context.Context, t *testing.T, tb testbed.Testbed, builder pldclient.TransactionBuilder) *TransactionHelper {
+func NewTransactionHelper(ctx context.Context, t *testing.T, tb testbed.Testbed, builder pldclient.TxBuilder) *TransactionHelper {
 	return &TransactionHelper{ctx: ctx, t: t, tb: tb, builder: builder}
 }
 
 func (th *TransactionHelper) SignAndSend(signer string) pldclient.SentTransaction {
-	stx, err := th.builder.Public().From(signer).SendTX()
-	require.NoError(th.t, err)
+	stx := th.builder.Public().From(signer).Send()
+	require.NoError(th.t, stx.Error())
 	return stx
 }
 
@@ -78,11 +78,11 @@ func (th *TransactionHelper) Prepare() tktypes.HexBytes {
 	return b
 }
 
-func (th *TransactionHelper) FindEvent(txHash *tktypes.Bytes32, abi abi.ABI, eventName string, eventParams any) *blockindexer.EventWithData {
+func (th *TransactionHelper) FindEvent(txHash *tktypes.Bytes32, abi abi.ABI, eventName string, eventParams any) *pldapi.EventWithData {
 	targetEvent := abi.Events()[eventName]
 	assert.NotNil(th.t, targetEvent)
 	assert.NotEmpty(th.t, targetEvent.SolString())
-	events, err := th.tb.Components().BlockIndexer().DecodeTransactionEvents(th.ctx, *txHash, abi)
+	events, err := th.tb.Components().BlockIndexer().DecodeTransactionEvents(th.ctx, *txHash, abi, "")
 	assert.NoError(th.t, err)
 	for _, event := range events {
 		if event.SoliditySignature == targetEvent.SolString() {
@@ -153,18 +153,10 @@ func toJSON(t *testing.T, v any) []byte {
 	return result
 }
 
-func deployBuilder(ctx context.Context, t *testing.T, pld pldclient.PaladinClient, abi abi.ABI, bytecode []byte) pldclient.TransactionBuilder {
-	abiClient, err := pld.ABI(ctx, abi)
-	assert.NoError(t, err)
-	construct, err := abiClient.Constructor(ctx, bytecode)
-	assert.NoError(t, err)
-	return construct.TXBuilder(ctx)
+func deployBuilder(ctx context.Context, pld pldclient.PaladinClient, abi abi.ABI, bytecode []byte) pldclient.TxBuilder {
+	return pld.ForABI(ctx, abi).Constructor().Bytecode(bytecode)
 }
 
-func functionBuilder(ctx context.Context, t *testing.T, pld pldclient.PaladinClient, abi abi.ABI, functionName string) pldclient.TransactionBuilder {
-	abiClient, err := pld.ABI(ctx, abi)
-	assert.NoError(t, err)
-	fn, err := abiClient.Function(ctx, functionName)
-	assert.NoError(t, err)
-	return fn.TXBuilder(ctx)
+func functionBuilder(ctx context.Context, pld pldclient.PaladinClient, abi abi.ABI, functionName string) pldclient.TxBuilder {
+	return pld.ForABI(ctx, abi).Function(functionName)
 }
