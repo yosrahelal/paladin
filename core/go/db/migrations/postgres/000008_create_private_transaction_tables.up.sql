@@ -11,6 +11,7 @@ CREATE TABLE dispatches (
 CREATE UNIQUE INDEX dispatches_public_private ON dispatches("public_transaction_address","public_transaction_nonce","private_transaction_id");
 
 CREATE TABLE state_distributions (
+    "created"           BIGINT  NOT NULL,
     "state_id"          TEXT    NOT NULL,
     "domain_name"       TEXT    NOT NULL,
     "contract_address"  TEXT    NOT NULL,
@@ -20,6 +21,7 @@ CREATE TABLE state_distributions (
     FOREIGN KEY ("domain_name", "state_id") REFERENCES states ("domain_name", "id") ON DELETE CASCADE
 );
 
+CREATE INDEX state_distributions_created ON state_distributions("created");
 CREATE UNIQUE INDEX state_distributions_state_identity ON state_distributions("state_id","identity_locator");
 
 CREATE TABLE state_distribution_acknowledgments (

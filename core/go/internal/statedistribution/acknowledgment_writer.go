@@ -83,6 +83,10 @@ func (aw *acknowledgementWriter) Start() {
 	aw.flushWriter.Start()
 }
 
+func (aw *acknowledgementWriter) Stop() {
+	aw.flushWriter.Shutdown()
+}
+
 func (aw *acknowledgementWriter) Queue(ctx context.Context, stateDistributionID string) {
 	aw.flushWriter.Queue(ctx, &acknowledgementWriteOperation{
 		StateDistributionID: stateDistributionID,

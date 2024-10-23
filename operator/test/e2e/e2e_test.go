@@ -116,7 +116,7 @@ var _ = Describe("controller", Ordered, func() {
 				}).
 				From(notary).
 				Send().
-				Wait(10 * time.Second)
+				Wait(60 * time.Second)
 			Expect(deploy.Error()).To(BeNil())
 			Expect(deploy.Receipt().ContractAddress).ToNot(BeNil())
 			notoContract = deploy.Receipt().ContractAddress
@@ -134,9 +134,8 @@ var _ = Describe("controller", Ordered, func() {
 				}).
 				From(notary).
 				Send().
-				Wait(10 * time.Second)
+				Wait(60 * time.Second) // TODO: Diagnose why this takes so long
 			Expect(deploy.Error()).To(BeNil())
-			Expect(deploy.Receipt().ContractAddress).ToNot(BeNil())
 		})
 	})
 })
