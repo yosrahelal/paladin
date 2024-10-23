@@ -224,6 +224,7 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 	} else {
 		mdc = componentmocks.NewDomainContext(t)
 		mdc.On("Ctx").Return(ctx).Maybe()
+		mdc.On("Info").Return(components.DomainContextInfo{ID: uuid.New()}).Maybe()
 		mdc.On("Close").Return()
 		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), mdc)
 		mc.stateStore.On("NewDomainContext", mock.Anything, tp.d, mock.Anything, mock.Anything).Return(mdc).Maybe()

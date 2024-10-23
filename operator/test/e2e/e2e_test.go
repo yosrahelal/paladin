@@ -48,7 +48,7 @@ func withTimeout[T any](do func(ctx context.Context) T) T {
 
 var _ = Describe("controller", Ordered, func() {
 	BeforeAll(func() {
-		log.SetLevel("debug")
+		log.SetLevel("trace")
 	})
 
 	AfterAll(func() {
