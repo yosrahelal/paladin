@@ -286,9 +286,9 @@ func (d *domain) FindAvailableStates(ctx context.Context, req *prototk.FindAvail
 
 	var states []*pldapi.State
 	if req.UseNullifiers != nil && *req.UseNullifiers {
-		_, states, err = c.dCtx.FindAvailableNullifiers(schemaID, &query)
+		_, states, err = c.dCtx.FindAvailableNullifiers(c.dbTX, schemaID, &query)
 	} else {
-		_, states, err = c.dCtx.FindAvailableStates(schemaID, &query)
+		_, states, err = c.dCtx.FindAvailableStates(c.dbTX, schemaID, &query)
 	}
 	if err != nil {
 		return nil, err

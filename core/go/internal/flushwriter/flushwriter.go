@@ -62,7 +62,7 @@ type Operation[T Writeable[R], R any] interface {
 //
 // Note: If you perform a failed DB operation, then the whole DB transaction
 // will rollback even if you don't return an error.
-type BatchHandler[T Writeable[R], R any] func(ctx context.Context, tx *gorm.DB, values []T) ([]Result[R], error)
+type BatchHandler[T Writeable[R], R any] func(ctx context.Context, tx *gorm.DB, values []T) (func(error), []Result[R], error)
 
 type Writer[T Writeable[R], R any] interface {
 	Start()                                                      // the routines do not run until this is called
@@ -73,8 +73,9 @@ type Writer[T Writeable[R], R any] interface {
 }
 
 type Result[R any] struct {
-	Err error
-	R   R
+	Err                error
+	R                  R
+	DBTXResultCallback func(error)
 }
 
 type op[T Writeable[R], R any] struct {
@@ -269,11 +270,21 @@ func (w *writer[T, R]) runBatch(ctx context.Context, b *batch[T, R]) {
 	}
 	log.L(ctx).Debugf("Writing batch count=%d keys=%v", len(keys), keys)
 
+	// We promise to call any registered result callback with the DB Transaction result on all paths.
+	var txErr error
+	var dbResultCallback func(error)
+	defer func() {
+		if dbResultCallback != nil {
+			dbResultCallback(txErr)
+		}
+	}()
+
 	var results []Result[R]
-	err := w.p.DB().Transaction(func(tx *gorm.DB) (err error) {
-		results, err = w.handler(ctx, tx.WithContext(ctx), values)
+	txErr = w.p.DB().Transaction(func(tx *gorm.DB) (err error) {
+		dbResultCallback, results, err = w.handler(ctx, tx.WithContext(ctx), values)
 		return err
 	})
+	err := txErr
 	if err != nil {
 		log.L(ctx).Errorf("Write batch failed: %s", err)
 	} else if len(results) != len(values) {

@@ -75,7 +75,7 @@ var transactionReceiptFilters = filters.FieldMap{
 	"id":              filters.UUIDField(`"transaction"`),
 	"indexed":         filters.TimestampField("indexed"),
 	"success":         filters.BooleanField("success"),
-	"transactionHash": filters.StringField("tx_hash"),
+	"transactionHash": filters.HexBytesField("tx_hash"),
 	"blockNumber":     filters.Int64Field("block_number"),
 }
 

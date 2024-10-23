@@ -199,7 +199,7 @@ func (tb *testbed) newPrivateTransaction(ctx context.Context, invocation tktypes
 func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.DomainSmartContract, tx *components.PrivateTransaction) error {
 
 	// Testbed just uses a domain context for the duration of the TX, and flushes before returning
-	dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address(), tb.c.Persistence().DB() /* no TX */)
+	dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address())
 	defer dCtx.Close()
 
 	// First we call init on the smart contract to:
@@ -225,7 +225,7 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	}
 
 	// Now call assemble
-	if err := psc.AssembleTransaction(dCtx, tx); err != nil {
+	if err := psc.AssembleTransaction(dCtx, tb.c.Persistence().DB(), tx); err != nil {
 		return err
 	}
 
@@ -239,7 +239,7 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	// The testbed always chooses to take the assemble output and progress to endorse
 	// (no complex sequence selection routine that might result in abandonment).
 	// So just write the states
-	if err := psc.WritePotentialStates(dCtx, tx); err != nil {
+	if err := psc.WritePotentialStates(dCtx, tb.c.Persistence().DB(), tx); err != nil {
 		return err
 	}
 
@@ -262,14 +262,16 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 	}
 
 	// Prepare the transaction
-	if err := psc.PrepareTransaction(dCtx, tx); err != nil {
+	if err := psc.PrepareTransaction(dCtx, tb.c.Persistence().DB(), tx); err != nil {
 		return err
 	}
 
 	// Flush the context
-	if err := dCtx.FlushSync(); err != nil {
+	dbTXResultCB, err := dCtx.Flush(tb.c.Persistence().DB())
+	if err != nil {
 		return err
 	}
+	dbTXResultCB(nil)
 
 	if tx.PreparedPrivateTransaction != nil && tx.PreparedPrivateTransaction.To != nil {
 		nextContract, err := tb.c.DomainManager().GetSmartContractByAddress(ctx, *tx.PreparedPrivateTransaction.To)
@@ -432,10 +434,10 @@ func (tb *testbed) rpcTestbedCall() rpcserver.RPCHandler {
 			return nil, err
 		}
 
-		dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address(), tb.c.Persistence().DB() /* no TX */)
+		dCtx := tb.c.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address())
 		defer dCtx.Close()
 
-		cv, err := psc.ExecCall(dCtx, tx.Inputs, resolvedVerifiers)
+		cv, err := psc.ExecCall(dCtx, tb.c.Persistence().DB(), tx.Inputs, resolvedVerifiers)
 		if err != nil {
 			return nil, err
 		}

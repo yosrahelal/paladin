@@ -5,7 +5,7 @@ go 1.22.5
 require (
 	github.com/go-resty/resty/v2 v2.14.0
 	github.com/hyperledger/firefly-common v1.4.11
-	github.com/hyperledger/firefly-signer v1.1.18-0.20241020190415-2aaf31608d01
+	github.com/hyperledger/firefly-signer v1.1.18
 	github.com/kaleido-io/paladin/core v0.0.0-00010101000000-000000000000
 	github.com/kaleido-io/paladin/toolkit v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.9.0

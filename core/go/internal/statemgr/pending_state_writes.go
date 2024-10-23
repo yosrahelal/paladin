@@ -19,12 +19,9 @@ package statemgr
 import (
 	"context"
 
-	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/internal/flushwriter"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -35,10 +32,8 @@ import (
 // - one active
 // - one flushing
 // the rotation and is protected by the stateLock of the parent stateContext
-type writeOperation struct {
-	id          string
-	domainKey   string
-	writerOp    flushwriter.Operation[*writeOperation, *noResult]
+type pendingStateWrites struct {
+	dc          *domainContext
 	flushResult error
 	flushed     chan struct{}
 	// States and state nullifiers can be flushed to persistence, although
@@ -48,56 +43,32 @@ type writeOperation struct {
 	stateNullifiers []*pldapi.StateNullifier
 }
 
-type noResult struct{}
-
-type stateWriter struct {
-	ss *stateManager
-	w  flushwriter.Writer[*writeOperation, *noResult]
-}
-
-func (wo *writeOperation) WriteKey() string {
-	return wo.domainKey
-}
-
-func newStateWriter(bgCtx context.Context, ss *stateManager, conf *pldconf.FlushWriterConfig) *stateWriter {
-	sw := &stateWriter{ss: ss}
-	sw.w = flushwriter.NewWriter(bgCtx, sw.runBatch, ss.p, conf, &pldconf.StateWriterConfigDefaults)
-	return sw
-}
-
-func (sw *stateWriter) start() {
-	sw.w.Start()
-}
-
-func (op *writeOperation) flush(ctx context.Context) error {
-	_, err := op.writerOp.WaitFlushed(ctx)
-	return err
-}
-
-func (sw *stateWriter) newWriteOp(domainName string, contractAddress tktypes.EthAddress) *writeOperation {
-	return &writeOperation{
-		id:        tktypes.ShortID(),
-		domainKey: domainName + ":" + contractAddress.String(),
+func (dc *domainContext) newPendingStateWrites() *pendingStateWrites {
+	return &pendingStateWrites{
+		dc:      dc,
+		flushed: make(chan struct{}),
 	}
 }
 
-func (sw *stateWriter) queue(ctx context.Context, op *writeOperation) {
-	op.writerOp = sw.w.Queue(ctx, op)
+// must host the state lock when calling
+func (op *pendingStateWrites) setError(err error) {
+	if op.flushResult == nil {
+		op.flushResult = err
+		close(op.flushed)
+	}
 }
 
-func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writeOperation) ([]flushwriter.Result[*noResult], error) {
+func (op *pendingStateWrites) exec(ctx context.Context, tx *gorm.DB) error {
 
 	// Build lists of things to insert (we are insert only)
 	var states []*pldapi.State
 	var stateLocks []*pldapi.StateLock
 	var stateNullifiers []*pldapi.StateNullifier
-	for _, op := range values {
-		for _, s := range op.states {
-			states = append(states, s.State)
-		}
-		if len(op.stateNullifiers) > 0 {
-			stateNullifiers = append(stateNullifiers, op.stateNullifiers...)
-		}
+	for _, s := range op.states {
+		states = append(states, s.State)
+	}
+	if len(op.stateNullifiers) > 0 {
+		stateNullifiers = append(stateNullifiers, op.stateNullifiers...)
 	}
 	log.L(ctx).Debugf("Writing state batch states=%d locks=%d nullifiers=%d ",
 		len(states), len(stateLocks), len(stateNullifiers))
@@ -105,7 +76,7 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 	var err error
 
 	if len(states) > 0 {
-		err = sw.ss.writeStates(ctx, tx, states)
+		err = op.dc.ss.writeStates(ctx, tx, states)
 	}
 
 	if err == nil && len(stateNullifiers) > 0 {
@@ -118,9 +89,5 @@ func (sw *stateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*writ
 			Error
 	}
 	// We don't actually provide any result, so just build an array of nil results
-	return make([]flushwriter.Result[*noResult], len(values)), err
-}
-
-func (sw *stateWriter) stop() {
-	sw.w.Shutdown()
+	return err
 }

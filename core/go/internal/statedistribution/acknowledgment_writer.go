@@ -52,7 +52,7 @@ type stateDistributionAcknowledgement struct {
 	ID                string `json:"id"                gorm:"column:id"`
 }
 
-func (aw *acknowledgementWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*acknowledgementWriteOperation) ([]flushwriter.Result[*acknowledgementWriterNoResult], error) {
+func (aw *acknowledgementWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*acknowledgementWriteOperation) (func(error), []flushwriter.Result[*acknowledgementWriterNoResult], error) {
 	log.L(ctx).Debugf("acknowledgementWriter:runBatch %d acknowledgements", len(values))
 
 	acknowledgements := make([]*stateDistributionAcknowledgement, 0, len(values))
@@ -75,12 +75,16 @@ func (aw *acknowledgementWriter) runBatch(ctx context.Context, tx *gorm.DB, valu
 	}
 
 	// We don't actually provide any result, so just build an array of nil results
-	return make([]flushwriter.Result[*acknowledgementWriterNoResult], len(values)), err
+	return nil, make([]flushwriter.Result[*acknowledgementWriterNoResult], len(values)), err
 
 }
 
 func (aw *acknowledgementWriter) Start() {
 	aw.flushWriter.Start()
+}
+
+func (aw *acknowledgementWriter) Stop() {
+	aw.flushWriter.Shutdown()
 }
 
 func (aw *acknowledgementWriter) Queue(ctx context.Context, stateDistributionID string) {
