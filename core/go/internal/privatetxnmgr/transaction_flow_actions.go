@@ -106,6 +106,8 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 			return
 		}
 	}
+	log.L(ctx).Debugf("Transaction %s is ready (outputStatesPotential=%d outputStates=%d)",
+		tf.transaction.ID.String(), len(tf.transaction.PostAssembly.OutputStatesPotential), len(tf.transaction.PostAssembly.OutputStates))
 	tf.readyForSequencing = true
 
 	//If we get here, we have an assembled transaction and have no intention of delegating it
