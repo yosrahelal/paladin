@@ -89,7 +89,7 @@ func (tf *transactionFlow) outstandingEndorsementRequests(ctx context.Context) [
 					found = endorsement.Name == attRequest.Name &&
 						party == endorsement.Verifier.Lookup &&
 						attRequest.VerifierType == endorsement.Verifier.VerifierType
-					log.L(ctx).Debugf("endorsement matched=%t: request[name=%s,party=%s,verifierType=%s] endorsement[name=%s,party=%s,verifierType=%s] verifier=%s",
+					log.L(ctx).Infof("endorsement matched=%t: request[name=%s,party=%s,verifierType=%s] endorsement[name=%s,party=%s,verifierType=%s] verifier=%s",
 						found,
 						attRequest.Name, party, attRequest.VerifierType,
 						endorsement.Name, endorsement.Verifier.Lookup, endorsement.Verifier.VerifierType,

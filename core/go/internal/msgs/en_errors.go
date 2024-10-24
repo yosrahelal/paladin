@@ -280,7 +280,7 @@ var (
 	MsgPrivateTxManagerParseFailed             = ffe("PD011803", "Failed to parse message")
 	MsgPrivateTxManagerInvalidMessage          = ffe("PD011804", "Invalid message received from transport")
 	MsgSequencerInternalError                  = ffe("PD011805", "Sequencer internal error %s, ")
-	MsgKeyResolutionFailed                     = ffe("PD011806", "Key resolution failed for key %s, algorithm %s")
+	MsgKeyResolutionFailed                     = ffe("PD011806", "Key resolution failed for key %s, algorithm %s, verifierType %s")
 	MsgDeployInitFailed                        = ffe("PD011807", "Failed to initialise a deploy transaction")
 	MsgDeployPrepareFailed                     = ffe("PD011808", "Failed to prepare a deploy transaction")
 	MsgDeployPrepareIncomplete                 = ffe("PD011809", "Prepare step did not return a transaction to invoke, or a transaction to deploy")
