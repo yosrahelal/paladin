@@ -71,7 +71,7 @@ export const Submissions: React.FC = () => {
             {pendingTransactions?.map((pendingTransaction) => (
               <PendingTransaction
                 key={pendingTransaction.id}
-                pendingTransaction={pendingTransaction}
+                paladinTransaction={pendingTransaction}
               />
             ))}
           </Box>
