@@ -157,7 +157,7 @@ func (tf *transactionFlow) revertTransaction(ctx context.Context, revertReason s
 }
 
 func (tf *transactionFlow) finalize(ctx context.Context) {
-	log.L(ctx).Errorf("finalize transaction %s: %s", tf.transaction.ID.String(), tf.finalizeReason)
+	log.L(ctx).Infof("finalize transaction %s: %s", tf.transaction.ID.String(), tf.finalizeReason)
 	//flush that to the txmgr database
 	// so that the user can see that it is reverted and so that we stop retrying to assemble and endorse it
 
@@ -170,12 +170,20 @@ func (tf *transactionFlow) finalize(ctx context.Context) {
 			//we are not on the main event loop thread so can't update in memory state here.
 			// need to go back into the event loop
 			log.L(ctx).Infof("Transaction %s finalize committed", tf.transaction.ID.String())
+
+			// Remove this transaction from our domain context on success - all changes are flushed to DB at this point
+			tf.endorsementGatherer.DomainContext().ResetTransactions(tf.transaction.ID)
+
 			go tf.publisher.PublishTransactionFinalizedEvent(ctx, tf.transaction.ID.String())
 		},
 		func(ctx context.Context, rollbackErr error) {
 			//we are not on the main event loop thread so can't update in memory state here.
 			// need to go back into the event loop
 			log.L(ctx).Errorf("Transaction %s finalize rolled back: %s", tf.transaction.ID.String(), rollbackErr)
+
+			// Reset the whole domain context on failure
+			tf.endorsementGatherer.DomainContext().Reset()
+
 			go tf.publisher.PublishTransactionFinalizeError(ctx, tf.transaction.ID.String(), tf.finalizeReason, rollbackErr)
 		},
 	)

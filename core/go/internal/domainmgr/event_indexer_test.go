@@ -59,7 +59,7 @@ func TestEventIndexingWithDB(t *testing.T) {
 	contractAddr := tktypes.EthAddress(tktypes.RandBytes(20))
 
 	// Index an event indicating deployment of a new smart contract instance
-	var batchTxs []*components.ReceiptInput
+	var batchTxs txCompletionsOrdered
 	var unprocessedEvents []*pldapi.EventWithData
 	err := dm.persistence.DB().Transaction(func(tx *gorm.DB) (err error) {
 		unprocessedEvents, batchTxs, err = dm.registrationIndexer(ctx, tx, &blockindexer.EventDeliveryBatch{
@@ -235,7 +235,7 @@ func TestHandleEventBatch(t *testing.T) {
 			},
 		}).Return(nil, nil)
 
-		mc.txManager.On("MatchAndFinalizeTransactions", mock.Anything, mock.Anything, mock.MatchedBy(func(receipts []*components.ReceiptInput) bool {
+		mc.txManager.On("MatchAndFinalizeTransactions", mock.Anything, mock.Anything, mock.MatchedBy(func(receipts []*components.TxCompletion) bool {
 			// Note first contract is unrecognized, second is recognized
 			require.Len(t, receipts, 1)
 			r := receipts[0]
@@ -248,6 +248,8 @@ func TestHandleEventBatch(t *testing.T) {
 			assert.Equal(t, expectedEvent.LogIndex, r.OnChain.LogIndex)
 			return true
 		})).Return([]uuid.UUID{txID}, nil)
+
+		mc.privateTxManager.On("PrivateTransactionConfirmed", mock.Anything, mock.Anything).Return()
 	})
 	defer done()
 	d := td.d
@@ -819,15 +821,15 @@ func TestHandleEventBatchUpsertStateFail(t *testing.T) {
 
 func TestReceiptSorting(t *testing.T) {
 	// Note the detail of the sorting code is in tktypes.OnChainLocation
-	receiptList := receiptsByOnChainOrder{
-		{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1100}},
-		{OnChain: tktypes.OnChainLocation{ /* not onchain */ }},
-		{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1000}},
+	receiptList := txCompletionsOrdered{
+		{ReceiptInput: components.ReceiptInput{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1100}}},
+		{ReceiptInput: components.ReceiptInput{OnChain: tktypes.OnChainLocation{ /* not onchain */ }}},
+		{ReceiptInput: components.ReceiptInput{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1000}}},
 	}
 	sort.Sort(receiptList)
-	assert.Equal(t, receiptsByOnChainOrder{
-		{OnChain: tktypes.OnChainLocation{Type: tktypes.NotOnChain}},
-		{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1000}},
-		{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1100}},
+	assert.Equal(t, txCompletionsOrdered{
+		{ReceiptInput: components.ReceiptInput{OnChain: tktypes.OnChainLocation{Type: tktypes.NotOnChain}}},
+		{ReceiptInput: components.ReceiptInput{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1000}}},
+		{ReceiptInput: components.ReceiptInput{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1100}}},
 	}, receiptList)
 }

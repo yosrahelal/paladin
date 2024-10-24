@@ -135,7 +135,7 @@ func (tf *transactionFlow) applyTransactionConfirmedEvent(ctx context.Context, e
 	log.L(ctx).Debugf("transactionFlow:applyTransactionConfirmedEvent transactionID:%s contractAddress: %s", tf.transaction.ID.String(), event.ContractAddress)
 	tf.latestEvent = "TransactionConfirmedEvent"
 	tf.status = "confirmed"
-	tf.complete = true
+	tf.finalizeRequired = true
 }
 
 func (tf *transactionFlow) applyTransactionRevertedEvent(ctx context.Context, _ *ptmgrtypes.TransactionRevertedEvent) {

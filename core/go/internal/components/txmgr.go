@@ -46,9 +46,14 @@ type ReceiptInput struct {
 	RevertData      tktypes.HexBytes        // set for RT_FailedOnChainWithRevertData
 }
 
+type TxCompletion struct {
+	ReceiptInput
+	PSC DomainSmartContract
+}
+
 type TXManager interface {
 	ManagerLifecycle
-	MatchAndFinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*ReceiptInput) ([]uuid.UUID, error) // returns which transactions were known
+	MatchAndFinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*TxCompletion) ([]uuid.UUID, error) // returns which transactions were known
 	FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*ReceiptInput) error                        // requires all transactions to be known
 	CalculateRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes) error
 	DecodeRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.DecodedError, error)

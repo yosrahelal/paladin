@@ -79,7 +79,7 @@ var transactionReceiptFilters = filters.FieldMap{
 	"blockNumber":     filters.Int64Field("block_number"),
 }
 
-func (tm *txManager) MatchAndFinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*components.ReceiptInput) ([]uuid.UUID, error) {
+func (tm *txManager) MatchAndFinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*components.TxCompletion) ([]uuid.UUID, error) {
 	// It's possible for transactions to be deleted out of band, and we don't place a responsibility
 	// on the caller to know that. So we take the hit of querying for the existence of these transactions
 	// and only marking completion on those that exist.
@@ -97,18 +97,18 @@ func (tm *txManager) MatchAndFinalizeTransactions(ctx context.Context, dbTX *gor
 		return nil, err
 	}
 	confirmedInfo := make([]*components.ReceiptInput, 0, len(info))
-	for _, ri := range info {
+	for _, completion := range info {
 		exists := false
 		for _, existing := range existingTXs {
-			if ri.TransactionID == existing {
+			if completion.TransactionID == existing {
 				exists = true
 				break
 			}
 		}
 		if !exists {
-			log.L(ctx).Warnf("Receipt notification for untracked transaction %s: %+v", ri.TransactionID, tktypes.JSONString(ri))
+			log.L(ctx).Warnf("Receipt notification for untracked transaction %s: %+v", completion.TransactionID, tktypes.JSONString(completion))
 		} else {
-			confirmedInfo = append(confirmedInfo, ri)
+			confirmedInfo = append(confirmedInfo, &completion.ReceiptInput)
 		}
 	}
 	return existingTXs, tm.FinalizeTransactions(ctx, dbTX, confirmedInfo)
