@@ -15,13 +15,10 @@
 
 package io.kaleido.paladin.pente.domain.helpers;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.kaleido.paladin.testbed.Testbed;
 import io.kaleido.paladin.toolkit.*;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -56,7 +53,7 @@ public class BondTrackerHelper {
         return address;
     }
 
-    public String investorRegistry(String sender) throws IOException {
+    public InvestorRegistryHelper investorRegistry(String sender) throws IOException {
         var output = pente.call(
                 "investorRegistry",
                 JsonABI.newParameters(),
@@ -67,7 +64,7 @@ public class BondTrackerHelper {
                 address,
                 new HashMap<>()
         );
-        return output.output();
+        return new InvestorRegistryHelper(pente, JsonHex.addressFrom(output.output()));
     }
 
     public String balanceOf(String sender, String account) throws IOException {

@@ -20,6 +20,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kaleido.paladin.pente.domain.PenteConfiguration.GroupTupleJSON;
+import io.kaleido.paladin.pente.domain.helpers.BondSubscriptionHelper;
 import io.kaleido.paladin.pente.domain.helpers.BondTrackerHelper;
 import io.kaleido.paladin.pente.domain.helpers.NotoHelper;
 import io.kaleido.paladin.pente.domain.helpers.PenteHelper;
@@ -79,61 +80,11 @@ public class BondTest {
         }
     }
 
-    static final JsonABI.Entry investorRegistryAddInvestorABI = JsonABI.newFunction(
-            "addInvestor",
-            JsonABI.newParameters(
-                    JsonABI.newTuple("group", "Group", JsonABI.newParameters(
-                            JsonABI.newParameter("salt", "bytes32"),
-                            JsonABI.newParameter("members", "string[]")
-                    )),
-                    JsonABI.newParameter("to", "address"),
-                    JsonABI.newTuple("inputs", "", JsonABI.newParameters(
-                            JsonABI.newParameter("addr", "address")
-                    ))
-            ),
-            JsonABI.newParameters()
-    );
-
-    static final JsonABI.Entry bondSubscriptionDeployABI = JsonABI.newFunction(
-            "deploy",
-            JsonABI.newParameters(
-                    JsonABI.newTuple("group", "Group", JsonABI.newParameters(
-                            JsonABI.newParameter("salt", "bytes32"),
-                            JsonABI.newParameter("members", "string[]")
-                    )),
-                    JsonABI.newParameter("bytecode", "bytes"),
-                    JsonABI.newTuple("inputs", "", JsonABI.newParameters(
-                            JsonABI.newParameter("distributionAddress", "address"),
-                            JsonABI.newParameter("units", "uint256")
-                    ))
-            ),
-            JsonABI.newParameters()
-    );
-
-    static final JsonABI.Entry bondSubscriptionMarkReceivedABI = JsonABI.newFunction(
-            "markReceived",
-            JsonABI.newParameters(
-                    JsonABI.newTuple("group", "Group", JsonABI.newParameters(
-                            JsonABI.newParameter("salt", "bytes32"),
-                            JsonABI.newParameter("members", "string[]")
-                    )),
-                    JsonABI.newParameter("to", "address"),
-                    JsonABI.newTuple("inputs", "", JsonABI.newParameters(
-                            JsonABI.newParameter("units", "uint256")
-                    ))
-            ),
-            JsonABI.newParameters()
-    );
-
     @JsonIgnoreProperties(ignoreUnknown = true)
     record StateSchema(
             @JsonProperty
             JsonHex.Bytes32 id
     ) {
-    }
-
-    private static Testbed.PrivateContractTransaction getTransactionInfo(LinkedHashMap<String, Object> res) {
-        return new ObjectMapper().convertValue(res, Testbed.PrivateContractTransaction.class);
     }
 
     @Test
@@ -170,11 +121,6 @@ public class BondTest {
                     this.getClass().getClassLoader(),
                     "contracts/shared/TokenDistributionFactory.sol/TokenDistributionFactory.json",
                     "abi"
-            );
-            String bondSubscriptionBytecode = ResourceLoader.jsonResourceEntryText(
-                    this.getClass().getClassLoader(),
-                    "contracts/private/BondSubscription.sol/BondSubscription.json",
-                    "bytecode"
             );
 
             // Create the token distribution factory on the base ledger
@@ -255,57 +201,20 @@ public class BondTest {
             bondTracker.setDistribution("custodian", tokenDistributionAddress.toString());
 
             // Add Alice as an allowed investor
-            String investorRegistryAddress = bondTracker.investorRegistry("custodian");
-            testbed.getRpcClient().request("testbed_invoke",
-                    new PrivateContractInvoke(
-                            "custodian",
-                            JsonHex.addressFrom(issuerCustodianInstance.address()),
-                            investorRegistryAddInvestorABI,
-                            new HashMap<>() {{
-                                put("group", issuerCustodianGroup);
-                                put("to", investorRegistryAddress);
-                                put("inputs", new HashMap<>() {{
-                                    put("addr", aliceAddress);
-                                }});
-                            }}
-                    ), true);
+            var investorRegistry = bondTracker.investorRegistry("custodian");
+            investorRegistry.addInvestor("custodian", aliceAddress);
 
             // Alice deploys BondSubscription to the alice/custodian privacy group, to request subscription
             // TODO: if Alice deploys, how can custodian trust it's the correct logic?
-            var tx = getTransactionInfo(
-                    testbed.getRpcClient().request("testbed_invoke",
-                            new PrivateContractInvoke(
-                                    "alice",
-                                    JsonHex.addressFrom(aliceCustodianInstance.address()),
-                                    bondSubscriptionDeployABI,
-                                    new HashMap<>() {{
-                                        put("group", aliceCustodianGroup);
-                                        put("bytecode", bondSubscriptionBytecode);
-                                        put("inputs", new HashMap<>() {{
-                                            put("distributionAddress", tokenDistributionAddress);
-                                            put("units", 1000);
-                                        }});
-                                    }}
-                            ), true));
-            var extraData = new ObjectMapper().readValue(tx.extraData(), PenteConfiguration.TransactionExtraData.class);
-            var bondSubscriptionAddress = extraData.contractAddress();
+            var bondSubscription = BondSubscriptionHelper.deploy(aliceCustodianInstance, "alice", new HashMap<>() {{
+                put("distributionAddress", tokenDistributionAddress);
+                put("units", 1000);
+            }});
 
             // Alice receives full bond distribution
             // TODO: take payment as a cash token from Alice
             // TODO: this should be done together as an Atom
-            testbed.getRpcClient().request("testbed_invoke",
-                    new PrivateContractInvoke(
-                            "alice",
-                            JsonHex.addressFrom(aliceCustodianInstance.address()),
-                            bondSubscriptionMarkReceivedABI,
-                            new HashMap<>() {{
-                                put("group", aliceCustodianGroup);
-                                put("to", bondSubscriptionAddress);
-                                put("inputs", new HashMap<>() {{
-                                    put("units", 1000);
-                                }});
-                            }}
-                    ), true);
+            bondSubscription.markReceived("alice", 1000);
             noto.transfer("custodian", "alice", 1000);
 
             // TODO: figure out how to test negative cases (such as when Pente reverts due to a non-allowed investor)
