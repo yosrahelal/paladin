@@ -224,7 +224,7 @@ task clean {
 }
 
 // Existing 'make' task
-task make(type: Exec, dependsOn: [copySolidity]) {
+task make(type: Exec, dependsOn: [copySolidity,":toolkit:go:protoc"]) {
     executable 'make'
 }
 
