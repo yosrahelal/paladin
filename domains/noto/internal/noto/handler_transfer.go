@@ -327,7 +327,7 @@ func (h *transferHandler) guardTransfer(ctx context.Context, tx *types.ParsedTra
 
 	if tx.DomainConfig.DecodedData.PrivateAddress != nil {
 		transactionType = prototk.PreparedTransaction_PRIVATE
-		functionABI = penteInvokeABI("onMint", functionABI.Inputs)
+		functionABI = penteInvokeABI("onTransfer", functionABI.Inputs)
 		penteParams := &PenteInvokeParams{
 			Group:  tx.DomainConfig.DecodedData.PrivateGroup,
 			To:     tx.DomainConfig.DecodedData.PrivateAddress,
