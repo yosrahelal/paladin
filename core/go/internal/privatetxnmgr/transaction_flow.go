@@ -73,7 +73,7 @@ type transactionFlow struct {
 	identityResolver            components.IdentityResolver
 	syncPoints                  syncpoints.SyncPoints
 	transportWriter             ptmgrtypes.TransportWriter
-	finalizeReason              string
+	finalizeRevertReason        string
 	finalizeRequired            bool
 	finalizePending             bool
 	complete                    bool

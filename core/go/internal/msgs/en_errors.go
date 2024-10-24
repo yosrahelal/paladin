@@ -279,7 +279,7 @@ var (
 	MsgPrivateTxManagerAssembleError           = ffe("PD011802", "Error assembling transaction: %s")
 	MsgPrivateTxManagerParseFailed             = ffe("PD011803", "Failed to parse message")
 	MsgPrivateTxManagerInvalidMessage          = ffe("PD011804", "Invalid message received from transport")
-	MsgSequencerInternalError                  = ffe("PD011805", "Sequencer internal error %s, ")
+	MsgSequencerInternalError                  = ffe("PD011805", "Sequencer internal error")
 	MsgKeyResolutionFailed                     = ffe("PD011806", "Key resolution failed for key %s, algorithm %s, verifierType %s")
 	MsgDeployInitFailed                        = ffe("PD011807", "Failed to initialise a deploy transaction")
 	MsgDeployPrepareFailed                     = ffe("PD011808", "Failed to prepare a deploy transaction")
@@ -297,6 +297,7 @@ var (
 	MsgPrivateTxManagerDeployError             = ffe("PD011820", "Failed to deploy private contract")
 	MsgPrivateTxMgrEncodeCallDataFailed        = ffe("PD011821", "Failed to encode call data '%s' for private contract deploy")
 	MsgPrivateTxManagerNonLocalSigningAddr     = ffe("PD011822", "Attempt do dispatch a blockchain transaction using a signing identity for a different node: %s")
+	MsgPrivateTxManagerStateHashContention     = ffe("PD011823", "Contention detected attempting to spend hash %s in multiple transactions")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")

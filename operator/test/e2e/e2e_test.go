@@ -197,6 +197,7 @@ var _ = Describe("controller", Ordered, func() {
 		It("sends some notos to sally on node2", func() {
 			for _, amount := range []*tktypes.HexUint256{
 				notoAmount(33), // 79
+				notoAmount(66), // 13
 			} {
 				txn := rpc["node1"].ForABI(ctx, nototypes.NotoABI).
 					Private().

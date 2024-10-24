@@ -94,7 +94,7 @@ func (tf *transactionFlow) applyTransactionAssembleFailedEvent(ctx context.Conte
 	tf.latestEvent = "TransactionAssembleFailedEvent"
 	tf.latestError = event.Error
 	tf.finalizeRequired = true
-	tf.finalizeReason = event.Error
+	tf.finalizeRevertReason = event.Error
 }
 
 func (tf *transactionFlow) applyTransactionSignedEvent(ctx context.Context, event *ptmgrtypes.TransactionSignedEvent) {

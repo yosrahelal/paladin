@@ -36,11 +36,6 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 		return
 	}
 
-	if tf.dispatched {
-		log.L(ctx).Infof("Transaction %s is dispatched", tf.transaction.ID.String())
-		return
-	}
-
 	// Lets get the nasty stuff out of the way first
 	// if the event handler has marked the transaction as failed, then we initiate the finalize sync point
 	if tf.finalizeRequired {
@@ -51,6 +46,11 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 		//we know we need to finalize but we are not currently waiting for a finalize to complete
 		// most likely a previous attempt to finalize has failed
 		tf.finalize(ctx)
+	}
+
+	if tf.dispatched {
+		log.L(ctx).Infof("Transaction %s is dispatched", tf.transaction.ID.String())
+		return
 	}
 
 	if tf.transaction.PreAssembly == nil {
@@ -151,13 +151,13 @@ func (tf *transactionFlow) revertTransaction(ctx context.Context, revertReason s
 	//trigger a finalize and update the transaction state so that finalize can be retried if it fails
 	tf.finalizeRequired = true
 	tf.finalizePending = true
-	tf.finalizeReason = revertReason
+	tf.finalizeRevertReason = revertReason
 	tf.finalize(ctx)
 
 }
 
 func (tf *transactionFlow) finalize(ctx context.Context) {
-	log.L(ctx).Infof("finalize transaction %s: %s", tf.transaction.ID.String(), tf.finalizeReason)
+	log.L(ctx).Errorf("finalize transaction %s: %s", tf.transaction.ID.String(), tf.finalizeRevertReason)
 	//flush that to the txmgr database
 	// so that the user can see that it is reverted and so that we stop retrying to assemble and endorse it
 
@@ -165,7 +165,7 @@ func (tf *transactionFlow) finalize(ctx context.Context) {
 		ctx,
 		tf.domainAPI.Address(),
 		tf.transaction.ID,
-		tf.finalizeReason,
+		tf.finalizeRevertReason,
 		func(ctx context.Context) {
 			//we are not on the main event loop thread so can't update in memory state here.
 			// need to go back into the event loop
@@ -184,7 +184,7 @@ func (tf *transactionFlow) finalize(ctx context.Context) {
 			// Reset the whole domain context on failure
 			tf.endorsementGatherer.DomainContext().Reset()
 
-			go tf.publisher.PublishTransactionFinalizeError(ctx, tf.transaction.ID.String(), tf.finalizeReason, rollbackErr)
+			go tf.publisher.PublishTransactionFinalizeError(ctx, tf.transaction.ID.String(), tf.finalizeRevertReason, rollbackErr)
 		},
 	)
 }
