@@ -14,53 +14,59 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useContext, useEffect, useState } from "react";
-import { ApplicationContext } from "../Context";
-import { Registry } from "../components/Registry";
 import { Box, Fade, Paper, Typography } from "@mui/material";
+import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
+import { useContext } from "react";
+import { Registry } from "../components/Registry";
+import { ApplicationContext } from "../contexts/ApplicationContext";
+import { fetchRegistries } from "../queries/registry";
 
 export const Registries: React.FC = () => {
-
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
-  const [loading, setLoading] = useState(true);
-  const [registries, setRegistries] = useState<string[]>([]);
 
-  useEffect(() => {
-    let requestPayload = {
-      jsonrpc: '2.0',
-      id: Date.now(),
-      method: 'reg_registries'
-    };
-    fetch('/json-rpc', {
-      method: 'post',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestPayload)
-    }).then(async response => {
-      setRegistries((await response.json()).result);
-    }).finally(() => setLoading(false));
-  }, [lastBlockWithTransactions]);
+  const { data: registries, isLoading: loadingRegistries } = useQuery({
+    queryKey: ["registries", lastBlockWithTransactions],
+    queryFn: () => fetchRegistries(),
+  });
 
-  if (loading) {
+  if (loadingRegistries) {
     return <></>;
   }
 
   return (
     <Fade timeout={800} in={true}>
-      <Box sx={{ padding: '20px', maxWidth: '1200px', marginLeft: 'auto', marginRight: 'auto' }}>
-        <Paper sx={{
-          padding: '10px', paddingTop: '12px', backgroundColor: 'rgba(255, 255, 255, .65)'
-        }}>
-          <Typography align="center" sx={{ fontSize: '24px', fontWeight: 500 }}>{t('entries')}</Typography>
-          <Box sx={{ padding: '20px', overflow: 'scroll', height: 'calc(100vh - 162px)' }}>
-            {registries.map(registry => <Registry key={registry} registryName={registry} />)}
+      <Box
+        sx={{
+          padding: "20px",
+          maxWidth: "1200px",
+          marginLeft: "auto",
+          marginRight: "auto",
+        }}
+      >
+        <Paper
+          sx={{
+            padding: "10px",
+            paddingTop: "12px",
+            backgroundColor: "rgba(255, 255, 255, .65)",
+          }}
+        >
+          <Typography align="center" sx={{ fontSize: "24px", fontWeight: 500 }}>
+            {t("entries")}
+          </Typography>
+          <Box
+            sx={{
+              padding: "20px",
+              overflow: "scroll",
+              height: "calc(100vh - 162px)",
+            }}
+          >
+            {registries?.map((registry) => (
+              <Registry key={registry} registryName={registry} />
+            ))}
           </Box>
         </Paper>
       </Box>
     </Fade>
   );
-
-}
+};

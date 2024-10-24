@@ -14,56 +14,51 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export interface IApplicationContext {
-  lastBlockWithTransactions: number
-  errorMessage?: string
-}
-
 export interface ITransaction {
-  hash: string
-  blockNumber: number
-  transactionIndex: number
-  from: string
-  nonce: number
-  contractAddress?: string
-  result: string
+  hash: string;
+  blockNumber: number;
+  transactionIndex: number;
+  from: string;
+  nonce: number;
+  contractAddress?: string;
+  result: string;
 }
 
 export interface IEvent {
-  blockNumber: number
-  transactionIndex: number
-  logIndex: number
-  transactionHash: string
-  signature: string
+  blockNumber: number;
+  transactionIndex: number;
+  logIndex: number;
+  transactionHash: string;
+  signature: string;
 }
 
 export interface IRegistryEntry {
-  registry: string
-  id: string
-  name: string
-  active: boolean
+  registry: string;
+  id: string;
+  name: string;
+  active: boolean;
   properties: {
-    [key: string]: string
-  }
+    [key: string]: string;
+  };
 }
 
 export interface IPaladinTransaction {
-  id: string
-  created: string
-  type: string
-  domain: string
-  function: string
-  to?: string
-  from: string
-  abiReference: string
+  id: string;
+  created: string;
+  type: string;
+  domain: string;
+  function: string;
+  to?: string;
+  from: string;
+  abiReference: string;
   data: {
-    [key: string]: string
-  }
+    [key: string]: string;
+  };
 }
 
 export interface ITransactionReceipt {
-  blockNumber: number
-  id: string
-  success: boolean
-  transactionHash: string
+  blockNumber: number;
+  id: string;
+  success: boolean;
+  transactionHash: string;
 }
