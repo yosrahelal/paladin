@@ -22,7 +22,7 @@ import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
-import toast from "react-hot-toast";
+import toast, { Toaster } from "react-hot-toast";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Header } from "./components/Header";
 import { ApplicationContextProvider } from "./contexts/ApplicationContext";
@@ -81,6 +81,7 @@ function App() {
           </ThemeProvider>
         </ApplicationContextProvider>
       </QueryClientProvider>
+      <Toaster position="bottom-left" toastOptions={{ duration: 5000 }} />
     </>
   );
 }

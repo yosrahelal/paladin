@@ -24,6 +24,9 @@ export const ApplicationContextProvider = ({ children }: Props) => {
         return 0;
       }),
     refetchInterval: constants.UPDATE_FREQUENCY_MILLISECONDS,
+    retry: (failureCount) => {
+      return failureCount < 1;
+    },
   });
 
   return (
