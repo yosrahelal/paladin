@@ -13,14 +13,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package io.kaleido.paladin.pente.domain;
+package io.kaleido.paladin.pente.domain.helpers;
+
+
+import io.kaleido.paladin.testbed.Testbed;
+
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kaleido.paladin.pente.domain.PenteConfiguration.GroupTupleJSON;
-import io.kaleido.paladin.testbed.Testbed;
 import io.kaleido.paladin.toolkit.*;
 
 import java.io.IOException;
@@ -28,7 +30,6 @@ import java.util.HashMap;
 import java.util.List;
 
 public class NotoHelper {
-
     final String domainName;
     final Testbed testbed;
     final String address;
@@ -98,6 +99,10 @@ public class NotoHelper {
         this.domainName = domainName;
         this.testbed = testbed;
         this.address = address;
+    }
+
+    public String address() {
+        return address;
     }
 
     public List<NotoCoin> queryStates(JsonHex.Bytes32 schemaID, JsonQuery.Query query) throws IOException {

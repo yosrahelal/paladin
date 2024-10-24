@@ -20,10 +20,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.kaleido.paladin.pente.domain.PenteConfiguration.GroupTupleJSON;
+import io.kaleido.paladin.pente.domain.helpers.BondTrackerHelper;
+import io.kaleido.paladin.pente.domain.helpers.NotoHelper;
+import io.kaleido.paladin.pente.domain.helpers.PenteHelper;
 import io.kaleido.paladin.testbed.Testbed;
 import io.kaleido.paladin.toolkit.*;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -33,8 +34,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class BondTest {
-
-    private static final Logger LOGGER = LogManager.getLogger(BondTest.class);
 
     private final Testbed.Setup testbedSetup = new Testbed.Setup("../../core/go/db/migrations/sqlite", 5000);
 
@@ -79,71 +78,6 @@ public class BondTest {
             return new JsonHex.Address(contractAddr);
         }
     }
-
-    static final JsonABI.Entry bondTrackerDeployABI = JsonABI.newFunction(
-            "deploy",
-            JsonABI.newParameters(
-                    JsonABI.newTuple("group", "Group", JsonABI.newParameters(
-                            JsonABI.newParameter("salt", "bytes32"),
-                            JsonABI.newParameter("members", "string[]")
-                    )),
-                    JsonABI.newParameter("bytecode", "bytes"),
-                    JsonABI.newTuple("inputs", "", JsonABI.newParameters(
-                            JsonABI.newParameter("name", "string"),
-                            JsonABI.newParameter("symbol", "string"),
-                            JsonABI.newParameter("custodian", "address"),
-                            JsonABI.newParameter("distributionFactory", "address")
-                    ))
-            ),
-            JsonABI.newParameters()
-    );
-
-    static final JsonABI.Entry bondTrackerBalanceABI = JsonABI.newFunction(
-            "balanceOf",
-            JsonABI.newParameters(
-                    JsonABI.newTuple("group", "Group", JsonABI.newParameters(
-                            JsonABI.newParameter("salt", "bytes32"),
-                            JsonABI.newParameter("members", "string[]")
-                    )),
-                    JsonABI.newParameter("to", "address"),
-                    JsonABI.newTuple("inputs", "", JsonABI.newParameters(
-                            JsonABI.newParameter("account", "address")
-                    ))
-            ),
-            JsonABI.newParameters(
-                    JsonABI.newParameter("output", "uint256")
-            )
-    );
-
-    static final JsonABI.Entry bondTrackerInvestorRegistryABI = JsonABI.newFunction(
-            "investorRegistry",
-            JsonABI.newParameters(
-                    JsonABI.newTuple("group", "Group", JsonABI.newParameters(
-                            JsonABI.newParameter("salt", "bytes32"),
-                            JsonABI.newParameter("members", "string[]")
-                    )),
-                    JsonABI.newParameter("to", "address"),
-                    JsonABI.newTuple("inputs", "", JsonABI.newParameters())
-            ),
-            JsonABI.newParameters(
-                    JsonABI.newParameter("output", "address")
-            )
-    );
-
-    static final JsonABI.Entry bondTrackerSetDistributionABI = JsonABI.newFunction(
-            "setDistribution",
-            JsonABI.newParameters(
-                    JsonABI.newTuple("group", "Group", JsonABI.newParameters(
-                            JsonABI.newParameter("salt", "bytes32"),
-                            JsonABI.newParameter("members", "string[]")
-                    )),
-                    JsonABI.newParameter("to", "address"),
-                    JsonABI.newTuple("inputs", "", JsonABI.newParameters(
-                            JsonABI.newParameter("addr", "address")
-                    ))
-            ),
-            JsonABI.newParameters()
-    );
 
     static final JsonABI.Entry investorRegistryAddInvestorABI = JsonABI.newFunction(
             "addInvestor",
@@ -192,20 +126,13 @@ public class BondTest {
     );
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record PenteCallOutputJSON(
-            @JsonProperty
-            String output
-    ) {
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
     record StateSchema(
             @JsonProperty
             JsonHex.Bytes32 id
     ) {
     }
 
-    Testbed.PrivateContractTransaction getTransactionInfo(LinkedHashMap<String, Object> res) {
+    private static Testbed.PrivateContractTransaction getTransactionInfo(LinkedHashMap<String, Object> res) {
         return new ObjectMapper().convertValue(res, Testbed.PrivateContractTransaction.class);
     }
 
@@ -234,11 +161,6 @@ public class BondTest {
             assertEquals(1, notoSchemas.size());
             var notoSchema = mapper.convertValue(notoSchemas.getFirst(), StateSchema.class);
 
-            String bondTrackerBytecode = ResourceLoader.jsonResourceEntryText(
-                    this.getClass().getClassLoader(),
-                    "contracts/private/BondTracker.sol/BondTracker.json",
-                    "bytecode"
-            );
             String tokenDistributionFactoryBytecode = ResourceLoader.jsonResourceEntryText(
                     this.getClass().getClassLoader(),
                     "contracts/shared/TokenDistributionFactory.sol/TokenDistributionFactory.json",
@@ -262,67 +184,42 @@ public class BondTest {
                     tokenDistributionFactoryBytecode,
                     new HashMap<String, String>());
 
+            String custodianAddress = testbed.getRpcClient().request("testbed_resolveVerifier",
+                    "custodian", Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS);
+            String aliceAddress = testbed.getRpcClient().request("testbed_resolveVerifier",
+                    "alice", Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS);
+
             GroupTupleJSON issuerCustodianGroup = new GroupTupleJSON(
                     JsonHex.randomBytes32(), new String[]{"issuer", "custodian"});
             GroupTupleJSON aliceCustodianGroup = new GroupTupleJSON(
                     JsonHex.randomBytes32(), new String[]{"alice", "custodian"});
 
             // Create the privacy groups
-            String issuerCustodianInstanceAddress = testbed.getRpcClient().request("testbed_deploy",
-                    "pente",
-                    new PenteConfiguration.PrivacyGroupConstructorParamsJSON(
-                            issuerCustodianGroup,
-                            "shanghai",
-                            PenteConfiguration.ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES,
-                            true
-                    ));
-            assertFalse(issuerCustodianInstanceAddress.isBlank());
-            String aliceCustodianInstanceAddress = testbed.getRpcClient().request("testbed_deploy",
-                    "pente",
-                    new PenteConfiguration.PrivacyGroupConstructorParamsJSON(
-                            aliceCustodianGroup,
-                            "shanghai",
-                            PenteConfiguration.ENDORSEMENT_TYPE__GROUP_SCOPED_IDENTITIES,
-                            true
-                    ));
-            assertFalse(aliceCustodianInstanceAddress.isBlank());
-
-            String custodianAddress = testbed.getRpcClient().request("testbed_resolveVerifier",
-                    "custodian", Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS);
-            String aliceAddress = testbed.getRpcClient().request("testbed_resolveVerifier",
-                    "alice", Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS);
+            var issuerCustodianInstance = PenteHelper.newPrivacyGroup(
+                    "pente", testbed, issuerCustodianGroup, true);
+            assertFalse(issuerCustodianInstance.address().isBlank());
+            var aliceCustodianInstance = PenteHelper.newPrivacyGroup(
+                    "pente", testbed, aliceCustodianGroup, true);
+            assertFalse(aliceCustodianInstance.address().isBlank());
 
             // Deploy BondTracker to the issuer/custodian privacy group
-            var tx = getTransactionInfo(
-                    testbed.getRpcClient().request("testbed_invoke",
-                            new PrivateContractInvoke(
-                                    "issuer",
-                                    JsonHex.addressFrom(issuerCustodianInstanceAddress),
-                                    bondTrackerDeployABI,
-                                    new HashMap<>() {{
-                                        put("group", issuerCustodianGroup);
-                                        put("bytecode", bondTrackerBytecode);
-                                        put("inputs", new HashMap<>() {{
-                                            put("name", "BOND");
-                                            put("symbol", "BOND");
-                                            put("custodian", custodianAddress);
-                                            put("distributionFactory", tokenDistributionFactoryAddress);
-                                        }});
-                                    }}
-                            ), true));
-            var extraData = new ObjectMapper().readValue(tx.extraData(), PenteConfiguration.TransactionExtraData.class);
-            var bondTrackerAddress = extraData.contractAddress();
+            var bondTracker = BondTrackerHelper.deploy(issuerCustodianInstance, "issuer", new HashMap<>() {{
+                put("name", "BOND");
+                put("symbol", "BOND");
+                put("custodian", custodianAddress);
+                put("distributionFactory", tokenDistributionFactoryAddress);
+            }});
 
             // Create Noto token
             var noto = NotoHelper.deploy("noto", testbed,
                     new NotoHelper.ConstructorParams(
                             "custodian",
                             new NotoHelper.HookParams(
-                                    issuerCustodianInstanceAddress,
-                                    bondTrackerAddress,
+                                    issuerCustodianInstance.address(),
+                                    bondTracker.address(),
                                     issuerCustodianGroup),
                             false));
-            assertFalse(noto.address.isBlank());
+            assertFalse(noto.address().isBlank());
 
             // Issue bond
             noto.mint("issuer", "custodian", 1000);
@@ -334,21 +231,7 @@ public class BondTest {
             assertEquals(custodianAddress, notoStates.getFirst().data().owner());
 
             // Validate bond tracker balance
-            LinkedHashMap<String, Object> queryResult = testbed.getRpcClient().request("testbed_call",
-                    new PrivateContractInvoke(
-                            "issuer",
-                            JsonHex.addressFrom(issuerCustodianInstanceAddress),
-                            bondTrackerBalanceABI,
-                            new HashMap<>() {{
-                                put("group", issuerCustodianGroup);
-                                put("to", bondTrackerAddress.toString());
-                                put("inputs", new HashMap<>() {{
-                                    put("account", custodianAddress);
-                                }});
-                            }}
-                    ), "");
-            var custodianBalance = mapper.convertValue(queryResult, PenteCallOutputJSON.class);
-            assertEquals("1000", custodianBalance.output);
+            assertEquals("1000", bondTracker.balanceOf("issuer", custodianAddress));
 
             // Pull the last transaction receipt
             // TODO: is there a better way to correlate this from the testbed transaction?
@@ -369,40 +252,14 @@ public class BondTest {
 
             // Tell bond tracker about the distribution contract
             // TODO: feels slightly odd to have to tell the contract about the result of the deployment it requested
-            testbed.getRpcClient().request("testbed_invoke",
-                    new PrivateContractInvoke(
-                            "custodian",
-                            JsonHex.addressFrom(issuerCustodianInstanceAddress),
-                            bondTrackerSetDistributionABI,
-                            new HashMap<>() {{
-                                put("group", issuerCustodianGroup);
-                                put("to", bondTrackerAddress.toString());
-                                put("inputs", new HashMap<>() {{
-                                    put("addr", tokenDistributionAddress);
-                                }});
-                            }}
-                    ), true);
-
-            // Get investor registry address from bond tracker
-            queryResult = testbed.getRpcClient().request("testbed_call",
-                    new PrivateContractInvoke(
-                            "custodian",
-                            JsonHex.addressFrom(issuerCustodianInstanceAddress),
-                            bondTrackerInvestorRegistryABI,
-                            new HashMap<>() {{
-                                put("group", issuerCustodianGroup);
-                                put("to", bondTrackerAddress.toString());
-                                put("inputs", new HashMap<>());
-                            }}
-                    ), "");
-            var queryOutput = mapper.convertValue(queryResult, PenteCallOutputJSON.class);
-            String investorRegistryAddress = queryOutput.output();
+            bondTracker.setDistribution("custodian", tokenDistributionAddress.toString());
 
             // Add Alice as an allowed investor
+            String investorRegistryAddress = bondTracker.investorRegistry("custodian");
             testbed.getRpcClient().request("testbed_invoke",
                     new PrivateContractInvoke(
                             "custodian",
-                            JsonHex.addressFrom(issuerCustodianInstanceAddress),
+                            JsonHex.addressFrom(issuerCustodianInstance.address()),
                             investorRegistryAddInvestorABI,
                             new HashMap<>() {{
                                 put("group", issuerCustodianGroup);
@@ -415,11 +272,11 @@ public class BondTest {
 
             // Alice deploys BondSubscription to the alice/custodian privacy group, to request subscription
             // TODO: if Alice deploys, how can custodian trust it's the correct logic?
-            tx = getTransactionInfo(
+            var tx = getTransactionInfo(
                     testbed.getRpcClient().request("testbed_invoke",
                             new PrivateContractInvoke(
                                     "alice",
-                                    JsonHex.addressFrom(aliceCustodianInstanceAddress),
+                                    JsonHex.addressFrom(aliceCustodianInstance.address()),
                                     bondSubscriptionDeployABI,
                                     new HashMap<>() {{
                                         put("group", aliceCustodianGroup);
@@ -430,7 +287,7 @@ public class BondTest {
                                         }});
                                     }}
                             ), true));
-            extraData = new ObjectMapper().readValue(tx.extraData(), PenteConfiguration.TransactionExtraData.class);
+            var extraData = new ObjectMapper().readValue(tx.extraData(), PenteConfiguration.TransactionExtraData.class);
             var bondSubscriptionAddress = extraData.contractAddress();
 
             // Alice receives full bond distribution
@@ -439,7 +296,7 @@ public class BondTest {
             testbed.getRpcClient().request("testbed_invoke",
                     new PrivateContractInvoke(
                             "alice",
-                            JsonHex.addressFrom(aliceCustodianInstanceAddress),
+                            JsonHex.addressFrom(aliceCustodianInstance.address()),
                             bondSubscriptionMarkReceivedABI,
                             new HashMap<>() {{
                                 put("group", aliceCustodianGroup);
@@ -460,36 +317,8 @@ public class BondTest {
             assertEquals(aliceAddress, notoStates.getFirst().data().owner());
 
             // Validate bond tracker balance
-            queryResult = testbed.getRpcClient().request("testbed_call",
-                    new PrivateContractInvoke(
-                            "issuer",
-                            JsonHex.addressFrom(issuerCustodianInstanceAddress),
-                            bondTrackerBalanceABI,
-                            new HashMap<>() {{
-                                put("group", issuerCustodianGroup);
-                                put("to", bondTrackerAddress.toString());
-                                put("inputs", new HashMap<>() {{
-                                    put("account", custodianAddress);
-                                }});
-                            }}
-                    ), "");
-            custodianBalance = mapper.convertValue(queryResult, PenteCallOutputJSON.class);
-            queryResult = testbed.getRpcClient().request("testbed_call",
-                    new PrivateContractInvoke(
-                            "issuer",
-                            JsonHex.addressFrom(issuerCustodianInstanceAddress),
-                            bondTrackerBalanceABI,
-                            new HashMap<>() {{
-                                put("group", issuerCustodianGroup);
-                                put("to", bondTrackerAddress.toString());
-                                put("inputs", new HashMap<>() {{
-                                    put("account", aliceAddress);
-                                }});
-                            }}
-                    ), "");
-            var aliceBalance = mapper.convertValue(queryResult, PenteCallOutputJSON.class);
-            assertEquals("0", custodianBalance.output);
-            assertEquals("1000", aliceBalance.output);
+            assertEquals("0", bondTracker.balanceOf("issuer", custodianAddress));
+            assertEquals("1000", bondTracker.balanceOf("issuer", aliceAddress));
         }
     }
 }

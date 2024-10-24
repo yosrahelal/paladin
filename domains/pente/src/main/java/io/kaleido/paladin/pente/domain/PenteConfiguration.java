@@ -99,7 +99,7 @@ public class PenteConfiguration {
     public static final String ENDORSEMENT_TYPE_GROUP_SCOPED_KEYS = "groupScopedKeys";
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record GroupTupleJSON(
+   public record GroupTupleJSON(
             @JsonProperty
             Bytes32 salt,
             @JsonProperty
@@ -114,7 +114,7 @@ public class PenteConfiguration {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record PrivacyGroupConstructorParamsJSON(
+    public record PrivacyGroupConstructorParamsJSON(
             @JsonProperty
             GroupTupleJSON group,
             @JsonProperty
@@ -180,7 +180,7 @@ public class PenteConfiguration {
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record TransactionExtraData(
+    public record TransactionExtraData(
             @JsonProperty
             Address contractAddress,
             @JsonProperty
