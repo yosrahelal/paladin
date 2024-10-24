@@ -15,46 +15,36 @@
 // limitations under the License.
 
 import { Box, Typography } from "@mui/material";
+import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
-import { useContext, useEffect, useState } from "react";
-import { IEvent } from "../interfaces";
+import { fetchEvents } from "../queries/events";
 import { Event } from "./Event";
-import { ApplicationContext } from "../Context";
-import { constants } from "../utils";
+import { useContext } from "react";
+import { ApplicationContext } from "../contexts/ApplicationContext";
 
 export const Events: React.FC = () => {
-
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
-  const [events, setEvents] = useState<IEvent[]>();
-
-  useEffect(() => {
-    let requestPayload = {
-      jsonrpc: '2.0',
-      id: Date.now(),
-      method: 'bidx_queryIndexedEvents',
-      params: [{ limit: constants.EVENT_QUERY_LIMIT, sort: ['blockNumber DESC', 'transactionIndex DESC', 'logIndex DESC'] }]
-    };
-    fetch('/json-rpc', {
-      method: 'post',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestPayload)
-    }).then(async response => {
-      setEvents((await response.json()).result);
-    });
-  }, [lastBlockWithTransactions]);
+  const { data: events } = useQuery({
+    queryKey: ["events", lastBlockWithTransactions],
+    queryFn: () => fetchEvents(),
+  });
 
   return (
     <>
-      <Typography align="center" sx={{ fontSize: '24px', fontWeight: 500 }}>{t('events')}</Typography>
-      <Box sx={{ height: 'calc(100vh - 163px)', overflow: 'scroll', padding: '20px' }}>
-        {events?.map(event =>
+      <Typography align="center" sx={{ fontSize: "24px", fontWeight: 500 }}>
+        {t("events")}
+      </Typography>
+      <Box
+        sx={{
+          height: "calc(100vh - 163px)",
+          overflow: "scroll",
+          padding: "20px",
+        }}
+      >
+        {events?.map((event) => (
           <Event key={`${event.blockNumber}-${event.logIndex}`} event={event} />
-        )}
+        ))}
       </Box>
     </>
   );
-
-}
+};
