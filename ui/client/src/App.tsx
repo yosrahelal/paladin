@@ -22,29 +22,17 @@ import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
-import toast, { Toaster } from "react-hot-toast";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Header } from "./components/Header";
 import { ApplicationContextProvider } from "./contexts/ApplicationContext";
-import { ErrorDialog } from "./dialogs/Error";
 import { themeOptions } from "./themes/default";
 import { Indexer } from "./views/indexer";
 import { Registries } from "./views/Registries";
 import { Submissions } from "./views/Submissions";
 
 const queryClient = new QueryClient({
-  queryCache: new QueryCache({
-    onError: (error) =>
-      toast.custom((t) => {
-        return <ErrorDialog dialogOpen={t.visible} message={error.message} />;
-      }),
-  }),
-  mutationCache: new MutationCache({
-    onError: (error) =>
-      toast.custom((t) => {
-        return <ErrorDialog dialogOpen={t.visible} message={error.message} />;
-      }),
-  }),
+  queryCache: new QueryCache({}),
+  mutationCache: new MutationCache({}),
 });
 
 function App() {
@@ -81,7 +69,6 @@ function App() {
           </ThemeProvider>
         </ApplicationContextProvider>
       </QueryClientProvider>
-      <Toaster position="bottom-left" toastOptions={{ duration: 5000 }} />
     </>
   );
 }

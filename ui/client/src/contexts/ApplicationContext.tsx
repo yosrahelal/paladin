@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createContext } from "react";
 import { constants } from "../components/config";
+import { ErrorDialog } from "../dialogs/Error";
 import { fetchLatestBlockWithTxs } from "../queries/blocks";
 
 interface IApplicationContext {
@@ -14,7 +15,7 @@ interface Props {
 }
 
 export const ApplicationContextProvider = ({ children }: Props) => {
-  const { data: lastBlockWithTransactions } = useQuery({
+  const { data: lastBlockWithTransactions, error } = useQuery({
     queryKey: ["lastBlockWithTransactions"],
     queryFn: () =>
       fetchLatestBlockWithTxs().then((res) => {
@@ -34,6 +35,7 @@ export const ApplicationContextProvider = ({ children }: Props) => {
       value={{ lastBlockWithTransactions: lastBlockWithTransactions ?? 0 }}
     >
       {children}
+      <ErrorDialog dialogOpen={!!error} message={error?.message ?? ""} />
     </ApplicationContext.Provider>
   );
 };
