@@ -210,8 +210,12 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	}
 
 	deployData := &types.NotoConfigData_V0{
-		NotaryLookup: notary.Lookup,
-		NotaryType:   types.NotaryTypeSigner,
+		NotaryLookup:    notary.Lookup,
+		NotaryType:      types.NotaryTypeSigner,
+		RestrictMinting: true,
+	}
+	if params.RestrictMinting != nil {
+		deployData.RestrictMinting = *params.RestrictMinting
 	}
 
 	notaryAddress, err := tktypes.ParseEthAddress(notary.Verifier)

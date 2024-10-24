@@ -35,10 +35,11 @@ type NotoConfig_V0 struct {
 }
 
 type NotoConfigData_V0 struct {
-	NotaryLookup   string              `json:"notaryLookup"`
-	NotaryType     tktypes.Bytes32     `json:"notaryType"`
-	PrivateAddress *tktypes.EthAddress `json:"privateAddress"`
-	PrivateGroup   *PentePrivateGroup  `json:"privateGroup"`
+	NotaryLookup    string              `json:"notaryLookup"`
+	NotaryType      tktypes.Bytes32     `json:"notaryType"`
+	PrivateAddress  *tktypes.EthAddress `json:"privateAddress"`
+	PrivateGroup    *PentePrivateGroup  `json:"privateGroup"`
+	RestrictMinting bool                `json:"restrictMinting"`
 }
 
 type PentePrivateGroup struct {

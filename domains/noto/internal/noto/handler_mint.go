@@ -52,7 +52,7 @@ func (h *mintHandler) ValidateParams(ctx context.Context, config *types.NotoConf
 func (h *mintHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	params := tx.Params.(*types.MintParams)
 
-	if req.Transaction.From != tx.DomainConfig.DecodedData.NotaryLookup {
+	if tx.DomainConfig.DecodedData.RestrictMinting && req.Transaction.From != tx.DomainConfig.DecodedData.NotaryLookup {
 		return nil, i18n.NewError(ctx, msgs.MsgMintOnlyNotary)
 	}
 	return &prototk.InitTransactionResponse{

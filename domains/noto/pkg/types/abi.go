@@ -68,9 +68,10 @@ var NotoABI = abi.ABI{
 }
 
 type ConstructorParams struct {
-	Notary         string      `json:"notary"`                   // Lookup string for the notary identity
-	Implementation string      `json:"implementation,omitempty"` // Use a specific implementation of Noto that was registered to the factory (blank to use default)
-	Hooks          *HookParams `json:"hooks,omitempty"`          // Configure hooks for programmable logic around Noto operations
+	Notary          string      `json:"notary"`                    // Lookup string for the notary identity
+	Implementation  string      `json:"implementation,omitempty"`  // Use a specific implementation of Noto that was registered to the factory (blank to use default)
+	Hooks           *HookParams `json:"hooks,omitempty"`           // Configure hooks for programmable logic around Noto operations
+	RestrictMinting *bool       `json:"restrictMinting,omitempty"` // Only allow notary to mint (default: true)
 }
 
 // Currently the only supported hooks are provided via a Pente private smart contract
