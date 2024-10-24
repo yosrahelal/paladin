@@ -31,6 +31,7 @@ type StateDistributerConfig struct {
 var PrivateTxManagerDefaults = &PrivateTxManagerConfig{
 	Sequencer: PrivateTxManagerSequencerConfig{
 		MaxConcurrentProcess:    confutil.P(500),
+		MaxInflightTransactions: confutil.P(500),
 		EvaluationInterval:      confutil.P("5m"),
 		PersistenceRetryTimeout: confutil.P("5s"),
 		StaleTimeout:            confutil.P("10m"),
@@ -41,6 +42,7 @@ var PrivateTxManagerDefaults = &PrivateTxManagerConfig{
 
 type PrivateTxManagerSequencerConfig struct {
 	MaxConcurrentProcess    *int    `json:"maxConcurrentProcess,omitempty"`
+	MaxInflightTransactions *int    `json:"maxInflightTransactions,omitempty"`
 	MaxPendingEvents        *int    `json:"maxPendingEvents,omitempty"`
 	EvaluationInterval      *string `json:"evalInterval,omitempty"`
 	PersistenceRetryTimeout *string `json:"persistenceRetryTimeout,omitempty"`

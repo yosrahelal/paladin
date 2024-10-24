@@ -32,11 +32,11 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func NewTransactionFlow(ctx context.Context, transaction *components.PrivateTransaction, nodeID string, components components.AllComponents, domainAPI components.DomainSmartContract, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, syncPoints syncpoints.SyncPoints, transportWriter ptmgrtypes.TransportWriter, requestTimeout time.Duration) ptmgrtypes.TransactionFlow {
+func NewTransactionFlow(ctx context.Context, transaction *components.PrivateTransaction, nodeName string, components components.AllComponents, domainAPI components.DomainSmartContract, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, syncPoints syncpoints.SyncPoints, transportWriter ptmgrtypes.TransportWriter, requestTimeout time.Duration, selectCoordinator CoordinatorSelectorFunction) ptmgrtypes.TransactionFlow {
 	return &transactionFlow{
 		stageErrorRetry:             10 * time.Second,
 		domainAPI:                   domainAPI,
-		nodeID:                      nodeID,
+		nodeName:                    nodeName,
 		components:                  components,
 		publisher:                   publisher,
 		endorsementGatherer:         endorsementGatherer,
@@ -56,13 +56,14 @@ func NewTransactionFlow(ctx context.Context, transaction *components.PrivateTran
 		dispatched:                  false,
 		clock:                       ptmgrtypes.RealClock(),
 		requestTimeout:              requestTimeout,
+		selectCoordinator:           selectCoordinator,
 	}
 }
 
 type transactionFlow struct {
 	stageErrorRetry             time.Duration
 	components                  components.AllComponents
-	nodeID                      string
+	nodeName                    string
 	domainAPI                   components.DomainSmartContract
 	transaction                 *components.PrivateTransaction
 	publisher                   ptmgrtypes.Publisher
@@ -85,6 +86,7 @@ type transactionFlow struct {
 	dispatched                  bool
 	clock                       ptmgrtypes.Clock
 	requestTimeout              time.Duration
+	selectCoordinator           CoordinatorSelectorFunction
 }
 
 func (tf *transactionFlow) GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error) {

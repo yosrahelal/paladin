@@ -203,6 +203,7 @@ message DomainConfig {
   BaseLedgerSubmitConfig base_ledger_submit_config = 3; // Describe the requirements of this domain for how submission happens
   string abi_events_json = 4; // ABI events that the domain will process for state updates
   map<string, int32> signing_algorithms = 5; // A list of supported signing algorithms with the minimum key lengths for each algorithm
+  CoordinatorConfig coordinator_config = 6; // Describe the requirements of this domain for how coordinator selection happens
 }
 
 message BaseLedgerSubmitConfig {
@@ -213,6 +214,19 @@ message BaseLedgerSubmitConfig {
   }
   Mode submit_mode = 1;
   string one_time_use_prefix = 2;
+}
+
+
+message CoordinatorConfig {
+  enum Mode {
+      SENDER_COORDINATES = 0; // every TX is submitted by a different key, with a HD wallet path from the UUID of the TX itself
+      STATIC_COORDINATOR = 1; // one of the endorsers of the transaction should submit the TX (that endorser might specify ENDORSER_SUBMIT)
+      DYNAMIC_COORDINATOR = 2; // TODO: a bank of submitters are provided by the domain config/runtime as candidates to submit transactions
+  }
+  Mode coordinator_selection_mode = 3;
+  optional string static_coordinator = 4;
+  repeated string dynamic_coordinators = 5;
+  optional uint32 range_size = 6;
 }
 
 message StateSchema {

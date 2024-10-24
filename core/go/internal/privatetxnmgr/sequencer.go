@@ -29,8 +29,10 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
+	"github.com/serialx/hashring"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -94,25 +96,30 @@ type Sequencer struct {
 
 	staleTimeout time.Duration
 
-	pendingEvents chan ptmgrtypes.PrivateTransactionEvent
+	pendingTransactionEvents chan ptmgrtypes.PrivateTransactionEvent
 
-	contractAddress     tktypes.EthAddress // the contract address managed by the current sequencer
-	nodeID              string
-	domainAPI           components.DomainSmartContract
-	components          components.AllComponents
-	endorsementGatherer ptmgrtypes.EndorsementGatherer
-	publisher           ptmgrtypes.Publisher
-	identityResolver    components.IdentityResolver
-	syncPoints          syncpoints.SyncPoints
-	stateDistributer    statedistribution.StateDistributer
-	transportWriter     ptmgrtypes.TransportWriter
-	graph               Graph
-	requestTimeout      time.Duration
+	contractAddress             tktypes.EthAddress // the contract address managed by the current sequencer
+	nodeName                    string
+	domainAPI                   components.DomainSmartContract
+	components                  components.AllComponents
+	endorsementGatherer         ptmgrtypes.EndorsementGatherer
+	publisher                   ptmgrtypes.Publisher
+	identityResolver            components.IdentityResolver
+	syncPoints                  syncpoints.SyncPoints
+	stateDistributer            statedistribution.StateDistributer
+	transportWriter             ptmgrtypes.TransportWriter
+	graph                       Graph
+	requestTimeout              time.Duration
+	coordinatorSelectorFunction CoordinatorSelectorFunction
+	blockHeight                 int64
+	newBlockEvents              chan int64
+	assembleRequester           AssembleRequester
 }
+type CoordinatorSelectorFunction func(ctx context.Context) string
 
 func NewSequencer(
 	ctx context.Context,
-	nodeID string,
+	nodeName string,
 	contractAddress tktypes.EthAddress,
 	sequencerConfig *pldconf.PrivateTxManagerSequencerConfig,
 	allComponents components.AllComponents,
@@ -124,6 +131,7 @@ func NewSequencer(
 	stateDistributer statedistribution.StateDistributer,
 	transportWriter ptmgrtypes.TransportWriter,
 	requestTimeout time.Duration,
+
 ) *Sequencer {
 
 	newSequencer := &Sequencer{
@@ -142,8 +150,8 @@ func NewSequencer(
 		processedTxIDs:               make(map[string]bool),
 		orchestrationEvalRequestChan: make(chan bool, 1),
 		stopProcess:                  make(chan bool, 1),
-		pendingEvents:                make(chan ptmgrtypes.PrivateTransactionEvent, *pldconf.PrivateTxManagerDefaults.Sequencer.MaxPendingEvents),
-		nodeID:                       nodeID,
+		pendingTransactionEvents:     make(chan ptmgrtypes.PrivateTransactionEvent, *pldconf.PrivateTxManagerDefaults.Sequencer.MaxPendingEvents),
+		nodeName:                     nodeName,
 		domainAPI:                    domainAPI,
 		components:                   allComponents,
 		endorsementGatherer:          endorsementGatherer,
@@ -154,9 +162,63 @@ func NewSequencer(
 		transportWriter:              transportWriter,
 		graph:                        NewGraph(),
 		requestTimeout:               requestTimeout,
+		newBlockEvents:               make(chan int64, 10), //TODO do we want to make the buffer size configurable? Or should we put in non blocking mode? Does it matter if we miss a block?
+		assembleRequester:            NewAssembleRequester(ctx, confutil.Int(sequencerConfig.MaxInflightTransactions, *pldconf.PrivateTxManagerDefaults.Sequencer.MaxInflightTransactions)),
 	}
 
 	log.L(ctx).Debugf("NewSequencer for contract address %s created: %+v", newSequencer.contractAddress, newSequencer)
+
+	//TODO temporary hack / PoC until we have domain contract config to control the policy
+
+	newSequencer.coordinatorSelectorFunction = func(ctx context.Context) string {
+		// Coordinator selector policy is either
+		//  - coordinator node is statically configured in the contract
+		//  - deterministic and fair rotation between a predefined set of endorsers
+		//  - the sender of the transaction coordinates the transaction
+		//
+		// Submitter selection policy is either
+		// - Coordinator submits
+		// - Sender submits
+		// - 3rd party submission
+
+		// Currently only the following combinations are implemented
+		// 1+1 - core option set for Noto
+		// 2+1 - core option set for Pente
+		// 3+2 - core option set for Zeto
+
+		coordinatorSelectionMode := domainAPI.Domain().Configuration().GetCoordinatorConfig().GetCoordinatorSelectionMode()
+
+		if coordinatorSelectionMode == prototk.CoordinatorConfig_SENDER_COORDINATES {
+			return nodeName
+		}
+
+		coordinatorNode := ""
+
+		if coordinatorSelectionMode == prototk.CoordinatorConfig_STATIC_COORDINATOR {
+			coordinatorNode = domainAPI.Domain().Configuration().GetCoordinatorConfig().GetStaticCoordinator()
+		}
+
+		if coordinatorSelectionMode == prototk.CoordinatorConfig_DYNAMIC_COORDINATOR {
+			dynamicCoordinators := domainAPI.Domain().Configuration().GetCoordinatorConfig().GetDynamicCoordinators()
+			if len(dynamicCoordinators) == 0 {
+				log.L(ctx).Errorf("No dynamic coordinators configured")
+				return nodeName
+			}
+
+			rangeSize := domainAPI.Domain().Configuration().GetCoordinatorConfig().GetRangeSize()
+			if rangeSize == 0 {
+				rangeSize = 10 //TODO this default should be configurable at the node level
+			}
+			rangeIndex := newSequencer.blockHeight / int64(rangeSize)
+
+			//TODO Not sure we even need a hashring for this given that rangeIndex is incrementing, we could have a simple round robin scheme using modulo of the number of coordinators
+			ring := hashring.New(dynamicCoordinators)
+			coordinatorNode, _ = ring.GetNode(fmt.Sprintf("%d", rangeIndex))
+
+		}
+
+		return coordinatorNode
+	}
 
 	return newSequencer
 }
@@ -183,6 +245,12 @@ func (s *Sequencer) removeTransactionProcessor(txID string) {
 	delete(s.incompleteTxSProcessMap, txID)
 }
 
+func (s *Sequencer) OnNewBlockHeight(ctx context.Context, blockHeight int64) {
+	log.L(ctx).Debugf("Sequencer OnNewBlockHeight %d", blockHeight)
+	s.blockHeight = blockHeight
+
+}
+
 func (s *Sequencer) ProcessNewTransaction(ctx context.Context, tx *components.PrivateTransaction) (queued bool) {
 	s.incompleteTxProcessMapMutex.Lock()
 	defer s.incompleteTxProcessMapMutex.Unlock()
@@ -192,9 +260,9 @@ func (s *Sequencer) ProcessNewTransaction(ctx context.Context, tx *components.Pr
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeID, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout)
+			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeName, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout, s.coordinatorSelectorFunction)
 		}
-		s.pendingEvents <- &ptmgrtypes.TransactionSubmittedEvent{
+		s.pendingTransactionEvents <- &ptmgrtypes.TransactionSubmittedEvent{
 			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
 		}
 	}
@@ -219,9 +287,9 @@ func (s *Sequencer) ProcessInFlightTransaction(ctx context.Context, tx *componen
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeID, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout)
+			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeName, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout, s.coordinatorSelectorFunction)
 		}
-		s.pendingEvents <- &ptmgrtypes.TransactionSwappedInEvent{
+		s.pendingTransactionEvents <- &ptmgrtypes.TransactionSwappedInEvent{
 			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
 		}
 	}
@@ -229,7 +297,7 @@ func (s *Sequencer) ProcessInFlightTransaction(ctx context.Context, tx *componen
 }
 
 func (s *Sequencer) HandleEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
-	s.pendingEvents <- event
+	s.pendingTransactionEvents <- event
 }
 
 func (s *Sequencer) Start(c context.Context) (done <-chan struct{}, err error) {

@@ -309,6 +309,23 @@ type SimpleDomainConfig struct {
 	SubmitMode string `json:"submitMode"`
 }
 
+// ABI for the config field in the PaladinRegisterSmartContract_V0 event
+// this must match the type and order of arguments passed to the abi.encode function call in the solidity contract
+var contractDataABI = &abi.ParameterArray{
+	{Name: "endorsementMode", Type: "string"},
+	{Name: "notaryLocator", Type: "string"},
+	{Name: "endorsementSetLocators", Type: "string[]"},
+}
+
+// golang struct to parse and serialize the data received from the block indexer when the base ledger factor contract
+// emits a PaladinRegisterSmartContract_V0 event
+// this must match the ABI above
+type simpleTokenConfigParser struct {
+	EndorsementMode string   `json:"endorsementMode"`
+	NotaryLocator   string   `json:"notaryLocator"`
+	EndorsementSet  []string `json:"endorsementSetLocators"`
+}
+
 func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 	simpleDomainABI := mustParseBuildABI(simpleDomainBuild)
 	simpleTokenABI := mustParseBuildABI(simpleTokenBuild)
@@ -337,23 +354,6 @@ func SimpleTokenDomain(t *testing.T, ctx context.Context) plugintk.PluginBase {
 			}
 		]
 	}`
-
-	// ABI for the config field in the PaladinRegisterSmartContract_V0 event
-	// this must match the type and order of arguments passed to the abi.encode function call in the solidity contract
-	contractDataABI := &abi.ParameterArray{
-		{Name: "endorsementMode", Type: "string"},
-		{Name: "notaryLocator", Type: "string"},
-		{Name: "endorsementSetLocators", Type: "string[]"},
-	}
-
-	// golang struct to parse and serialize the data received from the block indexer when the base ledger factor contract
-	//emits a PaladinRegisterSmartContract_V0 event
-	// this must match the ABI above
-	type simpleTokenConfigParser struct {
-		EndorsementMode string   `json:"endorsementMode"`
-		NotaryLocator   string   `json:"notaryLocator"`
-		EndorsementSet  []string `json:"endorsementSetLocators"`
-	}
 
 	return plugintk.NewDomain(func(callbacks plugintk.DomainCallbacks) plugintk.DomainAPI {
 

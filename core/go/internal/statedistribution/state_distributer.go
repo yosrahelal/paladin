@@ -171,7 +171,7 @@ func (sd *stateDistributer) Start(bgCtx context.Context) error {
 				log.L(ctx).Warnf("exiting before sending all recovered state distributions")
 			}
 		}
-		log.L(ctx).Errorf("stateDistributer finished startup recovery after dispatching %d distributions", dispatched)
+		log.L(ctx).Debugf("stateDistributer finished startup recovery after dispatching %d distributions", dispatched)
 	}()
 
 	go func() {

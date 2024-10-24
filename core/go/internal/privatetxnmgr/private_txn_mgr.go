@@ -30,6 +30,7 @@ import (
 
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
@@ -60,7 +61,16 @@ type privateTxManager struct {
 
 // Init implements Engine.
 func (p *privateTxManager) PreInit(c components.PreInitComponents) (*components.ManagerInitResult, error) {
-	return &components.ManagerInitResult{}, nil
+	return &components.ManagerInitResult{
+		PreCommitHandler: func(ctx context.Context, dbTX *gorm.DB, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) (blockindexer.PostCommit, error) {
+			log.L(ctx).Debug("PrivateTxManager PreCommitHandler")
+			latestBlockNumber := blocks[len(blocks)-1].Number
+			return func() {
+				log.L(ctx).Debugf("PrivateTxManager PostCommitHandler: %d", latestBlockNumber)
+				p.OnNewBlockHeight(ctx, latestBlockNumber)
+			}, nil
+		},
+	}, nil
 }
 
 func (p *privateTxManager) PostInit(c components.AllComponents) error {
@@ -100,6 +110,14 @@ func NewPrivateTransactionMgr(ctx context.Context, config *pldconf.PrivateTxMana
 	}
 	p.ctx, p.ctxCancel = context.WithCancel(ctx)
 	return p
+}
+
+func (p *privateTxManager) OnNewBlockHeight(ctx context.Context, blockHeight int64) {
+	p.sequencersLock.RLock()
+	defer p.sequencersLock.RUnlock()
+	for _, sequencer := range p.sequencers {
+		sequencer.OnNewBlockHeight(ctx, blockHeight)
+	}
 }
 
 func (p *privateTxManager) getSequencerForContract(ctx context.Context, contractAddr tktypes.EthAddress, domainAPI components.DomainSmartContract) (oc *Sequencer, err error) {

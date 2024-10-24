@@ -82,7 +82,11 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 	}).Maybe()
 	mocks.domainSmartContract.On("Domain").Return(domain).Maybe()
 
-	tp := NewTransactionFlow(ctx, transaction, tktypes.RandHex(16), mocks.allComponents, mocks.domainSmartContract, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.syncPoints, mocks.transportWriter, 1*time.Minute)
+	nodeName := tktypes.RandHex(16)
+	selectCoordinator := func(ctx context.Context) string {
+		return nodeName
+	}
+	tp := NewTransactionFlow(ctx, transaction, nodeName, mocks.allComponents, mocks.domainSmartContract, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.syncPoints, mocks.transportWriter, 1*time.Minute, selectCoordinator)
 
 	return tp.(*transactionFlow), mocks
 }

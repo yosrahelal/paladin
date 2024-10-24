@@ -60,10 +60,32 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 		// and before it is added to the transaction processor / dispatched to the event loop
 	}
 
+	if tf.status == "delegating" {
+		log.L(ctx).Infof("Transaction %s is delegating", tf.transaction.ID.String())
+		return
+	}
+
+	if tf.status == "delegated" {
+		// probably should not get here because the sequencer should have removed the transaction processor
+		log.L(ctx).Infof("Transaction %s has been delegated", tf.transaction.ID.String())
+		return
+	}
+	tf.delegateIfRequired(ctx)
+	if tf.status == "delegating" {
+		log.L(ctx).Infof("Transaction %s is delegating", tf.transaction.ID.String())
+		return
+	}
+
+	if tf.status == "delegated" {
+		// probably should not get here because the sequencer should have removed the transaction processor
+		log.L(ctx).Infof("Transaction %s has been delegated", tf.transaction.ID.String())
+		return
+	}
+
 	if tf.transaction.PostAssembly == nil {
 		log.L(ctx).Debug("not assembled yet - or was assembled and reverted")
 
-		//if we have not sent a request, or if the request has timed out or been invalided by a re-assembly, then send the request
+		//if we have not sent a request, or if the request has timed out or been invalidated by a re-assembly, then send the request
 		tf.requestVerifierResolution(ctx)
 		if tf.hasOutstandingVerifierRequests(ctx) {
 			log.L(ctx).Infof("Transaction %s not ready to assemble. Waiting for verifiers to be resolved", tf.transaction.ID.String())
@@ -75,18 +97,6 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 			log.L(ctx).Infof("Transaction %s not assembled. Waiting for assembler to return", tf.transaction.ID.String())
 			return
 		}
-	}
-
-	tf.delegateIfRequired(ctx)
-	if tf.status == "delegating" {
-		log.L(ctx).Infof("Transaction %s is delegating", tf.transaction.ID.String())
-		return
-	}
-
-	if tf.status == "delegated" {
-		// probably should not get here because the sequencer should have removed the transaction processor
-		log.L(ctx).Infof("Transaction %s has been delegated", tf.transaction.ID.String())
-		return
 	}
 
 	if tf.transaction.PostAssembly.OutputStatesPotential != nil && tf.transaction.PostAssembly.OutputStates == nil {
@@ -182,47 +192,32 @@ func (tf *transactionFlow) finalize(ctx context.Context) {
 }
 
 func (tf *transactionFlow) delegateIfRequired(ctx context.Context) {
+	//TODO there may be a potential optimization we can add where, in certain domain configurations, we can optimistically proceed without delegation and only delegate once we detect
+	// other active nodes.  For now, we keep it simple and strictly abide by the configuration of the domain
 	log.L(ctx).Debug("transactionFlow:delegateIfRequired")
-	if tf.transaction.PostAssembly.AttestationPlan != nil {
-		numEndorsers := 0
-		endorser := "" // will only be used if there is only one
-		for _, attRequest := range tf.transaction.PostAssembly.AttestationPlan {
-			if attRequest.AttestationType == prototk.AttestationType_ENDORSE {
-				numEndorsers = numEndorsers + len(attRequest.Parties)
-				endorser = attRequest.Parties[0]
-			}
-		}
-		//in the special case of a single endorsers in a domain with a submit mode of ENDORSER_SUBMISSION we delegate to that endorser
-		// It is most likely that this means we are in the noto domain and
-		// that single endorser is the notary and all transactions will be delegated there for endorsement
-		// and dispatch to base ledger so we might as well delegate the coordination to it so that
-		// it can maximize the optimistic spending of pending states
+	coordinatorNode := tf.selectCoordinator(ctx)
 
-		if tf.domainAPI.Domain().Configuration().GetBaseLedgerSubmitConfig().GetSubmitMode() == prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION && numEndorsers == 1 {
-			endorserNode, err := tktypes.PrivateIdentityLocator(endorser).Node(ctx, true)
-			if err != nil {
-				log.L(ctx).Errorf("Failed to get node name from locator %s: %s", tf.transaction.PostAssembly.AttestationPlan[0].Parties[0], err)
-				tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
-				return
-			}
-			if endorserNode != tf.nodeID && endorserNode != "" {
-				tf.localCoordinator = false
-				// TODO persist the delegation and send the request on the callback
-				tf.status = "delegating"
-				// TODO update to "delegated" once the ack has been received
-				err := tf.transportWriter.SendDelegationRequest(
-					ctx,
-					uuid.New().String(),
-					endorserNode,
-					tf.transaction,
-				)
-				if err != nil {
-					tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
-				}
-				return
-			}
-		}
+	tf.localCoordinator = false
+	// TODO persist the delegation and send the request on the callback
+	if coordinatorNode == tf.nodeName || coordinatorNode == "" {
+		return
 	}
+	//TODO if already `delegating` check how long we have been waiting for the ack and send again.
+	//Should probably do that earlier in the flow because if we have just decided not to delegate or if we have just selected a different delegate, \
+	//then we need to either claw back that delegation or wait until the delegate has realized that they are no longer the coordinator and returns / forwards the responsibility for this transaction
+	tf.status = "delegating"
+
+	// TODO update to "delegated" once the ack has been received
+	err := tf.transportWriter.SendDelegationRequest(
+		ctx,
+		uuid.New().String(),
+		coordinatorNode,
+		tf.transaction,
+	)
+	if err != nil {
+		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
+	}
+
 }
 
 func (tf *transactionFlow) requestAssemble(ctx context.Context) {
@@ -252,66 +247,8 @@ func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 		return
 	}
 
-	if assemblingNode == tf.nodeID || assemblingNode == "" {
-		//we are the node that is responsible for assembling this transaction
-		readTX := tf.components.Persistence().DB() // no DB transaction required here
-		err = tf.domainAPI.AssembleTransaction(tf.endorsementGatherer.DomainContext(), readTX, tf.transaction)
-		if err != nil {
-			log.L(ctx).Errorf("AssembleTransaction failed: %s", err)
-			tf.publisher.PublishTransactionAssembleFailedEvent(ctx,
-				tf.transaction.ID.String(),
-				i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), err.Error()),
-			)
-			return
-		}
-		if tf.transaction.PostAssembly == nil {
-			// This is most likely a programming error in the domain
-			log.L(ctx).Errorf("PostAssembly is nil.")
-			tf.publisher.PublishTransactionAssembleFailedEvent(
-				ctx,
-				tf.transaction.ID.String(),
-				i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), "AssembleTransaction returned nil PostAssembly"),
-			)
-			return
-		}
+	//TODO call tf.assembleRequester.RequestAssemble(ctx, assemblingNode ....// figure out what to pass )
 
-		// Some validation that we are confident we can execute the given attestation plan
-		for _, attRequest := range tf.transaction.PostAssembly.AttestationPlan {
-			switch attRequest.AttestationType {
-			case prototk.AttestationType_ENDORSE:
-			case prototk.AttestationType_SIGN:
-			case prototk.AttestationType_GENERATE_PROOF:
-				errorMessage := "AttestationType_GENERATE_PROOF is not implemented yet"
-				log.L(ctx).Error(errorMessage)
-				tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
-				tf.publisher.PublishTransactionAssembleFailedEvent(ctx,
-					tf.transaction.ID.String(),
-					i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), errorMessage),
-				)
-			default:
-				errorMessage := fmt.Sprintf("Unsupported attestation type: %s", attRequest.AttestationType)
-				log.L(ctx).Error(errorMessage)
-				tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
-				tf.publisher.PublishTransactionAssembleFailedEvent(ctx,
-					tf.transaction.ID.String(),
-					i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), errorMessage),
-				)
-			}
-		}
-
-		//TODO should probably include the assemble output in the event
-		// for now that is not necessary because this is a local assemble and the domain manager updates the transaction that we passed by reference
-		// need to decide if we want to continue with that style of interface to the domain manager and if so,
-		// we need to do something different when the assembling node is remote
-		tf.publisher.PublishTransactionAssembledEvent(ctx,
-			tf.transaction.ID.String(),
-		)
-		return
-
-	} else {
-		log.L(ctx).Debugf("Assembling transaction %s on node %s", tf.transaction.ID.String(), assemblingNode)
-		//TODO send a request to the node that is responsible for assembling this transaction
-	}
 }
 
 func (tf *transactionFlow) requestSignature(ctx context.Context, attRequest *prototk.AttestationRequest, partyName string) {
@@ -395,7 +332,7 @@ func (tf *transactionFlow) requestEndorsement(ctx context.Context, party string,
 		return
 	}
 
-	if partyNode == tf.nodeID || partyNode == "" {
+	if partyNode == tf.nodeName || partyNode == "" {
 		// This is a local party, so we can endorse it directly
 		endorsement, revertReason, err := tf.endorsementGatherer.GatherEndorsement(
 			ctx,

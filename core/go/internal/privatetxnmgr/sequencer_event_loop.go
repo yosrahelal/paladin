@@ -41,8 +41,11 @@ func (s *Sequencer) evaluationLoop() {
 	for {
 		// an InFlight
 		select {
-		case pendingEvent := <-s.pendingEvents:
-			s.handleEvent(ctx, pendingEvent)
+		case blockHeight := <-s.newBlockEvents:
+			//TODO should we use this is as the metronome to periodically trigger any inflight transactions to re-evaluate their state?
+			s.blockHeight = blockHeight
+		case pendingEvent := <-s.pendingTransactionEvents:
+			s.handleTransactionEvent(ctx, pendingEvent)
 		case <-s.orchestrationEvalRequestChan:
 		case <-ticker.C:
 		case <-ctx.Done():
@@ -59,7 +62,7 @@ func (s *Sequencer) evaluationLoop() {
 	}
 }
 
-func (s *Sequencer) handleEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
+func (s *Sequencer) handleTransactionEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
 	//For any event that is specific to a single transaction,
 	// find (or create) the transaction processor for that transaction
 	// and pass the event to it
