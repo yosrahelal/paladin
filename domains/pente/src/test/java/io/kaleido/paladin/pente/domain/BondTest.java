@@ -85,7 +85,9 @@ public class BondTest {
             @JsonProperty
             String notary,
             @JsonProperty
-            NotoHookParamsJSON hooks
+            NotoHookParamsJSON hooks,
+            @JsonProperty
+            boolean restrictMinting
     ) {
     }
 
@@ -368,7 +370,6 @@ public class BondTest {
             var bondTrackerAddress = extraData.contractAddress();
 
             // Create Noto token
-            // TODO: should actually be created by the issuer, with custodian as notary
             String notoInstanceAddress = testbed.getRpcClient().request("testbed_deploy",
                     "noto",
                     new NotoConstructorParamsJSON(
@@ -376,22 +377,21 @@ public class BondTest {
                             new NotoHookParamsJSON(
                                     issuerCustodianInstanceAddress,
                                     bondTrackerAddress,
-                                    issuerCustodianGroup)));
+                                    issuerCustodianGroup),
+                            false));
             assertFalse(notoInstanceAddress.isBlank());
 
             // Issue bond
-            // TODO: should actually be initiated by the issuer
-            tx = getTransactionInfo(
-                    testbed.getRpcClient().request("testbed_invoke",
-                            new PrivateContractInvoke(
-                                    "custodian",
-                                    JsonHex.addressFrom(notoInstanceAddress),
-                                    notoMintABI,
-                                    new HashMap<>() {{
-                                        put("to", "custodian");
-                                        put("amount", 1000);
-                                    }}
-                            ), true));
+            testbed.getRpcClient().request("testbed_invoke",
+                    new PrivateContractInvoke(
+                            "issuer",
+                            JsonHex.addressFrom(notoInstanceAddress),
+                            notoMintABI,
+                            new HashMap<>() {{
+                                put("to", "custodian");
+                                put("amount", 1000);
+                            }}
+                    ), true);
 
             // Validate Noto balance
             List<JsonNode> notoStates = testbed.getRpcClient().request("pstate_queryContractStates",

@@ -18,6 +18,7 @@ contract BondTracker is INotoHooks, ERC20, Ownable {
 
     Status internal _status;
     address internal _distributionFactory;
+    address internal _issuer;
     address public distribution;
     InvestorRegistry public investorRegistry;
 
@@ -29,6 +30,7 @@ contract BondTracker is INotoHooks, ERC20, Ownable {
     ) ERC20(name, symbol) Ownable(custodian) {
         _status = Status.INITIALIZED;
         _distributionFactory = distributionFactory;
+        _issuer = _msgSender();
         investorRegistry = new InvestorRegistry(custodian);
     }
 
@@ -42,8 +44,9 @@ contract BondTracker is INotoHooks, ERC20, Ownable {
         uint256 amount,
         PreparedTransaction calldata prepared
     ) external onlyOwner {
-        require(_status == Status.INITIALIZED, "Bond has already been issued");
+        require(sender == _issuer, "Bond must be issued by issuer");
         require(to == owner(), "Bond must be issued to custodian");
+        require(_status == Status.INITIALIZED, "Bond has already been issued");
         _mint(to, amount);
         _status = Status.ISSUED;
 
