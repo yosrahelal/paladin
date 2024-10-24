@@ -165,16 +165,19 @@ func (bi *blockIndexer) Start(internalStreams ...*InternalEventStream) error {
 
 func (bi *blockIndexer) AddEventStream(ctx context.Context, stream *InternalEventStream) (*EventStream, error) {
 	es, err := bi.upsertInternalEventStream(ctx, stream)
+	if err != nil {
+		return nil, err
+	}
 
 	// Can be called before start as managers start before the block indexer
 	bi.stateLock.Lock()
 	started := bi.started
 	bi.stateLock.Unlock()
 
-	if started && err == nil {
+	if started {
 		bi.startEventStream(es)
 	}
-	return es.definition, err
+	return es.definition, nil
 }
 
 func (bi *blockIndexer) startOrReset() {

@@ -73,14 +73,14 @@ func (tm *txManager) getABIByHash(ctx context.Context, hash tktypes.Bytes32) (*p
 }
 
 func (tm *txManager) storeABI(ctx context.Context, a abi.ABI) (*tktypes.Bytes32, error) {
-	pa, err := tm.upsertABI(ctx, a)
+	pa, err := tm.UpsertABI(ctx, a)
 	if err != nil {
 		return nil, err
 	}
 	return &pa.Hash, err
 }
 
-func (tm *txManager) upsertABI(ctx context.Context, a abi.ABI) (*pldapi.StoredABI, error) {
+func (tm *txManager) UpsertABI(ctx context.Context, a abi.ABI) (*pldapi.StoredABI, error) {
 	hash, err := tktypes.ABISolDefinitionHash(ctx, a)
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrInvalidABI)

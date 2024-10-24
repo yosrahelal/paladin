@@ -79,27 +79,28 @@ type outstandingEndorsementRequest struct {
 	party      string
 }
 
-func (tf *transactionFlow) outstandingEndorsementRequests(_ context.Context) []*outstandingEndorsementRequest {
+func (tf *transactionFlow) outstandingEndorsementRequests(ctx context.Context) []*outstandingEndorsementRequest {
 	outstandingEndorsementRequests := make([]*outstandingEndorsementRequest, 0)
 	for _, attRequest := range tf.transaction.PostAssembly.AttestationPlan {
 		if attRequest.AttestationType == prototk.AttestationType_ENDORSE {
 			for _, party := range attRequest.Parties {
-				var verifier string
-				for _, v := range tf.transaction.PreAssembly.Verifiers {
-					if v.Lookup == party {
-						verifier = v.Verifier
-						break
-					}
-				}
-
 				found := false
 				for _, endorsement := range tf.transaction.PostAssembly.Endorsements {
-					if endorsement.Name == attRequest.Name && endorsement.Verifier.Verifier == verifier {
-						found = true
+					found = endorsement.Name == attRequest.Name &&
+						party == endorsement.Verifier.Lookup &&
+						attRequest.VerifierType == endorsement.Verifier.VerifierType
+					log.L(ctx).Debugf("endorsement matched=%t: request[name=%s,party=%s,verifierType=%s] endorsement[name=%s,party=%s,verifierType=%s] verifier=%s",
+						found,
+						attRequest.Name, party, attRequest.VerifierType,
+						endorsement.Name, endorsement.Verifier.Lookup, endorsement.Verifier.VerifierType,
+						endorsement.Verifier.Verifier,
+					)
+					if found {
 						break
 					}
 				}
 				if !found {
+					log.L(ctx).Debugf("endorsement request for %s outstanding for transaction %s", party, tf.transaction.ID)
 					outstandingEndorsementRequests = append(outstandingEndorsementRequests, &outstandingEndorsementRequest{party: party, attRequest: attRequest})
 				}
 			}

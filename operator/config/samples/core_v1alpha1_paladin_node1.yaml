@@ -11,7 +11,7 @@ metadata:
 spec:
   config: |
     log:
-      level: debug
+      level: trace
     db:
       postgres:
         debugQueries: true

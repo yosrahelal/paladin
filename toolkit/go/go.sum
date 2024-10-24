@@ -96,6 +96,10 @@ github.com/hyperledger/firefly-common v1.4.11 h1:WKv2hQuNpS7yP51THxzpzrqU3jkln23
 github.com/hyperledger/firefly-common v1.4.11/go.mod h1:E7w/RxNtVnX52WXLQW9f2xVAgZnW70voZeE9sZrx/q0=
 github.com/hyperledger/firefly-signer v1.1.18 h1:W3ED5LSUQOBa9OkWnkv9Sn8iJs6hJ1AU6RidUkgh0/A=
 github.com/hyperledger/firefly-signer v1.1.18/go.mod h1:HDaDdht94JypRTunRGrcPL5Pvxfh4yigjatTrie5JUI=
+github.com/hyperledger/firefly-signer v1.1.19-0.20241024004807-eafd71c97692 h1:M/GpUfc4UyuWytZBKnDl9Qs7mjCkWDPQ3OJ/K7ivbE8=
+github.com/hyperledger/firefly-signer v1.1.19-0.20241024004807-eafd71c97692/go.mod h1:HDaDdht94JypRTunRGrcPL5Pvxfh4yigjatTrie5JUI=
+github.com/hyperledger/firefly-signer v1.1.19-0.20241024010504-13d52d4241be h1:d74qwNo0KzAfBdjn0VcTYKTulgIXWsGgh0y6HQPOS/4=
+github.com/hyperledger/firefly-signer v1.1.19-0.20241024010504-13d52d4241be/go.mod h1:HDaDdht94JypRTunRGrcPL5Pvxfh4yigjatTrie5JUI=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/invopop/yaml v0.2.0 h1:7zky/qH+O0DwAyoobXUqvVBwgBFRxKoQ/3FjcVpjTMY=

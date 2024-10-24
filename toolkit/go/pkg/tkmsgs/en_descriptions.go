@@ -117,6 +117,9 @@ var (
 	TransactionActivityRecordMessage              = ffm("TransactionActivityRecord.message", "Activity message")
 	TransactionDependenciesDependsOn              = ffm("TransactionDependencies.dependsOn", "Transactions that this transaction depends on")
 	TransactionDependenciesPrereqOf               = ffm("TransactionDependencies.prereqOf", "Transactions that require this transaction as a prerequisite")
+	DecodedErrorData                              = ffm("DecodedError.data", "The decoded JSON data from the error")
+	DecodedSummary                                = ffm("DecodedError.summary", "String summary of the error")
+	DecodedDefinition                             = ffm("DecodedError.definition", "The ABI definition of the error recovered from the dictionary of ABIs")
 )
 
 // query/query_json.go

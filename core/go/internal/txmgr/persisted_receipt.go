@@ -187,9 +187,17 @@ func (tm *txManager) FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, in
 }
 
 func (tm *txManager) CalculateRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes) error {
+	de, err := tm.DecodeRevertError(ctx, dbTX, revertData, "")
+	if err != nil {
+		return err
+	}
+	return i18n.NewError(ctx, msgs.MsgTxMgrRevertedDecodedData, de.Summary)
+}
+
+func (tm *txManager) DecodeRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.DecodedError, error) {
 
 	if len(revertData) < 4 {
-		return i18n.NewError(ctx, msgs.MsgTxMgrRevertedNoData)
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrRevertedNoData)
 	}
 	selector := tktypes.HexBytes(revertData[0:4])
 
@@ -201,7 +209,7 @@ func (tm *txManager) CalculateRevertError(ctx context.Context, dbTX *gorm.DB, re
 		Find(&errorDefs).
 		Error
 	if err != nil {
-		return i18n.WrapError(ctx, err, msgs.MsgTxMgrRevertedDataNotDecoded)
+		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrRevertedDataNotDecoded)
 	}
 
 	// Turn this into an ABI that we pass to the handy utility (which also includes
@@ -214,11 +222,22 @@ func (tm *txManager) CalculateRevertError(ctx context.Context, dbTX *gorm.DB, re
 			virtualABI = append(virtualABI, &e)
 		}
 	}
-	decodedErrString, ok := virtualABI.ErrorStringCtx(ctx, revertData)
-	if ok {
-		return i18n.NewError(ctx, msgs.MsgTxMgrRevertedDecodedData, decodedErrString)
+	e, cv, ok := virtualABI.ParseErrorCtx(ctx, revertData)
+	if !ok {
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrRevertedDataNotDecoded)
 	}
-	return i18n.NewError(ctx, msgs.MsgTxMgrRevertedDataNotDecoded)
+	de := &pldapi.DecodedError{
+		Summary:    abi.FormatErrorStringCtx(ctx, e, cv),
+		Definition: e,
+	}
+	serializer, err := dataFormat.GetABISerializer(ctx)
+	if err == nil {
+		de.Data, err = serializer.SerializeJSONCtx(ctx, cv)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return de, nil
 }
 
 func (tm *txManager) QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.TransactionReceipt, error) {

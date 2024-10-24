@@ -127,7 +127,9 @@ func (bi *blockIndexer) upsertInternalEventStream(ctx context.Context, ies *Inte
 			return nil, i18n.NewError(ctx, msgs.MsgBlockIndexerESSourceError)
 		}
 		for i := range existing[0].Sources {
-			if err := tktypes.ABIsMustMatch(ctx, existing[0].Sources[i].ABI, def.Sources[i].ABI); err != nil {
+			if err := tktypes.ABIsMustMatch(ctx, existing[0].Sources[i].ABI, def.Sources[i].ABI,
+				abi.Event, // we only need to compare on the events
+			); err != nil {
 				return nil, err
 			}
 			if !existing[0].Sources[i].Address.Equals(def.Sources[i].Address) {

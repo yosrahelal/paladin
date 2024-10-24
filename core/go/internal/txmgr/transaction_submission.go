@@ -92,7 +92,7 @@ func (tm *txManager) resolveFunction(ctx context.Context, inputABI abi.ABI, inpu
 			// (we need something to hash to an abiReference in all cases)
 			inputABI = abi.ABI{defaultConstructor}
 		}
-		pa, err = tm.upsertABI(ctx, inputABI)
+		pa, err = tm.UpsertABI(ctx, inputABI)
 	}
 	if err != nil || pa == nil {
 		return nil, i18n.WrapError(ctx, err, msgs.MsgTxMgrABIReferenceLookupFailed, inputABIRef)

@@ -51,7 +51,7 @@ public class PenteConfiguration {
 
     private final JsonABI privacyGroupABI;
 
-    private final JsonABI interfaceABI;
+    private final JsonABI eventsABI;
 
     private final JsonABI externalCallABI;
 
@@ -76,9 +76,14 @@ public class PenteConfiguration {
             privacyGroupABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
                     "contracts/domains/pente/PentePrivacyGroup.sol/PentePrivacyGroup.json",
                     "abi");
-            interfaceABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
-                    "contracts/domains/interfaces/IPente.sol/IPente.json",
-                    "abi");
+            // Note that technically we could just supply the IPente interface ABI for the events, but instead we
+            // grab the events we need from the full privacy group ABI along with the error definitions.
+            // This means that Paladin has our full list of error definitions to decode on-chain errors if things go wrong.
+            eventsABI = new JsonABI();
+            eventsABI.addAll(privacyGroupABI.stream().filter(e ->
+                    e.type().equals("error") ||
+                        (e.type().equals("event") && (e.name().equals("UTXOApproved") || e.name().equals("UTXOTransfer")))
+            ).toList());
             externalCallABI = JsonABI.fromJSONResourceEntry(getClass().getClassLoader(),
                     "contracts/private/interfaces/IPenteExternalCall.sol/IPenteExternalCall.json",
                     "abi");
@@ -253,7 +258,7 @@ public class PenteConfiguration {
         return privacyGroupABI;
     }
 
-    synchronized JsonABI getInterfaceABI() { return interfaceABI; }
+    synchronized JsonABI getEventsABI() { return eventsABI; }
 
     synchronized JsonABI getExternalCallABI() { return externalCallABI; }
 

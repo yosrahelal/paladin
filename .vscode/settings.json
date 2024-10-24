@@ -3,7 +3,8 @@
     "go.lintTool": "golangci-lint",
     "cSpell.words": [
       "idempotency",
-      "remoting"
+      "remoting",
+      "Upsert"
     ],
     "go.testTimeout": "60s",
     "java.configuration.updateBuildConfiguration": "disabled",
