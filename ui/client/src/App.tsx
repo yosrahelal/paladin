@@ -15,7 +15,7 @@
 // limitations under the License.
 
 import { Box, CssBaseline } from "@mui/material";
-import { createTheme, ThemeProvider } from "@mui/material/styles";
+import { createTheme, PaletteMode, ThemeProvider } from "@mui/material/styles";
 import {
   MutationCache,
   QueryCache,
@@ -25,10 +25,12 @@ import {
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Header } from "./components/Header";
 import { ApplicationContextProvider } from "./contexts/ApplicationContext";
-import { themeOptions } from "./themes/default";
+import { darkThemeOptions, lightThemeOptions } from "./themes/default";
 import { Indexer } from "./views/indexer";
 import { Registries } from "./views/Registries";
 import { Submissions } from "./views/Submissions";
+import { useEffect, useMemo, useState } from "react";
+import { constants } from "./components/config";
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({}),
@@ -36,12 +38,57 @@ const queryClient = new QueryClient({
 });
 
 function App() {
-  const theme = createTheme(themeOptions);
+
+  const [systemTheme, setSystemTheme] = useState(
+    window.matchMedia &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light'
+  );
+
+  const [storedTheme, setStoredTheme] = useState<PaletteMode>();
+
+  useEffect(() => {
+    window
+      .matchMedia('(prefers-color-scheme: dark)')
+      .addEventListener('change', (event) => {
+        setSystemTheme(event.matches ? 'dark' : 'light');
+      });
+  }, []);
+
+
+  const theme = useMemo(() => {
+    const modeFromStorage = localStorage.getItem(constants.COLOR_MODE_STORAGE_KEY);
+    if (modeFromStorage === null) {
+      // If color mode not previously set
+      return createTheme(
+        systemTheme === 'dark' ? darkThemeOptions : lightThemeOptions
+      );
+    } else {
+      // Create color mode based on local storage
+      return createTheme(
+        modeFromStorage === 'dark' ? darkThemeOptions : lightThemeOptions
+      );
+    }
+  }, [systemTheme, storedTheme]);
+
+  const colorMode = useMemo(
+    () => ({
+      toggleColorMode: () => {
+        const currentMode =
+          localStorage.getItem(constants.COLOR_MODE_STORAGE_KEY) ?? systemTheme;
+        const newMode = currentMode === 'light' ? 'dark' : 'light';
+        localStorage.setItem(constants.COLOR_MODE_STORAGE_KEY, newMode);
+        setStoredTheme(newMode);
+      },
+    }),
+    []
+  );
 
   return (
     <>
       <QueryClientProvider client={queryClient}>
-        <ApplicationContextProvider>
+        <ApplicationContextProvider colorMode={colorMode}>
           <ThemeProvider theme={theme}>
             <CssBaseline />
             <Box

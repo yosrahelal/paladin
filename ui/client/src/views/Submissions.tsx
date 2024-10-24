@@ -49,7 +49,8 @@ export const Submissions: React.FC = () => {
           sx={{
             padding: "10px",
             paddingTop: "12px",
-            backgroundColor: "rgba(255, 255, 255, .65)",
+            backgroundColor: theme => theme.palette.mode === 'light' ?
+            'rgba(255, 255, 255, .65)' : 'rgba(60, 60, 60, .65)'
           }}
         >
           <Tabs

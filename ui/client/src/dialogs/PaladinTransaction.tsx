@@ -19,7 +19,8 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
-  DialogTitle} from '@mui/material';
+  DialogTitle,
+  useTheme} from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import JSONPretty from 'react-json-pretty';
 import { IPaladinTransaction } from '../interfaces';
@@ -37,6 +38,23 @@ export const PaladinTransactionDialog: React.FC<Props> = ({
 }) => {
 
   const { t } = useTranslation();
+  const theme = useTheme();
+
+  const colors = theme.palette.mode === 'dark'?
+  {
+    main: 'line-height:1.3;color:#white;overflow:auto;',
+    key: 'color:white;',
+    string: 'color:#20dfdf;',
+    value: 'color:#20dfdf;',
+    boolean: 'color:#20dfdf;'
+  }:
+  {
+    main: 'line-height:1.3;color:#107070;overflow:auto;',
+    key: 'color:#464646;',
+    string: 'color:#107070;',
+    value: 'color:#107070;',
+    boolean: 'color:#107070;'
+  };
 
   return (
     <Dialog
@@ -48,13 +66,7 @@ export const PaladinTransactionDialog: React.FC<Props> = ({
         {t('transaction')}
       </DialogTitle>
       <DialogContent>
-        <JSONPretty style={{ fontSize: '14px'}}  data={paladinTransaction} theme={{
-          main: 'line-height:1.3;color:#107070;overflow:auto;',
-          key: 'color:#464646;',
-          string: 'color:#107070;',
-          value: 'color:#107070;',
-          boolean: 'color:#107070;'
-        }} />
+        <JSONPretty style={{ fontSize: '14px'}}  data={paladinTransaction} theme={colors} />
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'center', marginBottom: '15px' }}>
         <Button

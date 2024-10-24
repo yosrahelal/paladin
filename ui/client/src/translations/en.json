@@ -42,5 +42,6 @@
   "transactionIndex": "Tx Index",
   "transactions": "Transactions",
   "transactionsAndEvents": "Transactions & Events",
-  "type": "Type"
+  "type": "Type",
+  "switchThemeMode": "Switch theme mode"
 }

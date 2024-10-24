@@ -25,12 +25,16 @@ export const Indexer: React.FC = () => {
       <Box sx={{ padding: '20px', maxWidth: '1200px', marginLeft: 'auto', marginRight: 'auto' }}>
         <Grid2 container spacing={2}>
           <Grid2 size={{ md: 6, sm: 12, xs: 12 }}>
-            <Paper sx={{ padding: '10px', paddingTop: '12px', backgroundColor: 'rgba(255, 255, 255, .65)' }}>
+            <Paper sx={{ padding: '10px', paddingTop: '12px',
+              backgroundColor: theme => theme.palette.mode === 'light' ?
+               'rgba(255, 255, 255, .65)' : 'rgba(60, 60, 60, .65)' }}>
               <Transactions />
             </Paper>
           </Grid2>
           <Grid2 size={{ md: 6, sm: 12, xs: 12 }}>
-            <Paper sx={{ padding: '10px', paddingTop: '12px', backgroundColor: 'rgba(255, 255, 255, .65)' }}>
+            <Paper sx={{ padding: '10px', paddingTop: '12px', 
+              backgroundColor: theme => theme.palette.mode === 'light' ?
+              'rgba(255, 255, 255, .65)' : 'rgba(60, 60, 60, .65)' }}>
               <Events />
             </Paper>
           </Grid2>

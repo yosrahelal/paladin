@@ -5,16 +5,22 @@ import { ErrorDialog } from "../dialogs/Error";
 import { fetchLatestBlockWithTxs } from "../queries/blocks";
 
 interface IApplicationContext {
+  colorMode: {
+    toggleColorMode: () => void;
+  };
   lastBlockWithTransactions: number;
 }
 
 export const ApplicationContext = createContext({} as IApplicationContext);
 
 interface Props {
+  colorMode: {
+    toggleColorMode: () => void;
+  };
   children: JSX.Element;
 }
 
-export const ApplicationContextProvider = ({ children }: Props) => {
+export const ApplicationContextProvider = ({ children, colorMode }: Props) => {
   const { data: lastBlockWithTransactions, error } = useQuery({
     queryKey: ["lastBlockWithTransactions"],
     queryFn: () =>
@@ -32,7 +38,7 @@ export const ApplicationContextProvider = ({ children }: Props) => {
 
   return (
     <ApplicationContext.Provider
-      value={{ lastBlockWithTransactions: lastBlockWithTransactions ?? 0 }}
+      value={{ lastBlockWithTransactions: lastBlockWithTransactions ?? 0, colorMode }}
     >
       {children}
       <ErrorDialog dialogOpen={!!error} message={error?.message ?? ""} />

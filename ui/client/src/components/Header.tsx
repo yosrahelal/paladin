@@ -14,13 +14,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { AppBar, Box, Grid2, Tab, Tabs, Toolbar, Typography } from "@mui/material";
-import { useState } from "react";
+import { AppBar, Box, Grid2, IconButton, Tab, Tabs, Toolbar, Tooltip, Typography } from "@mui/material";
+import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
+import Brightness4Icon from '@mui/icons-material/Brightness4';
+import { ApplicationContext } from "../contexts/ApplicationContext";
 
 export const Header: React.FC = () => {
 
+  const { colorMode } = useContext(ApplicationContext);
   const { t } = useTranslation();
   const navigate = useNavigate();
   const pathname = useLocation().pathname.toLowerCase();
@@ -68,6 +71,13 @@ export const Header: React.FC = () => {
                 <Tab label={t('registry')} />
               </Tabs>
             </Grid2>
+          </Grid2>
+          <Grid2>
+            <Tooltip arrow title={t('switchThemeMode')}>
+            <IconButton color="inherit" onClick={() => colorMode.toggleColorMode()}>
+                <Brightness4Icon />
+            </IconButton>
+            </Tooltip>
           </Grid2>
         </Toolbar>
       </AppBar>
