@@ -37,6 +37,7 @@ contract BondTracker is INotoHooks, ERC20, Ownable {
     }
 
     function onMint(
+        address sender,
         address to,
         uint256 amount,
         PreparedTransaction calldata prepared
@@ -54,6 +55,7 @@ contract BondTracker is INotoHooks, ERC20, Ownable {
     }
 
     function onTransfer(
+        address sender,
         address from,
         address to,
         uint256 amount,
@@ -80,6 +82,7 @@ contract BondTracker is INotoHooks, ERC20, Ownable {
     }
 
     function onApproveTransfer(
+        address sender,
         address from,
         address delegate,
         PreparedTransaction calldata prepared

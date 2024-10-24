@@ -49,6 +49,7 @@ type NotoTransferParams struct {
 }
 
 type NotoTransferHookParams struct {
+	Sender   *tktypes.EthAddress      `json:"sender"`
 	From     *tktypes.EthAddress      `json:"from"`
 	To       *tktypes.EthAddress      `json:"to"`
 	Amount   *tktypes.HexUint256      `json:"amount"`

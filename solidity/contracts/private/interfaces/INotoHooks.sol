@@ -14,12 +14,14 @@ interface INotoHooks is IPenteExternalCall {
     }
 
     function onMint(
+        address sender,
         address to,
         uint256 amount,
         PreparedTransaction calldata prepared
     ) external;
 
     function onTransfer(
+        address sender,
         address from,
         address to,
         uint256 amount,
@@ -27,6 +29,7 @@ interface INotoHooks is IPenteExternalCall {
     ) external;
 
     function onApproveTransfer(
+        address sender,
         address from,
         address delegate,
         PreparedTransaction calldata prepared

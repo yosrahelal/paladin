@@ -52,11 +52,12 @@ func (h *transferHandler) ValidateParams(ctx context.Context, config *types.Noto
 
 func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	params := tx.Params.(*types.TransferParams)
+	notary := tx.DomainConfig.DecodedData.NotaryLookup
 
 	return &prototk.InitTransactionResponse{
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{
-				Lookup:       tx.DomainConfig.DecodedData.NotaryLookup,
+				Lookup:       notary,
 				Algorithm:    algorithms.ECDSA_SECP256K1,
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
@@ -76,24 +77,17 @@ func (h *transferHandler) Init(ctx context.Context, tx *types.ParsedTransaction,
 
 func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 	params := tx.Params.(*types.TransferParams)
+	notary := tx.DomainConfig.DecodedData.NotaryLookup
 
-	notary := domain.FindVerifier(tx.DomainConfig.DecodedData.NotaryLookup, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
-	if notary == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "notary")
-	}
-	from := domain.FindVerifier(tx.Transaction.From, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
-	if from == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "from")
-	}
-	fromAddress, err := tktypes.ParseEthAddress(from.Verifier)
+	_, err := h.noto.findEthAddressVerifier(ctx, "notary", notary, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
-	to := domain.FindVerifier(params.To, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
-	if to == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "to")
+	fromAddress, err := h.noto.findEthAddressVerifier(ctx, "from", tx.Transaction.From, req.ResolvedVerifiers)
+	if err != nil {
+		return nil, err
 	}
-	toAddress, err := tktypes.ParseEthAddress(to.Verifier)
+	toAddress, err := h.noto.findEthAddressVerifier(ctx, "to", params.To, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
@@ -102,13 +96,13 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 	if err != nil {
 		return nil, err
 	}
-	outputCoins, outputStates, err := h.noto.prepareOutputs(notary.Lookup, to.Lookup, toAddress, params.Amount)
+	outputCoins, outputStates, err := h.noto.prepareOutputs(notary, params.To, toAddress, params.Amount)
 	if err != nil {
 		return nil, err
 	}
 	if total.Cmp(params.Amount.Int()) == 1 {
 		remainder := big.NewInt(0).Sub(total, params.Amount.Int())
-		returnedCoins, returnedStates, err := h.noto.prepareOutputs(notary.Lookup, from.Lookup, fromAddress, (*tktypes.HexUint256)(remainder))
+		returnedCoins, returnedStates, err := h.noto.prepareOutputs(notary, tx.Transaction.From, fromAddress, (*tktypes.HexUint256)(remainder))
 		if err != nil {
 			return nil, err
 		}
@@ -140,7 +134,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 				AttestationType: prototk.AttestationType_ENDORSE,
 				Algorithm:       algorithms.ECDSA_SECP256K1,
 				VerifierType:    verifiers.ETH_ADDRESS,
-				Parties:         []string{tx.DomainConfig.DecodedData.NotaryLookup},
+				Parties:         []string{notary},
 			},
 		}
 	case types.NotoVariantSelfSubmit:
@@ -152,7 +146,7 @@ func (h *transferHandler) Assemble(ctx context.Context, tx *types.ParsedTransact
 				Algorithm:       algorithms.ECDSA_SECP256K1,
 				VerifierType:    verifiers.ETH_ADDRESS,
 				PayloadType:     signpayloads.OPAQUE_TO_RSV,
-				Parties:         []string{tx.DomainConfig.DecodedData.NotaryLookup},
+				Parties:         []string{notary},
 			},
 			// Sender will endorse the assembled transaction (by submitting to the ledger)
 			{
@@ -290,19 +284,11 @@ func (h *transferHandler) baseLedgerTransfer(ctx context.Context, tx *types.Pars
 func (h *transferHandler) hookTransfer(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, baseTransaction *TransactionWrapper) (*TransactionWrapper, error) {
 	inParams := tx.Params.(*types.TransferParams)
 
-	from := domain.FindVerifier(tx.Transaction.From, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
-	if from == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "from")
-	}
-	fromAddress, err := tktypes.ParseEthAddress(from.Verifier)
+	fromAddress, err := h.noto.findEthAddressVerifier(ctx, "from", tx.Transaction.From, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
-	to := domain.FindVerifier(inParams.To, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
-	if to == nil {
-		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "to")
-	}
-	toAddress, err := tktypes.ParseEthAddress(to.Verifier)
+	toAddress, err := h.noto.findEthAddressVerifier(ctx, "to", inParams.To, req.ResolvedVerifiers)
 	if err != nil {
 		return nil, err
 	}
@@ -312,6 +298,7 @@ func (h *transferHandler) hookTransfer(ctx context.Context, tx *types.ParsedTran
 		return nil, err
 	}
 	params := &TransferHookParams{
+		Sender: fromAddress,
 		From:   fromAddress,
 		To:     toAddress,
 		Amount: inParams.Amount,

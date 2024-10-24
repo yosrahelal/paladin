@@ -22,12 +22,14 @@ import (
 )
 
 type MintHookParams struct {
+	Sender   *tktypes.EthAddress `json:"sender"`
 	To       *tktypes.EthAddress `json:"to"`
 	Amount   *tktypes.HexUint256 `json:"amount"`
 	Prepared PreparedTransaction `json:"prepared"`
 }
 
 type TransferHookParams struct {
+	Sender   *tktypes.EthAddress `json:"sender"`
 	From     *tktypes.EthAddress `json:"from"`
 	To       *tktypes.EthAddress `json:"to"`
 	Amount   *tktypes.HexUint256 `json:"amount"`
@@ -35,6 +37,7 @@ type TransferHookParams struct {
 }
 
 type ApproveTransferHookParams struct {
+	Sender   *tktypes.EthAddress `json:"sender"`
 	From     *tktypes.EthAddress `json:"from"`
 	Delegate *tktypes.EthAddress `json:"delegate"`
 	Prepared PreparedTransaction `json:"prepared"`

@@ -11,6 +11,7 @@ contract NotoTrackerERC20 is INotoHooks, ERC20 {
     constructor(string memory name, string memory symbol) ERC20(name, symbol) {}
 
     function onMint(
+        address sender,
         address to,
         uint256 amount,
         PreparedTransaction calldata prepared
@@ -20,6 +21,7 @@ contract NotoTrackerERC20 is INotoHooks, ERC20 {
     }
 
     function onTransfer(
+        address sender,
         address from,
         address to,
         uint256 amount,
@@ -30,6 +32,7 @@ contract NotoTrackerERC20 is INotoHooks, ERC20 {
     }
 
     function onApproveTransfer(
+        address sender,
         address from,
         address delegate,
         PreparedTransaction calldata prepared
