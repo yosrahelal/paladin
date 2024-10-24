@@ -80,46 +80,6 @@ public class BondTest {
         }
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record NotoConstructorParamsJSON(
-            @JsonProperty
-            String notary,
-            @JsonProperty
-            NotoHookParamsJSON hooks,
-            @JsonProperty
-            boolean restrictMinting
-    ) {
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record NotoHookParamsJSON(
-            @JsonProperty
-            String publicAddress,
-            @JsonProperty
-            JsonHex.Address privateAddress,
-            @JsonProperty
-            GroupTupleJSON privateGroup
-    ) {
-    }
-
-    static final JsonABI.Entry notoMintABI = JsonABI.newFunction(
-            "mint",
-            JsonABI.newParameters(
-                    JsonABI.newParameter("to", "string"),
-                    JsonABI.newParameter("amount", "uint256")
-            ),
-            JsonABI.newParameters()
-    );
-
-    static final JsonABI.Entry notoTransferABI = JsonABI.newFunction(
-            "transfer",
-            JsonABI.newParameters(
-                    JsonABI.newParameter("to", "string"),
-                    JsonABI.newParameter("amount", "uint256")
-            ),
-            JsonABI.newParameters()
-    );
-
     static final JsonABI.Entry bondTrackerDeployABI = JsonABI.newFunction(
             "deploy",
             JsonABI.newParameters(
@@ -245,22 +205,6 @@ public class BondTest {
     ) {
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record NotoCoin(
-            @JsonProperty
-            NotoCoinData data
-    ) {
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record NotoCoinData(
-            @JsonProperty
-            String owner,
-            @JsonProperty
-            String amount
-    ) {
-    }
-
     Testbed.PrivateContractTransaction getTransactionInfo(LinkedHashMap<String, Object> res) {
         return new ObjectMapper().convertValue(res, Testbed.PrivateContractTransaction.class);
     }
@@ -370,40 +314,24 @@ public class BondTest {
             var bondTrackerAddress = extraData.contractAddress();
 
             // Create Noto token
-            String notoInstanceAddress = testbed.getRpcClient().request("testbed_deploy",
-                    "noto",
-                    new NotoConstructorParamsJSON(
+            var noto = NotoHelper.deploy("noto", testbed,
+                    new NotoHelper.ConstructorParams(
                             "custodian",
-                            new NotoHookParamsJSON(
+                            new NotoHelper.HookParams(
                                     issuerCustodianInstanceAddress,
                                     bondTrackerAddress,
                                     issuerCustodianGroup),
                             false));
-            assertFalse(notoInstanceAddress.isBlank());
+            assertFalse(noto.address.isBlank());
 
             // Issue bond
-            testbed.getRpcClient().request("testbed_invoke",
-                    new PrivateContractInvoke(
-                            "issuer",
-                            JsonHex.addressFrom(notoInstanceAddress),
-                            notoMintABI,
-                            new HashMap<>() {{
-                                put("to", "custodian");
-                                put("amount", 1000);
-                            }}
-                    ), true);
+            noto.mint("issuer", "custodian", 1000);
 
             // Validate Noto balance
-            List<JsonNode> notoStates = testbed.getRpcClient().request("pstate_queryContractStates",
-                    "noto",
-                    notoInstanceAddress,
-                    notoSchema.id,
-                    null,
-                    "available");
+            var notoStates = noto.queryStates(notoSchema.id, null);
             assertEquals(1, notoStates.size());
-            var notoCoin = mapper.convertValue(notoStates.getFirst(), NotoCoin.class);
-            assertEquals("1000", notoCoin.data.amount);
-            assertEquals(custodianAddress, notoCoin.data.owner);
+            assertEquals("1000", notoStates.getFirst().data().amount());
+            assertEquals(custodianAddress, notoStates.getFirst().data().owner());
 
             // Validate bond tracker balance
             LinkedHashMap<String, Object> queryResult = testbed.getRpcClient().request("testbed_call",
@@ -521,30 +449,15 @@ public class BondTest {
                                 }});
                             }}
                     ), true);
-            testbed.getRpcClient().request("testbed_invoke",
-                    new PrivateContractInvoke(
-                            "custodian",
-                            JsonHex.addressFrom(notoInstanceAddress),
-                            notoTransferABI,
-                            new HashMap<>() {{
-                                put("to", "alice");
-                                put("amount", 1000);
-                            }}
-                    ), true);
+            noto.transfer("custodian", "alice", 1000);
 
             // TODO: figure out how to test negative cases (such as when Pente reverts due to a non-allowed investor)
 
             // Validate Noto balance
-            notoStates = testbed.getRpcClient().request("pstate_queryContractStates",
-                    "noto",
-                    notoInstanceAddress,
-                    notoSchema.id,
-                    null,
-                    "available");
+            notoStates = noto.queryStates(notoSchema.id, null);
             assertEquals(1, notoStates.size());
-            notoCoin = mapper.convertValue(notoStates.getFirst(), NotoCoin.class);
-            assertEquals("1000", notoCoin.data.amount);
-            assertEquals(aliceAddress, notoCoin.data.owner);
+            assertEquals("1000", notoStates.getFirst().data().amount());
+            assertEquals(aliceAddress, notoStates.getFirst().data().owner());
 
             // Validate bond tracker balance
             queryResult = testbed.getRpcClient().request("testbed_call",
