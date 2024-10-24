@@ -37,7 +37,7 @@ export const Submissions: React.FC = () => {
     let requestPayload = {
       jsonrpc: '2.0',
       id: Date.now(),
-      method: tab === 0? 'ptx_queryTransactions' : 'ptx_queryPendingTransactions',
+      method: tab === 0? 'ptx_queryTransactionsFull' : 'ptx_queryPendingTransactions',
       params
     };
     fetch('/json-rpc', {
