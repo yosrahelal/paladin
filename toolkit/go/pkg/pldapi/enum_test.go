@@ -17,9 +17,13 @@
 package pldapi
 
 import (
+	"encoding/json"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEnums(t *testing.T) {
@@ -28,4 +32,19 @@ func TestEnums(t *testing.T) {
 	assert.NotEmpty(t, ActiveFilter("").Enum().Options())
 	assert.NotEmpty(t, SchemaType("").Enum().Options())
 	assert.NotEmpty(t, StateLockType("").Enum().Options())
+}
+
+func TestStateStatusQualifierJSON(t *testing.T) {
+	var q StateStatusQualifier
+	err := json.Unmarshal(([]byte)(`"wrong"`), &q)
+	assert.Regexp(t, "PD020016", err)
+
+	err = json.Unmarshal(([]byte)(`"ALL"`), &q)
+	require.NoError(t, err)
+	require.Equal(t, StateStatusAll, q)
+
+	u := uuid.New().String()
+	err = json.Unmarshal(tktypes.JSONString(u), &q)
+	require.NoError(t, err)
+	assert.Equal(t, u, (string)(q))
 }

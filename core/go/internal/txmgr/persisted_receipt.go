@@ -224,7 +224,7 @@ func (tm *txManager) DecodeRevertError(ctx context.Context, dbTX *gorm.DB, rever
 	}
 	e, cv, ok := virtualABI.ParseErrorCtx(ctx, revertData)
 	if !ok {
-		return nil, i18n.NewError(ctx, msgs.MsgTxMgrRevertedDataNotDecoded)
+		return nil, i18n.NewError(ctx, msgs.MsgTxMgrRevertedNoMatchingErrABI, revertData)
 	}
 	de := &pldapi.DecodedError{
 		Summary:    abi.FormatErrorStringCtx(ctx, e, cv),

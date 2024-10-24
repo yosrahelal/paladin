@@ -90,6 +90,7 @@ var allTypes = []interface{}{
 	pldapi.RegistryProperty{},
 	pldapi.OnChainLocation{},
 	tktypes.JSONFormatOptions(""),
+	pldapi.StateStatusQualifier(""),
 	query.QueryJSON{
 		Limit: ptr.To(10),
 		Sort:  []string{"field1 DESC", "field2"},

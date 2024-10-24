@@ -91,7 +91,6 @@ var (
 	MsgStateABITypeMustBeTuple        = ffe("PD010114", "ABI type definition must be a tuple parameter with an internalType such as 'struct StructName'")
 	MsgStateLabelFieldNotUnique       = ffe("PD010115", "Label field with index %d has a duplicate name '%s'")
 	MsgStateInvalidValue              = ffe("PD010116", "Invalid value")
-	MsgStateInvalidQualifier          = ffe("PD010117", "Status must be one of 'available','confirmed','unconfirmed','spent','locked','all' or the UUID of a transaction")
 	MsgStateLockCreateNotInContext    = ffe("PD010118", "Cannot mark a creating lock for state %s as it was not added in this context")
 	MsgStateFlushFailedDomainReset    = ffe("PD010119", "Flush of state for domain %s contract %s has failed. The domain context must be reset")
 	MsgStateSpendConflictUnexpected   = ffe("PD010120", "Pending spend for transaction %s found when attempting to spend from transaction %s")
@@ -377,6 +376,7 @@ var (
 	MsgTxMgrNoABIOrReference             = ffe("PD012218", "An ABI containing a function/constructor definition or an abiReference to an existing stored ABI must be supplied")
 	MsgTxMgrIdempotencyKeyClash          = ffe("PD012220", "idempotencyKey already used by submitted transaction %s") // important error code (relied on by operator, and apps)
 	MsgTxMgrPrivateCallNotSupported      = ffe("PD012221", "Call (read-only data query via function call) not currently supported for private smart contracts")
+	MsgTxMgrRevertedNoMatchingErrABI     = ffe("PD012222", "No error ABI available to decode %s")
 
 	// FlushWriter module PD0123XX
 	MsgFlushWriterQuiescing      = ffe("PD012300", "Writer shutting down")
