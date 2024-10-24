@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "../private/interfaces/INotoGuard.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {INotoHooks} from "../private/interfaces/INotoHooks.sol";
 
 /**
- * Example Noto Guard which tracks all Noto token movements on a private ERC20.
+ * @dev Example Noto hooks which track all Noto token movements on a private ERC20.
  */
-contract NotoTrackerERC20 is INotoGuard, ERC20 {
+contract NotoTrackerERC20 is INotoHooks, ERC20 {
     constructor(string memory name, string memory symbol) ERC20(name, symbol) {}
 
     function onMint(

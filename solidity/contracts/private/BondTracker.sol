@@ -3,14 +3,14 @@ pragma solidity ^0.8.20;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {INotoGuard} from "../private/interfaces/INotoGuard.sol";
+import {INotoHooks} from "../private/interfaces/INotoHooks.sol";
 import {InvestorRegistry} from "./InvestorRegistry.sol";
 
 /**
  * @title BondTracker
- * @dev Notary tracker logic to model a simple bond lifecycle on top of Noto.
+ * @dev Hook logic to model a simple bond lifecycle on top of Noto.
  */
-contract BondTracker is INotoGuard, ERC20, Ownable {
+contract BondTracker is INotoHooks, ERC20, Ownable {
     enum Status {
         INITIALIZED,
         ISSUED

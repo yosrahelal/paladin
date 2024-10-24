@@ -172,7 +172,7 @@ func (h *mintHandler) baseLedgerMint(ctx context.Context, req *prototk.PrepareTr
 	}, nil
 }
 
-func (h *mintHandler) guardMint(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, baseTransaction *TransactionWrapper) (*TransactionWrapper, error) {
+func (h *mintHandler) hookMint(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, baseTransaction *TransactionWrapper) (*TransactionWrapper, error) {
 	inParams := tx.Params.(*types.MintParams)
 
 	to := domain.FindVerifier(inParams.To, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
@@ -188,7 +188,7 @@ func (h *mintHandler) guardMint(ctx context.Context, tx *types.ParsedTransaction
 	if err != nil {
 		return nil, err
 	}
-	params := &GuardMintParams{
+	params := &MintHookParams{
 		To:     toAddress,
 		Amount: inParams.Amount,
 		Prepared: PreparedTransaction{
@@ -198,7 +198,7 @@ func (h *mintHandler) guardMint(ctx context.Context, tx *types.ParsedTransaction
 	}
 
 	transactionType := prototk.PreparedTransaction_PUBLIC
-	functionABI := solutils.MustLoadBuild(notoGuardJSON).ABI.Functions()["onMint"]
+	functionABI := solutils.MustLoadBuild(notoHooksJSON).ABI.Functions()["onMint"]
 	var paramsJSON []byte
 
 	if tx.DomainConfig.DecodedData.PrivateAddress != nil {
@@ -211,7 +211,7 @@ func (h *mintHandler) guardMint(ctx context.Context, tx *types.ParsedTransaction
 		}
 		paramsJSON, err = json.Marshal(penteParams)
 	} else {
-		// Note: public guards aren't really useful except in testing
+		// Note: public hooks aren't really useful except in testing, as they disclose everything
 		// TODO: remove this?
 		paramsJSON, err = json.Marshal(params)
 	}
@@ -232,12 +232,12 @@ func (h *mintHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, 
 	if err != nil {
 		return nil, err
 	}
-	if tx.DomainConfig.NotaryType.Equals(&types.NotaryTypeContract) {
-		guardTransaction, err := h.guardMint(ctx, tx, req, baseTransaction)
+	if tx.DomainConfig.DecodedData.NotaryType.Equals(&types.NotaryTypePente) {
+		hookTransaction, err := h.hookMint(ctx, tx, req, baseTransaction)
 		if err != nil {
 			return nil, err
 		}
-		return guardTransaction.prepare()
+		return hookTransaction.prepare()
 	}
 	return baseTransaction.prepare()
 }

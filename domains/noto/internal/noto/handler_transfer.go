@@ -287,7 +287,7 @@ func (h *transferHandler) baseLedgerTransfer(ctx context.Context, tx *types.Pars
 	}, nil
 }
 
-func (h *transferHandler) guardTransfer(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, baseTransaction *TransactionWrapper) (*TransactionWrapper, error) {
+func (h *transferHandler) hookTransfer(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, baseTransaction *TransactionWrapper) (*TransactionWrapper, error) {
 	inParams := tx.Params.(*types.TransferParams)
 
 	from := domain.FindVerifier(tx.Transaction.From, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, req.ResolvedVerifiers)
@@ -311,7 +311,7 @@ func (h *transferHandler) guardTransfer(ctx context.Context, tx *types.ParsedTra
 	if err != nil {
 		return nil, err
 	}
-	params := &GuardTransferParams{
+	params := &TransferHookParams{
 		From:   fromAddress,
 		To:     toAddress,
 		Amount: inParams.Amount,
@@ -322,7 +322,7 @@ func (h *transferHandler) guardTransfer(ctx context.Context, tx *types.ParsedTra
 	}
 
 	transactionType := prototk.PreparedTransaction_PUBLIC
-	functionABI := solutils.MustLoadBuild(notoGuardJSON).ABI.Functions()["onTransfer"]
+	functionABI := solutils.MustLoadBuild(notoHooksJSON).ABI.Functions()["onTransfer"]
 	var paramsJSON []byte
 
 	if tx.DomainConfig.DecodedData.PrivateAddress != nil {
@@ -335,7 +335,7 @@ func (h *transferHandler) guardTransfer(ctx context.Context, tx *types.ParsedTra
 		}
 		paramsJSON, err = json.Marshal(penteParams)
 	} else {
-		// Note: public guards aren't really useful except in testing
+		// Note: public hooks aren't really useful except in testing, as they disclose everything
 		// TODO: remove this?
 		paramsJSON, err = json.Marshal(params)
 	}
@@ -356,12 +356,12 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 	if err != nil {
 		return nil, err
 	}
-	if tx.DomainConfig.NotaryType.Equals(&types.NotaryTypeContract) {
-		guardTransaction, err := h.guardTransfer(ctx, tx, req, baseTransaction)
+	if tx.DomainConfig.DecodedData.NotaryType.Equals(&types.NotaryTypePente) {
+		hookTransaction, err := h.hookTransfer(ctx, tx, req, baseTransaction)
 		if err != nil {
 			return nil, err
 		}
-		return guardTransaction.prepare()
+		return hookTransaction.prepare()
 	}
 	return baseTransaction.prepare()
 }

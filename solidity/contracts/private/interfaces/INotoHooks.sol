@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import "./IPenteExternalCall.sol";
+import {IPenteExternalCall} from "./IPenteExternalCall.sol";
 
 /**
- * A Noto guard is designed to be deployed privately on top of Pente, and to receive
- * prepared transactions from Noto in order to perform final checking and submission
- * to the base ledger.
+ * @dev Noto hooks can be deployed privately on top of Pente, to receive prepared transactions
+ *      from Noto in order to perform final checking and submission to the base ledger.
  */
-interface INotoGuard is IPenteExternalCall {
+interface INotoHooks is IPenteExternalCall {
     struct PreparedTransaction {
         address contractAddress;
         bytes encodedCall;

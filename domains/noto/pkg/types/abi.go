@@ -68,11 +68,16 @@ var NotoABI = abi.ABI{
 }
 
 type ConstructorParams struct {
-	Notary              string              `json:"notary"`
-	GuardPublicAddress  *tktypes.EthAddress `json:"guardPublicAddress,omitempty"`
-	GuardPrivateAddress *tktypes.EthAddress `json:"guardPrivateAddress,omitempty"`
-	GuardPrivateGroup   *PentePrivateGroup  `json:"guardPrivateGroup,omitempty"`
-	Implementation      string              `json:"implementation"`
+	Notary         string      `json:"notary"`                   // Lookup string for the notary identity
+	Implementation string      `json:"implementation,omitempty"` // Use a specific implementation of Noto that was registered to the factory (blank to use default)
+	Hooks          *HookParams `json:"hooks,omitempty"`          // Configure hooks for programmable logic around Noto operations
+}
+
+// Currently the only supported hooks are provided via a Pente private smart contract
+type HookParams struct {
+	PrivateGroup   *PentePrivateGroup  `json:"privateGroup,omitempty"`   // Details on a Pente privacy group
+	PublicAddress  *tktypes.EthAddress `json:"publicAddress,omitempty"`  // Public address of the Pente privacy group
+	PrivateAddress *tktypes.EthAddress `json:"privateAddress,omitempty"` // Private address of the hook contract deployed within the privacy group
 }
 
 type MintParams struct {

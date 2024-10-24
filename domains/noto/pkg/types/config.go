@@ -28,7 +28,6 @@ type DomainConfig struct {
 var NotoConfigID_V0 = tktypes.MustParseHexBytes("0x00010000")
 
 type NotoConfig_V0 struct {
-	NotaryType    tktypes.Bytes32    `json:"notaryType"`
 	NotaryAddress tktypes.EthAddress `json:"notaryAddress"`
 	Variant       tktypes.Bytes32    `json:"variant"`
 	Data          tktypes.HexBytes   `json:"data"`
@@ -37,6 +36,7 @@ type NotoConfig_V0 struct {
 
 type NotoConfigData_V0 struct {
 	NotaryLookup   string              `json:"notaryLookup"`
+	NotaryType     tktypes.Bytes32     `json:"notaryType"`
 	PrivateAddress *tktypes.EthAddress `json:"privateAddress"`
 	PrivateGroup   *PentePrivateGroup  `json:"privateGroup"`
 }
@@ -47,10 +47,9 @@ type PentePrivateGroup struct {
 }
 
 var NotoConfigABI_V0 = &abi.ParameterArray{
-	{Name: "notaryType", Type: "bytes32"},
 	{Name: "notaryAddress", Type: "address"},
-	{Name: "data", Type: "bytes"},
 	{Name: "variant", Type: "bytes32"},
+	{Name: "data", Type: "bytes"},
 }
 
 var NotoTransactionData_V0 = tktypes.MustParseHexBytes("0x00010000")
@@ -59,7 +58,7 @@ type DomainHandler = domain.DomainHandler[NotoConfig_V0]
 type ParsedTransaction = domain.ParsedTransaction[NotoConfig_V0]
 
 var NotaryTypeSigner = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000000")
-var NotaryTypeContract = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000001")
+var NotaryTypePente = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000001")
 
 var NotoVariantDefault = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000000")
 var NotoVariantSelfSubmit = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000001")

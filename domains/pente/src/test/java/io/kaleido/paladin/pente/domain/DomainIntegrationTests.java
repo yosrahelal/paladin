@@ -88,11 +88,18 @@ public class DomainIntegrationTests {
             @JsonProperty
             String notary,
             @JsonProperty
-            String guardPublicAddress,
+            NotoHookParamsJSON hooks
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record NotoHookParamsJSON(
             @JsonProperty
-            JsonHex.Address guardPrivateAddress,
+            String publicAddress,
             @JsonProperty
-            GroupTupleJSON guardPrivateGroup
+            JsonHex.Address privateAddress,
+            @JsonProperty
+            GroupTupleJSON privateGroup
     ) {
     }
 
@@ -243,9 +250,10 @@ public class DomainIntegrationTests {
                     "noto",
                     new NotoConstructorParamsJSON(
                             "notary",
-                            penteInstanceAddress,
-                            notoTrackerAddress,
-                            groupInfo));
+                            new NotoHookParamsJSON(
+                                    penteInstanceAddress,
+                                    notoTrackerAddress,
+                                    groupInfo)));
             assertFalse(notoInstanceAddress.isBlank());
 
             // Perform Noto mint
