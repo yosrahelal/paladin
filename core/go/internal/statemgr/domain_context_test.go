@@ -386,7 +386,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	// We add one extra spend that simulates something happening outside of this context
 	transactionID5 := uuid.New()
 	spends = append(spends, &pldapi.StateSpend{DomainName: "domain1", State: states[0].ID, Transaction: transactionID5}) //20
-	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), spends, confirms)
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), spends, []*pldapi.StateRead{}, confirms)
 	require.NoError(t, err)
 
 	// So in the domain context, this states will still be visible - because we don't have transactionID5
@@ -482,7 +482,7 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	syncFlushContext(t, dc)
 
 	// Mark both states confirmed
-	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*pldapi.StateSpend{},
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*pldapi.StateSpend{}, []*pldapi.StateRead{},
 		[]*pldapi.StateConfirm{
 			{DomainName: "domain1", State: stateID1, Transaction: transactionID1},
 			{DomainName: "domain1", State: stateID2, Transaction: transactionID1},
@@ -514,7 +514,7 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
 		[]*pldapi.StateSpend{
 			{DomainName: "domain1", State: nullifier1, Transaction: transactionID3},
-		}, []*pldapi.StateConfirm{})
+		}, []*pldapi.StateRead{}, []*pldapi.StateConfirm{})
 	require.NoError(t, err)
 
 	// reset the domain context so we're working from the db

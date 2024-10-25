@@ -119,22 +119,49 @@ type StateInt64Label struct {
 	Value      int64
 }
 
-// State record can be updated before, during and after confirm records are written
-// For example the confirmation of the existence of states will be coming all the time
-// from the base ledger, for which we will never receive the private state itself.
-// Immutable once written
+// A confirm record is written when indexing the blockchain, and can be written regardless
+// of whether we currently have access to the private data of the state.
+// It is simply a join record between the Paladin transaction ID and the state.
+//
+// A state is "available" if we:
+// - have the confirm record
+// - have the private data for the state
+// - do not have a spend record
+//
+// Note that a Domain Context will track the creation of a state before it makes it to
+// the blockchain, allowing us to submit chains of transactions that create and spend
+// states all in a single block. In that case the state will only be "available" within
+// the in-memory domain context being managed by the sequencer for that smart contract.
 type StateConfirm struct {
 	DomainName  string           `json:"-"                 gorm:"primaryKey"`
 	State       tktypes.HexBytes `json:"-"                 gorm:"primaryKey"`
 	Transaction uuid.UUID        `docstruct:"StateConfirm" json:"transaction"`
 }
 
-// State record can be updated before, during and after spend records are written
-// Immutable once written
+// A spend record is written when indexing the blockchain, and can be written regardless
+// of whether we currently have access to the private data of the state.
+// It is simply a join record between the Paladin transaction ID and the state.
+//
+// Once a spend record has been index, a state is no longer available for any transaction
+// to consume (because we know the blockchain would reject if if we tried).
+//
+// Just like with the creation of new states, we keep an in-memory copy of the spend
+// in the Domain Context of the sequencer while we are assembling+endorsing+submitting
+// the transaction, to avoid us attempting to double-spend states (which of course will
+// be rejected by the blockchain).
 type StateSpend struct {
 	DomainName  string           `json:"-"                 gorm:"primaryKey"`
 	State       tktypes.HexBytes `json:"-"                 gorm:"primaryKey"`
 	Transaction uuid.UUID        `docstruct:"StateSpend" json:"transaction"`
+}
+
+// We also record when we simply read a state during a transaction, without creating or
+// spending it. This is important for being able to re-execute the transaction in the future
+// against the exact state of the blockchain. We use this in receipt generation.
+type StateRead struct {
+	DomainName  string           `json:"-"                 gorm:"primaryKey"`
+	State       tktypes.HexBytes `json:"-"                 gorm:"primaryKey"`
+	Transaction uuid.UUID        `docstruct:"StateRead" json:"transaction"`
 }
 
 type StateLockType string

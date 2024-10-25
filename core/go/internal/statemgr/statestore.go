@@ -92,24 +92,25 @@ func (ss *stateManager) Stop() {
 // be happening concurrently against the database, and after commit of these changes
 // might find new states become available and/or states marked locked for spending
 // become fully unavailable.
-func (ss *stateManager) WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*pldapi.StateSpend, confirms []*pldapi.StateConfirm) (err error) {
+func (ss *stateManager) WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*pldapi.StateSpend, reads []*pldapi.StateRead, confirms []*pldapi.StateConfirm) (err error) {
 	if len(spends) > 0 {
 		err = dbTX.
 			Table("state_spends").
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}},
-				DoNothing: true, // immutable
-			}).
+			Clauses(clause.OnConflict{DoNothing: true}).
 			Create(spends).
+			Error
+	}
+	if err == nil && len(reads) > 0 {
+		err = dbTX.
+			Table("state_reads").
+			Clauses(clause.OnConflict{DoNothing: true}).
+			Create(reads).
 			Error
 	}
 	if err == nil && len(confirms) > 0 {
 		err = dbTX.
 			Table("state_confirms").
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "domain_name"}, {Name: "state"}},
-				DoNothing: true, // immutable
-			}).
+			Clauses(clause.OnConflict{DoNothing: true}).
 			Create(confirms).
 			Error
 	}

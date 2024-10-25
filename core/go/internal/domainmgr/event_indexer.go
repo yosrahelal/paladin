@@ -281,6 +281,19 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		stateSpends[i] = &pldapi.StateSpend{DomainName: d.name, State: stateID, Transaction: *txUUID}
 	}
 
+	stateReads := make([]*pldapi.StateRead, len(res.ReadStates))
+	for i, state := range res.ReadStates {
+		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
+		if err != nil {
+			return nil, err
+		}
+		stateID, err := tktypes.ParseHexBytes(ctx, state.Id)
+		if err != nil {
+			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
+		}
+		stateReads[i] = &pldapi.StateRead{DomainName: d.name, State: stateID, Transaction: *txUUID}
+	}
+
 	stateConfirms := make([]*pldapi.StateConfirm, len(res.ConfirmedStates))
 	for i, state := range res.ConfirmedStates {
 		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
@@ -331,8 +344,8 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 	}
 
 	// Then any finalizations of those states
-	if len(stateSpends) > 0 || len(stateConfirms) > 0 {
-		if err := d.dm.stateStore.WriteStateFinalizations(ctx, dbTX, stateSpends, stateConfirms); err != nil {
+	if len(stateSpends) > 0 || len(stateReads) > 0 || len(stateConfirms) > 0 {
+		if err := d.dm.stateStore.WriteStateFinalizations(ctx, dbTX, stateSpends, stateReads, stateConfirms); err != nil {
 			return nil, err
 		}
 	}

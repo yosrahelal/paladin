@@ -194,8 +194,9 @@ message HandleEventBatchRequest {
 message HandleEventBatchResponse {
   repeated CompletedTransaction transactions_complete = 1; // A list of Paladin transactions that may be considered complete
   repeated StateUpdate spent_states = 2; // A list of states that are now spent
-  repeated StateUpdate confirmed_states = 3; // A list of states that are now confirmed (and unspent)
-  repeated NewConfirmedState new_states = 4; // A list of new states to store (only for events that contain full state data)
+  repeated StateUpdate read_states = 3; // A list of states that this transaction was dependent on the un-spent state of, but did not spend in the transation
+  repeated StateUpdate confirmed_states = 4; // A list of states that are now confirmed (and unspent)
+  repeated NewConfirmedState new_states = 5; // A list of new states to store (only for events that contain full state data)
 }
 
 // **VALIDATE_STATE_HASHES** step only happens when custom_state_hash is true in the domain config, and then must be implemented

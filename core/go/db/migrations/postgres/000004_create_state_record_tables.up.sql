@@ -16,6 +16,14 @@ CREATE TABLE state_spends (
 );
 CREATE INDEX state_spend_transaction ON state_spends("transaction");
 
+CREATE TABLE state_reads (
+    "domain_name" TEXT    NOT NULL,
+    "state"       TEXT    NOT NULL,
+    "transaction" UUID    NOT NULL,
+    PRIMARY KEY ("domain_name", "state")
+);
+CREATE INDEX state_read_transaction ON state_reads("transaction");
+
 CREATE TABLE state_nullifiers (
     "domain_name" TEXT    NOT NULL,
     "id"          TEXT    NOT NULL,

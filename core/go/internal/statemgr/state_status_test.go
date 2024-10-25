@@ -158,7 +158,7 @@ func TestStateLockingQuery(t *testing.T) {
 	// Mark them all confirmed apart from one
 	for i, w := range widgets {
 		if i != 3 {
-			err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*pldapi.StateSpend{},
+			err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*pldapi.StateSpend{}, []*pldapi.StateRead{},
 				[]*pldapi.StateConfirm{
 					{DomainName: "domain1", State: w.ID, Transaction: uuid.New()},
 				})
@@ -177,7 +177,7 @@ func TestStateLockingQuery(t *testing.T) {
 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
 		[]*pldapi.StateSpend{
 			{DomainName: "domain1", State: widgets[0].ID, Transaction: uuid.New()},
-		}, []*pldapi.StateConfirm{})
+		}, []*pldapi.StateRead{}, []*pldapi.StateConfirm{})
 	require.NoError(t, err)
 
 	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4) // unchanged
@@ -231,6 +231,9 @@ func TestStateLockingQuery(t *testing.T) {
 	// Mark that new state confirmed
 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
 		[]*pldapi.StateSpend{},
+		[]*pldapi.StateRead{
+			{DomainName: "domain1", State: widgets[1].ID, Transaction: uuid.New()}, // this is inert
+		},
 		[]*pldapi.StateConfirm{
 			{DomainName: "domain1", State: widgets[5].ID, Transaction: uuid.New()},
 		})
