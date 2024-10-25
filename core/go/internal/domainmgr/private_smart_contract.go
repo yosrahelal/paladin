@@ -179,27 +179,30 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 	}
 
 	postAssembly := &components.TransactionPostAssembly{}
-	// We hydrate the states on our side of the Manager<->Plugin divide at this point,
-	// which provides back to the engine the full sequence locking information of the
-	// states (inputs, and read)
-	postAssembly.InputStates, err = dc.loadStates(dCtx, readTX, res.AssembledTransaction.InputStates)
-	if err != nil {
-		return err
-	}
-	postAssembly.ReadStates, err = dc.loadStates(dCtx, readTX, res.AssembledTransaction.ReadStates)
-	if err != nil {
-		return err
+	if res.AssemblyResult == prototk.AssembleTransactionResponse_OK && res.AssembledTransaction != nil {
+		// We hydrate the states on our side of the Manager<->Plugin divide at this point,
+		// which provides back to the engine the full sequence locking information of the
+		// states (inputs, and read)
+		postAssembly.InputStates, err = dc.loadStates(dCtx, readTX, res.AssembledTransaction.InputStates)
+		if err != nil {
+			return err
+		}
+		postAssembly.ReadStates, err = dc.loadStates(dCtx, readTX, res.AssembledTransaction.ReadStates)
+		if err != nil {
+			return err
+		}
+
+		// Note the states at this point are just potential states - depending on the analysis
+		// of the result, and the locking on the input states, the engine might decide to
+		// abandon this attempt and just re-assemble later.
+		postAssembly.OutputStatesPotential = res.AssembledTransaction.OutputStates
+		postAssembly.ExtraData = res.AssembledTransaction.ExtraData
 	}
 
 	// We need to pass the assembly result back - it needs to be assigned to a sequence
 	// before anything interesting can happen with the result here
 	postAssembly.AssemblyResult = res.AssemblyResult
 	postAssembly.AttestationPlan = res.AttestationPlan
-	// Note the states at this point are just potential states - depending on the analysis
-	// of the result, and the locking on the input states, the engine might decide to
-	// abandon this attempt and just re-assemble later.
-	postAssembly.OutputStatesPotential = res.AssembledTransaction.OutputStates
-	postAssembly.ExtraData = res.AssembledTransaction.ExtraData
 	tx.PostAssembly = postAssembly
 	return nil
 }
