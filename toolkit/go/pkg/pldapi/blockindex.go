@@ -80,6 +80,6 @@ type EventWithData struct {
 	// Things like whitespace etc. subject to change (so should not stored for later comparison)
 	SoliditySignature string `docstruct:"EventWithData" json:"soliditySignature"`
 
-	Address tktypes.EthAddress `docstruct:"EventWithData"json:"address"`
-	Data    tktypes.RawJSON    `docstruct:"EventWithData"json:"data"`
+	Address tktypes.EthAddress `docstruct:"EventWithData" json:"address"`
+	Data    tktypes.RawJSON    `docstruct:"EventWithData" json:"data"`
 }
