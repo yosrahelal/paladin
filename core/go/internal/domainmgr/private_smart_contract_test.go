@@ -67,13 +67,29 @@ func TestPrivateSmartContractQueryNoResult(t *testing.T) {
 
 }
 
-func goodPSC(d *domain) *domainContract {
-	return d.newSmartContract(&PrivateSmartContract{
+func goodPSC(t *testing.T, td *testDomainContext) *domainContract {
+	d := td.d
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{
+			Valid: true,
+			ContractConfig: &prototk.ContractConfig{
+				ContractConfigJson:   `{}`,
+				CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+				SubmitterSelection:   prototk.ContractConfig_SUBMITTER_SENDER,
+			},
+		}, nil
+	}
+
+	loadResult, psc, err := d.initSmartContract(d.ctx, &PrivateSmartContract{
 		DeployTX:        uuid.New(),
 		RegistryAddress: *d.RegistryAddress(),
 		Address:         tktypes.EthAddress(tktypes.RandBytes(20)),
 		ConfigBytes:     []byte{0xfe, 0xed, 0xbe, 0xef},
 	})
+	require.NoError(t, err)
+	require.Equal(t, pscValid, loadResult)
+	require.NotNil(t, psc.ContractConfig())
+	return psc
 }
 
 func goodPrivateTXWithInputs(psc *domainContract) *components.PrivateTransaction {
@@ -100,11 +116,12 @@ func goodPrivateTXWithInputs(psc *domainContract) *components.PrivateTransaction
 }
 
 func doDomainInitTransactionOK(t *testing.T, td *testDomainContext, resFn ...func(*prototk.InitTransactionResponse)) (*domainContract, *components.PrivateTransaction) {
-	psc := goodPSC(td.d)
+	psc := goodPSC(t, td)
 	tx := goodPrivateTXWithInputs(psc)
 	tx.PreAssembly = &components.TransactionPreAssembly{
 		TransactionSpecification: &prototk.TransactionSpecification{},
 	}
+
 	td.tp.Functions.InitTransaction = func(ctx context.Context, itr *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 		assert.Equal(t, tktypes.Bytes32UUIDFirst16(tx.ID).String(), itr.Transaction.TransactionId)
 		assert.Equal(t, int64(12345), itr.Transaction.BaseBlock)
@@ -316,7 +333,7 @@ func TestDomainInitTransactionMissingInput(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	psc := goodPSC(td.d)
+	psc := goodPSC(t, td)
 
 	tx := &components.PrivateTransaction{}
 	err := psc.InitTransaction(td.ctx, tx)
@@ -332,7 +349,7 @@ func TestDomainInitTransactionConfirmedBlockFail(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	psc := goodPSC(td.d)
+	psc := goodPSC(t, td)
 	tx := goodPrivateTXWithInputs(psc)
 
 	err := psc.InitTransaction(td.ctx, tx)
@@ -346,7 +363,7 @@ func TestDomainInitTransactionError(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	psc := goodPSC(td.d)
+	psc := goodPSC(t, td)
 	tx := goodPrivateTXWithInputs(psc)
 
 	td.tp.Functions.InitTransaction = func(ctx context.Context, itr *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
@@ -364,7 +381,7 @@ func TestDomainInitTransactionBadInputs(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	psc := goodPSC(td.d)
+	psc := goodPSC(t, td)
 	tx := goodPrivateTXWithInputs(psc)
 	tx.Inputs.Inputs = tktypes.RawJSON(`{"missing": "parameters}`)
 
@@ -541,11 +558,7 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 		Constraints:     []prototk.AttestationResult_AttestationConstraint{prototk.AttestationResult_ENDORSER_MUST_SUBMIT},
 	})
 
-	// Resolve who should sign it - we should find it's the endorser due to the endorser submit above
-	err = psc.ResolveDispatch(td.ctx, tx)
-	require.NoError(t, err)
-	assert.Equal(t, "endorser1", tx.Signer)
-
+	// Prepare the transaction for submission to the blockchain
 	td.tp.Functions.PrepareTransaction = func(ctx context.Context, ptr *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
 		assert.Same(t, tx.PreAssembly.TransactionSpecification, ptr.Transaction)
 		assert.Len(t, tx.PostAssembly.InputStates, 2)
@@ -577,6 +590,8 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 			},
 		}, nil
 	}
+
+	tx.Signer = tktypes.RandAddress().String()
 
 	// And now prepare
 	err = psc.PrepareTransaction(dCtx, td.c.dbTX, tx)
@@ -738,62 +753,6 @@ func TestEndorseTransactionFail(t *testing.T) {
 		Endorser:                 &prototk.ResolvedVerifier{},
 	})
 	assert.Regexp(t, "pop", err)
-}
-
-func TestResolveDispatchDuplicateSigners(t *testing.T) {
-	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
-	defer done()
-
-	psc, tx := doDomainInitAssembleTransactionOK(t, td)
-	tx.PostAssembly.Endorsements = []*prototk.AttestationResult{
-		{
-			Name: "endorse", Verifier: &prototk.ResolvedVerifier{Lookup: "verifier1"},
-			Constraints: []prototk.AttestationResult_AttestationConstraint{prototk.AttestationResult_ENDORSER_MUST_SUBMIT},
-		},
-		{
-			Name: "endorse", Verifier: &prototk.ResolvedVerifier{Lookup: "verifier2"},
-			Constraints: []prototk.AttestationResult_AttestationConstraint{prototk.AttestationResult_ENDORSER_MUST_SUBMIT},
-		},
-	}
-
-	err := psc.ResolveDispatch(td.ctx, tx)
-	assert.Regexp(t, "PD011623", err)
-}
-
-func TestResolveDispatchSignerOneTimeUse(t *testing.T) {
-	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
-	defer done()
-
-	psc, tx := doDomainInitAssembleTransactionOK(t, td)
-	tx.PostAssembly.Endorsements = []*prototk.AttestationResult{}
-
-	err := psc.ResolveDispatch(td.ctx, tx)
-	require.NoError(t, err)
-	assert.Equal(t, "one/time/keys/"+tx.ID.String(), tx.Signer)
-}
-
-func TestResolveDispatchNoEndorser(t *testing.T) {
-	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
-	defer done()
-	td.d.config.BaseLedgerSubmitConfig.SubmitMode = prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION
-
-	psc, tx := doDomainInitAssembleTransactionOK(t, td)
-	tx.PostAssembly.Endorsements = []*prototk.AttestationResult{}
-
-	err := psc.ResolveDispatch(td.ctx, tx)
-	assert.Regexp(t, "PD011624", err)
-}
-
-func TestResolveDispatchWrongType(t *testing.T) {
-	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), mockBlockHeight)
-	defer done()
-	td.d.config.BaseLedgerSubmitConfig.SubmitMode = prototk.BaseLedgerSubmitConfig_Mode(99)
-
-	psc, tx := doDomainInitAssembleTransactionOK(t, td)
-	tx.PostAssembly.Endorsements = []*prototk.AttestationResult{}
-
-	err := psc.ResolveDispatch(td.ctx, tx)
-	assert.Regexp(t, "PD011625", err)
 }
 
 func TestPrepareTransactionFail(t *testing.T) {
@@ -968,7 +927,7 @@ func TestIncompleteStages(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
 	defer done()
 
-	psc := goodPSC(td.d)
+	psc := goodPSC(t, td)
 	tx := &components.PrivateTransaction{}
 
 	err := psc.InitTransaction(td.ctx, tx)
@@ -985,9 +944,6 @@ func TestIncompleteStages(t *testing.T) {
 
 	_, err = psc.EndorseTransaction(td.mdc, td.c.dbTX, nil)
 	assert.Regexp(t, "PD011630", err)
-
-	err = psc.ResolveDispatch(td.ctx, tx)
-	assert.Regexp(t, "PD011631", err)
 
 	err = psc.PrepareTransaction(td.mdc, td.c.dbTX, tx)
 	assert.Regexp(t, "PD011632", err)
@@ -1017,7 +973,7 @@ func TestInitCallOk(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	psc := goodPSC(td.d)
+	psc := goodPSC(t, td)
 
 	td.tp.Functions.InitCall = func(ctx context.Context, icr *prototk.InitCallRequest) (*prototk.InitCallResponse, error) {
 		assert.JSONEq(t, `{"address":"0xf2c41ae275a9ace65e1fb78b97270a61d86aa0ed"}`, icr.Transaction.FunctionParamsJson)
@@ -1048,7 +1004,7 @@ func TestInitCallBadInput(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	psc := goodPSC(td.d)
+	psc := goodPSC(t, td)
 
 	_, err := psc.InitCall(td.ctx, &components.TransactionInputs{
 		To: psc.info.Address,
@@ -1071,7 +1027,7 @@ func TestInitCallError(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	psc := goodPSC(td.d)
+	psc := goodPSC(t, td)
 
 	td.tp.Functions.InitCall = func(ctx context.Context, icr *prototk.InitCallRequest) (*prototk.InitCallResponse, error) {
 		return nil, fmt.Errorf("pop")
@@ -1088,7 +1044,7 @@ func TestExecCall(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	psc := goodPSC(td.d)
+	psc := goodPSC(t, td)
 
 	td.tp.Functions.ExecCall = func(ctx context.Context, cr *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
 		require.Len(t, cr.ResolvedVerifiers, 1)
@@ -1124,7 +1080,7 @@ func TestExecCallBadInput(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	psc := goodPSC(td.d)
+	psc := goodPSC(t, td)
 
 	_, err := psc.ExecCall(td.c.dCtx, td.c.dbTX, &components.TransactionInputs{
 		To: psc.info.Address,
@@ -1147,7 +1103,7 @@ func TestExecCallBadOutput(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	psc := goodPSC(td.d)
+	psc := goodPSC(t, td)
 
 	td.tp.Functions.ExecCall = func(ctx context.Context, cr *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
 		assert.JSONEq(t, `{"address":"0xf2c41ae275a9ace65e1fb78b97270a61d86aa0ed"}`, cr.Transaction.FunctionParamsJson)
@@ -1168,7 +1124,7 @@ func TestExecCallNilOutputOk(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	psc := goodPSC(td.d)
+	psc := goodPSC(t, td)
 
 	td.tp.Functions.ExecCall = func(ctx context.Context, cr *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
 		assert.JSONEq(t, `{"address":"0xf2c41ae275a9ace65e1fb78b97270a61d86aa0ed"}`, cr.Transaction.FunctionParamsJson)
@@ -1188,7 +1144,7 @@ func TestExecCallFail(t *testing.T) {
 	defer done()
 	assert.Nil(t, td.d.initError.Load())
 
-	psc := goodPSC(td.d)
+	psc := goodPSC(t, td)
 
 	td.tp.Functions.ExecCall = func(ctx context.Context, cr *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
 		return &prototk.ExecCallResponse{}, fmt.Errorf("pop")
@@ -1198,4 +1154,84 @@ func TestExecCallFail(t *testing.T) {
 
 	_, err := psc.ExecCall(td.c.dCtx, td.c.dbTX, txi, []*prototk.ResolvedVerifier{})
 	assert.Regexp(t, "pop", err)
+}
+
+func TestGetPSCInvalidConfig(t *testing.T) {
+	addr := tktypes.RandAddress()
+	var mc *mockComponents
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(_mc *mockComponents) {
+		mc = _mc
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	mc.db.ExpectQuery("SELECT.*private_smart_contracts").
+		WillReturnRows(sqlmock.NewRows([]string{"address", "domain_address"}).
+			AddRow(addr.String(), td.d.registryAddress.String()))
+
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{
+			Valid: false, // Not valid
+			ContractConfig: &prototk.ContractConfig{
+				ContractConfigJson:   `{}`,
+				CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+				SubmitterSelection:   prototk.ContractConfig_SUBMITTER_SENDER,
+			},
+		}, nil
+	}
+
+	psc, err := td.dm.GetSmartContractByAddress(td.ctx, *addr)
+	require.Regexp(t, "PD011610", err) // invalid config
+	assert.Nil(t, psc)
+}
+
+func TestGetPSCUnknownDomain(t *testing.T) {
+	addr := tktypes.RandAddress()
+	var mc *mockComponents
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(_mc *mockComponents) {
+		mc = _mc
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	mc.db.ExpectQuery("SELECT.*private_smart_contracts").
+		WillReturnRows(sqlmock.NewRows([]string{"address", "domain_address"}).
+			AddRow(addr.String(), tktypes.RandAddress().String()))
+
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{
+			Valid: true,
+			ContractConfig: &prototk.ContractConfig{
+				ContractConfigJson:   `{}`,
+				CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+				SubmitterSelection:   prototk.ContractConfig_SUBMITTER_SENDER,
+			},
+		}, nil
+	}
+
+	psc, err := td.dm.GetSmartContractByAddress(td.ctx, *addr)
+	require.Regexp(t, "PD011654", err) // domain no longer configured
+	assert.Nil(t, psc)
+}
+
+func TestGetPSCInitError(t *testing.T) {
+	addr := tktypes.RandAddress()
+	var mc *mockComponents
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(_mc *mockComponents) {
+		mc = _mc
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	mc.db.ExpectQuery("SELECT.*private_smart_contracts").
+		WillReturnRows(sqlmock.NewRows([]string{"address", "domain_address"}).
+			AddRow(addr.String(), td.d.registryAddress.String()))
+
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return nil, fmt.Errorf("pop")
+	}
+
+	psc, err := td.dm.GetSmartContractByAddress(td.ctx, *addr)
+	require.Regexp(t, "pop", err) // domain no longer configured
+	assert.Nil(t, psc)
 }

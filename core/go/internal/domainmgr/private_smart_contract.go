@@ -42,21 +42,48 @@ type PrivateSmartContract struct {
 }
 
 type domainContract struct {
-	dm   *domainManager
-	d    *domain
-	api  components.DomainManagerToDomain
-	info *PrivateSmartContract
+	dm     *domainManager
+	d      *domain
+	api    components.DomainManagerToDomain
+	info   *PrivateSmartContract   // from the DB
+	config *prototk.ContractConfig // from init processing in the domain
 }
 
-func (d *domain) newSmartContract(def *PrivateSmartContract) *domainContract {
+type pscLoadResult int
+
+const (
+	pscLoadError pscLoadResult = iota
+	pscInitError
+	pscNotFound
+	pscDomainNotFound
+	pscInvalid
+	pscValid
+)
+
+func (d *domain) initSmartContract(ctx context.Context, def *PrivateSmartContract) (pscLoadResult, *domainContract, error) {
 	dc := &domainContract{
 		dm:   d.dm,
 		d:    d,
 		api:  d.api,
 		info: def,
 	}
+
+	res, err := d.api.InitContract(ctx, &prototk.InitContractRequest{
+		ContractAddress: def.Address.String(),
+		ContractConfig:  def.ConfigBytes,
+	})
+	if err != nil {
+		return pscInitError, nil, err
+	}
+	if !res.Valid {
+		log.L(ctx).Warnf("smart contract %s has invalid configuration rejected by the domain", def.Address)
+		return pscInvalid, nil, nil
+	}
+	dc.config = res.ContractConfig
+
+	// Only cache valid ones
 	d.dm.contractCache.Set(dc.info.Address, dc)
-	return dc
+	return pscValid, dc, nil
 }
 
 func (dc *domainContract) processTxInputs(ctx context.Context, txi *components.TransactionInputs) (*prototk.TransactionSpecification, error) {
@@ -82,8 +109,8 @@ func (dc *domainContract) processTxInputs(ctx context.Context, txi *components.T
 	}
 	return &prototk.TransactionSpecification{
 		ContractInfo: &prototk.ContractInfo{
-			ContractAddress: dc.info.Address.String(),
-			ContractConfig:  dc.info.ConfigBytes,
+			ContractAddress:    dc.info.Address.String(),
+			ContractConfigJson: dc.config.ContractConfigJson,
 		},
 		From:               txi.From,
 		FunctionAbiJson:    string(abiJSON),
@@ -92,6 +119,10 @@ func (dc *domainContract) processTxInputs(ctx context.Context, txi *components.T
 		BaseBlock:          int64(confirmedBlockHeight),
 		Intent:             txi.Intent,
 	}, nil
+}
+
+func (dc *domainContract) ContractConfig() *prototk.ContractConfig {
+	return dc.config
 }
 
 func (dc *domainContract) InitTransaction(ctx context.Context, tx *components.PrivateTransaction) error {
@@ -362,41 +393,6 @@ func (dc *domainContract) EndorseTransaction(dCtx components.DomainContext, read
 	}, nil
 }
 
-func (dc *domainContract) ResolveDispatch(ctx context.Context, tx *components.PrivateTransaction) error {
-	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil ||
-		tx.PostAssembly == nil || tx.PostAssembly.Endorsements == nil {
-		return i18n.NewError(ctx, msgs.MsgDomainTXIncompleteResolveDispatch)
-	}
-
-	for _, ar := range tx.PostAssembly.Endorsements {
-		for _, c := range ar.Constraints {
-			if c == prototk.AttestationResult_ENDORSER_MUST_SUBMIT {
-				if tx.Signer != "" {
-					// Multiple endorsers claiming it is an error
-					return i18n.NewError(ctx, msgs.MsgDomainMultipleEndorsersSubmit)
-				}
-				tx.Signer = ar.Verifier.Lookup
-			}
-		}
-	}
-	if tx.Signer != "" {
-		return nil
-	}
-
-	config := dc.d.Configuration()
-	switch config.BaseLedgerSubmitConfig.SubmitMode {
-	case prototk.BaseLedgerSubmitConfig_ONE_TIME_USE_KEYS:
-		tx.Signer = config.BaseLedgerSubmitConfig.OneTimeUsePrefix + tx.ID.String()
-		return nil
-	case prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION:
-		// if there was an endorser, we'd have it above
-		return i18n.NewError(ctx, msgs.MsgDomainNoEndorserSubmit)
-	default:
-		return i18n.NewError(ctx, msgs.MsgDomainInvalidSubmissionConfig, config.BaseLedgerSubmitConfig.SubmitMode)
-	}
-
-}
-
 func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, readTX *gorm.DB, tx *components.PrivateTransaction) error {
 	if tx.Inputs == nil || tx.PreAssembly == nil || tx.PreAssembly.TransactionSpecification == nil ||
 		tx.PostAssembly == nil || tx.Signer == "" {
@@ -534,10 +530,6 @@ func (dc *domainContract) Domain() components.Domain {
 
 func (dc *domainContract) Address() tktypes.EthAddress {
 	return dc.info.Address
-}
-
-func (dc *domainContract) ConfigBytes() tktypes.HexBytes {
-	return dc.info.ConfigBytes
 }
 
 func (dc *domainContract) allAttestations(tx *components.PrivateTransaction) []*prototk.AttestationResult {

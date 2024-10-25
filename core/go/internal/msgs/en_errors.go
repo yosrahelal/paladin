@@ -226,6 +226,7 @@ var (
 	MsgDomainPrivateAbiJsonInvalid            = ffe("PD011607", "Private contract ABI invalid")
 	MsgDomainInvalidQueryJSON                 = ffe("PD011608", "Invalid query JSON")
 	MsgDomainContractNotFoundByAddr           = ffe("PD011609", "A smart contract with address %s has not yet been indexed")
+	MsgDomainContractNotValid                 = ffe("PD011610", "A smart contract with address %s exists with invalid configuration rejected by the domain")
 	MsgDomainInvalidPrepareDeployResult       = ffe("PD011611", "Prepare deploy did not result in exactly one of a invoke transaction or a deploy transaction")
 	MsgDomainInvalidFunctionParams            = ffe("PD011612", "Invalid function parameters for %s")
 	MsgDomainUnknownSchema                    = ffe("PD011613", "Unknown schema %s")
@@ -236,7 +237,6 @@ var (
 	MsgDomainBaseLedgerSubmitInvalid          = ffe("PD011619", "Base ledger submission config is invalid")
 	MsgDomainTXIncompleteInitDeploy           = ffe("PD011620", "Transaction is incomplete for phase InitDeploy")
 	MsgDomainTXIncompletePrepareDeploy        = ffe("PD011621", "Transaction is incomplete for phase PrepareDeploy")
-	MsgDomainDeployNoSigner                   = ffe("PD011622", "Domain did not provide a signer for base ledger transaction to deploy the private smart contract")
 	MsgDomainMultipleEndorsersSubmit          = ffe("PD011623", "Multiple endorsers of the transaction specified a submission constraint")
 	MsgDomainNoEndorserSubmit                 = ffe("PD011624", "Domain is configured for endorser submission, and no endorser specified a submission constraint")
 	MsgDomainInvalidSubmissionConfig          = ffe("PD011625", "Domain specified an unexpected base ledger submission config: %s")
@@ -268,6 +268,7 @@ var (
 	MsgDomainInvalidStates                    = ffe("PD011651", "Invalid states")
 	MsgDomainInvalidResponseToValidate        = ffe("PD011652", "Invalid response to validation")
 	MsgDomainInvalidDataFromDomain            = ffe("PD011653", "Invalid data returned by domain for call ABI outputs")
+	MsgDomainNotConfiguredForPSC              = ffe("PD011654", "A smart contract with address %s exists for a domain that is no longer configured on this node")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownRunMode = ffe("PD011700", "Unknown run mode '%s'")

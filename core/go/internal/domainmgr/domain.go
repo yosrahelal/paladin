@@ -102,9 +102,6 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 
 	// Parse all the schemas
 	d.config = confRes.DomainConfig
-	if d.config.BaseLedgerSubmitConfig == nil {
-		return nil, i18n.NewError(d.ctx, msgs.MsgDomainBaseLedgerSubmitInvalid)
-	}
 	abiSchemas := make([]*abi.Parameter, len(d.config.AbiStateSchemasJson))
 	for i, schemaJSON := range d.config.AbiStateSchemasJson {
 		if err := json.Unmarshal([]byte(schemaJSON), &abiSchemas[i]); err != nil {
@@ -504,16 +501,8 @@ func (d *domain) PrepareDeploy(ctx context.Context, tx *components.PrivateContra
 		return err
 	}
 
-	if res.Signer != nil && *res.Signer != "" {
+	if res.Signer != nil {
 		tx.Signer = *res.Signer
-	} else {
-		switch d.config.BaseLedgerSubmitConfig.SubmitMode {
-		case prototk.BaseLedgerSubmitConfig_ONE_TIME_USE_KEYS:
-			tx.Signer = d.config.BaseLedgerSubmitConfig.OneTimeUsePrefix + tx.ID.String()
-		default:
-			log.L(ctx).Errorf("Signer mode %s and no signer returned", d.config.BaseLedgerSubmitConfig.SubmitMode)
-			return i18n.NewError(ctx, msgs.MsgDomainDeployNoSigner)
-		}
 	}
 	if res.Transaction != nil && res.Deploy == nil {
 		var functionABI abi.Entry

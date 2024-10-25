@@ -212,16 +212,17 @@ func TestGetDomainNotFound(t *testing.T) {
 	_, err := dm.GetDomainByName(ctx, "wrong")
 	assert.Regexp(t, "PD011600", err)
 
-	_, err = dm.getDomainByAddress(ctx, tktypes.MustEthAddress(tktypes.RandHex(20)), false)
+	_, err = dm.getDomainByAddress(ctx, tktypes.MustEthAddress(tktypes.RandHex(20)))
 	assert.Regexp(t, "PD011600", err)
 
-	dc, err := dm.getDomainByAddress(ctx, tktypes.MustEthAddress(tktypes.RandHex(20)), true)
-	assert.NoError(t, err)
+	dc := dm.getDomainByAddressOrNil(tktypes.MustEthAddress(tktypes.RandHex(20)))
 	assert.Nil(t, dc)
 }
 
 func TestGetDomainNotInit(t *testing.T) {
-	td, done := newTestDomain(t, false, &prototk.DomainConfig{})
+	td, done := newTestDomain(t, false, &prototk.DomainConfig{
+		AbiStateSchemasJson: []string{`{!!! bad`},
+	})
 	defer done()
 
 	_, err := td.dm.GetDomainByName(td.ctx, td.d.name)
@@ -277,7 +278,7 @@ func TestWaitForDeployDomainNotFound(t *testing.T) {
 			// We simulate this on the main test routine below
 			return nil
 		})
-		assert.Regexp(t, "PD011609", err)
+		assert.Regexp(t, "PD011654", err)
 		close(received)
 	}()
 

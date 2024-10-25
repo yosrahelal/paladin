@@ -138,7 +138,7 @@ func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID 
 			// Note: hits will be cached, but events from unrecognized contracts will always
 			// result in a cache miss and a database lookup
 			// TODO: revisit if we should optimize this
-			psc, err := d.dm.getSmartContractCached(ctx, tx, ev.Address)
+			_, psc, err := d.dm.getSmartContractCached(ctx, tx, ev.Address)
 			if err != nil {
 				return nil, err
 			}
@@ -151,8 +151,8 @@ func (d *domain) batchEventsByAddress(ctx context.Context, tx *gorm.DB, batchID 
 				HandleEventBatchRequest: prototk.HandleEventBatchRequest{
 					BatchId: batchID,
 					ContractInfo: &prototk.ContractInfo{
-						ContractAddress: psc.Address().String(),
-						ContractConfig:  psc.ConfigBytes(),
+						ContractAddress:    psc.Address().String(),
+						ContractConfigJson: psc.config.ContractConfigJson,
 					},
 				},
 			}

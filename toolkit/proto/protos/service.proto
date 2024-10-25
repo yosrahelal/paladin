@@ -48,16 +48,17 @@ message DomainMessage {
     InitDomainRequest           init_domain =               1020;
     InitDeployRequest           init_deploy =               1030;
     PrepareDeployRequest        prepare_deploy =            1040;
-    InitTransactionRequest      init_transaction =          1050;
-    AssembleTransactionRequest  assemble_transaction =      1060;
-    EndorseTransactionRequest   endorse_transaction =       1070;
-    PrepareTransactionRequest   prepare_transaction =       1080;
-    HandleEventBatchRequest     handle_event_batch =        1090;
-    SignRequest                 sign =                      1100;
-    GetVerifierRequest          get_verifier =              1110;
-    ValidateStateHashesRequest  validate_state_hashes =     1120;
-    InitCallRequest             init_call =                 1130;
-    ExecCallRequest             exec_call =                 1140;
+    InitContractRequest         init_contract =             1050;
+    InitTransactionRequest      init_transaction =          1060;
+    AssembleTransactionRequest  assemble_transaction =      1070;
+    EndorseTransactionRequest   endorse_transaction =       1080;
+    PrepareTransactionRequest   prepare_transaction =       1090;
+    HandleEventBatchRequest     handle_event_batch =        1100;
+    InitCallRequest             init_call =                 1110;
+    ExecCallRequest             exec_call =                 1120;
+    SignRequest                 sign =                      1130;
+    GetVerifierRequest          get_verifier =              1140;
+    ValidateStateHashesRequest  validate_state_hashes =     1150;
   }
 
   oneof response_from_domain {
@@ -65,16 +66,17 @@ message DomainMessage {
     InitDomainResponse          init_domain_res =           1021;
     InitDeployResponse          init_deploy_res =           1031;
     PrepareDeployResponse       prepare_deploy_res =        1041;
-    InitTransactionResponse     init_transaction_res =      1051;
-    AssembleTransactionResponse assemble_transaction_res =  1061;
-    EndorseTransactionResponse  endorse_transaction_res =   1071;
-    PrepareTransactionResponse  prepare_transaction_res =   1081;
-    HandleEventBatchResponse    handle_event_batch_res =    1091;
-    SignResponse                sign_res =                  1101;
-    GetVerifierResponse         get_verifier_res =          1111;
-    ValidateStateHashesResponse validate_state_hashes_res = 1121;
-    InitCallResponse            init_call_res =             1131;
-    ExecCallResponse            exec_call_res =             1141;
+    InitContractResponse        init_contract_res =         1051;
+    InitTransactionResponse     init_transaction_res =      1061;
+    AssembleTransactionResponse assemble_transaction_res =  1071;
+    EndorseTransactionResponse  endorse_transaction_res =   1081;
+    PrepareTransactionResponse  prepare_transaction_res =   1091;
+    HandleEventBatchResponse    handle_event_batch_res =    1101;
+    InitCallResponse            init_call_res =             1111;
+    ExecCallResponse            exec_call_res =             1121;
+    SignResponse                sign_res =                  1131;
+    GetVerifierResponse         get_verifier_res =          1141;
+    ValidateStateHashesResponse validate_state_hashes_res = 1151;
   }
 
   // Request/reply exchanges initiated by the domain, to the paladin node
