@@ -87,4 +87,7 @@ func TestPrivateIdentityLocatorErrors(t *testing.T) {
 
 	_, err = PrivateIdentityLocator("_@").FullyQualified(context.Background(), "")
 	assert.Regexp(t, "PD020005", err)
+
+	_, err = PrivateIdentityLocator("no.node.supplied").Node(context.Background(), false)
+	assert.Regexp(t, "PD020017", err)
 }

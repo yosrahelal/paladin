@@ -127,45 +127,96 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 	}
 	tf.status = "endorsed"
 
-	// TODO is this too late to be resolving the dispatch key?
-	//
-	// SUGGESTION: we need to do this before we do delegateIfRequired, as if the endorsing signer
-	// is on another node, we need to delegate to that node.
-	//
-	// Can we do it any earlier or do we need to wait until we have all endorsements ( i.e. so that the endorser can declare ENDORSER_MUST_SUBMIT)
-	// We would need to do it earlier if we want to avoid transactions for different dispatch keys ending up in the same dependency graph
-	if tf.transaction.Signer == "" {
-		err := tf.resolveDispatch(ctx)
-		if err != nil {
+	reDelegate, err := tf.setTransactionSigner(ctx)
+	if err != nil {
 
-			log.L(ctx).Errorf("Failed to resolve dispatch for transaction %s: %s", tf.transaction.ID.String(), err)
-			tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerResolveDispatchError), err.Error())
+		log.L(ctx).Errorf("Invalid outcome from signer selection %s: %s", tf.transaction.ID.String(), err)
+		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerResolveDispatchError), err.Error())
 
-			//TODO as it stands, we will just enter a retry loop of trying to resolve the dispatcher next time the event loop triggers an action
-			// if we are lucky, that will be triggered by an event that somehow changes the in memory state in a way that the dispatcher can be
-			// resolved but that is unlikely
-			// would it be more appropriate to re-assemble ( or even revert ) the transaction here?
-			return
-		}
+		//TODO as it stands, we will just enter a retry loop of trying to resolve the dispatcher next time the event loop triggers an action
+		// if we are lucky, that will be triggered by an event that somehow changes the in memory state in a way that the dispatcher can be
+		// resolved but that is unlikely
+		// would it be more appropriate to re-assemble ( or even revert ) the transaction here?
+		return
+	} else if reDelegate {
+		// TODO: We should re-delegate in this scenario
+		tf.latestError = i18n.NewError(ctx, msgs.MsgPrivateReDelegationRequired).Error()
 	}
 }
 
-func (tf *transactionFlow) resolveDispatch(ctx context.Context) error {
+func (tf *transactionFlow) setTransactionSigner(ctx context.Context) (reDelegate bool, err error) {
+	// We only set the signing key in one very specific ENDORSER_MUST_SUBMIT path in this function.
+	// In the general case the Sequencer picks a random signing key to submit the transaction.
 	tx := tf.transaction
+	tx.Signer = ""
+
+	// We are the coordinator to be running this function.
+	// We need to check if:
+	// 1. There are any ENDORSER_MUST_SUBMIT constraints
+	// 2. If there are, that we are the correct coordinator, or if we need to re-delegate.
+	endorserSubmitSigner := ""
 	for _, ar := range tx.PostAssembly.Endorsements {
 		for _, c := range ar.Constraints {
 			if c == prototk.AttestationResult_ENDORSER_MUST_SUBMIT {
-				if tx.Signer != "" {
+				if endorserSubmitSigner != "" {
 					// Multiple endorsers claiming it is an error
-					return i18n.NewError(ctx, msgs.MsgDomainMultipleEndorsersSubmit)
+					return false, i18n.NewError(ctx, msgs.MsgDomainMultipleEndorsersSubmit)
 				}
-				tx.Signer = ar.Verifier.Lookup
+				log.L(ctx).Debugf("Endorser %s provided an ENDORSER_MUST_SUBMIT signing constraint for transaction %s", ar.Verifier.Lookup, tx.ID)
+				endorserSubmitSigner = ar.Verifier.Lookup
 			}
 		}
 	}
-	// Note: the signer might still be empty here, in which case that's fine as the coordinating
-	// Sequencer will choose
-	return nil
+	if endorserSubmitSigner == "" {
+		// great - we just need to use the anonymous signing management of the coordinator
+		return false, nil
+	}
+
+	contractConf := tf.domainAPI.ContractConfig()
+	if contractConf.SubmitterSelection != prototk.ContractConfig_SUBMITTER_COORDINATOR {
+		// We only accept ENDORSER_MUST_SUBMIT constraints for contracts configured with coordinator submission.
+		return false, i18n.NewError(ctx, msgs.MsgDomainEndorserSubmitConfigClash,
+			endorserSubmitSigner, contractConf.CoordinatorSelection, contractConf.SubmitterSelection)
+	}
+
+	// Now we need to check the configuration for how the coordinator is picked
+	switch contractConf.CoordinatorSelection {
+	case prototk.ContractConfig_COORDINATOR_STATIC:
+		staticCoordinator := ""
+		if contractConf.StaticCoordinator != nil {
+			staticCoordinator = *contractConf.StaticCoordinator
+		}
+		if endorserSubmitSigner != staticCoordinator {
+			// If you have a static coordinator, and an endorser with an ENDORSER_MUST_SUBMIT, they must match.
+			return false, i18n.NewError(ctx, msgs.MsgDomainEndorserSubmitConfigClash,
+				endorserSubmitSigner, fmt.Sprintf(`%s='%s'`, contractConf.CoordinatorSelection, staticCoordinator),
+				contractConf.SubmitterSelection)
+		}
+	case prototk.ContractConfig_COORDINATOR_ENDORSER:
+		// This is fine, but it's possible we've ended up with the wrong coordinator/endorser combination.
+	default:
+		// This is invalid. In order for an endorsement to be able to provide an ENDORSER_MUST_SUBMIT
+		// constraint it must be configured so we are allowed to pick the coordinator to be the endorser.
+		return false, i18n.NewError(ctx, msgs.MsgDomainEndorserSubmitConfigClash,
+			endorserSubmitSigner, contractConf.CoordinatorSelection, contractConf.SubmitterSelection)
+	}
+
+	// Ok we have a submission constraint to use the signing key of an endorser to submit.
+	// Check it is a local identity. If not we have a re-delegation scenario.
+	node, err := tktypes.PrivateIdentityLocator(endorserSubmitSigner).Node(ctx, false /* must be fully qualified in this scenario */)
+	if err != nil {
+		return false, i18n.WrapError(ctx, err, msgs.MsgDomainEndorserSubmitConfigClash,
+			endorserSubmitSigner, contractConf.CoordinatorSelection, contractConf.SubmitterSelection)
+	}
+	if node != tf.nodeID {
+		log.L(ctx).Warnf("For transaction %s to be submitted, the coordinator must move to the node ENDORSER_MUST_SUBMIT constraint %s",
+			tx.ID, endorserSubmitSigner)
+		return true, nil
+	}
+	// Ok - we have an endorsement approval to use the returned
+	// NON-ANONYMOUS identity homed on this local node to submit.
+	tx.Signer = endorserSubmitSigner
+	return false, nil
 }
 
 func (tf *transactionFlow) revertTransaction(ctx context.Context, revertReason string) {
