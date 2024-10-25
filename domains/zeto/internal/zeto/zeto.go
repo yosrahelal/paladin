@@ -141,11 +141,8 @@ func (z *Zeto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 		DomainConfig: &prototk.DomainConfig{
 			CustomHashFunction:  true,
 			AbiStateSchemasJson: schemas,
-			BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
-				SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
-			},
-			AbiEventsJson:     string(eventsJSON),
-			SigningAlgorithms: signingAlgos,
+			AbiEventsJson:       string(eventsJSON),
+			SigningAlgorithms:   signingAlgos,
 		},
 	}, nil
 }
@@ -219,6 +216,27 @@ func (z *Zeto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 	}, nil
 }
 
+func (z *Zeto) InitContract(ctx context.Context, req *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+	var zetoContractConfigJSON []byte
+	domainConfig, err := z.decodeDomainConfig(ctx, req.ContractConfig)
+	if err == nil {
+		zetoContractConfigJSON, err = json.Marshal(domainConfig)
+	}
+	if err != nil {
+		// This on-chain contract has invalid configuration - not an error in our process
+		return &prototk.InitContractResponse{Valid: false}, nil
+	}
+
+	return &prototk.InitContractResponse{
+		Valid: true,
+		ContractConfig: &prototk.ContractConfig{
+			ContractConfigJson:   string(zetoContractConfigJSON),
+			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
+			SubmitterSelection:   prototk.ContractConfig_SUBMITTER_SENDER,
+		},
+	}, nil
+}
+
 func (z *Zeto) InitTransaction(ctx context.Context, req *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
 	tx, handler, err := z.validateTransaction(ctx, req.Transaction)
 	if err != nil {
@@ -254,7 +272,7 @@ func (z *Zeto) PrepareTransaction(ctx context.Context, req *prototk.PrepareTrans
 func (z *Zeto) decodeDomainConfig(ctx context.Context, domainConfig []byte) (*types.DomainInstanceConfig, error) {
 	configValues, err := types.DomainInstanceConfigABI.DecodeABIDataCtx(ctx, domainConfig, 0)
 	if err != nil {
-		return nil, err
+		return nil, i18n.NewError(ctx, msgs.MsgErrorAbiDecodeDomainInstanceConfig, err)
 	}
 	configJSON, err := tktypes.StandardABISerializer().SerializeJSON(configValues)
 	if err != nil {
@@ -278,9 +296,10 @@ func (z *Zeto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalFuncAbi, err)
 	}
 
-	domainConfig, err := z.decodeDomainConfig(ctx, tx.ContractInfo.ContractConfig)
+	var domainConfig *types.DomainInstanceConfig
+	err = json.Unmarshal([]byte(tx.ContractInfo.ContractConfigJson), &domainConfig)
 	if err != nil {
-		return nil, nil, i18n.NewError(ctx, msgs.MsgErrorDecodeDomainConfig, err)
+		return nil, nil, err
 	}
 
 	abi := types.ZetoABI.Functions()[functionABI.Name]
@@ -326,17 +345,10 @@ func (z *Zeto) registerEventSignatures(eventAbis abi.ABI) {
 }
 
 func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
-	cv, err := types.DomainInstanceConfigABI.DecodeABIData(req.ContractInfo.ContractConfig, 0)
+	var domainConfig *types.DomainInstanceConfig
+	err := json.Unmarshal([]byte(req.ContractInfo.ContractConfigJson), &domainConfig)
 	if err != nil {
 		return nil, i18n.NewError(ctx, msgs.MsgErrorAbiDecodeDomainInstanceConfig, err)
-	}
-	j, err := cv.JSON()
-	if err != nil {
-		return nil, err
-	}
-	domainConfig := &types.DomainInstanceConfig{}
-	if err := json.Unmarshal(j, domainConfig); err != nil {
-		return nil, err
 	}
 
 	contractAddress, err := tktypes.ParseEthAddress(req.ContractInfo.ContractAddress)
