@@ -130,15 +130,20 @@ public class BondTest {
                     tokenDistributionFactoryBytecode,
                     new HashMap<String, String>());
 
+            String cashIssuer = "cashIssuer";
+            String bondIssuer = "bondIssuer";
+            String bondCustodian = "bondCustodian";
+            String alice = "alice";
+
             String custodianAddress = testbed.getRpcClient().request("testbed_resolveVerifier",
-                    "custodian", Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS);
+                    bondCustodian, Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS);
             String aliceAddress = testbed.getRpcClient().request("testbed_resolveVerifier",
-                    "alice", Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS);
+                    alice, Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS);
 
             GroupTupleJSON issuerCustodianGroup = new GroupTupleJSON(
-                    JsonHex.randomBytes32(), new String[]{"issuer", "custodian"});
+                    JsonHex.randomBytes32(), new String[]{bondIssuer, bondCustodian});
             GroupTupleJSON aliceCustodianGroup = new GroupTupleJSON(
-                    JsonHex.randomBytes32(), new String[]{"alice", "custodian"});
+                    JsonHex.randomBytes32(), new String[]{alice, bondCustodian});
 
             // Create the privacy groups
             var issuerCustodianInstance = PenteHelper.newPrivacyGroup(
@@ -149,37 +154,50 @@ public class BondTest {
             assertFalse(aliceCustodianInstance.address().isBlank());
 
             // Deploy BondTracker to the issuer/custodian privacy group
-            var bondTracker = BondTrackerHelper.deploy(issuerCustodianInstance, "issuer", new HashMap<>() {{
+            var bondTracker = BondTrackerHelper.deploy(issuerCustodianInstance, bondIssuer, new HashMap<>() {{
                 put("name", "BOND");
                 put("symbol", "BOND");
                 put("custodian", custodianAddress);
                 put("distributionFactory", tokenDistributionFactoryAddress);
             }});
 
-            // Create Noto token
-            var noto = NotoHelper.deploy("noto", testbed,
+            // Create Noto tokens (bond and cash)
+            var notoBond = NotoHelper.deploy("noto", testbed,
                     new NotoHelper.ConstructorParams(
-                            "custodian",
+                            bondCustodian,
                             new NotoHelper.HookParams(
                                     issuerCustodianInstance.address(),
                                     bondTracker.address(),
                                     issuerCustodianGroup),
                             false));
-            assertFalse(noto.address().isBlank());
+            assertFalse(notoBond.address().isBlank());
+            var notoCash = NotoHelper.deploy("noto", testbed,
+                    new NotoHelper.ConstructorParams(
+                            cashIssuer,
+                            null,
+                            true));
+            assertFalse(notoCash.address().isBlank());
 
-            // Issue bond
-            noto.mint("issuer", "custodian", 1000);
+            // Issue cash to investors
+            notoCash.mint(cashIssuer, alice, 100000);
 
-            // Validate Noto balance
-            var notoStates = noto.queryStates(notoSchema.id, null);
-            assertEquals(1, notoStates.size());
-            assertEquals("1000", notoStates.getFirst().data().amount());
-            assertEquals(custodianAddress, notoStates.getFirst().data().owner());
+            // Issue bond to custodian
+            notoBond.mint(bondIssuer, bondCustodian, 1000);
+
+            // Validate Noto balances
+            var notoCashStates = notoCash.queryStates(notoSchema.id, null);
+            assertEquals(1, notoCashStates.size());
+            assertEquals("100000", notoCashStates.getFirst().data().amount());
+            assertEquals(aliceAddress, notoCashStates.getFirst().data().owner());
+            var notoBondStates = notoBond.queryStates(notoSchema.id, null);
+            assertEquals(1, notoBondStates.size());
+            assertEquals("1000", notoBondStates.getFirst().data().amount());
+            assertEquals(custodianAddress, notoBondStates.getFirst().data().owner());
 
             // Validate bond tracker balance
-            assertEquals("1000", bondTracker.balanceOf("issuer", custodianAddress));
+            assertEquals("1000", bondTracker.balanceOf(bondIssuer, custodianAddress));
 
-            // Pull the last transaction receipt
+            // Pull the last transaction receipt (for the bond mint)
             // TODO: is there a better way to correlate this from the testbed transaction?
             List<LinkedHashMap<String, Object>> transactions = testbed.getRpcClient().request("ptx_queryTransactionReceipts",
                     new JsonQuery.Query(1, null, null));
@@ -198,36 +216,42 @@ public class BondTest {
 
             // Tell bond tracker about the distribution contract
             // TODO: feels slightly odd to have to tell the contract about the result of the deployment it requested
-            bondTracker.setDistribution("custodian", tokenDistributionAddress.toString());
+            bondTracker.setDistribution(bondCustodian, tokenDistributionAddress.toString());
 
             // Add Alice as an allowed investor
-            var investorRegistry = bondTracker.investorRegistry("custodian");
-            investorRegistry.addInvestor("custodian", aliceAddress);
+            var investorRegistry = bondTracker.investorRegistry(bondCustodian);
+            investorRegistry.addInvestor(bondCustodian, aliceAddress);
 
             // Alice deploys BondSubscription to the alice/custodian privacy group, to request subscription
             // TODO: if Alice deploys, how can custodian trust it's the correct logic?
-            var bondSubscription = BondSubscriptionHelper.deploy(aliceCustodianInstance, "alice", new HashMap<>() {{
+            var bondSubscription = BondSubscriptionHelper.deploy(aliceCustodianInstance, alice, new HashMap<>() {{
                 put("distributionAddress", tokenDistributionAddress);
                 put("units", 1000);
             }});
 
             // Alice receives full bond distribution
-            // TODO: take payment as a cash token from Alice
             // TODO: this should be done together as an Atom
-            bondSubscription.markReceived("alice", 1000);
-            noto.transfer("custodian", "alice", 1000);
+            bondSubscription.markReceived(alice, 1000);
+            notoBond.transfer(bondCustodian, alice, 1000);
+            notoCash.transfer(alice, bondCustodian, 1000);
 
             // TODO: figure out how to test negative cases (such as when Pente reverts due to a non-allowed investor)
 
             // Validate Noto balance
-            notoStates = noto.queryStates(notoSchema.id, null);
-            assertEquals(1, notoStates.size());
-            assertEquals("1000", notoStates.getFirst().data().amount());
-            assertEquals(aliceAddress, notoStates.getFirst().data().owner());
+            notoCashStates = notoCash.queryStates(notoSchema.id, null);
+            assertEquals(2, notoCashStates.size());
+            assertEquals("1000", notoCashStates.get(0).data().amount());
+            assertEquals(custodianAddress, notoCashStates.get(0).data().owner());
+            assertEquals("99000", notoCashStates.get(1).data().amount());
+            assertEquals(aliceAddress, notoCashStates.get(1).data().owner());
+            notoBondStates = notoBond.queryStates(notoSchema.id, null);
+            assertEquals(1, notoBondStates.size());
+            assertEquals("1000", notoBondStates.getFirst().data().amount());
+            assertEquals(aliceAddress, notoBondStates.getFirst().data().owner());
 
             // Validate bond tracker balance
-            assertEquals("0", bondTracker.balanceOf("issuer", custodianAddress));
-            assertEquals("1000", bondTracker.balanceOf("issuer", aliceAddress));
+            assertEquals("0", bondTracker.balanceOf(bondIssuer, custodianAddress));
+            assertEquals("1000", bondTracker.balanceOf(bondIssuer, aliceAddress));
         }
     }
 }
