@@ -493,6 +493,9 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 			ABI: abi.ABI{&functionABI},
 		}
 	}
+	if res.Metadata != nil {
+		tx.PreparedMetadata = []byte(*res.Metadata)
+	}
 	return nil
 }
 

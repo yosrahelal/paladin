@@ -389,6 +389,7 @@ func (tb *testbed) mapTransaction(ctx context.Context, tx *components.PrivateTra
 	return &TransactionResult{
 		EncodedCall:         encodedCall,
 		PreparedTransaction: preparedTransaction,
+		PreparedMetadata:    tx.PreparedMetadata,
 		InputStates:         inputStates,
 		OutputStates:        outputStates,
 		ReadStates:          readStates,
@@ -427,7 +428,7 @@ func (tb *testbed) rpcTestbedPrepare() rpcserver.RPCHandler {
 		invocation TransactionInput,
 	) (*TransactionResult, error) {
 
-		psc, tx, err := tb.newPrivateTransaction(ctx, invocation, prototk.TransactionSpecification_CALL)
+		psc, tx, err := tb.newPrivateTransaction(ctx, invocation, prototk.TransactionSpecification_PREPARE_TRANSACTION)
 		if err != nil {
 			return nil, err
 		}
