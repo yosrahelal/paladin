@@ -26,6 +26,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { EllapsedTime } from "./EllapsedTime";
+import VisibilityIcon from '@mui/icons-material/Visibility';
 
 daysjs.extend(relativeTime);
 
@@ -35,7 +36,7 @@ type Props = {
 
 export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
 
-  const [paladinTransactionDialogOpen, setPaladinTransactionDialogOpen] = useState(false);
+  const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
 
@@ -47,7 +48,7 @@ export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
     try {
       const parsed = JSON.stringify(value);
       return parsed.substring(1, parsed.length - 1);
-    } catch(err) {}
+    } catch (err) { }
     return value;
   };
 
@@ -66,11 +67,9 @@ export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
         <Grid2 container direction="column" spacing={2}>
           <Grid2 container justifyContent="space-evenly">
             <Grid2>
-              <ButtonBase onClick={() => setPaladinTransactionDialogOpen(true)}>
-                <Typography align="center" variant="h6" color="primary">
-                  {t(paladinTransaction.type)}
-                </Typography>
-              </ButtonBase>
+              <Typography align="center" variant="h6">
+                {t(paladinTransaction.type)}
+              </Typography>
               <Typography align="center" variant="body2" color="textSecondary">
                 {t("type")}
               </Typography>
@@ -115,10 +114,14 @@ export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
           <Grid2>
             <Box sx={{ display: 'flex', padding: '4px', justifyContent: 'space-between' }}>
               <EllapsedTime timestamp={paladinTransaction?.created} />
-              <Button size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                onClick={() => setIsExpanded(!isExpanded)}>
-                {t(isExpanded ? 'hideProperties' : 'showProperties')}
-              </Button>
+              <Box>
+                <Button size="small" startIcon={<VisibilityIcon />} sx={{ marginRight: '40px' }}
+                  onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
+                <Button size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                  onClick={() => setIsExpanded(!isExpanded)}>
+                  {t(isExpanded ? 'hideProperties' : 'showProperties')}
+                </Button>
+              </Box>
             </Box>
             <Collapse in={isExpanded}>
               {Object.keys(paladinTransaction.data)
@@ -131,11 +134,11 @@ export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
                     multiline
                     fullWidth
                     size="small"
-                    sx={{ marginTop: '12px'}}
+                    sx={{ marginTop: '12px' }}
                     value={formatProperty(paladinTransaction.data[property])}
                   />
                 ))}
-                {Object.keys(paladinTransaction.data).length === 0 &&
+              {Object.keys(paladinTransaction.data).length === 0 &&
                 <Typography align="center">{t('noProperties')}</Typography>}
             </Collapse>
           </Grid2>
@@ -144,8 +147,8 @@ export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
       <ViewDetailsDialog
         title={t('transaction')}
         details={paladinTransaction}
-        dialogOpen={paladinTransactionDialogOpen}
-        setDialogOpen={setPaladinTransactionDialogOpen}
+        dialogOpen={viewDetailsDialogOpen}
+        setDialogOpen={setViewDetailsDialogOpen}
       />
     </>
   );

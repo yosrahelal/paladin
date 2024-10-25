@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, ButtonBase, Grid2, Typography } from "@mui/material";
+import { Box, Button, Grid2, Typography } from "@mui/material";
 import { IPaladinTransaction, ITransaction, ITransactionReceipt } from "../interfaces";
 import { t } from "i18next";
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
@@ -24,7 +24,8 @@ import { ViewDetailsDialog } from "../dialogs/ViewDetails";
 import { useState } from "react";
 import daysjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-// import HourglassTopIcon from '@mui/icons-material/HourglassTop';
+import { EllapsedTime } from "./EllapsedTime";
+import VisibilityIcon from '@mui/icons-material/Visibility';
 
 type Props = {
   transaction: ITransaction
@@ -34,33 +35,25 @@ type Props = {
 
 daysjs.extend(relativeTime);
 
-export const Transaction: React.FC<Props> = ({ transaction, transactionReceipt, paladinTransaction }) => {
+export const Transaction: React.FC<Props> = ({ transaction, paladinTransaction }) => {
 
-  const [paladinTransactionDialogOpen, setPaladinTransactionDialogOpen] = useState(false);
+  const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
 
   return (
     <>
       <Box sx={{
         position: 'relative',
         backgroundColor: theme => theme.palette.background.paper,
-        marginBottom: '20px', padding: '10px',  borderRadius: '6px', boxShadow: '0px 0px 8px 3px rgba(0,0,0,0.26)'
+        marginBottom: '20px', padding: '10px', borderRadius: '6px', boxShadow: '0px 0px 8px 3px rgba(0,0,0,0.26)'
       }}>
         {paladinTransaction !== undefined &&
-          <img src="/paladin-icon-light.svg" width="38" style={{ position: 'absolute', left: '4px', bottom: '0px' }} />
+          <img src="/paladin-icon-light.svg" width="38" style={{ position: 'absolute', left: 'calc(50% - 19px)', bottom: '0px' }} />
         }
-        {/* <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-        <HourglassTopIcon color="primary" sx={{ marginRight: '4px', fontSize: '16px', height: '20px' }} />
-          <Typography color="textSecondary" align="center" variant="body2" sx={{ marginBottom: '8px'}}>
-            {daysjs(paladinTransaction?.created).fromNow()}
-            </Typography>
-        </Box> */}
         <Grid2 container direction="column" spacing={2}>
           <Grid2 container justifyContent="space-evenly">
             {paladinTransaction !== undefined &&
               <Grid2>
-                <ButtonBase onClick={() => setPaladinTransactionDialogOpen(true)}>
-                  <Typography align="center" variant="h6" color="primary">{t(paladinTransaction.type)}</Typography>
-                </ButtonBase>
+                <Typography align="center" variant="h6" color="textPrimary">{t(paladinTransaction.type)}</Typography>
                 <Typography align="center" variant="body2" color="textSecondary">{t('type')}</Typography>
               </Grid2>}
             <Grid2>
@@ -95,15 +88,21 @@ export const Transaction: React.FC<Props> = ({ transaction, transactionReceipt, 
                 <Typography align="center" variant="body2" color="textSecondary">{t('contract')}</Typography>
               </Grid2>}
           </Grid2>
+          <Grid2>
+            <Box sx={{ display: 'flex', padding: '4px', justifyContent: 'space-between' }}>
+              <EllapsedTime timestamp={transaction.block.timestamp} />
+              <Button size="small" startIcon={<VisibilityIcon />}
+                onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
+            </Box>
+          </Grid2>
         </Grid2>
       </Box>
-      {transactionReceipt !== undefined && paladinTransaction !== undefined &&
-        <ViewDetailsDialog
-          title={t('transaction')}
-          details={paladinTransaction}
-          dialogOpen={paladinTransactionDialogOpen}
-          setDialogOpen={setPaladinTransactionDialogOpen}
-        />}
+      <ViewDetailsDialog
+        title={t('transaction')}
+        details={paladinTransaction ?? transaction}
+        dialogOpen={viewDetailsDialogOpen}
+        setDialogOpen={setViewDetailsDialogOpen}
+      />
     </>
   );
 

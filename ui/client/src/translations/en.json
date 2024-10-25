@@ -48,5 +48,7 @@
   "hideProperties": "Hide Properties",
   "noProperties": "No Properties",
   "viewDetails": "View Details",
-  "registryEntry": "Registry Entry"
+  "registryEntry": "Registry Entry",
+  "noPendingTransactions": "No Pending Transactions",
+  "event": "Event"
 }

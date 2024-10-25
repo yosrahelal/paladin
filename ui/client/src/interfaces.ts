@@ -14,6 +14,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+export interface IBlock {
+  number: number;
+  hash: string;
+  timestamp: string;
+}
+
 export interface ITransaction {
   hash: string;
   blockNumber: number;
@@ -22,6 +28,7 @@ export interface ITransaction {
   nonce: number;
   contractAddress?: string;
   result: string;
+  block: IBlock;
 }
 
 export interface IEvent {
@@ -30,6 +37,7 @@ export interface IEvent {
   logIndex: number;
   transactionHash: string;
   signature: string;
+  block: IBlock;
 }
 
 export interface IRegistryEntry {

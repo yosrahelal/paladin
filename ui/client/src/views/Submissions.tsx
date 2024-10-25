@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, Fade, Paper, Tab, Tabs } from "@mui/material";
+import { Box, Fade, Paper, Tab, Tabs, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
 import { useContext, useState } from "react";
@@ -75,6 +75,8 @@ export const Submissions: React.FC = () => {
                 paladinTransaction={pendingTransaction}
               />
             ))}
+            {pendingTransactions?.length === 0 &&
+            <Typography align="center" variant="h6" sx={{ marginTop: '20px'}}>{t('noPendingTransactions')}</Typography>}
           </Box>
         </Paper>
       </Box>

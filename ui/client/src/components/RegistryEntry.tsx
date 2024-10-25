@@ -121,8 +121,8 @@ export const RegistryEntry: React.FC<Props> = ({ registryEntry }) => {
             </Grid2>
           </Grid2>
           <Grid2>
-            <Box sx={{ display: 'flex', padding: '4px', justifyContent: 'space-between' }}>
-              <Button startIcon={<VisibilityIcon />} sx={{ marginRight: '40px' }}
+            <Box sx={{ display: 'flex', padding: '4px', justifyContent: 'right' }}>
+              <Button size="small" startIcon={<VisibilityIcon />} sx={{ marginRight: '40px' }}
                 onClick={() => setViewDetailsDialogOpen(true)}>{t('viewDetails')}</Button>
               <Button size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                 onClick={() => setIsExpanded(!isExpanded)}>
