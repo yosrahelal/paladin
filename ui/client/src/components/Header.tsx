@@ -14,12 +14,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { AppBar, Box, Grid2, IconButton, Tab, Tabs, Toolbar, Tooltip, Typography } from "@mui/material";
+import { AppBar, Box, Grid2, IconButton, Tab, Tabs, Toolbar, Tooltip, Typography, useTheme } from "@mui/material";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import { ApplicationContext } from "../contexts/ApplicationContext";
+
 
 export const Header: React.FC = () => {
 
@@ -27,6 +28,7 @@ export const Header: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const pathname = useLocation().pathname.toLowerCase();
+  const theme = useTheme();
 
   const getTabFromPath = (path: string) => {
     if (path.startsWith('/indexer')) {
@@ -56,7 +58,7 @@ export const Header: React.FC = () => {
         <Toolbar>
           <Grid2 container alignItems="center" justifyContent="space-between" size={{ xs: 12 }}>
             <Grid2>
-              <Typography variant="h6">{t('paladin')}</Typography>
+              <Typography variant="h6" color={ theme.palette.mode === 'dark' ? 'primary' : 'inherit'}>{t('paladin')}</Typography>
             </Grid2>
             <Grid2>
               <Tabs value={tab} onChange={(_event, value) => handleNavigation(value)} textColor="inherit"
