@@ -87,6 +87,7 @@ type PrivateTransaction struct {
 	Signer                     string                   `json:"signer"`
 	PreparedPublicTransaction  *pldapi.TransactionInput `json:"-"`
 	PreparedPrivateTransaction *pldapi.TransactionInput `json:"-"`
+	PreparedMetadata           tktypes.RawJSON          `json:"-"`
 
 	PublicTxOptions pldapi.PublicTxOptions `json:"-"`
 }

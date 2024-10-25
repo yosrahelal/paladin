@@ -32,6 +32,7 @@ type TransactionInput struct {
 type TransactionResult struct {
 	EncodedCall         tktypes.HexBytes         `json:"encodedCall"`
 	PreparedTransaction *pldapi.TransactionInput `json:"preparedTransaction"`
+	PreparedMetadata    tktypes.RawJSON          `json:"preparedMetadata"`
 	InputStates         []*pldapi.StateWithData  `json:"inputStates"`
 	OutputStates        []*pldapi.StateWithData  `json:"outputStates"`
 	ReadStates          []*pldapi.StateWithData  `json:"readStates"`
