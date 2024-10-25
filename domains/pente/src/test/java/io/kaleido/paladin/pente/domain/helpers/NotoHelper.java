@@ -72,6 +72,33 @@ public class NotoHelper {
     ) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ApproveExtraParams(
+            @JsonProperty
+            JsonHex.Bytes data
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record NotoPublicTransaction(
+            @JsonProperty
+            JsonABI.Entry functionABI,
+            @JsonProperty
+            JsonNode paramsJSON,
+            @JsonProperty
+            JsonHex.Bytes encodedCall
+    ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record NotoTransferMetadata(
+            @JsonProperty
+            ApproveExtraParams approvalParams,
+            @JsonProperty
+            NotoPublicTransaction transferWithApproval
+    ) {
+    }
+
     static final JsonABI.Entry mintABI = JsonABI.newFunction(
             "mint",
             JsonABI.newParameters(

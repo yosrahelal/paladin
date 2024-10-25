@@ -151,4 +151,13 @@ public class PenteHelper {
                 ), "");
         return new ObjectMapper().convertValue(queryResult, PenteCallOutputJSON.class);
     }
+
+    public Testbed.TransactionResult prepare(String sender, JsonABI.Entry fn, Object inputs) throws IOException {
+        return getTransactionInfo(
+                testbed.getRpcClient().request("testbed_prepare", new Testbed.TransactionInput(
+                        sender,
+                        JsonHex.addressFrom(address),
+                        fn,
+                        inputs)));
+    }
 }

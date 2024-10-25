@@ -16,6 +16,8 @@
 package types
 
 import (
+	"context"
+
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -97,4 +99,23 @@ type ApproveParams struct {
 	Outputs  []*pldapi.StateWithData `json:"outputs"`
 	Data     tktypes.HexBytes        `json:"data"`
 	Delegate *tktypes.EthAddress     `json:"delegate"`
+}
+
+type ApproveExtraParams struct {
+	Data tktypes.HexBytes `json:"data"`
+}
+
+type NotoPublicTransaction struct {
+	FunctionABI *abi.Entry      `json:"functionABI"`
+	ParamsJSON  tktypes.RawJSON `json:"paramsJSON"`
+	EncodedCall []byte          `json:"encodedCall"`
+}
+
+func (npt *NotoPublicTransaction) Encode(ctx context.Context) ([]byte, error) {
+	return npt.FunctionABI.EncodeCallDataJSONCtx(ctx, npt.ParamsJSON)
+}
+
+type NotoTransferMetadata struct {
+	ApprovalParams       ApproveExtraParams    `json:"approvalParams"`       // Partial set of params that can be passed to the "approveTransfer" method to approve another party to perform this transfer
+	TransferWithApproval NotoPublicTransaction `json:"transferWithApproval"` // The public transaction that would need to be submitted by an approved party to perform this transfer
 }

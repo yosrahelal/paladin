@@ -135,6 +135,10 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withHooks b
 	log.L(ctx).Infof("Prepare the transfers")
 	transferGold := notoGold.Transfer(ctx, bob, 1).Prepare(alice)
 	transferSilver := notoSilver.Transfer(ctx, alice, 10).Prepare(bob)
+	require.NotNil(t, transferGold)
+	require.NotNil(t, transferGold.PreparedMetadata)
+	require.NotNil(t, transferSilver)
+	require.NotNil(t, transferSilver.PreparedMetadata)
 
 	// TODO: this should actually be a Pente state transition
 	log.L(ctx).Infof("Prepare the trade execute")
@@ -152,38 +156,17 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withHooks b
 	}).SignAndSend(bob).Wait(5 * time.Second)
 	require.NoError(t, sent.Error())
 
-	var transferGoldParams NotoTransferParams
-	var transferGoldEncoded []byte
-	if withHooks {
-		// Unpack the inner "transfer" and replace with "transferWithApproval"
-		// TODO: make this simpler
-		var hookParams NotoTransferHookParams
-		err = json.Unmarshal(transferGold.PreparedTransaction.Data, &hookParams)
-		require.NoError(t, err)
-		decoded, err := notoGold.ABI.Functions()["transfer"].DecodeCallDataCtx(ctx, hookParams.Prepared.EncodedCall)
-		require.NoError(t, err)
-		decodedJSON, err := decoded.JSON()
-		require.NoError(t, err)
-		hookParams.Prepared.EncodedCall, err = notoGold.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, decodedJSON)
-		require.NoError(t, err)
-		newParamsJSON, err := json.Marshal(hookParams)
-		require.NoError(t, err)
-		transferGoldEncoded, err = tracker.ABI.Functions()["onTransfer"].EncodeCallDataJSONCtx(ctx, newParamsJSON)
-		require.NoError(t, err)
-		err = json.Unmarshal(decodedJSON, &transferGoldParams)
-		require.NoError(t, err)
-	} else {
-		// Generate a "transferWithApproval" using the same params from the encoded "transfer"
-		transferGoldEncoded, err = notoGold.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferGold.PreparedTransaction.Data)
-		require.NoError(t, err)
-		err = json.Unmarshal(transferGold.PreparedTransaction.Data, &transferGoldParams)
-		require.NoError(t, err)
-	}
-
-	var transferSilverParams NotoTransferParams
-	transferSilverEncoded, err := notoSilver.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferSilver.PreparedTransaction.Data)
+	var transferGoldExtra nototypes.NotoTransferMetadata
+	err = json.Unmarshal(transferGold.PreparedMetadata, &transferGoldExtra)
 	require.NoError(t, err)
-	err = json.Unmarshal(transferSilver.PreparedTransaction.Data, &transferSilverParams)
+	var transferSilverExtra nototypes.NotoTransferMetadata
+	err = json.Unmarshal(transferSilver.PreparedMetadata, &transferSilverExtra)
+	require.NoError(t, err)
+
+	transferGoldEncoded, err := transferGoldExtra.TransferWithApproval.Encode(ctx)
+	require.NoError(t, err)
+
+	transferSilverEncoded, err := transferSilverExtra.TransferWithApproval.Encode(ctx)
 	require.NoError(t, err)
 
 	log.L(ctx).Infof("Create Atom instance")
@@ -206,25 +189,20 @@ func pvpNotoNoto(t *testing.T, hdWalletSeed *testbed.UTInitFunction, withHooks b
 	// If any party found a discrepancy at this point, they could cancel the swap (last chance to back out)
 
 	log.L(ctx).Infof("Approve both Noto transactions")
+	goldDelegate := transferAtom.Address
 	if withHooks {
-		notoGold.ApproveTransfer(ctx, &nototypes.ApproveParams{
-			Inputs:   transferGold.InputStates,
-			Outputs:  transferGold.OutputStates,
-			Data:     transferGoldParams.Data,
-			Delegate: trackerAddress,
-		}).SignAndSend(alice).Wait()
-	} else {
-		notoGold.ApproveTransfer(ctx, &nototypes.ApproveParams{
-			Inputs:   transferGold.InputStates,
-			Outputs:  transferGold.OutputStates,
-			Data:     transferGoldParams.Data,
-			Delegate: transferAtom.Address,
-		}).SignAndSend(alice).Wait()
+		goldDelegate = trackerAddress
 	}
+	notoGold.ApproveTransfer(ctx, &nototypes.ApproveParams{
+		Inputs:   transferGold.InputStates,
+		Outputs:  transferGold.OutputStates,
+		Data:     transferGoldExtra.ApprovalParams.Data,
+		Delegate: goldDelegate,
+	}).SignAndSend(alice).Wait()
 	notoSilver.ApproveTransfer(ctx, &nototypes.ApproveParams{
 		Inputs:   transferSilver.InputStates,
 		Outputs:  transferSilver.OutputStates,
-		Data:     transferSilverParams.Data,
+		Data:     transferSilverExtra.ApprovalParams.Data,
 		Delegate: transferAtom.Address,
 	}).SignAndSend(bob).Wait()
 
@@ -356,9 +334,6 @@ func TestNotoForZeto(t *testing.T) {
 	log.L(ctx).Infof("Prepare the transfers")
 	transferNoto := noto.Transfer(ctx, bob, 1).Prepare(alice)
 	transferZeto := zeto.Transfer(ctx, alice, 1).Prepare(bob)
-
-	transferNotoEncoded, err := noto.ABI.Functions()["transferWithApproval"].EncodeCallDataJSONCtx(ctx, transferNoto.PreparedTransaction.Data)
-	require.NoError(t, err)
 	zeto.LockProof(ctx, tktypes.MustEthAddress(bobKey.Verifier.Verifier), transferZeto.EncodedCall).SignAndSend(bob, false).Wait()
 
 	// TODO: this should actually be a Pente state transition
@@ -388,11 +363,15 @@ func TestNotoForZeto(t *testing.T) {
 	log.L(ctx).Infof("Bob proposes tokens: contract=%s value=%s inputs=%+v outputs=%+v",
 		bobData["tokenAddress"], bobData["tokenValue"], bobStates["inputs"], bobStates["outputs"])
 
+	var transferNotoExtra nototypes.NotoTransferMetadata
+	err = json.Unmarshal(transferNoto.PreparedMetadata, &transferNotoExtra)
+	require.NoError(t, err)
+
 	log.L(ctx).Infof("Create Atom instance")
 	transferAtom := atomFactory.Create(ctx, alice, []*helpers.AtomOperation{
 		{
 			ContractAddress: noto.Address,
-			CallData:        transferNotoEncoded,
+			CallData:        transferNotoExtra.TransferWithApproval.EncodedCall,
 		},
 		{
 			ContractAddress: zeto.Address,

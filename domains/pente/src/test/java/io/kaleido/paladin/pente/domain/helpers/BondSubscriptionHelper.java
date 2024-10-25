@@ -53,8 +53,22 @@ public class BondSubscriptionHelper {
         return address;
     }
 
-    public void markReceived(String sender, int units) throws IOException {
-        var method = abi.getABIEntry("function", "markReceived");
+    public void prepareBond(String sender, JsonHex.Address to, JsonHex.Bytes encodedCall) throws IOException {
+        var method = abi.getABIEntry("function", "prepareBond");
+        pente.invoke(
+                method.name(),
+                method.inputs(),
+                sender,
+                address,
+                new HashMap<>() {{
+                    put("to", to);
+                    put("encodedCall", encodedCall);
+                }}
+        );
+    }
+
+    public void distribute(String sender, int units) throws IOException {
+        var method = abi.getABIEntry("function", "distribute");
         pente.invoke(
                 method.name(),
                 method.inputs(),

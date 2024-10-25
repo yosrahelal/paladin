@@ -227,7 +227,7 @@ func (h *approveHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 		if err != nil {
 			return nil, err
 		}
-		return hookTransaction.prepare()
+		return hookTransaction.prepare(nil)
 	}
-	return baseTransaction.prepare()
+	return baseTransaction.prepare(nil)
 }

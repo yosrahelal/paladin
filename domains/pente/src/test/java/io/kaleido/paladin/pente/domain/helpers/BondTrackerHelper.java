@@ -20,8 +20,6 @@ import io.kaleido.paladin.toolkit.*;
 import java.io.IOException;
 import java.util.HashMap;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
 public class BondTrackerHelper {
     final PenteHelper pente;
     final JsonABI abi;

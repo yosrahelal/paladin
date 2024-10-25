@@ -133,7 +133,7 @@ type TransactionWrapper struct {
 	contractAddress *tktypes.EthAddress
 }
 
-func (tw *TransactionWrapper) prepare() (*prototk.PrepareTransactionResponse, error) {
+func (tw *TransactionWrapper) prepare(metadata []byte) (*prototk.PrepareTransactionResponse, error) {
 	functionJSON, err := json.Marshal(tw.functionABI)
 	if err != nil {
 		return nil, err
@@ -143,14 +143,19 @@ func (tw *TransactionWrapper) prepare() (*prototk.PrepareTransactionResponse, er
 		addr := tw.contractAddress.String()
 		contractAddress = &addr
 	}
-	return &prototk.PrepareTransactionResponse{
+	res := &prototk.PrepareTransactionResponse{
 		Transaction: &prototk.PreparedTransaction{
 			Type:            tw.transactionType,
 			FunctionAbiJson: string(functionJSON),
 			ParamsJson:      string(tw.paramsJSON),
 			ContractAddress: contractAddress,
 		},
-	}, nil
+	}
+	if metadata != nil {
+		metadataString := string(metadata)
+		res.Metadata = &metadataString
+	}
+	return res, nil
 }
 
 func (tw *TransactionWrapper) encode(ctx context.Context) ([]byte, error) {

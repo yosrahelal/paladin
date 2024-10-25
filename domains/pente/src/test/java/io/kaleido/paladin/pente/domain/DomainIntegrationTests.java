@@ -20,7 +20,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.kaleido.paladin.Main;
 import io.kaleido.paladin.pente.domain.PenteConfiguration.GroupTupleJSON;
 import io.kaleido.paladin.testbed.Testbed;
 import io.kaleido.paladin.toolkit.*;

@@ -232,7 +232,7 @@ func (h *transferHandler) Endorse(ctx context.Context, tx *types.ParsedTransacti
 	return nil, i18n.NewError(ctx, msgs.MsgUnrecognizedEndorsement, req.EndorsementRequest.Name)
 }
 
-func (h *transferHandler) baseLedgerTransfer(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (*TransactionWrapper, error) {
+func (h *transferHandler) baseLedgerTransfer(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, withApproval bool) (*TransactionWrapper, error) {
 	inputs := make([]string, len(req.InputStates))
 	for i, state := range req.InputStates {
 		inputs[i] = state.Id
@@ -275,8 +275,12 @@ func (h *transferHandler) baseLedgerTransfer(ctx context.Context, tx *types.Pars
 	if err != nil {
 		return nil, err
 	}
+	fn := "transfer"
+	if withApproval {
+		fn = "transferWithApproval"
+	}
 	return &TransactionWrapper{
-		functionABI: h.noto.contractABI.Functions()[tx.FunctionABI.Name],
+		functionABI: h.noto.contractABI.Functions()[fn],
 		paramsJSON:  paramsJSON,
 	}, nil
 }
@@ -338,17 +342,73 @@ func (h *transferHandler) hookTransfer(ctx context.Context, tx *types.ParsedTran
 	}, nil
 }
 
-func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
-	baseTransaction, err := h.baseLedgerTransfer(ctx, tx, req)
+func (h *transferHandler) makeExtraData(ctx context.Context, withApprovalTX *TransactionWrapper, req *prototk.PrepareTransactionRequest) ([]byte, error) {
+	data, err := h.noto.encodeTransactionData(ctx, req.Transaction)
 	if err != nil {
 		return nil, err
 	}
-	if tx.DomainConfig.DecodedData.NotaryType.Equals(&types.NotaryTypePente) {
-		hookTransaction, err := h.hookTransfer(ctx, tx, req, baseTransaction)
+	encodedCall, err := withApprovalTX.functionABI.EncodeCallDataJSONCtx(ctx, withApprovalTX.paramsJSON)
+	if err != nil {
+		return nil, err
+	}
+	extraData := &types.NotoTransferMetadata{
+		ApprovalParams: types.ApproveExtraParams{
+			Data: data,
+		},
+		TransferWithApproval: types.NotoPublicTransaction{
+			FunctionABI: withApprovalTX.functionABI,
+			ParamsJSON:  withApprovalTX.paramsJSON,
+			EncodedCall: encodedCall,
+		},
+	}
+	return json.Marshal(extraData)
+}
+
+func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest) (*prototk.PrepareTransactionResponse, error) {
+	var err error
+	var baseTransaction *TransactionWrapper
+	var withApprovalTransaction *TransactionWrapper
+	var hookTransaction *TransactionWrapper
+	var withApprovalHookTransaction *TransactionWrapper
+	var extraData []byte
+
+	// If preparing a transaction for later use, return extra data allowing it to be delegated to an approved party
+	prepareApprovals := req.Transaction.Intent == prototk.TransactionSpecification_PREPARE_TRANSACTION
+
+	baseTransaction, err = h.baseLedgerTransfer(ctx, tx, req, false)
+	if err != nil {
+		return nil, err
+	}
+	if prepareApprovals {
+		withApprovalTransaction, err = h.baseLedgerTransfer(ctx, tx, req, true)
 		if err != nil {
 			return nil, err
 		}
-		return hookTransaction.prepare()
 	}
-	return baseTransaction.prepare()
+
+	if tx.DomainConfig.DecodedData.NotaryType.Equals(&types.NotaryTypePente) {
+		hookTransaction, err = h.hookTransfer(ctx, tx, req, baseTransaction)
+		if err != nil {
+			return nil, err
+		}
+		if prepareApprovals {
+			withApprovalHookTransaction, err = h.hookTransfer(ctx, tx, req, withApprovalTransaction)
+			if err != nil {
+				return nil, err
+			}
+			extraData, err = h.makeExtraData(ctx, withApprovalHookTransaction, req)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return hookTransaction.prepare(extraData)
+	}
+
+	if prepareApprovals {
+		extraData, err = h.makeExtraData(ctx, withApprovalTransaction, req)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return baseTransaction.prepare(extraData)
 }
