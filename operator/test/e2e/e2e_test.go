@@ -41,8 +41,8 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
-//go:embed abis/NotoTrackerSimple.json
-var notoTrackerSimpleBuildJSON []byte
+//go:embed abis/NotoTrackerERC20.json
+var NotoTrackerERC20BuildJSON []byte
 
 const node1HttpURL = "http://127.0.0.1:31548"
 const node2HttpURL = "http://127.0.0.1:31648"
@@ -296,11 +296,9 @@ var _ = Describe("controller", Ordered, func() {
 
 		It("deploys a private smart contract into the privacy group", func() {
 
-			notoTracker := solutils.MustLoadBuild(notoTrackerSimpleBuildJSON)
+			notoTracker := solutils.MustLoadBuild(NotoTrackerERC20BuildJSON)
 
-			type notoTrackerConstructorInputParams struct {
-				MaxSupply *tktypes.HexUint256 `json:"maxSupply"`
-			}
+			type notoTrackerConstructorInputParams struct{}
 
 			deploy := rpc["node1"].ForABI(ctx, abi.ABI{notoTrackerDeployABI}).
 				Private().
@@ -310,9 +308,7 @@ var _ = Describe("controller", Ordered, func() {
 				Inputs(&penteDeployParams{
 					Group:    penteGroupNodes1and2,
 					Bytecode: notoTracker.Bytecode,
-					Inputs: notoTrackerConstructorInputParams{
-						MaxSupply: tktypes.Int64ToInt256(1000000),
-					},
+					Inputs:   notoTrackerConstructorInputParams{},
 				}).
 				From("random." + uuid.NewString()). // anyone can submit this by design
 				Send().
