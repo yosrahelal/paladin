@@ -34,6 +34,7 @@ import (
 
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/rpcclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
@@ -303,13 +304,13 @@ func TestNewBlockIndexerRestoreCheckpointFail(t *testing.T) {
 	require.NoError(t, p.Mock.ExpectationsWereMet())
 }
 
-func checkIndexedBlockEqual(t *testing.T, expected *BlockInfoJSONRPC, indexed *IndexedBlock) {
+func checkIndexedBlockEqual(t *testing.T, expected *BlockInfoJSONRPC, indexed *pldapi.IndexedBlock) {
 	assert.Equal(t, expected.Hash.String(), indexed.Hash.String())
 	assert.Equal(t, expected.Number.Uint64(), uint64(indexed.Number))
 }
 
-func addBlockPostCommit(bi *blockIndexer, postCommit func([]*IndexedBlock)) {
-	bi.preCommitHandlers = append(bi.preCommitHandlers, func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error) {
+func addBlockPostCommit(bi *blockIndexer, postCommit func([]*pldapi.IndexedBlock)) {
+	bi.preCommitHandlers = append(bi.preCommitHandlers, func(ctx context.Context, dbTX *gorm.DB, blocks []*pldapi.IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error) {
 		return func() { postCommit(blocks) }, nil
 	})
 }
@@ -323,8 +324,8 @@ func TestBlockIndexerCatchUpToHeadFromZeroNoConfirmations(t *testing.T) {
 
 	bi.requiredConfirmations = 0
 
-	utBatchNotify := make(chan []*IndexedBlock)
-	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+	utBatchNotify := make(chan []*pldapi.IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -347,8 +348,8 @@ func TestBlockIndexerBatchTimeoutOne(t *testing.T) {
 
 	bi.requiredConfirmations = 0
 
-	utBatchNotify := make(chan []*IndexedBlock)
-	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+	utBatchNotify := make(chan []*pldapi.IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -368,8 +369,8 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 
 	bi.requiredConfirmations = 5
 
-	utBatchNotify := make(chan []*IndexedBlock)
-	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+	utBatchNotify := make(chan []*pldapi.IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -434,7 +435,7 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 		require.Equal(t, blocks[i].Number.Uint64(), uint64(events[0].BlockNumber))
 
 		// Decode events
-		decodedEvents, err := bi.DecodeTransactionEvents(ctx, tktypes.Bytes32(tx0.TransactionHash), testABI)
+		decodedEvents, err := bi.DecodeTransactionEvents(ctx, tktypes.Bytes32(tx0.TransactionHash), testABI, "")
 		assert.NoError(t, err)
 		assert.Len(t, decodedEvents, 3)
 		assert.Equal(t, "event EventA()", decodedEvents[0].SoliditySignature)
@@ -494,8 +495,8 @@ func TestBlockIndexerListenFromCurrentBlock(t *testing.T) {
 	_, err := bi.GetConfirmedBlockHeight(ctx)
 	assert.Regexp(t, "PD011308", err)
 
-	utBatchNotify := make(chan []*IndexedBlock)
-	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+	utBatchNotify := make(chan []*pldapi.IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
 
 	// do not start block listener
 	bi.startOrReset()
@@ -550,8 +551,8 @@ func TestBatching(t *testing.T) {
 
 	bi.batchSize = 5
 
-	utBatchNotify := make(chan []*IndexedBlock)
-	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+	utBatchNotify := make(chan []*pldapi.IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -579,7 +580,7 @@ func TestBlockIndexerListenFromCurrentUsingCheckpointBlock(t *testing.T) {
 	blocks, receipts := testBlockArray(t, 15)
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 
-	bi.persistence.DB().Table("indexed_blocks").Create(&IndexedBlock{
+	bi.persistence.DB().Table("indexed_blocks").Create(&pldapi.IndexedBlock{
 		Number: 12345,
 		Hash:   tktypes.MustParseBytes32(tktypes.RandHex(32)),
 	})
@@ -698,8 +699,8 @@ func testBlockIndexerHandleReorgInConfirmationWindow(t *testing.T, blockLenBefor
 		}
 	})
 
-	utBatchNotify := make(chan []*IndexedBlock)
-	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+	utBatchNotify := make(chan []*pldapi.IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -744,8 +745,8 @@ func TestBlockIndexerHandleRandomConflictingBlockNotification(t *testing.T) {
 		return blocks, receipts
 	})
 
-	utBatchNotify := make(chan []*IndexedBlock)
-	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+	utBatchNotify := make(chan []*pldapi.IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -774,8 +775,8 @@ func TestBlockIndexerResetsAfterHashLookupFail(t *testing.T) {
 		return blocks, receipts
 	})
 
-	utBatchNotify := make(chan []*IndexedBlock)
-	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+	utBatchNotify := make(chan []*pldapi.IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -797,8 +798,8 @@ func TestBlockIndexerDispatcherFallsBehindHead(t *testing.T) {
 	blocks, receipts := testBlockArray(t, 30)
 	mockBlocksRPCCalls(mRPC, blocks, receipts)
 
-	utBatchNotify := make(chan []*IndexedBlock)
-	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+	utBatchNotify := make(chan []*pldapi.IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -936,8 +937,8 @@ func TestBlockIndexerWaitForTransactionSuccess(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	utBatchNotify := make(chan []*IndexedBlock)
-	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+	utBatchNotify := make(chan []*pldapi.IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -951,7 +952,7 @@ func TestBlockIndexerWaitForTransactionSuccess(t *testing.T) {
 
 	tx, err := bi.WaitForTransactionAnyResult(ctx, txHash)
 	require.NoError(t, err)
-	assert.Equal(t, TXResult_SUCCESS, tx.Result.V())
+	assert.Equal(t, pldapi.TXResult_SUCCESS, tx.Result.V())
 	assert.Equal(t, ethtypes.HexUint64(tx.BlockNumber), blocks[2].Number)
 	assert.Equal(t, txHash, tx.Hash)
 }
@@ -986,8 +987,8 @@ func TestBlockIndexerWaitForTransactionRevert(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	utBatchNotify := make(chan []*IndexedBlock)
-	addBlockPostCommit(bi, func(blocks []*IndexedBlock) { utBatchNotify <- blocks })
+	utBatchNotify := make(chan []*pldapi.IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
 
 	bi.startOrReset() // do not start block listener
 
@@ -1001,7 +1002,7 @@ func TestBlockIndexerWaitForTransactionRevert(t *testing.T) {
 
 	tx, err := bi.WaitForTransactionAnyResult(ctx, txHash)
 	require.NoError(t, err)
-	assert.Equal(t, TXResult_FAILURE, tx.Result.V())
+	assert.Equal(t, pldapi.TXResult_FAILURE, tx.Result.V())
 	assert.Equal(t, ethtypes.HexUint64(tx.BlockNumber), blocks[2].Number)
 	assert.Equal(t, txHash, tx.Hash)
 }
@@ -1025,7 +1026,7 @@ func TestDecodeTransactionEventsFail(t *testing.T) {
 
 	p.Mock.ExpectQuery("SELECT.*indexed_events").WillReturnError(fmt.Errorf("pop"))
 
-	_, err := bi.DecodeTransactionEvents(ctx, tktypes.Bytes32(tktypes.RandBytes(32)), testABI)
+	_, err := bi.DecodeTransactionEvents(ctx, tktypes.Bytes32(tktypes.RandBytes(32)), testABI, "")
 	assert.Regexp(t, "pop", err)
 
 }
@@ -1151,4 +1152,12 @@ func TestQueryNoLimit(t *testing.T) {
 
 	_, err = bi.QueryIndexedEvents(ctx, query.NewQueryBuilder().Query())
 	assert.Regexp(t, "PD011311", err)
+}
+
+func TestAddEventStreamBadName(t *testing.T) {
+	ctx, bi, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	_, err := bi.AddEventStream(ctx, &InternalEventStream{})
+	assert.Regexp(t, "PD020005", err)
 }

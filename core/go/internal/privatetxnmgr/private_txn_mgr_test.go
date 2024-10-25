@@ -17,8 +17,10 @@ package privatetxnmgr
 
 import (
 	"context"
-	"crypto/sha256"
+	"errors"
 	"math/rand"
+	"reflect"
+	"regexp"
 	"sync"
 	"testing"
 	"time"
@@ -27,17 +29,10 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
-	"github.com/kaleido-io/paladin/core/internal/components"
-	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
-	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
-
-	"github.com/kaleido-io/paladin/core/pkg/ethclient"
-	"github.com/kaleido-io/paladin/core/pkg/persistence"
-	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
@@ -49,6 +44,13 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"gorm.io/gorm"
+
+	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/core/pkg/persistence"
+	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
+	pbEngine "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 )
 
 // Attempt to assert the behaviour of the private transaction manager as a whole component in isolation from the rest of the system
@@ -77,7 +79,7 @@ var testABI = abi.ABI{
 
 func TestPrivateTxManagerInit(t *testing.T) {
 
-	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, "node1")
 	err := privateTxManager.PostInit(mocks.allComponents)
 	require.NoError(t, err)
 }
@@ -85,7 +87,7 @@ func TestPrivateTxManagerInit(t *testing.T) {
 func TestPrivateTxManagerInvalidTransaction(t *testing.T) {
 	ctx := context.Background()
 
-	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, tktypes.MustEthAddress(tktypes.RandHex(20)))
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, "node1")
 	err := privateTxManager.PostInit(mocks.allComponents)
 	require.NoError(t, err)
 
@@ -102,9 +104,17 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	ctx := context.Background()
 
 	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, "node1")
+	mocks.mockDomain(domainAddress, prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION)
 
 	domainAddressString := domainAddress.String()
+
+	// unqualified lookup string because everything is local
+	aliceIdentity := "alice"
+	aliceVerifier := tktypes.RandAddress().String()
+	notaryIdentity := "domain1.contract1.notary"
+	notaryVerifier := tktypes.RandAddress().String()
+	notaryKeyHandle := "notaryKeyHandle"
 
 	initialised := make(chan struct{}, 1)
 	mocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
@@ -112,7 +122,12 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
-					Lookup:       "alice",
+					Lookup:       aliceIdentity, // unqualified lookup string because everything is local
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+				},
+				{
+					Lookup:       notaryIdentity,
 					Algorithm:    algorithms.ECDSA_SECP256K1,
 					VerifierType: verifiers.ETH_ADDRESS,
 				},
@@ -121,15 +136,19 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 		initialised <- struct{}{}
 	}).Return(nil)
 
-	mocks.identityResolver.On("ResolveVerifierAsync", mock.Anything, "alice", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	mocks.identityResolver.On("ResolveVerifierAsync", mock.Anything, aliceIdentity, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		resovleFn := args.Get(4).(func(context.Context, string))
-		resovleFn(ctx, "aliceVerifier")
+		resovleFn(ctx, aliceVerifier)
+	}).Return(nil)
+	mocks.identityResolver.On("ResolveVerifierAsync", mock.Anything, notaryIdentity, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		resovleFn := args.Get(4).(func(context.Context, string))
+		resovleFn(ctx, notaryVerifier)
 	}).Return(nil)
 	// TODO check that the transaction is signed with this key
 
 	assembled := make(chan struct{}, 1)
-	mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
+	mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
 			AssemblyResult: prototk.AssembleTransactionResponse_OK,
@@ -148,7 +167,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 					VerifierType:    verifiers.ETH_ADDRESS,
 					PayloadType:     signpayloads.OPAQUE_TO_RSV,
 					Parties: []string{
-						"domain1.contract1.notary",
+						notaryIdentity,
 					},
 				},
 			},
@@ -157,7 +176,14 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 
 	}).Return(nil)
 
-	mocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("notaryKeyHandle", "notaryVerifier", nil)
+	notaryKeyMapping := &pldapi.KeyMappingAndVerifier{
+		KeyMappingWithPath: &pldapi.KeyMappingWithPath{KeyMapping: &pldapi.KeyMapping{
+			Identifier: notaryIdentity,
+			KeyHandle:  notaryKeyHandle,
+		}},
+		Verifier: &pldapi.KeyVerifier{Verifier: notaryVerifier},
+	}
+	mocks.keyManager.On("ResolveKeyNewDatabaseTX", mock.Anything, notaryIdentity, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return(notaryKeyMapping, nil)
 
 	signingAddress := tktypes.RandHex(32)
 
@@ -171,23 +197,17 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 		Result:  prototk.EndorseTransactionResponse_SIGN,
 		Payload: []byte("some-endorsement-bytes"),
 		Endorser: &prototk.ResolvedVerifier{
-			Lookup:       "notaryKeyHandle",
-			Verifier:     "notaryVerifier",
+			Lookup:       notaryIdentity,
+			Verifier:     notaryVerifier,
 			Algorithm:    algorithms.ECDSA_SECP256K1,
 			VerifierType: verifiers.ETH_ADDRESS,
 		},
 	}, nil)
 
-	mocks.keyManager.On("Sign", mock.Anything, &signerapi.SignRequest{
-		KeyHandle:   "notaryKeyHandle",
-		Algorithm:   algorithms.ECDSA_SECP256K1,
-		PayloadType: signpayloads.OPAQUE_TO_RSV,
-		Payload:     []byte("some-endorsement-bytes"),
-	}).Return(&signerapi.SignResponse{
-		Payload: []byte("some-signature-bytes"),
-	}, nil)
+	mocks.keyManager.On("Sign", mock.Anything, notaryKeyMapping, signpayloads.OPAQUE_TO_RSV, mock.Anything).
+		Return([]byte("notary-signature-bytes"), nil)
 
-	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
+	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
 				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
@@ -195,12 +215,15 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
-			tx := args[1].(*components.PrivateTransaction)
+			tx := args[2].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
-			tx.PreparedPublicTransaction = &components.EthTransaction{
-				FunctionABI: testABI[0],
-				To:          *domainAddress,
-				Inputs:      cv,
+			jsonData, _ := cv.JSON()
+			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
+				ABI: abi.ABI{testABI[0]},
+				Transaction: pldapi.Transaction{
+					To:   domainAddress,
+					Data: tktypes.RawJSON(jsonData),
+				},
 			}
 		},
 	)
@@ -210,6 +233,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 		Inputs: &components.TransactionInputs{
 			Domain: "domain1",
 			To:     *domainAddress,
+			From:   aliceIdentity,
 		},
 	}
 
@@ -220,11 +244,15 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	mockPublicTxManager := mocks.publicTxManager.(*componentmocks.PublicTxManager)
 	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockPublicTxBatch, nil)
 
+	signingAddr := tktypes.RandAddress()
+	mocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1"}).
+		Return([]*tktypes.EthAddress{signingAddr}, nil)
+
 	publicTransactions := []components.PublicTxAccepted{
 		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: ptxapi.PublicTxInput{
-				From: "signer1",
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: pldapi.PublicTxInput{
+				From: signingAddr,
 			},
 		}, nil),
 	}
@@ -232,6 +260,11 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	mockPublicTxBatch.On("Rejected").Return([]components.PublicTxRejected{})
 	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
 	mockPublicTxBatch.On("Completed", mock.Anything, true).Return()
+
+	dcFlushed := make(chan error, 1)
+	mocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
+		dcFlushed <- err
+	}, nil)
 
 	err := privateTxManager.Start()
 	require.NoError(t, err)
@@ -242,6 +275,8 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	testTimeout := 100 * time.Minute
 	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx.ID.String(), testTimeout)
 	assert.Equal(t, "dispatched", status)
+
+	require.NoError(t, <-dcFlushed)
 }
 
 func TestPrivateTxManagerLocalEndorserSubmits(t *testing.T) {
@@ -250,22 +285,103 @@ func TestPrivateTxManagerLocalEndorserSubmits(t *testing.T) {
 func TestPrivateTxManagerRevertFromLocalEndorsement(t *testing.T) {
 }
 
-func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
+type identityForTesting struct {
+	identity        string
+	identityLocator string
+	verifier        string
+	keyHandle       string
+	mocks           *dependencyMocks
+	mockSign        func(signature []byte)
+}
+
+func (i *identityForTesting) mockResolve(ctx context.Context, other identityForTesting) {
+	// in addition to the default mocks set up in newPartyForTesting, we can set up mocks to resolve remote identitys
+	// we could have used a real IdentityResolver here but we are testing the private transaction manager in isolation and so we mock the IdentityResolver as we do with all other tests in this file
+	i.mocks.identityResolver.On(
+		"ResolveVerifierAsync",
+		mock.Anything,
+		other.identityLocator,
+		algorithms.ECDSA_SECP256K1,
+		verifiers.ETH_ADDRESS,
+		mock.Anything,
+		mock.Anything).
+		Run(func(args mock.Arguments) {
+			resolveFn := args.Get(4).(func(context.Context, string))
+			resolveFn(ctx, other.verifier)
+		}).Return(nil).Maybe()
+}
+
+func newPartyForTesting(ctx context.Context, name, node string, mocks *dependencyMocks) identityForTesting {
+	party := identityForTesting{
+		identity:        name,
+		identityLocator: name + "@" + node,
+		verifier:        tktypes.RandAddress().String(),
+		keyHandle:       name + "KeyHandle",
+		mocks:           mocks,
+	}
+
+	mocks.identityResolver.On("ResolveVerifierAsync", mock.Anything, party.identity, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		resolveFn := args.Get(4).(func(context.Context, string))
+		resolveFn(ctx, party.verifier)
+	}).Return(nil).Maybe()
+
+	mocks.identityResolver.On("ResolveVerifierAsync", mock.Anything, party.identityLocator, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		resolveFn := args.Get(4).(func(context.Context, string))
+		resolveFn(ctx, party.verifier)
+	}).Return(nil).Maybe()
+
+	mocks.identityResolver.On("ResolveVerifier", mock.Anything, party.identityLocator, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+		Return(party.verifier, nil).Maybe()
+
+	keyMapping := &pldapi.KeyMappingAndVerifier{
+		KeyMappingWithPath: &pldapi.KeyMappingWithPath{KeyMapping: &pldapi.KeyMapping{
+			Identifier: party.identity,
+			KeyHandle:  party.keyHandle,
+		}},
+		Verifier: &pldapi.KeyVerifier{Verifier: party.verifier},
+	}
+	mocks.keyManager.On("ResolveKeyNewDatabaseTX", mock.Anything, party.identity, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return(keyMapping, nil).Maybe()
+
+	party.mockSign = func(signature []byte) {
+		mocks.keyManager.On("Sign", mock.Anything, keyMapping, signpayloads.OPAQUE_TO_RSV, mock.Anything).
+			Return(signature, nil)
+	}
+
+	return party
+}
+
+func TestPrivateTxManagerRemoteNotaryEndorser(t *testing.T) {
 	ctx := context.Background()
+	// A transaction that requires exactly one endorsement from a notary (as per noto) and therefore delegates coordination of the transaction to that node
 
 	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
+	localNodeName := "localNode"
+	remoteNodeName := "remoteNode"
+	privateTxManager, localNodeMocks := NewPrivateTransactionMgrForTesting(t, localNodeName)
+	localNodeMocks.mockDomain(domainAddress, prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION)
+
 	domainAddressString := domainAddress.String()
 
-	remoteEngine, remoteEngineMocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
+	remoteEngine, remoteEngineMocks := NewPrivateTransactionMgrForTesting(t, remoteNodeName)
+	remoteEngineMocks.mockDomain(domainAddress, prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION)
+
+	alice := newPartyForTesting(ctx, "alice", localNodeName, localNodeMocks)
+	notary := newPartyForTesting(ctx, "notary", remoteNodeName, remoteEngineMocks)
+
+	alice.mockResolve(ctx, notary)
 
 	initialised := make(chan struct{}, 1)
-	mocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	localNodeMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
-					Lookup:       "alice",
+					Lookup:       alice.identity,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+				},
+				{
+					Lookup:       notary.identityLocator, // as it is a remote id, we need to use the locator
 					Algorithm:    algorithms.ECDSA_SECP256K1,
 					VerifierType: verifiers.ETH_ADDRESS,
 				},
@@ -274,14 +390,11 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 		initialised <- struct{}{}
 	}).Return(nil)
 
-	mocks.identityResolver.On("ResolveVerifierAsync", mock.Anything, "alice", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		resovleFn := args.Get(4).(func(context.Context, string))
-		resovleFn(ctx, "aliceVerifier")
-	}).Return(nil)
-
 	assembled := make(chan struct{}, 1)
-	mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
+	delegated := make(chan struct{}, 1)
+
+	localNodeMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
 
 		tx.PostAssembly = &components.TransactionPostAssembly{
 			AssemblyResult: prototk.AssembleTransactionResponse_OK,
@@ -300,7 +413,7 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 					VerifierType:    verifiers.ETH_ADDRESS,
 					PayloadType:     signpayloads.OPAQUE_TO_RSV,
 					Parties: []string{
-						"domain1.contract1.notary@othernode",
+						notary.identityLocator,
 					},
 				},
 			},
@@ -309,8 +422,9 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 
 	}).Return(nil)
 
-	mocks.transportManager.On("Send", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	localNodeMocks.transportManager.On("Send", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		go func() {
+			assert.Equal(t, remoteNodeName, args.Get(1).(*components.TransportMessage).Node)
 			transportMessage := args.Get(1).(*components.TransportMessage)
 			remoteEngine.ReceiveTransportMessage(ctx, transportMessage)
 		}()
@@ -325,13 +439,13 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 
 	remoteEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(remoteEngineMocks.domainSmartContract, nil)
 
-	remoteEngineMocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("notaryKeyHandle", "notaryVerifier", nil)
-
 	signingAddress := tktypes.RandHex(32)
 
-	mocks.domainSmartContract.On("ResolveDispatch", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	//Dispatch should happen on the remote node
+	remoteEngineMocks.domainSmartContract.On("ResolveDispatch", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.Signer = signingAddress
+		delegated <- struct{}{}
 	}).Return(nil)
 
 	//TODO match endorsement request and verifier args
@@ -339,22 +453,16 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 		Result:  prototk.EndorseTransactionResponse_SIGN,
 		Payload: []byte("some-endorsement-bytes"),
 		Endorser: &prototk.ResolvedVerifier{
-			Lookup:       "notaryKeyHandle",
-			Verifier:     "notaryVerifier",
+			Lookup:       notary.identityLocator, //matches whatever was specified in PreAssembly.RequiredVerifiers
+			Verifier:     notary.verifier,
 			Algorithm:    algorithms.ECDSA_SECP256K1,
 			VerifierType: verifiers.ETH_ADDRESS,
 		},
 	}, nil)
-	remoteEngineMocks.keyManager.On("Sign", mock.Anything, &signerapi.SignRequest{
-		KeyHandle:   "notaryKeyHandle",
-		Algorithm:   algorithms.ECDSA_SECP256K1,
-		PayloadType: signpayloads.OPAQUE_TO_RSV,
-		Payload:     []byte("some-endorsement-bytes"),
-	}).Return(&signerapi.SignResponse{
-		Payload: []byte("some-signature-bytes"),
-	}, nil)
 
-	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
+	notary.mockSign([]byte("some-signature-bytes"))
+
+	remoteEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
 				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
@@ -362,12 +470,15 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
-			tx := args[1].(*components.PrivateTransaction)
+			tx := args[2].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
-			tx.PreparedPublicTransaction = &components.EthTransaction{
-				FunctionABI: testABI[0],
-				To:          *domainAddress,
-				Inputs:      cv,
+			jsonData, _ := cv.JSON()
+			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
+				ABI: abi.ABI{testABI[0]},
+				Transaction: pldapi.Transaction{
+					To:   domainAddress,
+					Data: tktypes.RawJSON(jsonData),
+				},
 			}
 		},
 	)
@@ -377,6 +488,7 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 		Inputs: &components.TransactionInputs{
 			Domain: "domain1",
 			To:     *domainAddress,
+			From:   alice.identity,
 		},
 	}
 
@@ -384,14 +496,18 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 	mockPublicTxBatch.On("Finalize", mock.Anything).Return().Maybe()
 	mockPublicTxBatch.On("CleanUp", mock.Anything).Return().Maybe()
 
-	mockPublicTxManager := mocks.publicTxManager.(*componentmocks.PublicTxManager)
+	mockPublicTxManager := remoteEngineMocks.publicTxManager.(*componentmocks.PublicTxManager)
 	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockPublicTxBatch, nil)
+
+	signingAddr := tktypes.RandAddress()
+	remoteEngineMocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1"}).
+		Return([]*tktypes.EthAddress{signingAddr}, nil)
 
 	publicTransactions := []components.PublicTxAccepted{
 		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: ptxapi.PublicTxInput{
-				From: "signer1",
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: pldapi.PublicTxInput{
+				From: signingAddr,
 			},
 		}, nil),
 	}
@@ -400,38 +516,326 @@ func TestPrivateTxManagerRemoteEndorser(t *testing.T) {
 	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
 	mockPublicTxBatch.On("Completed", mock.Anything, true).Return()
 
+	// Flush of domain context happens on the remote node (the notary)
+	dcFlushed := make(chan error, 1)
+	remoteEngineMocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
+		dcFlushed <- err
+	}, nil)
+
 	err := privateTxManager.Start()
 	assert.NoError(t, err)
 
 	err = privateTxManager.HandleNewTx(ctx, tx)
 	assert.NoError(t, err)
 
-	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx.ID.String(), 200*time.Second)
+	<-delegated
+	status := pollForStatus(ctx, t, "dispatched", remoteEngine, domainAddressString, tx.ID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
+
+	require.NoError(t, <-dcFlushed)
 
 }
 
-func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
-	//2 transactions, one dependant on the other
-	// we purposely endorse the first transaction late to ensure that the 2nd transaction
-	// is still sequenced behind the first
+func TestPrivateTxManagerEndorsementGroup(t *testing.T) {
+
 	ctx := context.Background()
+	// A transaction that requires endorsement from a group of remote endorsers (as per pente and its 100% endorsement policy)
+	// In this scenario there is only one active transaction and therefore no risk of contention so the transactions is coordinated
+	// and dispatched locally.  The only expected interaction with the remote nodes is to request endorsements and to distribute the new states
 
 	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, domainAddress)
-
 	domainAddressString := domainAddress.String()
-	mocks.identityResolver.On("ResolveVerifierAsync", mock.Anything, "alice", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		resovleFn := args.Get(4).(func(context.Context, string))
-		resovleFn(ctx, "aliceVerifier")
-	}).Return(nil)
 
-	mocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	aliceNodeName := "aliceNode"
+	bobNodeName := "bobNode"
+	carolNodeName := "carolNode"
+
+	aliceEngine, aliceEngineMocks := NewPrivateTransactionMgrForTesting(t, aliceNodeName)
+	aliceEngineMocks.mockDomain(domainAddress, prototk.BaseLedgerSubmitConfig_ONE_TIME_USE_KEYS)
+
+	bobEngine, bobEngineMocks := NewPrivateTransactionMgrForTesting(t, bobNodeName)
+	bobEngineMocks.mockDomain(domainAddress, prototk.BaseLedgerSubmitConfig_ONE_TIME_USE_KEYS)
+
+	carolEngine, carolEngineMocks := NewPrivateTransactionMgrForTesting(t, carolNodeName)
+	carolEngineMocks.mockDomain(domainAddress, prototk.BaseLedgerSubmitConfig_ONE_TIME_USE_KEYS)
+
+	alice := newPartyForTesting(ctx, "alice", aliceNodeName, aliceEngineMocks)
+	bob := newPartyForTesting(ctx, "bob", bobNodeName, bobEngineMocks)
+	carol := newPartyForTesting(ctx, "carol", carolNodeName, carolEngineMocks)
+
+	alice.mockResolve(ctx, bob)
+	alice.mockResolve(ctx, carol)
+
+	initialised := make(chan struct{}, 1)
+
+	aliceEngineMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(1).(*components.PrivateTransaction)
 		tx.PreAssembly = &components.TransactionPreAssembly{
 			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 				{
-					Lookup:       "alice",
+					Lookup:       alice.identityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+				},
+				{
+					Lookup:       bob.identityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+				},
+				{
+					Lookup:       carol.identityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+				},
+			},
+		}
+		initialised <- struct{}{}
+	}).Return(nil)
+
+	aliceEngineMocks.identityResolver.On("ResolveVerifierAsync", mock.Anything, alice.identityLocator, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		resovleFn := args.Get(4).(func(context.Context, string))
+		resovleFn(ctx, alice.verifier)
+	}).Return(nil)
+
+	aliceEngineMocks.identityResolver.On("ResolveVerifierAsync", mock.Anything, bob.identityLocator, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		resovleFn := args.Get(4).(func(context.Context, string))
+		resovleFn(ctx, bob.verifier)
+	}).Return(nil)
+
+	aliceEngineMocks.identityResolver.On("ResolveVerifierAsync", mock.Anything, carol.identityLocator, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		resovleFn := args.Get(4).(func(context.Context, string))
+		resovleFn(ctx, carol.verifier)
+	}).Return(nil)
+
+	assembled := make(chan struct{}, 1)
+	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
+
+		tx.PostAssembly = &components.TransactionPostAssembly{
+			AssemblyResult: prototk.AssembleTransactionResponse_OK,
+			InputStates: []*components.FullState{
+				{
+					ID:     tktypes.RandBytes(32),
+					Schema: tktypes.Bytes32(tktypes.RandBytes(32)),
+					Data:   tktypes.JSONString("foo"),
+				},
+			},
+			AttestationPlan: []*prototk.AttestationRequest{
+				{
+					Name:            "endorsers",
+					AttestationType: prototk.AttestationType_ENDORSE,
+					Algorithm:       algorithms.ECDSA_SECP256K1,
+					VerifierType:    verifiers.ETH_ADDRESS,
+					PayloadType:     signpayloads.OPAQUE_TO_RSV,
+					Parties: []string{
+						alice.identityLocator,
+						bob.identityLocator,
+						carol.identityLocator,
+					},
+				},
+			},
+		}
+		assembled <- struct{}{}
+
+	}).Return(nil)
+
+	routeToNode := func(args mock.Arguments) {
+		go func() {
+			transportMessage := args.Get(1).(*components.TransportMessage)
+			switch transportMessage.Node {
+			case aliceNodeName:
+				aliceEngine.ReceiveTransportMessage(ctx, transportMessage)
+			case bobNodeName:
+				bobEngine.ReceiveTransportMessage(ctx, transportMessage)
+			case carolNodeName:
+				carolEngine.ReceiveTransportMessage(ctx, transportMessage)
+			}
+		}()
+	}
+
+	aliceEngineMocks.transportManager.On("Send", mock.Anything, mock.Anything).Run(routeToNode).Return(nil).Maybe()
+	bobEngineMocks.transportManager.On("Send", mock.Anything, mock.Anything).Run(routeToNode).Return(nil).Maybe()
+	carolEngineMocks.transportManager.On("Send", mock.Anything, mock.Anything).Run(routeToNode).Return(nil).Maybe()
+
+	//set up the mocks on bob and carols engines that are need on the endorse code path (and of course also on alice's engine because she is an endorser too)
+
+	bobEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(bobEngineMocks.domainSmartContract, nil)
+	carolEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(carolEngineMocks.domainSmartContract, nil)
+
+	signingAddress := tktypes.RandHex(32)
+
+	aliceEngineMocks.domainSmartContract.On("ResolveDispatch", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(1).(*components.PrivateTransaction)
+		tx.Signer = signingAddress
+	}).Return(nil)
+
+	//TODO match endorsement request and verifier args
+	aliceEngineMocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&components.EndorsementResult{
+		Result:  prototk.EndorseTransactionResponse_SIGN,
+		Payload: []byte("alice-endorsement-bytes"),
+		Endorser: &prototk.ResolvedVerifier{
+			Lookup:       alice.identityLocator,
+			Verifier:     alice.verifier,
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
+		},
+	}, nil)
+
+	alice.mockSign([]byte("alice-signature-bytes"))
+
+	bobEngineMocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&components.EndorsementResult{
+		Result:  prototk.EndorseTransactionResponse_SIGN,
+		Payload: []byte("bob-endorsement-bytes"),
+		Endorser: &prototk.ResolvedVerifier{
+			Lookup:       bob.identityLocator,
+			Verifier:     bob.verifier,
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
+		},
+	}, nil)
+
+	bob.mockSign([]byte("bob-signature-bytes"))
+
+	carolEngineMocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&components.EndorsementResult{
+		Result:  prototk.EndorseTransactionResponse_SIGN,
+		Payload: []byte("carol-endorsement-bytes"),
+		Endorser: &prototk.ResolvedVerifier{
+			Lookup:       carol.identityLocator,
+			Verifier:     carol.verifier,
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
+		},
+	}, nil)
+
+	carol.mockSign([]byte("carol-signature-bytes"))
+
+	aliceEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
+		func(args mock.Arguments) {
+			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
+				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
+				"outputs": []any{tktypes.Bytes32(tktypes.RandBytes(32))},
+				"data":    "0xfeedbeef",
+			})
+			require.NoError(t, err)
+			tx := args[2].(*components.PrivateTransaction)
+			tx.Signer = "signer1"
+			jsonData, _ := cv.JSON()
+			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
+				ABI: abi.ABI{testABI[0]},
+				Transaction: pldapi.Transaction{
+					To:   domainAddress,
+					Data: tktypes.RawJSON(jsonData),
+				},
+			}
+			aliceEndorsed, bobEndorsed, carolEndorsed := false, false, false
+			for _, endorsement := range tx.PostAssembly.Endorsements {
+				switch endorsement.Verifier.Verifier {
+				case alice.verifier:
+					if reflect.DeepEqual(endorsement.Payload, []byte("alice-signature-bytes")) {
+						aliceEndorsed = true
+					}
+				case bob.verifier:
+					if reflect.DeepEqual(endorsement.Payload, []byte("bob-signature-bytes")) {
+						bobEndorsed = true
+					}
+				case carol.verifier:
+					if reflect.DeepEqual(endorsement.Payload, []byte("carol-signature-bytes")) {
+						carolEndorsed = true
+					}
+				}
+			}
+			assert.True(t, aliceEndorsed)
+			assert.True(t, bobEndorsed)
+			assert.True(t, carolEndorsed)
+		},
+	)
+
+	tx := &components.PrivateTransaction{
+		ID: uuid.New(),
+		Inputs: &components.TransactionInputs{
+			Domain: "domain1",
+			To:     *domainAddress,
+			From:   alice.identity,
+		},
+	}
+
+	mockPublicTxBatch := componentmocks.NewPublicTxBatch(t)
+	mockPublicTxBatch.On("Finalize", mock.Anything).Return().Maybe()
+	mockPublicTxBatch.On("CleanUp", mock.Anything).Return().Maybe()
+
+	mockPublicTxManager := aliceEngineMocks.publicTxManager.(*componentmocks.PublicTxManager)
+	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockPublicTxBatch, nil)
+
+	signingAddr := tktypes.RandAddress()
+	aliceEngineMocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1"}).
+		Return([]*tktypes.EthAddress{signingAddr}, nil)
+
+	publicTransactions := []components.PublicTxAccepted{
+		newFakePublicTx(&components.PublicTxSubmission{
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: pldapi.PublicTxInput{
+				From: signingAddr,
+			},
+		}, nil),
+	}
+	mockPublicTxBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
+	mockPublicTxBatch.On("Rejected").Return([]components.PublicTxRejected{})
+	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
+	mockPublicTxBatch.On("Completed", mock.Anything, true).Return()
+
+	dcFlushed := make(chan error, 1)
+	aliceEngineMocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
+		dcFlushed <- err
+	}, nil)
+
+	err := aliceEngine.Start()
+	assert.NoError(t, err)
+
+	err = aliceEngine.HandleNewTx(ctx, tx)
+	assert.NoError(t, err)
+
+	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, tx.ID.String(), 200*time.Second)
+	assert.Equal(t, "dispatched", status)
+
+	require.NoError(t, <-dcFlushed)
+}
+
+func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
+	// extension to the TestPrivateTxManagerEndorsementGroup test
+	// 2 transactions, one dependant on the other
+	// we purposely endorse the first transaction late to ensure that the 2nd transaction
+	// is still sequenced behind the first
+
+	log.SetLevel("trace")
+	ctx := context.Background()
+
+	domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
+	domainAddressString := domainAddress.String()
+
+	aliceNodeName := "aliceNode"
+	bobNodeName := "bobNode"
+	aliceEngine, aliceEngineMocks := NewPrivateTransactionMgrForTesting(t, aliceNodeName)
+	aliceEngineMocks.mockDomain(domainAddress, prototk.BaseLedgerSubmitConfig_ONE_TIME_USE_KEYS)
+
+	_, bobEngineMocks := NewPrivateTransactionMgrForTesting(t, bobNodeName)
+	bobEngineMocks.mockDomain(domainAddress, prototk.BaseLedgerSubmitConfig_ONE_TIME_USE_KEYS)
+
+	alice := newPartyForTesting(ctx, "alice", aliceNodeName, aliceEngineMocks)
+	bob := newPartyForTesting(ctx, "bob", bobNodeName, bobEngineMocks)
+
+	alice.mockResolve(ctx, bob)
+
+	aliceEngineMocks.domainSmartContract.On("InitTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(1).(*components.PrivateTransaction)
+		tx.PreAssembly = &components.TransactionPreAssembly{
+			RequiredVerifiers: []*prototk.ResolveVerifierRequest{
+				{
+					Lookup:       alice.identityLocator,
+					Algorithm:    algorithms.ECDSA_SECP256K1,
+					VerifierType: verifiers.ETH_ADDRESS,
+				},
+				{
+					Lookup:       bob.identityLocator,
 					Algorithm:    algorithms.ECDSA_SECP256K1,
 					VerifierType: verifiers.ETH_ADDRESS,
 				},
@@ -461,7 +865,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		Inputs: &components.TransactionInputs{
 			Domain: "domain1",
 			To:     *domainAddress,
-			From:   "Alice",
+			From:   alice.identity,
 		},
 	}
 
@@ -470,12 +874,12 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		Inputs: &components.TransactionInputs{
 			Domain: "domain1",
 			To:     *domainAddress,
-			From:   "Bob",
+			From:   alice.identity,
 		},
 	}
 
-	mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
+	aliceEngineMocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
 		switch tx.ID.String() {
 		case tx1.ID.String():
 			tx.PostAssembly = &components.TransactionPostAssembly{
@@ -490,7 +894,8 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 						VerifierType:    verifiers.ETH_ADDRESS,
 						PayloadType:     signpayloads.OPAQUE_TO_RSV,
 						Parties: []string{
-							"domain1.contract1.notary@othernode",
+							alice.identityLocator,
+							bob.identityLocator,
 						},
 					},
 				},
@@ -507,7 +912,8 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 						VerifierType:    verifiers.ETH_ADDRESS,
 						PayloadType:     signpayloads.OPAQUE_TO_RSV,
 						Parties: []string{
-							"domain1.contract1.notary@othernode",
+							alice.identityLocator,
+							bob.identityLocator,
 						},
 					},
 				},
@@ -518,11 +924,30 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	}).Times(2).Return(nil)
 
 	sentEndorsementRequest := make(chan struct{}, 1)
-	mocks.transportManager.On("Send", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	aliceEngineMocks.transportManager.On("Send", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		sentEndorsementRequest <- struct{}{}
 	}).Return(nil).Maybe()
 
-	mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil).Run(
+	aliceEngineMocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&components.EndorsementResult{
+		Result:  prototk.EndorseTransactionResponse_SIGN,
+		Payload: []byte("alice-endorsement-bytes"),
+		Endorser: &prototk.ResolvedVerifier{
+			Lookup:       alice.identityLocator,
+			Verifier:     alice.verifier,
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
+		},
+	}, nil)
+
+	alice.mockSign([]byte("alice-signature-bytes"))
+
+	signingAddress := tktypes.RandHex(32)
+	aliceEngineMocks.domainSmartContract.On("ResolveDispatch", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(1).(*components.PrivateTransaction)
+		tx.Signer = signingAddress
+	}).Return(nil)
+
+	aliceEngineMocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil).Run(
 		func(args mock.Arguments) {
 			cv, err := testABI[0].Inputs.ParseExternalData(map[string]any{
 				"inputs":  []any{tktypes.Bytes32(tktypes.RandBytes(32))},
@@ -530,63 +955,67 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 				"data":    "0xfeedbeef",
 			})
 			require.NoError(t, err)
-			tx := args[1].(*components.PrivateTransaction)
+			tx := args[2].(*components.PrivateTransaction)
 			tx.Signer = "signer1"
-			tx.PreparedPublicTransaction = &components.EthTransaction{
-				FunctionABI: testABI[0],
-				To:          *domainAddress,
-				Inputs:      cv,
+			jsonData, _ := cv.JSON()
+			tx.PreparedPublicTransaction = &pldapi.TransactionInput{
+				ABI: abi.ABI{testABI[0]},
+				Transaction: pldapi.Transaction{
+					To:   domainAddress,
+					Data: tktypes.RawJSON(jsonData),
+				},
 			}
 		},
 	)
-	signingAddress := tktypes.RandHex(32)
+	tx := &components.PrivateTransaction{
+		ID: uuid.New(),
+	}
 
-	mocks.domainSmartContract.On("ResolveDispatch", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(1).(*components.PrivateTransaction)
-		tx.Signer = signingAddress
-	}).Return(nil)
+	mockPublicTxBatch := componentmocks.NewPublicTxBatch(t)
+	mockPublicTxBatch.On("Finalize", mock.Anything).Return().Maybe()
+	mockPublicTxBatch.On("CleanUp", mock.Anything).Return().Maybe()
 
-	mockPublicTxBatch1 := componentmocks.NewPublicTxBatch(t)
-	mockPublicTxBatch1.On("Finalize", mock.Anything).Return().Maybe()
-	mockPublicTxBatch1.On("CleanUp", mock.Anything).Return().Maybe()
+	mockPublicTxManager := aliceEngineMocks.publicTxManager.(*componentmocks.PublicTxManager)
+	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockPublicTxBatch, nil)
 
-	mockPublicTxManager := mocks.publicTxManager.(*componentmocks.PublicTxManager)
-	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything, mock.Anything).Return(mockPublicTxBatch1, nil).Once()
+	signingAddr := tktypes.RandAddress()
+	aliceEngineMocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1", "signer1"}).
+		Return([]*tktypes.EthAddress{signingAddr, signingAddr}, nil)
 
 	publicTransactions := []components.PublicTxAccepted{
 		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx1.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: ptxapi.PublicTxInput{
-				From: "signer1",
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: pldapi.PublicTxInput{
+				From: signingAddr,
 			},
 		}, nil),
 		newFakePublicTx(&components.PublicTxSubmission{
-			Bindings: []*components.PaladinTXReference{{TransactionID: tx2.ID, TransactionType: ptxapi.TransactionTypePrivate.Enum()}},
-			PublicTxInput: ptxapi.PublicTxInput{
-				From: "signer1",
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: pldapi.PublicTxInput{
+				From: signingAddr,
 			},
 		}, nil),
 	}
-	mockPublicTxBatch1.On("Submit", mock.Anything, mock.Anything).Return(nil)
-	mockPublicTxBatch1.On("Rejected").Return([]components.PublicTxRejected{})
-	mockPublicTxBatch1.On("Accepted").Return(publicTransactions)
-	mockPublicTxBatch1.On("Completed", mock.Anything, true).Return()
+	mockPublicTxBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
+	mockPublicTxBatch.On("Rejected").Return([]components.PublicTxRejected{})
+	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
+	mockPublicTxBatch.On("Completed", mock.Anything, true).Return()
 
-	err := privateTxManager.Start()
+	err := aliceEngine.Start()
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleNewTx(ctx, tx1)
+	err = aliceEngine.HandleNewTx(ctx, tx1)
 	require.NoError(t, err)
 
-	err = privateTxManager.HandleNewTx(ctx, tx2)
+	err = aliceEngine.HandleNewTx(ctx, tx2)
 	require.NoError(t, err)
 
 	// Neither transaction should be dispatched yet
-	s, err := privateTxManager.GetTxStatus(ctx, domainAddressString, tx1.ID.String())
+	s, err := aliceEngine.GetTxStatus(ctx, domainAddressString, tx1.ID.String())
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
-	s, err = privateTxManager.GetTxStatus(ctx, domainAddressString, tx2.ID.String())
+	s, err = aliceEngine.GetTxStatus(ctx, domainAddressString, tx2.ID.String())
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
@@ -594,12 +1023,18 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		Name:            "notary",
 		AttestationType: prototk.AttestationType_ENDORSE,
 		Payload:         tktypes.RandBytes(32),
+		Verifier: &prototk.ResolvedVerifier{
+			Lookup:       bob.identityLocator,
+			Verifier:     bob.verifier,
+			Algorithm:    algorithms.ECDSA_SECP256K1,
+			VerifierType: verifiers.ETH_ADDRESS,
+		},
 	}
 
 	attestationResultAny, err := anypb.New(&attestationResult)
 	require.NoError(t, err)
 
-	//wait for both transactions to send the endorsement request
+	//wait for both transactions to send an endorsement request each
 	<-sentEndorsementRequest
 	<-sentEndorsementRequest
 
@@ -609,24 +1044,24 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		TransactionId:   tx2.ID.String(),
 		Endorsement:     attestationResultAny,
 	}
-	endorsementResponse2Bytes, err := proto.Marshal(endorsementResponse2)
+	endorsementResponse2bytes, err := proto.Marshal(endorsementResponse2)
 	require.NoError(t, err)
 
-	//now send the endorsement back
-	privateTxManager.ReceiveTransportMessage(ctx, &components.TransportMessage{
+	//now send the endorsements back
+	aliceEngine.ReceiveTransportMessage(ctx, &components.TransportMessage{
 		MessageType: "EndorsementResponse",
-		Payload:     endorsementResponse2Bytes,
+		Payload:     endorsementResponse2bytes,
 	})
 
 	//unless the tests are running in short mode, wait a second to ensure that the transaction is not dispatched
 	if !testing.Short() {
 		time.Sleep(1 * time.Second)
 	}
-	s, err = privateTxManager.GetTxStatus(ctx, domainAddressString, tx1.ID.String())
+	s, err = aliceEngine.GetTxStatus(ctx, domainAddressString, tx1.ID.String())
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
-	s, err = privateTxManager.GetTxStatus(ctx, domainAddressString, tx2.ID.String())
+	s, err = aliceEngine.GetTxStatus(ctx, domainAddressString, tx2.ID.String())
 	require.NoError(t, err)
 	assert.NotEqual(t, "dispatch", s.Status)
 
@@ -639,17 +1074,25 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	endorsementResponse1Bytes, err := proto.Marshal(endorsementResponse1)
 	require.NoError(t, err)
 
-	//now send the endorsement back
-	privateTxManager.ReceiveTransportMessage(ctx, &components.TransportMessage{
+	//now send the final endorsement back
+	aliceEngine.ReceiveTransportMessage(ctx, &components.TransportMessage{
 		MessageType: "EndorsementResponse",
 		Payload:     endorsementResponse1Bytes,
 	})
 
-	status := pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx1.ID.String(), 200*time.Second)
+	// at this point we should get a flush of the states
+	dcFlushed := make(chan error, 1)
+	aliceEngineMocks.domainContext.On("Flush", mock.Anything).Return(func(err error) {
+		dcFlushed <- err
+	}, nil)
+
+	status := pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, tx1.ID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
 
-	status = pollForStatus(ctx, t, "dispatched", privateTxManager, domainAddressString, tx2.ID.String(), 200*time.Second)
+	status = pollForStatus(ctx, t, "dispatched", aliceEngine, domainAddressString, tx2.ID.String(), 200*time.Second)
 	assert.Equal(t, "dispatched", status)
+
+	require.NoError(t, <-dcFlushed)
 
 	//TODO assert that transaction 1 got dispatched before 2
 
@@ -659,6 +1102,296 @@ func TestPrivateTxManagerLocalBlockedTransaction(t *testing.T) {
 	//TODO
 	// 3 transactions, for different signing addresses, but two are is blocked by the other
 	// when the earlier transaction is confirmed, both blocked transactions should be dispatched
+}
+
+func TestPrivateTxManagerDeploy(t *testing.T) {
+	ctx := context.Background()
+
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, "node1")
+	notary := newPartyForTesting(ctx, "notary", "node1", mocks)
+
+	tx := &components.PrivateContractDeploy{
+		ID:     uuid.New(),
+		Domain: "domain1",
+		Inputs: tktypes.JSONString(`{"inputs": ["0xfeedbeef"]}`),
+	}
+
+	mocks.domain.On("InitDeploy", mock.Anything, tx).Run(func(args mock.Arguments) {
+		tx.RequiredVerifiers = []*prototk.ResolveVerifierRequest{
+			{
+				Lookup:       notary.identityLocator,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
+			},
+		}
+	}).Return(nil)
+
+	domainRegistryAddress := tktypes.RandAddress()
+
+	testConstructorABI := &abi.Entry{
+		Name:   "constructor",
+		Inputs: abi.ParameterArray{{Name: "foo", Type: "int32"}},
+	}
+	testConstructorParameters, err := testConstructorABI.Inputs.ParseJSON([]byte(`{"foo": "42"}`))
+	require.NoError(t, err)
+
+	mocks.domain.On("PrepareDeploy", mock.Anything, tx).Run(func(args mock.Arguments) {
+		tx.InvokeTransaction = &components.EthTransaction{
+			FunctionABI: testConstructorABI,
+			To:          *domainRegistryAddress,
+			Inputs:      testConstructorParameters,
+		}
+		tx.Signer = "signer1"
+	}).Return(nil)
+
+	signingAddr := tktypes.RandAddress()
+	mocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1"}).
+		Return([]*tktypes.EthAddress{signingAddr}, nil)
+
+	publicTransactions := []components.PublicTxAccepted{
+		newFakePublicTx(&components.PublicTxSubmission{
+			Bindings: []*components.PaladinTXReference{{TransactionID: tx.ID, TransactionType: pldapi.TransactionTypePrivate.Enum()}},
+			PublicTxInput: pldapi.PublicTxInput{
+				From: signingAddr,
+			},
+		}, nil),
+	}
+
+	mockPublicTxBatch := componentmocks.NewPublicTxBatch(t)
+
+	mockPublicTxManager := mocks.publicTxManager.(*componentmocks.PublicTxManager)
+	mockPublicTxManager.On("PrepareSubmissionBatch", mock.Anything, mock.Anything).Return(mockPublicTxBatch, nil)
+
+	dispatched := make(chan struct{}, 1)
+	mockPublicTxBatch.On("Submit", mock.Anything, mock.Anything).Return(nil)
+	mockPublicTxBatch.On("Rejected").Return([]components.PublicTxRejected{})
+	mockPublicTxBatch.On("Accepted").Return(publicTransactions)
+	mockPublicTxBatch.On("Completed", mock.Anything, true).Run(func(args mock.Arguments) {
+		dispatched <- struct{}{}
+	}).Return()
+
+	mocks.txManager.On("FinalizeTransactions", mock.Anything, mock.Anything, mock.Anything).Return(nil).Panic("did not expect transaction to be reverted").Maybe()
+
+	err = privateTxManager.Start()
+	require.NoError(t, err)
+
+	err = privateTxManager.HandleDeployTx(ctx, tx)
+	require.NoError(t, err)
+
+	deadlineTimer := time.NewTimer(timeTillDeadline(t))
+	select {
+	case <-dispatched:
+	case <-deadlineTimer.C:
+		assert.Fail(t, "timed out")
+
+	}
+}
+
+func TestPrivateTxManagerDeployFailInit(t *testing.T) {
+	// Init errors should fail synchronously
+	ctx := context.Background()
+
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, "node1")
+
+	tx := &components.PrivateContractDeploy{
+		ID:     uuid.New(),
+		Domain: "domain1",
+		Inputs: tktypes.JSONString(`{"inputs": ["0xfeedbeef"]}`),
+	}
+
+	mocks.domain.On("InitDeploy", mock.Anything, tx).Return(errors.New("failed to init"))
+
+	err := privateTxManager.Start()
+	require.NoError(t, err)
+
+	err = privateTxManager.HandleDeployTx(ctx, tx)
+	assert.Error(t, err)
+	assert.Regexp(t, regexp.MustCompile(".*failed to init.*"), err.Error())
+}
+
+func TestPrivateTxManagerDeployFailPrepare(t *testing.T) {
+	ctx := context.Background()
+
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, "node1")
+	notary := newPartyForTesting(ctx, "notary", "node1", mocks)
+
+	tx := &components.PrivateContractDeploy{
+		ID:     uuid.New(),
+		Domain: "domain1",
+		Inputs: tktypes.JSONString(`{"inputs": ["0xfeedbeef"]}`),
+	}
+
+	mocks.domain.On("InitDeploy", mock.Anything, tx).Run(func(args mock.Arguments) {
+		tx.RequiredVerifiers = []*prototk.ResolveVerifierRequest{
+			{
+				Lookup:       notary.identityLocator,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
+			},
+		}
+	}).Return(nil)
+
+	mocks.domain.On("PrepareDeploy", mock.Anything, tx).Return(errors.New("failed to prepare"))
+
+	reverted := make(chan []*components.ReceiptInput, 1)
+
+	mocks.txManager.On("FinalizeTransactions", mock.Anything, mock.Anything, mock.Anything).
+		Run(
+			func(args mock.Arguments) {
+				reverted <- args.Get(2).([]*components.ReceiptInput)
+			},
+		).
+		Return(nil)
+
+	err := privateTxManager.Start()
+	require.NoError(t, err)
+
+	err = privateTxManager.HandleDeployTx(ctx, tx)
+	require.NoError(t, err)
+
+	deadlineTimer := time.NewTimer(timeTillDeadline(t))
+	select {
+	case receipts := <-reverted:
+		assert.Len(t, receipts, 1)
+		assert.Equal(t, tx.ID, receipts[0].TransactionID)
+		assert.Regexp(t, regexp.MustCompile(".*failed to prepare.*"), receipts[0].FailureMessage)
+
+	case <-deadlineTimer.C:
+		assert.Fail(t, "timed out")
+
+	}
+}
+
+func TestPrivateTxManagerFailSignerResolve(t *testing.T) {
+	ctx := context.Background()
+
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, "node1")
+	notary := newPartyForTesting(ctx, "notary", "node1", mocks)
+
+	tx := &components.PrivateContractDeploy{
+		ID:     uuid.New(),
+		Domain: "domain1",
+		Inputs: tktypes.JSONString(`{"inputs": ["0xfeedbeef"]}`),
+	}
+
+	mocks.domain.On("InitDeploy", mock.Anything, tx).Run(func(args mock.Arguments) {
+		tx.RequiredVerifiers = []*prototk.ResolveVerifierRequest{
+			{
+				Lookup:       notary.identityLocator,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
+			},
+		}
+	}).Return(nil)
+
+	domainRegistryAddress := tktypes.RandAddress()
+
+	testConstructorABI := &abi.Entry{
+		Name:   "constructor",
+		Inputs: abi.ParameterArray{{Name: "foo", Type: "int32"}},
+	}
+	testConstructorParameters, err := testConstructorABI.Inputs.ParseJSON([]byte(`{"foo": "42"}`))
+	require.NoError(t, err)
+
+	mocks.domain.On("PrepareDeploy", mock.Anything, tx).Run(func(args mock.Arguments) {
+		tx.InvokeTransaction = &components.EthTransaction{
+			FunctionABI: testConstructorABI,
+			To:          *domainRegistryAddress,
+			Inputs:      testConstructorParameters,
+		}
+		tx.Signer = "signer1"
+	}).Return(nil)
+
+	mocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1"}).
+		Return(nil, errors.New("failed to resolve"))
+
+	reverted := make(chan []*components.ReceiptInput, 1)
+
+	mocks.txManager.On("FinalizeTransactions", mock.Anything, mock.Anything, mock.Anything).
+		Run(
+			func(args mock.Arguments) {
+				reverted <- args.Get(2).([]*components.ReceiptInput)
+			},
+		).
+		Return(nil)
+
+	err = privateTxManager.Start()
+	require.NoError(t, err)
+
+	err = privateTxManager.HandleDeployTx(ctx, tx)
+	require.NoError(t, err)
+
+	deadlineTimer := time.NewTimer(timeTillDeadline(t))
+	select {
+	case receipts := <-reverted:
+		assert.Len(t, receipts, 1)
+		assert.Equal(t, tx.ID, receipts[0].TransactionID)
+		assert.Regexp(t, regexp.MustCompile(".*failed to resolve.*"), receipts[0].FailureMessage)
+
+	case <-deadlineTimer.C:
+		assert.Fail(t, "timed out")
+	}
+}
+
+func TestPrivateTxManagerDeployFailNoInvokeOrDeploy(t *testing.T) {
+	ctx := context.Background()
+
+	privateTxManager, mocks := NewPrivateTransactionMgrForTesting(t, "node1")
+	notary := newPartyForTesting(ctx, "notary", "node1", mocks)
+
+	tx := &components.PrivateContractDeploy{
+		ID:     uuid.New(),
+		Domain: "domain1",
+		Inputs: tktypes.JSONString(`{"inputs": ["0xfeedbeef"]}`),
+	}
+
+	mocks.domain.On("InitDeploy", mock.Anything, tx).Run(func(args mock.Arguments) {
+		tx.RequiredVerifiers = []*prototk.ResolveVerifierRequest{
+			{
+				Lookup:       notary.identityLocator,
+				Algorithm:    algorithms.ECDSA_SECP256K1,
+				VerifierType: verifiers.ETH_ADDRESS,
+			},
+		}
+	}).Return(nil)
+
+	mocks.domain.On("PrepareDeploy", mock.Anything, tx).Run(func(args mock.Arguments) {
+		tx.InvokeTransaction = nil
+		tx.DeployTransaction = nil
+		tx.Signer = "signer1"
+	}).Return(nil)
+
+	signingAddr := tktypes.RandAddress()
+	mocks.keyManager.On("ResolveEthAddressBatchNewDatabaseTX", mock.Anything, []string{"signer1"}).
+		Return([]*tktypes.EthAddress{signingAddr}, nil)
+
+	reverted := make(chan []*components.ReceiptInput, 1)
+
+	mocks.txManager.On("FinalizeTransactions", mock.Anything, mock.Anything, mock.Anything).
+		Run(
+			func(args mock.Arguments) {
+				reverted <- args.Get(2).([]*components.ReceiptInput)
+			},
+		).
+		Return(nil)
+
+	err := privateTxManager.Start()
+	require.NoError(t, err)
+
+	err = privateTxManager.HandleDeployTx(ctx, tx)
+	require.NoError(t, err)
+
+	deadlineTimer := time.NewTimer(timeTillDeadline(t))
+	select {
+	case receipts := <-reverted:
+		assert.Len(t, receipts, 1)
+		assert.Equal(t, tx.ID, receipts[0].TransactionID)
+		assert.Regexp(t, regexp.MustCompile("PD011801"), receipts[0].FailureMessage)
+		assert.Regexp(t, regexp.MustCompile("PD011820"), receipts[0].FailureMessage)
+
+	case <-deadlineTimer.C:
+		assert.Fail(t, "timed out")
+	}
 }
 
 func TestPrivateTxManagerMiniLoad(t *testing.T) {
@@ -688,9 +1421,11 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 			ctx := context.Background()
 
 			domainAddress := tktypes.MustEthAddress(tktypes.RandHex(20))
-			privateTxManager, mocks := NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t, domainAddress, newFakePublicTxManager(t))
+			privateTxManager, mocks := NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t, newFakePublicTxManager(t), "node1")
+			mocks.mockDomain(domainAddress, prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION)
 
-			remoteEngine, remoteEngineMocks := NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t, domainAddress, newFakePublicTxManager(t))
+			remoteEngine, remoteEngineMocks := NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t, newFakePublicTxManager(t), "node2")
+			remoteEngineMocks.mockDomain(domainAddress, prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION)
 
 			dependenciesByTransactionID := make(map[string][]string) // populated during assembly stage
 			nonceByTransactionID := make(map[string]uint64)          // populated when dispatch event recieved and used later to check that the nonce order matchs the dependency order
@@ -717,7 +1452,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 			failEarly := make(chan string, 1)
 
 			assembleConcurrency := 0
-			mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+			mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 				//assert that we are not assembling more than 1 transaction at a time
 				if assembleConcurrency > 0 {
 					failEarly <- "Assembling more than one transaction at a time"
@@ -729,7 +1464,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 
 				// chose a number of dependencies at random 0, 1, 2, 3
 				// for each dependency, chose a different unclaimed pending state to spend
-				tx := args.Get(1).(*components.PrivateTransaction)
+				tx := args.Get(2).(*components.PrivateTransaction)
 
 				var inputStates []*components.FullState
 				numDependencies := min(r.Intn(4), len(unclaimedPendingStatesToMintingTransaction))
@@ -805,7 +1540,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 			}).Return(nil).Maybe()
 			remoteEngineMocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Return(remoteEngineMocks.domainSmartContract, nil)
 
-			remoteEngineMocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("notaryKeyHandle", "notaryVerifier", nil)
+			remoteEngineMocks.keyManager.On("ResolveKey", mock.Anything, "domain1.contract1.notary@othernode", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).Return("domain1.contract1.notary", "notaryVerifier", nil)
 
 			signingAddress := tktypes.RandHex(32)
 
@@ -819,14 +1554,14 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 				Result:  prototk.EndorseTransactionResponse_SIGN,
 				Payload: []byte("some-endorsement-bytes"),
 				Endorser: &prototk.ResolvedVerifier{
-					Lookup:       "notaryKeyHandle",
+					Lookup:       "domain1.contract1.notary",
 					Verifier:     "notaryVerifier",
 					Algorithm:    algorithms.ECDSA_SECP256K1,
 					VerifierType: verifiers.ETH_ADDRESS,
 				},
 			}, nil)
 			remoteEngineMocks.keyManager.On("Sign", mock.Anything, &signerapi.SignRequest{
-				KeyHandle:   "notaryKeyHandle",
+				KeyHandle:   "domain1.contract1.notary",
 				Algorithm:   algorithms.ECDSA_SECP256K1,
 				PayloadType: signpayloads.OPAQUE_TO_RSV,
 				Payload:     []byte("some-endorsement-bytes"),
@@ -834,7 +1569,7 @@ func TestPrivateTxManagerMiniLoad(t *testing.T) {
 				Payload: []byte("some-signature-bytes"),
 			}, nil)
 
-			mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything).Return(nil)
+			mocks.domainSmartContract.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 			expectedNonce := uint64(0)
 
@@ -930,6 +1665,7 @@ func pollForStatus(ctx context.Context, t *testing.T, expectedStatus string, pri
 
 type dependencyMocks struct {
 	allComponents       *componentmocks.AllComponents
+	db                  *mockpersistence.SQLMockProvider
 	domain              *componentmocks.Domain
 	domainSmartContract *componentmocks.DomainSmartContract
 	domainContext       *componentmocks.DomainContext
@@ -937,16 +1673,16 @@ type dependencyMocks struct {
 	transportManager    *componentmocks.TransportManager
 	stateStore          *componentmocks.StateManager
 	keyManager          *componentmocks.KeyManager
-	ethClientFactory    *componentmocks.EthClientFactory
 	publicTxManager     components.PublicTxManager /* could be fake or mock */
 	identityResolver    *componentmocks.IdentityResolver
+	txManager           *componentmocks.TXManager
 }
 
 // For Black box testing we return components.PrivateTxManager
-func NewPrivateTransactionMgrForTesting(t *testing.T, domainAddress *tktypes.EthAddress) (components.PrivateTxManager, *dependencyMocks) {
+func NewPrivateTransactionMgrForTesting(t *testing.T, nodeName string) (components.PrivateTxManager, *dependencyMocks) {
 	// by default create a mock publicTxManager if no fake was provided
 	fakePublicTxManager := componentmocks.NewPublicTxManager(t)
-	privateTxManager, mocks := NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t, domainAddress, fakePublicTxManager)
+	privateTxManager, mocks := NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t, fakePublicTxManager, nodeName)
 	return privateTxManager, mocks
 }
 
@@ -957,17 +1693,17 @@ type fakePublicTxManager struct {
 }
 
 // GetPublicTransactionForHash implements components.PublicTxManager.
-func (f *fakePublicTxManager) GetPublicTransactionForHash(ctx context.Context, dbTX *gorm.DB, hash tktypes.Bytes32) (*ptxapi.PublicTxWithBinding, error) {
+func (f *fakePublicTxManager) GetPublicTransactionForHash(ctx context.Context, dbTX *gorm.DB, hash tktypes.Bytes32) (*pldapi.PublicTxWithBinding, error) {
 	panic("unimplemented")
 }
 
 // QueryPublicTxForTransactions implements components.PublicTxManager.
-func (f *fakePublicTxManager) QueryPublicTxForTransactions(ctx context.Context, dbTX *gorm.DB, boundToTxns []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*ptxapi.PublicTx, error) {
+func (f *fakePublicTxManager) QueryPublicTxForTransactions(ctx context.Context, dbTX *gorm.DB, boundToTxns []uuid.UUID, jq *query.QueryJSON) (map[uuid.UUID][]*pldapi.PublicTx, error) {
 	panic("unimplemented")
 }
 
 // QueryPublicTxWithBindings implements components.PublicTxManager.
-func (f *fakePublicTxManager) QueryPublicTxWithBindings(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*ptxapi.PublicTxWithBinding, error) {
+func (f *fakePublicTxManager) QueryPublicTxWithBindings(ctx context.Context, dbTX *gorm.DB, jq *query.QueryJSON) ([]*pldapi.PublicTxWithBinding, error) {
 	panic("unimplemented")
 }
 
@@ -1027,21 +1763,17 @@ func (f *fakePublicTxBatch) Rejected() []components.PublicTxRejected {
 type fakePublicTx struct {
 	t         *components.PublicTxSubmission
 	rejectErr error
-	pubTx     *ptxapi.PublicTx
+	pubTx     *pldapi.PublicTx
 }
 
 func newFakePublicTx(t *components.PublicTxSubmission, rejectErr error) *fakePublicTx {
-	// Fake up signer resolution by just hashing whatever comes in
-	signerStringHash := sha256.New()
-	signerStringHash.Write([]byte(t.From))
-	fromAddr := tktypes.EthAddress(signerStringHash.Sum(nil)[0:20])
 	return &fakePublicTx{
 		t:         t,
 		rejectErr: rejectErr,
-		pubTx: &ptxapi.PublicTx{
+		pubTx: &pldapi.PublicTx{
 			To:              t.To,
 			Data:            t.Data,
-			From:            fromAddr,
+			From:            *t.From,
 			Created:         tktypes.TimestampNow(),
 			PublicTxOptions: t.PublicTxOptions,
 		},
@@ -1060,7 +1792,7 @@ func (f *fakePublicTx) Bindings() []*components.PaladinTXReference {
 	return f.t.Bindings
 }
 
-func (f *fakePublicTx) PublicTx() *ptxapi.PublicTx {
+func (f *fakePublicTx) PublicTx() *pldapi.PublicTx {
 	return f.pubTx
 }
 
@@ -1096,7 +1828,7 @@ func newFakePublicTxManager(t *testing.T) *fakePublicTxManager {
 	}
 }
 
-func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, domainAddress *tktypes.EthAddress, publicTxMgr components.PublicTxManager) (components.PrivateTxManager, *dependencyMocks) {
+func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, publicTxMgr components.PublicTxManager, nodeName string) (components.PrivateTxManager, *dependencyMocks) {
 
 	ctx := context.Background()
 	mocks := &dependencyMocks{
@@ -1108,42 +1840,53 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, dom
 		transportManager:    componentmocks.NewTransportManager(t),
 		stateStore:          componentmocks.NewStateManager(t),
 		keyManager:          componentmocks.NewKeyManager(t),
-		ethClientFactory:    componentmocks.NewEthClientFactory(t),
 		publicTxManager:     publicTxMgr,
 		identityResolver:    componentmocks.NewIdentityResolver(t),
+		txManager:           componentmocks.NewTXManager(t),
 	}
 	mocks.allComponents.On("StateManager").Return(mocks.stateStore).Maybe()
 	mocks.allComponents.On("DomainManager").Return(mocks.domainMgr).Maybe()
 	mocks.allComponents.On("TransportManager").Return(mocks.transportManager).Maybe()
+	mocks.transportManager.On("LocalNodeName").Return(nodeName)
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
+	mocks.allComponents.On("TxManager").Return(mocks.txManager).Maybe()
 	mocks.allComponents.On("PublicTxManager").Return(publicTxMgr).Maybe()
 	mocks.allComponents.On("Persistence").Return(persistence.NewUnitTestPersistence(ctx)).Maybe()
-	mocks.allComponents.On("EthClientFactory").Return(mocks.ethClientFactory).Maybe()
-	unconnectedRealClient := ethclient.NewUnconnectedRPCClient(ctx, mocks.keyManager, &pldconf.EthClientConfig{}, 0)
-	mocks.ethClientFactory.On("SharedWS").Return(unconnectedRealClient).Maybe()
 	mocks.domainSmartContract.On("Domain").Return(mocks.domain).Maybe()
-	mocks.stateStore.On("NewDomainContext", mock.Anything, mocks.domain, *domainAddress).Return(mocks.domainContext).Maybe()
+	mocks.domainMgr.On("GetDomainByName", mock.Anything, "domain1").Return(mocks.domain, nil).Maybe()
 	mocks.domain.On("Name").Return("domain1").Maybe()
 
-	e := NewPrivateTransactionMgr(ctx, tktypes.RandHex(16), &pldconf.PrivateTxManagerConfig{
+	mocks.domainContext.On("Ctx").Return(ctx).Maybe()
+	mocks.domainContext.On("Info").Return(components.DomainContextInfo{ID: uuid.New()}).Maybe()
+
+	e := NewPrivateTransactionMgr(ctx, &pldconf.PrivateTxManagerConfig{
 		Writer: pldconf.FlushWriterConfig{
 			WorkerCount:  confutil.P(1),
 			BatchMaxSize: confutil.P(1), // we don't want batching for our test
 		},
-		Orchestrator: pldconf.PrivateTxManagerOrchestratorConfig{
+		Sequencer: pldconf.PrivateTxManagerSequencerConfig{
 			// StaleTimeout: ,
 		},
 	})
 
 	//It is not valid to call other managers before PostInit
 	mocks.transportManager.On("RegisterClient", mock.Anything, mock.Anything).Return(nil).Maybe()
-	mocks.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(mocks.domainSmartContract, nil)
 	//It is not valid to reference LateBound components before PostInit
 	mocks.allComponents.On("IdentityResolver").Return(mocks.identityResolver).Maybe()
 	err := e.PostInit(mocks.allComponents)
 	assert.NoError(t, err)
 	return e, mocks
 
+}
+
+func (m *dependencyMocks) mockDomain(domainAddress *tktypes.EthAddress, submitMode prototk.BaseLedgerSubmitConfig_Mode) {
+	m.stateStore.On("NewDomainContext", mock.Anything, m.domain, *domainAddress, mock.Anything).Return(m.domainContext).Maybe()
+	m.domainMgr.On("GetSmartContractByAddress", mock.Anything, *domainAddress).Maybe().Return(m.domainSmartContract, nil)
+	m.domain.On("Configuration").Return(&prototk.DomainConfig{
+		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
+			SubmitMode: submitMode,
+		},
+	}).Maybe()
 }
 
 func timeTillDeadline(t *testing.T) time.Duration {

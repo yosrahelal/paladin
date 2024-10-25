@@ -26,6 +26,7 @@ import (
 	"golang.org/x/crypto/sha3"
 
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 )
@@ -63,6 +64,7 @@ type EventStream struct {
 	Type    tktypes.Enum[EventStreamType] `json:"type"`
 	Config  EventStreamConfig             `json:"config"         gorm:"type:bytes;serializer:json"`
 	Sources EventSources                  `json:"sources"        gorm:"serializer:json"` // immutable (event delivery behavior would be too undefined with mutability)
+	Format  tktypes.JSONFormatOptions     `json:"format"`
 }
 
 type EventSources []EventStreamSource
@@ -110,30 +112,17 @@ type EventStreamSignature struct {
 	SignatureHash tktypes.Bytes32 `json:"signatureHash"          gorm:"primaryKey"`
 }
 
-type EventWithData struct {
-	*IndexedEvent
-
-	// SoliditySignature allows a deterministic comparison to which ABI to use in the runtime,
-	// when both the blockindexer and consuming code are using the same version of firefly-signer.
-	// Includes variable names, including deep within nested structure.
-	// Things like whitespace etc. subject to change (so should not stored for later comparison)
-	SoliditySignature string `json:"soliditySignature"`
-
-	Address tktypes.EthAddress `json:"address"`
-	Data    tktypes.RawJSON    `json:"data"`
-}
-
 type EventDeliveryBatch struct {
-	StreamID   uuid.UUID        `json:"streamId"`
-	StreamName string           `json:"streamName"`
-	BatchID    uuid.UUID        `json:"batchId"`
-	Events     []*EventWithData `json:"events"`
+	StreamID   uuid.UUID               `json:"streamId"`
+	StreamName string                  `json:"streamName"`
+	BatchID    uuid.UUID               `json:"batchId"`
+	Events     []*pldapi.EventWithData `json:"events"`
 }
 
 // Post commit callback is invoked after the DB transaction completes (only on success)
 type PostCommit func()
 
-type PreCommitHandler func(ctx context.Context, dbTX *gorm.DB, blocks []*IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error)
+type PreCommitHandler func(ctx context.Context, dbTX *gorm.DB, blocks []*pldapi.IndexedBlock, transactions []*IndexedTransactionNotify) (PostCommit, error)
 
 type InternalStreamCallback func(ctx context.Context, dbTX *gorm.DB, batch *EventDeliveryBatch) (PostCommit, error)
 

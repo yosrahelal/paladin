@@ -103,6 +103,8 @@ func (r *BesuGenesisReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *BesuGenesisReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.BesuGenesis{}).
+		// Reconcile when any besu status changes
+		Watches(&corev1alpha1.Besu{}, reconcileAll(BesuGenesisCRMap, r.Client), reconcileEveryChange()).
 		Complete(r)
 }
 

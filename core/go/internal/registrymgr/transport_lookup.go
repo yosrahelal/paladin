@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
@@ -81,7 +82,7 @@ func (tl *transportLookup) getNodeTransports(ctx context.Context, dbTX *gorm.DB,
 
 	// Resolve all the items in the hierarchy to find the leaf
 	var lookupParentID tktypes.HexBytes
-	var entry *components.RegistryEntryWithProperties
+	var entry *pldapi.RegistryEntryWithProperties
 	for _, entryName := range hierarchy {
 		q := query.NewQueryBuilder().Equal(".name", entryName).Limit(1)
 		if lookupParentID == nil {
@@ -89,7 +90,7 @@ func (tl *transportLookup) getNodeTransports(ctx context.Context, dbTX *gorm.DB,
 		} else {
 			q = q.Equal(".parentId", lookupParentID)
 		}
-		entries, err := r.QueryEntriesWithProps(ctx, dbTX, components.ActiveFilterActive, q.Query())
+		entries, err := r.QueryEntriesWithProps(ctx, dbTX, pldapi.ActiveFilterActive, q.Query())
 		if err != nil {
 			return nil, err
 		}
@@ -116,6 +117,7 @@ func (tl *transportLookup) getNodeTransports(ctx context.Context, dbTX *gorm.DB,
 		if mappedName != "" {
 			transportName = mappedName
 		}
+		log.L(ctx).Infof("Property '%s' matches transport %s (mappedName=%s,regexp='%s')", k, subMatch[1], transportName, tl.propertyRegexp)
 		transports = append(transports, &components.RegistryNodeTransportEntry{
 			Node:      fullLookup,
 			Registry:  tl.regName,

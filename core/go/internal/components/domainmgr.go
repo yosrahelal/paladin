@@ -19,6 +19,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
@@ -39,8 +41,8 @@ type DomainManager interface {
 	DomainRegistered(name string, toDomain DomainManagerToDomain) (fromDomain plugintk.DomainCallbacks, err error)
 	GetDomainByName(ctx context.Context, name string) (Domain, error)
 	GetSmartContractByAddress(ctx context.Context, addr tktypes.EthAddress) (DomainSmartContract, error)
-	WaitForDeploy(ctx context.Context, txID uuid.UUID) (DomainSmartContract, error)
-	WaitForTransaction(ctx context.Context, txID uuid.UUID) error
+	ExecDeployAndWait(ctx context.Context, txID uuid.UUID, call func() error) (dc DomainSmartContract, err error)
+	ExecAndWaitTransaction(ctx context.Context, txID uuid.UUID, call func() error) error
 	GetSigner() signerapi.InMemorySigner
 }
 
@@ -67,12 +69,14 @@ type DomainSmartContract interface {
 	ConfigBytes() tktypes.HexBytes
 
 	InitTransaction(ctx context.Context, tx *PrivateTransaction) error
+	AssembleTransaction(dCtx DomainContext, readTX *gorm.DB, tx *PrivateTransaction) error
+	WritePotentialStates(dCtx DomainContext, readTX *gorm.DB, tx *PrivateTransaction) error
+	LockStates(dCtx DomainContext, readTX *gorm.DB, tx *PrivateTransaction) error
+	EndorseTransaction(dCtx DomainContext, readTX *gorm.DB, req *PrivateTransactionEndorseRequest) (*EndorsementResult, error)
+	PrepareTransaction(dCtx DomainContext, readTX *gorm.DB, tx *PrivateTransaction) error
 
-	AssembleTransaction(dCtx DomainContext, tx *PrivateTransaction) error
-	WritePotentialStates(dCtx DomainContext, tx *PrivateTransaction) error
-	LockStates(dCtx DomainContext, tx *PrivateTransaction) error
-	EndorseTransaction(dCtx DomainContext, req *PrivateTransactionEndorseRequest) (*EndorsementResult, error)
-	PrepareTransaction(dCtx DomainContext, tx *PrivateTransaction) error
+	InitCall(ctx context.Context, tx *TransactionInputs) ([]*prototk.ResolveVerifierRequest, error)
+	ExecCall(dCtx DomainContext, readTX *gorm.DB, tx *TransactionInputs, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error)
 
 	ResolveDispatch(ctx context.Context, tx *PrivateTransaction) error
 }

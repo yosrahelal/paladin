@@ -17,67 +17,32 @@
 package statemgr
 
 import (
-	"context"
-	"strings"
-
-	"github.com/google/uuid"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
-	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"gorm.io/gorm"
 )
 
-// Queries against the state store can be made in the context of a
-// transaction UUID, or one of the standard qualifiers
-// (confirmed/unconfirmed/spent/all)
-type StateStatusQualifier string
-
-const StateStatusAvailable = "available"
-const StateStatusConfirmed = "confirmed"
-const StateStatusUnconfirmed = "unconfirmed"
-const StateStatusSpent = "spent"
-const StateStatusAll = "all"
-
-func (q *StateStatusQualifier) UnmarshalText(b []byte) error {
-	text := strings.ToLower(string(b))
-	switch text {
-	case StateStatusAvailable,
-		StateStatusConfirmed,
-		StateStatusUnconfirmed,
-		StateStatusSpent,
-		StateStatusAll:
-		*q = StateStatusQualifier(text)
-	default:
-		u, err := uuid.Parse(string(text))
-		if err != nil {
-			return i18n.NewError(context.Background(), msgs.MsgStateInvalidQualifier)
-		}
-		*q = (StateStatusQualifier)(u.String())
-	}
-	return nil
-}
-
 // Only called for one of the static qualifiers - not for a domain context
-func (q StateStatusQualifier) whereClause(db *gorm.DB /* must be the DB not the query */) (*gorm.DB, bool) {
+func whereClauseForQual(db *gorm.DB /* must be the DB not the query */, q pldapi.StateStatusQualifier) (*gorm.DB, bool) {
 	switch q {
-	case StateStatusAvailable:
+	case pldapi.StateStatusAvailable:
 		return db.
 				Where(`"Spent"."transaction" IS NULL`).
 				Where(`"Confirmed"."transaction" IS NOT NULL`),
 			true
-	case StateStatusConfirmed:
+	case pldapi.StateStatusConfirmed:
 		return db.
 				Where(`"Confirmed"."transaction" IS NOT NULL`).
 				Where(`"Spent"."transaction" IS NULL`),
 			true
-	case StateStatusUnconfirmed:
+	case pldapi.StateStatusUnconfirmed:
 		return db.
 				Where(`"Confirmed"."transaction" IS NULL`),
 			true
-	case StateStatusSpent:
+	case pldapi.StateStatusSpent:
 		return db.
 				Where(`"Spent"."transaction" IS NOT NULL`),
 			true
-	case StateStatusAll:
+	case pldapi.StateStatusAll:
 		return db.Where("TRUE"),
 			true
 	default:

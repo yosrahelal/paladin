@@ -56,6 +56,8 @@ message DomainMessage {
     SignRequest                 sign =                      1100;
     GetVerifierRequest          get_verifier =              1110;
     ValidateStateHashesRequest  validate_state_hashes =     1120;
+    InitCallRequest             init_call =                 1130;
+    ExecCallRequest             exec_call =                 1140;
   }
 
   oneof response_from_domain {
@@ -71,6 +73,8 @@ message DomainMessage {
     SignResponse                sign_res =                  1101;
     GetVerifierResponse         get_verifier_res =          1111;
     ValidateStateHashesResponse validate_state_hashes_res = 1121;
+    InitCallResponse            init_call_res =             1131;
+    ExecCallResponse            exec_call_res =             1141;
   }
 
   // Request/reply exchanges initiated by the domain, to the paladin node

@@ -22,6 +22,7 @@ import (
 	"math/big"
 	"strconv"
 	"testing"
+	"time"
 
 	_ "embed"
 
@@ -31,8 +32,8 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
-	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -130,6 +131,23 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 		"outputs": null
 	}`
 
+	fakeCoinGetBalanceABI := `{
+		"type": "function",
+		"name": "getBalance",
+		"inputs": [
+		  {
+		    "name": "account",
+			"type": "string"
+		  }
+		],
+		"outputs": [
+		  {
+		    "name": "amount",
+			"type": "uint256"
+		  }
+		]
+	}`
+
 	fakeDeployPayload := `{
 		"notary": "domain1.contract1.notary",
 		"name": "FakeToken1",
@@ -146,6 +164,14 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 		Salt   tktypes.HexBytes      `json:"salt"`
 		Owner  ethtypes.Address0xHex `json:"owner"`
 		Amount *ethtypes.HexInteger  `json:"amount"`
+	}
+
+	type getBalanceParser struct {
+		Account string `json:"account"`
+	}
+
+	type getBalanceResult struct {
+		Amount *tktypes.HexUint256 `json:"amount"`
 	}
 
 	contractDataABI := &abi.ParameterArray{
@@ -197,7 +223,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 					return nil, nil, nil, fmt.Errorf("insufficient funds (available=%s)", total.Text(10))
 				}
 				for _, state := range states {
-					lastStateTimestamp = state.StoredAt
+					lastStateTimestamp = state.CreatedAt
 					// Note: More sophisticated coin selection might prefer states that aren't locked to a sequence
 					var coin fakeCoinParser
 					if err := json.Unmarshal([]byte(state.DataJson), &coin); err != nil {
@@ -361,7 +387,7 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 				assert.Equal(t, "domain1.contract1.notary", req.ResolvedVerifiers[0].Lookup)
 				assert.NotEmpty(t, req.ResolvedVerifiers[0].Verifier)
 				return &prototk.PrepareDeployResponse{
-					Signer: confutil.P(fmt.Sprintf("domain1/transactions/%s", req.Transaction.TransactionId)),
+					Signer: confutil.P(fmt.Sprintf("domain1.transactions.%s", req.Transaction.TransactionId)),
 					Transaction: &prototk.PreparedTransaction{
 						FunctionAbiJson: toJSONString(t, simDomainABI.Functions()["newSIMTokenNotarized"]),
 						ParamsJson: fmt.Sprintf(`{
@@ -600,13 +626,76 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 				}
 				return &res, nil
 			},
+
+			InitCall: func(ctx context.Context, icr *prototk.InitCallRequest) (*prototk.InitCallResponse, error) {
+				tx := icr.Transaction
+				assert.JSONEq(t, fakeCoinGetBalanceABI, tx.FunctionAbiJson)
+				assert.Equal(t, "function getBalance(string memory account) external returns (uint256 amount) { }", tx.FunctionSignature)
+				var inputs *getBalanceParser
+				err := json.Unmarshal([]byte(icr.Transaction.FunctionParamsJson), &inputs)
+				require.NoError(t, err)
+				return &prototk.InitCallResponse{
+					RequiredVerifiers: []*prototk.ResolveVerifierRequest{
+						{
+							Lookup:       inputs.Account,
+							Algorithm:    algorithms.ECDSA_SECP256K1,
+							VerifierType: verifiers.ETH_ADDRESS,
+						},
+					},
+				}, nil
+			},
+
+			ExecCall: func(ctx context.Context, ecr *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
+				tx := ecr.Transaction
+				assert.JSONEq(t, fakeCoinGetBalanceABI, tx.FunctionAbiJson)
+				assert.Equal(t, "function getBalance(string memory account) external returns (uint256 amount) { }", tx.FunctionSignature)
+				balance := new(big.Int)
+				var limit = 10
+				var lastState *prototk.StoredState
+				for {
+					jq := query.NewQueryBuilder().
+						Sort("-.created", "-.id").
+						Limit(limit).
+						Equal("owner", ecr.ResolvedVerifiers[0].Verifier)
+					if lastState != nil {
+						jq = jq.Or(
+							query.NewQueryBuilder().LessThan(".created", lastState.CreatedAt),
+							query.NewQueryBuilder().Equal(".created", lastState.CreatedAt).LessThan(".id", lastState.Id),
+						)
+					}
+					res, err := callbacks.FindAvailableStates(ctx, &prototk.FindAvailableStatesRequest{
+						StateQueryContext: ecr.StateQueryContext,
+						SchemaId:          fakeCoinSchemaID,
+						QueryJson:         jq.Query().String(),
+					})
+					require.NoError(t, err)
+
+					for _, state := range res.States {
+						var coin fakeCoinParser
+						err := json.Unmarshal([]byte(state.DataJson), &coin)
+						require.NoError(t, err)
+						balance = balance.Add(balance, coin.Amount.BigInt())
+						lastState = state
+					}
+
+					if len(res.States) < limit {
+						break
+					}
+
+				}
+				return &prototk.ExecCallResponse{
+					ResultJson: tktypes.JSONString(&getBalanceResult{
+						Amount: (*tktypes.HexUint256)(balance),
+					}).Pretty(),
+				}, nil
+			},
 		}}
 	})
 
 	confFile := writeTestConfig(t)
 	factoryContractAddress := deploySmartContract(t, confFile)
 	tb := NewTestBed()
-	url, done, err := tb.StartForTest(confFile, map[string]*TestbedDomain{
+	url, _, done, err := tb.StartForTest(confFile, map[string]*TestbedDomain{
 		"domain1": {
 			Plugin:          fakeCoinDomain,
 			Config:          map[string]any{"some": "config"},
@@ -650,6 +739,17 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 	}, true)
 	assert.NoError(t, rpcErr)
 
+	var balance *getBalanceResult
+	rpcErr = tbRPC.CallRPC(ctx, &balance, "testbed_call", &tktypes.PrivateContractInvoke{
+		To:       tktypes.EthAddress(contractAddr),
+		Function: *mustParseABIEntry(fakeCoinGetBalanceABI),
+		Inputs: tktypes.RawJSON(`{
+			"account": "wallets.org1.aaaaaa"
+		}`),
+	}, tktypes.DefaultJSONFormatOptions)
+	assert.NoError(t, rpcErr)
+	assert.Equal(t, "100000000000000000000", balance.Amount.Int().String())
+
 	// Check we can also use the utility function externally to resolve verifiers
 	var address tktypes.EthAddress
 	rpcErr = tbRPC.CallRPC(ctx, &address, "testbed_resolveVerifier", "wallets.org2.bbbbbb", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
@@ -662,32 +762,39 @@ func TestDemoNotarizedCoinSelection(t *testing.T) {
 // Then we return the factory
 func deploySmartContract(t *testing.T, confFile string) *tktypes.EthAddress {
 	ctx := context.Background()
-
-	simDomainABI := mustParseBuildABI(simDomainBuild)
-
 	tb := NewTestBed()
-
-	_, done, err := tb.StartForTest(confFile, nil)
+	_, _, done, err := tb.StartForTest(confFile, nil)
 	require.NoError(t, err)
 	defer done()
 
-	bi := tb.Components().BlockIndexer()
+	simDomainABI := mustParseBuildABI(simDomainBuild)
+	simDomainBytecode := mustParseBuildBytecode(simDomainBuild)
+	txm := tb.Components().TxManager()
 
 	// In this test we deploy the factory in-line
-	ec, err := tb.Components().EthClientFactory().HTTPClient().ABI(ctx, simDomainABI)
+	txID, err := txm.SendTransaction(ctx, &pldapi.TransactionInput{
+		Transaction: pldapi.Transaction{
+			Type: pldapi.TransactionTypePublic.Enum(),
+			From: "domain1_admin",
+		},
+		ABI:      simDomainABI,
+		Bytecode: simDomainBytecode,
+	})
 	require.NoError(t, err)
 
-	cc, err := ec.Constructor(ctx, mustParseBuildBytecode(simDomainBuild))
-	require.NoError(t, err)
+	var receipt *pldapi.TransactionReceipt
+	ticker := time.NewTicker(100 * time.Millisecond)
+	for {
+		<-ticker.C
+		require.False(t, t.Failed())
+		receipt, err = txm.GetTransactionReceiptByID(ctx, *txID)
+		require.NoError(t, err)
+		if receipt != nil {
+			break
+		}
+	}
 
-	deployTXHash, err := cc.R(ctx).
-		Signer("domain1_admin").
-		Input(`{}`).
-		SignAndSend()
-	require.NoError(t, err)
-
-	deployTx, err := bi.WaitForTransactionSuccess(ctx, *deployTXHash, simDomainABI)
-	require.NoError(t, err)
-	require.Equal(t, deployTx.Result.V(), blockindexer.TXResult_SUCCESS)
-	return deployTx.ContractAddress
+	require.True(t, receipt.Success)
+	require.NotNil(t, receipt.ContractAddress)
+	return receipt.ContractAddress
 }

@@ -31,7 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/core/pkg/ethclient"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/ptxapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -40,8 +40,8 @@ type GasPriceClient interface {
 	HasZeroGasPrice(ctx context.Context) bool
 	SetFixedGasPriceIfConfigured(ctx context.Context, ethTx *ethsigner.Transaction)
 	GetFixedGasPriceJSON(ctx context.Context) (gasPrice *fftypes.JSONAny)
-	ParseGasPriceJSON(ctx context.Context, input *fftypes.JSONAny) (gpo *ptxapi.PublicTxGasPricing, err error)
-	GetGasPriceObject(ctx context.Context) (gasPrice *ptxapi.PublicTxGasPricing, err error)
+	ParseGasPriceJSON(ctx context.Context, input *fftypes.JSONAny) (gpo *pldapi.PublicTxGasPricing, err error)
+	GetGasPriceObject(ctx context.Context) (gasPrice *pldapi.PublicTxGasPricing, err error)
 	Init(ctx context.Context, cAPI ethclient.EthClient)
 }
 
@@ -81,7 +81,7 @@ func (hGpc *HybridGasPriceClient) SetFixedGasPriceIfConfigured(ctx context.Conte
 	}
 }
 
-func (hGpc *HybridGasPriceClient) GetGasPriceObject(ctx context.Context) (gasPrice *ptxapi.PublicTxGasPricing, err error) {
+func (hGpc *HybridGasPriceClient) GetGasPriceObject(ctx context.Context) (gasPrice *pldapi.PublicTxGasPricing, err error) {
 
 	gasPriceJSON, err := hGpc.getGasPriceJSON(ctx)
 	if err != nil {
@@ -157,8 +157,8 @@ func NewGasPriceClient(ctx context.Context, conf *pldconf.PublicTxManagerConfig)
 	return gasPriceClient
 }
 
-func (hGpc *HybridGasPriceClient) ParseGasPriceJSON(ctx context.Context, input *fftypes.JSONAny) (gpo *ptxapi.PublicTxGasPricing, err error) {
-	gpo = &ptxapi.PublicTxGasPricing{}
+func (hGpc *HybridGasPriceClient) ParseGasPriceJSON(ctx context.Context, input *fftypes.JSONAny) (gpo *pldapi.PublicTxGasPricing, err error) {
+	gpo = &pldapi.PublicTxGasPricing{}
 	if input == nil {
 		gpo.GasPrice = (*tktypes.HexUint256)(big.NewInt(0))
 		log.L(ctx).Tracef("Gas price object generated using empty input, gasPrice=%+v", gpo)
@@ -169,7 +169,7 @@ func (hGpc *HybridGasPriceClient) ParseGasPriceJSON(ctx context.Context, input *
 	maxPriorityFeePerGas := gasPriceObject.GetInteger("maxPriorityFeePerGas")
 	maxFeePerGas := gasPriceObject.GetInteger("maxFeePerGas")
 	if maxPriorityFeePerGas.Sign() > 0 || maxFeePerGas.Sign() > 0 {
-		gpo = &ptxapi.PublicTxGasPricing{
+		gpo = &pldapi.PublicTxGasPricing{
 			MaxPriorityFeePerGas: (*tktypes.HexUint256)(maxPriorityFeePerGas),
 			MaxFeePerGas:         (*tktypes.HexUint256)(maxFeePerGas),
 		}

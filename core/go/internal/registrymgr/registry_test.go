@@ -29,6 +29,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
@@ -537,9 +538,9 @@ func TestHandleEventBatchOk(t *testing.T) {
 		StreamID:   uuid.New(),
 		StreamName: "registry_1",
 		BatchID:    uuid.New(),
-		Events: []*blockindexer.EventWithData{
+		Events: []*pldapi.EventWithData{
 			{
-				IndexedEvent: &blockindexer.IndexedEvent{
+				IndexedEvent: &pldapi.IndexedEvent{
 					BlockNumber:      12345,
 					TransactionIndex: 10,
 					LogIndex:         20,
@@ -579,8 +580,8 @@ func TestHandleEventBatchError(t *testing.T) {
 
 	batch := &blockindexer.EventDeliveryBatch{
 		BatchID: uuid.New(),
-		Events: []*blockindexer.EventWithData{{
-			IndexedEvent: &blockindexer.IndexedEvent{
+		Events: []*pldapi.EventWithData{{
+			IndexedEvent: &pldapi.IndexedEvent{
 				BlockNumber:      12345,
 				TransactionIndex: 10,
 				LogIndex:         20,

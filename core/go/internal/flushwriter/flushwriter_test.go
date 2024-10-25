@@ -82,15 +82,17 @@ func writeTestOps(ctx context.Context, w *writer[*testWritable, *testResult], co
 }
 
 func TestSuccessfulWriteBatch(t *testing.T) {
+	dbTXResult := make(chan error, 1)
+
 	ctx, w, mdb, done := newTestWriter(t, &pldconf.FlushWriterConfig{
 		BatchMaxSize: confutil.P(1000),
 	},
-		func(ctx context.Context, tx *gorm.DB, values []*testWritable) ([]Result[*testResult], error) {
+		func(ctx context.Context, tx *gorm.DB, values []*testWritable) (func(error), []Result[*testResult], error) {
 			results := make([]Result[*testResult], len(values))
 			for i, v := range values {
 				results[i] = Result[*testResult]{R: &testResult{output: v.input}}
 			}
-			return results, nil
+			return func(err error) { dbTXResult <- err }, results, nil
 		},
 	)
 	defer done()
@@ -104,19 +106,23 @@ func TestSuccessfulWriteBatch(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, fmt.Sprintf("write_%.3d", i), r.output)
 	}
+
+	require.Nil(t, <-dbTXResult)
 }
 
 func TestBatchTimeout(t *testing.T) {
+	dbTXResult := make(chan error, 1)
+
 	ctx, w, mdb, done := newTestWriter(t, &pldconf.FlushWriterConfig{
 		BatchMaxSize: confutil.P(1000),
 		BatchTimeout: confutil.P("10ms"),
 	},
-		func(ctx context.Context, tx *gorm.DB, values []*testWritable) ([]Result[*testResult], error) {
+		func(ctx context.Context, tx *gorm.DB, values []*testWritable) (func(error), []Result[*testResult], error) {
 			results := make([]Result[*testResult], len(values))
 			for i, v := range values {
 				results[i] = Result[*testResult]{R: &testResult{output: v.input}}
 			}
-			return results, nil
+			return func(err error) { dbTXResult <- err }, results, nil
 		},
 	)
 	defer done()
@@ -126,6 +132,9 @@ func TestBatchTimeout(t *testing.T) {
 
 	op := w.Queue(ctx, &testWritable{input: "for timeout"})
 	<-op.Flushed()
+
+	require.Nil(t, <-dbTXResult)
+
 }
 
 func TestShutdownNowInBatchWait(t *testing.T) {
@@ -140,11 +149,15 @@ func TestShutdownNowInBatchWait(t *testing.T) {
 }
 
 func TestBadResult(t *testing.T) {
+	dbTXResult := make(chan error, 1)
+
 	ctx, w, mdb, done := newTestWriter(t, &pldconf.FlushWriterConfig{
 		BatchMaxSize: confutil.P(1000),
 	},
-		func(ctx context.Context, tx *gorm.DB, values []*testWritable) ([]Result[*testResult], error) {
-			return make([]Result[*testResult], len(values)-1), nil
+		func(ctx context.Context, tx *gorm.DB, values []*testWritable) (func(error), []Result[*testResult], error) {
+			return func(err error) { dbTXResult <- err },
+				make([]Result[*testResult], len(values)-1),
+				nil
 		},
 	)
 	defer done()
@@ -157,6 +170,9 @@ func TestBadResult(t *testing.T) {
 		_, err := op.WaitFlushed(ctx)
 		assert.Regexp(t, "PD012301", err)
 	}
+
+	// Note we still dispatch the nil error regarding the DB transaction to the DB result callback
+	require.NoError(t, <-dbTXResult)
 }
 
 func TestBadOp(t *testing.T) {
@@ -171,14 +187,17 @@ func TestBadOp(t *testing.T) {
 }
 
 func TestIndividualError(t *testing.T) {
+	dbTXResult := make(chan error, 1)
+
 	ctx, w, mdb, done := newTestWriter(t, &pldconf.FlushWriterConfig{
 		BatchMaxSize: confutil.P(1000),
 	},
-		func(ctx context.Context, tx *gorm.DB, values []*testWritable) ([]Result[*testResult], error) {
-			return []Result[*testResult]{
-				{R: &testResult{output: "worked"}},
-				{Err: fmt.Errorf("failed")},
-			}, nil
+		func(ctx context.Context, tx *gorm.DB, values []*testWritable) (func(error), []Result[*testResult], error) {
+			return func(err error) { dbTXResult <- err },
+				[]Result[*testResult]{
+					{R: &testResult{output: "worked"}},
+					{Err: fmt.Errorf("failed")},
+				}, nil
 		},
 	)
 	defer done()
@@ -194,14 +213,16 @@ func TestIndividualError(t *testing.T) {
 	require.EqualError(t, err, "failed")
 	assert.Nil(t, r)
 
+	require.NoError(t, <-dbTXResult)
+
 }
 
 func TestWaitFlushTimeout(t *testing.T) {
 	ctx, w, _, done := newTestWriter(t, &pldconf.FlushWriterConfig{
 		BatchMaxSize: confutil.P(1000),
 	},
-		func(ctx context.Context, tx *gorm.DB, values []*testWritable) ([]Result[*testResult], error) {
-			return nil, fmt.Errorf("should not make it back to call")
+		func(ctx context.Context, tx *gorm.DB, values []*testWritable) (func(error), []Result[*testResult], error) {
+			return nil, nil, fmt.Errorf("should not make it back to call")
 		},
 	)
 	done()
@@ -210,14 +231,15 @@ func TestWaitFlushTimeout(t *testing.T) {
 		_, err := op.WaitFlushed(ctx)
 		assert.Regexp(t, "PD010301|PD012300", err)
 	}
+
 }
 
 func TestFailedWriteBatch(t *testing.T) {
 	ctx, w, mdb, done := newTestWriter(t, &pldconf.FlushWriterConfig{
 		BatchMaxSize: confutil.P(1000),
 	},
-		func(ctx context.Context, tx *gorm.DB, values []*testWritable) ([]Result[*testResult], error) {
-			return nil, fmt.Errorf("pop")
+		func(ctx context.Context, tx *gorm.DB, values []*testWritable) (func(error), []Result[*testResult], error) {
+			return nil, nil, fmt.Errorf("pop")
 		},
 	)
 	defer done()

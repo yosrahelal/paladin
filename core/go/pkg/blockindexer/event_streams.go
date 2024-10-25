@@ -27,6 +27,7 @@ import (
 
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -44,6 +45,7 @@ type eventStream struct {
 	blocks         chan *eventStreamBlock
 	dispatch       chan *eventDispatch
 	handler        InternalStreamCallback
+	serializer     *abi.Serializer
 	detectorDone   chan struct{}
 	dispatcherDone chan struct{}
 }
@@ -57,7 +59,7 @@ type eventBatch struct {
 }
 
 type eventDispatch struct {
-	event       *EventWithData
+	event       *pldapi.EventWithData
 	lastInBlock bool
 }
 
@@ -125,7 +127,9 @@ func (bi *blockIndexer) upsertInternalEventStream(ctx context.Context, ies *Inte
 			return nil, i18n.NewError(ctx, msgs.MsgBlockIndexerESSourceError)
 		}
 		for i := range existing[0].Sources {
-			if err := tktypes.ABIsMustMatch(ctx, existing[0].Sources[i].ABI, def.Sources[i].ABI); err != nil {
+			if err := tktypes.ABIsMustMatch(ctx, existing[0].Sources[i].ABI, def.Sources[i].ABI,
+				abi.Event, // we only need to compare on the events
+			); err != nil {
 				return nil, err
 			}
 			if !existing[0].Sources[i].Address.Equals(def.Sources[i].Address) {
@@ -184,6 +188,7 @@ func (bi *blockIndexer) initEventStream(ctx context.Context, definition *EventSt
 			signatures: make(map[string]bool),
 			blocks:     make(chan *eventStreamBlock, bi.esBlockDispatchQueueLength),
 			dispatch:   make(chan *eventDispatch, batchSize),
+			serializer: definition.Format.GetABISerializerIgnoreErrors(ctx),
 		}
 	}
 
@@ -289,7 +294,7 @@ func (es *eventStream) processCheckpoint() (int64, error) {
 }
 
 func (bi *blockIndexer) getHighestIndexedBlock(ctx context.Context) (*int64, error) {
-	var blocks []*IndexedBlock
+	var blocks []*pldapi.IndexedBlock
 	err := bi.retry.Do(ctx, func(attempt int) (retryable bool, err error) {
 		return true, bi.persistence.DB().
 			Table("indexed_blocks").
@@ -333,7 +338,7 @@ func (es *eventStream) detector() {
 		return
 	}
 
-	var lastCatchupEvent *IndexedEvent
+	var lastCatchupEvent *pldapi.IndexedEvent
 	var catchUpToBlock *eventStreamBlock
 	for {
 		// we wait to be told about a block from the chain, to see whether that is a block that
@@ -394,12 +399,12 @@ func (es *eventStream) detector() {
 
 func (es *eventStream) processNotifiedBlock(block *eventStreamBlock, fullBlock bool) {
 	for i, l := range block.events {
-		event := &EventWithData{
+		event := &pldapi.EventWithData{
 			IndexedEvent: es.bi.logToIndexedEvent(l),
 		}
 		// Only dispatch events that were completed by the validation against our ABI
 		for _, source := range es.definition.Sources {
-			if es.bi.matchLog(es.ctx, source.ABI, l, event, source.Address) {
+			if es.bi.matchLog(es.ctx, source.ABI, l, event, source.Address, es.serializer) {
 				es.sendToDispatcher(event,
 					// Can only move checkpoint past this block once we know we've processed the last one
 					fullBlock && i == (len(block.events)-1))
@@ -409,7 +414,7 @@ func (es *eventStream) processNotifiedBlock(block *eventStreamBlock, fullBlock b
 	}
 }
 
-func (es *eventStream) sendToDispatcher(event *EventWithData, lastInBlock bool) {
+func (es *eventStream) sendToDispatcher(event *pldapi.EventWithData, lastInBlock bool) {
 	log.L(es.ctx).Debugf("passing event to dispatcher %d/%d/%d (tx=%s,address=%s)", event.BlockNumber, event.TransactionIndex, event.LogIndex, event.TransactionHash, &event.Address)
 	select {
 	case es.dispatch <- &eventDispatch{event, lastInBlock}:
@@ -512,7 +517,7 @@ func (es *eventStream) runBatch(batch *eventBatch) error {
 
 }
 
-func (es *eventStream) processCatchupEventPage(lastCatchupEvent *IndexedEvent, checkpointBlock int64, catchUpToBlockNumber int64) (caughtUp bool, lastEvent *IndexedEvent, err error) {
+func (es *eventStream) processCatchupEventPage(lastCatchupEvent *pldapi.IndexedEvent, checkpointBlock int64, catchUpToBlockNumber int64) (caughtUp bool, lastEvent *pldapi.IndexedEvent, err error) {
 
 	// We query up to the head of the chain as currently indexed, with a limit on the events
 	// we return for enrichment/processing.
@@ -524,7 +529,7 @@ func (es *eventStream) processCatchupEventPage(lastCatchupEvent *IndexedEvent, c
 	// they match as signatures in ethereum are not precise (due to the "indexed" flag not being included)
 	// That also means we can do an efficient IN query on the sig H/L
 	pageSize := es.bi.esCatchUpQueryPageSize
-	var page []*IndexedEvent
+	var page []*pldapi.IndexedEvent
 	err = es.bi.retry.Do(es.ctx, func(attempt int) (retryable bool, err error) {
 		db := es.bi.persistence.DB()
 		q := db.
@@ -557,9 +562,9 @@ func (es *eventStream) processCatchupEventPage(lastCatchupEvent *IndexedEvent, c
 
 	// Because we're in catch up here, we have to query the chain ourselves for the receipts.
 	// That's done by transaction (not by event) - so we've got to group
-	byTxID := make(map[string][]*EventWithData)
+	byTxID := make(map[string][]*pldapi.EventWithData)
 	for _, event := range page {
-		byTxID[event.TransactionHash.String()] = append(byTxID[event.TransactionHash.String()], &EventWithData{
+		byTxID[event.TransactionHash.String()] = append(byTxID[event.TransactionHash.String()], &pldapi.EventWithData{
 			IndexedEvent: event,
 			// Leave Address and Data as that's what we'll fill in, if it works
 		})
@@ -579,7 +584,7 @@ func (es *eventStream) processCatchupEventPage(lastCatchupEvent *IndexedEvent, c
 		for _, _source := range es.definition.Sources {
 			source := _source // not safe to pass loop pointer
 			go func() {
-				enrichments <- es.bi.enrichTransactionEvents(es.ctx, source.ABI, source.Address, tx, events, true /* retry indefinitely */)
+				enrichments <- es.bi.enrichTransactionEvents(es.ctx, source.ABI, source.Address, tx, events, es.serializer, true /* retry indefinitely */)
 			}()
 		}
 	}

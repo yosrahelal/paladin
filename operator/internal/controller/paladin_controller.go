@@ -670,13 +670,17 @@ func (r *PaladinReconciler) generatePaladinSigners(ctx context.Context, node *co
 			return fmt.Errorf("only one signer currently supported")
 		}
 
-		// TODO: This should resolve the keystore by "name" once we have the full key store config in Paladin
-		pldSigner := &pldConf.Signer
+		wallet := &pldconf.WalletConfig{
+			Name:        s.Name,
+			SignerType:  pldconf.WalletSignerTypeEmbedded,
+			KeySelector: s.KeySelector,
+			Signer:      &pldconf.SignerConfig{},
+		}
 
 		// Upsert a secret if we've been asked to. We use a mnemonic in this case (rather than directly generating a 32byte seed)
 		if s.Type == corev1alpha1.SignerType_AutoHDWallet {
-			pldSigner.KeyDerivation.Type = pldconf.KeyDerivationTypeBIP32
-			pldSigner.KeyDerivation.SeedKeyPath = pldconf.SigningKeyConfigEntry{Name: "seed"}
+			wallet.Signer.KeyDerivation.Type = pldconf.KeyDerivationTypeBIP32
+			wallet.Signer.KeyDerivation.SeedKeyPath = pldconf.SigningKeyConfigEntry{Name: "seed"}
 			if err := r.generateBIP39SeedSecretIfNotExist(ctx, node, s.Secret); err != nil {
 				return err
 			}
@@ -684,8 +688,11 @@ func (r *PaladinReconciler) generatePaladinSigners(ctx context.Context, node *co
 
 		// Note we update the fields we are responsible for, rather than creating the whole object
 		// So detailed configuration can be provided in the config YAML
-		pldSigner.KeyStore.Type = pldconf.KeyStoreTypeStatic
-		pldSigner.KeyStore.Static.File = fmt.Sprintf("/keystores/%s/keys.yaml", s.Name)
+		wallet.Signer.KeyStore.Type = pldconf.KeyStoreTypeStatic
+		wallet.Signer.KeyStore.Static.File = fmt.Sprintf("/keystores/%s/keys.yaml", s.Name)
+
+		// Add to the end of the list in the order defined
+		pldConf.Wallets = append(pldConf.Wallets, wallet)
 
 	}
 
@@ -789,7 +796,7 @@ func (r *PaladinReconciler) generatePaladinRegistries(ctx context.Context, node 
 		pldConf.Registries[reg.Name] = &pldconf.RegistryConfig{
 			Plugin: r.mapPluginConfig(reg.Spec.Plugin),
 			Transports: pldconf.RegistryTransportsConfig{
-				Enabled:           &reg.Spec.Transports.Enabled,
+				Enabled:           reg.Spec.Transports.Enabled,
 				RequiredPrefix:    reg.Spec.Transports.RequiredPrefix,
 				HierarchySplitter: reg.Spec.Transports.HierarchySplitter,
 				PropertyRegexp:    reg.Spec.Transports.PropertyRegexp,
@@ -1010,23 +1017,21 @@ func (r *PaladinReconciler) generateServiceTemplate(node *corev1alpha1.Paladin, 
 	if svc.Spec.Type == "" {
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
 	}
-	// Set ports unless CR has taken ownership
-	if svc.Spec.Ports == nil {
-		mergeServicePorts(&svc.Spec, []corev1.ServicePort{
-			{
-				Name:       "rpc-http",
-				Port:       8548,
-				TargetPort: intstr.FromInt(8548),
-				Protocol:   corev1.ProtocolTCP,
-			},
-			{
-				Name:       "rpc-ws",
-				Port:       8549,
-				TargetPort: intstr.FromInt(8549),
-				Protocol:   corev1.ProtocolTCP,
-			},
-		})
-	}
+	// Merge our required ports with the overrides the user has provided
+	mergeServicePorts(&svc.Spec, []corev1.ServicePort{
+		{
+			Name:       "rpc-http",
+			Port:       8548,
+			TargetPort: intstr.FromInt(8548),
+			Protocol:   corev1.ProtocolTCP,
+		},
+		{
+			Name:       "rpc-ws",
+			Port:       8549,
+			TargetPort: intstr.FromInt(8549),
+			Protocol:   corev1.ProtocolTCP,
+		},
+	})
 	return svc
 }
 
@@ -1049,8 +1054,6 @@ func (r *PaladinReconciler) generateSecretTemplate(node *corev1alpha1.Paladin, n
 
 func (r *PaladinReconciler) getLabels(node *corev1alpha1.Paladin, extraLabels ...map[string]string) map[string]string {
 	l := make(map[string]string, len(r.config.Paladin.Labels))
-	l["app"] = generatePaladinName(node.Name)
-
 	for k, v := range r.config.Paladin.Labels {
 		l[k] = v
 	}
@@ -1059,6 +1062,7 @@ func (r *PaladinReconciler) getLabels(node *corev1alpha1.Paladin, extraLabels ..
 			l[k] = v
 		}
 	}
+	l["app.kubernetes.io/name"] = generatePaladinName(node.Name)
 	return l
 }
 
@@ -1083,7 +1087,7 @@ func getPaladinURLEndpoint(ctx context.Context, c client.Client, name, namespace
 		for _, p := range svc.Spec.Ports {
 			if p.Name == "rpc-http" {
 				if p.NodePort == 0 {
-					return "", fmt.Errorf("cannot use nodePort for %s rpc-http port as not set", generatePaladinName(name))
+					return "", fmt.Errorf("cannot use nodePort for %s rpc-http port as not cset", generatePaladinName(name))
 				}
 				return fmt.Sprintf("http://localhost:%d", p.NodePort), nil
 			}

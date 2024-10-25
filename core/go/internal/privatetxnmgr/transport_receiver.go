@@ -22,8 +22,8 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 )
 
-// If we had lots of these we would probably want to centralise the assignment of the constants to avoid duplication
-// but currently there is only 2 ( the other being IDENTITIY_RESOLVER_DESTINATION )
+// If we had lots of these we would probably want to centralize the assignment of the constants to avoid duplication
+// but currently there is only 2 ( the other being IDENTITY_RESOLVER_DESTINATION )
 const PRIVATE_TX_MANAGER_DESTINATION = "private-tx-manager"
 
 func (p *privateTxManager) Destination() string {
@@ -32,9 +32,9 @@ func (p *privateTxManager) Destination() string {
 
 func (p *privateTxManager) ReceiveTransportMessage(ctx context.Context, message *components.TransportMessage) {
 	//TODO this need to become an ultra low latency, non blocking, handover to the event loop thread.
-	// need some thought on how to handle errors, retries, buffering, swapping idle orchestrators in and out of memory etc...
+	// need some thought on how to handle errors, retries, buffering, swapping idle sequencers in and out of memory etc...
 
-	//Send the event to the orchestrator for the contract and any transaction manager for the signing key
+	//Send the event to the sequencer for the contract and any transaction manager for the signing key
 	messagePayload := message.Payload
 	replyToDestination := message.ReplyTo
 
@@ -43,7 +43,8 @@ func (p *privateTxManager) ReceiveTransportMessage(ctx context.Context, message 
 		go p.handleEndorsementRequest(ctx, messagePayload, replyToDestination)
 	case "EndorsementResponse":
 		go p.handleEndorsementResponse(ctx, messagePayload)
-
+	case "DelegationRequest":
+		go p.handleDelegationRequest(ctx, messagePayload)
 	default:
 		log.L(ctx).Errorf("Unknown message type: %s", message.MessageType)
 	}

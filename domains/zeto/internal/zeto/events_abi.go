@@ -19,7 +19,7 @@ import (
 	_ "embed"
 
 	"github.com/hyperledger/firefly-signer/pkg/abi"
-	"github.com/kaleido-io/paladin/toolkit/pkg/domain"
+	"github.com/kaleido-io/paladin/toolkit/pkg/solutils"
 )
 
 //go:embed abis/IZeto.json
@@ -29,14 +29,14 @@ var zetoEncryptedABIBytes []byte // From "gradle copySolidity"
 
 func getAllZetoEventAbis() abi.ABI {
 	var events abi.ABI
-	contract := domain.LoadBuild(zetoABIBytes)
+	contract := solutils.MustLoadBuild(zetoABIBytes)
 	events = buildEvents(events, contract)
-	contract = domain.LoadBuild(zetoEncryptedABIBytes)
+	contract = solutils.MustLoadBuild(zetoEncryptedABIBytes)
 	events = buildEvents(events, contract)
 	return events
 }
 
-func buildEvents(events abi.ABI, contract *domain.SolidityBuild) abi.ABI {
+func buildEvents(events abi.ABI, contract *solutils.SolidityBuild) abi.ABI {
 	for _, entry := range contract.ABI {
 		if entry.Type == abi.Event {
 			events = append(events, entry)

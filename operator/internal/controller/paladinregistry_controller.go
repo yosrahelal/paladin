@@ -114,5 +114,7 @@ func (r *PaladinRegistryReconciler) trackContractDeploymentAndRequeue(ctx contex
 func (r *PaladinRegistryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.PaladinRegistry{}).
+		// Reconcile when any contract deployment changes status
+		Watches(&corev1alpha1.SmartContractDeployment{}, reconcileAll(PaladinRegistryCRMap, r.Client), reconcileEveryChange()).
 		Complete(r)
 }

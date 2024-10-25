@@ -31,6 +31,7 @@ import (
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
@@ -223,9 +224,10 @@ func newTestDomain(t *testing.T, realDB bool, domainConfig *prototk.DomainConfig
 	} else {
 		mdc = componentmocks.NewDomainContext(t)
 		mdc.On("Ctx").Return(ctx).Maybe()
+		mdc.On("Info").Return(components.DomainContextInfo{ID: uuid.New()}).Maybe()
 		mdc.On("Close").Return()
 		c = tp.d.newInFlightDomainRequest(dm.persistence.DB(), mdc)
-		mc.stateStore.On("NewDomainContext", mock.Anything, tp.d, mock.Anything).Return(mdc).Maybe()
+		mc.stateStore.On("NewDomainContext", mock.Anything, tp.d, mock.Anything, mock.Anything).Return(mdc).Maybe()
 	}
 
 	return &testDomainContext{
@@ -287,12 +289,17 @@ func TestDomainInitStates(t *testing.T) {
 	assert.NotNil(t, td.d.Configuration().BaseLedgerSubmitConfig)
 
 }
+func mockUpsertABIOk(mc *mockComponents) {
+	mc.txManager.On("UpsertABI", mock.Anything, mock.Anything).Return(&pldapi.StoredABI{
+		Hash: tktypes.Bytes32(tktypes.RandBytes(32)),
+	}, nil)
+}
 
 func TestDomainInitStatesWithEvents(t *testing.T) {
 
 	domainConf := goodDomainConf()
 	domainConf.AbiEventsJson = fakeCoinEventsABI
-	td, done := newTestDomain(t, true, domainConf)
+	td, done := newTestDomain(t, true, domainConf, mockUpsertABIOk)
 	defer done()
 
 	assert.Nil(t, td.d.initError.Load())
@@ -364,9 +371,28 @@ func TestDomainInitBadEventsABI(t *testing.T) {
 				"inputs": [{"type": "verywrong"}]
 			}
 		]`,
-	})
+	}, mockUpsertABIOk)
 	defer done()
 	assert.Regexp(t, "FF22025", *td.d.initError.Load())
+	assert.False(t, td.tp.initialized.Load())
+}
+
+func TestDomainInitUpsertEventsABIFail(t *testing.T) {
+	td, done := newTestDomain(t, false, &prototk.DomainConfig{
+		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
+		AbiStateSchemasJson:    []string{},
+		AbiEventsJson: `[
+			{
+				"type": "event",
+				"name": "bad",
+				"inputs": [{"type": "verywrong"}]
+			}
+		]`,
+	}, func(mc *mockComponents) {
+		mc.txManager.On("UpsertABI", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+	})
+	defer done()
+	assert.Regexp(t, "pop", *td.d.initError.Load())
 	assert.False(t, td.tp.initialized.Load())
 }
 
@@ -375,7 +401,7 @@ func TestDomainInitStreamFail(t *testing.T) {
 		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
 		AbiStateSchemasJson:    []string{},
 		AbiEventsJson:          fakeCoinEventsABI,
-	}, func(mc *mockComponents) {
+	}, mockUpsertABIOk, func(mc *mockComponents) {
 		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()
@@ -480,7 +506,7 @@ func TestDomainFindAvailableStatesFail(t *testing.T) {
 	defer done()
 
 	schemaID := tktypes.Bytes32(tktypes.RandBytes(32))
-	td.mdc.On("FindAvailableStates", schemaID, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
+	td.mdc.On("FindAvailableStates", mock.Anything, schemaID, mock.Anything).Return(nil, nil, fmt.Errorf("pop"))
 
 	assert.Nil(t, td.d.initError.Load())
 	_, err := td.d.FindAvailableStates(td.ctx, &prototk.FindAvailableStatesRequest{
@@ -501,7 +527,7 @@ func storeTestState(t *testing.T, td *testDomainContext, txID uuid.UUID, amount 
 	require.NoError(t, err)
 
 	// Call the real statestore
-	_, err = td.c.dCtx.UpsertStates(&components.StateUpsert{
+	_, err = td.c.dCtx.UpsertStates(td.c.dbTX, &components.StateUpsert{
 		SchemaID:  tktypes.MustParseBytes32(td.tp.stateSchemas[0].Id),
 		Data:      stateJSON,
 		CreatedBy: &txID,
@@ -1007,11 +1033,11 @@ func TestRecoverSignerFailCases(t *testing.T) {
 }
 
 func TestMapStateLockType(t *testing.T) {
-	for _, pldType := range components.StateLockType("").Options() {
-		assert.NotNil(t, mapStateLockType(components.StateLockType(pldType)))
+	for _, pldType := range pldapi.StateLockType("").Options() {
+		assert.NotNil(t, mapStateLockType(pldapi.StateLockType(pldType)))
 	}
 	assert.Panics(t, func() {
-		_ = mapStateLockType(components.StateLockType("wrong"))
+		_ = mapStateLockType(pldapi.StateLockType("wrong"))
 	})
 }
 

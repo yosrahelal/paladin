@@ -26,6 +26,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
@@ -108,14 +109,14 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, components.SchemaTypeABI, as.Persisted().Type)
-	assert.Equal(t, components.SchemaTypeABI, as.Type())
+	assert.Equal(t, pldapi.SchemaTypeABI, as.Persisted().Type.V())
+	assert.Equal(t, pldapi.SchemaTypeABI, as.Type())
 	assert.NotNil(t, as.definition)
 	assert.Equal(t, "type=MyStruct(uint256 field1,string field2,int64 field3,bool field4,address field5,int256 field6,bytes field7,uint32 field8,string field9),labels=[field1,field2,field3,field4,field5,field6,field7,field8]", as.Persisted().Signature)
 	cacheKey := "domain1/0xcf41493c8bb9652d1483ee6cb5122efbec6fbdf67cc27363ba5b030b59244cad"
 	assert.Equal(t, cacheKey, schemaCacheKey(as.Persisted().DomainName, as.Persisted().ID))
 
-	err = ss.persistSchemas(ctx, ss.p.DB(), []*components.SchemaPersisted{as.SchemaPersisted})
+	err = ss.persistSchemas(ctx, ss.p.DB(), []*pldapi.Schema{as.Schema})
 	require.NoError(t, err)
 	schemaID := as.Persisted().ID
 	contractAddress := tktypes.RandAddress()
@@ -142,7 +143,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	})
 	require.NoError(t, err)
 	state1 := states[0]
-	assert.Equal(t, []*components.StateLabel{
+	assert.Equal(t, []*pldapi.StateLabel{
 		// uint256 written as zero padded string
 		{DomainName: "domain1", State: state1.ID, Label: "field1", Value: "0000000000000000000000000123456789012345678901234567890123456789"},
 		// string written as it is
@@ -155,7 +156,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		// bytes are just bytes
 		{DomainName: "domain1", State: state1.ID, Label: "field7", Value: "feedbeef"},
 	}, state1.Labels)
-	assert.Equal(t, []*components.StateInt64Label{
+	assert.Equal(t, []*pldapi.StateInt64Label{
 		// int64 can just be stored directly in a numeric index
 		{DomainName: "domain1", State: state1.ID, Label: "field3", Value: 42},
 		// bool also gets an efficient numeric index - we don't attempt to allocate anything smaller than int64 to this
@@ -179,12 +180,12 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	}`, string(state1.Data))
 
 	// Second should succeed, but not do anything
-	err = ss.persistSchemas(ctx, ss.p.DB(), []*components.SchemaPersisted{as.SchemaPersisted})
+	err = ss.persistSchemas(ctx, ss.p.DB(), []*pldapi.Schema{as.Schema})
 	require.NoError(t, err)
 	schemaID = as.ID()
 
 	getValidate := func() {
-		as1, err := ss.GetSchema(ctx, as.Persisted().DomainName, schemaID, nil, true)
+		as1, err := ss.GetSchema(ctx, ss.p.DB(), as.Persisted().DomainName, schemaID, true)
 		require.NoError(t, err)
 		assert.NotNil(t, as1)
 		as1Sig, err := as1.(*abiSchema).FullSignature(ctx)
@@ -203,7 +204,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 	getValidate()
 
 	// Get the state back too
-	state1a, err := ss.GetState(ctx, as.Persisted().DomainName, *contractAddress, state1.ID, true, true)
+	state1a, err := ss.GetState(ctx, ss.p.DB(), as.Persisted().DomainName, *contractAddress, state1.ID, true, true)
 	require.NoError(t, err)
 	assert.Equal(t, state1, state1a)
 
@@ -222,7 +223,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		]
 	}`), &query)
 	require.NoError(t, err)
-	states, err = ss.FindStates(ctx, as.Persisted().DomainName, *contractAddress, schemaID, query, "all")
+	states, err = ss.FindContractStates(ctx, ss.p.DB(), as.Persisted().DomainName, *contractAddress, schemaID, query, "all")
 	require.NoError(t, err)
 	assert.Len(t, states, 1)
 
@@ -233,7 +234,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		]
 	}`), &query)
 	require.NoError(t, err)
-	states, err = ss.FindStates(ctx, as.Persisted().DomainName, *contractAddress, schemaID, query, "all")
+	states, err = ss.FindContractStates(ctx, ss.p.DB(), as.Persisted().DomainName, *contractAddress, schemaID, query, "all")
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 
@@ -244,7 +245,7 @@ func TestStoreRetrieveABISchema(t *testing.T) {
 		]
 	}`), &query)
 	require.NoError(t, err)
-	states, err = ss.FindStates(ctx, as.Persisted().DomainName, *contractAddress, schemaID, query, "all")
+	states, err = ss.FindContractStates(ctx, ss.p.DB(), as.Persisted().DomainName, *contractAddress, schemaID, query, "all")
 	require.NoError(t, err)
 	assert.Len(t, states, 0)
 }
@@ -275,9 +276,9 @@ func TestGetSchemaInvalidJSON(t *testing.T) {
 
 	mdb.ExpectQuery("SELECT.*schemas").WillReturnRows(sqlmock.NewRows(
 		[]string{"type", "content"},
-	).AddRow(components.SchemaTypeABI, "!!! { bad json"))
+	).AddRow(pldapi.SchemaTypeABI, "!!! { bad json"))
 
-	_, err := ss.GetSchema(ctx, "domain1", tktypes.Bytes32Keccak(([]byte)("test")), nil, true)
+	_, err := ss.GetSchema(ctx, ss.p.DB(), "domain1", tktypes.Bytes32Keccak(([]byte)("test")), true)
 	assert.Regexp(t, "PD010113", err)
 }
 
@@ -286,7 +287,7 @@ func TestRestoreABISchemaInvalidType(t *testing.T) {
 	ctx, _, _, _, done := newDBMockStateManager(t)
 	defer done()
 
-	_, err := newABISchemaFromDB(ctx, &components.SchemaPersisted{
+	_, err := newABISchemaFromDB(ctx, &pldapi.Schema{
 		Definition: tktypes.RawJSON(`{}`),
 	})
 	assert.Regexp(t, "PD010114", err)
@@ -298,7 +299,7 @@ func TestRestoreABISchemaInvalidTypeTree(t *testing.T) {
 	ctx, _, _, _, done := newDBMockStateManager(t)
 	defer done()
 
-	_, err := newABISchemaFromDB(ctx, &components.SchemaPersisted{
+	_, err := newABISchemaFromDB(ctx, &pldapi.Schema{
 		Definition: tktypes.RawJSON(`{"type":"tuple","internalType":"struct MyType","components":[{"type":"wrong"}]}`),
 	})
 	assert.Regexp(t, "FF22025.*wrong", err)
@@ -424,7 +425,7 @@ func TestABISchemaProcessStateInvalidType(t *testing.T) {
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &components.SchemaPersisted{
+		Schema: &pldapi.Schema{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{
@@ -462,7 +463,7 @@ func TestABISchemaProcessStateLabelMissing(t *testing.T) {
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &components.SchemaPersisted{
+		Schema: &pldapi.Schema{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{
@@ -507,7 +508,7 @@ func TestABISchemaProcessStateBadValue(t *testing.T) {
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &components.SchemaPersisted{
+		Schema: &pldapi.Schema{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{
@@ -530,7 +531,7 @@ func TestABISchemaProcessStateMismatchValue(t *testing.T) {
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &components.SchemaPersisted{
+		Schema: &pldapi.Schema{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{
@@ -555,7 +556,7 @@ func TestABISchemaProcessStateEIP712Failure(t *testing.T) {
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &components.SchemaPersisted{
+		Schema: &pldapi.Schema{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{
@@ -580,7 +581,7 @@ func TestABISchemaProcessStateDataFailure(t *testing.T) {
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &components.SchemaPersisted{
+		Schema: &pldapi.Schema{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{
@@ -605,7 +606,7 @@ func TestABISchemaMapLabelResolverBadType(t *testing.T) {
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &components.SchemaPersisted{
+		Schema: &pldapi.Schema{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{
@@ -624,8 +625,8 @@ func TestABISchemaMapLabelResolverBadType(t *testing.T) {
 func TestABISchemaInsertCustomHashNoID(t *testing.T) {
 
 	as := &abiSchema{
-		SchemaPersisted: &components.SchemaPersisted{},
-		definition:      &abi.Parameter{Components: abi.ParameterArray{}},
+		Schema:     &pldapi.Schema{},
+		definition: &abi.Parameter{Components: abi.ParameterArray{}},
 	}
 	tc, err := as.definition.Components.TypeComponentTree()
 	require.NoError(t, err)
@@ -649,7 +650,7 @@ func TestABISchemaInsertStandardHashMismatch(t *testing.T) {
 
 func TestABISchemaInsertCustomHashBadData(t *testing.T) {
 	as := &abiSchema{
-		SchemaPersisted: &components.SchemaPersisted{},
+		Schema: &pldapi.Schema{},
 		definition: &abi.Parameter{Components: abi.ParameterArray{
 			{Type: "uint256", Name: "field1"},
 		}},
@@ -667,7 +668,7 @@ func TestABISchemaMapValueToLabelTypeErrors(t *testing.T) {
 	defer done()
 
 	as := &abiSchema{
-		SchemaPersisted: &components.SchemaPersisted{
+		Schema: &pldapi.Schema{
 			Labels: []string{"field1"},
 		},
 		definition: &abi.Parameter{

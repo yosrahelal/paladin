@@ -28,11 +28,12 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func (ss *stateManager) WritePreVerifiedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*components.StateUpsertOutsideContext) ([]*components.State, error) {
+func (ss *stateManager) WritePreVerifiedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*components.StateUpsertOutsideContext) ([]*pldapi.State, error) {
 
 	d, err := ss.domainManager.GetDomainByName(ctx, domainName)
 	if err != nil {
@@ -42,7 +43,7 @@ func (ss *stateManager) WritePreVerifiedStates(ctx context.Context, dbTX *gorm.D
 	return ss.processInsertStates(ctx, dbTX, d, states)
 }
 
-func (ss *stateManager) WriteReceivedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*components.StateUpsertOutsideContext) ([]*components.State, error) {
+func (ss *stateManager) WriteReceivedStates(ctx context.Context, dbTX *gorm.DB, domainName string, states []*components.StateUpsertOutsideContext) ([]*pldapi.State, error) {
 
 	d, err := ss.domainManager.GetDomainByName(ctx, domainName)
 	if err != nil {
@@ -72,11 +73,11 @@ func (ss *stateManager) WriteReceivedStates(ctx context.Context, dbTX *gorm.DB, 
 	return ss.processInsertStates(ctx, dbTX, d, states)
 }
 
-func (ss *stateManager) processInsertStates(ctx context.Context, dbTX *gorm.DB, d components.Domain, inStates []*components.StateUpsertOutsideContext) (processedStates []*components.State, err error) {
+func (ss *stateManager) processInsertStates(ctx context.Context, dbTX *gorm.DB, d components.Domain, inStates []*components.StateUpsertOutsideContext) (processedStates []*pldapi.State, err error) {
 
-	processedStates = make([]*components.State, len(inStates))
+	processedStates = make([]*pldapi.State, len(inStates))
 	for i, inState := range inStates {
-		schema, err := ss.GetSchema(ctx, d.Name(), inState.SchemaID, dbTX, true)
+		schema, err := ss.GetSchema(ctx, dbTX, d.Name(), inState.SchemaID, true)
 		if err != nil {
 			return nil, err
 		}
@@ -96,9 +97,9 @@ func (ss *stateManager) processInsertStates(ctx context.Context, dbTX *gorm.DB, 
 	return processedStates, nil
 }
 
-func (ss *stateManager) writeStates(ctx context.Context, dbTX *gorm.DB, states []*components.State) (err error) {
-	var labels []*components.StateLabel
-	var int64Labels []*components.StateInt64Label
+func (ss *stateManager) writeStates(ctx context.Context, dbTX *gorm.DB, states []*pldapi.State) (err error) {
+	var labels []*pldapi.StateLabel
+	var int64Labels []*pldapi.StateInt64Label
 	for _, s := range states {
 		labels = append(labels, s.Labels...)
 		int64Labels = append(int64Labels, s.Int64Labels...)
@@ -139,12 +140,12 @@ func (ss *stateManager) writeStates(ctx context.Context, dbTX *gorm.DB, states [
 	return err
 }
 
-func (ss *stateManager) GetState(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, stateID tktypes.HexBytes, failNotFound, withLabels bool) (*components.State, error) {
-	q := ss.p.DB().Table("states")
+func (ss *stateManager) GetState(ctx context.Context, dbTX *gorm.DB, domainName string, contractAddress tktypes.EthAddress, stateID tktypes.HexBytes, failNotFound, withLabels bool) (*pldapi.State, error) {
+	q := dbTX.Table("states")
 	if withLabels {
 		q = q.Preload("Labels").Preload("Int64Labels")
 	}
-	var states []*components.State
+	var states []*pldapi.State
 	err := q.
 		Where("domain_name = ?", domainName).
 		Where("contract_address = ?", contractAddress).
@@ -197,26 +198,31 @@ func (ss *stateManager) labelSetFor(schema components.Schema) *trackingLabelSet 
 	return &tls
 }
 
-func (ss *stateManager) FindStates(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, query *query.QueryJSON, status StateStatusQualifier) (s []*components.State, err error) {
-	_, s, err = ss.findStates(ctx, domainName, contractAddress, schemaID, query, status)
+func (ss *stateManager) FindContractStates(ctx context.Context, dbTX *gorm.DB, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, query *query.QueryJSON, status pldapi.StateStatusQualifier) (s []*pldapi.State, err error) {
+	_, s, err = ss.findStates(ctx, dbTX, domainName, &contractAddress, schemaID, query, status)
+	return s, err
+}
+
+func (ss *stateManager) FindStates(ctx context.Context, dbTX *gorm.DB, domainName string, schemaID tktypes.Bytes32, query *query.QueryJSON, status pldapi.StateStatusQualifier) (s []*pldapi.State, err error) {
+	_, s, err = ss.findStates(ctx, dbTX, domainName, nil, schemaID, query, status)
 	return s, err
 }
 
 func (ss *stateManager) findStates(
 	ctx context.Context,
+	dbTX *gorm.DB,
 	domainName string,
-	contractAddress tktypes.EthAddress,
+	contractAddress *tktypes.EthAddress,
 	schemaID tktypes.Bytes32,
 	jq *query.QueryJSON,
-	status StateStatusQualifier,
+	status pldapi.StateStatusQualifier,
 	excluded ...tktypes.HexBytes,
-) (schema components.Schema, s []*components.State, err error) {
-	db := ss.p.DB()
-	whereClause, isPlainDB := status.whereClause(db)
+) (schema components.Schema, s []*pldapi.State, err error) {
+	whereClause, isPlainDB := whereClauseForQual(dbTX, status)
 	if isPlainDB {
-		return ss.findStatesCommon(ctx, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
-			q = q.Joins("Confirmed", db.Select("transaction")).
-				Joins("Spent", db.Select("transaction"))
+		return ss.findStatesCommon(ctx, dbTX, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
+			q = q.Joins("Confirmed", dbTX.Select("transaction")).
+				Joins("Spent", dbTX.Select("transaction"))
 
 			if len(excluded) > 0 {
 				q = q.Not(`"states"."id" IN(?)`, excluded)
@@ -228,7 +234,7 @@ func (ss *stateManager) findStates(
 		})
 	}
 
-	// We need to run it against the specified domain context
+	// Otherwise, we need to run it against the specified domain context
 	var dc components.DomainContext
 	dcID, err := uuid.Parse(string(status))
 	if err == nil {
@@ -239,25 +245,25 @@ func (ss *stateManager) findStates(
 	if err != nil {
 		return nil, nil, err
 	}
-	return dc.FindAvailableStates(schemaID, jq)
+	return dc.FindAvailableStates(dbTX, schemaID, jq)
 }
 
 func (ss *stateManager) findAvailableNullifiers(
 	ctx context.Context,
+	dbTX *gorm.DB,
 	domainName string,
-	contractAddress tktypes.EthAddress,
+	contractAddress *tktypes.EthAddress,
 	schemaID tktypes.Bytes32,
 	jq *query.QueryJSON,
 	spendingStates []tktypes.HexBytes,
 	spendingNullifiers []tktypes.HexBytes,
-) (schema components.Schema, s []*components.State, err error) {
-	return ss.findStatesCommon(ctx, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
-		db := ss.p.DB()
-		hasNullifier := db.Where(`"Nullifier"."id" IS NOT NULL`)
+) (schema components.Schema, s []*pldapi.State, err error) {
+	return ss.findStatesCommon(ctx, dbTX, domainName, contractAddress, schemaID, jq, func(q *gorm.DB) *gorm.DB {
+		hasNullifier := dbTX.Where(`"Nullifier"."id" IS NOT NULL`)
 
-		q = q.Joins("Confirmed", db.Select("transaction")).
-			Joins("Nullifier", db.Select(`"Nullifier"."id"`)).
-			Joins("Nullifier.Spent", db.Select("transaction")).
+		q = q.Joins("Confirmed", dbTX.Select("transaction")).
+			Joins("Nullifier", dbTX.Select(`"Nullifier"."id"`)).
+			Joins("Nullifier.Spent", dbTX.Select("transaction")).
 			Where(hasNullifier)
 
 		if len(spendingStates) > 0 {
@@ -269,7 +275,7 @@ func (ss *stateManager) findAvailableNullifiers(
 
 		// Scope to only unspent
 		q = q.Where(`"Nullifier__Spent"."transaction" IS NULL`).
-			Where(db.
+			Where(dbTX.
 				Or(`"Confirmed"."transaction" IS NOT NULL`),
 			)
 		return q
@@ -278,17 +284,18 @@ func (ss *stateManager) findAvailableNullifiers(
 
 func (ss *stateManager) findStatesCommon(
 	ctx context.Context,
+	dbTX *gorm.DB,
 	domainName string,
-	contractAddress tktypes.EthAddress,
+	contractAddress *tktypes.EthAddress,
 	schemaID tktypes.Bytes32,
 	jq *query.QueryJSON,
 	addQuery func(q *gorm.DB) *gorm.DB,
-) (schema components.Schema, s []*components.State, err error) {
+) (schema components.Schema, s []*pldapi.State, err error) {
 	if len(jq.Sort) == 0 {
 		jq.Sort = []string{".created"}
 	}
 
-	schema, err = ss.GetSchema(ctx, domainName, schemaID, nil, true)
+	schema, err = ss.GetSchema(ctx, dbTX, domainName, schemaID, true)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -296,8 +303,7 @@ func (ss *stateManager) findStatesCommon(
 	tracker := ss.labelSetFor(schema)
 
 	// Build the query
-	db := ss.p.DB()
-	q := filters.BuildGORM(ctx, jq, db.Table("states"), tracker)
+	q := filters.BuildGORM(ctx, jq, dbTX.Table("states"), tracker)
 	if q.Error != nil {
 		return nil, nil, q.Error
 	}
@@ -312,11 +318,13 @@ func (ss *stateManager) findStatesCommon(
 	}
 
 	q = q.Where("states.domain_name = ?", domainName).
-		Where("states.contract_address = ?", contractAddress).
 		Where("states.schema = ?", schema.Persisted().ID)
+	if contractAddress != nil {
+		q = q.Where("states.contract_address = ?", contractAddress)
+	}
 	q = addQuery(q)
 
-	var states []*components.State
+	var states []*pldapi.State
 	q = q.Find(&states)
 	if q.Error != nil {
 		return nil, nil, q.Error

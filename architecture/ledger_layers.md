@@ -84,4 +84,4 @@ For this reason a significant traditional Web 2.0 infrastructure layer is needed
 
 This is a combination of application runtimes specific to individual DApps, and middleware that facilitates core system integration, bridging, asset modelling and other high level functions.
 
-Paladin does not implement this layer, but is designed to provide high performance enterprise friendly APIs, Event streams, and data query interfaces, to enable application code to be built rapidly, and middleware projects such as Hyperledger FireFly to build upon.
+Paladin does not implement this layer, but is designed to provide high performance enterprise friendly APIs, Event streams, and data query interfaces, to enable application code to be built rapidly, and middleware projects such as Paladin to build upon.

@@ -52,11 +52,11 @@ func (wo *receivedStateWriteOperation) WriteKey() string {
 	return wo.DomainName
 }
 
-func (rsw *receivedStateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*receivedStateWriteOperation) ([]flushwriter.Result[*receivedStateWriterNoResult], error) {
+func (rsw *receivedStateWriter) runBatch(ctx context.Context, tx *gorm.DB, values []*receivedStateWriteOperation) (func(error), []flushwriter.Result[*receivedStateWriterNoResult], error) {
 	log.L(ctx).Debugf("receivedStateWriter:runBatch %d acknowledgements", len(values))
 
 	if len(values) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	stateUpserts := make([]*components.StateUpsertOutsideContext, len(values))
@@ -75,12 +75,16 @@ func (rsw *receivedStateWriter) runBatch(ctx context.Context, tx *gorm.DB, value
 	}
 
 	// We don't actually provide any result, so just build an array of nil results
-	return make([]flushwriter.Result[*receivedStateWriterNoResult], len(values)), err
+	return nil, make([]flushwriter.Result[*receivedStateWriterNoResult], len(values)), err
 
 }
 
 func (rsw *receivedStateWriter) Start() {
 	rsw.flushWriter.Start()
+}
+
+func (rsw *receivedStateWriter) Stop() {
+	rsw.flushWriter.Shutdown()
 }
 
 func (rsw *receivedStateWriter) QueueAndWait(ctx context.Context, domainName string, contractAddress tktypes.EthAddress, schemaID tktypes.Bytes32, stateDataJson tktypes.RawJSON) error {

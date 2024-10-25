@@ -1,502 +1,273 @@
-// Copyright © 2024 Kaleido, Inc.
-//
-// SPDX-License-Identifier: Apache-2.0
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * Copyright © 2024 Kaleido, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 package privatetxnmgr
 
 import (
 	"context"
+	"fmt"
 	"sync"
+	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
-	pb "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
+	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
+	"github.com/kaleido-io/paladin/core/internal/statedistribution"
+
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
+/*
+ * This file contains the lifecycle functions and the basic entry points to a sequencer.
+ * A sequencer can be created for a specific contract address and is responsible for maintaining an in-memory copy of the state of all inflight transactions for that contract.
+ * It is expected that there will never be more than one sequencer for any given contract address in memory at one time.
+ */
+type SequencerState string
+
+const (
+	// brand new sequencer
+	SequencerStateNew SequencerState = "new"
+	// sequencer running normally
+	SequencerStateRunning SequencerState = "running"
+	// sequencer is blocked and waiting for precondition to be fulfilled, e.g. pre-req tx blocking current stage
+	SequencerStateWaiting SequencerState = "waiting"
+	// transactions managed by an sequencer stuck in the same state
+	SequencerStateStale SequencerState = "stale"
+	// no transactions in a specific sequencer
+	SequencerStateIdle SequencerState = "idle"
+	// sequencer is paused
+	SequencerStatePaused SequencerState = "paused"
+	// sequencer is stopped
+	SequencerStateStopped SequencerState = "stopped"
+)
+
+var AllSequencerStates = []string{
+	string(SequencerStateNew),
+	string(SequencerStateRunning),
+	string(SequencerStateWaiting),
+	string(SequencerStateStale),
+	string(SequencerStateIdle),
+	string(SequencerStatePaused),
+	string(SequencerStateStopped),
+}
+
+type Sequencer struct {
+	ctx                     context.Context
+	persistenceRetryTimeout time.Duration
+
+	// each sequencer has its own go routine
+	initiated    time.Time     // when sequencer is created
+	evalInterval time.Duration // between how long the sequencer will do an evaluation to check & remove transactions that missed events
+
+	maxConcurrentProcess        int
+	incompleteTxProcessMapMutex sync.Mutex
+	incompleteTxSProcessMap     map[string]ptmgrtypes.TransactionFlow // a map of all known transactions that are not completed
+
+	processedTxIDs    map[string]bool // an internal record of completed transactions to handle persistence delays that causes reprocessing
+	sequencerLoopDone chan struct{}
+
+	// input channels
+	orchestrationEvalRequestChan chan bool
+	stopProcess                  chan bool // a channel to tell the current sequencer to stop processing all events and mark itself as to be deleted
+
+	// Metrics provided for fairness control in the controller
+	totalCompleted int64 // total number of transaction completed since initiated
+	state          SequencerState
+	stateEntryTime time.Time // when the sequencer entered the current state
+
+	staleTimeout time.Duration
+
+	pendingEvents chan ptmgrtypes.PrivateTransactionEvent
+
+	contractAddress     tktypes.EthAddress // the contract address managed by the current sequencer
+	nodeID              string
+	domainAPI           components.DomainSmartContract
+	components          components.AllComponents
+	endorsementGatherer ptmgrtypes.EndorsementGatherer
+	publisher           ptmgrtypes.Publisher
+	identityResolver    components.IdentityResolver
+	syncPoints          syncpoints.SyncPoints
+	stateDistributer    statedistribution.StateDistributer
+	transportWriter     ptmgrtypes.TransportWriter
+	graph               Graph
+	requestTimeout      time.Duration
+}
+
 func NewSequencer(
+	ctx context.Context,
 	nodeID string,
+	contractAddress tktypes.EthAddress,
+	sequencerConfig *pldconf.PrivateTxManagerSequencerConfig,
+	allComponents components.AllComponents,
+	domainAPI components.DomainSmartContract,
+	endorsementGatherer ptmgrtypes.EndorsementGatherer,
 	publisher ptmgrtypes.Publisher,
+	syncPoints syncpoints.SyncPoints,
+	identityResolver components.IdentityResolver,
+	stateDistributer statedistribution.StateDistributer,
 	transportWriter ptmgrtypes.TransportWriter,
+	requestTimeout time.Duration,
+) *Sequencer {
 
-) ptmgrtypes.Sequencer {
-	return &sequencer{
-		publisher:                   publisher,
-		nodeID:                      nodeID,
-		resolver:                    NewContentionResolver(),
-		graph:                       NewGraph(),
-		unconfirmedStatesByID:       make(map[string]*unconfirmedState),
-		unconfirmedTransactionsByID: make(map[string]*transaction),
-		stateSpenders:               make(map[string]string),
-		transportWriter:             transportWriter,
-		invalidTransactions:         make([]string, 0),
-	}
-}
+	newSequencer := &Sequencer{
+		ctx:                  log.WithLogField(ctx, "role", fmt.Sprintf("sequencer-%s", contractAddress)),
+		initiated:            time.Now(),
+		contractAddress:      contractAddress,
+		evalInterval:         confutil.DurationMin(sequencerConfig.EvaluationInterval, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Sequencer.EvaluationInterval),
+		maxConcurrentProcess: confutil.Int(sequencerConfig.MaxConcurrentProcess, *pldconf.PrivateTxManagerDefaults.Sequencer.MaxConcurrentProcess),
+		state:                SequencerStateNew,
+		stateEntryTime:       time.Now(),
 
-type blockingTransaction struct {
-	transactionID string
-	nodeID        string
-}
+		incompleteTxSProcessMap: make(map[string]ptmgrtypes.TransactionFlow),
+		persistenceRetryTimeout: confutil.DurationMin(sequencerConfig.PersistenceRetryTimeout, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Sequencer.PersistenceRetryTimeout),
 
-type blockedTransaction struct {
-	transactionID string
-	blockedBy     []blockingTransaction
-}
-
-// a delegatable transaction is one that has dependencies on one or more transactions and all of those transactions
-// are owned by one single other node
-type delegatableTransaction struct {
-	transactionID  string
-	delegateNodeId string
-}
-
-type unconfirmedState struct {
-	stateID              string
-	mintingTransactionID string
-}
-
-type transaction struct {
-	id               string
-	sequencingNodeID string
-	assemblerNodeID  string
-	endorsed         bool
-	inputStateIDs    []string
-	outputStateIDs   []string
-	signingAddress   string
-}
-
-type sequencer struct {
-	nodeID                      string
-	publisher                   ptmgrtypes.Publisher
-	resolver                    ptmgrtypes.ContentionResolver
-	dispatcher                  ptmgrtypes.Dispatcher
-	graph                       Graph
-	blockedTransactions         []*blockedTransaction // naive implementation of a list of blocked transaction TODO may need to make this a graph so that we can analyise knock on effects of unblocking a transaction but this simple list will do for now to prove out functional behaviour
-	unconfirmedStatesByID       map[string]*unconfirmedState
-	unconfirmedTransactionsByID map[string]*transaction
-	stateSpenders               map[string]string /// map of state hash to our recognized spender of that state
-	invalidTransactions         []string          // transactions that have been added but are no longer valid - e.g. maybe on of its dependencies has been re-assembled
-	lock                        sync.Mutex        //put one massive mutex around the whole sequencer for now.  We can optimize this later
-	transportWriter             ptmgrtypes.TransportWriter
-}
-
-func (s *sequencer) SetDispatcher(dispatcher ptmgrtypes.Dispatcher) {
-	s.dispatcher = dispatcher
-}
-
-func (s *sequencer) evaluateGraph(ctx context.Context) error {
-
-	dispatchableTransactions, err := s.graph.GetDispatchableTransactions(ctx)
-	if err != nil {
-		log.L(ctx).Errorf("Error getting dispatchable transactions: %s", err)
-		return err
-	}
-	if len(dispatchableTransactions) == 0 {
-		return nil
-	}
-	err = s.dispatcher.DispatchTransactions(ctx, dispatchableTransactions)
-	if err != nil {
-		log.L(ctx).Errorf("Error dispatching transaction: %s", err)
-		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, err)
-	}
-	//DispatchTransactions is a persistence point so we can remove the transactions from our graph now that they are dispatched
-	err = s.graph.RemoveTransactions(ctx, dispatchableTransactions)
-	if err != nil {
-		//TODO this is bad.  What can we do?
-		// probably need to add more precise error reporting to RemoveTransactions function
-		log.L(ctx).Errorf("Error removing dispatched transaction: %s", err)
-		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, err)
-	}
-	return nil
-}
-
-func (s *sequencer) getUnconfirmedDependencies(ctx context.Context, txn transaction) ([]*transaction, error) {
-	mintingTransactions := make([]*transaction, 0, len(txn.inputStateIDs))
-	for _, stateID := range txn.inputStateIDs {
-		unconfirmedState, ok := s.unconfirmedStatesByID[stateID]
-		if !ok {
-			//this state is already confirmed
-			//TODO should we verify this is the case and not just the case that we have not learned about it yet?
-			log.L(ctx).Debugf("State %s is already confirmed", stateID)
-			continue
-		}
-		mintingTransactionID := unconfirmedState.mintingTransactionID
-		mintingTransaction := s.unconfirmedTransactionsByID[mintingTransactionID]
-
-		if mintingTransaction != nil {
-			log.L(ctx).Debugf("Transaction %s is dependant on transaction %s on node %s", txn.id, mintingTransactionID, mintingTransaction.sequencingNodeID)
-			mintingTransactions = append(mintingTransactions, mintingTransaction)
-		}
-	}
-	return mintingTransactions, nil
-}
-
-func (s *sequencer) delegate(ctx context.Context, transactionId string, delegateNodeID string) error {
-	log.L(ctx).Infof("Delegating transaction %s to node %s", transactionId, delegateNodeID)
-
-	err := s.transportWriter.SendDelegateTransactionMessage(ctx, transactionId, delegateNodeID)
-	if err != nil {
-		log.L(ctx).Errorf("Error sending delegate transaction message: %s", err)
-		return err
+		staleTimeout:                 confutil.DurationMin(sequencerConfig.StaleTimeout, 1*time.Millisecond, *pldconf.PrivateTxManagerDefaults.Sequencer.StaleTimeout),
+		processedTxIDs:               make(map[string]bool),
+		orchestrationEvalRequestChan: make(chan bool, 1),
+		stopProcess:                  make(chan bool, 1),
+		pendingEvents:                make(chan ptmgrtypes.PrivateTransactionEvent, *pldconf.PrivateTxManagerDefaults.Sequencer.MaxPendingEvents),
+		nodeID:                       nodeID,
+		domainAPI:                    domainAPI,
+		components:                   allComponents,
+		endorsementGatherer:          endorsementGatherer,
+		publisher:                    publisher,
+		syncPoints:                   syncPoints,
+		identityResolver:             identityResolver,
+		stateDistributer:             stateDistributer,
+		transportWriter:              transportWriter,
+		graph:                        NewGraph(),
+		requestTimeout:               requestTimeout,
 	}
 
-	//update our local state to reflect that this transaction is now delegated
-	txn, ok := s.unconfirmedTransactionsByID[transactionId]
+	log.L(ctx).Debugf("NewSequencer for contract address %s created: %+v", newSequencer.contractAddress, newSequencer)
+
+	return newSequencer
+}
+
+func (s *Sequencer) abort(err error) {
+	log.L(s.ctx).Errorf("Sequencer aborting: %s", err)
+	s.stopProcess <- true
+
+}
+func (s *Sequencer) getTransactionProcessor(txID string) ptmgrtypes.TransactionFlow {
+	s.incompleteTxProcessMapMutex.Lock()
+	defer s.incompleteTxProcessMapMutex.Unlock()
+	transactionProcessor, ok := s.incompleteTxSProcessMap[txID]
 	if !ok {
-		//TODO could we recover from this error by adding the transaction to the map now?
-		log.L(ctx).Errorf("failed to find minting transaction %s", transactionId)
-		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, transactionId)
-	}
-	txn.sequencingNodeID = delegateNodeID
-	return nil
-}
-
-func (s *sequencer) blockTransaction(ctx context.Context, transactionId string, blockedBy []blockingTransaction) error {
-	s.blockedTransactions = append(s.blockedTransactions, &blockedTransaction{
-		transactionID: transactionId,
-		blockedBy:     blockedBy,
-	})
-	err := s.publisher.PublishTransactionBlockedEvent(ctx, transactionId)
-	if err != nil {
-		log.L(ctx).Errorf("Error publishing transaction blocked event: %s", err)
-		return err
-	}
-	return nil
-}
-
-func (s *sequencer) delegateIfAppropriate(ctx context.Context, transaction *transaction) (bool, error) {
-	//if the transaction has any dependencies on transactions that are being managed by other nodes,
-	//then we need to delegate this one to that remote node too
-	unconfirmedDependencies, err := s.getUnconfirmedDependencies(ctx, *transaction)
-	if err != nil {
-		log.L(ctx).Errorf("Error getting unconfirmed dependencies: %s", err)
-		return false, err
-	}
-
-	blockingNodeIDs := make(map[string]struct{})
-	blockedBy := make([]blockingTransaction, 0, len(unconfirmedDependencies))
-
-	for _, dependency := range unconfirmedDependencies {
-		blockingNodeIDs[dependency.sequencingNodeID] = struct{}{}
-		blockedBy = append(blockedBy, blockingTransaction{
-			transactionID: dependency.id,
-			nodeID:        dependency.sequencingNodeID,
-		})
-	}
-	keys := make([]string, 0, len(blockingNodeIDs))
-	for k := range blockingNodeIDs {
-		keys = append(keys, k)
-	}
-	if len(keys) > 1 {
-
-		// we have a dependency on transactions from multiple nodes
-		// we can't delegate this transaction to multiple nodes, so we need to wait for the dependencies to be resolved
-		log.L(ctx).Debugf("Transaction %s is blocked by transactions from multiple nodes %v", transaction.id, keys)
-		err := s.blockTransaction(ctx, transaction.id, blockedBy)
-
-		if err != nil {
-			log.L(ctx).Errorf("Error blocking transaction: %s", err)
-			return false, err
-		}
-		return true, nil
-	}
-	if len(keys) == 1 && keys[0] != s.nodeID {
-		// we are dependent on one other node so we can delegate
-		log.L(ctx).Debugf("Transaction %s is dependant on transaction(s). Delegating to node %s", transaction.id, keys[0])
-		err := s.delegate(ctx, transaction.id, keys[0])
-		if err != nil {
-			log.L(ctx).Errorf("Error delegating: %s", err)
-			return false, err
-		}
-
-		return true, nil
-
-	}
-	//otherwise there are no dependencies ( or they are all on the local node) so we can just add the transaction to the graph
-
-	return false, nil
-}
-
-func (s *sequencer) updateBlockedTransactions(event *pb.TransactionConfirmedEvent) {
-	for _, blockedTransaction := range s.blockedTransactions {
-		for i, dependency := range blockedTransaction.blockedBy {
-			if dependency.transactionID == event.TransactionId {
-				//TODO assuming the dependency transaction is only in the array once.  Can we assert this?
-				blockedTransaction.blockedBy = append(blockedTransaction.blockedBy[:i], blockedTransaction.blockedBy[i+1:]...)
-				continue
-			}
-		}
-	}
-}
-
-func (s *sequencer) findDelegatableTransactions() []delegatableTransaction {
-	delegatableTransactions := make([]delegatableTransaction, 0, len(s.blockedTransactions))
-	//if I have any transactions in blocked that are dependant on this confirmed transaction, then I need to re-evaluate them
-
-	for _, blockedTransaction := range s.blockedTransactions {
-		blockingNodeIDs := make(map[string]bool)
-
-		for _, dependency := range blockedTransaction.blockedBy {
-			blockingNodeIDs[dependency.nodeID] = true
-		}
-		keys := make([]string, 0, len(blockingNodeIDs))
-		for k := range blockingNodeIDs {
-			keys = append(keys, k)
-		}
-		if len(keys) > 1 {
-			// we still have a dependency on transactions from multiple nodes
-			// we can't delegate this transaction to multiple nodes, so we need to wait for the dependencies to be resolved
-			continue
-		}
-		if len(keys) == 1 && keys[0] != s.nodeID {
-			// we are dependent on one other node so we can delegate
-			delegatableTransactions = append(delegatableTransactions, delegatableTransaction{
-				transactionID:  blockedTransaction.transactionID,
-				delegateNodeId: keys[0],
-			})
-			continue
-
-		}
-		//otherwise there are no dependencies ( or they are all on the local node) so we can just add the transaction to the graph
-		//TODO - is there any scenario ( including timing conditions) where the number of blockedBy could be zero? and we just dispatch it ourselves rather than delegating it?
-	}
-	return delegatableTransactions
-}
-func (s *sequencer) acceptTransaction(ctx context.Context, transaction *transaction) error {
-	transaction.sequencingNodeID = s.nodeID
-
-	delegated, err := s.delegateIfAppropriate(ctx, transaction)
-	if err != nil {
-		log.L(ctx).Errorf("Error delegating transaction: %s", err)
-		return err
-	}
-	if delegated {
+		log.L(s.ctx).Errorf("Transaction processor not found for transaction ID %s", txID)
 		return nil
 	}
-
-	err = s.graph.AddTransaction(ctx, transaction.id, transaction.inputStateIDs, transaction.outputStateIDs)
-	if err != nil {
-		log.L(ctx).Errorf("Error adding transaction to graph: %s", err)
-		return err
-	}
-	err = s.evaluateGraph(ctx)
-	if err != nil {
-		log.L(ctx).Errorf("Error evaluating graph: %s", err)
-		return err
-	}
-	return nil
+	return transactionProcessor
 }
 
-func (s *sequencer) HandleTransactionAssembledEvent(ctx context.Context, event *pb.TransactionAssembledEvent) {
-	log.L(ctx).Infof("Received transaction assembled event: %s", event.String())
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	//Record the new transaction
-	s.unconfirmedTransactionsByID[event.TransactionId] = &transaction{
-		id:               event.TransactionId,
-		sequencingNodeID: event.NodeId, // assume it goes to its local sequencer until we hear otherwise
-		assemblerNodeID:  event.NodeId,
-		outputStateIDs:   event.OutputStateId,
-		inputStateIDs:    event.InputStateId,
-	}
-	for _, unconfirmedStateID := range event.OutputStateId {
-		s.unconfirmedStatesByID[unconfirmedStateID] = &unconfirmedState{
-			stateID:              unconfirmedStateID,
-			mintingTransactionID: event.TransactionId,
+func (s *Sequencer) removeTransactionProcessor(txID string) {
+	s.incompleteTxProcessMapMutex.Lock()
+	defer s.incompleteTxProcessMapMutex.Unlock()
+	delete(s.incompleteTxSProcessMap, txID)
+}
+
+func (s *Sequencer) ProcessNewTransaction(ctx context.Context, tx *components.PrivateTransaction) (queued bool) {
+	s.incompleteTxProcessMapMutex.Lock()
+	defer s.incompleteTxProcessMapMutex.Unlock()
+	if s.incompleteTxSProcessMap[tx.ID.String()] == nil {
+		if len(s.incompleteTxSProcessMap) >= s.maxConcurrentProcess {
+			// TODO: decide how this map is managed, it shouldn't track the entire lifecycle
+			// tx processing pool is full, queue the item
+			return true
+		} else {
+			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeID, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout)
+		}
+		s.pendingEvents <- &ptmgrtypes.TransactionSubmittedEvent{
+			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
 		}
 	}
+	return false
 }
 
-func (s *sequencer) HandleTransactionDispatchResolvedEvent(ctx context.Context, event *pb.TransactionDispatchResolvedEvent) error {
-	log.L(ctx).Infof("Received transaction dispatch resolved event: %s", event.String())
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	if !s.graph.IncludesTransaction(event.TransactionId) {
-		log.L(ctx).Debugf("Transaction %s does not exist locally", event.TransactionId)
-		return nil
+func (s *Sequencer) ProcessInFlightTransaction(ctx context.Context, tx *components.PrivateTransaction) (queued bool) {
+	log.L(ctx).Infof("Processing in flight transaction %s", tx.ID)
+	//a transaction that already has had some processing done on it
+	// currently the only case this can happen is a transaction delegated from another node
+	// but maybe in future, inflight transactions being coordinated locally could be swapped out of memory when they are blocked and/or if we are at max concurrency
+	s.incompleteTxProcessMapMutex.Lock()
+	defer s.incompleteTxProcessMapMutex.Unlock()
+	_, alreadyInMemory := s.incompleteTxSProcessMap[tx.ID.String()]
+	if alreadyInMemory {
+		log.L(ctx).Warnf("Transaction %s already in memory. Ignoring", tx.ID)
+		return false
 	}
-
-	err := s.graph.RecordSigner(ctx, event.TransactionId, event.Signer)
-	if err != nil {
-		log.L(ctx).Errorf("Error recording signer: %s", err)
-		return err
-	}
-
-	//TODO we evaluate the graph here because resolving the signer theoretically might unblock some transactions
-	// however, in reality, this is typically going to happen immediately before we are informed of an endorsement
-	// so maybe more efficient to not evaluate the graph right now because we will do it again very soon
-	err = s.evaluateGraph(ctx)
-	if err != nil {
-		log.L(ctx).Errorf("Error evaluating graph: %s", err)
-		return err
-	}
-	return nil
-}
-
-func (s *sequencer) HandleTransactionEndorsedEvent(ctx context.Context, event *pb.TransactionEndorsedEvent) error {
-
-	log.L(ctx).Infof("Received transaction endorsed event: %s", event.String())
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	if !s.graph.IncludesTransaction(event.TransactionId) {
-		log.L(ctx).Debugf("Transaction %s does not exist locally", event.TransactionId)
-		return nil
-	}
-
-	err := s.graph.RecordEndorsement(ctx, event.TransactionId)
-	if err != nil {
-		log.L(ctx).Errorf("Error recording endorsement: %s", err)
-		return err
-	}
-
-	err = s.evaluateGraph(ctx)
-	if err != nil {
-		log.L(ctx).Errorf("Error evaluating graph: %s", err)
-		return err
-	}
-	return nil
-}
-
-func (s *sequencer) HandleTransactionConfirmedEvent(ctx context.Context, event *pb.TransactionConfirmedEvent) error {
-	log.L(ctx).Infof("Received transaction confirmed event: %s", event.String())
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	outputStateIDes := s.unconfirmedTransactionsByID[event.TransactionId].outputStateIDs
-	for _, outputStateID := range outputStateIDes {
-		delete(s.unconfirmedStatesByID, outputStateID)
-	}
-	delete(s.unconfirmedTransactionsByID, event.TransactionId)
-
-	s.updateBlockedTransactions(event)
-	delegatableTransactions := s.findDelegatableTransactions()
-	for _, delegatableTransaction := range delegatableTransactions {
-		err := s.delegate(ctx, delegatableTransaction.transactionID, delegatableTransaction.delegateNodeId)
-		if err != nil {
-			log.L(ctx).Errorf("Error delegating: %s", err)
-			return err
+	if s.incompleteTxSProcessMap[tx.ID.String()] == nil {
+		if len(s.incompleteTxSProcessMap) >= s.maxConcurrentProcess {
+			// TODO: decide how this map is managed, it shouldn't track the entire lifecycle
+			// tx processing pool is full, queue the item
+			return true
+		} else {
+			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeID, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout)
+		}
+		s.pendingEvents <- &ptmgrtypes.TransactionSwappedInEvent{
+			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
 		}
 	}
-
-	return nil
+	return false
 }
 
-func (s *sequencer) HandleTransactionRevertedEvent(ctx context.Context, event *pb.TransactionRevertedEvent) error {
-	//release the transaction's claim on any states
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	for state, spender := range s.stateSpenders {
-		if spender == event.TransactionId {
-			delete(s.stateSpenders, state)
-		}
-	}
-	return nil
+func (s *Sequencer) HandleEvent(ctx context.Context, event ptmgrtypes.PrivateTransactionEvent) {
+	s.pendingEvents <- event
 }
 
-func (s *sequencer) HandleTransactionDelegatedEvent(ctx context.Context, event *pb.TransactionDelegatedEvent) error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	transaction := s.unconfirmedTransactionsByID[event.TransactionId]
-	if transaction == nil {
-		log.L(ctx).Errorf("Transaction %s does not exist", event.TransactionId)
-		//TODO - should we do something here?  Should we add the transaction to our map?
-		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, event.TransactionId)
-	}
-	log.L(ctx).Infof("HandleTransactionDelegatedEvent transaction %s delegated from %s to %s", event.TransactionId, event.DelegatingNodeId, event.DelegateNodeId)
-	if transaction.sequencingNodeID != event.DelegatingNodeId {
-		log.L(ctx).Debugf("local info about transaction %s out of date current sequencing node is thought to be  %s", event.TransactionId, transaction.sequencingNodeID)
-	}
-
-	transaction.sequencingNodeID = event.DelegateNodeId
-	return nil
+func (s *Sequencer) Start(c context.Context) (done <-chan struct{}, err error) {
+	s.syncPoints.Start()
+	s.sequencerLoopDone = make(chan struct{})
+	go s.evaluationLoop()
+	s.TriggerSequencerEvaluation()
+	return s.sequencerLoopDone, nil
 }
 
-func (s *sequencer) RemoveTransaction(ctx context.Context, txnID string) {
-	log.L(ctx).Infof("RemoveTransaction: %s", txnID)
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	//release the transaction's claim on any states
-	for inputState, spender := range s.stateSpenders {
-		if spender == txnID {
-			delete(s.stateSpenders, inputState)
-		}
-	}
-	//any other transactions that were speculatively spending the output states of the transaction will need to be re-assembled
-	for _, outputState := range s.unconfirmedTransactionsByID[txnID].outputStateIDs {
-		spender, found := s.stateSpenders[outputState]
-		if found {
-			s.invalidTransactions = append(s.invalidTransactions, spender)
-		}
+// Stop the InFlight transaction process.
+func (s *Sequencer) Stop() {
+	// try to send an item in `stopProcess` channel, which has a buffer of 1
+	// if it already has an item in the channel, this function does nothing
+	select {
+	case s.stopProcess <- true:
+	default:
 	}
 
-	// remove it from the graph
-	s.graph.RemoveTransaction(ctx, txnID)
-
-	//then forget about the transaction
-	delete(s.unconfirmedTransactionsByID, txnID)
 }
 
-func (s *sequencer) AssignTransaction(ctx context.Context, txnID string) {
-	log.L(ctx).Infof("AssignTransaction: %s", txnID)
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	//TODO we assume that the AssignTransaction message always comes _after_ the transactionAssembled event.  Is this safe to assume?  Should we pass the full transaction details on the delegateTransaction message? Or should we wait for the transactionAssembled event before actioning the delegation?
-	txn, ok := s.unconfirmedTransactionsByID[txnID]
-	if !ok {
-		panic("transaction not found")
-		//TODO refactor sequencer so that this is not a situation we need to worry about
-		// the sequencer should not need to be told about transactions that are assembled on other nodes
-		// it should only worry about the graph for the current coordinator.  If that results in potential contention, the coordinator will
-		// resolve that
-		// so we don't need separate `HandleTransactionAssembledEvent` and `AssignTransaction` methods
-	}
-
-	// txn is passed as a pointer so that it can be updated in the acceptTransaction method
-	// this is not thread safe but we assume that the sequencer is single threaded
-	err := s.acceptTransaction(ctx, txn)
-	if err != nil {
-		log.L(ctx).Errorf("Error accepting transaction: %s", err)
-		// This error is most likely caused by errors from actions we take to resolve contention in the graph
-		//TODO need to refactor the sequencer so that
-		// - event handlers simply record the information provided and do not throw any error
-		// - separate function to evaluate the graph and return any actions (dispatch, delegate, block) that need to be taken
-		// - rethink how many of those actions can be decided upon and actioned from the sequencer itself
-		//   i.e. the coordinator should should decide when to delegate and it is most likely not because we somehow managed to spend a pending state of a transaction on another coordinator.  That should not be possible in the first place
+func (s *Sequencer) TriggerSequencerEvaluation() {
+	// try to send an item in `processNow` channel, which has a buffer of 1
+	// if it already has an item in the channel, this function does nothing
+	select {
+	case s.orchestrationEvalRequestChan <- true:
+	default:
 	}
 }
 
-func (s *sequencer) ApproveEndorsement(ctx context.Context, endorsementRequst ptmgrtypes.EndorsementRequest) (bool, error) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	contentionFound := false
-	for _, stateID := range endorsementRequst.InputStates {
-		if stateSpender, ok := s.stateSpenders[stateID]; ok {
-			if stateSpender != endorsementRequst.TransactionID {
-				//another transaction is already recognised as the spender of this state
-				contentionFound = true
-				break
-			}
-		}
+func (s *Sequencer) GetTxStatus(ctx context.Context, txID string) (status components.PrivateTxStatus, err error) {
+	//TODO This is primarily here to help with testing for now
+	// this needs to be revisited ASAP as part of a holisitic review of the persistence model
+	s.incompleteTxProcessMapMutex.Lock()
+	defer s.incompleteTxProcessMapMutex.Unlock()
+	if txProc, ok := s.incompleteTxSProcessMap[txID]; ok {
+		return txProc.GetTxStatus(ctx)
 	}
-	if contentionFound {
-		return false, nil
-	}
-	//register this transaction as the spender of all the states
-	for _, stateID := range endorsementRequst.InputStates {
-		s.stateSpenders[stateID] = endorsementRequst.TransactionID
-	}
-	return true, nil
+	//TODO should be possible to query the status of a transaction that is not inflight
+	return components.PrivateTxStatus{}, i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "Transaction not found")
 }

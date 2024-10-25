@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
+	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signer"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
@@ -31,7 +32,7 @@ import (
 
 func newZetoSigningModule(t *testing.T) (context.Context, signer.SigningModule, func()) {
 	ctx := context.Background()
-	sm, err := signer.NewSigningModule(ctx, &SnarkProverConfig{
+	sm, err := signer.NewSigningModule(ctx, &zetosignerapi.SnarkProverConfig{
 		ConfigNoExt: signerapi.ConfigNoExt{
 			KeyDerivation: pldconf.KeyDerivationConfig{
 				Type: pldconf.KeyDerivationTypeBIP32,
@@ -48,8 +49,8 @@ func newZetoSigningModule(t *testing.T) (context.Context, signer.SigningModule, 
 				},
 			},
 		},
-	}, &signerapi.Extensions[*SnarkProverConfig]{
-		InMemorySignerFactories: map[string]signerapi.InMemorySignerFactory[*SnarkProverConfig]{
+	}, &signerapi.Extensions[*zetosignerapi.SnarkProverConfig]{
+		InMemorySignerFactories: map[string]signerapi.InMemorySignerFactory[*zetosignerapi.SnarkProverConfig]{
 			"domain": NewZetoOnlyDomainRouter(),
 		},
 	})
@@ -65,7 +66,7 @@ func TestZKPSigningModuleKeyResolution(t *testing.T) {
 	resp1, err := sm.Resolve(ctx, &signerapi.ResolveKeyRequest{
 		RequiredIdentifiers: []*signerapi.PublicKeyIdentifierType{
 			{Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS},
-			{Algorithm: AlgoDomainZetoSnarkBJJ("zeto"), VerifierType: IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X},
+			{Algorithm: zetosignerapi.AlgoDomainZetoSnarkBJJ("zeto"), VerifierType: zetosignerapi.IDEN3_PUBKEY_BABYJUBJUB_COMPRESSED_0X},
 		},
 		Name: "blueKey",
 		Path: []*signerapi.ResolveKeyPathSegment{

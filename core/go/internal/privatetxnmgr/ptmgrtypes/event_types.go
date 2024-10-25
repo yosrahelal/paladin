@@ -16,7 +16,11 @@
 package ptmgrtypes
 
 import (
-	"github.com/kaleido-io/paladin/core/pkg/proto/sequence"
+	"context"
+
+	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/core/internal/msgs"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 )
 
@@ -26,11 +30,16 @@ type PrivateTransactionEvent interface {
 	GetTransactionID() string
 	GetContractAddress() string
 	SetContractAddress(string)
+	Validate(ctx context.Context) error
 }
 
 type PrivateTransactionEventBase struct {
 	TransactionID   string
 	ContractAddress string
+}
+
+func (e *PrivateTransactionEventBase) Validate(ctx context.Context) error {
+	return nil
 }
 
 func (e *PrivateTransactionEventBase) GetTransactionID() string {
@@ -49,9 +58,18 @@ type TransactionSubmittedEvent struct {
 	PrivateTransactionEventBase
 }
 
+// existing Transaction has been loaded into memory
+type TransactionSwappedInEvent struct {
+	PrivateTransactionEventBase
+}
+
 type TransactionAssembledEvent struct {
 	PrivateTransactionEventBase
-	sequence.TransactionAssembledEvent
+}
+
+type TransactionAssembleFailedEvent struct {
+	PrivateTransactionEventBase
+	Error string
 }
 
 type TransactionSignedEvent struct {
@@ -100,6 +118,37 @@ type ResolveVerifierErrorEvent struct {
 	Lookup       *string
 	Algorithm    *string
 	ErrorMessage *string
+}
+
+func (event *ResolveVerifierResponseEvent) Validate(ctx context.Context) error {
+
+	// TODO why are these  pointers?  should they be strings? If we keep them as pointers, we need to add a validate() method
+	if event.Lookup == nil {
+		log.L(ctx).Error("Lookup is nil")
+		//ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInvalidEventMissingField), "Lookup")
+		return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInvalidEventMissingField, "Lookup")
+	}
+	if event.Algorithm == nil {
+		log.L(ctx).Error("Algorithm is nil")
+		//ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInvalidEventMissingField), "Algorithm")
+		return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInvalidEventMissingField, "Algorithm")
+	}
+	if event.Verifier == nil {
+		log.L(ctx).Error("Verifier is nil")
+		//ts.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInvalidEventMissingField), "Verifier")
+		return i18n.NewError(ctx, msgs.MsgPrivateTxManagerInvalidEventMissingField, "Verifier")
+	}
+	return nil
+}
+
+type TransactionFinalizedEvent struct {
+	PrivateTransactionEventBase
+}
+
+type TransactionFinalizeError struct {
+	PrivateTransactionEventBase
+	RevertReason string // reason we were trying to finalize the transaction
+	ErrorMessage string // reason the transaction could not be finalized
 }
 
 // Replies are correlated to the corresponding request and not necessarily to a specific transaction and/or contract

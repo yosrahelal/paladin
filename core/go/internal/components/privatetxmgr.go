@@ -34,8 +34,10 @@ type TransactionDispatchedEvent struct {
 }
 
 type PrivateTxStatus struct {
-	TxID   string `json:"transactionId"`
-	Status string `json:"status"`
+	TxID        string `json:"transactionId"`
+	Status      string `json:"status"`
+	LatestEvent string `json:"latestEvent"`
+	LatestError string `json:"latestError"`
 }
 
 type PrivateTxManager interface {
@@ -52,4 +54,6 @@ type PrivateTxManager interface {
 	Subscribe(ctx context.Context, subscriber PrivateTxEventSubscriber)
 
 	NotifyFailedPublicTx(ctx context.Context, dbTX *gorm.DB, confirms []*PublicTxMatch) error
+
+	PrivateTransactionConfirmed(ctx context.Context, receipt *TxCompletion)
 }

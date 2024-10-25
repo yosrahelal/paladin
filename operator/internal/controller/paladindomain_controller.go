@@ -109,5 +109,7 @@ func (r *PaladinDomainReconciler) trackContractDeploymentAndRequeue(ctx context.
 func (r *PaladinDomainReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1alpha1.PaladinDomain{}).
+		// Reconcile when any contract deployment changes status
+		Watches(&corev1alpha1.SmartContractDeployment{}, reconcileAll(PaladinDomainCRMap, r.Client), reconcileEveryChange()).
 		Complete(r)
 }

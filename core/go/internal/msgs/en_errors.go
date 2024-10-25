@@ -91,7 +91,6 @@ var (
 	MsgStateABITypeMustBeTuple        = ffe("PD010114", "ABI type definition must be a tuple parameter with an internalType such as 'struct StructName'")
 	MsgStateLabelFieldNotUnique       = ffe("PD010115", "Label field with index %d has a duplicate name '%s'")
 	MsgStateInvalidValue              = ffe("PD010116", "Invalid value")
-	MsgStateInvalidQualifier          = ffe("PD010117", "Status must be one of 'available','confirmed','unconfirmed','spent','locked','all' or the UUID of a transaction")
 	MsgStateLockCreateNotInContext    = ffe("PD010118", "Cannot mark a creating lock for state %s as it was not added in this context")
 	MsgStateFlushFailedDomainReset    = ffe("PD010119", "Flush of state for domain %s contract %s has failed. The domain context must be reset")
 	MsgStateSpendConflictUnexpected   = ffe("PD010120", "Pending spend for transaction %s found when attempting to spend from transaction %s")
@@ -105,6 +104,7 @@ var (
 	MsgStateInvalidCalculatingHash    = ffe("PD010128", "Failed to generate hash as state is invalid")
 	MsgStateHashMismatch              = ffe("PD010129", "The supplied state ID '%s' does not match the state hash '%s'")
 	MsgStateIDMissing                 = ffe("PD010130", "The state id must be supplied for this domain")
+	MsgStateFlushInProgress           = ffe("PD010131", "A flush is already in progress for this domain context")
 
 	// Persistence PD0102XX
 	MsgPersistenceInvalidType         = ffe("PD010200", "Invalid persistence type: %s")
@@ -129,6 +129,23 @@ var (
 	MsgTransactionParseError           = ffe("PD010401", "Failed to parse transaction message.")
 	MsgTransactionSerializeError       = ffe("PD010402", "Failed to serialise transaction response.")
 	MsgTransactionInvalidTransactionID = ffe("PD010403", "The provided ID %s cannot be parsed into a valid UUID due to %s")
+
+	// Key manager PD0105XX
+	MsgKeyManagerInvalidIdentifier          = ffe("PD010500", "Invalid key identifier: '%s'")
+	MsgKeyManagerNoWalletMatch              = ffe("PD010501", "No configured wallet has a keySelector that matches '%s'")
+	MsgKeyManagerOptimisticRetry            = ffe("PD010502", "Retry after allocation race for identifier '%s'")
+	MsgKeyManagerWalletNotConfigured        = ffe("PD010503", "No wallet called '%s' is configured on this node")
+	MsgKeyManagerKeyHandleNonDeterminism    = ffe("PD010504", "Signing module for wallet '%s' returned key handle '%s' from key resolution of verifier %s, mismatching key handle '%s' returned previously the same key")
+	MsgKeyManagerInvalidResolveResponse     = ffe("PD010505", "Signing module for wallet '%s' returned invalid response")
+	MsgKeyManagerInvalidWalletSignerType    = ffe("PD010506", "Invalid signer type '%s' configured for wallet '%s'")
+	MsgKeyManagerEmbeddedSignerFailInit     = ffe("PD010507", "Initialization of embedded signer for wallet '%s' failed")
+	MsgKeyManagerInvalidConfig              = ffe("PD010508", "Configuration for wallet '%s' invalid")
+	MsgKeyManagerDuplicateName              = ffe("PD010509", "Duplicate wallet name '%s'")
+	MsgKeyManagerInvalidKeySelector         = ffe("PD010510", "Key selector for wallet '%s' invalid")
+	MsgKeyManagerVerifierLookupNotFound     = ffe("PD010511", "Verifier not available in reverse lookup table")
+	MsgKeyManagerIdentifierPathNotFound     = ffe("PD010512", "Identifier path segment '%s' not found in database")
+	MsgKeyManagerExistingIdentifierNotFound = ffe("PD010513", "Identifier '%s' not found in database")
+	MsgKeyManagerMissingDatabaseTxn         = ffe("PD010514", "Missing database transaction context")
 
 	// Comms bus PD0106XX
 	MsgDestinationNotFound     = ffe("PD010600", "Destination not found: %s")
@@ -250,25 +267,36 @@ var (
 	MsgDomainInvalidStateID                   = ffe("PD011650", "Invalid state ID '%s'")
 	MsgDomainInvalidStates                    = ffe("PD011651", "Invalid states")
 	MsgDomainInvalidResponseToValidate        = ffe("PD011652", "Invalid response to validation")
+	MsgDomainInvalidDataFromDomain            = ffe("PD011653", "Invalid data returned by domain for call ABI outputs")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownRunMode = ffe("PD011700", "Unknown run mode '%s'")
 
 	// PrivTxMgr PD0118XX
-	MsgDomainNotProvided              = ffe("PD011800", "Domain not found in the transaction input")
-	MsgPrivateTxManagerInternalError  = ffe("PD011801", "Unexpected error in engine %s")
-	MsgPrivateTxManagerAssembleError  = ffe("PD011802", "Error assembling transaction")
-	MsgPrivateTxManagerParseFailed    = ffe("PD011803", "Failed to parse message")
-	MsgPrivateTxManagerInvalidMessage = ffe("PD011804", "Invalid message received from transport")
-	MsgSequencerInternalError         = ffe("PD011805", "Sequencer internal error %s, ")
-	MsgKeyResolutionFailed            = ffe("PD011806", "Key resolution failed for key %s, algorithm %s")
-	MsgDeployInitFailed               = ffe("PD011807", "Failed to initialise a deploy transaction")
-	MsgDeployPrepareFailed            = ffe("PD011808", "Failed to prepare a deploy transaction")
-	MsgDeployPrepareIncomplete        = ffe("PD011809", "Prepare step did not return a transaction to invoke, or a transaction to deploy")
-	MsgBaseLedgerTransactionFailed    = ffe("PD011810", "Failed to submit base ledger transaction")
-	MsgContractAddressNotProvided     = ffe("PD011811", "Contract address (To) not found in the transaction input")
-	MsgPrivTxMgrPublicTxFail          = ffe("PD011812", "Public transaction rejected")
-	MsgResolveVerifierRemoteFailed    = ffe("PD011813", "Failed to resolve verifier on remote node with lookup %s algorithm %s: Error %s")
+	MsgDomainNotProvided                       = ffe("PD011800", "Domain not found in the transaction input")
+	MsgPrivateTxManagerInternalError           = ffe("PD011801", "Unexpected error in engine %s")
+	MsgPrivateTxManagerAssembleError           = ffe("PD011802", "Error assembling transaction: %s")
+	MsgPrivateTxManagerParseFailed             = ffe("PD011803", "Failed to parse message")
+	MsgPrivateTxManagerInvalidMessage          = ffe("PD011804", "Invalid message received from transport")
+	MsgSequencerInternalError                  = ffe("PD011805", "Sequencer internal error")
+	MsgKeyResolutionFailed                     = ffe("PD011806", "Key resolution failed for key %s, algorithm %s, verifierType %s")
+	MsgDeployInitFailed                        = ffe("PD011807", "Failed to initialise a deploy transaction")
+	MsgDeployPrepareFailed                     = ffe("PD011808", "Failed to prepare a deploy transaction")
+	MsgDeployPrepareIncomplete                 = ffe("PD011809", "Prepare step did not return a transaction to invoke, or a transaction to deploy")
+	MsgBaseLedgerTransactionFailed             = ffe("PD011810", "Failed to submit base ledger transaction")
+	MsgContractAddressNotProvided              = ffe("PD011811", "Contract address (To) not found in the transaction input")
+	MsgPrivTxMgrPublicTxFail                   = ffe("PD011812", "Public transaction rejected")
+	MsgResolveVerifierRemoteFailed             = ffe("PD011813", "Failed to resolve verifier on remote node with lookup %s algorithm %s: Error %s")
+	MsgPrivateTxManagerAssembleRevert          = ffe("PD011814", "Domain reverted transaction on assemble")
+	MsgPrivateTxManagerResolveError            = ffe("PD011815", "Failed to resolve local signer for party %s (verifier=%s,algorithm=%s): %s")
+	MsgPrivateTxManagerSignError               = ffe("PD011816", "Failed to sign for party %s (verifier=%s,algorithm=%s): %s")
+	MsgPrivateTxManagerEndorsementRequestError = ffe("PD011817", "Failed to request endorsement from %s: %s")
+	MsgPrivateTxManagerResolveDispatchError    = ffe("PD011818", "Failed to resolve dispatcher: %s")
+	MsgPrivateTxManagerPrepareError            = ffe("PD011819", "Failed to prepare transaction dispatch to base ledger: %s")
+	MsgPrivateTxManagerDeployError             = ffe("PD011820", "Failed to deploy private contract")
+	MsgPrivateTxMgrEncodeCallDataFailed        = ffe("PD011821", "Failed to encode call data '%s' for private contract deploy")
+	MsgPrivateTxManagerNonLocalSigningAddr     = ffe("PD011822", "Attempt do dispatch a blockchain transaction using a signing identity for a different node: %s")
+	MsgPrivateTxManagerStateHashContention     = ffe("PD011823", "Contention detected attempting to spend hash %s in multiple transactions")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")
@@ -298,6 +326,7 @@ var (
 	MsgPublicBatchCompleted            = ffe("PD011933", "Batch already completed")
 	MsgInvalidAutoFuelSource           = ffe("PD011934", "Invalid auto-fueling source '%s'")
 	MsgInvalidStateMissingTXHash       = ffe("PD011935", "Invalid state - missing transaction hash from previous sign stage")
+	MsgInvalidTXMissingFromAddr        = ffe("PD011936", "From address missing for transaction")
 
 	// TransportManager module PD0120XX
 	MsgTransportInvalidMessage                = ffe("PD012000", "Invalid message")
@@ -346,6 +375,8 @@ var (
 	MsgTxMgrInvalidStoredData            = ffe("PD012217", "Stored data is invalid")
 	MsgTxMgrNoABIOrReference             = ffe("PD012218", "An ABI containing a function/constructor definition or an abiReference to an existing stored ABI must be supplied")
 	MsgTxMgrIdempotencyKeyClash          = ffe("PD012220", "idempotencyKey already used by submitted transaction %s") // important error code (relied on by operator, and apps)
+	MsgTxMgrPrivateCallNotSupported      = ffe("PD012221", "Call (read-only data query via function call) not currently supported for private smart contracts")
+	MsgTxMgrRevertedNoMatchingErrABI     = ffe("PD012222", "No error ABI available to decode %s")
 
 	// FlushWriter module PD0123XX
 	MsgFlushWriterQuiescing      = ffe("PD012300", "Writer shutting down")

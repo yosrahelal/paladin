@@ -19,6 +19,9 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/query"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"gorm.io/gorm"
 )
@@ -43,9 +46,29 @@ type ReceiptInput struct {
 	RevertData      tktypes.HexBytes        // set for RT_FailedOnChainWithRevertData
 }
 
+type TxCompletion struct {
+	ReceiptInput
+	PSC DomainSmartContract
+}
+
 type TXManager interface {
 	ManagerLifecycle
-	MatchAndFinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*ReceiptInput) ([]uuid.UUID, error) // returns which transactions were known
+	MatchAndFinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*TxCompletion) ([]uuid.UUID, error) // returns which transactions were known
 	FinalizeTransactions(ctx context.Context, dbTX *gorm.DB, info []*ReceiptInput) error                        // requires all transactions to be known
 	CalculateRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes) error
+	DecodeRevertError(ctx context.Context, dbTX *gorm.DB, revertData tktypes.HexBytes, dataFormat tktypes.JSONFormatOptions) (*pldapi.DecodedError, error)
+	SendTransaction(ctx context.Context, tx *pldapi.TransactionInput) (*uuid.UUID, error)
+	SendTransactions(ctx context.Context, txs []*pldapi.TransactionInput) (txIDs []uuid.UUID, err error)
+	GetTransactionByID(ctx context.Context, id uuid.UUID) (*pldapi.Transaction, error)
+	GetTransactionByIDFull(ctx context.Context, id uuid.UUID) (result *pldapi.TransactionFull, err error)
+	GetTransactionDependencies(ctx context.Context, id uuid.UUID) (*pldapi.TransactionDependencies, error)
+	GetPublicTransactionByNonce(ctx context.Context, from tktypes.EthAddress, nonce tktypes.HexUint64) (*pldapi.PublicTxWithBinding, error)
+	GetPublicTransactionByHash(ctx context.Context, hash tktypes.Bytes32) (*pldapi.PublicTxWithBinding, error)
+	QueryTransactions(ctx context.Context, jq *query.QueryJSON, pending bool) ([]*pldapi.Transaction, error)
+	QueryTransactionsFull(ctx context.Context, jq *query.QueryJSON, pending bool) (results []*pldapi.TransactionFull, err error)
+	QueryTransactionsFullTx(ctx context.Context, jq *query.QueryJSON, dbTX *gorm.DB, pending bool) ([]*pldapi.TransactionFull, error)
+	QueryTransactionReceipts(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.TransactionReceipt, error)
+	GetTransactionReceiptByID(ctx context.Context, id uuid.UUID) (*pldapi.TransactionReceipt, error)
+	CallTransaction(ctx context.Context, result any, tx *pldapi.TransactionCall) (err error)
+	UpsertABI(ctx context.Context, a abi.ABI) (*pldapi.StoredABI, error)
 }

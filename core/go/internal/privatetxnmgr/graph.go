@@ -18,7 +18,6 @@ package privatetxnmgr
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
@@ -28,81 +27,49 @@ import (
 )
 
 type Graph interface {
-	AddTransaction(ctx context.Context, txID string, inputStates []string, outputStates []string) error
+	AddTransaction(ctx context.Context, transaction ptmgrtypes.TransactionFlow)
 	GetDispatchableTransactions(ctx context.Context) (ptmgrtypes.DispatchableTransactions, error)
 	RemoveTransaction(ctx context.Context, txID string)
-	RemoveTransactions(ctx context.Context, transactionsToRemove ptmgrtypes.DispatchableTransactions) error
-	RecordSigner(ctx context.Context, txID string, signer string) error
-	RecordEndorsement(ctx context.Context, txID string) error
+	RemoveTransactions(ctx context.Context, transactionsToRemove ptmgrtypes.DispatchableTransactions)
 	IncludesTransaction(txID string) bool
 }
 
 type graph struct {
 	// This is the source of truth for all transaction
-	allTransactions map[string]*transaction
+	allTransactions map[string]ptmgrtypes.TransactionFlow
 
 	// all of the following are ephemeral and derived from allTransactions
 
 	// implement graph of transactions as an adjacency matrix where the values in the matrix is an array of state hashes that connect those transactions
 	// first dimension is the dependency ( i.e the minter of the state) and second dimension is the dependant (i.e. the consumer of the state)
 	// and the third dimension is the array of state hashes that connect the two transactions
-	//  this direction makes it easier to isolate a sequence of dispatchable transactions by doing a breadth first search starting at the layer of independant transactions
+	//  this direction makes it easier to isolate a sequence of dispatchable transactions by doing a breadth first search starting at the layer of independent transactions
 	transactionsMatrix [][][]string
-	transactions       []*transaction
+	transactions       []ptmgrtypes.TransactionFlow
 	//map of transaction id to index in the transactions array
 	transactionIndex map[string]int
 }
 
 func NewGraph() Graph {
 	return &graph{
-		allTransactions: make(map[string]*transaction),
+		allTransactions: make(map[string]ptmgrtypes.TransactionFlow),
 	}
 }
 
-func (g *graph) AddTransaction(ctx context.Context, txID string, inputStates []string, outputStates []string) error {
-	g.allTransactions[txID] = &transaction{
-		id:             txID,
-		endorsed:       false,
-		inputStateIDs:  inputStates,
-		outputStateIDs: outputStates,
-	}
+func (g *graph) AddTransaction(ctx context.Context, transaction ptmgrtypes.TransactionFlow) {
+	log.L(ctx).Debugf("Adding transaction %s to graph", transaction.ID().String())
+	g.allTransactions[transaction.ID().String()] = transaction
 
-	// TODO should probably cache this graph and only rebuild it when needed (e.g. on restart)
-	// and incrementally update it when new transactions are added etc...
-	// or if we do build it every time, then we should remove the allTransactions field of the graph struct ( and AddTransaction and RemoveTransaction funcs) because it is just duplicating the data from the sequencer struct
-	err := g.buildMatrix(ctx)
-	if err != nil {
-		log.L(ctx).Errorf("Error building graph: %s", err)
-		return err
-	}
-	return nil
 }
 
 func (g *graph) IncludesTransaction(txID string) bool {
 	return g.allTransactions[txID] != nil
 }
 
-func (g *graph) RecordEndorsement(ctx context.Context, txID string) error {
-	if g.allTransactions[txID] == nil {
-		log.L(ctx).Errorf("Transaction %s does not exist", txID)
-		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, fmt.Sprintf("Transaction %s does not exist", txID))
-	}
-	g.allTransactions[txID].endorsed = true
-	return nil
-}
-
-func (g *graph) RecordSigner(ctx context.Context, txID string, signer string) error {
-	if g.allTransactions[txID] == nil {
-		log.L(ctx).Errorf("Transaction %s does not exist", txID)
-		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, fmt.Sprintf("Transaction %s does not exist", txID))
-	}
-	g.allTransactions[txID].signingAddress = signer
-	return nil
-}
-
 func (g *graph) buildMatrix(ctx context.Context) error {
+	log.L(ctx).Debugf("Building graph with %d transactions", len(g.allTransactions))
 	g.transactionIndex = make(map[string]int)
-	g.transactions = make([]*transaction, len(g.allTransactions))
+	g.transactions = make([]ptmgrtypes.TransactionFlow, len(g.allTransactions))
 	currentIndex := 0
 	for txnId, txn := range g.allTransactions {
 		g.transactionIndex[txnId] = currentIndex
@@ -114,12 +81,12 @@ func (g *graph) buildMatrix(ctx context.Context) error {
 	//for each unique state hash, create an index of its minter and/or spender
 	stateToSpender := make(map[string]*int)
 	for txnIndex, txn := range g.transactions {
-		for _, stateID := range txn.inputStateIDs {
+		for _, stateID := range txn.InputStateIDs() {
 			if stateToSpender[stateID] != nil {
 				//TODO this is expected in some cases and represents a contention that needs to be resolved
 				//TBC do we assert that it is resolved before we get to this point?
 				log.L(ctx).Errorf("State hash %s is spent by multiple transactions", stateID)
-				return i18n.NewError(ctx, msgs.MsgSequencerInternalError, "State hash %s is spent by multiple transactions")
+				return i18n.NewError(ctx, msgs.MsgPrivateTxManagerStateHashContention, stateID)
 			}
 			stateToSpender[stateID] = confutil.P(txnIndex)
 		}
@@ -134,9 +101,12 @@ func (g *graph) buildMatrix(ctx context.Context) error {
 		//TODO this is O(n^2) and could be optimised
 		//TODO what about input states that are not output states of any transaction? Do we assume that the minter transactions are already dispatched /
 		// or confirmed?
-		for _, stateID := range minter.outputStateIDs {
+		for _, stateID := range minter.OutputStateIDs() {
 			if spenderIndex := stateToSpender[stateID]; spenderIndex != nil {
 				//we have a dependency relationship
+				if log.IsTraceEnabled() {
+					log.L(ctx).Tracef("Graph.buildMatrix Transaction %s depends on transaction %s", minter.ID().String(), g.transactions[*spenderIndex].ID().String())
+				}
 				g.transactionsMatrix[minterIndex][*spenderIndex] = append(g.transactionsMatrix[minterIndex][*spenderIndex], stateID)
 			}
 		}
@@ -150,8 +120,18 @@ func (g *graph) buildMatrix(ctx context.Context) error {
 // of transactions that have been endorsed and have no dependencies on transactions that have not been endorsed
 // and then doing a topological sort of each of those subgraphs
 func (g *graph) GetDispatchableTransactions(ctx context.Context) (ptmgrtypes.DispatchableTransactions, error) {
+	log.L(ctx).Debug("Graph.GetDispatchableTransactions")
 
-	//TODO there are many valid topilogical sorts of any given graph,
+	// TODO should probably cache this graph and only rebuild it when needed (e.g. on restart)
+	// and incrementally update it when new transactions are added etc...
+	// if we do build it every time, might as well have the list of transactions passed in as a parameter rather than trying to maintain the list via AddTransaction and RemoveTransaction
+	err := g.buildMatrix(ctx)
+	if err != nil {
+		log.L(ctx).Errorf("Error building graph: %s", err)
+		return nil, err
+	}
+
+	//TODO there are many valid topological sorts of any given graph,
 	// should we bias in favour of older transactions?
 	// for now, we do a breath first search which is a close approximation of an bias in favour of older transactions
 
@@ -173,7 +153,11 @@ func (g *graph) GetDispatchableTransactions(ctx context.Context) (ptmgrtypes.Dis
 
 	//find all independent transactions and add them to the queue
 	for txnIndex, indegree := range indegrees {
+
 		if indegree == 0 {
+			if log.IsTraceEnabled() {
+				log.L(ctx).Tracef("Graph.GetDispatchableTransactions Transaction %s has no dependencies", g.transactions[txnIndex].ID().String())
+			}
 			queue = append(queue, txnIndex)
 		}
 	}
@@ -185,13 +169,20 @@ func (g *graph) GetDispatchableTransactions(ctx context.Context) (ptmgrtypes.Dis
 		nextTransaction := queue[0]
 		queue = queue[1:]
 
-		if !g.transactions[nextTransaction].endorsed {
+		if !g.transactions[nextTransaction].IsEndorsed(ctx) {
 			//this transaction is not endorsed, so we cannot dispatch it
+			if log.IsTraceEnabled() {
+				log.L(ctx).Tracef("Graph.GetDispatchableTransactions Transaction %s not endorsed so cannot be dispatched", g.transactions[nextTransaction].ID().String())
+			}
 			continue
+		} else {
+			if log.IsTraceEnabled() {
+				log.L(ctx).Tracef("Graph.GetDispatchableTransactions Transaction %s is endorsed and will be dispatched", g.transactions[nextTransaction].ID().String())
+			}
 		}
 
 		//transaction can be dispatched
-		dispatchable = append(dispatchable, g.transactions[nextTransaction].id)
+		dispatchable = append(dispatchable, g.transactions[nextTransaction].ID().String())
 
 		//get this transaction's dependencies
 		dependencies := g.transactionsMatrix[nextTransaction]
@@ -200,6 +191,9 @@ func (g *graph) GetDispatchableTransactions(ctx context.Context) (ptmgrtypes.Dis
 			if len(states) > 0 {
 				indegrees[dependant]--
 				if indegrees[dependant] == 0 {
+					if log.IsTraceEnabled() {
+						log.L(ctx).Tracef("Graph.GetDispatchableTransactions Transaction %s dependencies are being dispatched", g.transactions[dependant].ID().String())
+					}
 					// add the dependant to the queue
 					queue = append(queue, dependant)
 				}
@@ -208,45 +202,41 @@ func (g *graph) GetDispatchableTransactions(ctx context.Context) (ptmgrtypes.Dis
 	}
 
 	//TODO for now, we assume that all dispatchable transactions are to be dispatched by the same signing key
-	// in reality, we need to maintain subgraphs per signign key because there is no way to guarntee ordering
+	// in reality, we need to maintain subgraphs per signing key because there is no way to guarantee ordering
 	// across signing keys
 
 	if len(dispatchable) > 0 {
-		signingAddress := g.allTransactions[dispatchable[0]].signingAddress
+		signingAddress := g.allTransactions[dispatchable[0]].Signer()
+		log.L(ctx).Debugf("Graph.GetDispatchableTransactions %d dispatchable transactions", len(dispatchable))
 		return map[string][]string{
 			signingAddress: dispatchable,
 		}, nil
 	}
+	log.L(ctx).Debug("Graph.GetDispatchableTransactions No dispatchable transactions")
+
 	return map[string][]string{}, nil
 }
 func (g *graph) RemoveTransaction(ctx context.Context, txID string) {
+	log.L(ctx).Debugf("Graph.RemoveTransaction Removing transaction %s from graph", txID)
 	delete(g.allTransactions, txID)
 }
 
-func (g *graph) RemoveTransactions(ctx context.Context, transactionsToRemove ptmgrtypes.DispatchableTransactions) error {
+func (g *graph) RemoveTransactions(ctx context.Context, transactionsToRemove ptmgrtypes.DispatchableTransactions) {
+	log.L(ctx).Debugf("Graph.RemoveTransactions Removing transactions from graph")
 	// no validation performed here
-	// it is valid to remove transactions that have dependants.  In fact that is normal.
-	//Transactions are removed when they are dispatched and dependencies are dispatched before their dependants
-	// also, it is valid to remove transactions that are dependants of other transactions that are not being removed
+	// it is valid to remove transactions that have dependents.  In fact that is normal.
+	//Transactions are removed when they are dispatched and dependencies are dispatched before their dependents
+	// also, it is valid to remove transactions that are dependents of other transactions that are not being removed
 	// maybe they got reverted before being endorsed or whatever it is not the concern of the graph to validate this
 	// the graph just gets redrawn based on the dependencies that remain after a transaction is removed
 
 	for _, sequence := range transactionsToRemove {
 		for _, txID := range sequence {
 			if g.allTransactions[txID] == nil {
-				//Only real validation we do is to throw an error if a transaction to be removed does not exist
-				// TODO - is that really an error?  Should we just ignore it and remove the others?  That would give us some idempotency behaviour that might be useful
-				log.L(ctx).Errorf("Transaction %s does not exist", txID)
-				return i18n.NewError(ctx, msgs.MsgSequencerInternalError, fmt.Sprintf("Transaction %s does not exist", txID))
+				log.L(ctx).Infof("Transaction %s already removed", txID)
+			} else {
+				delete(g.allTransactions, txID)
 			}
-			delete(g.allTransactions, txID)
 		}
 	}
-
-	err := g.buildMatrix(ctx)
-	if err != nil {
-		log.L(ctx).Errorf("Error building graph: %s", err)
-		return err
-	}
-	return nil
 }

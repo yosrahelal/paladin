@@ -17,12 +17,16 @@ package privatetxnmgr
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/kaleido-io/paladin/core/internal/components"
-	pb "github.com/kaleido-io/paladin/core/pkg/proto/sequence"
+	engineProto "github.com/kaleido-io/paladin/core/pkg/proto/engine"
+	pb "github.com/kaleido-io/paladin/core/pkg/proto/engine"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
+	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func NewTransportWriter(domainName string, contractAddress *tktypes.EthAddress, nodeID string, transportManager components.TransportManager) *transportWriter {
@@ -41,21 +45,38 @@ type transportWriter struct {
 	contractAddress  *tktypes.EthAddress
 }
 
-func (tw *transportWriter) SendDelegateTransactionMessage(ctx context.Context, transactionId string, delegateNodeId string) error {
-	delegationMessage := &pb.DelegateTransaction{
-		TransactionId:    transactionId,
-		DelegatingNodeId: tw.nodeID,
-		DelegateNodeId:   delegateNodeId,
-	}
-	delegationMessageBytes, err := proto.Marshal(delegationMessage)
+func (tw *transportWriter) SendDelegationRequest(
+	ctx context.Context,
+	delegationId string,
+	delegateNodeId string,
+	transaction *components.PrivateTransaction,
+
+) error {
+
+	transactionBytes, err := json.Marshal(transaction)
+
 	if err != nil {
-		log.L(ctx).Errorf("Error marshalling delegate transaction message: %s", err)
+		log.L(ctx).Errorf("Error marshalling transaction message: %s", err)
+		return err
+	}
+	delegationRequest := &pb.DelegationRequest{
+		DelegationId:       delegationId,
+		TransactionId:      transaction.ID.String(),
+		DelegateNodeId:     delegateNodeId,
+		PrivateTransaction: transactionBytes,
+	}
+	delegationRequestBytes, err := proto.Marshal(delegationRequest)
+	if err != nil {
+		log.L(ctx).Errorf("Error marshalling delegationRequest  message: %s", err)
 		return err
 	}
 
 	if err = tw.transportManager.Send(ctx, &components.TransportMessage{
-		MessageType: "DelegateTransaction",
-		Payload:     delegationMessageBytes,
+		MessageType: "DelegationRequest",
+		Payload:     delegationRequestBytes,
+		Component:   PRIVATE_TX_MANAGER_DESTINATION,
+		Node:        delegateNodeId,
+		ReplyTo:     tw.nodeID,
 	}); err != nil {
 		return err
 	}
@@ -96,4 +117,85 @@ func (tw *transportWriter) SendState(ctx context.Context, stateId string, schema
 	}
 
 	return nil
+}
+
+// TODO do we have duplication here?  contractAddress and transactionID are in the transactionSpecification
+func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState) error {
+	attRequestAny, err := anypb.New(attRequest)
+	if err != nil {
+		log.L(ctx).Error("Error marshalling attestation request", err)
+		return err
+	}
+
+	transactionSpecificationAny, err := anypb.New(transactionSpecification)
+	if err != nil {
+		log.L(ctx).Error("Error marshalling transaction specification", err)
+		return err
+	}
+	verifiersAny := make([]*anypb.Any, len(verifiers))
+	for i, verifier := range verifiers {
+		verifierAny, err := anypb.New(verifier)
+		if err != nil {
+			log.L(ctx).Error("Error marshalling verifier", err)
+			return err
+		}
+		verifiersAny[i] = verifierAny
+	}
+	signaturesAny := make([]*anypb.Any, len(signatures))
+	for i, signature := range signatures {
+		signatureAny, err := anypb.New(signature)
+		if err != nil {
+			log.L(ctx).Error("Error marshalling signature", err)
+			return err
+		}
+		signaturesAny[i] = signatureAny
+	}
+
+	inputStatesAny := make([]*anypb.Any, len(inputStates))
+	endorseableInputStates := toEndorsableList(inputStates)
+	for i, inputState := range endorseableInputStates {
+		inputStateAny, err := anypb.New(inputState)
+		if err != nil {
+			log.L(ctx).Error("Error marshalling input state", err)
+			//TODO return nil, err
+		}
+		inputStatesAny[i] = inputStateAny
+	}
+
+	outputStatesAny := make([]*anypb.Any, len(outputStates))
+	endorseableOutputStates := toEndorsableList(outputStates)
+	for i, outputState := range endorseableOutputStates {
+		outputStateAny, err := anypb.New(outputState)
+		if err != nil {
+			log.L(ctx).Error("Error marshalling output state", err)
+			return err
+		}
+		outputStatesAny[i] = outputStateAny
+	}
+
+	endorsementRequest := &engineProto.EndorsementRequest{
+		ContractAddress:          contractAddress,
+		TransactionId:            transactionID,
+		AttestationRequest:       attRequestAny,
+		Party:                    party,
+		TransactionSpecification: transactionSpecificationAny,
+		Verifiers:                verifiersAny,
+		Signatures:               signaturesAny,
+		InputStates:              inputStatesAny,
+		OutputStates:             outputStatesAny,
+	}
+
+	endorsementRequestBytes, err := proto.Marshal(endorsementRequest)
+	if err != nil {
+		log.L(ctx).Error("Error marshalling endorsement request", err)
+		return err
+	}
+	err = tw.transportManager.Send(ctx, &components.TransportMessage{
+		MessageType: "EndorsementRequest",
+		Node:        targetNode,
+		Component:   PRIVATE_TX_MANAGER_DESTINATION,
+		ReplyTo:     tw.nodeID,
+		Payload:     endorsementRequestBytes,
+	})
+	return err
 }

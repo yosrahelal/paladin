@@ -83,7 +83,7 @@ func TestUpsertABIBadData(t *testing.T) {
 	ctx, txm, done := newTestTransactionManager(t, false)
 	defer done()
 
-	_, err := txm.upsertABI(ctx, abi.ABI{{Inputs: abi.ParameterArray{{Type: "wrong"}}}})
+	_, err := txm.UpsertABI(ctx, abi.ABI{{Inputs: abi.ParameterArray{{Type: "wrong"}}}})
 	assert.Regexp(t, "PD012201", err)
 
 }
