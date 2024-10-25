@@ -28,9 +28,9 @@ type DomainConfig struct {
 var NotoConfigID_V0 = tktypes.MustParseHexBytes("0x00010000")
 
 type NotoConfig_V0 struct {
-	NotaryType    tktypes.Bytes32    `json:"notaryType"`
+	NotaryType    tktypes.HexUint64  `json:"notaryType"`
 	NotaryAddress tktypes.EthAddress `json:"notaryAddress"`
-	Variant       tktypes.Bytes32    `json:"variant"`
+	Variant       tktypes.HexUint64  `json:"variant"`
 	Data          tktypes.HexBytes   `json:"data"`
 	DecodedData   *NotoConfigData_V0 `json:"-"`
 }
@@ -41,25 +41,35 @@ type NotoConfigData_V0 struct {
 	PrivateGroup   *PentePrivateGroup  `json:"privateGroup"`
 }
 
+// This is the structure we parse the config into in InitConfig and gets passed back to us on every call
+type NotoParsedConfig struct {
+	NotaryType     tktypes.HexUint64   `json:"notaryType"`
+	NotaryAddress  tktypes.EthAddress  `json:"notaryAddress"`
+	Variant        tktypes.HexUint64   `json:"variant"`
+	NotaryLookup   string              `json:"notaryLookup"`
+	PrivateAddress *tktypes.EthAddress `json:"privateAddress,omitempty"`
+	PrivateGroup   *PentePrivateGroup  `json:"privateGroup,omitempty"`
+}
+
 type PentePrivateGroup struct {
 	Salt    tktypes.Bytes32 `json:"salt"`
 	Members []string        `json:"members"`
 }
 
 var NotoConfigABI_V0 = &abi.ParameterArray{
-	{Name: "notaryType", Type: "bytes32"},
+	{Name: "notaryType", Type: "uint64"},
 	{Name: "notaryAddress", Type: "address"},
 	{Name: "data", Type: "bytes"},
-	{Name: "variant", Type: "bytes32"},
+	{Name: "variant", Type: "uint64"},
 }
 
 var NotoTransactionData_V0 = tktypes.MustParseHexBytes("0x00010000")
 
-type DomainHandler = domain.DomainHandler[NotoConfig_V0]
-type ParsedTransaction = domain.ParsedTransaction[NotoConfig_V0]
+type DomainHandler = domain.DomainHandler[NotoParsedConfig]
+type ParsedTransaction = domain.ParsedTransaction[NotoParsedConfig]
 
-var NotaryTypeSigner = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000000")
-var NotaryTypeContract = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000001")
+var NotaryTypeSigner tktypes.HexUint64 = 0x0000
+var NotaryTypeContract tktypes.HexUint64 = 0x0001
 
-var NotoVariantDefault = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000000")
-var NotoVariantSelfSubmit = tktypes.MustParseBytes32("0x0000000000000000000000000000000000000000000000000000000000000001")
+var NotoVariantDefault tktypes.HexUint64 = 0x0000
+var NotoVariantSelfSubmit tktypes.HexUint64 = 0x0001

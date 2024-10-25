@@ -201,6 +201,78 @@ func TestBuildAndSubmitPublicTXHTTPOk(t *testing.T) {
 
 }
 
+func TestBuildAndSubmitPrivateTXHTTPRevert(t *testing.T) {
+
+	ctx, c, rpcServer, done := newTestClientAndServerHTTP(t)
+	defer done()
+
+	contractAddr := tktypes.RandAddress()
+	txID := uuid.New()
+
+	rpcServer.Register(rpcserver.NewRPCModule("ptx").
+		Add(
+			"ptx_sendTransaction", rpcserver.RPCMethod1(func(ctx context.Context, tx pldapi.TransactionInput) (*uuid.UUID, error) {
+				require.JSONEq(t, `{
+					"widget": {
+						"id": "0x172ea50b3535721154ae5b368e850825615882bb",
+						"sku": "12345",
+						"features": ["blue", "round"]
+					}
+				}`, string(tx.Data))
+				require.Equal(t, pldapi.TransactionTypePrivate, tx.Type.V())
+				require.Equal(t, "neeto", tx.Domain)
+				require.Equal(t, "newWidget", tx.Function)
+				require.Equal(t, contractAddr, tx.To)
+				require.Equal(t, "tx.sender", tx.From)
+				require.Equal(t, tktypes.HexUint64(100000), *tx.PublicTxOptions.Gas)
+				return &txID, nil
+			}),
+		).
+		Add(
+			"ptx_getTransaction", rpcserver.RPCMethod1(func(ctx context.Context, suppliedID uuid.UUID) (*pldapi.Transaction, error) {
+				require.Equal(t, txID, suppliedID)
+				return &pldapi.Transaction{
+					ID: &txID,
+				}, nil
+			}),
+		).
+		Add(
+			"ptx_getTransactionReceipt", rpcserver.RPCMethod1(func(ctx context.Context, suppliedID uuid.UUID) (*pldapi.TransactionReceipt, error) {
+				require.Equal(t, txID, suppliedID)
+				return &pldapi.TransactionReceipt{
+					ID: txID,
+					TransactionReceiptData: pldapi.TransactionReceiptData{
+						Success:        false,
+						FailureMessage: "something went wrong",
+					},
+				}, nil
+			}),
+		),
+	)
+
+	sent := c.ForABI(ctx, testABI).
+		Private().Domain("neeto").
+		Function("newWidget").
+		Inputs(map[string]any{
+			"widget": map[string]any{
+				"id":       "0x172EA50B3535721154ae5B368E850825615882BB",
+				"sku":      12345,
+				"features": []string{"blue", "round"},
+			},
+		}).
+		From("tx.sender").
+		To(contractAddr).
+		PublicTxOptions(pldapi.PublicTxOptions{
+			Gas: confutil.P(tktypes.HexUint64(100000)),
+		}).
+		Send()
+
+	res := sent.Wait(100 * time.Millisecond)
+	assert.EqualError(t, res.Error(), "something went wrong")
+	assert.Nil(t, res.TransactionHash())
+
+}
+
 func TestBuildAndSubmitPublicCallHTTPOk(t *testing.T) {
 
 	ctx, c, rpcServer, done := newTestClientAndServerHTTP(t)

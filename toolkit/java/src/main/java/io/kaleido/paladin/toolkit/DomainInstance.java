@@ -33,6 +33,7 @@ public abstract class DomainInstance extends PluginInstance<Service.DomainMessag
     protected abstract CompletableFuture<ToDomain.InitDomainResponse> initDomain(ToDomain.InitDomainRequest request);
     protected abstract CompletableFuture<ToDomain.InitDeployResponse> initDeploy(ToDomain.InitDeployRequest request);
     protected abstract CompletableFuture<ToDomain.PrepareDeployResponse> prepareDeploy(ToDomain.PrepareDeployRequest request);
+    protected abstract CompletableFuture<ToDomain.InitContractResponse> initContract(ToDomain.InitContractRequest request);
     protected abstract CompletableFuture<ToDomain.InitTransactionResponse> initTransaction(ToDomain.InitTransactionRequest request);
     protected abstract CompletableFuture<ToDomain.AssembleTransactionResponse> assembleTransaction(ToDomain.AssembleTransactionRequest request);
     protected abstract CompletableFuture<ToDomain.EndorseTransactionResponse> endorseTransaction(ToDomain.EndorseTransactionRequest request);
@@ -104,6 +105,7 @@ public abstract class DomainInstance extends PluginInstance<Service.DomainMessag
                 case INIT_DOMAIN -> initDomain(request.getInitDomain()).thenApply(response::setInitDomainRes);
                 case INIT_DEPLOY -> initDeploy(request.getInitDeploy()).thenApply(response::setInitDeployRes);
                 case PREPARE_DEPLOY -> prepareDeploy(request.getPrepareDeploy()).thenApply(response::setPrepareDeployRes);
+                case INIT_CONTRACT -> initContract(request.getInitContract()).thenApply(response::setInitContractRes);
                 case INIT_TRANSACTION -> initTransaction(request.getInitTransaction()).thenApply(response::setInitTransactionRes);
                 case ASSEMBLE_TRANSACTION -> assembleTransaction(request.getAssembleTransaction()).thenApply(response::setAssembleTransactionRes);
                 case ENDORSE_TRANSACTION -> endorseTransaction(request.getEndorseTransaction()).thenApply(response::setEndorseTransactionRes);

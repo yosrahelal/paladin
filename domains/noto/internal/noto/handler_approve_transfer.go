@@ -36,7 +36,7 @@ type approveHandler struct {
 	noto *Noto
 }
 
-func (h *approveHandler) ValidateParams(ctx context.Context, config *types.NotoConfig_V0, params string) (interface{}, error) {
+func (h *approveHandler) ValidateParams(ctx context.Context, config *types.NotoParsedConfig, params string) (interface{}, error) {
 	var approveParams types.ApproveParams
 	if err := json.Unmarshal([]byte(params), &approveParams); err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func (h *approveHandler) Assemble(ctx context.Context, tx *types.ParsedTransacti
 				AttestationType: prototk.AttestationType_ENDORSE,
 				Algorithm:       algorithms.ECDSA_SECP256K1,
 				VerifierType:    verifiers.ETH_ADDRESS,
-				Parties:         []string{tx.DomainConfig.DecodedData.NotaryLookup},
+				Parties:         []string{tx.DomainConfig.NotaryLookup},
 			},
 		},
 	}, nil
@@ -193,12 +193,12 @@ func (h *approveHandler) guardApprove(ctx context.Context, tx *types.ParsedTrans
 	functionABI := solutils.MustLoadBuild(notoGuardJSON).ABI.Functions()["onApproveTransfer"]
 	var paramsJSON []byte
 
-	if tx.DomainConfig.DecodedData.PrivateAddress != nil {
+	if tx.DomainConfig.PrivateAddress != nil {
 		transactionType = prototk.PreparedTransaction_PRIVATE
 		functionABI = penteInvokeABI("onMint", functionABI.Inputs)
 		penteParams := &PenteInvokeParams{
-			Group:  tx.DomainConfig.DecodedData.PrivateGroup,
-			To:     tx.DomainConfig.DecodedData.PrivateAddress,
+			Group:  tx.DomainConfig.PrivateGroup,
+			To:     tx.DomainConfig.PrivateAddress,
 			Inputs: params,
 		}
 		paramsJSON, err = json.Marshal(penteParams)
@@ -224,7 +224,7 @@ func (h *approveHandler) Prepare(ctx context.Context, tx *types.ParsedTransactio
 	if err != nil {
 		return nil, err
 	}
-	if tx.DomainConfig.NotaryType.Equals(&types.NotaryTypeContract) {
+	if tx.DomainConfig.NotaryType == types.NotaryTypeContract {
 		guardTransaction, err := h.guardApprove(ctx, tx, req, baseTransaction)
 		if err != nil {
 			return nil, err

@@ -66,7 +66,7 @@ type Domain interface {
 type DomainSmartContract interface {
 	Domain() Domain
 	Address() tktypes.EthAddress
-	ConfigBytes() tktypes.HexBytes
+	ContractConfig() *prototk.ContractConfig
 
 	InitTransaction(ctx context.Context, tx *PrivateTransaction) error
 	AssembleTransaction(dCtx DomainContext, readTX *gorm.DB, tx *PrivateTransaction) error
@@ -77,8 +77,6 @@ type DomainSmartContract interface {
 
 	InitCall(ctx context.Context, tx *TransactionInputs) ([]*prototk.ResolveVerifierRequest, error)
 	ExecCall(dCtx DomainContext, readTX *gorm.DB, tx *TransactionInputs, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error)
-
-	ResolveDispatch(ctx context.Context, tx *PrivateTransaction) error
 }
 
 type EndorsementResult struct {

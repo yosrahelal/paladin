@@ -70,7 +70,7 @@ type noResult struct{}
 
 func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*syncPointOperation) (func(error), []flushwriter.Result[*noResult], error) {
 
-	finalizeOperations := make(map[tktypes.EthAddress][]*finalizeOperation)
+	finalizeOperations := make([]*finalizeOperation, 0, len(values))
 	dispatchOperations := make([]*dispatchOperation, 0, len(values))
 	delegateOperations := make([]*delegateOperation, 0, len(values))
 	delegationAckOperations := make([]*delegationAckOperation, 0, len(values))
@@ -81,7 +81,7 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*sync
 			domainContextsToFlush[op.domainContext.Info().ID] = op.domainContext
 		}
 		if op.finalizeOperation != nil {
-			finalizeOperations[op.contractAddress] = append(finalizeOperations[op.contractAddress], op.finalizeOperation)
+			finalizeOperations = append(finalizeOperations, op.finalizeOperation)
 		}
 		if op.dispatchOperation != nil {
 			dispatchOperations = append(dispatchOperations, op.dispatchOperation)
@@ -128,7 +128,7 @@ func (s *syncPoints) runBatch(ctx context.Context, dbTX *gorm.DB, values []*sync
 	// assumption at time of coding because WriteKey returns the contract address
 	// but probably should consider a less brittle way to codify this assertion
 	if err == nil && len(finalizeOperations) > 0 {
-		err = s.writeFinalizeOperations(ctx, dbTX, finalizeOperations) // err variable must not be re-allocated
+		err = s.writeFailureOperations(ctx, dbTX, finalizeOperations) // err variable must not be re-allocated
 	}
 
 	if err == nil && len(dispatchOperations) > 0 {

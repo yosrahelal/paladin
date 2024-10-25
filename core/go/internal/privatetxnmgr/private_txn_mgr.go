@@ -300,21 +300,18 @@ func (p *privateTxManager) HandleDeployTx(ctx context.Context, tx *components.Pr
 	// NOTE unlike private transactions, we assume that all verifiers are resolved locally
 
 	//Resolve keys synchronously so that we can return an error if any key resolution fails
-	keyMgr := p.components.KeyManager()
 	tx.Verifiers = make([]*prototk.ResolvedVerifier, len(tx.RequiredVerifiers))
 	for i, v := range tx.RequiredVerifiers {
-		unqualifiedLookup, err := tktypes.PrivateIdentityLocator(v.Lookup).Identity(ctx)
-		var resolvedKey *pldapi.KeyMappingAndVerifier
-		if err == nil {
-			resolvedKey, err = keyMgr.ResolveKeyNewDatabaseTX(ctx, unqualifiedLookup, v.Algorithm, v.VerifierType)
-		}
+		// TODO: This is a synchronous cross-node exchange, done sequentially for each verifier.
+		// Potentially needs to move to an event-driven model like on invocation.
+		verifier, err := p.components.IdentityResolver().ResolveVerifier(ctx, v.Lookup, v.Algorithm, v.VerifierType)
 		if err != nil {
-			return i18n.WrapError(ctx, err, msgs.MsgKeyResolutionFailed, v.Lookup, v.Algorithm)
+			return i18n.WrapError(ctx, err, msgs.MsgKeyResolutionFailed, v.Lookup, v.Algorithm, v.VerifierType)
 		}
 		tx.Verifiers[i] = &prototk.ResolvedVerifier{
 			Lookup:       v.Lookup,
 			Algorithm:    v.Algorithm,
-			Verifier:     resolvedKey.Verifier.Verifier,
+			Verifier:     verifier,
 			VerifierType: v.VerifierType,
 		}
 	}
@@ -725,4 +722,20 @@ func (p *privateTxManager) NotifyFailedPublicTx(ctx context.Context, dbTX *gorm.
 		}
 	}
 	return p.components.TxManager().FinalizeTransactions(ctx, dbTX, privateFailureReceipts)
+}
+
+// We get called post-commit by the indexer in the domain when transaction confirmations have been recorded,
+// at which point it is important for us to remove transactions from our Domain Context in-memory buffer.
+// This might also unblock significant extra processing for more transactions.
+func (p *privateTxManager) PrivateTransactionConfirmed(ctx context.Context, receipt *components.TxCompletion) {
+	log.L(ctx).Infof("private TX manager notified of transaction confirmation %s deploy=%t",
+		receipt.TransactionID, receipt.PSC == nil)
+	if receipt.PSC != nil {
+		seq, err := p.getSequencerForContract(ctx, receipt.PSC.Address(), receipt.PSC)
+		if err != nil {
+			log.L(ctx).Errorf("failed to obtain sequence to process receipts on contract %s: %s", receipt.PSC.Address(), err)
+			return
+		}
+		seq.publisher.PublishTransactionConfirmedEvent(ctx, receipt.TransactionID.String())
+	}
 }

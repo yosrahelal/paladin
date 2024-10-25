@@ -59,7 +59,7 @@ func TestEventIndexingWithDB(t *testing.T) {
 	contractAddr := tktypes.EthAddress(tktypes.RandBytes(20))
 
 	// Index an event indicating deployment of a new smart contract instance
-	var batchTxs []*components.ReceiptInput
+	var batchTxs txCompletionsOrdered
 	var unprocessedEvents []*pldapi.EventWithData
 	err := dm.persistence.DB().Transaction(func(tx *gorm.DB) (err error) {
 		unprocessedEvents, batchTxs, err = dm.registrationIndexer(ctx, tx, &blockindexer.EventDeliveryBatch{
@@ -91,6 +91,17 @@ func TestEventIndexingWithDB(t *testing.T) {
 	assert.Len(t, batchTxs, 1)
 	assert.Empty(t, unprocessedEvents) // we consumed all the events there were
 
+	tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{
+			Valid: true,
+			ContractConfig: &prototk.ContractConfig{
+				ContractConfigJson:   `{}`,
+				CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+				SubmitterSelection:   prototk.ContractConfig_SUBMITTER_SENDER,
+			},
+		}, nil
+	}
+
 	// Lookup the instance against the domain
 	psc, err := dm.GetSmartContractByAddress(ctx, contractAddr)
 	require.NoError(t, err)
@@ -103,7 +114,7 @@ func TestEventIndexingWithDB(t *testing.T) {
 	}, dc.info)
 	assert.Equal(t, contractAddr, psc.Address())
 	assert.Equal(t, "test1", psc.Domain().Name())
-	assert.Equal(t, "0xfeedbeef", psc.ConfigBytes().String())
+	assert.Equal(t, "0xfeedbeef", psc.(*domainContract).info.ConfigBytes.String())
 
 	// Get cached
 	psc2, err := dm.GetSmartContractByAddress(ctx, contractAddr)
@@ -235,7 +246,7 @@ func TestHandleEventBatch(t *testing.T) {
 			},
 		}).Return(nil, nil)
 
-		mc.txManager.On("MatchAndFinalizeTransactions", mock.Anything, mock.Anything, mock.MatchedBy(func(receipts []*components.ReceiptInput) bool {
+		mc.txManager.On("MatchAndFinalizeTransactions", mock.Anything, mock.Anything, mock.MatchedBy(func(receipts []*components.TxCompletion) bool {
 			// Note first contract is unrecognized, second is recognized
 			require.Len(t, receipts, 1)
 			r := receipts[0]
@@ -248,6 +259,8 @@ func TestHandleEventBatch(t *testing.T) {
 			assert.Equal(t, expectedEvent.LogIndex, r.OnChain.LogIndex)
 			return true
 		})).Return([]uuid.UUID{txID}, nil)
+
+		mc.privateTxManager.On("PrivateTransactionConfirmed", mock.Anything, mock.Anything).Return()
 	})
 	defer done()
 	d := td.d
@@ -296,6 +309,9 @@ func TestHandleEventBatch(t *testing.T) {
 				},
 			},
 		}, nil
+	}
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
 	cb, err := d.handleEventBatch(ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
@@ -412,6 +428,9 @@ func TestHandleEventBatchDomainError(t *testing.T) {
 	td.tp.Functions.HandleEventBatch = func(ctx context.Context, req *prototk.HandleEventBatchRequest) (*prototk.HandleEventBatchResponse, error) {
 		return nil, fmt.Errorf("pop")
 	}
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
+	}
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
@@ -450,6 +469,9 @@ func TestHandleEventBatchSpentBadTransactionID(t *testing.T) {
 				},
 			},
 		}, nil
+	}
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
@@ -490,6 +512,9 @@ func TestHandleEventBatchConfirmBadTransactionID(t *testing.T) {
 			},
 		}, nil
 	}
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
+	}
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
@@ -527,6 +552,9 @@ func TestHandleEventBatchSpentBadSchemaID(t *testing.T) {
 				},
 			},
 		}, nil
+	}
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
@@ -566,6 +594,9 @@ func TestHandleEventBatchConfirmBadSchemaID(t *testing.T) {
 			},
 		}, nil
 	}
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
+	}
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
@@ -602,6 +633,9 @@ func TestHandleEventBatchNewBadTransactionID(t *testing.T) {
 				},
 			},
 		}, nil
+	}
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
@@ -641,6 +675,9 @@ func TestHandleEventBatchNewBadSchemaID(t *testing.T) {
 			},
 		}, nil
 	}
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
+	}
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
@@ -678,6 +715,9 @@ func TestHandleEventBatchNewBadStateID(t *testing.T) {
 				},
 			},
 		}, nil
+	}
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
@@ -717,6 +757,9 @@ func TestHandleEventBatchBadTransactionID(t *testing.T) {
 				},
 			},
 		}, nil
+	}
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
 	}
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
@@ -762,6 +805,9 @@ func TestHandleEventBatchMarkConfirmedFail(t *testing.T) {
 			},
 		}, nil
 	}
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
+	}
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
@@ -803,6 +849,9 @@ func TestHandleEventBatchUpsertStateFail(t *testing.T) {
 			},
 		}, nil
 	}
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		return &prototk.InitContractResponse{Valid: true, ContractConfig: &prototk.ContractConfig{}}, nil
+	}
 
 	_, err = td.d.handleEventBatch(td.ctx, mp.P.DB(), &blockindexer.EventDeliveryBatch{
 		BatchID: batchID,
@@ -819,15 +868,15 @@ func TestHandleEventBatchUpsertStateFail(t *testing.T) {
 
 func TestReceiptSorting(t *testing.T) {
 	// Note the detail of the sorting code is in tktypes.OnChainLocation
-	receiptList := receiptsByOnChainOrder{
-		{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1100}},
-		{OnChain: tktypes.OnChainLocation{ /* not onchain */ }},
-		{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1000}},
+	receiptList := txCompletionsOrdered{
+		{ReceiptInput: components.ReceiptInput{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1100}}},
+		{ReceiptInput: components.ReceiptInput{OnChain: tktypes.OnChainLocation{ /* not onchain */ }}},
+		{ReceiptInput: components.ReceiptInput{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1000}}},
 	}
 	sort.Sort(receiptList)
-	assert.Equal(t, receiptsByOnChainOrder{
-		{OnChain: tktypes.OnChainLocation{Type: tktypes.NotOnChain}},
-		{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1000}},
-		{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1100}},
+	assert.Equal(t, txCompletionsOrdered{
+		{ReceiptInput: components.ReceiptInput{OnChain: tktypes.OnChainLocation{Type: tktypes.NotOnChain}}},
+		{ReceiptInput: components.ReceiptInput{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1000}}},
+		{ReceiptInput: components.ReceiptInput{OnChain: tktypes.OnChainLocation{Type: tktypes.OnChainEvent, BlockNumber: 1100}}},
 	}, receiptList)
 }

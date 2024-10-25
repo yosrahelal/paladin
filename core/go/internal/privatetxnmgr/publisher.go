@@ -159,3 +159,13 @@ func (p *publisher) PublishTransactionFinalizeError(ctx context.Context, transac
 	}
 	p.privateTxManager.HandleNewEvent(ctx, event)
 }
+
+func (p *publisher) PublishTransactionConfirmedEvent(ctx context.Context, transactionId string) {
+	event := &ptmgrtypes.TransactionConfirmedEvent{
+		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
+			ContractAddress: p.contractAddress,
+			TransactionID:   transactionId,
+		},
+	}
+	p.privateTxManager.HandleNewEvent(ctx, event)
+}

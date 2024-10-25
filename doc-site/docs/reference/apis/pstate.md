@@ -19,6 +19,7 @@ title: pstate_*
 1. `contractAddress`: [`EthAddress`](../types/simpletypes.md#ethaddress)
 2. `schemaRef`: [`Bytes32`](../types/simpletypes.md#bytes32)
 3. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
+4. `qualifier`: [`StateStatusQualifier`](../types/statestatusqualifier.md#statestatusqualifier)
 
 ### Returns
 
@@ -31,6 +32,7 @@ title: pstate_*
 0. `domain`: `string`
 1. `schemaRef`: [`Bytes32`](../types/simpletypes.md#bytes32)
 2. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
+3. `qualifier`: [`StateStatusQualifier`](../types/statestatusqualifier.md#statestatusqualifier)
 
 ### Returns
 

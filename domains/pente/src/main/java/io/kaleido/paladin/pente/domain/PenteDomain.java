@@ -57,10 +57,7 @@ public class PenteDomain extends DomainInstance {
 
         var domainConfig = ToDomain.DomainConfig.newBuilder()
                 .addAllAbiStateSchemasJson(config.allPenteSchemas())
-                .setBaseLedgerSubmitConfig(ToDomain.BaseLedgerSubmitConfig.newBuilder()
-                        .setSubmitMode(ToDomain.BaseLedgerSubmitConfig.Mode.ONE_TIME_USE_KEYS)
-                        .build())
-                .setAbiEventsJson(config.getInterfaceABI().toString())
+                .setAbiEventsJson(config.getEventsABI().toString())
                 .build();
         return CompletableFuture.completedFuture(ToDomain.ConfigureDomainResponse.newBuilder()
                 .setDomainConfig(domainConfig)
@@ -152,7 +149,8 @@ public class PenteDomain extends DomainInstance {
                     resolvedVerifiers,
                     params.externalCallsEnabled()
             ).getBytes());
-            var response = ToDomain.PrepareDeployResponse.newBuilder();
+            var response = ToDomain.PrepareDeployResponse.newBuilder().
+                    setSigner("%s.deploy.%s".formatted(config.getDomainName(), UUID.randomUUID().toString()));
             var newPrivacyGroupABIJson = config.getFactoryContractABI().getABIEntry("function", "newPrivacyGroup").toJSON(false);
             response.getTransactionBuilder().
                     setFunctionAbiJson(newPrivacyGroupABIJson).
@@ -164,6 +162,31 @@ public class PenteDomain extends DomainInstance {
             return CompletableFuture.completedFuture(response.build());
         } catch(Exception e) {
             return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    @Override
+    protected CompletableFuture<ToDomain.InitContractResponse> initContract(ToDomain.InitContractRequest request) {
+        try {
+            var onChainConfig = PenteConfiguration.decodeConfig(request.getContractConfig().toByteArray());
+
+            var contractConfigObj = new PenteConfiguration.ContractConfig(onChainConfig.evmVersion());
+            var contractConfig = ToDomain.ContractConfig.newBuilder().
+                    setContractConfigJson(new ObjectMapper().writeValueAsString(contractConfigObj)).
+                    setCoordinatorSelection(ToDomain.ContractConfig.CoordinatorSelection.COORDINATOR_ENDORSER).
+                    setSubmitterSelection(ToDomain.ContractConfig.SubmitterSelection.SUBMITTER_COORDINATOR).
+                    build();
+            return CompletableFuture.completedFuture(ToDomain.InitContractResponse.newBuilder().
+                    setValid(true).
+                    setContractConfig(contractConfig).
+                    build());
+
+        } catch(Exception e) {
+            LOGGER.error(new FormattedMessage("Invalid configuration for domain {}", request.getContractAddress()), e);
+            // We do not stall the indexer for this
+            return CompletableFuture.completedFuture(ToDomain.InitContractResponse.newBuilder().
+                    setValid(false).
+                    build());
         }
     }
 
@@ -486,7 +509,7 @@ public class PenteDomain extends DomainInstance {
             Bytes data
     ) {}
 
-    /** during assembly we load available states from the Paladin state store */
+    /** during assembly, we load available states from the Paladin state store */
     class AssemblyAccountLoader implements AccountLoader {
         private final HashMap<org.hyperledger.besu.datatypes.Address, FromDomain.StoredState> loadedAccountStates = new HashMap<>();
         private final String stateQueryContext;

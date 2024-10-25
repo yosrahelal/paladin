@@ -65,10 +65,9 @@ func TestRunBatchFinalizeOperations(t *testing.T) {
 
 	expectedReceipts := []*components.ReceiptInput{
 		{
-			ReceiptType:     components.RT_FailedWithMessage,
-			ContractAddress: testContractAddress,
-			TransactionID:   testTxnID,
-			FailureMessage:  testRevertReason,
+			ReceiptType:    components.RT_FailedWithMessage,
+			TransactionID:  testTxnID,
+			FailureMessage: testRevertReason,
 		},
 	}
 
@@ -83,9 +82,7 @@ func TestRunBatchFinalizeOperations(t *testing.T) {
 }
 
 func TestRunBatchFinalizeOperationsMixedContractAddresses(t *testing.T) {
-	//given that multiple WriteKeys can be matched to a single worker, there is no
-	//guarantee that the contract address will be the same for all the operations in one batch
-	// so need to make sure we handle this case
+
 	ctx := context.Background()
 	s, m := newSyncPointsForTesting(t)
 
@@ -125,37 +122,40 @@ func TestRunBatchFinalizeOperationsMixedContractAddresses(t *testing.T) {
 				FailureMessage: testRevertReason2b,
 			},
 		},
-	}
-
-	expectedReceipts1 := []*components.ReceiptInput{
 		{
-			ReceiptType:     components.RT_FailedWithMessage,
-			ContractAddress: testContractAddress1,
-			TransactionID:   testTxnID1,
-			FailureMessage:  testRevertReason1,
-		},
-	}
-	expectedReceipts2 := []*components.ReceiptInput{
-		{
-			ReceiptType:     components.RT_FailedWithMessage,
-			ContractAddress: testContractAddress2,
-			TransactionID:   testTxnID2a,
-			FailureMessage:  testRevertReason2a,
-		},
-		{
-			ReceiptType:     components.RT_FailedWithMessage,
-			ContractAddress: testContractAddress2,
-			TransactionID:   testTxnID2b,
-			FailureMessage:  testRevertReason2b,
+			// This one is a success - which does NOT get passed to FinalizeTransactions as
+			// the receipt is written by the Domain event indexer.
+			domainContext:   dc,
+			contractAddress: *testContractAddress2,
+			finalizeOperation: &finalizeOperation{
+				TransactionID: testTxnID2a,
+			},
 		},
 	}
 
-	m.txMgr.On("FinalizeTransactions", ctx, dbTX, expectedReceipts1).Return(nil)
-	m.txMgr.On("FinalizeTransactions", ctx, dbTX, expectedReceipts2).Return(nil)
+	expectedReceipts := []*components.ReceiptInput{
+		{
+			ReceiptType:    components.RT_FailedWithMessage,
+			TransactionID:  testTxnID1,
+			FailureMessage: testRevertReason1,
+		},
+		{
+			ReceiptType:    components.RT_FailedWithMessage,
+			TransactionID:  testTxnID2a,
+			FailureMessage: testRevertReason2a,
+		},
+		{
+			ReceiptType:    components.RT_FailedWithMessage,
+			TransactionID:  testTxnID2b,
+			FailureMessage: testRevertReason2b,
+		},
+	}
+
+	m.txMgr.On("FinalizeTransactions", ctx, dbTX, expectedReceipts).Return(nil)
 
 	dbResultCB, res, err := s.runBatch(ctx, dbTX, testSyncPointOperations)
 	assert.NoError(t, err)
-	require.Len(t, res, 3)
+	require.Len(t, res, 4)
 	dbResultCB(nil)
 	require.NoError(t, <-flushResult)
 

@@ -54,23 +54,26 @@ func (s *syncPoints) QueueTransactionFinalize(ctx context.Context, contractAddre
 
 }
 
-func (s *syncPoints) writeFinalizeOperations(ctx context.Context, dbTX *gorm.DB, finalizeOperationsByContractAddress map[tktypes.EthAddress][]*finalizeOperation) error {
+func (s *syncPoints) writeFailureOperations(ctx context.Context, dbTX *gorm.DB, finalizeOperations []*finalizeOperation) error {
 
-	for contractAddress, finalizeOperations := range finalizeOperationsByContractAddress {
-		receipts := make([]*components.ReceiptInput, len(finalizeOperations))
-		for i, op := range finalizeOperations {
-			receipts[i] = &components.ReceiptInput{
-				ReceiptType:     components.RT_FailedWithMessage,
-				ContractAddress: &contractAddress,
-				TransactionID:   op.TransactionID,
-				FailureMessage:  op.FailureMessage,
-			}
-		}
-
-		err := s.txMgr.FinalizeTransactions(ctx, dbTX, receipts)
-		if err != nil {
-			return err
+	// We are only responsible for failures. Success receipts are written on the DB transaction of the event handler,
+	// so they are guaranteed to be written in sequence for each confirmed domain private transaction.
+	//
+	// However, a syncpoint gets triggered for every finalize so that we can flush the Domain Context to the DB
+	// so that all states are stored, before we clear out the transaction from the in-memory Domain Context.
+	failureReceipts := make([]*components.ReceiptInput, 0)
+	for _, op := range finalizeOperations {
+		if op.FailureMessage != "" {
+			failureReceipts = append(failureReceipts, &components.ReceiptInput{
+				ReceiptType:    components.RT_FailedWithMessage,
+				TransactionID:  op.TransactionID,
+				FailureMessage: op.FailureMessage,
+			})
 		}
 	}
+	if len(failureReceipts) > 0 {
+		return s.txMgr.FinalizeTransactions(ctx, dbTX, failureReceipts)
+	}
 	return nil
+
 }

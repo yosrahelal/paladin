@@ -32,3 +32,6 @@ title: TransactionInput
 | `abi` | Application Binary Interface (ABI) definition - required if abiReference not supplied | [`Entry[]`](#entry) |
 | `bytecode` | Bytecode prepended to encoded data inputs for deploy transactions | [`HexBytes`](simpletypes.md#hexbytes) |
 
+## Entry
+
+

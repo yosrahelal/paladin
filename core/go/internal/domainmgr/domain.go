@@ -102,9 +102,6 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 
 	// Parse all the schemas
 	d.config = confRes.DomainConfig
-	if d.config.BaseLedgerSubmitConfig == nil {
-		return nil, i18n.NewError(d.ctx, msgs.MsgDomainBaseLedgerSubmitInvalid)
-	}
 	abiSchemas := make([]*abi.Parameter, len(d.config.AbiStateSchemasJson))
 	for i, schemaJSON := range d.config.AbiStateSchemasJson {
 		if err := json.Unmarshal([]byte(schemaJSON), &abiSchemas[i]); err != nil {
@@ -142,12 +139,16 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 	}
 
 	if d.config.AbiEventsJson != "" {
-		// Parse the events ABI
+		// Parse the events ABI - which we also pass to TxManager for information about all the errors contained in here
 		var eventsABI abi.ABI
 		if err := json.Unmarshal([]byte(d.config.AbiEventsJson), &eventsABI); err != nil {
 			return nil, i18n.WrapError(d.ctx, err, msgs.MsgDomainInvalidEvents)
 		}
 		stream.Sources = append(stream.Sources, blockindexer.EventStreamSource{ABI: eventsABI})
+
+		if _, err := d.dm.txManager.UpsertABI(d.ctx, eventsABI); err != nil {
+			return nil, err
+		}
 	}
 
 	// We build a stream name in a way assured to result in a new stream if the ABI changes
@@ -198,6 +199,7 @@ func (d *domain) init() {
 
 		// Complete the initialization
 		_, err = d.api.InitDomain(d.ctx, initReq)
+
 		return true, err
 	})
 	if err != nil {
@@ -499,16 +501,8 @@ func (d *domain) PrepareDeploy(ctx context.Context, tx *components.PrivateContra
 		return err
 	}
 
-	if res.Signer != nil && *res.Signer != "" {
+	if res.Signer != nil {
 		tx.Signer = *res.Signer
-	} else {
-		switch d.config.BaseLedgerSubmitConfig.SubmitMode {
-		case prototk.BaseLedgerSubmitConfig_ONE_TIME_USE_KEYS:
-			tx.Signer = d.config.BaseLedgerSubmitConfig.OneTimeUsePrefix + tx.ID.String()
-		default:
-			log.L(ctx).Errorf("Signer mode %s and no signer returned", d.config.BaseLedgerSubmitConfig.SubmitMode)
-			return i18n.NewError(ctx, msgs.MsgDomainDeployNoSigner)
-		}
 	}
 	if res.Transaction != nil && res.Deploy == nil {
 		var functionABI abi.Entry

@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
@@ -99,6 +100,7 @@ type Sequencer struct {
 	pendingTransactionEvents chan ptmgrtypes.PrivateTransactionEvent
 
 	contractAddress             tktypes.EthAddress // the contract address managed by the current sequencer
+	defaultSigner               string
 	nodeName                    string
 	domainAPI                   components.DomainSmartContract
 	components                  components.AllComponents
@@ -162,7 +164,11 @@ func NewSequencer(
 		transportWriter:              transportWriter,
 		graph:                        NewGraph(),
 		requestTimeout:               requestTimeout,
-		newBlockEvents:               make(chan int64, 10), //TODO do we want to make the buffer size configurable? Or should we put in non blocking mode? Does it matter if we miss a block?
+
+		// Randomly allocate a signer.
+		// TODO: rotation
+		defaultSigner:  fmt.Sprintf("domains.%s.submit.%s", contractAddress, uuid.New()),
+		newBlockEvents: make(chan int64, 10), //TODO do we want to make the buffer size configurable? Or should we put in non blocking mode? Does it matter if we miss a block?
 
 	}
 

@@ -37,11 +37,6 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 		return
 	}
 
-	if tf.dispatched {
-		log.L(ctx).Infof("Transaction %s is dispatched", tf.transaction.ID.String())
-		return
-	}
-
 	// Lets get the nasty stuff out of the way first
 	// if the event handler has marked the transaction as failed, then we initiate the finalize sync point
 	if tf.finalizeRequired {
@@ -52,6 +47,11 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 		//we know we need to finalize but we are not currently waiting for a finalize to complete
 		// most likely a previous attempt to finalize has failed
 		tf.finalize(ctx)
+	}
+
+	if tf.dispatched {
+		log.L(ctx).Infof("Transaction %s is dispatched", tf.transaction.ID.String())
+		return
 	}
 
 	if tf.transaction.PreAssembly == nil {
@@ -138,23 +138,96 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 	}
 	tf.status = "endorsed"
 
-	// TODO is this too late to be resolving the dispatch key?
-	// Can we do it any earlier or do we need to wait until we have all endorsements ( i.e. so that the endorser can declare ENDORSER_MUST_SUBMIT)
-	// We would need to do it earlier if we want to avoid transactions for different dispatch keys ending up in the same dependency graph
-	if tf.transaction.Signer == "" {
-		err := tf.domainAPI.ResolveDispatch(ctx, tf.transaction)
-		if err != nil {
+	reDelegate, err := tf.setTransactionSigner(ctx)
+	if err != nil {
 
-			log.L(ctx).Errorf("Failed to resolve dispatch for transaction %s: %s", tf.transaction.ID.String(), err)
-			tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerResolveDispatchError), err.Error())
+		log.L(ctx).Errorf("Invalid outcome from signer selection %s: %s", tf.transaction.ID.String(), err)
+		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerResolveDispatchError), err.Error())
 
-			//TODO as it stands, we will just enter a retry loop of trying to resolve the dispatcher next time the event loop triggers an action
-			// if we are lucky, that will be triggered by an event that somehow changes the in memory state in a way that the dispatcher can be
-			// resolved but that is unlikely
-			// would it be more appropriate to re-assemble ( or even revert ) the transaction here?
-			return
+		//TODO as it stands, we will just enter a retry loop of trying to resolve the dispatcher next time the event loop triggers an action
+		// if we are lucky, that will be triggered by an event that somehow changes the in memory state in a way that the dispatcher can be
+		// resolved but that is unlikely
+		// would it be more appropriate to re-assemble ( or even revert ) the transaction here?
+		return
+	} else if reDelegate {
+		// TODO: We should re-delegate in this scenario
+		tf.latestError = i18n.NewError(ctx, msgs.MsgPrivateReDelegationRequired).Error()
+	}
+}
+
+func (tf *transactionFlow) setTransactionSigner(ctx context.Context) (reDelegate bool, err error) {
+	// We only set the signing key in one very specific ENDORSER_MUST_SUBMIT path in this function.
+	// In the general case the Sequencer picks a random signing key to submit the transaction.
+	tx := tf.transaction
+	tx.Signer = ""
+
+	// We are the coordinator to be running this function.
+	// We need to check if:
+	// 1. There are any ENDORSER_MUST_SUBMIT constraints
+	// 2. If there are, that we are the correct coordinator, or if we need to re-delegate.
+	endorserSubmitSigner := ""
+	for _, ar := range tx.PostAssembly.Endorsements {
+		for _, c := range ar.Constraints {
+			if c == prototk.AttestationResult_ENDORSER_MUST_SUBMIT {
+				if endorserSubmitSigner != "" {
+					// Multiple endorsers claiming it is an error
+					return false, i18n.NewError(ctx, msgs.MsgDomainMultipleEndorsersSubmit)
+				}
+				log.L(ctx).Debugf("Endorser %s provided an ENDORSER_MUST_SUBMIT signing constraint for transaction %s", ar.Verifier.Lookup, tx.ID)
+				endorserSubmitSigner = ar.Verifier.Lookup
+			}
 		}
 	}
+	if endorserSubmitSigner == "" {
+		// great - we just need to use the anonymous signing management of the coordinator
+		return false, nil
+	}
+
+	contractConf := tf.domainAPI.ContractConfig()
+	if contractConf.SubmitterSelection != prototk.ContractConfig_SUBMITTER_COORDINATOR {
+		// We only accept ENDORSER_MUST_SUBMIT constraints for contracts configured with coordinator submission.
+		return false, i18n.NewError(ctx, msgs.MsgDomainEndorserSubmitConfigClash,
+			endorserSubmitSigner, contractConf.CoordinatorSelection, contractConf.SubmitterSelection)
+	}
+
+	// Now we need to check the configuration for how the coordinator is picked
+	switch contractConf.CoordinatorSelection {
+	case prototk.ContractConfig_COORDINATOR_STATIC:
+		staticCoordinator := ""
+		if contractConf.StaticCoordinator != nil {
+			staticCoordinator = *contractConf.StaticCoordinator
+		}
+		if endorserSubmitSigner != staticCoordinator {
+			// If you have a static coordinator, and an endorser with an ENDORSER_MUST_SUBMIT, they must match.
+			return false, i18n.NewError(ctx, msgs.MsgDomainEndorserSubmitConfigClash,
+				endorserSubmitSigner, fmt.Sprintf(`%s='%s'`, contractConf.CoordinatorSelection, staticCoordinator),
+				contractConf.SubmitterSelection)
+		}
+	case prototk.ContractConfig_COORDINATOR_ENDORSER:
+		// This is fine, but it's possible we've ended up with the wrong coordinator/endorser combination.
+	default:
+		// This is invalid. In order for an endorsement to be able to provide an ENDORSER_MUST_SUBMIT
+		// constraint it must be configured so we are allowed to pick the coordinator to be the endorser.
+		return false, i18n.NewError(ctx, msgs.MsgDomainEndorserSubmitConfigClash,
+			endorserSubmitSigner, contractConf.CoordinatorSelection, contractConf.SubmitterSelection)
+	}
+
+	// Ok we have a submission constraint to use the signing key of an endorser to submit.
+	// Check it is a local identity. If not we have a re-delegation scenario.
+	node, err := tktypes.PrivateIdentityLocator(endorserSubmitSigner).Node(ctx, false /* must be fully qualified in this scenario */)
+	if err != nil {
+		return false, i18n.WrapError(ctx, err, msgs.MsgDomainEndorserSubmitConfigClash,
+			endorserSubmitSigner, contractConf.CoordinatorSelection, contractConf.SubmitterSelection)
+	}
+	if node != tf.nodeID {
+		log.L(ctx).Warnf("For transaction %s to be submitted, the coordinator must move to the node ENDORSER_MUST_SUBMIT constraint %s",
+			tx.ID, endorserSubmitSigner)
+		return true, nil
+	}
+	// Ok - we have an endorsement approval to use the returned
+	// NON-ANONYMOUS identity homed on this local node to submit.
+	tx.Signer = endorserSubmitSigner
+	return false, nil
 }
 
 func (tf *transactionFlow) revertTransaction(ctx context.Context, revertReason string) {
@@ -162,13 +235,13 @@ func (tf *transactionFlow) revertTransaction(ctx context.Context, revertReason s
 	//trigger a finalize and update the transaction state so that finalize can be retried if it fails
 	tf.finalizeRequired = true
 	tf.finalizePending = true
-	tf.finalizeReason = revertReason
+	tf.finalizeRevertReason = revertReason
 	tf.finalize(ctx)
 
 }
 
 func (tf *transactionFlow) finalize(ctx context.Context) {
-	log.L(ctx).Errorf("finalize transaction %s: %s", tf.transaction.ID.String(), tf.finalizeReason)
+	log.L(ctx).Errorf("finalize transaction %s: %s", tf.transaction.ID.String(), tf.finalizeRevertReason)
 	//flush that to the txmgr database
 	// so that the user can see that it is reverted and so that we stop retrying to assemble and endorse it
 
@@ -176,18 +249,26 @@ func (tf *transactionFlow) finalize(ctx context.Context) {
 		ctx,
 		tf.domainAPI.Address(),
 		tf.transaction.ID,
-		tf.finalizeReason,
+		tf.finalizeRevertReason,
 		func(ctx context.Context) {
 			//we are not on the main event loop thread so can't update in memory state here.
 			// need to go back into the event loop
 			log.L(ctx).Infof("Transaction %s finalize committed", tf.transaction.ID.String())
+
+			// Remove this transaction from our domain context on success - all changes are flushed to DB at this point
+			tf.endorsementGatherer.DomainContext().ResetTransactions(tf.transaction.ID)
+
 			go tf.publisher.PublishTransactionFinalizedEvent(ctx, tf.transaction.ID.String())
 		},
 		func(ctx context.Context, rollbackErr error) {
 			//we are not on the main event loop thread so can't update in memory state here.
 			// need to go back into the event loop
 			log.L(ctx).Errorf("Transaction %s finalize rolled back: %s", tf.transaction.ID.String(), rollbackErr)
-			go tf.publisher.PublishTransactionFinalizeError(ctx, tf.transaction.ID.String(), tf.finalizeReason, rollbackErr)
+
+			// Reset the whole domain context on failure
+			tf.endorsementGatherer.DomainContext().Reset()
+
+			go tf.publisher.PublishTransactionFinalizeError(ctx, tf.transaction.ID.String(), tf.finalizeRevertReason, rollbackErr)
 		},
 	)
 }

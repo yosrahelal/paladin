@@ -75,7 +75,7 @@ type transactionFlow struct {
 	identityResolver            components.IdentityResolver
 	syncPoints                  syncpoints.SyncPoints
 	transportWriter             ptmgrtypes.TransportWriter
-	finalizeReason              string
+	finalizeRevertReason        string
 	finalizeRequired            bool
 	finalizePending             bool
 	complete                    bool
@@ -120,7 +120,12 @@ func (tf *transactionFlow) CoordinatingLocally() bool {
 	return tf.localCoordinator
 }
 
-func (tf *transactionFlow) PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error) {
+func (tf *transactionFlow) PrepareTransaction(ctx context.Context, defaultSigner string) (*components.PrivateTransaction, error) {
+
+	if tf.transaction.Signer == "" {
+		log.L(ctx).Infof("Using random signing key from sequencer to prepare transaction: %s", defaultSigner)
+		tf.transaction.Signer = defaultSigner
+	}
 
 	readTX := tf.components.Persistence().DB() // no DB transaction required here
 	prepError := tf.domainAPI.PrepareTransaction(tf.endorsementGatherer.DomainContext(), readTX, tf.transaction)

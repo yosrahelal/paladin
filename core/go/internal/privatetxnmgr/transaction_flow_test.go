@@ -73,13 +73,12 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.endorsementGatherer.On("DomainContext").Return(mocks.domainContext).Maybe()
 	mocks.domainSmartContract.On("Address").Return(*contractAddress).Maybe()
+	mocks.domainSmartContract.On("ContractConfig").Return(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+	}).Maybe()
 
 	domain := componentmocks.NewDomain(t)
-	domain.On("Configuration").Return(&prototk.DomainConfig{
-		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
-			SubmitMode: prototk.BaseLedgerSubmitConfig_ONE_TIME_USE_KEYS,
-		},
-	}).Maybe()
+	domain.On("Configuration").Return(&prototk.DomainConfig{}).Maybe()
 	mocks.domainSmartContract.On("Domain").Return(domain).Maybe()
 
 	nodeName := tktypes.RandHex(16)

@@ -55,6 +55,7 @@ type Publisher interface {
 	PublishResolveVerifierErrorEvent(ctx context.Context, transactionId string, lookup, algorithm, errorMessage string)
 	PublishTransactionFinalizedEvent(ctx context.Context, transactionId string)
 	PublishTransactionFinalizeError(ctx context.Context, transactionId string, revertReason string, err error)
+	PublishTransactionConfirmedEvent(ctx context.Context, transactionId string)
 }
 
 // Map of signing address to an ordered list of transaction IDs that are ready to be dispatched by that signing address
@@ -107,7 +108,7 @@ type TransactionFlow interface {
 	ApplyEvent(ctx context.Context, event PrivateTransactionEvent)
 	Action(ctx context.Context)
 
-	PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error)
+	PrepareTransaction(ctx context.Context, defaultSigner string) (*components.PrivateTransaction, error)
 	GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution
 	CoordinatingLocally() bool
 	IsComplete() bool

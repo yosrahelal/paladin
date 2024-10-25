@@ -130,9 +130,7 @@ func TestDomainRequestsOK(t *testing.T) {
 			assert.Equal(t, int64(12345), cdr.ChainId)
 			return &prototk.ConfigureDomainResponse{
 				DomainConfig: &prototk.DomainConfig{
-					BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
-						SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
-					},
+					CustomHashFunction: true,
 				},
 			}, nil
 		},
@@ -149,6 +147,14 @@ func TestDomainRequestsOK(t *testing.T) {
 			assert.Equal(t, "deploy_tx1_prepare", pdr.Transaction.TransactionId)
 			return &prototk.PrepareDeployResponse{
 				Signer: confutil.P("signing1"),
+			}, nil
+		},
+		InitContract: func(ctx context.Context, itr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+			assert.Equal(t, "0xaabbcc", itr.ContractAddress)
+			return &prototk.InitContractResponse{
+				ContractConfig: &prototk.ContractConfig{
+					ContractConfigJson: `{"domain":"conf"}`,
+				},
 			}, nil
 		},
 		InitTransaction: func(ctx context.Context, itr *prototk.InitTransactionRequest) (*prototk.InitTransactionResponse, error) {
@@ -274,7 +280,7 @@ func TestDomainRequestsOK(t *testing.T) {
 		ChainId: int64(12345),
 	})
 	require.NoError(t, err)
-	assert.Equal(t, prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION, cdr.DomainConfig.BaseLedgerSubmitConfig.SubmitMode)
+	assert.True(t, cdr.DomainConfig.CustomHashFunction)
 
 	_, err = domainAPI.InitDomain(ctx, &prototk.InitDomainRequest{})
 	require.NoError(t, err)
@@ -299,6 +305,12 @@ func TestDomainRequestsOK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "signing1", *pdr.Signer)
+
+	iscr, err := domainAPI.InitContract(ctx, &prototk.InitContractRequest{
+		ContractAddress: "0xaabbcc",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, `{"domain":"conf"}`, iscr.ContractConfig.ContractConfigJson)
 
 	itr, err := domainAPI.InitTransaction(ctx, &prototk.InitTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{

@@ -65,7 +65,7 @@ type Noto struct {
 type NotoDeployParams struct {
 	Name          string             `json:"name,omitempty"`
 	TransactionID string             `json:"transactionId"`
-	NotaryType    tktypes.Bytes32    `json:"notaryType"`
+	NotaryType    tktypes.HexUint64  `json:"notaryType"`
 	NotaryAddress tktypes.EthAddress `json:"notaryAddress"`
 	Data          tktypes.HexBytes   `json:"data"`
 }
@@ -171,10 +171,7 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	return &prototk.ConfigureDomainResponse{
 		DomainConfig: &prototk.DomainConfig{
 			AbiStateSchemasJson: []string{string(schemaJSON)},
-			BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{
-				SubmitMode: prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION,
-			},
-			AbiEventsJson: string(eventsJSON),
+			AbiEventsJson:       string(eventsJSON),
 		},
 	}, nil
 }
@@ -210,7 +207,7 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 		return nil, i18n.NewError(ctx, msgs.MsgErrorVerifyingAddress, "notary")
 	}
 
-	var notaryType tktypes.Bytes32
+	var notaryType tktypes.HexUint64
 	var notaryAddress *tktypes.EthAddress
 	if params.GuardPublicAddress.IsZero() {
 		notaryAddress, err = tktypes.ParseEthAddress(notary.Verifier)
@@ -258,6 +255,40 @@ func (n *Noto) PrepareDeploy(ctx context.Context, req *prototk.PrepareDeployRequ
 			ParamsJson:      string(paramsJSON),
 		},
 		Signer: &notary.Lookup,
+	}, nil
+}
+
+func (n *Noto) InitContract(ctx context.Context, req *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+	var notoContractConfigJSON []byte
+	var staticCoordinator string
+	domainConfig, err := n.decodeConfig(ctx, req.ContractConfig)
+	if err == nil {
+		parsedConfig := &types.NotoParsedConfig{
+			NotaryType:     domainConfig.NotaryType,
+			NotaryAddress:  domainConfig.NotaryAddress,
+			Variant:        domainConfig.Variant,
+			NotaryLookup:   domainConfig.DecodedData.NotaryLookup,
+			PrivateAddress: domainConfig.DecodedData.PrivateAddress,
+			PrivateGroup:   domainConfig.DecodedData.PrivateGroup,
+		}
+		notoContractConfigJSON, err = json.Marshal(parsedConfig)
+	}
+	if err == nil {
+		staticCoordinator = domainConfig.DecodedData.NotaryLookup
+	}
+	if err != nil {
+		// This on-chain contract has invalid configuration - not an error in our process
+		return &prototk.InitContractResponse{Valid: false}, nil
+	}
+
+	return &prototk.InitContractResponse{
+		Valid: true,
+		ContractConfig: &prototk.ContractConfig{
+			ContractConfigJson:   string(notoContractConfigJSON),
+			CoordinatorSelection: prototk.ContractConfig_COORDINATOR_STATIC,
+			StaticCoordinator:    &staticCoordinator,
+			SubmitterSelection:   prototk.ContractConfig_SUBMITTER_COORDINATOR,
+		},
 	}, nil
 }
 
@@ -328,7 +359,8 @@ func (n *Noto) validateTransaction(ctx context.Context, tx *prototk.TransactionS
 		return nil, nil, err
 	}
 
-	domainConfig, err := n.decodeConfig(ctx, tx.ContractInfo.ContractConfig)
+	var domainConfig *types.NotoParsedConfig
+	err = json.Unmarshal([]byte(tx.ContractInfo.ContractConfigJson), &domainConfig)
 	if err != nil {
 		return nil, nil, err
 	}

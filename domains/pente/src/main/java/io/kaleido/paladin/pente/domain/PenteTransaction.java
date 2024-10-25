@@ -112,7 +112,7 @@ class PenteTransaction {
     private final PenteDomain domain;
     private final JsonABI.Entry functionDef;
     private final Address contractAddress;
-    private final byte[] contractConfig;
+    private final PenteConfiguration.ContractConfig contractConfig;
     private final String from;
     private final String jsonParams;
     private final long baseBlock;
@@ -122,7 +122,7 @@ class PenteTransaction {
     PenteTransaction(PenteDomain domain, ToDomain.TransactionSpecification tx) throws IOException, IllegalArgumentException {
         this.domain = domain;
         contractAddress = new Address(tx.getContractInfo().getContractAddress());
-        contractConfig = tx.getContractInfo().getContractConfig().toByteArray();
+        contractConfig = new ObjectMapper().readValue(tx.getContractInfo().getContractConfigJson(), PenteConfiguration.ContractConfig.class);
         from = tx.getFrom();
         baseBlock = tx.getBaseBlock();
         // Check the ABI params we expect at the top level (we don't mind the order)
@@ -209,8 +209,8 @@ class PenteTransaction {
         return values;
     }
 
-    PenteConfiguration.OnChainConfig getConfig() throws ClassNotFoundException {
-        return PenteConfiguration.decodeConfig(this.contractConfig);
+    PenteConfiguration.ContractConfig getConfig() throws ClassNotFoundException {
+        return this.contractConfig;
     }
 
     EVMRunner getEVM(long chainId, long blockNumber, AccountLoader accountLoader) throws ClassNotFoundException {

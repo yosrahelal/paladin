@@ -18,6 +18,7 @@ package pldclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -90,7 +91,7 @@ type TxBuilder interface {
 	PublicTxOptions(opts pldapi.PublicTxOptions) TxBuilder // detailed options of how to submit the public / base ledger transaction that results from the public/private transaction
 	GetPublicTxOptions() pldapi.PublicTxOptions
 
-	PublicCallOptions(opts pldapi.PublicCallOptions) TxBuilder // for calls of public transactions, this is
+	PublicCallOptions(opts pldapi.PublicCallOptions) TxBuilder // allows you to set the block number the call happens against, when running queries directly against the base ledger
 	GetPublicCallOptions() pldapi.PublicCallOptions
 
 	DataFormat(format tktypes.JSONFormatOptions) TxBuilder // determines how JSON will be sent/received to/from the server as serialized JSON
@@ -642,6 +643,9 @@ func (tr *transactionResult) wait(timeout time.Duration) TransactionResult {
 		}
 		// Did we get one?
 		if tr.receipt != nil {
+			if !tr.receipt.Success {
+				tr.deferError(errors.New(tr.receipt.FailureMessage))
+			}
 			return tr
 		}
 		// Check we didn't timeout
@@ -669,7 +673,7 @@ func (tr *transactionResult) Receipt() *pldapi.TransactionReceipt {
 }
 
 func (tr *transactionResult) TransactionHash() *tktypes.Bytes32 {
-	if tr.receipt != nil {
+	if tr.receipt != nil && tr.receipt.TransactionReceiptDataOnchain != nil {
 		return tr.receipt.TransactionHash
 	}
 	return nil

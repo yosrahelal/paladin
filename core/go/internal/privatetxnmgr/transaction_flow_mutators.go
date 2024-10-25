@@ -97,7 +97,7 @@ func (tf *transactionFlow) applyTransactionAssembleFailedEvent(ctx context.Conte
 	tf.latestEvent = "TransactionAssembleFailedEvent"
 	tf.latestError = event.Error
 	tf.finalizeRequired = true
-	tf.finalizeReason = event.Error
+	tf.finalizeRevertReason = event.Error
 }
 
 func (tf *transactionFlow) applyTransactionSignedEvent(ctx context.Context, event *ptmgrtypes.TransactionSignedEvent) {
@@ -138,7 +138,7 @@ func (tf *transactionFlow) applyTransactionConfirmedEvent(ctx context.Context, e
 	log.L(ctx).Debugf("transactionFlow:applyTransactionConfirmedEvent transactionID:%s contractAddress: %s", tf.transaction.ID.String(), event.ContractAddress)
 	tf.latestEvent = "TransactionConfirmedEvent"
 	tf.status = "confirmed"
-	tf.complete = true
+	tf.finalizeRequired = true
 }
 
 func (tf *transactionFlow) applyTransactionRevertedEvent(ctx context.Context, _ *ptmgrtypes.TransactionRevertedEvent) {

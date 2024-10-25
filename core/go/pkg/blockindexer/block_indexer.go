@@ -165,16 +165,19 @@ func (bi *blockIndexer) Start(internalStreams ...*InternalEventStream) error {
 
 func (bi *blockIndexer) AddEventStream(ctx context.Context, stream *InternalEventStream) (*EventStream, error) {
 	es, err := bi.upsertInternalEventStream(ctx, stream)
+	if err != nil {
+		return nil, err
+	}
 
 	// Can be called before start as managers start before the block indexer
 	bi.stateLock.Lock()
 	started := bi.started
 	bi.stateLock.Unlock()
 
-	if started && err == nil {
+	if started {
 		bi.startEventStream(es)
 	}
-	return es.definition, err
+	return es.definition, nil
 }
 
 func (bi *blockIndexer) startOrReset() {
@@ -453,7 +456,7 @@ func (bi *blockIndexer) dispatcher(ctx context.Context) {
 			// spin getting blocks until we it looks like we need to wait for a notification
 			lastFromNotification := false
 			for bi.readNextBlock(ctx, &lastFromNotification) {
-				toDispatch := bi.getNextConfirmed()
+				toDispatch := bi.getNextConfirmed(ctx)
 				if toDispatch != nil {
 					pendingDispatch = append(pendingDispatch, toDispatch)
 				}
@@ -739,21 +742,25 @@ func (bi *blockIndexer) readNextBlock(ctx context.Context, lastFromNotification 
 		// It's possible that while we were off at the node querying this, a notification came in
 		// that affected our state. We need to check this still matches, or go round again
 		if len(bi.blocksSinceCheckpoint) > 0 {
-			if !bi.blocksSinceCheckpoint[len(bi.blocksSinceCheckpoint)-1].Hash.Equals(nextBlock.ParentHash) {
+			headBlock := bi.blocksSinceCheckpoint[len(bi.blocksSinceCheckpoint)-1]
+			if !headBlock.Hash.Equals(nextBlock.ParentHash) {
 				// This doesn't attach to the end of our list. Trim it off and try again.
 				bi.blocksSinceCheckpoint = bi.blocksSinceCheckpoint[0 : len(bi.blocksSinceCheckpoint)-1]
+				log.L(ctx).Debugf("Block %d / %s does not fit in our view of the canonical chain - trimming (parentHash=%s != head[%d]=%s, new blocksSinceCheckpoint=%d)",
+					nextBlock.Number, nextBlock.Hash, nextBlock.ParentHash, len(bi.blocksSinceCheckpoint)-1, headBlock.Hash, len(bi.blocksSinceCheckpoint))
 				return true
 			}
 		}
 
 		// We successfully attached it
 		bi.blocksSinceCheckpoint = append(bi.blocksSinceCheckpoint, nextBlock)
+		log.L(ctx).Debugf("Added read block %d / %s to list (new blocksSinceCheckpoint=%d)", nextBlock.Number, nextBlock.Hash, len(bi.blocksSinceCheckpoint))
 	}
 	return true
 
 }
 
-func (bi *blockIndexer) getNextConfirmed() (toDispatch *BlockInfoJSONRPC) {
+func (bi *blockIndexer) getNextConfirmed(ctx context.Context) (toDispatch *BlockInfoJSONRPC) {
 	bi.stateLock.Lock()
 	defer bi.stateLock.Unlock()
 	if len(bi.blocksSinceCheckpoint) > bi.requiredConfirmations {
@@ -762,6 +769,7 @@ func (bi *blockIndexer) getNextConfirmed() (toDispatch *BlockInfoJSONRPC) {
 		bi.blocksSinceCheckpoint = append([]*BlockInfoJSONRPC{}, bi.blocksSinceCheckpoint[1:]...)
 		newCheckpoint := toDispatch.Number + 1
 		bi.nextBlock = &newCheckpoint
+		log.L(ctx).Debugf("Confirmed block popped for dispatch %d / %s (new blocksSinceCheckpoint=%d)", toDispatch.Number, toDispatch.Hash, len(bi.blocksSinceCheckpoint))
 	}
 	return toDispatch
 }

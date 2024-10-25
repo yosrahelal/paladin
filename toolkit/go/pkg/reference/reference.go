@@ -90,6 +90,7 @@ var allTypes = []interface{}{
 	pldapi.RegistryProperty{},
 	pldapi.OnChainLocation{},
 	tktypes.JSONFormatOptions(""),
+	pldapi.StateStatusQualifier(""),
 	query.QueryJSON{
 		Limit: ptr.To(10),
 		Sort:  []string{"field1 DESC", "field2"},
@@ -642,7 +643,7 @@ func (d *docGenerator) writeStructFields(ctx context.Context, t reflect.Type, pa
 		pldType := fieldType.Name()
 
 		_, isKnown := d.typeToPage[strings.ToLower(pldType)]
-		if !isKnown {
+		if pldType == "" /* a plain slice rather than named one */ || !isKnown {
 			if fieldType.Kind() == reflect.Slice {
 				fieldType = fieldType.Elem()
 				pldType = fieldType.Name()
@@ -673,6 +674,19 @@ func (d *docGenerator) writeStructFields(ctx context.Context, t reflect.Type, pa
 
 		if link != "" {
 			pldType = fmt.Sprintf("[%s](%s)", pldType, link)
+
+			// Generate the table for the sub type
+			_, typeAlreadyGenerated := d.typeToPage[strings.ToLower(fieldType.Name())]
+			_, page := d.pageToTypes[strings.ToLower(fieldType.Name())]
+
+			if isStruct && !typeAlreadyGenerated && !page {
+				d.addPageToMap(fieldType, pageName)
+
+				subFieldBuff.WriteString(fmt.Sprintf("## %s\n\n", fieldType.Name()))
+				subFieldMarkdown, _ := d.generateObjectReferenceMarkdown(ctx, false, nil, fieldType, pageName, outputPath)
+				subFieldBuff.Write(subFieldMarkdown)
+				subFieldBuff.WriteString("\n")
+			}
 		}
 
 		tableBuff.WriteString(fmt.Sprintf("| `%s` | %s | %s |\n", jsonFieldName, description, pldType))

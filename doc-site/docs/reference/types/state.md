@@ -31,3 +31,6 @@ title: State
 | `locks` | When querying states within a domain context running ahead of the blockchain assembling transactions for submission, this provides detail on locks applied to the state | [`StateLock[]`](statelock.md#statelock) |
 | `nullifier` | Only set if nullifiers are being used in the domain, and a nullifier has been generated that is available for spending this state | [`StateNullifier`](#statenullifier) |
 
+## StateNullifier
+
+
