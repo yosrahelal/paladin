@@ -46,5 +46,7 @@
   "switchThemeMode": "Switch theme mode",
   "showProperties": "Show Properties",
   "hideProperties": "Hide Properties",
-  "noProperties": "No Properties"
+  "noProperties": "No Properties",
+  "viewDetails": "View Details",
+  "registryEntry": "Registry Entry"
 }

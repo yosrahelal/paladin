@@ -23,16 +23,17 @@ import {
   useTheme} from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import JSONPretty from 'react-json-pretty';
-import { IPaladinTransaction } from '../interfaces';
 
 type Props = {
-  paladinTransaction: IPaladinTransaction
+  title: string
+  details: Object
   dialogOpen: boolean
   setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
 }
 
-export const PaladinTransactionDialog: React.FC<Props> = ({
-  paladinTransaction,
+export const ViewDetailsDialog: React.FC<Props> = ({
+  title,
+  details,
   dialogOpen,
   setDialogOpen
 }) => {
@@ -63,10 +64,10 @@ export const PaladinTransactionDialog: React.FC<Props> = ({
       maxWidth="lg"
     >
       <DialogTitle sx={{ textAlign: 'center' }}>
-        {t('transaction')}
+        {title}
       </DialogTitle>
       <DialogContent>
-        <JSONPretty style={{ fontSize: '14px'}}  data={paladinTransaction} theme={colors} />
+        <JSONPretty style={{ fontSize: '14px'}}  data={details} theme={colors} />
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'center', marginBottom: '15px' }}>
         <Button

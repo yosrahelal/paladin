@@ -20,7 +20,7 @@ import { t } from "i18next";
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { Hash } from "./Hash";
-import { PaladinTransactionDialog } from "../dialogs/PaladinTransaction";
+import { ViewDetailsDialog } from "../dialogs/ViewDetails";
 import { useState } from "react";
 import daysjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -98,8 +98,9 @@ export const Transaction: React.FC<Props> = ({ transaction, transactionReceipt, 
         </Grid2>
       </Box>
       {transactionReceipt !== undefined && paladinTransaction !== undefined &&
-        <PaladinTransactionDialog
-          paladinTransaction={paladinTransaction}
+        <ViewDetailsDialog
+          title={t('transaction')}
+          details={paladinTransaction}
           dialogOpen={paladinTransactionDialogOpen}
           setDialogOpen={setPaladinTransactionDialogOpen}
         />}

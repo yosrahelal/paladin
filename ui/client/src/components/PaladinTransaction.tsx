@@ -17,11 +17,10 @@
 import { Box, Button, ButtonBase, Collapse, Grid2, TextField, Typography } from "@mui/material";
 import { t } from "i18next";
 import { useState } from "react";
-import { PaladinTransactionDialog } from "../dialogs/PaladinTransaction";
+import { ViewDetailsDialog } from "../dialogs/ViewDetails";
 import { IPaladinTransaction } from "../interfaces";
 import { Hash } from "./Hash";
 import { Timestamp } from "./Timestamp";
-import HourglassTopIcon from '@mui/icons-material/HourglassTop';
 import daysjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -142,8 +141,9 @@ export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
           </Grid2>
         </Grid2>
       </Box>
-      <PaladinTransactionDialog
-        paladinTransaction={paladinTransaction}
+      <ViewDetailsDialog
+        title={t('transaction')}
+        details={paladinTransaction}
         dialogOpen={paladinTransactionDialogOpen}
         setDialogOpen={setPaladinTransactionDialogOpen}
       />
