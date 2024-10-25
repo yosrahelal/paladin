@@ -22,12 +22,17 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { Hash } from "./Hash";
 import { PaladinTransactionDialog } from "../dialogs/PaladinTransaction";
 import { useState } from "react";
+import daysjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+// import HourglassTopIcon from '@mui/icons-material/HourglassTop';
 
 type Props = {
   transaction: ITransaction
   transactionReceipt?: ITransactionReceipt
   paladinTransaction?: IPaladinTransaction
 }
+
+daysjs.extend(relativeTime);
 
 export const Transaction: React.FC<Props> = ({ transaction, transactionReceipt, paladinTransaction }) => {
 
@@ -38,11 +43,17 @@ export const Transaction: React.FC<Props> = ({ transaction, transactionReceipt, 
       <Box sx={{
         position: 'relative',
         backgroundColor: theme => theme.palette.background.paper,
-        marginBottom: '20px', padding: '10px', borderRadius: '6px', boxShadow: '0px 0px 8px 3px rgba(0,0,0,0.26)'
+        marginBottom: '20px', padding: '10px',  borderRadius: '6px', boxShadow: '0px 0px 8px 3px rgba(0,0,0,0.26)'
       }}>
         {paladinTransaction !== undefined &&
-          <img src="/paladin-icon-light.svg" width="45" style={{ position: 'absolute', left: '4px', bottom: '0px' }} />
+          <img src="/paladin-icon-light.svg" width="38" style={{ position: 'absolute', left: '4px', bottom: '0px' }} />
         }
+        {/* <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+        <HourglassTopIcon color="primary" sx={{ marginRight: '4px', fontSize: '16px', height: '20px' }} />
+          <Typography color="textSecondary" align="center" variant="body2" sx={{ marginBottom: '8px'}}>
+            {daysjs(paladinTransaction?.created).fromNow()}
+            </Typography>
+        </Box> */}
         <Grid2 container direction="column" spacing={2}>
           <Grid2 container justifyContent="space-evenly">
             {paladinTransaction !== undefined &&

@@ -14,25 +14,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Box, ButtonBase, Grid2, TextField, Typography } from "@mui/material";
+import { Box, Button, ButtonBase, Collapse, Grid2, TextField, Typography } from "@mui/material";
 import { t } from "i18next";
 import { useState } from "react";
 import { PaladinTransactionDialog } from "../dialogs/PaladinTransaction";
 import { IPaladinTransaction } from "../interfaces";
 import { Hash } from "./Hash";
 import { Timestamp } from "./Timestamp";
+import HourglassTopIcon from '@mui/icons-material/HourglassTop';
+import daysjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+
+daysjs.extend(relativeTime);
 
 type Props = {
   paladinTransaction: IPaladinTransaction;
 };
 
 export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
-  const [paladinTransactionDialogOpen, setPaladinTransactionDialogOpen] =
-    useState(false);
+
+  const [paladinTransactionDialogOpen, setPaladinTransactionDialogOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+
 
   if (paladinTransaction === undefined) {
     return <></>;
   }
+
+  const formatProperty = (value: any) => {
+    try {
+      const parsed = JSON.stringify(value);
+      return parsed.substring(1, parsed.length - 1);
+    } catch(err) {}
+    return value;
+  };
 
   return (
     <>
@@ -45,6 +62,7 @@ export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
           boxShadow: "0px 0px 8px 3px rgba(0,0,0,0.26)",
         }}
       >
+
         <Grid2 container direction="column" spacing={2}>
           <Grid2 container justifyContent="space-evenly">
             <Grid2>
@@ -71,7 +89,7 @@ export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
             </Grid2>
             <Grid2>
               <Typography align="center" variant="h6" color="textPrimary">
-                {paladinTransaction.domain}
+                {paladinTransaction.domain ?? '--'}
               </Typography>
               <Typography align="center" variant="body2" color="textSecondary">
                 {t("domain")}
@@ -93,20 +111,38 @@ export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
                 {t("type")}
               </Typography>
             </Grid2>
-            {Object.keys(paladinTransaction.data)
-              .filter((property) => property !== "$owner")
-              .map((property) => (
-                <TextField
-                  key={property}
-                  label={property}
-                  disabled
-                  maxRows={8}
-                  multiline
-                  fullWidth
-                  size="small"
-                  value={JSON.stringify(paladinTransaction.data[property])}
-                />
-              ))}
+          </Grid2>
+          <Grid2>
+            <Box sx={{ display: 'flex', padding: '4px', justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', padding: '4px' }}>
+                <HourglassTopIcon color="primary" sx={{ marginRight: '4px', fontSize: '16px', height: '20px' }} />
+                <Typography color="textSecondary" variant="body2" >
+                  {daysjs(paladinTransaction?.created).fromNow()}
+                </Typography>
+              </Box>
+              <Button size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                onClick={() => setIsExpanded(!isExpanded)}>
+                {t(isExpanded ? 'hideProperties' : 'showProperties')}
+              </Button>
+            </Box>
+            <Collapse in={isExpanded}>
+              {Object.keys(paladinTransaction.data)
+                .filter((property) => property !== "$owner")
+                .map((property) => (
+                  <TextField
+                    key={property}
+                    label={property}
+                    maxRows={8}
+                    multiline
+                    fullWidth
+                    size="small"
+                    sx={{ marginTop: '12px'}}
+                    value={formatProperty(paladinTransaction.data[property])}
+                  />
+                ))}
+                {Object.keys(paladinTransaction.data).length === 0 &&
+                <Typography align="center">{t('noProperties')}</Typography>}
+            </Collapse>
           </Grid2>
         </Grid2>
       </Box>

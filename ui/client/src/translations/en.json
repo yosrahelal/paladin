@@ -43,5 +43,8 @@
   "transactions": "Transactions",
   "transactionsAndEvents": "Transactions & Events",
   "type": "Type",
-  "switchThemeMode": "Switch theme mode"
+  "switchThemeMode": "Switch theme mode",
+  "showProperties": "Show Properties",
+  "hideProperties": "Hide Properties",
+  "noProperties": "No Properties"
 }
