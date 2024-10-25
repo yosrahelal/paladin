@@ -106,30 +106,6 @@ public class BondTest {
                 )
         )) {
 
-            var mapper = new ObjectMapper();
-            List<JsonNode> notoSchemas = testbed.getRpcClient().request("pstate_listSchemas",
-                    "noto");
-            assertEquals(1, notoSchemas.size());
-            var notoSchema = mapper.convertValue(notoSchemas.getFirst(), StateSchema.class);
-
-            String tokenDistributionFactoryBytecode = ResourceLoader.jsonResourceEntryText(
-                    this.getClass().getClassLoader(),
-                    "contracts/shared/TokenDistributionFactory.sol/TokenDistributionFactory.json",
-                    "bytecode"
-            );
-            JsonABI tokenDistributionFactoryABI = JsonABI.fromJSONResourceEntry(
-                    this.getClass().getClassLoader(),
-                    "contracts/shared/TokenDistributionFactory.sol/TokenDistributionFactory.json",
-                    "abi"
-            );
-
-            // Create the token distribution factory on the base ledger
-            String tokenDistributionFactoryAddress = testbed.getRpcClient().request("testbed_deployBytecode",
-                    "issuer",
-                    tokenDistributionFactoryABI,
-                    tokenDistributionFactoryBytecode,
-                    new HashMap<String, String>());
-
             String cashIssuer = "cashIssuer";
             String bondIssuer = "bondIssuer";
             String bondCustodian = "bondCustodian";
@@ -139,6 +115,23 @@ public class BondTest {
                     bondCustodian, Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS);
             String aliceAddress = testbed.getRpcClient().request("testbed_resolveVerifier",
                     alice, Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS);
+
+            var mapper = new ObjectMapper();
+            List<JsonNode> notoSchemas = testbed.getRpcClient().request("pstate_listSchemas",
+                    "noto");
+            assertEquals(1, notoSchemas.size());
+            var notoSchema = mapper.convertValue(notoSchemas.getFirst(), StateSchema.class);
+
+            String bondTrackerPublicBytecode = ResourceLoader.jsonResourceEntryText(
+                    this.getClass().getClassLoader(),
+                    "contracts/shared/BondTrackerPublic.sol/BondTrackerPublic.json",
+                    "bytecode"
+            );
+            JsonABI bondTrackerPublicABI = JsonABI.fromJSONResourceEntry(
+                    this.getClass().getClassLoader(),
+                    "contracts/shared/BondTrackerPublic.sol/BondTrackerPublic.json",
+                    "abi"
+            );
 
             GroupTupleJSON issuerCustodianGroup = new GroupTupleJSON(
                     JsonHex.randomBytes32(), new String[]{bondIssuer, bondCustodian});
@@ -153,15 +146,36 @@ public class BondTest {
                     "pente", testbed, aliceCustodianGroup, true);
             assertFalse(aliceCustodianInstance.address().isBlank());
 
-            // Deploy BondTracker to the issuer/custodian privacy group
+            // Create Noto cash token
+            var notoCash = NotoHelper.deploy("noto", testbed,
+                    new NotoHelper.ConstructorParams(
+                            cashIssuer,
+                            null,
+                            true));
+            assertFalse(notoCash.address().isBlank());
+
+            // Create the public bond tracker on the base ledger (controlled by the privacy group)
+            String bondTrackerPublicAddress = testbed.getRpcClient().request("testbed_deployBytecode",
+                    "issuer",
+                    bondTrackerPublicABI,
+                    bondTrackerPublicBytecode,
+                    new HashMap<String, String>(){{
+                        put("owner", issuerCustodianInstance.address());
+                        put("issueDate_", "0");
+                        put("maturityDate_", "1");
+                        put("currencyToken_", notoCash.address());
+                        put("faceValue_", "1");
+                    }});
+
+            // Deploy private bond tracker to the issuer/custodian privacy group
             var bondTracker = BondTrackerHelper.deploy(issuerCustodianInstance, bondIssuer, new HashMap<>() {{
                 put("name", "BOND");
                 put("symbol", "BOND");
                 put("custodian", custodianAddress);
-                put("distributionFactory", tokenDistributionFactoryAddress);
+                put("publicTracker", bondTrackerPublicAddress);
             }});
 
-            // Create Noto tokens (bond and cash)
+            // Create Noto bond token
             var notoBond = NotoHelper.deploy("noto", testbed,
                     new NotoHelper.ConstructorParams(
                             bondCustodian,
@@ -171,12 +185,6 @@ public class BondTest {
                                     issuerCustodianGroup),
                             false));
             assertFalse(notoBond.address().isBlank());
-            var notoCash = NotoHelper.deploy("noto", testbed,
-                    new NotoHelper.ConstructorParams(
-                            cashIssuer,
-                            null,
-                            true));
-            assertFalse(notoCash.address().isBlank());
 
             // Issue cash to investors
             notoCash.mint(cashIssuer, alice, 100000);
@@ -197,26 +205,8 @@ public class BondTest {
             // Validate bond tracker balance
             assertEquals("1000", bondTracker.balanceOf(bondIssuer, custodianAddress));
 
-            // Pull the last transaction receipt (for the bond mint)
-            // TODO: is there a better way to correlate this from the testbed transaction?
-            List<LinkedHashMap<String, Object>> transactions = testbed.getRpcClient().request("ptx_queryTransactionReceipts",
-                    new JsonQuery.Query(1, null, null));
-            assertEquals(1, transactions.size());
-            String lastTransactionHash = transactions.getFirst().get("transactionHash").toString();
-
-            // Parse distribution contract address on the base ledger
-            // TODO: how is this bound to the Noto token?
-            String distributionSignature = "event NewDistribution(address addr)";
-            List<LinkedHashMap<String, Object>> events = testbed.getRpcClient().request("bidx_decodeTransactionEvents",
-                    lastTransactionHash, tokenDistributionFactoryABI, "");
-            var distributionEvent = events.stream().filter(obj -> obj.get("soliditySignature").equals(distributionSignature)).findFirst();
-            assertTrue(distributionEvent.isPresent());
-            var eventData = mapper.convertValue(distributionEvent.get().get("data"), LinkedHashMap.class);
-            var tokenDistributionAddress = eventData.get("addr");
-
-            // Tell bond tracker about the distribution contract
-            // TODO: feels slightly odd to have to tell the contract about the result of the deployment it requested
-            bondTracker.setDistribution(bondCustodian, tokenDistributionAddress.toString());
+            // Begin bond distribution
+            bondTracker.beginDistribution(bondCustodian, 1, 1);
 
             // Add Alice as an allowed investor
             var investorRegistry = bondTracker.investorRegistry(bondCustodian);
@@ -225,8 +215,8 @@ public class BondTest {
             // Alice deploys BondSubscription to the alice/custodian privacy group, to request subscription
             // TODO: if Alice deploys, how can custodian trust it's the correct logic?
             var bondSubscription = BondSubscriptionHelper.deploy(aliceCustodianInstance, alice, new HashMap<>() {{
-                put("distributionAddress", tokenDistributionAddress);
-                put("units", 1000);
+                put("bondAddress_", notoBond.address());
+                put("units_", 1000);
             }});
 
             // Alice receives full bond distribution

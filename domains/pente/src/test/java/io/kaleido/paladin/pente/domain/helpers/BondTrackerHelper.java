@@ -24,14 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class BondTrackerHelper {
     final PenteHelper pente;
+    final JsonABI abi;
     final JsonHex.Address address;
-
-    static final JsonABI.Parameters constructorParams = JsonABI.newParameters(
-            JsonABI.newParameter("name", "string"),
-            JsonABI.newParameter("symbol", "string"),
-            JsonABI.newParameter("custodian", "address"),
-            JsonABI.newParameter("distributionFactory", "address")
-    );
 
     public static BondTrackerHelper deploy(PenteHelper pente, String sender, Object inputs) throws IOException {
         String bytecode = ResourceLoader.jsonResourceEntryText(
@@ -39,13 +33,19 @@ public class BondTrackerHelper {
                 "contracts/private/BondTracker.sol/BondTracker.json",
                 "bytecode"
         );
-
-        var address = pente.deploy(sender, bytecode, constructorParams, inputs);
-        return new BondTrackerHelper(pente, address);
+        JsonABI abi = JsonABI.fromJSONResourceEntry(
+                BondTrackerHelper.class.getClassLoader(),
+                "contracts/private/BondTracker.sol/BondTracker.json",
+                "abi"
+        );
+        var constructor = abi.getABIEntry("constructor", null);
+        var address = pente.deploy(sender, bytecode, constructor.inputs(), inputs);
+        return new BondTrackerHelper(pente, abi, address);
     }
 
-    private BondTrackerHelper(PenteHelper pente, JsonHex.Address address) {
+    private BondTrackerHelper(PenteHelper pente, JsonABI abi, JsonHex.Address address) {
         this.pente = pente;
+        this.abi = abi;
         this.address = address;
     }
 
@@ -54,9 +54,10 @@ public class BondTrackerHelper {
     }
 
     public InvestorRegistryHelper investorRegistry(String sender) throws IOException {
+        var method = abi.getABIEntry("function", "investorRegistry");
         var output = pente.call(
-                "investorRegistry",
-                JsonABI.newParameters(),
+                method.name(),
+                method.inputs(),
                 JsonABI.newParameters(
                         JsonABI.newParameter("output", "address")
                 ),
@@ -68,11 +69,10 @@ public class BondTrackerHelper {
     }
 
     public String balanceOf(String sender, String account) throws IOException {
+        var method = abi.getABIEntry("function", "balanceOf");
         var output = pente.call(
-                "balanceOf",
-                JsonABI.newParameters(
-                        JsonABI.newParameter("account", "address")
-                ),
+                method.name(),
+                method.inputs(),
                 JsonABI.newParameters(
                         JsonABI.newParameter("output", "uint256")
                 ),
@@ -85,16 +85,16 @@ public class BondTrackerHelper {
         return output.output();
     }
 
-    public void setDistribution(String sender, String addr) throws IOException {
+    public void beginDistribution(String sender, int discountPrice, int minimumDenomination) throws IOException {
+        var method = abi.getABIEntry("function", "beginDistribution");
         pente.invoke(
-                "setDistribution",
-                JsonABI.newParameters(
-                        JsonABI.newParameter("addr", "address")
-                ),
+                method.name(),
+                method.inputs(),
                 sender,
                 address,
                 new HashMap<>() {{
-                    put("addr", addr);
+                    put("discountPrice", discountPrice);
+                    put("minimumDenomination", minimumDenomination);
                 }}
         );
     }

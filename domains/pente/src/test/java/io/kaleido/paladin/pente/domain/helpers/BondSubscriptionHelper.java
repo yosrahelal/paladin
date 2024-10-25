@@ -24,12 +24,8 @@ import java.util.HashMap;
 
 public class BondSubscriptionHelper {
     final PenteHelper pente;
+    final JsonABI abi;
     final JsonHex.Address address;
-
-    static final JsonABI.Parameters constructorParams = JsonABI.newParameters(
-            JsonABI.newParameter("distributionAddress", "address"),
-            JsonABI.newParameter("units", "uint256")
-    );
 
     public static BondSubscriptionHelper deploy(PenteHelper pente, String sender, Object inputs) throws IOException {
         String bytecode = ResourceLoader.jsonResourceEntryText(
@@ -37,13 +33,19 @@ public class BondSubscriptionHelper {
                 "contracts/private/BondSubscription.sol/BondSubscription.json",
                 "bytecode"
         );
-
-        var address = pente.deploy(sender, bytecode, constructorParams, inputs);
-        return new BondSubscriptionHelper(pente, address);
+        JsonABI abi = JsonABI.fromJSONResourceEntry(
+                BondTrackerHelper.class.getClassLoader(),
+                "contracts/private/BondSubscription.sol/BondSubscription.json",
+                "abi"
+        );
+        var constructor = abi.getABIEntry("constructor", null);
+        var address = pente.deploy(sender, bytecode, constructor.inputs(), inputs);
+        return new BondSubscriptionHelper(pente, abi, address);
     }
 
-    private BondSubscriptionHelper(PenteHelper pente, JsonHex.Address address) {
+    private BondSubscriptionHelper(PenteHelper pente, JsonABI abi, JsonHex.Address address) {
         this.pente = pente;
+        this.abi = abi;
         this.address = address;
     }
 
@@ -52,15 +54,14 @@ public class BondSubscriptionHelper {
     }
 
     public void markReceived(String sender, int units) throws IOException {
+        var method = abi.getABIEntry("function", "markReceived");
         pente.invoke(
-                "markReceived",
-                JsonABI.newParameters(
-                        JsonABI.newParameter("units", "uint256")
-                ),
+                method.name(),
+                method.inputs(),
                 sender,
                 address,
                 new HashMap<>() {{
-                    put("units", units);
+                    put("units_", units);
                 }}
         );
     }

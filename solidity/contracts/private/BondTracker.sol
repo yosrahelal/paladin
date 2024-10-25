@@ -13,29 +13,25 @@ import {InvestorRegistry} from "./InvestorRegistry.sol";
 contract BondTracker is INotoHooks, ERC20, Ownable {
     enum Status {
         INITIALIZED,
-        ISSUED
+        ISSUED,
+        DISTRIBUTION_STARTED
     }
 
     Status internal _status;
-    address internal _distributionFactory;
+    address internal _publicTracker;
     address internal _issuer;
-    address public distribution;
     InvestorRegistry public investorRegistry;
 
     constructor(
         string memory name,
         string memory symbol,
         address custodian,
-        address distributionFactory
+        address publicTracker
     ) ERC20(name, symbol) Ownable(custodian) {
         _status = Status.INITIALIZED;
-        _distributionFactory = distributionFactory;
+        _publicTracker = publicTracker;
         _issuer = _msgSender();
         investorRegistry = new InvestorRegistry(custodian);
-    }
-
-    function setDistribution(address addr) external onlyOwner {
-        distribution = addr;
     }
 
     function onMint(
@@ -51,10 +47,25 @@ contract BondTracker is INotoHooks, ERC20, Ownable {
         _status = Status.ISSUED;
 
         emit PenteExternalCall(
-            _distributionFactory,
-            abi.encodeWithSignature("deploy(uint256)", amount)
+            _publicTracker,
+            abi.encodeWithSignature("onIssue(address,uint256)", to, amount)
         );
         emit PenteExternalCall(prepared.contractAddress, prepared.encodedCall);
+    }
+
+    function beginDistribution(
+        uint256 discountPrice,
+        uint256 minimumDenomination
+    ) external {
+        _status = Status.DISTRIBUTION_STARTED;
+        emit PenteExternalCall(
+            _publicTracker,
+            abi.encodeWithSignature(
+                "beginDistribution(uint256,uint256)",
+                discountPrice,
+                minimumDenomination
+            )
+        );
     }
 
     function onTransfer(
@@ -71,16 +82,11 @@ contract BondTracker is INotoHooks, ERC20, Ownable {
         _transfer(from, to, amount);
 
         if (from == owner()) {
-            require(
-                distribution != address(0),
-                "Distribution address has not been set"
-            );
             emit PenteExternalCall(
-                distribution,
-                abi.encodeWithSignature("decrease(uint256)", amount)
+                _publicTracker,
+                abi.encodeWithSignature("onDistribute(uint256)", amount)
             );
         }
-
         emit PenteExternalCall(prepared.contractAddress, prepared.encodedCall);
     }
 

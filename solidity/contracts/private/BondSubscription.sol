@@ -8,15 +8,15 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
  * @dev Private state between an investor and a bond custodian, tracking their subscribed units.
  */
 contract BondSubscription is Ownable {
-    address public distributionAddress;
+    address public bondAddress;
     uint256 public requestedUnits;
     uint256 public receivedUnits;
 
     constructor(
-        address distributionAddress_,
+        address bondAddress_,
         uint256 units_
     ) Ownable(_msgSender()) {
-        distributionAddress = distributionAddress_;
+        bondAddress = bondAddress_;
         requestedUnits = units_;
     }
 
