@@ -18,6 +18,7 @@ package pldclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -642,6 +643,9 @@ func (tr *transactionResult) wait(timeout time.Duration) TransactionResult {
 		}
 		// Did we get one?
 		if tr.receipt != nil {
+			if !tr.receipt.Success {
+				tr.deferError(errors.New(tr.receipt.FailureMessage))
+			}
 			return tr
 		}
 		// Check we didn't timeout
