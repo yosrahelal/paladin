@@ -86,7 +86,8 @@ func newPaladinTransactionProcessorForTesting(t *testing.T, ctx context.Context,
 	selectCoordinator := func(ctx context.Context) string {
 		return nodeName
 	}
-	tp := NewTransactionFlow(ctx, transaction, nodeName, mocks.allComponents, mocks.domainSmartContract, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.syncPoints, mocks.transportWriter, 1*time.Minute, selectCoordinator)
+	assembleCoordinator := NewAssembleCoordinator(ctx, nodeName, 1, mocks.allComponents, mocks.domainSmartContract, mocks.domainContext)
+	tp := NewTransactionFlow(ctx, transaction, nodeName, mocks.allComponents, mocks.domainSmartContract, mocks.publisher, mocks.endorsementGatherer, mocks.identityResolver, mocks.syncPoints, mocks.transportWriter, 1*time.Minute, selectCoordinator, assembleCoordinator)
 
 	return tp.(*transactionFlow), mocks
 }

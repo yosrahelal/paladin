@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -197,11 +198,12 @@ func (tf *transactionFlow) delegateIfRequired(ctx context.Context) {
 	log.L(ctx).Debug("transactionFlow:delegateIfRequired")
 	coordinatorNode := tf.selectCoordinator(ctx)
 
-	tf.localCoordinator = false
 	// TODO persist the delegation and send the request on the callback
 	if coordinatorNode == tf.nodeName || coordinatorNode == "" {
 		return
 	}
+	tf.localCoordinator = false
+
 	//TODO if already `delegating` check how long we have been waiting for the ack and send again.
 	//Should probably do that earlier in the flow because if we have just decided not to delegate or if we have just selected a different delegate, \
 	//then we need to either claw back that delegation or wait until the delegate has realized that they are no longer the coordinator and returns / forwards the responsibility for this transaction
@@ -225,7 +227,7 @@ func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 	//Usually, they will get sent to us already assembled but there may be cases where we need to re-assemble
 	// so this needs to be an async step
 	// however, there must be only one assemble in progress at a time or else there is a risk that 2 transactions could chose to spend the same state
-	//   (TODO - maybe in future, we could further optimise this and allow multiple assembles to be in progress if we can assert that they are not presented with the same available states)
+	//   (TODO - maybe in future, we could further optimize this and allow multiple assembles to be in progress if we can assert that they are not presented with the same available states)
 	//   However, before we do that, we really need to sort out the separation of concerns between the domain manager, state store and private transaction manager and where the responsibility to single thread the assembly stream(s) lies
 
 	log.L(ctx).Debug("transactionFlow:requestAssemble")
@@ -247,7 +249,34 @@ func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 		return
 	}
 
-	//TODO call tf.assembleRequester.RequestAssemble(ctx, assemblingNode ....// figure out what to pass )
+	//TODO is this safe or do we need a deep copy?
+	transactionInputsCopy := *tf.transaction.Inputs
+	preAssemblyCopy := *tf.transaction.PreAssembly
+
+	tf.assembleCoordinator.RequestAssemble(ctx, assemblingNode,
+		tf.transaction.ID,
+		&transactionInputsCopy,
+		&preAssemblyCopy,
+
+		AssembleRequestCallbacks{
+			OnComplete: func(postAssembly *components.TransactionPostAssembly) {
+				// TODO should probably include the assemble output in the event
+				// for now that is not necessary because this is a local assemble and the domain manager updates the transaction that we passed by reference
+				// need to decide if we want to continue with that style of interface to the domain manager and if so,
+				// we need to do something different when the assembling node is remote
+				tf.publisher.PublishTransactionAssembledEvent(ctx,
+					tf.transaction.ID.String(),
+					postAssembly,
+				)
+			},
+			OnFail: func(err error) {
+				log.L(ctx).Errorf("AssembleTransaction failed: %s", err)
+				tf.publisher.PublishTransactionAssembleFailedEvent(ctx,
+					tf.transaction.ID.String(),
+					i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), err.Error()),
+				)
+			},
+		})
 
 }
 

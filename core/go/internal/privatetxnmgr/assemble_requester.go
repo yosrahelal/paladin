@@ -19,116 +19,170 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
-	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-type AssembleRequester interface {
+// AssembleCoordinator is a component that is responsible for coordinating the assembly of all transactions for a given domain contract instance
+// requests to assemble transactions are accepted and the actual assembly is performed asynchronously
+type AssembleCoordinator interface {
 	Start(ctx context.Context)
-}
-type assembleRequest struct {
-}
-type assembleRequester struct {
-	requests chan *assembleRequest
+	Stop()
+	RequestAssemble(ctx context.Context, assemblingNode string, transactionID uuid.UUID, transactionInputs *components.TransactionInputs, transactionPreAssembly *components.TransactionPreAssembly, callbacks AssembleRequestCallbacks)
 }
 
-func NewAssembleRequester(ctx context.Context, maxPendingRequests int) AssembleRequester {
-	return &assembleRequester{
-		requests: make(chan *assembleRequest, maxPendingRequests),
+type AssembleRequestCompleteCallback func(postAssembly *components.TransactionPostAssembly)
+type AssembleRequestFailedCallback func(error)
+type AssembleRequestCallbacks struct {
+	OnComplete AssembleRequestCompleteCallback
+	OnFail     AssembleRequestFailedCallback
+}
+
+func (ar *assembleCoordinator) requestAssemble(ctx context.Context, callbacks AssembleRequestCallbacks) {
+	ar.requests <- &assembleRequest{
+		callbacks: callbacks,
 	}
 }
-func (ar *assembleRequester) Start(ctx context.Context) {
-	go func() {
 
+type assembleCoordinator struct {
+	nodeName      string
+	requests      chan *assembleRequest
+	stopProcess   chan bool
+	components    components.AllComponents
+	domainAPI     components.DomainSmartContract
+	domainContext components.DomainContext
+}
+
+type assembleRequest struct {
+	assemblingNode         string
+	assembleCoordinator    *assembleCoordinator
+	transactionID          uuid.UUID
+	transactionInputs      *components.TransactionInputs
+	transactionPreassembly *components.TransactionPreAssembly
+	callbacks              AssembleRequestCallbacks
+}
+
+func NewAssembleCoordinator(ctx context.Context, nodeName string, maxPendingRequests int, components components.AllComponents, domainAPI components.DomainSmartContract, domainContext components.DomainContext) AssembleCoordinator {
+	return &assembleCoordinator{
+		nodeName:      nodeName,
+		stopProcess:   make(chan bool, 1),
+		requests:      make(chan *assembleRequest, maxPendingRequests),
+		components:    components,
+		domainAPI:     domainAPI,
+		domainContext: domainContext,
+	}
+}
+
+func (ac *assembleCoordinator) Start(ctx context.Context) {
+	log.L(ctx).Info("Starting AssembleCoordinator")
+	go func() {
+		for {
+			select {
+			case req := <-ac.requests:
+				if req.assemblingNode == "" || req.assemblingNode == ac.nodeName {
+					req.processLocal(ctx)
+				} else {
+					req.processRemote(ctx, req.assemblingNode)
+				}
+			case <-ac.stopProcess:
+				log.L(ctx).Info("assembleCoordinator loop process stopped")
+				return
+			case <-ctx.Done():
+				log.L(ctx).Info("AssembleCoordinator loop exit due to canceled context")
+				return
+			}
+		}
 	}()
+}
+
+func (ac *assembleCoordinator) Stop() {
+	// try to send an item in `stopProcess` channel, which has a buffer of 1
+	// if it already has an item in the channel, this function does nothing
+	select {
+	case ac.stopProcess <- true:
+	default:
+	}
+
+}
+
+// TODO really need to figure out the separation between PrivateTxManager and DomainManager
+// to allow us to do the assemble on a separate thread and without worrying about locking the PrivateTransaction objects
+// we copy the pertinent structures out of the PrivateTransaction and pass them to the assemble thread
+// and then use them to create another private transaction object that is passed to the domain manager which then just unpicks it again
+func (ac *assembleCoordinator) RequestAssemble(ctx context.Context, assemblingNode string, transactionID uuid.UUID, transactionInputs *components.TransactionInputs, transactionPreAssembly *components.TransactionPreAssembly, callbacks AssembleRequestCallbacks) {
+
+	log.L(ctx).Debug("RequestAssemble")
+	ac.requests <- &assembleRequest{
+		assembleCoordinator:    ac,
+		callbacks:              callbacks,
+		transactionInputs:      transactionInputs,
+		transactionPreassembly: transactionPreAssembly,
+	}
 
 }
 
 func (req *assembleRequest) processLocal(ctx context.Context) {
-//we are the node that is responsible for assembling this transaction
-readTX := tf.components.Persistence().DB() // no DB transaction required here
-err = tf.domainAPI.AssembleTransaction(tf.endorsementGatherer.DomainContext(), readTX, tf.transaction)
-if err != nil {
-	log.L(ctx).Errorf("AssembleTransaction failed: %s", err)
-	tf.publisher.PublishTransactionAssembleFailedEvent(ctx,
-		tf.transaction.ID.String(),
-		i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), err.Error()),
-	)
-	return
-}
-if tf.transaction.PostAssembly == nil {
-	// This is most likely a programming error in the domain
-	log.L(ctx).Errorf("PostAssembly is nil.")
-	tf.publisher.PublishTransactionAssembleFailedEvent(
-		ctx,
-		tf.transaction.ID.String(),
-		i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), "AssembleTransaction returned nil PostAssembly"),
-	)
-	return
-}
+	log.L(ctx).Debug("assembleRequest:processLocal")
+	// we are the node that is responsible for assembling this transaction
+	readTX := req.assembleCoordinator.components.Persistence().DB() // no DB transaction required here
 
-// Some validation that we are confident we can execute the given attestation plan
-for _, attRequest := range tf.transaction.PostAssembly.AttestationPlan {
-	switch attRequest.AttestationType {
-	case prototk.AttestationType_ENDORSE:
-	case prototk.AttestationType_SIGN:
-	case prototk.AttestationType_GENERATE_PROOF:
-		errorMessage := "AttestationType_GENERATE_PROOF is not implemented yet"
-		log.L(ctx).Error(errorMessage)
-		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
-		tf.publisher.PublishTransactionAssembleFailedEvent(ctx,
-			tf.transaction.ID.String(),
-			i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), errorMessage),
-		)
-	default:
-		errorMessage := fmt.Sprintf("Unsupported attestation type: %s", attRequest.AttestationType)
-		log.L(ctx).Error(errorMessage)
-		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), errorMessage)
-		tf.publisher.PublishTransactionAssembleFailedEvent(ctx,
-			tf.transaction.ID.String(),
-			i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerAssembleError), errorMessage),
-		)
+	transaction := &components.PrivateTransaction{
+		Inputs:      req.transactionInputs,
+		PreAssembly: req.transactionPreassembly,
 	}
-}
 
-//TODO should probably include the assemble output in the event
-// for now that is not necessary because this is a local assemble and the domain manager updates the transaction that we passed by reference
-// need to decide if we want to continue with that style of interface to the domain manager and if so,
-// we need to do something different when the assembling node is remote
-tf.publisher.PublishTransactionAssembledEvent(ctx,
-	tf.transaction.ID.String(),
-)
-return
+	err := req.assembleCoordinator.domainAPI.AssembleTransaction(req.assembleCoordinator.domainContext, readTX, transaction)
+	if err != nil {
+		req.callbacks.OnFail(err)
+		return
+	}
+	if transaction.PostAssembly == nil {
+		// This is most likely a programming error in the domain
+		err := i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, "AssembleTransaction returned nil PostAssembly")
+		req.callbacks.OnFail(err)
+		return
+	}
+
+	// Some validation that we are confident we can execute the given attestation plan
+	for _, attRequest := range transaction.PostAssembly.AttestationPlan {
+		switch attRequest.AttestationType {
+		case prototk.AttestationType_ENDORSE:
+		case prototk.AttestationType_SIGN:
+		case prototk.AttestationType_GENERATE_PROOF:
+			errorMessage := "AttestationType_GENERATE_PROOF is not implemented yet"
+			log.L(ctx).Error(errorMessage)
+			err := i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
+			req.callbacks.OnFail(err)
+
+		default:
+			errorMessage := fmt.Sprintf("Unsupported attestation type: %s", attRequest.AttestationType)
+			log.L(ctx).Error(errorMessage)
+			err := i18n.NewError(ctx, msgs.MsgPrivateTxManagerInternalError, errorMessage)
+			req.callbacks.OnFail(err)
+		}
+	}
+
+	log.L(ctx).Debug("assembleRequest:processLocal complete")
+
+	req.callbacks.OnComplete(transaction.PostAssembly)
+
 }
 
 func (req *assembleRequest) processRemote(ctx context.Context, assemblingNode string) {
 
-	func (req *assembleRequest) processLocalAssemble(ctx context.Context) {
 	//Assemble may require a call to another node ( in the case we have been delegated to coordinate transaction for other nodes)
 	//Usually, they will get sent to us already assembled but there may be cases where we need to re-assemble
 	// so this needs to be an async step
 	// however, there must be only one assemble in progress at a time or else there is a risk that 2 transactions could chose to spend the same state
-	//   (TODO - maybe in future, we could further optimise this and allow multiple assembles to be in progress if we can assert that they are not presented with the same available states)
+	//   (TODO - maybe in future, we could further optimize this and allow multiple assembles to be in progress if we can assert that they are not presented with the same available states)
 	//   However, before we do that, we really need to sort out the separation of concerns between the domain manager, state store and private transaction manager and where the responsibility to single thread the assembly stream(s) lies
 
-	log.L(ctx).Debug("assembleRequest:process")
+	log.L(ctx).Debug("assembleRequest:processRemote")
 
-
-
-	log.L(ctx).Debugf("Assembling transaction %s on node %s", tf.transaction.ID.String(), assemblingNode)
+	log.L(ctx).Debugf("Assembling transaction %s on node %s", req.transactionID.String(), assemblingNode)
 	//TODO send a request to the node that is responsible for assembling this transaction
-}
-
-type AssembleRequestCallbacks interface {
-	AssembleRequestComplete()
-	AssembleRequestFailed(error)
-}
-
-func (ar *assembleRequester) requestAssemble(ctx context.Context, callbacks AssembleRequestCallbacks) {
-	ar.requests <- &assembleRequest{
-		callbacks: callbacks,
-	}
 }

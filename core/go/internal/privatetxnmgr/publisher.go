@@ -64,12 +64,13 @@ func (p *publisher) PublishTransactionDispatchedEvent(ctx context.Context, trans
 
 }
 
-func (p *publisher) PublishTransactionAssembledEvent(ctx context.Context, transactionId string) {
+func (p *publisher) PublishTransactionAssembledEvent(ctx context.Context, transactionId string, postAssembly *components.TransactionPostAssembly) {
 	event := &ptmgrtypes.TransactionAssembledEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
 			ContractAddress: p.contractAddress,
 			TransactionID:   transactionId,
 		},
+		PostAssembly: postAssembly,
 	}
 	p.privateTxManager.HandleNewEvent(ctx, event)
 }

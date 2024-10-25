@@ -113,7 +113,7 @@ type Sequencer struct {
 	coordinatorSelectorFunction CoordinatorSelectorFunction
 	blockHeight                 int64
 	newBlockEvents              chan int64
-	assembleRequester           AssembleRequester
+	assembleCoordinator         AssembleCoordinator
 }
 type CoordinatorSelectorFunction func(ctx context.Context) string
 
@@ -163,7 +163,7 @@ func NewSequencer(
 		graph:                        NewGraph(),
 		requestTimeout:               requestTimeout,
 		newBlockEvents:               make(chan int64, 10), //TODO do we want to make the buffer size configurable? Or should we put in non blocking mode? Does it matter if we miss a block?
-		assembleRequester:            NewAssembleRequester(ctx, confutil.Int(sequencerConfig.MaxInflightTransactions, *pldconf.PrivateTxManagerDefaults.Sequencer.MaxInflightTransactions)),
+
 	}
 
 	log.L(ctx).Debugf("NewSequencer for contract address %s created: %+v", newSequencer.contractAddress, newSequencer)
@@ -220,6 +220,19 @@ func NewSequencer(
 		return coordinatorNode
 	}
 
+	//TODO consolidate the initialization of the endorsement gatherer and the assemble coordinator.  Both need the same domain context - but maybe the assemble coordinator should provide the domain context to the endorsement gatherer on a per request basis
+	//
+	domainSmartContract, err := allComponents.DomainManager().GetSmartContractByAddress(ctx, contractAddress)
+	if err != nil {
+		log.L(ctx).Errorf("Failed to get domain smart contract for contract address %s: %s", contractAddress, err)
+
+		return nil
+	}
+
+	domainContext := allComponents.StateManager().NewDomainContext(newSequencer.ctx /* background context */, domainSmartContract.Domain(), contractAddress)
+
+	newSequencer.assembleCoordinator = NewAssembleCoordinator(ctx, nodeName, confutil.Int(sequencerConfig.MaxInflightTransactions, *pldconf.PrivateTxManagerDefaults.Sequencer.MaxInflightTransactions), allComponents, domainAPI, domainContext)
+
 	return newSequencer
 }
 
@@ -260,7 +273,7 @@ func (s *Sequencer) ProcessNewTransaction(ctx context.Context, tx *components.Pr
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeName, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout, s.coordinatorSelectorFunction)
+			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeName, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout, s.coordinatorSelectorFunction, s.assembleCoordinator)
 		}
 		s.pendingTransactionEvents <- &ptmgrtypes.TransactionSubmittedEvent{
 			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
@@ -287,7 +300,7 @@ func (s *Sequencer) ProcessInFlightTransaction(ctx context.Context, tx *componen
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeName, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout, s.coordinatorSelectorFunction)
+			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeName, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout, s.coordinatorSelectorFunction, s.assembleCoordinator)
 		}
 		s.pendingTransactionEvents <- &ptmgrtypes.TransactionSwappedInEvent{
 			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
@@ -303,6 +316,7 @@ func (s *Sequencer) HandleEvent(ctx context.Context, event ptmgrtypes.PrivateTra
 func (s *Sequencer) Start(c context.Context) (done <-chan struct{}, err error) {
 	s.syncPoints.Start()
 	s.sequencerLoopDone = make(chan struct{})
+	s.assembleCoordinator.Start(c)
 	go s.evaluationLoop()
 	s.TriggerSequencerEvaluation()
 	return s.sequencerLoopDone, nil
@@ -312,6 +326,7 @@ func (s *Sequencer) Start(c context.Context) (done <-chan struct{}, err error) {
 func (s *Sequencer) Stop() {
 	// try to send an item in `stopProcess` channel, which has a buffer of 1
 	// if it already has an item in the channel, this function does nothing
+	s.assembleCoordinator.Stop()
 	select {
 	case s.stopProcess <- true:
 	default:

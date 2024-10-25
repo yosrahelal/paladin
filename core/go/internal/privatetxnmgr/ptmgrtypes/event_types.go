@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
@@ -65,6 +66,7 @@ type TransactionSwappedInEvent struct {
 
 type TransactionAssembledEvent struct {
 	PrivateTransactionEventBase
+	PostAssembly *components.TransactionPostAssembly
 }
 
 type TransactionAssembleFailedEvent struct {

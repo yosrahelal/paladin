@@ -77,8 +77,11 @@ func (tf *transactionFlow) applyTransactionSwappedInEvent(ctx context.Context, _
 
 }
 
-func (tf *transactionFlow) applyTransactionAssembledEvent(ctx context.Context, _ *ptmgrtypes.TransactionAssembledEvent) {
+func (tf *transactionFlow) applyTransactionAssembledEvent(ctx context.Context, event *ptmgrtypes.TransactionAssembledEvent) {
+	log.L(ctx).Debug("transactionFlow:applyTransactionAssembledEvent")
+
 	tf.latestEvent = "TransactionAssembledEvent"
+	tf.transaction.PostAssembly = event.PostAssembly
 	if tf.transaction.PostAssembly.AssemblyResult == prototk.AssembleTransactionResponse_REVERT {
 		// Not sure if any domains actually use this but it is a valid response to indicate failure
 		log.L(ctx).Errorf("AssemblyResult is AssembleTransactionResponse_REVERT")

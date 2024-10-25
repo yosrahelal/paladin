@@ -181,7 +181,9 @@ func (p *privateTxManager) getSequencerForContract(ctx context.Context, contract
 }
 
 func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context, contractAddr tktypes.EthAddress) (ptmgrtypes.EndorsementGatherer, error) {
-
+	// We need to have this as a function of the PrivateTransactionManager rather than a function of the sequencer because the endorsement gatherer is needed
+	// even if we don't have a sequencer.  e.g. maybe the transaction is being coordinated by another node and this node has just been asked to endorse it
+	// in that case, we need to make sure that we are using the domainContext provided by the endorsement request
 	domainSmartContract, err := p.components.DomainManager().GetSmartContractByAddress(ctx, contractAddr)
 	if err != nil {
 		return nil, err
