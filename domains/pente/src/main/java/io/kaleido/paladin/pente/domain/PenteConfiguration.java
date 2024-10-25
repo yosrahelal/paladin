@@ -58,8 +58,10 @@ public class PenteConfiguration {
     // Topic generated from event "PenteExternalCall(address,bytes)"
     private final Bytes externalCallTopic = Bytes.fromHexString("0xcac03685d5ba4ab3e1465a8ee1b2bb21094ddbd612a969fd34f93a5be7a0ac4f");
 
+    @SuppressWarnings("FieldCanBeLocal")
     private final String transferSignature = "event UTXOTransfer(bytes32 txId, bytes32[] inputs, bytes32[] outputs, bytes data)";
 
+    private String domainName;
     private long chainId;
 
     private String schemaId_AccountState_v24_9_0;
@@ -178,6 +180,12 @@ public class PenteConfiguration {
 
     public static final int PenteConfigID_V0 = 0x00010000;
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record ContractConfig(
+            @JsonProperty()
+            String evmVersion
+    ) {}
+
     interface OnChainConfig {
         String evmVersion();
     }
@@ -270,12 +278,17 @@ public class PenteConfiguration {
         return chainId;
     }
 
+    synchronized String getDomainName() {
+        return domainName;
+    }
+
     synchronized void initFromConfig(ToDomain.ConfigureDomainRequest configReq) {
+        this.domainName = configReq.getName();
         this.chainId = configReq.getChainId();
     }
 
     List<String> allPenteSchemas() {
-        return Arrays.asList(abiTuple_AccountState_v24_9_0().toString());
+        return Collections.singletonList(abiTuple_AccountState_v24_9_0().toString());
     }
 
     synchronized void schemasInitialized(List<ToDomain.StateSchema> schemas) {
