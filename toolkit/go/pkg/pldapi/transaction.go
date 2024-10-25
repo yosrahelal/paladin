@@ -80,6 +80,12 @@ type TransactionFull struct {
 	// TODO: PrivateTransactions object list
 }
 
+type DecodedError struct {
+	Data       tktypes.RawJSON `docstruct:"DecodedError" json:"data"`
+	Summary    string          `docstruct:"DecodedError" json:"summary"`
+	Definition *abi.Entry      `docstruct:"DecodedError" json:"definition"`
+}
+
 type TransactionReceipt struct {
 	ID uuid.UUID `docstruct:"TransactionReceipt" json:"id,omitempty"` // transaction ID
 	TransactionReceiptData

@@ -80,6 +80,7 @@ task copySolidity(type: Copy) {
         include 'contracts/registry/IdentityRegistry.sol/IdentityRegistry.json'
         include 'contracts/domains/noto/NotoFactory.sol/NotoFactory.json'
         include 'contracts/domains/pente/PenteFactory.sol/PenteFactory.json'
+        include 'contracts/private/NotoTrackerERC20.sol/NotoTrackerERC20.json'
     }
     into 'test/e2e/abis'
 
@@ -223,7 +224,7 @@ task clean {
 }
 
 // Existing 'make' task
-task make(type: Exec) {
+task make(type: Exec, dependsOn: [copySolidity,":toolkit:go:protoc"]) {
     executable 'make'
 }
 

@@ -17,7 +17,13 @@
 package pldapi
 
 import (
+	"context"
+	"encoding/json"
+	"strings"
+
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tkmsgs"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -36,6 +42,42 @@ func (st SchemaType) Options() []string {
 	return []string{
 		string(SchemaTypeABI),
 	}
+}
+
+// Queries against the state store can be made in the context of a
+// transaction UUID, or one of the standard qualifiers
+// (confirmed/unconfirmed/spent/all)
+//
+// Note this is not modelled as a normal Paladin Enum, as you can fall back to a UUID.
+type StateStatusQualifier string
+
+const StateStatusAvailable StateStatusQualifier = "available"
+const StateStatusConfirmed StateStatusQualifier = "confirmed"
+const StateStatusUnconfirmed StateStatusQualifier = "unconfirmed"
+const StateStatusSpent StateStatusQualifier = "spent"
+const StateStatusAll StateStatusQualifier = "all"
+
+func (q *StateStatusQualifier) UnmarshalJSON(b []byte) error {
+	var text string
+	err := json.Unmarshal(b, &text)
+	if err == nil {
+		qText := StateStatusQualifier(strings.ToLower(text))
+		switch qText {
+		case StateStatusAvailable,
+			StateStatusConfirmed,
+			StateStatusUnconfirmed,
+			StateStatusSpent,
+			StateStatusAll:
+			*q = qText
+		default:
+			u, err := uuid.Parse(string(text))
+			if err != nil {
+				return i18n.NewError(context.Background(), tkmsgs.MsgTypesInvalidStateQualifier)
+			}
+			*q = (StateStatusQualifier)(u.String())
+		}
+	}
+	return err
 }
 
 type Schema struct {

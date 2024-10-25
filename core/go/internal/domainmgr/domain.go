@@ -142,12 +142,16 @@ func (d *domain) processDomainConfig(confRes *prototk.ConfigureDomainResponse) (
 	}
 
 	if d.config.AbiEventsJson != "" {
-		// Parse the events ABI
+		// Parse the events ABI - which we also pass to TxManager for information about all the errors contained in here
 		var eventsABI abi.ABI
 		if err := json.Unmarshal([]byte(d.config.AbiEventsJson), &eventsABI); err != nil {
 			return nil, i18n.WrapError(d.ctx, err, msgs.MsgDomainInvalidEvents)
 		}
 		stream.Sources = append(stream.Sources, blockindexer.EventStreamSource{ABI: eventsABI})
+
+		if _, err := d.dm.txManager.UpsertABI(d.ctx, eventsABI); err != nil {
+			return nil, err
+		}
 	}
 
 	// We build a stream name in a way assured to result in a new stream if the ABI changes
@@ -198,6 +202,7 @@ func (d *domain) init() {
 
 		// Complete the initialization
 		_, err = d.api.InitDomain(d.ctx, initReq)
+
 		return true, err
 	})
 	if err != nil {

@@ -86,7 +86,7 @@ func (g *graph) buildMatrix(ctx context.Context) error {
 				//TODO this is expected in some cases and represents a contention that needs to be resolved
 				//TBC do we assert that it is resolved before we get to this point?
 				log.L(ctx).Errorf("State hash %s is spent by multiple transactions", stateID)
-				return i18n.NewError(ctx, msgs.MsgSequencerInternalError, "State hash %s is spent by multiple transactions")
+				return i18n.NewError(ctx, msgs.MsgPrivateTxManagerStateHashContention, stateID)
 			}
 			stateToSpender[stateID] = confutil.P(txnIndex)
 		}

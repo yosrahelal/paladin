@@ -91,7 +91,6 @@ var (
 	MsgStateABITypeMustBeTuple        = ffe("PD010114", "ABI type definition must be a tuple parameter with an internalType such as 'struct StructName'")
 	MsgStateLabelFieldNotUnique       = ffe("PD010115", "Label field with index %d has a duplicate name '%s'")
 	MsgStateInvalidValue              = ffe("PD010116", "Invalid value")
-	MsgStateInvalidQualifier          = ffe("PD010117", "Status must be one of 'available','confirmed','unconfirmed','spent','locked','all' or the UUID of a transaction")
 	MsgStateLockCreateNotInContext    = ffe("PD010118", "Cannot mark a creating lock for state %s as it was not added in this context")
 	MsgStateFlushFailedDomainReset    = ffe("PD010119", "Flush of state for domain %s contract %s has failed. The domain context must be reset")
 	MsgStateSpendConflictUnexpected   = ffe("PD010120", "Pending spend for transaction %s found when attempting to spend from transaction %s")
@@ -279,8 +278,8 @@ var (
 	MsgPrivateTxManagerAssembleError           = ffe("PD011802", "Error assembling transaction: %s")
 	MsgPrivateTxManagerParseFailed             = ffe("PD011803", "Failed to parse message")
 	MsgPrivateTxManagerInvalidMessage          = ffe("PD011804", "Invalid message received from transport")
-	MsgSequencerInternalError                  = ffe("PD011805", "Sequencer internal error %s, ")
-	MsgKeyResolutionFailed                     = ffe("PD011806", "Key resolution failed for key %s, algorithm %s")
+	MsgSequencerInternalError                  = ffe("PD011805", "Sequencer internal error")
+	MsgKeyResolutionFailed                     = ffe("PD011806", "Key resolution failed for key %s, algorithm %s, verifierType %s")
 	MsgDeployInitFailed                        = ffe("PD011807", "Failed to initialise a deploy transaction")
 	MsgDeployPrepareFailed                     = ffe("PD011808", "Failed to prepare a deploy transaction")
 	MsgDeployPrepareIncomplete                 = ffe("PD011809", "Prepare step did not return a transaction to invoke, or a transaction to deploy")
@@ -297,6 +296,7 @@ var (
 	MsgPrivateTxManagerDeployError             = ffe("PD011820", "Failed to deploy private contract")
 	MsgPrivateTxMgrEncodeCallDataFailed        = ffe("PD011821", "Failed to encode call data '%s' for private contract deploy")
 	MsgPrivateTxManagerNonLocalSigningAddr     = ffe("PD011822", "Attempt do dispatch a blockchain transaction using a signing identity for a different node: %s")
+	MsgPrivateTxManagerStateHashContention     = ffe("PD011823", "Contention detected attempting to spend hash %s in multiple transactions")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")
@@ -376,6 +376,7 @@ var (
 	MsgTxMgrNoABIOrReference             = ffe("PD012218", "An ABI containing a function/constructor definition or an abiReference to an existing stored ABI must be supplied")
 	MsgTxMgrIdempotencyKeyClash          = ffe("PD012220", "idempotencyKey already used by submitted transaction %s") // important error code (relied on by operator, and apps)
 	MsgTxMgrPrivateCallNotSupported      = ffe("PD012221", "Call (read-only data query via function call) not currently supported for private smart contracts")
+	MsgTxMgrRevertedNoMatchingErrABI     = ffe("PD012222", "No error ABI available to decode %s")
 
 	// FlushWriter module PD0123XX
 	MsgFlushWriterQuiescing      = ffe("PD012300", "Writer shutting down")
