@@ -63,7 +63,7 @@ type BlockIndexer interface {
 	WaitForTransactionSuccess(ctx context.Context, hash tktypes.Bytes32, errorABI abi.ABI) (*pldapi.IndexedTransaction, error)
 	WaitForTransactionAnyResult(ctx context.Context, hash tktypes.Bytes32) (*pldapi.IndexedTransaction, error)
 	GetBlockListenerHeight(ctx context.Context) (highest uint64, err error)
-	GetConfirmedBlockHeight(ctx context.Context) (confirmed uint64, err error)
+	GetConfirmedBlockHeight(ctx context.Context) (confirmed tktypes.HexUint64, err error)
 	RPCModule() *rpcserver.RPCModule
 }
 
@@ -255,12 +255,12 @@ func (bi *blockIndexer) Stop() {
 	}
 }
 
-func (bi *blockIndexer) GetConfirmedBlockHeight(ctx context.Context) (highest uint64, err error) {
+func (bi *blockIndexer) GetConfirmedBlockHeight(ctx context.Context) (highest tktypes.HexUint64, err error) {
 	highestConfirmedBlock := bi.highestConfirmedBlock.Load()
 	if highestConfirmedBlock < 0 {
 		return 0, i18n.NewError(ctx, msgs.MsgBlockIndexerNoBlocksIndexed)
 	}
-	return uint64(highestConfirmedBlock), nil
+	return tktypes.HexUint64(highestConfirmedBlock), nil
 }
 
 func (bi *blockIndexer) GetBlockListenerHeight(ctx context.Context) (confirmed uint64, err error) {

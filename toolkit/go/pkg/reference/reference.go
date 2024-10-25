@@ -89,6 +89,10 @@ var allTypes = []interface{}{
 	},
 	pldapi.RegistryProperty{},
 	pldapi.OnChainLocation{},
+	pldapi.IndexedBlock{},
+	pldapi.IndexedTransaction{},
+	pldapi.IndexedEvent{},
+	pldapi.EventWithData{},
 	tktypes.JSONFormatOptions(""),
 	pldapi.StateStatusQualifier(""),
 	query.QueryJSON{
@@ -195,6 +199,7 @@ var allAPITypes = []pldclient.RPCModule{
 	pldclient.New().Registry(),
 	pldclient.New().Transport(),
 	pldclient.New().StateStore(),
+	pldclient.New().BlockIndex(),
 }
 
 var allSimpleTypes = []interface{}{

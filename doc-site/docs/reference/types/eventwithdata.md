@@ -1,17 +1,15 @@
 ---
-title: IndexedEvent
+title: EventWithData
 ---
-{% include-markdown "./_includes/indexedevent_description.md" %}
+{% include-markdown "./_includes/eventwithdata_description.md" %}
 
 ### Example
 
 ```json
 {
-    "blockNumber": 0,
-    "transactionIndex": 0,
-    "logIndex": 0,
-    "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-    "signature": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    "soliditySignature": "",
+    "address": "0x0000000000000000000000000000000000000000",
+    "data": null
 }
 ```
 
@@ -26,4 +24,7 @@ title: IndexedEvent
 | `signature` | The event signature | [`Bytes32`](simpletypes.md#bytes32) |
 | `transaction` | The transaction that triggered this event (optional) | [`IndexedTransaction`](indexedtransaction.md#indexedtransaction) |
 | `block` | The block containing this event | [`IndexedBlock`](indexedblock.md#indexedblock) |
+| `soliditySignature` | A Solidity style description of the event and parameters, including parameter names and whether they are indexed | `string` |
+| `address` | The address of the smart contract that emitted this event | [`EthAddress`](simpletypes.md#ethaddress) |
+| `data` | JSON formatted data from the event | [`RawJSON`](simpletypes.md#rawjson) |
 

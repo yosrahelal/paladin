@@ -78,8 +78,8 @@ type EventWithData struct {
 	// when both the blockindexer and consuming code are using the same version of firefly-signer.
 	// Includes variable names, including deep within nested structure.
 	// Things like whitespace etc. subject to change (so should not stored for later comparison)
-	SoliditySignature string `json:"soliditySignature"`
+	SoliditySignature string `docstruct:"EventWithData" json:"soliditySignature"`
 
-	Address tktypes.EthAddress `json:"address"`
-	Data    tktypes.RawJSON    `json:"data"`
+	Address tktypes.EthAddress `docstruct:"EventWithData"json:"address"`
+	Data    tktypes.RawJSON    `docstruct:"EventWithData"json:"data"`
 }

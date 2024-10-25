@@ -14,6 +14,7 @@ var ffm = func(key, translation string) i18n.MessageKey {
 var (
 	IndexedBlockNumber                 = ffm("IndexedBlock.number", "The block number")
 	IndexedBlockHash                   = ffm("IndexedBlock.hash", "The unique hash of the block")
+	IndexedBlockTimestamp              = ffm("IndexedBlock.timestamp", "The block timestamp")
 	IndexedTransactionHash             = ffm("IndexedTransaction.hash", "The unique hash of the transaction")
 	IndexedTransactionBlockNumber      = ffm("IndexedTransaction.blockNumber", "The block number containing this transaction")
 	IndexedTransactionTransactionIndex = ffm("IndexedTransaction.transactionIndex", "The index of the transaction within the block")
@@ -22,13 +23,17 @@ var (
 	IndexedTransactionNonce            = ffm("IndexedTransaction.nonce", "The transaction nonce")
 	IndexedTransactionContractAddress  = ffm("IndexedTransaction.contractAddress", "The contract address created by this transaction (optional)")
 	IndexedTransactionResult           = ffm("IndexedTransaction.result", "The result of the transaction (optional)")
+	IndexedTransactionBlock            = ffm("IndexedTransaction.block", "The block containing this event")
 	IndexedEventBlockNumber            = ffm("IndexedEvent.blockNumber", "The block number containing this event")
 	IndexedEventTransactionIndex       = ffm("IndexedEvent.transactionIndex", "The index of the transaction within the block")
 	IndexedEventLogIndex               = ffm("IndexedEvent.logIndex", "The log index of the event")
 	IndexedEventTransactionHash        = ffm("IndexedEvent.transactionHash", "The hash of the transaction that triggered this event")
 	IndexedEventSignature              = ffm("IndexedEvent.signature", "The event signature")
 	IndexedEventTransaction            = ffm("IndexedEvent.transaction", "The transaction that triggered this event (optional)")
-	IndexedEventBlock                  = ffm("IndexedEvent.block", "The block containing this event (optional)")
+	IndexedEventBlock                  = ffm("IndexedEvent.block", "The block containing this event")
+	EventWithDataSoliditySignature     = ffm("EventWithData.soliditySignature", "A Solidity style description of the event and parameters, including parameter names and whether they are indexed")
+	EventWithDataAddress               = ffm("EventWithData.address", "The address of the smart contract that emitted this event")
+	EventWithDataData                  = ffm("EventWithData.data", "JSON formatted data from the event")
 )
 
 // pldapi/keymgr.go
