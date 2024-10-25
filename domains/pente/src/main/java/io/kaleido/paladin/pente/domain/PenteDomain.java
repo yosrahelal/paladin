@@ -79,7 +79,7 @@ public class PenteDomain extends DomainInstance {
     protected CompletableFuture<ToDomain.InitDeployResponse> initDeploy(ToDomain.InitDeployRequest request) {
         try {
             var params = new ObjectMapper().readValue(request.getTransaction().getConstructorParamsJson(),
-                            PenteConfiguration.PrivacyGroupConstructorParamsJSON.class);
+                    PenteConfiguration.PrivacyGroupConstructorParamsJSON.class);
 
             // Only support one string right now for endorsement type.
             // The intention is that more validation options (BLS and/or ZKP based) can be added later.
@@ -109,7 +109,7 @@ public class PenteDomain extends DomainInstance {
                         build());
             }
             return CompletableFuture.completedFuture(response.build());
-        } catch(Exception e) {
+        } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }
     }
@@ -141,7 +141,7 @@ public class PenteDomain extends DomainInstance {
     protected CompletableFuture<ToDomain.PrepareDeployResponse> prepareDeploy(ToDomain.PrepareDeployRequest request) {
         try {
             var params = new ObjectMapper().readValue(request.getTransaction().getConstructorParamsJson(),
-                PenteConfiguration.PrivacyGroupConstructorParamsJSON.class);
+                    PenteConfiguration.PrivacyGroupConstructorParamsJSON.class);
 
             var resolvedVerifiers = getResolvedEndorsers(params.group().salt(), params.group().members(), request.getResolvedVerifiersList());
             var onchainConfBuilder = new ByteArrayOutputStream();
@@ -162,7 +162,7 @@ public class PenteDomain extends DomainInstance {
                     )));
             LOGGER.info("endorsement group verifier addresses: {}", resolvedVerifiers);
             return CompletableFuture.completedFuture(response.build());
-        } catch(Exception e) {
+        } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }
     }
@@ -179,19 +179,18 @@ public class PenteDomain extends DomainInstance {
                     build()
             );
             return CompletableFuture.completedFuture(response.build());
-        } catch(Exception e) {
+        } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }
     }
 
     private List<PenteConfiguration.TransactionExternalCall> parseExternalCalls(PenteTransaction.EVMExecutionResult execResult) throws Exception {
-        var externalCallEventABI = config.getExternalCallABI().getABIEntry("event", "PenteExternalCall").toJSON(false);
         var externalCalls = new ArrayList<PenteConfiguration.TransactionExternalCall>();
         for (var log : execResult.logs()) {
             if (log.getTopics().getFirst().equals(config.getExternalCallTopic())) {
                 var decodedEvent = decodeData(FromDomain.DecodeDataRequest.newBuilder().
                         setEncodingType(FromDomain.EncodingType.EVENT_DATA).
-                        setDefinition(externalCallEventABI).
+                        setDefinition(config.getExternalCallEventABI().toJSON(false)).
                         addAllTopics(log.getTopics().stream().map(t -> ByteString.copyFrom(t.toArray())).toList()).
                         setData(ByteString.copyFrom(log.getData().toArray())).
                         build()).get();
@@ -218,7 +217,7 @@ public class PenteDomain extends DomainInstance {
 
             // Execution throws an EVMExecutionException if fails
             var accountLoader = new AssemblyAccountLoader(request.getStateQueryContext());
-            var execResult = tx.executeEVM(config.getChainId(), tx.getFromVerifier(request.getResolvedVerifiersList()), accountLoader);
+            var execResult = tx.invokeEVM(config.getChainId(), tx.getFromVerifier(request.getResolvedVerifiersList()), accountLoader);
             var result = ToDomain.AssembleTransactionResponse.newBuilder();
             var assembledTransaction = tx.buildAssembledTransaction(execResult.evm(), accountLoader, buildExtraData(execResult));
             result.setAssemblyResult(ToDomain.AssembleTransactionResponse.Result.OK);
@@ -253,7 +252,7 @@ public class PenteDomain extends DomainInstance {
                     build()
             );
             return CompletableFuture.completedFuture(result.build());
-        } catch(PenteTransaction.EVMExecutionException e) {
+        } catch (PenteTransaction.EVMExecutionException e) {
             // Note unlike a base ledger, we do not write a nonce update to the sender's account
             // (which would be a UTXO spend + mint) for a revert during assembly of a transaction,
             // as endorsing and submitting that would be lots of work.
@@ -262,7 +261,7 @@ public class PenteDomain extends DomainInstance {
                     setAssemblyResult(ToDomain.AssembleTransactionResponse.Result.REVERT).
                     setRevertReason(e.getMessage()).
                     build());
-        } catch(Exception e) {
+        } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }
     }
@@ -283,7 +282,7 @@ public class PenteDomain extends DomainInstance {
             // Do the execution of the transaction again ourselves
             var tx = new PenteTransaction(this, request.getTransaction());
             var endorsementLoader = new EndorsementAccountLoader(inputAccounts, readAccounts);
-            var execResult = tx.executeEVM(config.getChainId(), tx.getFromVerifier(request.getResolvedVerifiersList()), endorsementLoader);
+            var execResult = tx.invokeEVM(config.getChainId(), tx.getFromVerifier(request.getResolvedVerifiersList()), endorsementLoader);
 
             // For the inputs, the endorsementLoader checks we loaded everything from the right set
             var inputsMatch = endorsementLoader.checkEmpty();
@@ -329,8 +328,8 @@ public class PenteDomain extends DomainInstance {
             ByteString signature = null;
             for (var sign : request.getSignaturesList()) {
                 if (sign.getVerifier().getAlgorithm().equals(Algorithms.ECDSA_SECP256K1) &&
-                    sign.getVerifier().getVerifierType().equals(Verifiers.ETH_ADDRESS) &&
-                   sign.getVerifier().getVerifier().equals(execResult.senderAddress().toString())) {
+                        sign.getVerifier().getVerifierType().equals(Verifiers.ETH_ADDRESS) &&
+                        sign.getVerifier().getVerifier().equals(execResult.senderAddress().toString())) {
                     signature = sign.getPayload();
                 }
             }
@@ -349,10 +348,10 @@ public class PenteDomain extends DomainInstance {
 
             // Check we agree with the typed data we will sign
             var endorsementPayload = tx.eip712TypedDataEndorsementPayload(
-                request.getInputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
-                request.getReadsList().stream().map(ToDomain.EndorsableState::getId).toList(),
-                request.getOutputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
-                parseExternalCalls(execResult)
+                    request.getInputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
+                    request.getReadsList().stream().map(ToDomain.EndorsableState::getId).toList(),
+                    request.getOutputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
+                    parseExternalCalls(execResult)
             );
 
             // Ok - we are happy to add our endorsement signature
@@ -360,13 +359,13 @@ public class PenteDomain extends DomainInstance {
                     setEndorsementResult(ToDomain.EndorseTransactionResponse.Result.SIGN).
                     setPayload(ByteString.copyFrom(endorsementPayload)).
                     build());
-        } catch(PenteTransaction.EVMExecutionException e) {
+        } catch (PenteTransaction.EVMExecutionException e) {
             LOGGER.error(new FormattedMessage("EVM execution failed during endorsement TX {}", request.getTransaction().getTransactionId()), e);
             return CompletableFuture.completedFuture(ToDomain.EndorseTransactionResponse.newBuilder().
                     setEndorsementResult(ToDomain.EndorseTransactionResponse.Result.SIGN).
                     setRevertReason(e.getMessage()).
                     build());
-        } catch(Exception e) {
+        } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }
     }
@@ -381,7 +380,7 @@ public class PenteDomain extends DomainInstance {
                     request.getExtraData(),
                     PenteConfiguration.TransactionExtraData.class);
 
-            var params = new HashMap<String, Object>(){{
+            var params = new HashMap<String, Object>() {{
                 put("txId", request.getTransaction().getTransactionId());
                 put("inputs", request.getInputStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
                 put("reads", request.getReadStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
@@ -396,7 +395,7 @@ public class PenteDomain extends DomainInstance {
                     setParamsJson(new ObjectMapper().writeValueAsString(params));
             var result = ToDomain.PrepareTransactionResponse.newBuilder().setTransaction(preparedTx);
             return CompletableFuture.completedFuture(result.build());
-        } catch(Exception e) {
+        } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }
     }
@@ -429,7 +428,7 @@ public class PenteDomain extends DomainInstance {
                 }
             }
             return CompletableFuture.completedFuture(null);
-        } catch(Exception e) {
+        } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }
     }
@@ -456,14 +455,34 @@ public class PenteDomain extends DomainInstance {
 
     @Override
     protected CompletableFuture<ToDomain.InitCallResponse> initCall(ToDomain.InitCallRequest request) {
-        // TODO: Implement call against the Pente privacy group
-        return CompletableFuture.failedFuture(new UnsupportedOperationException());
+        try {
+            var tx = new PenteTransaction(this, request.getTransaction());
+            var response = ToDomain.InitCallResponse.newBuilder();
+            response.addRequiredVerifiers(ToDomain.ResolveVerifierRequest.newBuilder().
+                    setAlgorithm(Algorithms.ECDSA_SECP256K1).
+                    setVerifierType(Verifiers.ETH_ADDRESS).
+                    setLookup(tx.getFrom()).
+                    build()
+            );
+            return CompletableFuture.completedFuture(response.build());
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
     }
 
     @Override
     protected CompletableFuture<ToDomain.ExecCallResponse> execCall(ToDomain.ExecCallRequest request) {
-        // TODO: Implement call against the Pente privacy group
-        return CompletableFuture.failedFuture(new UnsupportedOperationException());
+        try {
+            var tx = new PenteTransaction(this, request.getTransaction());
+            var accountLoader = new AssemblyAccountLoader(request.getStateQueryContext());
+            var result = tx.callEVM(config.getChainId(), tx.getFromVerifier(request.getResolvedVerifiersList()), accountLoader);
+
+            var response = ToDomain.ExecCallResponse.newBuilder();
+            response.setResultJson(result);
+            return CompletableFuture.completedFuture(response.build());
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -472,7 +491,8 @@ public class PenteDomain extends DomainInstance {
             String soliditySignature,
             @JsonProperty
             JsonNode data
-    ) {}
+    ) {
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record UTXOTransferJSON(
@@ -532,6 +552,7 @@ public class PenteDomain extends DomainInstance {
                 this.readAccounts.put(account.getAddress(), account);
             }
         }
+
         public Optional<PersistedAccount> load(org.hyperledger.besu.datatypes.Address address) {
             var account = inputAccounts.remove(address);
             if (account != null) {
@@ -543,6 +564,7 @@ public class PenteDomain extends DomainInstance {
             }
             return Optional.empty();
         }
+
         boolean checkEmpty() {
             return readAccounts.isEmpty() && inputAccounts.isEmpty();
         }
@@ -553,15 +575,18 @@ public class PenteDomain extends DomainInstance {
     }
 
     @FunctionalInterface
-    public interface SupplierEx<T> { T get() throws Exception; }
+    public interface SupplierEx<T> {
+        T get() throws Exception;
+    }
+
     static <ReturnType> ReturnType withIOException(SupplierEx<ReturnType> fn) throws IOException {
         try {
             return fn.get();
-        } catch(IOException e) {
+        } catch (IOException e) {
             throw e;
         } catch (Exception e) {
             if (e instanceof RuntimeException) {
-                throw (RuntimeException)(e);
+                throw (RuntimeException) (e);
             }
             throw new RuntimeException(e);
         }
