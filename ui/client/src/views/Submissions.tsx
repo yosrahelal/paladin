@@ -66,7 +66,7 @@ export const Submissions: React.FC = () => {
             sx={{
               padding: "20px",
               overflow: "scroll",
-              height: "calc(100vh - 162px)",
+              height: "calc(100vh - 178px)",
             }}
           >
             {pendingTransactions?.map((pendingTransaction) => (
