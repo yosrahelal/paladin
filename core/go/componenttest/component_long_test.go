@@ -24,6 +24,7 @@ package componenttest
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -192,62 +193,69 @@ func TestPrivateTransactions100PercentEndorsementConcurrent(t *testing.T) {
 	}
 	// send JSON RPC message to node 1 to deploy a private contract
 	contractAddress := alice.deploySimpleStorageDomainInstanceContract(t, domains.PrivacyGroupEndorsement, constructorParameters)
+	for i := 0; i < 1; i++ {
 
-	// Start a private transaction on alice's node
-	// this should require endorsement from bob and carol
-	var aliceTxID uuid.UUID
-	err := alice.client.CallRPC(ctx, &aliceTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
-		ABI: *domains.SimpleStorageSetABI(),
-		Transaction: pldapi.Transaction{
-			To:             contractAddress,
-			Domain:         "domain1",
-			IdempotencyKey: "tx1-alice",
-			Type:           pldapi.TransactionTypePrivate.Enum(),
-			From:           alice.identity,
-			Data: tktypes.RawJSON(`{
-                    "key": "alice",
-					"value": "hello"
-                }`),
-		},
-	})
-	require.NoError(t, err)
-	assert.NotEqual(t, uuid.UUID{}, aliceTxID)
+		// Start a private transaction on alice's node
+		// this should require endorsement from bob and carol
+		var aliceTxID uuid.UUID
+		err := alice.client.CallRPC(ctx, &aliceTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
+			ABI: *domains.SimpleStorageSetABI(),
+			Transaction: pldapi.Transaction{
+				To:             contractAddress,
+				Domain:         "domain1",
+				IdempotencyKey: fmt.Sprintf("tx1-alice0-%d", i),
+				Type:           pldapi.TransactionTypePrivate.Enum(),
+				From:           alice.identity,
+				Data: tktypes.RawJSON(fmt.Sprintf(`{
+                    "key": "alice_%d",
+					"value": "hello_%d"
+                }`, i, i)),
+			},
+		})
+		require.NoError(t, err)
+		assert.NotEqual(t, uuid.UUID{}, aliceTxID)
 
-	// Start a private transaction on alice's node
-	// this should require endorsement from bob and carol
-	var bobTxID uuid.UUID
-	err = bob.client.CallRPC(ctx, &bobTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
-		ABI: *domains.SimpleStorageSetABI(),
-		Transaction: pldapi.Transaction{
-			To:             contractAddress,
-			Domain:         "domain1",
-			IdempotencyKey: "tx1-bob",
-			Type:           pldapi.TransactionTypePrivate.Enum(),
-			From:           bob.identity,
-			Data: tktypes.RawJSON(`{
-                    "key": "bob",
-					"value": "bonjour"
-                }`),
-		},
-	})
-	require.NoError(t, err)
-	assert.NotEqual(t, uuid.UUID{}, bobTxID)
+		// Start a private transaction on alice's node
+		// this should require endorsement from bob and carol
+		var bobTxID uuid.UUID
+		err = bob.client.CallRPC(ctx, &bobTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
+			ABI: *domains.SimpleStorageSetABI(),
+			Transaction: pldapi.Transaction{
+				To:             contractAddress,
+				Domain:         "domain1",
+				IdempotencyKey: fmt.Sprintf("tx1-bob-%d", i),
+				Type:           pldapi.TransactionTypePrivate.Enum(),
+				From:           bob.identity,
+				Data: tktypes.RawJSON(fmt.Sprintf(`{
+                    "key": "bob_%d",
+					"value": "bonjour_%d"
+                }`, i, i)),
+			},
+		})
+		require.NoError(t, err)
+		assert.NotEqual(t, uuid.UUID{}, bobTxID)
 
-	assert.Eventually(t,
-		transactionReceiptCondition(t, ctx, aliceTxID, alice.client, false),
-		transactionLatencyThreshold(t),
-		100*time.Millisecond,
-		"Transaction did not receive a receipt",
-	)
+		assert.Eventually(t,
+			transactionReceiptCondition(t, ctx, aliceTxID, alice.client, false),
+			transactionLatencyThreshold(t),
+			100*time.Millisecond,
+			"Transaction did not receive a receipt",
+		)
 
-	assert.Eventually(t,
-		transactionReceiptCondition(t, ctx, bobTxID, bob.client, false),
-		transactionLatencyThreshold(t),
-		100*time.Millisecond,
-		"Transaction did not receive a receipt",
-	)
+		assert.Eventually(t,
+			transactionReceiptCondition(t, ctx, bobTxID, bob.client, false),
+			transactionLatencyThreshold(t),
+			100*time.Millisecond,
+			"Transaction did not receive a receipt",
+		)
+	}
 
 	var schemas []*pldapi.Schema
+
+	err := alice.client.CallRPC(ctx, &schemas, "pstate_listSchemas", "simpleStorageDomain")
+	require.NoError(t, err)
+	require.Len(t, schemas, 1)
+
 	err = bob.client.CallRPC(ctx, &schemas, "pstate_listSchemas", "simpleStorageDomain")
 	require.NoError(t, err)
 	require.Len(t, schemas, 1)
