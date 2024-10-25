@@ -24,6 +24,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var encodedConfig = func() []byte {
@@ -96,7 +97,7 @@ func TestInitTransactionBadFunction(t *testing.T) {
 	_, err := n.InitTransaction(context.Background(), &prototk.InitTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
 			ContractInfo: &prototk.ContractInfo{
-				ContractConfig: encodedConfig,
+				ContractConfigJson: `{"notaryLookup":"notary"}`,
 			},
 			FunctionAbiJson: `{"name": "does-not-exist"}`,
 		},
@@ -104,12 +105,27 @@ func TestInitTransactionBadFunction(t *testing.T) {
 	assert.ErrorContains(t, err, "PD200001")
 }
 
+func TestInitContractOk(t *testing.T) {
+	n := &Noto{}
+	res, err := n.InitContract(context.Background(), &prototk.InitContractRequest{
+		ContractAddress: tktypes.RandAddress().String(),
+		ContractConfig:  encodedConfig,
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"notaryAddress":"0x138baffcdcc3543aad1afd81c71d2182cdf9c8cd",
+		"notaryLookup":"notary",
+		"notaryType":"0x0",
+		"variant":"0x0"
+	}`, res.ContractConfig.ContractConfigJson)
+}
+
 func TestInitTransactionBadParams(t *testing.T) {
 	n := &Noto{}
 	_, err := n.InitTransaction(context.Background(), &prototk.InitTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
 			ContractInfo: &prototk.ContractInfo{
-				ContractConfig: encodedConfig,
+				ContractConfigJson: `{"notaryLookup":"notary"}`,
 			},
 			FunctionAbiJson:    `{"name": "transfer"}`,
 			FunctionParamsJson: "!!wrong",
@@ -123,7 +139,7 @@ func TestInitTransactionMissingTo(t *testing.T) {
 	_, err := n.InitTransaction(context.Background(), &prototk.InitTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
 			ContractInfo: &prototk.ContractInfo{
-				ContractConfig: encodedConfig,
+				ContractConfigJson: `{"notaryLookup":"notary"}`,
 			},
 			FunctionAbiJson:    `{"name": "transfer"}`,
 			FunctionParamsJson: "{}",
@@ -137,7 +153,7 @@ func TestInitTransactionMissingAmount(t *testing.T) {
 	_, err := n.InitTransaction(context.Background(), &prototk.InitTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
 			ContractInfo: &prototk.ContractInfo{
-				ContractConfig: encodedConfig,
+				ContractConfigJson: `{"notaryLookup":"notary"}`,
 			},
 			FunctionAbiJson:    `{"name": "transfer"}`,
 			FunctionParamsJson: `{"to": "recipient"}`,
@@ -151,7 +167,7 @@ func TestInitTransactionBadSignature(t *testing.T) {
 	_, err := n.InitTransaction(context.Background(), &prototk.InitTransactionRequest{
 		Transaction: &prototk.TransactionSpecification{
 			ContractInfo: &prototk.ContractInfo{
-				ContractConfig: encodedConfig,
+				ContractConfigJson: `{"notaryLookup":"notary"}`,
 			},
 			FunctionAbiJson:    `{"name": "transfer"}`,
 			FunctionParamsJson: `{"to": "recipient", "amount": 1}`,
