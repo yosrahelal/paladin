@@ -108,7 +108,7 @@ type TransactionFlow interface {
 	ApplyEvent(ctx context.Context, event PrivateTransactionEvent)
 	Action(ctx context.Context)
 
-	PrepareTransaction(ctx context.Context) (*components.PrivateTransaction, error)
+	PrepareTransaction(ctx context.Context, defaultSigner string) (*components.PrivateTransaction, error)
 	GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution
 	CoordinatingLocally() bool
 	IsComplete() bool

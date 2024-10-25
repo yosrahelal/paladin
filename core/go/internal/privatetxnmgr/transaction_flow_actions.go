@@ -128,10 +128,14 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 	tf.status = "endorsed"
 
 	// TODO is this too late to be resolving the dispatch key?
+	//
+	// SUGGESTION: we need to do this before we do delegateIfRequired, as if the endorsing signer
+	// is on another node, we need to delegate to that node.
+	//
 	// Can we do it any earlier or do we need to wait until we have all endorsements ( i.e. so that the endorser can declare ENDORSER_MUST_SUBMIT)
 	// We would need to do it earlier if we want to avoid transactions for different dispatch keys ending up in the same dependency graph
 	if tf.transaction.Signer == "" {
-		err := tf.domainAPI.ResolveDispatch(ctx, tf.transaction)
+		err := tf.resolveDispatch(ctx)
 		if err != nil {
 
 			log.L(ctx).Errorf("Failed to resolve dispatch for transaction %s: %s", tf.transaction.ID.String(), err)
@@ -144,6 +148,24 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 			return
 		}
 	}
+}
+
+func (tf *transactionFlow) resolveDispatch(ctx context.Context) error {
+	tx := tf.transaction
+	for _, ar := range tx.PostAssembly.Endorsements {
+		for _, c := range ar.Constraints {
+			if c == prototk.AttestationResult_ENDORSER_MUST_SUBMIT {
+				if tx.Signer != "" {
+					// Multiple endorsers claiming it is an error
+					return i18n.NewError(ctx, msgs.MsgDomainMultipleEndorsersSubmit)
+				}
+				tx.Signer = ar.Verifier.Lookup
+			}
+		}
+	}
+	// Note: the signer might still be empty here, in which case that's fine as the coordinating
+	// Sequencer will choose
+	return nil
 }
 
 func (tf *transactionFlow) revertTransaction(ctx context.Context, revertReason string) {
@@ -206,7 +228,7 @@ func (tf *transactionFlow) delegateIfRequired(ctx context.Context) {
 		// and dispatch to base ledger so we might as well delegate the coordination to it so that
 		// it can maximize the optimistic spending of pending states
 
-		if tf.domainAPI.Domain().Configuration().GetBaseLedgerSubmitConfig().GetSubmitMode() == prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION && numEndorsers == 1 {
+		if tf.domainAPI.ContractConfig().CoordinatorSelection == prototk.ContractConfig_COORDINATOR_ENDORSER && numEndorsers == 1 {
 			endorserNode, err := tktypes.PrivateIdentityLocator(endorser).Node(ctx, true)
 			if err != nil {
 				log.L(ctx).Errorf("Failed to get node name from locator %s: %s", tf.transaction.PostAssembly.AttestationPlan[0].Parties[0], err)
