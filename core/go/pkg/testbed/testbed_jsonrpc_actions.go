@@ -196,7 +196,7 @@ func (tb *testbed) newPrivateTransaction(ctx context.Context, invocation tktypes
 	return psc, tx, err
 }
 
-func (tb *testbed) resolveTXSigner(ctx context.Context, tx *components.PrivateTransaction) error {
+func (tb *testbed) resolveTXSigner(tx *components.PrivateTransaction) error {
 	// The testbed implements much simpler checking here than the full private TX manager
 	// on whether the ENDORSER_MUST_SUBMIT constraint clashes with the config on the contract.
 	for _, ar := range tx.PostAssembly.Endorsements {
@@ -278,7 +278,7 @@ func (tb *testbed) execPrivateTransaction(ctx context.Context, psc components.Do
 		len(tx.PostAssembly.InputStates), len(tx.PostAssembly.OutputStates), len(tx.PostAssembly.Signatures), len(tx.PostAssembly.Endorsements))
 
 	// Pick the signer for the base ledger transaction (we are always the coordinator in the testbed so this logic is much simplified from the private TX manager)
-	if err := tb.resolveTXSigner(ctx, tx); err != nil {
+	if err := tb.resolveTXSigner(tx); err != nil {
 		return err
 	}
 
