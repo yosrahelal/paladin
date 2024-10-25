@@ -171,7 +171,7 @@ func doDomainInitAssembleTransactionOK(t *testing.T, td *testDomainContext) (*do
 }
 
 func mockBlockHeight(mc *mockComponents) {
-	mc.blockIndexer.On("GetConfirmedBlockHeight", mock.Anything).Return(uint64(12345), nil)
+	mc.blockIndexer.On("GetConfirmedBlockHeight", mock.Anything).Return(tktypes.HexUint64(12345), nil)
 }
 
 func TestDomainInitTransactionOK(t *testing.T) {
@@ -344,7 +344,7 @@ func TestDomainInitTransactionMissingInput(t *testing.T) {
 
 func TestDomainInitTransactionConfirmedBlockFail(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
-		mc.blockIndexer.On("GetConfirmedBlockHeight", mock.Anything).Return(uint64(0), fmt.Errorf("pop"))
+		mc.blockIndexer.On("GetConfirmedBlockHeight", mock.Anything).Return(tktypes.HexUint64(0), fmt.Errorf("pop"))
 	})
 	defer done()
 	assert.Nil(t, td.d.initError.Load())

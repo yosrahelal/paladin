@@ -521,7 +521,7 @@ func TestBlockIndexerListenFromCurrentBlock(t *testing.T) {
 
 	ch, err := bi.GetConfirmedBlockHeight(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, uint64(9), ch)
+	assert.Equal(t, tktypes.HexUint64(9), ch)
 }
 
 func TestBlockIndexerCancelledBeforeCurrentBlock(t *testing.T) {
