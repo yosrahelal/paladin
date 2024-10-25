@@ -673,7 +673,7 @@ func (tr *transactionResult) Receipt() *pldapi.TransactionReceipt {
 }
 
 func (tr *transactionResult) TransactionHash() *tktypes.Bytes32 {
-	if tr.receipt != nil {
+	if tr.receipt != nil && tr.receipt.TransactionReceiptDataOnchain != nil {
 		return tr.receipt.TransactionHash
 	}
 	return nil

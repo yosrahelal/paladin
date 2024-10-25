@@ -269,6 +269,7 @@ func TestBuildAndSubmitPrivateTXHTTPRevert(t *testing.T) {
 
 	res := sent.Wait(100 * time.Millisecond)
 	assert.EqualError(t, res.Error(), "something went wrong")
+	assert.Nil(t, res.TransactionHash())
 
 }
 
