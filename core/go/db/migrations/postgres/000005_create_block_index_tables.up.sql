@@ -3,8 +3,11 @@ BEGIN;
 CREATE TABLE indexed_blocks (
     "hash"            TEXT    NOT NULL,
     "number"          BIGINT  NOT NULL,
+    "timestamp"       BIGINT  NOT NULL,
     PRIMARY KEY ("number")
 );
+
+CREATE INDEX indexed_blocks_hash ON indexed_blocks("hash");
 
 CREATE TABLE indexed_transactions (
     "hash"              TEXT      NOT NULL,

@@ -458,7 +458,7 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 	lastBlock := int64(-1)
 	lastIndex := -1
 	for i := 0; i < 15; i += 5 {
-		page, err := bi.ListTransactionEvents(ctx, lastBlock, lastIndex, 5, true, true)
+		page, err := bi.ListTransactionEvents(ctx, lastBlock, lastIndex, 5)
 		require.NoError(t, err)
 		assert.Len(t, page, 5)
 		for i2 := 0; i2 < 5; i2++ {
