@@ -26,6 +26,7 @@ import daysjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import { EllapsedTime } from "./EllapsedTime";
 
 daysjs.extend(relativeTime);
 
@@ -114,12 +115,7 @@ export const PendingTransaction: React.FC<Props> = ({ paladinTransaction }) => {
           </Grid2>
           <Grid2>
             <Box sx={{ display: 'flex', padding: '4px', justifyContent: 'space-between' }}>
-              <Box sx={{ display: 'flex', padding: '4px' }}>
-                <HourglassTopIcon color="primary" sx={{ marginRight: '4px', fontSize: '16px', height: '20px' }} />
-                <Typography color="textSecondary" variant="body2" >
-                  {daysjs(paladinTransaction?.created).fromNow()}
-                </Typography>
-              </Box>
+              <EllapsedTime timestamp={paladinTransaction?.created} />
               <Button size="small" endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                 onClick={() => setIsExpanded(!isExpanded)}>
                 {t(isExpanded ? 'hideProperties' : 'showProperties')}
