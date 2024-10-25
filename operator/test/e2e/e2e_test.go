@@ -298,9 +298,7 @@ var _ = Describe("controller", Ordered, func() {
 
 			notoTracker := solutils.MustLoadBuild(NotoTrackerERC20BuildJSON)
 
-			type notoTrackerConstructorInputParams struct {
-				MaxSupply *tktypes.HexUint256 `json:"maxSupply"`
-			}
+			type notoTrackerConstructorInputParams struct{}
 
 			deploy := rpc["node1"].ForABI(ctx, abi.ABI{notoTrackerDeployABI}).
 				Private().
@@ -310,9 +308,7 @@ var _ = Describe("controller", Ordered, func() {
 				Inputs(&penteDeployParams{
 					Group:    penteGroupNodes1and2,
 					Bytecode: notoTracker.Bytecode,
-					Inputs: notoTrackerConstructorInputParams{
-						MaxSupply: tktypes.Int64ToInt256(1000000),
-					},
+					Inputs:   notoTrackerConstructorInputParams{},
 				}).
 				From("random." + uuid.NewString()). // anyone can submit this by design
 				Send().
