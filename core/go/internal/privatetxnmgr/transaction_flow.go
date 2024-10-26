@@ -32,7 +32,23 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
-func NewTransactionFlow(ctx context.Context, transaction *components.PrivateTransaction, nodeName string, components components.AllComponents, domainAPI components.DomainSmartContract, publisher ptmgrtypes.Publisher, endorsementGatherer ptmgrtypes.EndorsementGatherer, identityResolver components.IdentityResolver, syncPoints syncpoints.SyncPoints, transportWriter ptmgrtypes.TransportWriter, requestTimeout time.Duration, selectCoordinator CoordinatorSelectorFunction, assembleCoordinator AssembleCoordinator) ptmgrtypes.TransactionFlow {
+func NewTransactionFlow(
+	ctx context.Context,
+	transaction *components.PrivateTransaction,
+	nodeName string,
+	components components.AllComponents,
+	domainAPI components.DomainSmartContract,
+	publisher ptmgrtypes.Publisher,
+	endorsementGatherer ptmgrtypes.EndorsementGatherer,
+	identityResolver components.IdentityResolver,
+	syncPoints syncpoints.SyncPoints,
+	transportWriter ptmgrtypes.TransportWriter,
+	requestTimeout time.Duration,
+	selectCoordinator ptmgrtypes.CoordinatorSelector,
+	assembleCoordinator AssembleCoordinator,
+	environment ptmgrtypes.SequencerEnvironment,
+) ptmgrtypes.TransactionFlow {
+
 	return &transactionFlow{
 		stageErrorRetry:             10 * time.Second,
 		domainAPI:                   domainAPI,
@@ -58,6 +74,7 @@ func NewTransactionFlow(ctx context.Context, transaction *components.PrivateTran
 		requestTimeout:              requestTimeout,
 		selectCoordinator:           selectCoordinator,
 		assembleCoordinator:         assembleCoordinator,
+		environment:                 environment,
 	}
 }
 
@@ -78,6 +95,7 @@ type transactionFlow struct {
 	finalizeRevertReason        string
 	finalizeRequired            bool
 	finalizePending             bool
+	assemblePending             bool
 	complete                    bool
 	requestedVerifierResolution bool                            //TODO add precision here so that we can track individual requests and implement retry as per endorsement
 	requestedSignatures         bool                            //TODO add precision here so that we can track individual requests and implement retry as per endorsement
@@ -87,8 +105,9 @@ type transactionFlow struct {
 	dispatched                  bool
 	clock                       ptmgrtypes.Clock
 	requestTimeout              time.Duration
-	selectCoordinator           CoordinatorSelectorFunction
+	selectCoordinator           ptmgrtypes.CoordinatorSelector
 	assembleCoordinator         AssembleCoordinator
+	environment                 ptmgrtypes.SequencerEnvironment
 }
 
 func (tf *transactionFlow) GetTxStatus(ctx context.Context) (components.PrivateTxStatus, error) {

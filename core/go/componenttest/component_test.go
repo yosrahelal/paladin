@@ -623,7 +623,7 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 	alice.peer(bob.nodeConfig)
 	bob.peer(alice.nodeConfig)
 
-	domainConfig := domains.SimpleDomainConfig{
+	domainConfig := &domains.SimpleDomainConfig{
 		SubmitMode: domains.ENDORSER_SUBMISSION,
 	}
 	alice.start(t, domainConfig)
@@ -823,7 +823,7 @@ func TestPrivateTransactions100PercentEndorsement(t *testing.T) {
 	bob.peer(alice.nodeConfig, carol.nodeConfig)
 	carol.peer(alice.nodeConfig, bob.nodeConfig)
 
-	domainConfig := domains.SimpleDomainConfig{
+	domainConfig := &domains.SimpleDomainConfig{
 		SubmitMode: domains.ONE_TIME_USE_KEYS,
 	}
 	alice.start(t, domainConfig)

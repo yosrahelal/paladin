@@ -216,15 +216,9 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 			contractAddr, err := ethtypes.NewAddress(tx.ContractInfo.ContractAddress)
 			require.NoError(t, err)
 
-			configValues, err := contractDataABI.DecodeABIData(tx.ContractInfo.ContractConfig, 0)
-			str := tktypes.HexBytes(tx.ContractInfo.ContractConfig).HexString0xPrefix()
-			assert.NotEqual(t, "", str)
-			require.NoError(t, err)
-
-			configJSON, err := tktypes.StandardABISerializer().SerializeJSON(configValues)
 			require.NoError(t, err)
 			var config simpleStorageConfigParser
-			err = json.Unmarshal(configJSON, &config)
+			err = json.Unmarshal([]byte(tx.ContractInfo.ContractConfigJson), &config)
 			require.NoError(t, err)
 
 			return contractAddr, config, &inputs
@@ -243,25 +237,10 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 				eventsJSON, err := json.Marshal(eventsABI)
 				require.NoError(t, err)
 
-				baseLedgerSubmitConfig := &prototk.BaseLedgerSubmitConfig{}
-				if domainConfig.SubmitMode == "" || domainConfig.SubmitMode == ENDORSER_SUBMISSION {
-					baseLedgerSubmitConfig.SubmitMode = prototk.BaseLedgerSubmitConfig_ENDORSER_SUBMISSION
-				} else if domainConfig.SubmitMode == ONE_TIME_USE_KEYS {
-					baseLedgerSubmitConfig.SubmitMode = prototk.BaseLedgerSubmitConfig_ONE_TIME_USE_KEYS
-				} else {
-					return nil, fmt.Errorf("unknown submit mode %s", domainConfig.SubmitMode)
-				}
-
 				return &prototk.ConfigureDomainResponse{
 					DomainConfig: &prototk.DomainConfig{
-						BaseLedgerSubmitConfig: baseLedgerSubmitConfig,
-						AbiStateSchemasJson:    []string{simpleStorageStateSchema},
-						AbiEventsJson:          string(eventsJSON),
-						CoordinatorConfig: &prototk.CoordinatorConfig{
-							CoordinatorSelectionMode: prototk.CoordinatorConfig_DYNAMIC_COORDINATOR,
-							DynamicCoordinators:      domainConfig.EndorsementSet,
-							RangeSize:                confutil.P(uint32(10)),
-						},
+						AbiStateSchemasJson: []string{simpleStorageStateSchema},
+						AbiEventsJson:       string(eventsJSON),
 					},
 				}, nil
 			},
@@ -339,6 +318,38 @@ func SimpleStorageDomain(t *testing.T, ctx context.Context) plugintk.PluginBase 
 						FunctionAbiJson: toJSONString(t, simpleDomainABI.Functions()["newSimpleTokenNotarized"]),
 						ParamsJson:      tktypes.JSONString(params).String(),
 					},
+				}, nil
+			},
+
+			InitContract: func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+
+				configValues, err := contractDataABI.DecodeABIData(icr.ContractConfig, 0)
+				str := tktypes.HexBytes(icr.ContractConfig).HexString0xPrefix()
+				assert.NotEqual(t, "", str)
+				require.NoError(t, err)
+
+				configJSON, err := tktypes.StandardABISerializer().SerializeJSON(configValues)
+				require.NoError(t, err)
+				contractConfig := &prototk.ContractConfig{
+					ContractConfigJson: string(configJSON),
+				}
+				var constructorParameters SimpleStorageConstructorParameters
+				err = json.Unmarshal([]byte(configJSON), &constructorParameters)
+				require.NoError(t, err)
+
+				if constructorParameters.EndorsementMode == SelfEndorsement {
+					contractConfig.CoordinatorSelection = prototk.ContractConfig_COORDINATOR_SENDER
+					contractConfig.SubmitterSelection = prototk.ContractConfig_SUBMITTER_SENDER
+				} else if constructorParameters.EndorsementMode == PrivacyGroupEndorsement {
+					contractConfig.CoordinatorSelection = prototk.ContractConfig_COORDINATOR_ENDORSER
+					contractConfig.SubmitterSelection = prototk.ContractConfig_SUBMITTER_COORDINATOR
+				} else {
+					return nil, fmt.Errorf("unknown endorsement mode %s", constructorParameters.EndorsementMode)
+				}
+
+				return &prototk.InitContractResponse{
+					Valid:          true,
+					ContractConfig: contractConfig,
 				}, nil
 			},
 

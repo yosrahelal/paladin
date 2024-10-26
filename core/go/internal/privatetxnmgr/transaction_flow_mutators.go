@@ -82,6 +82,7 @@ func (tf *transactionFlow) applyTransactionAssembledEvent(ctx context.Context, e
 
 	tf.latestEvent = "TransactionAssembledEvent"
 	tf.transaction.PostAssembly = event.PostAssembly
+	tf.assemblePending = false
 	if tf.transaction.PostAssembly.AssemblyResult == prototk.AssembleTransactionResponse_REVERT {
 		// Not sure if any domains actually use this but it is a valid response to indicate failure
 		log.L(ctx).Errorf("AssemblyResult is AssembleTransactionResponse_REVERT")
@@ -98,6 +99,7 @@ func (tf *transactionFlow) applyTransactionAssembleFailedEvent(ctx context.Conte
 	tf.latestError = event.Error
 	tf.finalizeRequired = true
 	tf.finalizeRevertReason = event.Error
+	tf.assemblePending = false
 }
 
 func (tf *transactionFlow) applyTransactionSignedEvent(ctx context.Context, event *ptmgrtypes.TransactionSignedEvent) {

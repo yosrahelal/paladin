@@ -43,7 +43,7 @@ func (s *Sequencer) evaluationLoop() {
 		select {
 		case blockHeight := <-s.newBlockEvents:
 			//TODO should we use this is as the metronome to periodically trigger any inflight transactions to re-evaluate their state?
-			s.blockHeight = blockHeight
+			s.environment.blockHeight = blockHeight
 		case pendingEvent := <-s.pendingTransactionEvents:
 			s.handleTransactionEvent(ctx, pendingEvent)
 		case <-s.orchestrationEvalRequestChan:

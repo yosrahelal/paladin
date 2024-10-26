@@ -30,10 +30,8 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
 	"github.com/kaleido-io/paladin/core/internal/statedistribution"
-	"github.com/serialx/hashring"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
-	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
@@ -71,6 +69,14 @@ var AllSequencerStates = []string{
 	string(SequencerStateStopped),
 }
 
+type sequencerEnvironment struct {
+	blockHeight int64
+}
+
+func (e *sequencerEnvironment) GetBlockHeight() int64 {
+	return e.blockHeight
+}
+
 type Sequencer struct {
 	ctx                     context.Context
 	persistenceRetryTimeout time.Duration
@@ -99,25 +105,24 @@ type Sequencer struct {
 
 	pendingTransactionEvents chan ptmgrtypes.PrivateTransactionEvent
 
-	contractAddress             tktypes.EthAddress // the contract address managed by the current sequencer
-	defaultSigner               string
-	nodeName                    string
-	domainAPI                   components.DomainSmartContract
-	components                  components.AllComponents
-	endorsementGatherer         ptmgrtypes.EndorsementGatherer
-	publisher                   ptmgrtypes.Publisher
-	identityResolver            components.IdentityResolver
-	syncPoints                  syncpoints.SyncPoints
-	stateDistributer            statedistribution.StateDistributer
-	transportWriter             ptmgrtypes.TransportWriter
-	graph                       Graph
-	requestTimeout              time.Duration
-	coordinatorSelectorFunction CoordinatorSelectorFunction
-	blockHeight                 int64
-	newBlockEvents              chan int64
-	assembleCoordinator         AssembleCoordinator
+	contractAddress     tktypes.EthAddress // the contract address managed by the current sequencer
+	defaultSigner       string
+	nodeName            string
+	domainAPI           components.DomainSmartContract
+	components          components.AllComponents
+	endorsementGatherer ptmgrtypes.EndorsementGatherer
+	publisher           ptmgrtypes.Publisher
+	identityResolver    components.IdentityResolver
+	syncPoints          syncpoints.SyncPoints
+	stateDistributer    statedistribution.StateDistributer
+	transportWriter     ptmgrtypes.TransportWriter
+	graph               Graph
+	requestTimeout      time.Duration
+	coordinatorSelector ptmgrtypes.CoordinatorSelector
+	newBlockEvents      chan int64
+	assembleCoordinator AssembleCoordinator
+	environment         *sequencerEnvironment
 }
-type CoordinatorSelectorFunction func(ctx context.Context) string
 
 func NewSequencer(
 	ctx context.Context,
@@ -133,8 +138,9 @@ func NewSequencer(
 	stateDistributer statedistribution.StateDistributer,
 	transportWriter ptmgrtypes.TransportWriter,
 	requestTimeout time.Duration,
+	blockHeight int64,
 
-) *Sequencer {
+) (*Sequencer, error) {
 
 	newSequencer := &Sequencer{
 		ctx:                  log.WithLogField(ctx, "role", fmt.Sprintf("sequencer-%s", contractAddress)),
@@ -164,6 +170,9 @@ func NewSequencer(
 		transportWriter:              transportWriter,
 		graph:                        NewGraph(),
 		requestTimeout:               requestTimeout,
+		environment: &sequencerEnvironment{
+			blockHeight: blockHeight,
+		},
 
 		// Randomly allocate a signer.
 		// TODO: rotation
@@ -174,57 +183,12 @@ func NewSequencer(
 
 	log.L(ctx).Debugf("NewSequencer for contract address %s created: %+v", newSequencer.contractAddress, newSequencer)
 
-	//TODO temporary hack / PoC until we have domain contract config to control the policy
-
-	newSequencer.coordinatorSelectorFunction = func(ctx context.Context) string {
-		// Coordinator selector policy is either
-		//  - coordinator node is statically configured in the contract
-		//  - deterministic and fair rotation between a predefined set of endorsers
-		//  - the sender of the transaction coordinates the transaction
-		//
-		// Submitter selection policy is either
-		// - Coordinator submits
-		// - Sender submits
-		// - 3rd party submission
-
-		// Currently only the following combinations are implemented
-		// 1+1 - core option set for Noto
-		// 2+1 - core option set for Pente
-		// 3+2 - core option set for Zeto
-
-		coordinatorSelectionMode := domainAPI.Domain().Configuration().GetCoordinatorConfig().GetCoordinatorSelectionMode()
-
-		if coordinatorSelectionMode == prototk.CoordinatorConfig_SENDER_COORDINATES {
-			return nodeName
-		}
-
-		coordinatorNode := ""
-
-		if coordinatorSelectionMode == prototk.CoordinatorConfig_STATIC_COORDINATOR {
-			coordinatorNode = domainAPI.Domain().Configuration().GetCoordinatorConfig().GetStaticCoordinator()
-		}
-
-		if coordinatorSelectionMode == prototk.CoordinatorConfig_DYNAMIC_COORDINATOR {
-			dynamicCoordinators := domainAPI.Domain().Configuration().GetCoordinatorConfig().GetDynamicCoordinators()
-			if len(dynamicCoordinators) == 0 {
-				log.L(ctx).Errorf("No dynamic coordinators configured")
-				return nodeName
-			}
-
-			rangeSize := domainAPI.Domain().Configuration().GetCoordinatorConfig().GetRangeSize()
-			if rangeSize == 0 {
-				rangeSize = 10 //TODO this default should be configurable at the node level
-			}
-			rangeIndex := newSequencer.blockHeight / int64(rangeSize)
-
-			//TODO Not sure we even need a hashring for this given that rangeIndex is incrementing, we could have a simple round robin scheme using modulo of the number of coordinators
-			ring := hashring.New(dynamicCoordinators)
-			coordinatorNode, _ = ring.GetNode(fmt.Sprintf("%d", rangeIndex))
-
-		}
-
-		return coordinatorNode
+	coordinatorSelector, err := NewCoordinatorSelector(ctx, nodeName, domainAPI.ContractConfig(), *sequencerConfig)
+	if err != nil {
+		log.L(ctx).Errorf("Failed to create coordinator selector: %s", err)
+		return nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerNewSequencerError, domainAPI.ContractConfig().GetCoordinatorSelection())
 	}
+	newSequencer.coordinatorSelector = coordinatorSelector
 
 	//TODO consolidate the initialization of the endorsement gatherer and the assemble coordinator.  Both need the same domain context - but maybe the assemble coordinator should provide the domain context to the endorsement gatherer on a per request basis
 	//
@@ -232,14 +196,14 @@ func NewSequencer(
 	if err != nil {
 		log.L(ctx).Errorf("Failed to get domain smart contract for contract address %s: %s", contractAddress, err)
 
-		return nil
+		return nil, i18n.WrapError(ctx, err, msgs.MsgPrivateTxManagerNewSequencerError, contractAddress)
 	}
 
 	domainContext := allComponents.StateManager().NewDomainContext(newSequencer.ctx /* background context */, domainSmartContract.Domain(), contractAddress)
 
 	newSequencer.assembleCoordinator = NewAssembleCoordinator(ctx, nodeName, confutil.Int(sequencerConfig.MaxInflightTransactions, *pldconf.PrivateTxManagerDefaults.Sequencer.MaxInflightTransactions), allComponents, domainAPI, domainContext)
 
-	return newSequencer
+	return newSequencer, nil
 }
 
 func (s *Sequencer) abort(err error) {
@@ -266,7 +230,7 @@ func (s *Sequencer) removeTransactionProcessor(txID string) {
 
 func (s *Sequencer) OnNewBlockHeight(ctx context.Context, blockHeight int64) {
 	log.L(ctx).Debugf("Sequencer OnNewBlockHeight %d", blockHeight)
-	s.blockHeight = blockHeight
+	s.environment.blockHeight = blockHeight
 
 }
 
@@ -279,7 +243,7 @@ func (s *Sequencer) ProcessNewTransaction(ctx context.Context, tx *components.Pr
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeName, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout, s.coordinatorSelectorFunction, s.assembleCoordinator)
+			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeName, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout, s.coordinatorSelector, s.assembleCoordinator, s.environment)
 		}
 		s.pendingTransactionEvents <- &ptmgrtypes.TransactionSubmittedEvent{
 			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
@@ -306,7 +270,7 @@ func (s *Sequencer) ProcessInFlightTransaction(ctx context.Context, tx *componen
 			// tx processing pool is full, queue the item
 			return true
 		} else {
-			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeName, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout, s.coordinatorSelectorFunction, s.assembleCoordinator)
+			s.incompleteTxSProcessMap[tx.ID.String()] = NewTransactionFlow(ctx, tx, s.nodeName, s.components, s.domainAPI, s.publisher, s.endorsementGatherer, s.identityResolver, s.syncPoints, s.transportWriter, s.requestTimeout, s.coordinatorSelector, s.assembleCoordinator, s.environment)
 		}
 		s.pendingTransactionEvents <- &ptmgrtypes.TransactionSwappedInEvent{
 			PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{TransactionID: tx.ID.String()},
@@ -319,10 +283,11 @@ func (s *Sequencer) HandleEvent(ctx context.Context, event ptmgrtypes.PrivateTra
 	s.pendingTransactionEvents <- event
 }
 
-func (s *Sequencer) Start(c context.Context) (done <-chan struct{}, err error) {
+func (s *Sequencer) Start(ctx context.Context) (done <-chan struct{}, err error) {
+	log.L(ctx).Info("Starting Sequencer")
 	s.syncPoints.Start()
 	s.sequencerLoopDone = make(chan struct{})
-	s.assembleCoordinator.Start(c)
+	s.assembleCoordinator.Start()
 	go s.evaluationLoop()
 	s.TriggerSequencerEvaluation()
 	return s.sequencerLoopDone, nil

@@ -196,7 +196,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 		}
 	}
 	switch domainConfig := domainConfig.(type) {
-	case domains.SimpleDomainConfig:
+	case *domains.SimpleDomainConfig:
 		i.conf.DomainManagerConfig.Domains["domain1"] = &pldconf.DomainConfig{
 			AllowSigning: true,
 			Plugin: pldconf.PluginConfig{
@@ -206,7 +206,7 @@ func newInstanceForComponentTesting(t *testing.T, domainRegistryAddress *tktypes
 			Config:          map[string]any{"submitMode": domainConfig.SubmitMode},
 			RegistryAddress: domainRegistryAddress.String(),
 		}
-	case domains.SimpleStorageDomainConfig:
+	case *domains.SimpleStorageDomainConfig:
 		endorsementSet := make([]string, 1+len(peerNodes))
 		endorsementSet[0] = binding.name
 		for i, peerNode := range peerNodes {

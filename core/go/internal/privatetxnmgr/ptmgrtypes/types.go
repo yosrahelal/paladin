@@ -134,3 +134,11 @@ func (c *realClock) Now() time.Time {
 func RealClock() Clock {
 	return &realClock{}
 }
+
+type CoordinatorSelector interface {
+	SelectCoordinatorNode(ctx context.Context, transaction *components.PrivateTransaction, environment SequencerEnvironment) (string, error)
+}
+
+type SequencerEnvironment interface {
+	GetBlockHeight() int64
+}

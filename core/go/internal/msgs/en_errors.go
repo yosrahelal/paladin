@@ -270,6 +270,7 @@ var (
 	MsgDomainInvalidDataFromDomain            = ffe("PD011653", "Invalid data returned by domain for call ABI outputs")
 	MsgDomainNotConfiguredForPSC              = ffe("PD011654", "A smart contract with address %s exists for a domain that is no longer configured on this node")
 	MsgDomainEndorserSubmitConfigClash        = ffe("PD011655", "An ENDORSER_MUST_SUBMIT constraint was provided by endorser %s, but the contract configuration is %s / %s")
+	MsgDomainInvalidCoordinatorSelection      = ffe("PD011656", "Invalid coordinator selection of '%s' configured. valid options are: COORDINATOR_SENDER, COORDINATOR_STATIC, COORDINATOR_ENDORSER")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownRunMode = ffe("PD011700", "Unknown run mode '%s'")
@@ -300,6 +301,7 @@ var (
 	MsgPrivateTxManagerNonLocalSigningAddr     = ffe("PD011822", "Attempt do dispatch a blockchain transaction using a signing identity for a different node: %s")
 	MsgPrivateTxManagerStateHashContention     = ffe("PD011823", "Contention detected attempting to spend hash %s in multiple transactions")
 	MsgPrivateReDelegationRequired             = ffe("PD011824", "Re-delegation is required for this transaction to progress")
+	MsgPrivateTxManagerNewSequencerError       = ffe("PD011825", "Failed to create new sequencer")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")

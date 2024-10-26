@@ -53,12 +53,38 @@ func TestPrivateTransactions100PercentEndorsementBetter(t *testing.T) {
 	bob.peer(alice.nodeConfig, carol.nodeConfig)
 	carol.peer(alice.nodeConfig, bob.nodeConfig)
 
-	domainConfig := domains.SimpleStorageDomainConfig{
+	domainConfig := &domains.SimpleStorageDomainConfig{
 		SubmitMode: domains.ONE_TIME_USE_KEYS,
 	}
 	alice.start(t, domainConfig)
 	bob.start(t, domainConfig)
 	carol.start(t, domainConfig)
+
+	observedBlockHeight := int64(0)
+
+	//wait for all nodes to be aware of block height
+	//NOTE: it should be valid to start straight away but doing so would test a more complex code path which we will do in a separate test
+	for observedBlockHeight == 0 {
+		alice.client.CallRPC(ctx, &observedBlockHeight, "bidx_getConfirmedBlockHeight")
+
+		if observedBlockHeight == 0 {
+			time.Sleep(1 * time.Second) // Add a small delay to avoid a tight loop
+		}
+	}
+	observedBlockHeight = 0
+	for observedBlockHeight == 0 {
+		bob.client.CallRPC(ctx, &observedBlockHeight, "bidx_getConfirmedBlockHeight")
+		if observedBlockHeight == 0 {
+			time.Sleep(1 * time.Second) // Add a small delay to avoid a tight loop
+		}
+	}
+	observedBlockHeight = 0
+	for observedBlockHeight == 0 {
+		carol.client.CallRPC(ctx, &observedBlockHeight, "bidx_getConfirmedBlockHeight")
+		if observedBlockHeight == 0 {
+			time.Sleep(1 * time.Second) // Add a small delay to avoid a tight loop
+		}
+	}
 
 	endorsementSet := []string{alice.identityLocator, bob.identityLocator, carol.identityLocator}
 
@@ -97,8 +123,8 @@ func TestPrivateTransactions100PercentEndorsementBetter(t *testing.T) {
 		"Transaction did not receive a receipt",
 	)
 
-	// Start a private transaction on alice's node
-	// this should require endorsement from bob and carol
+	// Start a private transaction on bob's node
+	// this should require endorsement from alice and carol
 	var bobTxID uuid.UUID
 	err = bob.client.CallRPC(ctx, &bobTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
 		ABI: *domains.SimpleStorageSetABI(),
@@ -123,21 +149,6 @@ func TestPrivateTransactions100PercentEndorsementBetter(t *testing.T) {
 		100*time.Millisecond,
 		"Transaction did not receive a receipt",
 	)
-
-	err = bob.client.CallRPC(ctx, &bobTxID, "ptx_sendTransaction", &pldapi.TransactionInput{
-		ABI: *domains.SimpleStorageSetABI(),
-		Transaction: pldapi.Transaction{
-			To:             contractAddress,
-			Domain:         "domain1",
-			IdempotencyKey: "tx1-bob",
-			Type:           pldapi.TransactionTypePrivate.Enum(),
-			From:           bob.identity,
-			Data: tktypes.RawJSON(`{
-                    "key": "foo",
-					"value": "quz"
-                }`),
-		},
-	})
 
 	var schemas []*pldapi.Schema
 	err = bob.client.CallRPC(ctx, &schemas, "pstate_listSchemas", "simpleStorageDomain")

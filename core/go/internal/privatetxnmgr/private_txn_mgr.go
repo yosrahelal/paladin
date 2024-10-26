@@ -57,6 +57,7 @@ type privateTxManager struct {
 	subscribersLock      sync.Mutex
 	syncPoints           syncpoints.SyncPoints
 	stateDistributer     statedistribution.StateDistributer
+	blockHeight          int64
 }
 
 // Init implements Engine.
@@ -113,6 +114,8 @@ func NewPrivateTransactionMgr(ctx context.Context, config *pldconf.PrivateTxMana
 }
 
 func (p *privateTxManager) OnNewBlockHeight(ctx context.Context, blockHeight int64) {
+	p.blockHeight = blockHeight
+
 	p.sequencersLock.RLock()
 	defer p.sequencersLock.RUnlock()
 	for _, sequencer := range p.sequencers {
@@ -146,21 +149,27 @@ func (p *privateTxManager) getSequencerForContract(ctx context.Context, contract
 				return nil, err
 			}
 
-			p.sequencers[contractAddr.String()] =
-				NewSequencer(
-					p.ctx, p.nodeName,
-					contractAddr,
-					&p.config.Sequencer,
-					p.components,
-					domainAPI,
-					endorsementGatherer,
-					publisher,
-					p.syncPoints,
-					p.components.IdentityResolver(),
-					p.stateDistributer,
-					transportWriter,
-					confutil.DurationMin(p.config.RequestTimeout, 0, *pldconf.PrivateTxManagerDefaults.RequestTimeout),
-				)
+			newSequencer, err := NewSequencer(
+				p.ctx, p.nodeName,
+				contractAddr,
+				&p.config.Sequencer,
+				p.components,
+				domainAPI,
+				endorsementGatherer,
+				publisher,
+				p.syncPoints,
+				p.components.IdentityResolver(),
+				p.stateDistributer,
+				transportWriter,
+				confutil.DurationMin(p.config.RequestTimeout, 0, *pldconf.PrivateTxManagerDefaults.RequestTimeout),
+				p.blockHeight,
+			)
+			if err != nil {
+				log.L(ctx).Errorf("Failed to create sequencer for contract %s: %s", contractAddr.String(), err)
+				return nil, err
+			}
+			p.sequencers[contractAddr.String()] = newSequencer
+
 			sequencerDone, err := p.sequencers[contractAddr.String()].Start(ctx)
 			if err != nil {
 				log.L(ctx).Errorf("Failed to start sequencer for contract %s: %s", contractAddr.String(), err)

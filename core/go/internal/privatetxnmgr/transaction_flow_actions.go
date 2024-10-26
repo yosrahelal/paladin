@@ -30,10 +30,27 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 )
 
+func (tf *transactionFlow) logActionDebug(ctx context.Context, msg string) {
+	//centralize the debug logging to force a consistent format and make it easier to analyze the logs
+	log.L(ctx).Debugf("transactionFlow:Action TransactionID='%s' Status='%s' LatestEvent='%s' LatestError='%s' : %s", tf.transaction.ID, tf.status, tf.latestEvent, tf.latestError, msg)
+}
+
+func (tf *transactionFlow) logActionInfo(ctx context.Context, msg string) {
+	//centralize the info logging to force a consistent format and make it easier to analyze the logs
+	log.L(ctx).Infof("transactionFlow:Action TransactionID='%s' Status='%s' LatestEvent='%s' LatestError='%s' : %s", tf.transaction.ID, tf.status, tf.latestEvent, tf.latestError, msg)
+}
+
+func (tf *transactionFlow) logActionError(ctx context.Context, msg string, err error) {
+	//centralize the info logging to force a consistent format and make it easier to analyze the logs
+	log.L(ctx).Errorf("transactionFlow:Action TransactionID='%s' Status='%s' LatestEvent='%s' LatestError='%s' : %s.  %s", tf.transaction.ID, tf.status, tf.latestEvent, tf.latestError, msg, err.Error())
+}
+
 func (tf *transactionFlow) Action(ctx context.Context) {
-	log.L(ctx).Debug("transactionFlow:Action")
+	log.L(ctx).Debugf("transactionFlow:Action TransactionID='%s' Status='%s' LatestEvent='%s' LatestError='%s'", tf.transaction.ID, tf.status, tf.latestEvent, tf.latestError)
+
+	tf.logActionDebug(ctx, ">>")
 	if tf.complete {
-		log.L(ctx).Infof("Transaction %s is complete", tf.transaction.ID.String())
+		tf.logActionInfo(ctx, "Transaction is complete")
 		return
 	}
 
@@ -41,7 +58,7 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 	// if the event handler has marked the transaction as failed, then we initiate the finalize sync point
 	if tf.finalizeRequired {
 		if tf.finalizePending {
-			log.L(ctx).Infof("Transaction %s finalize already pending", tf.transaction.ID.String())
+			tf.logActionInfo(ctx, "finalize already pending")
 			return
 		}
 		//we know we need to finalize but we are not currently waiting for a finalize to complete
@@ -50,54 +67,45 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 	}
 
 	if tf.dispatched {
-		log.L(ctx).Infof("Transaction %s is dispatched", tf.transaction.ID.String())
+		tf.logActionInfo(ctx, "Transaction is dispatched")
 		return
 	}
 
 	if tf.transaction.PreAssembly == nil {
+		tf.logActionDebug(ctx, "PreAssembly is nil")
 		panic("PreAssembly is nil.")
 		//This should never happen unless there is a serious programming error or the memory has been corrupted
 		// PreAssembly is checked for nil after InitTransaction which is during the synchronous transaction request
 		// and before it is added to the transaction processor / dispatched to the event loop
 	}
 
-	if tf.status == "delegating" {
-		log.L(ctx).Infof("Transaction %s is delegating", tf.transaction.ID.String())
-		return
-	}
-
-	if tf.status == "delegated" {
-		// probably should not get here because the sequencer should have removed the transaction processor
-		log.L(ctx).Infof("Transaction %s has been delegated", tf.transaction.ID.String())
-		return
-	}
-	tf.delegateIfRequired(ctx)
-	if tf.status == "delegating" {
-		log.L(ctx).Infof("Transaction %s is delegating", tf.transaction.ID.String())
-		return
-	}
-
-	if tf.status == "delegated" {
-		// probably should not get here because the sequencer should have removed the transaction processor
-		log.L(ctx).Infof("Transaction %s has been delegated", tf.transaction.ID.String())
+	//depending on the delegation policy, we may be able to decide to delegate before we have assembled the transaction
+	if !tf.delegateIfRequired(ctx) {
+		tf.logActionDebug(ctx, "no continue after pre assembly delegate check")
 		return
 	}
 
 	if tf.transaction.PostAssembly == nil {
-		log.L(ctx).Debug("not assembled yet - or was assembled and reverted")
+		tf.logActionDebug(ctx, "PostAssembly is nil")
 
 		//if we have not sent a request, or if the request has timed out or been invalidated by a re-assembly, then send the request
 		tf.requestVerifierResolution(ctx)
 		if tf.hasOutstandingVerifierRequests(ctx) {
-			log.L(ctx).Infof("Transaction %s not ready to assemble. Waiting for verifiers to be resolved", tf.transaction.ID.String())
+			tf.logActionInfo(ctx, "Transaction not ready to assemble. Waiting for verifiers to be resolved")
 			return
 		}
 
 		tf.requestAssemble(ctx)
 		if tf.transaction.PostAssembly == nil {
-			log.L(ctx).Infof("Transaction %s not assembled. Waiting for assembler to return", tf.transaction.ID.String())
+			tf.logActionInfo(ctx, "Transaction not  not assembled. Waiting for assembler to return")
 			return
 		}
+	}
+
+	//depending on the delegation policy, we may not be able to decide to delegate until after we have assembled the transaction
+	if !tf.delegateIfRequired(ctx) {
+		tf.logActionDebug(ctx, "no continue after post assembly delegate check")
+		return
 	}
 
 	if tf.transaction.PostAssembly.OutputStatesPotential != nil && tf.transaction.PostAssembly.OutputStates == nil {
@@ -117,7 +125,7 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 			return
 		}
 	}
-	log.L(ctx).Debugf("Transaction %s is ready (outputStatesPotential=%d outputStates=%d)",
+	log.L(ctx).Debugf("transactionFlow:Action TransactionID='%s' is ready for sequencing (outputStatesPotential=%d outputStates=%d)",
 		tf.transaction.ID.String(), len(tf.transaction.PostAssembly.OutputStatesPotential), len(tf.transaction.PostAssembly.OutputStates))
 	tf.readyForSequencing = true
 
@@ -128,12 +136,14 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 	// start with fulfilling any outstanding signature requests
 	tf.requestSignatures(ctx)
 	if tf.hasOutstandingSignatureRequests() {
+		tf.logActionDebug(ctx, "Transaction not ready to endorse. Waiting for signatures to be resolved")
 		return
 	}
 	tf.status = "signed"
 
 	tf.requestEndorsements(ctx)
 	if tf.hasOutstandingEndorsementRequests(ctx) {
+		tf.logActionDebug(ctx, "Transaction not ready to dispatch. Waiting for endorsements to be resolved")
 		return
 	}
 	tf.status = "endorsed"
@@ -153,6 +163,8 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 		// TODO: We should re-delegate in this scenario
 		tf.latestError = i18n.NewError(ctx, msgs.MsgPrivateReDelegationRequired).Error()
 	}
+	tf.logActionDebug(ctx, "<<")
+
 }
 
 func (tf *transactionFlow) setTransactionSigner(ctx context.Context) (reDelegate bool, err error) {
@@ -219,7 +231,7 @@ func (tf *transactionFlow) setTransactionSigner(ctx context.Context) (reDelegate
 		return false, i18n.WrapError(ctx, err, msgs.MsgDomainEndorserSubmitConfigClash,
 			endorserSubmitSigner, contractConf.CoordinatorSelection, contractConf.SubmitterSelection)
 	}
-	if node != tf.nodeID {
+	if node != tf.nodeName {
 		log.L(ctx).Warnf("For transaction %s to be submitted, the coordinator must move to the node ENDORSER_MUST_SUBMIT constraint %s",
 			tx.ID, endorserSubmitSigner)
 		return true, nil
@@ -273,15 +285,36 @@ func (tf *transactionFlow) finalize(ctx context.Context) {
 	)
 }
 
-func (tf *transactionFlow) delegateIfRequired(ctx context.Context) {
+func (tf *transactionFlow) delegateIfRequired(ctx context.Context) (doContinue bool) {
 	//TODO there may be a potential optimization we can add where, in certain domain configurations, we can optimistically proceed without delegation and only delegate once we detect
-	// other active nodes.  For now, we keep it simple and strictly abide by the configuration of the domain
-	log.L(ctx).Debug("transactionFlow:delegateIfRequired")
-	coordinatorNode := tf.selectCoordinator(ctx)
+	// potential contention with other active nodes.  For now, we keep it simple and strictly abide by the configuration of the domain
+	if tf.status == "delegating" {
+		tf.logActionInfo(ctx, "Transaction is delegating")
+		return false
+	}
+
+	if tf.status == "delegated" {
+		// probably should not get here because the sequencer should have removed the transaction processor
+		tf.logActionInfo(ctx, "Transaction is delegated")
+		return false
+	}
+	coordinatorNode, err := tf.selectCoordinator.SelectCoordinatorNode(ctx, tf.transaction, tf.environment)
+	if err != nil {
+		// errors from here are most likely a problem resolving the node name from the parties in the attestation plan
+		// so there is no point retrying although if we redo the assemble stage, we may get a different result
+		//TODO should we make the error action ( revert, reassemble, retry) an explicit property of the error so that this assessment can be made closer
+		// to the source of the error?
+		tf.latestError = err.Error()
+		tf.transaction.PostAssembly = nil
+		tf.logActionError(ctx, "Failed to select coordinator node", err)
+		return false
+	}
 
 	// TODO persist the delegation and send the request on the callback
 	if coordinatorNode == tf.nodeName || coordinatorNode == "" {
-		return
+		// we are the coordinator so we should continue
+		tf.logActionDebug(ctx, "Local coordinator")
+		return true
 	}
 	tf.localCoordinator = false
 
@@ -289,9 +322,17 @@ func (tf *transactionFlow) delegateIfRequired(ctx context.Context) {
 	//Should probably do that earlier in the flow because if we have just decided not to delegate or if we have just selected a different delegate, \
 	//then we need to either claw back that delegation or wait until the delegate has realized that they are no longer the coordinator and returns / forwards the responsibility for this transaction
 	tf.status = "delegating"
+	// ensure that the From field is fully qualified before sending to the delegate so that they can send assemble requests to the correct place
+	fullQualifiedFrom, err := tktypes.PrivateIdentityLocator(tf.transaction.Inputs.From).FullyQualified(ctx, tf.nodeName)
+	if err != nil {
+		//this can only mean that the From field is an invalid identity locator and we should never have got this far
+		// unless there is a serious programming error or the memory has been corrupted
+		panic("Failed to fully qualify the coordinator node")
+	}
+	tf.transaction.Inputs.From = fullQualifiedFrom.String()
 
 	// TODO update to "delegated" once the ack has been received
-	err := tf.transportWriter.SendDelegationRequest(
+	err = tf.transportWriter.SendDelegationRequest(
 		ctx,
 		uuid.New().String(),
 		coordinatorNode,
@@ -299,7 +340,12 @@ func (tf *transactionFlow) delegateIfRequired(ctx context.Context) {
 	)
 	if err != nil {
 		tf.latestError = i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgPrivateTxManagerInternalError), err.Error())
+		tf.logActionError(ctx, "Failed to send delegation request", err)
+		//TODO implement retry so that it is ok to just carry on in case of this error
 	}
+	//we have initiated a delegation so we should not continue any further with the flow on this node
+	tf.logActionInfo(ctx, fmt.Sprintf("Delegating transaction to %s", coordinatorNode))
+	return false
 
 }
 
@@ -314,7 +360,12 @@ func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 	log.L(ctx).Debug("transactionFlow:requestAssemble")
 
 	if tf.transaction.PostAssembly != nil {
-		log.L(ctx).Debug("already assembled")
+		tf.logActionDebug(ctx, "Already assembled")
+		return
+	}
+
+	if tf.assemblePending {
+		tf.logActionDebug(ctx, "Assemble already pending")
 		return
 	}
 
@@ -358,6 +409,7 @@ func (tf *transactionFlow) requestAssemble(ctx context.Context) {
 				)
 			},
 		})
+	tf.assemblePending = true
 
 }
 

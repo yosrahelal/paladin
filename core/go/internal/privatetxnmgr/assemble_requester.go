@@ -30,7 +30,7 @@ import (
 // AssembleCoordinator is a component that is responsible for coordinating the assembly of all transactions for a given domain contract instance
 // requests to assemble transactions are accepted and the actual assembly is performed asynchronously
 type AssembleCoordinator interface {
-	Start(ctx context.Context)
+	Start()
 	Stop()
 	RequestAssemble(ctx context.Context, assemblingNode string, transactionID uuid.UUID, transactionInputs *components.TransactionInputs, transactionPreAssembly *components.TransactionPreAssembly, callbacks AssembleRequestCallbacks)
 }
@@ -49,6 +49,7 @@ func (ar *assembleCoordinator) requestAssemble(ctx context.Context, callbacks As
 }
 
 type assembleCoordinator struct {
+	ctx           context.Context
 	nodeName      string
 	requests      chan *assembleRequest
 	stopProcess   chan bool
@@ -68,6 +69,7 @@ type assembleRequest struct {
 
 func NewAssembleCoordinator(ctx context.Context, nodeName string, maxPendingRequests int, components components.AllComponents, domainAPI components.DomainSmartContract, domainContext components.DomainContext) AssembleCoordinator {
 	return &assembleCoordinator{
+		ctx:           ctx,
 		nodeName:      nodeName,
 		stopProcess:   make(chan bool, 1),
 		requests:      make(chan *assembleRequest, maxPendingRequests),
@@ -77,22 +79,22 @@ func NewAssembleCoordinator(ctx context.Context, nodeName string, maxPendingRequ
 	}
 }
 
-func (ac *assembleCoordinator) Start(ctx context.Context) {
-	log.L(ctx).Info("Starting AssembleCoordinator")
+func (ac *assembleCoordinator) Start() {
+	log.L(ac.ctx).Info("Starting AssembleCoordinator")
 	go func() {
 		for {
 			select {
 			case req := <-ac.requests:
 				if req.assemblingNode == "" || req.assemblingNode == ac.nodeName {
-					req.processLocal(ctx)
+					req.processLocal(ac.ctx)
 				} else {
-					req.processRemote(ctx, req.assemblingNode)
+					req.processRemote(ac.ctx, req.assemblingNode)
 				}
 			case <-ac.stopProcess:
-				log.L(ctx).Info("assembleCoordinator loop process stopped")
+				log.L(ac.ctx).Info("assembleCoordinator loop process stopped")
 				return
-			case <-ctx.Done():
-				log.L(ctx).Info("AssembleCoordinator loop exit due to canceled context")
+			case <-ac.ctx.Done():
+				log.L(ac.ctx).Info("AssembleCoordinator loop exit due to canceled context")
 				return
 			}
 		}
@@ -117,7 +119,9 @@ func (ac *assembleCoordinator) RequestAssemble(ctx context.Context, assemblingNo
 
 	log.L(ctx).Debug("RequestAssemble")
 	ac.requests <- &assembleRequest{
+		assemblingNode:         assemblingNode,
 		assembleCoordinator:    ac,
+		transactionID:          transactionID,
 		callbacks:              callbacks,
 		transactionInputs:      transactionInputs,
 		transactionPreassembly: transactionPreAssembly,
@@ -131,6 +135,7 @@ func (req *assembleRequest) processLocal(ctx context.Context) {
 	readTX := req.assembleCoordinator.components.Persistence().DB() // no DB transaction required here
 
 	transaction := &components.PrivateTransaction{
+		ID:          req.transactionID,
 		Inputs:      req.transactionInputs,
 		PreAssembly: req.transactionPreassembly,
 	}
