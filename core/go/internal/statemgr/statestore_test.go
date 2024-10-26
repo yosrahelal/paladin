@@ -18,14 +18,19 @@ package statemgr
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/google/uuid"
 
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/core/pkg/persistence/mockpersistence"
+	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
+	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,4 +93,47 @@ func newDBMockStateManager(t *testing.T) (context.Context, *stateManager, sqlmoc
 		ss.Stop()
 		require.NoError(t, p.Mock.ExpectationsWereMet())
 	}
+}
+
+func TestGetTransactionStatesUnavailable(t *testing.T) {
+
+	ctx, ss, _, done := newDBTestStateManager(t)
+	defer done()
+
+	txID := uuid.New()
+	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID3 := tktypes.HexBytes(tktypes.RandBytes(32))
+
+	err := ss.WriteStateFinalizations(ctx, ss.p.DB(),
+		[]*pldapi.StateSpend{
+			{DomainName: "domain1", State: stateID1, Transaction: txID},
+		},
+		[]*pldapi.StateRead{
+			{DomainName: "domain1", State: stateID2, Transaction: txID},
+		},
+		[]*pldapi.StateConfirm{
+			{DomainName: "domain1", State: stateID3, Transaction: txID},
+		})
+	require.NoError(t, err)
+
+	txStates, err := ss.GetTransactionStates(ctx, ss.p.DB(), txID)
+	require.NoError(t, err)
+	require.Empty(t, txStates.Spent)
+	require.Empty(t, txStates.Read)
+	require.Empty(t, txStates.Confirmed)
+	require.Equal(t, []tktypes.HexBytes{stateID1}, txStates.Unavailable.Spent)
+	require.Equal(t, []tktypes.HexBytes{stateID2}, txStates.Unavailable.Read)
+	require.Equal(t, []tktypes.HexBytes{stateID3}, txStates.Unavailable.Confirmed)
+}
+
+func TestGetTransactionStatesFail(t *testing.T) {
+
+	ctx, ss, db, _, done := newDBMockStateManager(t)
+	defer done()
+
+	db.ExpectQuery("SELECT.*states").WillReturnError(fmt.Errorf("pop"))
+
+	_, err := ss.GetTransactionStates(ctx, ss.p.DB(), uuid.New())
+	assert.Regexp(t, "pop", err)
 }

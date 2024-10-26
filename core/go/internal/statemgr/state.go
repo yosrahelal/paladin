@@ -35,6 +35,7 @@ import (
 
 type transactionStateRecord struct {
 	pldapi.StateBase
+	State          tktypes.HexBytes `gorm:"column:state"`
 	RecordType     string           `gorm:"column:record_type"`
 	SpentState     tktypes.HexBytes `gorm:"column:spent_state"`
 	ReadState      tktypes.HexBytes `gorm:"column:read_state"`

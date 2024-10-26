@@ -443,6 +443,8 @@ func checkPostCommit(t *testing.T, ss *stateManager, txID uuid.UUID, expectedSpe
 	txStates, err := ss.GetTransactionStates(ss.bgCtx, ss.p.DB(), txID)
 	require.NoError(t, err)
 
+	require.Nil(t, txStates.Unavailable)
+
 	toMap := func(states []*pldapi.StateBase) map[string]bool {
 		m := make(map[string]bool)
 		for _, s := range states {

@@ -125,9 +125,16 @@ type StateInt64Label struct {
 }
 
 type TransactionStates struct {
-	Confirmed []*StateBase `docstruct:"TransactionStates" json:"confirmed"`
-	Read      []*StateBase `docstruct:"TransactionStates" json:"read"`
-	Spent     []*StateBase `docstruct:"TransactionStates" json:"spent"`
+	Confirmed   []*StateBase       `docstruct:"TransactionStates" json:"confirmed"`
+	Read        []*StateBase       `docstruct:"TransactionStates" json:"read"`
+	Spent       []*StateBase       `docstruct:"TransactionStates" json:"spent"`
+	Unavailable *UnavailableStates `docstruct:"TransactionStates" json:"unavailable,omitempty"` // nil if complete
+}
+
+type UnavailableStates struct {
+	Confirmed []tktypes.HexBytes `docstruct:"TransactionStates" json:"confirmed"`
+	Read      []tktypes.HexBytes `docstruct:"TransactionStates" json:"read"`
+	Spent     []tktypes.HexBytes `docstruct:"TransactionStates" json:"spent"`
 }
 
 // A confirm record is written when indexing the blockchain, and can be written regardless
