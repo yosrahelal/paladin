@@ -301,18 +301,18 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	// Simulate a transaction where we spend two states, and create 2 new ones
 	transactionID3 := uuid.New()
 	err = dc.AddStateLocks(
-		&pldapi.StateLock{Type: pldapi.StateLockTypeSpend.Enum(), State: states[0].ID, Transaction: transactionID3}, // 10 +
-		&pldapi.StateLock{Type: pldapi.StateLockTypeSpend.Enum(), State: states[1].ID, Transaction: transactionID3}, // 75 +
+		&pldapi.StateLock{Type: pldapi.StateLockTypeSpend.Enum(), State: tx1states[1].ID, Transaction: transactionID3}, // 10 +
+		&pldapi.StateLock{Type: pldapi.StateLockTypeSpend.Enum(), State: tx1states[2].ID, Transaction: transactionID3}, // 75 +
 	)
 	require.NoError(t, err)
 
 	// Do a quick check on upsert semantics with un-flushed updates, to make sure the unflushed list doesn't dup
-	tx2states, err := dc.UpsertStates(ss.p.DB(),
+	tx3states, err := dc.UpsertStates(ss.p.DB(),
 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 35, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID3},
 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 50, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID3},
 	)
 	require.NoError(t, err)
-	assert.Len(t, tx2states, 2)
+	assert.Len(t, tx3states, 2)
 	assert.Equal(t, len(dc.unFlushed.states), 5)
 	assert.Equal(t, len(dc.txLocks), 8)
 
@@ -345,15 +345,16 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	// Write another transaction that splits a coin to two
 	transactionID4 := uuid.New()
 	err = dc.AddStateLocks(
-		&pldapi.StateLock{Type: pldapi.StateLockTypeSpend.Enum(), State: states[0].ID, Transaction: transactionID4}, // 50
+		&pldapi.StateLock{Type: pldapi.StateLockTypeSpend.Enum(), State: tx3states[1].ID, Transaction: transactionID4}, // 50
+		&pldapi.StateLock{Type: pldapi.StateLockTypeRead.Enum(), State: tx1states[0].ID, Transaction: transactionID4},  // 100
 	)
 	require.NoError(t, err)
-	tx3states, err := dc.UpsertStates(ss.p.DB(),
+	tx4states, err := dc.UpsertStates(ss.p.DB(),
 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 20, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID4},
 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 30, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID4},
 	)
 	require.NoError(t, err)
-	assert.Len(t, tx3states, 2)
+	assert.Len(t, tx4states, 2)
 
 	// Now check that we merge the DB and in-memory state
 	_, states, err = dc.FindAvailableStates(ss.p.DB(), schemaID, query.NewQueryBuilder().Sort("owner", "amount").Query())
@@ -374,11 +375,14 @@ func TestStateContextMintSpendMint(t *testing.T) {
 
 	// Write confirmations for all the things that happened above
 	var spends []*pldapi.StateSpend
+	var reads []*pldapi.StateRead
 	var confirms []*pldapi.StateConfirm
 	for _, lock := range dc.txLocks {
 		switch lock.Type.V() {
 		case pldapi.StateLockTypeSpend:
 			spends = append(spends, &pldapi.StateSpend{DomainName: "domain1", State: lock.State, Transaction: lock.Transaction})
+		case pldapi.StateLockTypeRead:
+			reads = append(reads, &pldapi.StateRead{DomainName: "domain1", State: lock.State, Transaction: lock.Transaction})
 		case pldapi.StateLockTypeCreate:
 			confirms = append(confirms, &pldapi.StateConfirm{DomainName: "domain1", State: lock.State, Transaction: lock.Transaction})
 		}
@@ -386,7 +390,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	// We add one extra spend that simulates something happening outside of this context
 	transactionID5 := uuid.New()
 	spends = append(spends, &pldapi.StateSpend{DomainName: "domain1", State: states[0].ID, Transaction: transactionID5}) //20
-	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), spends, []*pldapi.StateRead{}, confirms)
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), spends, reads, confirms)
 	require.NoError(t, err)
 
 	// So in the domain context, this states will still be visible - because we don't have transactionID5
@@ -409,6 +413,61 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	assert.Equal(t, int64(30), parseFakeCoin(t, states[0]).Amount.Int64())
 	assert.Equal(t, int64(35), parseFakeCoin(t, states[1]).Amount.Int64())
 	assert.Equal(t, int64(100), parseFakeCoin(t, states[2]).Amount.Int64())
+
+	// Check the post-commit lookups for each set
+	checkPostCommit(t, ss, transactionID1, // transaction one
+		[]tktypes.HexBytes{},
+		[]tktypes.HexBytes{},
+		[]tktypes.HexBytes{tx1states[0].ID, tx1states[2].ID, tx1states[2].ID}, // mints these three
+	)
+	checkPostCommit(t, ss, transactionID2, // transaction one
+		[]tktypes.HexBytes{},
+		[]tktypes.HexBytes{tx1states[1].ID}, // just reads this one
+		[]tktypes.HexBytes{},
+	)
+	checkPostCommit(t, ss, transactionID3, // transaction three
+		[]tktypes.HexBytes{tx1states[1].ID, tx1states[2].ID}, // spends these two ..
+		[]tktypes.HexBytes{},
+		[]tktypes.HexBytes{tx3states[0].ID, tx3states[1].ID}, // and mints these two
+	)
+	checkPostCommit(t, ss, transactionID4, // transaction four,
+		[]tktypes.HexBytes{tx3states[1].ID},                  // spends this one ...
+		[]tktypes.HexBytes{tx1states[0].ID},                  // reads this one ...
+		[]tktypes.HexBytes{tx4states[0].ID, tx4states[1].ID}, // and mints these two
+	)
+
+}
+
+func checkPostCommit(t *testing.T, ss *stateManager, txID uuid.UUID, expectedSpent, expectedRead, expectedConfirmed []tktypes.HexBytes) {
+
+	txStates, err := ss.GetTransactionStates(ss.bgCtx, ss.p.DB(), txID)
+	require.NoError(t, err)
+
+	toMap := func(states []*pldapi.StateBase) map[string]bool {
+		m := make(map[string]bool)
+		for _, s := range states {
+			m[s.ID.String()] = true
+		}
+		return m
+	}
+
+	spentIDs := toMap(txStates.Spent)
+	require.Equal(t, len(expectedSpent), len(spentIDs), "unique spent ID counts match")
+	for _, sID := range expectedSpent {
+		require.Contains(t, spentIDs, sID.String())
+	}
+
+	readIDs := toMap(txStates.Read)
+	require.Equal(t, len(expectedRead), len(readIDs), "unique read ID counts match")
+	for _, sID := range expectedRead {
+		require.Contains(t, readIDs, sID.String())
+	}
+
+	confirmedIDs := toMap(txStates.Confirmed)
+	require.Equal(t, len(expectedConfirmed), len(confirmedIDs), "unique confirmed ID counts match")
+	for _, sID := range expectedConfirmed {
+		require.Contains(t, confirmedIDs, sID.String())
+	}
 
 }
 
@@ -743,7 +802,7 @@ func TestDSIMergeUnFlushedBadDBRecord(t *testing.T) {
 	dc.creatingStates[s1.ID.String()] = s1
 
 	_, err = dc.mergeUnFlushedApplyLocks(schema1, []*pldapi.State{
-		{ID: tktypes.RandBytes(32), Data: tktypes.RawJSON("wrong")},
+		{StateBase: pldapi.StateBase{ID: tktypes.RandBytes(32), Data: tktypes.RawJSON("wrong")}},
 	}, query.NewQueryBuilder().Sort(".created").Query(), false)
 	assert.Regexp(t, "PD010116", err)
 

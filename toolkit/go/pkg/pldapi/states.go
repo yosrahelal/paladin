@@ -90,19 +90,24 @@ type Schema struct {
 	Labels     []string                 `docstruct:"Schema" json:"labels"      gorm:"type:text[]; serializer:json"`
 }
 
-type State struct {
+type StateBase struct {
 	ID              tktypes.HexBytes   `docstruct:"State" json:"id"                  gorm:"primaryKey"`
 	Created         tktypes.Timestamp  `docstruct:"State" json:"created"             gorm:"autoCreateTime:nano"`
 	DomainName      string             `docstruct:"State" json:"domain"              gorm:"primaryKey"`
 	Schema          tktypes.Bytes32    `docstruct:"State" json:"schema"`
 	ContractAddress tktypes.EthAddress `docstruct:"State" json:"contractAddress"`
 	Data            tktypes.RawJSON    `docstruct:"State" json:"data"`
-	Labels          []*StateLabel      `docstruct:"State" json:"-"                   gorm:"foreignKey:state;references:id;"`
-	Int64Labels     []*StateInt64Label `docstruct:"State" json:"-"                   gorm:"foreignKey:state;references:id;"`
-	Confirmed       *StateConfirm      `docstruct:"State" json:"confirmed,omitempty" gorm:"foreignKey:state;references:id;"`
-	Spent           *StateSpend        `docstruct:"State" json:"spent,omitempty"     gorm:"foreignKey:state;references:id;"`
-	Locks           []*StateLock       `docstruct:"State" json:"locks,omitempty"     gorm:"-"` // in memory only processing here
-	Nullifier       *StateNullifier    `docstruct:"State" json:"nullifier,omitempty" gorm:"foreignKey:state;references:id;"`
+}
+
+type State struct {
+	StateBase
+	Labels      []*StateLabel      `docstruct:"State" json:"-"                   gorm:"foreignKey:state;references:id;"`
+	Int64Labels []*StateInt64Label `docstruct:"State" json:"-"                   gorm:"foreignKey:state;references:id;"`
+	Confirmed   *StateConfirm      `docstruct:"State" json:"confirmed,omitempty" gorm:"foreignKey:state;references:id;"`
+	Read        *StateRead         `docstruct:"State" json:"read,omitempty"      gorm:"foreignKey:state;references:id;"`
+	Spent       *StateSpend        `docstruct:"State" json:"spent,omitempty"     gorm:"foreignKey:state;references:id;"`
+	Locks       []*StateLock       `docstruct:"State" json:"locks,omitempty"     gorm:"-"` // in memory only processing here
+	Nullifier   *StateNullifier    `docstruct:"State" json:"nullifier,omitempty" gorm:"foreignKey:state;references:id;"`
 }
 
 type StateLabel struct {
@@ -117,6 +122,12 @@ type StateInt64Label struct {
 	State      tktypes.HexBytes `gorm:"primaryKey"`
 	Label      string
 	Value      int64
+}
+
+type TransactionStates struct {
+	Confirmed []*StateBase `docstruct:"TransactionStates" json:"confirmed"`
+	Read      []*StateBase `docstruct:"TransactionStates" json:"read"`
+	Spent     []*StateBase `docstruct:"TransactionStates" json:"spent"`
 }
 
 // A confirm record is written when indexing the blockchain, and can be written regardless

@@ -54,6 +54,9 @@ type StateManager interface {
 
 	// GetState returns a state by ID, with optional labels
 	GetState(ctx context.Context, dbTX *gorm.DB, domainName string, contractAddress tktypes.EthAddress, stateID tktypes.HexBytes, failNotFound, withLabels bool) (*pldapi.State, error)
+
+	// Get all states created, read or spent by a confirmed transaction
+	GetTransactionStates(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID) (*pldapi.TransactionStates, error)
 }
 
 type DomainContextInfo struct {

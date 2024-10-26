@@ -21,9 +21,11 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/persistence"
 	"github.com/kaleido-io/paladin/toolkit/pkg/cache"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
@@ -95,6 +97,7 @@ func (ss *stateManager) Stop() {
 func (ss *stateManager) WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*pldapi.StateSpend, reads []*pldapi.StateRead, confirms []*pldapi.StateConfirm) (err error) {
 	if len(spends) > 0 {
 		err = dbTX.
+			WithContext(ctx).
 			Table("state_spends").
 			Clauses(clause.OnConflict{DoNothing: true}).
 			Create(spends).
@@ -102,6 +105,7 @@ func (ss *stateManager) WriteStateFinalizations(ctx context.Context, dbTX *gorm.
 	}
 	if err == nil && len(reads) > 0 {
 		err = dbTX.
+			WithContext(ctx).
 			Table("state_reads").
 			Clauses(clause.OnConflict{DoNothing: true}).
 			Create(reads).
@@ -109,10 +113,54 @@ func (ss *stateManager) WriteStateFinalizations(ctx context.Context, dbTX *gorm.
 	}
 	if err == nil && len(confirms) > 0 {
 		err = dbTX.
+			WithContext(ctx).
 			Table("state_confirms").
 			Clauses(clause.OnConflict{DoNothing: true}).
 			Create(confirms).
 			Error
 	}
 	return err
+}
+
+func (ss *stateManager) GetTransactionStates(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID) (*pldapi.TransactionStates, error) {
+
+	// We query from the states table, joining in the other fields
+	var states []*transactionStateRecord
+	err := dbTX.
+		WithContext(ctx).
+		// This query joins across three tables in a single query - pushing the complexity to the DB.
+		// The reason we have three tables is to make the queries for available states simpler.
+		Raw(`SELECT * from "states" RIGHT JOIN ( `+
+			`SELECT "transaction", "state", 'spent'     AS "record_type" FROM "state_spends"   WHERE "transaction" = ? UNION ALL `+
+			`SELECT "transaction", "state", 'read'      AS "record_type" FROM "state_reads"    WHERE "transaction" = ? UNION ALL `+
+			`SELECT "transaction", "state", 'confirmed' AS "record_type" FROM "state_confirms" WHERE "transaction" = ? ) "records" `+
+			`ON "states"."id" = "records"."state"`,
+			txID, txID, txID).
+		Scan(&states).
+		Error
+	if err != nil {
+		return nil, err
+	}
+	txStates := &pldapi.TransactionStates{}
+	for _, s := range states {
+		switch s.RecordType {
+		case "spent":
+			if s.ID == nil {
+				return nil, i18n.NewError(ctx, msgs.MsgStateTxMissingDataForState, s.SpentState, txID, "spent")
+			}
+			txStates.Spent = append(txStates.Spent, &s.StateBase)
+		case "read":
+			if s.ID == nil {
+				return nil, i18n.NewError(ctx, msgs.MsgStateTxMissingDataForState, s.ReadState, txID, "read")
+			}
+			txStates.Read = append(txStates.Read, &s.StateBase)
+		case "confirmed":
+			if s.ID == nil {
+				return nil, i18n.NewError(ctx, msgs.MsgStateTxMissingDataForState, s.ConfirmedState, txID, "confirmed")
+			}
+			txStates.Confirmed = append(txStates.Confirmed, &s.StateBase)
+		}
+	}
+	return txStates, nil
+
 }
