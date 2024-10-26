@@ -104,16 +104,20 @@ func TestGetTransactionStatesUnavailable(t *testing.T) {
 	stateID1 := tktypes.HexBytes(tktypes.RandBytes(32))
 	stateID2 := tktypes.HexBytes(tktypes.RandBytes(32))
 	stateID3 := tktypes.HexBytes(tktypes.RandBytes(32))
+	stateID4 := tktypes.HexBytes(tktypes.RandBytes(32))
 
 	err := ss.WriteStateFinalizations(ctx, ss.p.DB(),
-		[]*pldapi.StateSpend{
+		[]*pldapi.StateSpendRecord{
 			{DomainName: "domain1", State: stateID1, Transaction: txID},
 		},
-		[]*pldapi.StateRead{
+		[]*pldapi.StateReadRecord{
 			{DomainName: "domain1", State: stateID2, Transaction: txID},
 		},
-		[]*pldapi.StateConfirm{
+		[]*pldapi.StateConfirmRecord{
 			{DomainName: "domain1", State: stateID3, Transaction: txID},
+		},
+		[]*pldapi.StateInfoRecord{
+			{DomainName: "domain1", State: stateID4, Transaction: txID},
 		})
 	require.NoError(t, err)
 
@@ -125,6 +129,7 @@ func TestGetTransactionStatesUnavailable(t *testing.T) {
 	require.Equal(t, []tktypes.HexBytes{stateID1}, txStates.Unavailable.Spent)
 	require.Equal(t, []tktypes.HexBytes{stateID2}, txStates.Unavailable.Read)
 	require.Equal(t, []tktypes.HexBytes{stateID3}, txStates.Unavailable.Confirmed)
+	require.Equal(t, []tktypes.HexBytes{stateID4}, txStates.Unavailable.Info)
 }
 
 func TestGetTransactionStatesFail(t *testing.T) {

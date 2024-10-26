@@ -92,11 +92,11 @@ func (ss *stateManager) Stop() {
 // be happening concurrently against the database, and after commit of these changes
 // might find new states become available and/or states marked locked for spending
 // become fully unavailable.
-func (ss *stateManager) WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*pldapi.StateSpend, reads []*pldapi.StateRead, confirms []*pldapi.StateConfirm) (err error) {
+func (ss *stateManager) WriteStateFinalizations(ctx context.Context, dbTX *gorm.DB, spends []*pldapi.StateSpendRecord, reads []*pldapi.StateReadRecord, confirms []*pldapi.StateConfirmRecord, infoRecords []*pldapi.StateInfoRecord) (err error) {
 	if len(spends) > 0 {
 		err = dbTX.
 			WithContext(ctx).
-			Table("state_spends").
+			Table("state_spend_records").
 			Clauses(clause.OnConflict{DoNothing: true}).
 			Create(spends).
 			Error
@@ -104,7 +104,7 @@ func (ss *stateManager) WriteStateFinalizations(ctx context.Context, dbTX *gorm.
 	if err == nil && len(reads) > 0 {
 		err = dbTX.
 			WithContext(ctx).
-			Table("state_reads").
+			Table("state_read_records").
 			Clauses(clause.OnConflict{DoNothing: true}).
 			Create(reads).
 			Error
@@ -112,9 +112,17 @@ func (ss *stateManager) WriteStateFinalizations(ctx context.Context, dbTX *gorm.
 	if err == nil && len(confirms) > 0 {
 		err = dbTX.
 			WithContext(ctx).
-			Table("state_confirms").
+			Table("state_confirm_records").
 			Clauses(clause.OnConflict{DoNothing: true}).
 			Create(confirms).
+			Error
+	}
+	if err == nil && len(infoRecords) > 0 {
+		err = dbTX.
+			WithContext(ctx).
+			Table("state_info_records").
+			Clauses(clause.OnConflict{DoNothing: true}).
+			Create(infoRecords).
 			Error
 	}
 	return err
@@ -129,11 +137,12 @@ func (ss *stateManager) GetTransactionStates(ctx context.Context, dbTX *gorm.DB,
 		// This query joins across three tables in a single query - pushing the complexity to the DB.
 		// The reason we have three tables is to make the queries for available states simpler.
 		Raw(`SELECT * from "states" RIGHT JOIN ( `+
-			`SELECT "transaction", "state", 'spent'     AS "record_type" FROM "state_spends"   WHERE "transaction" = ? UNION ALL `+
-			`SELECT "transaction", "state", 'read'      AS "record_type" FROM "state_reads"    WHERE "transaction" = ? UNION ALL `+
-			`SELECT "transaction", "state", 'confirmed' AS "record_type" FROM "state_confirms" WHERE "transaction" = ? ) "records" `+
+			`SELECT "transaction", "state", 'spent'     AS "record_type" FROM "state_spend_records"   WHERE "transaction" = ? UNION ALL `+
+			`SELECT "transaction", "state", 'read'      AS "record_type" FROM "state_read_records"    WHERE "transaction" = ? UNION ALL `+
+			`SELECT "transaction", "state", 'confirmed' AS "record_type" FROM "state_confirm_records" WHERE "transaction" = ? UNION ALL `+
+			`SELECT "transaction", "state", 'info'      AS "record_type" FROM "state_info_records"    WHERE "transaction" = ? ) "records" `+
 			`ON "states"."id" = "records"."state"`,
-			txID, txID, txID).
+			txID, txID, txID, txID).
 		Scan(&states).
 		Error
 	if err != nil {
@@ -164,6 +173,13 @@ func (ss *stateManager) GetTransactionStates(ctx context.Context, dbTX *gorm.DB,
 				unavailable.Confirmed = append(unavailable.Confirmed, s.State)
 			} else {
 				txStates.Confirmed = append(txStates.Confirmed, &s.StateBase)
+			}
+		case "info":
+			if s.ID == nil {
+				hasUnavailable = true
+				unavailable.Info = append(unavailable.Info, s.State)
+			} else {
+				txStates.Info = append(txStates.Info, &s.StateBase)
 			}
 		}
 	}

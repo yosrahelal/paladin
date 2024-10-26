@@ -158,10 +158,10 @@ func TestStateLockingQuery(t *testing.T) {
 	// Mark them all confirmed apart from one
 	for i, w := range widgets {
 		if i != 3 {
-			err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*pldapi.StateSpend{}, []*pldapi.StateRead{},
-				[]*pldapi.StateConfirm{
+			err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*pldapi.StateSpendRecord{}, []*pldapi.StateReadRecord{},
+				[]*pldapi.StateConfirmRecord{
 					{DomainName: "domain1", State: w.ID, Transaction: uuid.New()},
-				})
+				}, []*pldapi.StateInfoRecord{})
 			require.NoError(t, err)
 		}
 	}
@@ -175,9 +175,9 @@ func TestStateLockingQuery(t *testing.T) {
 
 	// Mark one spent
 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
-		[]*pldapi.StateSpend{
+		[]*pldapi.StateSpendRecord{
 			{DomainName: "domain1", State: widgets[0].ID, Transaction: uuid.New()},
-		}, []*pldapi.StateRead{}, []*pldapi.StateConfirm{})
+		}, []*pldapi.StateReadRecord{}, []*pldapi.StateConfirmRecord{}, []*pldapi.StateInfoRecord{})
 	require.NoError(t, err)
 
 	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4) // unchanged
@@ -230,13 +230,13 @@ func TestStateLockingQuery(t *testing.T) {
 
 	// Mark that new state confirmed
 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
-		[]*pldapi.StateSpend{},
-		[]*pldapi.StateRead{
+		[]*pldapi.StateSpendRecord{},
+		[]*pldapi.StateReadRecord{
 			{DomainName: "domain1", State: widgets[1].ID, Transaction: uuid.New()}, // this is inert
 		},
-		[]*pldapi.StateConfirm{
+		[]*pldapi.StateConfirmRecord{
 			{DomainName: "domain1", State: widgets[5].ID, Transaction: uuid.New()},
-		})
+		}, []*pldapi.StateInfoRecord{})
 	require.NoError(t, err)
 
 	// reset the domain context - does not matter now

@@ -198,7 +198,8 @@ message HandleEventBatchResponse {
   repeated StateUpdate spent_states = 2; // A list of states that are now spent
   repeated StateUpdate read_states = 3; // A list of states that this transaction was dependent on the un-spent state of, but did not spend in the transation
   repeated StateUpdate confirmed_states = 4; // A list of states that are now confirmed (and unspent)
-  repeated NewConfirmedState new_states = 5; // A list of new states to store (only for events that contain full state data)
+  repeated StateUpdate info_states = 5; // A list of states that are important information in/out of the business transaction, but are never recorded in an on-chain map, or returned from FindAvailableStates
+  repeated NewConfirmedState new_states = 6; // A list of new states to store (only for events that contain full state data)
 }
 
 // **VALIDATE_STATE_HASHES** step only happens when custom_state_hash is true in the domain config, and then must be implemented

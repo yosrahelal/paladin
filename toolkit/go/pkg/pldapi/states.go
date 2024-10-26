@@ -101,13 +101,13 @@ type StateBase struct {
 
 type State struct {
 	StateBase
-	Labels      []*StateLabel      `docstruct:"State" json:"-"                   gorm:"foreignKey:state;references:id;"`
-	Int64Labels []*StateInt64Label `docstruct:"State" json:"-"                   gorm:"foreignKey:state;references:id;"`
-	Confirmed   *StateConfirm      `docstruct:"State" json:"confirmed,omitempty" gorm:"foreignKey:state;references:id;"`
-	Read        *StateRead         `docstruct:"State" json:"read,omitempty"      gorm:"foreignKey:state;references:id;"`
-	Spent       *StateSpend        `docstruct:"State" json:"spent,omitempty"     gorm:"foreignKey:state;references:id;"`
-	Locks       []*StateLock       `docstruct:"State" json:"locks,omitempty"     gorm:"-"` // in memory only processing here
-	Nullifier   *StateNullifier    `docstruct:"State" json:"nullifier,omitempty" gorm:"foreignKey:state;references:id;"`
+	Labels      []*StateLabel       `docstruct:"State" json:"-"                   gorm:"foreignKey:state;references:id;"`
+	Int64Labels []*StateInt64Label  `docstruct:"State" json:"-"                   gorm:"foreignKey:state;references:id;"`
+	Confirmed   *StateConfirmRecord `docstruct:"State" json:"confirmed,omitempty" gorm:"foreignKey:state;references:id;"`
+	Read        *StateReadRecord    `docstruct:"State" json:"read,omitempty"      gorm:"foreignKey:state;references:id;"`
+	Spent       *StateSpendRecord   `docstruct:"State" json:"spent,omitempty"     gorm:"foreignKey:state;references:id;"`
+	Locks       []*StateLock        `docstruct:"State" json:"locks,omitempty"     gorm:"-"` // in memory only processing here
+	Nullifier   *StateNullifier     `docstruct:"State" json:"nullifier,omitempty" gorm:"foreignKey:state;references:id;"`
 }
 
 type StateLabel struct {
@@ -128,6 +128,7 @@ type TransactionStates struct {
 	Confirmed   []*StateBase       `docstruct:"TransactionStates" json:"confirmed"`
 	Read        []*StateBase       `docstruct:"TransactionStates" json:"read"`
 	Spent       []*StateBase       `docstruct:"TransactionStates" json:"spent"`
+	Info        []*StateBase       `docstruct:"TransactionStates" json:"info"`
 	Unavailable *UnavailableStates `docstruct:"TransactionStates" json:"unavailable,omitempty"` // nil if complete
 }
 
@@ -135,6 +136,7 @@ type UnavailableStates struct {
 	Confirmed []tktypes.HexBytes `docstruct:"TransactionStates" json:"confirmed"`
 	Read      []tktypes.HexBytes `docstruct:"TransactionStates" json:"read"`
 	Spent     []tktypes.HexBytes `docstruct:"TransactionStates" json:"spent"`
+	Info      []tktypes.HexBytes `docstruct:"TransactionStates" json:"info"`
 }
 
 // A confirm record is written when indexing the blockchain, and can be written regardless
@@ -150,7 +152,7 @@ type UnavailableStates struct {
 // the blockchain, allowing us to submit chains of transactions that create and spend
 // states all in a single block. In that case the state will only be "available" within
 // the in-memory domain context being managed by the sequencer for that smart contract.
-type StateConfirm struct {
+type StateConfirmRecord struct {
 	DomainName  string           `json:"-"                 gorm:"primaryKey"`
 	State       tktypes.HexBytes `json:"-"                 gorm:"primaryKey"`
 	Transaction uuid.UUID        `docstruct:"StateConfirm" json:"transaction"`
@@ -167,7 +169,7 @@ type StateConfirm struct {
 // in the Domain Context of the sequencer while we are assembling+endorsing+submitting
 // the transaction, to avoid us attempting to double-spend states (which of course will
 // be rejected by the blockchain).
-type StateSpend struct {
+type StateSpendRecord struct {
 	DomainName  string           `json:"-"                 gorm:"primaryKey"`
 	State       tktypes.HexBytes `json:"-"                 gorm:"primaryKey"`
 	Transaction uuid.UUID        `docstruct:"StateSpend" json:"transaction"`
@@ -176,10 +178,19 @@ type StateSpend struct {
 // We also record when we simply read a state during a transaction, without creating or
 // spending it. This is important for being able to re-execute the transaction in the future
 // against the exact state of the blockchain. We use this in receipt generation.
-type StateRead struct {
+type StateReadRecord struct {
 	DomainName  string           `json:"-"                 gorm:"primaryKey"`
 	State       tktypes.HexBytes `json:"-"                 gorm:"primaryKey"`
 	Transaction uuid.UUID        `docstruct:"StateRead" json:"transaction"`
+}
+
+// Transactions can also refer to state that never exists before or after the transaction.
+// It is part of the transaction that is required to fully process the transaction,
+// but it originated exclusively within that transaction
+type StateInfoRecord struct {
+	DomainName  string           `json:"-"                 gorm:"primaryKey"`
+	State       tktypes.HexBytes `json:"-"                 gorm:"primaryKey"`
+	Transaction uuid.UUID        `docstruct:"StateConfirm" json:"transaction"`
 }
 
 type StateLockType string
@@ -219,8 +230,8 @@ type StateLock struct {
 // nullifier (not for the state) when it is spent.
 // Immutable once written
 type StateNullifier struct {
-	DomainName string           `json:"domain"          gorm:"primaryKey"`
-	ID         tktypes.HexBytes `json:"id"              gorm:"primaryKey"`
-	State      tktypes.HexBytes `json:"-"`
-	Spent      *StateSpend      `json:"spent,omitempty" gorm:"foreignKey:state;references:id;"`
+	DomainName string            `json:"domain"          gorm:"primaryKey"`
+	ID         tktypes.HexBytes  `json:"id"              gorm:"primaryKey"`
+	State      tktypes.HexBytes  `json:"-"`
+	Spent      *StateSpendRecord `json:"spent,omitempty" gorm:"foreignKey:state;references:id;"`
 }

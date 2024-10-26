@@ -268,43 +268,40 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		return nil, err
 	}
 
-	stateSpends := make([]*pldapi.StateSpend, len(res.SpentStates))
+	stateSpends := make([]*pldapi.StateSpendRecord, len(res.SpentStates))
 	for i, state := range res.SpentStates {
-		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
+		txUUID, stateID, err := d.prepareIndexRecord(ctx, state.TransactionId, state.Id)
 		if err != nil {
 			return nil, err
 		}
-		stateID, err := tktypes.ParseHexBytes(ctx, state.Id)
-		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
-		}
-		stateSpends[i] = &pldapi.StateSpend{DomainName: d.name, State: stateID, Transaction: *txUUID}
+		stateSpends[i] = &pldapi.StateSpendRecord{DomainName: d.name, State: stateID, Transaction: txUUID}
 	}
 
-	stateReads := make([]*pldapi.StateRead, len(res.ReadStates))
+	stateReads := make([]*pldapi.StateReadRecord, len(res.ReadStates))
 	for i, state := range res.ReadStates {
-		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
+		txUUID, stateID, err := d.prepareIndexRecord(ctx, state.TransactionId, state.Id)
 		if err != nil {
 			return nil, err
 		}
-		stateID, err := tktypes.ParseHexBytes(ctx, state.Id)
-		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
-		}
-		stateReads[i] = &pldapi.StateRead{DomainName: d.name, State: stateID, Transaction: *txUUID}
+		stateReads[i] = &pldapi.StateReadRecord{DomainName: d.name, State: stateID, Transaction: txUUID}
 	}
 
-	stateConfirms := make([]*pldapi.StateConfirm, len(res.ConfirmedStates))
+	stateConfirms := make([]*pldapi.StateConfirmRecord, len(res.ConfirmedStates))
 	for i, state := range res.ConfirmedStates {
-		txUUID, err := d.recoverTransactionID(ctx, state.TransactionId)
+		txUUID, stateID, err := d.prepareIndexRecord(ctx, state.TransactionId, state.Id)
 		if err != nil {
 			return nil, err
 		}
-		stateID, err := tktypes.ParseHexBytes(ctx, state.Id)
+		stateConfirms[i] = &pldapi.StateConfirmRecord{DomainName: d.name, State: stateID, Transaction: txUUID}
+	}
+
+	stateInfoRecords := make([]*pldapi.StateInfoRecord, len(res.InfoStates))
+	for i, state := range res.InfoStates {
+		txUUID, stateID, err := d.prepareIndexRecord(ctx, state.TransactionId, state.Id)
 		if err != nil {
-			return nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, state.Id)
+			return nil, err
 		}
-		stateConfirms[i] = &pldapi.StateConfirm{DomainName: d.name, State: stateID, Transaction: *txUUID}
+		stateInfoRecords[i] = &pldapi.StateInfoRecord{DomainName: d.name, State: stateID, Transaction: txUUID}
 	}
 
 	newStates := make([]*components.StateUpsertOutsideContext, 0)
@@ -332,7 +329,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 		})
 
 		// These have implicit confirmations
-		stateConfirms = append(stateConfirms, &pldapi.StateConfirm{DomainName: d.name, State: id, Transaction: *txUUID})
+		stateConfirms = append(stateConfirms, &pldapi.StateConfirmRecord{DomainName: d.name, State: id, Transaction: *txUUID})
 	}
 
 	// Write any new states first
@@ -345,9 +342,21 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX *gorm.DB,
 
 	// Then any finalizations of those states
 	if len(stateSpends) > 0 || len(stateReads) > 0 || len(stateConfirms) > 0 {
-		if err := d.dm.stateStore.WriteStateFinalizations(ctx, dbTX, stateSpends, stateReads, stateConfirms); err != nil {
+		if err := d.dm.stateStore.WriteStateFinalizations(ctx, dbTX, stateSpends, stateReads, stateConfirms, stateInfoRecords); err != nil {
 			return nil, err
 		}
 	}
 	return res, err
+}
+
+func (d *domain) prepareIndexRecord(ctx context.Context, txIDStr, stateIDStr string) (uuid.UUID, tktypes.HexBytes, error) {
+	txUUID, err := d.recoverTransactionID(ctx, txIDStr)
+	if err != nil {
+		return uuid.UUID{}, nil, err
+	}
+	stateID, err := tktypes.ParseHexBytes(ctx, stateIDStr)
+	if err != nil {
+		return uuid.UUID{}, nil, i18n.NewError(ctx, msgs.MsgDomainInvalidStateID, stateIDStr)
+	}
+	return *txUUID, stateID, nil
 }

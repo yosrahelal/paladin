@@ -241,13 +241,18 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	defer done()
 
 	transactionID1 := uuid.New()
-	var schemaID tktypes.Bytes32
 
-	// Pop in our widget ABI
-	schemas, err := ss.EnsureABISchemas(ctx, ss.p.DB(), "domain1", []*abi.Parameter{testABIParam(t, fakeCoinABI)})
+	schemas, err := ss.EnsureABISchemas(ctx, ss.p.DB(), "domain1", []*abi.Parameter{
+		testABIParam(t, fakeCoinABI), // Pop in our widget ABI
+		{Type: "tuple", InternalType: "struct TXInfo", Components: abi.ParameterArray{ // and an info state schema
+			{Name: "info", Type: "string"},
+			{Name: "salt", Type: "bytes32"},
+		}},
+	})
 	require.NoError(t, err)
-	assert.Len(t, schemas, 1)
-	schemaID = schemas[0].ID()
+	assert.Len(t, schemas, 2)
+	schemaID := schemas[0].ID()
+	infoSchema := schemas[1].ID()
 
 	_, dc := newTestDomainContext(t, ctx, ss, "domain1", false)
 	defer dc.Close()
@@ -257,9 +262,10 @@ func TestStateContextMintSpendMint(t *testing.T) {
 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 100, "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID1},
 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 10,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID1},
 		&components.StateUpsert{SchemaID: schemaID, Data: tktypes.RawJSON(fmt.Sprintf(`{"amount": 75,  "owner": "0xf7b1c69F5690993F2C8ecE56cc89D42b1e737180", "salt": "%s"}`, tktypes.RandHex(32))), CreatedBy: &transactionID1},
+		&components.StateUpsert{SchemaID: infoSchema, Data: tktypes.RawJSON(fmt.Sprintf(`{"info": "some info", "salt": "%s"}`, tktypes.RandHex(32)))},
 	)
 	require.NoError(t, err)
-	assert.Len(t, tx1states, 3)
+	assert.Len(t, tx1states, 4)
 
 	// Mark an in-memory read - doesn't affect it's availability
 	transactionID2 := uuid.New()
@@ -313,7 +319,7 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	)
 	require.NoError(t, err)
 	assert.Len(t, tx3states, 2)
-	assert.Equal(t, len(dc.unFlushed.states), 5)
+	assert.Equal(t, len(dc.unFlushed.states), 6)
 	assert.Equal(t, len(dc.txLocks), 8)
 
 	// Query the states on the first address
@@ -374,23 +380,25 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	syncFlushContext(t, dc)
 
 	// Write confirmations for all the things that happened above
-	var spends []*pldapi.StateSpend
-	var reads []*pldapi.StateRead
-	var confirms []*pldapi.StateConfirm
+	var spends []*pldapi.StateSpendRecord
+	var reads []*pldapi.StateReadRecord
+	var confirms []*pldapi.StateConfirmRecord
 	for _, lock := range dc.txLocks {
 		switch lock.Type.V() {
 		case pldapi.StateLockTypeSpend:
-			spends = append(spends, &pldapi.StateSpend{DomainName: "domain1", State: lock.State, Transaction: lock.Transaction})
+			spends = append(spends, &pldapi.StateSpendRecord{DomainName: "domain1", State: lock.State, Transaction: lock.Transaction})
 		case pldapi.StateLockTypeRead:
-			reads = append(reads, &pldapi.StateRead{DomainName: "domain1", State: lock.State, Transaction: lock.Transaction})
+			reads = append(reads, &pldapi.StateReadRecord{DomainName: "domain1", State: lock.State, Transaction: lock.Transaction})
 		case pldapi.StateLockTypeCreate:
-			confirms = append(confirms, &pldapi.StateConfirm{DomainName: "domain1", State: lock.State, Transaction: lock.Transaction})
+			confirms = append(confirms, &pldapi.StateConfirmRecord{DomainName: "domain1", State: lock.State, Transaction: lock.Transaction})
 		}
 	}
 	// We add one extra spend that simulates something happening outside of this context
 	transactionID5 := uuid.New()
-	spends = append(spends, &pldapi.StateSpend{DomainName: "domain1", State: states[0].ID, Transaction: transactionID5}) //20
-	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), spends, reads, confirms)
+	spends = append(spends, &pldapi.StateSpendRecord{DomainName: "domain1", State: states[0].ID, Transaction: transactionID5}) //20
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), spends, reads, confirms, []*pldapi.StateInfoRecord{
+		{DomainName: "domain1", State: tx1states[3].ID, Transaction: transactionID1}, // Add an info record for TX 1
+	})
 	require.NoError(t, err)
 
 	// So in the domain context, this states will still be visible - because we don't have transactionID5
@@ -418,27 +426,31 @@ func TestStateContextMintSpendMint(t *testing.T) {
 	checkPostCommit(t, ss, transactionID1, // transaction one
 		[]tktypes.HexBytes{},
 		[]tktypes.HexBytes{},
-		[]tktypes.HexBytes{tx1states[0].ID, tx1states[2].ID, tx1states[2].ID}, // mints these three
+		[]tktypes.HexBytes{tx1states[0].ID, tx1states[2].ID, tx1states[2].ID}, // mints these three ...
+		[]tktypes.HexBytes{tx1states[3].ID},                                   // and has this info
 	)
 	checkPostCommit(t, ss, transactionID2, // transaction one
 		[]tktypes.HexBytes{},
 		[]tktypes.HexBytes{tx1states[1].ID}, // just reads this one
+		[]tktypes.HexBytes{},
 		[]tktypes.HexBytes{},
 	)
 	checkPostCommit(t, ss, transactionID3, // transaction three
 		[]tktypes.HexBytes{tx1states[1].ID, tx1states[2].ID}, // spends these two ..
 		[]tktypes.HexBytes{},
 		[]tktypes.HexBytes{tx3states[0].ID, tx3states[1].ID}, // and mints these two
+		[]tktypes.HexBytes{},
 	)
 	checkPostCommit(t, ss, transactionID4, // transaction four,
 		[]tktypes.HexBytes{tx3states[1].ID},                  // spends this one ...
 		[]tktypes.HexBytes{tx1states[0].ID},                  // reads this one ...
 		[]tktypes.HexBytes{tx4states[0].ID, tx4states[1].ID}, // and mints these two
+		[]tktypes.HexBytes{},
 	)
 
 }
 
-func checkPostCommit(t *testing.T, ss *stateManager, txID uuid.UUID, expectedSpent, expectedRead, expectedConfirmed []tktypes.HexBytes) {
+func checkPostCommit(t *testing.T, ss *stateManager, txID uuid.UUID, expectedSpent, expectedRead, expectedConfirmed, expectedInfo []tktypes.HexBytes) {
 
 	txStates, err := ss.GetTransactionStates(ss.bgCtx, ss.p.DB(), txID)
 	require.NoError(t, err)
@@ -469,6 +481,12 @@ func checkPostCommit(t *testing.T, ss *stateManager, txID uuid.UUID, expectedSpe
 	require.Equal(t, len(expectedConfirmed), len(confirmedIDs), "unique confirmed ID counts match")
 	for _, sID := range expectedConfirmed {
 		require.Contains(t, confirmedIDs, sID.String())
+	}
+
+	infoIDs := toMap(txStates.Info)
+	require.Equal(t, len(expectedInfo), len(infoIDs), "unique confirmed ID counts match")
+	for _, sID := range expectedInfo {
+		require.Contains(t, infoIDs, sID.String())
 	}
 
 }
@@ -543,11 +561,11 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	syncFlushContext(t, dc)
 
 	// Mark both states confirmed
-	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*pldapi.StateSpend{}, []*pldapi.StateRead{},
-		[]*pldapi.StateConfirm{
+	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(), []*pldapi.StateSpendRecord{}, []*pldapi.StateReadRecord{},
+		[]*pldapi.StateConfirmRecord{
 			{DomainName: "domain1", State: stateID1, Transaction: transactionID1},
 			{DomainName: "domain1", State: stateID2, Transaction: transactionID1},
-		})
+		}, []*pldapi.StateInfoRecord{})
 	require.NoError(t, err)
 
 	// Mark the first state as "spending"
@@ -573,9 +591,9 @@ func TestStateContextMintSpendWithNullifier(t *testing.T) {
 	// Spend the state associated with nullifier
 	transactionID3 := uuid.New()
 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
-		[]*pldapi.StateSpend{
+		[]*pldapi.StateSpendRecord{
 			{DomainName: "domain1", State: nullifier1, Transaction: transactionID3},
-		}, []*pldapi.StateRead{}, []*pldapi.StateConfirm{})
+		}, []*pldapi.StateReadRecord{}, []*pldapi.StateConfirmRecord{}, []*pldapi.StateInfoRecord{})
 	require.NoError(t, err)
 
 	// reset the domain context so we're working from the db
