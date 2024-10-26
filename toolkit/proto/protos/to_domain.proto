@@ -130,9 +130,10 @@ message EndorseTransactionRequest {
   TransactionSpecification transaction = 4; // The transaction specified by the user
   repeated ResolvedVerifier resolved_verifiers = 5; // The list of resovled verifiers
   repeated EndorsableState inputs = 6; // Input states for the transaction
-  repeated EndorsableState reads = 7; // States relied upon by the transaction, that are not actually consumed
+  repeated EndorsableState reads = 7; // States relied upon by the transaction, that are not actually consumed, but must exist on chain
   repeated EndorsableState outputs = 8; // Output states for the transaction
-  repeated AttestationResult signatures = 9; // All SIGN attestation results (required from submitting node before endorsement)
+  repeated EndorsableState info = 9; // Info states for the transaction, that are important information in/out of the business transaction, but are never recorded in an on-chain map, or returned from FindAvailableStates
+  repeated AttestationResult signatures = 10; // All SIGN attestation results (required from submitting node before endorsement)
 }
 
 message EndorseTransactionResponse {
@@ -153,9 +154,10 @@ message PrepareTransactionRequest {
   repeated EndorsableState input_states = 3; // The list of input states
   repeated EndorsableState read_states = 4; // The list of read states
   repeated EndorsableState output_states = 5; // The list of output states
-  repeated AttestationResult attestation_result = 6; // The results of any proofs/attestations that came out of the endorsement phase
-  repeated ResolvedVerifier resolved_verifiers = 7; // A list of transaction signatures/proofs that have been resolved
-  optional string extra_data = 8; // Any extra data that was included in the transaction assembly
+  repeated EndorsableState info_states = 6; // The list of states that are important information in/out of the business transaction, but are never recorded in an on-chain map, or returned from FindAvailableStates
+  repeated AttestationResult attestation_result = 7; // The results of any proofs/attestations that came out of the endorsement phase
+  repeated ResolvedVerifier resolved_verifiers = 8; // A list of transaction signatures/proofs that have been resolved
+  optional string extra_data = 9; // Any extra data that was included in the transaction assembly
 }
 
 message PrepareTransactionResponse {
@@ -268,7 +270,7 @@ message AssembledTransaction {
   repeated StateRef input_states = 1; // A list of the state IDs that the transaction spends - these might include ones being minted on other sequences, resulting in an instruction to the TX manager to re-allocate the transaction to another sequence
   repeated StateRef read_states = 2; // A list of state IDs that the execution of the transaction depends on being unspent on the chain (but will not spend). Also could be being minted on other sequences.
   repeated NewState output_states = 3; // A list of new states the domain will create as an output from this transaction, if it is executed and confirmed
-  optional string extra_data = 4; // Any extra data to be included in the transaction (other than states)
+  repeated NewState info_states = 4; // A list of states recorded as meaningful to the transaction, but do not need to exist on-chain before the transaction, and are not stored on-chain in any map afterwards
 }
 
 message StateRef {

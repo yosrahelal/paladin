@@ -410,6 +410,12 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 		Amount: ethtypes.NewHexInteger64(5555555),
 	}
 
+	state6 := &fakeState{
+		Salt:   tktypes.Bytes32(tktypes.RandBytes(32)),
+		Owner:  tktypes.EthAddress(tktypes.RandBytes(20)),
+		Amount: ethtypes.NewHexInteger64(6666666),
+	}
+
 	td.tp.Functions.AssembleTransaction = func(ctx context.Context, req *prototk.AssembleTransactionRequest) (*prototk.AssembleTransactionResponse, error) {
 		assert.Same(t, req.Transaction, tx.PreAssembly.TransactionSpecification)
 
@@ -436,6 +442,9 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 		newStateData, err := json.Marshal(state5)
 		require.NoError(t, err)
 
+		infoStateData, err := json.Marshal(state6)
+		require.NoError(t, err)
+
 		return &prototk.AssembleTransactionResponse{
 			AssemblyResult: prototk.AssembleTransactionResponse_OK,
 			AssembledTransaction: &prototk.AssembledTransaction{
@@ -448,6 +457,9 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 				},
 				OutputStates: []*prototk.NewState{
 					{SchemaId: td.tp.stateSchemas[0].Id, StateDataJson: string(newStateData)},
+				},
+				InfoStates: []*prototk.NewState{
+					{SchemaId: td.tp.stateSchemas[0].Id, StateDataJson: string(infoStateData)},
 				},
 			},
 			AttestationPlan: []*prototk.AttestationRequest{
@@ -466,6 +478,7 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 	assert.Len(t, tx.PostAssembly.InputStates, 2)
 	assert.Len(t, tx.PostAssembly.ReadStates, 1)
 	assert.Len(t, tx.PostAssembly.OutputStatesPotential, 1)
+	assert.Len(t, tx.PostAssembly.InfoStatesPotential, 1)
 	assert.Equal(t, prototk.AssembleTransactionResponse_OK, tx.PostAssembly.AssemblyResult)
 	assert.Len(t, tx.PostAssembly.AttestationPlan, 1)
 
@@ -521,6 +534,8 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 		assert.Contains(t, string(tx.PostAssembly.InputStates[1].Data), state3.Salt.String())
 		assert.Len(t, tx.PostAssembly.OutputStates, 1)
 		assert.Contains(t, string(tx.PostAssembly.OutputStates[0].Data), state5.Salt.String())
+		assert.Len(t, tx.PostAssembly.InfoStates, 1)
+		assert.Contains(t, string(tx.PostAssembly.InfoStates[0].Data), state6.Salt.String())
 		return &prototk.EndorseTransactionResponse{
 			EndorsementResult: prototk.EndorseTransactionResponse_ENDORSER_SUBMIT,
 			Payload:           []byte(`some result`),
@@ -543,6 +558,7 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 		InputStates:              psc.d.toEndorsableList(tx.PostAssembly.InputStates),
 		ReadStates:               psc.d.toEndorsableList(tx.PostAssembly.ReadStates),
 		OutputStates:             psc.d.toEndorsableList(tx.PostAssembly.OutputStates),
+		InfoStates:               psc.d.toEndorsableList(tx.PostAssembly.InfoStates),
 		Endorsement:              endorsementRequest,
 		Endorser:                 endorser,
 	})
@@ -566,6 +582,8 @@ func TestFullTransactionRealDBOK(t *testing.T) {
 		assert.Contains(t, string(tx.PostAssembly.InputStates[1].Data), state3.Salt.String())
 		assert.Len(t, tx.PostAssembly.OutputStates, 1)
 		assert.Contains(t, string(tx.PostAssembly.OutputStates[0].Data), state5.Salt.String())
+		assert.Len(t, tx.PostAssembly.InfoStates, 1)
+		assert.Contains(t, string(tx.PostAssembly.InfoStates[0].Data), state6.Salt.String())
 		// Check endorsement
 		assert.Len(t, tx.PostAssembly.Endorsements, 1)
 		endorsement := tx.PostAssembly.Endorsements[0]
@@ -749,6 +767,7 @@ func TestEndorseTransactionFail(t *testing.T) {
 		InputStates:              psc.d.toEndorsableList(tx.PostAssembly.InputStates),
 		ReadStates:               psc.d.toEndorsableList(tx.PostAssembly.ReadStates),
 		OutputStates:             psc.d.toEndorsableList(tx.PostAssembly.OutputStates),
+		InfoStates:               psc.d.toEndorsableList(tx.PostAssembly.InfoStates),
 		Endorsement:              &prototk.AttestationRequest{},
 		Endorser:                 &prototk.ResolvedVerifier{},
 	})
