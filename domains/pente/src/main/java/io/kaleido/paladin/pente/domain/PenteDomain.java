@@ -226,6 +226,13 @@ public class PenteDomain extends DomainInstance {
         return externalCalls;
     }
 
+    private String buildExtraData(PenteEVMTransaction.EVMExecutionResult execResult) throws Exception {
+        return new ObjectMapper().writeValueAsString(
+                new PenteConfiguration.TransactionExtraData(
+                        new Address(execResult.contractAddress().toArray()),
+                        parseExternalCalls(execResult.logs())));
+    }
+
     @Override
     protected CompletableFuture<ToDomain.AssembleTransactionResponse> assembleTransaction(ToDomain.AssembleTransactionRequest request) {
         try {
@@ -236,25 +243,18 @@ public class PenteDomain extends DomainInstance {
             var ethTxn = new PenteEVMTransaction(this, tx, tx.getFromVerifier(request.getResolvedVerifiersList()));
             var execResult = ethTxn.invokeEVM(accountLoader);
             var result = ToDomain.AssembleTransactionResponse.newBuilder();
-            var encodedTxn = tx.getEncodedTransaction(ethTxn);
-            var encodedTxnHash = Keccak.Hash(encodedTxn);
-            var assembledTransaction = tx.buildAssembledTransaction(execResult.evm(), accountLoader, ethTxn, encodedTxn);
+
+            // Just like a base Eth transaction, we need a signed and encoded transaction for endorser verification.
+            // We package this up as an "info" state on the transaction, that will be distributed to all parties
+            // just like all the other states. However, it never exists in the UTXO map on-chain, and is never
+            // available for selection as an input to a transaction. It exists only to be emitted as part of the
+            // event from the transaction where it is used.
+            var encodedTxn = tx.getSignedRawTransaction(ethTxn);
+            var assembledTransaction = tx.buildAssembledTransaction(execResult.evm(), accountLoader, ethTxn, encodedTxn, buildExtraData(execResult));
+
+            // We now have the assembly result
             result.setAssemblyResult(ToDomain.AssembleTransactionResponse.Result.OK);
             result.setAssembledTransaction(assembledTransaction);
-
-
-            // Just like a base Eth transaction, we sign the encoded transaction.
-            // However, we do not package the signature back up in any RLP encoded way
-            // back again into a full transaction RLP bytestring.
-            result.addAttestationPlan(ToDomain.AttestationRequest.newBuilder().
-                    setAlgorithm(Algorithms.ECDSA_SECP256K1).
-                    setVerifierType(Verifiers.ETH_ADDRESS).
-                    setAttestationType(ToDomain.AttestationType.SIGN).
-                    setPayloadType(SignPayloads.OPAQUE_TO_RSV).
-                    setPayload(ByteString.copyFrom(encodedTxnHash.getBytes())).
-                    addParties(tx.getFrom()).
-                    build()
-            );
 
             // In addition to the signing address of the sender of this transaction (which can be any eth address)
             // we need to get endorsements from all endorsers in the list associated with the privacy group.
@@ -299,11 +299,9 @@ public class PenteDomain extends DomainInstance {
             }
             if (request.getInfoCount() != 1) throw new IllegalArgumentException("No transaction input state");
 
-            // Recover the input
+            // Recover the input from the signed rawTransaction that is in the "info" state recorded alongside the transaction
             var tx = new PenteTransaction(this, request.getTransaction());
             var evmTxn = PenteEVMTransaction.buildFromInput(this, request.getInfo(0).getStateDataJson().getBytes(StandardCharsets.UTF_8));
-            var txPayload = tx.getEncodedTransaction(evmTxn);
-            var txPayloadHash = Keccak.Hash(txPayload);
 
             // Do the execution of the transaction again ourselves
             var endorsementLoader = new EndorsementAccountLoader(inputAccounts, readAccounts);
@@ -349,28 +347,6 @@ public class PenteDomain extends DomainInstance {
                 throw new IllegalStateException("Execution state mismatch detected in endorsement");
             }
 
-            // Recover the signer against the payload as we processed it
-            ByteString signature = null;
-            for (var sign : request.getSignaturesList()) {
-                if (sign.getVerifier().getAlgorithm().equals(Algorithms.ECDSA_SECP256K1) &&
-                        sign.getVerifier().getVerifierType().equals(Verifiers.ETH_ADDRESS) &&
-                        sign.getVerifier().getVerifier().equals(execResult.senderAddress().toString())) {
-                    signature = sign.getPayload();
-                }
-            }
-            if (signature == null) {
-                throw new IllegalArgumentException("missing signature for %s".formatted(execResult.senderAddress()));
-            }
-            var recovered = recoverSigner(FromDomain.RecoverSignerRequest.newBuilder().
-                    setAlgorithm(Algorithms.ECDSA_SECP256K1).
-                    setPayload(ByteString.copyFrom(txPayloadHash.getBytes())).
-                    setPayloadType(SignPayloads.OPAQUE_TO_RSV).
-                    setSignature(signature).
-                    build()).get();
-            if (!recovered.getVerifier().equals(execResult.senderAddress().toString())) {
-                throw new IllegalArgumentException("invalid signature for %s (recovered=%s)".formatted(execResult.senderAddress(), recovered.getVerifier()));
-            }
-
             // Check we agree with the typed data we will sign
             var endorsementPayload = tx.eip712TypedDataEndorsementPayload(
                     request.getInputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
@@ -401,16 +377,22 @@ public class PenteDomain extends DomainInstance {
             var signatures = request.getAttestationResultList().stream().
                     filter(r -> r.getAttestationType() == ToDomain.AttestationType.ENDORSE).
                     toList();
-            var extraData = new ObjectMapper().readValue(
-                    request.getExtraData(),
-                    PenteConfiguration.TransactionExtraData.class);
+            List<PenteConfiguration.TransactionExternalCall> externalCalls;
+            if (request.getExtraData().isEmpty()) {
+                externalCalls = Collections.emptyList();
+            } else {
+                var extraData = new ObjectMapper().readValue(
+                        request.getExtraData(),
+                        PenteConfiguration.TransactionExtraData.class);
+                externalCalls = extraData.externalCalls();
+            }
 
             var params = new HashMap<String, Object>() {{
                 put("txId", request.getTransaction().getTransactionId());
                 put("inputs", request.getInputStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
                 put("reads", request.getReadStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
                 put("outputs", request.getOutputStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
-                put("externalCalls", extraData.externalCalls());
+                put("externalCalls", externalCalls);
                 put("signatures", signatures.stream().map(r -> JsonHex.wrap(r.getPayload().toByteArray())).toList()
                 );
             }};

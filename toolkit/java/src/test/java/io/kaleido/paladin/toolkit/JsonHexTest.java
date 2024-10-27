@@ -111,14 +111,14 @@ public class JsonHexTest {
 
     private record TestRecordInt(
             @JsonProperty()
-            JsonHex.Uint256 value
+            JsonHexNum.Uint256 value
     ) {};
 
 
     @Test
     public void testUint256() throws Exception {
 
-        var biggestUint256 = new JsonHex.Uint256(BigInteger.valueOf(2).pow(256).subtract(BigInteger.valueOf(1)));
+        var biggestUint256 = new JsonHexNum.Uint256(BigInteger.valueOf(2).pow(256).subtract(BigInteger.valueOf(1)));
         assertEquals("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", biggestUint256.toString());
 
         TestRecordInt tr = new ObjectMapper().readValue("""
@@ -145,13 +145,13 @@ public class JsonHexTest {
                 """, TestRecordInt.class);
         assertEquals(0L, tr.value.bigInt().longValue());
         assertEquals("0x0", tr.value.toString());
-        assertEquals("0x0", new JsonHex.Uint256("0x00000000").toString());
+        assertEquals("0x0", JsonHexNum.Uint256.fromString("0x00000000").toString());
 
         assertThrows(IllegalArgumentException.class, () -> {
-            new JsonHex.Uint256("0x010000000000000000000000000000000000000000000000000000000000000000").toString();
+            JsonHexNum.Uint256.fromString("0x010000000000000000000000000000000000000000000000000000000000000000").toString();
         });
 
-        assertEquals(0L, JsonHex.Uint256.fromBigIntZeroNull(null).longValue());
+        assertEquals(0L, JsonHexNum.Uint256.fromBigIntZeroNull(null).longValue());
 
     }
 }

@@ -19,22 +19,13 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.google.protobuf.ByteString;
 import io.kaleido.paladin.toolkit.*;
 import io.kaleido.paladin.pente.evmrunner.EVMRunner;
-import io.kaleido.paladin.pente.evmrunner.EVMVersion;
-import io.kaleido.paladin.pente.evmstate.AccountLoader;
 import io.kaleido.paladin.pente.evmstate.DynamicLoadWorldState;
-import io.kaleido.paladin.pente.evmstate.PersistedAccount;
 import io.kaleido.paladin.toolkit.JsonHex.Address;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.tuweni.bytes.Bytes;
-import org.hyperledger.besu.evm.frame.MessageFrame;
-import org.hyperledger.besu.evm.internal.EvmConfiguration;
-import org.hyperledger.besu.evm.log.Log;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -255,12 +246,13 @@ class PenteTransaction {
         return response.getBody();
     }
 
-    byte[] getEncodedTransaction(PenteEVMTransaction ethTXJson) throws IOException, IllegalStateException, ExecutionException, InterruptedException {
+    byte[] getSignedRawTransaction(PenteEVMTransaction ethTXJson) throws IOException, IllegalStateException, ExecutionException, InterruptedException {
         var request = FromDomain.EncodeDataRequest.newBuilder().
-                setEncodingType(FromDomain.EncodingType.ETH_TRANSACTION).
+                setEncodingType(FromDomain.EncodingType.ETH_TRANSACTION_SIGNED).
                 setDefinition(defs.inputs.toJSON(false)).
                 setBody(new ObjectMapper().writeValueAsString(ethTXJson)).
                 setDefinition("eip-1559").
+                setKeyIdentifier(from).
                 build();
         var response = domain.encodeData(request).get();
         return response.getData().toByteArray();
@@ -311,12 +303,18 @@ class PenteTransaction {
             @JsonProperty
             String evmVersion,
             @JsonProperty
-            JsonHex.Uint256 baseBlock,
+            JsonHexNum.Uint256 baseBlock,
             @JsonProperty
-            JsonHex.Uint256 bytecodeLength
+            JsonHexNum.Uint256 bytecodeLength
     ) {}
 
-    ToDomain.AssembledTransaction buildAssembledTransaction(EVMRunner evm, PenteDomain.AssemblyAccountLoader accountLoader, PenteEVMTransaction evmTxn, byte[] encodedTxn) throws IOException, ExecutionException, InterruptedException {
+    ToDomain.AssembledTransaction buildAssembledTransaction(
+            EVMRunner evm,
+            PenteDomain.AssemblyAccountLoader accountLoader,
+            PenteEVMTransaction evmTxn,
+            byte[] encodedTxn,
+            String extraData) throws IOException, ExecutionException, InterruptedException {
+
         var latestAccountSchemaId = domain.getConfig().schemaId_AccountStateLatest();
         var latestTransactionInputSchemaId = domain.getConfig().schemaId_TransactionInputStateLatest();
         var result = ToDomain.AssembledTransaction.newBuilder();
@@ -359,8 +357,8 @@ class PenteTransaction {
         var txInput = new TransactionInputInfoState(
             new JsonHex.Bytes(encodedTxn),
             evmTxn.getEVMVersion(),
-            new JsonHex.Uint256(evmTxn.getBaseBlock()),
-            new JsonHex.Uint256(evmTxn.getBytecodeLen())
+            new JsonHexNum.Uint256(evmTxn.getBaseBlock()),
+            new JsonHexNum.Uint256(evmTxn.getBytecodeLen())
         );
         var txInputState = ToDomain.NewState.newBuilder().
                 setSchemaId(latestTransactionInputSchemaId).
@@ -371,6 +369,9 @@ class PenteTransaction {
         result.addAllReadStates(readStates);
         result.addAllOutputStates(outputStates);
         result.addInfoStates(txInputState);
+        if (extraData != null) {
+            result.setExtraData(extraData);
+        }
         return result.build();
     }
 

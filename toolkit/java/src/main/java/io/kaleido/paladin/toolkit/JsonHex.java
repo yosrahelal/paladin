@@ -133,73 +133,6 @@ public abstract class JsonHex {
         }
     }
 
-    @JsonDeserialize(using = JsonDeserializerUint256.class)
-    @JsonSerialize(using = JsonSerializerUint256.class)
-    public static class Uint256 extends JsonHex {
-        static final Uint256 ZERO = new Uint256(0);
-
-        public Uint256(String str) {super(str, -1);}
-        public Uint256(long intVal) {
-            this(BigInteger.valueOf(intVal));
-        }
-        public Uint256(BigInteger intVal) {
-            super(intVal.toByteArray(), -1);
-            if (intVal.signum() < 0) {
-                throw new IllegalArgumentException("negative value for uint256");
-            }
-        }
-        public BigInteger bigInt() {
-            // Java uses two's compliment natively in BigInteger.
-            // We left pad to 33 bytes to ensure we can fit in a 32 byte uint256 number
-            var buff = new byte[33];
-            var val = super.getBytes();
-            System.arraycopy(val, 0, buff, buff.length-val.length, val.length);
-            return new BigInteger(buff);
-        }
-
-        public static Uint256 fromBigIntZeroNull(BigInteger intVal) {
-            if (intVal == null) {
-                return ZERO;
-            }
-            return new Uint256(intVal);
-        }
-
-        public long longValue() {
-            return bigInt().longValue();
-        }
-
-        public int intValue() {
-            return bigInt().intValue();
-        }
-
-        private byte[] uintBytesTrimmed() {
-            var val = super.getBytes();
-            if (val.length == 0) {
-                val = new byte[1];
-            }
-            var trim = 0;
-            for (var i = 0; i < val.length-1 && val[i] == 0; i++) {
-                trim++; // no need for this extra var other than linter complaint if empty body
-            }
-            if (trim > 0) {
-                var trimmed = new byte[val.length-trim];
-                System.arraycopy(val, trim, trimmed, 0, trimmed.length);
-                val = trimmed;
-            }
-            if (val.length > 32) {
-                throw new IllegalArgumentException("integer larger than 256 bits");
-            }
-            return val;
-        }
-        public String toString() {
-            var hexValue = "0x" + HexFormat.of().formatHex(this.uintBytesTrimmed());
-            if (hexValue.equals("0x00")) {
-                hexValue = "0x0";
-            }
-            return hexValue;
-        }
-    }
-
     public static class JsonDeserializerAddress extends JsonDeserializer<Address> {
         @Override
         public Address deserialize(JsonParser jp, DeserializationContext ctxt) throws IOException {
@@ -211,28 +144,6 @@ public abstract class JsonHex {
         @Override
         public void serialize(Address value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
             gen.writeString(value.to0xHex());
-        }
-    }
-
-    public static class JsonDeserializerUint256 extends JsonDeserializer<Uint256> {
-        @Override
-        public Uint256 deserialize(JsonParser jp, DeserializationContext ctxt) throws IOException {
-            var strValue = deserializeStr(jp);
-            if (strValue.startsWith("0x")) {
-                if (strValue.equals("0x0")) {
-                    return Uint256.ZERO;
-                }
-                return new Uint256(strValue);
-            }
-            // must be a string
-            return new Uint256(new BigInteger(strValue, 10));
-        }
-    }
-
-    public static class JsonSerializerUint256 extends JsonSerializer<Uint256> {
-        @Override
-        public void serialize(Uint256 value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
-            gen.writeString(value.toString());
         }
     }
 
