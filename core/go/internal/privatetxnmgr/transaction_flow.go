@@ -65,7 +65,7 @@ func NewTransactionFlow(
 		finalizePending:             false,
 		requestedVerifierResolution: false,
 		requestedSignatures:         false,
-		requestedEndorsementTimes:   make(map[string]map[string]time.Time),
+		pendingEndorsementRequests:  make(map[string]map[string]*pendingEndorsementRequest),
 		complete:                    false,
 		localCoordinator:            true,
 		readyForSequencing:          false,
@@ -78,6 +78,10 @@ func NewTransactionFlow(
 	}
 }
 
+type pendingEndorsementRequest struct {
+	//time the request was made
+	requestTime time.Time
+}
 type transactionFlow struct {
 	stageErrorRetry             time.Duration
 	components                  components.AllComponents
@@ -97,9 +101,9 @@ type transactionFlow struct {
 	finalizePending             bool
 	assemblePending             bool
 	complete                    bool
-	requestedVerifierResolution bool                            //TODO add precision here so that we can track individual requests and implement retry as per endorsement
-	requestedSignatures         bool                            //TODO add precision here so that we can track individual requests and implement retry as per endorsement
-	requestedEndorsementTimes   map[string]map[string]time.Time //map of attestationRequest names to a map of parties to the time the most request was made
+	requestedVerifierResolution bool                                             //TODO add precision here so that we can track individual requests and implement retry as per endorsement
+	requestedSignatures         bool                                             //TODO add precision here so that we can track individual requests and implement retry as per endorsement
+	pendingEndorsementRequests  map[string]map[string]*pendingEndorsementRequest //map of attestationRequest names to a map of parties to a struct containing information about the active pending request
 	localCoordinator            bool
 	readyForSequencing          bool
 	dispatched                  bool

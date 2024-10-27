@@ -546,12 +546,12 @@ func (tf *transactionFlow) requestEndorsements(ctx context.Context) {
 		// there is a request in the attestation plan and we do not have a response to match it
 		// first lets see if we have recently sent a request for this endorsement and just need to be patient
 		previousRequestTime := time.Time{}
-		if timesForAttRequest, ok := tf.requestedEndorsementTimes[outstandingEndorsementRequest.attRequest.Name]; ok {
-			if t, ok := timesForAttRequest[outstandingEndorsementRequest.party]; ok {
-				previousRequestTime = t
+		if timesForAttRequest, ok := tf.pendingEndorsementRequests[outstandingEndorsementRequest.attRequest.Name]; ok {
+			if r, ok := timesForAttRequest[outstandingEndorsementRequest.party]; ok {
+				previousRequestTime = r.requestTime
 			}
 		} else {
-			tf.requestedEndorsementTimes[outstandingEndorsementRequest.attRequest.Name] = make(map[string]time.Time)
+			tf.pendingEndorsementRequests[outstandingEndorsementRequest.attRequest.Name] = make(map[string]*pendingEndorsementRequest)
 		}
 
 		if !previousRequestTime.IsZero() && tf.clock.Now().Before(previousRequestTime.Add(tf.requestTimeout)) {
@@ -565,7 +565,10 @@ func (tf *transactionFlow) requestEndorsements(ctx context.Context) {
 			log.L(ctx).Infof("Previous endorsement request for transaction:%s, attestation request:%s, party:%s sent at %v has timed out", tf.transaction.ID.String(), outstandingEndorsementRequest.attRequest.Name, outstandingEndorsementRequest.party, previousRequestTime)
 		}
 		tf.requestEndorsement(ctx, outstandingEndorsementRequest.party, outstandingEndorsementRequest.attRequest)
-		tf.requestedEndorsementTimes[outstandingEndorsementRequest.attRequest.Name][outstandingEndorsementRequest.party] = tf.clock.Now()
+		tf.pendingEndorsementRequests[outstandingEndorsementRequest.attRequest.Name][outstandingEndorsementRequest.party] =
+			&pendingEndorsementRequest{
+				requestTime: tf.clock.Now(),
+			}
 
 	}
 }
