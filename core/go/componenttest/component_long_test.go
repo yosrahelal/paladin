@@ -150,24 +150,40 @@ func TestPrivateTransactions100PercentEndorsementBetter(t *testing.T) {
 		"Transaction did not receive a receipt",
 	)
 
-	var schemas []*pldapi.Schema
-	err = bob.client.CallRPC(ctx, &schemas, "pstate_listSchemas", "simpleStorageDomain")
+	var bobSchemas []*pldapi.Schema
+	err = bob.client.CallRPC(ctx, &bobSchemas, "pstate_listSchemas", "simpleStorageDomain")
 	require.NoError(t, err)
-	require.Len(t, schemas, 1)
+	require.Len(t, bobSchemas, 1)
 
-	var states []*pldapi.State
-	err = bob.client.CallRPC(ctx, &states, "pstate_queryContractStates", "simpleStorageDomain", contractAddress.String(), schemas[0].ID, tktypes.RawJSON(`{}`), "available")
+	var bobStates []*pldapi.State
+	err = bob.client.CallRPC(ctx, &bobStates, "pstate_queryContractStates", "simpleStorageDomain", contractAddress.String(), bobSchemas[0].ID, tktypes.RawJSON(`{}`), "available")
 	require.NoError(t, err)
-	require.Len(t, states, 1)
+	require.Len(t, bobStates, 1)
 	stateData := make(map[string]string)
 	storage := make(map[string]string)
-	jsonErr := json.Unmarshal(states[0].Data.Bytes(), &stateData)
+	jsonErr := json.Unmarshal(bobStates[0].Data.Bytes(), &stateData)
 	require.NoError(t, jsonErr)
 
 	jsonErr = json.Unmarshal([]byte(stateData["records"]), &storage)
 	require.NoError(t, jsonErr)
 
 	assert.Equal(t, "quz", storage["foo"])
+
+	// Alice should see the same latest state of the world as Bob
+	var aliceSchemas []*pldapi.Schema
+
+	err = alice.client.CallRPC(ctx, &aliceSchemas, "pstate_listSchemas", "simpleStorageDomain")
+	require.NoError(t, err)
+	require.Len(t, aliceSchemas, 1)
+	assert.Equal(t, bobSchemas[0].ID, aliceSchemas[0].ID)
+
+	var aliceStates []*pldapi.State
+
+	err = alice.client.CallRPC(ctx, &aliceStates, "pstate_queryContractStates", "simpleStorageDomain", contractAddress.String(), aliceSchemas[0].ID, tktypes.RawJSON(`{}`), "available")
+	require.NoError(t, err)
+	require.Len(t, aliceStates, 1)
+	assert.Equal(t, bobStates[0].ID, aliceStates[0].ID)
+	assert.Equal(t, bobStates[0].Data, aliceStates[0].Data)
 
 }
 
