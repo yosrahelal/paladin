@@ -32,6 +32,7 @@ import io.kaleido.paladin.toolkit.JsonHex.Bytes32;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.FormattedMessage;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -352,6 +353,7 @@ public class PenteDomain extends DomainInstance {
                     request.getInputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
                     request.getReadsList().stream().map(ToDomain.EndorsableState::getId).toList(),
                     request.getOutputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
+                    request.getInfoList().stream().map(ToDomain.EndorsableState::getId).toList(),
                     parseExternalCalls(execResult.logs())
             );
 
@@ -389,13 +391,16 @@ public class PenteDomain extends DomainInstance {
 
             var params = new HashMap<String, Object>() {{
                 put("txId", request.getTransaction().getTransactionId());
-                put("inputs", request.getInputStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
-                put("reads", request.getReadStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
-                put("outputs", request.getOutputStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
+                put("states", new HashMap<String, Object>() {{
+                    put("inputs", request.getInputStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
+                    put("reads", request.getReadStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
+                    put("outputs", request.getOutputStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
+                    put("info", request.getInfoStatesList().stream().map(ToDomain.EndorsableState::getId).toList());
+                }});
                 put("externalCalls", externalCalls);
-                put("signatures", signatures.stream().map(r -> JsonHex.wrap(r.getPayload().toByteArray())).toList()
-                );
+                put("signatures", signatures.stream().map(r -> JsonHex.wrap(r.getPayload().toByteArray())).toList());
             }};
+
             var transitionFunctionABI = config.getPrivacyGroupABI().getABIEntry("function", "transition").toJSON(false);
             var preparedTx = ToDomain.PreparedTransaction.newBuilder().
                     setFunctionAbiJson(transitionFunctionABI).
@@ -418,7 +423,15 @@ public class PenteDomain extends DomainInstance {
                             .setId(id.to0xHex())
                             .setTransactionId(transfer.txId.to0xHex())
                             .build()).toList();
+                    var reads = Arrays.stream(transfer.reads).map(id -> ToDomain.StateUpdate.newBuilder()
+                            .setId(id.to0xHex())
+                            .setTransactionId(transfer.txId.to0xHex())
+                            .build()).toList();
                     var outputs = Arrays.stream(transfer.outputs).map(id -> ToDomain.StateUpdate.newBuilder()
+                            .setId(id.to0xHex())
+                            .setTransactionId(transfer.txId.to0xHex())
+                            .build()).toList();
+                    var info = Arrays.stream(transfer.info).map(id -> ToDomain.StateUpdate.newBuilder()
                             .setId(id.to0xHex())
                             .setTransactionId(transfer.txId.to0xHex())
                             .build()).toList();
@@ -428,7 +441,9 @@ public class PenteDomain extends DomainInstance {
                                     .setLocation(event.getLocation())
                                     .build())
                             .addAllSpentStates(inputs)
-                            .addAllConfirmedStates(outputs);
+                            .addAllReadStates(reads)
+                            .addAllConfirmedStates(outputs)
+                            .addAllInfoStates(info);
                     return CompletableFuture.completedFuture(result.build());
                 } else {
                     throw new Exception("Unknown signature: " + event.getSoliditySignature());
@@ -509,7 +524,11 @@ public class PenteDomain extends DomainInstance {
             @JsonProperty
             Bytes32[] inputs,
             @JsonProperty
+            Bytes32[] reads,
+            @JsonProperty
             Bytes32[] outputs,
+            @JsonProperty
+            Bytes32[] info,
             @JsonProperty
             Bytes data
     ) {}

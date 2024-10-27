@@ -409,7 +409,7 @@ class PenteTransaction {
         return lookups;
     }
 
-    byte[] eip712TypedDataEndorsementPayload(List<String> inputs, List<String> reads, List<String> outputs, List<PenteConfiguration.TransactionExternalCall> externalCalls) throws IOException, ExecutionException, InterruptedException {
+    byte[] eip712TypedDataEndorsementPayload(List<String> inputs, List<String> reads, List<String> outputs, List<String> info, List<PenteConfiguration.TransactionExternalCall> externalCalls) throws IOException, ExecutionException, InterruptedException {
         var typedDataRequest = new HashMap<String, Object>() {{
             put("types", new HashMap<String, Object>() {{
                 put("Transition", new ArrayDeque<Map<String, Object>>() {{
@@ -423,6 +423,10 @@ class PenteTransaction {
                     }});
                     add(new HashMap<>() {{
                         put("name", "outputs");
+                        put("type", "bytes32[]");
+                    }});
+                    add(new HashMap<>() {{
+                        put("name", "info");
                         put("type", "bytes32[]");
                     }});
                     add(new HashMap<>() {{
@@ -470,6 +474,7 @@ class PenteTransaction {
                 put("inputs", inputs);
                 put("reads", reads);
                 put("outputs", outputs);
+                put("info", info);
                 put("externalCalls", externalCalls);
             }});
         }};

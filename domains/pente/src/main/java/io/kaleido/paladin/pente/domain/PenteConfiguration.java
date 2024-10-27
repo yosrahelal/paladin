@@ -61,7 +61,7 @@ public class PenteConfiguration {
     private final Bytes externalCallTopic = Bytes.fromHexString("0xcac03685d5ba4ab3e1465a8ee1b2bb21094ddbd612a969fd34f93a5be7a0ac4f");
 
     @SuppressWarnings("FieldCanBeLocal")
-    private final String transferSignature = "event UTXOTransfer(bytes32 txId, bytes32[] inputs, bytes32[] outputs, bytes data)";
+    private final String transferSignature = "event UTXOTransfer(bytes32 txId, bytes32[] inputs, bytes32[] reads, bytes32[] outputs, bytes32[] info, bytes data)";
 
     private String domainName;
     private long chainId;
