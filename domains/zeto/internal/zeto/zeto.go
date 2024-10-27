@@ -30,6 +30,7 @@ import (
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner/zetosignerapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
+	"github.com/kaleido-io/paladin/toolkit/pkg/log"
 	"github.com/kaleido-io/paladin/toolkit/pkg/plugintk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/prototk"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signerapi"
@@ -349,7 +350,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 	var smtName string
 	var storage smt.StatesStorage
 	var tree core.SparseMerkleTree
-	if useNullifiers(domainConfig.CircuitId) {
+	if isNullifiersCircuit(domainConfig.CircuitId) {
 		smtName = smt.MerkleTreeName(domainConfig.TokenName, contractAddress)
 		storage = smt.NewStatesStorage(z.Callbacks, smtName, req.StateQueryContext, z.merkleTreeRootSchema.Id, z.merkleTreeNodeSchema.Id)
 		tree, err = smt.NewSmt(storage)
@@ -374,7 +375,7 @@ func (z *Zeto) HandleEventBatch(ctx context.Context, req *prototk.HandleEventBat
 	if len(errors) > 0 {
 		return &res, i18n.NewError(ctx, msgs.MsgErrorHandleEvents, formatErrors(errors))
 	}
-	if useNullifiers(domainConfig.CircuitId) {
+	if isNullifiersCircuit(domainConfig.CircuitId) {
 		newStatesForSMT, err := storage.GetNewStates()
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorGetNewSmtStates, smtName, err)
@@ -407,16 +408,33 @@ func (z *Zeto) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.Sig
 }
 
 func (z *Zeto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateStateHashesRequest) (*prototk.ValidateStateHashesResponse, error) {
-	var validIds []string
+	var res prototk.ValidateStateHashesResponse
 	for _, state := range req.States {
-		if state.SchemaId == z.coinSchema.Id {
-			fmt.Printf("Validating state, data='%s'\n", state.StateDataJson)
-			validIds = append(validIds, state.Id)
+		log.L(ctx).Debugf("validating state hashes: %+v\n", state)
+		var coin types.ZetoCoin
+		err := json.Unmarshal([]byte(state.StateDataJson), &coin)
+		if err != nil {
+			log.L(ctx).Errorf("Error unmarshalling state data: %s", err)
+			continue
+		}
+		hash, err := coin.Hash(ctx)
+		if err != nil {
+			log.L(ctx).Errorf("Error hashing state data: %s", err)
+			continue
+		}
+		if state.Id == "" {
+			// if the requested state ID is empty, we simply set it
+			res.StateIds = append(res.StateIds, hash.String())
+		} else {
+			// if the requested state ID is set, we compare it with the calculated hash
+			if hash.String() != state.Id {
+				log.L(ctx).Errorf("State hash mismatch (hashed vs. received): %s != %s", hash.String(), state.Id)
+				return nil, i18n.NewError(ctx, msgs.MsgErrorStateHashMismatch, hash.String(), state.Id)
+			}
+			res.StateIds = append(res.StateIds, state.Id)
 		}
 	}
-	return &prototk.ValidateStateHashesResponse{
-		StateIds: validIds,
-	}, nil
+	return &res, nil
 }
 
 func (z *Zeto) InitCall(ctx context.Context, req *prototk.InitCallRequest) (*prototk.InitCallResponse, error) {

@@ -26,7 +26,6 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/msgs"
 	"github.com/kaleido-io/paladin/domains/zeto/internal/zeto/smt"
-	"github.com/kaleido-io/paladin/domains/zeto/pkg/constants"
 	corepb "github.com/kaleido-io/paladin/domains/zeto/pkg/proto"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/types"
 	"github.com/kaleido-io/paladin/domains/zeto/pkg/zetosigner"
@@ -210,11 +209,11 @@ func (h *transferHandler) Prepare(ctx context.Context, tx *types.ParsedTransacti
 		"proof":   h.encodeProof(proofRes.Proof),
 		"data":    data,
 	}
-	if tx.DomainConfig.TokenName == constants.TOKEN_ANON_ENC || tx.DomainConfig.TokenName == constants.TOKEN_ANON_ENC_BATCH {
+	if isEncryptionToken(tx.DomainConfig.TokenName) {
 		params["ecdhPublicKey"] = strings.Split(proofRes.PublicInputs["ecdhPublicKey"], ",")
 		params["encryptionNonce"] = proofRes.PublicInputs["encryptionNonce"]
 		params["encryptedValues"] = strings.Split(proofRes.PublicInputs["encryptedValues"], ",")
-	} else if tx.DomainConfig.TokenName == constants.TOKEN_ANON_NULLIFIER || tx.DomainConfig.TokenName == constants.TOKEN_ANON_NULLIFIER_BATCH {
+	} else if isNullifiersToken(tx.DomainConfig.TokenName) {
 		delete(params, "inputs")
 		params["nullifiers"] = strings.Split(proofRes.PublicInputs["nullifiers"], ",")
 		params["root"] = proofRes.PublicInputs["root"]
@@ -277,7 +276,7 @@ func (h *transferHandler) formatProvingRequest(ctx context.Context, inputCoins, 
 	}
 
 	var extras []byte
-	if useNullifiers(circuitId) {
+	if isNullifiersCircuit(circuitId) {
 		proofs, extrasObj, err := h.generateMerkleProofs(ctx, tokenName, stateQueryContext, contractAddress, inputCoins)
 		if err != nil {
 			return nil, i18n.NewError(ctx, msgs.MsgErrorGenerateMTP, err)
