@@ -8,6 +8,7 @@
     ],
     "go.testTimeout": "60s",
     "java.configuration.updateBuildConfiguration": "disabled",
-    "go.testTags": "testdbpostgres"
+    "go.testTags": "testdbpostgres",
+    "go.buildTags": "testdbpostgres"
   }
   

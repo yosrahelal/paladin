@@ -54,7 +54,7 @@ func newTestRegistryManager(t *testing.T, realDB bool, conf *pldconf.RegistryMan
 	var err error
 	var pDone func()
 	if realDB {
-		p, pDone, err = persistence.NewUnitTestPersistence(ctx)
+		p, pDone, err = persistence.NewUnitTestPersistence(ctx, "registry")
 		require.NoError(t, err)
 	} else {
 		mp, err := mockpersistence.NewSQLMockProvider()

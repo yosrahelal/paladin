@@ -57,7 +57,7 @@ func newTestKeyManager(t *testing.T, realDB bool, conf *pldconf.KeyManagerConfig
 	var pDone func()
 	var err error
 	if realDB {
-		p, pDone, err = persistence.NewUnitTestPersistence(ctx)
+		p, pDone, err = persistence.NewUnitTestPersistence(ctx, "keymgr")
 		require.NoError(t, err)
 	} else {
 		mp, err := mockpersistence.NewSQLMockProvider()

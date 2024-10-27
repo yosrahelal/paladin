@@ -111,7 +111,7 @@ func newTestPublicTxManager(t *testing.T, realDBAndSigner bool, extraSetup ...fu
 	var p persistence.Persistence
 	if realDBAndSigner {
 		var err error
-		p, dbClose, err = persistence.NewUnitTestPersistence(ctx)
+		p, dbClose, err = persistence.NewUnitTestPersistence(ctx, "publictxmgr")
 		require.NoError(t, err)
 
 		mocks.keyManager = keymanager.NewKeyManager(ctx, &pldconf.KeyManagerConfig{

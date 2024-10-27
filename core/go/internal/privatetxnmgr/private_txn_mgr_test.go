@@ -1839,7 +1839,7 @@ func NewPrivateTransactionMgrForTestingWithFakePublicTxManager(t *testing.T, pub
 	mocks.allComponents.On("KeyManager").Return(mocks.keyManager).Maybe()
 	mocks.allComponents.On("TxManager").Return(mocks.txManager).Maybe()
 	mocks.allComponents.On("PublicTxManager").Return(publicTxMgr).Maybe()
-	mocks.allComponents.On("Persistence").Return(persistence.NewUnitTestPersistence(ctx)).Maybe()
+	mocks.allComponents.On("Persistence").Return(persistence.NewUnitTestPersistence(ctx, "privatetxmgr")).Maybe()
 	mocks.domainSmartContract.On("Domain").Return(mocks.domain).Maybe()
 	mocks.domainMgr.On("GetDomainByName", mock.Anything, "domain1").Return(mocks.domain, nil).Maybe()
 	mocks.domain.On("Name").Return("domain1").Maybe()

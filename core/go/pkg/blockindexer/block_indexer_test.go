@@ -121,7 +121,7 @@ func newTestBlockIndexerConf(t *testing.T, config *pldconf.BlockIndexerConfig) (
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
-	p, pDone, err := persistence.NewUnitTestPersistence(ctx)
+	p, pDone, err := persistence.NewUnitTestPersistence(ctx, "blockindexer")
 	require.NoError(t, err)
 
 	blockListener, mRPC := newTestBlockListenerConf(t, ctx, config)

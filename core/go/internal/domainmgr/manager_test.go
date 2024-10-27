@@ -78,7 +78,7 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManager
 	var realStateManager components.StateManager
 	var pDone func()
 	if realDB {
-		p, pDone, err = persistence.NewUnitTestPersistence(ctx)
+		p, pDone, err = persistence.NewUnitTestPersistence(ctx, "domainmgr")
 		require.NoError(t, err)
 		realStateManager = statemgr.NewStateManager(ctx, &pldconf.StateStoreConfig{}, p)
 		componentMocks.On("StateManager").Return(realStateManager)

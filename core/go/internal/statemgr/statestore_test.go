@@ -49,7 +49,7 @@ func newMockComponents(t *testing.T) *mockComponents {
 
 func newDBTestStateManager(t *testing.T) (context.Context, *stateManager, *mockComponents, func()) {
 	ctx := context.Background()
-	p, pDone, err := persistence.NewUnitTestPersistence(ctx)
+	p, pDone, err := persistence.NewUnitTestPersistence(ctx, "statemgr")
 	require.NoError(t, err)
 	ss := NewStateManager(ctx, &pldconf.StateStoreConfig{}, p)
 

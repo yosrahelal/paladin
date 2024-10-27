@@ -70,7 +70,7 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pld
 	var err error
 	var pDone func()
 	if realDB {
-		p, pDone, err = persistence.NewUnitTestPersistence(ctx)
+		p, pDone, err = persistence.NewUnitTestPersistence(ctx, "txmgr")
 		require.NoError(t, err)
 	} else {
 		mp, err := mockpersistence.NewSQLMockProvider()
