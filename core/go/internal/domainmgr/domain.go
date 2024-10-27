@@ -434,6 +434,15 @@ func (d *domain) DecodeData(ctx context.Context, decRequest *prototk.DecodeDataR
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestFail)
 		}
+	case prototk.EncodingType_ETH_TRANSACTION:
+		from, tx, err := ethsigner.RecoverRawTransaction(ctx, decRequest.Data, d.dm.ethClientFactory.ChainID())
+		if err == nil {
+			tx.From = json.RawMessage(fmt.Sprintf(`"%s"`, from.String()))
+			body, err = json.Marshal(tx)
+		}
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestFail)
+		}
 	default:
 		return nil, i18n.NewError(ctx, msgs.MsgDomainABIDecodingRequestInvalidType, decRequest.EncodingType)
 	}

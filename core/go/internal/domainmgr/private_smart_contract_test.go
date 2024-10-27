@@ -24,6 +24,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/hyperledger/firefly-signer/pkg/ethsigner"
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
@@ -258,6 +259,25 @@ func TestEncodeDecodeABIData(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.NotEqual(t, txEIP155, txEIP1559_a)
+
+	key := secp256k1.KeyPairFromBytes(tktypes.RandBytes(32))
+	tx := &ethsigner.Transaction{
+		To: ethtypes.MustNewAddress("0x05d936207F04D81a85881b72A0D17854Ee8BE45A"),
+	}
+	eip1559Signed, err := tx.SignEIP1559(key, td.d.dm.ethClientFactory.ChainID())
+	require.NoError(t, err)
+
+	original, err := td.d.DecodeData(td.ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION,
+		Definition:   "eip1559",
+		Data:         eip1559Signed,
+	})
+	require.NoError(t, err)
+	var recoveredTx *ethsigner.Transaction
+	err = json.Unmarshal([]byte(original.Body), &recoveredTx)
+	require.NoError(t, err)
+	assert.Equal(t, "0x05d936207f04d81a85881b72a0d17854ee8be45a", recoveredTx.To.String())
+	assert.Equal(t, fmt.Sprintf(`"%s"`, key.Address.String()), string(recoveredTx.From))
 
 	eventDef := `{
 		"type": "event",
