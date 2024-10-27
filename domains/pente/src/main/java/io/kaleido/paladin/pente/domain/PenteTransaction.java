@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.google.protobuf.ByteString;
+import io.kaleido.paladin.pente.domain.PenteConfiguration.TransactionInvoke;
 import io.kaleido.paladin.toolkit.*;
 import io.kaleido.paladin.pente.evmrunner.EVMRunner;
 import io.kaleido.paladin.pente.evmrunner.EVMVersion;
@@ -349,7 +350,7 @@ class PenteTransaction {
     ) {
     }
 
-    ToDomain.AssembledTransaction buildAssembledTransaction(EVMRunner evm, PenteDomain.AssemblyAccountLoader accountLoader, String extraData) throws IOException {
+    ToDomain.AssembledTransaction buildAssembledTransaction(EVMRunner evm, PenteDomain.AssemblyAccountLoader accountLoader, ToDomain.NewState evmInputState) throws IOException {
         var latestSchemaId = domain.getConfig().schemaId_AccountStateLatest();
         var result = ToDomain.AssembledTransaction.newBuilder();
         var committedUpdates = evm.getWorld().getCommittedAccountUpdates();
@@ -391,9 +392,7 @@ class PenteTransaction {
         result.addAllInputStates(inputStates);
         result.addAllReadStates(readStates);
         result.addAllOutputStates(outputStates);
-        if (extraData != null) {
-            result.setExtraData(extraData);
-        }
+        result.addInfoStates(evmInputState);
         return result.build();
     }
 
@@ -464,12 +463,16 @@ class PenteTransaction {
         return decodeOutput(execResult.getOutputData());
     }
 
-    EVMExecutionResult invokeEVM(long chainId, Address fromAddr, AccountLoader accountLoader) throws IOException, ExecutionException, InterruptedException, ClassNotFoundException, EVMExecutionException {
-        var evm = getEVM(chainId, getBaseBlock(), accountLoader);
+    TransactionInvoke buildInvokeInputState() {
         var senderAddress = org.hyperledger.besu.datatypes.Address.wrap(Bytes.wrap(fromAddr.getBytes()));
         var calldata = getEncodedCallData();
         var sender = evm.getWorld().getUpdater().getOrCreate(senderAddress);
         var nonce = sender.getNonce();
+
+    }
+
+    EVMExecutionResult invokeEVM(long chainId, Address fromAddr, AccountLoader accountLoader, TransactionInvoke invoke) throws IOException, ExecutionException, InterruptedException, ClassNotFoundException, EVMExecutionException {
+        var evm = getEVM(chainId, getBaseBlock(), accountLoader);
         MessageFrame execResult;
         if (getValues().to() == null) {
             execResult = evm.runContractDeploymentBytes(

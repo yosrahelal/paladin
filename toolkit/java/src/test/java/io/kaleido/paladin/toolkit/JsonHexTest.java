@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.math.BigInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -106,5 +107,37 @@ public class JsonHexTest {
         assertEquals(64, b32.toHex().length());
         JsonHex.Bytes b16 = JsonHex.randomBytes(16);
         assertEquals(32, b16.toHex().length());
+    }
+
+    private record TestRecordInt(
+            @JsonProperty()
+            JsonHex.Uint256 value
+    ) {};
+
+
+    @Test
+    public void testUint256() throws Exception {
+
+        var biggestUint256 = new JsonHex.Uint256(BigInteger.valueOf(2).pow(256).subtract(BigInteger.valueOf(1)));
+        assertEquals("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", biggestUint256.toString());
+
+        TestRecordInt tr = new ObjectMapper().readValue("""
+                {"value":"0x11223344"}
+                """, TestRecordInt.class);
+        assertEquals(287454020L, tr.value.bigInt().longValue());
+        assertEquals("0x11223344", tr.value.toString());
+        assertEquals("{\"value\":\"0x11223344\"}", new ObjectMapper().writeValueAsString(tr));
+
+        tr = new ObjectMapper().readValue("""
+                {"value":"0x0"}
+                """, TestRecordInt.class);
+        assertEquals(0L, tr.value.bigInt().longValue());
+        assertEquals("0x0", tr.value.toString());
+        assertEquals("0x0", new JsonHex.Uint256("0x00000000").toString());
+
+        assertThrows(IllegalArgumentException.class, () -> {
+            new JsonHex.Uint256("0x010000000000000000000000000000000000000000000000000000000000000000").toString();
+        });
+
     }
 }

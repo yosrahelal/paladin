@@ -182,11 +182,15 @@ public class PenteConfiguration {
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record TransactionExtraData(
+    record TransactionInvoke(
             @JsonProperty
-            Address contractAddress,
+            JsonHex.Uint256 nonce,
             @JsonProperty
-            List<TransactionExternalCall> externalCalls
+            Address from,
+            @JsonProperty
+            Address to,
+            @JsonProperty
+            JsonHex data
     ) {}
 
     public static byte[] intToBytes4(int val) {
