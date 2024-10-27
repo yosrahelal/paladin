@@ -233,7 +233,7 @@ public class PenteDomain extends DomainInstance {
 
             // Execution throws an EVMExecutionException if fails
             var accountLoader = new AssemblyAccountLoader(request.getStateQueryContext());
-            var ethTxn = new PenteEVMTransaction(this, tx, request);
+            var ethTxn = new PenteEVMTransaction(this, tx, tx.getFromVerifier(request.getResolvedVerifiersList()));
             var execResult = ethTxn.invokeEVM(accountLoader);
             var result = ToDomain.AssembleTransactionResponse.newBuilder();
             var encodedTxn = tx.getEncodedTransaction(ethTxn);
@@ -500,10 +500,11 @@ public class PenteDomain extends DomainInstance {
         try {
             var tx = new PenteTransaction(this, request.getTransaction());
             var accountLoader = new AssemblyAccountLoader(request.getStateQueryContext());
-            var result = tx.callEVM(config.getChainId(), tx.getFromVerifier(request.getResolvedVerifiersList()), accountLoader);
+            var ethTxn = new PenteEVMTransaction(this, tx, tx.getFromVerifier(request.getResolvedVerifiersList()));
+            var result = ethTxn.invokeEVM(accountLoader);
 
             var response = ToDomain.ExecCallResponse.newBuilder();
-            response.setResultJson(result);
+            response.setResultJson(tx.decodeOutput(result.outputData()));
             return CompletableFuture.completedFuture(response.build());
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);

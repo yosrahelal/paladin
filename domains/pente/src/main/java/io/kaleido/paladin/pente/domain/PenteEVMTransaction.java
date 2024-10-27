@@ -102,23 +102,23 @@ class PenteEVMTransaction {
     public PenteEVMTransaction() {}
 
     /**
-     * In assemble we construct the Ethereum transaction, without a nonce, from the parameters supplied by the sender
+     * In assemble and exec-call we construct the Ethereum transaction, without a nonce, from the parameters supplied by the sender
      * of the transaction.
      *
      * The nonce is NOT assigned at this point, instead we will look up the current account state from the chain on this path.
      *
      * @param domain the domain
      * @param ptx the common transaction input request for all functions that have the original transaction input available
-     * @param request the assemble request is unique to just assemble
+     * @param from the sender of the request extracted from the resolved verifiers
      */
-    PenteEVMTransaction(PenteDomain domain, PenteTransaction ptx, ToDomain.AssembleTransactionRequest request) throws IOException, ExecutionException, InterruptedException, ClassNotFoundException {
+    PenteEVMTransaction(PenteDomain domain, PenteTransaction ptx, Address from) throws IOException, ExecutionException, InterruptedException, ClassNotFoundException {
         this.domain = domain;
         this.evmVersion = ptx.getConfig().evmVersion();
         this.baseBlock = ptx.getBaseBlock();
 
         var values = ptx.getValues();
 
-        this.from = ptx.getFromVerifier(request.getResolvedVerifiersList());
+        this.from = from;
         this.to = values.to();
         this.nonce = null; // to be assigned in invoke based on the current state of the chain
         this.gas = new JsonHex.Uint256(values.gas());

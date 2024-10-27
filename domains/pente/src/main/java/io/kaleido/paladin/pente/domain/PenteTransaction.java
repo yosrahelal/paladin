@@ -244,12 +244,12 @@ class PenteTransaction {
         return response.getData().toByteArray();
     }
 
-    String decodeOutput(Bytes outputData) throws IllegalStateException, ExecutionException, InterruptedException {
+    String decodeOutput(byte[] outputData) throws IllegalStateException, ExecutionException, InterruptedException {
         JsonABI.Parameter outputsEntry = JsonABI.newTuple("", "", functionDef.outputs());
         var request = FromDomain.DecodeDataRequest.newBuilder().
                 setEncodingType(FromDomain.EncodingType.TUPLE).
                 setDefinition(outputsEntry.toJSON(false)).
-                setData(ByteString.copyFrom(outputData.toArray())).
+                setData(ByteString.copyFrom(outputData)).
                 build();
         var response = domain.decodeData(request).get();
         return response.getBody();
