@@ -673,6 +673,18 @@ func (d *domain) toEndorsableList(states []*components.FullState) []*prototk.End
 	return endorsableList
 }
 
+func (d *domain) toEndorsableListBase(states []*pldapi.StateBase) []*prototk.EndorsableState {
+	endorsableList := make([]*prototk.EndorsableState, len(states))
+	for i, input := range states {
+		endorsableList[i] = &prototk.EndorsableState{
+			Id:            input.ID.String(),
+			SchemaId:      input.Schema.String(),
+			StateDataJson: string(input.Data),
+		}
+	}
+	return endorsableList
+}
+
 func (d *domain) CustomHashFunction() bool {
 	// note config assured to be non-nil by GetDomainByName() not returning a domain until init complete
 	return d.config.CustomHashFunction

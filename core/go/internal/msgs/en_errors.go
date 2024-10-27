@@ -271,6 +271,8 @@ var (
 	MsgDomainNotConfiguredForPSC              = ffe("PD011654", "A smart contract with address %s exists for a domain that is no longer configured on this node")
 	MsgDomainEndorserSubmitConfigClash        = ffe("PD011655", "An ENDORSER_MUST_SUBMIT constraint was provided by endorser %s, but the contract configuration is %s / %s")
 	MsgDomainABIEncodingInlineSigningFailed   = ffe("PD011656", "ABI encoding and signing failed with transaction type '%s' and key identifier '%s'")
+	MsgDomainDomainReceiptNotAvailable        = ffe("PD011657", "A domain receipt is not yet available for transaction %s as no state confirmations have been indexed for that transaction")
+	MsgDomainDomainReceiptNoStatesAvailable   = ffe("PD011658", "A domain receipt is not yet available for transaction %s as none of the private state data is available on the local node")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownRunMode = ffe("PD011700", "Unknown run mode '%s'")

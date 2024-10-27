@@ -130,8 +130,8 @@ func (ss *stateManager) WriteStateFinalizations(ctx context.Context, dbTX *gorm.
 
 func (ss *stateManager) GetTransactionStates(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID) (*pldapi.TransactionStates, error) {
 
-	// We query from the states table, joining in the other fields
-	var states []*transactionStateRecord
+	// We query from the records table, joining in the other fields
+	var records []*transactionStateRecord
 	err := dbTX.
 		WithContext(ctx).
 		// This query joins across three tables in a single query - pushing the complexity to the DB.
@@ -143,15 +143,17 @@ func (ss *stateManager) GetTransactionStates(ctx context.Context, dbTX *gorm.DB,
 			`SELECT "transaction", "state", 'info'      AS "record_type" FROM "state_info_records"    WHERE "transaction" = ? ) "records" `+
 			`ON "states"."id" = "records"."state"`,
 			txID, txID, txID, txID).
-		Scan(&states).
+		Scan(&records).
 		Error
 	if err != nil {
 		return nil, err
 	}
 	hasUnavailable := false
 	unavailable := &pldapi.UnavailableStates{}
-	txStates := &pldapi.TransactionStates{}
-	for _, s := range states {
+	txStates := &pldapi.TransactionStates{
+		Unknown: len(records) == 0, // if we have no confirmation records at all then this is an unknown transaction
+	}
+	for _, s := range records {
 		switch s.RecordType {
 		case "spent":
 			if s.ID == nil {

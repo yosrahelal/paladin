@@ -183,11 +183,11 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 		// We hydrate the states on our side of the Manager<->Plugin divide at this point,
 		// which provides back to the engine the full sequence locking information of the
 		// states (inputs, and read)
-		postAssembly.InputStates, err = dc.loadStates(dCtx, readTX, res.AssembledTransaction.InputStates)
+		postAssembly.InputStates, err = dc.loadStatesFromContext(dCtx, readTX, res.AssembledTransaction.InputStates)
 		if err != nil {
 			return err
 		}
-		postAssembly.ReadStates, err = dc.loadStates(dCtx, readTX, res.AssembledTransaction.ReadStates)
+		postAssembly.ReadStates, err = dc.loadStatesFromContext(dCtx, readTX, res.AssembledTransaction.ReadStates)
 		if err != nil {
 			return err
 		}
@@ -554,6 +554,38 @@ func (dc *domainContract) ExecCall(dCtx components.DomainContext, readTX *gorm.D
 	return cv, nil
 }
 
+func (dc *domainContract) GetDomainReceipt(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID) (tktypes.RawJSON, error) {
+
+	// Load up the currently available set of states
+	txStates, err := dc.dm.stateStore.GetTransactionStates(ctx, dbTX, txID)
+	if err != nil {
+		return nil, err
+	}
+	if txStates.Unknown {
+		// We know nothing about this transaction yet
+		return nil, i18n.NewError(ctx, msgs.MsgDomainDomainReceiptNotAvailable, txID)
+	}
+	empty := len(txStates.Spent) == 0 && len(txStates.Read) == 0 && len(txStates.Confirmed) == 0 && len(txStates.Info) == 0
+	if empty {
+		// We have none of the private data for the transaction at all
+		return nil, i18n.NewError(ctx, msgs.MsgDomainDomainReceiptNoStatesAvailable, txID)
+	}
+
+	// As long as we have some knowledge, we call to the domain and see what it builds with what we have available
+	res, err := dc.api.BuildReceipt(ctx, &prototk.BuildReceiptRequest{
+		TransactionId: tktypes.Bytes32UUIDFirst16(txID).String(),
+		Complete:      txStates.Unavailable == nil, // important for the domain to know if we have everything (it may fail with partial knowledge)
+		InputStates:   dc.d.toEndorsableListBase(txStates.Spent),
+		ReadStates:    dc.d.toEndorsableListBase(txStates.Read),
+		OutputStates:  dc.d.toEndorsableListBase(txStates.Confirmed),
+		InfoStates:    dc.d.toEndorsableListBase(txStates.Info),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return tktypes.RawJSON(res.ReceiptJson), nil
+}
+
 func (dc *domainContract) Domain() components.Domain {
 	return dc.d
 }
@@ -568,7 +600,7 @@ func (dc *domainContract) allAttestations(tx *components.PrivateTransaction) []*
 	return attestations
 }
 
-func (dc *domainContract) loadStates(dCtx components.DomainContext, readTX *gorm.DB, refs []*prototk.StateRef) ([]*components.FullState, error) {
+func (dc *domainContract) loadStatesFromContext(dCtx components.DomainContext, readTX *gorm.DB, refs []*prototk.StateRef) ([]*components.FullState, error) {
 	rawIDsBySchema := make(map[tktypes.Bytes32][]tktypes.RawJSON)
 	stateIDs := make([]tktypes.HexBytes, len(refs))
 	for i, s := range refs {
