@@ -90,7 +90,7 @@ func TestPrivateTransactions100PercentEndorsementBetter(t *testing.T) {
 
 	constructorParameters := &domains.SimpleStorageConstructorParameters{
 		EndorsementSet:  endorsementSet,
-		Name:            "FakeToken1",
+		Name:            "SimpleStorage1",
 		EndorsementMode: domains.PrivacyGroupEndorsement,
 	}
 	// send JSON RPC message to node 1 to deploy a private contract
@@ -188,7 +188,7 @@ func TestPrivateTransactions100PercentEndorsementConcurrent(t *testing.T) {
 	bob.peer(alice.nodeConfig, carol.nodeConfig)
 	carol.peer(alice.nodeConfig, bob.nodeConfig)
 
-	domainConfig := domains.SimpleStorageDomainConfig{
+	domainConfig := &domains.SimpleStorageDomainConfig{
 		SubmitMode: domains.ONE_TIME_USE_KEYS,
 	}
 	alice.start(t, domainConfig)
@@ -199,7 +199,7 @@ func TestPrivateTransactions100PercentEndorsementConcurrent(t *testing.T) {
 
 	constructorParameters := &domains.SimpleStorageConstructorParameters{
 		EndorsementSet:  endorsementSet,
-		Name:            "FakeToken1",
+		Name:            "SimpleStorage1",
 		EndorsementMode: domains.PrivacyGroupEndorsement,
 	}
 	// send JSON RPC message to node 1 to deploy a private contract
@@ -213,7 +213,7 @@ func TestPrivateTransactions100PercentEndorsementConcurrent(t *testing.T) {
 			ABI: *domains.SimpleStorageSetABI(),
 			Transaction: pldapi.Transaction{
 				To:             contractAddress,
-				Domain:         "domain1",
+				Domain:         "simpleStorageDomain",
 				IdempotencyKey: fmt.Sprintf("tx1-alice0-%d", i),
 				Type:           pldapi.TransactionTypePrivate.Enum(),
 				From:           alice.identity,
@@ -233,7 +233,7 @@ func TestPrivateTransactions100PercentEndorsementConcurrent(t *testing.T) {
 			ABI: *domains.SimpleStorageSetABI(),
 			Transaction: pldapi.Transaction{
 				To:             contractAddress,
-				Domain:         "domain1",
+				Domain:         "simpleStorageDomain",
 				IdempotencyKey: fmt.Sprintf("tx1-bob-%d", i),
 				Type:           pldapi.TransactionTypePrivate.Enum(),
 				From:           bob.identity,
