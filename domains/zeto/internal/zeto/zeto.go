@@ -415,12 +415,12 @@ func (z *Zeto) ValidateStateHashes(ctx context.Context, req *prototk.ValidateSta
 		err := json.Unmarshal([]byte(state.StateDataJson), &coin)
 		if err != nil {
 			log.L(ctx).Errorf("Error unmarshalling state data: %s", err)
-			continue
+			return nil, i18n.NewError(ctx, msgs.MsgErrorUnmarshalStateData, err)
 		}
 		hash, err := coin.Hash(ctx)
 		if err != nil {
 			log.L(ctx).Errorf("Error hashing state data: %s", err)
-			continue
+			return nil, i18n.NewError(ctx, msgs.MsgErrorHashOutputState, err)
 		}
 		if state.Id == "" {
 			// if the requested state ID is empty, we simply set it

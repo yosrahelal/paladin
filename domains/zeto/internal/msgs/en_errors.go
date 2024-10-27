@@ -126,4 +126,5 @@ var (
 	MsgErrorParseInputCommitment           = ffe("PD210084", "Failed to parse input commitment")
 	MsgNotImplemented                      = ffe("PD210085", "Not implemented")
 	MsgErrorStateHashMismatch              = ffe("PD210086", "State hash mismatch (hashed vs. received): %s != %s")
+	MsgErrorUnmarshalStateData             = ffe("PD210087", "Failed to unmarshal state data. %s")
 )

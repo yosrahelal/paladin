@@ -44,13 +44,13 @@ func TestTransferValidateParams(t *testing.T) {
 	assert.EqualError(t, err, "json: cannot unmarshal object into Go struct field TransferParams.transfers of type []*types.TransferParamEntry")
 
 	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":[{}]}")
-	assert.EqualError(t, err, "PD210025: Parameter 'to' is required")
+	assert.EqualError(t, err, "PD210025: Parameter 'to' is required (index=0)")
 
 	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":0}]}")
-	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be greater than 0")
+	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be greater than 0 (index=0)")
 
 	_, err = h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":-10}]}")
-	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be greater than 0")
+	assert.EqualError(t, err, "PD210027: Parameter 'amount' must be greater than 0 (index=0)")
 
 	params, err := h.ValidateParams(ctx, nil, "{\"transfers\":[{\"to\":\"0x1234567890123456789012345678901234567890\",\"amount\":10}]}")
 	assert.NoError(t, err)
