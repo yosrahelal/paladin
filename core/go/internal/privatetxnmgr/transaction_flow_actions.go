@@ -486,6 +486,7 @@ func (tf *transactionFlow) requestEndorsement(ctx context.Context, party string,
 			toEndorsableList(tf.transaction.PostAssembly.InputStates),
 			toEndorsableList(tf.transaction.PostAssembly.ReadStates),
 			toEndorsableList(tf.transaction.PostAssembly.OutputStates),
+			toEndorsableList(tf.transaction.PostAssembly.InfoStates),
 			party,
 			attRequest)
 		if err != nil {
@@ -515,6 +516,7 @@ func (tf *transactionFlow) requestEndorsement(ctx context.Context, party string,
 			tf.transaction.PostAssembly.Signatures,
 			tf.transaction.PostAssembly.InputStates,
 			tf.transaction.PostAssembly.OutputStates,
+			tf.transaction.PostAssembly.InfoStates,
 		)
 		if err != nil {
 			log.L(ctx).Errorf("Failed to send endorsement request to party %s: %s", party, err)

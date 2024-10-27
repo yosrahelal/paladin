@@ -169,6 +169,7 @@ func (tb *testbed) gatherEndorsements(dCtx components.DomainContext, psc compone
 					InputStates:              toEndorsableList(tx.PostAssembly.InputStates),
 					ReadStates:               toEndorsableList(tx.PostAssembly.ReadStates),
 					OutputStates:             toEndorsableList(tx.PostAssembly.OutputStates),
+					InfoStates:               toEndorsableList(tx.PostAssembly.InfoStates),
 					Endorsement:              ar,
 					Endorser: &prototk.ResolvedVerifier{
 						Lookup:       partyName,

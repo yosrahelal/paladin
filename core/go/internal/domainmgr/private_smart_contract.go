@@ -444,7 +444,6 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 		InfoStates:        dc.d.toEndorsableList(postAssembly.InfoStates),
 		AttestationResult: dc.allAttestations(tx),
 		ResolvedVerifiers: preAssembly.Verifiers,
-		ExtraData:         postAssembly.ExtraData,
 	})
 	if err != nil {
 		return err

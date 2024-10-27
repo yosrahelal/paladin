@@ -553,6 +553,16 @@ func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, message
 		}
 	}
 
+	infoStates := make([]*prototk.EndorsableState, len(endorsementRequest.GetInfoStates()))
+	for i, s := range endorsementRequest.GetInfoStates() {
+		infoStates[i] = &prototk.EndorsableState{}
+		err = s.UnmarshalTo(infoStates[i])
+		if err != nil {
+			log.L(ctx).Errorf("Failed to unmarshal attestation request: %s", err)
+			return
+		}
+	}
+
 	endorsement, revertReason, err := endorsementGatherer.GatherEndorsement(ctx,
 		transactionSpecification,
 		verifiers,
@@ -560,6 +570,7 @@ func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, message
 		inputStates,
 		readStates,
 		outputStates,
+		infoStates,
 		endorsementRequest.GetParty(),
 		attestationRequest)
 	if err != nil {

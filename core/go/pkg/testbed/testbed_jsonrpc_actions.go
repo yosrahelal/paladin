@@ -354,6 +354,14 @@ func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) (*tktypes.P
 			Data:   []byte(state.Data),
 		}
 	}
+	infoStates := make([]*tktypes.FullState, len(tx.PostAssembly.InfoStates))
+	for i, state := range tx.PostAssembly.InfoStates {
+		infoStates[i] = &tktypes.FullState{
+			ID:     state.ID,
+			Schema: state.Schema,
+			Data:   []byte(state.Data),
+		}
+	}
 
 	var functionABI *abi.Entry
 	var to tktypes.EthAddress
@@ -375,7 +383,7 @@ func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) (*tktypes.P
 		InputStates:  inputStates,
 		OutputStates: outputStates,
 		ReadStates:   readStates,
-		ExtraData:    tx.PostAssembly.ExtraData,
+		InfoStates:   infoStates,
 	}, nil
 }
 

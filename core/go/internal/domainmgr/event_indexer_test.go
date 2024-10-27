@@ -202,6 +202,7 @@ func TestHandleEventBatch(t *testing.T) {
 	stateSpent := tktypes.RandHex(32)
 	stateRead := tktypes.RandHex(32)
 	stateConfirmed := tktypes.RandHex(32)
+	stateInfo := tktypes.RandHex(32)
 	fakeHash1 := tktypes.RandHex(32)
 	fakeSchema := tktypes.Bytes32(tktypes.RandBytes(32))
 	event1 := &pldapi.EventWithData{
@@ -238,6 +239,8 @@ func TestHandleEventBatch(t *testing.T) {
 		}, []*pldapi.StateConfirmRecord{
 			{DomainName: "test1", State: tktypes.MustParseHexBytes(stateConfirmed), Transaction: txID}, // the ConfirmedStates StateUpdate
 			{DomainName: "test1", State: tktypes.MustParseHexBytes(fakeHash1), Transaction: txID},      // the implicit confirm from the NewConfirmedState
+		}, []*pldapi.StateInfoRecord{
+			{DomainName: "test1", State: tktypes.MustParseHexBytes(stateInfo), Transaction: txID}, // the InfoStates StateUpdate
 		}).Return(nil, nil)
 
 		mc.stateStore.On("WritePreVerifiedStates", mock.Anything, mock.Anything, "test1", []*components.StateUpsertOutsideContext{
@@ -306,6 +309,12 @@ func TestHandleEventBatch(t *testing.T) {
 			ConfirmedStates: []*prototk.StateUpdate{
 				{
 					Id:            stateConfirmed,
+					TransactionId: txIDBytes32.String(),
+				},
+			},
+			InfoStates: []*prototk.StateUpdate{
+				{
+					Id:            stateInfo,
 					TransactionId: txIDBytes32.String(),
 				},
 			},
@@ -875,7 +884,7 @@ func TestHandleEventBatchMarkConfirmedFail(t *testing.T) {
 	stateConfirmed := tktypes.RandHex(32)
 
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
-		mc.stateStore.On("WriteStateFinalizations", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		mc.stateStore.On("WriteStateFinalizations", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 			Return(fmt.Errorf("pop"))
 	})
 	defer done()
