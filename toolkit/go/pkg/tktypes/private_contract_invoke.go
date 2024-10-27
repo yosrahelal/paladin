@@ -36,6 +36,7 @@ type PrivateContractTransaction struct {
 	OutputStates []*FullState `json:"outputStates"`
 	ReadStates   []*FullState `json:"readStates"`
 	InfoStates   []*FullState `json:"infoStates"`
+	ExtraData    *string      `json:"extraData,omitempty"`
 }
 
 type FullState struct {

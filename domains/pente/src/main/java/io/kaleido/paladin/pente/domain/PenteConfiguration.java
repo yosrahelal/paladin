@@ -68,6 +68,8 @@ public class PenteConfiguration {
 
     private String schemaId_AccountState_v24_9_0;
 
+    private String schemaId_TransactionInfoState_v24_9_0;
+
     record Schema(String id, String signature, JsonABI.Parameter def) {}
 
     private final Map<String, Schema> schemasByID = new HashMap<>();
@@ -166,6 +168,15 @@ public class PenteConfiguration {
         ));
     }
 
+    JsonABI.Parameter abiTuple_TransactionInfoState_v24_9_0() {
+        return JsonABI.newTuple("TransactionInfoState_v24_9_0", "TransactionInfoState_v24_9_0", JsonABI.newParameters(
+                JsonABI.newParameter("rawTransaction", "bytes"),
+                JsonABI.newParameter("evmVersion", "string"),
+                JsonABI.newParameter("baseBlock", "uint64"),
+                JsonABI.newParameter("bytecodeLength", "uint32")
+        ));
+    }
+
     record NewPrivacyGroupFactoryParams(
             @JsonProperty()
             Bytes32 transactionId,
@@ -182,15 +193,11 @@ public class PenteConfiguration {
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record TransactionInvoke(
+    record TransactionExtraData(
             @JsonProperty
-            JsonHex.Uint256 nonce,
+            Address contractAddress,
             @JsonProperty
-            Address from,
-            @JsonProperty
-            Address to,
-            @JsonProperty
-            JsonHex data
+            List<TransactionExternalCall> externalCalls
     ) {}
 
     public static byte[] intToBytes4(int val) {
@@ -297,7 +304,10 @@ public class PenteConfiguration {
     }
 
     List<String> allPenteSchemas() {
-        return Collections.singletonList(abiTuple_AccountState_v24_9_0().toString());
+        return List.of(
+                abiTuple_AccountState_v24_9_0().toString(),
+                abiTuple_TransactionInfoState_v24_9_0().toString()
+        );
     }
 
     synchronized void schemasInitialized(List<ToDomain.StateSchema> schemas) {
@@ -305,16 +315,28 @@ public class PenteConfiguration {
         if (schemas.size() != schemaDefs.size()) {
             throw new IllegalStateException("expected %d schemas, received %d".formatted(schemaDefs.size(), schemas.size()));
         }
-        schemaId_AccountState_v24_9_0 = schemas.getFirst().getId();
+        var schema = schemas.getFirst();
+        schemaId_AccountState_v24_9_0 = schema.getId();
         schemasByID.put(schemaId_AccountState_v24_9_0, new Schema(
-                schemas.getFirst().getId(),
-                schemas.getFirst().getSignature(),
+                schema.getId(),
+                schema.getSignature(),
                 abiTuple_AccountState_v24_9_0()
+        ));
+        schema = schemas.get(1);
+        schemaId_TransactionInfoState_v24_9_0 = schema.getId();
+        schemasByID.put(schemaId_TransactionInfoState_v24_9_0, new Schema(
+                schema.getId(),
+                schema.getSignature(),
+                abiTuple_TransactionInfoState_v24_9_0()
         ));
     }
 
     synchronized String schemaId_AccountStateLatest() {
         return schemaId_AccountState_v24_9_0;
+    }
+
+    synchronized String schemaId_TransactionInputStateLatest() {
+        return schemaId_TransactionInfoState_v24_9_0;
     }
 
 }

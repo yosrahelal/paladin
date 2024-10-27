@@ -22,7 +22,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.google.protobuf.ByteString;
-import io.kaleido.paladin.pente.domain.PenteConfiguration.TransactionInvoke;
 import io.kaleido.paladin.toolkit.*;
 import io.kaleido.paladin.pente.evmrunner.EVMRunner;
 import io.kaleido.paladin.pente.evmrunner.EVMVersion;
@@ -216,18 +215,6 @@ class PenteTransaction {
         return this.contractConfig;
     }
 
-    EVMRunner getEVM(long chainId, long blockNumber, AccountLoader accountLoader) throws ClassNotFoundException {
-        var evmConfig = EvmConfiguration.DEFAULT;
-        var evmVersionStr = getConfig().evmVersion();
-        EVMVersion evmVersion = switch (evmVersionStr) {
-            case "london" -> EVMVersion.London(chainId, evmConfig);
-            case "paris" -> EVMVersion.Paris(chainId, evmConfig);
-            case "shanghai" -> EVMVersion.Shanghai(chainId, evmConfig);
-            default -> throw new IllegalArgumentException("unknown EVM version '%s'".formatted(evmVersionStr));
-        };
-        return new EVMRunner(evmVersion, accountLoader, blockNumber);
-    }
-
     boolean requiresABIEncoding() {
         return (abiEntryType == ABIEntryType.DEPLOY || abiEntryType == ABIEntryType.CUSTOM_FUNCTION);
     }
@@ -268,34 +255,7 @@ class PenteTransaction {
         return response.getBody();
     }
 
-    /** The sub-set of Ethereum JSON fields for a transaction built on-demand from input, that we include in the signature that is verified by endorsement */
-    record EndorsableEthTransactionJson(
-            @JsonProperty
-            Address to,
-            @JsonProperty
-            long nonce,
-            @JsonProperty
-            @JsonSerialize(using = ToStringSerializer.class)
-            BigInteger gas,
-            @JsonProperty
-            @JsonSerialize(using = ToStringSerializer.class)
-            BigInteger value,
-            @JsonProperty
-            JsonHex.Bytes data
-
-            // Note no gas price used/supported in Pente transactions
-    ) {
-    }
-
-    byte[] getEncodedTransaction(long nonce, byte[] calldata) throws IOException, IllegalStateException, ExecutionException, InterruptedException {
-        var values = getValues();
-        var ethTXJson = new EndorsableEthTransactionJson(
-                values.to,
-                nonce,
-                values.gas,
-                values.value,
-                JsonHex.wrap(calldata)
-        );
+    byte[] getEncodedTransaction(PenteEVMTransaction ethTXJson) throws IOException, IllegalStateException, ExecutionException, InterruptedException {
         var request = FromDomain.EncodeDataRequest.newBuilder().
                 setEncodingType(FromDomain.EncodingType.ETH_TRANSACTION).
                 setDefinition(defs.inputs.toJSON(false)).
@@ -344,14 +304,21 @@ class PenteTransaction {
                 formatted(Algorithms.ECDSA_SECP256K1, Verifiers.ETH_ADDRESS, from));
     }
 
-    record EVMStateResult(
-            List<PersistedAccount> newAccountStates,
-            ToDomain.AssembledTransaction assembledTransaction
-    ) {
-    }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record TransactionInputInfoState(
+            @JsonProperty
+            JsonHex.Bytes rawTransaction,
+            @JsonProperty
+            String evmVersion,
+            @JsonProperty
+            JsonHex.Uint256 baseBlock,
+            @JsonProperty
+            JsonHex.Uint256 bytecodeLength
+    ) {}
 
-    ToDomain.AssembledTransaction buildAssembledTransaction(EVMRunner evm, PenteDomain.AssemblyAccountLoader accountLoader, ToDomain.NewState evmInputState) throws IOException {
-        var latestSchemaId = domain.getConfig().schemaId_AccountStateLatest();
+    ToDomain.AssembledTransaction buildAssembledTransaction(EVMRunner evm, PenteDomain.AssemblyAccountLoader accountLoader, PenteEVMTransaction evmTxn, byte[] encodedTxn) throws IOException, ExecutionException, InterruptedException {
+        var latestAccountSchemaId = domain.getConfig().schemaId_AccountStateLatest();
+        var latestTransactionInputSchemaId = domain.getConfig().schemaId_TransactionInputStateLatest();
         var result = ToDomain.AssembledTransaction.newBuilder();
         var committedUpdates = evm.getWorld().getCommittedAccountUpdates();
         var loadedAccountStates = accountLoader.getLoadedAccountStates();
@@ -373,7 +340,7 @@ class PenteTransaction {
                     LOGGER.info("Writing new state for account {} (existing={})", loadedAccount, inputState);
                     var updatedAccount = evm.getWorld().get(loadedAccount);
                     outputStates.add(ToDomain.NewState.newBuilder().
-                            setSchemaId(latestSchemaId).
+                            setSchemaId(latestAccountSchemaId).
                             setStateDataJsonBytes(ByteString.copyFrom(updatedAccount.serialize())).
                             addAllDistributionList(lookups).
                             build());
@@ -389,10 +356,21 @@ class PenteTransaction {
                         build());
             }
         }
+        var txInput = new TransactionInputInfoState(
+            new JsonHex.Bytes(encodedTxn),
+            evmTxn.getEVMVersion(),
+            new JsonHex.Uint256(evmTxn.getBaseBlock()),
+            new JsonHex.Uint256(evmTxn.getBytecodeLen())
+        );
+        var txInputState = ToDomain.NewState.newBuilder().
+                setSchemaId(latestTransactionInputSchemaId).
+                setStateDataJsonBytes(ByteString.copyFrom(new ObjectMapper().writeValueAsBytes(txInput))).
+                addAllDistributionList(lookups).
+                build();
         result.addAllInputStates(inputStates);
         result.addAllReadStates(readStates);
         result.addAllOutputStates(outputStates);
-        result.addInfoStates(evmInputState);
+        result.addInfoStates(txInputState);
         return result.build();
     }
 
@@ -428,81 +406,6 @@ class PenteTransaction {
             }
         }
         return lookups;
-    }
-
-    record EVMExecutionResult(
-            EVMRunner evm,
-            org.hyperledger.besu.datatypes.Address senderAddress,
-            org.hyperledger.besu.datatypes.Address contractAddress,
-            byte[] txPayload,
-            JsonHex.Bytes32 txPayloadHash,
-            List<Log> logs
-    ) {
-    }
-
-    static class EVMExecutionException extends Exception {
-        EVMExecutionException(String message) {
-            super(message);
-        }
-    }
-
-    String callEVM(long chainId, Address fromAddr, AccountLoader accountLoader) throws IOException, ExecutionException, InterruptedException, ClassNotFoundException, EVMExecutionException {
-        var evm = getEVM(chainId, getBaseBlock(), accountLoader);
-        var senderAddress = org.hyperledger.besu.datatypes.Address.wrap(Bytes.wrap(fromAddr.getBytes()));
-        var calldata = getEncodedCallData();
-
-        var execResult = evm.runContractInvokeBytes(
-                senderAddress,
-                org.hyperledger.besu.datatypes.Address.wrap(Bytes.wrap(getValues().to().getBytes())),
-                Bytes.wrap(calldata)
-        );
-        if (execResult.getState() != MessageFrame.State.COMPLETED_SUCCESS) {
-            throw new EVMExecutionException("call reverted: %s".formatted(execResult.getRevertReason()));
-        }
-
-        return decodeOutput(execResult.getOutputData());
-    }
-
-    TransactionInvoke buildInvokeInputState() {
-        var senderAddress = org.hyperledger.besu.datatypes.Address.wrap(Bytes.wrap(fromAddr.getBytes()));
-        var calldata = getEncodedCallData();
-        var sender = evm.getWorld().getUpdater().getOrCreate(senderAddress);
-        var nonce = sender.getNonce();
-
-    }
-
-    EVMExecutionResult invokeEVM(long chainId, Address fromAddr, AccountLoader accountLoader, TransactionInvoke invoke) throws IOException, ExecutionException, InterruptedException, ClassNotFoundException, EVMExecutionException {
-        var evm = getEVM(chainId, getBaseBlock(), accountLoader);
-        MessageFrame execResult;
-        if (getValues().to() == null) {
-            execResult = evm.runContractDeploymentBytes(
-                    senderAddress,
-                    null,
-                    Bytes.wrap(getValues().bytecode().getBytes()),
-                    Bytes.wrap(calldata)
-            );
-        } else {
-            execResult = evm.runContractInvokeBytes(
-                    senderAddress,
-                    org.hyperledger.besu.datatypes.Address.wrap(Bytes.wrap(getValues().to().getBytes())),
-                    Bytes.wrap(calldata)
-            );
-        }
-        if (execResult.getState() != MessageFrame.State.COMPLETED_SUCCESS) {
-            throw new EVMExecutionException("transaction reverted: %s".formatted(execResult.getRevertReason()));
-        }
-        // Note we only increment the nonce after successful executions
-        sender.setNonce(nonce+1);
-        evm.getWorld().getUpdater().commit();
-        var txPayload = getEncodedTransaction(nonce, calldata);
-        return new EVMExecutionResult(
-                evm,
-                senderAddress,
-                execResult.getContractAddress(),
-                txPayload,
-                Keccak.Hash(txPayload),
-                execResult.getLogs()
-        );
     }
 
     byte[] eip712TypedDataEndorsementPayload(List<String> inputs, List<String> reads, List<String> outputs, List<PenteConfiguration.TransactionExternalCall> externalCalls) throws IOException, ExecutionException, InterruptedException {

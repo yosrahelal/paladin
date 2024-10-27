@@ -134,6 +134,7 @@ message EndorseTransactionRequest {
   repeated EndorsableState outputs = 8; // Output states for the transaction
   repeated EndorsableState info = 9; // Info states for the transaction, that are important information in/out of the business transaction, but are never recorded in an on-chain map, or returned from FindAvailableStates
   repeated AttestationResult signatures = 10; // All SIGN attestation results (required from submitting node before endorsement)
+  
 }
 
 message EndorseTransactionResponse {
@@ -272,6 +273,7 @@ message AssembledTransaction {
   repeated StateRef read_states = 2; // A list of state IDs that the execution of the transaction depends on being unspent on the chain (but will not spend). Also could be being minted on other sequences.
   repeated NewState output_states = 3; // A list of new states the domain will create as an output from this transaction, if it is executed and confirmed
   repeated NewState info_states = 4; // A list of states recorded as meaningful to the transaction, but do not need to exist on-chain before the transaction, and are not stored on-chain in any map afterwards
+  optional string extra_data = 5; // Any extra data to be propagated to prepare the transaction (this is not recorded directly as states, so primary use is for data that results in direct EVM transaction function in the base ledger contract)
 }
 
 message StateRef {

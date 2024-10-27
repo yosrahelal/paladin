@@ -155,6 +155,14 @@ public abstract class JsonHex {
             return new BigInteger(buff);
         }
 
+        public long longValue() {
+            return bigInt().longValue();
+        }
+
+        public int intValue() {
+            return bigInt().intValue();
+        }
+
         private byte[] uintBytesTrimmed() {
             var val = super.getBytes();
             if (val.length == 0) {

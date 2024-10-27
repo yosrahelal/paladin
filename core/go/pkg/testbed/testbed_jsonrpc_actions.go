@@ -384,6 +384,7 @@ func (tb *testbed) mapTransaction(tx *components.PrivateTransaction) (*tktypes.P
 		OutputStates: outputStates,
 		ReadStates:   readStates,
 		InfoStates:   infoStates,
+		ExtraData:    tx.PostAssembly.ExtraData,
 	}, nil
 }
 

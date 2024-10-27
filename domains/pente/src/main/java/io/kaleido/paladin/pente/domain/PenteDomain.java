@@ -207,9 +207,9 @@ public class PenteDomain extends DomainInstance {
         }
     }
 
-    private List<PenteConfiguration.TransactionExternalCall> parseExternalCalls(PenteTransaction.EVMExecutionResult execResult) throws Exception {
+    private List<PenteConfiguration.TransactionExternalCall> parseExternalCalls(List<org.hyperledger.besu.evm.log.Log> logs) throws Exception {
         var externalCalls = new ArrayList<PenteConfiguration.TransactionExternalCall>();
-        for (var log : execResult.logs()) {
+        for (var log : logs) {
             if (log.getTopics().getFirst().equals(config.getExternalCallTopic())) {
                 var decodedEvent = decodeData(FromDomain.DecodeDataRequest.newBuilder().
                         setEncodingType(FromDomain.EncodingType.EVENT_DATA).
@@ -226,13 +226,6 @@ public class PenteDomain extends DomainInstance {
         return externalCalls;
     }
 
-    private String buildExtraData(PenteTransaction.EVMExecutionResult execResult) throws Exception {
-        return new ObjectMapper().writeValueAsString(
-                new PenteConfiguration.TransactionExtraData(
-                        new Address(execResult.contractAddress().toArray()),
-                        parseExternalCalls(execResult)));
-    }
-
     @Override
     protected CompletableFuture<ToDomain.AssembleTransactionResponse> assembleTransaction(ToDomain.AssembleTransactionRequest request) {
         try {
@@ -240,9 +233,12 @@ public class PenteDomain extends DomainInstance {
 
             // Execution throws an EVMExecutionException if fails
             var accountLoader = new AssemblyAccountLoader(request.getStateQueryContext());
-            var execResult = tx.invokeEVM(config.getChainId(), tx.getFromVerifier(request.getResolvedVerifiersList()), accountLoader);
+            var ethTxn = new PenteEVMTransaction(this, tx, request);
+            var execResult = ethTxn.invokeEVM(accountLoader);
             var result = ToDomain.AssembleTransactionResponse.newBuilder();
-            var assembledTransaction = tx.buildAssembledTransaction(execResult.evm(), accountLoader, buildExtraData(execResult));
+            var encodedTxn = tx.getEncodedTransaction(ethTxn);
+            var encodedTxnHash = Keccak.Hash(encodedTxn);
+            var assembledTransaction = tx.buildAssembledTransaction(execResult.evm(), accountLoader, ethTxn, encodedTxn);
             result.setAssemblyResult(ToDomain.AssembleTransactionResponse.Result.OK);
             result.setAssembledTransaction(assembledTransaction);
 
@@ -255,7 +251,7 @@ public class PenteDomain extends DomainInstance {
                     setVerifierType(Verifiers.ETH_ADDRESS).
                     setAttestationType(ToDomain.AttestationType.SIGN).
                     setPayloadType(SignPayloads.OPAQUE_TO_RSV).
-                    setPayload(ByteString.copyFrom(execResult.txPayloadHash().getBytes())).
+                    setPayload(ByteString.copyFrom(encodedTxnHash.getBytes())).
                     addParties(tx.getFrom()).
                     build()
             );
@@ -275,7 +271,7 @@ public class PenteDomain extends DomainInstance {
                     build()
             );
             return CompletableFuture.completedFuture(result.build());
-        } catch (PenteTransaction.EVMExecutionException e) {
+        } catch (PenteEVMTransaction.EVMExecutionException e) {
             // Note unlike a base ledger, we do not write a nonce update to the sender's account
             // (which would be a UTXO spend + mint) for a revert during assembly of a transaction,
             // as endorsing and submitting that would be lots of work.
@@ -301,11 +297,17 @@ public class PenteDomain extends DomainInstance {
             for (var read : request.getReadsList()) {
                 readAccounts.add(PersistedAccount.deserialize(read.getStateDataJson().getBytes(StandardCharsets.UTF_8)));
             }
+            if (request.getInfoCount() != 1) throw new IllegalArgumentException("No transaction input state");
+
+            // Recover the input
+            var tx = new PenteTransaction(this, request.getTransaction());
+            var evmTxn = PenteEVMTransaction.buildFromInput(this, request.getInfo(0).getStateDataJson().getBytes(StandardCharsets.UTF_8));
+            var txPayload = tx.getEncodedTransaction(evmTxn);
+            var txPayloadHash = Keccak.Hash(txPayload);
 
             // Do the execution of the transaction again ourselves
-            var tx = new PenteTransaction(this, request.getTransaction());
             var endorsementLoader = new EndorsementAccountLoader(inputAccounts, readAccounts);
-            var execResult = tx.invokeEVM(config.getChainId(), tx.getFromVerifier(request.getResolvedVerifiersList()), endorsementLoader);
+            var execResult = evmTxn.invokeEVM(endorsementLoader);
 
             // For the inputs, the endorsementLoader checks we loaded everything from the right set
             var inputsMatch = endorsementLoader.checkEmpty();
@@ -361,7 +363,7 @@ public class PenteDomain extends DomainInstance {
             }
             var recovered = recoverSigner(FromDomain.RecoverSignerRequest.newBuilder().
                     setAlgorithm(Algorithms.ECDSA_SECP256K1).
-                    setPayload(ByteString.copyFrom(execResult.txPayloadHash().getBytes())).
+                    setPayload(ByteString.copyFrom(txPayloadHash.getBytes())).
                     setPayloadType(SignPayloads.OPAQUE_TO_RSV).
                     setSignature(signature).
                     build()).get();
@@ -374,7 +376,7 @@ public class PenteDomain extends DomainInstance {
                     request.getInputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
                     request.getReadsList().stream().map(ToDomain.EndorsableState::getId).toList(),
                     request.getOutputsList().stream().map(ToDomain.EndorsableState::getId).toList(),
-                    parseExternalCalls(execResult)
+                    parseExternalCalls(execResult.logs())
             );
 
             // Ok - we are happy to add our endorsement signature
@@ -382,7 +384,7 @@ public class PenteDomain extends DomainInstance {
                     setEndorsementResult(ToDomain.EndorseTransactionResponse.Result.SIGN).
                     setPayload(ByteString.copyFrom(endorsementPayload)).
                     build());
-        } catch (PenteTransaction.EVMExecutionException e) {
+        } catch (PenteEVMTransaction.EVMExecutionException e) {
             LOGGER.error(new FormattedMessage("EVM execution failed during endorsement TX {}", request.getTransaction().getTransactionId()), e);
             return CompletableFuture.completedFuture(ToDomain.EndorseTransactionResponse.newBuilder().
                     setEndorsementResult(ToDomain.EndorseTransactionResponse.Result.SIGN).

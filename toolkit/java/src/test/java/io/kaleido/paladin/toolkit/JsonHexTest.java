@@ -124,7 +124,8 @@ public class JsonHexTest {
         TestRecordInt tr = new ObjectMapper().readValue("""
                 {"value":"0x11223344"}
                 """, TestRecordInt.class);
-        assertEquals(287454020L, tr.value.bigInt().longValue());
+        assertEquals(287454020L, tr.value.longValue());
+        assertEquals(287454020, tr.value.intValue());
         assertEquals("0x11223344", tr.value.toString());
         assertEquals("{\"value\":\"0x11223344\"}", new ObjectMapper().writeValueAsString(tr));
 
