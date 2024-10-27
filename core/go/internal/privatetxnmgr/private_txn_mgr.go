@@ -603,11 +603,13 @@ func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, message
 	}
 
 	endorsementResponse := &pbEngine.EndorsementResponse{
-		IdempotencyKey:  endorsementRequest.IdempotencyKey,
-		ContractAddress: contractAddressString,
-		TransactionId:   endorsementRequest.TransactionId,
-		Endorsement:     endorsementAny,
-		RevertReason:    revertReason,
+		IdempotencyKey:         endorsementRequest.IdempotencyKey,
+		ContractAddress:        contractAddressString,
+		TransactionId:          endorsementRequest.TransactionId,
+		Endorsement:            endorsementAny,
+		RevertReason:           revertReason,
+		Party:                  endorsementRequest.Party,
+		AttestationRequestName: attestationRequest.Name,
 	}
 	endorsementResponseBytes, err := proto.Marshal(endorsementResponse)
 	if err != nil {
@@ -688,9 +690,11 @@ func (p *privateTxManager) handleEndorsementResponse(ctx context.Context, messag
 			TransactionID:   endorsementResponse.TransactionId,
 			ContractAddress: contractAddressString,
 		},
-		RevertReason:   revertReason,
-		Endorsement:    endorsement,
-		IdempotencyKey: endorsementResponse.IdempotencyKey,
+		RevertReason:           revertReason,
+		Endorsement:            endorsement,
+		Party:                  endorsementResponse.Party,
+		AttestationRequestName: endorsementResponse.AttestationRequestName,
+		IdempotencyKey:         endorsementResponse.IdempotencyKey,
 	})
 
 }

@@ -514,6 +514,8 @@ func (tf *transactionFlow) requestEndorsement(ctx context.Context, idempotencyKe
 		tf.publisher.PublishTransactionEndorsedEvent(ctx,
 			tf.transaction.ID.String(),
 			idempotencyKey,
+			party,
+			attRequest.Name,
 			endorsement,
 			revertReason,
 		)

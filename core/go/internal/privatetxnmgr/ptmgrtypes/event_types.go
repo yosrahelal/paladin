@@ -81,9 +81,11 @@ type TransactionSignedEvent struct {
 
 type TransactionEndorsedEvent struct {
 	PrivateTransactionEventBase
-	RevertReason   *string
-	Endorsement    *prototk.AttestationResult
-	IdempotencyKey string
+	RevertReason           *string
+	Endorsement            *prototk.AttestationResult
+	Party                  string // In case Endorsement is nil, this is need to correlate with the attestation request
+	AttestationRequestName string // In case Endorsement is nil, this is need to correlate with the attestation request
+	IdempotencyKey         string
 }
 
 type TransactionDispatchedEvent struct {

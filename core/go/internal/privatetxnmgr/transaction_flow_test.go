@@ -914,7 +914,7 @@ func TestRequestLocalEndorsements(t *testing.T) {
 		nil,
 	).Once()
 
-	mocks.publisher.On("PublishTransactionEndorsedEvent", mock.Anything, newTxID.String(), mock.Anything, mock.Anything, mock.Anything).Return().Times(3)
+	mocks.publisher.On("PublishTransactionEndorsedEvent", mock.Anything, newTxID.String(), mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Times(3)
 	tp.Action(ctx)
 
 	mocks.transportWriter.AssertExpectations(t)
@@ -1080,7 +1080,9 @@ func TestTimedOutEndorsementRequest(t *testing.T) {
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
 		},
-		IdempotencyKey: idempotencyKeyBob,
+		Party:                  bobIdentityLocator,
+		AttestationRequestName: "foo",
+		IdempotencyKey:         idempotencyKeyBob,
 	})
 
 	//simulate the passing of time
@@ -1199,17 +1201,10 @@ func TestEndorsementResponseAfterRevert(t *testing.T) {
 			TransactionID:   newTxID.String(),
 			ContractAddress: testContractAddress.String(),
 		},
-		Endorsement: &prototk.AttestationResult{
-			Name: "foo",
-			Verifier: &prototk.ResolvedVerifier{
-				Lookup:       bobIdentityLocator,
-				Algorithm:    algorithms.ECDSA_SECP256K1,
-				Verifier:     bobVerifier,
-				VerifierType: verifiers.ETH_ADDRESS,
-			},
-		},
-		IdempotencyKey: bobIdempotencyKey,
-		RevertReason:   confutil.P("bob refused to endorse"),
+		Party:                  bobIdentityLocator,
+		AttestationRequestName: "foo",
+		IdempotencyKey:         bobIdempotencyKey,
+		RevertReason:           confutil.P("bob refused to endorse"),
 	})
 
 	tp.Action(ctx)
@@ -1229,7 +1224,9 @@ func TestEndorsementResponseAfterRevert(t *testing.T) {
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
 		},
-		IdempotencyKey: carolIdempotencyKey,
+		Party:                  carolIdentityLocator,
+		AttestationRequestName: "foo",
+		IdempotencyKey:         carolIdempotencyKey,
 	})
 
 	//transaction should be marked for reassemble
@@ -1352,19 +1349,10 @@ func TestEndorsementResponseAfterReassemble(t *testing.T) {
 			TransactionID:   newTxID.String(),
 			ContractAddress: testContractAddress.String(),
 		},
-		Endorsement: &prototk.AttestationResult{
-			Name: "foo",
-			Verifier: &prototk.ResolvedVerifier{
-				Lookup:       bobIdentityLocator,
-				Algorithm:    algorithms.ECDSA_SECP256K1,
-				Verifier:     bobVerifier,
-				VerifierType: verifiers.ETH_ADDRESS,
-			},
-			PayloadType: confutil.P(signpayloads.OPAQUE_TO_RSV),
-			Payload:     payloadFromAssemble1,
-		},
-		RevertReason:   confutil.P("bob refused to endorse"),
-		IdempotencyKey: bobIdempotencyKey,
+		Party:                  bobIdentityLocator,
+		AttestationRequestName: "foo",
+		RevertReason:           confutil.P("bob refused to endorse"),
+		IdempotencyKey:         bobIdempotencyKey,
 	})
 
 	tp.Action(ctx)
@@ -1411,7 +1399,9 @@ func TestEndorsementResponseAfterReassemble(t *testing.T) {
 			PayloadType: confutil.P(signpayloads.OPAQUE_TO_RSV),
 			Payload:     payloadFromAssemble1,
 		},
-		IdempotencyKey: carolIdempotencyKey,
+		Party:                  carolIdentityLocator,
+		AttestationRequestName: "foo",
+		IdempotencyKey:         carolIdempotencyKey,
 	})
 
 	// should still have 2 outstanding endorsement requests
@@ -1566,7 +1556,9 @@ func TestDuplicateEndorsementResponse(t *testing.T) {
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
 		},
-		IdempotencyKey: aliceIdempotencyKey,
+		Party:                  aliceIdentityLocator,
+		AttestationRequestName: "foo",
+		IdempotencyKey:         aliceIdempotencyKey,
 	})
 
 	//simulate the passing of time
@@ -1591,7 +1583,9 @@ func TestDuplicateEndorsementResponse(t *testing.T) {
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
 		},
-		IdempotencyKey: carolIdempotencyKey,
+		Party:                  carolIdentityLocator,
+		AttestationRequestName: "foo",
+		IdempotencyKey:         carolIdempotencyKey,
 	})
 	tp.applyTransactionEndorsedEvent(ctx, &ptmgrtypes.TransactionEndorsedEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
@@ -1607,7 +1601,9 @@ func TestDuplicateEndorsementResponse(t *testing.T) {
 				VerifierType: verifiers.ETH_ADDRESS,
 			},
 		},
-		IdempotencyKey: carolIdempotencyKey,
+		Party:                  carolIdentityLocator,
+		AttestationRequestName: "foo",
+		IdempotencyKey:         carolIdempotencyKey,
 	})
 
 	// no further action because we are still waiting for a response from bob

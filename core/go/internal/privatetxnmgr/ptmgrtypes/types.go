@@ -50,7 +50,7 @@ type Publisher interface {
 	PublishTransactionAssembledEvent(ctx context.Context, transactionId string, postAssembly *components.TransactionPostAssembly)
 	PublishTransactionAssembleFailedEvent(ctx context.Context, transactionId string, errorMessage string)
 	PublishTransactionSignedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult)
-	PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, idempotencyKey string, attestationResult *prototk.AttestationResult, revertReason *string)
+	PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, idempotencyKey string, party string, attestationRequestName string, attestationResult *prototk.AttestationResult, revertReason *string)
 	PublishResolveVerifierResponseEvent(ctx context.Context, transactionId string, lookup, algorithm, verifier, verifierType string)
 	PublishResolveVerifierErrorEvent(ctx context.Context, transactionId string, lookup, algorithm, errorMessage string)
 	PublishTransactionFinalizedEvent(ctx context.Context, transactionId string)

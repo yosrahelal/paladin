@@ -46,8 +46,10 @@ message EndorsementResponse {
     string transaction_id = 1;
     string idempotency_key = 2;
     string contract_address = 3;
-    google.protobuf.Any endorsement = 4;
+    optional google.protobuf.Any endorsement = 4;
     optional string revert_reason = 5;
+    string party = 6;
+    string attestation_request_name = 7;
 }
 
 message ResolveVerifierRequest {

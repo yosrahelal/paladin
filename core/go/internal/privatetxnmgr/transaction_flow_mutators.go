@@ -112,14 +112,14 @@ func (tf *transactionFlow) applyTransactionSignedEvent(ctx context.Context, even
 func (tf *transactionFlow) applyTransactionEndorsedEvent(ctx context.Context, event *ptmgrtypes.TransactionEndorsedEvent) {
 	tf.latestEvent = "TransactionEndorsedEvent"
 	//if this response does not match a pending request, then we ignore it
-	pendingRequestsForAttRequestName, ok := tf.pendingEndorsementRequests[event.Endorsement.Name]
+	pendingRequestsForAttRequestName, ok := tf.pendingEndorsementRequests[event.AttestationRequestName]
 	if !ok {
-		log.L(ctx).Warnf("Received endorsement for unknown request name %s", event.Endorsement.Name)
+		log.L(ctx).Warnf("Received endorsement for unknown request name %s", event.AttestationRequestName)
 		return
 	}
-	pendingRequest, ok := pendingRequestsForAttRequestName[event.Endorsement.Verifier.Lookup]
+	pendingRequest, ok := pendingRequestsForAttRequestName[event.Party]
 	if !ok {
-		log.L(ctx).Warnf("Received endorsement for unknown party %s", event.Endorsement.Verifier.Lookup)
+		log.L(ctx).Warnf("Received endorsement for unknown party %s", event.Party)
 		return
 	}
 
@@ -128,7 +128,7 @@ func (tf *transactionFlow) applyTransactionEndorsedEvent(ctx context.Context, ev
 		return
 	}
 	//we have (had) a pending request for this endorsement but it is no longer pending because we now have a response
-	delete(pendingRequestsForAttRequestName, event.Endorsement.Verifier.Lookup)
+	delete(pendingRequestsForAttRequestName, event.Party)
 
 	if event.RevertReason != nil {
 		log.L(ctx).Infof("Endorsement for transaction %s was rejected: %s", tf.transaction.ID.String(), *event.RevertReason)

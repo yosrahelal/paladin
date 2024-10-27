@@ -1036,10 +1036,12 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 
 	// endorse transaction 2 before 1 and check that 2 is not dispatched before 1
 	endorsementResponse2 := &pbEngine.EndorsementResponse{
-		ContractAddress: domainAddressString,
-		TransactionId:   tx2.ID.String(),
-		Endorsement:     attestationResultAny,
-		IdempotencyKey:  idempotencyKey2,
+		ContractAddress:        domainAddressString,
+		TransactionId:          tx2.ID.String(),
+		Endorsement:            attestationResultAny,
+		IdempotencyKey:         idempotencyKey2,
+		Party:                  bob.identityLocator,
+		AttestationRequestName: "notary",
 	}
 	endorsementResponse2bytes, err := proto.Marshal(endorsementResponse2)
 	require.NoError(t, err)
@@ -1064,10 +1066,12 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 
 	// endorse transaction 1 and check that both it and 2 are dispatched
 	endorsementResponse1 := &pbEngine.EndorsementResponse{
-		ContractAddress: domainAddressString,
-		TransactionId:   tx1.ID.String(),
-		Endorsement:     attestationResultAny,
-		IdempotencyKey:  idempotencyKey1,
+		ContractAddress:        domainAddressString,
+		TransactionId:          tx1.ID.String(),
+		Endorsement:            attestationResultAny,
+		IdempotencyKey:         idempotencyKey1,
+		Party:                  bob.identityLocator,
+		AttestationRequestName: "notary",
 	}
 	endorsementResponse1Bytes, err := proto.Marshal(endorsementResponse1)
 	require.NoError(t, err)

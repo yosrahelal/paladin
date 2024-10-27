@@ -123,6 +123,14 @@ func (s *Sequencer) handleTransactionEvent(ctx context.Context, event ptmgrtypes
 		// we are responsible for coordinating the endorsement flow for this transaction, ensure that it has been added it to the graph
 		// NOTE: AddTransaction is idempotent so we don't need to check whether we have already added it
 		s.graph.AddTransaction(ctx, transactionProcessor)
+	} else {
+		// incase the transaction was previously added to the graph but is no longer coordinating locally or is no longer ready for sequencing
+		// then we need to remove it from the graph
+		// this is a no-op if the transaction was not previously added to the graph
+
+		//TODO - this should really be a method on the graph itself ( similar to GetDispatchableTransactions) to find all transactions ( and there dependents)
+		// that are no longer ready for sequencing and remove them from the graph
+		s.graph.RemoveTransaction(ctx, transactionID)
 	}
 
 	//analyze the graph to see if we can dispatch any transactions

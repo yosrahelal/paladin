@@ -97,15 +97,17 @@ func (p *publisher) PublishTransactionSignedEvent(ctx context.Context, transacti
 	p.privateTxManager.HandleNewEvent(ctx, event)
 }
 
-func (p *publisher) PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, idempotencyKey string, endorsement *prototk.AttestationResult, revertReason *string) {
+func (p *publisher) PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, idempotencyKey string, party string, attestationRequestName string, endorsement *prototk.AttestationResult, revertReason *string) {
 	event := &ptmgrtypes.TransactionEndorsedEvent{
 		PrivateTransactionEventBase: ptmgrtypes.PrivateTransactionEventBase{
 			ContractAddress: p.contractAddress,
 			TransactionID:   transactionId,
 		},
-		Endorsement:    endorsement,
-		RevertReason:   revertReason,
-		IdempotencyKey: idempotencyKey,
+		Endorsement:            endorsement,
+		RevertReason:           revertReason,
+		Party:                  party,
+		AttestationRequestName: attestationRequestName,
+		IdempotencyKey:         idempotencyKey,
 	}
 	p.privateTxManager.HandleNewEvent(ctx, event)
 }
