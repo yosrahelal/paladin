@@ -34,7 +34,7 @@ func (sd *stateDistributer) DistributeStates(ctx context.Context, stateDistribut
 }
 
 func (sd *stateDistributer) sendState(ctx context.Context, stateDistribution *StateDistribution) {
-	log.L(ctx).Debugf("stateDistributer:sendState %s %s %s %s %s %s", stateDistribution.Domain, stateDistribution.ContractAddress, stateDistribution.SchemaID, stateDistribution.StateID, stateDistribution.IdentityLocator, stateDistribution.ID)
+	log.L(ctx).Debugf("stateDistributer:sendState domain: %s, contractAddress: %s, schemaID: %s, stateID: %s, identityLocator: %s, id: %s", stateDistribution.Domain, stateDistribution.ContractAddress, stateDistribution.SchemaID, stateDistribution.StateID, stateDistribution.IdentityLocator, stateDistribution.ID)
 
 	stateProducedEvent := &pb.StateProducedEvent{
 		DomainName:      stateDistribution.Domain,
