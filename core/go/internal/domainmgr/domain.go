@@ -32,6 +32,7 @@ import (
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/msgs"
 	"github.com/kaleido-io/paladin/core/pkg/blockindexer"
+	"golang.org/x/crypto/sha3"
 	"gorm.io/gorm"
 
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
@@ -42,6 +43,7 @@ import (
 	"github.com/kaleido-io/paladin/toolkit/pkg/retry"
 	"github.com/kaleido-io/paladin/toolkit/pkg/signpayloads"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
+	"github.com/kaleido-io/paladin/toolkit/pkg/verifiers"
 )
 
 type domain struct {
@@ -355,20 +357,37 @@ func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataR
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIEncodingRequestEncodingFail)
 		}
-	case prototk.EncodingType_ETH_TRANSACTION:
+	case prototk.EncodingType_ETH_TRANSACTION, prototk.EncodingType_ETH_TRANSACTION_SIGNED:
 		var tx *ethsigner.Transaction
 		err := json.Unmarshal([]byte(encRequest.Body), &tx)
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIEncodingRequestEntryInvalid)
 		}
 		// We only support EIP-155 and EIP-1559 as they include the ChainID in the payload
+		var sigPayload *ethsigner.TransactionSignaturePayload
+		var finalizer func(signaturePayload *ethsigner.TransactionSignaturePayload, sig *secp256k1.SignatureData) ([]byte, error)
 		switch encRequest.Definition {
 		case "", "eip1559", "eip-1559": // default
-			abiData = tx.SignaturePayloadEIP1559(d.dm.ethClientFactory.ChainID()).Bytes()
+			sigPayload = tx.SignaturePayloadEIP1559(d.dm.ethClientFactory.ChainID())
+			finalizer = tx.FinalizeEIP1559WithSignature
 		case "eip155", "eip-155":
-			abiData = tx.SignaturePayloadLegacyEIP155(d.dm.ethClientFactory.ChainID()).Bytes()
+			sigPayload = tx.SignaturePayloadLegacyEIP155(d.dm.ethClientFactory.ChainID())
+			finalizer = func(signaturePayload *ethsigner.TransactionSignaturePayload, sig *secp256k1.SignatureData) ([]byte, error) {
+				return tx.FinalizeLegacyEIP155WithSignature(signaturePayload, sig, d.dm.ethClientFactory.ChainID())
+			}
 		default:
 			return nil, i18n.NewError(ctx, msgs.MsgDomainABIEncodingRequestInvalidType, encRequest.Definition)
+		}
+		if encRequest.EncodingType == prototk.EncodingType_ETH_TRANSACTION_SIGNED {
+			sig, err := d.inlineEthSign(ctx, sigPayload.Bytes(), encRequest.KeyIdentifier)
+			if err == nil {
+				abiData, err = finalizer(sigPayload, sig)
+			}
+			if err != nil {
+				return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIEncodingInlineSigningFailed, encRequest.Definition, encRequest.KeyIdentifier)
+			}
+		} else {
+			abiData = sigPayload.Bytes()
 		}
 	case prototk.EncodingType_TYPED_DATA_V4:
 		var tdv4 *eip712.TypedData
@@ -386,6 +405,28 @@ func (d *domain) EncodeData(ctx context.Context, encRequest *prototk.EncodeDataR
 	return &prototk.EncodeDataResponse{
 		Data: abiData,
 	}, nil
+}
+
+func (d *domain) inlineEthSign(ctx context.Context, payload []byte, keyIdentifier string) (sig *secp256k1.SignatureData, err error) {
+
+	sigPayloadHash := sha3.NewLegacyKeccak256()
+	_, err = sigPayloadHash.Write(payload)
+
+	var resolvedKey *pldapi.KeyMappingAndVerifier
+	if err == nil {
+		resolvedKey, err = d.dm.keyManager.ResolveKeyNewDatabaseTX(ctx, keyIdentifier, algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS)
+	}
+
+	var signatureRSV []byte
+	if err == nil {
+		signatureRSV, err = d.dm.keyManager.Sign(ctx, resolvedKey, signpayloads.OPAQUE_TO_RSV, tktypes.HexBytes(sigPayloadHash.Sum(nil)))
+	}
+
+	if err == nil {
+		sig, err = secp256k1.DecodeCompactRSV(ctx, signatureRSV)
+	}
+
+	return sig, err
 }
 
 func (d *domain) DecodeData(ctx context.Context, decRequest *prototk.DecodeDataRequest) (*prototk.DecodeDataResponse, error) {
@@ -435,9 +476,36 @@ func (d *domain) DecodeData(ctx context.Context, decRequest *prototk.DecodeDataR
 			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestFail)
 		}
 	case prototk.EncodingType_ETH_TRANSACTION:
-		from, tx, err := ethsigner.RecoverRawTransaction(ctx, decRequest.Data, d.dm.ethClientFactory.ChainID())
+		// We support round tripping the same types as encode
+		var tx *ethsigner.Transaction
+		var err error
+		switch decRequest.Definition {
+		case "", "eip1559", "eip-1559": // this is all we support currently
+			tx, err = ethsigner.DecodeEIP1559SignaturePayload(ctx, decRequest.Data, d.dm.ethClientFactory.ChainID())
+		default:
+			return nil, i18n.NewError(ctx, msgs.MsgDomainABIDecodingRequestEntryInvalid, decRequest.Definition)
+		}
 		if err == nil {
-			tx.From = json.RawMessage(fmt.Sprintf(`"%s"`, from.String()))
+			body, err = json.Marshal(tx)
+		}
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, msgs.MsgDomainABIDecodingRequestFail)
+		}
+	case prototk.EncodingType_ETH_TRANSACTION_SIGNED:
+		// We support round tripping the same types as encode
+		var tx *ethsigner.TransactionWithOriginalPayload
+		var from *ethtypes.Address0xHex
+		var err error
+		switch decRequest.Definition {
+		case "", "eip1559", "eip-1559":
+			from, tx, err = ethsigner.RecoverEIP1559Transaction(ctx, decRequest.Data, d.dm.ethClientFactory.ChainID())
+		case "eip155", "eip-155":
+			from, tx, err = ethsigner.RecoverLegacyRawTransaction(ctx, decRequest.Data, d.dm.ethClientFactory.ChainID())
+		default:
+			err = i18n.NewError(ctx, msgs.MsgDomainABIDecodingRequestEntryInvalid, decRequest.Definition)
+		}
+		if err == nil {
+			tx.From = json.RawMessage(fmt.Sprintf(`"%s"`, from))
 			body, err = json.Marshal(tx)
 		}
 		if err != nil {

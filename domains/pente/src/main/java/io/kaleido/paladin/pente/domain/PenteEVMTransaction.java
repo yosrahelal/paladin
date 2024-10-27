@@ -121,8 +121,8 @@ class PenteEVMTransaction {
         this.from = from;
         this.to = values.to();
         this.nonce = null; // to be assigned in invoke based on the current state of the chain
-        this.gas = new JsonHex.Uint256(values.gas());
-        this.value = new JsonHex.Uint256(values.value());
+        this.gas = JsonHex.Uint256.fromBigIntZeroNull(values.gas());
+        this.value = JsonHex.Uint256.fromBigIntZeroNull(values.value());
 
         this.callData = ptx.getEncodedCallData();
         if (this.to == null) {

@@ -270,6 +270,7 @@ var (
 	MsgDomainInvalidDataFromDomain            = ffe("PD011653", "Invalid data returned by domain for call ABI outputs")
 	MsgDomainNotConfiguredForPSC              = ffe("PD011654", "A smart contract with address %s exists for a domain that is no longer configured on this node")
 	MsgDomainEndorserSubmitConfigClash        = ffe("PD011655", "An ENDORSER_MUST_SUBMIT constraint was provided by endorser %s, but the contract configuration is %s / %s")
+	MsgDomainABIEncodingInlineSigningFailed   = ffe("PD011656", "ABI encoding and signing failed with transaction type '%s' and key identifier '%s'")
 
 	// Entrypoint PD0117XX
 	MsgEntrypointUnknownRunMode = ffe("PD011700", "Unknown run mode '%s'")

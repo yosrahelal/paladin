@@ -77,6 +77,7 @@ type domainManager struct {
 	privateTxManager components.PrivateTxManager
 	txManager        components.TXManager
 	blockIndexer     blockindexer.BlockIndexer
+	keyManager       components.KeyManager
 	ethClientFactory ethclient.EthClientFactory
 	domainSigner     *domainSigner
 
@@ -105,6 +106,7 @@ func (dm *domainManager) PostInit(c components.AllComponents) error {
 	dm.persistence = c.Persistence()
 	dm.ethClientFactory = c.EthClientFactory()
 	dm.blockIndexer = c.BlockIndexer()
+	dm.keyManager = c.KeyManager()
 
 	// Register ourselves as a signing on the key manager
 	dm.domainSigner = &domainSigner{dm: dm}

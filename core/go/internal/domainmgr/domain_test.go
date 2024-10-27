@@ -985,9 +985,22 @@ func TestDecodeABIDataFailCases(t *testing.T) {
 	assert.Regexp(t, "PD011646.*Insufficient bytes", err)
 	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
 		EncodingType: prototk.EncodingType_ETH_TRANSACTION,
+		Definition:   "eip1559",
 		Data:         []byte(``),
 	})
-	assert.Regexp(t, "PD011646.*Transaction payload is empty", err)
+	assert.Regexp(t, "PD011646.*FF22084", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION,
+		Definition:   "eip155", // not supported for UNSIGNED round trip currently (supported for signed)
+		Data:         []byte(``),
+	})
+	assert.Regexp(t, "PD011645", err)
+	_, err = d.DecodeData(ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION_SIGNED,
+		Definition:   "wrong",
+		Data:         []byte(``),
+	})
+	assert.Regexp(t, "PD011645", err)
 }
 
 func TestRecoverSignerFailCases(t *testing.T) {

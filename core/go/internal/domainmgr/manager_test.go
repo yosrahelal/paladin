@@ -40,6 +40,7 @@ import (
 
 type mockComponents struct {
 	db               sqlmock.Sqlmock
+	c                *componentmocks.AllComponents
 	ethClient        *ethclientmocks.EthClient
 	ethClientFactory *ethclientmocks.EthClientFactory
 	stateStore       *componentmocks.StateManager
@@ -52,7 +53,9 @@ type mockComponents struct {
 func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManagerConfig, extraSetup ...func(mc *mockComponents)) (context.Context, *domainManager, *mockComponents, func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
+	componentMocks := componentmocks.NewAllComponents(t)
 	mc := &mockComponents{
+		c:                componentMocks,
 		blockIndexer:     componentmocks.NewBlockIndexer(t),
 		stateStore:       componentmocks.NewStateManager(t),
 		ethClientFactory: ethclientmocks.NewEthClientFactory(t),
@@ -62,7 +65,6 @@ func newTestDomainManager(t *testing.T, realDB bool, conf *pldconf.DomainManager
 	}
 
 	// Blockchain stuff is always mocked
-	componentMocks := componentmocks.NewAllComponents(t)
 	componentMocks.On("EthClientFactory").Return(mc.ethClientFactory)
 	mc.ethClientFactory.On("ChainID").Return(int64(12345)).Maybe()
 	mc.ethClientFactory.On("HTTPClient").Return(mc.ethClient).Maybe()

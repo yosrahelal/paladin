@@ -28,7 +28,9 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	"github.com/hyperledger/firefly-signer/pkg/secp256k1"
 	"github.com/kaleido-io/paladin/config/pkg/confutil"
+	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/internal/keymanager"
 	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/algorithms"
 	"github.com/kaleido-io/paladin/toolkit/pkg/log"
@@ -260,24 +262,16 @@ func TestEncodeDecodeABIData(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEqual(t, txEIP155, txEIP1559_a)
 
-	key := secp256k1.KeyPairFromBytes(tktypes.RandBytes(32))
-	tx := &ethsigner.Transaction{
-		To: ethtypes.MustNewAddress("0x05d936207F04D81a85881b72A0D17854Ee8BE45A"),
-	}
-	eip1559Signed, err := tx.SignEIP1559(key, td.d.dm.ethClientFactory.ChainID())
-	require.NoError(t, err)
-
 	original, err := td.d.DecodeData(td.ctx, &prototk.DecodeDataRequest{
 		EncodingType: prototk.EncodingType_ETH_TRANSACTION,
 		Definition:   "eip1559",
-		Data:         eip1559Signed,
+		Data:         txEIP1559_a.Data,
 	})
 	require.NoError(t, err)
 	var recoveredTx *ethsigner.Transaction
 	err = json.Unmarshal([]byte(original.Body), &recoveredTx)
 	require.NoError(t, err)
 	assert.Equal(t, "0x05d936207f04d81a85881b72a0d17854ee8be45a", recoveredTx.To.String())
-	assert.Equal(t, fmt.Sprintf(`"%s"`, key.Address.String()), string(recoveredTx.From))
 
 	eventDef := `{
 		"type": "event",
@@ -325,6 +319,132 @@ func TestEncodeDecodeABIData(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, `{"contractAddress":"3153e3e67d3d4be35aa5baff60b5a862f55a5431","encodedCall":"60fe47b10000000000000000000000000000000000000000000000000000000000000064"}`, decResult.Body)
+
+}
+
+func initRealKeyManagerForTest(t *testing.T) (components.KeyManager, func(mc *mockComponents)) {
+	keymgr := keymanager.NewKeyManager(context.Background(), &pldconf.KeyManagerConfig{
+		Wallets: []*pldconf.WalletConfig{
+			{
+				Name: "wallet1",
+				Signer: &pldconf.SignerConfig{
+					KeyDerivation: pldconf.KeyDerivationConfig{
+						Type: pldconf.KeyDerivationTypeBIP32,
+					},
+					KeyStore: pldconf.KeyStoreConfig{
+						Type: pldconf.KeyStoreTypeStatic,
+						Static: pldconf.StaticKeyStoreConfig{
+							Keys: map[string]pldconf.StaticKeyEntryConfig{
+								"seed": {
+									Encoding: "hex",
+									Inline:   tktypes.RandHex(32),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	return keymgr, func(mc *mockComponents) {
+		_, err := keymgr.PreInit(mc.c)
+		require.NoError(t, err)
+		err = keymgr.PostInit(mc.c)
+		require.NoError(t, err)
+		err = keymgr.Start()
+		require.NoError(t, err)
+	}
+}
+
+func TestEncodeDecodeABIDataWithSigningEIP1559(t *testing.T) {
+	keymgr, setupKeyManager := initRealKeyManagerForTest(t)
+
+	td, done := newTestDomain(t, true, goodDomainConf(), setupKeyManager)
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	td.d.dm.keyManager = keymgr
+
+	expectedSigner, err := keymgr.ResolveEthAddressNewDatabaseTX(td.ctx, "key1")
+	require.NoError(t, err)
+
+	signedEIP1559Tx, err := td.d.EncodeData(td.ctx, &prototk.EncodeDataRequest{
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION_SIGNED,
+		Definition:   "eip1559",
+		Body: `{
+		  "to": "0x05d936207F04D81a85881b72A0D17854Ee8BE45A"
+		}`,
+		KeyIdentifier: "key1",
+	})
+	assert.NoError(t, err)
+
+	original, err := td.d.DecodeData(td.ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION_SIGNED,
+		Definition:   "eip1559",
+		Data:         signedEIP1559Tx.Data,
+	})
+	require.NoError(t, err)
+	var recoveredTx *ethsigner.Transaction
+	err = json.Unmarshal([]byte(original.Body), &recoveredTx)
+	require.NoError(t, err)
+	assert.Equal(t, "0x05d936207f04d81a85881b72a0d17854ee8be45a", recoveredTx.To.String())
+	assert.Equal(t, fmt.Sprintf(`"%s"`, expectedSigner), string(recoveredTx.From))
+
+}
+
+func TestEncodeDecodeABIDataWithSigningEIP155(t *testing.T) {
+	keymgr, setupKeyManager := initRealKeyManagerForTest(t)
+
+	td, done := newTestDomain(t, true, goodDomainConf(), setupKeyManager)
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	td.d.dm.keyManager = keymgr
+
+	expectedSigner, err := keymgr.ResolveEthAddressNewDatabaseTX(td.ctx, "key1")
+	require.NoError(t, err)
+
+	signedEIP1559Tx, err := td.d.EncodeData(td.ctx, &prototk.EncodeDataRequest{
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION_SIGNED,
+		Definition:   "eip155",
+		Body: `{
+		  "to": "0x05d936207F04D81a85881b72A0D17854Ee8BE45A"
+		}`,
+		KeyIdentifier: "key1",
+	})
+	assert.NoError(t, err)
+
+	original, err := td.d.DecodeData(td.ctx, &prototk.DecodeDataRequest{
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION_SIGNED,
+		Definition:   "eip155",
+		Data:         signedEIP1559Tx.Data,
+	})
+	require.NoError(t, err)
+	var recoveredTx *ethsigner.Transaction
+	err = json.Unmarshal([]byte(original.Body), &recoveredTx)
+	require.NoError(t, err)
+	assert.Equal(t, "0x05d936207f04d81a85881b72a0d17854ee8be45a", recoveredTx.To.String())
+	assert.Equal(t, fmt.Sprintf(`"%s"`, expectedSigner), string(recoveredTx.From))
+
+}
+
+func TestEncodeAndSignEIP1559Fail(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
+		mc.keyManager.On("ResolveKeyNewDatabaseTX", mock.Anything, "key1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+			Return(nil, fmt.Errorf("pop"))
+	})
+	defer done()
+	assert.Nil(t, td.d.initError.Load())
+
+	_, err := td.d.EncodeData(td.ctx, &prototk.EncodeDataRequest{
+		EncodingType: prototk.EncodingType_ETH_TRANSACTION_SIGNED,
+		Definition:   "eip155",
+		Body: `{
+		  "to": "0x05d936207F04D81a85881b72A0D17854Ee8BE45A"
+		}`,
+		KeyIdentifier: "key1",
+	})
+	assert.Regexp(t, "PD011656.*pop", err)
 
 }
 

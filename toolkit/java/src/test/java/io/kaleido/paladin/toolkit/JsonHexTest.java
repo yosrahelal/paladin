@@ -130,6 +130,17 @@ public class JsonHexTest {
         assertEquals("{\"value\":\"0x11223344\"}", new ObjectMapper().writeValueAsString(tr));
 
         tr = new ObjectMapper().readValue("""
+                {"value":"1122334455"}
+                """, TestRecordInt.class);
+        assertEquals(1122334455L, tr.value.longValue());
+
+        // check we work with very large JSON strings, larger than long coudl store
+        tr = new ObjectMapper().readValue("""
+                {"value":11223344556677889900112233445566}
+                """, TestRecordInt.class);
+        assertEquals("0x8da89506792d2b6fb84a3538be", tr.value.toString());
+
+        tr = new ObjectMapper().readValue("""
                 {"value":"0x0"}
                 """, TestRecordInt.class);
         assertEquals(0L, tr.value.bigInt().longValue());
@@ -139,6 +150,8 @@ public class JsonHexTest {
         assertThrows(IllegalArgumentException.class, () -> {
             new JsonHex.Uint256("0x010000000000000000000000000000000000000000000000000000000000000000").toString();
         });
+
+        assertEquals(0L, JsonHex.Uint256.fromBigIntZeroNull(null).longValue());
 
     }
 }

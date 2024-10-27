@@ -136,6 +136,8 @@ public abstract class JsonHex {
     @JsonDeserialize(using = JsonDeserializerUint256.class)
     @JsonSerialize(using = JsonSerializerUint256.class)
     public static class Uint256 extends JsonHex {
+        static final Uint256 ZERO = new Uint256(0);
+
         public Uint256(String str) {super(str, -1);}
         public Uint256(long intVal) {
             this(BigInteger.valueOf(intVal));
@@ -153,6 +155,13 @@ public abstract class JsonHex {
             var val = super.getBytes();
             System.arraycopy(val, 0, buff, buff.length-val.length, val.length);
             return new BigInteger(buff);
+        }
+
+        public static Uint256 fromBigIntZeroNull(BigInteger intVal) {
+            if (intVal == null) {
+                return ZERO;
+            }
+            return new Uint256(intVal);
         }
 
         public long longValue() {
@@ -208,11 +217,15 @@ public abstract class JsonHex {
     public static class JsonDeserializerUint256 extends JsonDeserializer<Uint256> {
         @Override
         public Uint256 deserialize(JsonParser jp, DeserializationContext ctxt) throws IOException {
-            var hexValue = deserializeStr(jp);
-            if (hexValue.equals("0") || hexValue.equals("0x0")) {
-                hexValue = "0x00";
+            var strValue = deserializeStr(jp);
+            if (strValue.startsWith("0x")) {
+                if (strValue.equals("0x0")) {
+                    return Uint256.ZERO;
+                }
+                return new Uint256(strValue);
             }
-            return new Uint256(hexValue);
+            // must be a string
+            return new Uint256(new BigInteger(strValue, 10));
         }
     }
 
