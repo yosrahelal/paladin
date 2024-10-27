@@ -327,3 +327,18 @@ func (br *domainBridge) ExecCall(ctx context.Context, req *prototk.ExecCallReque
 	)
 	return
 }
+
+func (br *domainBridge) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptRequest) (res *prototk.BuildReceiptResponse, err error) {
+	err = br.toPlugin.RequestReply(ctx,
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) {
+			dm.Message().RequestToDomain = &prototk.DomainMessage_BuildReceipt{BuildReceipt: req}
+		},
+		func(dm plugintk.PluginMessage[prototk.DomainMessage]) bool {
+			if r, ok := dm.Message().ResponseFromDomain.(*prototk.DomainMessage_BuildReceiptRes); ok {
+				res = r.BuildReceiptRes
+			}
+			return res != nil
+		},
+	)
+	return
+}

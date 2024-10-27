@@ -369,6 +369,23 @@ func TestDomainFunction_ExecCall(t *testing.T) {
 	})
 }
 
+func TestDomainFunction_BuildReceipt(t *testing.T) {
+	_, exerciser, funcs, _, _, done := setupDomainTests(t)
+	defer done()
+
+	// BuildReceipt - paladin to domain
+	funcs.BuildReceipt = func(ctx context.Context, cdr *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
+		return &prototk.BuildReceiptResponse{}, nil
+	}
+	exerciser.doExchangeToPlugin(func(req *prototk.DomainMessage) {
+		req.RequestToDomain = &prototk.DomainMessage_BuildReceipt{
+			BuildReceipt: &prototk.BuildReceiptRequest{},
+		}
+	}, func(res *prototk.DomainMessage) {
+		assert.IsType(t, &prototk.DomainMessage_BuildReceiptRes{}, res.ResponseFromDomain)
+	})
+}
+
 func TestDomainRequestError(t *testing.T) {
 	_, exerciser, _, _, _, done := setupDomainTests(t)
 	defer done()

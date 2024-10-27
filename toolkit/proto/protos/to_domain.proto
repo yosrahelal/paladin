@@ -185,6 +185,21 @@ message ExecCallResponse {
   string result_json = 1; // JSON formatted data that conforms to the outputs specification of the ABI interface supplied in the request
 }
 
+// **RECEIPT** given the available details of a confirmed transation, returns a domain specific receipt payload that an application can process
+message BuildReceiptRequest {
+  string transaction_id = 1; // the transaction ID
+  bool complete = 2; // some domains only process complete data sets. If true, then the states provided in this request are the full set of states that known to be part of the transaction (as recorded by the event handler)
+  repeated EndorsableState input_states = 3; // available input states
+  repeated EndorsableState read_states = 4; // available read states
+  repeated EndorsableState output_states = 5; // available output states
+  repeated EndorsableState info_states = 6; // available info states  
+}
+
+message BuildReceiptResponse {
+  string receipt_json = 1; // a domain specific JSON payload describing the transaction receipt
+}
+
+
 // **EVENTS** handler called with batches of blockchain events that match an event signature and contract address registered by this domain
 
 message HandleEventBatchRequest {
