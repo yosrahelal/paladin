@@ -105,7 +105,7 @@ func (s *Sequencer) handleTransactionEvent(ctx context.Context, event ptmgrtypes
 		 	After applying the event to the transaction, we can either a) clean up that transaction ( if we have just learned, from the event that the transaction is complete and needs no further actions)
 			or b) perform any necessary actions (e.g. sending requests for signatures, endorsements etc.)
 	*/
-	if transactionProcessor.IsComplete() {
+	if transactionProcessor.IsComplete(ctx) {
 
 		s.graph.RemoveTransaction(ctx, transactionID)
 		s.removeTransactionProcessor(transactionID)
@@ -119,7 +119,7 @@ func (s *Sequencer) handleTransactionEvent(ctx context.Context, event ptmgrtypes
 		transactionProcessor.Action(ctx)
 	}
 
-	if transactionProcessor.CoordinatingLocally() && transactionProcessor.ReadyForSequencing() && !transactionProcessor.Dispatched() {
+	if transactionProcessor.CoordinatingLocally(ctx) && transactionProcessor.ReadyForSequencing(ctx) && !transactionProcessor.Dispatched(ctx) {
 		// we are responsible for coordinating the endorsement flow for this transaction, ensure that it has been added it to the graph
 		// NOTE: AddTransaction is idempotent so we don't need to check whether we have already added it
 		s.graph.AddTransaction(ctx, transactionProcessor)

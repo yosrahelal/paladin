@@ -81,8 +81,9 @@ type TransactionSignedEvent struct {
 
 type TransactionEndorsedEvent struct {
 	PrivateTransactionEventBase
-	RevertReason *string
-	Endorsement  *prototk.AttestationResult
+	RevertReason   *string
+	Endorsement    *prototk.AttestationResult
+	IdempotencyKey string
 }
 
 type TransactionDispatchedEvent struct {

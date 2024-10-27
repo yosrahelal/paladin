@@ -127,7 +127,6 @@ func (tf *transactionFlow) Action(ctx context.Context) {
 	}
 	log.L(ctx).Debugf("transactionFlow:Action TransactionID='%s' is ready for sequencing (outputStatesPotential=%d outputStates=%d)",
 		tf.transaction.ID.String(), len(tf.transaction.PostAssembly.OutputStatesPotential), len(tf.transaction.PostAssembly.OutputStates))
-	tf.readyForSequencing = true
 
 	//If we get here, we have an assembled transaction and have no intention of delegating it
 	// so we are responsible for coordinating the endorsement flow
@@ -484,7 +483,7 @@ func (tf *transactionFlow) requestSignatures(ctx context.Context) {
 	tf.requestedSignatures = true
 }
 
-func (tf *transactionFlow) requestEndorsement(ctx context.Context, party string, attRequest *prototk.AttestationRequest) {
+func (tf *transactionFlow) requestEndorsement(ctx context.Context, idempotencyKey string, party string, attRequest *prototk.AttestationRequest) {
 
 	partyLocator := tktypes.PrivateIdentityLocator(party)
 	partyNode, err := partyLocator.Node(ctx, true)
@@ -514,6 +513,7 @@ func (tf *transactionFlow) requestEndorsement(ctx context.Context, party string,
 		}
 		tf.publisher.PublishTransactionEndorsedEvent(ctx,
 			tf.transaction.ID.String(),
+			idempotencyKey,
 			endorsement,
 			revertReason,
 		)
@@ -523,6 +523,7 @@ func (tf *transactionFlow) requestEndorsement(ctx context.Context, party string,
 
 		err = tf.transportWriter.SendEndorsementRequest(
 			ctx,
+			idempotencyKey,
 			party,
 			partyNode,
 			tf.transaction.Inputs.To.String(),
@@ -546,9 +547,12 @@ func (tf *transactionFlow) requestEndorsements(ctx context.Context) {
 		// there is a request in the attestation plan and we do not have a response to match it
 		// first lets see if we have recently sent a request for this endorsement and just need to be patient
 		previousRequestTime := time.Time{}
-		if timesForAttRequest, ok := tf.pendingEndorsementRequests[outstandingEndorsementRequest.attRequest.Name]; ok {
-			if r, ok := timesForAttRequest[outstandingEndorsementRequest.party]; ok {
+		idempotencyKey := uuid.New().String()
+		previousIdempotencyKey := ""
+		if pendingRequestsForAttRequest, ok := tf.pendingEndorsementRequests[outstandingEndorsementRequest.attRequest.Name]; ok {
+			if r, ok := pendingRequestsForAttRequest[outstandingEndorsementRequest.party]; ok {
 				previousRequestTime = r.requestTime
+				previousIdempotencyKey = r.idempotencyKey
 			}
 		} else {
 			tf.pendingEndorsementRequests[outstandingEndorsementRequest.attRequest.Name] = make(map[string]*pendingEndorsementRequest)
@@ -564,10 +568,16 @@ func (tf *transactionFlow) requestEndorsements(ctx context.Context) {
 		} else {
 			log.L(ctx).Infof("Previous endorsement request for transaction:%s, attestation request:%s, party:%s sent at %v has timed out", tf.transaction.ID.String(), outstandingEndorsementRequest.attRequest.Name, outstandingEndorsementRequest.party, previousRequestTime)
 		}
-		tf.requestEndorsement(ctx, outstandingEndorsementRequest.party, outstandingEndorsementRequest.attRequest)
+		if previousIdempotencyKey != "" {
+			tf.logActionDebug(ctx, fmt.Sprintf("Previous endorsement request timed out. Sending new request with same idempotency key %s", previousIdempotencyKey))
+			idempotencyKey = previousIdempotencyKey
+		}
+
+		tf.requestEndorsement(ctx, idempotencyKey, outstandingEndorsementRequest.party, outstandingEndorsementRequest.attRequest)
 		tf.pendingEndorsementRequests[outstandingEndorsementRequest.attRequest.Name][outstandingEndorsementRequest.party] =
 			&pendingEndorsementRequest{
-				requestTime: tf.clock.Now(),
+				requestTime:    tf.clock.Now(),
+				idempotencyKey: idempotencyKey,
 			}
 
 	}

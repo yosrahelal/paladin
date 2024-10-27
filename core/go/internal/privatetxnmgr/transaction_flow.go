@@ -68,7 +68,6 @@ func NewTransactionFlow(
 		pendingEndorsementRequests:  make(map[string]map[string]*pendingEndorsementRequest),
 		complete:                    false,
 		localCoordinator:            true,
-		readyForSequencing:          false,
 		dispatched:                  false,
 		clock:                       ptmgrtypes.RealClock(),
 		requestTimeout:              requestTimeout,
@@ -81,6 +80,8 @@ func NewTransactionFlow(
 type pendingEndorsementRequest struct {
 	//time the request was made
 	requestTime time.Time
+	//unique string to identify the request (non unique across retries)
+	idempotencyKey string
 }
 type transactionFlow struct {
 	stageErrorRetry             time.Duration
@@ -105,7 +106,6 @@ type transactionFlow struct {
 	requestedSignatures         bool                                             //TODO add precision here so that we can track individual requests and implement retry as per endorsement
 	pendingEndorsementRequests  map[string]map[string]*pendingEndorsementRequest //map of attestationRequest names to a map of parties to a struct containing information about the active pending request
 	localCoordinator            bool
-	readyForSequencing          bool
 	dispatched                  bool
 	clock                       ptmgrtypes.Clock
 	requestTimeout              time.Duration
@@ -123,15 +123,15 @@ func (tf *transactionFlow) GetTxStatus(ctx context.Context) (components.PrivateT
 	}, nil
 }
 
-func (tf *transactionFlow) IsComplete() bool {
+func (tf *transactionFlow) IsComplete(_ context.Context) bool {
 	return tf.complete
 }
 
-func (tf *transactionFlow) ReadyForSequencing() bool {
-	return tf.readyForSequencing
+func (tf *transactionFlow) ReadyForSequencing(ctx context.Context) bool {
+	return tf.transaction.PostAssembly != nil
 }
 
-func (tf *transactionFlow) Dispatched() bool {
+func (tf *transactionFlow) Dispatched(_ context.Context) bool {
 	return tf.dispatched
 }
 
@@ -139,7 +139,7 @@ func (tf *transactionFlow) IsEndorsed(ctx context.Context) bool {
 	return !tf.hasOutstandingEndorsementRequests(ctx)
 }
 
-func (tf *transactionFlow) CoordinatingLocally() bool {
+func (tf *transactionFlow) CoordinatingLocally(_ context.Context) bool {
 	return tf.localCoordinator
 }
 
@@ -212,7 +212,7 @@ func (tf *transactionFlow) GetStateDistributions(ctx context.Context) []*statedi
 	return stateDistributions
 }
 
-func (tf *transactionFlow) InputStateIDs() []string {
+func (tf *transactionFlow) InputStateIDs(_ context.Context) []string {
 
 	inputStateIDs := make([]string, len(tf.transaction.PostAssembly.InputStates))
 	for i, inputState := range tf.transaction.PostAssembly.InputStates {
@@ -221,7 +221,7 @@ func (tf *transactionFlow) InputStateIDs() []string {
 	return inputStateIDs
 }
 
-func (tf *transactionFlow) OutputStateIDs() []string {
+func (tf *transactionFlow) OutputStateIDs(_ context.Context) []string {
 
 	//We use the output states here not the OutputStatesPotential because it is not possible for another transaction
 	// to spend a state unless it has been written to the state store and at that point we have the state ID
@@ -232,12 +232,12 @@ func (tf *transactionFlow) OutputStateIDs() []string {
 	return outputStateIDs
 }
 
-func (tf *transactionFlow) Signer() string {
+func (tf *transactionFlow) Signer(_ context.Context) string {
 
 	return tf.transaction.Signer
 }
 
-func (tf *transactionFlow) ID() uuid.UUID {
+func (tf *transactionFlow) ID(_ context.Context) uuid.UUID {
 
 	return tf.transaction.ID
 }

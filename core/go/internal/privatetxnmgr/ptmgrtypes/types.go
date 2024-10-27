@@ -50,7 +50,7 @@ type Publisher interface {
 	PublishTransactionAssembledEvent(ctx context.Context, transactionId string, postAssembly *components.TransactionPostAssembly)
 	PublishTransactionAssembleFailedEvent(ctx context.Context, transactionId string, errorMessage string)
 	PublishTransactionSignedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult)
-	PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, attestationResult *prototk.AttestationResult, revertReason *string)
+	PublishTransactionEndorsedEvent(ctx context.Context, transactionId string, idempotencyKey string, attestationResult *prototk.AttestationResult, revertReason *string)
 	PublishResolveVerifierResponseEvent(ctx context.Context, transactionId string, lookup, algorithm, verifier, verifierType string)
 	PublishResolveVerifierErrorEvent(ctx context.Context, transactionId string, lookup, algorithm, errorMessage string)
 	PublishTransactionFinalizedEvent(ctx context.Context, transactionId string)
@@ -90,7 +90,7 @@ type ContentionResolver interface {
 type TransportWriter interface {
 	SendState(ctx context.Context, stateId string, schemaId string, stateDataJson string, party string) error
 	SendDelegationRequest(ctx context.Context, delegationId string, delegateNodeId string, transaction *components.PrivateTransaction) error
-	SendEndorsementRequest(ctx context.Context, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState) error
+	SendEndorsementRequest(ctx context.Context, idempotencyKey string, party string, targetNode string, contractAddress string, transactionID string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*components.FullState, outputStates []*components.FullState) error
 }
 
 type TransactionFlowStatus int
@@ -110,15 +110,15 @@ type TransactionFlow interface {
 
 	PrepareTransaction(ctx context.Context, defaultSigner string) (*components.PrivateTransaction, error)
 	GetStateDistributions(ctx context.Context) []*statedistribution.StateDistribution
-	CoordinatingLocally() bool
-	IsComplete() bool
-	ReadyForSequencing() bool
-	Dispatched() bool
-	ID() uuid.UUID
+	CoordinatingLocally(ctx context.Context) bool
+	IsComplete(ctx context.Context) bool
+	ReadyForSequencing(ctx context.Context) bool
+	Dispatched(ctx context.Context) bool
+	ID(ctx context.Context) uuid.UUID
 	IsEndorsed(ctx context.Context) bool
-	InputStateIDs() []string
-	OutputStateIDs() []string
-	Signer() string
+	InputStateIDs(ctx context.Context) []string
+	OutputStateIDs(ctx context.Context) []string
+	Signer(ctx context.Context) string
 }
 
 type Clock interface {

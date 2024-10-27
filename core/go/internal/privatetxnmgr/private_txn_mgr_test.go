@@ -150,6 +150,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	mocks.domainSmartContract.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
 	})
+	endorsePayload := []byte("some-endorsement-bytes")
 	mocks.domainSmartContract.On("AssembleTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		tx := args.Get(2).(*components.PrivateTransaction)
 
@@ -191,7 +192,7 @@ func TestPrivateTxManagerSimpleTransaction(t *testing.T) {
 	//TODO match endorsement request and verifier args
 	mocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&components.EndorsementResult{
 		Result:  prototk.EndorseTransactionResponse_SIGN,
-		Payload: []byte("some-endorsement-bytes"),
+		Payload: endorsePayload,
 		Endorser: &prototk.ResolvedVerifier{
 			Lookup:       notaryIdentity,
 			Verifier:     notaryVerifier,
@@ -916,9 +917,17 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		}
 	}).Times(2).Return(nil)
 
-	sentEndorsementRequest := make(chan struct{}, 1)
+	sentEndorsementRequest := make(chan string, 1)
 	aliceEngineMocks.transportManager.On("Send", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		sentEndorsementRequest <- struct{}{}
+		message := args.Get(1).(*components.TransportMessage)
+		endorsementRequest := &pbEngine.EndorsementRequest{}
+		err := proto.Unmarshal(message.Payload, endorsementRequest)
+		if err != nil {
+			log.L(ctx).Errorf("Failed to unmarshal endorsement request: %s", err)
+			return
+		}
+
+		sentEndorsementRequest <- endorsementRequest.IdempotencyKey
 	}).Return(nil).Maybe()
 
 	aliceEngineMocks.domainSmartContract.On("EndorseTransaction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&components.EndorsementResult{
@@ -1022,14 +1031,15 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 	require.NoError(t, err)
 
 	//wait for both transactions to send an endorsement request each
-	<-sentEndorsementRequest
-	<-sentEndorsementRequest
+	idempotencyKey1 := <-sentEndorsementRequest
+	idempotencyKey2 := <-sentEndorsementRequest
 
 	// endorse transaction 2 before 1 and check that 2 is not dispatched before 1
 	endorsementResponse2 := &pbEngine.EndorsementResponse{
 		ContractAddress: domainAddressString,
 		TransactionId:   tx2.ID.String(),
 		Endorsement:     attestationResultAny,
+		IdempotencyKey:  idempotencyKey2,
 	}
 	endorsementResponse2bytes, err := proto.Marshal(endorsementResponse2)
 	require.NoError(t, err)
@@ -1057,6 +1067,7 @@ func TestPrivateTxManagerDependantTransactionEndorsedOutOfOrder(t *testing.T) {
 		ContractAddress: domainAddressString,
 		TransactionId:   tx1.ID.String(),
 		Endorsement:     attestationResultAny,
+		IdempotencyKey:  idempotencyKey1,
 	}
 	endorsementResponse1Bytes, err := proto.Marshal(endorsementResponse1)
 	require.NoError(t, err)

@@ -603,6 +603,7 @@ func (p *privateTxManager) handleEndorsementRequest(ctx context.Context, message
 	}
 
 	endorsementResponse := &pbEngine.EndorsementResponse{
+		IdempotencyKey:  endorsementRequest.IdempotencyKey,
 		ContractAddress: contractAddressString,
 		TransactionId:   endorsementRequest.TransactionId,
 		Endorsement:     endorsementAny,
@@ -687,8 +688,9 @@ func (p *privateTxManager) handleEndorsementResponse(ctx context.Context, messag
 			TransactionID:   endorsementResponse.TransactionId,
 			ContractAddress: contractAddressString,
 		},
-		RevertReason: revertReason,
-		Endorsement:  endorsement,
+		RevertReason:   revertReason,
+		Endorsement:    endorsement,
+		IdempotencyKey: endorsementResponse.IdempotencyKey,
 	})
 
 }

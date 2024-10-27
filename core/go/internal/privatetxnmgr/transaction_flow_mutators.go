@@ -111,6 +111,25 @@ func (tf *transactionFlow) applyTransactionSignedEvent(ctx context.Context, even
 
 func (tf *transactionFlow) applyTransactionEndorsedEvent(ctx context.Context, event *ptmgrtypes.TransactionEndorsedEvent) {
 	tf.latestEvent = "TransactionEndorsedEvent"
+	//if this response does not match a pending request, then we ignore it
+	pendingRequestsForAttRequestName, ok := tf.pendingEndorsementRequests[event.Endorsement.Name]
+	if !ok {
+		log.L(ctx).Warnf("Received endorsement for unknown request name %s", event.Endorsement.Name)
+		return
+	}
+	pendingRequest, ok := pendingRequestsForAttRequestName[event.Endorsement.Verifier.Lookup]
+	if !ok {
+		log.L(ctx).Warnf("Received endorsement for unknown party %s", event.Endorsement.Verifier.Lookup)
+		return
+	}
+
+	if pendingRequest.idempotencyKey != event.IdempotencyKey {
+		log.L(ctx).Debugf("Pending request idempotencyKey %s does not match endorsement idempotencyKey %s, assuming response from obsolete request", pendingRequest.idempotencyKey, event.IdempotencyKey)
+		return
+	}
+	//we have (had) a pending request for this endorsement but it is no longer pending because we now have a response
+	delete(pendingRequestsForAttRequestName, event.Endorsement.Verifier.Lookup)
+
 	if event.RevertReason != nil {
 		log.L(ctx).Infof("Endorsement for transaction %s was rejected: %s", tf.transaction.ID.String(), *event.RevertReason)
 		// endorsement errors trigger a re-assemble
@@ -121,6 +140,8 @@ func (tf *transactionFlow) applyTransactionEndorsedEvent(ctx context.Context, ev
 		// we discard them when they do return.
 		//only apply at this stage, action will be taken later
 		tf.transaction.PostAssembly = nil
+		// remove all pending endorsement request records because they are no longer valid
+		tf.pendingEndorsementRequests = make(map[string]map[string]*pendingEndorsementRequest)
 
 	} else {
 		log.L(ctx).Infof("Adding endorsement from %s to transaction %s", event.Endorsement.Verifier.Lookup, tf.transaction.ID.String())
