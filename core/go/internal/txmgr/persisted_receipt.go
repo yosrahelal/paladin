@@ -232,3 +232,36 @@ func (tm *txManager) GetTransactionReceiptByID(ctx context.Context, id uuid.UUID
 	}
 	return prs[0], nil
 }
+
+func (tm *txManager) GetTransactionReceiptByIDFull(ctx context.Context, id uuid.UUID) (*pldapi.TransactionReceiptFull, error) {
+	receipt, err := tm.GetTransactionReceiptByID(ctx, id)
+	if err != nil || receipt == nil {
+		return nil, err
+	}
+	fullReceipt := &pldapi.TransactionReceiptFull{TransactionReceipt: receipt}
+	if receipt.Domain != "" {
+		fullReceipt.States, err = tm.stateMgr.GetTransactionStates(ctx, tm.p.DB(), id)
+		if err == nil {
+			d, domainErr := tm.domainMgr.GetDomainByName(ctx, receipt.Domain)
+			if domainErr == nil {
+				fullReceipt.DomainReceipt, domainErr = d.BuildDomainReceipt(ctx, tm.p.DB(), id, fullReceipt.States)
+			}
+			if domainErr != nil {
+				fullReceipt.DomainReceiptError = domainErr.Error()
+			}
+		}
+	}
+	return fullReceipt, nil
+}
+
+func (tm *txManager) GetDomainReceiptByID(ctx context.Context, domain string, id uuid.UUID) (tktypes.RawJSON, error) {
+	d, err := tm.domainMgr.GetDomainByName(ctx, domain)
+	if err != nil {
+		return nil, err
+	}
+	return d.GetDomainReceipt(ctx, tm.p.DB(), id)
+}
+
+func (tm *txManager) GetStateReceiptByID(ctx context.Context, id uuid.UUID) (*pldapi.TransactionStates, error) {
+	return tm.stateMgr.GetTransactionStates(ctx, tm.p.DB(), id)
+}

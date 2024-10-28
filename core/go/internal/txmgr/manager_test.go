@@ -38,6 +38,7 @@ type mockComponents struct {
 	keyManager       *componentmocks.KeyManager
 	publicTxMgr      *componentmocks.PublicTxManager
 	privateTxMgr     *componentmocks.PrivateTxManager
+	stateMgr         *componentmocks.StateManager
 	identityResolver *componentmocks.IdentityResolver
 }
 
@@ -54,6 +55,7 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pld
 		domainManager:    componentmocks.NewDomainManager(t),
 		publicTxMgr:      componentmocks.NewPublicTxManager(t),
 		privateTxMgr:     componentmocks.NewPrivateTxManager(t),
+		stateMgr:         componentmocks.NewStateManager(t),
 		identityResolver: componentmocks.NewIdentityResolver(t),
 	}
 
@@ -63,6 +65,7 @@ func newTestTransactionManager(t *testing.T, realDB bool, init ...func(conf *pld
 	componentMocks.On("KeyManager").Return(mc.keyManager).Maybe()
 	componentMocks.On("PublicTxManager").Return(mc.publicTxMgr).Maybe()
 	componentMocks.On("PrivateTxManager").Return(mc.privateTxMgr).Maybe()
+	componentMocks.On("StateManager").Return(mc.stateMgr).Maybe()
 	componentMocks.On("IdentityResolver").Return(mc.identityResolver).Maybe()
 	componentMocks.On("EthClientFactory").Return(mc.ethClientFactory).Maybe()
 

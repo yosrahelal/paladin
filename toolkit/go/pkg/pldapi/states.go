@@ -126,10 +126,10 @@ type StateInt64Label struct {
 
 type TransactionStates struct {
 	Unknown     bool               `docstruct:"TransactionStates" json:"unknown,omitempty"` // true if we know nothing about this transaction at all
-	Confirmed   []*StateBase       `docstruct:"TransactionStates" json:"confirmed"`
-	Read        []*StateBase       `docstruct:"TransactionStates" json:"read"`
-	Spent       []*StateBase       `docstruct:"TransactionStates" json:"spent"`
-	Info        []*StateBase       `docstruct:"TransactionStates" json:"info"`
+	Confirmed   []*StateBase       `docstruct:"TransactionStates" json:"confirmed,omitempty"`
+	Read        []*StateBase       `docstruct:"TransactionStates" json:"read,omitempty"`
+	Spent       []*StateBase       `docstruct:"TransactionStates" json:"spent,omitempty"`
+	Info        []*StateBase       `docstruct:"TransactionStates" json:"info,omitempty"`
 	Unavailable *UnavailableStates `docstruct:"TransactionStates" json:"unavailable,omitempty"` // nil if we have the data for all states
 }
 

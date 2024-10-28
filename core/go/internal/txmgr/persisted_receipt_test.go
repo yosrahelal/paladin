@@ -24,6 +24,7 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/config/pkg/pldconf"
 	"github.com/kaleido-io/paladin/core/internal/components"
+	"github.com/kaleido-io/paladin/core/mocks/componentmocks"
 	"github.com/kaleido-io/paladin/toolkit/pkg/pldapi"
 	"github.com/kaleido-io/paladin/toolkit/pkg/tktypes"
 
@@ -160,6 +161,14 @@ func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 
 	ctx, txm, done := newTestTransactionManager(t, true, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
+
+		mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, mock.Anything).Return(
+			&pldapi.TransactionStates{Unknown: true}, nil,
+		)
+
+		md := componentmocks.NewDomain(t)
+		mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
+		md.On("BuildDomainReceipt", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("not available"))
 	})
 	defer done()
 
@@ -183,6 +192,7 @@ func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 		return txm.FinalizeTransactions(ctx, tx, []*components.ReceiptInput{
 			{
 				TransactionID: *txID,
+				Domain:        "domain1",
 				ReceiptType:   components.RT_Success,
 				OnChain: tktypes.OnChainLocation{
 					Type:             tktypes.OnChainEvent,
@@ -197,18 +207,22 @@ func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	receipt, err := txm.GetTransactionReceiptByID(ctx, *txID)
+	receipt, err := txm.GetTransactionReceiptByIDFull(ctx, *txID)
 	require.NoError(t, err)
+
 	require.NotNil(t, receipt)
 	require.JSONEq(t, fmt.Sprintf(`{
 		"id":"%s",
+		"domain": "domain1",
 		"blockNumber":12345, 
 		"logIndex":5,
 	 	"source":"0x3f9f796ff55589dd2358c458f185bbed357c0b6e",
 	  	"success":true, 
 	  	"transactionHash":"0xd0561b310b77e47bc16fb3c40d48b72255b1748efeecf7452373dfce8045af30", 
-		"transactionIndex":10
-	}`, txID), string(tktypes.JSONString(receipt)))
+		"transactionIndex":10,
+		"states": {"unknown": true},
+		"domainReceiptError": "not available"
+	}`, txID), tktypes.JSONString(receipt).Pretty())
 
 }
 
@@ -256,6 +270,31 @@ func TestGetTransactionReceiptNoResult(t *testing.T) {
 	res, err := txm.GetTransactionReceiptByID(ctx, uuid.New())
 	assert.NoError(t, err)
 	assert.Nil(t, res)
+
+}
+
+func TestGetTransactionReceiptFullNoResult(t *testing.T) {
+
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.db.ExpectQuery("SELECT.*transaction_receipts").WillReturnRows(sqlmock.NewRows([]string{}))
+	})
+	defer done()
+
+	res, err := txm.GetTransactionReceiptByIDFull(ctx, uuid.New())
+	assert.NoError(t, err)
+	assert.Nil(t, res)
+
+}
+
+func TestGetDomainReceiptFail(t *testing.T) {
+
+	ctx, txm, done := newTestTransactionManager(t, false, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(nil, fmt.Errorf("not found"))
+	})
+	defer done()
+
+	_, err := txm.GetDomainReceiptByID(ctx, "domain1", uuid.New())
+	assert.Regexp(t, "not found", err)
 
 }
 

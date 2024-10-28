@@ -91,6 +91,13 @@ type TransactionReceipt struct {
 	TransactionReceiptData
 }
 
+type TransactionReceiptFull struct {
+	*TransactionReceipt
+	States             *TransactionStates `json:"states,omitempty"`
+	DomainReceipt      tktypes.RawJSON    `json:"domainReceipt,omitempty"`
+	DomainReceiptError string             `json:"domainReceiptError,omitempty"`
+}
+
 type TransactionReceiptDataOnchain struct {
 	TransactionHash  *tktypes.Bytes32 `docstruct:"TransactionReceiptDataOnchain" json:"transactionHash,omitempty"`
 	BlockNumber      int64            `docstruct:"TransactionReceiptDataOnchain" json:"blockNumber,omitempty"`

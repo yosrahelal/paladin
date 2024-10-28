@@ -22,6 +22,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/hyperledger/firefly-signer/pkg/eip712"
@@ -715,4 +716,41 @@ func (d *domain) ValidateStateHashes(ctx context.Context, states []*components.F
 		return nil, i18n.NewError(d.ctx, msgs.MsgDomainInvalidResponseToValidate)
 	}
 	return hexIDs, nil
+}
+
+func (d *domain) GetDomainReceipt(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID) (tktypes.RawJSON, error) {
+
+	// Load up the currently available set of states
+	txStates, err := d.dm.stateStore.GetTransactionStates(ctx, dbTX, txID)
+	if err != nil {
+		return nil, err
+	}
+
+	return d.BuildDomainReceipt(ctx, dbTX, txID, txStates)
+}
+
+func (d *domain) BuildDomainReceipt(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID, txStates *pldapi.TransactionStates) (tktypes.RawJSON, error) {
+	if txStates.Unknown {
+		// We know nothing about this transaction yet
+		return nil, i18n.NewError(ctx, msgs.MsgDomainDomainReceiptNotAvailable, txID)
+	}
+	empty := len(txStates.Spent) == 0 && len(txStates.Read) == 0 && len(txStates.Confirmed) == 0 && len(txStates.Info) == 0
+	if empty {
+		// We have none of the private data for the transaction at all
+		return nil, i18n.NewError(ctx, msgs.MsgDomainDomainReceiptNoStatesAvailable, txID)
+	}
+
+	// As long as we have some knowledge, we call to the domain and see what it builds with what we have available
+	res, err := d.api.BuildReceipt(ctx, &prototk.BuildReceiptRequest{
+		TransactionId: tktypes.Bytes32UUIDFirst16(txID).String(),
+		Complete:      txStates.Unavailable == nil, // important for the domain to know if we have everything (it may fail with partial knowledge)
+		InputStates:   d.toEndorsableListBase(txStates.Spent),
+		ReadStates:    d.toEndorsableListBase(txStates.Read),
+		OutputStates:  d.toEndorsableListBase(txStates.Confirmed),
+		InfoStates:    d.toEndorsableListBase(txStates.Info),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return tktypes.RawJSON(res.ReceiptJson), nil
 }

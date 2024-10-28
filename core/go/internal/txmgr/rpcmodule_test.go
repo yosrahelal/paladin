@@ -419,6 +419,38 @@ func TestPublicTransactionPassthroughQueries(t *testing.T) {
 	assert.Equal(t, sampleTxns[0], txn)
 }
 
+func TestDetailedReceiptRPCsNotFound(t *testing.T) {
+
+	ctx, url, _, done := newTestTransactionManagerWithRPC(t, func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, mock.Anything).
+			Return(&pldapi.TransactionStates{Unknown: true}, nil)
+
+		md := componentmocks.NewDomain(t)
+		mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
+		md.On("GetDomainReceipt", mock.Anything, mock.Anything, mock.Anything).Return(tktypes.RawJSON(`{}`), nil)
+	})
+	defer done()
+
+	rpcClient, err := rpcclient.NewHTTPClient(ctx, &pldconf.HTTPClientConfig{URL: url})
+	require.NoError(t, err)
+
+	var txReceipt *pldapi.TransactionReceiptFull
+	err = rpcClient.CallRPC(ctx, &txReceipt, "ptx_getTransactionReceiptFull", uuid.New())
+	require.NoError(t, err)
+	assert.Nil(t, txReceipt)
+
+	var txStates *pldapi.TransactionStates
+	err = rpcClient.CallRPC(ctx, &txStates, "ptx_getStateReceipt", uuid.New())
+	require.NoError(t, err)
+	assert.Equal(t, &pldapi.TransactionStates{Unknown: true}, txStates)
+
+	var domainReceipt tktypes.RawJSON
+	err = rpcClient.CallRPC(ctx, &domainReceipt, "ptx_getDomainReceipt", "domain1", uuid.New())
+	require.NoError(t, err)
+	assert.JSONEq(t, `{}`, domainReceipt.Pretty())
+
+}
+
 func TestIdentityResolvePassthroughQueries(t *testing.T) {
 
 	ctx, url, _, done := newTestTransactionManagerWithRPC(t,

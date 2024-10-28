@@ -554,38 +554,6 @@ func (dc *domainContract) ExecCall(dCtx components.DomainContext, readTX *gorm.D
 	return cv, nil
 }
 
-func (dc *domainContract) GetDomainReceipt(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID) (tktypes.RawJSON, error) {
-
-	// Load up the currently available set of states
-	txStates, err := dc.dm.stateStore.GetTransactionStates(ctx, dbTX, txID)
-	if err != nil {
-		return nil, err
-	}
-	if txStates.Unknown {
-		// We know nothing about this transaction yet
-		return nil, i18n.NewError(ctx, msgs.MsgDomainDomainReceiptNotAvailable, txID)
-	}
-	empty := len(txStates.Spent) == 0 && len(txStates.Read) == 0 && len(txStates.Confirmed) == 0 && len(txStates.Info) == 0
-	if empty {
-		// We have none of the private data for the transaction at all
-		return nil, i18n.NewError(ctx, msgs.MsgDomainDomainReceiptNoStatesAvailable, txID)
-	}
-
-	// As long as we have some knowledge, we call to the domain and see what it builds with what we have available
-	res, err := dc.api.BuildReceipt(ctx, &prototk.BuildReceiptRequest{
-		TransactionId: tktypes.Bytes32UUIDFirst16(txID).String(),
-		Complete:      txStates.Unavailable == nil, // important for the domain to know if we have everything (it may fail with partial knowledge)
-		InputStates:   dc.d.toEndorsableListBase(txStates.Spent),
-		ReadStates:    dc.d.toEndorsableListBase(txStates.Read),
-		OutputStates:  dc.d.toEndorsableListBase(txStates.Confirmed),
-		InfoStates:    dc.d.toEndorsableListBase(txStates.Info),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return tktypes.RawJSON(res.ReceiptJson), nil
-}
-
 func (dc *domainContract) Domain() components.Domain {
 	return dc.d
 }
