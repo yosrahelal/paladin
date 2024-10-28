@@ -221,33 +221,43 @@ func (tm *txManager) SendTransaction(ctx context.Context, tx *pldapi.Transaction
 	return &txIDs[0], nil
 }
 
-func (tm *txManager) CallTransaction(ctx context.Context, result any, tx *pldapi.TransactionCall) (err error) {
+func (tm *txManager) CallTransaction(ctx context.Context, result any, call *pldapi.TransactionCall) (err error) {
 
-	txi, err := tm.resolveNewTransaction(ctx, &tx.TransactionInput)
+	txi, err := tm.resolveNewTransaction(ctx, &call.TransactionInput)
 	if err != nil {
 		return err
 	}
 
-	if tx.Type.V() != pldapi.TransactionTypePublic {
-		return i18n.NewError(ctx, msgs.MsgTxMgrPrivateCallNotSupported)
+	if call.Type.V() == pldapi.TransactionTypePublic {
+		return tm.callTransactionPublic(ctx, result, call, txi)
 	}
+
+	if call.To == nil {
+		// We don't support a "call" of a deploy for private Transactions
+		return i18n.NewError(ctx, msgs.MsgTxMgrPrivateCallRequiresTo)
+	}
+
+	psc.InitCall(ctx)
+}
+
+func (tm *txManager) callTransactionPublic(ctx context.Context, result any, call *pldapi.TransactionCall, txi *txInsertInfo) (err error) {
 
 	ec := tm.ethClientFactory.HTTPClient().(ethclient.EthClientWithKeyManager)
 	var callReq ethclient.ABIFunctionRequestBuilder
 	abiFunc, err := ec.ABIFunction(ctx, txi.fn.definition)
-	blockRef := tx.Block.String()
+	blockRef := call.Block.String()
 	if blockRef == "" {
 		blockRef = "latest"
 	}
 	if err == nil {
 		callReq = abiFunc.R(ctx).
-			To(tx.To.Address0xHex()).
-			Input(tx.Data).
+			To(call.To.Address0xHex()).
+			Input(call.Data).
 			BlockRef(ethclient.BlockRef(blockRef)).
 			Output(result)
-		if tx.From != "" {
+		if call.From != "" {
 			var senderAddr *tktypes.EthAddress
-			senderAddr, err = tm.keyManager.ResolveEthAddressNewDatabaseTX(ctx, tx.From)
+			senderAddr, err = tm.keyManager.ResolveEthAddressNewDatabaseTX(ctx, call.From)
 			if err == nil {
 				callReq = callReq.Signer(senderAddr.String())
 			}
