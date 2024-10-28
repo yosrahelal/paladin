@@ -256,7 +256,7 @@ func (dc *domainContext) FindAvailableStates(dbTX *gorm.DB, schemaID tktypes.Byt
 	}
 
 	// Run the query against the DB
-	schema, states, err := dc.ss.findStates(dc, dbTX, dc.domainName, &dc.contractAddress, schemaID, query, StateStatusAvailable, spending...)
+	schema, states, err := dc.ss.findStates(dc, dbTX, dc.domainName, &dc.contractAddress, schemaID, query, pldapi.StateStatusAvailable, spending...)
 	if err != nil {
 		return nil, nil, err
 	}

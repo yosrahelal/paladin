@@ -47,6 +47,7 @@ func (tm *txManager) buildRPCModule() {
 		Add("ptx_getPublicTransactionByHash", tm.rpcGetPublicTransactionByHash()).
 		Add("ptx_storeABI", tm.rpcStoreABI()).
 		Add("ptx_getStoredABI", tm.rpcGetStoredABI()).
+		Add("ptx_decodeError", tm.rpcDecodeRevertError()).
 		Add("ptx_queryStoredABIs", tm.rpcQueryStoredABIs()).
 		Add("ptx_resolveVerifier", tm.rpcResolveVerifier())
 
@@ -228,5 +229,14 @@ func (tm *txManager) rpcDebugTransactionStatus() rpcserver.RPCHandler {
 		id uuid.UUID,
 	) (components.PrivateTxStatus, error) {
 		return tm.privateTxMgr.GetTxStatus(ctx, contractAddress, id.String())
+	})
+}
+
+func (tm *txManager) rpcDecodeRevertError() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod2(func(ctx context.Context,
+		revertError tktypes.HexBytes,
+		dataFormat tktypes.JSONFormatOptions,
+	) (*pldapi.DecodedError, error) {
+		return tm.DecodeRevertError(ctx, tm.p.DB(), revertError, dataFormat)
 	})
 }

@@ -288,6 +288,11 @@ func TestPublicTransactionLifecycle(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	var de *pldapi.DecodedError
+	err = rpcClient.CallRPC(ctx, &de, "ptx_decodeError", tktypes.HexBytes(revertData), tktypes.DefaultJSONFormatOptions)
+	require.NoError(t, err)
+	require.Equal(t, `BadValue("12345")`, de.Summary)
+
 	// Ask for the receipt directly
 	var txReceipt *pldapi.TransactionReceipt
 	err = rpcClient.CallRPC(ctx, &txReceipt, "ptx_getTransactionReceipt", tx2ID)

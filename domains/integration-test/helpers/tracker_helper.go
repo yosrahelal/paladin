@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//go:embed abis/NotoTrackerERC20.json
+//go:embed abis/NotoTrackerPublicERC20.json
 var NotoTrackerJSON []byte
 
 type NotoTrackerHelper struct {

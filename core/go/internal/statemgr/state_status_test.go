@@ -128,7 +128,7 @@ func TestStateLockingQuery(t *testing.T) {
 		`{"size": 55555, "color": "blue", "price": 500}`,
 	})
 
-	checkQuery := func(jq *query.QueryJSON, status StateStatusQualifier, expected ...int) {
+	checkQuery := func(jq *query.QueryJSON, status pldapi.StateStatusQualifier, expected ...int) {
 		states, err := ss.FindContractStates(ctx, ss.p.DB(), "domain1", contractAddress, schemaID, jq, status)
 		require.NoError(t, err)
 		assert.Len(t, states, len(expected))
@@ -145,14 +145,14 @@ func TestStateLockingQuery(t *testing.T) {
 		}
 	}
 
-	seqQual := StateStatusQualifier(dc.Info().ID.String())
+	seqQual := pldapi.StateStatusQualifier(dc.Info().ID.String())
 	all := query.NewQueryBuilder().Query()
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4)
-	checkQuery(all, StateStatusAvailable)
-	checkQuery(all, StateStatusConfirmed)
-	checkQuery(all, StateStatusUnconfirmed, 0, 1, 2, 3, 4)
-	checkQuery(all, StateStatusSpent)
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4)
+	checkQuery(all, pldapi.StateStatusAvailable)
+	checkQuery(all, pldapi.StateStatusConfirmed)
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 0, 1, 2, 3, 4)
+	checkQuery(all, pldapi.StateStatusSpent)
 	checkQuery(all, seqQual)
 
 	// Mark them all confirmed apart from one
@@ -166,12 +166,12 @@ func TestStateLockingQuery(t *testing.T) {
 		}
 	}
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4)    // unchanged
-	checkQuery(all, StateStatusAvailable, 0, 1, 2, 4) // added all but 3
-	checkQuery(all, StateStatusConfirmed, 0, 1, 2, 4) // added all but 3
-	checkQuery(all, StateStatusUnconfirmed, 3)        // added 3
-	checkQuery(all, StateStatusSpent)                 // unchanged
-	checkQuery(all, seqQual, 0, 1, 2, 4)              // added all but 3
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4)    // unchanged
+	checkQuery(all, pldapi.StateStatusAvailable, 0, 1, 2, 4) // added all but 3
+	checkQuery(all, pldapi.StateStatusConfirmed, 0, 1, 2, 4) // added all but 3
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 3)        // added 3
+	checkQuery(all, pldapi.StateStatusSpent)                 // unchanged
+	checkQuery(all, seqQual, 0, 1, 2, 4)                     // added all but 3
 
 	// Mark one spent
 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
@@ -180,12 +180,12 @@ func TestStateLockingQuery(t *testing.T) {
 		}, []*pldapi.StateConfirm{})
 	require.NoError(t, err)
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4) // unchanged
-	checkQuery(all, StateStatusAvailable, 1, 2, 4) // removed 0
-	checkQuery(all, StateStatusConfirmed, 1, 2, 4) // removed 0
-	checkQuery(all, StateStatusUnconfirmed, 3)     // unchanged
-	checkQuery(all, StateStatusSpent, 0)           // added 0
-	checkQuery(all, seqQual, 1, 2, 4)              // unchanged
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4) // unchanged
+	checkQuery(all, pldapi.StateStatusAvailable, 1, 2, 4) // removed 0
+	checkQuery(all, pldapi.StateStatusConfirmed, 1, 2, 4) // removed 0
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 3)     // unchanged
+	checkQuery(all, pldapi.StateStatusSpent, 0)           // added 0
+	checkQuery(all, seqQual, 1, 2, 4)                     // unchanged
 
 	// add a new state only within the domain context
 	txID1 := uuid.New()
@@ -195,12 +195,12 @@ func TestStateLockingQuery(t *testing.T) {
 	widgets = append(widgets, contextStates...)
 	syncFlushContext(t, dc)
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4, 5) // added 5
-	checkQuery(all, StateStatusAvailable, 1, 2, 4)    // unchanged
-	checkQuery(all, StateStatusConfirmed, 1, 2, 4)    // unchanged
-	checkQuery(all, StateStatusUnconfirmed, 3, 5)     // added 5
-	checkQuery(all, StateStatusSpent, 0)              // unchanged
-	checkQuery(all, seqQual, 1, 2, 4, 5)              // added 5
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4, 5) // added 5
+	checkQuery(all, pldapi.StateStatusAvailable, 1, 2, 4)    // unchanged
+	checkQuery(all, pldapi.StateStatusConfirmed, 1, 2, 4)    // unchanged
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 3, 5)     // added 5
+	checkQuery(all, pldapi.StateStatusSpent, 0)              // unchanged
+	checkQuery(all, seqQual, 1, 2, 4, 5)                     // added 5
 
 	// lock the unconfirmed one for spending
 	txID2 := uuid.New()
@@ -211,22 +211,22 @@ func TestStateLockingQuery(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
-	checkQuery(all, StateStatusAvailable, 1, 2, 4)    // unchanged
-	checkQuery(all, StateStatusConfirmed, 1, 2, 4)    // unchanged
-	checkQuery(all, StateStatusUnconfirmed, 3, 5)     // unchanged
-	checkQuery(all, StateStatusSpent, 0)              // unchanged
-	checkQuery(all, seqQual, 1, 2, 4)                 // removed 5
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
+	checkQuery(all, pldapi.StateStatusAvailable, 1, 2, 4)    // unchanged
+	checkQuery(all, pldapi.StateStatusConfirmed, 1, 2, 4)    // unchanged
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 3, 5)     // unchanged
+	checkQuery(all, pldapi.StateStatusSpent, 0)              // unchanged
+	checkQuery(all, seqQual, 1, 2, 4)                        // removed 5
 
 	// cancel that spend lock
 	dc.ResetTransactions(txID2)
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
-	checkQuery(all, StateStatusAvailable, 1, 2, 4)    // unchanged
-	checkQuery(all, StateStatusConfirmed, 1, 2, 4)    // unchanged
-	checkQuery(all, StateStatusUnconfirmed, 3, 5)     // unchanged
-	checkQuery(all, StateStatusSpent, 0)              // unchanged
-	checkQuery(all, seqQual, 1, 2, 4, 5)              // added 5 back
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
+	checkQuery(all, pldapi.StateStatusAvailable, 1, 2, 4)    // unchanged
+	checkQuery(all, pldapi.StateStatusConfirmed, 1, 2, 4)    // unchanged
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 3, 5)     // unchanged
+	checkQuery(all, pldapi.StateStatusSpent, 0)              // unchanged
+	checkQuery(all, seqQual, 1, 2, 4, 5)                     // added 5 back
 
 	// Mark that new state confirmed
 	err = ss.WriteStateFinalizations(ss.bgCtx, ss.p.DB(),
@@ -239,12 +239,12 @@ func TestStateLockingQuery(t *testing.T) {
 	// reset the domain context - does not matter now
 	dc.Reset()
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
-	checkQuery(all, StateStatusAvailable, 1, 2, 4, 5) // added 5
-	checkQuery(all, StateStatusConfirmed, 1, 2, 4, 5) // added 5
-	checkQuery(all, StateStatusUnconfirmed, 3)        // removed 5
-	checkQuery(all, StateStatusSpent, 0)              // unchanged
-	checkQuery(all, seqQual, 1, 2, 4, 5)              // unchanged
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
+	checkQuery(all, pldapi.StateStatusAvailable, 1, 2, 4, 5) // added 5
+	checkQuery(all, pldapi.StateStatusConfirmed, 1, 2, 4, 5) // added 5
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 3)        // removed 5
+	checkQuery(all, pldapi.StateStatusSpent, 0)              // unchanged
+	checkQuery(all, seqQual, 1, 2, 4, 5)                     // unchanged
 
 	// Add 3 only as confirmed by a TX only within the domain context
 	// Note we have to re-supply the data here, so that the domain context can
@@ -258,26 +258,15 @@ func TestStateLockingQuery(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	checkQuery(all, StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
-	checkQuery(all, StateStatusAvailable, 1, 2, 4, 5) // unchanged
-	checkQuery(all, StateStatusConfirmed, 1, 2, 4, 5) // unchanged
-	checkQuery(all, StateStatusUnconfirmed, 3)        // unchanged
-	checkQuery(all, StateStatusSpent, 0)              // unchanged
-	checkQuery(all, seqQual, 1, 2, 3, 4, 5)           // added 3
+	checkQuery(all, pldapi.StateStatusAll, 0, 1, 2, 3, 4, 5) // unchanged
+	checkQuery(all, pldapi.StateStatusAvailable, 1, 2, 4, 5) // unchanged
+	checkQuery(all, pldapi.StateStatusConfirmed, 1, 2, 4, 5) // unchanged
+	checkQuery(all, pldapi.StateStatusUnconfirmed, 3)        // unchanged
+	checkQuery(all, pldapi.StateStatusSpent, 0)              // unchanged
+	checkQuery(all, seqQual, 1, 2, 3, 4, 5)                  // added 3
 
 	// check a sub-select
 	checkQuery(query.NewQueryBuilder().Equal("color", "pink").Query(), seqQual, 3)
-	checkQuery(query.NewQueryBuilder().Equal("color", "pink").Query(), StateStatusAvailable)
+	checkQuery(query.NewQueryBuilder().Equal("color", "pink").Query(), pldapi.StateStatusAvailable)
 
-}
-
-func TestStateStatusQualifierJSON(t *testing.T) {
-	var q StateStatusQualifier
-	err := json.Unmarshal(([]byte)(`"wrong"`), &q)
-	assert.Regexp(t, "PD010117", err)
-
-	u := uuid.New().String()
-	err = json.Unmarshal(tktypes.JSONString(u), &q)
-	require.NoError(t, err)
-	assert.Equal(t, u, (string)(q))
 }

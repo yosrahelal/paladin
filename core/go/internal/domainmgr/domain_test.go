@@ -289,12 +289,17 @@ func TestDomainInitStates(t *testing.T) {
 	assert.NotNil(t, td.d.Configuration().BaseLedgerSubmitConfig)
 
 }
+func mockUpsertABIOk(mc *mockComponents) {
+	mc.txManager.On("UpsertABI", mock.Anything, mock.Anything).Return(&pldapi.StoredABI{
+		Hash: tktypes.Bytes32(tktypes.RandBytes(32)),
+	}, nil)
+}
 
 func TestDomainInitStatesWithEvents(t *testing.T) {
 
 	domainConf := goodDomainConf()
 	domainConf.AbiEventsJson = fakeCoinEventsABI
-	td, done := newTestDomain(t, true, domainConf)
+	td, done := newTestDomain(t, true, domainConf, mockUpsertABIOk)
 	defer done()
 
 	assert.Nil(t, td.d.initError.Load())
@@ -366,9 +371,28 @@ func TestDomainInitBadEventsABI(t *testing.T) {
 				"inputs": [{"type": "verywrong"}]
 			}
 		]`,
-	})
+	}, mockUpsertABIOk)
 	defer done()
 	assert.Regexp(t, "FF22025", *td.d.initError.Load())
+	assert.False(t, td.tp.initialized.Load())
+}
+
+func TestDomainInitUpsertEventsABIFail(t *testing.T) {
+	td, done := newTestDomain(t, false, &prototk.DomainConfig{
+		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
+		AbiStateSchemasJson:    []string{},
+		AbiEventsJson: `[
+			{
+				"type": "event",
+				"name": "bad",
+				"inputs": [{"type": "verywrong"}]
+			}
+		]`,
+	}, func(mc *mockComponents) {
+		mc.txManager.On("UpsertABI", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+	})
+	defer done()
+	assert.Regexp(t, "pop", *td.d.initError.Load())
 	assert.False(t, td.tp.initialized.Load())
 }
 
@@ -377,7 +401,7 @@ func TestDomainInitStreamFail(t *testing.T) {
 		BaseLedgerSubmitConfig: &prototk.BaseLedgerSubmitConfig{},
 		AbiStateSchemasJson:    []string{},
 		AbiEventsJson:          fakeCoinEventsABI,
-	}, func(mc *mockComponents) {
+	}, mockUpsertABIOk, func(mc *mockComponents) {
 		mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 	})
 	defer done()

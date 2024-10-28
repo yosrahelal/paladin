@@ -172,7 +172,7 @@ func TestFindStatesUnknownContext(t *testing.T) {
 				},
 			},
 		},
-	}, StateStatusQualifier(uuid.NewString()))
+	}, pldapi.StateStatusQualifier(uuid.NewString()))
 	assert.Regexp(t, "PD010123", err)
 
 }
