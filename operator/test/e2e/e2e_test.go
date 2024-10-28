@@ -460,13 +460,13 @@ var _ = Describe("controller", Ordered, func() {
 				Private().
 				Domain("pente").
 				To(penteContract).
-				Function("mint").
+				Function("transfer").
 				Inputs(&penteInvokeParams{
 					Group: penteGroupNodes1and2,
 					To:    *erc20StarsAddr,
 					Inputs: map[string]any{
-						"to":     getEthAddress("sally", "node1"),
-						"amount": with18Decimals(42),
+						"to":    getEthAddress("sally", "node2"),
+						"value": with18Decimals(42),
 					},
 				}).
 				From("seren@node1").
@@ -505,9 +505,11 @@ var _ = Describe("controller", Ordered, func() {
 			erc20TransferABI := erc20Simple.ABI.Events()["Transfer"]
 			Expect(penteReceipt.Receipt.Logs).To(HaveLen(1))
 			transferEventJSON := decodePrivateEVMEvent(erc20TransferABI, penteReceipt.Receipt.Logs[0])
-			Expect(transferEventJSON).To(MatchJSON(`{
-			  "erm": true
-			}`))
+			Expect(transferEventJSON).To(MatchJSON(fmt.Sprintf(`{
+				"from": "%s",
+				"to": "%s",
+				"value": "42000000000000000000"
+			}`, getEthAddress("seren", "node1"), getEthAddress("sally", "node2"))))
 		})
 
 		It("check ERC-20 balance of Seren and Sally", func() {

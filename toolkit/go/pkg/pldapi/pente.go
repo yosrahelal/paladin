@@ -25,7 +25,7 @@ type PenteDomainReceipt struct {
 type PrivateEVMTransaction struct {
 	From  tktypes.EthAddress  `json:"from"`
 	To    *tktypes.EthAddress `json:"to"`
-	Nonce *tktypes.EthAddress `json:"nonce"`
+	Nonce tktypes.HexUint64   `json:"nonce"`
 	Gas   tktypes.HexUint64   `json:"gas,omitempty"`
 	Value *tktypes.HexUint256 `json:"value,omitempty"`
 	Data  tktypes.HexBytes    `json:"data"`
