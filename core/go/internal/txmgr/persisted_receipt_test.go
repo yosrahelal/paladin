@@ -163,7 +163,7 @@ func TestFinalizeTransactionsInsertOkEvent(t *testing.T) {
 		mc.privateTxMgr.On("HandleNewTx", mock.Anything, mock.Anything).Return(nil)
 
 		mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, mock.Anything).Return(
-			&pldapi.TransactionStates{Unknown: true}, nil,
+			&pldapi.TransactionStates{None: true}, nil,
 		)
 
 		md := componentmocks.NewDomain(t)

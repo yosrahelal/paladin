@@ -1,14 +1,12 @@
 ---
-title: TransactionReceipt
+title: TransactionReceiptFull
 ---
-{% include-markdown "./_includes/transactionreceipt_description.md" %}
+{% include-markdown "./_includes/transactionreceiptfull_description.md" %}
 
 ### Example
 
 ```json
-{
-    "id": "00000000-0000-0000-0000-000000000000"
-}
+{}
 ```
 
 ### Field Descriptions
@@ -26,4 +24,7 @@ title: TransactionReceipt
 | `failureMessage` | Failure message - set if transaction reverted | `string` |
 | `revertData` | Encoded revert data - if available | [`HexBytes`](simpletypes.md#hexbytes) |
 | `contractAddress` | New contract address - to be used in the 'To' field for subsequent invoke transactions | [`EthAddress`](simpletypes.md#ethaddress) |
+| `states` | The state receipt for the transaction (private transactions only) | [`TransactionStates`](transactionstates.md#transactionstates) |
+| `domainReceipt` | The domain receipt for the transaction (private transaction only) | [`RawJSON`](simpletypes.md#rawjson) |
+| `domainReceiptError` | Contains the error if it was not possible to obtain the domain receipt for a private transaction | `string` |
 

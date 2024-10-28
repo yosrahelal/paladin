@@ -423,7 +423,7 @@ func TestDetailedReceiptRPCsNotFound(t *testing.T) {
 
 	ctx, url, _, done := newTestTransactionManagerWithRPC(t, func(tmc *pldconf.TxManagerConfig, mc *mockComponents) {
 		mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, mock.Anything).
-			Return(&pldapi.TransactionStates{Unknown: true}, nil)
+			Return(&pldapi.TransactionStates{None: true}, nil)
 
 		md := componentmocks.NewDomain(t)
 		mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
@@ -442,7 +442,7 @@ func TestDetailedReceiptRPCsNotFound(t *testing.T) {
 	var txStates *pldapi.TransactionStates
 	err = rpcClient.CallRPC(ctx, &txStates, "ptx_getStateReceipt", uuid.New())
 	require.NoError(t, err)
-	assert.Equal(t, &pldapi.TransactionStates{Unknown: true}, txStates)
+	assert.Equal(t, &pldapi.TransactionStates{None: true}, txStates)
 
 	var domainReceipt tktypes.RawJSON
 	err = rpcClient.CallRPC(ctx, &domainReceipt, "ptx_getDomainReceipt", "domain1", uuid.New())

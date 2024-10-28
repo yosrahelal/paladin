@@ -1229,7 +1229,7 @@ func TestGetDomainReceiptNotIndexed(t *testing.T) {
 
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(), func(mc *mockComponents) {
 		mc.stateStore.On("GetTransactionStates", mock.Anything, mock.Anything, txID).
-			Return(&pldapi.TransactionStates{Unknown: true}, nil)
+			Return(&pldapi.TransactionStates{None: true}, nil)
 	})
 	defer done()
 	assert.Nil(t, td.d.initError.Load())

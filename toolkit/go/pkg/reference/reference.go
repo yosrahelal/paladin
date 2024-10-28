@@ -61,6 +61,8 @@ type param struct {
 var allTypes = []interface{}{
 	pldapi.IndexedEvent{},
 	pldapi.TransactionReceipt{},
+	pldapi.TransactionReceiptFull{},
+	pldapi.TransactionStates{},
 	pldapi.TransactionInput{},
 	pldapi.TransactionFull{},
 	pldapi.TransactionCall{},

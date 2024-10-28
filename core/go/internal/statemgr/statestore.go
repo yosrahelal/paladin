@@ -151,7 +151,7 @@ func (ss *stateManager) GetTransactionStates(ctx context.Context, dbTX *gorm.DB,
 	hasUnavailable := false
 	unavailable := &pldapi.UnavailableStates{}
 	txStates := &pldapi.TransactionStates{
-		Unknown: len(records) == 0, // if we have no confirmation records at all then this is an unknown transaction
+		None: len(records) == 0, // if we have no confirmation records at all then this is an unknown transaction
 	}
 	for _, s := range records {
 		switch s.RecordType {

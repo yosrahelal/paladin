@@ -125,19 +125,19 @@ type StateInt64Label struct {
 }
 
 type TransactionStates struct {
-	Unknown     bool               `docstruct:"TransactionStates" json:"unknown,omitempty"` // true if we know nothing about this transaction at all
-	Confirmed   []*StateBase       `docstruct:"TransactionStates" json:"confirmed,omitempty"`
-	Read        []*StateBase       `docstruct:"TransactionStates" json:"read,omitempty"`
+	None        bool               `docstruct:"TransactionStates" json:"none,omitempty"` // true if we know nothing about this transaction at all
 	Spent       []*StateBase       `docstruct:"TransactionStates" json:"spent,omitempty"`
+	Read        []*StateBase       `docstruct:"TransactionStates" json:"read,omitempty"`
+	Confirmed   []*StateBase       `docstruct:"TransactionStates" json:"confirmed,omitempty"`
 	Info        []*StateBase       `docstruct:"TransactionStates" json:"info,omitempty"`
 	Unavailable *UnavailableStates `docstruct:"TransactionStates" json:"unavailable,omitempty"` // nil if we have the data for all states
 }
 
 type UnavailableStates struct {
-	Confirmed []tktypes.HexBytes `docstruct:"TransactionStates" json:"confirmed"`
-	Read      []tktypes.HexBytes `docstruct:"TransactionStates" json:"read"`
-	Spent     []tktypes.HexBytes `docstruct:"TransactionStates" json:"spent"`
-	Info      []tktypes.HexBytes `docstruct:"TransactionStates" json:"info"`
+	Confirmed []tktypes.HexBytes `docstruct:"UnavailableStates" json:"confirmed"`
+	Read      []tktypes.HexBytes `docstruct:"UnavailableStates" json:"read"`
+	Spent     []tktypes.HexBytes `docstruct:"UnavailableStates" json:"spent"`
+	Info      []tktypes.HexBytes `docstruct:"UnavailableStates" json:"info"`
 }
 
 // A confirm record is written when indexing the blockchain, and can be written regardless

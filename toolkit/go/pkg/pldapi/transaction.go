@@ -93,9 +93,9 @@ type TransactionReceipt struct {
 
 type TransactionReceiptFull struct {
 	*TransactionReceipt
-	States             *TransactionStates `json:"states,omitempty"`
-	DomainReceipt      tktypes.RawJSON    `json:"domainReceipt,omitempty"`
-	DomainReceiptError string             `json:"domainReceiptError,omitempty"`
+	States             *TransactionStates `docstruct:"TransactionReceiptFull" json:"states,omitempty"`
+	DomainReceipt      tktypes.RawJSON    `docstruct:"TransactionReceiptFull" json:"domainReceipt,omitempty"`
+	DomainReceiptError string             `docstruct:"TransactionReceiptFull" json:"domainReceiptError,omitempty"`
 }
 
 type TransactionReceiptDataOnchain struct {

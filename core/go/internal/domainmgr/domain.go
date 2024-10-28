@@ -730,7 +730,7 @@ func (d *domain) GetDomainReceipt(ctx context.Context, dbTX *gorm.DB, txID uuid.
 }
 
 func (d *domain) BuildDomainReceipt(ctx context.Context, dbTX *gorm.DB, txID uuid.UUID, txStates *pldapi.TransactionStates) (tktypes.RawJSON, error) {
-	if txStates.Unknown {
+	if txStates.None {
 		// We know nothing about this transaction yet
 		return nil, i18n.NewError(ctx, msgs.MsgDomainDomainReceiptNotAvailable, txID)
 	}
