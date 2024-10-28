@@ -230,20 +230,31 @@ public class BondTest {
                     bondTransfer.preparedTransaction().data()
             );
 
-            // Pass the prepared bond transfer to the subscription contract
-            bondSubscription.prepareBond(bondCustodian, bondTransfer2.preparedTransaction().to(), bondTransfer2.encodedCall());
+            // Prepare the payment transfer
+            var paymentTransfer = notoCash.prepareTransfer(alice, bondCustodian, 1000);
+            assertEquals("public", paymentTransfer.preparedTransaction().type());
+            var paymentMetadata = mapper.convertValue(paymentTransfer.preparedMetadata(), NotoHelper.NotoTransferMetadata.class);
 
-            // TODO: we should need to approve either Noto or Pente for the bond transfer
+            // Pass the prepared transfers to the subscription contract
+            bondSubscription.prepareBond(bondCustodian, bondTransfer2.preparedTransaction().to(), bondTransfer2.encodedCall());
+            bondSubscription.preparePayment(alice, paymentTransfer.preparedTransaction().to(), paymentMetadata.transferWithApproval().encodedCall());
+
+            // Alice approves payment transfer
+            notoCash.approveTransfer(
+                    "alice",
+                    paymentTransfer.inputStates(),
+                    paymentTransfer.outputStates(),
+                    paymentMetadata.approvalParams().data(),
+                    aliceCustodianInstance.address());
+
+            // TODO: custodian should need to approve either Noto or Pente for the bond transfer
             // Currently the encoded call that is returned is a fully endorsed Pente/BondTracker onTransfer(),
             // which will in turn call Noto with a fully endorsed transfer().
             // Either the Pente call needs to require approval, or the Noto call needs to be transferWithApproval()
             // so that it requires approval.
 
             // Alice receives full bond distribution
-            // TODO: this should be done together as an Atom
             bondSubscription.distribute(alice, 1000);
-            notoCash.transfer(alice, bondCustodian, 1000); // TODO: this should be a side effect of distribute() too
-            // bond transfer was already encoded to happen as a side-effect of distribute()
 
             // TODO: figure out how to test negative cases (such as when Pente reverts due to a non-allowed investor)
 

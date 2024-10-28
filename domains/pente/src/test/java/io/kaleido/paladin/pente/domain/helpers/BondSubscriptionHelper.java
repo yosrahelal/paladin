@@ -67,6 +67,20 @@ public class BondSubscriptionHelper {
         );
     }
 
+    public void preparePayment(String sender, JsonHex.Address to, JsonHex.Bytes encodedCall) throws IOException {
+        var method = abi.getABIEntry("function", "preparePayment");
+        pente.invoke(
+                method.name(),
+                method.inputs(),
+                sender,
+                address,
+                new HashMap<>() {{
+                    put("to", to);
+                    put("encodedCall", encodedCall);
+                }}
+        );
+    }
+
     public void distribute(String sender, int units) throws IOException {
         var method = abi.getABIEntry("function", "distribute");
         pente.invoke(
