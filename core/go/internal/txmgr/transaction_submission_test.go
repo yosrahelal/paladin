@@ -747,21 +747,92 @@ func TestCallTransactionBadTX(t *testing.T) {
 
 }
 
-func TestCallTransactionPrivNotSupported(t *testing.T) {
-	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+func TestCallTransactionPrivOk(t *testing.T) {
+	fnDef := &abi.Entry{Name: "getSpins", Type: abi.Function,
+		Inputs: abi.ParameterArray{
+			{Name: "wheel", Type: "string"},
+		},
+		Outputs: abi.ParameterArray{
+			{Name: "spins", Type: "uint256"},
+		},
+	}
+
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		res, err := fnDef.Outputs.ParseJSON([]byte(`{"spins": 42}`))
+		require.NoError(t, err)
+
+		mc.privateTxMgr.On("CallPrivateSmartContract", mock.Anything, mock.Anything).
+			Return(res, nil)
+	})
 	defer done()
 
-	tx := pldclient.New().ForABI(ctx, abi.ABI{{Name: "getSpins", Type: abi.Function}}).
+	tx := pldclient.New().ForABI(ctx, abi.ABI{fnDef}).
 		Function("getSpins").
 		Private().
 		Domain("test1").
 		To(tktypes.RandAddress()).
 		Inputs(map[string]any{"wheel": "of fortune"}).
+		DataFormat("mode=array&number=json-number").
 		BuildTX()
 	require.NoError(t, tx.Error())
 
-	var result any
+	var result tktypes.RawJSON
 	err := txm.CallTransaction(ctx, &result, tx.CallTX())
-	require.Regexp(t, "PD012221", err)
+	require.NoError(t, err)
+	require.JSONEq(t, `[42]`, result.Pretty())
+
+}
+
+func TestCallTransactionPrivFail(t *testing.T) {
+	fnDef := &abi.Entry{Name: "ohSnap", Type: abi.Function}
+
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI, func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+		mc.privateTxMgr.On("CallPrivateSmartContract", mock.Anything, mock.Anything).
+			Return(nil, fmt.Errorf("snap"))
+	})
+	defer done()
+
+	tx := pldclient.New().ForABI(ctx, abi.ABI{fnDef}).
+		Function("ohSnap").
+		Private().
+		Domain("test1").
+		To(tktypes.RandAddress()).
+		BuildTX()
+	require.NoError(t, tx.Error())
+
+	var result tktypes.RawJSON
+	err := txm.CallTransaction(ctx, &result, tx.CallTX())
+	assert.Regexp(t, "snap", err)
+
+}
+
+func TestCallTransactionPrivMissingTo(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	defer done()
+
+	err := txm.CallTransaction(ctx, nil, &pldapi.TransactionCall{
+		TransactionInput: pldapi.TransactionInput{
+			Transaction: pldapi.Transaction{
+				Type: pldapi.TransactionTypePrivate.Enum(),
+			},
+		},
+	})
+	assert.Regexp(t, "PD012222", err)
+
+}
+
+func TestCallTransactionBadSerializer(t *testing.T) {
+	ctx, txm, done := newTestTransactionManager(t, false, mockInsertABI)
+	defer done()
+
+	err := txm.CallTransaction(ctx, nil, &pldapi.TransactionCall{
+		TransactionInput: pldapi.TransactionInput{
+			Transaction: pldapi.Transaction{
+				Type: pldapi.TransactionTypePrivate.Enum(),
+			},
+		},
+		DataFormat: "wrong",
+	})
+	assert.Regexp(t, "PD020015", err)
 
 }

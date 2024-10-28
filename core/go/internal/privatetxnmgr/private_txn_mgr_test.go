@@ -18,6 +18,7 @@ package privatetxnmgr
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
 	"reflect"
 	"regexp"
@@ -1886,4 +1887,162 @@ func timeTillDeadline(t *testing.T) time.Duration {
 		return 0
 	}
 	return timeRemaining - 100*time.Millisecond
+}
+
+func mockDomainSmartContractAndCtx(t *testing.T, m *dependencyMocks) (*componentmocks.Domain, *componentmocks.DomainSmartContract) {
+	contractAddr := *tktypes.RandAddress()
+
+	mDomain := componentmocks.NewDomain(t)
+	mDomain.On("Name").Return("domain1").Maybe()
+
+	mPSC := componentmocks.NewDomainSmartContract(t)
+	mPSC.On("Address").Return(contractAddr).Maybe()
+	mPSC.On("Domain").Return(mDomain).Maybe()
+
+	m.domainMgr.On("GetSmartContractByAddress", mock.Anything, contractAddr).Return(mPSC, nil)
+
+	mDC := componentmocks.NewDomainContext(t)
+	m.stateStore.On("NewDomainContext", mock.Anything, mDomain, contractAddr).Return(mDC).Maybe()
+	mDC.On("Close").Return().Maybe()
+
+	return mDomain, mPSC
+}
+
+func TestCallPrivateSmartContractOk(t *testing.T) {
+
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+
+	_, mPSC := mockDomainSmartContractAndCtx(t, m)
+
+	fnDef := &abi.Entry{Name: "getIt", Type: abi.Function, Outputs: abi.ParameterArray{
+		{Name: "it", Type: "string"},
+	}}
+	resultCV, err := fnDef.Outputs.ParseJSON([]byte(`["thing"]`))
+	require.NoError(t, err)
+
+	bobAddr := tktypes.RandAddress()
+	m.identityResolver.On("ResolveVerifier", mock.Anything, "bob@node1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+		Return(bobAddr.String(), nil)
+	mPSC.On("InitCall", mock.Anything, mock.Anything).Return(
+		[]*prototk.ResolveVerifierRequest{
+			{Lookup: "bob@node1", Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS},
+		}, nil,
+	)
+	mPSC.On("ExecCall", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(verifiers []*prototk.ResolvedVerifier) bool {
+		require.Equal(t, bobAddr.String(), verifiers[0].Verifier)
+		return true
+	})).Return(
+		resultCV, nil,
+	)
+
+	res, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		To:       mPSC.Address(),
+		Inputs:   tktypes.RawJSON(`{}`),
+		Function: fnDef,
+	})
+	require.NoError(t, err)
+	jsonData, err := res.JSON()
+	require.NoError(t, err)
+	require.JSONEq(t, `{"it": "thing"}`, string(jsonData))
+
+}
+
+func TestCallPrivateSmartContractBadContract(t *testing.T) {
+
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+
+	m.domainMgr.On("GetSmartContractByAddress", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("not found"))
+
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		To:     *tktypes.RandAddress(),
+		Inputs: tktypes.RawJSON(`{}`),
+	})
+	assert.Regexp(t, "not found", err)
+
+}
+func TestCallPrivateSmartContractBadDomainName(t *testing.T) {
+
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+
+	_, mPSC := mockDomainSmartContractAndCtx(t, m)
+
+	fnDef := &abi.Entry{Name: "getIt", Type: abi.Function, Outputs: abi.ParameterArray{
+		{Name: "it", Type: "string"},
+	}}
+
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		Domain:   "does-not-match",
+		To:       mPSC.Address(),
+		Inputs:   tktypes.RawJSON(`{}`),
+		Function: fnDef,
+	})
+	assert.Regexp(t, "PD011825", err)
+
+}
+
+func TestCallPrivateSmartContractInitCallFail(t *testing.T) {
+
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+
+	_, mPSC := mockDomainSmartContractAndCtx(t, m)
+
+	mPSC.On("InitCall", mock.Anything, mock.Anything).Return(
+		nil, fmt.Errorf("pop"),
+	)
+
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		To:     mPSC.Address(),
+		Inputs: tktypes.RawJSON(`{}`),
+	})
+	require.Regexp(t, "pop", err)
+
+}
+
+func TestCallPrivateSmartContractResolveFail(t *testing.T) {
+
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+
+	_, mPSC := mockDomainSmartContractAndCtx(t, m)
+
+	mPSC.On("InitCall", mock.Anything, mock.Anything).Return(
+		[]*prototk.ResolveVerifierRequest{
+			{Lookup: "bob@node1", Algorithm: algorithms.ECDSA_SECP256K1, VerifierType: verifiers.ETH_ADDRESS},
+		}, nil,
+	)
+	m.identityResolver.On("ResolveVerifier", mock.Anything, "bob@node1", algorithms.ECDSA_SECP256K1, verifiers.ETH_ADDRESS).
+		Return("", fmt.Errorf("pop"))
+
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		To:     mPSC.Address(),
+		Inputs: tktypes.RawJSON(`{}`),
+	})
+	require.Regexp(t, "pop", err)
+
+}
+
+func TestCallPrivateSmartContractExecCallFail(t *testing.T) {
+
+	ctx := context.Background()
+	ptx, m := NewPrivateTransactionMgrForTesting(t, "node1")
+
+	_, mPSC := mockDomainSmartContractAndCtx(t, m)
+
+	mPSC.On("InitCall", mock.Anything, mock.Anything).Return(
+		[]*prototk.ResolveVerifierRequest{}, nil,
+	)
+	mPSC.On("ExecCall", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(
+		nil, fmt.Errorf("pop"),
+	)
+
+	_, err := ptx.CallPrivateSmartContract(ctx, &components.TransactionInputs{
+		To:     mPSC.Address(),
+		Inputs: tktypes.RawJSON(`{}`),
+	})
+	require.Regexp(t, "pop", err)
+
 }

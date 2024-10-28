@@ -179,7 +179,7 @@ func (cm *componentManager) Init() (err error) {
 	}
 
 	if err == nil {
-		cm.identityResolver = identityresolver.NewIdentityResolver(cm.bgCtx)
+		cm.identityResolver = identityresolver.NewIdentityResolver(cm.bgCtx, &cm.conf.IdentityResolver)
 		cm.initResults["identity_resolver"], err = cm.identityResolver.PreInit(cm)
 		err = cm.wrapIfErr(err, msgs.MsgComponentIdentityResolverInitError)
 	}

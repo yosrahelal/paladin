@@ -256,7 +256,7 @@ func TestCalculateRevertErrorDecodeFail(t *testing.T) {
 	defer done()
 
 	err := txm.CalculateRevertError(ctx, txm.p.DB(), []byte("any data"))
-	assert.Regexp(t, "PD012222", err)
+	assert.Regexp(t, "PD012221", err)
 
 }
 

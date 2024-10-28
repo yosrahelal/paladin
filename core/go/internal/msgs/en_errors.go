@@ -304,6 +304,7 @@ var (
 	MsgPrivateTxManagerNonLocalSigningAddr     = ffe("PD011822", "Attempt do dispatch a blockchain transaction using a signing identity for a different node: %s")
 	MsgPrivateTxManagerStateHashContention     = ffe("PD011823", "Contention detected attempting to spend hash %s in multiple transactions")
 	MsgPrivateReDelegationRequired             = ffe("PD011824", "Re-delegation is required for this transaction to progress")
+	MsgPrivateTxMgrDomainMismatch              = ffe("PD011825", "Domain '%s' specified does not match domain '%s' of deployed private smart contract %s")
 
 	// Public Transaction Manager PD0119XX
 	MsgInsufficientBalance             = ffe("PD011900", "Balance %s of fueling source address %s is below the required amount %s")
@@ -382,8 +383,8 @@ var (
 	MsgTxMgrInvalidStoredData            = ffe("PD012217", "Stored data is invalid")
 	MsgTxMgrNoABIOrReference             = ffe("PD012218", "An ABI containing a function/constructor definition or an abiReference to an existing stored ABI must be supplied")
 	MsgTxMgrIdempotencyKeyClash          = ffe("PD012220", "idempotencyKey already used by submitted transaction %s") // important error code (relied on by operator, and apps)
-	MsgTxMgrPrivateCallNotSupported      = ffe("PD012221", "Call (read-only data query via function call) not currently supported for private smart contracts")
-	MsgTxMgrRevertedNoMatchingErrABI     = ffe("PD012222", "No error ABI available to decode %s")
+	MsgTxMgrRevertedNoMatchingErrABI     = ffe("PD012221", "No error ABI available to decode %s")
+	MsgTxMgrPrivateCallRequiresTo        = ffe("PD012222", "A to contract address must be specified for private smart contract calls")
 
 	// FlushWriter module PD0123XX
 	MsgFlushWriterQuiescing      = ffe("PD012300", "Writer shutting down")

@@ -27,6 +27,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
+	"github.com/hyperledger/firefly-signer/pkg/ethtypes"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -352,10 +353,9 @@ var _ = Describe("controller", Ordered, func() {
 			testLog("Pente privacy group %s (salt=%s) deployed by TX %s", penteContract, penteGroupNodes1and2.Salt, deploy.ID())
 		})
 
+		erc20Simple := solutils.MustLoadBuild(ERC20SimpleBuildJSON)
 		var erc20DeployID uuid.UUID
 		It("deploys a vanilla ERC-20 into the the privacy group with a minter/owner", func() {
-
-			erc20Simple := solutils.MustLoadBuild(ERC20SimpleBuildJSON)
 
 			deploy := rpc["node1"].ForABI(ctx, erc20PrivateABI).
 				Private().
@@ -434,7 +434,7 @@ var _ = Describe("controller", Ordered, func() {
 					To:    *erc20StarsAddr,
 					Inputs: map[string]any{
 						"to":     getEthAddress("seren", "node1"),
-						"amount": with18Decimals(100),
+						"amount": with18Decimals(1977),
 					},
 				}).
 				From("seren@node1").
@@ -442,15 +442,85 @@ var _ = Describe("controller", Ordered, func() {
 				Wait(5 * time.Second)
 			Expect(invoke.Error()).To(BeNil())
 			testLog("SimpleERC20 mint transaction %s", invoke.ID())
-			erc20DeployID = invoke.ID()
 
 		})
 
 		It("check ERC-20 balance of Seren", func() {
 
 			serenBalance := getERC20Balance("seren", "node1")
-			testLog("SimpleERC20 balance after mint to seren@node1: %s", serenBalance)
-			Expect(serenBalance.String()).To(Equal(with18Decimals(100).String()))
+			testLog("SimpleERC20 balance after mint to seren@node1: %s", serenBalance.Int())
+			Expect(serenBalance.String()).To(Equal(with18Decimals(1977).String()))
+
+		})
+
+		var erc20TransferID uuid.UUID
+		It("transfers some ERC-20 inside the the privacy group from seren@node1 to sally@node2", func() {
+
+			invoke := rpc["node1"].ForABI(ctx, erc20PrivateABI).
+				Private().
+				Domain("pente").
+				To(penteContract).
+				Function("transfer").
+				Inputs(&penteInvokeParams{
+					Group: penteGroupNodes1and2,
+					To:    *erc20StarsAddr,
+					Inputs: map[string]any{
+						"to":    getEthAddress("sally", "node2"),
+						"value": with18Decimals(42),
+					},
+				}).
+				From("seren@node1").
+				Send().
+				Wait(5 * time.Second)
+			Expect(invoke.Error()).To(BeNil())
+			testLog("SimpleERC20 mint transaction %s", invoke.ID())
+			erc20TransferID = invoke.ID()
+
+		})
+
+		decodePrivateEVMEvent := func(eventDef *abi.Entry, log *pldapi.PrivateEVMLog) string {
+			ethTopics := make([]ethtypes.HexBytes0xPrefix, len(log.Topics))
+			for i, t := range log.Topics {
+				ethTopics[i] = t[:]
+			}
+			cv, err := eventDef.DecodeEventDataCtx(ctx, ethTopics, ethtypes.HexBytes0xPrefix(log.Data))
+			Expect(err).To(BeNil())
+			b, err := tktypes.DefaultJSONFormatOptions.GetABISerializerIgnoreErrors(ctx).SerializeJSONCtx(ctx, cv)
+			Expect(err).To(BeNil())
+			return string(b)
+		}
+
+		It("waits for the receipt logs on node2", func() {
+			var penteReceiptJSON tktypes.RawJSON
+			Eventually(func() error {
+				var err error
+				penteReceiptJSON, err = rpc["node2"].PTX().GetDomainReceipt(ctx, "pente", erc20TransferID)
+				return err
+			}, "5s").Should(BeNil())
+			var penteReceipt *pldapi.PenteDomainReceipt
+			err := json.Unmarshal(penteReceiptJSON, &penteReceipt)
+			Expect(err).To(BeNil())
+
+			// Decode the transfer
+			erc20TransferABI := erc20Simple.ABI.Events()["Transfer"]
+			Expect(penteReceipt.Receipt.Logs).To(HaveLen(1))
+			transferEventJSON := decodePrivateEVMEvent(erc20TransferABI, penteReceipt.Receipt.Logs[0])
+			Expect(transferEventJSON).To(MatchJSON(fmt.Sprintf(`{
+				"from": "%s",
+				"to": "%s",
+				"value": "42000000000000000000"
+			}`, getEthAddress("seren", "node1"), getEthAddress("sally", "node2"))))
+		})
+
+		It("check ERC-20 balance of Seren and Sally", func() {
+
+			serenBalance := getERC20Balance("seren", "node1")
+			testLog("SimpleERC20 balance after mint to seren@node1: %s", serenBalance.Int())
+			Expect(serenBalance.String()).To(Equal(with18Decimals(1935).String()))
+
+			sallyBalance := getERC20Balance("sally", "node2")
+			testLog("SimpleERC20 balance after mint to seren@node1: %s", sallyBalance.Int())
+			Expect(sallyBalance.String()).To(Equal(with18Decimals(42).String()))
 
 		})
 

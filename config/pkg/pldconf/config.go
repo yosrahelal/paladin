@@ -41,6 +41,7 @@ type PaladinConfig struct {
 	TxManager              TxManagerConfig        `json:"txManager"`
 	PrivateTxManager       PrivateTxManagerConfig `json:"privateTxManager"`
 	PublicTxManager        PublicTxManagerConfig  `json:"publicTxManager"`
+	IdentityResolver       IdentityResolverConfig `json:"identityResolver"`
 }
 
 func ReadAndParseYAMLFile(ctx context.Context, filePath string, config interface{}) error {

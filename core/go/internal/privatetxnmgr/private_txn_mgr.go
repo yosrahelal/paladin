@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-signer/pkg/abi"
 	"github.com/kaleido-io/paladin/core/internal/components"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/ptmgrtypes"
 	"github.com/kaleido-io/paladin/core/internal/privatetxnmgr/syncpoints"
@@ -187,7 +188,7 @@ func (p *privateTxManager) getEndorsementGathererForContract(ctx context.Context
 // In the meantime, we a single function to submit a transaction and there is currently no persistence of the submission record.  It is all held in memory only
 func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.PrivateTransaction) error {
 	log.L(ctx).Debugf("Handling new transaction: %v", tx)
-	if tx.Inputs == nil || tx.Inputs.Domain == "" {
+	if tx.Inputs == nil {
 		return i18n.NewError(ctx, msgs.MsgDomainNotProvided)
 	}
 
@@ -201,6 +202,13 @@ func (p *privateTxManager) HandleNewTx(ctx context.Context, tx *components.Priva
 	if err != nil {
 		return err
 	}
+
+	domainName := domainAPI.Domain().Name()
+	if tx.Inputs.Domain != "" && domainName != tx.Inputs.Domain {
+		return i18n.NewError(ctx, msgs.MsgPrivateTxMgrDomainMismatch, tx.Inputs.Domain, domainName, domainAPI.Address())
+	}
+	tx.Inputs.Domain = domainName
+
 	err = domainAPI.InitTransaction(ctx, tx)
 	if err != nil {
 		return err
@@ -729,4 +737,47 @@ func (p *privateTxManager) PrivateTransactionConfirmed(ctx context.Context, rece
 		}
 		seq.publisher.PublishTransactionConfirmedEvent(ctx, receipt.TransactionID.String())
 	}
+}
+
+func (p *privateTxManager) CallPrivateSmartContract(ctx context.Context, call *components.TransactionInputs) (*abi.ComponentValue, error) {
+
+	psc, err := p.components.DomainManager().GetSmartContractByAddress(ctx, call.To)
+	if err != nil {
+		return nil, err
+	}
+
+	domainName := psc.Domain().Name()
+	if call.Domain != "" && domainName != call.Domain {
+		return nil, i18n.NewError(ctx, msgs.MsgPrivateTxMgrDomainMismatch, call.Domain, domainName, psc.Address())
+	}
+	call.Domain = domainName
+
+	// Initialize the call, returning at list of required verifiers
+	requiredVerifiers, err := psc.InitCall(ctx, call)
+	if err != nil {
+		return nil, err
+	}
+
+	// Do the verification in-line and synchronously for call (there is caching in the identity resolver)
+	identityResolver := p.components.IdentityResolver()
+	verifiers := make([]*prototk.ResolvedVerifier, len(requiredVerifiers))
+	for i, r := range requiredVerifiers {
+		verifier, err := identityResolver.ResolveVerifier(ctx, r.Lookup, r.Algorithm, r.VerifierType)
+		if err != nil {
+			return nil, err
+		}
+		verifiers[i] = &prototk.ResolvedVerifier{
+			Lookup:       r.Lookup,
+			Algorithm:    r.Algorithm,
+			VerifierType: r.VerifierType,
+			Verifier:     verifier,
+		}
+	}
+
+	// Create a throwaway domain context for this call
+	dCtx := p.components.StateManager().NewDomainContext(ctx, psc.Domain(), psc.Address())
+	defer dCtx.Close()
+
+	// Do the actual call
+	return psc.ExecCall(dCtx, p.components.Persistence().DB(), call, verifiers)
 }
