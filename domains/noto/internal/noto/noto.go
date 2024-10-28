@@ -533,3 +533,8 @@ func (n *Noto) InitCall(ctx context.Context, req *prototk.InitCallRequest) (*pro
 func (n *Noto) ExecCall(ctx context.Context, req *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }
+
+func (n *Noto) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
+	// TODO: Event logs for transfers would be great for Noto
+	return nil, i18n.NewError(ctx, msgs.MsgNoDomainReceipt)
+}

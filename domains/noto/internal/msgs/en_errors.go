@@ -62,4 +62,5 @@ var (
 	MsgUnknownEvent                = ffe("PD200021", "Unknown event: %s")
 	MsgNotImplemented              = ffe("PD200022", "Not implemented")
 	MsgInvalidDelegate             = ffe("PD200023", "Invalid delegate: %s")
+	MsgNoDomainReceipt             = ffe("PD200024", "Not implemented. See state receipt for coin transfers")
 )

@@ -429,3 +429,8 @@ func (z *Zeto) InitCall(ctx context.Context, req *prototk.InitCallRequest) (*pro
 func (z *Zeto) ExecCall(ctx context.Context, req *prototk.ExecCallRequest) (*prototk.ExecCallResponse, error) {
 	return nil, i18n.NewError(ctx, msgs.MsgNotImplemented)
 }
+
+func (z *Zeto) BuildReceipt(ctx context.Context, req *prototk.BuildReceiptRequest) (*prototk.BuildReceiptResponse, error) {
+	// TODO: Event logs for transfers would be great for Noto
+	return nil, i18n.NewError(ctx, msgs.MsgNoDomainReceipt)
+}
